@@ -16126,6 +16126,78 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.bytes-compressed.l5.data
+      exported_name: storage_bytes_compressed_l5_data
+      labeled_name: 'storage.bytes-compressed{level: 5, type: data}'
+      description: Total number of logical bytes compressed for L5 data blocks.
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.bytes-compressed.l5.values
+      exported_name: storage_bytes_compressed_l5_values
+      labeled_name: 'storage.bytes-compressed{level: 5, type: values}'
+      description: Total number of logical bytes compressed for L5 value blocks.
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.bytes-compressed.l6.data
+      exported_name: storage_bytes_compressed_l6_data
+      labeled_name: 'storage.bytes-compressed{level: 6, type: data}'
+      description: Total number of logical bytes compressed for L6 data blocks.
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.bytes-compressed.l6.values
+      exported_name: storage_bytes_compressed_l6_values
+      labeled_name: 'storage.bytes-compressed{level: 6, type: values}'
+      description: Total number of logical bytes compressed for L6 value blocks.
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.bytes-decompressed.l5.data
+      exported_name: storage_bytes_decompressed_l5_data
+      labeled_name: 'storage.bytes-decompressed{level: 5, type: data}'
+      description: Total number of logical bytes decompressed for L5 data blocks.
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.bytes-decompressed.l5.values
+      exported_name: storage_bytes_decompressed_l5_values
+      labeled_name: 'storage.bytes-decompressed{level: 5, type: values}'
+      description: Total number of logical bytes decompressed for L5 value blocks.
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.bytes-decompressed.l6.data
+      exported_name: storage_bytes_decompressed_l6_data
+      labeled_name: 'storage.bytes-decompressed{level: 6, type: data}'
+      description: Total number of logical bytes decompressed for L6 data blocks.
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.bytes-decompressed.l6.values
+      exported_name: storage_bytes_decompressed_l6_values
+      labeled_name: 'storage.bytes-decompressed{level: 6, type: values}'
+      description: Total number of logical bytes decompressed for L6 value blocks.
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: storage.checkpoints
       exported_name: storage_checkpoints
       description: |-
