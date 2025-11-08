@@ -218,7 +218,8 @@
           {{.ID}}
         </td>
         <td>
-          <button id="diag-btn-{{.ID}}" popovertarget="diagnostics" @click="$store.diagnosticsTarget = '{{.ID}}'; $store.diagnosticsFingerprint = {{.Key.KeyData.Query | printf "%q"}}">Activate</button>
+          {{$diagState := index $.Data.DiagnosticStates .Key.KeyData.Query}}
+          {{ template "statement_diagnostics_controls" $diagState }}
         </td>
       </tr>
       {{end}}
@@ -255,8 +256,8 @@
     latency thresholds set below. The request is cancelled when a single
     diagnostics bundle is captured. Learn more
   </p>
-  <form method="POST" action="/future/diagnostics/new"
-        hx-post="/future/diagnostics/new"
+  <form method="POST" action="/future/sqlactivity/statements/diagnostics"
+        hx-post="/future/sqlactivity/statements/diagnostics"
         :hx-target="'#diag-btn-' + $store.diagnosticsTarget"
         hx-swap="outerHTML"
         @htmx:after-swap="document.getElementById('diagnostics').hidePopover()"

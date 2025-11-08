@@ -1,10 +1,203 @@
 {{template "layout-start" .}}
 
-<nav class="breadcrumbs" aria-label="Breadcrumbs">
-  <ul>
-    <li class="<h1>">Overview</li>
-  </ul>
-</nav>
 <h2>Overview</h2>
+<div class="box flex-switch">
+  <div class="flex-column flex-grow:2">
+    <div class="<h4>">Capacity Usage</div>
+    <div class="flex-row align-items:center">
+      <label for=disk class="<h2>">{{formatPercent .Data.CapacityPercent}}</label>
+      <meter class="flex-grow:2" id=disk min=0 max={{.Data.CapacityTotal}} value={{.Data.CapacityUsed}} low={{mul .Data.CapacityTotal 0.25}} high={{mul .Data.CapacityTotal 0.85}} optimum={{mul .Data.CapacityTotal 0.5}}>{{.Data.CapacityUsedStr}} of {{.Data.CapacityTotalStr}}</meter>
+    </div>
+    <div class="flex-row">
+      <div>Used</div>
+      <div>{{.Data.CapacityUsedStr}}</div>
+      <div>Usable</div>
+      <div>{{.Data.CapacityTotalStr}}</div>
+    </div>
+  </div>
+  <div class="flex-column">
+    <div class="h4">Node Status</div>
+    <div class="flex-row">
+      <div class="flex-column">
+        <div class="<h2>">{{.Data.LiveNodes}}</div>
+        <div class="<h4>">Live Nodes</div>
+      </div>
+      <div class="flex-column">
+        <div class="<h2> color warn">{{.Data.SuspectNodes}}</div>
+        <div class="<h4>">Suspect Nodes</div>
+      </div>
+      <div class="flex-column">
+        <div class="<h2> color warn">{{.Data.DrainingNodes}}</div>
+        <div class="<h4>">Draining Nodes</div>
+      </div>
+      <div class="flex-column">
+        <div class="<h2> color bad">{{.Data.DeadNodes}}</div>
+        <div class="<h4>">Dead Nodes</div>
+      </div>
+    </div>
+  </div>
+  <div class="flex-column">
+    <div class="<h4>">Replication Status</div>
+    <div class="flex-row">
+      <div class="flex-column">
+        <div class="<h2>">{{.Data.TotalRanges}}</div>
+        <div class="<h4>">Total Ranges</div>
+      </div>
+      <div class="flex-column">
+        <div class="<h2> color warn">{{.Data.UnderReplicatedRanges}}</div>
+        <div class="<h4>">Under-Replicated Ranges</div>
+      </div>
+      <div class="flex-column">
+        <div class="<h2> color bad">{{.Data.UnavailableRanges}}</div>
+        <div class="<h4>">Unavailable Ranges</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="overflow-x:auto" x-data="tableSort()">
+  <h3>Nodes (7)</h3>
+  <table class="width:100%" >
+    <thead>
+      <tr>
+        <th @click="sort('nodes', 0)" style="cursor: pointer;">Nodes</th>
+        <th @click="sort('nodeCount', 0)" style="cursor: pointer;">NodeCount </th>
+        <th>Uptime</th>
+        <th>Replicas</th>
+        <th>CapacityUsage </th>
+        <th>MemoryUse </th>
+        <th>vCPUs</th>
+        <th>Version</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody x-data="{ expanded: false }">
+      <tr>
+        <td @click="expanded = !expanded">
+          <span x-show="!expanded">▶</span>
+          <span x-show="expanded">▼</span> us-east1-d</td>
+        <td>2</td>
+        <td></td>
+        <td>11467</td>
+        <td>31%</td>
+        <td>45%</td>
+        <td>32</td>
+        <td></td>
+        <td><chip class="info">Live</td>
+        <td></td>
+      </tr>
+      <tr x-show="expanded">
+        <td>10.142.0.6:26257 (n1)</td>
+        <td></td>
+        <td>17 days</td>
+        <td>5634</td>
+        <td>31%</td>
+        <td>44%</td>
+        <td>16</td>
+        <td>v25.4.0</td>
+        <td><chip class="info">Live</td>
+        <td><a href="#">Logs</a></td>
+      </tr>
+      <tr x-show="expanded">
+        <td>10.142.0.6:26257 (n1)</td>
+        <td></td>
+        <td>17 days</td>
+        <td>5634</td>
+        <td>31%</td>
+        <td>44%</td>
+        <td>16</td>
+        <td>v25.4.0</td>
+        <td><chip class="info">Live</td>
+        <td><a href="#">Logs</a></td>
+      </tr>
+    </tbody>
+    <tr>
+      <td>us-east1-d</td>
+      <td>3</td>
+      <td></td>
+      <td>11467</td>
+      <td>31%</td>
+      <td>45%</td>
+      <td>32</td>
+      <td></td>
+      <td><chip class="info">Live</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>us-east1-d</td>
+      <td>4</td>
+      <td></td>
+      <td>11467</td>
+      <td>31%</td>
+      <td>45%</td>
+      <td>32</td>
+      <td></td>
+      <td><chip class="info">Live</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>us-east1-d</td>
+      <td>454545</td>
+      <td></td>
+      <td>11467</td>
+      <td>31%</td>
+      <td>45%</td>
+      <td>32</td>
+      <td></td>
+      <td><chip class="info">Live</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>us-east1-d</td>
+      <td>6</td>
+      <td></td>
+      <td>11467</td>
+      <td>31%</td>
+      <td>45%</td>
+      <td>32</td>
+      <td></td>
+      <td><chip class="info">Live</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>us-east1-d</td>
+      <td>2</td>
+      <td></td>
+      <td>11467</td>
+      <td>31%</td>
+      <td>45%</td>
+      <td>32</td>
+      <td></td>
+      <td><chip class="info">Live</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>us-east1-d</td>
+      <td>2</td>
+      <td></td>
+      <td>11467</td>
+      <td>31%</td>
+      <td>45%</td>
+      <td>32</td>
+      <td></td>
+      <td><chip class="info">Live</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>us-east1-d</td>
+      <td>2</td>
+      <td></td>
+      <td>11467</td>
+      <td>31%</td>
+      <td>45%</td>
+      <td>32</td>
+      <td></td>
+      <td><chip class="info">Live</td>
+      <td></td>
+    </tr>
+    <tr>
+    </tr>
+  </table>
+</div>
 
 {{template "layout-end" .}}

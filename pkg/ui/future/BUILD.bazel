@@ -18,6 +18,7 @@ go_library(
         "//pkg/rpc/rpcbase",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
+        "//pkg/sql/appstatspb",
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

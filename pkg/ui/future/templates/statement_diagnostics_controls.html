@@ -1,0 +1,30 @@
+{{ define "statement_diagnostics_controls" }}
+<div id="diag-controls-{{.ID}}">
+  {{if .HasPendingRequest}}
+    {{/* State 2: Pending request - show Waiting + Cancel */}}
+    <div class="flex-row crowded" id="diag-btn-{{.ID}}">
+      <button disabled class="warn">Waiting</button>
+      <button class="bad"
+              hx-delete="/future/sqlactivity/statements/123/diagnostics/{{ .PendingRequestID }}"
+              hx-target="#diag-controls-{{.ID}}"
+              hx-swap="outerHTML"
+              title="Cancel diagnostic request">X</button>
+    </div>
+  {{else if .CompletedBundles}}
+    {{/* State 3: Completed bundles - show Download button with popover */}}
+    <div id="diag-btn-{{.ID}}">
+      <button class="ok" aria-label="Download diagnostics" popovertarget="diagnostic-select-{{.ID}}" x-ref="diagnostic-select-button-{{.ID}}">
+        Download
+      </button>
+      <div popover id="diagnostic-select-{{.ID}}" x-anchor="$refs['diagnostic-select-button-{{.ID}}']" class="flex-column">
+        {{range .CompletedBundles}}
+          <a href="{{.DownloadURL}}">Bundle #{{.ID}} ({{.CollectedAt.Format "2006-01-02 15:04:05"}})</a>
+        {{end}}
+      </div>
+    </div>
+  {{else}}
+    {{/* State 1: No diagnostic activity - show Activate button */}}
+    <button class="ok" id="diag-btn-{{.ID}}" popovertarget="diagnostics" @click="$store.diagnosticsTarget = '{{.ID}}'; $store.diagnosticsFingerprint = {{.Query | printf "%q"}}">Activate</button>
+  {{end}}
+</div>
+{{ end }}

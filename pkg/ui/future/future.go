@@ -6,6 +6,7 @@
 package future
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"html/template"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gorilla/mux"
@@ -232,11 +234,56 @@ type SQLActivityParams struct {
 	SortByDisplay string
 }
 
+// DiagnosticBundle represents a completed diagnostic bundle
+type DiagnosticBundle struct {
+	ID          int64
+	CollectedAt time.Time
+	DownloadURL string
+}
+
+// DiagnosticState represents the diagnostic state for a statement fingerprint
+type DiagnosticState struct {
+	// HasPendingRequest indicates if there's an active (not completed) diagnostic request
+	HasPendingRequest bool
+	// PendingRequestID is the ID of the pending request (for cancellation)
+	PendingRequestID int64
+	// CompletedBundles is the list of completed diagnostic bundles
+	CompletedBundles []DiagnosticBundle
+	// ID is the statement fingerprint ID of the fingerprint corresponding to this set of diagnostics.
+	ID appstatspb.StmtFingerprintID
+	// Query is the string fingerprint corresponding to this set of diagnostics.
+	Query string
+}
+
 // SQLActivityData combines the API response with form parameters
 type SQLActivityData struct {
 	Statements    *serverpb.StatementsResponse
 	Params        SQLActivityParams
 	TotalWorkload float64 // Sum of (count * service_lat.mean) across all statements
+	// DiagnosticStates maps statement fingerprint ID to its diagnostic state
+	DiagnosticStates map[string]DiagnosticState
+}
+
+// OverviewData contains cluster overview information
+type OverviewData struct {
+	// Capacity information
+	CapacityUsed      int64   // Total bytes used across all stores
+	CapacityTotal     int64   // Total capacity across all stores
+	CapacityPercent   float64 // Percentage of capacity used
+	CapacityUsedStr   string  // Formatted capacity used (e.g., "1.7 TiB")
+	CapacityTotalStr  string  // Formatted total capacity (e.g., "8.6 TiB")
+	CapacityAvailable int64   // Total available capacity
+
+	// Node status counts
+	LiveNodes     int
+	SuspectNodes  int
+	DrainingNodes int
+	DeadNodes     int
+
+	// Range information
+	TotalRanges           int
+	UnderReplicatedRanges int
+	UnavailableRanges     int
 }
 
 func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
@@ -277,14 +324,70 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		handleSqlActivityStatements(w, r, cfg)
 	}).Methods("GET")
 
-	futureRouter.HandleFunc("/diagnostics/new", func(w http.ResponseWriter, r *http.Request) {
+	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}/diagnostics", func(w http.ResponseWriter, r *http.Request) {
+		handleGetDiagnosticsControls(w, r, cfg)
+	}).Methods("GET")
+
+	futureRouter.HandleFunc("/sqlactivity/statements/diagnostics", func(w http.ResponseWriter, r *http.Request) {
 		handleCreateDiagnostics(w, r, cfg)
 	}).Methods("POST")
+
+	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}/diagnostics/{diagID}", func(w http.ResponseWriter, r *http.Request) {
+		handleCancelDiagnostics(w, r, cfg)
+	}).Methods("DELETE")
 
 	// Serve static assets
 	futureRouter.PathPrefix("/assets/").HandlerFunc(handleAssets)
 
 	return router.ServeHTTP
+}
+
+func handleGetDiagnosticsControls(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+
+}
+
+func handleCancelDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	// Parse form data
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+
+	requestIDStr := r.FormValue("request_id")
+
+	if requestIDStr == "" {
+		http.Error(w, "Missing request_id", http.StatusBadRequest)
+		return
+	}
+
+	requestID, err := strconv.ParseInt(requestIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid request_id", http.StatusBadRequest)
+		return
+	}
+
+	// Call the API to cancel the diagnostics request
+	cancelResp, err := cfg.Status.CancelStatementDiagnosticsReport(r.Context(), &serverpb.CancelStatementDiagnosticsReportRequest{
+		RequestID: requestID,
+	})
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	if err != nil || !cancelResp.Canceled {
+		errorMsg := "Failed to cancel request"
+		if err != nil {
+			errorMsg = err.Error()
+		} else if cancelResp.Error != "" {
+			errorMsg = cancelResp.Error
+		}
+		log.Dev.Warningf(r.Context(), "Failed to cancel diagnostics request: %v", errorMsg)
+		// Return error message
+		errorHTML := fmt.Sprintf(`<div class="bad box">Error: %s</div>`, errorMsg)
+		_, _ = w.Write([]byte(errorHTML))
+		return
+	}
+
+	// TODO: redirect to GET /StmtID/diag
 }
 
 func handleCreateDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
@@ -465,10 +568,40 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 		totalWorkload += float64(stmt.Stats.Count) * stmt.Stats.ServiceLat.Mean
 	}
 
+	// Fetch diagnostic reports to determine state for each statement
+	diagnosticStates := make(map[string]DiagnosticState)
+	diagResp, err := cfg.Status.StatementDiagnosticsRequests(r.Context(), &serverpb.StatementDiagnosticsReportsRequest{})
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to fetch diagnostic reports: %v", err)
+		// Continue without diagnostic states - we'll just show the Activate button for all
+	} else {
+		// Group diagnostic reports by statement fingerprint
+		for _, report := range diagResp.Reports {
+			state := diagnosticStates[report.StatementFingerprint]
+
+			if !report.Completed {
+				// This is a pending request
+				state.HasPendingRequest = true
+				state.PendingRequestID = report.Id
+			} else if report.StatementDiagnosticsId > 0 {
+				// This is a completed bundle
+				bundle := DiagnosticBundle{
+					ID:          report.StatementDiagnosticsId,
+					CollectedAt: report.RequestedAt, // Using RequestedAt as placeholder
+					DownloadURL: fmt.Sprintf("/_status/stmtdiag/%d", report.StatementDiagnosticsId),
+				}
+				state.CompletedBundles = append(state.CompletedBundles, bundle)
+			}
+
+			diagnosticStates[report.StatementFingerprint] = state
+		}
+	}
+
 	// Build the data structure with params
 	data := SQLActivityData{
-		Statements:    resp,
-		TotalWorkload: totalWorkload,
+		Statements:       resp,
+		TotalWorkload:    totalWorkload,
+		DiagnosticStates: diagnosticStates,
 		Params: SQLActivityParams{
 			Top:           top,
 			By:            by,
@@ -533,15 +666,84 @@ func handleOverview(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	// Set content type
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
+	// Fetch cluster data
+	data, err := fetchOverviewData(r.Context(), cfg)
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to fetch overview data: %v", err)
+		http.Error(w, "Failed to fetch cluster data", http.StatusInternalServerError)
+		return
+	}
+
 	// Execute the pre-parsed template
-	err := templates.ExecuteTemplate(w, "overview.html", PageData{
+	err = templates.ExecuteTemplate(w, "overview.html", PageData{
 		IndexHTMLArgs: cfg,
+		Data:          data,
 	})
 	if err != nil {
 		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
 		return
 	}
+}
+
+// fetchOverviewData fetches and processes cluster overview data
+func fetchOverviewData(ctx context.Context, cfg IndexHTMLArgs) (*OverviewData, error) {
+	data := &OverviewData{}
+
+	// Fetch nodes information
+	nodesResp, err := cfg.Status.NodesUI(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch nodes: %w", err)
+	}
+
+	// Process nodes data to calculate capacity and node status counts
+	for _, node := range nodesResp.Nodes {
+		// Process store capacity
+		for _, store := range node.StoreStatuses {
+			data.CapacityUsed += store.Desc.Capacity.Used
+			data.CapacityTotal += store.Desc.Capacity.Capacity
+			data.CapacityAvailable += store.Desc.Capacity.Available
+			data.TotalRanges += int(store.Desc.Capacity.RangeCount)
+		}
+
+		// Count node status based on liveness
+		if liveness, ok := nodesResp.LivenessByNodeID[node.Desc.NodeID]; ok {
+			switch liveness {
+			case 3: // NODE_STATUS_LIVE
+				data.LiveNodes++
+			case 2: // NODE_STATUS_UNAVAILABLE (suspect)
+				data.SuspectNodes++
+			case 6: // NODE_STATUS_DRAINING
+				data.DrainingNodes++
+			case 1: // NODE_STATUS_DEAD
+				data.DeadNodes++
+			}
+		}
+	}
+
+	// Calculate capacity percentage
+	if data.CapacityTotal > 0 {
+		data.CapacityPercent = float64(data.CapacityUsed) / float64(data.CapacityTotal)
+	}
+
+	// Format capacity strings using the existing formatBytes function
+	data.CapacityUsedStr = formatBytes(float64(data.CapacityUsed))
+	data.CapacityTotalStr = formatBytes(float64(data.CapacityTotal))
+
+	// Fetch problem ranges
+	problemRangesResp, err := cfg.Status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{})
+	if err != nil {
+		// Log the error but continue - we can still show the rest of the data
+		log.Dev.Warningf(ctx, "Failed to fetch problem ranges: %v", err)
+	} else {
+		// Count underreplicated and unavailable ranges across all nodes
+		for _, nodeProblems := range problemRangesResp.ProblemsByNodeID {
+			data.UnderReplicatedRanges += len(nodeProblems.UnderreplicatedRangeIDs)
+			data.UnavailableRanges += len(nodeProblems.UnavailableRangeIDs)
+		}
+	}
+
+	return data, nil
 }
 
 // handleLogin serves the login.html template
