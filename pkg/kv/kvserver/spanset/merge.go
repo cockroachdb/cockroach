@@ -13,12 +13,12 @@ import "slices"
 //
 // Returns true iff all of the spans are distinct.
 // The input spans are not safe for re-use.
-func mergeSpans(latches *[]Span) ([]Span, bool) {
-	if len(*latches) == 0 {
-		return *latches, true
+func mergeSpans(latches []Span) ([]Span, bool) {
+	if len(latches) == 0 {
+		return latches, true
 	}
 
-	slices.SortFunc(*latches, func(s1, s2 Span) int {
+	slices.SortFunc(latches, func(s1, s2 Span) int {
 		// Sort first on the start key and second on the end key. Note that we're
 		// relying on EndKey = nil (and len(EndKey) == 0) sorting before other
 		// EndKeys.
@@ -32,10 +32,10 @@ func mergeSpans(latches *[]Span) ([]Span, bool) {
 	// We build up the resulting slice of merged spans in place. This is safe
 	// because "r" grows by at most 1 element on each iteration, staying abreast
 	// or behind the iteration over "latches".
-	r := (*latches)[:1]
+	r := latches[:1]
 	distinct := true
 
-	for _, cur := range (*latches)[1:] {
+	for _, cur := range latches[1:] {
 		prev := &r[len(r)-1]
 		if len(cur.EndKey) == 0 && len(prev.EndKey) == 0 {
 			if cur.Key.Compare(prev.Key) != 0 {
