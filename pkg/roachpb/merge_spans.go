@@ -5,28 +5,10 @@
 
 package roachpb
 
-import "sort"
-
-type sortedSpans []Span
-
-func (s *sortedSpans) Less(i, j int) bool {
-	// Sort first on the start key and second on the end key. Note that we're
-	// relying on EndKey = nil (and len(EndKey) == 0) sorting before other
-	// EndKeys.
-	c := (*s)[i].Key.Compare((*s)[j].Key)
-	if c != 0 {
-		return c < 0
-	}
-	return (*s)[i].EndKey.Compare((*s)[j].EndKey) < 0
-}
-
-func (s *sortedSpans) Swap(i, j int) {
-	(*s)[i], (*s)[j] = (*s)[j], (*s)[i]
-}
-
-func (s *sortedSpans) Len() int {
-	return len(*s)
-}
+import (
+	"slices"
+	"sort"
+)
 
 // MergeSpans sorts the incoming spans and merges overlapping spans. Returns
 // true iff all of the spans are distinct. Note that even if it returns true,
@@ -39,7 +21,14 @@ func MergeSpans(spans *[]Span) ([]Span, bool) {
 		return *spans, true
 	}
 
-	sort.Sort((*sortedSpans)(spans))
+	// Sort first on the start key and second on the end key. Note that we're
+	// relying on empty EndKey sorting before other EndKeys.
+	slices.SortFunc(*spans, func(s1, s2 Span) int {
+		if c := s1.Key.Compare(s2.Key); c != 0 {
+			return c
+		}
+		return s1.EndKey.Compare(s2.EndKey)
+	})
 
 	// We build up the resulting slice of merged spans in place. This is safe
 	// because "r" grows by at most 1 element on each iteration, staying abreast
