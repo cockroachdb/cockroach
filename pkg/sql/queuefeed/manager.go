@@ -14,7 +14,6 @@ type Manager struct {
 	executor isql.DB
 }
 
-
 func NewManager(executor isql.DB) *Manager {
 	// setup rangefeed on partitions table (/poll)
 	// handle handoff from one server to another
@@ -22,7 +21,7 @@ func NewManager(executor isql.DB) *Manager {
 }
 
 const createQueuePartitionTableSQL = `
-CREATE TABLE IF NOT EXISTS queue_partition_%s (
+CREATE TABLE IF NOT EXISTS defaultdb.queue_partition_%s (
 	partition_id INT8 PRIMARY KEY,
 	-- is the sql server assigned dead
 	sql_liveness_session UUID NOT NULL,
@@ -30,15 +29,15 @@ CREATE TABLE IF NOT EXISTS queue_partition_%s (
 	user_session UUID NOT NULL,
 	sql_liveness_session_successor UUID,
 	user_session_successor UUID,
-	partition_spec []byte,
-	updated_at TIMESTAMPZ,
+	partition_spec bytea,
+	updated_at TIMESTAMPTZ
 )`
 
 const createQueueCursorTableSQL = `
-CREATE TABLE IF NOT EXISTS queue_cursor_%s (
+CREATE TABLE IF NOT EXISTS defaultdb.queue_cursor_%s (
 	partition_id INT8 PRIMARY KEY,
-	updated_at   TIMESTAMPZ,
-	cursor       []byte,
+	updated_at   TIMESTAMPTZ,
+	cursor       bytea
 )`
 
 // should take a txn

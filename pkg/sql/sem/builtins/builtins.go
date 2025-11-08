@@ -4647,10 +4647,15 @@ value if you rely on the HLC for accuracy.`,
 		Types: tree.ParamTypes{
 			{Name: "queue_name", Typ: types.String},
 		},
+		Volatility: volatility.Volatile,
 		ReturnType: tree.FixedReturnType(types.Void),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			qn := args[0].(*tree.DString)
-			return nil, getQueueManager(evalCtx).CreateQueueTables(ctx, string(*qn))
+			err := getQueueManager(evalCtx).CreateQueueTables(ctx, string(*qn))
+			if err != nil {
+				return nil, err
+			}
+			return tree.DVoidDatum, nil
 		},
 	}),
 
@@ -4659,7 +4664,8 @@ value if you rely on the HLC for accuracy.`,
 			{Name: "queue_name", Typ: types.String},
 			{Name: "limit", Typ: types.Int},
 		},
-		ReturnType: tree.ArrayOfFirstNonNullReturnType(),
+		Volatility: volatility.Volatile,
+		ReturnType: tree.FixedReturnType(types.MakeArray(types.Json)),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			var err error
 			// ignore queue_name for now; we only support one queue
