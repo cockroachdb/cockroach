@@ -226,23 +226,6 @@ DROP USER userlongpassword
 
 subtest end
 
-subtest user_provisioning_gating_mixed_version
-
-user root
-
-statement ok
-set cluster setting security.provisioning.ldap.enabled = true;
-
-statement ok
-DROP user testuser
-
-user testuser nodeidx=0 newsession
-
-statement error pq: password authentication failed for user testuser
-SHOW session_user
-
-subtest end
-
 subtest user_provisioning_gating_latest_version
 
 user root

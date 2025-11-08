@@ -85,16 +85,6 @@ CREATE TABLE t1(
   FAMILY fam_0 (a, b, c, d, e)
 );
 
-statement ok
-CREATE TABLE t1(
-  a INT PRIMARY KEY,
-  b INT DEFAULT f1(),
-  c INT,
-  d INT NULL,
-  e INT,
-  FAMILY fam_0 (a, b, c, d, e)
-);
-
 let $tbl_id
 SELECT id FROM system.namespace WHERE name = 't1';
 

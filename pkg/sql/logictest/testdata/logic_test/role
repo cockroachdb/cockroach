@@ -1951,12 +1951,6 @@ skipif config 3node-tenant
 statement ok
 ALTER ROLE testuser PROVISIONSRC 'ldap:ldap.example.com'
 
-statement error PROVISIONSRC role option is only supported after v25.3 upgrade is finalized
-CREATE ROLE role_with_provisioning PROVISIONSRC 'ldap:ldap.example.com'
-
-statement error PROVISIONSRC role option is only supported after v25.3 upgrade is finalized
-ALTER ROLE testuser PROVISIONSRC 'ldap:ldap.example.com'
-
 subtest end
 
 # Validates that drop role will be prevented if the role is in use by
