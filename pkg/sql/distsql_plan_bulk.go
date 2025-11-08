@@ -41,6 +41,8 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanningWithOracle(
 	localityFilter roachpb.Locality,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
 	if dsp.codec.ForSystemTenant() {
+		// TODO(yuzefovich): evaluate whether we can remove system tenant
+		// specific code.
 		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg, oracle, localityFilter)
 	}
 	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg, oracle, localityFilter)

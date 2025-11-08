@@ -1314,13 +1314,6 @@ const (
 	// SpanPartitionReason_ROUND_ROBIN is reported when there is no locality info
 	// on any of the instances and so we default to a naive round-robin strategy.
 	SpanPartitionReason_ROUND_ROBIN
-	// SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY is reported when the
-	// target node retrieved via gossip is deemed unhealthy. In this case we
-	// default to the gateway node.
-	SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY
-	// SpanPartitionReason_GOSSIP_TARGET_HEALTHY is reported when the
-	// target node retrieved via gossip is deemed healthy.
-	SpanPartitionReason_GOSSIP_TARGET_HEALTHY
 	// SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED is reported
 	// when there is no match to the provided locality filter and the gateway is
 	// eligible but overloaded with other partitions. In this case we pick a
@@ -1350,10 +1343,6 @@ func (r SpanPartitionReason) String() string {
 		return "locality-filtered-random"
 	case SpanPartitionReason_ROUND_ROBIN:
 		return "round-robin"
-	case SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY:
-		return "gossip-gateway-target-unhealthy"
-	case SpanPartitionReason_GOSSIP_TARGET_HEALTHY:
-		return "gossip-target-healthy"
 	case SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED:
 		return "locality-filtered-random-gateway-overloaded"
 	default:
@@ -1527,9 +1516,6 @@ func (dsp *DistSQLPlanner) partitionSpansEx(
 		return []SpanPartition{{SQLInstanceID: dsp.gatewaySQLInstanceID, Spans: spans}},
 			true /* ignoreMisplannedRanges */, nil
 	}
-	if dsp.useGossipPlanning(ctx, planCtx) {
-		return dsp.deprecatedPartitionSpansSystem(ctx, planCtx, spans)
-	}
 	return dsp.partitionSpans(ctx, planCtx, spans, bound)
 }
 
@@ -1651,27 +1637,6 @@ func (dsp *DistSQLPlanner) partitionSpan(
 	return partitions, lastPartitionIdx, nil
 }
 
-// deprecatedPartitionSpansSystem finds node owners for ranges touching the given spans
-// for a system tenant.
-func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
-	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
-) (partitions []SpanPartition, ignoreMisplannedRanges bool, _ error) {
-	nodeMap := make(map[base.SQLInstanceID]int)
-	resolver := func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
-		return dsp.deprecatedHealthySQLInstanceIDForKVNodeIDSystem(ctx, planCtx, nodeID)
-	}
-	for _, span := range spans {
-		var err error
-		partitions, _, err = dsp.partitionSpan(
-			ctx, planCtx, span, partitions, nodeMap, resolver, &ignoreMisplannedRanges,
-		)
-		if err != nil {
-			return nil, false, err
-		}
-	}
-	return partitions, ignoreMisplannedRanges, nil
-}
-
 // partitionSpans assigns SQL instances to spans. In mixed sql and KV mode it
 // generally assigns each span to the instance hosted on the KV node chosen by
 // the configured replica oracle, while in clusters operating with standalone
@@ -1728,26 +1693,6 @@ func (dsp *DistSQLPlanner) partitionSpans(
 		}
 	}
 	return partitions, ignoreMisplannedRanges, nil
-}
-
-// deprecatedHealthySQLInstanceIDForKVNodeIDSystem returns the SQL instance that
-// should handle the range with the given node ID when planning is done on
-// behalf of the system tenant. It ensures that the chosen SQL instance is
-// healthy and of the compatible DistSQL version.
-func (dsp *DistSQLPlanner) deprecatedHealthySQLInstanceIDForKVNodeIDSystem(
-	ctx context.Context, planCtx *PlanningCtx, nodeID roachpb.NodeID,
-) (base.SQLInstanceID, SpanPartitionReason) {
-	sqlInstanceID := base.SQLInstanceID(nodeID)
-	status := dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, sqlInstanceID)
-	// If the node is unhealthy, use the gateway to process this span instead of
-	// the unhealthy host. An empty address indicates an unhealthy host.
-	reason := SpanPartitionReason_GOSSIP_TARGET_HEALTHY
-	if status != NodeOK {
-		log.VEventf(ctx, 2, "not planning on node %d: %s", sqlInstanceID, status)
-		sqlInstanceID = dsp.gatewaySQLInstanceID
-		reason = SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY
-	}
-	return sqlInstanceID, reason
 }
 
 // checkInstanceHealth returns the instance health status by dialing the node.
@@ -2129,10 +2074,6 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 		return 0, err
 	}
 
-	if dsp.useGossipPlanning(ctx, planCtx) {
-		sqlInstanceID, _ := dsp.deprecatedHealthySQLInstanceIDForKVNodeIDSystem(ctx, planCtx, replDesc.NodeID)
-		return sqlInstanceID, nil
-	}
 	resolver, err := dsp.makeInstanceResolver(ctx, planCtx)
 	if err != nil {
 		return 0, err
@@ -2140,23 +2081,6 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 	sqlInstanceID, reason := resolver(replDesc.NodeID)
 	planCtx.spanPartitionState.update(sqlInstanceID, reason)
 	return sqlInstanceID, nil
-}
-
-// TODO(yuzefovich): retire this setting altogether in 25.3 release.
-var useGossipPlanning = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.distsql_planning.use_gossip.enabled",
-	"if enabled, the DistSQL physical planner falls back to gossip-based planning",
-	false,
-)
-
-func (dsp *DistSQLPlanner) useGossipPlanning(_ context.Context, planCtx *PlanningCtx) bool {
-	var gossipPlanningEnabled bool
-	// Some of the planCtx fields can be left unset in tests.
-	if planCtx.ExtendedEvalCtx != nil && planCtx.ExtendedEvalCtx.Settings != nil {
-		gossipPlanningEnabled = useGossipPlanning.Get(&planCtx.ExtendedEvalCtx.Settings.SV)
-	}
-	return dsp.codec.ForSystemTenant() && planCtx.localityFilter.Empty() && gossipPlanningEnabled
 }
 
 // convertOrdering maps the columns in props.ordering to the output columns of a
