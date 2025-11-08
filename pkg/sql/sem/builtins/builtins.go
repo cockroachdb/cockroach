@@ -4684,7 +4684,7 @@ value if you rely on the HLC for accuracy.`,
 
 			ret := tree.NewDArray(types.Json)
 
-			rows, err := qr.GetRows(ctx)
+			rows, err := qr.GetRows(ctx, int(tree.MustBeDInt(args[1])))
 			if err != nil {
 				return nil, err
 			}
