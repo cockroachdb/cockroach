@@ -536,14 +536,6 @@ CREATE TABLE t1(
   FAMILY fam_0 (a, b, c)
 );
 
-statement ok
-CREATE TABLE t1(
-  a INT PRIMARY KEY,
-  b INT DEFAULT f1(),
-  c INT,
-  FAMILY fam_0 (a, b, c)
-);
-
 query T
 SELECT get_fn_depended_on_by($fn_id)
 ----
