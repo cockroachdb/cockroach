@@ -7,15 +7,13 @@ package spanset
 
 import "slices"
 
-// mergeSpans sorts the given spans and merges ones with overlapping
-// spans and equal access timestamps. The implementation is a copy of
-// roachpb.MergeSpans.
+// mergeSpans sorts the given spans and merges ones with overlapping spans and
+// equal access timestamps. The implementation is a modified roachpb.MergeSpans.
 //
-// Returns true iff all of the spans are distinct.
 // The input spans are not safe for re-use.
-func mergeSpans(latches []Span) ([]Span, bool) {
+func mergeSpans(latches []Span) []Span {
 	if len(latches) == 0 {
-		return latches, true
+		return latches
 	}
 
 	slices.SortFunc(latches, func(s1, s2 Span) int {
@@ -33,7 +31,6 @@ func mergeSpans(latches []Span) ([]Span, bool) {
 	// because "r" grows by at most 1 element on each iteration, staying abreast
 	// or behind the iteration over "latches".
 	r := latches[:1]
-	distinct := true
 
 	for _, cur := range latches[1:] {
 		prev := &r[len(r)-1]
@@ -46,7 +43,6 @@ func mergeSpans(latches []Span) ([]Span, bool) {
 				if cur.Timestamp != prev.Timestamp {
 					r = append(r, cur)
 				}
-				distinct = false
 			}
 			continue
 		}
@@ -58,7 +54,6 @@ func mergeSpans(latches []Span) ([]Span, bool) {
 				} else {
 					prev.EndKey = cur.EndKey
 				}
-				distinct = false
 			} else {
 				// [a, nil] merge [b, c]
 				r = append(r, cur)
@@ -75,15 +70,11 @@ func mergeSpans(latches []Span) ([]Span, bool) {
 					} else {
 						prev.EndKey = cur.EndKey
 					}
-					if c > 0 {
-						distinct = false
-					}
 				} else {
 					// [a, c] merge [b, c]
 					if cur.Timestamp != prev.Timestamp {
 						r = append(r, cur)
 					}
-					distinct = false
 				}
 			} else if c == 0 {
 				// [a, b] merge [b, nil]
@@ -96,11 +87,10 @@ func mergeSpans(latches []Span) ([]Span, bool) {
 				if cur.Timestamp != prev.Timestamp {
 					r = append(r, cur)
 				}
-				distinct = false
 			}
 			continue
 		}
 		r = append(r, cur)
 	}
-	return r, distinct
+	return r
 }
