@@ -41,14 +41,15 @@ type Visitor interface {
 	//
 	// VisitPost visits Exprs but not TableExprs. For TableExprs, VisitTablePost
 	// must be used.
-	VisitPost(expr Expr) (newNode Expr)
+	VisitPost(expr Expr) (newExpr Expr)
 }
 
 // ExtendedVisitor extends Visitor with methods that are called for TableExpr
-// nodes during an expression or statement walk.
+// nodes and Statement nodes during an expression or statement walk.
 //
 // Unlike Visitor, which does not visit some parts of the AST for historical
-// reasons, ExtendedVisitor is intended to visit every part of the tree.
+// reasons, ExtendedVisitor is intended to visit every node in the tree. (If a
+// node is missing, please add it.)
 type ExtendedVisitor interface {
 	Visitor
 
@@ -65,7 +66,22 @@ type ExtendedVisitor interface {
 	// used for rewriting expressions.
 	//
 	// VisitTablePost is identical to VisitPost but handles TableExpr nodes.
-	VisitTablePost(expr TableExpr) (newNode TableExpr)
+	VisitTablePost(expr TableExpr) (newExpr TableExpr)
+
+	// VisitStatementPre is called for each Statement node before recursing into
+	// that subtree. Upon return, if recurse if false, the visit will not recurse
+	// into the subtree (and VisitStatementPost will node be called for this
+	// Statement node).
+	//
+	// VisitStatementPre is identical to VisitPre but handles Statement nodes.
+	VisitStatementPre(expr Statement) (recurse bool, newExpr Statement)
+
+	// VisitStatementPost is called for each Statement node after recursing into
+	// the subtree. The returned Statement replaces the visited expression and can
+	// be used for rewriting expressions.
+	//
+	// VisitStatementPost is identical to VisitPost but handles Statement nodes.
+	VisitStatementPost(expr Statement) (newExpr Statement)
 }
 
 // Walk implements the Expr interface.
@@ -2147,12 +2163,21 @@ var _ walkableStmt = &ValuesClause{}
 // statement by itself. For example, it will not walk into Subquery nodes within
 // a FROM clause or into a JoinCond (unless using an ExtendedVisitor). Walk's
 // logic is pretty interdependent with the logic for constructing a query plan.
-func WalkStmt(v Visitor, stmt Statement) (newStmt Statement, changed bool) {
+func WalkStmt(v Visitor, stmt Statement) (Statement, bool) {
+	if ev, ok := v.(ExtendedVisitor); ok {
+		recurse, newStmt := ev.VisitStatementPre(stmt)
+		if walkable, ok := newStmt.(walkableStmt); recurse && ok {
+			newStmt = walkable.walkStmt(v)
+			newStmt = ev.VisitStatementPost(newStmt)
+		}
+		return newStmt, (stmt != newStmt)
+	}
+
 	walkable, ok := stmt.(walkableStmt)
 	if !ok {
 		return stmt, false
 	}
-	newStmt = walkable.walkStmt(v)
+	newStmt := walkable.walkStmt(v)
 	return newStmt, (stmt != newStmt)
 }
 
@@ -2211,7 +2236,8 @@ func SimpleStmtVisit(stmt Statement, preFn SimpleVisitFn) (Statement, error) {
 
 type extendedSimpleVisitor struct {
 	simpleVisitor
-	efn ExtendedSimpleVisitFn
+	preTableFn ExtendedSimpleVisitTableFn
+	preStmtFn  ExtendedSimpleVisitStmtFn
 }
 
 var _ ExtendedVisitor = &extendedSimpleVisitor{}
@@ -2220,31 +2246,54 @@ func (ev *extendedSimpleVisitor) VisitTablePre(expr TableExpr) (recurse bool, ne
 	if ev.err != nil {
 		return false, expr
 	}
-	recurse, newExpr, ev.err = ev.efn(expr)
+	recurse, newExpr, ev.err = ev.preTableFn(expr)
 	if ev.err != nil {
 		return false, expr
 	}
 	return recurse, newExpr
 }
 
-func (ev *extendedSimpleVisitor) VisitTablePost(expr TableExpr) (newNode TableExpr) { return expr }
+func (ev *extendedSimpleVisitor) VisitTablePost(expr TableExpr) (newExpr TableExpr) { return expr }
 
-// ExtendedSimpleVisitFn is a function that is run for every TableExpr node in
-// the VisitTablePre stage; see ExtendedSimpleVisit.
-type ExtendedSimpleVisitFn func(expr TableExpr) (recurse bool, newExpr TableExpr, err error)
+func (ev *extendedSimpleVisitor) VisitStatementPre(
+	expr Statement,
+) (recurse bool, newExpr Statement) {
+	if ev.err != nil {
+		return false, expr
+	}
+	recurse, newExpr, ev.err = ev.preStmtFn(expr)
+	if ev.err != nil {
+		return false, expr
+	}
+	return recurse, newExpr
+}
 
-// ExtendedSimpleVisit is a convenience wrapper for visitors that only have
-// VisitPre and VisitTablePre code, and don't return any results except an
-// error. The given functions are called in VisitPre for every Expr node and
-// VisitTablePre for every TableExpr node, respectively. The visitor stops as
-// soon as an error is returned.
+func (ev *extendedSimpleVisitor) VisitStatementPost(expr Statement) (newExpr Statement) {
+	return expr
+}
+
+// ExtendedSimpleVisitFn and ExtendedSimpleVisitStmtFn are functions that are
+// run for every TableExpr and Statement node, respectively; see
+// ExtendedSimpleVisit.
+type ExtendedSimpleVisitTableFn func(expr TableExpr) (recurse bool, newExpr TableExpr, err error)
+type ExtendedSimpleVisitStmtFn func(expr Statement) (recurse bool, newExpr Statement, err error)
+
+// ExtendedSimpleVisit is a convenience wrapper for extended visitors that only
+// have VisitPre, VisitTablePre, and VisitStatementPre code, and don't return
+// any results except an error. The given functions are called in VisitPre for
+// every Expr node, VisitTablePre for every TableExpr node, and
+// VisitStatementPre for every Statement node. The visitor stops as soon as an
+// error is returned.
 //
 // ExtendedSimpleVisit is identical to SimpleVisit but also handles TableExpr
-// nodes.
+// and Statement nodes.
 func ExtendedSimpleVisit(
-	expr Expr, preFn SimpleVisitFn, preTableFn ExtendedSimpleVisitFn,
+	expr Expr,
+	preFn SimpleVisitFn,
+	preTableFn ExtendedSimpleVisitTableFn,
+	preStmtFn ExtendedSimpleVisitStmtFn,
 ) (Expr, error) {
-	ev := extendedSimpleVisitor{simpleVisitor{fn: preFn}, preTableFn}
+	ev := extendedSimpleVisitor{simpleVisitor{fn: preFn}, preTableFn, preStmtFn}
 	newExpr, _ := WalkExpr(&ev, expr)
 	if ev.err != nil {
 		return nil, ev.err
@@ -2253,14 +2302,18 @@ func ExtendedSimpleVisit(
 }
 
 // ExtendedSimpleStmtVisit is a convenience wrapper for visitors that want to
-// visit all part of a statement, only have VisitPre and VisitTablePre code, and
-// don't return any results except an error. The given functions are called in
-// VisitPre for every Expr node and VisitTablePre for every TableExpr node,
-// respectively. The visitor stops as soon as an error is returned.
+// visit all part of a statement, only have VisitPre, VisitTablePre, and
+// VisitStatementPre code, and don't return any results except an error. The
+// given functions are called in VisitPre for every Expr node, VisitTablePre for
+// every TableExpr node, and VisitStatementPre for every Statement node. The
+// visitor stops as soon as an error is returned.
 func ExtendedSimpleStmtVisit(
-	stmt Statement, preFn SimpleVisitFn, preTableFn ExtendedSimpleVisitFn,
+	stmt Statement,
+	preFn SimpleVisitFn,
+	preTableFn ExtendedSimpleVisitTableFn,
+	preStmtFn ExtendedSimpleVisitStmtFn,
 ) (Statement, error) {
-	ev := extendedSimpleVisitor{simpleVisitor{fn: preFn}, preTableFn}
+	ev := extendedSimpleVisitor{simpleVisitor{fn: preFn}, preTableFn, preStmtFn}
 	newStmt, changed := WalkStmt(&ev, stmt)
 	if ev.err != nil {
 		return nil, ev.err
@@ -2276,7 +2329,7 @@ type debugVisitor struct {
 	level int
 }
 
-var _ Visitor = &debugVisitor{}
+var _ ExtendedVisitor = &debugVisitor{}
 
 func (v *debugVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	v.level++
@@ -2289,6 +2342,36 @@ func (v *debugVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 }
 
 func (v *debugVisitor) VisitPost(expr Expr) Expr {
+	v.level--
+	return expr
+}
+
+func (v *debugVisitor) VisitTablePre(expr TableExpr) (recurse bool, newExpr TableExpr) {
+	v.level++
+	fmt.Fprintf(&v.buf, "%*s", 2*v.level, " ")
+	str := fmt.Sprintf("%#v\n", expr)
+	// Remove "parser." to make the string more compact.
+	str = strings.Replace(str, "parser.", "", -1)
+	v.buf.WriteString(str)
+	return true, expr
+}
+
+func (v *debugVisitor) VisitTablePost(expr TableExpr) TableExpr {
+	v.level--
+	return expr
+}
+
+func (v *debugVisitor) VisitStatementPre(expr Statement) (recurse bool, newExpr Statement) {
+	v.level++
+	fmt.Fprintf(&v.buf, "%*s", 2*v.level, " ")
+	str := fmt.Sprintf("%#v\n", expr)
+	// Remove "parser." to make the string more compact.
+	str = strings.Replace(str, "parser.", "", -1)
+	v.buf.WriteString(str)
+	return true, expr
+}
+
+func (v *debugVisitor) VisitStatementPost(expr Statement) Statement {
 	v.level--
 	return expr
 }
