@@ -38,49 +38,27 @@ func MergeSpans(spans []Span) ([]Span, bool) {
 
 	for _, cur := range spans[1:] {
 		prev := &r[len(r)-1]
-		if len(cur.EndKey) == 0 && len(prev.EndKey) == 0 {
-			if cur.Key.Compare(prev.Key) != 0 {
-				// [a, nil] merge [b, nil]
-				r = append(r, cur)
+		if len(prev.EndKey) == 0 { // prev is a point key
+			if !cur.Key.Equal(prev.Key) { // cur.Key > prev.Key
+				r = append(r, cur) // [a] + [b,any) = [a], [b,any)
 			} else {
-				// [a, nil] merge [a, nil]
-				distinct = false
+				distinct = false         // [a] + [a,any) = [a,any)
+				prev.EndKey = cur.EndKey // cur.EndKey >= prev.EndKey
 			}
-			continue
-		}
-		if len(prev.EndKey) == 0 {
-			if cur.Key.Compare(prev.Key) == 0 {
-				// [a, nil] merge [a, b]
-				prev.EndKey = cur.EndKey
-				distinct = false
-			} else {
-				// [a, nil] merge [b, c]
-				r = append(r, cur)
+		} else if c := cur.Key.Compare(prev.EndKey); c > 0 {
+			r = append(r, cur) // // [a,b) + [c,any) = [a,b), [c,any)
+		} else if c == 0 {
+			if len(cur.EndKey) == 0 { // cur is a point key
+				prev.EndKey = cur.Key.Next() // [a,b) + [b] = [a,b.Next())
+			} else if cur.EndKey.Compare(prev.EndKey) > 0 {
+				prev.EndKey = cur.EndKey // [a,b) + [b,c) = [a,c)
 			}
-			continue
-		}
-		if c := prev.EndKey.Compare(cur.Key); c >= 0 {
-			if cur.EndKey != nil {
-				if prev.EndKey.Compare(cur.EndKey) < 0 {
-					// [a, c] merge [b, d]
-					prev.EndKey = cur.EndKey
-					if c > 0 {
-						distinct = false
-					}
-				} else {
-					// [a, c] merge [b, c]
-					distinct = false
-				}
-			} else if c == 0 {
-				// [a, b] merge [b, nil]
-				prev.EndKey = cur.Key.Next()
-			} else {
-				// [a, c] merge [b, nil]
-				distinct = false
+		} else {
+			distinct = false // cur.Key is contained in prev
+			if len(cur.EndKey) != 0 && cur.EndKey.Compare(prev.EndKey) > 0 {
+				prev.EndKey = cur.EndKey // [a,c) + [b,d) = [a,d)
 			}
-			continue
 		}
-		r = append(r, cur)
 	}
 	return r, distinct
 }
