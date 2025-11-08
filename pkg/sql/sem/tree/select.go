@@ -679,8 +679,10 @@ func (node *JoinTableExpr) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Cond)
 		ctx.WriteByte(' ')
 		if node.JoinType != "" {
-			ctx.WriteString(node.JoinType)
-			ctx.WriteByte(' ')
+			if node.JoinType != AstInner || !ctx.HasFlags(FmtHideHints) {
+				ctx.WriteString(node.JoinType)
+				ctx.WriteByte(' ')
+			}
 			if node.Hint != "" && !ctx.HasFlags(FmtHideHints) {
 				ctx.WriteString(node.Hint)
 				ctx.WriteByte(' ')
@@ -691,8 +693,10 @@ func (node *JoinTableExpr) Format(ctx *FmtCtx) {
 	} else {
 		// General syntax: "<a> <join_type> [<join_hint>] JOIN <b> <condition>"
 		if node.JoinType != "" {
-			ctx.WriteString(node.JoinType)
-			ctx.WriteByte(' ')
+			if node.JoinType != AstInner || !ctx.HasFlags(FmtHideHints) {
+				ctx.WriteString(node.JoinType)
+				ctx.WriteByte(' ')
+			}
 			if node.Hint != "" && !ctx.HasFlags(FmtHideHints) {
 				ctx.WriteString(node.Hint)
 				ctx.WriteByte(' ')
