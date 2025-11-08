@@ -1980,7 +1980,7 @@ func TestRangefeedCatchupStarvation(t *testing.T) {
 				if len(seen) >= totalKeys {
 					return
 				}
-			case <-time.After(testutils.DefaultSucceedsSoonDuration):
+			case <-time.After(testutils.SucceedsSoonDuration()):
 				t.Fatal("test timed out")
 			}
 		}
