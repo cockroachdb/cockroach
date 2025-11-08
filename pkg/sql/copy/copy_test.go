@@ -704,8 +704,9 @@ func TestLargeCopy(t *testing.T) {
 	// This test can cause timeouts.
 	skip.UnderRace(t)
 	ctx := context.Background()
+	rng, _ := randutil.NewPseudoRand()
 
-	srv, _, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, sqlDB, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
@@ -719,16 +720,53 @@ func TestLargeCopy(t *testing.T) {
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvdb, s.Codec(), "defaultdb", "lineitem")
 	require.NotNil(t, desc, "Failed to lookup descriptor")
+	rows := rng.Intn(2000) + 1
+	cr := &copyReader{rng: rng, cols: desc.PublicColumns(), rows: rows}
 
-	err = conn.Exec(ctx, "SET copy_from_atomic_enabled = false")
-	require.NoError(t, err)
+	if rng.Float64() < 0.5 {
+		_, err = sqlDB.Exec("SET copy_from_atomic_enabled = false")
+		require.NoError(t, err)
+	}
 
-	rng := rand.New(rand.NewSource(0))
-	rows := 100
-	numrows, err := conn.GetDriverConn().CopyFrom(ctx,
-		&copyReader{rng: rng, cols: desc.PublicColumns(), rows: rows},
-		"COPY lineitem FROM STDIN WITH CSV;")
-	require.NoError(t, err)
+	// In 50% cases change the primary key concurrently with the COPY.
+	doAlterPK := rng.Float64() < 0.5
+	ignoreErr := func(err error) bool {
+		if err == nil {
+			return true
+		}
+		if !doAlterPK {
+			return false
+		}
+		// We might hit a duplicate key error when changing the primary key
+		// (which seems somewhat expected), so we'll ignore such an error.
+		return strings.Contains(err.Error(), "duplicate key") ||
+			// TODO(yuzefovich): occasionally we get this error, and it's not
+			// clear why. Look into this.
+			strings.Contains(err.Error(), "cannot disable pipelining on a running transaction")
+	}
+	alterPKCh := make(chan error)
+	if doAlterPK {
+		// We'll delay starting the ALTER to exercise different scenarios.
+		sleepMillis := rng.Intn(2000)
+		go func() {
+			defer close(alterPKCh)
+			time.Sleep(time.Duration(sleepMillis) * time.Millisecond)
+			_, err := sqlDB.Exec("ALTER TABLE lineitem ALTER PRIMARY KEY USING COLUMNS (l_orderkey, l_linenumber, l_suppkey);")
+			alterPKCh <- err
+		}()
+		// Delay starting the COPY too.
+		time.Sleep(time.Duration(rng.Intn(2000)) * time.Millisecond)
+	} else {
+		close(alterPKCh)
+	}
+	numrows, copyErr := conn.GetDriverConn().CopyFrom(ctx, cr, "COPY lineitem FROM STDIN WITH CSV;")
+	alterErr := <-alterPKCh
+	if !ignoreErr(copyErr) {
+		t.Fatal(copyErr)
+	}
+	if !ignoreErr(alterErr) {
+		t.Fatal(alterErr)
+	}
 	require.Equal(t, int(numrows), rows)
 }
 
