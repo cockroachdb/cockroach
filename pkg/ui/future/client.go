@@ -24,10 +24,7 @@ import (
 // This follows the same pattern as NewAPIInternalServer in pkg/server/apiinternal,
 // but wraps the connection in regular client types that include grpc.CallOption support.
 func DialNodeClients(
-	ctx context.Context,
-	nd rpcbase.NodeDialer,
-	nodeID roachpb.NodeID,
-	cs *cluster.Settings,
+	ctx context.Context, nd rpcbase.NodeDialer, nodeID roachpb.NodeID, cs *cluster.Settings,
 ) (serverpb.AdminClient, serverpb.StatusClient, error) {
 	// Dial the node using the default connection class
 	conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
@@ -46,7 +43,9 @@ func DialNodeClients(
 // by dialing a remote address using simple gRPC dial.
 // This is a simplified version for external tools that don't have access to
 // the CockroachDB RPC infrastructure. For internal use, prefer DialNodeClients.
-func DialRemoteClients(ctx context.Context, address string) (serverpb.AdminClient, serverpb.StatusClient, error) {
+func DialRemoteClients(
+	ctx context.Context, address string,
+) (serverpb.AdminClient, serverpb.StatusClient, error) {
 	// Dial the remote server
 	conn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {

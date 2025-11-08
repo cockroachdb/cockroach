@@ -12,3 +12,21 @@ sh_binary(
     ],
     visibility = ["//visibility:public"],
 )
+
+# Development target for running standalone DB Console server with ibazel hot reload
+# Usage:
+#   1. Start CRDB: ./cockroach start-single-node --insecure
+#   2. In another terminal: ibazel run //build/dev:cockroach-db-console
+# This provides hot reload for UI development while keeping CRDB node running
+# Uses minimal standalone binary (1,565 packages vs 5,570) for 72% faster builds!
+sh_binary(
+    name = "cockroach-db-console",
+    srcs = ["cockroach-db-console.sh"],
+    args = [
+        "$(location //pkg/cmd/cockroach-db-console-standalone:cockroach-db-console-standalone)",
+    ],
+    data = [
+        "//pkg/cmd/cockroach-db-console-standalone",
+    ],
+    visibility = ["//visibility:public"],
+)

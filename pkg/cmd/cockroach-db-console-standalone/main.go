@@ -3,7 +3,9 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package cli
+// cockroach-db-console-standalone is a minimal binary for UI development
+// that has ZERO dependencies on pkg/cli to keep builds fast.
+package main
 
 import (
 	"context"
@@ -14,68 +16,44 @@ import (
 	"os/signal"
 	"regexp"
 
-	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/ui/future"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
-	"github.com/spf13/cobra"
 )
 
-var startDBConsoleCmd = &cobra.Command{
-	Use:   "start-db-console",
-	Short: "start a standalone DB Console server",
-	Long: `
-Start a standalone DB Console server that connects to a running CockroachDB node.
-This allows for fast development iteration with hot reloading while keeping the
-CockroachDB node running.
-
-The console will be served on http://localhost:9080 by default.
-`,
-	Example: `  cockroach start-db-console --host=localhost:26257 --insecure`,
-	Args:    cobra.NoArgs,
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		os.Exit(1)
+	}
 }
 
-// GetStartDBConsoleCmd returns the start-db-console command for use in minimal builds.
-func GetStartDBConsoleCmd() *cobra.Command {
-	return startDBConsoleCmd
-}
+func run() error {
+	// Parse simple flags
+	host := "localhost:26257"
+	port := "9080"
 
-var dbConsoleCtx = struct {
-	host     string
-	port     string
-	insecure bool
-}{
-	host:     "localhost:26257",
-	port:     "9080",
-	insecure: true,
-}
+	for i, arg := range os.Args[1:] {
+		switch arg {
+		case "--host":
+			if i+1 < len(os.Args)-1 {
+				host = os.Args[i+2]
+			}
+		case "--port":
+			if i+1 < len(os.Args)-1 {
+				port = os.Args[i+2]
+			}
+		case "--help", "-h":
+			fmt.Println("Usage: cockroach-db-console-standalone [--host=localhost:26257] [--port=9080]")
+			fmt.Println("")
+			fmt.Println("Minimal DB Console server for fast UI development iteration.")
+			fmt.Println("Connects to a running CockroachDB node and serves the UI.")
+			return nil
+		}
+	}
 
-func init() {
-	startDBConsoleCmd.RunE = clierrorplus.MaybeDecorateError(runStartDBConsole)
-
-	// Add flags
-	startDBConsoleCmd.Flags().StringVar(
-		&dbConsoleCtx.host,
-		"host",
-		dbConsoleCtx.host,
-		"CockroachDB node address to connect to (host:port)")
-
-	startDBConsoleCmd.Flags().StringVar(
-		&dbConsoleCtx.port,
-		"port",
-		dbConsoleCtx.port,
-		"Port to serve the DB Console on")
-
-	startDBConsoleCmd.Flags().BoolVar(
-		&dbConsoleCtx.insecure,
-		"insecure",
-		dbConsoleCtx.insecure,
-		"Use insecure connection (development only)")
-}
-
-func runStartDBConsole(cmd *cobra.Command, _ []string) error {
 	ctx := context.Background()
 
 	// Create a stopper for graceful shutdown
@@ -91,9 +69,8 @@ func runStartDBConsole(cmd *cobra.Command, _ []string) error {
 		stopper.Stop(ctx)
 	}()
 
-	// Dial the node to get clients using simple gRPC dial
-	// This is simpler for a development tool and doesn't require cluster ID matching
-	adminClient, statusClient, err := future.DialRemoteClients(ctx, dbConsoleCtx.host)
+	// Dial the node using simple gRPC
+	adminClient, statusClient, err := future.DialRemoteClients(ctx, host)
 	if err != nil {
 		return errors.Wrap(err, "failed to dial CockroachDB node")
 	}
@@ -101,7 +78,7 @@ func runStartDBConsole(cmd *cobra.Command, _ []string) error {
 	// Verify connection by checking cluster info
 	clusterResp, err := adminClient.Cluster(ctx, &serverpb.ClusterRequest{})
 	if err != nil {
-		return errors.Wrapf(err, "failed to connect to CockroachDB at %s", dbConsoleCtx.host)
+		return errors.Wrapf(err, "failed to connect to CockroachDB at %s", host)
 	}
 
 	// Get build info from the remote node
@@ -114,13 +91,12 @@ func runStartDBConsole(cmd *cobra.Command, _ []string) error {
 	fmt.Printf("Connected to CockroachDB cluster: %s (version: %s)\n",
 		clusterResp.ClusterID, buildInfo.Tag)
 
-	// Extract version in vMajor.Minor format (e.g., "v24.3") from the tag
-	// Tag format is typically "v24.3.0" or "v24.3.0-alpha.1"
+	// Extract version in vMajor.Minor format from tag
 	version := extractMajorMinorVersion(buildInfo.Tag)
 
-	// Create the UI handler with actual build info from the server
+	// Create the UI handler
 	uiHandler := future.MakeFutureHandler(future.IndexHTMLArgs{
-		Insecure:  dbConsoleCtx.insecure,
+		Insecure:  true, // Always insecure for dev
 		NodeID:    detailsResp.NodeID.String(),
 		Tag:       buildInfo.Tag,
 		Version:   version,
@@ -130,7 +106,7 @@ func runStartDBConsole(cmd *cobra.Command, _ []string) error {
 	})
 
 	// Create HTTP server
-	listenAddr := fmt.Sprintf("localhost:%s", dbConsoleCtx.port)
+	listenAddr := fmt.Sprintf("localhost:%s", port)
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		return errors.Wrapf(err, "failed to listen on %s", listenAddr)
@@ -140,7 +116,7 @@ func runStartDBConsole(cmd *cobra.Command, _ []string) error {
 		Handler: uiHandler,
 	}
 
-	fmt.Printf("DB Console available at http://%s/future\n", listenAddr)
+	fmt.Printf("DB Console available at http://%s\n", listenAddr)
 	fmt.Println("Press Ctrl+C to stop")
 
 	// Start serving in a goroutine
@@ -154,7 +130,6 @@ func runStartDBConsole(cmd *cobra.Command, _ []string) error {
 	// Wait for shutdown or error
 	select {
 	case <-stopper.ShouldQuiesce():
-		// Gracefully shutdown the HTTP server
 		if err := server.Shutdown(ctx); err != nil {
 			log.Dev.Warningf(ctx, "HTTP server shutdown error: %v", err)
 		}
@@ -164,15 +139,11 @@ func runStartDBConsole(cmd *cobra.Command, _ []string) error {
 	}
 }
 
-// extractMajorMinorVersion extracts the major.minor version from a build tag.
-// For example: "v24.3.0" -> "v24.3", "v24.3.0-alpha.1" -> "v24.3"
 func extractMajorMinorVersion(tag string) string {
-	// Match vMAJOR.MINOR pattern (e.g., v24.3)
 	re := regexp.MustCompile(`^v(\d+)\.(\d+)`)
 	matches := re.FindStringSubmatch(tag)
 	if len(matches) >= 3 {
 		return fmt.Sprintf("v%s.%s", matches[1], matches[2])
 	}
-	// Fallback to the full tag if parsing fails
 	return tag
 }
