@@ -53,6 +53,11 @@ func NewHintInjectionDonor(ast Statement, sv *settings.Values) (*HintInjectionDo
 			donor.walk = append(donor.walk, expr)
 			return true, expr, nil
 		},
+		// Statement nodes are not tracked in the donor walk on this branch;
+		// the injection visitor's statement hooks are no-ops to match.
+		func(stmt Statement) (bool, Statement, error) {
+			return true, stmt, nil
+		},
 	); err != nil {
 		return nil, err
 	}
@@ -155,6 +160,16 @@ func (v *hintInjectionVisitor) VisitTablePre(expr TableExpr) (recurse bool, newE
 
 func (v *hintInjectionVisitor) VisitPost(expr Expr) Expr                { return expr }
 func (v *hintInjectionVisitor) VisitTablePost(expr TableExpr) TableExpr { return expr }
+
+// VisitStatementPre is part of the ExtendedVisitor interface. Statement nodes
+// do not participate in hint injection on this branch; it recurses without
+// consuming a donor walk entry, mirroring the donor's statement no-op.
+func (v *hintInjectionVisitor) VisitStatementPre(stmt Statement) (recurse bool, newStmt Statement) {
+	return true, stmt
+}
+
+// VisitStatementPost is part of the ExtendedVisitor interface.
+func (v *hintInjectionVisitor) VisitStatementPost(stmt Statement) Statement { return stmt }
 
 var _ ExtendedVisitor = &hintInjectionVisitor{}
 
