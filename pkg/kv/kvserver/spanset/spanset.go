@@ -226,21 +226,6 @@ func (s *SpanSet) GetSpans(access SpanAccess, scope SpanScope) []Span {
 	return s.spans[access][scope]
 }
 
-// BoundarySpan returns a span containing all the spans with the given params.
-func (s *SpanSet) BoundarySpan(scope SpanScope) roachpb.Span {
-	var boundary roachpb.Span
-	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
-		for _, cur := range s.GetSpans(sa, scope) {
-			if !boundary.Valid() {
-				boundary = cur.Span
-				continue
-			}
-			boundary = boundary.Combine(cur.Span)
-		}
-	}
-	return boundary
-}
-
 // Intersects returns true iff the span set denoted by `other` has any
 // overlapping spans with `s`, and that those spans overlap in access type. Note
 // that timestamps associated with the spans in the spanset are not considered,
