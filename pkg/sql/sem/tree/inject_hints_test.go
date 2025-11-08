@@ -192,6 +192,69 @@ func TestInjectHints(t *testing.T) {
 			expectedSQL:   "SELECT * FROM a@a_b_idx WHERE b = $1 ORDER BY c LIMIT $2",
 			expectChanged: true,
 		},
+		{
+			name:          "index hint with hidden placeholders",
+			originalSQL:   "SELECT * FROM a WHERE b = $1 ORDER BY c LIMIT $2",
+			donorSQL:      "SELECT * FROM a@a_b_idx WHERE b = _ ORDER BY c LIMIT _",
+			expectedSQL:   "SELECT * FROM a@a_b_idx WHERE b = $1 ORDER BY c LIMIT $2",
+			expectChanged: true,
+		},
+		{
+			name:          "index hint with hidden constants",
+			originalSQL:   "SELECT * FROM a WHERE b = 1 ORDER BY c LIMIT 2",
+			donorSQL:      "SELECT * FROM a@a_b_idx WHERE b = _ ORDER BY c LIMIT _",
+			expectedSQL:   "SELECT * FROM a@a_b_idx WHERE b = 1 ORDER BY c LIMIT 2",
+			expectChanged: true,
+		},
+		{
+			name:          "extra parens",
+			originalSQL:   "SELECT * FROM a WHERE b > 1 AND b < 10 ORDER BY c LIMIT 2",
+			donorSQL:      "SELECT * FROM a@a_b_idx WHERE (b > _) AND (b < _) ORDER BY c LIMIT _",
+			expectedSQL:   "SELECT * FROM a@a_b_idx WHERE (b > 1) AND (b < 10) ORDER BY c LIMIT 2",
+			expectChanged: true,
+		},
+		{
+			name:          "even more parens",
+			originalSQL:   "SELECT * FROM a WHERE (b > 1 AND b < 10) OR (b > 20) ORDER BY c LIMIT 2",
+			donorSQL:      "SELECT * FROM a@a_b_idx WHERE ((b > _) AND (b < _)) OR (b > _) ORDER BY c LIMIT _",
+			expectedSQL:   "SELECT * FROM a@a_b_idx WHERE ((b > 1) AND (b < 10)) OR (b > 20) ORDER BY c LIMIT 2",
+			expectChanged: true,
+		},
+		{
+			name:          "tuple, array, values with one item",
+			originalSQL:   "SELECT (4,), ARRAY[5] FROM a LEFT OUTER JOIN (VALUES (6)) AS b (c) ON d = e",
+			donorSQL:      "SELECT (_,), ARRAY[_] FROM a LEFT LOOKUP JOIN (VALUES (_)) AS b (c) ON d = e",
+			expectedSQL:   "SELECT (4,), ARRAY[5] FROM a LEFT LOOKUP JOIN (VALUES (6)) AS b (c) ON d = e",
+			expectChanged: true,
+		},
+		{
+			name:          "tuple with collapsed list",
+			originalSQL:   "SELECT (4, 5, 6) FROM a JOIN b ON c = d",
+			donorSQL:      "SELECT (_, __more__) FROM a INNER HASH JOIN b ON c = d",
+			expectedSQL:   "SELECT (4, 5, 6) FROM a INNER HASH JOIN b ON c = d",
+			expectChanged: true,
+		},
+		{
+			name:          "array with collapsed list",
+			originalSQL:   "SELECT ARRAY[4, 5, 6] FROM a JOIN b ON c = d",
+			donorSQL:      "SELECT ARRAY[_, __more__] FROM a@{NO_FULL_SCAN} INNER HASH JOIN b@b_d_idx ON c = d",
+			expectedSQL:   "SELECT ARRAY[4, 5, 6] FROM a@{NO_FULL_SCAN} INNER HASH JOIN b@b_d_idx ON c = d",
+			expectChanged: true,
+		},
+		{
+			name:          "values with collapsed lists",
+			originalSQL:   "SELECT * FROM (VALUES (5, 6), (7, 8)) AS v (c, d), a WHERE b = c",
+			donorSQL:      "SELECT * FROM (VALUES (_, __more__), (__more__)) AS v (c, d), a@{NO_FULL_SCAN} WHERE b = c",
+			expectedSQL:   "SELECT * FROM (VALUES (5, 6), (7, 8)) AS v (c, d), a@{NO_FULL_SCAN} WHERE b = c",
+			expectChanged: true,
+		},
+		{
+			name:          "inner join",
+			originalSQL:   "SELECT * FROM a INNER JOIN b ON true",
+			donorSQL:      "SELECT * FROM a INNER JOIN b ON true",
+			expectedSQL:   "SELECT * FROM a INNER JOIN b ON true",
+			expectChanged: false,
+		},
 	}
 
 	st := cluster.MakeTestingClusterSettings()
@@ -296,9 +359,9 @@ func TestRandomInjectHints(t *testing.T) {
 		require.NoError(t, err)
 		donorSQL := tree.AsString(donorStmt.AST)
 
-		// Format the donor AST without hints, and parse again to make the target
-		// statement fingerprint.
-		targetSQL := tree.AsStringWithFlags(donorStmt.AST, tree.FmtHideHints)
+		// Format the random statement without hints, and parse again to make the
+		// target statement.
+		targetSQL := tree.AsStringWithFlags(randStmt.AST, tree.FmtHideHints)
 		targetStmt, err := parser.ParseOne(targetSQL)
 		require.NoError(t, err)
 
@@ -309,13 +372,12 @@ func TestRandomInjectHints(t *testing.T) {
 		result, changed, err := donor.InjectHints(targetStmt.AST)
 		require.NoError(t, err)
 
-		// Check that the rewritten statement matches the donor statement.
-		if changed {
-			resultSQL := tree.AsString(result)
-			require.Equal(t, donorSQL, resultSQL, "resulting SQL mismatch")
-		} else {
+		// Check that the rewritten statement matches the donor statement when
+		// formatted as a statement fingerprint.
+		resultFingerprint := tree.AsStringWithFlags(result, fingerprintFlags)
+		require.Equal(t, donorSQL, resultFingerprint, "resulting SQL mismatch")
+		if !changed {
 			require.Same(t, targetStmt.AST, result, "resulting statement was changed")
-			require.Equal(t, donorSQL, targetSQL)
 		}
 	}
 }
