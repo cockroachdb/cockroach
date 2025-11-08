@@ -56,7 +56,7 @@ func TestMergeSpans(t *testing.T) {
 	}
 	for _, c := range testCases {
 		spans := makeSpans(c.spans)
-		spans, distinct := MergeSpans((*[]Span)(&spans))
+		spans, distinct := MergeSpans(spans)
 		expected := makeSpans(c.expected)
 		require.Equal(t, expected, spans)
 		require.Equal(t, c.distinct, distinct)

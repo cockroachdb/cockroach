@@ -404,7 +404,7 @@ func mergeIntoSpans(s []roachpb.Span, ws []roachpb.SequencedWrite) ([]roachpb.Sp
 	for i, w := range ws {
 		m[len(s)+i] = roachpb.Span{Key: w.Key}
 	}
-	return roachpb.MergeSpans(&m)
+	return roachpb.MergeSpans(m)
 }
 
 // isTxnCommitImplicit determines whether the transaction has satisfied the

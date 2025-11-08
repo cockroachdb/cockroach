@@ -16,14 +16,14 @@ import (
 // but the two are still merged.
 //
 // The input spans are not safe for re-use.
-func MergeSpans(spans *[]Span) ([]Span, bool) {
-	if len(*spans) == 0 {
-		return *spans, true
+func MergeSpans(spans []Span) ([]Span, bool) {
+	if len(spans) == 0 {
+		return spans, true
 	}
 
 	// Sort first on the start key and second on the end key. Note that we're
 	// relying on empty EndKey sorting before other EndKeys.
-	slices.SortFunc(*spans, func(s1, s2 Span) int {
+	slices.SortFunc(spans, func(s1, s2 Span) int {
 		if c := s1.Key.Compare(s2.Key); c != 0 {
 			return c
 		}
@@ -33,10 +33,10 @@ func MergeSpans(spans *[]Span) ([]Span, bool) {
 	// We build up the resulting slice of merged spans in place. This is safe
 	// because "r" grows by at most 1 element on each iteration, staying abreast
 	// or behind the iteration over "spans".
-	r := (*spans)[:1]
+	r := spans[:1]
 	distinct := true
 
-	for _, cur := range (*spans)[1:] {
+	for _, cur := range spans[1:] {
 		prev := &r[len(r)-1]
 		if len(cur.EndKey) == 0 && len(prev.EndKey) == 0 {
 			if cur.Key.Compare(prev.Key) != 0 {
