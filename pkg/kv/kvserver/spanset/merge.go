@@ -34,26 +34,22 @@ func mergeSpans(latches []Span) []Span {
 
 	for _, cur := range latches[1:] {
 		prev := &r[len(r)-1]
+		// Can only merge spans at the same timestamp.
+		if cur.Timestamp != prev.Timestamp {
+			r = append(r, cur)
+			continue
+		}
 		if len(cur.EndKey) == 0 && len(prev.EndKey) == 0 {
 			if cur.Key.Compare(prev.Key) != 0 {
 				// [a, nil] merge [b, nil]
 				r = append(r, cur)
-			} else {
-				// [a, nil] merge [a, nil]
-				if cur.Timestamp != prev.Timestamp {
-					r = append(r, cur)
-				}
 			}
 			continue
 		}
 		if len(prev.EndKey) == 0 {
 			if cur.Key.Compare(prev.Key) == 0 {
 				// [a, nil] merge [a, b]
-				if cur.Timestamp != prev.Timestamp {
-					r = append(r, cur)
-				} else {
-					prev.EndKey = cur.EndKey
-				}
+				prev.EndKey = cur.EndKey
 			} else {
 				// [a, nil] merge [b, c]
 				r = append(r, cur)
@@ -65,29 +61,11 @@ func mergeSpans(latches []Span) []Span {
 			if cur.EndKey != nil {
 				if prev.EndKey.Compare(cur.EndKey) < 0 {
 					// [a, c] merge [b, d]
-					if cur.Timestamp != prev.Timestamp {
-						r = append(r, cur)
-					} else {
-						prev.EndKey = cur.EndKey
-					}
-				} else {
-					// [a, c] merge [b, c]
-					if cur.Timestamp != prev.Timestamp {
-						r = append(r, cur)
-					}
+					prev.EndKey = cur.EndKey
 				}
 			} else if c == 0 {
 				// [a, b] merge [b, nil]
-				if cur.Timestamp != prev.Timestamp {
-					r = append(r, cur)
-				} else {
-					prev.EndKey = cur.Key.Next()
-				}
-			} else {
-				// [a, c] merge [b, nil]
-				if cur.Timestamp != prev.Timestamp {
-					r = append(r, cur)
-				}
+				prev.EndKey = cur.Key.Next()
 			}
 			continue
 		}
