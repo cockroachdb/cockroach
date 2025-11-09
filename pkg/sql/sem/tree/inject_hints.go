@@ -211,12 +211,13 @@ func (v *hintInjectionVisitor) VisitTablePre(expr TableExpr) (recurse bool, newE
 	donorExpr := v.hd.walk[v.walkIdx]
 	v.walkIdx += 1
 
-	// Copy hints from the corresponding donor TableExpr.
+	// Remove any existing hints from the original TableExpr, and copy hints from
+	// the corresponding donor TableExpr.
 	switch donor := donorExpr.(type) {
 	case *AliasedTableExpr:
 		switch orig := expr.(type) {
 		case *AliasedTableExpr:
-			if donor.IndexFlags != nil {
+			if !donor.IndexFlags.Equal(orig.IndexFlags) {
 				// Create a new node with any pre-existing inline hints replaced with
 				// hints from the donor.
 				newNode := *orig
