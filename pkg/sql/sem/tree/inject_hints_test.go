@@ -82,7 +82,7 @@ func TestInjectHints(t *testing.T) {
 			originalSQL:   "SELECT * FROM t@idx",
 			donorSQL:      "SELECT * FROM t@idx",
 			expectedSQL:   "SELECT * FROM t@idx",
-			expectChanged: true, // we still perform a rewrite, and still return true
+			expectChanged: false,
 		},
 		{
 			name:          "different constants should work",
@@ -153,11 +153,11 @@ func TestInjectHints(t *testing.T) {
 			expectChanged: true,
 		},
 		{
-			name:          "hint unchanged by donor",
+			name:          "hint overwritten by donor",
 			originalSQL:   "SELECT * FROM t@idx",
-			donorSQL:      "SELECT * FROM t",
-			expectedSQL:   "SELECT * FROM t@idx",
-			expectChanged: false,
+			donorSQL:      "SELECT * FROM t@{NO_FULL_SCAN}",
+			expectedSQL:   "SELECT * FROM t@{NO_FULL_SCAN}",
+			expectChanged: true,
 		},
 		{
 			name:          "subquery in join condition",
@@ -285,6 +285,13 @@ func TestInjectHints(t *testing.T) {
 			originalSQL:   "SELECT * FROM a JOIN b ON true",
 			donorSQL:      "SELECT * FROM a INNER JOIN b ON true",
 			expectedSQL:   "SELECT * FROM a INNER JOIN b ON true",
+			expectChanged: true,
+		},
+		{
+			name:          "remove hints",
+			originalSQL:   "SELECT * FROM a@{NO_FULL_SCAN,IGNORE_FOREIGN_KEYS} INNER LOOKUP JOIN b@b_c_idx ON true",
+			donorSQL:      "SELECT * FROM a JOIN b ON true",
+			expectedSQL:   "SELECT * FROM a JOIN b ON true",
 			expectChanged: true,
 		},
 	}
