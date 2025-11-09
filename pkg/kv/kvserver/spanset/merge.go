@@ -78,8 +78,9 @@ func mergeSpans(latches []Span) []Span {
 				// [a, b] merge [b, nil]
 				if cur.Timestamp != prev.Timestamp {
 					r = append(r, cur)
+				} else {
+					prev.EndKey = cur.Key.Next()
 				}
-				prev.EndKey = cur.Key.Next()
 			} else {
 				// [a, c] merge [b, nil]
 				if cur.Timestamp != prev.Timestamp {
