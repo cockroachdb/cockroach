@@ -27,12 +27,13 @@ func TestInjectHints(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
-		name          string
-		originalSQL   string
-		donorSQL      string
-		expectedSQL   string
-		expectChanged bool
-		expectError   bool
+		name              string
+		originalSQL       string
+		donorSQL          string
+		expectedSQL       string
+		expectChanged     bool
+		expectError       bool
+		legacyFingerprint bool
 	}{
 		{
 			name:          "inject index hint on simple table",
@@ -242,11 +243,42 @@ func TestInjectHints(t *testing.T) {
 			expectChanged: true,
 		},
 		{
+			name:              "tuple with legacy collapsed list",
+			originalSQL:       "SELECT (4, 5, 6) FROM a JOIN b ON c = d",
+			donorSQL:          "SELECT (_, _, __more1_10__) FROM a INNER HASH JOIN b ON c = d",
+			expectedSQL:       "SELECT (4, 5, 6) FROM a INNER HASH JOIN b ON c = d",
+			expectChanged:     true,
+			legacyFingerprint: true,
+		},
+		{
+			name:              "array with legacy collapsed list",
+			originalSQL:       "SELECT ARRAY[4, 5, 6] FROM a JOIN b ON c = d",
+			donorSQL:          "SELECT ARRAY[_, _, __more1_10__] FROM a@{NO_FULL_SCAN} INNER HASH JOIN b@b_d_idx ON c = d",
+			expectedSQL:       "SELECT ARRAY[4, 5, 6] FROM a@{NO_FULL_SCAN} INNER HASH JOIN b@b_d_idx ON c = d",
+			expectChanged:     true,
+			legacyFingerprint: true,
+		},
+		{
+			name:              "values with legacy collapsed lists",
+			originalSQL:       "SELECT * FROM (VALUES (5, 6), (7, 8)) AS v (c, d), a WHERE b = c",
+			donorSQL:          "SELECT * FROM (VALUES (_, _), (__more1_10__)) AS v (c, d), a@{NO_FULL_SCAN} WHERE b = c",
+			expectedSQL:       "SELECT * FROM (VALUES (5, 6), (7, 8)) AS v (c, d), a@{NO_FULL_SCAN} WHERE b = c",
+			expectChanged:     true,
+			legacyFingerprint: true,
+		},
+		{
 			name:          "inner join",
 			originalSQL:   "SELECT * FROM a INNER JOIN b ON true",
 			donorSQL:      "SELECT * FROM a INNER JOIN b ON true",
 			expectedSQL:   "SELECT * FROM a INNER JOIN b ON true",
 			expectChanged: false,
+		},
+		{
+			name:          "inner join in donor",
+			originalSQL:   "SELECT * FROM a JOIN b ON true",
+			donorSQL:      "SELECT * FROM a INNER JOIN b ON true",
+			expectedSQL:   "SELECT * FROM a INNER JOIN b ON true",
+			expectChanged: true,
 		},
 	}
 
@@ -254,6 +286,11 @@ func TestInjectHints(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			var fingerprintFlags tree.FmtFlags
+			if !tc.legacyFingerprint {
+				fingerprintFlags = tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&st.SV))
+			}
+
 			// Parse original statement.
 			originalStmt, err := parser.ParseOne(tc.originalSQL)
 			require.NoError(t, err)
@@ -263,15 +300,15 @@ func TestInjectHints(t *testing.T) {
 			require.NoError(t, err)
 
 			// Create hint injection donor.
-			donor, err := tree.NewHintInjectionDonor(donorStmt.AST, &st.SV)
+			donor, err := tree.NewHintInjectionDonor(donorStmt.AST, fingerprintFlags)
 			require.NoError(t, err)
 
 			// Validate.
 			if tc.expectError {
-				require.Error(t, donor.Validate(originalStmt.AST, &st.SV))
+				require.Error(t, donor.Validate(originalStmt.AST, fingerprintFlags))
 				return
 			} else {
-				require.NoError(t, donor.Validate(originalStmt.AST, &st.SV))
+				require.NoError(t, donor.Validate(originalStmt.AST, fingerprintFlags))
 			}
 
 			// Inject hints.
@@ -340,15 +377,21 @@ func TestRandomInjectHints(t *testing.T) {
 		t.Log(randSQL + ";")
 
 		// Generate the statement fingerprint for the random statement.
+		var fingerprintFlags tree.FmtFlags
+		if rng.Intn(10) < 9 {
+			// 90% chance of using the current default statement fingerprint
+			// formatting, 10% chance of using the legacy statement fingerprint
+			// formatting.
+			fingerprintFlags = tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&st.SV))
+		}
 		randStmt, err := parser.ParseOne(randSQL)
 		require.NoError(t, err)
-		fingerprintFlags := tree.FmtHideConstants | tree.FmtCollapseLists | tree.FmtConstantsAsUnderscores
-		randFingerprint := tree.AsStringWithFlags(randStmt.AST, fingerprintFlags)
+		randFingerprint := tree.FormatStatementHideConstants(randStmt.AST, fingerprintFlags)
 
 		// Parse random fingerprint to make the donor AST.
 		donorStmt, err := parser.ParseOne(randFingerprint)
 		require.NoError(t, err)
-		donor, err := tree.NewHintInjectionDonor(donorStmt.AST, &st.SV)
+		donor, err := tree.NewHintInjectionDonor(donorStmt.AST, fingerprintFlags)
 		require.NoError(t, err)
 		donorSQL := tree.AsString(donorStmt.AST)
 
@@ -359,7 +402,7 @@ func TestRandomInjectHints(t *testing.T) {
 		require.NoError(t, err)
 
 		// Validate.
-		require.NoError(t, donor.Validate(targetStmt.AST, &st.SV))
+		require.NoError(t, donor.Validate(targetStmt.AST, fingerprintFlags))
 
 		// Inject hints.
 		result, changed, err := donor.InjectHints(targetStmt.AST)
@@ -367,7 +410,7 @@ func TestRandomInjectHints(t *testing.T) {
 
 		// Check that the rewritten statement matches the donor statement when
 		// formatted as a statement fingerprint.
-		resultFingerprint := tree.AsStringWithFlags(result, fingerprintFlags)
+		resultFingerprint := tree.FormatStatementHideConstants(result, fingerprintFlags)
 		require.Equal(t, donorSQL, resultFingerprint, "resulting SQL mismatch")
 		if !changed {
 			require.Same(t, targetStmt.AST, result, "resulting statement was changed")

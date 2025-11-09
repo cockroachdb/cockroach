@@ -8,7 +8,6 @@ package tree
 import (
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,22 +35,13 @@ type HintInjectionDonor struct {
 	collapsed []bool
 }
 
-// validationFmtFlags returns the FmtFlags used to check that the donor
-// statement and the target statement match. These should be the same FmtFlags
-// used for statement fingerprints (including
-// sql.stats.statement_fingerprint.format_mask) with FmtHideHints added.
-func validationFmtFlags(sv *settings.Values) FmtFlags {
-	stmtFingerprintFmtMask := FmtHideConstants | FmtFlags(QueryFormattingForFingerprintsMask.Get(sv))
-	return stmtFingerprintFmtMask | FmtHideHints
-}
-
 // NewHintInjectionDonor creates a HintInjectionDonor from a parsed AST. The
 // parsed donor statement could be a regular SQL statement or a statement
 // fingerprint.
-func NewHintInjectionDonor(ast Statement, sv *settings.Values) (*HintInjectionDonor, error) {
+func NewHintInjectionDonor(ast Statement, fingerprintFlags FmtFlags) (*HintInjectionDonor, error) {
 	hd := &HintInjectionDonor{
 		ast:           ast,
-		validationSQL: AsStringWithFlags(ast, validationFmtFlags(sv)),
+		validationSQL: FormatStatementHideConstants(ast, fingerprintFlags, FmtHideHints),
 		collapsed:     []bool{false},
 	}
 	WalkStmt(hd, ast)
@@ -318,8 +308,8 @@ func (v *hintInjectionVisitor) VisitStatementPost(expr Statement) Statement {
 
 // Validate checks that the target statement exactly matches the donor (except
 // for hints).
-func (hd *HintInjectionDonor) Validate(stmt Statement, sv *settings.Values) error {
-	sql := AsStringWithFlags(stmt, validationFmtFlags(sv))
+func (hd *HintInjectionDonor) Validate(stmt Statement, fingerprintFlags FmtFlags) error {
+	sql := FormatStatementHideConstants(stmt, fingerprintFlags, FmtHideHints)
 	if sql != hd.validationSQL {
 		return errors.Newf(
 			"statement does not match hint donor statement: %v vs %v", sql, hd.validationSQL,
