@@ -46,7 +46,7 @@ func TestMergeSpans(t *testing.T) {
 		{"a@10,a-b@10", "a-b@10"},
 		{"a@10,a-b@20", "a@10,a-b@20"},
 		{"a-b@20,b@20", "a-b\x00@20"},
-		{"a-b@20,b@30", "a-b\x00@20,b@30"}, // FIXME: this is a bug
+		{"a-b@20,b@30", "a-b@20,b@30"},
 		{"a-c@20,m-n@10,c-o@10,o-z@20", "a-c@20,c-o@10,o-z@20"},
 	} {
 		t.Run("", func(t *testing.T) {
