@@ -35,39 +35,23 @@ func mergeSpans(latches []Span) []Span {
 		// Can only merge spans at the same timestamp.
 		if cur.Timestamp != prev.Timestamp {
 			r = append(r, cur)
-			continue
-		}
-		if len(cur.EndKey) == 0 && len(prev.EndKey) == 0 {
-			if cur.Key.Compare(prev.Key) != 0 {
-				// [a, nil] merge [b, nil]
-				r = append(r, cur)
+		} else if len(prev.EndKey) == 0 { // prev is a point key
+			if !cur.Key.Equal(prev.Key) { // cur.Key > prev.Key
+				r = append(r, cur) // [a] + [b,any) = [a], [b,any)
+			} else { // [a] + [a,any) = [a,any)
+				prev.EndKey = cur.EndKey // cur.EndKey >= prev.EndKey
 			}
-			continue
-		}
-		if len(prev.EndKey) == 0 {
-			if cur.Key.Compare(prev.Key) == 0 {
-				// [a, nil] merge [a, b]
-				prev.EndKey = cur.EndKey
-			} else {
-				// [a, nil] merge [b, c]
-				r = append(r, cur)
+		} else if c := cur.Key.Compare(prev.EndKey); c > 0 {
+			r = append(r, cur) // [a,b) + [c,any) = [a,b), [c,any)
+		} else if c == 0 {
+			if len(cur.EndKey) == 0 { // cur is a point key
+				prev.EndKey = cur.Key.Next() // [a,b) + [b] = [a,b.Next())
+			} else if cur.EndKey.Compare(prev.EndKey) > 0 {
+				prev.EndKey = cur.EndKey // [a,b) + [b,c) = [a,c)
 			}
-			continue
+		} else if len(cur.EndKey) != 0 && cur.EndKey.Compare(prev.EndKey) > 0 {
+			prev.EndKey = cur.EndKey // [a,c) + [b,d) = [a,d)
 		}
-
-		if c := prev.EndKey.Compare(cur.Key); c >= 0 {
-			if cur.EndKey != nil {
-				if prev.EndKey.Compare(cur.EndKey) < 0 {
-					// [a, c] merge [b, d]
-					prev.EndKey = cur.EndKey
-				}
-			} else if c == 0 {
-				// [a, b] merge [b, nil]
-				prev.EndKey = cur.Key.Next()
-			}
-			continue
-		}
-		r = append(r, cur)
 	}
 	return r
 }
