@@ -11,6 +11,10 @@ import "slices"
 // equal access timestamps. The implementation is a modified roachpb.MergeSpans.
 //
 // The input spans are not safe for re-use.
+//
+// TODO(pav-kv): explain and assert on what this function expects. It definitely
+// does not solve the most general form of merging, but it seems the expectation
+// here is that every key is covered only by one timestamp.
 func mergeSpans(latches []Span) []Span {
 	if len(latches) == 0 {
 		return latches
