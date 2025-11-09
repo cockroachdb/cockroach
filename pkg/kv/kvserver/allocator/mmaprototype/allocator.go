@@ -43,34 +43,29 @@ type Allocator interface {
 	// associated node in the cluster.
 	ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg)
 
-	// TODO(sumeer): only a subset of the fields in
-	// pendingReplicaChange/PendingRangeChange are relevant to the caller. Hide
-	// the remaining.
-
 	// Methods related to making changes.
 
-	// AdjustPendingChangesDisposition is optional feedback to inform the
-	// allocator of success or failure of proposed changes. For successful
-	// changes, this is a faster way to know about success than waiting for the
-	// next ProcessNodeLoadResponse from the local node. For failed changes, in
-	// the absence of this feedback, proposed changes that have not been enacted
-	// in N seconds will be garbage collected and assumed to have failed.
+	// AdjustPendingChangeDisposition is optional feedback to inform the
+	// allocator of success or failure of proposed changes to a range. For
+	// successful changes, this is a faster way to know about success than
+	// waiting for the next ProcessNodeLoadResponse from the local node. For
+	// failed changes, in the absence of this feedback, proposed changes that
+	// have not been enacted in N seconds will be garbage collected and assumed
+	// to have failed.
 	//
-	// Calls to AdjustPendingChangesDisposition must be correctly sequenced with
+	// Calls to AdjustPendingChangeDisposition must be correctly sequenced with
 	// full state updates from the local node provided in
 	// ProcessNodeLoadResponse.
-	//
-	// REQUIRES: len(changes) > 0 and all changes are to the same range.
-	AdjustPendingChangesDisposition(changes []ChangeID, success bool)
+	AdjustPendingChangeDisposition(change PendingRangeChange, success bool)
 
-	// RegisterExternalChanges informs this allocator about yet to complete
+	// RegisterExternalChange informs this allocator about yet to complete
 	// changes to the cluster which were not initiated by this allocator. The
-	// caller is returned a list of ChangeIDs, corresponding 1:1 to each  replica
-	// change provided as an argument. The returned list of ChangeIDs should then
-	// be used to call AdjustPendingChangesDisposition when the changes are
-	// completed, either successfully or not. All changes should correspond to the
-	// same range.
-	RegisterExternalChanges(changes []ReplicaChange) []ChangeID
+	// ownership of all state inside change is handed off to the callee. If ok
+	// is true, the change was registered, and the caller should subsequently
+	// use the same change in a subsequent call to
+	// AdjustPendingChangeDisposition when the changes are completed, either
+	// successfully or not. If ok is false, the change was not registered.
+	RegisterExternalChange(change PendingRangeChange) (ok bool)
 
 	// ComputeChanges is called periodically and frequently, say every 10s.
 	//
@@ -152,6 +147,23 @@ type Allocator interface {
 	//
 	// TODO(sumeer): remove once the integration is properly done.
 	KnownStores() map[roachpb.StoreID]struct{}
+
+	// BuildMMARebalanceAdvisor is called by the allocator sync to build a
+	// MMARebalanceAdvisor for the given existing store and candidates. The
+	// advisor should be later passed to IsInConflictWithMMA to determine if a
+	// given candidate is in conflict with the existing store.
+	//
+	// TODO(sumeer): merge the above comment with the comment in the
+	// implementation.
+	BuildMMARebalanceAdvisor(existing roachpb.StoreID, cands []roachpb.StoreID) *MMARebalanceAdvisor
+
+	// IsInConflictWithMMA is called by the allocator sync to determine if the
+	// given candidate is in conflict with the existing store.
+	//
+	// TODO(sumeer): merge the above comment with the comment in the
+	// implementation.
+	IsInConflictWithMMA(
+		ctx context.Context, cand roachpb.StoreID, advisor *MMARebalanceAdvisor, cpuOnly bool) bool
 }
 
 // Avoid unused lint errors.

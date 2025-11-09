@@ -487,7 +487,8 @@ func TestClusterState(t *testing.T) {
 							changes = append(changes, rebalanceChanges[:]...)
 						}
 					}
-					cs.createPendingChanges(changes...)
+					rangeChange := MakePendingRangeChange(rangeID, changes)
+					cs.addPendingRangeChange(rangeChange)
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "gc-pending-changes":
@@ -503,10 +504,10 @@ func TestClusterState(t *testing.T) {
 					for _, id := range changeIDsInt {
 						if expectPanic {
 							require.Panics(t, func() {
-								cs.undoPendingChange(id, true)
+								cs.undoPendingChange(id)
 							})
 						} else {
-							cs.undoPendingChange(id, true)
+							cs.undoPendingChange(id)
 						}
 					}
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))

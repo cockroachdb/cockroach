@@ -21,7 +21,7 @@ func convertLeaseTransferToMMA(
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
 	transferFrom, transferTo roachpb.ReplicationTarget,
-) []mmaprototype.ReplicaChange {
+) mmaprototype.PendingRangeChange {
 	// TODO(wenyihu6): we are passing existing replicas to
 	// mmaprototype.MakeLeaseTransferChanges just to get the add and remove
 	// replica state. See if things could be cleaned up.
@@ -47,17 +47,17 @@ func convertLeaseTransferToMMA(
 		transferTo,
 		transferFrom,
 	)
-	return replicaChanges[:]
+	return mmaprototype.MakePendingRangeChange(desc.RangeID, replicaChanges[:])
 }
 
-// convertReplicaChangeToMMA converts a replica change to mma replica changes.
-// It will be passed to mma.RegisterExternalChanges.
+// convertReplicaChangeToMMA converts a replica change to a mma range change.
+// It will be passed to mma.RegisterExternalChange.
 func convertReplicaChangeToMMA(
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
 	changes kvpb.ReplicationChanges,
 	leaseholderStoreID roachpb.StoreID,
-) []mmaprototype.ReplicaChange {
+) mmaprototype.PendingRangeChange {
 	rLoad := mmaRangeLoad(usage)
 	replicaChanges := make([]mmaprototype.ReplicaChange, 0, len(changes))
 	replicaSet := desc.Replicas()
@@ -122,5 +122,5 @@ func convertReplicaChangeToMMA(
 			panic("unimplemented change type")
 		}
 	}
-	return replicaChanges
+	return mmaprototype.MakePendingRangeChange(desc.RangeID, replicaChanges)
 }
