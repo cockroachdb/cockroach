@@ -1,0 +1,85 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package spanset
+
+import (
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/stretchr/testify/require"
+)
+
+func TestMergeSpans(t *testing.T) {
+	for _, tc := range []struct {
+		spans    string
+		expected string
+	}{
+		{"", ""},
+		{"a", "a"},
+		{"a,b", "a,b"},
+		{"b,a", "a,b"},
+		{"a,a", "a"},
+		{"a-b", "a-b"},
+		{"a-b,b-c", "a-c"},
+		{"a-c,a-b", "a-c"},
+		{"a,b-c", "a,b-c"},
+		{"a,a-c", "a-c"},
+		{"a-c,b", "a-c"},
+		{"a-c,c", "a-c\x00"},
+		{"a-c,b-bb", "a-c"},
+		{"a-c,b-c", "a-c"},
+
+		{"a@10", "a@10"},
+		{"a@10,b@10", "a@10,b@10"},
+		{"a@10,b@20", "a@10,b@20"},
+		{"b@20,a@10", "a@10,b@20"},
+		{"a@10,a-b@10", "a-b@10"},
+		{"a@10,a-b@20", "a@10,a-b@20"},
+		{"a-b@20,b@20", "a-b\x00@20"},
+		{"a-b@20,b@30", "a-b\x00@20,b@30"}, // FIXME: this is a bug
+		{"a-c@20,m-n@10,c-o@10,o-z@20", "a-c@20,c-o@10,o-z@20"},
+	} {
+		t.Run("", func(t *testing.T) {
+			spans := mergeSpans(makeSpans(tc.spans))
+			expected := makeSpans(tc.expected)
+			require.Equal(t, expected, spans)
+		})
+	}
+}
+
+func makeSpan(s string) Span {
+	var ts hlc.Timestamp
+	if idx := strings.IndexByte(s, '@'); idx != -1 {
+		i, err := strconv.ParseInt(s[idx+1:], 10, 63)
+		if err != nil {
+			panic(err)
+		}
+		ts = hlc.Timestamp{WallTime: i}
+		s = s[:idx]
+	}
+	parts := strings.Split(s, "-")
+	if len(parts) != 2 {
+		return Span{Span: roachpb.Span{Key: roachpb.Key(s)}, Timestamp: ts}
+	}
+	return Span{
+		Span: roachpb.Span{
+			Key:    roachpb.Key(parts[0]),
+			EndKey: roachpb.Key(parts[1]),
+		},
+		Timestamp: ts,
+	}
+}
+
+func makeSpans(s string) []Span {
+	var spans []Span
+	for _, p := range strings.Split(s, ",") {
+		spans = append(spans, makeSpan(p))
+	}
+	return spans
+}

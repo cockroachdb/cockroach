@@ -29,6 +29,7 @@ go_test(
     size = "small",
     srcs = [
         "batch_test.go",
+        "merge_test.go",
         "spanset_test.go",
     ],
     embed = [":spanset"],
