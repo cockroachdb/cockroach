@@ -212,7 +212,13 @@ func (s *SpanSet) Merge(s2 *SpanSet) {
 	s.SortAndDedup()
 }
 
-// SortAndDedup sorts the spans in the SpanSet and removes any duplicates.
+// SortAndDedup sorts the spans in the SpanSet by key and removes duplicate or
+// overlapping / redundant spans. The SpanSet represents the same subset of the
+// {keys}x{timestamps} space before and after this call, but is not guaranteed
+// to have a minimal number of spans in a general case (see mergeSpans comment).
+//
+// TODO(pav-kv): does this make CheckAllowed falsely fail in some cases? Maybe
+// it's fine: importantly, it should not falsely succeed.
 func (s *SpanSet) SortAndDedup() {
 	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
 		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
