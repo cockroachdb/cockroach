@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sqlnemesis",
+    srcs = [
+        "generator.go",
+        "operations.go",
+        "sqlnemesis.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/internal/sqlnemesis",
+    visibility = ["//pkg:__subpackages__"],
+)
+
+go_test(
+    name = "sqlnemesis_test",
+    size = "medium",
+    srcs = ["sqlnemesis_test.go"],
+    data = ["//c-deps:libgeos"],
+    embed = [":sqlnemesis"],
+)

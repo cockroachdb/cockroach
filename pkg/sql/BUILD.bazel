@@ -321,6 +321,7 @@ go_library(
         "//pkg/geo/geoprojbase",
         "//pkg/gossip",
         "//pkg/inspectz/inspectzpb",
+        "//pkg/internal/sqlnemesis",
         "//pkg/jobs",
         "//pkg/jobs/jobsauth",
         "//pkg/jobs/jobspb",
