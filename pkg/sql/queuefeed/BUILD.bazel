@@ -1,9 +1,10 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "queuefeed",
     srcs = [
         "manager.go",
+        "partitions.go",
         "reader.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/queuefeed",
@@ -11,11 +12,40 @@ go_library(
     deps = [
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvpb",
+        "//pkg/roachpb",
         "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlliveness",
         "//pkg/util/hlc",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "queuefeed_test",
+    srcs = [
+        "main_test.go",
+        "partitions_test.go",
+    ],
+    embed = [":queuefeed"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/isql",
+        "//pkg/sql/sqlliveness",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//require",
     ],
 )
