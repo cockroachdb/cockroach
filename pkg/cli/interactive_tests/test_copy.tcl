@@ -202,4 +202,22 @@ eexpect ":/# "
 
 end_test
 
+start_test "Test file input with valid content from stdin"
+
+send "$argv sql --insecure -e 'TRUNCATE TABLE t'\r"
+eexpect ":/# "
+send "cat >/tmp/test_copy.sql <<EOF\r"
+send "1,a\r"
+send "EOF\r"
+eexpect ":/# "
+send "cat /tmp/test_copy.sql | $argv sql --insecure -e 'COPY t FROM STDIN'\r"
+eexpect ":/# "
+
+send "$argv sql --insecure -e 'SELECT * FROM t ORDER BY id'\r"
+eexpect "1 | a"
+eexpect "(1 rows)"
+eexpect ":/# "
+
+end_test
+
 stop_server $argv
