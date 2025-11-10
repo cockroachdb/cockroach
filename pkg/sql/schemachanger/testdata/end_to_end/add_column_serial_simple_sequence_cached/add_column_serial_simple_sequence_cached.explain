@@ -46,7 +46,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── SetNameInDescriptor {"DescriptorID":107,"Name":"tbl_serial_id_se..."}
  │              ├── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"tbl_serial_id_se...","SchemaID":105}}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":107,"SchemaID":105}}
- │              ├── SetSequenceOptions {"Key":"PER SESSION CACH...","SequenceID":107,"Value":"256"}
+ │              ├── SetSequenceOption {"Key":"PER SESSION CACH...","SequenceID":107,"Value":"256"}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":107}}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":107}}
  │              ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":107}
@@ -153,7 +153,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"tbl_serial_id_se...","SchemaID":105}}
  │              ├── UpdateTTLScheduleMetadata {"NewName":"tbl_serial_id_se...","TableID":107}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":107,"SchemaID":105}}
- │              ├── SetSequenceOptions {"Key":"PER SESSION CACH...","SequenceID":107,"Value":"256"}
+ │              ├── SetSequenceOption {"Key":"PER SESSION CACH...","SequenceID":107,"Value":"256"}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":107}}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":107}}
  │              ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":107}

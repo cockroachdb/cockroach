@@ -34,7 +34,7 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
  │              ├── SetNameInDescriptor {"DescriptorID":108,"Name":"sq1"}
  │              ├── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"sq1","SchemaID":106}}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":108,"SchemaID":106}}
- │              ├── SetSequenceOptions {"Key":"START","SequenceID":108,"Value":"32"}
+ │              ├── SetSequenceOption {"Key":"START","SequenceID":108,"Value":"32"}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":108}}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":108}}
  │              ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":108}
@@ -161,7 +161,7 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
                 ├── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"sq1","SchemaID":106}}
                 ├── UpdateTTLScheduleMetadata {"NewName":"sq1","TableID":108}
                 ├── SetObjectParentID {"ObjParent":{"ChildObjectID":108,"SchemaID":106}}
-                ├── SetSequenceOptions {"Key":"START","SequenceID":108,"Value":"32"}
+                ├── SetSequenceOption {"Key":"START","SequenceID":108,"Value":"32"}
                 ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":108}}
                 ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":108}}
                 ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":108}
