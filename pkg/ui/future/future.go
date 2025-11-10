@@ -747,13 +747,24 @@ func fetchOverviewData(ctx context.Context, cfg IndexHTMLArgs) (*OverviewData, e
 		var nodeReplicas int
 		var nodeCapacityUsed, nodeCapacityTotal int64
 		for _, store := range node.StoreStatuses {
-			data.CapacityUsed += store.Desc.Capacity.Used
-			data.CapacityTotal += store.Desc.Capacity.Capacity
-			data.CapacityAvailable += store.Desc.Capacity.Available
+			storeCapacity := store.Desc.Capacity.Capacity
+			storeAvailable := store.Desc.Capacity.Available
+
+			// Prefer the .Used field when available, fall back to capacity - available
+			// The Used field tracks CockroachDB's actual disk usage
+			storeUsed := store.Desc.Capacity.Used
+			if storeUsed == 0 && storeCapacity > storeAvailable {
+				// Fallback calculation if Used field is not populated
+				storeUsed = storeCapacity - storeAvailable
+			}
+
+			data.CapacityUsed += storeUsed
+			data.CapacityTotal += storeCapacity
+			data.CapacityAvailable += storeAvailable
 			data.TotalRanges += int(store.Desc.Capacity.RangeCount)
 
-			nodeCapacityUsed += store.Desc.Capacity.Used
-			nodeCapacityTotal += store.Desc.Capacity.Capacity
+			nodeCapacityUsed += storeUsed
+			nodeCapacityTotal += storeCapacity
 			nodeReplicas += int(store.Desc.Capacity.RangeCount)
 		}
 

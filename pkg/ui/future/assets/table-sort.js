@@ -8,13 +8,29 @@ document.addEventListener('alpine:init', () => {
     itemsPerPage: 25,
 
     init() {
-      this.originalOrder = Array.from(this.$el.querySelectorAll('tbody tr'));
-      this.table = this.$el.querySelector('tbody');
+      const tbodies = this.$el.querySelectorAll('tbody');
+      this.isGrouped = tbodies.length > 1;
+
+      if (this.isGrouped) {
+        // For grouped tables, store tbody elements in original order
+        this.originalOrder = Array.from(tbodies);
+        this.table = this.$el.querySelector('table');
+      } else {
+        // For non-grouped tables, store rows in original order
+        this.originalOrder = Array.from(this.$el.querySelectorAll('tbody tr'));
+        this.table = this.$el.querySelector('tbody');
+      }
       this.renderPage();
     },
 
     get allRows() {
-      return Array.from(this.table.querySelectorAll('tr'));
+      if (this.isGrouped) {
+        // For grouped tables, return all tbody elements
+        return Array.from(this.table.querySelectorAll('tbody'));
+      } else {
+        // For non-grouped tables, return all rows
+        return Array.from(this.table.querySelectorAll('tr'));
+      }
     },
 
     get totalPages() {
@@ -37,12 +53,12 @@ document.addEventListener('alpine:init', () => {
     },
 
     renderPage() {
-      const rows = this.allRows;
-      rows.forEach((row, index) => {
+      const elements = this.allRows;
+      elements.forEach((element, index) => {
         if (index >= this.startIndex && index < this.endIndex) {
-          row.style.display = '';
+          element.style.display = '';
         } else {
-          row.style.display = 'none';
+          element.style.display = 'none';
         }
       });
     },
@@ -85,35 +101,74 @@ document.addEventListener('alpine:init', () => {
         this.sortDirection = 'asc';
       }
 
-      const tbody = this.table;
-
       if (this.sortDirection === 'original') {
         // Restore original order
-        this.originalOrder.forEach(row => tbody.appendChild(row));
+        if (this.isGrouped) {
+          // For grouped tables, restore tbody elements
+          this.originalOrder.forEach(tbody => this.table.appendChild(tbody));
+        } else {
+          // For non-grouped tables, restore rows
+          const tbody = this.table;
+          this.originalOrder.forEach(row => tbody.appendChild(row));
+        }
       } else {
-        // Sort rows
-        const rows = Array.from(tbody.querySelectorAll('tr'));
-        rows.sort((a, b) => {
-          const aCell = a.children[index];
-          const bCell = b.children[index];
-          const aValue = aCell.dataset.sort || aCell.textContent.trim();
-          const bValue = bCell.dataset.sort || bCell.textContent.trim();
+        // Sort
+        if (this.isGrouped) {
+          // For grouped tables, sort tbody elements based on first row
+          const tbodies = Array.from(this.table.querySelectorAll('tbody'));
+          tbodies.sort((a, b) => {
+            // Get the first row of each tbody
+            const aFirstRow = a.querySelector('tr');
+            const bFirstRow = b.querySelector('tr');
 
-          // Try numeric comparison first
-          const aNum = parseFloat(aValue);
-          const bNum = parseFloat(bValue);
+            if (!aFirstRow || !bFirstRow) return 0;
 
-          let comparison;
-          if (!isNaN(aNum) && !isNaN(bNum)) {
-            comparison = aNum - bNum;
-          } else {
-            comparison = aValue.localeCompare(bValue);
-          }
+            const aCell = aFirstRow.children[index];
+            const bCell = bFirstRow.children[index];
+            const aValue = aCell?.dataset.sort || aCell?.textContent.trim() || '';
+            const bValue = bCell?.dataset.sort || bCell?.textContent.trim() || '';
 
-          return this.sortDirection === 'asc' ? comparison : -comparison;
-        });
+            // Try numeric comparison first
+            const aNum = parseFloat(aValue);
+            const bNum = parseFloat(bValue);
 
-        rows.forEach(row => tbody.appendChild(row));
+            let comparison;
+            if (!isNaN(aNum) && !isNaN(bNum)) {
+              comparison = aNum - bNum;
+            } else {
+              comparison = aValue.localeCompare(bValue);
+            }
+
+            return this.sortDirection === 'asc' ? comparison : -comparison;
+          });
+
+          tbodies.forEach(tbody => this.table.appendChild(tbody));
+        } else {
+          // For non-grouped tables, sort rows
+          const tbody = this.table;
+          const rows = Array.from(tbody.querySelectorAll('tr'));
+          rows.sort((a, b) => {
+            const aCell = a.children[index];
+            const bCell = b.children[index];
+            const aValue = aCell.dataset.sort || aCell.textContent.trim();
+            const bValue = bCell.dataset.sort || bCell.textContent.trim();
+
+            // Try numeric comparison first
+            const aNum = parseFloat(aValue);
+            const bNum = parseFloat(bValue);
+
+            let comparison;
+            if (!isNaN(aNum) && !isNaN(bNum)) {
+              comparison = aNum - bNum;
+            } else {
+              comparison = aValue.localeCompare(bValue);
+            }
+
+            return this.sortDirection === 'asc' ? comparison : -comparison;
+          });
+
+          rows.forEach(row => tbody.appendChild(row));
+        }
       }
 
       // Reset to page 1 after sorting and render the page

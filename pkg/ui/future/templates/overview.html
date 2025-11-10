@@ -59,15 +59,33 @@
   <table class="width:100%">
     <thead>
       <tr>
-        <th @click="sort('nodes', 0)" style="cursor: pointer;">Nodes</th>
-        <th @click="sort('nodeCount', 0)" style="cursor: pointer;">NodeCount</th>
-        <th>Uptime</th>
-        <th>Replicas</th>
-        <th>CapacityUsage</th>
-        <th>MemoryUse</th>
-        <th>vCPUs</th>
-        <th>Version</th>
-        <th>Status</th>
+        <th @click="sort('nodes', 0)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>Nodes </div><div x-text="getSortIndicator('nodes')"></div></div>
+        </th>
+        <th @click="sort('nodeCount', 1)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>Node Count </div><div x-text="getSortIndicator('nodeCount')"></div></div>
+        </th>
+        <th>
+          <div class="flex-row align-items:top">Uptime</div>
+        </th>
+        <th @click="sort('replicas', 3)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>Replicas </div><div x-text="getSortIndicator('replicas')"></div></div>
+        </th>
+        <th @click="sort('capacity', 4)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>Capacity Usage </div><div x-text="getSortIndicator('capacity')"></div></div>
+        </th>
+        <th @click="sort('memory', 5)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>Memory Use </div><div x-text="getSortIndicator('memory')"></div></div>
+        </th>
+        <th @click="sort('vcpus', 6)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>vCPUs </div><div x-text="getSortIndicator('vcpus')"></div></div>
+        </th>
+        <th>
+          <div class="flex-row align-items:top">Version</div>
+        </th>
+        <th @click="sort('status', 8)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>Status </div><div x-text="getSortIndicator('status')"></div></div>
+        </th>
         <th></th>
       </tr>
     </thead>
