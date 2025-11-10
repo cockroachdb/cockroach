@@ -34,7 +34,7 @@ StatementPhase stage 1 of 1 with 24 MutationType ops
       ObjParent:
         ChildObjectID: 104
         SchemaID: 101
-    *scop.SetSequenceOptions
+    *scop.SetSequenceOption
       Key: START
       SequenceID: 104
       Value: "32"
@@ -172,7 +172,7 @@ PreCommitPhase stage 2 of 2 with 25 MutationType ops
       ObjParent:
         ChildObjectID: 104
         SchemaID: 101
-    *scop.SetSequenceOptions
+    *scop.SetSequenceOption
       Key: START
       SequenceID: 104
       Value: "32"
