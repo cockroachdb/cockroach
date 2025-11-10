@@ -183,7 +183,11 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 	var isMMARegistered bool
 	var mmaChange mmaprototype.PendingRangeChange
 	if kvserverbase.LoadBasedRebalancingModeIsMMA(&as.st.SV) {
-		mmaChange = convertReplicaChangeToMMA(desc, usage, changes, leaseholderStoreID)
+		var err error
+		mmaChange, err = convertReplicaChangeToMMA(desc, usage, changes, leaseholderStoreID)
+		if err != nil {
+			log.KvDistribution.Errorf(ctx, "failed to convert replica change to mma: %v", err)
+		}
 		isMMARegistered = as.mmaAllocator.RegisterExternalChange(mmaChange)
 	}
 	trackedChange := trackedAllocatorChange{
