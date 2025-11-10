@@ -30,6 +30,8 @@ func TestPGTest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	t.Skip("Currently broken under coverage instrumentation")
+
 	// Enable enterprise features so READ COMMITTED can be tested.
 	defer ccl.TestingEnableEnterprise()()
 

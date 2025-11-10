@@ -5,9 +5,11 @@
 
 //go:build !bazel_code_cover
 
-// Package bazelcodecover allows instrumented binaries to output code coverage
+// Allows instrumented binaries to output code coverage
 // data.
-package bazelcodecover
+package buildutil
+
+const CrdbCoverageBuild = false
 
 // MaybeInitCodeCoverage does nothing unless we are building in a special
 // coverage collection mode. See the same function in the corresponding
