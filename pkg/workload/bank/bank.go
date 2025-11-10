@@ -240,10 +240,11 @@ func (b *bank) Ops(
 			tableIdx := rng.IntN(b.tables)
 			updateStmt := updateStmts[tableIdx]
 
+			// Rows are always expected to be at least two (via validation).
 			from := rng.IntN(b.rows)
-			to := rng.IntN(b.rows - 1)
-			for from == to && b.rows != 1 {
-				to = rng.IntN(b.rows - 1)
+			to := rng.IntN(b.rows)
+			for from == to {
+				to = rng.IntN(b.rows)
 			}
 			amount := rand.IntN(maxTransfer)
 			start := timeutil.Now()
