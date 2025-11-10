@@ -656,6 +656,12 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		rpcCtx.clientStreamInterceptorsDRPC = append(rpcCtx.clientStreamInterceptorsDRPC,
 			drpcinterceptor.StreamClientInterceptor(tracer, tagger))
 	}
+
+	// Add the DRPC gateway request counter interceptor to track telemetry for
+	// HTTP gateway requests.
+	rpcCtx.clientUnaryInterceptorsDRPC = append(rpcCtx.clientUnaryInterceptorsDRPC,
+		drpcGatewayRequestCounterInterceptor)
+
 	// Note that we do not consult rpcCtx.Knobs.StreamClientInterceptor. That knob
 	// can add another interceptor, but it can only do it dynamically, based on
 	// a connection class. Only calls going over an actual gRPC connection will
