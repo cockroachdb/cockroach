@@ -93,7 +93,7 @@ func runStartDBConsole(cmd *cobra.Command, _ []string) error {
 
 	// Dial the node to get clients using simple gRPC dial
 	// This is simpler for a development tool and doesn't require cluster ID matching
-	adminClient, statusClient, err := future.DialRemoteClients(ctx, dbConsoleCtx.host)
+	adminClient, statusClient, tsClient, err := future.DialRemoteClients(ctx, dbConsoleCtx.host)
 	if err != nil {
 		return errors.Wrap(err, "failed to dial CockroachDB node")
 	}
@@ -127,6 +127,7 @@ func runStartDBConsole(cmd *cobra.Command, _ []string) error {
 		ClusterID: clusterResp.ClusterID,
 		Admin:     adminClient,
 		Status:    statusClient,
+		TS:        tsClient,
 	})
 
 	// Create HTTP server

@@ -86,7 +86,7 @@ func run() error {
 	}()
 
 	// Dial the node using simple gRPC
-	adminClient, statusClient, err := future.DialRemoteClients(ctx, host)
+	adminClient, statusClient, tsClient, err := future.DialRemoteClients(ctx, host)
 	if err != nil {
 		return errors.Wrap(err, "failed to dial CockroachDB node")
 	}
@@ -119,6 +119,7 @@ func run() error {
 		ClusterID: clusterResp.ClusterID,
 		Admin:     adminClient,
 		Status:    statusClient,
+		TS:        tsClient,
 	})
 
 	// Create HTTP server

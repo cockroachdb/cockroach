@@ -180,7 +180,7 @@ func (s *httpServer) setupRoutes(
 
 	// Dial the local node to get client interfaces for the UI.
 	// This follows the same pattern as NewAPIInternalServer.
-	adminClient, statusClient, err := future.DialNodeClients(ctx, nodeDialer, localNodeID, s.cfg.Settings)
+	adminClient, statusClient, tsClient, err := future.DialNodeClients(ctx, nodeDialer, localNodeID, s.cfg.Settings)
 	if err != nil {
 		return err
 	}
@@ -204,6 +204,7 @@ func (s *httpServer) setupRoutes(
 		Settings: s.cfg.Settings,
 		Admin:    adminClient,
 		Status:   statusClient,
+		TS:       tsClient,
 	})
 
 	// The authentication mux used here is created in "allow anonymous" mode so that the UI

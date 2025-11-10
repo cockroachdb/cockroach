@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/ui/future"
 	_ "github.com/cockroachdb/cockroach/pkg/ui/settings" // Import the settings package to register UI-related settings for doc generation.
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -113,6 +114,7 @@ type Config struct {
 	Settings     *cluster.Settings
 	Admin        serverpb.AdminClient
 	Status       serverpb.StatusClient
+	TS           tspb.TimeSeriesClient
 }
 
 var uiConfigPath = regexp.MustCompile("^/uiconfig$")
@@ -169,6 +171,7 @@ func Handler(cfg Config) http.Handler {
 			IsManaged: log.RedactionPolicyManaged,
 			Admin:     cfg.Admin,
 			Status:    cfg.Status,
+			TS:        cfg.TS,
 		}
 		if cfg.NodeID != nil {
 			args.NodeID = cfg.NodeID.String()

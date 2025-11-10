@@ -1,18 +1,181 @@
 {{template "layout-start" .}}
-
+<style>
+.u-tooltip {
+  position: absolute;
+  display: none;
+  background: var(--box-bg);
+  color: var(--fg);
+  border: 1px solid var(--muted-fg);
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 1000;
+}
+.u-time {
+  margin-bottom: 4px;
+  font-weight: bold;
+}
+.u-series {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.u-marker {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid;
+}
+.u-label {
+  font-weight: 500;
+}
+.status {
+  padding: 10px;
+  margin: 10px;
+  border-radius: 4px;
+}
+.status.loading {
+  background: var(--box-bg);
+  color: var(--muted-fg);
+  border: 1px solid var(--muted-fg);
+}
+.status.error {
+  background: var(--error-bg);
+  color: var(--error-fg);
+  border: 1px solid var(--error-fg);
+}
+.status.success {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  border: 1px solid var(--ok-fg);
+}
+</style>
 <nav class="breadcrumbs" aria-label="Breadcrumbs">
   <ul>
     <li class="<h1>">Metrics</li>
   </ul>
 </nav>
 <h2>Metrics</h2>
-<div class="box">
-  <form class="flex-switch">
-    <select>
-    </select>
-    <select>
-    </select>
+<div class="box flex-row">
+  <form class="flex-row">
+    <div>
+      <label for="node">Graph:</label>
+      <select name="node" id="node">
+        <option>Cluster</option>
+        <option>127.0.0.1:26357 (n1)</option>
+      </select>
+    </div>
+    <div>
+      <label for="dashboard">Dashboard:</label>
+      <select name="dashboard" id="dashboard">
+        <option>Overview</option>
+        <option>Hardware</option>
+      </select>
+    </div>
   </form>
+  <form class="flex-row" x-data>
+    <div>
+      <label for=category>Interval:</label>
+      <select
+        id=category
+        placeholder="Select a category..."
+        x-model="$store.timeRange.interval"
+        @change="$store.timeRange.handleIntervalChange()">
+        <option>Last 10m</option>
+        <option>Last 30m</option>
+        <option>Last 1h</option>
+        <option>Custom</option>
+      </select>
+    </div>
+    <div>
+      <label for="start-time">Start:</label>
+      <input
+        type="datetime-local"
+        id="start-time"
+        name="start-time"
+        x-model="$store.timeRange.startTime"
+        :disabled="$store.timeRange.interval !== 'Custom'" />
+    </div>
+    <div>
+      <label for="end-time">End:</label>
+      <input
+        type="datetime-local"
+        id="end-time"
+        name="end-time"
+        x-model="$store.timeRange.endTime"
+        :disabled="$store.timeRange.interval !== 'Custom'" />
+    </div>
+  </form>
+</div>
+<div class="flex-switch">
+  <div>
+    <figure
+      x-data="metricGraph()"
+      data-metrics='[
+        {"name":"sys.rss","sources":[1],"title":"Node 1"},
+        {"name":"sys.rss","sources":[2],"title":"Node 2"},
+        {"name":"sys.rss","sources":[3],"title":"Node 3"},
+        {"name":"sys.rss","sources":[4],"title":"Node 4"},
+        {"name":"sys.rss","sources":[5],"title":"Node 5"},
+        {"name":"sys.rss","sources":[6],"title":"Node 6"}
+        ]'
+      data-axis='{"units":"BYTES","label":"memory usage"}'>
+      <div :class="`status ${statusClass}`" x-text="statusMessage"></div>
+      <figcaption x-data="{open: false}">
+        <div x-ref="caption" @mouseenter="open = true" @mouseleave="open = false" class="text-align:center">
+          Memory Usage
+        </div>
+        <small role="tooltip" class="box crowded" x-show="open" x-anchor="$refs.caption" style="z-index: 1">
+        <p>Memory in use across all nodes</p>
+        <p>Metrics:
+          <ul>
+            <li>sys.rss</li>  
+          </ul>
+        </p>
+        </small>
+      </figcaption>
+      <div class="graph-container"></div>
+    </figure>
+    <figure
+      x-data="metricGraph()"
+      data-metrics='[
+        {"name":"sys.host.disk.read.bytes","sources":[1],"title":"Node 1",
+          "derivative":"NON_NEGATIVE_DERIVATIVE"},
+        {"name":"sys.host.disk.read.bytes","sources":[2],"title":"Node 2",
+          "derivative":"NON_NEGATIVE_DERIVATIVE"},
+        {"name":"sys.host.disk.read.bytes","sources":[3],"title":"Node 3",
+          "derivative":"NON_NEGATIVE_DERIVATIVE"},
+        {"name":"sys.host.disk.read.bytes","sources":[4],"title":"Node 4",
+          "derivative":"NON_NEGATIVE_DERIVATIVE"},
+        {"name":"sys.host.disk.read.bytes","sources":[5],"title":"Node 5",
+          "derivative":"NON_NEGATIVE_DERIVATIVE"},
+        {"name":"sys.host.disk.read.bytes","sources":[6],"title":"Node 6",
+          "derivative":"NON_NEGATIVE_DERIVATIVE"}
+        ]'
+      data-axis='{"units":"BYTES","label":"memory usage"}'>
+      <div :class="`status ${statusClass}`" x-text="statusMessage"></div>
+      <figcaption x-data="{open: false}">
+        <div x-ref="caption" @mouseenter="open = true" @mouseleave="open = false" class="text-align:center">
+          Disk Read Bytes/s
+        </div>
+        <small role="tooltip" class="box crowded" x-show="open" x-anchor="$refs.caption" style="z-index: 1">
+        <p></p>
+        <p>Metrics:
+          <ul>
+            <li>sys.host.disk.read.bytes</li>  
+          </ul>
+        </p>
+        </small>
+      </figcaption>
+      <div class="graph-container"></div>
+    </figure>
+  </div>
+  <div class="flex-column padding-block-start">
+    <div class="box info">New Version Available</div>
+    <div class="box">Summary</div>
+    <div class="box">Events</div>
+  </div>
 </div>
 <div>
 <!-- graphs go here -->

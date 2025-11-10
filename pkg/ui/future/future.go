@@ -8,8 +8,10 @@ package future
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gorilla/mux"
@@ -43,6 +46,7 @@ type IndexHTMLArgs struct {
 	IsManaged                 bool
 	Admin                     serverpb.AdminClient
 	Status                    serverpb.StatusClient
+	TS                        tspb.TimeSeriesClient
 }
 
 //go:embed assets/*
@@ -297,12 +301,12 @@ type RegionGroup struct {
 	Nodes      []NodeInfo
 
 	// Aggregated metrics for the region
-	TotalReplicas    int
-	CapacityPercent  float64
-	MemoryPercent    float64
-	TotalVCPUs       int
-	Status           string // "Live", "Degraded", etc.
-	UptimeSeconds    int64  // Minimum uptime in the region
+	TotalReplicas   int
+	CapacityPercent float64
+	MemoryPercent   float64
+	TotalVCPUs      int
+	Status          string // "Live", "Degraded", etc.
+	UptimeSeconds   int64  // Minimum uptime in the region
 }
 
 // NodeInfo contains information about a single node
@@ -370,6 +374,11 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}/diagnostics/{diagID}", func(w http.ResponseWriter, r *http.Request) {
 		handleCancelDiagnostics(w, r, cfg)
 	}).Methods("DELETE")
+
+	// Timeseries query endpoint
+	futureRouter.HandleFunc("/ts/query", func(w http.ResponseWriter, r *http.Request) {
+		handleTSQuery(w, r, cfg)
+	}).Methods("POST")
 
 	// Serve static assets
 	futureRouter.PathPrefix("/assets/").HandlerFunc(handleAssets)
@@ -996,6 +1005,123 @@ func handleMetrics(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
 		return
 	}
+}
+
+// timeSeriesQueryRequestJSON is a JSON-friendly wrapper for TimeSeriesQueryRequest
+// that handles nanosecond timestamps as strings (since JavaScript can't handle int64)
+type timeSeriesQueryRequestJSON struct {
+	StartNanos  string       `json:"start_nanos"`
+	EndNanos    string       `json:"end_nanos"`
+	Queries     []tspb.Query `json:"queries"`
+	SampleNanos string       `json:"sample_nanos"`
+}
+
+// timeSeriesDatapointJSON is a JSON-friendly wrapper for TimeSeriesDatapoint
+type timeSeriesDatapointJSON struct {
+	TimestampNanos string  `json:"timestampNanos"`
+	Value          float64 `json:"value"`
+}
+
+// timeSeriesQueryResponseJSON is a JSON-friendly wrapper for TimeSeriesQueryResponse
+type timeSeriesQueryResponseJSON struct {
+	Results []struct {
+		Query      tspb.Query                `json:"query"`
+		Datapoints []timeSeriesDatapointJSON `json:"datapoints"`
+		Sources    []string                  `json:"sources,omitempty"`
+	} `json:"results"`
+}
+
+// handleTSQuery handles timeseries query requests
+func handleTSQuery(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	// Read the request body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	// Parse JSON into wrapper struct
+	var reqJSON timeSeriesQueryRequestJSON
+	if err := json.Unmarshal(body, &reqJSON); err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to parse timeseries query request: %v", err)
+		http.Error(w, fmt.Sprintf("Invalid request format: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Convert to protobuf request
+	req := tspb.TimeSeriesQueryRequest{
+		Queries: reqJSON.Queries,
+	}
+
+	// Parse nanosecond timestamps from strings
+	if reqJSON.StartNanos != "" {
+		startNanos, err := strconv.ParseInt(reqJSON.StartNanos, 10, 64)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid start_nanos: %v", err), http.StatusBadRequest)
+			return
+		}
+		req.StartNanos = startNanos
+	}
+
+	if reqJSON.EndNanos != "" {
+		endNanos, err := strconv.ParseInt(reqJSON.EndNanos, 10, 64)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid end_nanos: %v", err), http.StatusBadRequest)
+			return
+		}
+		req.EndNanos = endNanos
+	}
+
+	if reqJSON.SampleNanos != "" {
+		sampleNanos, err := strconv.ParseInt(reqJSON.SampleNanos, 10, 64)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Invalid sample_nanos: %v", err), http.StatusBadRequest)
+			return
+		}
+		req.SampleNanos = sampleNanos
+	}
+
+	// Call the gRPC timeseries query endpoint
+	resp, err := cfg.TS.Query(r.Context(), &req)
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Timeseries query failed: %v", err)
+		http.Error(w, fmt.Sprintf("Query failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Convert response to JSON-friendly format
+	respJSON := timeSeriesQueryResponseJSON{
+		Results: make([]struct {
+			Query      tspb.Query                `json:"query"`
+			Datapoints []timeSeriesDatapointJSON `json:"datapoints"`
+			Sources    []string                  `json:"sources,omitempty"`
+		}, len(resp.Results)),
+	}
+
+	for i, result := range resp.Results {
+		respJSON.Results[i].Query = result.Query
+		respJSON.Results[i].Sources = result.Sources
+		respJSON.Results[i].Datapoints = make([]timeSeriesDatapointJSON, len(result.Datapoints))
+		for j, dp := range result.Datapoints {
+			respJSON.Results[i].Datapoints[j] = timeSeriesDatapointJSON{
+				TimestampNanos: strconv.FormatInt(dp.TimestampNanos, 10),
+				Value:          dp.Value,
+			}
+		}
+	}
+
+	// Marshal response to JSON
+	respBytes, err := json.Marshal(respJSON)
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to marshal timeseries response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+
+	// Return JSON response
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(respBytes)
 }
 
 // handleAssets serves static assets from the embedded filesystem
