@@ -35,18 +35,34 @@ func run() error {
 	host := "localhost:26257"
 	port := "9080"
 
-	for i, arg := range os.Args[1:] {
+	for i := 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
+
+		// Handle --flag=value format
+		if len(arg) > 7 && arg[:7] == "--host=" {
+			host = arg[7:]
+			continue
+		}
+		if len(arg) > 7 && arg[:7] == "--port=" {
+			port = arg[7:]
+			continue
+		}
+
+		// Handle --flag value format
 		switch arg {
 		case "--host":
-			if i+1 < len(os.Args)-1 {
-				host = os.Args[i+2]
+			if i+1 < len(os.Args) {
+				host = os.Args[i+1]
+				i++ // Skip next arg
 			}
 		case "--port":
-			if i+1 < len(os.Args)-1 {
-				port = os.Args[i+2]
+			if i+1 < len(os.Args) {
+				port = os.Args[i+1]
+				i++ // Skip next arg
 			}
 		case "--help", "-h":
 			fmt.Println("Usage: cockroach-db-console-standalone [--host=localhost:26257] [--port=9080]")
+			fmt.Println("       cockroach-db-console-standalone [--host localhost:26257] [--port 9080]")
 			fmt.Println("")
 			fmt.Println("Minimal DB Console server for fast UI development iteration.")
 			fmt.Println("Connects to a running CockroachDB node and serves the UI.")

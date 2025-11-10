@@ -7,6 +7,7 @@ set -euo pipefail
 
 # The cockroach binary path is passed as the first argument
 COCKROACH_BIN="$1"
+shift  # Remove the binary path from arguments
 
 # Clean up function for graceful shutdown
 cleanup() {
@@ -17,20 +18,25 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 echo "Starting standalone DB Console server (minimal build)..."
-echo "Connecting to CockroachDB at: localhost:26257"
-echo "DB Console will be available at: http://localhost:9080"
-echo "Direct access: http://localhost:9080/future/overview"
-echo ""
 echo "Hot reload is active - server will restart when UI code changes!"
 echo "This uses a minimal binary that only includes the DB Console command."
 echo ""
-echo "Keep your main CRDB node running separately with:"
-echo "  ./cockroach start-single-node --insecure"
-echo ""
 
 # Start the standalone DB console server
-# Note: The minimal binary just has start-db-console as the default command
-exec "$COCKROACH_BIN" start-db-console \
-    --host=localhost:26257 \
-    --port=9080 \
-    --insecure
+# If no arguments provided, use defaults. Otherwise, pass through all arguments.
+if [ $# -eq 0 ]; then
+    echo "Using default settings:"
+    echo "  Connecting to: localhost:26257"
+    echo "  DB Console at: http://localhost:9080/future"
+    echo ""
+    echo "To customize, pass flags: ibazel run //build/dev:cockroach-db-console -- --host=HOST:PORT --port=PORT"
+    echo ""
+    exec "$COCKROACH_BIN" start-db-console \
+        --host=localhost:26257 \
+        --port=9080 \
+        --insecure
+else
+    echo "Using custom flags: $*"
+    echo ""
+    exec "$COCKROACH_BIN" start-db-console "$@"
+fi
