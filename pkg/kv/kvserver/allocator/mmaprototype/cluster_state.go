@@ -6,9 +6,11 @@
 package mmaprototype
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -23,6 +25,12 @@ import (
 // These values can sometimes be used in ReplicaType, ReplicaIDAndType,
 // ReplicaState, specifically when used in the context of a
 // pendingReplicaChange.
+//
+// NB: In practice, the kvserver code never generates 0 as a valid ReplicaID.
+// The MMA code does not special case 0 to be an invalid value, because as of
+// the time of writing this comment, the 0 value being invalid was an
+// undocumented invariant of the kvserver code. Instead, the code here uses
+// two negative values to represent special cases.
 const (
 	// unknownReplicaID is used with a change that proposes to add a replica
 	// (since it does not know the future ReplicaID).
@@ -122,24 +130,30 @@ type ReplicaState struct {
 	LeaseDisposition LeaseDisposition
 }
 
-// ChangeID is a unique ID, in the context of this data-structure and when
+// changeID is a unique ID, in the context of this data-structure and when
 // receiving updates about enactment having happened or having been rejected
 // (by the component responsible for change enactment).
-//
-// TODO(sumeer): make ChangeID private.
-type ChangeID uint64
+type changeID uint64
 
 type ReplicaChangeType int
 
 const (
-	AddLease ReplicaChangeType = iota
+	Unknown ReplicaChangeType = iota
+	AddLease
 	RemoveLease
+	// AddReplica represents a single replica being added.
 	AddReplica
+	// RemoveReplica represents a single replica being removed.
 	RemoveReplica
+	// ChangeReplica represents a promotion to VOTER or demotion to NON_VOTER.
+	// It can also be shedding or acquiring the lease.
+	ChangeReplica
 )
 
 func (s ReplicaChangeType) String() string {
 	switch s {
+	case Unknown:
+		return "Unknown"
 	case AddLease:
 		return "AddLease"
 	case RemoveLease:
@@ -148,14 +162,14 @@ func (s ReplicaChangeType) String() string {
 		return "AddReplica"
 	case RemoveReplica:
 		return "RemoveReplica"
+	case ChangeReplica:
+		return "ChangeReplica"
 	default:
 		panic("unknown ReplicaChangeType")
 	}
 }
 
 // ReplicaChange describes a change to a replica.
-//
-// TODO(sumeer): make ReplicaChange private.
 type ReplicaChange struct {
 	// The load this change adds to a store. The values will be negative if the
 	// load is being removed.
@@ -168,27 +182,56 @@ type ReplicaChange struct {
 	rangeID roachpb.RangeID
 
 	// NB: 0 is not a valid ReplicaID, but this component does not care about
-	// this level of detail (the special consts defined above use negative
+	// this level of detail (the special constants defined above use negative
 	// ReplicaID values as markers).
+	//
+	// We define exists(replicaID) =
+	//  replicaID >= 0 || replicaID == unknownReplicaID.
 	//
 	// Only following cases can happen:
 	//
-	// - prev.replicaID >= 0 && next.replicaID == noReplicaID: outgoing replica.
-	//   prev.IsLeaseholder can be true or false, since we can transfer the
-	//   lease as part of moving the replica.
+	// - exists(prev.replicaID) && next.replicaID == noReplicaID: outgoing
+	//   replica. prev.IsLeaseholder can be true or false, since we can transfer
+	//   the lease as part of moving the replica. ReplicaChangeType is
+	//   RemoveReplica.
 	//
 	// - prev.replicaID == noReplicaID && next.replicaID == unknownReplicaID:
 	//   incoming replica, next.ReplicaType must be VOTER_FULL or NON_VOTER.
-	//   next.IsLeaseholder can be true or false.
+	//   next.IsLeaseholder can be true or false. ReplicaChangeType is
+	//   AddReplica.
 	//
-	// - prev.replicaID >= 0 && next.replicaID >= 0: can be a change to
-	//   IsLeaseholder, or ReplicaType. next.ReplicaType must be VOTER_FULL or
-	//   NON_VOTER.
+	// - exists(prev.replicaID) && exists(next.replicaID):
+	//   - If prev.ReplicaType == next.ReplicaType, ReplicaChangeType must be
+	//     AddLease or RemoveLease, with a change in the IsLeaseholder bit.
+	//   - If prev.ReplicaType != next.ReplicaType, ReplicaChangeType is
+	//     ChangeReplica, and this is a promotion/demotion. The IsLeaseholder
+	//     bit can change or be false in both prev and next (it can't be true in
+	//     both since a promoted replica can't have been the leaseholder and a
+	//     replica being demoted cannot retain the lease).
+	//
+	// NB: The prev value is always the state before the change. Typically, this
+	// will be the source of truth provided by the leaseholder in the RangeMsg,
+	// so will have real ReplicaIDs (if already a replica) and real ReplicaTypes
+	// (including types beyond VOTER_FULL and NON_VOTER). However, because of
+	// AdjustPendingChangeDisposition, we can remove pending changes and
+	// rangeState.replicas can have replicas with unknownReplicaID. Technically,
+	// there is nothing preventing someone from trying to construct another
+	// change to the range, where the prev state would include unknownReplicaID
+	// -- the data-structures allow for this. However, we do expect integration
+	// code to typically provide a new source of truth for the range from the
+	// leaseholder, before constructing more changes. Currently, this happens
+	// because the rebalancer atomically provide a new StoreLeaseholderMsg and
+	// then constructs more changes. We expect that the replicate and lease
+	// queues, when trying to construct a change for range, will first provide
+	// the source of truth for the range.
+	//
+	// The ReplicaType in next is either the zero value (for removals), or
+	// {VOTER_FULL, NON_VOTER} for additions/change, i.e., it represents the
+	// final goal state.
 	prev ReplicaState
 	next ReplicaIDAndType
 
-	// replicaChangeType is derived from (prev, next) and is a convenience for
-	// logging.
+	// replicaChangeType is a function of (prev, next) as described above.
 	replicaChangeType ReplicaChangeType
 }
 
@@ -203,25 +246,25 @@ func (rc ReplicaChange) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // isRemoval returns true if the change is a removal of a replica.
 func (rc ReplicaChange) isRemoval() bool {
-	return rc.prev.ReplicaID >= 0 && rc.next.ReplicaID == noReplicaID
+	return rc.replicaChangeType == RemoveReplica
 }
 
 // isAddition returns true if the change is an addition of a replica.
 func (rc ReplicaChange) isAddition() bool {
-	return rc.prev.ReplicaID == noReplicaID && rc.next.ReplicaID == unknownReplicaID
+	return rc.replicaChangeType == AddReplica
 }
 
 // isUpdate returns true if the change is an update to the replica type or
 // leaseholder status. This includes promotion/demotion changes.
 func (rc ReplicaChange) isUpdate() bool {
-	return rc.prev.ReplicaID >= 0 && rc.next.ReplicaID >= 0
+	return rc.replicaChangeType == AddLease || rc.replicaChangeType == RemoveLease ||
+		rc.replicaChangeType == ChangeReplica
 }
 
 // isPromoDemo returns true if the change is a promotion or demotion of a
-// replica.
+// replica (potentially with a lease change).
 func (rc ReplicaChange) isPromoDemo() bool {
-	return rc.prev.ReplicaID >= 0 && rc.next.ReplicaID >= 0 &&
-		rc.prev.ReplicaType.ReplicaType != rc.next.ReplicaType.ReplicaType
+	return rc.replicaChangeType == ChangeReplica
 }
 
 func MakeLeaseTransferChanges(
@@ -297,10 +340,12 @@ func MakeLeaseTransferChanges(
 func MakeAddReplicaChange(
 	rangeID roachpb.RangeID,
 	rLoad RangeLoad,
-	replicaState ReplicaState,
+	replicaIDAndType ReplicaIDAndType,
 	addTarget roachpb.ReplicationTarget,
 ) ReplicaChange {
-	replicaState.ReplicaID = unknownReplicaID
+	replicaIDAndType.ReplicaType.ReplicaType = mapReplicaTypeToVoterOrNonVoter(
+		replicaIDAndType.ReplicaType.ReplicaType)
+	replicaIDAndType.ReplicaID = unknownReplicaID
 	addReplica := ReplicaChange{
 		target:  addTarget,
 		rangeID: rangeID,
@@ -309,12 +354,12 @@ func MakeAddReplicaChange(
 				ReplicaID: noReplicaID,
 			},
 		},
-		next:              replicaState.ReplicaIDAndType,
+		next:              replicaIDAndType,
 		replicaChangeType: AddReplica,
 	}
 	addReplica.next.ReplicaID = unknownReplicaID
 	addReplica.loadDelta.add(loadVectorToAdd(rLoad.Load))
-	if replicaState.IsLeaseholder {
+	if replicaIDAndType.IsLeaseholder {
 		addReplica.secondaryLoadDelta[LeaseCount] = 1
 	} else {
 		// Set the load delta for CPU to be just the raft CPU. The non-raft CPU we
@@ -352,6 +397,34 @@ func MakeRemoveReplicaChange(
 	return removeReplica
 }
 
+// MakeReplicaTypeChange creates a replica change which changes the type of
+// the replica.
+func MakeReplicaTypeChange(
+	rangeID roachpb.RangeID,
+	rLoad RangeLoad,
+	prev ReplicaState,
+	next ReplicaIDAndType,
+	target roachpb.ReplicationTarget,
+) ReplicaChange {
+	next.ReplicaID = unknownReplicaID
+	next.ReplicaType.ReplicaType = mapReplicaTypeToVoterOrNonVoter(next.ReplicaType.ReplicaType)
+	change := ReplicaChange{
+		target:            target,
+		rangeID:           rangeID,
+		prev:              prev,
+		next:              next,
+		replicaChangeType: ChangeReplica,
+	}
+	if next.IsLeaseholder {
+		change.secondaryLoadDelta[LeaseCount] = 1
+		change.loadDelta[CPURate] = loadToAdd(rLoad.Load[CPURate] - rLoad.RaftCPU)
+	} else if prev.IsLeaseholder {
+		change.secondaryLoadDelta[LeaseCount] = -1
+		change.loadDelta[CPURate] = rLoad.RaftCPU - rLoad.Load[CPURate]
+	}
+	return change
+}
+
 // makeRebalanceReplicaChanges creates to replica changes, adding a replica and
 // removing another. If the replica being rebalanced is the current
 // leaseholder, the impact of the rebalance also includes the lease load.
@@ -371,20 +444,30 @@ func makeRebalanceReplicaChanges(
 		log.KvDistribution.Fatalf(context.Background(), "remove target %s not in existing replicas", removeTarget)
 	}
 
-	addState := ReplicaState{
-		ReplicaIDAndType: ReplicaIDAndType{
-			ReplicaID:   unknownReplicaID,
-			ReplicaType: remove.ReplicaType,
-		},
+	addIDAndType := ReplicaIDAndType{
+		ReplicaID:   unknownReplicaID,
+		ReplicaType: remove.ReplicaType,
 	}
-	addReplicaChange := MakeAddReplicaChange(rangeID, rLoad, addState, addTarget)
+	addReplicaChange := MakeAddReplicaChange(rangeID, rLoad, addIDAndType, addTarget)
 	removeReplicaChange := MakeRemoveReplicaChange(rangeID, rLoad, remove.ReplicaState, removeTarget)
 	return [2]ReplicaChange{addReplicaChange, removeReplicaChange}
 }
 
-// PendingRangeChange is a proposed set of change(s) to a range. It can consist
-// of multiple pending replica changes, such as adding or removing replicas, or
-// transferring the lease.
+func mapReplicaTypeToVoterOrNonVoter(rType roachpb.ReplicaType) roachpb.ReplicaType {
+	switch rType {
+	case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.VOTER_DEMOTING_LEARNER, roachpb.VOTER_DEMOTING_NON_VOTER:
+		return roachpb.VOTER_FULL
+	case roachpb.NON_VOTER, roachpb.LEARNER:
+		return roachpb.NON_VOTER
+	default:
+		panic(errors.AssertionFailedf("unknown replica type %v", rType))
+	}
+}
+
+// PendingRangeChange is a proposed set of change(s) to a range. It can
+// consist of multiple pending replica changes, such as adding or removing
+// replicas, or transferring the lease. There is at most one change per store
+// in the set.
 //
 // NB: pendingReplicaChanges is not visible outside the package, so we can be
 // certain that callers outside this package that hold a PendingRangeChange
@@ -459,10 +542,37 @@ func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 		if i > 0 {
 			w.Print(",")
 		}
-		w.Printf("%v", c.ChangeID)
+		w.Printf("%v", c.changeID)
 	}
 	w.Print("]")
 }
+
+// StringForTesting prints the untransformed internal state for testing.
+func (prc PendingRangeChange) StringForTesting() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "range r%v\n", prc.RangeID)
+	for _, c := range prc.pendingReplicaChanges {
+		fmt.Fprintf(&b, " %s\n", c.ReplicaChange.String())
+		fmt.Fprintf(&b, "  load: %s\n", c.loadDelta.String())
+		fmt.Fprintf(&b, "  secondary-load: %s\n", c.secondaryLoadDelta.String())
+	}
+	return b.String()
+}
+
+// SortForTesting sorts the internal pendingReplicaChanges slice to be
+// deterministic, in increasing order of StoreID, for testing purposes.
+func (prc PendingRangeChange) SortForTesting() {
+	slices.SortFunc(prc.pendingReplicaChanges, func(a, b *pendingReplicaChange) int {
+		return cmp.Compare(a.target.StoreID, b.target.StoreID)
+	})
+}
+
+// TODO(sumeer): A single PendingRangeChange can model a bunch of replica
+// changes and a lease transfer. Classifying the change as either
+// IsChangeReplicas or IsTransferLease is unnecessarily limiting. The only
+// code that really relies on this is integration code:
+// mma_store_rebalancer.go, allocator_sync.go, asim. We should fix those and
+// consider removing these methods.
 
 // IsChangeReplicas returns true if the pending range change is a change
 // replicas operation.
@@ -504,34 +614,78 @@ func (prc PendingRangeChange) IsTransferLease() bool {
 // ReplicationChanges returns the replication changes for the pending range
 // change. It panics if the pending range change is not a change replicas
 // operation.
+//
+// TODO(tbg): The ReplicationChanges can include a new leaseholder replica,
+// but the incoming leaseholder is not explicitly represented in
+// kvpb.ReplicationChanges. This is an existing modeling deficiency in the
+// kvserver code. In Replica.maybeTransferLeaseDuringLeaveJoint the first
+// VOTER_INCOMING is considered the new leaseholder. So the code below places
+// the new leaseholder (an ADD_VOTER) at index 0. It is not clear whether this
+// is sufficient for all integration use-cases. Verify and fix as needed.
+//
+// TODO(sumeer): this method is limiting, since a single PendingRangeChange
+// should be allowed to model any set of changes (see the existing TODO on
+// IsChangeReplicas).
 func (prc PendingRangeChange) ReplicationChanges() kvpb.ReplicationChanges {
 	if !prc.IsChangeReplicas() {
 		panic("RangeChange is not a change replicas")
 	}
-	chgs := make([]kvpb.ReplicationChange, len(prc.pendingReplicaChanges))
-	for i, c := range prc.pendingReplicaChanges {
-		chgs[i].Target = c.target
-		if c.prev.ReplicaID == noReplicaID {
+	chgs := make([]kvpb.ReplicationChange, 0, len(prc.pendingReplicaChanges))
+	newLeaseholderIndex := -1
+	for _, c := range prc.pendingReplicaChanges {
+		switch c.replicaChangeType {
+		case ChangeReplica, AddReplica, RemoveReplica:
+			// These are the only permitted cases.
+		default:
+			panic(errors.AssertionFailedf("change type %v is not a change replicas", c.replicaChangeType))
+		}
+		// The kvserver code represents a change in replica type as an
+		// addition and a removal of the same replica. For example, if a
+		// replica changes from VOTER_FULL to NON_VOTER, we will emit a pair
+		// of {ADD_NON_VOTER, REMOVE_VOTER} for the replica. The ordering of
+		// this pair does not matter.
+		//
+		// TODO(tbg): confirm that the ordering does not matter.
+		if c.replicaChangeType == ChangeReplica || c.replicaChangeType == AddReplica {
+			chg := kvpb.ReplicationChange{Target: c.target}
+			isNewLeaseholder := false
 			switch c.next.ReplicaType.ReplicaType {
 			case roachpb.VOTER_FULL:
-				chgs[i].ChangeType = roachpb.ADD_VOTER
+				chg.ChangeType = roachpb.ADD_VOTER
+				if c.next.IsLeaseholder {
+					isNewLeaseholder = true
+				}
 			case roachpb.NON_VOTER:
-				chgs[i].ChangeType = roachpb.ADD_NON_VOTER
+				chg.ChangeType = roachpb.ADD_NON_VOTER
 			default:
 				panic(errors.AssertionFailedf("unexpected replica type %s", c.next.ReplicaType.ReplicaType))
 			}
-		} else if c.next.ReplicaID == noReplicaID {
-			switch c.prev.ReplicaType.ReplicaType {
-			case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.VOTER_DEMOTING_LEARNER:
-				chgs[i].ChangeType = roachpb.REMOVE_VOTER
-			case roachpb.NON_VOTER, roachpb.LEARNER:
-				chgs[i].ChangeType = roachpb.REMOVE_NON_VOTER
+			if isNewLeaseholder {
+				if newLeaseholderIndex >= 0 {
+					panic(errors.AssertionFailedf(
+						"multiple new leaseholders in change replicas"))
+				}
+				newLeaseholderIndex = len(chgs)
+			}
+			chgs = append(chgs, chg)
+		}
+		if c.replicaChangeType == ChangeReplica || c.replicaChangeType == RemoveReplica {
+			chg := kvpb.ReplicationChange{Target: c.target}
+			prevType := mapReplicaTypeToVoterOrNonVoter(c.prev.ReplicaType.ReplicaType)
+			switch prevType {
+			case roachpb.VOTER_FULL:
+				chg.ChangeType = roachpb.REMOVE_VOTER
+			case roachpb.NON_VOTER:
+				chg.ChangeType = roachpb.REMOVE_NON_VOTER
 			default:
 				panic(errors.AssertionFailedf("unexpected replica type %s", c.prev.ReplicaType.ReplicaType))
 			}
-		} else {
-			panic("todo: support for promotion/demotion changes")
+			chgs = append(chgs, chg)
 		}
+	}
+	if newLeaseholderIndex >= 0 {
+		// Move the new leaseholder to index 0.
+		chgs[0], chgs[newLeaseholderIndex] = chgs[newLeaseholderIndex], chgs[0]
 	}
 	return chgs
 }
@@ -576,7 +730,7 @@ func (prc PendingRangeChange) LeaseTransferFrom() roachpb.StoreID {
 // moved from one store to another -- that pairing is not captured here, and
 // captured in the changes suggested by the allocator to the external entity.
 type pendingReplicaChange struct {
-	ChangeID
+	changeID
 	ReplicaChange
 
 	// The wall time at which this pending change was initiated. Used for
@@ -642,7 +796,7 @@ type storeState struct {
 		// Only the case where enactment happened is where a load pending change
 		// can live on -- but since that will set enactedAtTime, we are guaranteed
 		// to eventually remove it.
-		loadPendingChanges map[ChangeID]*pendingReplicaChange
+		loadPendingChanges map[changeID]*pendingReplicaChange
 		// replicas is computed from the authoritative information provided by
 		// various leaseholders in storeLeaseholderMsgs and adjusted for pending
 		// changes in clusterState.pendingChanges/rangeState.pendingChanges.
@@ -810,7 +964,7 @@ func (ss *storeState) computeMaxFractionPending() {
 
 func newStoreState() *storeState {
 	ss := &storeState{}
-	ss.adjusted.loadPendingChanges = map[ChangeID]*pendingReplicaChange{}
+	ss.adjusted.loadPendingChanges = map[changeID]*pendingReplicaChange{}
 	ss.adjusted.replicas = map[roachpb.RangeID]ReplicaState{}
 	ss.adjusted.topKRanges = map[roachpb.StoreID]*topKReplicas{}
 	return ss
@@ -954,13 +1108,13 @@ type rangeState struct {
 	// decision is not always executed atomically by the external system.
 	//
 	// The decision is modeled using at most one pendingReplicaChange per
-	// replica in the pre-change rangeState.replicas. This means that when we
-	// see a new RangeMsg.Replicas, and have an existing list of pending
-	// changes, we can individually compare each pending change to the state in
-	// RangeMsg.Replicas and decide whether it is (a) already incorporated or
-	// (b) can still apply in the future or (c) is inconsistent. Even complex
-	// decisions don't need to refer to a replica multiple times, so this is
-	// not a problematic restriction.
+	// replica (and store) in the pre-change rangeState.replicas. This means
+	// that when we see a new RangeMsg.Replicas, and have an existing list of
+	// pending changes, we can individually compare each pending change to the
+	// state in RangeMsg.Replicas and decide whether it is (a) already
+	// incorporated or (b) can still apply in the future or (c) is inconsistent.
+	// Even complex decisions don't need to refer to a replica multiple times,
+	// so this is not a problematic restriction.
 	//
 	// This separability per replica allows for observing intermediate states
 	// representing partial application (case (a) in the previous paragraph),
@@ -1029,8 +1183,9 @@ type rangeState struct {
 
 	load RangeLoad
 
-	// Only 1 or 2 changes (latter represents a lease transfer or rebalance that
-	// adds and removes replicas).
+	// The pending changes to this range, that are already reflected in
+	// replicas. There is at most one change per store in this slice (same
+	// invariant as PendingRangeChange).
 	//
 	// Life-cycle matches clusterState.pendingChanges. The consolidated
 	// rangeState.pendingChanges across all ranges in clusterState.ranges will
@@ -1137,11 +1292,11 @@ func replicaSetIsValid(replicas []StoreIDAndReplicaState) error {
 	return errors.Errorf("no leaseholder")
 }
 
-func (rs *rangeState) removePendingChangeTracking(changeID ChangeID) {
+func (rs *rangeState) removePendingChangeTracking(changeID changeID) {
 	n := len(rs.pendingChanges)
 	found := false
 	for i := 0; i < n; i++ {
-		if rs.pendingChanges[i].ChangeID == changeID {
+		if rs.pendingChanges[i].changeID == changeID {
 			rs.pendingChanges[i], rs.pendingChanges[n-1] = rs.pendingChanges[n-1], rs.pendingChanges[i]
 			rs.pendingChanges = rs.pendingChanges[:n-1]
 			found = true
@@ -1203,8 +1358,8 @@ type clusterState struct {
 	// Removed from based on RangeMsg (provided by the leaseholder),
 	// AdjustPendingChangesDisposition (provided by the enacting module at the
 	// leaseholder), or time-based GC.
-	pendingChanges map[ChangeID]*pendingReplicaChange
-	changeSeqGen   ChangeID
+	pendingChanges map[changeID]*pendingReplicaChange
+	changeSeqGen   changeID
 
 	*constraintMatcher
 	*localityTierInterner
@@ -1218,7 +1373,7 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 		stores:               map[roachpb.StoreID]*storeState{},
 		ranges:               map[roachpb.RangeID]*rangeState{},
 		scratchRangeMap:      map[roachpb.RangeID]struct{}{},
-		pendingChanges:       map[ChangeID]*pendingReplicaChange{},
+		pendingChanges:       map[changeID]*pendingReplicaChange{},
 		constraintMatcher:    newConstraintMatcher(interner),
 		localityTierInterner: newLocalityTierInterner(interner),
 	}
@@ -1266,7 +1421,7 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 	// effect.
 	for _, change := range ss.computePendingChangesReflectedInLatestLoad(storeMsg.LoadTime) {
 		log.KvDistribution.VInfof(ctx, 2, "s%d not-pending %v", storeMsg.StoreID, change)
-		delete(ss.adjusted.loadPendingChanges, change.ChangeID)
+		delete(ss.adjusted.loadPendingChanges, change.changeID)
 	}
 
 	for _, change := range ss.adjusted.loadPendingChanges {
@@ -1412,7 +1567,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			// example_skewed_cpu_even_ranges_mma_and_queues. I suspect the latter
 			// is because MMA is acting faster to undo the effects of the changes
 			// made by the replicate and lease queues.
-			cs.pendingChangeEnacted(change.ChangeID, now)
+			cs.pendingChangeEnacted(change.changeID, now)
 		}
 		// INVARIANT: remainingChanges and rs.pendingChanges contain the same set
 		// of changes, though possibly in different order.
@@ -1466,9 +1621,9 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				// We did not undo the load change above, or remove it from the various
 				// pendingChanges data-structures. We do those things now.
 				for _, change := range remainingChanges {
-					rs.removePendingChangeTracking(change.ChangeID)
-					delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.ChangeID)
-					delete(cs.pendingChanges, change.ChangeID)
+					rs.removePendingChangeTracking(change.changeID)
+					delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.changeID)
+					delete(cs.pendingChanges, change.changeID)
 					cs.undoChangeLoadDelta(change.ReplicaChange)
 				}
 				if n := len(rs.pendingChanges); n > 0 {
@@ -1514,9 +1669,9 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		//
 		// Gather the changeIDs, since calls to pendingChangeEnacted modify the
 		// rs.pendingChanges slice.
-		changeIDs := make([]ChangeID, len(rs.pendingChanges))
+		changeIDs := make([]changeID, len(rs.pendingChanges))
 		for i, change := range rs.pendingChanges {
-			changeIDs[i] = change.ChangeID
+			changeIDs[i] = change.changeID
 		}
 		for _, changeID := range changeIDs {
 			cs.pendingChangeEnacted(changeID, now)
@@ -1727,9 +1882,9 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 		}
 		// Gather the changeIDs, since calls to undoPendingChange modify the
 		// rs.pendingChanges slice.
-		var changeIDs []ChangeID
+		var changeIDs []changeID
 		for _, pendingChange := range rs.pendingChanges {
-			changeIDs = append(changeIDs, pendingChange.ChangeID)
+			changeIDs = append(changeIDs, pendingChange.changeID)
 		}
 		for _, changeID := range changeIDs {
 			cs.undoPendingChange(changeID)
@@ -1737,7 +1892,7 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 	}
 }
 
-func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time) {
+func (cs *clusterState) pendingChangeEnacted(cid changeID, enactedAt time.Time) {
 	change, ok := cs.pendingChanges[cid]
 	if !ok {
 		panic(fmt.Sprintf("change %v not found %v", cid, printMapPendingChanges(cs.pendingChanges)))
@@ -1748,14 +1903,14 @@ func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time) 
 		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
 	}
 
-	rs.removePendingChangeTracking(change.ChangeID)
-	delete(cs.pendingChanges, change.ChangeID)
+	rs.removePendingChangeTracking(change.changeID)
+	delete(cs.pendingChanges, change.changeID)
 }
 
 // undoPendingChange reverses the change with ID cid.
 //
 // REQUIRES: the change is not marked as no-rollback.
-func (cs *clusterState) undoPendingChange(cid ChangeID) {
+func (cs *clusterState) undoPendingChange(cid changeID) {
 	change, ok := cs.pendingChanges[cid]
 	if !ok {
 		panic(errors.AssertionFailedf("change %v not found %v", cid, printMapPendingChanges(cs.pendingChanges)))
@@ -1775,11 +1930,11 @@ func (cs *clusterState) undoPendingChange(cid ChangeID) {
 	// change from all tracking (range, store, cluster).
 	cs.undoReplicaChange(change.ReplicaChange)
 	rs.removePendingChangeTracking(cid)
-	delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.ChangeID)
-	delete(cs.pendingChanges, change.ChangeID)
+	delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.changeID)
+	delete(cs.pendingChanges, change.changeID)
 }
 
-func printMapPendingChanges(changes map[ChangeID]*pendingReplicaChange) string {
+func printMapPendingChanges(changes map[changeID]*pendingReplicaChange) string {
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "pending(%d)", len(changes))
 	for k, v := range changes {
@@ -1801,7 +1956,7 @@ func printPendingChanges(changes []*pendingReplicaChange) string {
 	fmt.Fprintf(&buf, "pending(%d)", len(changes))
 	for _, change := range changes {
 		fmt.Fprintf(&buf, "\nchange-id=%d store-id=%v node-id=%v range-id=%v load-delta=%v start=%v",
-			change.ChangeID, change.target.StoreID, change.target.NodeID, change.rangeID,
+			change.changeID, change.target.StoreID, change.target.NodeID, change.rangeID,
 			change.loadDelta, change.startTime,
 		)
 		if !(change.enactedAtTime == time.Time{}) {
@@ -1845,7 +2000,7 @@ func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
 		cs.applyReplicaChange(pendingChange.ReplicaChange, true)
 		cs.changeSeqGen++
 		cid := cs.changeSeqGen
-		pendingChange.ChangeID = cid
+		pendingChange.changeID = cid
 		pendingChange.startTime = now
 		pendingChange.enactedAtTime = time.Time{}
 		storeState := cs.stores[pendingChange.target.StoreID]
@@ -1878,33 +2033,14 @@ func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
 // checks that after the changes are applied there is exactly one leaseholder.
 // It returns a non-nil error if any of these checks fail.
 //
-// REQUIRES: all the changes are to the same range; there are 1, 2 or 4
-// changes.
-//
-// TODO(sumeer): the 4 changes part is a hack because the asim conformance
-// test produces a change (when running under SMA) which is:
-//
-// r10 type: RemoveReplica target store n3,s3 (replica-id=5 type=NON_VOTER)->(replica-id=none type=VOTER_FULL)
-// r10 type: RemoveReplica target store n2,s2 (replica-id=2 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL)
-// r10 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
-// r10 type: AddReplica target store n2,s2 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=NON_VOTER)]
-//
-// This change violates the requirement that there should be a single change
-// per store. Fix how this is modeled and disallow 4 changes.
-//
-// TODO(sumeer): allow arbitrary number of changes, but validate that at most
-// one change per store.
+// REQUIRES: all the changes are to the same range, and there is at most one
+// change per store.
 //
 // TODO(sumeer): change to take PendingRangeChange as parameter
 func (cs *clusterState) preCheckOnApplyReplicaChanges(changes []*pendingReplicaChange) error {
-	// preApplyReplicaChange is called before applying a change to the cluster
-	// state.
-	if len(changes) != 1 && len(changes) != 2 && len(changes) != 4 {
-		panic(errors.AssertionFailedf(
-			"applying replica changes must be of length 1, 2, or 4 but got %v in %v",
-			len(changes), changes))
+	if len(changes) == 0 {
+		return nil
 	}
-
 	rangeID := changes[0].rangeID
 	curr, ok := cs.ranges[rangeID]
 	// Return early if range already has some pending changes or the range does not exist.

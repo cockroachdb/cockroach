@@ -411,12 +411,16 @@ func (cs *clusterState) rebalanceStores(
 				log.KvDistribution.VInfof(ctx, 2, "skipping r%d: constraints analysis failed", rangeID)
 				continue
 			}
+			// TODO: we will also try to rebalance away from this store if it is
+			// currently in VOTER_DEMOTING_LEARNER, which seems unnecessary.
 			isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
 			if !isVoter && !isNonVoter {
 				// We should not panic here since the replicateQueue may have shed the
 				// lease and informed MMA, since the last time MMA computed the top-k
 				// ranges. This is useful for debugging in the prototype, due to the
 				// lack of unit tests.
+				//
+				// TODO: should this panic be removed now?
 				panic(fmt.Sprintf("internal state inconsistency: "+
 					"store=%v range_id=%v pending-changes=%v "+
 					"rstate_replicas=%v rstate_constraints=%v",
