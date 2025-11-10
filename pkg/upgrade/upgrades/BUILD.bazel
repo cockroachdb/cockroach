@@ -23,6 +23,7 @@ go_library(
         "v25_4_system_statement_hints.go",
         "v25_4_system_stats_tables_autostats_fraction.go",
         "v25_4_transaction_diagnostics_tables.go",
+        "v26_1_system_statement_fingerprints.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/upgrade/upgrades",
     visibility = ["//visibility:public"],

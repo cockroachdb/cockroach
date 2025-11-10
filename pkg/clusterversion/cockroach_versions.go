@@ -241,6 +241,7 @@ const (
 	// meta1 and meta2.
 	V26_1_InstallMeta2StaticSplitPoint
 
+	V26_1_AddSystemStatementFingerprintsTable
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -310,6 +311,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_1_Start: {Major: 25, Minor: 4, Internal: 2},
 
 	V26_1_InstallMeta2StaticSplitPoint: {Major: 25, Minor: 4, Internal: 4},
+
+	V26_1_AddSystemStatementFingerprintsTable: {Major: 25, Minor: 4, Internal: 6},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

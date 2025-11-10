@@ -45,6 +45,11 @@ export class Sidebar extends React.Component<SidebarProps> {
       activeFor: ["/insights"],
     },
     {
+      path: "/fingerprints",
+      text: "Fingerprints",
+      activeFor: ["/fingerprints"],
+    },
+    {
       path: "/reports/network",
       text: "Network",
       activeFor: ["/reports/network"],

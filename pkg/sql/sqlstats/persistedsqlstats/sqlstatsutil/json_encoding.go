@@ -59,6 +59,12 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 	return (*stmtStatsMetadata)(statistics).jsonFields().encodeJSON()
 }
 
+func BuildStmtMetadataNoFingerprintJSON(
+	statistics *appstatspb.CollectedStatementStatistics,
+) (json.JSON, error) {
+	return (*stmtStatsMetadata)(statistics).jsonFieldsNoQuery().encodeJSON()
+}
+
 // BuildStmtStatisticsJSON encodes the statistics section a given
 // appstatspb.CollectedStatementStatistics into a json.JSON object.
 //

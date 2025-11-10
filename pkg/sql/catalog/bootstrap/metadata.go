@@ -473,6 +473,9 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.TransactionDiagnosticsTable)
 	target.AddDescriptor(systemschema.StatementHintsTable)
 
+	// Tables introduced in 26.1
+	target.AddDescriptor(systemschema.StatementFingerprintsTable)
+	target.AddDescriptor(systemschema.StatementFingerprintIDSequence)
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
 	// If adding a call to AddDescriptor or AddDescriptorForSystemTenant, please

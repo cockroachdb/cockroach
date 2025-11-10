@@ -571,6 +571,26 @@ func (sp *Span) SpanID() tracingpb.SpanID {
 	return sp.i.SpanID()
 }
 
+// SetStatementFingerprint sets the SQL statement fingerprint for this span.
+// This fingerprint will be propagated to child spans, allowing the KV layer
+// to access it for observability purposes.
+func (sp *Span) SetStatementFingerprint(fingerprint int64) {
+	if sp.detectUseAfterFinish() {
+		return
+	}
+	sp.i.SetStatementFingerprint(fingerprint)
+}
+
+// GetStatementFingerprint returns the SQL statement fingerprint associated
+// with this span, if any. The fingerprint may have been set on this span
+// or inherited from a parent span.
+func (sp *Span) GetStatementFingerprint() int64 {
+	if sp.detectUseAfterFinish() {
+		return 0
+	}
+	return sp.i.GetStatementFingerprint()
+}
+
 // OperationName returns the name of this span assigned when the span was
 // created.
 func (sp *Span) OperationName() string {
@@ -893,6 +913,11 @@ type SpanMeta struct {
 	// any info about the span in order to not have a child be created on the
 	// other side. Similarly, ExtractMetaFrom does not deserialize this field.
 	sterile bool
+
+	// statementFingerprint is the fingerprint of the SQL statement that initiated
+	// this trace, if any. This is propagated from parent to child spans so that
+	// the KV layer can access it for observability purposes.
+	statementFingerprint int64
 }
 
 // Empty returns whether or not the SpanMeta is a zero value.
@@ -907,6 +932,9 @@ func (sm SpanMeta) String() string {
 	if hasOtelSpan {
 		s.WriteString(" hasOtel")
 		s.WriteString(fmt.Sprintf(" trace: %d span: %d", sm.otelCtx.TraceID(), sm.otelCtx.SpanID()))
+	}
+	if sm.statementFingerprint != 0 {
+		s.WriteString(fmt.Sprintf(" fingerprint: %d", sm.statementFingerprint))
 	}
 	s.WriteRune(']')
 	return s.String()
