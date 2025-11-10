@@ -212,11 +212,17 @@ func (s *SpanSet) Merge(s2 *SpanSet) {
 	s.SortAndDedup()
 }
 
-// SortAndDedup sorts the spans in the SpanSet and removes any duplicates.
+// SortAndDedup sorts the spans in the SpanSet by key and removes duplicate or
+// overlapping / redundant spans. The SpanSet represents the same subset of the
+// {keys}x{timestamps} space before and after this call, but is not guaranteed
+// to have a minimal number of spans in a general case (see mergeSpans comment).
+//
+// TODO(pav-kv): does this make CheckAllowed falsely fail in some cases? Maybe
+// it's fine: importantly, it should not falsely succeed.
 func (s *SpanSet) SortAndDedup() {
 	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
 		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
-			s.spans[sa][ss], _ /* distinct */ = mergeSpans(&s.spans[sa][ss])
+			s.spans[sa][ss] = mergeSpans(s.spans[sa][ss])
 		}
 	}
 }
@@ -224,21 +230,6 @@ func (s *SpanSet) SortAndDedup() {
 // GetSpans returns a slice of spans with the given parameters.
 func (s *SpanSet) GetSpans(access SpanAccess, scope SpanScope) []Span {
 	return s.spans[access][scope]
-}
-
-// BoundarySpan returns a span containing all the spans with the given params.
-func (s *SpanSet) BoundarySpan(scope SpanScope) roachpb.Span {
-	var boundary roachpb.Span
-	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
-		for _, cur := range s.GetSpans(sa, scope) {
-			if !boundary.Valid() {
-				boundary = cur.Span
-				continue
-			}
-			boundary = boundary.Combine(cur.Span)
-		}
-	}
-	return boundary
 }
 
 // Intersects returns true iff the span set denoted by `other` has any

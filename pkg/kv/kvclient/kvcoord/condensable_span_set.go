@@ -63,7 +63,7 @@ func (s *condensableSpanSet) insert(spans ...roachpb.Span) {
 // The method has the side effect of sorting the set.
 func (s *condensableSpanSet) mergeAndSort() {
 	oldLen := len(s.s)
-	s.s, _ = roachpb.MergeSpans(&s.s)
+	s.s, _ = roachpb.MergeSpans(s.s)
 	// Recompute the size if anything has changed.
 	if oldLen != len(s.s) {
 		s.bytes = 0
@@ -222,7 +222,7 @@ func (s *condensableSpanSet) estimateSize(spans []roachpb.Span, mergeThresholdBy
 	// Try harder - merge (a copy of) the existing spans with the new spans.
 	spans = append(spans, s.s...)
 	lenBeforeMerge := len(spans)
-	spans, _ = roachpb.MergeSpans(&spans)
+	spans, _ = roachpb.MergeSpans(spans)
 	if len(spans) == lenBeforeMerge {
 		// Nothing changed -i.e. we failed to merge any spans.
 		return estimate

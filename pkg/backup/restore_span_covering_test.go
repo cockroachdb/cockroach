@@ -797,7 +797,7 @@ func runTestRestoreEntryCoverForSpanAndFileCounts(
 			completedSpans = append(completedSpans, sp)
 		}
 
-		merged, _ := roachpb.MergeSpans(&completedSpans)
+		merged, _ := roachpb.MergeSpans(completedSpans)
 		return merged
 	}
 
