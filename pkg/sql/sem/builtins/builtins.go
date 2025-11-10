@@ -4697,7 +4697,9 @@ value if you rely on the HLC for accuracy.`,
 					}
 					obj.Add(fmt.Sprintf("f%d", i+1), j)
 				}
-				ret.Append(tree.NewDJSON(obj.Build()))
+				if err := ret.Append(tree.NewDJSON(obj.Build())); err != nil {
+					return nil, err
+				}
 			}
 			return ret, nil
 		},

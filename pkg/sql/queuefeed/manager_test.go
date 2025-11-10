@@ -17,22 +17,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func NewTestManager(t *testing.T, a serverutils.ApplicationLayerInterface) *Manager {
+	ctx := context.Background()
+	db := a.InternalDB().(isql.DB)
+	m := NewManager(ctx, db, a.RangeFeedFactory().(*rangefeed.Factory), a.Codec(), a.LeaseManager().(*lease.Manager))
+	require.NotNil(t, m.codec)
+	return m
+}
+
 func TestFeedCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 
-	db := srv.ApplicationLayer().InternalDB().(isql.DB)
 	// expect an error when trying to read from a queue that doesn't exist
-	qm := NewManager(ctx, db, srv.RangeFeedFactory().(*rangefeed.Factory), srv.Codec(), srv.ApplicationLayer().LeaseManager().(*lease.Manager))
+	qm := NewTestManager(t, srv.ApplicationLayer())
 	_, err := qm.GetOrInitReader(context.Background(), "test")
 	require.ErrorContains(t, err, "queue feed not found")
 
 	// expect no error when creating a queue
-	require.NoError(t, qm.CreateQueue(context.Background(), "test", 104))
+	db := sqlutils.MakeSQLRunner(conn)
+	db.Exec(t, `CREATE TABLE t (a string)`)
+	// get table id
+	var tableID int64
+	db.QueryRow(t, "SELECT id FROM system.namespace where name = 't'").Scan(&tableID)
+	require.NoError(t, qm.CreateQueue(context.Background(), "test", tableID))
 
 	// now we can read from the queue
 	reader, err := qm.GetOrInitReader(context.Background(), "test")
@@ -46,11 +58,10 @@ func TestQueuefeedCtxCancel(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 
-	db := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t))
-
+	db := sqlutils.MakeSQLRunner(conn)
 	db.Exec(t, `CREATE TABLE t (a string)`)
 	// get table id
 	var tableID int64
@@ -61,5 +72,4 @@ func TestQueuefeedCtxCancel(t *testing.T) {
 	defer cancel()
 	_, err := db.DB.QueryContext(ctx, `SELECT crdb_internal.select_from_queue_feed('hi', 1)`)
 	require.Error(t, err)
-
 }

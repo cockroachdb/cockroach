@@ -65,7 +65,16 @@ type Reader struct {
 	goroCtx context.Context
 }
 
-func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, rff *rangefeed.Factory, codec keys.SQLCodec, leaseMgr *lease.Manager, name string, tableDescID int64) *Reader {
+func NewReader(
+	ctx context.Context,
+	executor isql.DB,
+	mgr *Manager,
+	rff *rangefeed.Factory,
+	codec keys.SQLCodec,
+	leaseMgr *lease.Manager,
+	name string,
+	tableDescID int64,
+) *Reader {
 	r := &Reader{
 		executor:                    executor,
 		mgr:                         mgr,
@@ -290,7 +299,9 @@ func (r *Reader) checkForReassignment(ctx context.Context) error {
 }
 
 // TODO: this is all highly sus
-func (r *Reader) decodeRangefeedValue(ctx context.Context, rfv *kvpb.RangeFeedValue) (tree.Datums, error) {
+func (r *Reader) decodeRangefeedValue(
+	ctx context.Context, rfv *kvpb.RangeFeedValue,
+) (tree.Datums, error) {
 	key, value := rfv.Key, rfv.Value
 	key, err := r.codec.StripTenantPrefix(key)
 	if err != nil {
@@ -341,7 +352,7 @@ func (r *Reader) decodeRangefeedValue(ctx context.Context, rfv *kvpb.RangeFeedVa
 	for i, colID := range cols {
 		col, err := catalog.MustFindColumnByID(tableDesc, colID)
 		if err != nil {
-			return nil, errors.Wrapf(err, "finding column by id: %s", colID)
+			return nil, errors.Wrapf(err, "finding column by id: %d", colID)
 		}
 		ed := encDatums[i]
 		if err := ed.EnsureDecoded(col.ColumnDesc().Type, &tree.DatumAlloc{}); err != nil {

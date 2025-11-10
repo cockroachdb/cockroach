@@ -7,6 +7,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
@@ -24,24 +27,17 @@ type Manager struct {
 	leaseMgr *lease.Manager
 }
 
-func NewManager(_ context.Context, executor isql.DB, rff *rangefeed.Factory, codec keys.SQLCodec, leaseMgr *lease.Manager) *Manager {
+func NewManager(
+	_ context.Context,
+	executor isql.DB,
+	rff *rangefeed.Factory,
+	codec keys.SQLCodec,
+	leaseMgr *lease.Manager,
+) *Manager {
 	// setup rangefeed on partitions table (/poll)
 	// handle handoff from one server to another
 	return &Manager{executor: executor, rff: rff, codec: codec, leaseMgr: leaseMgr}
 }
-
-const createQueuePartitionTableSQL = `
-CREATE TABLE IF NOT EXISTS defaultdb.queue_partition_%s (
-	partition_id INT8 PRIMARY KEY,
-	-- is the sql server assigned dead
-	sql_liveness_session UUID NOT NULL,
-	-- pgwire session
-	user_session UUID NOT NULL,
-	sql_liveness_session_successor UUID,
-	user_session_successor UUID,
-	partition_spec bytea,
-	updated_at TIMESTAMPTZ
-)`
 
 const createQueueCursorTableSQL = `
 CREATE TABLE IF NOT EXISTS defaultdb.queue_cursor_%s (
@@ -66,25 +62,56 @@ SELECT table_desc_id FROM defaultdb.queue_feeds WHERE queue_feed_name = $1
 
 // should take a txn
 func (m *Manager) CreateQueue(ctx context.Context, queueName string, tableDescID int64) error {
-	return m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	err := m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, err := txn.Exec(ctx, "create_q", txn.KV(), createQueueTableSQL)
 		if err != nil {
 			return err
 		}
-		_, err = txn.Exec(ctx, "create_qp", txn.KV(), fmt.Sprintf(createQueuePartitionTableSQL, queueName))
+
+		pt := &partitionTable{queueName: queueName}
+		err = pt.CreateSchema(ctx, txn)
 		if err != nil {
 			return err
 		}
+
 		_, err = txn.Exec(ctx, "create_qc", txn.KV(), fmt.Sprintf(createQueueCursorTableSQL, queueName))
 		if err != nil {
 			return err
 		}
-		// TODO(queuefeed): add validation on the table descriptor id
+		return nil
+	})
+	if err != nil {
+		return errors.Wrapf(err, "creating queue tables for %s", queueName)
+	}
+
+	return m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		// TODO(queuefeed): figure out how we want to integrate with schema changes.
+		descriptor, err := m.leaseMgr.Acquire(ctx, lease.TimestampToReadTimestamp(txn.KV().ReadTimestamp()), descpb.ID(tableDescID))
+		if err != nil {
+			return err
+		}
+		tableDesc := descriptor.Underlying().(catalog.TableDescriptor)
+		defer descriptor.Release(ctx)
+
 		_, err = txn.Exec(ctx, "insert_q", txn.KV(), insertQueueFeedSQL, queueName, tableDescID)
 		if err != nil {
 			return err
 		}
-		return nil
+
+		pt := &partitionTable{queueName: queueName}
+
+		// Create a single initial partition that covers the table's primary key.
+		primaryIndexPrefix := m.codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(tableDesc.GetPrimaryIndexID()))
+		primaryKeySpan := roachpb.Span{
+			Key:    primaryIndexPrefix,
+			EndKey: primaryIndexPrefix.PrefixEnd(),
+		}
+		partition := Partition{
+			ID:   1,
+			Span: &primaryKeySpan,
+		}
+
+		return pt.InsertPartition(ctx, txn, partition)
 	})
 }
 
@@ -97,6 +124,7 @@ func (m *Manager) GetOrInitReader(ctx context.Context, name string) (queuebase.R
 		if err != nil {
 			return err
 		}
+
 		vals, err := txn.QueryRowEx(ctx, "fetch_q", txn.KV(),
 			sessiondata.NodeUserSessionDataOverride, fetchQueueFeedSQL, name)
 		if err != nil {

@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "queuefeed",
     srcs = [
+        "assignments.go",
         "manager.go",
         "partitions.go",
         "reader.go",
@@ -38,6 +39,7 @@ go_library(
 go_test(
     name = "queuefeed_test",
     srcs = [
+        "assignments_test.go",
         "main_test.go",
         "manager_test.go",
         "partitions_test.go",
@@ -45,10 +47,13 @@ go_test(
     embed = [":queuefeed"],
     deps = [
         "//pkg/base",
+        "//pkg/kv/kvclient/rangefeed",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
+        "//pkg/sql/catalog/lease",
         "//pkg/sql/isql",
         "//pkg/sql/sqlliveness",
         "//pkg/testutils/serverutils",
@@ -58,6 +63,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

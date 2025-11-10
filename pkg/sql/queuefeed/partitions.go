@@ -25,7 +25,6 @@ type Partition struct {
 }
 
 type partitionTable struct {
-	db        isql.DB
 	queueName string
 }
 
@@ -33,9 +32,9 @@ func (p *partitionTable) CreateSchema(ctx context.Context, txn isql.Txn) error {
 	_, err := txn.Exec(ctx, "create-partition-table", txn.KV(),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS defaultdb.queue_partition_%s (
 			partition_id BIGSERIAL PRIMARY KEY,
-			sql_liveness_session UUID,
+			sql_liveness_session BYTES,
 			user_session UUID,
-			sql_liveness_session_successor UUID,
+			sql_liveness_session_successor BYTES,
 			user_session_successor UUID,
 			partition_spec BYTES
 		)`, p.queueName))
@@ -61,13 +60,13 @@ func (p *partitionTable) ListPartitions(ctx context.Context, txn isql.Txn) ([]Pa
 		var session, successor Session
 		if !(row[1] == tree.DNull || row[2] == tree.DNull) {
 			session = Session{
-				LivenessID:   sqlliveness.SessionID(tree.MustBeDUuid(row[1]).UUID.GetBytes()),
+				LivenessID:   sqlliveness.SessionID(tree.MustBeDBytes(row[1])),
 				ConnectionID: tree.MustBeDUuid(row[2]).UUID,
 			}
 		}
 		if !(row[3] == tree.DNull || row[4] == tree.DNull) {
 			successor = Session{
-				LivenessID:   sqlliveness.SessionID(tree.MustBeDUuid(row[3]).UUID.GetBytes()),
+				LivenessID:   sqlliveness.SessionID(tree.MustBeDBytes(row[3])),
 				ConnectionID: tree.MustBeDUuid(row[4]).UUID,
 			}
 		}

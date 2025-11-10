@@ -28,7 +28,7 @@ func TestListPartitions(t *testing.T) {
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 	queueName := "test"
 
-	pt := &partitionTable{db: db, queueName: queueName}
+	pt := &partitionTable{queueName: queueName}
 
 	// Create table
 	err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -80,7 +80,7 @@ func TestUpdatePartition(t *testing.T) {
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 	queueName := "test"
 
-	pt := &partitionTable{db: db, queueName: queueName}
+	pt := &partitionTable{queueName: queueName}
 
 	// Create table
 	err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -134,7 +134,7 @@ func TestInsertPartition(t *testing.T) {
 	db := srv.ApplicationLayer().InternalDB().(isql.DB)
 	queueName := "test"
 
-	pt := &partitionTable{db: db, queueName: queueName}
+	pt := &partitionTable{queueName: queueName}
 
 	// Create table
 	err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
