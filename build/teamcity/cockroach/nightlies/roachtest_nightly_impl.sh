@@ -19,15 +19,26 @@ if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-nightly-bazel $(date)" -N "" -f ~/.ssh/id_rsa
 fi
 
+arm_probability="${ARM_PROBABILITY:-0.5}"
+fips_probability="${FIPS_PROBABILITY:-0.02}"
+
 arch=amd64
 if [[ ${CLOUD} == "ibm" ]]; then
   arch=s390x
 fi
 $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh $arch
 if [[ $arch != "s390x" ]]; then
-  $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh arm64
+  # Do not build arm64 if the probability is 0.
+  # Use `bc` for float comparison, bash supports only integer comparison.
+  if (( $(echo "$arm_probability > 0" | bc -l) )); then
+    $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh arm64
+  fi
   # N.B. FIPS is metamoprhically always on as of PR#139510
-  $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh amd64-fips
+  # Do not build fips if the probability is 0.
+  # Use `bc` for float comparison, bash supports only integer comparison.
+  if (( $(echo "$fips_probability > 0" | bc -l) )); then
+    $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh amd64-fips
+  fi
 fi
 
 artifacts=/artifacts
@@ -89,8 +100,8 @@ fi
 #
 build/teamcity-roachtest-invoke.sh \
   --metamorphic-encryption-probability=0.5 \
-  --metamorphic-arm64-probability="${ARM_PROBABILITY:-0.5}" \
-  --metamorphic-fips-probability="${FIPS_PROBABILITY:-0.02}" \
+  --metamorphic-arm64-probability="$arm_probability" \
+  --metamorphic-fips-probability="$fips_probability" \
   --metamorphic-cockroach-ea-probability="${COCKROACH_EA_PROBABILITY:-0.2}" \
   ${select_probability:-} \
   --always-collect-artifacts="${ALWAYS_COLLECT_ARTIFACTS:-false}" \
