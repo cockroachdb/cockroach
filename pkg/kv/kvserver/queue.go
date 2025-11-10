@@ -335,7 +335,7 @@ type queueImpl interface {
 	// (vs. it being a no-op or an error).
 	process(context.Context, *Replica, spanconfig.StoreReader, float64) (processed bool, err error)
 
-	// processScheduled is called after async task was created to run process.
+	// postProcessScheduled is called after async task was created to run process.
 	// This function is called by the process loop synchronously. This method is
 	// called regardless of process being called or not since replica validity
 	// checks are done asynchronously.
