@@ -46,8 +46,17 @@ func DialNodeClients(
 func DialRemoteClients(
 	ctx context.Context, address string,
 ) (serverpb.AdminClient, serverpb.StatusClient, error) {
-	// Dial the remote server
-	conn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Dial the remote server with necessary options for CockroachDB
+	// Include the max message size options that CockroachDB uses internally
+	dialOpts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(1<<31 - 1), // math.MaxInt32
+			grpc.MaxCallSendMsgSize(1<<31 - 1), // math.MaxInt32
+		),
+	}
+
+	conn, err := grpc.DialContext(ctx, address, dialOpts...)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to dial remote server")
 	}

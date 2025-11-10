@@ -284,6 +284,41 @@ type OverviewData struct {
 	TotalRanges           int
 	UnderReplicatedRanges int
 	UnavailableRanges     int
+
+	// Node groups by region
+	RegionGroups []RegionGroup
+	TotalNodes   int
+}
+
+// RegionGroup represents nodes grouped by region locality
+type RegionGroup struct {
+	RegionName string
+	NodeCount  int
+	Nodes      []NodeInfo
+
+	// Aggregated metrics for the region
+	TotalReplicas    int
+	CapacityPercent  float64
+	MemoryPercent    float64
+	TotalVCPUs       int
+	Status           string // "Live", "Degraded", etc.
+	UptimeSeconds    int64  // Minimum uptime in the region
+}
+
+// NodeInfo contains information about a single node
+type NodeInfo struct {
+	NodeID          int32
+	Address         string
+	Region          string
+	UptimeSeconds   int64
+	UptimeFormatted string
+	Replicas        int
+	CapacityPercent float64
+	MemoryPercent   float64
+	VCPUs           int
+	Version         string
+	Status          string
+	StatusClass     string // CSS class: "info", "warn", "bad"
 }
 
 func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
@@ -663,7 +698,10 @@ func mapSortByToEnum(sortBy string) serverpb.StatsSortOptions {
 
 // handleOverview serves the overview.html template
 func handleOverview(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
-	// Set content type
+	// Set cache control headers to prevent stale data
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	// Fetch cluster data
@@ -696,17 +734,39 @@ func fetchOverviewData(ctx context.Context, cfg IndexHTMLArgs) (*OverviewData, e
 		return nil, fmt.Errorf("failed to fetch nodes: %w", err)
 	}
 
+	// Group nodes by region
+	regionMap := make(map[string][]NodeInfo)
+	data.TotalNodes = len(nodesResp.Nodes)
+
 	// Process nodes data to calculate capacity and node status counts
 	for _, node := range nodesResp.Nodes {
-		// Process store capacity
+		// Extract region from locality
+		region := extractRegion(&node.Desc.Locality)
+
+		// Calculate node-level metrics
+		var nodeReplicas int
+		var nodeCapacityUsed, nodeCapacityTotal int64
 		for _, store := range node.StoreStatuses {
 			data.CapacityUsed += store.Desc.Capacity.Used
 			data.CapacityTotal += store.Desc.Capacity.Capacity
 			data.CapacityAvailable += store.Desc.Capacity.Available
 			data.TotalRanges += int(store.Desc.Capacity.RangeCount)
+
+			nodeCapacityUsed += store.Desc.Capacity.Used
+			nodeCapacityTotal += store.Desc.Capacity.Capacity
+			nodeReplicas += int(store.Desc.Capacity.RangeCount)
 		}
 
-		// Count node status based on liveness
+		// Calculate node capacity percentage
+		var nodeCapacityPercent float64
+		if nodeCapacityTotal > 0 {
+			nodeCapacityPercent = float64(nodeCapacityUsed) / float64(nodeCapacityTotal)
+		}
+
+		// Get node status and class
+		status, statusClass := getNodeStatus(int32(nodesResp.LivenessByNodeID[node.Desc.NodeID]))
+
+		// Count node status
 		if liveness, ok := nodesResp.LivenessByNodeID[node.Desc.NodeID]; ok {
 			switch liveness {
 			case 3: // NODE_STATUS_LIVE
@@ -719,6 +779,49 @@ func fetchOverviewData(ctx context.Context, cfg IndexHTMLArgs) (*OverviewData, e
 				data.DeadNodes++
 			}
 		}
+
+		// Calculate uptime
+		// Note: StartedAt is in nanoseconds since Unix epoch
+		now := timeutil.Now().UnixNano()
+		uptimeNanos := now - node.StartedAt
+		uptimeSeconds := uptimeNanos / 1e9
+		uptimeFormatted := formatUptime(uptimeSeconds)
+
+		// Get memory metrics
+		var memoryPercent float64
+		if memUsed, ok := node.Metrics["sys.rss"]; ok {
+			if memTotal, ok := node.Metrics["sys.totalmem"]; ok && memTotal > 0 {
+				memoryPercent = memUsed / memTotal
+			}
+		}
+
+		// Get CPU count
+		var vcpus int
+		if cpuCount, ok := node.Metrics["sys.cpu.sys.percent"]; ok {
+			vcpus = int(cpuCount)
+		}
+		// Fallback: try to get CPU count from a different metric or use a default
+		if vcpus == 0 {
+			vcpus = 1 // Default if we can't determine
+		}
+
+		// Create NodeInfo
+		nodeInfo := NodeInfo{
+			NodeID:          int32(node.Desc.NodeID),
+			Address:         node.Desc.Address.AddressField,
+			Region:          region,
+			UptimeSeconds:   uptimeSeconds,
+			UptimeFormatted: uptimeFormatted,
+			Replicas:        nodeReplicas,
+			CapacityPercent: nodeCapacityPercent,
+			MemoryPercent:   memoryPercent,
+			VCPUs:           vcpus,
+			Version:         node.BuildInfo.Tag,
+			Status:          status,
+			StatusClass:     statusClass,
+		}
+
+		regionMap[region] = append(regionMap[region], nodeInfo)
 	}
 
 	// Calculate capacity percentage
@@ -743,7 +846,115 @@ func fetchOverviewData(ctx context.Context, cfg IndexHTMLArgs) (*OverviewData, e
 		}
 	}
 
+	// Build region groups with aggregated metrics
+	data.RegionGroups = buildRegionGroups(regionMap)
+
 	return data, nil
+}
+
+// extractRegion extracts the region value from locality tiers
+func extractRegion(locality *serverpb.Locality) string {
+	if locality == nil {
+		return ""
+	}
+	for _, tier := range locality.Tiers {
+		if tier.Key == "region" {
+			return tier.Value
+		}
+	}
+	return ""
+}
+
+// getNodeStatus returns a human-readable status and CSS class for a liveness status
+func getNodeStatus(liveness int32) (string, string) {
+	switch liveness {
+	case 3: // NODE_STATUS_LIVE
+		return "Live", "info"
+	case 2: // NODE_STATUS_UNAVAILABLE
+		return "Suspect", "warn"
+	case 6: // NODE_STATUS_DRAINING
+		return "Draining", "warn"
+	case 1: // NODE_STATUS_DEAD
+		return "Dead", "bad"
+	case 4: // NODE_STATUS_DECOMMISSIONING
+		return "Decommissioning", "warn"
+	case 5: // NODE_STATUS_DECOMMISSIONED
+		return "Decommissioned", "bad"
+	default:
+		return "Unknown", "warn"
+	}
+}
+
+// formatUptime formats seconds into a human-readable uptime string
+func formatUptime(seconds int64) string {
+	if seconds < 0 {
+		return "0 s"
+	}
+	if seconds < 60 {
+		return fmt.Sprintf("%d s", seconds)
+	}
+	minutes := seconds / 60
+	if minutes < 60 {
+		return fmt.Sprintf("%d min", minutes)
+	}
+	hours := minutes / 60
+	if hours < 24 {
+		return fmt.Sprintf("%d hr", hours)
+	}
+	days := hours / 24
+	return fmt.Sprintf("%d days", days)
+}
+
+// buildRegionGroups creates RegionGroup entries with aggregated metrics
+func buildRegionGroups(regionMap map[string][]NodeInfo) []RegionGroup {
+	var groups []RegionGroup
+
+	for regionName, nodes := range regionMap {
+		group := RegionGroup{
+			RegionName: regionName,
+			NodeCount:  len(nodes),
+			Nodes:      nodes,
+		}
+
+		// Calculate aggregates
+		var totalCapacityPercent, totalMemoryPercent float64
+		var minUptime int64 = -1
+		allLive := true
+
+		for _, node := range nodes {
+			group.TotalReplicas += node.Replicas
+			totalCapacityPercent += node.CapacityPercent
+			totalMemoryPercent += node.MemoryPercent
+			group.TotalVCPUs += node.VCPUs
+
+			if minUptime == -1 || node.UptimeSeconds < minUptime {
+				minUptime = node.UptimeSeconds
+			}
+
+			if node.Status != "Live" {
+				allLive = false
+			}
+		}
+
+		// Average percentages
+		if len(nodes) > 0 {
+			group.CapacityPercent = totalCapacityPercent / float64(len(nodes))
+			group.MemoryPercent = totalMemoryPercent / float64(len(nodes))
+		}
+
+		group.UptimeSeconds = minUptime
+
+		// Set region status
+		if allLive {
+			group.Status = "Live"
+		} else {
+			group.Status = "Degraded"
+		}
+
+		groups = append(groups, group)
+	}
+
+	return groups
 }
 
 // handleLogin serves the login.html template

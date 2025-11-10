@@ -55,148 +55,74 @@
   </div>
 </div>
 <div class="overflow-x:auto" x-data="tableSort()">
-  <h3>Nodes (7)</h3>
-  <table class="width:100%" >
+  <h3>Nodes ({{.Data.TotalNodes}})</h3>
+  <table class="width:100%">
     <thead>
       <tr>
         <th @click="sort('nodes', 0)" style="cursor: pointer;">Nodes</th>
-        <th @click="sort('nodeCount', 0)" style="cursor: pointer;">NodeCount </th>
+        <th @click="sort('nodeCount', 0)" style="cursor: pointer;">NodeCount</th>
         <th>Uptime</th>
         <th>Replicas</th>
-        <th>CapacityUsage </th>
-        <th>MemoryUse </th>
+        <th>CapacityUsage</th>
+        <th>MemoryUse</th>
         <th>vCPUs</th>
         <th>Version</th>
         <th>Status</th>
         <th></th>
       </tr>
     </thead>
+    {{range .Data.RegionGroups}}
     <tbody x-data="{ expanded: false }">
+      {{if gt .NodeCount 1}}
+      {{/* Region summary row - only show if there are multiple nodes */}}
       <tr>
-        <td @click="expanded = !expanded">
+        <td @click="expanded = !expanded" style="cursor: pointer;">
           <span x-show="!expanded">▶</span>
-          <span x-show="expanded">▼</span> us-east1-d</td>
-        <td>2</td>
+          <span x-show="expanded">▼</span> {{if .RegionName}}{{.RegionName}}{{else}}(no region){{end}}</td>
+        <td>{{.NodeCount}}</td>
+        <td>{{if gt .UptimeSeconds 0}}{{formatTime (mul .UptimeSeconds 1000000000)}}{{end}}</td>
+        <td>{{.TotalReplicas}}</td>
+        <td>{{formatPercent .CapacityPercent}}</td>
+        <td>{{formatPercent .MemoryPercent}}</td>
+        <td>{{.TotalVCPUs}}</td>
         <td></td>
-        <td>11467</td>
-        <td>31%</td>
-        <td>45%</td>
-        <td>32</td>
-        <td></td>
-        <td><chip class="info">Live</td>
+        <td><chip class="{{if eq .Status "Live"}}info{{else}}warn{{end}}">{{.Status}}</chip></td>
         <td></td>
       </tr>
+      {{/* Individual node rows */}}
+      {{range .Nodes}}
       <tr x-show="expanded">
-        <td>10.142.0.6:26257 (n1)</td>
+        <td>{{.Address}} (n{{.NodeID}})</td>
         <td></td>
-        <td>17 days</td>
-        <td>5634</td>
-        <td>31%</td>
-        <td>44%</td>
-        <td>16</td>
-        <td>v25.4.0</td>
-        <td><chip class="info">Live</td>
+        <td>{{.UptimeFormatted}}</td>
+        <td>{{.Replicas}}</td>
+        <td>{{formatPercent .CapacityPercent}}</td>
+        <td>{{formatPercent .MemoryPercent}}</td>
+        <td>{{.VCPUs}}</td>
+        <td>{{.Version}}</td>
+        <td><chip class="{{.StatusClass}}">{{.Status}}</chip></td>
         <td><a href="#">Logs</a></td>
       </tr>
-      <tr x-show="expanded">
-        <td>10.142.0.6:26257 (n1)</td>
+      {{end}}
+      {{else}}
+      {{/* Single node - no expansion needed */}}
+      {{range .Nodes}}
+      <tr>
+        <td>{{.Address}} (n{{.NodeID}})</td>
         <td></td>
-        <td>17 days</td>
-        <td>5634</td>
-        <td>31%</td>
-        <td>44%</td>
-        <td>16</td>
-        <td>v25.4.0</td>
-        <td><chip class="info">Live</td>
+        <td>{{.UptimeFormatted}}</td>
+        <td>{{.Replicas}}</td>
+        <td>{{formatPercent .CapacityPercent}}</td>
+        <td>{{formatPercent .MemoryPercent}}</td>
+        <td>{{.VCPUs}}</td>
+        <td>{{.Version}}</td>
+        <td><chip class="{{.StatusClass}}">{{.Status}}</chip></td>
         <td><a href="#">Logs</a></td>
       </tr>
+      {{end}}
+      {{end}}
     </tbody>
-    <tr>
-      <td>us-east1-d</td>
-      <td>3</td>
-      <td></td>
-      <td>11467</td>
-      <td>31%</td>
-      <td>45%</td>
-      <td>32</td>
-      <td></td>
-      <td><chip class="info">Live</td>
-      <td></td>
-    </tr>
-    <tr>
-      <td>us-east1-d</td>
-      <td>4</td>
-      <td></td>
-      <td>11467</td>
-      <td>31%</td>
-      <td>45%</td>
-      <td>32</td>
-      <td></td>
-      <td><chip class="info">Live</td>
-      <td></td>
-    </tr>
-    <tr>
-      <td>us-east1-d</td>
-      <td>454545</td>
-      <td></td>
-      <td>11467</td>
-      <td>31%</td>
-      <td>45%</td>
-      <td>32</td>
-      <td></td>
-      <td><chip class="info">Live</td>
-      <td></td>
-    </tr>
-    <tr>
-      <td>us-east1-d</td>
-      <td>6</td>
-      <td></td>
-      <td>11467</td>
-      <td>31%</td>
-      <td>45%</td>
-      <td>32</td>
-      <td></td>
-      <td><chip class="info">Live</td>
-      <td></td>
-    </tr>
-    <tr>
-      <td>us-east1-d</td>
-      <td>2</td>
-      <td></td>
-      <td>11467</td>
-      <td>31%</td>
-      <td>45%</td>
-      <td>32</td>
-      <td></td>
-      <td><chip class="info">Live</td>
-      <td></td>
-    </tr>
-    <tr>
-      <td>us-east1-d</td>
-      <td>2</td>
-      <td></td>
-      <td>11467</td>
-      <td>31%</td>
-      <td>45%</td>
-      <td>32</td>
-      <td></td>
-      <td><chip class="info">Live</td>
-      <td></td>
-    </tr>
-    <tr>
-      <td>us-east1-d</td>
-      <td>2</td>
-      <td></td>
-      <td>11467</td>
-      <td>31%</td>
-      <td>45%</td>
-      <td>32</td>
-      <td></td>
-      <td><chip class="info">Live</td>
-      <td></td>
-    </tr>
-    <tr>
-    </tr>
+    {{end}}
   </table>
 </div>
 
