@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	gojson "encoding/json"
+	"fmt"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -139,6 +140,19 @@ var generators = map[string]builtinDefinition{
 			"Produces a virtual table containing aclitem stuff ("+
 				"returns no rows as this feature is unsupported in CockroachDB)",
 			volatility.Stable,
+		),
+	),
+	"crdb_internal.select_from_queue_feed": makeBuiltin(
+		genProps(),
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "queue_name", Typ: types.String},
+				{Name: "limit", Typ: types.Int},
+			},
+			queueFeedGeneratorType,
+			makeQueueFeedGenerator,
+			"Returns rows from a queue feed",
+			volatility.Volatile,
 		),
 	),
 	"crdb_internal.scan": makeBuiltin(
@@ -4350,3 +4364,77 @@ func (g *txnDiagnosticsRequestGenerator) Values() (tree.Datums, error) {
 // Close implements the eval.ValueGenerator interface.
 func (g *txnDiagnosticsRequestGenerator) Close(ctx context.Context) {
 }
+
+type queueFeedGenerator struct {
+	queueName string
+	limit     int
+	evalCtx   *eval.Context
+	rows      []tree.Datums
+	rowIdx    int
+}
+
+var queueFeedGeneratorType = types.Jsonb
+
+func makeQueueFeedGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	queueName := string(tree.MustBeDString(args[0]))
+	limit := int(tree.MustBeDInt(args[1]))
+	return &queueFeedGenerator{
+		queueName: queueName,
+		limit:     limit,
+		evalCtx:   evalCtx,
+		rowIdx:    -1,
+	}, nil
+}
+
+// ResolvedType implements the eval.ValueGenerator interface.
+func (g *queueFeedGenerator) ResolvedType() *types.T {
+	return queueFeedGeneratorType
+}
+
+// Start implements the eval.ValueGenerator interface.
+func (g *queueFeedGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	// Ignoring queue_name for now; we only support one queue. Same for limit.
+	// TODO(queuefeed): support multiple queues and limit.
+	qr, err := getQueueManager(g.evalCtx).GetOrInitReader(ctx, g.queueName)
+	if err != nil {
+		return err
+	}
+
+	// Attach commit hook to txn to confirm receipt
+	// or something... todo on rollback/abort.
+	txn.AddCommitTrigger(func(ctx context.Context) {
+		qr.ConfirmReceipt(ctx)
+	})
+
+	rows, err := qr.GetRows(ctx, g.limit)
+	if err != nil {
+		return err
+	}
+	g.rows = rows
+	return nil
+}
+
+// Next implements the eval.ValueGenerator interface.
+func (g *queueFeedGenerator) Next(ctx context.Context) (bool, error) {
+	g.rowIdx++
+	return g.rowIdx < len(g.rows), nil
+}
+
+// Values implements the eval.ValueGenerator interface.
+func (g *queueFeedGenerator) Values() (tree.Datums, error) {
+	row := g.rows[g.rowIdx]
+	obj := json.NewObjectBuilder(len(row))
+	for i, d := range row {
+		j, err := tree.AsJSON(d, g.evalCtx.SessionData().DataConversionConfig, g.evalCtx.GetLocation())
+		if err != nil {
+			return nil, err
+		}
+		obj.Add(fmt.Sprintf("f%d", i+1), j)
+	}
+	return tree.Datums{tree.NewDJSON(obj.Build())}, nil
+}
+
+// Close implements the eval.ValueGenerator interface.
+func (g *queueFeedGenerator) Close(ctx context.Context) {}

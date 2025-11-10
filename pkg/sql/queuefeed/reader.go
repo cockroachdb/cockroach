@@ -42,6 +42,8 @@ type Reader struct {
 func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, name string) *Reader {
 	buf := []tree.Datums{
 		{tree.NewDString("1"), tree.NewDString("2"), tree.NewDString("3")},
+		{tree.NewDString("4"), tree.NewDString("5"), tree.NewDString("6")},
+		{tree.NewDString("7"), tree.NewDString("8"), tree.NewDString("9")},
 	}
 
 	r := &Reader{

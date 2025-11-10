@@ -4659,50 +4659,6 @@ value if you rely on the HLC for accuracy.`,
 		},
 	}),
 
-	"crdb_internal.select_from_queue_feed": makeBuiltin(defProps(), tree.Overload{
-		Types: tree.ParamTypes{
-			{Name: "queue_name", Typ: types.String},
-			{Name: "limit", Typ: types.Int},
-		},
-		Volatility: volatility.Volatile,
-		ReturnType: tree.FixedReturnType(types.MakeArray(types.Json)),
-		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			var err error
-			// ignore queue_name for now; we only support one queue
-			// ditto limit lol
-			qn := args[0].(*tree.DString)
-			qr, err := getQueueManager(evalCtx).GetOrInitReader(ctx, string(*qn))
-			if err != nil {
-				return nil, err
-			}
-			// attach commit hook to txn to confirm receipt
-			txn := evalCtx.Txn
-			// or something... todo on rollback/abort
-			txn.AddCommitTrigger(func(ctx context.Context) {
-				qr.ConfirmReceipt(ctx)
-			})
-
-			ret := tree.NewDArray(types.Json)
-
-			rows, err := qr.GetRows(ctx, int(tree.MustBeDInt(args[1])))
-			if err != nil {
-				return nil, err
-			}
-			for _, row := range rows {
-				obj := json.NewObjectBuilder(len(row))
-				for i, d := range row {
-					j, err := tree.AsJSON(d, evalCtx.SessionData().DataConversionConfig, evalCtx.GetLocation())
-					if err != nil {
-						return nil, err
-					}
-					obj.Add(fmt.Sprintf("f%d", i+1), j)
-				}
-				ret.Append(tree.NewDJSON(obj.Build()))
-			}
-			return ret, nil
-		},
-	}),
-
 	"crdb_internal.json_to_pb": makeBuiltin(
 		jsonProps(),
 		tree.Overload{
