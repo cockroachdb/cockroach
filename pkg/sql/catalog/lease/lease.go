@@ -2122,12 +2122,24 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 	defer m.initComplete.Swap(true)
 	m.watchForUpdates(ctx)
 	_ = s.RunAsyncTask(ctx, "refresh-leases", func(ctx context.Context) {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Dev.Warningf(ctx, "panic in refresh-leases: %v", err)
+				panic(err)
+			}
+		}()
 		for {
 			select {
 			case id := <-m.descDelCh:
 				// Descriptor is marked as deleted, so mark it for deletion or
 				// remove it if it's no longer in use.
 				_ = s.RunAsyncTask(ctx, "purgeOldVersionsOrAcquireInitialVersion deleted descriptor", func(ctx context.Context) {
+					defer func() {
+						if err := recover(); err != nil {
+							log.Dev.Warningf(ctx, "panic in purgeOldVersionsOrAcquireInitialVersion deleted descriptor: %v", err)
+							panic(err)
+						}
+					}()
 					// Once the descriptor is purged notify that some change has occurred.
 					defer m.leaseGeneration.Add(1)
 					state := m.findNewest(id)
@@ -2209,6 +2221,12 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 				// of increased latency right as the descriptor has been committed.
 				if now := db.Clock().Now(); now.Less(desc.GetModificationTime()) {
 					_ = s.RunAsyncTask(ctx, "wait to purgeOldVersionsOrAcquireInitialVersion", func(ctx context.Context) {
+						defer func() {
+							if err := recover(); err != nil {
+								log.Dev.Warningf(ctx, "panic in wait to purgeOldVersionsOrAcquireInitialVersion: %v", err)
+								panic(err)
+							}
+						}()
 						toWait := time.Duration(desc.GetModificationTime().WallTime - now.WallTime)
 						select {
 						case <-time.After(toWait):
