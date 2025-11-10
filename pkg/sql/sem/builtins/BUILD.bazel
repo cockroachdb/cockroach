@@ -78,7 +78,7 @@ go_library(
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/privilege",
         "//pkg/sql/protoreflect",
-        "//pkg/sql/queuefeed",
+        "//pkg/sql/queuefeed/queuebase",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/valueside",

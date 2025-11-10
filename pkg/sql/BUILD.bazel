@@ -479,6 +479,7 @@ go_library(
         "//pkg/sql/protoreflect",
         "//pkg/sql/querycache",
         "//pkg/sql/queuefeed",
+        "//pkg/sql/queuefeed/queuebase",
         "//pkg/sql/regionliveness",
         "//pkg/sql/regions",
         "//pkg/sql/rolemembershipcache",

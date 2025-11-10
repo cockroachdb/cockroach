@@ -55,7 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
-	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed"
+	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
@@ -4658,6 +4658,52 @@ value if you rely on the HLC for accuracy.`,
 				return nil, err
 			}
 			return tree.DVoidDatum, nil
+		},
+	}),
+
+	"crdb_internal.select_from_queue_feed": makeBuiltin(defProps(), tree.Overload{
+		Types: tree.ParamTypes{
+			{Name: "queue_name", Typ: types.String},
+			{Name: "limit", Typ: types.Int},
+		},
+		Volatility: volatility.Volatile,
+		ReturnType: tree.FixedReturnType(types.MakeArray(types.Json)),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			var err error
+			// ignore queue_name for now; we only support one queue
+			// ditto limit lol
+			qn := args[0].(*tree.DString)
+			qr, err := getQueueManager(evalCtx).GetOrInitReader(ctx, string(*qn))
+			if err != nil {
+				return nil, err
+			}
+			// attach commit hook to txn to confirm receipt
+			txn := evalCtx.Txn
+
+			ret := tree.NewDArray(types.Json)
+
+			rowResult, err := qr.GetRows(ctx, int(tree.MustBeDInt(args[1])))
+			if err != nil {
+				return nil, err
+			}
+			// or something... todo on rollback/abort
+			txn.AddCommitTrigger(func(ctx context.Context) {
+				qr.ConfirmReceipt(ctx)
+			})
+
+			for _, row := range rowResult {
+				obj := json.NewObjectBuilder(len(row))
+				for i, d := range row {
+					fmt.Printf("d: %#+v\n", d)
+					j, err := tree.AsJSON(d, evalCtx.SessionData().DataConversionConfig, evalCtx.GetLocation())
+					if err != nil {
+						return nil, err
+					}
+					obj.Add(fmt.Sprintf("f%d", i+1), j)
+				}
+				ret.Append(tree.NewDJSON(obj.Build()))
+			}
+			return ret, nil
 		},
 	}),
 
@@ -12866,6 +12912,6 @@ func exprSliceToStrSlice(exprs []tree.Expr) []string {
 
 var nilRegionsError = errors.AssertionFailedf("evalCtx.Regions is nil")
 
-func getQueueManager(evalCtx *eval.Context) *queuefeed.Manager {
-	return evalCtx.Planner.ExecutorConfig().(interface{ GetQueueManager() *queuefeed.Manager }).GetQueueManager()
+func getQueueManager(evalCtx *eval.Context) queuebase.Manager {
+	return evalCtx.Planner.ExecutorConfig().(interface{ GetQueueManager() queuebase.Manager }).GetQueueManager()
 }
