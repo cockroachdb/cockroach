@@ -82,6 +82,7 @@ import (
 	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed"
+	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/rolemembershipcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -1856,7 +1857,7 @@ type ExecutorConfig struct {
 	QueueManager *queuefeed.Manager
 }
 
-func (cfg *ExecutorConfig) GetQueueManager() *queuefeed.Manager {
+func (cfg *ExecutorConfig) GetQueueManager() queuebase.Manager {
 	return cfg.QueueManager
 }
 

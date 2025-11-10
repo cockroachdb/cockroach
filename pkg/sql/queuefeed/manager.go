@@ -5,7 +5,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
@@ -15,12 +19,15 @@ import (
 // and create it too??
 type Manager struct {
 	executor isql.DB
+	rff      *rangefeed.Factory
+	codec    keys.SQLCodec
+	leaseMgr *lease.Manager
 }
 
-func NewManager(executor isql.DB) *Manager {
+func NewManager(executor isql.DB, rff *rangefeed.Factory, codec keys.SQLCodec, leaseMgr *lease.Manager) *Manager {
 	// setup rangefeed on partitions table (/poll)
 	// handle handoff from one server to another
-	return &Manager{executor: executor}
+	return &Manager{executor: executor, rff: rff, codec: codec, leaseMgr: leaseMgr}
 }
 
 const createQueuePartitionTableSQL = `
@@ -81,7 +88,8 @@ func (m *Manager) CreateQueue(ctx context.Context, queueName string, tableDescID
 	})
 }
 
-func (m *Manager) GetOrInitReader(ctx context.Context, name string) (*Reader, error) {
+func (m *Manager) GetOrInitReader(ctx context.Context, name string) (queuebase.Reader, error) {
+	// TODO: get if exists already
 	var tableDescID int64
 	err := m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, err := txn.Exec(ctx, "create_q", txn.KV(), createQueueTableSQL)
@@ -102,10 +110,14 @@ func (m *Manager) GetOrInitReader(ctx context.Context, name string) (*Reader, er
 	if err != nil {
 		return nil, err
 	}
-	reader := NewReader(ctx, m.executor, m, name, tableDescID)
+	reader := NewReader(ctx, m.executor, m, m.rff, m.codec, m.leaseMgr, name, tableDescID)
 	return reader, nil
 }
 
-func (m *Manager) reassessAssignments(ctx context.Context, name string) {}
+func (m *Manager) reassessAssignments(ctx context.Context, name string) (bool, error) {
+	return false, nil
+}
+
+var _ queuebase.Manager = &Manager{}
 
 type PartitionAssignment struct{}
