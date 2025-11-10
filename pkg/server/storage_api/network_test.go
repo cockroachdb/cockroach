@@ -26,6 +26,9 @@ func TestNetworkConnectivity(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	numNodes := 3
 	testCluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultDRPCOption: base.TestDRPCDisabled,
+		},
 		ReplicationMode: base.ReplicationManual,
 	})
 	ctx := context.Background()
