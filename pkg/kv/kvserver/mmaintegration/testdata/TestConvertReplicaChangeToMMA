@@ -1,0 +1,122 @@
+define-range id=1
+store-id=1 replica-id=10 type=VOTER_FULL leaseholder=true
+store-id=2 replica-id=20 type=VOTER_FULL
+----
+desc:r1:{-} [(n1,s1):10, (n2,s2):20, next=0, gen=0]
+leaseholder=s1
+
+# NB: all changes below are from the initial state defined above.
+
+# Remove the voter that is the leaseholder without adding a voter, so error.
+convert-replica-changes
+store-id=1 type=REMOVE_VOTER
+----
+error: leaseholder being removed but no new leaseholder picked from [{REMOVE_VOTER n1,s1}]
+
+# Remove voter and leaseholder, and add a voter, which becomes the
+# leaseholder.
+convert-replica-changes
+store-id=1 type=REMOVE_VOTER
+store-id=3 type=ADD_VOTER
+----
+PendingRangeChange: range r1
+ r1 type: RemoveReplica target store n1,s1 (replica-id=10 type=VOTER_FULL leaseholder=true)->(replica-id=none type=VOTER_FULL)
+  load: [cpu:-11, write-bandwidth:-100, byte-size:-1000]
+  secondary-load: [lease:-1, replica:0]
+ r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL leaseholder=true)
+  load: [cpu:12, write-bandwidth:110, byte-size:1100]
+  secondary-load: [lease:1, replica:0]
+As kvpb.ReplicationChanges:
+ [{ADD_VOTER n3,s3} {REMOVE_VOTER n1,s1}]
+
+# Remove non-leaseholder voter.
+convert-replica-changes
+store-id=2 type=REMOVE_VOTER
+----
+PendingRangeChange: range r1
+ r1 type: RemoveReplica target store n2,s2 (replica-id=20 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL)
+  load: [cpu:-1, write-bandwidth:-100, byte-size:-1000]
+  secondary-load: [lease:0, replica:0]
+As kvpb.ReplicationChanges:
+ [{REMOVE_VOTER n2,s2}]
+
+# Remove non leaseholder voter and add a voter.
+convert-replica-changes
+store-id=2 type=REMOVE_VOTER
+store-id=3 type=ADD_VOTER
+----
+PendingRangeChange: range r1
+ r1 type: RemoveReplica target store n2,s2 (replica-id=20 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL)
+  load: [cpu:-1, write-bandwidth:-100, byte-size:-1000]
+  secondary-load: [lease:0, replica:0]
+ r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
+  load: [cpu:1, write-bandwidth:110, byte-size:1100]
+  secondary-load: [lease:0, replica:0]
+As kvpb.ReplicationChanges:
+ [{REMOVE_VOTER n2,s2} {ADD_VOTER n3,s3}]
+
+# Remove leaseholder voter and add two voters, the first of which becomes the
+# leaseholder. The kvpb.ReplicationChanges lists the added leaseholder first.
+convert-replica-changes
+store-id=1 type=REMOVE_VOTER
+store-id=5 type=ADD_VOTER
+store-id=3 type=ADD_VOTER
+----
+PendingRangeChange: range r1
+ r1 type: RemoveReplica target store n1,s1 (replica-id=10 type=VOTER_FULL leaseholder=true)->(replica-id=none type=VOTER_FULL)
+  load: [cpu:-11, write-bandwidth:-100, byte-size:-1000]
+  secondary-load: [lease:-1, replica:0]
+ r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
+  load: [cpu:1, write-bandwidth:110, byte-size:1100]
+  secondary-load: [lease:0, replica:0]
+ r1 type: AddReplica target store n5,s5 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL leaseholder=true)
+  load: [cpu:12, write-bandwidth:110, byte-size:1100]
+  secondary-load: [lease:1, replica:0]
+As kvpb.ReplicationChanges:
+ [{ADD_VOTER n5,s5} {ADD_VOTER n3,s3} {REMOVE_VOTER n1,s1}]
+
+# Expect panic since removed twice.
+convert-replica-changes expect-panic
+store-id=2 type=REMOVE_VOTER
+store-id=2 type=REMOVE_VOTER
+----
+panicked as expected
+
+# Expect panic since added twice.
+convert-replica-changes expect-panic
+store-id=3 type=ADD_VOTER
+store-id=3 type=ADD_NON_VOTER
+----
+panicked as expected
+
+# Expect panic since removing non-existent replica.
+convert-replica-changes expect-panic
+store-id=4 type=REMOVE_VOTER
+----
+panicked as expected
+
+# Attempt to downgrade leaseholder voter to non-voter, without adding a voter,
+# returns an error.
+convert-replica-changes
+store-id=1 type=REMOVE_VOTER
+store-id=1 type=ADD_NON_VOTER
+store-id=3 type=ADD_NON_VOTER
+----
+error: leaseholder being removed but no new leaseholder picked from [{REMOVE_VOTER n1,s1} {ADD_NON_VOTER n1,s1} {ADD_NON_VOTER n3,s3}]
+
+# Attempt to downgrade leaseholder voter to non-voter, while adding a voter,
+# succeeds.
+convert-replica-changes
+store-id=1 type=REMOVE_VOTER
+store-id=1 type=ADD_NON_VOTER
+store-id=3 type=ADD_VOTER
+----
+PendingRangeChange: range r1
+ r1 type: ChangeReplica target store n1,s1 (replica-id=10 type=VOTER_FULL leaseholder=true)->(replica-id=unknown type=NON_VOTER)
+  load: [cpu:-10, write-bandwidth:0, byte-size:0]
+  secondary-load: [lease:-1, replica:0]
+ r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL leaseholder=true)
+  load: [cpu:12, write-bandwidth:110, byte-size:1100]
+  secondary-load: [lease:1, replica:0]
+As kvpb.ReplicationChanges:
+ [{ADD_VOTER n3,s3} {REMOVE_VOTER n1,s1} {ADD_NON_VOTER n1,s1}]
