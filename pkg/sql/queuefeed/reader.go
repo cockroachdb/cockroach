@@ -42,6 +42,8 @@ type Reader struct {
 func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, name string) *Reader {
 	buf := []tree.Datums{
 		{tree.NewDString("1"), tree.NewDString("2"), tree.NewDString("3")},
+		{tree.NewDString("4"), tree.NewDString("5"), tree.NewDString("6")},
+		{tree.NewDString("7"), tree.NewDString("8"), tree.NewDString("9")},
 	}
 
 	r := &Reader{
@@ -56,7 +58,8 @@ func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, name string)
 	ctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
 
-	r.setupRangefeed(ctx)
+	// TODO(queuefeed): Re-enable once queue data table and spans are implemented
+	// r.setupRangefeed(ctx)
 	go r.run(ctx)
 	return r
 }
