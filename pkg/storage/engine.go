@@ -1368,6 +1368,8 @@ func (m *Metrics) CompactedBytes() (read, written uint64) {
 		read += lm.TableBytesRead + lm.BlobBytesRead
 		written += lm.TablesCompacted.Bytes + lm.BlobBytesCompacted
 	}
+	read += uint64(m.Metrics.Compact.BlobFileRewrite.BytesRead)
+	written += uint64(m.Metrics.Compact.BlobFileRewrite.BytesWritten)
 	return read, written
 }
 
