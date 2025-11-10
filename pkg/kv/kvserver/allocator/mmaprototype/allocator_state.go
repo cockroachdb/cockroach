@@ -832,7 +832,7 @@ func (a *allocatorState) AdjustPendingChangeDisposition(change PendingRangeChang
 	// state. We gather the found changes.
 	var changes []*pendingReplicaChange
 	for _, c := range change.pendingReplicaChanges {
-		ch, ok := a.cs.pendingChanges[c.ChangeID]
+		ch, ok := a.cs.pendingChanges[c.changeID]
 		if !ok {
 			continue
 		}
@@ -849,9 +849,9 @@ func (a *allocatorState) AdjustPendingChangeDisposition(change PendingRangeChang
 	}
 	for _, c := range changes {
 		if success {
-			a.cs.pendingChangeEnacted(c.ChangeID, a.cs.ts.Now())
+			a.cs.pendingChangeEnacted(c.changeID, a.cs.ts.Now())
 		} else {
-			a.cs.undoPendingChange(c.ChangeID)
+			a.cs.undoPendingChange(c.changeID)
 		}
 	}
 }
