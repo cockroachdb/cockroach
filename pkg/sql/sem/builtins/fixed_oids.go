@@ -2863,7 +2863,7 @@ var builtinOidsArray = []string{
 	2908: `crdb_internal.inject_hint(statement_fingerprint: string, donor_sql: string) -> int`,
 	2909: `crdb_internal.clear_statement_hints_cache() -> void`,
 	2910: `crdb_internal.await_statement_hints_cache() -> void`,
-	2911: `crdb_internal.create_queue_feed(queue_name: string) -> void`,
+	2911: `crdb_internal.create_queue_feed(queue_name: string, table_descriptor_id: int) -> void`,
 	2912: `crdb_internal.select_from_queue_feed(queue_name: string, limit: int) -> jsonb`,
 }
 

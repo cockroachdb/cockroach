@@ -4646,13 +4646,15 @@ value if you rely on the HLC for accuracy.`,
 	"crdb_internal.create_queue_feed": makeBuiltin(defProps(), tree.Overload{
 		Types: tree.ParamTypes{
 			{Name: "queue_name", Typ: types.String},
+			{Name: "table_descriptor_id", Typ: types.Int},
 		},
 		Volatility: volatility.Volatile,
 		ReturnType: tree.FixedReturnType(types.Void),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			qn := args[0].(*tree.DString)
-			err := getQueueManager(evalCtx).CreateQueueTables(ctx, string(*qn))
-			if err != nil {
+			qm := getQueueManager(evalCtx)
+			tID := args[1].(*tree.DInt)
+			if err := qm.CreateQueue(ctx, string(*qn), int64(*tID)); err != nil {
 				return nil, err
 			}
 			return tree.DVoidDatum, nil
