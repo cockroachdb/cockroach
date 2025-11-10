@@ -1392,7 +1392,26 @@ func (rpcCtx *Context) ConnHealth(
 	if rpcCtx.GetLocalInternalClientForAddr(nodeID) != nil {
 		return nil
 	}
+
+	if !rpcbase.DRPCEnabled(context.Background(), rpcCtx.Settings) {
+		return rpcCtx.grpcConnHealth(target, nodeID, class)
+	}
+	return rpcCtx.drpcConnHealth(target, nodeID, class)
+}
+
+func (rpcCtx *Context) grpcConnHealth(
+	target string, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) error {
 	if p, ok := rpcCtx.peers.get(peerKey{target, nodeID, class}); ok {
+		return p.c.Health()
+	}
+	return ErrNotHeartbeated
+}
+
+func (rpcCtx *Context) drpcConnHealth(
+	target string, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) error {
+	if p, ok := rpcCtx.drpcPeers.get(peerKey{target, nodeID, class}); ok {
 		return p.c.Health()
 	}
 	return ErrNotHeartbeated
@@ -1499,14 +1518,32 @@ func (rpcCtx *Context) dialOptsLocal() ([]grpc.DialOption, error) {
 func (rpcCtx *Context) GetBreakerForAddr(
 	nodeID roachpb.NodeID, class rpcbase.ConnectionClass, addr net.Addr,
 ) (*circuitbreaker.Breaker, bool) {
-	sAddr := addr.String()
-	rpcCtx.peers.mu.RLock()
-	defer rpcCtx.peers.mu.RUnlock()
-	p, ok := rpcCtx.peers.mu.m[peerKey{
-		TargetAddr: sAddr,
+	k := peerKey{
+		TargetAddr: addr.String(),
 		NodeID:     nodeID,
 		Class:      class,
-	}]
+	}
+
+	if !rpcbase.DRPCEnabled(context.Background(), rpcCtx.Settings) {
+		return rpcCtx.grpcGetBreakerForAddr(k)
+	}
+	return rpcCtx.drpcGetBreakerForAddr(k)
+}
+
+func (rpcCtx *Context) grpcGetBreakerForAddr(k peerKey) (*circuitbreaker.Breaker, bool) {
+	rpcCtx.peers.mu.RLock()
+	defer rpcCtx.peers.mu.RUnlock()
+	p, ok := rpcCtx.peers.mu.m[k]
+	if !ok {
+		return nil, false
+	}
+	return p.b, true
+}
+
+func (rpcCtx *Context) drpcGetBreakerForAddr(k peerKey) (*circuitbreaker.Breaker, bool) {
+	rpcCtx.drpcPeers.mu.RLock()
+	defer rpcCtx.drpcPeers.mu.RUnlock()
+	p, ok := rpcCtx.drpcPeers.mu.m[k]
 	if !ok {
 		return nil, false
 	}
