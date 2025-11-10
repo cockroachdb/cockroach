@@ -6,6 +6,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/errors"
 )
 
 // watch queue partition table
@@ -40,14 +43,37 @@ CREATE TABLE IF NOT EXISTS defaultdb.queue_cursor_%s (
 	cursor       bytea
 )`
 
+const createQueueTableSQL = `
+CREATE TABLE IF NOT EXISTS defaultdb.queue_feeds (
+	queue_feed_name STRING PRIMARY KEY,
+	table_desc_id INT8 NOT NULL
+)`
+
+const insertQueueFeedSQL = `
+INSERT INTO defaultdb.queue_feeds (queue_feed_name, table_desc_id) VALUES ($1, $2)
+`
+
+const fetchQueueFeedSQL = `
+SELECT table_desc_id FROM defaultdb.queue_feeds WHERE queue_feed_name = $1
+`
+
 // should take a txn
-func (m *Manager) CreateQueueTables(ctx context.Context, queueName string) error {
+func (m *Manager) CreateQueue(ctx context.Context, queueName string, tableDescID int64) error {
 	return m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		_, err := txn.Exec(ctx, "create_qp", txn.KV(), fmt.Sprintf(createQueuePartitionTableSQL, queueName))
+		_, err := txn.Exec(ctx, "create_q", txn.KV(), createQueueTableSQL)
+		if err != nil {
+			return err
+		}
+		_, err = txn.Exec(ctx, "create_qp", txn.KV(), fmt.Sprintf(createQueuePartitionTableSQL, queueName))
 		if err != nil {
 			return err
 		}
 		_, err = txn.Exec(ctx, "create_qc", txn.KV(), fmt.Sprintf(createQueueCursorTableSQL, queueName))
+		if err != nil {
+			return err
+		}
+		// TODO(queuefeed): add validation on the table descriptor id
+		_, err = txn.Exec(ctx, "insert_q", txn.KV(), insertQueueFeedSQL, queueName, tableDescID)
 		if err != nil {
 			return err
 		}
@@ -56,11 +82,28 @@ func (m *Manager) CreateQueueTables(ctx context.Context, queueName string) error
 }
 
 func (m *Manager) GetOrInitReader(ctx context.Context, name string) (*Reader, error) {
-	err := m.CreateQueueTables(ctx, name)
+	var tableDescID int64
+	err := m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := txn.Exec(ctx, "create_q", txn.KV(), createQueueTableSQL)
+		if err != nil {
+			return err
+		}
+		vals, err := txn.QueryRowEx(ctx, "fetch_q", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride, fetchQueueFeedSQL, name)
+		if err != nil {
+			return err
+		}
+		if len(vals) == 0 {
+			return errors.Errorf("queue feed not found")
+		}
+		tableDescID = int64(tree.MustBeDInt(vals[0]))
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	return NewReader(ctx, m.executor, m, name), nil
+	reader := NewReader(ctx, m.executor, m, name, tableDescID)
+	return reader, nil
 }
 
 func (m *Manager) reassessAssignments(ctx context.Context, name string) {}

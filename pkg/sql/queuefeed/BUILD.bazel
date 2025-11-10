@@ -15,6 +15,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/sql/isql",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
         "//pkg/sql/sqlliveness",
         "//pkg/util/hlc",
         "//pkg/util/syncutil",
@@ -29,6 +30,7 @@ go_test(
     srcs = [
         "main_test.go",
         "partitions_test.go",
+        "manager_test.go",
     ],
     embed = [":queuefeed"],
     deps = [

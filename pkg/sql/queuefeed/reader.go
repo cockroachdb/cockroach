@@ -39,7 +39,7 @@ type Reader struct {
 	cancel context.CancelFunc
 }
 
-func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, name string) *Reader {
+func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, name string, tableDescID int64) *Reader {
 	buf := []tree.Datums{
 		{tree.NewDString("1"), tree.NewDString("2"), tree.NewDString("3")},
 		{tree.NewDString("4"), tree.NewDString("5"), tree.NewDString("6")},
@@ -58,7 +58,8 @@ func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, name string)
 	ctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
 
-	// TODO(queuefeed): Re-enable once queue data table and spans are implemented
+	// TODO(queuefeed): Re-enable once queue data table and spans are implemented.
+	// We will use the table descriptor id to set up a rangefeed on the table.
 	// r.setupRangefeed(ctx)
 	go r.run(ctx)
 	return r
@@ -119,7 +120,7 @@ func (r *Reader) run(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-    // state machine
+	// state machine
 	// -
 
 	for {
