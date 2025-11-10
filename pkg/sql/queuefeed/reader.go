@@ -56,7 +56,8 @@ func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, name string)
 	ctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
 
-	r.setupRangefeed(ctx)
+	// TODO(queuefeed): Re-enable once queue data table and spans are implemented
+	// r.setupRangefeed(ctx)
 	go r.run(ctx)
 	return r
 }
