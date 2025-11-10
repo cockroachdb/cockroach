@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "mmaintegration",
@@ -19,9 +19,27 @@ go_library(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
-        "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "mmaintegration_test",
+    srcs = ["mma_conversion_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":mmaintegration"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/allocator",
+        "//pkg/roachpb",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
