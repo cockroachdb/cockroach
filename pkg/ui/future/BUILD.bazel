@@ -4,6 +4,7 @@ go_library(
     name = "future",
     srcs = [
         "client.go",
+        "dashboards.go",
         "future.go",
     ],
     embedsrcs = glob([

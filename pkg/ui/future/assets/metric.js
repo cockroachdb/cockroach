@@ -1374,7 +1374,7 @@ function metricGraph() {
         // Build queries from metrics
         const queries = this.metrics.map((m) => {
           let q = {
-            name: `cr.node.${m.name}`,
+            name: `${m.name}`,
             sources: m.sources.map(s => `${s}`)
           }
           if (m.downsampler) {

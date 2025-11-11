@@ -81,23 +81,22 @@
 <nav class="breadcrumbs" aria-label="Breadcrumbs">
   <ul>
     <li class="<h1>">Metrics</li>
-    <li class="<h2>">Overview</li>
+    <li class="<h2>">{{.Data.DashboardName}}</li>
   </ul>
 </nav>
 <div class="box flex-row">
   <form class="flex-row">
     <div>
-      <label for="node">Graph:</label>
-      <select name="node" id="node">
-        <option>Cluster</option>
-        <option>127.0.0.1:26357 (n1)</option>
-      </select>
-    </div>
-    <div>
       <label for="dashboard">Dashboard:</label>
-      <select name="dashboard" id="dashboard">
-        <option>Overview</option>
-        <option>Hardware</option>
+      <select
+        name="dashboard"
+        id="dashboard"
+        hx-get="/future/metrics/{value}"
+        hx-target="body"
+        hx-push-url="true">
+        {{range .Data.AllDashboards}}
+        <option value="{{.}}" {{if eq . $.Data.DashboardName}}selected{{end}}>{{.}}</option>
+        {{end}}
       </select>
     </div>
   </form>
@@ -137,73 +136,30 @@
 </div>
 <div class="flex-switch">
   <div>
+    {{range .Data.Graphs}}
     <figure
       x-data="metricGraph()"
-      data-metrics='[
-        {"name":"sys.rss","sources":[1],"title":"n1"},
-        {"name":"sys.rss","sources":[2],"title":"n2"},
-        {"name":"sys.rss","sources":[3],"title":"n3"},
-        {"name":"sys.rss","sources":[4],"title":"n4"},
-        {"name":"sys.rss","sources":[5],"title":"n5"},
-        {"name":"sys.rss","sources":[6],"title":"n6"}
-        ]'
-      data-axis='{"units":"BYTES","label":"memory usage"}'>
+      data-metrics='{{.Metrics | json}}'
+      data-axis='{"units":"{{.Units}}","label":"{{.UnitsLabel}}"}'>
       <figcaption x-data="{open: false}">
         <div x-ref="caption" @mouseenter="open = true" @mouseleave="open = false" class="text-align:center">
-          Memory Usage
+          {{.Title}}
         </div>
+        {{if .Tooltip}}
         <small role="tooltip" class="box crowded" x-show="open" x-anchor="$refs.caption" style="z-index: 1">
-        <p>Memory in use across all nodes</p>
-        <p>Metrics:
-          <ul>
-            <li>sys.rss</li>  
-          </ul>
-        </p>
+          <p>{{.Tooltip}}</p>
         </small>
+        {{end}}
       </figcaption>
       <div class="graph-container"></div>
     </figure>
-    <figure
-      x-data="metricGraph()"
-      data-metrics='[
-        {"name":"sys.host.disk.read.bytes","sources":[1],"title":"n1",
-          "derivative":"NON_NEGATIVE_DERIVATIVE"},
-        {"name":"sys.host.disk.read.bytes","sources":[2],"title":"n2",
-          "derivative":"NON_NEGATIVE_DERIVATIVE"},
-        {"name":"sys.host.disk.read.bytes","sources":[3],"title":"n3",
-          "derivative":"NON_NEGATIVE_DERIVATIVE"},
-        {"name":"sys.host.disk.read.bytes","sources":[4],"title":"n4",
-          "derivative":"NON_NEGATIVE_DERIVATIVE"},
-        {"name":"sys.host.disk.read.bytes","sources":[5],"title":"n5",
-          "derivative":"NON_NEGATIVE_DERIVATIVE"},
-        {"name":"sys.host.disk.read.bytes","sources":[6],"title":"n6",
-          "derivative":"NON_NEGATIVE_DERIVATIVE"}
-        ]'
-      data-axis='{"units":"BYTES","label":"bytes"}'>
-      <figcaption x-data="{open: false}">
-        <div x-ref="caption" @mouseenter="open = true" @mouseleave="open = false" class="text-align:center">
-          Disk Read Bytes/s
-        </div>
-        <small role="tooltip" class="box crowded" x-show="open" x-anchor="$refs.caption" style="z-index: 1">
-        <p></p>
-        <p>Metrics:
-          <ul>
-            <li>sys.host.disk.read.bytes</li>  
-          </ul>
-        </p>
-        </small>
-      </figcaption>
-      <div class="graph-container"></div>
-    </figure>
+    {{end}}
   </div>
   <div class="flex-column padding-block-start">
     <div class="box info">New Version Available</div>
     <div class="box">Summary</div>
     <div class="box">Events</div>
   </div>
-</div>
-<div>
-<!-- graphs go here -->
 </div>
 
 {{template "layout-end" .}}

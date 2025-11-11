@@ -81,6 +81,13 @@ func init() {
 		"eq": func(a, b interface{}) bool {
 			return a == b
 		},
+		"json": func(v interface{}) template.JS {
+			jsonBytes, err := json.Marshal(v)
+			if err != nil {
+				return template.JS("{}")
+			}
+			return template.JS(jsonBytes)
+		},
 		"formatTime":    formatTimeWrapper,
 		"formatBytes":   formatBytesWrapper,
 		"formatNumber":  formatNumberWrapper,
@@ -350,9 +357,14 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 	// Serve the login page
 	futureRouter.HandleFunc("/login", handleLogin).Methods("GET")
 
-	// Serve the metrics page
+	// Redirect /future/metrics to /future/metrics/overview
 	futureRouter.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		handleMetrics(w, r, cfg)
+		http.Redirect(w, r, "/future/metrics/overview", http.StatusFound)
+	}).Methods("GET")
+
+	// Serve specific dashboard
+	futureRouter.HandleFunc("/metrics/{dashboard}", func(w http.ResponseWriter, r *http.Request) {
+		handleMetricsDashboard(w, r, cfg)
 	}).Methods("GET")
 
 	futureRouter.HandleFunc("/sqlactivity", func(w http.ResponseWriter, r *http.Request) {
@@ -996,20 +1008,132 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleMetrics serves the metrics.html template
-func handleMetrics(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+// MetricsDashboardData contains data for rendering the metrics dashboard page
+type MetricsDashboardData struct {
+	DashboardName string
+	Graphs        []DashboardGraph
+	AllDashboards []string
+	NodeIDs       []int32
+}
+
+// handleMetricsDashboard serves the metrics dashboard page
+func handleMetricsDashboard(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	// Get dashboard name from URL
+	vars := mux.Vars(r)
+	dashboardName := vars["dashboard"]
+
+	// Look up dashboard definition
+	graphs, ok := DASHBOARDS[dashboardName]
+	if !ok {
+		http.Error(w, "Dashboard not found", http.StatusNotFound)
+		return
+	}
+
+	// Fetch nodes to get node IDs for per-node metric expansion
+	nodesResp, err := cfg.Status.NodesUI(r.Context(), &serverpb.NodesRequest{})
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to fetch nodes: %v", err)
+		http.Error(w, "Failed to fetch nodes", http.StatusInternalServerError)
+		return
+	}
+
+	// Extract node IDs
+	var nodeIDs []int32
+	for _, node := range nodesResp.Nodes {
+		nodeIDs = append(nodeIDs, int32(node.Desc.NodeID))
+	}
+
+	// Expand per-node and per-store metrics
+	expandedGraphs := expandDashboardMetrics(graphs, nodeIDs)
+
+	// Get list of all dashboard names for dropdown
+	allDashboards := []string{
+		"overview", "hardware", "runtime", "sql", "storage",
+		"replication", "distributed", "queues", "networking",
+		"requests", "overload", "changefeeds", "ttl",
+	}
+
+	data := MetricsDashboardData{
+		DashboardName: dashboardName,
+		Graphs:        expandedGraphs,
+		AllDashboards: allDashboards,
+		NodeIDs:       nodeIDs,
+	}
+
 	// Set content type
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	// Execute the pre-parsed template
-	err := templates.ExecuteTemplate(w, "metrics.html", PageData{
+	err = templates.ExecuteTemplate(w, "metrics.html", PageData{
 		IndexHTMLArgs: cfg,
+		Data:          data,
 	})
 	if err != nil {
 		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
 		return
 	}
+}
+
+// expandDashboardMetrics expands per-node and per-store metrics into individual metric entries
+func expandDashboardMetrics(graphs []DashboardGraph, nodeIDs []int32) []DashboardGraph {
+	var expandedGraphs []DashboardGraph
+
+	for _, graph := range graphs {
+		expandedGraph := graph
+		expandedGraph.Metrics = nil // Clear and rebuild
+
+		for _, metric := range graph.Metrics {
+			if metric.NonNegativeRate {
+				metric.Derivative = "NON_NEGATIVE_DERIVATIVE"
+			}
+			if metric.StorePrefix || metric.PerStore {
+				metric.Name = "cr.store." + metric.Name
+			} else {
+				metric.Name = "cr.node." + metric.Name
+			}
+			if metric.PerNode {
+				// Create one metric per node
+				for _, nodeID := range nodeIDs {
+					expandedMetric := metric
+					expandedMetric.PerNode = false
+					expandedMetric.Sources = []int{int(nodeID)}
+					if expandedMetric.Title == "" {
+						expandedMetric.Title = fmt.Sprintf("n%d", nodeID)
+					} else {
+						// If there's already a title, append the node
+						expandedMetric.Title = fmt.Sprintf("%s (n%d)", metric.Title, nodeID)
+					}
+					expandedGraph.Metrics = append(expandedGraph.Metrics, expandedMetric)
+				}
+			} else if metric.PerStore {
+				// For per-store metrics, we also create one per node
+				// (each node typically has one store, but we use the same pattern)
+				for _, nodeID := range nodeIDs {
+					expandedMetric := metric
+					expandedMetric.PerStore = false
+					expandedMetric.Sources = []int{int(nodeID)}
+					if expandedMetric.Title == "" {
+						expandedMetric.Title = fmt.Sprintf("n%d", nodeID)
+					} else {
+						expandedMetric.Title = fmt.Sprintf("%s (n%d)", metric.Title, nodeID)
+					}
+					expandedGraph.Metrics = append(expandedGraph.Metrics, expandedMetric)
+				}
+			} else {
+				for _, nodeID := range nodeIDs {
+					metric.Sources = append(metric.Sources, int(nodeID))
+				}
+				// Regular metric, just copy as-is
+				expandedGraph.Metrics = append(expandedGraph.Metrics, metric)
+			}
+
+		}
+
+		expandedGraphs = append(expandedGraphs, expandedGraph)
+	}
+
+	return expandedGraphs
 }
 
 // timeSeriesQueryRequestJSON is a JSON-friendly wrapper for TimeSeriesQueryRequest
