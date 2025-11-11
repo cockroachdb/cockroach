@@ -92,9 +92,25 @@
       id="dashboard"
       hx-get="/future/metrics"
       hx-target="body"
-      hx-push-url="true">
+      hx-push-url="true"
+      hx-include="[name='node']">
       {{range .Data.AllDashboards}}
       <option value="{{.Name}}" {{if eq .Name $.Data.DashboardName}}selected{{end}}>{{.DisplayName}}</option>
+      {{end}}
+    </select>
+  </div>
+  <div>
+    <label for="node">Node:</label>
+    <select
+      name="node"
+      id="node"
+      hx-get="/future/metrics"
+      hx-target="body"
+      hx-push-url="true"
+      hx-include="[name='dashboard']">
+      <option value="" {{if eq .Data.SelectedNode ""}}selected{{end}}>Cluster</option>
+      {{range .Data.Nodes}}
+      <option value="{{.NodeID}}" {{if eq .NodeID $.Data.SelectedNode}}selected{{end}}>{{.Address}} (n{{.NodeID}})</option>
       {{end}}
     </select>
   </div>

@@ -1010,6 +1010,14 @@ type MetricsDashboardData struct {
 	Graphs               []DashboardGraph
 	AllDashboards        []DashboardInfo
 	NodeIDs              []int32
+	Nodes                []NodeDisplayInfo
+	SelectedNode         string // Node ID as string, empty string means "Cluster" (all nodes)
+}
+
+// NodeDisplayInfo contains minimal info for displaying a node in a dropdown
+type NodeDisplayInfo struct {
+	NodeID  string
+	Address string
 }
 
 // DashboardInfo contains the internal name and display name for a dashboard
@@ -1024,6 +1032,9 @@ func handleMetricsDashboard(w http.ResponseWriter, r *http.Request, cfg IndexHTM
 	if dashboardName == "" {
 		dashboardName = "overview"
 	}
+
+	// Get the selected node from query parameter (empty string means cluster-wide)
+	selectedNode := r.URL.Query().Get("node")
 
 	// Look up dashboard definition
 	graphs, ok := DASHBOARDS[dashboardName]
@@ -1040,14 +1051,20 @@ func handleMetricsDashboard(w http.ResponseWriter, r *http.Request, cfg IndexHTM
 		return
 	}
 
-	// Extract node IDs
+	// Extract node IDs and build node display info
 	var nodeIDs []int32
+	var nodes []NodeDisplayInfo
 	for _, node := range nodesResp.Nodes {
-		nodeIDs = append(nodeIDs, int32(node.Desc.NodeID))
+		nodeID := int32(node.Desc.NodeID)
+		nodeIDs = append(nodeIDs, nodeID)
+		nodes = append(nodes, NodeDisplayInfo{
+			NodeID:  fmt.Sprintf("%d", nodeID),
+			Address: node.Desc.Address.AddressField,
+		})
 	}
 
 	// Expand per-node and per-store metrics
-	expandedGraphs := expandDashboardMetrics(graphs, nodeIDs)
+	expandedGraphs := expandDashboardMetrics(graphs, nodeIDs, selectedNode)
 
 	// Get list of all dashboard names for dropdown
 	dashboardOrder := []string{
@@ -1081,6 +1098,8 @@ func handleMetricsDashboard(w http.ResponseWriter, r *http.Request, cfg IndexHTM
 		Graphs:               expandedGraphs,
 		AllDashboards:        allDashboards,
 		NodeIDs:              nodeIDs,
+		Nodes:                nodes,
+		SelectedNode:         selectedNode,
 	}
 
 	// Set content type
@@ -1099,8 +1118,27 @@ func handleMetricsDashboard(w http.ResponseWriter, r *http.Request, cfg IndexHTM
 }
 
 // expandDashboardMetrics expands per-node and per-store metrics into individual metric entries
-func expandDashboardMetrics(graphs []DashboardGraph, nodeIDs []int32) []DashboardGraph {
+// If selectedNode is not empty, only metrics for that node are included
+func expandDashboardMetrics(graphs []DashboardGraph, nodeIDs []int32, selectedNode string) []DashboardGraph {
 	var expandedGraphs []DashboardGraph
+
+	// Parse selectedNode if present
+	var filterNodeID int32 = -1
+	if selectedNode != "" {
+		if nodeID, err := strconv.ParseInt(selectedNode, 10, 32); err == nil {
+			filterNodeID = int32(nodeID)
+		}
+	}
+
+	// Determine which nodes to include
+	var targetNodeIDs []int32
+	if filterNodeID != -1 {
+		// Filter to specific node
+		targetNodeIDs = []int32{filterNodeID}
+	} else {
+		// Include all nodes
+		targetNodeIDs = nodeIDs
+	}
 
 	for _, graph := range graphs {
 		expandedGraph := graph
@@ -1116,8 +1154,8 @@ func expandDashboardMetrics(graphs []DashboardGraph, nodeIDs []int32) []Dashboar
 				metric.Name = "cr.node." + metric.Name
 			}
 			if metric.PerNode {
-				// Create one metric per node
-				for _, nodeID := range nodeIDs {
+				// Create one metric per node (filtered by targetNodeIDs)
+				for _, nodeID := range targetNodeIDs {
 					expandedMetric := metric
 					expandedMetric.PerNode = false
 					expandedMetric.Sources = []int{int(nodeID)}
@@ -1130,9 +1168,9 @@ func expandDashboardMetrics(graphs []DashboardGraph, nodeIDs []int32) []Dashboar
 					expandedGraph.Metrics = append(expandedGraph.Metrics, expandedMetric)
 				}
 			} else if metric.PerStore {
-				// For per-store metrics, we also create one per node
+				// For per-store metrics, we also create one per node (filtered by targetNodeIDs)
 				// (each node typically has one store, but we use the same pattern)
-				for _, nodeID := range nodeIDs {
+				for _, nodeID := range targetNodeIDs {
 					expandedMetric := metric
 					expandedMetric.PerStore = false
 					expandedMetric.Sources = []int{int(nodeID)}
@@ -1144,7 +1182,8 @@ func expandDashboardMetrics(graphs []DashboardGraph, nodeIDs []int32) []Dashboar
 					expandedGraph.Metrics = append(expandedGraph.Metrics, expandedMetric)
 				}
 			} else {
-				for _, nodeID := range nodeIDs {
+				// Regular metric - use targetNodeIDs for sources
+				for _, nodeID := range targetNodeIDs {
 					metric.Sources = append(metric.Sources, int(nodeID))
 				}
 				// Regular metric, just copy as-is
