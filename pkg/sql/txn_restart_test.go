@@ -1265,6 +1265,9 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	clientTestingKnobs := &kvcoord.ClientTestingKnobs{
 		MaxTxnRefreshAttempts: refreshAttempts,
 	}
+	var params base.TestServerArgs
+	params.RaftConfig.SetDefaults()
+	leaseDuration := params.RaftConfig.RangeLeaseDuration
 
 	testKey := []byte("test_key")
 	var s serverutils.ApplicationLayerInterface
@@ -1280,7 +1283,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 						atomic.AddInt32(&clockUpdate, 1)
 						// Hack to advance the transaction timestamp on a
 						// transaction restart.
-						const advancement = 2 * base.DefaultDescriptorLeaseDuration
+						advancement := 2 * leaseDuration
 						now := s.Clock().NowAsClockTimestamp()
 						now.WallTime += advancement.Nanoseconds()
 						s.Clock().Update(now)
@@ -1310,7 +1313,6 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 		DisableMaxOffsetCheck: true,
 	}
 
-	var params base.TestServerArgs
 	params.Knobs.Store = storeTestingKnobs
 	params.Knobs.KVClient = clientTestingKnobs
 	params.DefaultTestTenant = base.TestDoesNotWorkWithExternalProcessMode(156333)
