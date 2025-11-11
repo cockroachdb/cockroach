@@ -770,7 +770,12 @@ func fetchOverviewData(ctx context.Context, cfg IndexHTMLArgs) (*OverviewData, e
 			data.CapacityUsed += storeUsed
 			data.CapacityTotal += storeCapacity
 			data.CapacityAvailable += storeAvailable
-			data.TotalRanges += int(store.Desc.Capacity.RangeCount)
+
+			// Use the "ranges" metric which represents actual ranges on this store
+			// (not replicas). Sum across all stores to get total unique ranges.
+			if rangesMetric, ok := store.Metrics["ranges"]; ok {
+				data.TotalRanges += int(rangesMetric)
+			}
 
 			nodeCapacityUsed += storeUsed
 			nodeCapacityTotal += storeCapacity
