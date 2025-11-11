@@ -85,21 +85,19 @@
   </ul>
 </nav>
 <div class="box flex-row">
-  <form class="flex-row">
-    <div>
-      <label for="dashboard">Dashboard:</label>
-      <select
-        name="dashboard"
-        id="dashboard"
-        hx-get="/future/metrics/{value}"
-        hx-target="body"
-        hx-push-url="true">
-        {{range .Data.AllDashboards}}
-        <option value="{{.Name}}" {{if eq .Name $.Data.DashboardName}}selected{{end}}>{{.DisplayName}}</option>
-        {{end}}
-      </select>
-    </div>
-  </form>
+  <div>
+    <label for="dashboard">Dashboard:</label>
+    <select
+      name="dashboard"
+      id="dashboard"
+      hx-get="/future/metrics"
+      hx-target="body"
+      hx-push-url="true">
+      {{range .Data.AllDashboards}}
+      <option value="{{.Name}}" {{if eq .Name $.Data.DashboardName}}selected{{end}}>{{.DisplayName}}</option>
+      {{end}}
+    </select>
+  </div>
   <form class="flex-row" x-data>
     <div>
       <label for=category>Interval:</label>
@@ -135,7 +133,7 @@
   </form>
 </div>
 <div class="flex-switch">
-  <div>
+  <div class="flex-grow:2">
     {{range .Data.Graphs}}
     <figure
       x-data="metricGraph()"

@@ -357,13 +357,8 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 	// Serve the login page
 	futureRouter.HandleFunc("/login", handleLogin).Methods("GET")
 
-	// Redirect /future/metrics to /future/metrics/overview
-	futureRouter.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/future/metrics/overview", http.StatusFound)
-	}).Methods("GET")
-
 	// Serve specific dashboard
-	futureRouter.HandleFunc("/metrics/{dashboard}", func(w http.ResponseWriter, r *http.Request) {
+	futureRouter.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		handleMetricsDashboard(w, r, cfg)
 	}).Methods("GET")
 
@@ -1025,9 +1020,10 @@ type DashboardInfo struct {
 
 // handleMetricsDashboard serves the metrics dashboard page
 func handleMetricsDashboard(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
-	// Get dashboard name from URL
-	vars := mux.Vars(r)
-	dashboardName := vars["dashboard"]
+	dashboardName := r.URL.Query().Get("dashboard")
+	if dashboardName == "" {
+		dashboardName = "overview"
+	}
 
 	// Look up dashboard definition
 	graphs, ok := DASHBOARDS[dashboardName]
