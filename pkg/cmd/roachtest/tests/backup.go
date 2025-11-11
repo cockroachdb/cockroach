@@ -626,7 +626,7 @@ func runBackupMVCCRangeTombstones(
 	require.NoError(t, err)
 	_, err = conn.Exec(`USE tpch`)
 	require.NoError(t, err)
-	createStmt, err := readCreateTableFromFixture(
+	createStmt, err := readFileFromFixture(
 		"gs://cockroach-fixtures-us-east1/tpch-csv/schema/orders.sql?AUTH=implicit", conn)
 	require.NoError(t, err)
 	_, err = conn.ExecContext(ctx, createStmt)
