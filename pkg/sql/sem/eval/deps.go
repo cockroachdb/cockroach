@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -464,7 +463,7 @@ type Planner interface {
 
 	// AwaitStatementHintsCache waits for the node's statement hints cache to
 	// catch up with recent hint injections.
-	AwaitStatementHintsCache(ctx context.Context, st *cluster.Settings)
+	AwaitStatementHintsCache(ctx context.Context)
 
 	// RetryCounter is the number of times this statement has been retried.
 	RetryCounter() int
