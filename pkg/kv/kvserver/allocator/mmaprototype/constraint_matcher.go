@@ -93,28 +93,6 @@ func (cm *constraintMatcher) setStore(sal StoreAttributesAndLocality) {
 	}
 }
 
-// removeStore is called for a store that is removed from the cluster.
-func (cm *constraintMatcher) removeStore(storeID roachpb.StoreID) {
-	mc := cm.stores[storeID]
-	if mc == nil {
-		return
-	}
-	cm.allStores.remove(storeID)
-	delete(cm.stores, storeID)
-	for c := range mc.matched {
-		matchedSet := cm.constraints[c]
-		if matchedSet == nil {
-			panic(errors.AssertionFailedf(
-				"inconsistent state: store %d not found", storeID))
-		}
-		found := matchedSet.remove(storeID)
-		if !found {
-			panic(errors.AssertionFailedf(
-				"inconsistent state: store %d not found", storeID))
-		}
-	}
-}
-
 // storeMatchesConstraint is an internal helper method.
 func (cm *constraintMatcher) storeMatchesConstraint(
 	sal StoreAttributesAndLocality, c internedConstraint,
@@ -234,33 +212,6 @@ func (cm *constraintMatcher) constrainStoresForExpr(expr constraintsDisj, set *s
 			scratchPtr = &scratch
 		}
 	}
-}
-
-func (cm *constraintMatcher) checkConsistency() error {
-	for storeID, mc := range cm.stores {
-		for c := range mc.matched {
-			pl, ok := cm.constraints[c]
-			if !ok {
-				return errors.AssertionFailedf("constraint not found")
-			}
-			if !pl.contains(storeID) {
-				return errors.AssertionFailedf("constraint set does not include storeID %d", storeID)
-			}
-		}
-	}
-	for c, pl := range cm.constraints {
-		for _, storeID := range pl.storeSet {
-			store, ok := cm.stores[storeID]
-			if !ok {
-				return errors.AssertionFailedf("constraint set mentions unknown storeID %d", storeID)
-			}
-			_, ok = store.matched[c]
-			if !ok {
-				return errors.AssertionFailedf("stores and constraints map are out of sync")
-			}
-		}
-	}
-	return nil
 }
 
 // Avoid unused lint errors.
