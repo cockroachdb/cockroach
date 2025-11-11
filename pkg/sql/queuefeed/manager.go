@@ -24,7 +24,7 @@ type Manager struct {
 	leaseMgr *lease.Manager
 }
 
-func NewManager(executor isql.DB, rff *rangefeed.Factory, codec keys.SQLCodec, leaseMgr *lease.Manager) *Manager {
+func NewManager(_ context.Context, executor isql.DB, rff *rangefeed.Factory, codec keys.SQLCodec, leaseMgr *lease.Manager) *Manager {
 	// setup rangefeed on partitions table (/poll)
 	// handle handoff from one server to another
 	return &Manager{executor: executor, rff: rff, codec: codec, leaseMgr: leaseMgr}

@@ -61,7 +61,8 @@ type Reader struct {
 
 	triggerCheckForReassignment chan struct{}
 
-	cancel context.CancelCauseFunc
+	cancel  context.CancelCauseFunc
+	goroCtx context.Context
 }
 
 func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, rff *rangefeed.Factory, codec keys.SQLCodec, leaseMgr *lease.Manager, name string, tableDescID int64) *Reader {
@@ -74,19 +75,20 @@ func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, rff *rangefe
 		rff:                         rff,
 		tableID:                     descpb.ID(tableDescID),
 		triggerCheckForReassignment: make(chan struct{}),
+		// stored so we can use it in methods using a different context than the main goro ie GetRows and ConfirmReceipt
+		goroCtx: ctx,
 	}
 	r.mu.state = readerStateBatching
 	r.mu.buf = make([]tree.Datums, 0, maxBufSize)
 	r.mu.poppedWakeup = sync.NewCond(&r.mu.Mutex)
 	r.mu.pushedWakeup = sync.NewCond(&r.mu.Mutex)
 
-	ctx = context.TODO() // the context passed in here is canceled while the commit hook is running. so we need a longer-lived one for the persistent stuff.
-	// TODO: pass in from manager init
 	ctx, cancel := context.WithCancelCause(ctx)
 	r.cancel = func(cause error) {
-		cancel(cause)
 		fmt.Printf("canceling with cause: %s\n", cause)
+		cancel(cause)
 		r.mu.poppedWakeup.Broadcast()
+		r.mu.pushedWakeup.Broadcast()
 	}
 
 	r.setupRangefeed(ctx)
@@ -114,7 +116,7 @@ func (r *Reader) setupRangefeed(ctx context.Context) {
 
 		datums, err := r.decodeRangefeedValue(ctx, value)
 		if err != nil {
-			setErr(err)
+			setErr(errors.Wrapf(err, "decoding rangefeed value: %+v", value))
 			return
 		}
 		r.mu.buf = append(r.mu.buf, datums)
@@ -183,6 +185,8 @@ func (r *Reader) setupRangefeed(ctx context.Context) {
 // - [ ] checkpoint frontier if our frontier has advanced and we confirmed receipt
 // - [ ] gonna need some way to clean stuff up on conn_executor.close()
 
+// TODO: run still shuts down with context canceled after getting rows. why?
+
 func (r *Reader) run(ctx context.Context) {
 	defer func() {
 		fmt.Println("run done")
@@ -191,7 +195,7 @@ func (r *Reader) run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Printf("run: ctx done: %s\n", ctx.Err(), context.Cause(ctx))
+			fmt.Printf("run: ctx done: %s; cause: %s\n", ctx.Err(), context.Cause(ctx))
 			return
 		case <-r.triggerCheckForReassignment:
 			fmt.Printf("triggerCheckForReassignment\n")
@@ -206,7 +210,7 @@ func (r *Reader) run(ctx context.Context) {
 func (r *Reader) GetRows(ctx context.Context, limit int) ([]tree.Datums, error) {
 	fmt.Printf("GetRows start\n")
 
-	r.mu.Lock() // cant get this lock?
+	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if r.mu.state != readerStateBatching {
@@ -218,8 +222,25 @@ func (r *Reader) GetRows(ctx context.Context, limit int) ([]tree.Datums, error) 
 
 	if len(r.mu.buf) == 0 {
 		fmt.Printf("GetRows called with empty buf. waiting for pushedWakeup\n")
-		for ctx.Err() == nil && len(r.mu.buf) == 0 {
+		// shut down the reader if this ctx (which is distinct from the goro ctx) is canceled
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			select {
+			case <-ctx.Done():
+				r.cancel(errors.Wrapf(context.Cause(ctx), "GetRows canceled"))
+			case <-done:
+				return
+			}
+		}()
+		for ctx.Err() == nil && r.goroCtx.Err() == nil && len(r.mu.buf) == 0 {
 			r.mu.pushedWakeup.Wait()
+		}
+		if ctx.Err() != nil {
+			return nil, errors.Wrapf(context.Cause(ctx), "GetRows canceled")
+		}
+		if r.goroCtx.Err() != nil {
+			return nil, errors.Wrapf(context.Cause(r.goroCtx), "reader shutting down")
 		}
 	}
 
@@ -257,6 +278,8 @@ func (r *Reader) ConfirmReceipt(ctx context.Context) {
 
 	select {
 	case <-ctx.Done():
+		return
+	case <-r.goroCtx.Done():
 		return
 	case r.triggerCheckForReassignment <- struct{}{}:
 	}
