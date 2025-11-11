@@ -41,7 +41,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   {tableId: 109}
 - [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 109, schemaId: 101}
-- [[TableComment:{DescID: 109, Comment: shipment is important}, ABSENT], PUBLIC]
+- [[TableComment:{DescID: 109, Value: shipment is important}, ABSENT], PUBLIC]
   {comment: shipment is important, tableId: 109}
 - [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]
   {name: primary, tableId: 109}
@@ -55,7 +55,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   {columnId: 1, tableId: 109}
 - [[ColumnDefaultExpression:{DescID: 109, ColumnID: 1, Expr: gen_random_uuid()}, ABSENT], PUBLIC]
   {columnId: 1, expr: gen_random_uuid(), tableId: 109}
-- [[ColumnComment:{DescID: 109, ColumnID: 1, Comment: tracking_number is good}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 109, ColumnID: 1, Value: tracking_number is good}, ABSENT], PUBLIC]
   {columnId: 1, comment: tracking_number is good, pgAttributeNum: 1, tableId: 109}
 - [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, tableId: 109}
@@ -133,7 +133,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   {constraintId: 1, indexId: 1, isUnique: true, tableId: 109}
 - [[IndexName:{DescID: 109, Name: shipments_pkey, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, name: shipments_pkey, tableId: 109}
-- [[IndexComment:{DescID: 109, IndexID: 1, Comment: pkey is good}, ABSENT], PUBLIC]
+- [[IndexComment:{DescID: 109, IndexID: 1, Value: pkey is good}, ABSENT], PUBLIC]
   {comment: pkey is good, indexId: 1, tableId: 109}
 - [[IndexData:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 109}
@@ -141,7 +141,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   {columnIds: [4], constraintId: 2, referencedColumnIds: [1], referencedTableId: 104, tableId: 109}
 - [[ConstraintWithoutIndexName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT], PUBLIC]
   {constraintId: 2, name: fk_customers, tableId: 109}
-- [[ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is important}, ABSENT], PUBLIC]
+- [[ConstraintComment:{DescID: 109, ConstraintID: 2, Value: customer is important}, ABSENT], PUBLIC]
   {comment: customer is important, constraintId: 2, tableId: 109}
 - [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [2], ReferencedDescID: 105}, ABSENT], PUBLIC]
   {columnIds: [4], constraintId: 3, referencedColumnIds: [2], referencedTableId: 105, tableId: 109}

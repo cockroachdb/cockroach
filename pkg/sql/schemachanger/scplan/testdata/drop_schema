@@ -1348,7 +1348,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 - from: [Schema:{DescID: 104}, DROPPED]
-  to:   [SchemaComment:{DescID: 104, Comment: sc1 is good schema}, ABSENT]
+  to:   [SchemaComment:{DescID: 104, Value: sc1 is good schema}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Schema:{DescID: 104}, DROPPED]
@@ -1435,7 +1435,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SchemaComment:{DescID: 104, Comment: sc1 is good schema}, ABSENT]
+- from: [SchemaComment:{DescID: 104, Value: sc1 is good schema}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -1612,7 +1612,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 - from: [Table:{DescID: 106}, DROPPED]
-  to:   [TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT]
+  to:   [TableComment:{DescID: 106, Value: t1 is good table}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 106}, DROPPED]
@@ -1623,7 +1623,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
-- from: [TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT]
+- from: [TableComment:{DescID: 106, Value: t1 is good table}, ABSENT]
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -2211,7 +2211,7 @@ StatementPhase stage 1 of 1 with 231 MutationType ops
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Schema:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[SchemaComment:{DescID: 104, Comment: sc1 is good schema}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaComment:{DescID: 104, Value: sc1 is good schema}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -2224,7 +2224,7 @@ StatementPhase stage 1 of 1 with 231 MutationType ops
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT], PUBLIC] -> ABSENT
+    [[TableComment:{DescID: 106, Value: t1 is good table}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -3162,7 +3162,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Schema:{DescID: 104}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
-    [[SchemaComment:{DescID: 104, Comment: sc1 is good schema}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaComment:{DescID: 104, Value: sc1 is good schema}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 105}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], ABSENT] -> PUBLIC
@@ -3175,7 +3175,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Table:{DescID: 106}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaChild:{DescID: 106, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
-    [[TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT], ABSENT] -> PUBLIC
+    [[TableComment:{DescID: 106, Value: t1 is good table}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 106, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
@@ -3351,7 +3351,7 @@ PreCommitPhase stage 2 of 2 with 243 MutationType ops
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Schema:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
-    [[SchemaComment:{DescID: 104, Comment: sc1 is good schema}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaComment:{DescID: 104, Value: sc1 is good schema}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -3364,7 +3364,7 @@ PreCommitPhase stage 2 of 2 with 243 MutationType ops
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[TableComment:{DescID: 106, Comment: t1 is good table}, ABSENT], PUBLIC] -> ABSENT
+    [[TableComment:{DescID: 106, Value: t1 is good table}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 106, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT

@@ -24,7 +24,7 @@ ALTER TABLE defaultdb.t DROP COLUMN j
   {columnId: 2, tableId: 104}
 - [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, Expr: 42:::INT8}, ABSENT], PUBLIC]
   {columnId: 2, expr: '42:::INT8', tableId: 104}
-- [[ColumnComment:{DescID: 104, ColumnID: 2, Comment: column will drop}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 104, ColumnID: 2, Value: column will drop}, ABSENT], PUBLIC]
   {columnId: 2, comment: column will drop, pgAttributeNum: 2, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
   {columnId: 1, indexId: 1, tableId: 104}

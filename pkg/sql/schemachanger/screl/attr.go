@@ -55,8 +55,13 @@ const (
 	Name
 	// ReferencedDescID is the descriptor ID to which this element refers.
 	ReferencedDescID
-	// Comment is the comment metadata on descriptors.
-	Comment
+	// Value is a string attribute that can be used in different elements.
+	// Fields referring to the Value attribute cannot be used in rules and
+	// are only used as a part of the key to make an element unique. Current
+	// use includes:
+	//   1. comment metadata on descriptors.
+	//   2. string representation of column generated as identity sequence options
+	Value
 	// TemporaryIndexID is the index ID of the temporary index being populated
 	// during this index's backfill.
 	TemporaryIndexID
@@ -443,34 +448,34 @@ var elementSchemaOptions = []rel.SchemaOption{
 	// Comment elements.
 	rel.EntityMapping(t((*scpb.TableComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.TypeComment)(nil)),
 		rel.EntityAttr(DescID, "TypeID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.DatabaseComment)(nil)),
 		rel.EntityAttr(DescID, "DatabaseID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.SchemaComment)(nil)),
 		rel.EntityAttr(DescID, "SchemaID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.ColumnComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.IndexComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.ConstraintComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.IndexColumn)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
