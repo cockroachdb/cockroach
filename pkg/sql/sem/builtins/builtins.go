@@ -4678,7 +4678,6 @@ value if you rely on the HLC for accuracy.`,
 				return nil, err
 			}
 			// attach commit hook to txn to confirm receipt
-			txn := evalCtx.Txn
 
 			ret := tree.NewDArray(types.Json)
 
@@ -4687,7 +4686,7 @@ value if you rely on the HLC for accuracy.`,
 				return nil, err
 			}
 			// or something... todo on rollback/abort
-			txn.AddCommitTrigger(func(ctx context.Context) {
+			evalCtx.Txn.AddCommitTrigger(func(ctx context.Context) {
 				qr.ConfirmReceipt(ctx)
 			})
 
