@@ -7,39 +7,44 @@
   </ul>
 </nav>
 
-<form class="box flex-row">
+<div class="box flex-row align-items:end">
+<form class="flex-row align-items:end"
+      hx-get="/future/databases"
+      hx-target="#databases-table"
+      hx-trigger="submit"
+      hx-select="#databases-table"
+      hx-push-url="true">
   <div>
     <label for=search>Search:</label>
-    <input type="text" name=search id=search placeholder="Search databases">
+    <input type="text" name=search id=search placeholder="Search databases" value="{{ .Data.SearchFilter }}">
   </div>
   <div>
-    <label for=nodes>Nodes:</label>
-    <select id=nodes name=nodes>
-      <option value="all">All</option>
-      <optgroup label="us-east1">
-        <option value="all-us-east1">All in us-east1</option>
-        <option value="n1">n1</option>
-        <option value="n2">n2</option>
-        <option value="n3">n3</option>
+    <label for=nodeId>Nodes:</label>
+    <select id=nodeId name=nodeId>
+      <option value="">All</option>
+      {{ range $region, $nodes := .Data.NodesByRegion }}
+      <optgroup label="{{ $region }}">
+        {{ range $nodes }}
+        <option value="{{ .NodeID }}" {{ if eq .NodeID (printf "%d" $.Data.SelectedNode) }}selected{{ end }}>n{{ .NodeID }}</option>
+        {{ end }}
       </optgroup>
-      <optgroup label="us-west2">
-        <option value="all-us-west2">All in us-west2</option>
-        <option value="n4">n4</option>
-        <option value="n5">n5</option>
-        <option value="n6">n6</option>
-      </optgroup>
+      {{ end }}
     </select>
   </div>
+  <div>
+    <button type="submit" class="<big>">Filter</button>
+  </div>
+</form>
   <div class="flex-grow:2"></div>
   <div class="flex-column">
     <div class="justify-item:end">
       Auto stats collection: <chip class="ok">enabled</chip>
     </div>
-    <label for=refresh>Last refreshed: a few seconds ago <button id=refresh name=refresh>Refresh</button></label>
+    {{ template "table-metadata-job-info" .Data.MetadataJobInfo}}
   </div>
-</form>
+</div>
 
-<div x-data="tableSort()" style="overflow-x: auto;">
+<div id="databases-table" x-data="tableSort()" style="overflow-x: auto;">
   <table id="table-data">
     <thead>
       <tr>
@@ -50,21 +55,37 @@
       </tr>
     </thead>
     <tbody>
+      {{ if .Data.Databases }}
+        {{ range .Data.Databases }}
       <tr>
-        <td>movr</td>
-        <td>32.3 MiB</td>
-        <td>6</td>
+        <td><a href="/future/databases/{{ .DbID }}">{{ .DbName }}</a></td>
+        <td>{{ formatBytes .SizeBytes }}</td>
+        <td>{{ .TableCount }}</td>
         <td>
-          <chip>us-east1 (3)</chip>
-          <chip>us-west1 (3)</chip>
-          <chip>europe-west1 (3)</chip>
+          {{ if .RegionNodes }}
+            {{ range $region, $nodes := .RegionNodes }}
+              <chip>{{ $region }} ({{ len $nodes }})</chip>
+            {{ end }}
+          {{ else }}
+            -
+          {{ end }}
         </td>
       </tr>
+        {{ end }}
+      {{ else }}
+      <tr>
+        <td colspan="4" style="text-align: center; padding: 2rem;">No databases found</td>
+      </tr>
+      {{ end }}
     </tbody>
   </table>
   <div class="flex-row" style="justify-content: space-between; align-items: center; margin-top: 1rem;">
     <div>
-      <span x-text="paginationInfo"></span>
+      {{ if .Data.Databases }}
+        Showing {{ len .Data.Databases }} database(s)
+      {{ else }}
+        No results
+      {{ end }}
     </div>
     <div style="display: flex; gap: 0.5rem; align-items: center;">
       <button
@@ -82,6 +103,6 @@
       </button>
     </div>
   </div>
-<div>
+</div>
 
 {{ template "layout-end" .}}

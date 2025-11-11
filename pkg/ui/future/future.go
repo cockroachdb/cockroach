@@ -13,6 +13,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -88,10 +89,15 @@ func init() {
 			}
 			return template.JS(jsonBytes)
 		},
-		"formatTime":    formatTimeWrapper,
-		"formatBytes":   formatBytesWrapper,
-		"formatNumber":  formatNumberWrapper,
-		"formatPercent": formatPercentWrapper,
+		"formatTime":        formatTimeWrapper,
+		"formatBytes":       formatBytesWrapper,
+		"formatNumber":      formatNumberWrapper,
+		"formatPercent":     formatPercentWrapper,
+		"formatElapsedTime": formatElapsedTimeWrapper,
+		"timeNow":           func() time.Time { return timeutil.Now() },
+		"timeSub": func(a, b time.Time) time.Duration {
+			return a.Sub(b)
+		},
 	}
 	templates, err = template.New("").Funcs(funcMap).ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
@@ -138,6 +144,15 @@ func formatNumberWrapper(val interface{}) string {
 
 func formatPercentWrapper(val interface{}) string {
 	return formatPercent(toFloat64(val))
+}
+
+func formatElapsedTimeWrapper(val interface{}) string {
+	switch v := val.(type) {
+	case time.Duration:
+		return formatElapsedTime(v)
+	default:
+		return "unknown"
+	}
 }
 
 // formatTime formats nanoseconds into human-readable time with appropriate units
@@ -366,6 +381,15 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		handleDatabases(w, r, cfg)
 	}).Methods("GET")
 
+	// Database metadata refresh endpoints
+	futureRouter.HandleFunc("/databases/refresh", func(w http.ResponseWriter, r *http.Request) {
+		handleDatabaseMetadataRefresh(w, r, cfg)
+	}).Methods("POST")
+
+	futureRouter.HandleFunc("/databases/refresh-status", func(w http.ResponseWriter, r *http.Request) {
+		handleDatabaseMetadataRefreshStatus(w, r, cfg)
+	}).Methods("GET")
+
 	futureRouter.HandleFunc("/databases/{id}", func(w http.ResponseWriter, r *http.Request) {
 		handleDatabase(w, r, cfg)
 	}).Methods("GET")
@@ -406,42 +430,328 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 }
 
 func handleDatabases(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	ctx := r.Context()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Parse query parameters for filtering
+	searchFilter := r.URL.Query().Get("search")
+	nodeIDStr := r.URL.Query().Get("nodeId")
+	var selectedNode int32
+	if nodeIDStr != "" {
+		if parsed, err := strconv.ParseInt(nodeIDStr, 10, 32); err == nil {
+			selectedNode = int32(parsed)
+		}
+	}
+
+	// Fetch nodes to map stores to regions
+	nodesResp, err := cfg.Status.NodesUI(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch nodes: %v", err)
+		http.Error(w, "Failed to fetch nodes", http.StatusInternalServerError)
+		return
+	}
+
+	// Build a map of storeID -> (nodeID, region) and collect nodes by region
+	storeToNodeRegion := make(map[int64]struct {
+		nodeID int32
+		region string
+	})
+	nodesByRegion := make(map[string][]NodeDisplayInfo)
+	nodeToStores := make(map[int32][]int64) // Track which stores belong to each node
+
+	for _, node := range nodesResp.Nodes {
+		region := extractRegion(&node.Desc.Locality)
+		nodeID := int32(node.Desc.NodeID)
+
+		// Add node to region group
+		nodesByRegion[region] = append(nodesByRegion[region], NodeDisplayInfo{
+			NodeID:  fmt.Sprintf("%d", nodeID),
+			Address: node.Desc.Address.AddressField,
+		})
+
+		// Map stores to nodes
+		for _, store := range node.StoreStatuses {
+			storeID := int64(store.Desc.StoreID)
+			storeToNodeRegion[storeID] = struct {
+				nodeID int32
+				region string
+			}{
+				nodeID: nodeID,
+				region: region,
+			}
+			nodeToStores[nodeID] = append(nodeToStores[nodeID], storeID)
+		}
+	}
+
+	// Sort nodes within each region
+	for region := range nodesByRegion {
+		sort.Slice(nodesByRegion[region], func(i, j int) bool {
+			return nodesByRegion[region][i].NodeID < nodesByRegion[region][j].NodeID
+		})
+	}
+
+	// Build API URL with filters
+	apiURL := fmt.Sprintf("%s/api/v2/database_metadata/", apiBaseURL)
+	params := make([]string, 0, 2)
+	if searchFilter != "" {
+		params = append(params, fmt.Sprintf("name=%s", searchFilter))
+	}
+	// If filtering by node, add all stores from that node
+	if selectedNode > 0 {
+		if storeIDs, ok := nodeToStores[selectedNode]; ok {
+			for _, storeID := range storeIDs {
+				params = append(params, fmt.Sprintf("storeId=%d", storeID))
+			}
+		}
+	}
+	if len(params) > 0 {
+		apiURL += "?" + strings.Join(params, "&")
+	}
+
+	var apiResp apiPaginatedResponse[[]apiDbMetadata]
+	if err := fetchJSON(ctx, apiURL, &apiResp); err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch databases: %v", err)
+		http.Error(w, "Failed to fetch databases", http.StatusInternalServerError)
+		return
+	}
+
+	// Enrich databases with region/node information
+	var enrichedDatabases []DatabaseWithRegions
+	for _, db := range apiResp.Results {
+		dbWithRegions := DatabaseWithRegions{
+			apiDbMetadata: db,
+			RegionNodes:   make(map[string][]int32),
+		}
+
+		// Track unique nodes per region
+		nodesSeen := make(map[int32]bool)
+		for _, storeID := range db.StoreIDs {
+			if info, ok := storeToNodeRegion[storeID]; ok {
+				// Only add each node once per region
+				if !nodesSeen[info.nodeID] {
+					dbWithRegions.RegionNodes[info.region] = append(dbWithRegions.RegionNodes[info.region], info.nodeID)
+					nodesSeen[info.nodeID] = true
+				}
+			}
+		}
+
+		enrichedDatabases = append(enrichedDatabases, dbWithRegions)
+	}
+
+	// Fetch table metadata job status
+	var jobStatus apiTableMetadataJobStatus
+	jobStatusURL := fmt.Sprintf("%s/api/v2/table_metadata/updatejob/", apiBaseURL)
+	jobInfo := &MetadataJobInfo{}
+	if err := fetchJSON(ctx, jobStatusURL, &jobStatus); err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch job status: %v", err)
+		// Continue without job info
+	} else {
+		jobInfo.LastCompletedAt = jobStatus.LastCompletedTime
+		jobInfo.IsRunning = jobStatus.CurrentStatus == "RUNNING"
+	}
+
+	// Determine last refreshed time from the databases
+	var lastRefreshed *time.Time
+	for _, db := range enrichedDatabases {
+		if db.LastUpdated != nil {
+			if lastRefreshed == nil || db.LastUpdated.After(*lastRefreshed) {
+				lastRefreshed = db.LastUpdated
+			}
+		}
+	}
+
+	pageData := DatabasesPageData{
+		Databases:       enrichedDatabases,
+		SearchFilter:    searchFilter,
+		SelectedNode:    selectedNode,
+		NodesByRegion:   nodesByRegion,
+		LastRefreshed:   lastRefreshed,
+		MetadataJobInfo: jobInfo,
+	}
+
 	// Execute the pre-parsed template
-	err := templates.ExecuteTemplate(w, "databases.html", PageData{
+	err = templates.ExecuteTemplate(w, "databases.html", PageData{
 		IndexHTMLArgs: cfg,
-		Data:          nil,
+		Data:          pageData,
 	})
 	if err != nil {
-		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
+		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
 		return
 	}
 }
 
-func handleDatabase(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+func handleDatabaseMetadataRefresh(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	ctx := r.Context()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Trigger the table metadata job via the API
+	triggerURL := fmt.Sprintf("%s/api/v2/table_metadata/updatejob/", apiBaseURL)
+	req, err := http.NewRequestWithContext(ctx, "POST", triggerURL, nil)
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to create request: %v", err)
+		http.Error(w, "Failed to trigger refresh", http.StatusInternalServerError)
+		return
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to trigger refresh: %v", err)
+		http.Error(w, "Failed to trigger refresh", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Dev.Warningf(ctx, "Refresh trigger returned status %d", resp.StatusCode)
+		http.Error(w, "Failed to trigger refresh", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/future/databases/refresh-status", http.StatusFound)
+}
+
+func handleDatabaseMetadataRefreshStatus(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs,
+) {
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Check the job status
+	var jobStatus apiTableMetadataJobStatus
+	jobStatusURL := fmt.Sprintf("%s/api/v2/table_metadata/updatejob/", apiBaseURL)
+	if err := fetchJSON(ctx, jobStatusURL, &jobStatus); err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch job status: %v", err)
+		http.Error(w, "Failed to fetch job status", http.StatusInternalServerError)
+		return
+	}
+
+	metadataJobInfo := MetadataJobInfo{
+		LastCompletedAt: jobStatus.LastCompletedTime,
+		IsRunning:       jobStatus.CurrentStatus == "RUNNING",
+	}
+
 	// Execute the pre-parsed template
-	err := templates.ExecuteTemplate(w, "database.html", PageData{
+	err := templates.ExecuteTemplate(w, "table_metadata_job_info.html", PageData{
 		IndexHTMLArgs: cfg,
-		Data:          nil,
+		Data:          metadataJobInfo,
 	})
 	if err != nil {
-		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
+		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
+
+}
+
+// formatElapsedTime formats a duration into a human-readable string
+func formatElapsedTime(d time.Duration) string {
+	if d < time.Minute {
+		return "a few seconds ago"
+	}
+	if d < 2*time.Minute {
+		return "1 minute ago"
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%d minutes ago", int(d.Minutes()))
+	}
+	if d < 2*time.Hour {
+		return "1 hour ago"
+	}
+	if d < 24*time.Hour {
+		return fmt.Sprintf("%d hours ago", int(d.Hours()))
+	}
+	days := int(d.Hours() / 24)
+	if days == 1 {
+		return "1 day ago"
+	}
+	return fmt.Sprintf("%d days ago", days)
+}
+
+func handleDatabase(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Extract database ID from URL path
+	vars := mux.Vars(r)
+	dbIDStr := vars["id"]
+	dbID, err := strconv.ParseInt(dbIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid database ID", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch database details
+	var dbDetailsResp apiDbMetadataWithDetails
+	dbURL := fmt.Sprintf("%s/api/v2/database_metadata/%d", apiBaseURL, dbID)
+	if err := fetchJSON(ctx, dbURL, &dbDetailsResp); err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch database details: %v", err)
+		http.Error(w, "Failed to fetch database details", http.StatusInternalServerError)
+		return
+	}
+
+	// Fetch tables for this database
+	var tablesResp apiPaginatedResponse[[]apiTableMetadata]
+	tablesURL := fmt.Sprintf("%s/api/v2/table_metadata/?dbId=%d", apiBaseURL, dbID)
+	if err := fetchJSON(ctx, tablesURL, &tablesResp); err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch tables: %v", err)
+		http.Error(w, "Failed to fetch tables", http.StatusInternalServerError)
+		return
+	}
+
+	pageData := DatabasePageData{
+		DatabaseID:   dbDetailsResp.Metadata.DbID,
+		DatabaseName: dbDetailsResp.Metadata.DbName,
+		Tables:       tablesResp.Results,
+	}
+
+	// Execute the pre-parsed template
+	err = templates.ExecuteTemplate(w, "database.html", PageData{
+		IndexHTMLArgs: cfg,
+		Data:          pageData,
+	})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
 		return
 	}
 }
 
 func handleTable(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	ctx := r.Context()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Extract table ID from URL path
+	vars := mux.Vars(r)
+	tableIDStr := vars["id"]
+	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid table ID", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch table details including create statement
+	var tableDetailsResp apiTableMetadataWithDetails
+	tableURL := fmt.Sprintf("%s/api/v2/table_metadata/%d", apiBaseURL, tableID)
+	if err := fetchJSON(ctx, tableURL, &tableDetailsResp); err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch table details: %v", err)
+		http.Error(w, "Failed to fetch table details", http.StatusInternalServerError)
+		return
+	}
+
+	pageData := TablePageData{
+		Table:           tableDetailsResp.Metadata,
+		CreateStatement: tableDetailsResp.CreateStatement,
+	}
+
 	// Execute the pre-parsed template
-	err := templates.ExecuteTemplate(w, "table.html", PageData{
+	err = templates.ExecuteTemplate(w, "table.html", PageData{
 		IndexHTMLArgs: cfg,
-		Data:          nil,
+		Data:          pageData,
 	})
 	if err != nil {
-		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
+		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
 		return
 	}
@@ -1078,6 +1388,135 @@ type NodeDisplayInfo struct {
 type DashboardInfo struct {
 	Name        string
 	DisplayName string
+}
+
+const apiBaseURL = "http://localhost:8080"
+
+// API response types for database and table metadata
+// These mirror the types from pkg/server/api_v2_databases_metadata.go
+
+type apiPaginatedResponse[T any] struct {
+	Results        T                 `json:"results"`
+	PaginationInfo apiPaginationInfo `json:"pagination_info"`
+}
+
+type apiPaginationInfo struct {
+	TotalResults int64 `json:"total_results"`
+	PageSize     int   `json:"page_size"`
+	PageNum      int   `json:"page_num"`
+}
+
+type apiTableMetadata struct {
+	DbID                 int64      `json:"db_id"`
+	DbName               string     `json:"db_name"`
+	TableID              int64      `json:"table_id"`
+	SchemaName           string     `json:"schema_name"`
+	TableName            string     `json:"table_name"`
+	ReplicationSizeBytes int64      `json:"replication_size_bytes"`
+	RangeCount           int64      `json:"range_count"`
+	ColumnCount          int64      `json:"column_count"`
+	IndexCount           int64      `json:"index_count"`
+	PercentLiveData      float32    `json:"percent_live_data"`
+	TotalLiveDataBytes   int64      `json:"total_live_data_bytes"`
+	TotalDataBytes       int64      `json:"total_data_bytes"`
+	StoreIDs             []int64    `json:"store_ids"`
+	AutoStatsEnabled     bool       `json:"auto_stats_enabled"`
+	StatsLastUpdated     *time.Time `json:"stats_last_updated"`
+	LastUpdateError      string     `json:"last_update_error,omitempty"`
+	LastUpdated          time.Time  `json:"last_updated"`
+	ReplicaCount         int64      `json:"replica_count"`
+}
+
+type apiDbMetadata struct {
+	DbID        int64      `json:"db_id"`
+	DbName      string     `json:"db_name"`
+	SizeBytes   int64      `json:"size_bytes"`
+	TableCount  int64      `json:"table_count"`
+	StoreIDs    []int64    `json:"store_ids"`
+	LastUpdated *time.Time `json:"last_updated"`
+}
+
+type apiTableMetadataWithDetails struct {
+	Metadata        apiTableMetadata `json:"metadata"`
+	CreateStatement string           `json:"create_statement"`
+}
+
+type apiDbMetadataWithDetails struct {
+	Metadata apiDbMetadata `json:"metadata"`
+}
+
+type apiTableMetadataJobStatus struct {
+	CurrentStatus           string     `json:"current_status"`
+	Progress                float32    `json:"progress"`
+	LastStartTime           *time.Time `json:"last_start_time"`
+	LastCompletedTime       *time.Time `json:"last_completed_time"`
+	LastUpdatedTime         *time.Time `json:"last_updated_time"`
+	DataValidDuration       int        `json:"data_valid_duration"`
+	AutomaticUpdatesEnabled bool       `json:"automatic_updates_enabled"`
+}
+
+type apiTableMetadataJobTriggered struct {
+	JobTriggered bool   `json:"job_triggered"`
+	Message      string `json:"message"`
+}
+
+// DatabasesPageData contains data for the databases list page
+type DatabasesPageData struct {
+	Databases       []DatabaseWithRegions
+	SearchFilter    string
+	SelectedNode    int32
+	NodesByRegion   map[string][]NodeDisplayInfo
+	LastRefreshed   *time.Time
+	MetadataJobInfo *MetadataJobInfo
+}
+
+// MetadataJobInfo contains information about the table metadata cache job
+type MetadataJobInfo struct {
+	IsRunning       bool
+	LastCompletedAt *time.Time
+}
+
+// DatabaseWithRegions extends database metadata with region/node information
+type DatabaseWithRegions struct {
+	apiDbMetadata
+	RegionNodes map[string][]int32 // Map of region name to node IDs
+}
+
+// DatabasePageData contains data for a single database page
+type DatabasePageData struct {
+	DatabaseID   int64
+	DatabaseName string
+	Tables       []apiTableMetadata
+}
+
+// TablePageData contains data for a single table page
+type TablePageData struct {
+	Table           apiTableMetadata
+	CreateStatement string
+}
+
+// fetchJSON makes an HTTP GET request and unmarshals the JSON response
+func fetchJSON(ctx context.Context, url string, target interface{}) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API request failed with status %d", resp.StatusCode)
+	}
+
+	return json.NewDecoder(resp.Body).Decode(target)
 }
 
 // handleMetricsDashboard serves the metrics dashboard page
