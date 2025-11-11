@@ -629,7 +629,7 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
-	"canary_window": {
+	"stats_canary_window": {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			d, err := paramparse.DatumAsDuration(ctx, evalCtx, key, datum)
 			if err != nil {
@@ -639,11 +639,11 @@ var tableParams = map[string]tableParam{
 				return err
 			}
 
-			po.TableDesc.CanaryWindow = d
+			po.TableDesc.StatsCanaryWindow = d
 			return nil
 		},
 		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
-			po.TableDesc.CanaryWindow = 0
+			po.TableDesc.StatsCanaryWindow = 0
 			return nil
 		},
 	},

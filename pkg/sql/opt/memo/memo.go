@@ -244,6 +244,10 @@ type Memo struct {
 	// to clamp selectivity estimates to a lower bound.
 	optimizationStats OptimizationStats
 
+	// useCanaryStats indicates whether the optimizer uses canary stats
+	// for this query, as opposed to using the stable stats.
+	useCanaryStats eval.UseCanaryStatsVal
+
 	// WARNING: if you add more members, add initialization code in Init (if
 	// reusing allocated data structures is desired).
 }
@@ -331,6 +335,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		clampInequalitySelectivity:                 evalCtx.SessionData().OptimizerClampInequalitySelectivity,
 		useMaxFrequencySelectivity:                 evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
+		useCanaryStats:                             evalCtx.UseCanaryStats,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(ctx, evalCtx, m)
@@ -433,8 +438,11 @@ func (m *Memo) HasPlaceholders() bool {
 // This function cannot swallow errors and return only a boolean, as it may
 // perform KV operations on behalf of the transaction associated with the
 // provided catalog, and those errors are required to be propagated.
+// If ignoreCanaryStats is true, the check for useCanaryStats is skipped.
+// This is to avoid unnecessary memo invalidations when executing a prepared
+// memo.
 func (m *Memo) IsStale(
-	ctx context.Context, evalCtx *eval.Context, catalog cat.Catalog,
+	ctx context.Context, evalCtx *eval.Context, catalog cat.Catalog, ignoreCanaryStats bool,
 ) (bool, error) {
 	// Memo is stale if fields from SessionData that can affect planning have
 	// changed.
@@ -509,7 +517,7 @@ func (m *Memo) IsStale(
 		m.clampLowHistogramSelectivity != evalCtx.SessionData().OptimizerClampLowHistogramSelectivity ||
 		m.clampInequalitySelectivity != evalCtx.SessionData().OptimizerClampInequalitySelectivity ||
 		m.useMaxFrequencySelectivity != evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity ||
-		m.txnIsoLevel != evalCtx.TxnIsoLevel {
+		m.txnIsoLevel != evalCtx.TxnIsoLevel || (!ignoreCanaryStats && m.useCanaryStats != evalCtx.UseCanaryStats) {
 		return true, nil
 	}
 
