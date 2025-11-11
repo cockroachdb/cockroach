@@ -76,6 +76,11 @@ type Span struct {
 	Timestamp hlc.Timestamp
 }
 
+// TrickySpan represents a span that supports a special encoding where a nil
+// start key with a non-nil end key represents the point span:
+// [EndKey.Prev(), EndKey).
+type TrickySpan roachpb.Span
+
 // SpanSet tracks the set of key spans touched by a command, broken into MVCC
 // and non-MVCC accesses. The set is divided into subsets for access type
 // (read-only or read/write) and key scope (local or global; used to facilitate
@@ -88,7 +93,7 @@ type SpanSet struct {
 	// shouldn't be accessed (forbidden). This allows for complex pattern matching
 	// like forbidding specific keys across all range IDs without enumerating them
 	// explicitly.
-	forbiddenSpansMatchers []func(roachpb.Span) error
+	forbiddenSpansMatchers []func(TrickySpan) error
 	allowUndeclared        bool
 	allowForbidden         bool
 }
@@ -213,7 +218,7 @@ func (s *SpanSet) AddMVCC(access SpanAccess, span roachpb.Span, timestamp hlc.Ti
 
 // AddForbiddenMatcher adds a forbidden span matcher. The matcher is a function
 // that is called for each span access to check if it should be forbidden.
-func (s *SpanSet) AddForbiddenMatcher(matcher func(roachpb.Span) error) {
+func (s *SpanSet) AddForbiddenMatcher(matcher func(TrickySpan) error) {
 	s.forbiddenSpansMatchers = append(s.forbiddenSpansMatchers, matcher)
 }
 
@@ -353,7 +358,7 @@ func (s *SpanSet) checkAllowed(
 	if !s.allowForbidden {
 		// Check if the span is forbidden.
 		for _, matcher := range s.forbiddenSpansMatchers {
-			if err := matcher(span); err != nil {
+			if err := matcher(TrickySpan(span)); err != nil {
 				return errors.Errorf("cannot %s span %s: matches forbidden pattern",
 					access, span)
 			}
@@ -370,7 +375,7 @@ func (s *SpanSet) checkAllowed(
 
 		for ac := access; ac < NumSpanAccess; ac++ {
 			for _, cur := range s.spans[ac][scope] {
-				if contains(cur.Span, span) && check(ac, cur) {
+				if Contains(cur.Span, TrickySpan(span)) && check(ac, cur) {
 					return nil
 				}
 			}
@@ -382,24 +387,63 @@ func (s *SpanSet) checkAllowed(
 	return nil
 }
 
-// contains returns whether s1 contains s2. Unlike Span.Contains, this function
-// supports spans with a nil start key and a non-nil end key (e.g. "[nil, c)").
-// In this form, s2.Key (inclusive) is considered to be the previous key to
-// s2.EndKey (exclusive).
-func contains(s1, s2 roachpb.Span) bool {
-	if s2.Key != nil {
-		// The common case.
-		return s1.Contains(s2)
+// Contains returns whether s1 contains s2, where s2 can be a TrickySpan.
+func Contains(s1 roachpb.Span, s2 TrickySpan) bool {
+	s2Span := roachpb.Span(s2)
+
+	if s2Span.Key != nil {
+		// The common case: s2 is a regular span with a non-nil start key.
+		return s1.Contains(s2Span)
 	}
 
+	// s2 is a TrickySpan with nil Key and non-nil EndKey.
 	// The following is equivalent to:
 	//   s1.Contains(roachpb.Span{Key: s2.EndKey.Prev()})
 
 	if s1.EndKey == nil {
-		return s1.Key.IsPrev(s2.EndKey)
+		return s1.Key.IsPrev(s2Span.EndKey)
 	}
 
-	return s1.Key.Compare(s2.EndKey) < 0 && s1.EndKey.Compare(s2.EndKey) >= 0
+	return s1.Key.Compare(s2Span.EndKey) < 0 && s1.EndKey.Compare(s2Span.EndKey) >= 0
+}
+
+// Overlaps returns whether s1 overlaps s2, where s2 can be a TrickySpan.
+func Overlaps(s1 roachpb.Span, s2 TrickySpan) bool {
+	s2Span := roachpb.Span(s2)
+
+	// The common case: both spans have non-nil start keys.
+	if s2Span.Key != nil {
+		return s1.Overlaps(s2Span)
+	}
+
+	// s2 is a TrickySpan with nil Key and non-nil EndKey.
+	// The following is equivalent to:
+	//   s1.Overlaps(roachpb.Span{Key: s2.EndKey.Prev()})
+
+	if s1.EndKey == nil {
+		// s1 is a point span, overlaps with s2 iff s1.Key is the prev of s2.EndKey
+		return s1.Key.IsPrev(s2Span.EndKey)
+	}
+
+	// s1 is [s1.Key, s1.EndKey), s2 is [s2.EndKey.Prev(), s2.EndKey)
+	// They overlap iff s2.EndKey.Prev() is in [s1.Key, s1.EndKey).
+	return s1.Key.Compare(s2Span.EndKey) < 0 && s1.EndKey.Compare(s2Span.EndKey) >= 0
+}
+
+// PartiallyOverlaps returns whether s1 partially overlaps s2,
+// where s2 can be a TrickySpan. If true, it means that s1 and s2 overlap, but
+// neither s1 nor s2 contain one another.
+func PartiallyOverlaps(s1 roachpb.Span, s2 TrickySpan) bool {
+	s2Span := roachpb.Span(s2)
+
+	// The common case: both spans have non-nil start keys.
+	if s2Span.Key != nil {
+		return s1.Overlaps(s2Span) && !s1.Contains(s2Span) && !s2Span.Contains(s1)
+	}
+
+	// At this point, we know that s2 is a TrickySpan, and it represents a special
+	// point span. Point spans can never partially overlap with any span.
+	return false
 }
 
 // Validate returns an error if any spans that have been added to the set

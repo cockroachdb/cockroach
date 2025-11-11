@@ -7,6 +7,7 @@ package spanset
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -392,5 +393,164 @@ func TestSpanSetWriteImpliesRead(t *testing.T) {
 	}
 	if err := ss.CheckAllowed(SpanReadWrite, rwSpan); err != nil {
 		t.Errorf("expected to be allowed to read rwSpan, error: %+v", err)
+	}
+}
+
+// makeSpanHelper accepts strings like: "a-d", and returns a span with
+// startKey = a, and endKey = d. It also accepts `X` which represents nil. For
+// example, "X-d" returns a span with a nil startKey, and endKey = d.
+func makeSpanHelper(t *testing.T, s string) roachpb.Span {
+	parts := strings.Split(s, "-")
+	require.Len(t, parts, 2)
+
+	var start roachpb.Key
+	var end roachpb.Key
+
+	if parts[0] != "X" {
+		start = roachpb.Key(parts[0])
+	}
+
+	if parts[1] != "X" {
+		end = roachpb.Key(parts[1])
+	}
+
+	return roachpb.Span{
+		Key:    start,
+		EndKey: end,
+	}
+}
+
+// Test that Contains correctly determines if s1 contains s2, including
+// support for spans with nil start/end keys.
+func TestContains(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name     string
+		s1       roachpb.Span
+		s2       roachpb.Span
+		expected bool
+	}{
+		// s1 equals s2.
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "a-c"), expected: true},
+		// s1 contains s2.
+		{s1: makeSpanHelper(t, "a-d"), s2: makeSpanHelper(t, "b-c"), expected: true},
+		// s1 contains point s2.
+		{s1: makeSpanHelper(t, "a-d"), s2: makeSpanHelper(t, "a-X"), expected: true},
+		// Point s1 contains point s2.
+		{s1: makeSpanHelper(t, "a-X"), s2: makeSpanHelper(t, "a-X"), expected: true},
+		// s1 contains point s2 with nil startKey.
+		{s1: makeSpanHelper(t, "a-d"), s2: makeSpanHelper(t, "X-d"), expected: true},
+		// Point s1 contains point s2 with nil startKey.
+		{s1: makeSpanHelper(t, "a-X"), s2: roachpb.Span{EndKey: roachpb.Key("a").Next()}, expected: true},
+		// s1 does not contain s2.
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "d-f"), expected: false},
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "b-d"), expected: false},
+		{s1: makeSpanHelper(t, "b-c"), s2: makeSpanHelper(t, "a-d"), expected: false},
+		// s1 does not contain s2 point.
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "d-X"), expected: false},
+		// Point s1 does not contain s2.
+		{s1: makeSpanHelper(t, "a-X"), s2: makeSpanHelper(t, "b-d"), expected: false},
+		// Point s1 does not contain point s2.
+		{s1: makeSpanHelper(t, "a-X"), s2: makeSpanHelper(t, "b-X"), expected: false},
+		// s1 does not contain point s2 with nil startKey.
+		{s1: makeSpanHelper(t, "a-d"), s2: makeSpanHelper(t, "X-e"), expected: false},
+		// Point s1 does not contain point s2 with nil startKey.
+		{s1: makeSpanHelper(t, "a-X"), s2: makeSpanHelper(t, "X-b"), expected: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, Contains(tc.s1, TrickySpan(tc.s2)))
+		})
+	}
+}
+
+// Test that Overlaps correctly determines if s1 overlaps s2, including
+// support for spans with nil start/end keys.
+func TestOverlaps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name     string
+		s1       roachpb.Span
+		s2       roachpb.Span
+		expected bool
+	}{
+		// s1 equals s2.
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "a-c"), expected: true},
+		// s1 overlaps s2.
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "b-d"), expected: true},
+		// s1 contains s2.
+		{s1: makeSpanHelper(t, "a-d"), s2: makeSpanHelper(t, "b-c"), expected: true},
+		// s2 contains s1.
+		{s1: makeSpanHelper(t, "b-c"), s2: makeSpanHelper(t, "a-d"), expected: true},
+		// s1 overlaps point s2.
+		{s1: makeSpanHelper(t, "a-d"), s2: makeSpanHelper(t, "a-X"), expected: true},
+		// s1 overlaps point s2 with nil startKey.
+		{s1: makeSpanHelper(t, "a-d"), s2: makeSpanHelper(t, "X-d"), expected: true},
+		// Point s1 overlaps point s2 with nil startKey.
+		{s1: makeSpanHelper(t, "a-X"), s2: roachpb.Span{EndKey: roachpb.Key("a").Next()}, expected: true},
+		// Point s1 overlaps point s2.
+		{s1: makeSpanHelper(t, "a-X"), s2: makeSpanHelper(t, "a-X"), expected: true},
+		// s1 doesn't overlap s2.
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "d-f"), expected: false},
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "c-d"), expected: false},
+		// s1 doesn't overlap point s2.
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "c-X"), expected: false},
+		// s1 doesn't overlap point s2 with nil startKey.
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "X-a"), expected: false},
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "X-d"), expected: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tc.expected, Overlaps(tc.s1, TrickySpan(tc.s2)))
+		})
+	}
+}
+
+// Test that PartiallyOverlaps correctly determines if s1 partially overlaps s2,
+// including support for spans with nil start/end keys.
+func TestPartiallyOverlaps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name     string
+		s1       roachpb.Span
+		s2       roachpb.Span
+		expected bool
+	}{
+		// s1 equals s2.
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "a-c"), expected: false},
+		// s1 partially overlaps s2.
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "b-d"), expected: true},
+		{s1: makeSpanHelper(t, "b-d"), s2: makeSpanHelper(t, "a-c"), expected: true},
+		// s1 contains s2.
+		{s1: makeSpanHelper(t, "a-d"), s2: makeSpanHelper(t, "b-c"), expected: false},
+		// s2 contains s1.
+		{s1: makeSpanHelper(t, "b-c"), s2: makeSpanHelper(t, "a-d"), expected: false},
+		// s1 contains point s2.
+		{s1: makeSpanHelper(t, "a-d"), s2: makeSpanHelper(t, "a-X"), expected: false},
+		// s1 contains point s2 with nil startKey.
+		{s1: makeSpanHelper(t, "a-d"), s2: makeSpanHelper(t, "X-d"), expected: false},
+		// Point s1 contains point s2 with nil startKey.
+		{s1: makeSpanHelper(t, "a-X"), s2: roachpb.Span{EndKey: roachpb.Key("a").Next()}, expected: false},
+		// Point s1 contains point s2.
+		{s1: makeSpanHelper(t, "a-X"), s2: makeSpanHelper(t, "a-X"), expected: false},
+		// s1 doesn't overlap s2.
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "d-f"), expected: false},
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "c-d"), expected: false},
+		// s1 doesn't overlap point s2.
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "c-X"), expected: false},
+		// s1 doesn't overlap point s2 with nil startKey.
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "X-a"), expected: false},
+		{s1: makeSpanHelper(t, "a-c"), s2: makeSpanHelper(t, "X-d"), expected: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tc.expected, PartiallyOverlaps(tc.s1, TrickySpan(tc.s2)))
+		})
 	}
 }
