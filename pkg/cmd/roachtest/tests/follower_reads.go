@@ -1023,13 +1023,17 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		// this issue.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
 
-		// This test does not currently work with shared-process
-		// deployments (#129167), so we do not run it in separate-process
-		// mode either to reduce noise. We should reevaluate once the test
-		// works in shared-process.
+		// This test is incompatible with separate process mode as it queries metrics from
+		// TSDB. Separate process clusters currently do not write to TSDB as serverless uses
+		// third party metrics persistence solutions instead.
+		//
+		// TODO(darrylwong): Once #137625 is complete, we can switch to querying prometheus using
+		// `clusterstats` instead and re-enable separate process.
+		//
+		// This test is flaky in shared process mode, so it is temporarily disabled to reduce noise.
+		// TODO(server):  #157164 is the tracking issue to re-enable this.
 		mixedversion.EnabledDeploymentModes(
 			mixedversion.SystemOnlyDeployment,
-			mixedversion.SharedProcessDeployment,
 		),
 	)
 }
