@@ -1,15 +1,13 @@
 # We use a docker image mirror to avoid pulling from 3rd party repos, which sometimes have reliability issues.
 # See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
-FROM us-east1-docker.pkg.dev/crl-docker-sync/registry-access-redhat-com/ubi9/ubi-minimal
+FROM us-east1-docker.pkg.dev/crl-docker-sync/registry-access-redhat-com/ubi10/ubi-minimal
 ARG fips_enabled
 
 # For deployment, we need the following additionally installed:
-# tzdata - for time zone functions; reinstalled to replace the missing
-#          files in /usr/share/zoneinfo/
+# tzdata - for time zone functions
 # hostname - used in cockroach k8s manifests
 # tar - used by kubectl cp
 RUN microdnf update -y \
-    && rpm --erase --nodeps tzdata \
     && microdnf install tzdata hostname tar gzip xz -y \
     && rm -rf /var/cache/yum
 # FIPS mode requires the `openssl` package installed. Also we need to temporarily
@@ -20,7 +18,7 @@ RUN if [ "$fips_enabled" == "1" ]; then \
     microdnf install -y openssl && \
     rpm -qa | sort > /before.txt && \
     microdnf install -y crypto-policies-scripts && \
-    fips-mode-setup --enable --no-bootcfg && \
+    update-crypto-policies --set FIPS && \
     rpm -qa | sort > /after.txt && \
     microdnf remove -y $(comm -13 /before.txt /after.txt) && \
     microdnf clean all && \
