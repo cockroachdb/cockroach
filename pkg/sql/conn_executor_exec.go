@@ -568,6 +568,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache)
 		res.ResetStmtType(ps.AST)
 
+		// We reuse the prepared statement's useCanaryStats setting, so
+		// that we don't re-roll the dice.
+		if ps.UseCanaryStats != eval.UseCanaryStatsValUnset {
+			p.EvalContext().UseCanaryStats = ps.UseCanaryStats
+		}
+
 		if e.DiscardRows {
 			ih.SetDiscardRows()
 		}
