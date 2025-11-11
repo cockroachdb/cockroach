@@ -118,7 +118,9 @@ func TruncateLog(
 	// are not tracked in the raft log delta. The delta will be adjusted below
 	// raft.
 	// We can pass zero as nowNanos because we're only interested in SysBytes.
-	ms, err := storage.ComputeStats(ctx, readWriter, start, end, 0 /* nowNanos */)
+	// TODO(#157895): Use the log engine here instead of the state machine engine.
+	ms, err := storage.ComputeStats(ctx,
+		spanset.DisableForbiddenSpanAssertionsOnBatch(readWriter), start, end, 0 /* nowNanos */)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "while computing stats of Raft log freed by truncation")
 	}
