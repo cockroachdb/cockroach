@@ -150,20 +150,10 @@ func (r *Reader) setupRangefeed(ctx context.Context) {
 		fmt.Sprintf("queuefeed.reader.name=%s", r.name), initialTS, onValue, opts...,
 	)
 
-	// get desc for table
-	desc, err := r.leaseMgr.AcquireByName(ctx, lease.TimestampToReadTimestamp(initialTS), 100, 101, "t")
-	if err != nil {
-		setErr(err)
-		return
-	}
-	defer desc.Release(ctx)
-
 	// TODO: why are we given a zero codec?
 	r.codec = keys.MakeSQLCodec(roachpb.SystemTenantID)
 
-	tk := roachpb.Span{
-		Key: r.codec.TablePrefix(uint32(r.tableID)),
-	}
+	tk := roachpb.Span{Key: r.codec.TablePrefix(uint32(r.tableID))}
 	tk.EndKey = tk.Key.PrefixEnd()
 	spans := []roachpb.Span{tk}
 
@@ -184,8 +174,6 @@ func (r *Reader) setupRangefeed(ctx context.Context) {
 // - [ ] buffer rows in the background before being asked for them
 // - [ ] checkpoint frontier if our frontier has advanced and we confirmed receipt
 // - [ ] gonna need some way to clean stuff up on conn_executor.close()
-
-// TODO: run still shuts down with context canceled after getting rows. why?
 
 func (r *Reader) run(ctx context.Context) {
 	defer func() {
