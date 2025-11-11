@@ -24,11 +24,38 @@
 .u-marker {
   width: 10px;
   height: 10px;
-  border-radius: 50%;
-  border: 2px solid;
 }
 .u-label {
   font-weight: 500;
+}
+.u-legend tbody {
+  max-height: 300px;
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: row;
+  align-items: flex-start;
+  align-content: flex-start;
+  overflow: auto;
+  border: 0;
+}
+.u-legend tbody > tr {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+}
+.u-legend tbody > tr:first-child {
+  flex-basis: 100%;
+  text-align: left;
+  color: #808080;
+}
+.u-legend tbody > tr:first-child .u-marker {
+  display: none;
+}
+.u-legend .u-marker {
+  width: 1em;
+  height: 1em;
+  margin-right: 4px;
+  background-clip: padding-box !important;
 }
 .status {
   padding: 10px;
@@ -54,9 +81,9 @@
 <nav class="breadcrumbs" aria-label="Breadcrumbs">
   <ul>
     <li class="<h1>">Metrics</li>
+    <li class="<h2>">Overview</li>
   </ul>
 </nav>
-<h2>Metrics</h2>
 <div class="box flex-row">
   <form class="flex-row">
     <div>
@@ -113,15 +140,14 @@
     <figure
       x-data="metricGraph()"
       data-metrics='[
-        {"name":"sys.rss","sources":[1],"title":"Node 1"},
-        {"name":"sys.rss","sources":[2],"title":"Node 2"},
-        {"name":"sys.rss","sources":[3],"title":"Node 3"},
-        {"name":"sys.rss","sources":[4],"title":"Node 4"},
-        {"name":"sys.rss","sources":[5],"title":"Node 5"},
-        {"name":"sys.rss","sources":[6],"title":"Node 6"}
+        {"name":"sys.rss","sources":[1],"title":"n1"},
+        {"name":"sys.rss","sources":[2],"title":"n2"},
+        {"name":"sys.rss","sources":[3],"title":"n3"},
+        {"name":"sys.rss","sources":[4],"title":"n4"},
+        {"name":"sys.rss","sources":[5],"title":"n5"},
+        {"name":"sys.rss","sources":[6],"title":"n6"}
         ]'
       data-axis='{"units":"BYTES","label":"memory usage"}'>
-      <div :class="`status ${statusClass}`" x-text="statusMessage"></div>
       <figcaption x-data="{open: false}">
         <div x-ref="caption" @mouseenter="open = true" @mouseleave="open = false" class="text-align:center">
           Memory Usage
@@ -140,21 +166,20 @@
     <figure
       x-data="metricGraph()"
       data-metrics='[
-        {"name":"sys.host.disk.read.bytes","sources":[1],"title":"Node 1",
+        {"name":"sys.host.disk.read.bytes","sources":[1],"title":"n1",
           "derivative":"NON_NEGATIVE_DERIVATIVE"},
-        {"name":"sys.host.disk.read.bytes","sources":[2],"title":"Node 2",
+        {"name":"sys.host.disk.read.bytes","sources":[2],"title":"n2",
           "derivative":"NON_NEGATIVE_DERIVATIVE"},
-        {"name":"sys.host.disk.read.bytes","sources":[3],"title":"Node 3",
+        {"name":"sys.host.disk.read.bytes","sources":[3],"title":"n3",
           "derivative":"NON_NEGATIVE_DERIVATIVE"},
-        {"name":"sys.host.disk.read.bytes","sources":[4],"title":"Node 4",
+        {"name":"sys.host.disk.read.bytes","sources":[4],"title":"n4",
           "derivative":"NON_NEGATIVE_DERIVATIVE"},
-        {"name":"sys.host.disk.read.bytes","sources":[5],"title":"Node 5",
+        {"name":"sys.host.disk.read.bytes","sources":[5],"title":"n5",
           "derivative":"NON_NEGATIVE_DERIVATIVE"},
-        {"name":"sys.host.disk.read.bytes","sources":[6],"title":"Node 6",
+        {"name":"sys.host.disk.read.bytes","sources":[6],"title":"n6",
           "derivative":"NON_NEGATIVE_DERIVATIVE"}
         ]'
-      data-axis='{"units":"BYTES","label":"memory usage"}'>
-      <div :class="`status ${statusClass}`" x-text="statusMessage"></div>
+      data-axis='{"units":"BYTES","label":"bytes"}'>
       <figcaption x-data="{open: false}">
         <div x-ref="caption" @mouseenter="open = true" @mouseleave="open = false" class="text-align:center">
           Disk Read Bytes/s
