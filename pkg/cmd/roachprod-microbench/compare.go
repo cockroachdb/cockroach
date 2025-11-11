@@ -386,9 +386,10 @@ func (c *compare) postRegressionIssues(
 		if len(regressions) > 0 {
 			sheetLink := links[pkgName]
 			formatter, req := createRegressionPostRequest(pkgName, regressions, sheetLink, c.sheetDesc)
-			err := postIssuesToGitHub(c.ctx, l, formatter, req)
+			err := postBenchmarkIssue(c.ctx, l, formatter, req)
 			if err != nil {
-				return errors.Wrapf(err, "failed to post regression issue for package %s", pkgName)
+				log.Printf("failed to post regression issue for package %s: %v", pkgName, err)
+				continue
 			}
 			log.Printf("Posted regression issue for package: %s with %d regression(s)", pkgName, len(regressions))
 		}
