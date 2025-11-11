@@ -4522,8 +4522,8 @@ func (ex *connExecutor) serialize() serverpb.Session {
 
 	txnFingerprintIDs := ex.txnFingerprintIDCache.GetAllTxnFingerprintIDs()
 	sessionActiveTime := ex.totalActiveTimeStopWatch.Elapsed()
-	if startedAt, started := ex.totalActiveTimeStopWatch.LastStartedAt(); started {
-		sessionActiveTime = time.Duration(sessionActiveTime.Nanoseconds() + timeutil.Since(startedAt).Nanoseconds())
+	if elapsed, started := ex.totalActiveTimeStopWatch.CurrentElapsed(); started {
+		sessionActiveTime = time.Duration(sessionActiveTime.Nanoseconds() + elapsed.Nanoseconds())
 	}
 
 	return serverpb.Session{

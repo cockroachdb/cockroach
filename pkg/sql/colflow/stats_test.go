@@ -92,14 +92,14 @@ func TestVectorizedStatsCollector(t *testing.T) {
 	defer tu.cleanup(ctx)
 	for nBatches := 1; nBatches < 5; nBatches++ {
 		timeSource := timeutil.NewTestTimeSource()
-		mjInputWatch := timeutil.NewTestStopWatch(timeSource.Now)
+		mjInputWatch := timeutil.NewTestStopWatch(timeSource.NowMono)
 		leftSource := &timeAdvancingOperator{
 			OneInputHelper: colexecop.MakeOneInputHelper(makeFiniteChunksSourceWithBatchSize(tu.testAllocator, nBatches, coldata.BatchSize())),
 			timeSource:     timeSource,
 		}
 		leftInput := newVectorizedStatsCollector(
 			leftSource, nil /* kvReader */, nil /* columnarizer */, execinfrapb.ComponentID{ID: 0},
-			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
+			timeutil.NewTestStopWatch(timeSource.NowMono), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
 		)
 		rightSource := &timeAdvancingOperator{
@@ -108,7 +108,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		}
 		rightInput := newVectorizedStatsCollector(
 			rightSource, nil /* kvReader */, nil /* columnarizer */, execinfrapb.ComponentID{ID: 1},
-			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
+			timeutil.NewTestStopWatch(timeSource.NowMono), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
 		)
 		mergeJoiner := colexecjoin.NewMergeJoinOp(
