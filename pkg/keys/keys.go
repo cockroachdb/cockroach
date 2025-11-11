@@ -308,6 +308,17 @@ func DecodeRangeIDKey(
 	return roachpb.RangeID(rangeInt), infix, suffix, b, nil
 }
 
+// DecodeRangeIDPrefix parses a local range ID prefix into range ID.
+func DecodeRangeIDPrefix(key roachpb.Key) (roachpb.RangeID, error) {
+	if !bytes.HasPrefix(key, LocalRangeIDPrefix) {
+		return 0, errors.Errorf("key %s does not have %s prefix", key, LocalRangeIDPrefix)
+	}
+	// Cut the prefix, the Range ID, and the infix specifier.
+	b := key[len(LocalRangeIDPrefix):]
+	_, rangeInt, err := encoding.DecodeUvarintAscending(b)
+	return roachpb.RangeID(rangeInt), err
+}
+
 // AbortSpanKey returns a range-local key by Range ID for an
 // AbortSpan entry, with detail specified by encoding the
 // supplied transaction ID.

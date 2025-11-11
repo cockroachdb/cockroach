@@ -923,6 +923,8 @@ func DisableUndeclaredSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
 // forbidden span assertions disabled. It does not modify the original batch.
 // The returned batch shares the same underlying storage.Batch but has its own
 // SpanSet wrapper with the forbidden span assertion disabled.
+// TODO(ibrahim): We eventually want to eliminate all the users of this
+// function.
 func DisableForbiddenSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	switch v := rw.(type) {
 	case *spanSetBatch:
