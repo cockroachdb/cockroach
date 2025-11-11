@@ -6,10 +6,17 @@
 package tests
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
+	"maps"
+	"math/rand"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -23,9 +30,124 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
-func readCreateTableFromFixture(fixtureURI string, gatewayDB *gosql.DB) (string, error) {
+type dataset interface {
+	// init() initializes the dataset for use. It is called before any other
+	// receivers for the dataset.
+	init(ctx context.Context, c cluster.Cluster, l *logger.Logger) error
+
+	// getTableName() returns the name of the table to import into.
+	getTableName() string
+
+	// getCreateTableStmt() returns the CREATE TABLE syntax to create the table
+	// this dataset.
+	getCreateTableStmt() string
+
+	// getDataURLs() returns a slice containing the URLs to import from.
+	getDataURLs() []string
+
+	// getFingerprint() returns a map containing the expected fingerprint for this
+	// dataset, or 'nil' if the table has not been calibrated yet.
+	getFingerprint() map[string]string
+}
+
+// staticDataset represents a statically created dataset stored in external
+// storage. It's expected that each dataset type will fill in the struct with
+// a custom init() function and then use the receivers on staticDataset to
+// implement the rest of the dataset interface.
+type staticDataset struct {
+	tableName       string
+	createTableStmt string
+	dataURLs        []string
+	fingerprint     map[string]string
+}
+
+func (sd *staticDataset) init(_ context.Context, _ cluster.Cluster, _ *logger.Logger) error {
+	return nil
+}
+func (sd staticDataset) getTableName() string              { return sd.tableName }
+func (sd staticDataset) getCreateTableStmt() string        { return sd.createTableStmt }
+func (sd staticDataset) getDataURLs() []string             { return sd.dataURLs }
+func (sd staticDataset) getFingerprint() map[string]string { return sd.fingerprint }
+
+// tpchDataset represents a TPC-H dataset file stored on external storage.
+type tpchDataset struct {
+	staticDataset
+}
+
+// init() implements the dataset interface. We use scale factor 1 for local clusters and scale
+// factor 100 for roachprod clusters.
+func (tpch *tpchDataset) init(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger,
+) (err error) {
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "initializing %s", tpch.tableName)
+		}
+	}()
+	conn := c.Conn(ctx, l, 1)
+	baseURL := "gs://cockroach-fixtures-us-east1/tpch-csv/"
+	var scale string
+	if c.IsLocal() {
+		scale = "sf-1"
+	} else {
+		scale = "sf-100"
+	}
+
+	tpch.createTableStmt, err = readFileFromFixture(
+		fmt.Sprintf("%s/schema/%s.sql?AUTH=implicit", baseURL, tpch.tableName), conn)
+	if err != nil {
+		return err
+	}
+
+	fingerprintURL := fmt.Sprintf("%s/%s/%s.fingerprint?AUTH=implicit", baseURL, scale, tpch.tableName)
+	var fingerprint string
+	fingerprint, err = readFileFromFixture(fingerprintURL, conn)
+	if err != nil {
+		// It's okay to not have fingerprints here because we may doing a calibration run.
+		if !strings.Contains(err.Error(), "gcs object does not exist") {
+			return err
+		}
+	} else {
+		err = json.Unmarshal([]byte(fingerprint), &tpch.fingerprint)
+		if err != nil {
+			return errors.Wrapf(err, "error unmarshalling expected table fingerprint: %s", fingerprint)
+		}
+	}
+
+	tpch.dataURLs = make([]string, 0, 8)
+	for i := 1; i <= 8; i++ {
+		tpch.dataURLs = append(tpch.dataURLs,
+			fmt.Sprintf("%s/%s/%s.tbl.%d?AUTH=implicit", baseURL, scale, tpch.tableName, i))
+	}
+
+	return nil
+}
+
+// newTPCHDataset() is a convenience function to quickly declare a TPC-D dataset by name.
+func newTPCHDataset(name string) *tpchDataset {
+	return &tpchDataset{
+		staticDataset: staticDataset{
+			tableName: name,
+		},
+	}
+}
+
+// datasets is the set of all known datasets to test with.
+var datasets = map[string]dataset{
+	"tpch/customer": newTPCHDataset("customer"),
+	"tpch/lineitem": newTPCHDataset("lineitem"),
+	"tpch/orders":   newTPCHDataset("orders"),
+	"tpch/part":     newTPCHDataset("part"),
+	"tpch/partsupp": newTPCHDataset("partsupp"),
+	"tpch/supplier": newTPCHDataset("supplier"),
+}
+
+// readFileFromFixture() reads a URI by routing through the read_file() internal
+// function to avoid authentication issues when reading from various clouds.
+func readFileFromFixture(fixtureURI string, gatewayDB *gosql.DB) (string, error) {
 	row := make([]byte, 0)
 	err := gatewayDB.QueryRow(fmt.Sprintf(`SELECT crdb_internal.read_file('%s')`, fixtureURI)).Scan(&row)
 	if err != nil {
@@ -34,86 +156,361 @@ func readCreateTableFromFixture(fixtureURI string, gatewayDB *gosql.DB) (string,
 	return string(row), err
 }
 
-func registerImportNodeShutdown(r registry.Registry) {
-	getImportRunner := func(ctx context.Context, t test.Test, gatewayNode int) jobStarter {
-		startImport := func(c cluster.Cluster, l *logger.Logger) (jobspb.JobID, error) {
-			var jobID jobspb.JobID
-			// partsupp is 11.2 GiB.
-			tableName := "partsupp"
-			if c.IsLocal() {
-				// part is 2.264 GiB.
-				tableName = "part"
-			}
-			importStmt := fmt.Sprintf(`
-				IMPORT INTO %[1]s
-				CSV DATA (
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.1?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.2?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.3?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.4?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.5?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.6?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.7?AUTH=implicit',
-				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.8?AUTH=implicit'
-				) WITH  delimiter='|', detached
-			`, tableName)
-			gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
-			defer gatewayDB.Close()
+// The stringSource interface is a thin wrapper to allow tests to declare
+// and build sets of datasets to test with.
+type stringSource interface {
+	Strings() []string
+}
 
-			createStmt, err := readCreateTableFromFixture(
-				fmt.Sprintf("gs://cockroach-fixtures-us-east1/tpch-csv/schema/%s.sql?AUTH=implicit", tableName), gatewayDB)
-			if err != nil {
-				return jobID, err
-			}
+type One string
 
-			// Create the table to be imported into.
-			if _, err = gatewayDB.ExecContext(ctx, createStmt); err != nil {
-				return jobID, err
-			}
+func (o One) Strings() []string { return []string{string(o)} }
 
-			err = gatewayDB.QueryRowContext(ctx, importStmt).Scan(&jobID)
-			return jobID, err
+type FromFunc func() []string
+
+func (f FromFunc) Strings() []string { return f() }
+
+func allDatasets() []string {
+	return slices.Collect(maps.Keys(datasets))
+}
+
+func anyDataset() []string {
+	allDatasets := allDatasets()
+	return []string{allDatasets[rand.Intn(len(allDatasets))]}
+}
+
+// importTestSpec represents a subtest within the import test.
+type importTestSpec struct {
+	// subtestName is the name to register for this test.
+	subtestName string
+	// nodes is a slice of cluster sizes to test with.
+	nodes []int
+	// if benchmark is set to true, register this test as a benchmark and
+	// collect benchmarking artifacts.
+	benchmark bool
+	// manualOnly subtests are not registered to run nightly.
+	manualOnly bool
+	// calibrate indicates that its not an error for table fingerprints to
+	// be missing.
+	calibrate bool
+	// datasetNames is a list or generator of datasets that can be used
+	// wit this test.
+	datasetNames stringSource
+
+	// preTestHook is run after tables are created, but before the import starts.
+	preTestHook func(context.Context, test.Test, cluster.Cluster)
+	// importRunner is an alternate import runner.
+	importRunner func(context.Context, test.Test, cluster.Cluster, *logger.Logger, dataset) error
+}
+
+var tests = []importTestSpec{
+	// Generate checksums for data files that don't have them. If a dataset has
+	// a finger that is incorrect, it should be deleted or moved out of the way
+	// before running calibration. Also be aware that local tests can only
+	// calibrate local files. For larger datasets, a roachprod cluster is required.
+	{
+		subtestName:  "calibrate",
+		nodes:        []int{4},
+		manualOnly:   true,
+		calibrate:    true,
+		datasetNames: FromFunc(allDatasets),
+	},
+	// Basic test w/o injected failures.
+	{
+		subtestName:  "basic",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyDataset),
+	},
+	// Basic test w/benchmarking.
+	{
+		subtestName:  "benchmark",
+		benchmark:    true,
+		nodes:        []int{4},
+		datasetNames: One("tpch/lineitem"),
+	},
+	// Test with a decommissioned node.
+	{
+		subtestName:  "decommissioned",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyDataset),
+		preTestHook: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			nodeToDecommission := 2
+			t.Status(fmt.Sprintf("decommissioning node %d", nodeToDecommission))
+			c.Run(ctx, option.WithNodes(c.Node(nodeToDecommission)),
+				fmt.Sprintf(`./cockroach node decommission --self --wait=all --port={pgport:%d} --certs-dir=%s`,
+					nodeToDecommission, install.CockroachNodeCertsDir))
+
+			// Wait for a bit for node liveness leases to expire.
+			time.Sleep(10 * time.Second)
+		},
+	},
+	// Test job survival if a worker node is shutdown.
+	{
+		subtestName:  "nodeShutdown/worker",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyDataset),
+		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, ds dataset) error {
+			importConn := c.Conn(ctx, l, 2 /* gateway node */)
+			return executeNodeShutdown(ctx, t, c, defaultNodeShutdownConfig(c, 3 /* nodeToShutdown */),
+				func(c cluster.Cluster, l *logger.Logger) (jobspb.JobID, error) {
+					return runAsyncImportJob(ctx, importConn, ds)
+				})
+		},
+	},
+	// Test job survival if the coordinator node is shutdown.
+	{
+		subtestName:  "nodeShutdown/coordinator",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyDataset),
+		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, ds dataset) error {
+			importConn := c.Conn(ctx, l, 2 /* gateway node */)
+			return executeNodeShutdown(ctx, t, c, defaultNodeShutdownConfig(c, 2 /* nodeToShutdown */),
+				func(c cluster.Cluster, l *logger.Logger) (jobspb.JobID, error) {
+					return runAsyncImportJob(ctx, importConn, ds)
+				})
+		},
+	},
+}
+
+func registerImport(r registry.Registry) {
+	timeout := 10 * time.Hour
+	for _, testSpec := range tests {
+		suites := registry.Suites(registry.Nightly)
+		if testSpec.manualOnly {
+			suites = registry.ManualOnly
 		}
 
-		return startImport
+		for _, numNodes := range testSpec.nodes {
+			ts := testSpec
+			numNodes := numNodes
+
+			name := fmt.Sprintf("import/%s/nodes=%d", ts.subtestName, numNodes)
+			r.Add(registry.TestSpec{
+				Name:              name,
+				Owner:             registry.OwnerSQLQueries,
+				Timeout:           timeout,
+				Cluster:           r.MakeClusterSpec(numNodes),
+				CompatibleClouds:  registry.Clouds(spec.GCE, spec.Local),
+				Suites:            suites,
+				EncryptionSupport: registry.EncryptionMetamorphic,
+				Leases:            registry.MetamorphicLeases,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runImportTest(ctx, t, c, ts, numNodes, timeout)
+				},
+			})
+		}
+	}
+}
+
+func runImportTest(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	testSpec importTestSpec,
+	numNodes int,
+	timeout time.Duration,
+) {
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+
+	datasetNames := testSpec.datasetNames.Strings()
+	t.Status(fmt.Sprintf("Starting import test '%s' using datasets: %s",
+		testSpec.subtestName, strings.Join(datasetNames, ", ")))
+
+	// Create and use a test database
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+	_, err := conn.Exec(`CREATE DATABASE import_test`)
+	require.NoError(t, err)
+	_, err = conn.Exec(`USE import_test`)
+	require.NoError(t, err)
+
+	// Initialize datasets and create tables.
+	for _, name := range datasetNames {
+		ds, ok := datasets[name]
+		require.Truef(t, ok, "dataset '%s' not defined.", name)
+		err = ds.init(ctx, c, t.L())
+		require.NoError(t, err)
+		if !testSpec.calibrate {
+			require.NotNilf(t, ds.getFingerprint(),
+				"dataset '%s' has no fingerprint. Run calibrate manually.", name)
+		}
+		_, err = conn.Exec(ds.getCreateTableStmt())
+		require.NoError(t, err)
 	}
 
-	r.Add(registry.TestSpec{
-		Name:    "import/nodeShutdown/worker",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(4),
-		// Uses gs://cockroach-fixtures-us-east1. See:
-		// https://github.com/cockroachdb/cockroach/issues/105968
-		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
-		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.MetamorphicLeases,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-			gatewayNode := 2
-			nodeToShutdown := 3
-			startImport := getImportRunner(ctx, t, gatewayNode)
+	// If there's a pre-test hook, run it now.
+	if testSpec.preTestHook != nil {
+		t.Status("Running pre-test hook")
+		testSpec.preTestHook(ctx, t, c)
+	}
 
-			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startImport)
-		},
-	})
-	r.Add(registry.TestSpec{
-		Name:    "import/nodeShutdown/coordinator",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(4),
-		// Uses gs://cockroach-fixtures-us-east1. See:
-		// https://github.com/cockroachdb/cockroach/issues/105968
-		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
-		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.MetamorphicLeases,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-			gatewayNode := 2
-			nodeToShutdown := 2
-			startImport := getImportRunner(ctx, t, gatewayNode)
+	// For calibration runs, filter out datasets that have fingerprint files.
+	if testSpec.calibrate {
+		datasetNames = slices.DeleteFunc(datasetNames, func(n string) bool {
+			return datasets[n].getFingerprint() != nil
+		})
+		t.Status(fmt.Sprintf("Calibrating datasets: %s", strings.Join(datasetNames, ", ")))
+	}
 
-			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startImport)
-		},
-	})
+	// If this is a test that does benchmarking, setup measurement and wait for nodes to be ready.
+	tick := func() {}
+	if testSpec.benchmark {
+		t.Status("waiting for all nodes to be ready")
+		exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+		var perfBuf *bytes.Buffer
+		tick, perfBuf = initBulkJobPerfArtifacts(timeout, t, exporter)
+		defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
+
+		err = retry.ForDuration(30*time.Second, func() error {
+			var nodes int
+			err := conn.QueryRowContext(ctx,
+				`SELECT count(*)
+				   FROM crdb_internal.gossip_liveness
+				  WHERE updated_at > now() - interval '8s'`).Scan(&nodes)
+			// Don't retry on query error
+			require.NoError(t, err)
+			if numNodes != nodes {
+				return errors.Errorf("expected %d nodes, got %d", numNodes, nodes)
+			}
+			return nil
+		})
+		require.NoError(t, err)
+	}
+
+	// Start the disk usage logger for non-local tests.
+	stopDiskUsageLogger := func() {}
+	if !c.IsLocal() {
+		dul := roachtestutil.NewDiskUsageLogger(t, c)
+		t.Go(func(ctx context.Context, _ *logger.Logger) error {
+			return dul.Runner(ctx)
+		})
+		var once sync.Once
+		stopDiskUsageLogger = func() {
+			once.Do(dul.Done)
+		}
+		defer stopDiskUsageLogger()
+	}
+
+	t.Status("test running")
+
+	tick()
+	m := t.NewGroup()
+	for n, datasetName := range datasetNames {
+		m.Go(func(ctx context.Context, l *logger.Logger) (err error) {
+			ds := datasets[datasetName]
+			defer func() {
+				if err != nil {
+					err = errors.Wrapf(err, "import %s", datasetName)
+				}
+			}()
+
+			t.WorkerStatus("importing ", datasetName)
+			defer t.WorkerStatus()
+
+			// If this test has a custom import runner, use that, otherwise we just do a
+			// synchronous import.
+			if testSpec.importRunner != nil {
+				return testSpec.importRunner(ctx, t, c, l, ds)
+			} else {
+				importConn := c.Conn(ctx, l, (n%numNodes)+1)
+				defer importConn.Close()
+				return runSyncImportJob(ctx, importConn, ds)
+			}
+		})
+	}
+	m.Wait()
+	tick()
+	stopDiskUsageLogger()
+
+	// Verify that we imported the correct data
+	t.Status("validating imported data")
+	m = t.NewGroup()
+	for _, datasetName := range datasetNames {
+		m.Go(func(ctx context.Context, l *logger.Logger) (err error) {
+			ds := datasets[datasetName]
+			defer func() {
+				if err != nil {
+					err = errors.Wrapf(err, "validate %s", datasetName)
+				}
+			}()
+
+			t.WorkerStatus("validating ", datasetName)
+			defer t.WorkerStatus()
+
+			var rows *sql.Rows
+			rows, err = conn.Query(fmt.Sprintf(`SHOW FINGERPRINTS FROM TABLE import_test.%s`, ds.getTableName()))
+			if err != nil {
+				return err
+			}
+
+			fingerprint := make(map[string]string)
+			for rows.Next() {
+				var idxname, hash string
+				err = rows.Scan(&idxname, &hash)
+				if err != nil {
+					return err
+				}
+				fingerprint[idxname] = hash
+			}
+			if err = rows.Err(); err != nil {
+				return err
+			}
+			if ds.getFingerprint() == nil {
+				jsonFingerprint, err := json.MarshalIndent(&fingerprint, "", "  ")
+				if err != nil {
+					return err
+				}
+				l.Printf("Found fingerprint for '%s':\n%s", datasetName, jsonFingerprint)
+			} else if !maps.Equal(fingerprint, ds.getFingerprint()) {
+				return errors.Errorf("found fingerprint %v but expected %v", fingerprint, ds.getFingerprint())
+			} else {
+				l.Printf("Fingerprint for '%s' matched.", datasetName)
+			}
+			return nil
+		})
+	}
+	m.Wait()
+}
+
+// runSyncImportJob() runs an import job and waits for it to complete.
+func runSyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) error {
+	importStmt := formatImportStmt(ds, false)
+	_, err := conn.ExecContext(ctx, importStmt)
+	if err != nil {
+		err = errors.Wrapf(err, "%s", importStmt)
+	}
+	return err
+}
+
+// runAsyncImportJob() runs an import job and returns the job id immediately.
+func runAsyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) (jobspb.JobID, error) {
+	importStmt := formatImportStmt(ds, true)
+
+	var jobID jobspb.JobID
+	err := conn.QueryRowContext(ctx, importStmt).Scan(&jobID)
+	if err != nil {
+		err = errors.Wrapf(err, "%s", importStmt)
+	}
+
+	return jobID, err
+}
+
+// formatImportStmt() takes a dataset and formats a SQL import statment for that
+// dataset.
+func formatImportStmt(d dataset, detached bool) string {
+	var stmt strings.Builder
+	fmt.Fprintf(
+		&stmt,
+		`IMPORT INTO import_test.%s CSV DATA ('%s') WITH delimiter='|'`,
+		d.getTableName(),
+		strings.Join(d.getDataURLs(), "', '"),
+	)
+
+	if detached {
+		stmt.WriteString(", detached")
+	}
+
+	return stmt.String()
 }
 
 func registerImportTPCC(r registry.Registry) {
@@ -204,164 +601,5 @@ func registerImportTPCC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runImportTPCC(ctx, t, c, testName, 5*time.Hour, geoWarehouses)
 		},
-	})
-}
-
-func registerImportTPCH(r registry.Registry) {
-	for _, item := range []struct {
-		nodes   int
-		timeout time.Duration
-	}{
-		// TODO(dt): this test seems to have become slower as of 19.2. It previously
-		// had 4, 8 and 32 node configurations with comments claiming they ran in in
-		// 4-5h for 4 node and 3h for 8 node. As of 19.2, it seems to be timing out
-		// -- potentially because 8 secondary indexes is worst-case for direct
-		// ingestion and seems to cause a lot of compaction, but further profiling
-		// is required to confirm this. Until then, the 4 and 32 node configurations
-		// are removed (4 is too slow and 32 is pretty expensive) while 8-node is
-		// given a 50% longer timeout (which running by hand suggests should be OK).
-		// (07/27/21) The timeout was increased again to 10 hours. The test runs in
-		// ~7 hours which causes it to occasionally exceed the previous timeout of 8
-		// hours.
-		{8, 10 * time.Hour},
-	} {
-		item := item
-		r.Add(registry.TestSpec{
-			Name:      fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
-			Owner:     registry.OwnerSQLQueries,
-			Benchmark: true,
-			Cluster:   r.MakeClusterSpec(item.nodes),
-			// Uses gs://cockroach-fixtures-us-east1. See:
-			// https://github.com/cockroachdb/cockroach/issues/105968
-			CompatibleClouds:  registry.Clouds(spec.GCE, spec.Local),
-			Suites:            registry.Suites(registry.Nightly),
-			Timeout:           item.timeout,
-			EncryptionSupport: registry.EncryptionMetamorphic,
-			Leases:            registry.MetamorphicLeases,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
-				tick, perfBuf := initBulkJobPerfArtifacts(item.timeout, t, exporter)
-				defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
-
-				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-				conn := c.Conn(ctx, t.L(), 1)
-				if _, err := conn.Exec(`CREATE DATABASE csv;`); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := conn.Exec(`USE csv;`); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := conn.Exec(
-					`SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb'`,
-				); err != nil && !strings.Contains(err.Error(), "unknown cluster setting") {
-					t.Fatal(err)
-				}
-				// Wait for all nodes to be ready.
-				if err := retry.ForDuration(time.Second*30, func() error {
-					var nodes int
-					if err := conn.
-						QueryRowContext(ctx, `select count(*) from crdb_internal.gossip_liveness where updated_at > now() - interval '8s'`).
-						Scan(&nodes); err != nil {
-						t.Fatal(err)
-					} else if nodes != item.nodes {
-						return errors.Errorf("expected %d nodes, got %d", item.nodes, nodes)
-					}
-					return nil
-				}); err != nil {
-					t.Fatal(err)
-				}
-				m := c.NewDeprecatedMonitor(ctx)
-				dul := roachtestutil.NewDiskUsageLogger(t, c)
-				m.Go(dul.Runner)
-
-				// TODO(peter): This currently causes the test to fail because we see a
-				// flurry of valid merges when the import finishes.
-				//
-				// m.Go(func(ctx context.Context) error {
-				// 	// Make sure the merge queue doesn't muck with our import.
-				// 	return verifyMetrics(ctx, c, map[string]float64{
-				// 		"cr.store.queue.merge.process.success": 10,
-				// 		"cr.store.queue.merge.process.failure": 10,
-				// 	})
-				// })
-
-				m.Go(func(ctx context.Context) error {
-					defer dul.Done()
-					t.WorkerStatus(`running import`)
-					defer t.WorkerStatus()
-
-					createStmt, err := readCreateTableFromFixture(
-						"gs://cockroach-fixtures-us-east1/tpch-csv/schema/lineitem.sql?AUTH=implicit", conn)
-					if err != nil {
-						return err
-					}
-
-					// Create table to import into.
-					if _, err := conn.ExecContext(ctx, createStmt); err != nil {
-						return err
-					}
-
-					// Tick once before starting the import, and once after to capture the
-					// total elapsed time. This is used by roachperf to compute and display
-					// the average MB/sec per node.
-					tick()
-					_, err = conn.Exec(`
-						IMPORT INTO csv.lineitem
-						CSV DATA (
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.1?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.2?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.3?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.4?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.5?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.6?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.7?AUTH=implicit',
-						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.8?AUTH=implicit'
-						) WITH  delimiter='|'
-					`)
-					if err != nil {
-						return errors.Wrap(err, "import failed")
-					}
-					tick()
-					return nil
-				})
-
-				t.Status("waiting")
-				m.Wait()
-			},
-		})
-	}
-}
-
-func registerImportDecommissioned(r registry.Registry) {
-	runImportDecommissioned := func(ctx context.Context, t test.Test, c cluster.Cluster) {
-		warehouses := 100
-		if c.IsLocal() {
-			warehouses = 10
-		}
-
-		t.Status("starting csv servers")
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-		c.Run(ctx, option.WithNodes(c.All()), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
-
-		// Decommission a node.
-		nodeToDecommission := 2
-		t.Status(fmt.Sprintf("decommissioning node %d", nodeToDecommission))
-		c.Run(ctx, option.WithNodes(c.Node(nodeToDecommission)), fmt.Sprintf(`./cockroach node decommission --self --wait=all --port={pgport:%d} --certs-dir=%s`, nodeToDecommission, install.CockroachNodeCertsDir))
-
-		// Wait for a bit for node liveness leases to expire.
-		time.Sleep(10 * time.Second)
-
-		t.Status("running workload")
-		c.Run(ctx, option.WithNodes(c.Node(1)), tpccImportCmd("", warehouses, "{pgurl:1}"))
-	}
-
-	r.Add(registry.TestSpec{
-		Name:             "import/decommissioned",
-		Owner:            registry.OwnerSQLQueries,
-		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.MetamorphicLeases,
-		Run:              runImportDecommissioned,
 	})
 }
