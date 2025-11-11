@@ -1861,14 +1861,6 @@ func (cfg *ExecutorConfig) GetQueueManager() queuebase.Manager {
 	return cfg.QueueManager
 }
 
-func (cfg *ExecutorConfig) GetStopper() *stop.Stopper {
-	return cfg.Stopper
-}
-
-func (cfg *ExecutorConfig) GetAmbientCtx() log.AmbientContext {
-	return cfg.AmbientCtx
-}
-
 // UpdateVersionSystemSettingHook provides a callback that allows us
 // update the cluster version inside the system.settings table. This hook
 // is aimed at mainly updating tenant pods, which will currently skip over

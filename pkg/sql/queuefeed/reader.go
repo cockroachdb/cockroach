@@ -211,16 +211,9 @@ func (r *Reader) GetRows(ctx context.Context, limit int) ([]tree.Datums, error) 
 	if len(r.mu.buf) == 0 {
 		fmt.Printf("GetRows called with empty buf. waiting for pushedWakeup\n")
 		// shut down the reader if this ctx (which is distinct from the goro ctx) is canceled
-		done := make(chan struct{})
-		defer close(done)
-		go func() {
-			select {
-			case <-ctx.Done():
-				r.cancel(errors.Wrapf(ctx.Err(), "GetRows canceled"))
-			case <-done:
-				return
-			}
-		}()
+		defer context.AfterFunc(ctx, func() {
+			r.cancel(errors.Wrapf(ctx.Err(), "GetRows canceled"))
+		})()
 		for ctx.Err() == nil && r.goroCtx.Err() == nil && len(r.mu.buf) == 0 {
 			r.mu.pushedWakeup.Wait()
 		}
