@@ -15197,3 +15197,224 @@ func TestLeaderlessWatcherInit(t *testing.T) {
 		t.Fatalf("expected LeaderlessWatcher channel to be closed")
 	}
 }
+
+// TestOverlapsUnreplicatedRangeIDLocalKeys verifies that the function
+// overlapsUnreplicatedRangeIDLocalKeys() successfully catches any overlap with
+// unreplicated rangeID local keys.
+func TestOverlapsUnreplicatedRangeIDLocalKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testCases := []struct {
+		name      string
+		span      roachpb.Span
+		expectErr bool
+	}{
+		{
+			name: "point start key before unreplicated rangeID local span",
+			span: roachpb.Span{Key: keys.MakeRangeIDUnreplicatedPrefix(1).
+				Prevish(roachpb.PrevishKeyLength), EndKey: nil},
+			expectErr: false,
+		},
+		{
+			name:      "point start key within unreplicated rangeID local span",
+			span:      roachpb.Span{Key: keys.RaftTruncatedStateKey(1), EndKey: nil},
+			expectErr: true,
+		},
+		{
+			name: "point start key at unreplicated rangeID local span end",
+			span: roachpb.Span{Key: keys.MakeRangeIDUnreplicatedPrefix(1).
+				PrefixEnd(), EndKey: nil},
+			expectErr: false,
+		},
+		{
+			name:      "point end key before unreplicated rangeID local span",
+			span:      roachpb.Span{Key: nil, EndKey: keys.MakeRangeIDUnreplicatedPrefix(1)},
+			expectErr: false,
+		},
+		{
+			name:      "point end key within unreplicated rangeID local span",
+			span:      roachpb.Span{Key: nil, EndKey: keys.RaftTruncatedStateKey(1)},
+			expectErr: true,
+		},
+		{
+			name: "point end key at unreplicated rangeID local span end",
+			span: roachpb.Span{Key: nil, EndKey: keys.MakeRangeIDUnreplicatedPrefix(1).
+				PrefixEnd()},
+			expectErr: true,
+		},
+		{
+			name: "point end key after unreplicated rangeID local span",
+			span: roachpb.Span{Key: nil, EndKey: keys.MakeRangeIDUnreplicatedPrefix(1).
+				PrefixEnd().Next()},
+			expectErr: false,
+		},
+		{
+			name:      "span fully before unreplicated rangeID local span",
+			span:      roachpb.Span{Key: roachpb.KeyMin, EndKey: keys.MakeRangeIDUnreplicatedPrefix(0)},
+			expectErr: false,
+		},
+		{
+			name:      "span fully after unreplicated rangeID local span",
+			span:      roachpb.Span{Key: keys.LocalRangePrefix, EndKey: roachpb.KeyMax},
+			expectErr: false,
+		},
+		{
+			name:      "span fully overlaps unreplicated rangeID local span",
+			span:      roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+			expectErr: true,
+		},
+		{
+			name:      "span partially overlaps with start of unreplicated rangeID local span",
+			span:      roachpb.Span{Key: roachpb.KeyMin, EndKey: keys.RaftTruncatedStateKey(1)},
+			expectErr: true,
+		},
+		{
+			name:      "span partially overlaps with end of unreplicated rangeID local span",
+			span:      roachpb.Span{Key: keys.RaftTruncatedStateKey(1), EndKey: roachpb.KeyMax},
+			expectErr: true,
+		},
+		{
+			name: "span within with unreplicated rangeID local span",
+			span: roachpb.Span{Key: keys.RaftTruncatedStateKey(1),
+				EndKey: keys.RangeLastReplicaGCTimestampKey(1)},
+			expectErr: true,
+		},
+		{
+			name: "span overlaps with multiple unreplicated range local span",
+			span: roachpb.Span{Key: keys.RaftTruncatedStateKey(1),
+				EndKey: keys.RaftTruncatedStateKey(3)},
+			expectErr: true,
+		},
+		{
+			name: "span from end of unreplicated RangeID, to next replicated RangeID",
+			span: roachpb.Span{Key: keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd(),
+				EndKey: keys.RangeVersionKey(2)},
+			expectErr: false,
+		},
+		{
+			name: "span from end of unreplicated RangeID, to next unreplicated RangeID",
+			span: roachpb.Span{Key: keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd(),
+				EndKey: keys.RangeLastReplicaGCTimestampKey(2)},
+			expectErr: true,
+		},
+		{
+			name: "point end key at keys.MakeRangeIDUnreplicatedPrefix(0) with nil start",
+			span: roachpb.Span{Key: nil,
+				EndKey: keys.MakeRangeIDUnreplicatedPrefix(0)},
+			expectErr: false,
+		},
+		{
+			name: "point end key at keys.LocalRangePrefix with nil start",
+			span: roachpb.Span{Key: nil,
+				EndKey: keys.LocalRangePrefix},
+			expectErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := overlapsUnreplicatedRangeIDLocalKeys(tc.span)
+			if tc.expectErr {
+				require.Errorf(t, err, "expected error for span %s", tc.span)
+			} else {
+				require.NoErrorf(t, err, "expected no error for span %s", tc.span)
+			}
+		})
+	}
+}
+
+// TestOverlapsStoreLocalKeys verifies that the function
+// overlapsStoreLocalKeys() successfully catches any overlap with
+// store local keys.
+func TestOverlapsStoreLocalKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testCases := []struct {
+		name      string
+		span      roachpb.Span
+		expectErr bool
+	}{
+		{
+			name: "point start key before store local span",
+			span: roachpb.Span{Key: roachpb.Key(keys.LocalStorePrefix).
+				Prevish(roachpb.PrevishKeyLength), EndKey: nil},
+			expectErr: false,
+		},
+		{
+			name:      "point start key at store local span start",
+			span:      roachpb.Span{Key: keys.LocalStorePrefix, EndKey: nil},
+			expectErr: true,
+		},
+		{
+			name:      "point start key within store local span",
+			span:      roachpb.Span{Key: keys.StoreIdentKey(), EndKey: nil},
+			expectErr: true,
+		},
+		{
+			name:      "point start key at store local span end",
+			span:      roachpb.Span{Key: keys.LocalStoreMax, EndKey: nil},
+			expectErr: false,
+		},
+		{
+			name:      "point end key before store local span",
+			span:      roachpb.Span{Key: nil, EndKey: keys.LocalStorePrefix},
+			expectErr: false,
+		},
+		{
+			name:      "point end key at store local span start",
+			span:      roachpb.Span{Key: nil, EndKey: roachpb.Key(keys.LocalStorePrefix).Next()},
+			expectErr: true,
+		},
+		{
+			name:      "point end key within store local span",
+			span:      roachpb.Span{Key: nil, EndKey: keys.StoreIdentKey()},
+			expectErr: true,
+		},
+		{
+			name:      "point end key at store local span end",
+			span:      roachpb.Span{Key: nil, EndKey: keys.LocalStoreMax},
+			expectErr: true,
+		},
+		{
+			name:      "span fully before store local span",
+			span:      roachpb.Span{Key: roachpb.KeyMin, EndKey: keys.LocalStorePrefix},
+			expectErr: false,
+		},
+		{
+			name:      "span fully after store local span",
+			span:      roachpb.Span{Key: keys.LocalStoreMax, EndKey: roachpb.KeyMax},
+			expectErr: false,
+		},
+		{
+			name:      "span fully overlaps store local span",
+			span:      roachpb.Span{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax},
+			expectErr: true,
+		},
+		{
+			name:      "span partially overlaps with start of store local span",
+			span:      roachpb.Span{Key: roachpb.KeyMin, EndKey: keys.StoreIdentKey()},
+			expectErr: true,
+		},
+		{
+			name:      "span partially overlaps with end of store local span",
+			span:      roachpb.Span{Key: keys.StoreIdentKey(), EndKey: roachpb.KeyMax},
+			expectErr: true,
+		},
+		{
+			name:      "span within store local span",
+			span:      roachpb.Span{Key: keys.StoreGossipKey(), EndKey: keys.StoreIdentKey()},
+			expectErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := overlapsStoreLocalKeys(tc.span)
+			if tc.expectErr {
+				require.Errorf(t, err, "expected error for span %s", tc.span)
+			} else {
+				require.NoErrorf(t, err, "expected no error for span %s", tc.span)
+			}
+		})
+	}
+}
