@@ -888,6 +888,59 @@ func DisableReadWriterAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	}
 }
 
+func disableAssertionHelper(
+	rw storage.ReadWriter, disableAssertion func(spans *SpanSet),
+) storage.ReadWriter {
+	switch v := rw.(type) {
+	case *spanSetBatch:
+		// Create a SpanSet wrapper that will be used to disable a specific
+		// assertion ephemerally.
+		spans := &SpanSet{
+			spans:                  v.ReadWriter.spanSetReader.spans.spans,
+			forbiddenSpansMatchers: v.ReadWriter.spanSetReader.spans.forbiddenSpansMatchers,
+			allowForbidden:         v.ReadWriter.spanSetReader.spans.allowForbidden,
+			allowUndeclared:        v.ReadWriter.spanSetReader.spans.allowUndeclared,
+		}
+
+		// Call the function that will disable some assertion.
+		disableAssertion(spans)
+
+		// Create a new spanSetBatch with the modified span sets.
+		return &spanSetBatch{
+			ReadWriter: ReadWriter{
+				spanSetReader: spanSetReader{r: v.b, spans: spans, spansOnly: v.spansOnly, ts: v.ts},
+				spanSetWriter: spanSetWriter{w: v.b, spans: spans, spansOnly: v.spansOnly, ts: v.ts},
+			},
+			b:         v.b,
+			spans:     spans,
+			spansOnly: v.spansOnly,
+			ts:        v.ts,
+		}
+	default:
+		return rw
+	}
+}
+
+// DisableLatchAssertions returns a new batch wrapper with latch assertions
+// disabled. It does not modify the original batch. The returned batch shares
+// the same underlying storage.Batch but has its own SpanSet wrapper with the
+// latch assertion disabled.
+func DisableLatchAssertions(rw storage.ReadWriter) storage.ReadWriter {
+	return disableAssertionHelper(rw, func(spans *SpanSet) {
+		spans.DisableUndeclaredAccessAssertions()
+	})
+}
+
+// DisableForbiddenSpanAssertionsOnBatch returns a new batch wrapper with
+// forbidden span assertions disabled. It does not modify the original batch.
+// The returned batch shares the same underlying storage.Batch but has its own
+// SpanSet wrapper with the forbidden span assertion disabled.
+func DisableForbiddenSpanAssertionsOnBatch(rw storage.ReadWriter) storage.ReadWriter {
+	return disableAssertionHelper(rw, func(spans *SpanSet) {
+		spans.DisableForbiddenSpansAssertions()
+	})
+}
+
 // addLockTableSpans adds corresponding lock table spans for the declared
 // spans. This is to implicitly allow raw access to separated intents in the
 // lock table for any declared keys. Explicitly declaring lock table spans is
