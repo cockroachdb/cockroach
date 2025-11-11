@@ -571,6 +571,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
+		case *tree.AlterTableDropPartition:
+			// TODO: Implement DROP PARTITION WITH DATA
+			return unimplemented.NewWithIssueDetail(0,
+				"drop partition with data",
+				"DROP PARTITION WITH DATA is not yet implemented")
+
 		case *tree.AlterTableValidateConstraint:
 			name := string(t.Constraint)
 			c := catalog.FindConstraintByName(n.tableDesc, name)

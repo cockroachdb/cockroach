@@ -3803,6 +3803,7 @@ alter_table_cmd ::=
 	| 'ALTER' opt_column column_name 'DROP' 'IDENTITY' 'IF' 'EXISTS'
 	| 'ALTER' opt_column column_name 'DROP' 'STORED'
 	| 'ALTER' opt_column column_name 'SET' 'NOT' 'NULL'
+	| 'DROP' 'PARTITION' partition_name 'WITH' 'DATA'
 	| 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior
 	| 'DROP' opt_column column_name opt_drop_behavior
 	| 'ALTER' opt_column column_name opt_set_data 'TYPE' typename opt_collate opt_alter_column_using

@@ -1891,6 +1891,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 // anywhere else in the grammar, but it's definitely risky. We can blame any
 // funny behavior of UNBOUNDED on the SQL standard, though.
 %nonassoc  UNBOUNDED         // ideally should have same precedence as IDENT
+%nonassoc  DROP_COLUMN_PRECEDENCE
 %nonassoc  IDENT NULL PARTITION RANGE ROWS GROUPS PRECEDING FOLLOWING CUBE ROLLUP
 %left      CONCAT FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH REMOVE_PATH AT_AT DISTANCE COS_DISTANCE NEG_INNER_PRODUCT // multi-character ops
 %left      '|'
@@ -2975,6 +2976,15 @@ alter_table_cmd:
   {
     return unimplemented(sqllex, "alter table alter column add")
   }
+  // ALTER TABLE <name> DROP PARTITION <name> WITH DATA
+| DROP PARTITION partition_name WITH DATA
+  {
+    $$.val = &tree.AlterTableDropPartition{
+      IfExists: false,
+      Partition: tree.Name($3),
+      WithData: true,
+    }
+  }
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
 | DROP opt_column IF EXISTS column_name opt_drop_behavior
   {
@@ -2985,7 +2995,7 @@ alter_table_cmd:
     }
   }
   // ALTER TABLE <name> DROP [COLUMN] <colname> [RESTRICT|CASCADE]
-| DROP opt_column column_name opt_drop_behavior
+| DROP opt_column column_name opt_drop_behavior %prec DROP_COLUMN_PRECEDENCE
   {
     $$.val = &tree.AlterTableDropColumn{
       IfExists: false,
@@ -13412,7 +13422,7 @@ opt_in_schemas:
 
 opt_column:
   COLUMN {}
-| /* EMPTY */ {}
+| /* EMPTY */ %prec DROP_COLUMN_PRECEDENCE {}
 
 opt_set_data:
   SET DATA {}

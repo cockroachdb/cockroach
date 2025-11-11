@@ -61,6 +61,7 @@ func (*AlterTableDropColumn) alterTableCmd()         {}
 func (*AlterTableDropConstraint) alterTableCmd()     {}
 func (*AlterTableDropNotNull) alterTableCmd()        {}
 func (*AlterTableDropStored) alterTableCmd()         {}
+func (*AlterTableDropPartition) alterTableCmd()      {}
 func (*AlterTableSetNotNull) alterTableCmd()         {}
 func (*AlterTableRenameColumn) alterTableCmd()       {}
 func (*AlterTableRenameConstraint) alterTableCmd()   {}
@@ -86,6 +87,7 @@ var _ AlterTableCmd = &AlterTableDropColumn{}
 var _ AlterTableCmd = &AlterTableDropConstraint{}
 var _ AlterTableCmd = &AlterTableDropNotNull{}
 var _ AlterTableCmd = &AlterTableDropStored{}
+var _ AlterTableCmd = &AlterTableDropPartition{}
 var _ AlterTableCmd = &AlterTableSetNotNull{}
 var _ AlterTableCmd = &AlterTableRenameColumn{}
 var _ AlterTableCmd = &AlterTableRenameConstraint{}
@@ -333,6 +335,30 @@ func (node *AlterTableDropConstraint) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Constraint)
 	if node.DropBehavior != DropDefault {
 		ctx.Printf(" %s", node.DropBehavior)
+	}
+}
+
+// AlterTableDropPartition represents a DROP PARTITION command.
+type AlterTableDropPartition struct {
+	IfExists  bool
+	Partition Name
+	WithData  bool
+}
+
+// TelemetryName implements the AlterTableCmd interface.
+func (node *AlterTableDropPartition) TelemetryName() string {
+	return "drop_partition"
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableDropPartition) Format(ctx *FmtCtx) {
+	ctx.WriteString(" DROP PARTITION ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(&node.Partition)
+	if node.WithData {
+		ctx.WriteString(" WITH DATA")
 	}
 }
 
