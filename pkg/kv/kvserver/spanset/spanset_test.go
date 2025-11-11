@@ -394,3 +394,237 @@ func TestSpanSetWriteImpliesRead(t *testing.T) {
 		t.Errorf("expected to be allowed to read rwSpan, error: %+v", err)
 	}
 }
+
+// Test that Contains correctly determines if s1 contains s2, including
+// support for spans with nil start/end keys.
+func TestContains(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name     string
+		s1       roachpb.Span
+		s2       roachpb.Span
+		expected bool
+	}{
+		{
+			name:     "s1 contains s2 exactly",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			s2:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			expected: true,
+		},
+		{
+			name:     "s1 contains s2",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
+			s2:       roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+			expected: true,
+		},
+		{
+			name:     "s1 contains s2 start point span",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
+			s2:       roachpb.Span{Key: roachpb.Key("a")},
+			expected: true,
+		},
+		{
+			name:     "s1 contains s2 end point span",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
+			s2:       roachpb.Span{EndKey: roachpb.Key("d")},
+			expected: true,
+		},
+		{
+			name:     "s1 point contains s2 point same key",
+			s1:       roachpb.Span{Key: roachpb.Key("a")},
+			s2:       roachpb.Span{Key: roachpb.Key("a")},
+			expected: true,
+		},
+		{
+			name:     "s1 with nil start contains s2 with nil end",
+			s1:       roachpb.Span{EndKey: roachpb.Key("d").Next()},
+			s2:       roachpb.Span{Key: roachpb.Key("d")},
+			expected: true,
+		},
+		{
+			name:     "s1 with nil start contains s2",
+			s1:       roachpb.Span{EndKey: roachpb.Key("d").Next()},
+			s2:       roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("d").Next()},
+			expected: true,
+		},
+		{
+			name:     "s1 with nil start contains s2 with nil start",
+			s1:       roachpb.Span{EndKey: roachpb.Key("d")},
+			s2:       roachpb.Span{EndKey: roachpb.Key("d")},
+			expected: true,
+		},
+		{
+			name:     "s1 does not contain s2 - disjoint",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			s2:       roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("f")},
+			expected: false,
+		},
+		{
+			name:     "s1 does not contain s2 - partial overlap",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			s2:       roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")},
+			expected: false,
+		},
+		{
+			name:     "s1 does not contain s2 - s2 larger",
+			s1:       roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+			s2:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
+			expected: false,
+		},
+		{
+			name:     "s1 does not contain s2 point - outside range",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			s2:       roachpb.Span{Key: roachpb.Key("d")},
+			expected: false,
+		},
+		{
+			name:     "s1 with nil end does not contain disjoint span",
+			s1:       roachpb.Span{Key: roachpb.Key("a")},
+			s2:       roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")},
+			expected: false,
+		},
+		{
+			name:     "s1 with nil start does not contain disjoint span",
+			s1:       roachpb.Span{EndKey: roachpb.Key("b")},
+			s2:       roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")},
+			expected: false,
+		},
+		{
+			name:     "s1 with nil end does not contain s2 with nil start",
+			s1:       roachpb.Span{Key: roachpb.Key("a")},
+			s2:       roachpb.Span{Key: roachpb.Key("b")},
+			expected: false,
+		},
+		{
+			name:     "s1 with nil start does not contain s2 with nil end",
+			s1:       roachpb.Span{EndKey: roachpb.Key("a")},
+			s2:       roachpb.Span{EndKey: roachpb.Key("d")},
+			expected: false,
+		},
+		{
+			name:     "s1 with nil start does not contain s2",
+			s1:       roachpb.Span{EndKey: roachpb.Key("d")},
+			s2:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, Contains(tc.s1, tc.s2))
+		})
+	}
+}
+
+// Test that Overlaps correctly determines if s1 overlaps s2, including
+// support for spans with nil start/end keys.
+func TestOverlaps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name     string
+		s1       roachpb.Span
+		s2       roachpb.Span
+		expected bool
+	}{
+		{
+			name:     "s1 overlaps s2 exactly",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			s2:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			expected: true,
+		},
+		{
+			name:     "s1 overlaps s2 partial",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			s2:       roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")},
+			expected: true,
+		},
+		{
+			name:     "s1 contains s2",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
+			s2:       roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+			expected: true,
+		},
+		{
+			name:     "s2 contains s1",
+			s1:       roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+			s2:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
+			expected: true,
+		},
+		{
+			name:     "s1 overlaps s2 with nil end",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
+			s2:       roachpb.Span{Key: roachpb.Key("a")},
+			expected: true,
+		},
+		{
+			name:     "s1 overlaps s2 with nil start",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
+			s2:       roachpb.Span{EndKey: roachpb.Key("d")},
+			expected: true,
+		},
+		{
+			name:     "s1 point overlaps s2 point same key",
+			s1:       roachpb.Span{Key: roachpb.Key("a")},
+			s2:       roachpb.Span{Key: roachpb.Key("a")},
+			expected: true,
+		},
+		{
+			name:     "s1 point overlaps s2 point same end key",
+			s1:       roachpb.Span{EndKey: roachpb.Key("a")},
+			s2:       roachpb.Span{EndKey: roachpb.Key("a")},
+			expected: true,
+		},
+		{
+			name:     "s1 with nil start overlaps s2",
+			s1:       roachpb.Span{EndKey: roachpb.Key("d").Next()},
+			s2:       roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("d").Next()},
+			expected: true,
+		},
+		{
+			name:     "s1 does not overlap s2",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			s2:       roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("f")},
+			expected: false,
+		},
+		{
+			name:     "s1 does not overlap s2 - adjacent",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			s2:       roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+			expected: false,
+		},
+		{
+			name:     "s1 does not overlap s2 with nil end key",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			s2:       roachpb.Span{Key: roachpb.Key("c")},
+			expected: false,
+		},
+		{
+			name:     "s1 does not overlap s2 with nil start key",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			s2:       roachpb.Span{EndKey: roachpb.Key("a")},
+			expected: false,
+		},
+		{
+			name:     "s1 does not overlap s2 with nil start key",
+			s1:       roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			s2:       roachpb.Span{EndKey: roachpb.Key("d")},
+			expected: false,
+		},
+		{
+			name:     "s1 with nil start overlaps s2 with nil end",
+			s1:       roachpb.Span{EndKey: roachpb.Key("d").Next()},
+			s2:       roachpb.Span{Key: roachpb.Key("d")},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, Overlaps(tc.s1, tc.s2))
+			// Overlaps should be commutative.
+			require.Equal(t, tc.expected, Overlaps(tc.s2, tc.s1))
+		})
+	}
+}
