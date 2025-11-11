@@ -1,0 +1,117 @@
+
+
+{{ template "layout-start" .}}
+
+
+<nav class="breadcrumbs" aria-label="Breadcrumbs">
+  <ul>
+    <li class="<h1>">Databases</li>
+    <li class="<h2>">Database: movr</li>
+    <li class="<h3>">public.promo_codes</li>
+  </ul>
+</nav>
+
+<div role=tablist aria-label="Table">
+  <button role=tab aria-controls=overview aria-selected=true>Overview</button>
+  <button role=tab aria-controls=grants>Grants</button>
+  <button role=tab aria-controls=indexes>Indexes</button>
+</div>
+
+
+<div id=overview role=tabpanel>
+  <div class="box">
+    <pre><code class="language-sql">CREATE TABLE public.order_line (
+  ol_o_id INT8 NOT NULL,
+  ol_d_id INT8 NOT NULL,
+  ol_w_id INT8 NOT NULL,
+  ol_number INT8 NOT NULL,
+  ol_i_id INT8 NOT NULL,
+  ol_supply_w_id INT8 NULL,
+  ol_delivery_d TIMESTAMP NULL,
+  ol_quantity INT8 NULL,
+  ol_amount DECIMAL(6,2) NULL,
+  ol_dist_info CHAR(24) NULL,
+  CONSTRAINT order_line_pkey PRIMARY KEY (ol_w_id ASC, ol_d_id ASC, ol_o_id DESC, ol_number ASC),
+  CONSTRAINT order_line_ol_w_id_ol_d_id_ol_o_id_fkey FOREIGN KEY (ol_w_id, ol_d_id, ol_o_id) REFERENCES public."order"(o_w_id, o_d_id, o_id) NOT VALID,
+  CONSTRAINT order_line_ol_supply_w_id_ol_i_id_fkey FOREIGN KEY (ol_supply_w_id, ol_i_id) REFERENCES public.stock(s_w_id, s_i_id) NOT VALID
+);</code></pre>
+  </div>
+
+  <div class="flex-row justify-content:end">
+    <div>Last updated: 17 minutes ago</div>
+  </div>
+
+  <div class="flex-switch">
+    <div class="box">
+      <dl class="table rows" style="width: auto;">
+        <div><dt>Size:     </dt><dd>670.0 GiB</dd></div>
+        <div><dt>Ranges:    </dt><dd>1766</dd></div>
+        <div><dt>Replicas:  </dt><dd>5298</dd></div>
+        <div><dt>Regions/Nodes:   </dt><dd><chip>N1</chip><chip>N2</chip></dd></div>
+      </dl>      
+    </div>
+
+    <div class="box">
+      <dl class="table rows" style="width: auto;">
+        <div><dt>% of Live data:     </dt><dd>97.9 %
+531.4 GiB live data / 542.8 GiB total</dd></div>
+        <div><dt>Auto stats collections:    </dt><dd><chip class="ok">Enabled</chip></dd></div>
+        <div><dt>Stats last updated:  </dt><dd>Nov 10, 2025 at 23:14:57 EST</dd></div>
+      </dl>
+    </div>
+  </div>
+
+</div>
+
+<div id=grants role=tabpanel hidden>
+  <table>
+    <thead>
+      <tr>
+        <th>Grantee</th>
+        <th>Privileges</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>admin</td>
+        <td>ALL</td>
+      </tr>
+      <tr>
+        <td>public</td>
+        <td>CONNECT</td>
+      </tr>
+      <tr>
+        <td>root</td>
+        <td>ALL</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div id=indexes role=tabpanel hidden>
+  <div class="flex-row justify-content:end width:100%">
+    <div>Last Reset: Never</div>
+    <button class="warn">Reset all index stats</button>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Index Name</th>
+        <th>Last Read</th>
+        <th>Total Reads</th>
+        <th>Recommendations</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>promo_codes_pkey</td>
+        <td>Nov 11, 2025 at 21:23:04 UTC</td>
+        <td>1878</td>
+        <td>None</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{{ template "layout-end" .}}

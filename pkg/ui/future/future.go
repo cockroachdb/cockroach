@@ -362,6 +362,18 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		handleMetricsDashboard(w, r, cfg)
 	}).Methods("GET")
 
+	futureRouter.HandleFunc("/databases", func(w http.ResponseWriter, r *http.Request) {
+		handleDatabases(w, r, cfg)
+	}).Methods("GET")
+
+	futureRouter.HandleFunc("/databases/{id}", func(w http.ResponseWriter, r *http.Request) {
+		handleDatabase(w, r, cfg)
+	}).Methods("GET")
+
+	futureRouter.HandleFunc("/tables/{id}", func(w http.ResponseWriter, r *http.Request) {
+		handleTable(w, r, cfg)
+	}).Methods("GET")
+
 	futureRouter.HandleFunc("/sqlactivity", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/future/sqlactivity/statements", http.StatusFound)
 	}).Methods("GET")
@@ -391,6 +403,48 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 	futureRouter.PathPrefix("/assets/").HandlerFunc(handleAssets)
 
 	return router.ServeHTTP
+}
+
+func handleDatabases(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Execute the pre-parsed template
+	err := templates.ExecuteTemplate(w, "databases.html", PageData{
+		IndexHTMLArgs: cfg,
+		Data:          nil,
+	})
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
+}
+
+func handleDatabase(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Execute the pre-parsed template
+	err := templates.ExecuteTemplate(w, "database.html", PageData{
+		IndexHTMLArgs: cfg,
+		Data:          nil,
+	})
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
+}
+
+func handleTable(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Execute the pre-parsed template
+	err := templates.ExecuteTemplate(w, "table.html", PageData{
+		IndexHTMLArgs: cfg,
+		Data:          nil,
+	})
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
 }
 
 func handleGetDiagnosticsControls(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
@@ -1119,7 +1173,9 @@ func handleMetricsDashboard(w http.ResponseWriter, r *http.Request, cfg IndexHTM
 
 // expandDashboardMetrics expands per-node and per-store metrics into individual metric entries
 // If selectedNode is not empty, only metrics for that node are included
-func expandDashboardMetrics(graphs []DashboardGraph, nodeIDs []int32, selectedNode string) []DashboardGraph {
+func expandDashboardMetrics(
+	graphs []DashboardGraph, nodeIDs []int32, selectedNode string,
+) []DashboardGraph {
 	var expandedGraphs []DashboardGraph
 
 	// Parse selectedNode if present

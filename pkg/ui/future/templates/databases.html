@@ -1,0 +1,87 @@
+{{ template "layout-start" .}}
+
+
+<nav class="breadcrumbs" aria-label="Breadcrumbs">
+  <ul>
+    <li class="<h1>">Databases</li>
+  </ul>
+</nav>
+
+<form class="box flex-row">
+  <div>
+    <label for=search>Search:</label>
+    <input type="text" name=search id=search placeholder="Search databases">
+  </div>
+  <div>
+    <label for=nodes>Nodes:</label>
+    <select id=nodes name=nodes>
+      <option value="all">All</option>
+      <optgroup label="us-east1">
+        <option value="all-us-east1">All in us-east1</option>
+        <option value="n1">n1</option>
+        <option value="n2">n2</option>
+        <option value="n3">n3</option>
+      </optgroup>
+      <optgroup label="us-west2">
+        <option value="all-us-west2">All in us-west2</option>
+        <option value="n4">n4</option>
+        <option value="n5">n5</option>
+        <option value="n6">n6</option>
+      </optgroup>
+    </select>
+  </div>
+  <div class="flex-grow:2"></div>
+  <div class="flex-column">
+    <div class="justify-item:end">
+      Auto stats collection: <chip class="ok">enabled</chip>
+    </div>
+    <label for=refresh>Last refreshed: a few seconds ago <button id=refresh name=refresh>Refresh</button></label>
+  </div>
+</form>
+
+<div x-data="tableSort()" style="overflow-x: auto;">
+  <table id="table-data">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Size</th>
+        <th>Tables</th>
+        <th>Regions/Nodes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>movr</td>
+        <td>32.3 MiB</td>
+        <td>6</td>
+        <td>
+          <chip>us-east1 (3)</chip>
+          <chip>us-west1 (3)</chip>
+          <chip>europe-west1 (3)</chip>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="flex-row" style="justify-content: space-between; align-items: center; margin-top: 1rem;">
+    <div>
+      <span x-text="paginationInfo"></span>
+    </div>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <button
+        @click="prevPage()"
+        :disabled="currentPage === 1"
+        type="button">
+        ← Previous
+      </button>
+      <span>Page <span x-text="currentPage"></span> of <span x-text="totalPages"></span></span>
+      <button
+        @click="nextPage()"
+        :disabled="currentPage === totalPages"
+        type="button">
+        Next →
+      </button>
+    </div>
+  </div>
+<div>
+
+{{ template "layout-end" .}}
