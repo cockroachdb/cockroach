@@ -307,6 +307,7 @@ npm_translate_lock(
         "//pkg/ui/workspaces/db-console/src/js:package.json",
         "//pkg/ui/workspaces/e2e-tests:package.json",
         "//pkg/ui/workspaces/eslint-plugin-crdb:package.json",
+        "//pkg/ui/workspaces/roachprod-ui:package.json",
     ],
     npmrc = "//pkg/ui:.npmrc.bazel",
     patch_args = {

@@ -1,0 +1,49 @@
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//pkg/ui/workspaces/roachprod-ui:webpack-cli/package_json.bzl", webpack_bin = "bin")
+
+npm_link_all_packages(name = "node_modules")
+
+WEBPACK_DATA = glob(
+    include = [
+        "public/**",
+        "src/**",
+    ],
+    exclude = [
+        "src/**/*.spec.tsx",
+        "src/**/*.spec.ts",
+        "src/**/*.test.tsx",
+        "src/**/*.test.ts",
+    ],
+)
+
+WEBPACK_SRCS = [
+    "package.json",
+    "tsconfig.json",
+    "webpack.config.js",
+]
+
+# Build the roachprod UI with webpack
+webpack_bin.webpack_cli(
+    name = "roachprod-ui",
+    srcs = WEBPACK_SRCS + WEBPACK_DATA + [
+        ":node_modules",
+    ],
+    outs = [
+        "dist/bundle.js",
+        "dist/bundle.js.LICENSE.txt",
+        "dist/index.html",
+        "dist/roachprod-wonderland.png",
+    ],
+    args = [
+        "--config",
+        "webpack.config.js",
+        "--mode",
+        "production",
+        "--env",
+        "output=./dist",
+        "--env",
+        "bazel=true",
+    ],
+    chdir = package_name(),
+    visibility = ["//pkg/roachprod/ui:__pkg__"],
+)
