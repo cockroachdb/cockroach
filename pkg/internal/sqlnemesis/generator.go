@@ -5,16 +5,23 @@
 
 package sqlnemesis
 
-import "math/rand"
+import (
+	gosql "database/sql"
+	"math/rand"
+
+	"github.com/cockroachdb/errors"
+)
 
 type GeneratorConfig struct {
-	numSteps int
+	NumIterations   int
+	OpsPerIteration int
+	Validators      []Validator
 }
 
 type Validator interface {
-	GenerateRandomSetup(rng *rand.Rand)
-	GenerateRandomOperation(rng *rand.Rand) Operation
-	Validate() error
+	Init(*gosql.DB, *rand.Rand) error
+	GenerateRandomOperation(*rand.Rand) (_ string, ignoreErrors bool)
+	Validate(*gosql.DB) error
 }
 
 // responsible for picking types of queries, types of validation
@@ -23,20 +30,23 @@ type Generator struct {
 }
 
 func MakeGenerator(config GeneratorConfig) (*Generator, error) {
-	return &Generator{
-		validators: []Validator(nil),
-	}, nil
+	if len(config.Validators) == 0 {
+		return nil, errors.Newf("no validators provided")
+	}
+
+	// TODO: perhaps pick a subset of validators.
+	return &Generator{validators: config.Validators}, nil
 }
 
-func (g *Generator) RandStep(rng *rand.Rand) Step {
+func (g *Generator) RandOperation(rng *rand.Rand) (_ string, ignoreErrors bool) {
 	// pick a random validator and pick an operation from that
-	return Step{g.validators[rng.Intn(len(g.validators))].GenerateRandomOperation(rng)}
+	return g.validators[rng.Intn(len(g.validators))].GenerateRandomOperation(rng)
 }
 
-func (g *Generator) Validate() []error {
+func (g *Generator) Validate(db *gosql.DB) []error {
 	var failures []error
 	for _, validator := range g.validators {
-		if err := validator.Validate(); err != nil {
+		if err := validator.Validate(db); err != nil {
 			failures = append(failures, err)
 		}
 	}

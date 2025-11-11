@@ -7,31 +7,57 @@ package sqlnemesis
 
 import (
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 )
 
-func RunNemesis(db *gosql.DB, rnd *rand.Rand, config GeneratorConfig) ([]error, error) {
-	g, err := MakeGenerator(rnd, config)
+// TODO: figure out observability / reproducibility story.
+func log(s string) {
+	fmt.Printf("%s\n", s)
+}
+
+func RunNemesis(db *gosql.DB, rng *rand.Rand, config GeneratorConfig) ([]error, error) {
+	g, err := MakeGenerator(config)
 	if err != nil {
 		return nil, err
 	}
 
-	// not sure if this should be multi-threaded or single-threaded?
-	// start with single thread for now
-	for i := 0; i < config.numSteps; i++ {
-		step := g.RandStep(rng)
-		err := applyStep(step)
+	// Initialize the validators (which will also initialize the DB state).
+	for _, validator := range g.validators {
+		err = validator.Init(db, rng)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	// we don't think our validator needs to know which statements have run
-	// we only need the generator to know which validations to apply
-	failures := g.Validate()
-	return failures, nil
+	for iteration := 0; iteration < config.NumIterations; iteration++ {
+		log(fmt.Sprintf("-- iteration %d", iteration))
+		// TODO: not sure if this should be multi-threaded or single-threaded?
+		// start with single thread for now
+		for i := 0; i < config.OpsPerIteration; i++ {
+			op, ignoreErrors := g.RandOperation(rng)
+			err = apply(db, op)
+			if err != nil {
+				if !ignoreErrors {
+					log(op)
+					return nil, err
+				}
+			} else {
+				log(op)
+			}
+		}
+
+		// we don't think our validator needs to know which statements have run
+		// we only need the generator to know which validations to apply
+		failures := g.Validate(db)
+		if len(failures) > 0 {
+			return failures, nil
+		}
+	}
+	return nil, nil
 }
 
-func applyStep(step Step) error {
-	return nil
+func apply(db *gosql.DB, stmt string) error {
+	_, err := db.Exec(stmt)
+	return err
 }
