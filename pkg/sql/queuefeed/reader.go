@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -35,6 +36,7 @@ const (
 	readerStateBatching readerState = iota
 	readerStateHasUncommittedBatch
 	readerStateCheckingForReassignment
+	readerStateDead
 )
 
 // has rangefeed on data. reads from it. handles handoff
@@ -61,8 +63,9 @@ type Reader struct {
 
 	triggerCheckForReassignment chan struct{}
 
-	cancel  context.CancelCauseFunc
-	goroCtx context.Context
+	cancel     context.CancelCauseFunc
+	goroCtx    context.Context
+	isShutdown atomic.Bool
 }
 
 func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, rff *rangefeed.Factory, codec keys.SQLCodec, leaseMgr *lease.Manager, name string, tableDescID int64) *Reader {
@@ -190,6 +193,8 @@ func (r *Reader) setupRangefeed(ctx context.Context) {
 func (r *Reader) run(ctx context.Context) {
 	defer func() {
 		fmt.Println("run done")
+		r.isShutdown.Store(true)
+		r.mgr.forgetReader(r.name)
 	}()
 
 	for {
@@ -209,6 +214,10 @@ func (r *Reader) run(ctx context.Context) {
 
 func (r *Reader) GetRows(ctx context.Context, limit int) ([]tree.Datums, error) {
 	fmt.Printf("GetRows start\n")
+
+	if r.isShutdown.Load() {
+		return nil, errors.New("reader is shutting down")
+	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -266,13 +275,17 @@ func (r *Reader) GetRows(ctx context.Context, limit int) ([]tree.Datums, error) 
 }
 
 func (r *Reader) ConfirmReceipt(ctx context.Context) {
+	if r.isShutdown.Load() {
+		return
+	}
+
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 
 		fmt.Printf("confirming receipt with inflightBuffer len: %d\n", len(r.mu.inflightBuffer))
 
-		clear(r.mu.inflightBuffer)
+		r.mu.inflightBuffer = r.mu.inflightBuffer[:0]
 		r.mu.state = readerStateCheckingForReassignment
 	}()
 
@@ -283,6 +296,15 @@ func (r *Reader) ConfirmReceipt(ctx context.Context) {
 		return
 	case r.triggerCheckForReassignment <- struct{}{}:
 	}
+}
+
+func (r *Reader) IsAlive() bool {
+	return !r.isShutdown.Load()
+}
+
+func (r *Reader) Close() error {
+	r.cancel(errors.New("reader closing"))
+	return nil
 }
 
 func (r *Reader) checkForReassignment(ctx context.Context) error {
