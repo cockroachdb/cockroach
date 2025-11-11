@@ -81,7 +81,7 @@
 <nav class="breadcrumbs" aria-label="Breadcrumbs">
   <ul>
     <li class="<h1>">Metrics</li>
-    <li class="<h2>">{{.Data.DashboardName}}</li>
+    <li class="<h2>">{{.Data.DashboardDisplayName}}</li>
   </ul>
 </nav>
 <div class="box flex-row">
@@ -95,7 +95,7 @@
         hx-target="body"
         hx-push-url="true">
         {{range .Data.AllDashboards}}
-        <option value="{{.}}" {{if eq . $.Data.DashboardName}}selected{{end}}>{{.}}</option>
+        <option value="{{.Name}}" {{if eq .Name $.Data.DashboardName}}selected{{end}}>{{.DisplayName}}</option>
         {{end}}
       </select>
     </div>

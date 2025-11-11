@@ -1010,10 +1010,17 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 // MetricsDashboardData contains data for rendering the metrics dashboard page
 type MetricsDashboardData struct {
-	DashboardName string
-	Graphs        []DashboardGraph
-	AllDashboards []string
-	NodeIDs       []int32
+	DashboardName        string
+	DashboardDisplayName string
+	Graphs               []DashboardGraph
+	AllDashboards        []DashboardInfo
+	NodeIDs              []int32
+}
+
+// DashboardInfo contains the internal name and display name for a dashboard
+type DashboardInfo struct {
+	Name        string
+	DisplayName string
 }
 
 // handleMetricsDashboard serves the metrics dashboard page
@@ -1047,17 +1054,37 @@ func handleMetricsDashboard(w http.ResponseWriter, r *http.Request, cfg IndexHTM
 	expandedGraphs := expandDashboardMetrics(graphs, nodeIDs)
 
 	// Get list of all dashboard names for dropdown
-	allDashboards := []string{
+	dashboardOrder := []string{
 		"overview", "hardware", "runtime", "sql", "storage",
 		"replication", "distributed", "queues", "networking",
 		"requests", "overload", "changefeeds", "ttl",
+		"logicalDataReplication", "crossClusterReplication",
+	}
+
+	var allDashboards []DashboardInfo
+	for _, name := range dashboardOrder {
+		displayName := DashboardDisplayNames[name]
+		if displayName == "" {
+			displayName = name // fallback to internal name if no display name defined
+		}
+		allDashboards = append(allDashboards, DashboardInfo{
+			Name:        name,
+			DisplayName: displayName,
+		})
+	}
+
+	// Get display name for current dashboard
+	displayName := DashboardDisplayNames[dashboardName]
+	if displayName == "" {
+		displayName = dashboardName
 	}
 
 	data := MetricsDashboardData{
-		DashboardName: dashboardName,
-		Graphs:        expandedGraphs,
-		AllDashboards: allDashboards,
-		NodeIDs:       nodeIDs,
+		DashboardName:        dashboardName,
+		DashboardDisplayName: displayName,
+		Graphs:               expandedGraphs,
+		AllDashboards:        allDashboards,
+		NodeIDs:              nodeIDs,
 	}
 
 	// Set content type

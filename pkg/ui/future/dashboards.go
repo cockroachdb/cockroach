@@ -30,9 +30,21 @@ type DashboardGraph struct {
 }
 
 var DashboardDisplayNames = map[string]string{
-	"overview": "Overview",
-	"sql":      "SQL",
-	"requests": "Slow Requests",
+	"overview":                  "Overview",
+	"hardware":                  "Hardware",
+	"runtime":                   "Runtime",
+	"sql":                       "SQL",
+	"storage":                   "Storage",
+	"replication":               "Replication",
+	"distributed":               "Distributed",
+	"queues":                    "Queues",
+	"networking":                "Networking",
+	"requests":                  "Slow Requests",
+	"overload":                  "Overload",
+	"changefeeds":               "Changefeeds",
+	"ttl":                       "Row-Level TTL",
+	"logicalDataReplication":    "Logical Data Replication",
+	"crossClusterReplication":   "Cross-Cluster Replication",
 }
 
 var DASHBOARDS = map[string][]DashboardGraph{
@@ -162,7 +174,7 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			Units:      "BYTES",
 			UnitsLabel: "capacity",
 			Metrics: []Metric{
-				{Name: "capacity.available", PerNode: true, PerStore: true},
+				{Name: "capacity.available", PerNode: true, PerStore: true, StorePrefix: true},
 			},
 		},
 	},
@@ -336,9 +348,9 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			UnitsLabel: "capacity",
 			IsKVGraph:  true,
 			Metrics: []Metric{
-				{Name: "capacity", Title: "Max"},
-				{Name: "capacity.available", Title: "Available"},
-				{Name: "capacity.used", Title: "Used"},
+				{Name: "capacity", Title: "Max", StorePrefix: true},
+				{Name: "capacity.available", Title: "Available", StorePrefix: true},
+				{Name: "capacity.used", Title: "Used", StorePrefix: true},
 			},
 		},
 		{
@@ -347,8 +359,8 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			Units:      "BYTES",
 			UnitsLabel: "live bytes",
 			Metrics: []Metric{
-				{Name: "livebytes", Title: "Live"},
-				{Name: "sysbytes", Title: "System"},
+				{Name: "livebytes", Title: "Live", StorePrefix: true},
+				{Name: "sysbytes", Title: "System", StorePrefix: true},
 			},
 		},
 		{
@@ -358,7 +370,7 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			UnitsLabel: "latency",
 			IsKVGraph:  true,
 			Metrics: []Metric{
-				{Name: "raft.process.logcommit.latency-p99", PerNode: true, PerStore: true, Aggregation: "MAX"},
+				{Name: "raft.process.logcommit.latency-p99", PerNode: true, PerStore: true, Aggregation: "MAX", StorePrefix: true},
 			},
 		},
 		{
@@ -368,7 +380,7 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			UnitsLabel: "latency",
 			IsKVGraph:  true,
 			Metrics: []Metric{
-				{Name: "raft.process.commandcommit.latency-p99", PerNode: true, PerStore: true, Aggregation: "MAX"},
+				{Name: "raft.process.commandcommit.latency-p99", PerNode: true, PerStore: true, Aggregation: "MAX", StorePrefix: true},
 			},
 		},
 		{
@@ -377,7 +389,7 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			UnitsLabel: "factor",
 			IsKVGraph:  true,
 			Metrics: []Metric{
-				{Name: "rocksdb.read-amplification", PerNode: true, PerStore: true, Aggregation: "AVG"},
+				{Name: "rocksdb.read-amplification", PerNode: true, PerStore: true, Aggregation: "AVG", StorePrefix: true},
 			},
 		},
 		{
@@ -386,7 +398,7 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			UnitsLabel: "sstables",
 			IsKVGraph:  true,
 			Metrics: []Metric{
-				{Name: "rocksdb.num-sstables", PerNode: true, PerStore: true},
+				{Name: "rocksdb.num-sstables", PerNode: true, PerStore: true, StorePrefix: true},
 			},
 		},
 		{
@@ -406,7 +418,7 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			UnitsLabel: "written bytes",
 			IsKVGraph:  true,
 			Metrics: []Metric{
-				{Name: "rocksdb.compacted-bytes-written", PerNode: true, PerStore: true, NonNegativeRate: true},
+				{Name: "rocksdb.compacted-bytes-written", PerNode: true, PerStore: true, NonNegativeRate: true, StorePrefix: true},
 			},
 		},
 	},
@@ -416,13 +428,13 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			Tooltip:    "Various details about the status of ranges.",
 			UnitsLabel: "ranges",
 			Metrics: []Metric{
-				{Name: "ranges", Title: "Ranges"},
-				{Name: "replicas.leaders", Title: "Leaders"},
-				{Name: "replicas.leaseholders", Title: "Lease Holders"},
-				{Name: "replicas.leaders_not_leaseholders", Title: "Leaders w/o Lease"},
-				{Name: "ranges.unavailable", Title: "Unavailable", Color: "#F16969"},
-				{Name: "ranges.underreplicated", Title: "Under-replicated"},
-				{Name: "ranges.overreplicated", Title: "Over-replicated"},
+				{Name: "ranges", Title: "Ranges", StorePrefix: true},
+				{Name: "replicas.leaders", Title: "Leaders", StorePrefix: true},
+				{Name: "replicas.leaseholders", Title: "Lease Holders", StorePrefix: true},
+				{Name: "replicas.leaders_not_leaseholders", Title: "Leaders w/o Lease", StorePrefix: true},
+				{Name: "ranges.unavailable", Title: "Unavailable", Color: "#F16969", StorePrefix: true},
+				{Name: "ranges.underreplicated", Title: "Under-replicated", StorePrefix: true},
+				{Name: "ranges.overreplicated", Title: "Over-replicated", StorePrefix: true},
 			},
 		},
 		{
@@ -430,7 +442,7 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			Tooltip:    "The number of replicas on each node.",
 			UnitsLabel: "replicas",
 			Metrics: []Metric{
-				{Name: "replicas", PerNode: true, PerStore: true},
+				{Name: "replicas", PerNode: true, PerStore: true, StorePrefix: true},
 			},
 		},
 		{
@@ -438,7 +450,7 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			Tooltip:    "The number of leaseholder replicas on each node. A leaseholder replica is the one that receives and coordinates all read and write requests for its range.",
 			UnitsLabel: "leaseholders",
 			Metrics: []Metric{
-				{Name: "replicas.leaseholders", PerNode: true, PerStore: true},
+				{Name: "replicas.leaseholders", PerNode: true, PerStore: true, StorePrefix: true},
 			},
 		},
 		{
@@ -446,7 +458,7 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			Tooltip:    "Moving average of the number of KV batch requests processed by leaseholder replicas on each node per second. Tracks roughly the last 30 minutes of requests. Used for load-based rebalancing decisions.",
 			UnitsLabel: "queries",
 			Metrics: []Metric{
-				{Name: "rebalancing.queriespersecond", PerNode: true, PerStore: true},
+				{Name: "rebalancing.queriespersecond", PerNode: true, PerStore: true, StorePrefix: true},
 			},
 		},
 		{
@@ -455,28 +467,28 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			Units:      "BYTES",
 			UnitsLabel: "logical store size",
 			Metrics: []Metric{
-				{Name: "totalbytes", PerNode: true, PerStore: true},
+				{Name: "totalbytes", PerNode: true, PerStore: true, StorePrefix: true},
 			},
 		},
 		{
 			Title:      "Range Operations",
 			UnitsLabel: "ranges",
 			Metrics: []Metric{
-				{Name: "range.splits", Title: "Splits", NonNegativeRate: true},
-				{Name: "range.merges", Title: "Merges", NonNegativeRate: true},
-				{Name: "range.adds", Title: "Adds", NonNegativeRate: true},
-				{Name: "range.removes", Title: "Removes", NonNegativeRate: true},
-				{Name: "leases.transfers.success", Title: "Lease Transfers", NonNegativeRate: true},
+				{Name: "range.splits", Title: "Splits", NonNegativeRate: true, StorePrefix: true},
+				{Name: "range.merges", Title: "Merges", NonNegativeRate: true, StorePrefix: true},
+				{Name: "range.adds", Title: "Adds", NonNegativeRate: true, StorePrefix: true},
+				{Name: "range.removes", Title: "Removes", NonNegativeRate: true, StorePrefix: true},
+				{Name: "leases.transfers.success", Title: "Lease Transfers", NonNegativeRate: true, StorePrefix: true},
 			},
 		},
 		{
 			Title:      "Snapshots",
 			UnitsLabel: "snapshots",
 			Metrics: []Metric{
-				{Name: "range.snapshots.generated", Title: "Generated", NonNegativeRate: true},
-				{Name: "range.snapshots.applied-voter", Title: "Applied (Voters)", NonNegativeRate: true},
-				{Name: "range.snapshots.applied-initial", Title: "Applied (Initial Upreplication)", NonNegativeRate: true},
-				{Name: "range.snapshots.applied-non-voter", Title: "Applied (Non-Voters)", NonNegativeRate: true},
+				{Name: "range.snapshots.generated", Title: "Generated", NonNegativeRate: true, StorePrefix: true},
+				{Name: "range.snapshots.applied-voter", Title: "Applied (Voters)", NonNegativeRate: true, StorePrefix: true},
+				{Name: "range.snapshots.applied-initial", Title: "Applied (Initial Upreplication)", NonNegativeRate: true, StorePrefix: true},
+				{Name: "range.snapshots.applied-non-voter", Title: "Applied (Non-Voters)", NonNegativeRate: true, StorePrefix: true},
 			},
 		},
 	},
@@ -540,11 +552,11 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			Units:      "COUNT",
 			UnitsLabel: "failures",
 			Metrics: []Metric{
-				{Name: "queue.gc.process.failure", Title: "GC", NonNegativeRate: true},
-				{Name: "queue.replicagc.process.failure", Title: "Replica GC", NonNegativeRate: true},
-				{Name: "queue.replicate.process.failure", Title: "Replication", NonNegativeRate: true},
-				{Name: "queue.split.process.failure", Title: "Split", NonNegativeRate: true},
-				{Name: "queue.merge.process.failure", Title: "Merge", NonNegativeRate: true},
+				{Name: "queue.gc.process.failure", Title: "GC", NonNegativeRate: true, StorePrefix: true},
+				{Name: "queue.replicagc.process.failure", Title: "Replica GC", NonNegativeRate: true, StorePrefix: true},
+				{Name: "queue.replicate.process.failure", Title: "Replication", NonNegativeRate: true, StorePrefix: true},
+				{Name: "queue.split.process.failure", Title: "Split", NonNegativeRate: true, StorePrefix: true},
+				{Name: "queue.merge.process.failure", Title: "Merge", NonNegativeRate: true, StorePrefix: true},
 			},
 		},
 		{
@@ -552,10 +564,10 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			Units:      "COUNT",
 			UnitsLabel: "actions",
 			Metrics: []Metric{
-				{Name: "queue.replicate.process.success", Title: "Successful Actions / sec", NonNegativeRate: true},
-				{Name: "queue.replicate.pending", Title: "Pending Actions"},
-				{Name: "queue.replicate.addreplica", Title: "Replicas Added / sec", NonNegativeRate: true},
-				{Name: "queue.replicate.removereplica", Title: "Replicas Removed / sec", NonNegativeRate: true},
+				{Name: "queue.replicate.process.success", Title: "Successful Actions / sec", NonNegativeRate: true, StorePrefix: true},
+				{Name: "queue.replicate.pending", Title: "Pending Actions", StorePrefix: true},
+				{Name: "queue.replicate.addreplica", Title: "Replicas Added / sec", NonNegativeRate: true, StorePrefix: true},
+				{Name: "queue.replicate.removereplica", Title: "Replicas Removed / sec", NonNegativeRate: true, StorePrefix: true},
 			},
 		},
 		{
@@ -563,8 +575,8 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			Units:      "COUNT",
 			UnitsLabel: "actions",
 			Metrics: []Metric{
-				{Name: "queue.split.process.success", Title: "Successful Actions / sec", NonNegativeRate: true},
-				{Name: "queue.split.pending", Title: "Pending Actions", Downsampler: "MAX"},
+				{Name: "queue.split.process.success", Title: "Successful Actions / sec", NonNegativeRate: true, StorePrefix: true},
+				{Name: "queue.split.pending", Title: "Pending Actions", Downsampler: "MAX", StorePrefix: true},
 			},
 		},
 		{
@@ -572,8 +584,8 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			Units:      "COUNT",
 			UnitsLabel: "actions",
 			Metrics: []Metric{
-				{Name: "queue.merge.process.success", Title: "Successful Actions / sec", NonNegativeRate: true},
-				{Name: "queue.merge.pending", Title: "Pending Actions", Downsampler: "MAX"},
+				{Name: "queue.merge.process.success", Title: "Successful Actions / sec", NonNegativeRate: true, StorePrefix: true},
+				{Name: "queue.merge.pending", Title: "Pending Actions", Downsampler: "MAX", StorePrefix: true},
 			},
 		},
 		{
@@ -581,8 +593,8 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			Units:      "COUNT",
 			UnitsLabel: "actions",
 			Metrics: []Metric{
-				{Name: "queue.gc.process.success", Title: "Successful Actions / sec", NonNegativeRate: true},
-				{Name: "queue.gc.pending", Title: "Pending Actions", Downsampler: "MAX"},
+				{Name: "queue.gc.process.success", Title: "Successful Actions / sec", NonNegativeRate: true, StorePrefix: true},
+				{Name: "queue.gc.pending", Title: "Pending Actions", Downsampler: "MAX", StorePrefix: true},
 			},
 		},
 	},
@@ -729,6 +741,102 @@ var DASHBOARDS = map[string][]DashboardGraph{
 			Metrics: []Metric{
 				{Name: "jobs.row_level_ttl.select_duration-p99", Title: "scan latency (p99)", Downsampler: "MAX"},
 				{Name: "jobs.row_level_ttl.delete_duration-p99", Title: "delete latency (p99)", Downsampler: "MAX"},
+			},
+		},
+	},
+	"logicalDataReplication": {
+		{
+			Title:      "Replication Latency",
+			Tooltip:    "The difference in commit times between the source cluster and the destination cluster",
+			Units:      "DURATION",
+			UnitsLabel: "latency",
+			Metrics: []Metric{
+				{Name: "logical_replication.commit_latency-p50", Title: "p50", Aggregation: "MAX", Downsampler: "MAX"},
+				{Name: "logical_replication.commit_latency-p99", Title: "p99", Aggregation: "MAX", Downsampler: "MAX"},
+			},
+		},
+		{
+			Title:      "Replication Lag",
+			Tooltip:    "The age of the oldest row on the source cluster that has yet to replicate to destination cluster",
+			Units:      "DURATION",
+			UnitsLabel: "duration",
+			Metrics: []Metric{
+				{Name: "logical_replication.replicated_time_seconds", Title: "Replication Lag", Aggregation: "MAX", Downsampler: "MIN"},
+			},
+		},
+		{
+			Title:      "Row Updates Applied",
+			Tooltip:    "Rate at which row updates are applied by all logical replication jobs",
+			UnitsLabel: "updates",
+			Metrics: []Metric{
+				{Name: "logical_replication.events_ingested", Title: "Row Updates Applied", NonNegativeRate: true},
+				{Name: "logical_replication.events_dlqed", Title: "Row Updates sent to DLQ", NonNegativeRate: true},
+			},
+		},
+		{
+			Title:      "Logical Bytes Received",
+			Tooltip:    "Rate at which the logical bytes (sum of keys + values) are received by all logical replication jobs",
+			Units:      "BYTES",
+			UnitsLabel: "bytes",
+			Metrics: []Metric{
+				{Name: "logical_replication.logical_bytes", PerNode: true, NonNegativeRate: true},
+			},
+		},
+		{
+			Title:      "Row Application Processing Time: 50th percentile",
+			Tooltip:    "The 50th percentile in the time it takes to write a batch of row updates",
+			Units:      "DURATION",
+			UnitsLabel: "processing time",
+			Metrics: []Metric{
+				{Name: "logical_replication.batch_hist_nanos-p50", PerNode: true, Downsampler: "MAX"},
+			},
+		},
+		{
+			Title:      "Row Application Processing Time: 99th percentile",
+			Tooltip:    "The 99th percentile in the time it takes to write a batch of row updates",
+			Units:      "DURATION",
+			UnitsLabel: "processing time",
+			Metrics: []Metric{
+				{Name: "logical_replication.batch_hist_nanos-p99", PerNode: true, Downsampler: "MAX"},
+			},
+		},
+		{
+			Title:      "DLQ Causes",
+			Tooltip:    "Reasons events were sent to the DLQ",
+			UnitsLabel: "updates",
+			Metrics: []Metric{
+				{Name: "logical_replication.events_dlqed_age", Title: "Retry Duration Expired", NonNegativeRate: true},
+				{Name: "logical_replication.events_dlqed_space", Title: "Retry Queue Full", NonNegativeRate: true},
+				{Name: "logical_replication.events_dlqed_errtype", Title: "Non-retryable", NonNegativeRate: true},
+			},
+		},
+		{
+			Title:      "Retry Queue Size",
+			Tooltip:    "Total size of the retry queues across all processors in all LDR jobs",
+			Units:      "BYTES",
+			UnitsLabel: "bytes",
+			Metrics: []Metric{
+				{Name: "logical_replication.retry_queue_bytes", PerNode: true},
+			},
+		},
+	},
+	"crossClusterReplication": {
+		{
+			Title:      "Replication Lag",
+			Tooltip:    "Replication lag between primary and standby cluster",
+			Units:      "DURATION",
+			UnitsLabel: "duration",
+			Metrics: []Metric{
+				{Name: "physical_replication.replicated_time_seconds", Title: "Replication Lag", Aggregation: "MAX", Downsampler: "MIN"},
+			},
+		},
+		{
+			Title:      "Logical Bytes",
+			Tooltip:    "Rate at which the logical bytes (sum of keys + values) are ingested by all replication jobs",
+			Units:      "BYTES",
+			UnitsLabel: "bytes",
+			Metrics: []Metric{
+				{Name: "physical_replication.logical_bytes", Title: "Logical Bytes", NonNegativeRate: true},
 			},
 		},
 	},
