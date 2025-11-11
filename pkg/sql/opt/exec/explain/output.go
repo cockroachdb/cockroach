@@ -316,6 +316,15 @@ func (ob *OutputBuilder) AddPlanType(generic, optimized bool) {
 	}
 }
 
+// AddStmtHintCount adds a top-level field displaying the number of statement
+// hints applied to the query. Cannot be called while inside a node.
+func (ob *OutputBuilder) AddStmtHintCount(hintCount uint64) {
+	if hintCount == 0 {
+		return
+	}
+	ob.AddTopLevelField("statement hints count", string(humanizeutil.Count(hintCount)))
+}
+
 // AddPlanningTime adds a top-level planning time field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddPlanningTime(delta time.Duration) {
