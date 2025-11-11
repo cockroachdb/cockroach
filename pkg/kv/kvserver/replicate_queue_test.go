@@ -230,7 +230,10 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 			}
 			// Set up a test cluster with multiple stores per node if needed.
 			args := base.TestClusterArgs{
-				ReplicationMode:   base.ReplicationAuto,
+				ReplicationMode: base.ReplicationAuto,
+				ServerArgs: base.TestServerArgs{
+					DefaultDRPCOption: base.TestDRPCDisabled,
+				},
 				ServerArgsPerNode: map[int]base.TestServerArgs{},
 			}
 			for i := 0; i < testCase.nodes; i++ {
