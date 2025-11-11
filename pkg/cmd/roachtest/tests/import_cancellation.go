@@ -80,7 +80,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	}
 	for tbl := range tablesToNumFiles {
 		fixtureURL := fmt.Sprintf("gs://cockroach-fixtures-us-east1/tpch-csv/schema/%s.sql?AUTH=implicit", tbl)
-		createStmt, err := readCreateTableFromFixture(fixtureURL, conn)
+		createStmt, err := readFileFromFixture(fixtureURL, conn)
 		if err != nil {
 			t.Fatal(err)
 		}
