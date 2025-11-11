@@ -1299,7 +1299,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 
 	params.Knobs.Store = storeTestingKnobs
 	params.Knobs.KVClient = clientTestingKnobs
-	params.DefaultTestTenant = base.TestDoesNotWorkWithExternalProcessMode(156333)
+	params.DefaultTestTenant = base.TestTenantProbabilisticOnly
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s = srv.ApplicationLayer()
