@@ -10,7 +10,6 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/security/username",
-        "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/hintpb",
         "//pkg/sql/pgwire/pgcode",
