@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	jsonpath "github.com/cockroachdb/cockroach/pkg/util/jsonpath/eval"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randident"
 	"github.com/cockroachdb/cockroach/pkg/util/randident/randidentcfg"
@@ -4407,9 +4406,7 @@ func (g *queueFeedGenerator) Start(ctx context.Context, txn *kv.Txn) error {
 	// or something... todo on rollback/abort.
 	txn.AddCommitTrigger(func(ctx context.Context) {
 		// TODO(queuefeed): handle error properly.
-		if err := qr.ConfirmReceipt(ctx); err != nil {
-			log.Dev.Errorf(ctx, "error confirming receipt of queue %s: %v", g.queueName, err)
-		}
+		qr.ConfirmReceipt(ctx)
 	})
 
 	rows, err := qr.GetRows(ctx, g.limit)

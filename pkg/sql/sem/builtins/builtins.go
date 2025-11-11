@@ -4661,7 +4661,7 @@ value if you rely on the HLC for accuracy.`,
 		},
 	}),
 
-	"crdb_internal.select_from_queue_feed": makeBuiltin(defProps(), tree.Overload{
+	"crdb_internal.select_array_from_queue_feed": makeBuiltin(defProps(), tree.Overload{
 		Types: tree.ParamTypes{
 			{Name: "queue_name", Typ: types.String},
 			{Name: "limit", Typ: types.Int},
