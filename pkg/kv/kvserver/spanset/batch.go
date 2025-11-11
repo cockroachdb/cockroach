@@ -766,7 +766,9 @@ func NewReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Timestamp) st
 
 type spanSetBatch struct {
 	ReadWriter
-	b     storage.Batch
+	b storage.Batch
+	// TODO(ibrahim): The fields spans, spansOnly, and ts don't seem to be used.
+	// Consider removing them and performing the necessary clean ups.
 	spans *SpanSet
 
 	spansOnly bool
@@ -838,6 +840,22 @@ func (s spanSetBatch) ClearRawEncodedRange(start, end []byte) error {
 	return s.b.ClearRawEncodedRange(start, end)
 }
 
+// clone returns a shallow copy of the spanSetBatch. The returned batch shares
+// the same underlying storage.Batch but has its own spanSetBatch wrapper with
+// a new copy of the SpanSet that uses a shallow copy of the underlying spans.
+func (s spanSetBatch) clone() *spanSetBatch {
+	return &spanSetBatch{
+		ReadWriter: ReadWriter{
+			spanSetReader: spanSetReader{r: s.b, spans: s.spanSetReader.spans.ShallowCopy(), spansOnly: s.spansOnly, ts: s.ts},
+			spanSetWriter: spanSetWriter{w: s.b, spans: s.spanSetWriter.spans.ShallowCopy(), spansOnly: s.spansOnly, ts: s.ts},
+		},
+		b:         s.b,
+		spans:     s.spans.ShallowCopy(),
+		spansOnly: s.spansOnly,
+		ts:        s.ts,
+	}
+}
+
 // NewBatch returns a storage.Batch that asserts access of the underlying
 // Batch against the given SpanSet. We only consider span boundaries, associated
 // timestamps are not considered.
@@ -883,6 +901,40 @@ func DisableReadWriterAssertions(rw storage.ReadWriter) storage.ReadWriter {
 		return DisableReadWriterAssertions(v.w.(storage.ReadWriter))
 	case *spanSetBatch:
 		return DisableReadWriterAssertions(v.w.(storage.ReadWriter))
+	default:
+		return rw
+	}
+}
+
+// DisableLatchAssertions returns a new batch wrapper with latch assertions
+// disabled. It does not modify the original batch. The returned batch shares
+// the same underlying storage.Batch but has its own SpanSet wrapper with the
+// latch assertion disabled.
+func DisableLatchAssertions(rw storage.ReadWriter) storage.ReadWriter {
+	switch v := rw.(type) {
+	case *spanSetBatch:
+		newSnapSetBatch := v.clone()
+		newSnapSetBatch.spanSetReader.spans.DisableUndeclaredAccessAssertions()
+		newSnapSetBatch.spanSetWriter.spans.DisableUndeclaredAccessAssertions()
+		return newSnapSetBatch
+
+	default:
+		return rw
+	}
+}
+
+// DisableForbiddenSpanAssertionsOnBatch returns a new batch wrapper with
+// forbidden span assertions disabled. It does not modify the original batch.
+// The returned batch shares the same underlying storage.Batch but has its own
+// SpanSet wrapper with the forbidden span assertion disabled.
+func DisableForbiddenSpanAssertionsOnBatch(rw storage.ReadWriter) storage.ReadWriter {
+	switch v := rw.(type) {
+	case *spanSetBatch:
+		newSnapSetBatch := v.clone()
+		newSnapSetBatch.spanSetReader.spans.DisableForbiddenSpansAssertions()
+		newSnapSetBatch.spanSetWriter.spans.DisableForbiddenSpansAssertions()
+		return newSnapSetBatch
+
 	default:
 		return rw
 	}
