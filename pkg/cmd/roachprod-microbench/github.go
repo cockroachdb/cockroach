@@ -85,8 +85,8 @@ func createRegressionPostRequest(
 	return formatter, req
 }
 
-// postIssuesToGitHub posts a benchmark issue to github.
-func postIssuesToGitHub(
+// postBenchmarkIssue posts a benchmark issue to github.
+func postBenchmarkIssue(
 	ctx context.Context, l *logger.Logger, formatter issues.IssueFormatter, req issues.PostRequest,
 ) error {
 	opts := issues.DefaultOptionsFromEnv()
