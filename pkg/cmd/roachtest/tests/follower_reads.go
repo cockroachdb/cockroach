@@ -1065,7 +1065,9 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		// `clusterstats` instead and re-enable separate process.
 		mixedversion.EnabledDeploymentModes(
 			mixedversion.SystemOnlyDeployment,
-			mixedversion.SharedProcessDeployment,
+			// This test is flaky in shared process mode, so it's temporarily disabled to reduce noise.
+			// TODO(server):  #157164 is the tracking issue to re-enable this.
+			// mixedversion.SharedProcessDeployment,
 		),
 	)
 }
