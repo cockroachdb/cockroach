@@ -143,7 +143,8 @@ func (p *planner) prepareUsingOptimizer(
 			} else if pm.HintsGeneration != stmt.Prepared.HintsGeneration && !slices.Equal(pm.HintIDs, stmt.Prepared.HintIDs) {
 				opc.log(ctx, "query cache hit but external statement hints don't match")
 			} else {
-				isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog)
+				// TODO(janexing): I don't think we should skip checking canary stats here.
+				isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog, true /* ignoreCanaryStats */)
 				if err != nil {
 					return 0, err
 				}
@@ -156,6 +157,7 @@ func (p *planner) prepareUsingOptimizer(
 					stmt.Hints = pm.Hints
 					stmt.HintIDs = pm.HintIDs
 					stmt.HintsGeneration = pm.HintsGeneration
+					stmt.Prepared.UseCanaryStats = pm.UseCanaryStats
 					if cachedData.Memo.IsOptimized() {
 						// A cache, fully optimized memo is an "ideal generic
 						// memo".
@@ -176,7 +178,8 @@ func (p *planner) prepareUsingOptimizer(
 		opc.flags.Set(planFlagOptCacheMiss)
 	}
 
-	// Build the memo. Do not attempt to build a generic plan at PREPARE-time.
+	// Build the memo. Do not attempt to build a non-ideal generic plan at PREPARE-time.
+	// As in, if there is placeholder and can't go with fastpath, return a custom memo.
 	memo, _, err := opc.buildReusableMemo(ctx, false /* allowNonIdealGeneric */)
 	if err != nil {
 		return 0, err
@@ -694,7 +697,7 @@ func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.M
 	prep := opc.p.stmt.Prepared
 
 	if prep.GenericMemo != nil {
-		isStale, err := prep.GenericMemo.IsStale(ctx, opc.p.EvalContext(), opc.catalog)
+		isStale, err := prep.GenericMemo.IsStale(ctx, opc.p.EvalContext(), opc.catalog, true /* ignoreCanaryStats */)
 		if err != nil {
 			return nil, err
 		} else if isStale {
@@ -709,7 +712,7 @@ func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.M
 	}
 
 	if prep.BaseMemo != nil {
-		isStale, err := prep.BaseMemo.IsStale(ctx, opc.p.EvalContext(), opc.catalog)
+		isStale, err := prep.BaseMemo.IsStale(ctx, opc.p.EvalContext(), opc.catalog, true /* ignoreCanaryStats */)
 		if err != nil {
 			return nil, err
 		} else if isStale {
@@ -758,6 +761,10 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 	prep := p.stmt.Prepared
 	if !opc.allowMemoReuse || prep == nil {
 		return nil, nil
+	}
+
+	if prep.UseCanaryStats != eval.UseCanaryStatsValUnset {
+		opc.p.EvalContext().UseCanaryStats = prep.UseCanaryStats
 	}
 
 	// If the statement was previously prepared, check for a reusable memo.
@@ -836,11 +843,16 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	}
 
 	p := opc.p
+	// We are not using a prepared memo, so we need to decide whether to use
+	// canary stats or not.
+	if p.EvalContext().UseCanaryStats == eval.UseCanaryStatsValUnset && !p.SessionData().Internal {
+		p.EvalContext().UseCanaryStats = canaryRollDice(p.EvalContext())
+	}
 	if opc.useCache {
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.p.stmt.SQL)
 		if ok {
-			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
+			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog, false /* ignoreCanaryStats */); err != nil {
 				return nil, err
 			} else if isStale {
 				opc.log(ctx, "query cache hit but needed update")
