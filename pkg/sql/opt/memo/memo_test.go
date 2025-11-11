@@ -701,6 +701,13 @@ func TestMemoIsStale(t *testing.T) {
 	stale()
 	evalCtx.SessionData().RowSecurity = false
 	notStale()
+
+	evalCtx.UseCanaryStats = eval.UseCanaryStatsValTrue
+	stale()
+	evalCtx.UseCanaryStats = eval.UseCanaryStatsValFalse
+	stale()
+	evalCtx.UseCanaryStats = eval.UseCanaryStatsValUnset
+	notStale()
 }
 
 // TestStatsAvailable tests that the statisticsBuilder correctly identifies

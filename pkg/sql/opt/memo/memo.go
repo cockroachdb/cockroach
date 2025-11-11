@@ -244,6 +244,10 @@ type Memo struct {
 	// to clamp selectivity estimates to a lower bound.
 	optimizationStats OptimizationStats
 
+	// useCanaryStats indicates whether the optimizer uses canary stats
+	// for this query, as opposed to using the stable stats.
+	useCanaryStats eval.UseCanaryStatsVal
+
 	// WARNING: if you add more members, add initialization code in Init (if
 	// reusing allocated data structures is desired).
 }
@@ -331,6 +335,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		clampInequalitySelectivity:                 evalCtx.SessionData().OptimizerClampInequalitySelectivity,
 		useMaxFrequencySelectivity:                 evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
+		useCanaryStats:                             evalCtx.UseCanaryStats,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(ctx, evalCtx, m)

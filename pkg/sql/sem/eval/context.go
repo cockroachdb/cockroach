@@ -320,7 +320,41 @@ type Context struct {
 	// ExecutedStatementCounters contains metrics for successfully executed
 	// statements defined within the body of a UDF/SP.
 	ExecutedRoutineStatementCounters RoutineStatementCounters
+	// UseCanaryStats indicates whether this query participates in the canary
+	// statistics rollout feature. When set to true, the optimizer attempts to use
+	// "canary statistics" for all tables referenced by the query.
+	//
+	// This flag is determined probabilistically during query planning based on the
+	// sql.stats.canary_fraction cluster setting. The selection is atomic per query:
+	// either all tables use canary stats (when available) or all use stable stats.
+	//
+	// Canary statistics are newly collected table statistics that are still within
+	// their configured "canary window" (stats_canary_window storage parameter).
+	// These stats provide a controlled way to gradually roll out new statistics
+	// before promoting them to stable, allowing for manual intervention if
+	// performance regressions are detected.
+	//
+	// Stable statistics are the previously established statistics that have either
+	// been promoted from canary status or were collected before canary mode was
+	// enabled for the table.
+	//
+	// Fallback behavior: If a table lacks distinct canary statistics (e.g., only
+	// one statistics version exists, or canary stats have expired), the optimizer
+	// will use the available stable statistics even when this flag is true.
+	UseCanaryStats UseCanaryStatsVal
 }
+
+// UseCanaryStatsVal shows what is the value for the eval.Context.UseCanaryStats
+// and whether this value is set already. This "unset" mode is necessary
+// so that for the PREPARE - EXECUTE flow, we only set the canary stats mode
+// while it is being prepared, and not during execution.
+type UseCanaryStatsVal int64
+
+const (
+	UseCanaryStatsValUnset UseCanaryStatsVal = iota
+	UseCanaryStatsValFalse
+	UseCanaryStatsValTrue
+)
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution
 // of different statement types defined within the body of a UDF or stored

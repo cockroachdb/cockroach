@@ -431,3 +431,47 @@ func (e QoSLevel) ValidateInternal() QoSLevel {
 	}
 	panic(errors.AssertionFailedf("use of illegal internal QoSLevel: %s", e.String()))
 }
+
+// CanaryStatsMode controls whether all queries will deterministically use
+// canary or stable stats. See the comments on each mode for details.
+// This session variable is intended for troubleshooting.
+type CanaryStatsMode int64
+
+const (
+	// CanaryStatsModeAuto means that the system will automatically decide
+	// to use the canary stats or the stable stats for each query in this session.
+	CanaryStatsModeAuto CanaryStatsMode = iota
+	// CanaryStatsModeOff means that the optimizer always uses the stable stats
+	// for all queries in this session.
+	CanaryStatsModeOff
+	// CanaryStatsModeOn means that the optimizer always uses the canary stats
+	// for all queries in this session.
+	CanaryStatsModeOn
+)
+
+func (m CanaryStatsMode) String() string {
+	switch m {
+	case CanaryStatsModeAuto:
+		return "auto"
+	case CanaryStatsModeOff:
+		return "off"
+	case CanaryStatsModeOn:
+		return "on"
+	default:
+		return fmt.Sprintf("invalid (%d)", m)
+	}
+}
+
+// CanaryStatsModeFromString converts a string into a CanaryStatsMode.
+func CanaryStatsModeFromString(val string) (_ CanaryStatsMode, ok bool) {
+	switch strings.ToUpper(val) {
+	case "AUTO":
+		return CanaryStatsModeAuto, true
+	case "OFF":
+		return CanaryStatsModeOff, true
+	case "ON":
+		return CanaryStatsModeOn, true
+	default:
+		return 0, false
+	}
+}

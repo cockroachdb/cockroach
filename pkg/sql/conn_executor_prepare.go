@@ -248,6 +248,15 @@ func (ex *connExecutor) prepare(
 		prepared.HintIDs = stmt.HintIDs
 		prepared.HintsGeneration = stmt.HintsGeneration
 
+		if !p.SessionData().Internal {
+			// Randomly determine whether to use canary stats during statement
+			// preparation, storing the decision with the prepared statement.
+			// During execution, the stored decision is copied to the eval context
+			// to ensure consistent behavior across multiple executions.
+			prepared.UseCanaryStats = canaryRollDice(p.EvalContext(), ex.rng.internal)
+			p.extendedEvalCtx.UseCanaryStats = prepared.UseCanaryStats
+		}
+
 		// Point to the prepared state, which can be further populated during query
 		// preparation.
 		stmt.Prepared = prepared
