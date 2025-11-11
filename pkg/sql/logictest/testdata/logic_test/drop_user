@@ -1,52 +1,48 @@
 statement ok
 CREATE USER user1
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW USERS]
 ----
-username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
-user1     {}       {}
+username options member_of
+admin   {}    {}
+root   {}    {admin}
+testuser {}    {}
+user1   {}    {}
 
 statement ok
 DROP USER user1
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW USERS]
 ----
-username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
+username options member_of
+admin   {}    {}
+root   {}    {admin}
+testuser {}    {}
 
 statement ok
 CREATE USER user1
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW USERS]
 ----
-username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
-user1     {}       {}
+username options member_of
+admin   {}    {}
+root   {}    {admin}
+testuser {}    {}
+user1   {}    {}
 
 statement ok
 DROP USER USEr1
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW USERS]
 ----
-username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
+username options member_of
+admin   {}    {}
+root   {}    {admin}
+testuser {}    {}
 
 statement error user "user1" does not exist
 DROP USER user1
@@ -87,46 +83,43 @@ CREATE USER user3
 statement ok
 CREATE USER user4
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW USERS]
 ----
-username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
-user1     {}       {}
-user2     {}       {}
-user3     {}       {}
-user4     {}       {}
+username options member_of
+admin   {}    {}
+root   {}    {admin}
+testuser {}    {}
+user1   {}    {}
+user2   {}    {}
+user3   {}    {}
+user4   {}    {}
 
 statement ok
 DROP USER user1,user2
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW USERS]
 ----
-username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
-user3     {}       {}
-user4     {}       {}
+username options member_of
+admin   {}    {}
+root   {}    {admin}
+testuser {}    {}
+user3   {}    {}
+user4   {}    {}
 
 statement error user "user1" does not exist
 DROP USER user1,user3
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW USERS]
 ----
-username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
-user3     {}       {}
-user4     {}       {}
+username options member_of
+admin   {}    {}
+root   {}    {admin}
+testuser {}    {}
+user3   {}    {}
+user4   {}    {}
 
 statement ok
 CREATE USER user1
@@ -155,14 +148,13 @@ statement ok
 PREPARE du AS DROP USER user4;
 EXECUTE du
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW USERS]
 ----
-username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
+username options member_of
+admin   {}    {}
+root   {}    {admin}
+testuser {}    {}
 
 user testuser
 

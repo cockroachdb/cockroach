@@ -23,10 +23,10 @@ ALTER TABLE t ADD b INT
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices           is_hidden
-a            INT8       false        NULL            ·                      {t_f_idx,t_pkey}  false
-f            INT8       true         NULL            ·                      {t_f_idx,t_pkey}  false
-b            INT8       true         NULL            ·                      {t_pkey}          false
+column_name data_type is_nullable column_default generation_expression indices      is_hidden
+a      INT8    false    NULL      ·           {t_f_idx,t_pkey} false
+f      INT8    true     NULL      ·           {t_f_idx,t_pkey} false
+b      INT8    true     NULL      ·           {t_pkey}     false
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
@@ -44,7 +44,7 @@ WHERE job_type in ('NEW SCHEMA CHANGE', 'SCHEMA CHANGE')
 ORDER BY created DESC
 LIMIT 1
 ----
-ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b)  root  succeeded  1  ·
+ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b) root succeeded 1 ·
 
 statement error pgcode 42P07 .* name \"foo\" already exists
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
@@ -55,14 +55,14 @@ ALTER TABLE t ADD CONSTRAINT bar PRIMARY KEY (b)
 query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-t           foo         false       1             b            b           ASC        false    false     true     1
-t           foo         false       2             a            a           ASC        true     true      true     1
-t           t_f_idx     true        1             f            f           ASC        false    false     true     1
-t           t_f_idx     true        2             a            a           ASC        false    true      true     1
-t           t_pkey      false       1             a            a           ASC        false    false     true     1
-t           t_pkey      false       2             f            f           N/A        true     false     true     1
-t           t_pkey      false       3             b            b           N/A        true     false     true     1
+table_name index_name non_unique seq_in_index column_name definition direction storing implicit visible visibility
+t      foo     false    1       b      b      ASC    false  false   true   1
+t      foo     false    2       a      a      ASC    true   true   true   1
+t      t_f_idx   true    1       f      f      ASC    false  false   true   1
+t      t_f_idx   true    2       a      a      ASC    false  true   true   1
+t      t_pkey   false    1       a      a      ASC    false  false   true   1
+t      t_pkey   false    2       f      f      N/A    true   false   true   1
+t      t_pkey   false    3       b      b      N/A    true   false   true   1
 
 query III
 SELECT * FROM t
@@ -94,26 +94,26 @@ WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC, 2 DESC
 LIMIT 3
 ----
-SCHEMA CHANGE GC  GC for temporary index used during index backfill                           root
-SCHEMA CHANGE GC  GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root
-SCHEMA CHANGE     ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root
+SCHEMA CHANGE GC GC for temporary index used during index backfill              root
+SCHEMA CHANGE GC GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c) root
+SCHEMA CHANGE   ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)           root
 
 query IIII colnames,rowsort
 SELECT * FROM t
 ----
-a f b    c
+a f b  c
 1 9 NULL NULL
-2 9 1    1
-3 9 2    1
+2 9 1  1
+3 9 2  1
 
 query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t
 ----
-table_name  constraint_name  constraint_type  details                              validated
-t           check_a          CHECK            CHECK ((a > 0))                      true
-t           foo              UNIQUE           UNIQUE (b ASC)                       true
-t           t_f_fkey         FOREIGN KEY      FOREIGN KEY (f) REFERENCES other(b)  true
-t           t_pkey           PRIMARY KEY      PRIMARY KEY (a ASC)                  true
+table_name constraint_name constraint_type details               validated
+t      check_a     CHECK      CHECK ((a > 0))           true
+t      foo       UNIQUE      UNIQUE (b ASC)            true
+t      t_f_fkey     FOREIGN KEY   FOREIGN KEY (f) REFERENCES other(b) true
+t      t_pkey      PRIMARY KEY   PRIMARY KEY (a ASC)         true
 
 statement error CHECK
 INSERT INTO t (a, f) VALUES (-2, 9)
@@ -139,10 +139,10 @@ INSERT INTO t (a) VALUES (-3)
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK        CHECK ((a > 0))                      true
-t  foo       UNIQUE       UNIQUE (b ASC)                       true
-t  t_f_fkey  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  t_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t check_a  CHECK    CHECK ((a > 0))           true
+t foo    UNIQUE    UNIQUE (b ASC)            true
+t t_f_fkey FOREIGN KEY FOREIGN KEY (f) REFERENCES other(b) true
+t t_pkey  PRIMARY KEY PRIMARY KEY (a ASC)         true
 
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
@@ -168,11 +168,11 @@ ALTER TABLE t ADD CHECK (a > 0)
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK        CHECK ((a > 0))                      true
-t  check_a1  CHECK        CHECK ((a > 0))                      true
-t  foo       UNIQUE       UNIQUE (b ASC)                       true
-t  t_f_fkey  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  t_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t check_a  CHECK    CHECK ((a > 0))           true
+t check_a1 CHECK    CHECK ((a > 0))           true
+t foo    UNIQUE    UNIQUE (b ASC)            true
+t t_f_fkey FOREIGN KEY FOREIGN KEY (f) REFERENCES other(b) true
+t t_pkey  PRIMARY KEY PRIMARY KEY (a ASC)         true
 
 statement error constraint "typo" of relation "t" does not exist
 ALTER TABLE t VALIDATE CONSTRAINT typo
@@ -190,11 +190,11 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK        CHECK ((a > 0))                      true
-t  check_a1  CHECK        CHECK ((a > 0))                      true
-t  foo       UNIQUE       UNIQUE (b ASC)                       true
-t  t_f_fkey  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other(b)  true
-t  t_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)                  true
+t check_a  CHECK    CHECK ((a > 0))           true
+t check_a1 CHECK    CHECK ((a > 0))           true
+t foo    UNIQUE    UNIQUE (b ASC)            true
+t t_f_fkey FOREIGN KEY FOREIGN KEY (f) REFERENCES other(b) true
+t t_pkey  PRIMARY KEY PRIMARY KEY (a ASC)         true
 
 statement ok
 ALTER TABLE t DROP CONSTRAINT check_a, DROP CONSTRAINT check_a1
@@ -228,8 +228,8 @@ WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@foo CASCADE  root  running    0  ·
-SCHEMA CHANGE     DROP INDEX test.public.t@foo CASCADE         root  succeeded  1  ·
+SCHEMA CHANGE GC GC for DROP INDEX test.public.t@foo CASCADE root running  0 ·
+SCHEMA CHANGE   DROP INDEX test.public.t@foo CASCADE     root succeeded 1 ·
 
 
 skipif config local-legacy-schema-changer
@@ -240,21 +240,21 @@ WHERE job_type = 'NEW SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC   GC for DROP INDEX test.public.t@foo CASCADE  node  running    0  ·
-NEW SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE         root  succeeded  1  ·
+SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@foo CASCADE node running  0 ·
+NEW SCHEMA CHANGE DROP INDEX test.public.t@foo CASCADE     root succeeded 1 ·
 
 
 
 query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-t           t_f_idx     true        1             f            f           ASC        false    false     true     1
-t           t_f_idx     true        2             a            a           ASC        false    true      true     1
-t           t_pkey      false       1             a            a           ASC        false    false     true     1
-t           t_pkey      false       2             f            f           N/A        true     false     true     1
-t           t_pkey      false       3             b            b           N/A        true     false     true     1
-t           t_pkey      false       4             c            c           N/A        true     false     true     1
+table_name index_name non_unique seq_in_index column_name definition direction storing implicit visible visibility
+t      t_f_idx   true    1       f      f      ASC    false  false   true   1
+t      t_f_idx   true    2       a      a      ASC    false  true   true   1
+t      t_pkey   false    1       a      a      ASC    false  false   true   1
+t      t_pkey   false    2       f      f      N/A    true   false   true   1
+t      t_pkey   false    3       b      b      N/A    true   false   true   1
+t      t_pkey   false    4       c      c      N/A    true   false   true   1
 
 statement ok
 ALTER TABLE t DROP b, DROP c
@@ -262,9 +262,9 @@ ALTER TABLE t DROP b, DROP c
 query II rowsort
 SELECT * FROM t
 ----
-1  9
-2  9
-3  9
+1 9
+2 9
+3 9
 
 statement ok
 ALTER TABLE t ADD d INT UNIQUE
@@ -311,7 +311,7 @@ INSERT INTO t VALUES (31, 7, 32)
 statement ok
 ALTER TABLE t DROP CONSTRAINT t_f_fkey
 
-statement  ok
+statement ok
 INSERT INTO t VALUES (31, 7, 32)
 
 statement ok
@@ -328,8 +328,8 @@ WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@t_f_idx  root  running    0  ·
-SCHEMA CHANGE     DROP INDEX test.public.t@t_f_idx         root  succeeded  1  ·
+SCHEMA CHANGE GC GC for DROP INDEX test.public.t@t_f_idx root running  0 ·
+SCHEMA CHANGE   DROP INDEX test.public.t@t_f_idx     root succeeded 1 ·
 
 skipif config local-legacy-schema-changer
 query TTTTRT retry
@@ -339,8 +339,8 @@ WHERE job_type = 'NEW SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC   GC for DROP INDEX test.public.t@t_f_idx  node  running    0  ·
-NEW SCHEMA CHANGE  DROP INDEX test.public.t@t_f_idx         root  succeeded  1  ·
+SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@t_f_idx node running  0 ·
+NEW SCHEMA CHANGE DROP INDEX test.public.t@t_f_idx     root succeeded 1 ·
 
 statement ok
 ALTER TABLE t DROP COLUMN f
@@ -348,17 +348,17 @@ ALTER TABLE t DROP COLUMN f
 query IITTT colnames,rowsort
 SELECT * FROM t
 ----
-a   d     x     y     z
-1   NULL  NULL  1.3   1.4
-2   NULL  NULL  1.3   1.4
-3   NULL  NULL  1.3   1.4
-4   1     NULL  1.3   1.4
-11  12    1.0   1.3   1.4
-13  14    NULL  1.3   1.4
-21  22    NULL  1.0   1.4
-23  24    NULL  1.3   1.4
-31  32    NULL  1.3   1.4
-33  34    2.0   2.1   2.2
+a  d   x   y   z
+1  NULL NULL 1.3  1.4
+2  NULL NULL 1.3  1.4
+3  NULL NULL 1.3  1.4
+4  1   NULL 1.3  1.4
+11 12  1.0  1.3  1.4
+13 14  NULL 1.3  1.4
+21 22  NULL 1.0  1.4
+23 24  NULL 1.3  1.4
+31 32  NULL 1.3  1.4
+33 34  2.0  2.1  2.2
 
 statement ok
 ALTER TABLE t DROP COLUMN d
@@ -428,12 +428,12 @@ ALTER TABLE o DROP COLUMN h
 query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM o
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-o           o_pkey      false       1             rowid        rowid       ASC        false    false     true     1
-o           o_pkey      false       2             gf           gf          N/A        true     false     true     1
-o           o_pkey      false       3             i            i           N/A        true     false     true     1
-o           oi          true        1             i            i           ASC        false    false     true     1
-o           oi          true        2             rowid        rowid       ASC        false    true      true     1
+table_name index_name non_unique seq_in_index column_name definition direction storing implicit visible visibility
+o      o_pkey   false    1       rowid    rowid    ASC    false  false   true   1
+o      o_pkey   false    2       gf      gf     N/A    true   false   true   1
+o      o_pkey   false    3       i      i      N/A    true   false   true   1
+o      oi     true    1       i      i      ASC    false  false   true   1
+o      oi     true    2       rowid    rowid    ASC    false  true   true   1
 
 statement ok
 ALTER TABLE t ADD f INT CHECK (f > 1)
@@ -456,12 +456,12 @@ ALTER TABLE t ADD i INT AS (g - 1) STORED CHECK (i > 0)
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_f   CHECK        CHECK ((f > 1))      true
-t  check_g   CHECK        CHECK ((g > 0))      true
-t  check_h   CHECK        CHECK ((h > 0))      true
-t  check_h1  CHECK        CHECK ((h < 10))     true
-t  t_h_key   UNIQUE       UNIQUE (h ASC)       true
-t  t_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)  true
+t check_f  CHECK    CHECK ((f > 1))   true
+t check_g  CHECK    CHECK ((g > 0))   true
+t check_h  CHECK    CHECK ((h > 0))   true
+t check_h1 CHECK    CHECK ((h < 10))   true
+t t_h_key  UNIQUE    UNIQUE (h ASC)    true
+t t_pkey  PRIMARY KEY PRIMARY KEY (a ASC) true
 
 statement ok
 DROP TABLE t
@@ -494,13 +494,13 @@ ALTER TABLE t ADD COLUMN u INT UNIQUE, ADD COLUMN v INT UNIQUE, ADD CONSTRAINT c
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_c_b  CHECK        CHECK ((c > b))      true
-t  ck         CHECK        CHECK ((a > 0))      true
-t  t_d_key    UNIQUE       UNIQUE (d ASC)       true
-t  t_e_key    UNIQUE       UNIQUE (e ASC)       true
-t  t_pkey     PRIMARY KEY  PRIMARY KEY (a ASC)  true
-t  t_u_key    UNIQUE       UNIQUE (u ASC)       true
-t  t_v_key    UNIQUE       UNIQUE (v ASC)       true
+t check_c_b CHECK    CHECK ((c > b))   true
+t ck     CHECK    CHECK ((a > 0))   true
+t t_d_key  UNIQUE    UNIQUE (d ASC)    true
+t t_e_key  UNIQUE    UNIQUE (e ASC)    true
+t t_pkey   PRIMARY KEY PRIMARY KEY (a ASC) true
+t t_u_key  UNIQUE    UNIQUE (u ASC)    true
+t t_v_key  UNIQUE    UNIQUE (v ASC)    true
 
 statement ok
 DROP TABLE t
@@ -526,12 +526,12 @@ ALTER TABLE tt ADD t DECIMAL UNIQUE DEFAULT 4.0
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM tt
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices                      is_hidden
-a            INT8       false        NULL            ·                      {tt_pkey,tt_s_key,tt_t_key}  false
-q            DECIMAL    false        NULL            ·                      {tt_pkey}                    false
-r            DECIMAL    true         NULL            ·                      {tt_pkey}                    false
-s            DECIMAL    false        NULL            ·                      {tt_pkey,tt_s_key}           false
-t            DECIMAL    true         4.0             ·                      {tt_pkey,tt_t_key}           false
+column_name data_type is_nullable column_default generation_expression indices           is_hidden
+a      INT8    false    NULL      ·           {tt_pkey,tt_s_key,tt_t_key} false
+q      DECIMAL  false    NULL      ·           {tt_pkey}          false
+r      DECIMAL  true     NULL      ·           {tt_pkey}          false
+s      DECIMAL  false    NULL      ·           {tt_pkey,tt_s_key}      false
+t      DECIMAL  true     4.0       ·           {tt_pkey,tt_t_key}      false
 
 # Default values can be added and changed after table creation.
 statement ok
@@ -546,9 +546,9 @@ ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 42
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM add_default
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices             is_hidden
-a            INT8       false        NULL            ·                      {add_default_pkey}  false
-b            INT8       false        42              ·                      {add_default_pkey}  false
+column_name data_type is_nullable column_default generation_expression indices       is_hidden
+a      INT8    false    NULL      ·           {add_default_pkey} false
+b      INT8    false    42       ·           {add_default_pkey} false
 
 statement ok
 INSERT INTO add_default (a) VALUES (2)
@@ -641,8 +641,8 @@ ALTER TABLE add_default ADD COLUMN f TIMESTAMP DEFAULT NULL
 query IIS rowsort
 SELECT a,b,f FROM add_default
 ----
-2 42   NULL
-3 10   NULL
+2 42  NULL
+3 10  NULL
 5 NULL NULL
 
 # Adding a unique column to an existing table with data with a default value
@@ -704,13 +704,13 @@ ALTER TABLE add_default SET (schema_locked=true)
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM add_default
 ----
-column_name  data_type  is_nullable  column_default           generation_expression  indices             is_hidden
-a            INT8       false        NULL                     ·                      {add_default_pkey}  false
-b            INT8       true         NULL                     ·                      {add_default_pkey}  false
-c            TIMESTAMP  true         current_timestamp()      ·                      {add_default_pkey}  false
-d            TIMESTAMP  true         transaction_timestamp()  ·                      {add_default_pkey}  false
-e            TIMESTAMP  true         statement_timestamp()    ·                      {add_default_pkey}  false
-f            TIMESTAMP  true         NULL                     ·                      {add_default_pkey}  false
+column_name data_type is_nullable column_default      generation_expression indices       is_hidden
+a      INT8    false    NULL           ·           {add_default_pkey} false
+b      INT8    true     NULL           ·           {add_default_pkey} false
+c      TIMESTAMP true     current_timestamp()   ·           {add_default_pkey} false
+d      TIMESTAMP true     transaction_timestamp() ·           {add_default_pkey} false
+e      TIMESTAMP true     statement_timestamp()  ·           {add_default_pkey} false
+f      TIMESTAMP true     NULL           ·           {add_default_pkey} false
 
 query T rowsort
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.change_in_explicit_txn'
@@ -738,7 +738,7 @@ SELECT * FROM d
 ----
 1 NULL 7
 2 NULL 7
-3 4    7
+3 4  7
 
 # Test privileges.
 
@@ -766,9 +766,9 @@ user root
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM privs
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices       is_hidden
-a            INT8       false        NULL            ·                      {privs_pkey}  false
-b            INT8       true         NULL            ·                      {privs_pkey}  false
+column_name data_type is_nullable column_default generation_expression indices    is_hidden
+a      INT8    false    NULL      ·           {privs_pkey} false
+b      INT8    true     NULL      ·           {privs_pkey} false
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -784,10 +784,10 @@ ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM privs
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices           is_hidden
-a            INT8       false        NULL            ·                      {foo,privs_pkey}  false
-b            INT8       true         NULL            ·                      {foo,privs_pkey}  false
-c            INT8       true         NULL            ·                      {privs_pkey}      false
+column_name data_type is_nullable column_default generation_expression indices      is_hidden
+a      INT8    false    NULL      ·           {foo,privs_pkey} false
+b      INT8    true     NULL      ·           {foo,privs_pkey} false
+c      INT8    true     NULL      ·           {privs_pkey}   false
 
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER TABLE nonexistent SPLIT AT VALUES (42)
@@ -898,21 +898,21 @@ onlyif config schema-locked-disabled
 query TT
 show create table decomputed_column
 ----
-decomputed_column  CREATE TABLE public.decomputed_column (
-                     a INT8 NOT NULL,
-                     b INT8 NULL,
-                     CONSTRAINT decomputed_column_pkey PRIMARY KEY (a ASC)
-                   );
+decomputed_column CREATE TABLE public.decomputed_column (
+           a INT8 NOT NULL,
+           b INT8 NULL,
+           CONSTRAINT decomputed_column_pkey PRIMARY KEY (a ASC)
+          );
 
 skipif config schema-locked-disabled
 query TT
 show create table decomputed_column
 ----
-decomputed_column  CREATE TABLE public.decomputed_column (
-                     a INT8 NOT NULL,
-                     b INT8 NULL,
-                     CONSTRAINT decomputed_column_pkey PRIMARY KEY (a ASC)
-                   ) WITH (schema_locked = true);
+decomputed_column CREATE TABLE public.decomputed_column (
+           a INT8 NOT NULL,
+           b INT8 NULL,
+           CONSTRAINT decomputed_column_pkey PRIMARY KEY (a ASC)
+          ) WITH (schema_locked = true);
 
 # Test for https://github.com/cockroachdb/cockroach/issues/26483
 # We try to create a unique column on an un-indexable type.
@@ -964,34 +964,34 @@ subtest 27402
 
 statement ok
 CREATE TABLE users (
-    id INT NOT NULL,
-    city STRING NOT NULL,
-    name STRING NULL,
-    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC)
+  id INT NOT NULL,
+  city STRING NOT NULL,
+  name STRING NULL,
+  CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC)
 )
 
 statement ok
 CREATE TABLE vehicles (
-    id INT NOT NULL,
-    city STRING NOT NULL,
-    type STRING NULL,
-    owner_id INT NULL,
-    mycol STRING NULL,
-    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
-    INDEX vehicles_auto_index_fk_city_ref_users (city ASC, owner_id ASC)
+  id INT NOT NULL,
+  city STRING NOT NULL,
+  type STRING NULL,
+  owner_id INT NULL,
+  mycol STRING NULL,
+  CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
+  INDEX vehicles_auto_index_fk_city_ref_users (city ASC, owner_id ASC)
 )
 
 statement ok
 CREATE TABLE rides (
-    id INT NOT NULL,
-    city STRING NOT NULL,
-    vehicle_city STRING NULL,
-    rider_id INT NULL,
-    vehicle_id INT NULL,
-    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
-    INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC),
-    INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC),
-    CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city)
+  id INT NOT NULL,
+  city STRING NOT NULL,
+  vehicle_city STRING NULL,
+  rider_id INT NULL,
+  vehicle_id INT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
+  INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC),
+  INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC),
+  CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city)
 )
 
 statement ok
@@ -1053,7 +1053,7 @@ INSERT INTO t VALUES (NULL)
 query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  t_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+t t_pkey PRIMARY KEY PRIMARY KEY (rowid ASC) true
 
 statement ok
 ALTER TABLE t ALTER COLUMN a DROP NOT NULL
@@ -1084,9 +1084,9 @@ INSERT INTO t VALUES (NULL)
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  a_auto_not_null   CHECK        CHECK ((a IS NOT NULL))  true
-t  a_auto_not_null1  CHECK        CHECK ((a IS NOT NULL))  true
-t  t_pkey            PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+t a_auto_not_null  CHECK    CHECK ((a IS NOT NULL)) true
+t a_auto_not_null1 CHECK    CHECK ((a IS NOT NULL)) true
+t t_pkey      PRIMARY KEY PRIMARY KEY (rowid ASC) true
 
 statement ok
 DROP TABLE t
@@ -1110,9 +1110,9 @@ ALTER TABLE t ADD CHECK (a < 16) NOT VALID
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK        CHECK ((a < 100))           true
-t  check_a1  CHECK        CHECK ((a < 16)) NOT VALID  false
-t  t_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)     true
+t check_a  CHECK    CHECK ((a < 100))      true
+t check_a1 CHECK    CHECK ((a < 16)) NOT VALID false
+t t_pkey  PRIMARY KEY PRIMARY KEY (rowid ASC)   true
 
 query error pq: failed to satisfy CHECK constraint \(a < 16:::INT8\)
 INSERT INTO t VALUES (20)
@@ -1129,9 +1129,9 @@ ALTER TABLE t VALIDATE CONSTRAINT check_a1
 query TTTTB nosort
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a   CHECK        CHECK ((a < 100))        true
-t  check_a1  CHECK        CHECK ((a < 16))         true
-t  t_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+t check_a  CHECK    CHECK ((a < 100))    true
+t check_a1 CHECK    CHECK ((a < 16))     true
+t t_pkey  PRIMARY KEY PRIMARY KEY (rowid ASC) true
 
 subtest regression_42858
 
@@ -1205,9 +1205,9 @@ ALTER TABLE telemetry_test SET (schema_locked=false)
 
 statement ok
 ALTER TABLE telemetry_test
-  ADD COLUMN a int DEFAULT 1,
-  ADD COLUMN b int UNIQUE CHECK(b > 1),
-  ADD COLUMN c int AS (a + b) STORED
+ ADD COLUMN a int DEFAULT 1,
+ ADD COLUMN b int UNIQUE CHECK(b > 1),
+ ADD COLUMN c int AS (a + b) STORED
 
 skipif config schema-locked-disabled
 statement ok
@@ -1216,9 +1216,9 @@ ALTER TABLE telemetry_test SET (schema_locked=true)
 query T rowsort
 SELECT feature_name FROM crdb_internal.feature_usage
 WHERE feature_name IN (
-  'sql.schema.new_column.qualification.computed',
-  'sql.schema.new_column.qualification.default_expr',
-  'sql.schema.new_column.qualification.unique'
+ 'sql.schema.new_column.qualification.computed',
+ 'sql.schema.new_column.qualification.default_expr',
+ 'sql.schema.new_column.qualification.unique'
 )
 ----
 sql.schema.new_column.qualification.computed
@@ -1288,25 +1288,25 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE public.t2 (
-      y INT8 NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      x INT8 NULL,
-      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x)
-    );
+t2 CREATE TABLE public.t2 (
+   y INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   x INT8 NULL,
+   CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+   CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x)
+  );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE public.t2 (
-      y INT8 NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      x INT8 NULL,
-      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x)
-    ) WITH (schema_locked = true);
+t2 CREATE TABLE public.t2 (
+   y INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   x INT8 NULL,
+   CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+   CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x)
+  ) WITH (schema_locked = true);
 
 # Test that only one index gets created when adding a column
 # with references and unique.
@@ -1320,27 +1320,27 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t3
 ----
-t3  CREATE TABLE public.t3 (
-      y INT8 NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      x INT8 NULL,
-      CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
-      CONSTRAINT t3_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-      UNIQUE INDEX t3_x_key (x ASC)
-    );
+t3 CREATE TABLE public.t3 (
+   y INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   x INT8 NULL,
+   CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
+   CONSTRAINT t3_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
+   UNIQUE INDEX t3_x_key (x ASC)
+  );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE t3
 ----
-t3  CREATE TABLE public.t3 (
-      y INT8 NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      x INT8 NULL,
-      CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
-      CONSTRAINT t3_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-      UNIQUE INDEX t3_x_key (x ASC)
-    ) WITH (schema_locked = true);
+t3 CREATE TABLE public.t3 (
+   y INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   x INT8 NULL,
+   CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
+   CONSTRAINT t3_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
+   UNIQUE INDEX t3_x_key (x ASC)
+  ) WITH (schema_locked = true);
 
 # We allowed the foreign key validation code to look into the mutations
 # list to validate what columns / indexes can be used for foreign keys.
@@ -1386,23 +1386,23 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t1
 ----
-t1  CREATE TABLE public.t1 (
-      x INT8 NOT NULL,
-      x2 INT8 NULL,
-      CONSTRAINT t1_pkey PRIMARY KEY (x ASC),
-      CONSTRAINT t1_x2_fkey FOREIGN KEY (x2) REFERENCES public.t1(x)
-    );
+t1 CREATE TABLE public.t1 (
+   x INT8 NOT NULL,
+   x2 INT8 NULL,
+   CONSTRAINT t1_pkey PRIMARY KEY (x ASC),
+   CONSTRAINT t1_x2_fkey FOREIGN KEY (x2) REFERENCES public.t1(x)
+  );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE t1
 ----
-t1  CREATE TABLE public.t1 (
-      x INT8 NOT NULL,
-      x2 INT8 NULL,
-      CONSTRAINT t1_pkey PRIMARY KEY (x ASC),
-      CONSTRAINT t1_x2_fkey FOREIGN KEY (x2) REFERENCES public.t1(x)
-    ) WITH (schema_locked = true);
+t1 CREATE TABLE public.t1 (
+   x INT8 NOT NULL,
+   x2 INT8 NULL,
+   CONSTRAINT t1_pkey PRIMARY KEY (x ASC),
+   CONSTRAINT t1_x2_fkey FOREIGN KEY (x2) REFERENCES public.t1(x)
+  ) WITH (schema_locked = true);
 
 statement error pq: insert on table "t1" violates foreign key constraint "t1_x2_fkey"
 INSERT INTO t1 VALUES (1, 2)
@@ -1425,13 +1425,13 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE public.t2 (
-      y INT8 NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      x INT8 NULL,
-      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID
-    );
+t2 CREATE TABLE public.t2 (
+   y INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   x INT8 NULL,
+   CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+   CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID
+  );
 
 # Test that we can also add a column and then an FK in the same txn.
 statement ok
@@ -1449,13 +1449,13 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE public.t2 (
-      y INT8 NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      x INT8 NULL,
-      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID
-    );
+t2 CREATE TABLE public.t2 (
+   y INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   x INT8 NULL,
+   CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+   CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID
+  );
 
 # Test that we can add a column and an index to an FK in the same txn.
 statement ok
@@ -1476,14 +1476,14 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE public.t2 (
-      y INT8 NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      x INT8 NULL,
-      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
-      INDEX t2_x_idx (x ASC)
-    );
+t2 CREATE TABLE public.t2 (
+   y INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   x INT8 NULL,
+   CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+   CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
+   INDEX t2_x_idx (x ASC)
+  );
 
 # Test the above on a table not created in the same txn.
 statement ok
@@ -1507,14 +1507,14 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE public.t2 (
-      y INT8 NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      x INT8 NULL,
-      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-      INDEX t2_x_idx (x ASC)
-    );
+t2 CREATE TABLE public.t2 (
+   y INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   x INT8 NULL,
+   CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+   CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
+   INDEX t2_x_idx (x ASC)
+  );
 
 # Test that an FK can use a newly created index.
 statement ok
@@ -1536,13 +1536,13 @@ COMMIT
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE public.t2 (
-      x INT8 NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-      INDEX t2_x_idx (x ASC)
-    );
+t2 CREATE TABLE public.t2 (
+   x INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+   CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
+   INDEX t2_x_idx (x ASC)
+  );
 
 # Test when default column value leads to an FK violation.
 statement ok
@@ -1568,14 +1568,14 @@ ALTER TABLE t2 ADD COLUMN x INT DEFAULT 1 UNIQUE REFERENCES t1 (x)
 query TT
 SHOW CREATE t2
 ----
-t2  CREATE TABLE public.t2 (
-      y INT8 NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      x INT8 NULL DEFAULT 1:::INT8,
-      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-      UNIQUE INDEX t2_x_key (x ASC)
-    );
+t2 CREATE TABLE public.t2 (
+   y INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   x INT8 NULL DEFAULT 1:::INT8,
+   CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+   CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
+   UNIQUE INDEX t2_x_key (x ASC)
+  );
 
 statement ok
 RESET create_table_with_schema_locked
@@ -1607,21 +1607,21 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE child
 ----
-child  CREATE TABLE public.child (
-         c INT8 NOT NULL,
-         CONSTRAINT child_pkey PRIMARY KEY (c ASC),
-         FAMILY fam_0_c_p (c)
-       );
+child CREATE TABLE public.child (
+     c INT8 NOT NULL,
+     CONSTRAINT child_pkey PRIMARY KEY (c ASC),
+     FAMILY fam_0_c_p (c)
+    );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE child
 ----
-child  CREATE TABLE public.child (
-         c INT8 NOT NULL,
-         CONSTRAINT child_pkey PRIMARY KEY (c ASC),
-         FAMILY fam_0_c_p (c)
-       ) WITH (schema_locked = true);
+child CREATE TABLE public.child (
+     c INT8 NOT NULL,
+     CONSTRAINT child_pkey PRIMARY KEY (c ASC),
+     FAMILY fam_0_c_p (c)
+    ) WITH (schema_locked = true);
 
 statement ok
 SET create_table_with_schema_locked=false
@@ -1647,12 +1647,12 @@ query TT
 SELECT index_name, column_name FROM [SHOW INDEXES FROM regression_54196]
 ORDER BY index_name, column_name ASC
 ----
-regression_54196_col2_col3_idx  col2
-regression_54196_col2_col3_idx  col3
-regression_54196_col2_col3_idx  rowid
-regression_54196_pkey           col2
-regression_54196_pkey           col3
-regression_54196_pkey           rowid
+regression_54196_col2_col3_idx col2
+regression_54196_col2_col3_idx col3
+regression_54196_col2_col3_idx rowid
+regression_54196_pkey      col2
+regression_54196_pkey      col3
+regression_54196_pkey      rowid
 
 statement ok
 RESET create_table_with_schema_locked
@@ -1662,10 +1662,10 @@ RESET create_table_with_schema_locked
 
 statement ok
 CREATE TABLE t_cannot_rename_constraint_over_index (
-    k INT PRIMARY KEY,
-    v INT,
-    CONSTRAINT v_unique UNIQUE (v),
-    INDEX idx_v (v)
+  k INT PRIMARY KEY,
+  v INT,
+  CONSTRAINT v_unique UNIQUE (v),
+  INDEX idx_v (v)
 );
 
 statement error relation idx_v already exists
@@ -1678,12 +1678,12 @@ subtest unique_without_index
 
 statement error pq: unique constraints without an index are not yet supported
 CREATE TABLE unique_without_index_error (
-  a INT UNIQUE WITHOUT INDEX
+ a INT UNIQUE WITHOUT INDEX
 )
 
 statement ok
 CREATE TABLE unique_without_index_error (
-  a INT
+ a INT
 )
 
 statement error pq: unique constraints without an index are not yet supported
@@ -1694,23 +1694,23 @@ SET experimental_enable_unique_without_index_constraints = true
 
 statement ok
 CREATE TABLE unique_without_index (
-  a INT,
-  b INT UNIQUE WITHOUT INDEX,
-  c INT UNIQUE,
-  d INT UNIQUE WITHOUT INDEX,
-  e INT,
-  UNIQUE WITHOUT INDEX (b),
-  UNIQUE WITHOUT INDEX (a, b),
-  UNIQUE WITHOUT INDEX (c),
-  UNIQUE WITHOUT INDEX (d, e)
+ a INT,
+ b INT UNIQUE WITHOUT INDEX,
+ c INT UNIQUE,
+ d INT UNIQUE WITHOUT INDEX,
+ e INT,
+ UNIQUE WITHOUT INDEX (b),
+ UNIQUE WITHOUT INDEX (a, b),
+ UNIQUE WITHOUT INDEX (c),
+ UNIQUE WITHOUT INDEX (d, e)
 )
 
 statement ok
 CREATE TABLE uwi_child (
-  d INT REFERENCES unique_without_index (d),
-  e INT,
-  CONSTRAINT fk_d_e FOREIGN KEY (d, e) REFERENCES unique_without_index (d, e),
-  CONSTRAINT fk_e_d FOREIGN KEY (e, d) REFERENCES unique_without_index (e, d)
+ d INT REFERENCES unique_without_index (d),
+ e INT,
+ CONSTRAINT fk_d_e FOREIGN KEY (d, e) REFERENCES unique_without_index (d, e),
+ CONSTRAINT fk_e_d FOREIGN KEY (e, d) REFERENCES unique_without_index (e, d)
 )
 
 # We don't yet support adding a column marked as UNIQUE WITHOUT INDEX after a
@@ -1777,21 +1777,21 @@ ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_c;
 
 statement ok
 CREATE TABLE unique_without_index_partial (
-  a INT,
-  b INT,
-  c INT
+ a INT,
+ b INT,
+ c INT
 );
 INSERT INTO unique_without_index_partial VALUES
-  (1, 1, 1),
-  (2, 2, 2),
-  (1, 3, -3),
-  (2, -2, -2),
-  (NULL, 4, 4),
-  (NULL, 5, 5);
+ (1, 1, 1),
+ (2, 2, 2),
+ (1, 3, -3),
+ (2, -2, -2),
+ (NULL, 4, 4),
+ (NULL, 5, 5);
 
 let $constraint_violations_before
 SELECT usage_count
-  FROM crdb_internal.feature_usage
+ FROM crdb_internal.feature_usage
  WHERE feature_name = 'sql.schema_changer.errors.constraint_violation';
 
 # Trying to add a partial unique constraint fails when there are duplicates.
@@ -1805,14 +1805,14 @@ ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_1 UNIQUE WITHOUT 
 onlyif config local-legacy-schema-changer
 query B
 SELECT usage_count > $constraint_violations_before
-  FROM crdb_internal.feature_usage
+ FROM crdb_internal.feature_usage
  WHERE feature_name = 'sql.schema_changer.errors.constraint_violation';
 ----
 true
 
 query I
 SELECT count(usage_count)
-  FROM crdb_internal.feature_usage
+ FROM crdb_internal.feature_usage
  WHERE feature_name = 'sql.schema_changer.errors.uncategorized' and usage_count >= 1;
 ----
 1
@@ -1839,19 +1839,19 @@ ALTER TABLE unique_without_index_partial ADD CONSTRAINT uniq_a_2 UNIQUE WITHOUT 
 query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-table_name            constraint_name             constraint_type  details                                 validated
-unique_without_index  my_partial_unique_f         UNIQUE           UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE           UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_e2                UNIQUE           UNIQUE WITHOUT INDEX (e) NOT VALID      false
-unique_without_index  my_unique_f                 UNIQUE           UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_a_b                  UNIQUE           UNIQUE WITHOUT INDEX (a, b)             true
-unique_without_index  unique_b                    UNIQUE           UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_b_1                  UNIQUE           UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_c                    UNIQUE           UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE           UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE           UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE           UNIQUE (c ASC)                          true
-unique_without_index  unique_without_index_pkey   PRIMARY KEY      PRIMARY KEY (rowid ASC)                 true
+table_name      constraint_name       constraint_type details                 validated
+unique_without_index my_partial_unique_f     UNIQUE      UNIQUE WITHOUT INDEX (f) WHERE (f > 0) true
+unique_without_index my_unique_e         UNIQUE      UNIQUE WITHOUT INDEX (e)        true
+unique_without_index my_unique_e2        UNIQUE      UNIQUE WITHOUT INDEX (e) NOT VALID   false
+unique_without_index my_unique_f         UNIQUE      UNIQUE WITHOUT INDEX (f)        true
+unique_without_index unique_a_b         UNIQUE      UNIQUE WITHOUT INDEX (a, b)       true
+unique_without_index unique_b          UNIQUE      UNIQUE WITHOUT INDEX (b)        true
+unique_without_index unique_b_1         UNIQUE      UNIQUE WITHOUT INDEX (b)        true
+unique_without_index unique_c          UNIQUE      UNIQUE WITHOUT INDEX (c)        true
+unique_without_index unique_d          UNIQUE      UNIQUE WITHOUT INDEX (d)        true
+unique_without_index unique_d_e         UNIQUE      UNIQUE WITHOUT INDEX (d, e)       true
+unique_without_index unique_without_index_c_key UNIQUE      UNIQUE (c ASC)             true
+unique_without_index unique_without_index_pkey  PRIMARY KEY   PRIMARY KEY (rowid ASC)         true
 
 statement ok
 ALTER TABLE unique_without_index RENAME COLUMN a TO aa
@@ -1868,18 +1868,18 @@ ALTER TABLE unique_without_index RENAME CONSTRAINT unique_b TO unique_b_2
 query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_e2                UNIQUE       UNIQUE WITHOUT INDEX (e) NOT VALID      false
-unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_a_b                  UNIQUE       UNIQUE WITHOUT INDEX (aa, b)            true
-unique_without_index  unique_b_1                  UNIQUE       UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_b_2                  UNIQUE       UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
-unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
+unique_without_index my_partial_unique_f     UNIQUE    UNIQUE WITHOUT INDEX (f) WHERE (f > 0) true
+unique_without_index my_unique_e         UNIQUE    UNIQUE WITHOUT INDEX (e)        true
+unique_without_index my_unique_e2        UNIQUE    UNIQUE WITHOUT INDEX (e) NOT VALID   false
+unique_without_index my_unique_f         UNIQUE    UNIQUE WITHOUT INDEX (f)        true
+unique_without_index unique_a_b         UNIQUE    UNIQUE WITHOUT INDEX (aa, b)      true
+unique_without_index unique_b_1         UNIQUE    UNIQUE WITHOUT INDEX (b)        true
+unique_without_index unique_b_2         UNIQUE    UNIQUE WITHOUT INDEX (b)        true
+unique_without_index unique_c          UNIQUE    UNIQUE WITHOUT INDEX (c)        true
+unique_without_index unique_d          UNIQUE    UNIQUE WITHOUT INDEX (d)        true
+unique_without_index unique_d_e         UNIQUE    UNIQUE WITHOUT INDEX (d, e)       true
+unique_without_index unique_without_index_c_key UNIQUE    UNIQUE (c ASC)             true
+unique_without_index unique_without_index_pkey  PRIMARY KEY PRIMARY KEY (rowid ASC)         true
 
 statement error pgcode 0A000 cannot drop UNIQUE constraint \"unique_without_index_c_key\"
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
@@ -1898,16 +1898,16 @@ ALTER TABLE unique_without_index DROP CONSTRAINT my_unique_e2
 query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_a_b                  UNIQUE       UNIQUE WITHOUT INDEX (aa, b)            true
-unique_without_index  unique_b_1                  UNIQUE       UNIQUE WITHOUT INDEX (b)                true
-unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
-unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
+unique_without_index my_partial_unique_f     UNIQUE    UNIQUE WITHOUT INDEX (f) WHERE (f > 0) true
+unique_without_index my_unique_e         UNIQUE    UNIQUE WITHOUT INDEX (e)        true
+unique_without_index my_unique_f         UNIQUE    UNIQUE WITHOUT INDEX (f)        true
+unique_without_index unique_a_b         UNIQUE    UNIQUE WITHOUT INDEX (aa, b)      true
+unique_without_index unique_b_1         UNIQUE    UNIQUE WITHOUT INDEX (b)        true
+unique_without_index unique_c          UNIQUE    UNIQUE WITHOUT INDEX (c)        true
+unique_without_index unique_d          UNIQUE    UNIQUE WITHOUT INDEX (d)        true
+unique_without_index unique_d_e         UNIQUE    UNIQUE WITHOUT INDEX (d, e)       true
+unique_without_index unique_without_index_c_key UNIQUE    UNIQUE (c ASC)             true
+unique_without_index unique_without_index_pkey  PRIMARY KEY PRIMARY KEY (rowid ASC)         true
 
 # Dropping a column in a unique constraint drops the constraint.
 statement ok
@@ -1916,22 +1916,22 @@ ALTER TABLE unique_without_index DROP COLUMN b
 query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
-unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
-unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
+unique_without_index my_partial_unique_f     UNIQUE    UNIQUE WITHOUT INDEX (f) WHERE (f > 0) true
+unique_without_index my_unique_e         UNIQUE    UNIQUE WITHOUT INDEX (e)        true
+unique_without_index my_unique_f         UNIQUE    UNIQUE WITHOUT INDEX (f)        true
+unique_without_index unique_c          UNIQUE    UNIQUE WITHOUT INDEX (c)        true
+unique_without_index unique_d          UNIQUE    UNIQUE WITHOUT INDEX (d)        true
+unique_without_index unique_d_e         UNIQUE    UNIQUE WITHOUT INDEX (d, e)       true
+unique_without_index unique_without_index_c_key UNIQUE    UNIQUE (c ASC)             true
+unique_without_index unique_without_index_pkey  PRIMARY KEY PRIMARY KEY (rowid ASC)         true
 
 query TTTTB nosort
 SHOW CONSTRAINTS FROM uwi_child
 ----
-uwi_child  fk_d_e            FOREIGN KEY  FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e)  true
-uwi_child  fk_e_d            FOREIGN KEY  FOREIGN KEY (e, d) REFERENCES unique_without_index(e, d)  true
-uwi_child  uwi_child_d_fkey  FOREIGN KEY  FOREIGN KEY (d) REFERENCES unique_without_index(d)        true
-uwi_child  uwi_child_pkey    PRIMARY KEY  PRIMARY KEY (rowid ASC)                                   true
+uwi_child fk_d_e      FOREIGN KEY FOREIGN KEY (d, e) REFERENCES unique_without_index(d, e) true
+uwi_child fk_e_d      FOREIGN KEY FOREIGN KEY (e, d) REFERENCES unique_without_index(e, d) true
+uwi_child uwi_child_d_fkey FOREIGN KEY FOREIGN KEY (d) REFERENCES unique_without_index(d)    true
+uwi_child uwi_child_pkey  PRIMARY KEY PRIMARY KEY (rowid ASC)                  true
 
 # Attempting to drop a column with a foreign key reference fails.
 statement error pq: "unique_d" is referenced by foreign key from table "uwi_child"
@@ -1944,17 +1944,17 @@ ALTER TABLE unique_without_index DROP COLUMN d CASCADE
 query TTTTB nosort
 SHOW CONSTRAINTS FROM unique_without_index
 ----
-unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT INDEX (f) WHERE (f > 0)  true
-unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
-unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
-unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
-unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
+unique_without_index my_partial_unique_f     UNIQUE    UNIQUE WITHOUT INDEX (f) WHERE (f > 0) true
+unique_without_index my_unique_e         UNIQUE    UNIQUE WITHOUT INDEX (e)        true
+unique_without_index my_unique_f         UNIQUE    UNIQUE WITHOUT INDEX (f)        true
+unique_without_index unique_c          UNIQUE    UNIQUE WITHOUT INDEX (c)        true
+unique_without_index unique_without_index_c_key UNIQUE    UNIQUE (c ASC)             true
+unique_without_index unique_without_index_pkey  PRIMARY KEY PRIMARY KEY (rowid ASC)         true
 
 query TTTTB
 SHOW CONSTRAINTS FROM uwi_child
 ----
-uwi_child  uwi_child_pkey  PRIMARY KEY  PRIMARY KEY (rowid ASC)  true
+uwi_child uwi_child_pkey PRIMARY KEY PRIMARY KEY (rowid ASC) true
 
 # Regression for #54629.
 statement ok
@@ -1977,12 +1977,12 @@ COMMIT;
 
 query I
 SELECT count(descriptor_id)
-  FROM (
-        SELECT json_array_elements_text(
-                crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', value)->'descriptorIds'
-               )::INT8 AS descriptor_id
-          FROM system.job_info WHERE info_key = 'legacy_payload'
-       )
+ FROM (
+    SELECT json_array_elements_text(
+        crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', value)->'descriptorIds'
+        )::INT8 AS descriptor_id
+     FROM system.job_info WHERE info_key = 'legacy_payload'
+    )
  WHERE descriptor_id = ('test.public.t45985'::REGCLASS)::INT8;
 ----
 0
@@ -2104,19 +2104,19 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE visible_table
 ----
-visible_table  CREATE TABLE public.visible_table (
-                 a INT8 NOT NULL,
-                 CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
-               );
+visible_table CREATE TABLE public.visible_table (
+         a INT8 NOT NULL,
+         CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
+        );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE visible_table
 ----
-visible_table  CREATE TABLE public.visible_table (
-                 a INT8 NOT NULL,
-                 CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
-               ) WITH (schema_locked = true);
+visible_table CREATE TABLE public.visible_table (
+         a INT8 NOT NULL,
+         CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
+        ) WITH (schema_locked = true);
 
 statement ok
 ALTER TABLE visible_table ALTER COLUMN a SET NOT VISIBLE
@@ -2125,19 +2125,19 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE visible_table
 ----
-visible_table  CREATE TABLE public.visible_table (
-                 a INT8 NOT VISIBLE NOT NULL,
-                 CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
-               );
+visible_table CREATE TABLE public.visible_table (
+         a INT8 NOT VISIBLE NOT NULL,
+         CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
+        );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE visible_table
 ----
-visible_table  CREATE TABLE public.visible_table (
-                 a INT8 NOT VISIBLE NOT NULL,
-                 CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
-               ) WITH (schema_locked = true);
+visible_table CREATE TABLE public.visible_table (
+         a INT8 NOT VISIBLE NOT NULL,
+         CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
+        ) WITH (schema_locked = true);
 
 subtest if_table_exists_already
 
@@ -2194,13 +2194,13 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t67234]
 ----
 CREATE TABLE public.t67234 (
-  k INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
-  CONSTRAINT t67234_pkey PRIMARY KEY (k ASC),
-  UNIQUE INDEX t67234_c1 (a ASC) WHERE b > 0:::INT8,
-  FAMILY fam_0_k_a_b (k, a, b),
-  CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
+ k INT8 NOT NULL,
+ a INT8 NULL,
+ b INT8 NULL,
+ CONSTRAINT t67234_pkey PRIMARY KEY (k ASC),
+ UNIQUE INDEX t67234_c1 (a ASC) WHERE b > 0:::INT8,
+ FAMILY fam_0_k_a_b (k, a, b),
+ CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
 );
 
 skipif config schema-locked-disabled
@@ -2208,13 +2208,13 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t67234]
 ----
 CREATE TABLE public.t67234 (
-  k INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
-  CONSTRAINT t67234_pkey PRIMARY KEY (k ASC),
-  UNIQUE INDEX t67234_c1 (a ASC) WHERE b > 0:::INT8,
-  FAMILY fam_0_k_a_b (k, a, b),
-  CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
+ k INT8 NOT NULL,
+ a INT8 NULL,
+ b INT8 NULL,
+ CONSTRAINT t67234_pkey PRIMARY KEY (k ASC),
+ UNIQUE INDEX t67234_c1 (a ASC) WHERE b > 0:::INT8,
+ FAMILY fam_0_k_a_b (k, a, b),
+ CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
 ) WITH (schema_locked = true);
 
 subtest generated_as_identity
@@ -2237,27 +2237,27 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
-t  CREATE TABLE public.t (
-     a INT8 NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
-     c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
-     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-     UNIQUE INDEX t_a_key (a ASC)
-   );
+t CREATE TABLE public.t (
+   a INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
+   c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+   UNIQUE INDEX t_a_key (a ASC)
+  );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
-t  CREATE TABLE public.t (
-     a INT8 NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
-     c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
-     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-     UNIQUE INDEX t_a_key (a ASC)
-   ) WITH (schema_locked = true);
+t CREATE TABLE public.t (
+   a INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
+   c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+   UNIQUE INDEX t_a_key (a ASC)
+  ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO t (c) VALUES (2)
@@ -2269,29 +2269,29 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
-t  CREATE TABLE public.t (
-     a INT8 NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
-     c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
-     d INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
-     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-     UNIQUE INDEX t_a_key (a ASC)
-   );
+t CREATE TABLE public.t (
+   a INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
+   c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+   d INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+   UNIQUE INDEX t_a_key (a ASC)
+  );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
-t  CREATE TABLE public.t (
-     a INT8 NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
-     c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
-     d INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
-     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-     UNIQUE INDEX t_a_key (a ASC)
-   ) WITH (schema_locked = true);
+t CREATE TABLE public.t (
+   a INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
+   c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+   d INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+   UNIQUE INDEX t_a_key (a ASC)
+  ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO t (c) VALUES (2)
@@ -2363,9 +2363,9 @@ INSERT INTO t (a) VALUES (7), (8), (9)
 query II
 SELECT a, b - lag(b, 1) OVER (ORDER BY a) FROM t ORDER BY a;
 ----
-7  NULL
-8  3
-9  3
+7 NULL
+8 3
+9 3
 
 statement error pq: cannot insert into column "b"\nDETAIL: Column "b" is an identity column defined as GENERATED ALWAYS
 INSERT INTO t (a, b) VALUES (10, 2)
@@ -2393,27 +2393,27 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
-t  CREATE TABLE public.t (
-     a INT8 NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3),
-     c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3 PER NODE CACHE 10),
-     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-     UNIQUE INDEX t_a_key (a ASC)
-   );
+t CREATE TABLE public.t (
+   a INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3),
+   c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3 PER NODE CACHE 10),
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+   UNIQUE INDEX t_a_key (a ASC)
+  );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
-t  CREATE TABLE public.t (
-     a INT8 NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3),
-     c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3 PER NODE CACHE 10),
-     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-     UNIQUE INDEX t_a_key (a ASC)
-   ) WITH (schema_locked = true);
+t CREATE TABLE public.t (
+   a INT8 NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3),
+   c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3 PER NODE CACHE 10),
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+   UNIQUE INDEX t_a_key (a ASC)
+  ) WITH (schema_locked = true);
 
 statement ok
 ALTER TABLE t DROP COLUMN c
@@ -2424,9 +2424,9 @@ INSERT INTO t (a) VALUES (7), (8), (9)
 query II
 SELECT * FROM t ORDER BY a
 ----
-7  1
-8  4
-9  7
+7 1
+8 4
+9 7
 
 statement ok
 INSERT INTO t (a, b) VALUES (10, 2)
@@ -2434,10 +2434,10 @@ INSERT INTO t (a, b) VALUES (10, 2)
 query II
 SELECT * FROM t ORDER BY a
 ----
-7   1
-8   4
-9   7
-10  2
+7  1
+8  4
+9  7
+10 2
 
 statement error column "b" is an identity column
 ALTER TABLE t ALTER COLUMN b SET DEFAULT 10
@@ -2460,19 +2460,19 @@ skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE TABLE t
 ----
-t  CREATE TABLE public.t (
-     id INT8 NOT NULL,
-     CONSTRAINT t_pkey PRIMARY KEY (id ASC)
-   );
+t CREATE TABLE public.t (
+   id INT8 NOT NULL,
+   CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+  );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
-t  CREATE TABLE public.t (
-     id INT8 NOT NULL,
-     CONSTRAINT t_pkey PRIMARY KEY (id ASC)
-   ) WITH (schema_locked = true);
+t CREATE TABLE public.t (
+   id INT8 NOT NULL,
+   CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+  ) WITH (schema_locked = true);
 
 # Table has a PRIMARY KEY named index; check it errors when assinging PRIMARY KEY to id.
 statement ok
@@ -2480,10 +2480,10 @@ DROP TABLE IF EXISTS t;
 
 statement ok
 CREATE TABLE t (
-  id INT NOT NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_pk PRIMARY KEY (rowid),
-  CONSTRAINT t_pkey UNIQUE (id)
+ id INT NOT NULL,
+ rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_pk PRIMARY KEY (rowid),
+ CONSTRAINT t_pkey UNIQUE (id)
 )
 
 statement error constraint with name "t_pkey" already exists
@@ -2496,9 +2496,9 @@ DROP TABLE IF EXISTS t;
 
 statement ok
 CREATE TABLE t (
-  id INT NOT NULL,
-  explicit_rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_pk PRIMARY KEY (explicit_rowid)
+ id INT NOT NULL,
+ explicit_rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_pk PRIMARY KEY (explicit_rowid)
 )
 
 statement error multiple primary keys for table "t" are not allowed
@@ -2509,9 +2509,9 @@ DROP TABLE IF EXISTS t;
 
 statement ok
 CREATE TABLE public.t (
-   id INT8 NOT NULL,
-   rowid INT8 NOT VISIBLE NOT NULL,
-   CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+  id INT8 NOT NULL,
+  rowid INT8 NOT VISIBLE NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (id ASC)
 )
 
 statement error multiple primary keys for table "t" are not allowed
@@ -2522,9 +2522,9 @@ DROP TABLE IF EXISTS t;
 
 statement ok
 CREATE TABLE public.t (
-   id INT8 NOT NULL,
-   rowid INT4 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+  id INT8 NOT NULL,
+  rowid INT4 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (id ASC)
 )
 
 statement error multiple primary keys for table "t" are not allowed
@@ -2551,7 +2551,7 @@ statement ok
 ALTER TABLE colsource DROP COLUMN description, DROP COLUMN customer_id
 
 statement ok
-ALTER TABLE colsource ADD COLUMN customer_id UUID  REFERENCES colref(id), ADD COLUMN description STRING NULL;
+ALTER TABLE colsource ADD COLUMN customer_id UUID REFERENCES colref(id), ADD COLUMN description STRING NULL;
 
 statement ok
 COMMIT
@@ -2591,20 +2591,20 @@ ALTER TABLE multipleinstmt SET (schema_locked=true)
 query TTBT
 SELECT * FROM multipleinstmt ORDER BY key ASC;
 ----
-a  a  false  NULL
-b  b  false  NULL
-c  c  false  NULL
+a a false NULL
+b b false NULL
+c c false NULL
 
 statement ok
 ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS c BOOL DEFAULT true,
-                           ADD COLUMN IF NOT EXISTS d STRING;
+              ADD COLUMN IF NOT EXISTS d STRING;
 
 query TTBTBT
 SELECT * FROM multipleinstmt ORDER BY key ASC;
 ----
-a  a  false  NULL  true  NULL
-b  b  false  NULL  true  NULL
-c  c  false  NULL  true  NULL
+a a false NULL true NULL
+b b false NULL true NULL
+c c false NULL true NULL
 
 skip_on_retry
 
@@ -2753,7 +2753,7 @@ rollback
 statement ok
 alter table const_tbl add constraint "steve" CHECK (a > 100);
 
-statement error  pq: duplicate constraint name: "steve"
+statement error pq: duplicate constraint name: "steve"
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
 alter table const_tbl drop constraint "steve";
@@ -2786,15 +2786,15 @@ ALTER TABLE test_serial ADD COLUMN b SERIAL;
 query ITTT colnames,rowsort
 SELECT l.table_id, l.name, l.state, r.refobjid
 FROM (
-  SELECT table_id, name, state
-  FROM crdb_internal.tables WHERE name
-  LIKE 'test_serial%' AND state = 'PUBLIC'
+ SELECT table_id, name, state
+ FROM crdb_internal.tables WHERE name
+ LIKE 'test_serial%' AND state = 'PUBLIC'
 ) l
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
-table_id  name               state   refobjid
-202       test_serial_b_seq  PUBLIC  201
-201       test_serial        PUBLIC  NULL
+table_id name        state  refobjid
+202    test_serial_b_seq PUBLIC 201
+201    test_serial    PUBLIC NULL
 
 statement ok
 DROP TABLE test_serial;
@@ -2802,13 +2802,13 @@ DROP TABLE test_serial;
 query ITTT colnames
 SELECT l.table_id, l.name, l.state, r.refobjid
 FROM (
-  SELECT table_id, name, state
-  FROM crdb_internal.tables WHERE name
-  LIKE 'test_serial%' AND state = 'PUBLIC'
+ SELECT table_id, name, state
+ FROM crdb_internal.tables WHERE name
+ LIKE 'test_serial%' AND state = 'PUBLIC'
 ) l
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
-table_id  name  state  refobjid
+table_id name state refobjid
 
 statement ok
 CREATE TABLE test_serial (
@@ -2821,15 +2821,15 @@ ALTER TABLE test_serial ADD COLUMN b SERIAL;
 query ITTT colnames,rowsort
 SELECT l.table_id, l.name, l.state, r.refobjid
 FROM (
-  SELECT table_id, name, state
-  FROM crdb_internal.tables WHERE name
-  LIKE 'test_serial%' AND state = 'PUBLIC'
+ SELECT table_id, name, state
+ FROM crdb_internal.tables WHERE name
+ LIKE 'test_serial%' AND state = 'PUBLIC'
 ) l
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
-table_id  name               state   refobjid
-204       test_serial_b_seq  PUBLIC  203
-203       test_serial        PUBLIC  NULL
+table_id name        state  refobjid
+204    test_serial_b_seq PUBLIC 203
+203    test_serial    PUBLIC NULL
 
 statement ok
 ALTER TABLE test_serial DROP COLUMN b;
@@ -2837,14 +2837,14 @@ ALTER TABLE test_serial DROP COLUMN b;
 query ITTT colnames
 SELECT l.table_id, l.name, l.state, r.refobjid
 FROM (
-  SELECT table_id, name, state
-  FROM crdb_internal.tables WHERE name
-  LIKE 'test_serial%' AND state = 'PUBLIC'
+ SELECT table_id, name, state
+ FROM crdb_internal.tables WHERE name
+ LIKE 'test_serial%' AND state = 'PUBLIC'
 ) l
 LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
 ----
-table_id  name         state   refobjid
-203       test_serial  PUBLIC  NULL
+table_id name     state  refobjid
+203    test_serial PUBLIC NULL
 
 statement ok
 DROP TABLE test_serial;
@@ -2897,17 +2897,17 @@ ALTER TABLE t5 SET (sql_stats_automatic_collection_enabled = true)
 # Verify automatic collection is enabled.
 query T
 SELECT
-    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
-                              d.descriptor, false)->'table'->'autoStatsSettings'
+  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+               d.descriptor, false)->'table'->'autoStatsSettings'
 FROM
-    crdb_internal.tables AS tbl
-    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+  crdb_internal.tables AS tbl
+  INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
 WHERE
-    tbl.name = 't5'
-    AND tbl.drop_time IS NULL
-    AND crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
-                                      d.descriptor, false)->'table'->'autoStatsSettings'
-                                      ->> 'enabled' = 'true'
+  tbl.name = 't5'
+  AND tbl.drop_time IS NULL
+  AND crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                   d.descriptor, false)->'table'->'autoStatsSettings'
+                   ->> 'enabled' = 'true'
 ----
 {"enabled": true}
 
@@ -2918,17 +2918,17 @@ ALTER TABLE t5 SET (sql_stats_automatic_collection_enabled = 'false')
 # Verify automatic collection is disabled.
 query T
 SELECT
-    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
-                              d.descriptor, false)->'table'->'autoStatsSettings'
+  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+               d.descriptor, false)->'table'->'autoStatsSettings'
 FROM
-    crdb_internal.tables AS tbl
-    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+  crdb_internal.tables AS tbl
+  INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
 WHERE
-    tbl.name = 't5'
-    AND tbl.drop_time IS NULL
-    AND crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
-                                      d.descriptor, false)->'table'->'autoStatsSettings'
-                                      ->> 'enabled' = 'false'
+  tbl.name = 't5'
+  AND tbl.drop_time IS NULL
+  AND crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                   d.descriptor, false)->'table'->'autoStatsSettings'
+                   ->> 'enabled' = 'false'
 ----
 {"enabled": false}
 
@@ -2940,9 +2940,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t5]
 ----
 CREATE TABLE public.t5 (
-  a INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
+ a INT8 NULL,
+ rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+ CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
 ) WITH (sql_stats_automatic_collection_enabled = false);
 
 skipif config schema-locked-disabled
@@ -2950,9 +2950,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t5]
 ----
 CREATE TABLE public.t5 (
-  a INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
+ a INT8 NULL,
+ rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+ CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
 ) WITH (sql_stats_automatic_collection_enabled = false, schema_locked = true);
 
 statement error pq: parameter "sql_stats_automatic_collection_enabled" requires a Boolean value
@@ -2964,14 +2964,14 @@ ALTER TABLE t5 RESET (sql_stats_automatic_collection_enabled)
 # Verify the automatic collection setting is removed.
 query T
 SELECT
-    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
-                              d.descriptor, false)->'table'->>'autoStatsSettings'
+  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+               d.descriptor, false)->'table'->>'autoStatsSettings'
 FROM
-    crdb_internal.tables AS tbl
-    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+  crdb_internal.tables AS tbl
+  INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
 WHERE
-    tbl.name = 't5'
-    AND tbl.drop_time IS NULL
+  tbl.name = 't5'
+  AND tbl.drop_time IS NULL
 ----
 {}
 
@@ -2984,19 +2984,19 @@ ALTER TABLE t5 SET (sql_stats_automatic_collection_min_stale_rows = 'world')
 # Verify strings can be converted to proper setting values.
 statement ok
 ALTER TABLE t5 SET (sql_stats_automatic_collection_fraction_stale_rows = '0.15',
-                    sql_stats_automatic_collection_min_stale_rows = '1234')
+          sql_stats_automatic_collection_min_stale_rows = '1234')
 
 # Verify settings
 query T
 SELECT
-    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
-                              d.descriptor, false)->'table'->>'autoStatsSettings'
+  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+               d.descriptor, false)->'table'->>'autoStatsSettings'
 FROM
-    crdb_internal.tables AS tbl
-    INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
+  crdb_internal.tables AS tbl
+  INNER JOIN system.descriptor AS d ON d.id = tbl.table_id
 WHERE
-    tbl.name = 't5'
-    AND tbl.drop_time IS NULL
+  tbl.name = 't5'
+  AND tbl.drop_time IS NULL
 ----
 {"fractionStaleRows": 0.15, "minStaleRows": "1234"}
 
@@ -3005,9 +3005,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t5]
 ----
 CREATE TABLE public.t5 (
-  a INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
+ a INT8 NULL,
+ rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+ CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
 ) WITH (sql_stats_automatic_collection_min_stale_rows = 1234, sql_stats_automatic_collection_fraction_stale_rows = 0.15);
 
 skipif config schema-locked-disabled
@@ -3015,9 +3015,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t5]
 ----
 CREATE TABLE public.t5 (
-  a INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
+ a INT8 NULL,
+ rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+ CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
 ) WITH (sql_stats_automatic_collection_min_stale_rows = 1234, sql_stats_automatic_collection_fraction_stale_rows = 0.15, schema_locked = true);
 
 subtest add_volatile_unique_column_81448
@@ -3063,21 +3063,21 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE tbl
 ----
-tbl  CREATE TABLE public.tbl (
-       i INT8 NOT NULL,
-       j INT8 NOT NULL DEFAULT nextval('public.s1'::REGCLASS) ON UPDATE nextval('public.s2'::REGCLASS),
-       CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
-     );
+tbl CREATE TABLE public.tbl (
+    i INT8 NOT NULL,
+    j INT8 NOT NULL DEFAULT nextval('public.s1'::REGCLASS) ON UPDATE nextval('public.s2'::REGCLASS),
+    CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
+   );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE tbl
 ----
-tbl  CREATE TABLE public.tbl (
-       i INT8 NOT NULL,
-       j INT8 NOT NULL DEFAULT nextval('public.s1'::REGCLASS) ON UPDATE nextval('public.s2'::REGCLASS),
-       CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
-     ) WITH (schema_locked = true);
+tbl CREATE TABLE public.tbl (
+    i INT8 NOT NULL,
+    j INT8 NOT NULL DEFAULT nextval('public.s1'::REGCLASS) ON UPDATE nextval('public.s2'::REGCLASS),
+    CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
+   ) WITH (schema_locked = true);
 
 # Now use `ALTER COLUMN` to swap the use of sequence 's1' and 's2'
 
@@ -3091,21 +3091,21 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE tbl
 ----
-tbl  CREATE TABLE public.tbl (
-       i INT8 NOT NULL,
-       j INT8 NOT NULL DEFAULT nextval('public.s2'::REGCLASS) ON UPDATE nextval('public.s1'::REGCLASS),
-       CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
-     );
+tbl CREATE TABLE public.tbl (
+    i INT8 NOT NULL,
+    j INT8 NOT NULL DEFAULT nextval('public.s2'::REGCLASS) ON UPDATE nextval('public.s1'::REGCLASS),
+    CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
+   );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE tbl
 ----
-tbl  CREATE TABLE public.tbl (
-       i INT8 NOT NULL,
-       j INT8 NOT NULL DEFAULT nextval('public.s2'::REGCLASS) ON UPDATE nextval('public.s1'::REGCLASS),
-       CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
-     ) WITH (schema_locked = true);
+tbl CREATE TABLE public.tbl (
+    i INT8 NOT NULL,
+    j INT8 NOT NULL DEFAULT nextval('public.s2'::REGCLASS) ON UPDATE nextval('public.s1'::REGCLASS),
+    CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
+   ) WITH (schema_locked = true);
 
 # Verify that adding not-null physical column with a default or computed expression
 # fails if the expression evaluates to NULL.
@@ -3216,7 +3216,7 @@ ALTER TABLE t_93398 ADD COLUMN c2 DECIMAL DEFAULT pi();
 query IT
 SELECT * FROM t_93398;
 ----
-0  3.141592653589793
+0 3.141592653589793
 
 statement error pgcode 22001 value too long for type CHAR
 ALTER TABLE t_93398 ADD COLUMN c3 CHAR(1) DEFAULT 'foo'::TEXT;
@@ -3227,7 +3227,7 @@ ALTER TABLE t_93398 ADD COLUMN c3 "char" DEFAULT 'foo'::TEXT;
 query IT
 SELECT c1, c3 FROM t_93398;
 ----
-0  f
+0 f
 
 # The following subtest tests the case when there is a check constraint
 # that references other descriptors (such as sequences and types):
@@ -3256,9 +3256,9 @@ SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
 ORDER BY constraint_type;
 ----
-table_name  constraint_name  constraint_type  validated
-t_96115     check_i_j        CHECK            true
-t_96115     t_96115_pkey     PRIMARY KEY      true
+table_name constraint_name constraint_type validated
+t_96115   check_i_j    CHECK      true
+t_96115   t_96115_pkey   PRIMARY KEY   true
 
 statement ok
 ALTER TABLE t_96115 DROP CONSTRAINT check_i_j;
@@ -3269,8 +3269,8 @@ SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
 ORDER BY constraint_type;
 ----
-table_name  constraint_name  constraint_type  validated
-t_96115     t_96115_pkey     PRIMARY KEY      true
+table_name constraint_name constraint_type validated
+t_96115   t_96115_pkey   PRIMARY KEY   true
 
 statement ok
 ALTER TABLE t_96115 ADD CHECK (i > nextval('seq_96115') AND j::typ_96115 = 'a'::typ_96115);
@@ -3281,9 +3281,9 @@ SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
 ORDER BY constraint_type;
 ----
-table_name  constraint_name  constraint_type  validated
-t_96115     check_i_j        CHECK            true
-t_96115     t_96115_pkey     PRIMARY KEY      true
+table_name constraint_name constraint_type validated
+t_96115   check_i_j    CHECK      true
+t_96115   t_96115_pkey   PRIMARY KEY   true
 
 statement ok
 DROP SEQUENCE seq_96115 CASCADE;
@@ -3294,8 +3294,8 @@ SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
 ORDER BY constraint_type;
 ----
-table_name  constraint_name  constraint_type  validated
-t_96115     t_96115_pkey     PRIMARY KEY      true
+table_name constraint_name constraint_type validated
+t_96115   t_96115_pkey   PRIMARY KEY   true
 
 statement ok
 CREATE SEQUENCE seq_96115;
@@ -3329,9 +3329,9 @@ SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
 ORDER BY constraint_type;
 ----
-table_name  constraint_name  constraint_type  validated
-t_96115     t_96115_pkey     PRIMARY KEY      true
-t_96115     unique_j         UNIQUE           true
+table_name constraint_name constraint_type validated
+t_96115   t_96115_pkey   PRIMARY KEY   true
+t_96115   unique_j     UNIQUE      true
 
 statement ok
 ALTER TABLE t_96115 DROP CONSTRAINT unique_j;
@@ -3341,8 +3341,8 @@ SELECT table_name, constraint_name, constraint_type, validated
 FROM [SHOW CONSTRAINTS FROM t_96115]
 ORDER BY constraint_type;
 ----
-table_name  constraint_name  constraint_type  validated
-t_96115     t_96115_pkey     PRIMARY KEY      true
+table_name constraint_name constraint_type validated
+t_96115   t_96115_pkey   PRIMARY KEY   true
 
 statement ok
 DROP TABLE t_96115;
@@ -3419,9 +3419,9 @@ DROP INDEX t_97538_2_j_key;
 query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_97538_1
 ----
-table_name  constraint_name   constraint_type  details                                  validated
-t_97538_1   t_97538_1_i_fkey  FOREIGN KEY      FOREIGN KEY (i) REFERENCES t_97538_2(j)  true
-t_97538_1   t_97538_1_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)                      true
+table_name constraint_name  constraint_type details                 validated
+t_97538_1  t_97538_1_i_fkey FOREIGN KEY   FOREIGN KEY (i) REFERENCES t_97538_2(j) true
+t_97538_1  t_97538_1_pkey  PRIMARY KEY   PRIMARY KEY (i ASC)           true
 
 # Add back the unique index, and drop the unique without index constraint (without CASCADE) this time.
 statement ok
@@ -3435,9 +3435,9 @@ ALTER TABLE t_97538_2 DROP CONSTRAINT unique_j;
 query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_97538_1
 ----
-table_name  constraint_name   constraint_type  details                                  validated
-t_97538_1   t_97538_1_i_fkey  FOREIGN KEY      FOREIGN KEY (i) REFERENCES t_97538_2(j)  true
-t_97538_1   t_97538_1_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)                      true
+table_name constraint_name  constraint_type details                 validated
+t_97538_1  t_97538_1_i_fkey FOREIGN KEY   FOREIGN KEY (i) REFERENCES t_97538_2(j) true
+t_97538_1  t_97538_1_pkey  PRIMARY KEY   PRIMARY KEY (i ASC)           true
 
 statement ok
 DROP INDEX t_97538_2_j_key CASCADE;
@@ -3446,8 +3446,8 @@ DROP INDEX t_97538_2_j_key CASCADE;
 query TTTTB colnames
 SHOW CONSTRAINTS FROM t_97538_1
 ----
-table_name  constraint_name  constraint_type  details              validated
-t_97538_1   t_97538_1_pkey   PRIMARY KEY      PRIMARY KEY (i ASC)  true
+table_name constraint_name constraint_type details       validated
+t_97538_1  t_97538_1_pkey  PRIMARY KEY   PRIMARY KEY (i ASC) true
 
 # This subtest ensures that dropping a column that is referenced
 # by constraints works properly.
@@ -3479,40 +3479,40 @@ skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_96727_2
 ----
-t_96727_2  CREATE TABLE public.t_96727_2 (
-             i INT8 NOT NULL,
-             CONSTRAINT t_96727_2_pkey PRIMARY KEY (i ASC),
-             FAMILY fam_0_i_j (i)
-           ) WITH (schema_locked =
-           true);
+t_96727_2 CREATE TABLE public.t_96727_2 (
+       i INT8 NOT NULL,
+       CONSTRAINT t_96727_2_pkey PRIMARY KEY (i ASC),
+       FAMILY fam_0_i_j (i)
+      ) WITH (schema_locked =
+      true);
 
 onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_96727_2
 ----
-t_96727_2  CREATE TABLE public.t_96727_2 (
-             i INT8 NOT NULL,
-             CONSTRAINT t_96727_2_pkey PRIMARY KEY (i ASC),
-             FAMILY fam_0_i_j (i)
-           );
+t_96727_2 CREATE TABLE public.t_96727_2 (
+       i INT8 NOT NULL,
+       CONSTRAINT t_96727_2_pkey PRIMARY KEY (i ASC),
+       FAMILY fam_0_i_j (i)
+      );
 
 onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_96727_1
 ----
-t_96727_1  CREATE TABLE public.t_96727_1 (
-             i INT8 NOT NULL,
-             CONSTRAINT t_96727_1_pkey PRIMARY KEY (i ASC)
-           );
+t_96727_1 CREATE TABLE public.t_96727_1 (
+       i INT8 NOT NULL,
+       CONSTRAINT t_96727_1_pkey PRIMARY KEY (i ASC)
+      );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_96727_1
 ----
-t_96727_1  CREATE TABLE public.t_96727_1 (
-             i INT8 NOT NULL,
-             CONSTRAINT t_96727_1_pkey PRIMARY KEY (i ASC)
-           ) WITH (schema_locked = true);
+t_96727_1 CREATE TABLE public.t_96727_1 (
+       i INT8 NOT NULL,
+       CONSTRAINT t_96727_1_pkey PRIMARY KEY (i ASC)
+      ) WITH (schema_locked = true);
 
 # More testing when the column is referenced in other constraints.
 statement ok
@@ -3533,30 +3533,30 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_96727_2
 ----
-t_96727_2  CREATE TABLE public.t_96727_2 (
-             i INT8 NOT NULL,
-             CONSTRAINT t_96727_2_pkey PRIMARY KEY (i ASC),
-             FAMILY fam_0_i_j (i)
-           );
+t_96727_2 CREATE TABLE public.t_96727_2 (
+       i INT8 NOT NULL,
+       CONSTRAINT t_96727_2_pkey PRIMARY KEY (i ASC),
+       FAMILY fam_0_i_j (i)
+      );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_96727_2
 ----
-t_96727_2  CREATE TABLE public.t_96727_2 (
-             i INT8 NOT NULL,
-             CONSTRAINT t_96727_2_pkey PRIMARY KEY (i ASC),
-             FAMILY fam_0_i_j (i)
-           ) WITH (schema_locked = true);
+t_96727_2 CREATE TABLE public.t_96727_2 (
+       i INT8 NOT NULL,
+       CONSTRAINT t_96727_2_pkey PRIMARY KEY (i ASC),
+       FAMILY fam_0_i_j (i)
+      ) WITH (schema_locked = true);
 
 subtest regression_97546
 
 statement ok
 CREATE TABLE t_twocol (
-  id INT PRIMARY KEY,
-  a INT,
-  b INT,
-  FAMILY fam_0 (id, a, b)
+ id INT PRIMARY KEY,
+ a INT,
+ b INT,
+ FAMILY fam_0 (id, a, b)
 );
 CREATE FUNCTION f1() RETURNS t_twocol AS 'SELECT * FROM t_twocol' LANGUAGE SQL;
 CREATE FUNCTION f2() RETURNS t_twocol AS 'SELECT * FROM t_twocol' LANGUAGE SQL;
@@ -3576,10 +3576,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_twocol]
 ----
 CREATE TABLE public.t_twocol (
-  id INT8 NOT NULL,
-  a INT8 NULL,
-  CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0 (id, a)
+ id INT8 NOT NULL,
+ a INT8 NULL,
+ CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
+ FAMILY fam_0 (id, a)
 );
 
 skipif config schema-locked-disabled
@@ -3587,10 +3587,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_twocol]
 ----
 CREATE TABLE public.t_twocol (
-  id INT8 NOT NULL,
-  a INT8 NULL,
-  CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0 (id, a)
+ id INT8 NOT NULL,
+ a INT8 NULL,
+ CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
+ FAMILY fam_0 (id, a)
 ) WITH (schema_locked = true);
 
 statement ok
@@ -3600,22 +3600,22 @@ subtest regress_96368
 
 statement ok
 CREATE TABLE t_twocol (
-  id INT PRIMARY KEY,
-  a INT,
-  b INT,
-  FAMILY fam_0 (id, a, b)
+ id INT PRIMARY KEY,
+ a INT,
+ b INT,
+ FAMILY fam_0 (id, a, b)
 );
 CREATE FUNCTION f_unqualified_twocol() RETURNS t_twocol AS
 $$
-  SELECT t_twocol.id, t_twocol.a, t_twocol.b FROM t_twocol;
+ SELECT t_twocol.id, t_twocol.a, t_twocol.b FROM t_twocol;
 $$ LANGUAGE SQL;
 CREATE FUNCTION f_allcolsel_alias() RETURNS t_twocol AS
 $$
-  SELECT t1.id, t1.a, t1.b FROM t_twocol AS t1, t_twocol AS t2 WHERE t1.a = t2.a;
+ SELECT t1.id, t1.a, t1.b FROM t_twocol AS t1, t_twocol AS t2 WHERE t1.a = t2.a;
 $$ LANGUAGE SQL;
 CREATE FUNCTION f_tuplestar() RETURNS t_twocol AS
 $$
-  SELECT t_twocol.id, t_twocol.a, t_twocol.b FROM t_twocol;
+ SELECT t_twocol.id, t_twocol.a, t_twocol.b FROM t_twocol;
 $$ LANGUAGE SQL;
 
 # This statement should be ok but fails
@@ -3627,10 +3627,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_twocol]
 ----
 CREATE TABLE public.t_twocol (
-  id INT8 NOT NULL,
-  a INT8 NULL,
-  CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0 (id, a)
+ id INT8 NOT NULL,
+ a INT8 NULL,
+ CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
+ FAMILY fam_0 (id, a)
 );
 
 skipif config schema-locked-disabled
@@ -3638,10 +3638,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_twocol]
 ----
 CREATE TABLE public.t_twocol (
-  id INT8 NOT NULL,
-  a INT8 NULL,
-  CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0 (id, a)
+ id INT8 NOT NULL,
+ a INT8 NULL,
+ CONSTRAINT t_twocol_pkey PRIMARY KEY (id ASC),
+ FAMILY fam_0 (id, a)
 ) WITH (schema_locked = true);
 
 # This subtests ensures we cannot add an unvalidated PK constraint
@@ -3659,8 +3659,8 @@ ALTER TABLE t_96729 ADD PRIMARY KEY (i);
 query TTTTB colnames
 SHOW CONSTRAINTS FROM t_96729
 ----
-table_name  constraint_name  constraint_type  details              validated
-t_96729     t_96729_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)  true
+table_name constraint_name constraint_type details       validated
+t_96729   t_96729_pkey   PRIMARY KEY   PRIMARY KEY (i ASC) true
 
 # This subtests ensures adding UNIQUE constraint works properly.
 subtest alter_table_add_unique_96728
@@ -3677,9 +3677,9 @@ ALTER TABLE t_96728 ADD UNIQUE (j, k) WHERE (i > 0);
 query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t_96728
 ----
-table_name  constraint_name  constraint_type  details                              validated
-t_96728     t_96728_j_k_key  UNIQUE           UNIQUE (j ASC, k ASC) WHERE (i > 0)  true
-t_96728     t_96728_pkey     PRIMARY KEY      PRIMARY KEY (i ASC)                  true
+table_name constraint_name constraint_type details               validated
+t_96728   t_96728_j_k_key UNIQUE      UNIQUE (j ASC, k ASC) WHERE (i > 0) true
+t_96728   t_96728_pkey   PRIMARY KEY   PRIMARY KEY (i ASC)         true
 
 # This subtest tests behavior when there are multiple commands (ADD COLUMN, DROP COLUMN,
 # ALTER PRIMARY KEY, ADD CONSTRAINT) in one ALTER TABLE statement.
@@ -3707,9 +3707,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  i INT8 NOT NULL,
-  k INT8 NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
+ i INT8 NOT NULL,
+ k INT8 NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
 );
 
 skipif config schema-locked-disabled
@@ -3717,9 +3717,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  i INT8 NOT NULL,
-  k INT8 NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
+ i INT8 NOT NULL,
+ k INT8 NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
 ) WITH (schema_locked = true);
 
 skipif config local-legacy-schema-changer
@@ -3728,7 +3728,7 @@ ALTER TABLE t_99035 ADD COLUMN j INT DEFAULT unique_rowid(), DROP COLUMN j; -- n
 
 skipif config local-legacy-schema-changer
 statement ok
-ALTER TABLE t_99035 ADD COLUMN j INT, DROP COLUMN j;  -- noop
+ALTER TABLE t_99035 ADD COLUMN j INT, DROP COLUMN j; -- noop
 
 onlyif config schema-locked-disabled
 skipif config local-legacy-schema-changer
@@ -3736,9 +3736,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  i INT8 NOT NULL,
-  k INT8 NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
+ i INT8 NOT NULL,
+ k INT8 NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
 );
 
 skipif config schema-locked-disabled
@@ -3746,9 +3746,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  i INT8 NOT NULL,
-  k INT8 NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
+ i INT8 NOT NULL,
+ k INT8 NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_99035_pkey PRIMARY KEY (i ASC)
 ) WITH (schema_locked = true);
 
 statement ok
@@ -3766,11 +3766,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  i INT8 NOT NULL,
-  j INT8 NOT NULL,
-  k INT8 NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
-  UNIQUE INDEX t_99035_i_key (i ASC)
+ i INT8 NOT NULL,
+ j INT8 NOT NULL,
+ k INT8 NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+ UNIQUE INDEX t_99035_i_key (i ASC)
 );
 
 skipif config schema-locked-disabled
@@ -3778,11 +3778,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  i INT8 NOT NULL,
-  j INT8 NOT NULL,
-  k INT8 NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
-  UNIQUE INDEX t_99035_i_key (i ASC)
+ i INT8 NOT NULL,
+ j INT8 NOT NULL,
+ k INT8 NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+ UNIQUE INDEX t_99035_i_key (i ASC)
 ) WITH (schema_locked = true);
 
 statement ok
@@ -3800,8 +3800,8 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  j INT8 NOT NULL,
-  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
+ j INT8 NOT NULL,
+ CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
 );
 
 skipif config schema-locked-disabled
@@ -3809,8 +3809,8 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  j INT8 NOT NULL,
-  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
+ j INT8 NOT NULL,
+ CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
 ) WITH (schema_locked = true);
 
 statement ok
@@ -3828,9 +3828,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  j INT8 NOT NULL,
-  k INT8 NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
+ j INT8 NOT NULL,
+ k INT8 NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
 );
 
 skipif config schema-locked-disabled
@@ -3839,9 +3839,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  j INT8 NOT NULL,
-  k INT8 NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
+ j INT8 NOT NULL,
+ k INT8 NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC)
 ) WITH (schema_locked = true);
 
 statement ok
@@ -3868,11 +3868,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  j INT8 NOT NULL,
-  k INT8 NULL DEFAULT unique_rowid(),
-  p INT8 NULL DEFAULT 30:::INT8,
-  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
-  CONSTRAINT check_j CHECK (j >= 0:::INT8)
+ j INT8 NOT NULL,
+ k INT8 NULL DEFAULT unique_rowid(),
+ p INT8 NULL DEFAULT 30:::INT8,
+ CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+ CONSTRAINT check_j CHECK (j >= 0:::INT8)
 );
 
 skipif config schema-locked-disabled
@@ -3880,11 +3880,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  j INT8 NOT NULL,
-  k INT8 NULL DEFAULT unique_rowid(),
-  p INT8 NULL DEFAULT 30:::INT8,
-  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
-  CONSTRAINT check_j CHECK (j >= 0:::INT8)
+ j INT8 NOT NULL,
+ k INT8 NULL DEFAULT unique_rowid(),
+ p INT8 NULL DEFAULT 30:::INT8,
+ CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+ CONSTRAINT check_j CHECK (j >= 0:::INT8)
 ) WITH (schema_locked = true);
 
 statement ok
@@ -3902,12 +3902,12 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  j INT8 NOT NULL,
-  k INT8 NULL DEFAULT unique_rowid(),
-  p INT8 NULL DEFAULT 0:::INT8,
-  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
-  CONSTRAINT t_99035_p_fkey FOREIGN KEY (p) REFERENCES public.t_99035(j),
-  CONSTRAINT check_j CHECK (j >= 0:::INT8)
+ j INT8 NOT NULL,
+ k INT8 NULL DEFAULT unique_rowid(),
+ p INT8 NULL DEFAULT 0:::INT8,
+ CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+ CONSTRAINT t_99035_p_fkey FOREIGN KEY (p) REFERENCES public.t_99035(j),
+ CONSTRAINT check_j CHECK (j >= 0:::INT8)
 );
 
 skipif config schema-locked-disabled
@@ -3915,12 +3915,12 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_99035]
 ----
 CREATE TABLE public.t_99035 (
-  j INT8 NOT NULL,
-  k INT8 NULL DEFAULT unique_rowid(),
-  p INT8 NULL DEFAULT 0:::INT8,
-  CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
-  CONSTRAINT t_99035_p_fkey FOREIGN KEY (p) REFERENCES public.t_99035(j),
-  CONSTRAINT check_j CHECK (j >= 0:::INT8)
+ j INT8 NOT NULL,
+ k INT8 NULL DEFAULT unique_rowid(),
+ p INT8 NULL DEFAULT 0:::INT8,
+ CONSTRAINT t_99035_pkey PRIMARY KEY (j ASC),
+ CONSTRAINT t_99035_p_fkey FOREIGN KEY (p) REFERENCES public.t_99035(j),
+ CONSTRAINT check_j CHECK (j >= 0:::INT8)
 ) WITH (schema_locked = true);
 
 subtest end
@@ -3988,23 +3988,23 @@ onlyif config schema-locked-disabled
 query TT
 show create table t_99281
 ----
-t_99281  CREATE TABLE public.t_99281 (
-           i INT8 NOT NULL,
-           j INT8 NOT NULL,
-           k INT8 NOT NULL,
-           CONSTRAINT t_99281_pkey PRIMARY KEY (i ASC)
-         );
+t_99281 CREATE TABLE public.t_99281 (
+      i INT8 NOT NULL,
+      j INT8 NOT NULL,
+      k INT8 NOT NULL,
+      CONSTRAINT t_99281_pkey PRIMARY KEY (i ASC)
+     );
 
 skipif config schema-locked-disabled
 query TT
 show create table t_99281
 ----
-t_99281  CREATE TABLE public.t_99281 (
-           i INT8 NOT NULL,
-           j INT8 NOT NULL,
-           k INT8 NOT NULL,
-           CONSTRAINT t_99281_pkey PRIMARY KEY (i ASC)
-         ) WITH (schema_locked = true);
+t_99281 CREATE TABLE public.t_99281 (
+      i INT8 NOT NULL,
+      j INT8 NOT NULL,
+      k INT8 NOT NULL,
+      CONSTRAINT t_99281_pkey PRIMARY KEY (i ASC)
+     ) WITH (schema_locked = true);
 
 subtest 99764
 
@@ -4023,19 +4023,19 @@ skipif config local-legacy-schema-changer
 query TT
 show create table t_99764
 ----
-t_99764  CREATE TABLE public.t_99764 (
-           i INT8 NOT NULL,
-           CONSTRAINT t_99764_pkey PRIMARY KEY (i ASC)
-         );
+t_99764 CREATE TABLE public.t_99764 (
+      i INT8 NOT NULL,
+      CONSTRAINT t_99764_pkey PRIMARY KEY (i ASC)
+     );
 
 skipif config schema-locked-disabled
 query TT
 show create table t_99764
 ----
-t_99764  CREATE TABLE public.t_99764 (
-           i INT8 NOT NULL,
-           CONSTRAINT t_99764_pkey PRIMARY KEY (i ASC)
-         ) WITH (schema_locked = true);
+t_99764 CREATE TABLE public.t_99764 (
+      i INT8 NOT NULL,
+      CONSTRAINT t_99764_pkey PRIMARY KEY (i ASC)
+     ) WITH (schema_locked = true);
 
 # Validate that DROP COLUMN CASCADE generates the proper error if we attempt
 # to drop a key column
@@ -4133,12 +4133,12 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_118246]
 ----
 CREATE TABLE public.t_118246 (
-  i INT8 NOT NULL,
-  j INT8 NULL,
-  k INT8 NULL DEFAULT 30:::INT8,
-  CONSTRAINT t_118246_pkey PRIMARY KEY (i ASC),
-  CONSTRAINT unique_j UNIQUE WITHOUT INDEX (j),
-  CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k)
+ i INT8 NOT NULL,
+ j INT8 NULL,
+ k INT8 NULL DEFAULT 30:::INT8,
+ CONSTRAINT t_118246_pkey PRIMARY KEY (i ASC),
+ CONSTRAINT unique_j UNIQUE WITHOUT INDEX (j),
+ CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k)
 );
 
 skipif config schema-locked-disabled
@@ -4146,12 +4146,12 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_118246]
 ----
 CREATE TABLE public.t_118246 (
-  i INT8 NOT NULL,
-  j INT8 NULL,
-  k INT8 NULL DEFAULT 30:::INT8,
-  CONSTRAINT t_118246_pkey PRIMARY KEY (i ASC),
-  CONSTRAINT unique_j UNIQUE WITHOUT INDEX (j),
-  CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k)
+ i INT8 NOT NULL,
+ j INT8 NULL,
+ k INT8 NULL DEFAULT 30:::INT8,
+ CONSTRAINT t_118246_pkey PRIMARY KEY (i ASC),
+ CONSTRAINT unique_j UNIQUE WITHOUT INDEX (j),
+ CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k)
 ) WITH (schema_locked = true);
 
 subtest end
@@ -4180,10 +4180,10 @@ subtest 120017
 
 statement ok
 CREATE TABLE t_120017 (
-  a INT PRIMARY KEY,
-  b TEXT,
-  c INT NOT NULL,
-  CHECK (b IN ('x', 'y'))
+ a INT PRIMARY KEY,
+ b TEXT,
+ c INT NOT NULL,
+ CHECK (b IN ('x', 'y'))
 )
 
 skipif config local-legacy-schema-changer
@@ -4221,12 +4221,12 @@ SET create_table_with_schema_locked=false
 
 statement ok
 CREATE TABLE t_add_generated (
-  a int NOT NULL,
-  b int NOT NULL,
-  c int,
-  d STRING NOT NULL,
-  e INT DEFAULT 1,
-  FAMILY (a,b,c,d,e)
+ a int NOT NULL,
+ b int NOT NULL,
+ c int,
+ d STRING NOT NULL,
+ e INT DEFAULT 1,
+ FAMILY (a,b,c,d,e)
 )
 
 statement ok
@@ -4236,14 +4236,14 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_add_generated]
 ----
 CREATE TABLE public.t_add_generated (
-  a INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
-  b INT8 NOT NULL,
-  c INT8 NULL,
-  d STRING NOT NULL,
-  e INT8 NULL DEFAULT 1:::INT8,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_add_generated_pkey PRIMARY KEY (rowid ASC),
-  FAMILY fam_0_a_b_c_d_e_rowid (a, b, c, d, e, rowid)
+ a INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
+ b INT8 NOT NULL,
+ c INT8 NULL,
+ d STRING NOT NULL,
+ e INT8 NULL DEFAULT 1:::INT8,
+ rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_add_generated_pkey PRIMARY KEY (rowid ASC),
+ FAMILY fam_0_a_b_c_d_e_rowid (a, b, c, d, e, rowid)
 );
 
 statement ok
@@ -4253,14 +4253,14 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_add_generated]
 ----
 CREATE TABLE public.t_add_generated (
-  a INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
-  b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 2 INCREMENT 3),
-  c INT8 NULL,
-  d STRING NOT NULL,
-  e INT8 NULL DEFAULT 1:::INT8,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_add_generated_pkey PRIMARY KEY (rowid ASC),
-  FAMILY fam_0_a_b_c_d_e_rowid (a, b, c, d, e, rowid)
+ a INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
+ b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 2 INCREMENT 3),
+ c INT8 NULL,
+ d STRING NOT NULL,
+ e INT8 NULL DEFAULT 1:::INT8,
+ rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_add_generated_pkey PRIMARY KEY (rowid ASC),
+ FAMILY fam_0_a_b_c_d_e_rowid (a, b, c, d, e, rowid)
 );
 
 query error pq: column "c" of relation "t_add_generated" must be declared NOT NULL before identity can be added
@@ -4287,19 +4287,19 @@ INSERT INTO t_add_generated (b,d) VALUES (31,'31'), (32,'32'), (33,'33');
 query IIITI
 SELECT * FROM t_add_generated ORDER BY a
 ----
-2   2   NULL  11  1
-5   5   NULL  12  1
-8   8   NULL  13  1
-21  11  NULL  21  1
-22  14  NULL  22  1
-23  17  NULL  23  1
+2  2  NULL 11 1
+5  5  NULL 12 1
+8  8  NULL 13 1
+21 11 NULL 21 1
+22 14 NULL 22 1
+23 17 NULL 23 1
 
 statement ok
 CREATE TABLE t_set_generated (
-  a int GENERATED ALWAYS AS IDENTITY (START WITH 2 INCREMENT 3),
-  b int GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
-  c int,
-  FAMILY (a,b,c)
+ a int GENERATED ALWAYS AS IDENTITY (START WITH 2 INCREMENT 3),
+ b int GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
+ c int,
+ FAMILY (a,b,c)
 );
 
 statement ok
@@ -4309,12 +4309,12 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_set_generated]
 ----
 CREATE TABLE public.t_set_generated (
-  a INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
-  b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
-  c INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_set_generated_pkey PRIMARY KEY (rowid ASC),
-  FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
+ a INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
+ b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
+ c INT8 NULL,
+ rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_set_generated_pkey PRIMARY KEY (rowid ASC),
+ FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
 );
 
 statement ok
@@ -4324,12 +4324,12 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_set_generated]
 ----
 CREATE TABLE public.t_set_generated (
-  a INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
-  b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 2 INCREMENT 3),
-  c INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_set_generated_pkey PRIMARY KEY (rowid ASC),
-  FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
+ a INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START WITH 2 INCREMENT 3),
+ b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 2 INCREMENT 3),
+ c INT8 NULL,
+ rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+ CONSTRAINT t_set_generated_pkey PRIMARY KEY (rowid ASC),
+ FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
 );
 
 statement error pq: column "c" of relation "t_set_generated" is not an identity column
@@ -4353,9 +4353,9 @@ INSERT INTO t_set_generated (b) VALUES (4);
 query III
 SELECT * FROM t_set_generated ORDER BY a
 ----
-2  2  NULL
-3  8  NULL
-5  5  NULL
+2 2 NULL
+3 8 NULL
+5 5 NULL
 
 statement ok
 RESET create_table_with_schema_locked
@@ -4602,9 +4602,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_114316];
 ----
 CREATE TABLE public.t_114316 (
-  i INT8 NOT NULL,
-  a INT8[] NULL DEFAULT ARRAY[]:::OID[],
-  CONSTRAINT t_114316_pkey PRIMARY KEY (i ASC)
+ i INT8 NOT NULL,
+ a INT8[] NULL DEFAULT ARRAY[]:::OID[],
+ CONSTRAINT t_114316_pkey PRIMARY KEY (i ASC)
 );
 
 skipif config schema-locked-disabled
@@ -4612,9 +4612,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_114316];
 ----
 CREATE TABLE public.t_114316 (
-  i INT8 NOT NULL,
-  a INT8[] NULL DEFAULT ARRAY[]:::OID[],
-  CONSTRAINT t_114316_pkey PRIMARY KEY (i ASC)
+ i INT8 NOT NULL,
+ a INT8[] NULL DEFAULT ARRAY[]:::OID[],
+ CONSTRAINT t_114316_pkey PRIMARY KEY (i ASC)
 ) WITH (schema_locked = true);
 
 subtest end
@@ -4644,10 +4644,10 @@ alter table roach add column serial_id SERIAL;
 query TTBTTTB colnames,rowsort
 show columns from roach;
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices       is_hidden
-id           INT8       true         NULL            ·                      {roach_pkey}  false
-rowid        INT8       false        unique_rowid()  ·                      {roach_pkey}  true
-serial_id    INT8       false        unique_rowid()  ·                      {roach_pkey}  false
+column_name data_type is_nullable column_default generation_expression indices    is_hidden
+id      INT8    true     NULL      ·           {roach_pkey} false
+rowid    INT8    false    unique_rowid() ·           {roach_pkey} true
+serial_id  INT8    false    unique_rowid() ·           {roach_pkey} false
 
 subtest end
 
@@ -4695,9 +4695,9 @@ INSERT INTO tbl_with_dft_column_family VALUES(3.0, 3.0, '{"wolf": "sheep"}', 'gh
 query FFTT
 SELECT f, d, j, s FROM tbl_with_dft_column_family ORDER BY 1
 ----
-1  1.0  {"cat": "mouse"}     abc
-2  2.0  {"lion": "gazelle"}  def
-3  3.0  {"wolf": "sheep"}    ghi
+1 1.0 {"cat": "mouse"}   abc
+2 2.0 {"lion": "gazelle"} def
+3 3.0 {"wolf": "sheep"}  ghi
 
 statement ok
 ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (f);
@@ -4705,9 +4705,9 @@ ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (f);
 query FFTT
 SELECT * FROM tbl_with_dft_column_family ORDER BY 1
 ----
-1  1.0  {"cat": "mouse"}     abc
-2  2.0  {"lion": "gazelle"}  def
-3  3.0  {"wolf": "sheep"}    ghi
+1 1.0 {"cat": "mouse"}   abc
+2 2.0 {"lion": "gazelle"} def
+3 3.0 {"wolf": "sheep"}  ghi
 
 statement ok
 ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (d);
@@ -4715,9 +4715,9 @@ ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (d);
 query FFTT
 SELECT * FROM tbl_with_dft_column_family ORDER BY 1
 ----
-1  1.0  {"cat": "mouse"}     abc
-2  2.0  {"lion": "gazelle"}  def
-3  3.0  {"wolf": "sheep"}    ghi
+1 1.0 {"cat": "mouse"}   abc
+2 2.0 {"lion": "gazelle"} def
+3 3.0 {"wolf": "sheep"}  ghi
 
 statement ok
 ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (j);
@@ -4725,9 +4725,9 @@ ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (j);
 query FFTT
 SELECT * FROM tbl_with_dft_column_family ORDER BY 1
 ----
-1  1.0  {"cat": "mouse"}     abc
-2  2.0  {"lion": "gazelle"}  def
-3  3.0  {"wolf": "sheep"}    ghi
+1 1.0 {"cat": "mouse"}   abc
+2 2.0 {"lion": "gazelle"} def
+3 3.0 {"wolf": "sheep"}  ghi
 
 statement ok
 ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (s);
@@ -4735,9 +4735,9 @@ ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (s);
 query FFTT
 SELECT * FROM tbl_with_dft_column_family ORDER BY 1
 ----
-1  1.0  {"cat": "mouse"}     abc
-2  2.0  {"lion": "gazelle"}  def
-3  3.0  {"wolf": "sheep"}    ghi
+1 1.0 {"cat": "mouse"}   abc
+2 2.0 {"lion": "gazelle"} def
+3 3.0 {"wolf": "sheep"}  ghi
 
 subtest alter_dropped_col
 
@@ -4792,21 +4792,21 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_droppedcol;
 ----
-t_droppedcol  CREATE TABLE public.t_droppedcol (
-                dropme INT8 NULL,
-                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
-              );
+t_droppedcol CREATE TABLE public.t_droppedcol (
+        dropme INT8 NULL,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
+       );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t_droppedcol;
 ----
-t_droppedcol  CREATE TABLE public.t_droppedcol (
-                dropme INT8 NULL,
-                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
-              ) WITH (schema_locked = true);
+t_droppedcol CREATE TABLE public.t_droppedcol (
+        dropme INT8 NULL,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
+       ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE t_droppedcol;
@@ -4892,18 +4892,18 @@ query T
 SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name like 't1_serial_columns%' ORDER BY descriptor_name;
 ----
 CREATE TABLE public.t1_serial_columns (
-  n INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  i INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_i_seq'::REGCLASS),
-  j INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_j_seq'::REGCLASS),
-  k INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_k_seq'::REGCLASS),
-  i_cache INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_i_cache_seq'::REGCLASS),
-  i_virtual INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_i_virtual_seq'::REGCLASS),
-  i_node_cache INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_i_node_cache_seq'::REGCLASS),
-  i_unordered_rowid INT8 NOT NULL DEFAULT unordered_unique_rowid(),
-  z INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_z_seq1'::REGCLASS),
-  l INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_l_seq'::REGCLASS),
-  CONSTRAINT t1_serial_columns_pkey PRIMARY KEY (rowid ASC)
+ n INT8 NULL,
+ rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+ i INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_i_seq'::REGCLASS),
+ j INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_j_seq'::REGCLASS),
+ k INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_k_seq'::REGCLASS),
+ i_cache INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_i_cache_seq'::REGCLASS),
+ i_virtual INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_i_virtual_seq'::REGCLASS),
+ i_node_cache INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_i_node_cache_seq'::REGCLASS),
+ i_unordered_rowid INT8 NOT NULL DEFAULT unordered_unique_rowid(),
+ z INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_z_seq1'::REGCLASS),
+ l INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_l_seq'::REGCLASS),
+ CONSTRAINT t1_serial_columns_pkey PRIMARY KEY (rowid ASC)
 )
 CREATE SEQUENCE public.t1_serial_columns_i_cache_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 PER SESSION CACHE 256
 CREATE SEQUENCE public.t1_serial_columns_i_node_cache_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 PER NODE CACHE 256
@@ -4940,21 +4940,21 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t1_add
 ----
-t1_add  CREATE TABLE public.t1_add (
-          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          c1 INT8 NULL,
-          CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
-        );
+t1_add CREATE TABLE public.t1_add (
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     c1 INT8 NULL,
+     CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
+    );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t1_add
 ----
-t1_add  CREATE TABLE public.t1_add (
-          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          c1 INT8 NULL,
-          CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
-        ) WITH (schema_locked = true);
+t1_add CREATE TABLE public.t1_add (
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     c1 INT8 NULL,
+     CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
+    ) WITH (schema_locked = true);
 
 let $use_decl_sc
 SHOW use_declarative_schema_changer
@@ -4978,21 +4978,21 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t1_add
 ----
-t1_add  CREATE TABLE public.t1_add (
-          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          c1 DATE NULL DEFAULT '2024-08-31':::DATE,
-          CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
-        );
+t1_add CREATE TABLE public.t1_add (
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     c1 DATE NULL DEFAULT '2024-08-31':::DATE,
+     CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
+    );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t1_add
 ----
-t1_add  CREATE TABLE public.t1_add (
-          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          c1 DATE NULL DEFAULT '2024-08-31':::DATE,
-          CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
-        ) WITH (schema_locked = true);
+t1_add CREATE TABLE public.t1_add (
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     c1 DATE NULL DEFAULT '2024-08-31':::DATE,
+     CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
+    ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE t1_add
@@ -5006,8 +5006,8 @@ subtest alter_table_duplicate_storage_params
 
 statement ok
 CREATE TABLE alter_table_duplicate_storage_params_a (
-  a INT PRIMARY KEY,
-  b TEXT NOT NULL
+ a INT PRIMARY KEY,
+ b TEXT NOT NULL
 );
 
 statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
@@ -5019,17 +5019,17 @@ subtest alter_table_alter_primary_key_duplicate_storage_params
 
 statement ok
 CREATE TABLE alter_table_alter_primary_key_duplicate_storage_params_a (
-  a INT PRIMARY KEY,
-  b TEXT NOT NULL
+ a INT PRIMARY KEY,
+ b TEXT NOT NULL
 );
 
 skipif config local-legacy-schema-changer
 statement error pgcode 22023 pq: parameter "bucket_count" specified more than once
 ALTER TABLE alter_table_alter_primary_key_duplicate_storage_params_a
-  ALTER PRIMARY KEY
-  USING COLUMNS (b)
-  USING HASH
-  WITH (bucket_count=30, bucket_count=20);
+ ALTER PRIMARY KEY
+ USING COLUMNS (b)
+ USING HASH
+ WITH (bucket_count=30, bucket_count=20);
 
 subtest end
 
@@ -5046,7 +5046,7 @@ set use_declarative_schema_changer = on
 
 statement ok
 CREATE TABLE alter_table_add_column_with_invalid_geometry_expression (
-  id INT PRIMARY KEY
+ id INT PRIMARY KEY
 );
 INSERT INTO alter_table_add_column_with_invalid_geometry_expression VALUES (1);
 
@@ -5064,7 +5064,7 @@ subtest conditional_bump_udt_version
 
 statement ok
 CREATE TABLE t_conditional_bump_udt_version (
-  id INT PRIMARY KEY
+ id INT PRIMARY KEY
 );
 
 statement ok
@@ -5083,7 +5083,7 @@ query I
 SELECT 1
 FROM system.descriptor
 WHERE id = 'e1'::REGTYPE::INT - 100000 AND
-  (crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version')::INT > $e1_version;
+ (crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version')::INT > $e1_version;
 ----
 1
 
@@ -5100,7 +5100,7 @@ query I
 SELECT 1
 FROM system.descriptor
 WHERE id = 'e1'::REGTYPE::INT - 100000 AND
-  (crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version')::INT = $e1_version;
+ (crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version')::INT = $e1_version;
 ----
 1
 
@@ -5112,7 +5112,7 @@ query I
 SELECT 1
 FROM system.descriptor
 WHERE id = 'e1'::REGTYPE::INT - 100000 AND
-  (crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version')::INT = $e1_version;
+ (crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version')::INT = $e1_version;
 ----
 1
 
@@ -5124,7 +5124,7 @@ query I
 SELECT 1
 FROM system.descriptor
 WHERE id = 'e1'::REGTYPE::INT - 100000 AND
-  (crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version')::INT > $e1_version;
+ (crdb_internal.pb_to_json('descriptor', descriptor) -> 'type' ->> 'version')::INT > $e1_version;
 ----
 1
 
@@ -5172,25 +5172,25 @@ onlyif config schema-locked-disabled
 query TT
 show create table t_128420
 ----
-t_128420  CREATE TABLE public.t_128420 (
-            i INT8 NOT NULL,
-            box BOX2D NULL,
-            crdb_internal_i_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(i))), 16:::INT8)) VIRTUAL,
-            CONSTRAINT t_128420_pkey PRIMARY KEY (i ASC) USING HASH WITH (bucket_count=16),
-            UNIQUE INDEX t_128420_box_key (box ASC)
-          );
+t_128420 CREATE TABLE public.t_128420 (
+      i INT8 NOT NULL,
+      box BOX2D NULL,
+      crdb_internal_i_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(i))), 16:::INT8)) VIRTUAL,
+      CONSTRAINT t_128420_pkey PRIMARY KEY (i ASC) USING HASH WITH (bucket_count=16),
+      UNIQUE INDEX t_128420_box_key (box ASC)
+     );
 
 skipif config schema-locked-disabled
 query TT
 show create table t_128420
 ----
-t_128420  CREATE TABLE public.t_128420 (
-            i INT8 NOT NULL,
-            box BOX2D NULL,
-            crdb_internal_i_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(i))), 16:::INT8)) VIRTUAL,
-            CONSTRAINT t_128420_pkey PRIMARY KEY (i ASC) USING HASH WITH (bucket_count=16),
-            UNIQUE INDEX t_128420_box_key (box ASC)
-          ) WITH (schema_locked = true);
+t_128420 CREATE TABLE public.t_128420 (
+      i INT8 NOT NULL,
+      box BOX2D NULL,
+      crdb_internal_i_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(i))), 16:::INT8)) VIRTUAL,
+      CONSTRAINT t_128420_pkey PRIMARY KEY (i ASC) USING HASH WITH (bucket_count=16),
+      UNIQUE INDEX t_128420_box_key (box ASC)
+     ) WITH (schema_locked = true);
 
 subtest end
 
@@ -5222,9 +5222,9 @@ CREATE TABLE parent_infer_rbr_region_col (k INT PRIMARY KEY);
 
 statement ok
 CREATE TABLE t_infer_rbr_region_col (
-  a INT PRIMARY KEY,
-  b INT,
-  CONSTRAINT foo FOREIGN KEY (b) REFERENCES parent_infer_rbr_region_col(k)
+ a INT PRIMARY KEY,
+ b INT,
+ CONSTRAINT foo FOREIGN KEY (b) REFERENCES parent_infer_rbr_region_col(k)
 )
 
 # The infer_rbr_region_col_using_constraint table storage param cannot be set
@@ -5252,7 +5252,6 @@ statement ok
 ALTER TABLE tbl_with_unique_without_index ADD CONSTRAINT c UNIQUE WITHOUT INDEX (i, j) WHERE i IS NOT NULL;
 
 skipif config local-mixed-25.3
-skipif config local-mixed-25.2
 skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE tbl_with_unique_without_index DROP CONSTRAINT c, DROP COLUMN i;
@@ -5273,10 +5272,10 @@ subtest validate_alter_pk_with_inverted
 
 statement ok
 CREATE TABLE t_alter_pk_with_inverted(
-    a STRING NOT NULL,
-    d DECIMAL[],
-    INVERTED INDEX (d)
-  );
+  a STRING NOT NULL,
+  d DECIMAL[],
+  INVERTED INDEX (d)
+ );
 
 statement ok
 INSERT INTO t_alter_pk_with_inverted VALUES ('test', ARRAY[1.0, 2.0]);

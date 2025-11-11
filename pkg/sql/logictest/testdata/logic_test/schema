@@ -51,13 +51,13 @@ CREATE SEQUENCE myschema.s
 
 query TITITI rowsort
 SELECT
-  database_name, parent_id, schema_name, parent_schema_id, name, table_id
+ database_name, parent_id, schema_name, parent_schema_id, name, table_id
 FROM crdb_internal.tables
 WHERE database_name = 'test'
 ----
-test  104  myschema  107  tb  108
-test  104  myschema  107  v   111
-test  104  myschema  107  s   112
+test 104 myschema 107 tb 108
+test 104 myschema 107 v  111
+test 104 myschema 107 s  112
 
 query I
 SELECT * FROM myschema.tb
@@ -114,7 +114,7 @@ ALTER SCHEMA public OWNER TO testuser
 query TT
 SELECT schema_name, owner FROM [SHOW SCHEMAS] WHERE schema_name = 'public'
 ----
-public  testuser
+public testuser
 
 # Try to create a temp table in a user defined schema.
 statement error pgcode 42P16 pq: cannot create temporary relation in non-temporary schema
@@ -435,9 +435,9 @@ SELECT database_name, schema_name, grantee, privilege_type FROM
 [SHOW GRANTS ON SCHEMA privs]
 ORDER BY database_name, schema_name, grantee
 ----
-test  privs  admin     ALL
-test  privs  root      ALL
-test  privs  testuser  CREATE
+test privs admin   ALL
+test privs root   ALL
+test privs testuser CREATE
 
 user testuser
 
@@ -542,9 +542,9 @@ SELECT database_name, schema_name, grantee, privilege_type FROM
 WHERE grantee = 'testuser'
 ORDER BY database_name, schema_name, grantee
 ----
-otherdb   privs  testuser  CREATE
-otherdb2  privs  testuser  CREATE
-test      privs  testuser  CREATE
+otherdb  privs testuser CREATE
+otherdb2 privs testuser CREATE
+test   privs testuser CREATE
 
 statement ok
 use test
@@ -555,9 +555,9 @@ SELECT database_name, schema_name, grantee, privilege_type FROM
 WHERE grantee = 'testuser'
 ORDER BY database_name, schema_name, grantee
 ----
-otherdb   privs  testuser  CREATE
-otherdb2  privs  testuser  CREATE
-test      privs  testuser  CREATE
+otherdb  privs testuser CREATE
+otherdb2 privs testuser CREATE
+test   privs testuser CREATE
 
 # testuser should not have create privilege on test.priv, otherdb.priv, nor otherdb2.priv after revoke
 
@@ -603,15 +603,15 @@ CREATE SCHEMA user1_schema AUTHORIZATION user1
 # The created schemas should both be owned by user1.
 query TT rowsort
 SELECT
-  nspname, usename
+ nspname, usename
 FROM
-  pg_catalog.pg_namespace
-  LEFT JOIN pg_catalog.pg_user ON pg_namespace.nspowner = pg_user.usesysid
+ pg_catalog.pg_namespace
+ LEFT JOIN pg_catalog.pg_user ON pg_namespace.nspowner = pg_user.usesysid
 WHERE
-  nspname LIKE 'user1%';
+ nspname LIKE 'user1%';
 ----
-user1         user1
-user1_schema  user1
+user1     user1
+user1_schema user1
 
 # Ensure that we need CREATE on a database to create a schema.
 statement ok
@@ -736,7 +736,7 @@ a
 query II colnames
 SELECT * FROM public.test_table
 ----
-a  b
+a b
 
 query I colnames
 SELECT * FROM public_table
@@ -749,7 +749,7 @@ user root
 query II colnames
 SELECT * FROM test_table
 ----
-a  b
+a b
 
 query I colnames
 SELECT * FROM testuser.test_table
@@ -804,12 +804,12 @@ query TT rowsort
 SELECT schema_name, table_name FROM [SHOW TABLES]
 ----
 public t1
-sc1    t1
+sc1  t1
 
 query TT
 SELECT schema_name, table_name FROM [SHOW TABLES FROM sc1]
 ----
-sc1    t1
+sc1  t1
 
 statement ok
 USE test
@@ -818,12 +818,12 @@ query TT rowsort
 SELECT schema_name, table_name FROM [SHOW TABLES FROM for_show]
 ----
 public t1
-sc1    t1
+sc1  t1
 
 query TT
 SELECT schema_name, table_name FROM [SHOW TABLES FROM for_show.sc1]
 ----
-sc1    t1
+sc1  t1
 
 # Unit test for #61149
 statement ok
@@ -1206,12 +1206,12 @@ subtest search_path
 
 # Verify that spaces are trimmed.
 statement ok
-SET search_path = public,      a,     "   b  ",   c
+SET search_path = public,   a,   "  b ",  c
 
 query T
 SHOW search_path
 ----
-public, a, "   b  ", c
+public, a, "  b ", c
 
 # When each identifier is enclosed in single quotes, the search_path should
 # have multiple elements.
@@ -1271,12 +1271,12 @@ SHOW search_path
 
 # A whitespace identifier is allowed.
 statement ok
-SET search_path = "  ", abc
+SET search_path = " ", abc
 
 query T
 SHOW search_path
 ----
-"  ", abc
+" ", abc
 
 # Handle special characters.
 statement ok
@@ -1372,8 +1372,8 @@ USE should_have_create
 query TTTT rowsort
 SELECT database_name, schema_name, grantee, privilege_type FROM [SHOW GRANTS ON SCHEMA public] WHERE grantee = 'public'
 ----
-should_have_create  public  public  CREATE
-should_have_create  public  public  USAGE
+should_have_create public public CREATE
+should_have_create public public USAGE
 
 statement ok
 SET CLUSTER SETTING sql.auth.public_schema_create_privilege.enabled = false
@@ -1387,7 +1387,7 @@ USE should_not_have_create
 query TTTT
 SELECT database_name, schema_name, grantee, privilege_type FROM [SHOW GRANTS ON SCHEMA public] WHERE grantee = 'public'
 ----
-should_not_have_create  public  public  USAGE
+should_not_have_create public public USAGE
 
 statement ok
 RESET CLUSTER SETTING sql.auth.public_schema_create_privilege.enabled
@@ -1401,7 +1401,7 @@ statement ok
 CREATE SCHEMA my_pg_temp_123_123;
 
 statement ok
-DROP SCHEMA  my_pg_temp_123_123;
+DROP SCHEMA my_pg_temp_123_123;
 
 subtest end
 
@@ -1432,14 +1432,14 @@ use foo;
 
 statement ok
 CREATE TABLE baz (
-  id   int NOT NULL,
-  name varchar NOT NULL,
-  PRIMARY KEY (id)
+ id  int NOT NULL,
+ name varchar NOT NULL,
+ PRIMARY KEY (id)
 );
 
 statement ok
 CREATE FUNCTION qux() RETURNS void LANGUAGE SQL AS $$
-    SELECT * FROM baz;
+  SELECT * FROM baz;
 $$;
 
 statement ok
@@ -1450,14 +1450,14 @@ use bar;
 
 statement ok
 CREATE TABLE baz (
-  id   int NOT NULL,
-  name varchar NOT NULL,
-  PRIMARY KEY (id)
+ id  int NOT NULL,
+ name varchar NOT NULL,
+ PRIMARY KEY (id)
 );
 
 statement ok
 CREATE FUNCTION qux() RETURNS void LANGUAGE SQL AS $$
-    SELECT * FROM baz;
+  SELECT * FROM baz;
 $$;
 
 statement ok
@@ -1555,7 +1555,6 @@ skipif config local-legacy-schema-changer
 statement ok
 CREATE TRIGGER trigger_w4_521 BEFORE UPDATE OR DELETE ON drop_schema_with_triggers.t1 FOR EACH ROW EXECUTE FUNCTION drop_schema_with_triggers.trigger_function_w4_520();
 
-skipif config local-mixed-25.2
 skipif config local-mixed-25.3
 skipif config local-legacy-schema-changer
 statement ok

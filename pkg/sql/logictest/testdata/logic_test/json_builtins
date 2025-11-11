@@ -220,7 +220,7 @@ SELECT to_json(('$'::JSONPATH, '$.foo'::JSONPATH))
 ----
 {"f1": "$", "f2": "$.\"foo\""}
 
-skipif config local-mixed-25.2 local-mixed-25.3
+skipif config local-mixed-25.3
 query T
 SELECT to_json(('foo'::LTREE, 'bar'::LTREE))
 ----
@@ -541,8 +541,8 @@ SELECT json_build_object('a',1,'b',1.2,'c',true,'d',null,'e','{"x": 3, "y": [1,2
 
 query T
 SELECT json_build_object(
-       'a', json_build_object('b',false,'c',99),
-       'd', json_build_object('e',ARRAY[9,8,7]::int[])
+    'a', json_build_object('b',false,'c',99),
+    'd', json_build_object('e',ARRAY[9,8,7]::int[])
 )
 ----
 {"a": {"b": false, "c": 99}, "d": {"e": [9, 8, 7]}}
@@ -629,7 +629,7 @@ SELECT json_build_object('$'::JSONPATH, 1)
 ----
 {"$": 1}
 
-skipif config local-mixed-25.2 local-mixed-25.3
+skipif config local-mixed-25.3
 query T
 SELECT json_build_object('foo'::LTREE, 2)
 ----
@@ -719,7 +719,7 @@ query T
 SELECT jsonb_pretty('{"a": 1}')
 ----
 {
-    "a": 1
+  "a": 1
 }
 
 query T
@@ -908,12 +908,12 @@ json_each
 query TT colnames,nosort
 SELECT * FROM json_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
-key  value
-f1   [1, 2, 3]
-f2   {"f3": 1}
-f4   null
-f5   99
-f6   "stringy"
+key value
+f1  [1, 2, 3]
+f2  {"f3": 1}
+f4  null
+f5  99
+f6  "stringy"
 
 query error pq: cannot deconstruct an array as an object
 SELECT jsonb_each('[1]'::JSON)
@@ -938,12 +938,12 @@ jsonb_each
 query TT colnames,nosort
 SELECT * FROM jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
-key  value
-f1   [1, 2, 3]
-f2   {"f3": 1}
-f4   null
-f5   99
-f6   "stringy"
+key value
+f1  [1, 2, 3]
+f2  {"f3": 1}
+f4  null
+f5  99
+f6  "stringy"
 
 query error pq: cannot deconstruct an array as an object
 SELECT jsonb_each_text('[1]'::JSON)
@@ -978,12 +978,12 @@ q
 query TT colnames,nosort
 SELECT * FROM jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
-key  value
-f1   [1, 2, 3]
-f2   {"f3": 1}
-f4   NULL
-f5   99
-f6   stringy
+key value
+f1  [1, 2, 3]
+f2  {"f3": 1}
+f4  NULL
+f5  99
+f6  stringy
 
 query error pq: cannot deconstruct an array as an object
 SELECT json_each_text('[1]'::JSON)
@@ -1022,12 +1022,12 @@ q
 query TT colnames,nosort
 SELECT * FROM json_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
-key  value
-f1   [1, 2, 3]
-f2   {"f3": 1}
-f4   NULL
-f5   99
-f6   stringy
+key value
+f1  [1, 2, 3]
+f2  {"f3": 1}
+f4  NULL
+f5  99
+f6  stringy
 
 query T
 SELECT json_set('{"a":1}', '{a}'::STRING[], '2')
@@ -1240,7 +1240,7 @@ SELECT jsonb_array_length('[]')
 query TTT
 SELECT row_to_json(row(1,'foo')), row_to_json(NULL), row_to_json(row())
 ----
-{"f1": 1, "f2": "foo"}  NULL  {}
+{"f1": 1, "f2": "foo"} NULL {}
 
 query T
 SELECT row_to_json(x) FROM (SELECT 1 AS "OnE", 2 AS "tO_") x
@@ -1252,7 +1252,7 @@ SELECT row_to_json(x) FROM (SELECT 1 AS "OnE", 2 AS "tO_") x
 query T
 select row_to_json(t.*)
 from (
-  select 1 as a, 2 as b
+ select 1 as a, 2 as b
 ) t
 ----
 {"a": 1, "b": 2}
@@ -1264,49 +1264,49 @@ SELECT '["a", {"b":1}]'::jsonb #- '{1,b}'
 
 query BBBBBBBB
 select
-       jsonb_exists_any('{"id":12,"name":"Michael","address": {"postcode":12,"state":"California"}}'::jsonb, array['id']),
-       jsonb_exists_any('{"id":12,"name":"Michael","address": {"postcode":12,"state":"California"}}'::jsonb->'address', array['state']),
-       jsonb_exists_any('{"id":12,"name":"Michael","address": {"postcode":12,"state":"California"}}'::jsonb, array[NULL,'id']),
-       jsonb_exists_any('{"id":12,"name":"Michael","address": {"postcode":12,"state":"California"}}'::jsonb, array[NULL,'ids']),
-       jsonb_exists_any('["a","b"]', array['a']),
-       jsonb_exists_any('["a", 10, 12]', '{"a"}'::text[]),
-       jsonb_exists_any('["a"]', '{"a"}'),
-       jsonb_exists_any('["a"]', '{}');
+    jsonb_exists_any('{"id":12,"name":"Michael","address": {"postcode":12,"state":"California"}}'::jsonb, array['id']),
+    jsonb_exists_any('{"id":12,"name":"Michael","address": {"postcode":12,"state":"California"}}'::jsonb->'address', array['state']),
+    jsonb_exists_any('{"id":12,"name":"Michael","address": {"postcode":12,"state":"California"}}'::jsonb, array[NULL,'id']),
+    jsonb_exists_any('{"id":12,"name":"Michael","address": {"postcode":12,"state":"California"}}'::jsonb, array[NULL,'ids']),
+    jsonb_exists_any('["a","b"]', array['a']),
+    jsonb_exists_any('["a", 10, 12]', '{"a"}'::text[]),
+    jsonb_exists_any('["a"]', '{"a"}'),
+    jsonb_exists_any('["a"]', '{}');
 ----
 true	true	true	false	true	true	true	false
 
 query error pq: unknown signature: jsonb_exists_any\(jsonb, int\[\]\)
 select
-    jsonb_exists_any('{"id":12,"name":"Michael","address": {"postcode":12,"state":"California"}}'::jsonb, array[1]);
+  jsonb_exists_any('{"id":12,"name":"Michael","address": {"postcode":12,"state":"California"}}'::jsonb, array[1]);
 
 query error pq: jsonb_exists_any\(\): could not parse "id" as type int: strconv\.ParseInt: parsing "id": invalid syntax
 select
-    jsonb_exists_any('{"id":12,"name":"Michael","address": {"postcode":12,"state":"California"}}'::jsonb, array['id',1]);
+  jsonb_exists_any('{"id":12,"name":"Michael","address": {"postcode":12,"state":"California"}}'::jsonb, array['id',1]);
 
 # json_populate_record
 query FIII colnames
 SELECT *, c FROM json_populate_record(((1.01, 2, 3) AS d, c, a), '{"a": 3, "c": 10, "d": 11.001}')
 ----
-d       c   a c
-11.001  10  3 10
+d    c  a c
+11.001 10 3 10
 
 query BTT colnames
 SELECT * FROM json_populate_record(((true, ARRAY[1], ARRAY['f']) AS a, b, c), '{"a": true, "b": [1,2], "c": ["a", "b"]}')
 ----
-a     b      c
-true  {1,2}  {a,b}
+a   b   c
+true {1,2} {a,b}
 
 query BT colnames
 SELECT * FROM json_populate_record(((true, ((1, 'bar', ARRAY['a']) AS x, y, z)) AS a, b), '{"a": true, "b": {"x": "3", "y": "foo", "z": ["a", "b"]}}')
 ----
-a     b
-true  (3,foo,"{a,b}")
+a   b
+true (3,foo,"{a,b}")
 
 query BI colnames
 SELECT * FROM json_populate_record(((true, 3) AS a, b), '{"a": null, "b": null}')
 ----
-a     b
-NULL  NULL
+a   b
+NULL NULL
 
 query T colnames
 SELECT json_populate_record(((1.01, 2, 3) AS d, c, a), '{"a": 3, "c": 10, "d": 11.001}')
@@ -1342,7 +1342,7 @@ CREATE TABLE testtab (
 query ITTTTT
 SELECT * FROM json_populate_record(NULL::testtab, '{"i": 3, "ia": [1,2,3], "t": "foo", "ta": ["a", "b"], "ts": "2017-01-01 00:00", "j": {"a": "b", "c": 3, "d": [1,false,true,null,{"1":"2"}]}}'::JSON)
 ----
-3  {1,2,3}  foo  {a,b}  2017-01-01 00:00:00 +0000 +0000  {"a": "b", "c": 3, "d": [1, false, true, null, {"1": "2"}]}
+3 {1,2,3} foo {a,b} 2017-01-01 00:00:00 +0000 +0000 {"a": "b", "c": 3, "d": [1, false, true, null, {"1": "2"}]}
 
 query T
 SELECT json_populate_record(NULL::testtab, '{"i": 3, "ia": [1,2,3], "t": "foo", "ta": ["a", "b"], "ts": "2017-01-01 00:00", "j": {"a": "b", "c": 3, "d": [1,false,true,null,{"1":"2"}]}}'::JSON)
@@ -1352,7 +1352,7 @@ SELECT json_populate_record(NULL::testtab, '{"i": 3, "ia": [1,2,3], "t": "foo", 
 query ITTTTT
 SELECT * FROM json_populate_record(NULL::testtab, NULL)
 ----
-NULL  NULL  NULL  NULL  NULL  NULL
+NULL NULL NULL NULL NULL NULL
 
 query error could not parse \"foo\" as type int
 SELECT json_populate_record(((3,) AS a), '{"a": "foo"}')
@@ -1386,16 +1386,16 @@ SELECT * FROM json_populate_record(((3,) AS a), NULL)
 query FIII colnames,nosort
 SELECT *, c FROM json_populate_recordset(((1.01, 2, 3) AS d, c, a), '[{"a": 3, "c": 10, "d": 11.001}, {}]')
 ----
-d       c   a  c
-11.001  10  3  10
-1.01    2   3  2
+d    c  a c
+11.001 10 3 10
+1.01  2  3 2
 
 query FITI colnames,nosort
 SELECT *, c FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), '[{"a": 3, "c": 10, "d": 11.001}, {}]')
 ----
-d       c   a  c
-11.001  10  3  10
-NULL    2   3  2
+d    c  a c
+11.001 10 3 10
+NULL  2  3 2
 
 query FIT
 SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c, a), NULL)
@@ -1426,8 +1426,8 @@ SELECT * FROM json_populate_recordset(((NULL::NUMERIC, 2::INT, 3::TEXT) AS d, c,
 query ITTTTT nosort
 SELECT * FROM json_populate_recordset(NULL::testtab, '[{"i": 3, "ia": [1,2,3], "t": "foo", "ta": ["a", "b"], "ts": "2017-01-01 00:00", "j": {"a": "b", "c": 3, "d": [1,false,true,null,{"1":"2"}]}}, {}]'::JSON)
 ----
-3     {1,2,3}  foo   {a,b}  2017-01-01 00:00:00 +0000 +0000  {"a": "b", "c": 3, "d": [1, false, true, null, {"1": "2"}]}
-NULL  NULL     NULL  NULL   NULL                             NULL
+3   {1,2,3} foo  {a,b} 2017-01-01 00:00:00 +0000 +0000 {"a": "b", "c": 3, "d": [1, false, true, null, {"1": "2"}]}
+NULL NULL   NULL NULL  NULL               NULL
 
 query error invalid non-object argument to json_to_record
 SELECT * FROM json_to_record('3') AS t(a INT)
@@ -1456,37 +1456,37 @@ SELECT * FROM generate_series(1,10) g(g int)
 
 statement ok
 CREATE TABLE j (j) AS SELECT '{
-  "str": "a",
-  "int": 1,
-  "bool": true,
-  "nul": null,
-  "dec": 2.45,
-  "arrint": [1,2],
-  "arrmixed": [1,2,true],
-  "arrstr": ["a", "b"],
-  "arrbool": [true, false],
-  "obj": {"i": 3, "t": "blah", "z": true}
-  }'::JSONB
+ "str": "a",
+ "int": 1,
+ "bool": true,
+ "nul": null,
+ "dec": 2.45,
+ "arrint": [1,2],
+ "arrmixed": [1,2,true],
+ "arrstr": ["a", "b"],
+ "arrbool": [true, false],
+ "obj": {"i": 3, "t": "blah", "z": true}
+ }'::JSONB
 
 statement ok
 INSERT INTO j VALUES('{"str": "zzz"}')
 
 query TIBTFTTTTT
 SELECT t.* FROM j, json_to_record(j.j) AS t(
-  str TEXT,
-  int INT,
-  bool BOOL,
-  nul TEXT,
-  dec DECIMAL,
-  arrint INT[],
-  arrmixed TEXT,
-  arrstr TEXT[],
-  arrbool BOOL[],
-  obj TEXT
+ str TEXT,
+ int INT,
+ bool BOOL,
+ nul TEXT,
+ dec DECIMAL,
+ arrint INT[],
+ arrmixed TEXT,
+ arrstr TEXT[],
+ arrbool BOOL[],
+ obj TEXT
 ) ORDER BY rowid
 ----
-a    1     true  NULL  2.45  {1,2}  [1, 2, true]  {a,b}  {t,f}  {"i": 3, "t": "blah", "z": true}
-zzz  NULL  NULL  NULL  NULL  NULL   NULL          NULL   NULL   NULL
+a  1   true NULL 2.45 {1,2} [1, 2, true] {a,b} {t,f} {"i": 3, "t": "blah", "z": true}
+zzz NULL NULL NULL NULL NULL  NULL     NULL  NULL  NULL
 
 # Test that mismatched types return an error
 query error could not parse \"true\" as type int
@@ -1496,8 +1496,8 @@ SELECT t.bool FROM j, json_to_record(j.j) AS t(bool INT)
 query TT rowsort
 SELECT t.* FROM j, json_to_record(j.j) AS t(int TEXT, bool TEXT)
 ----
-1     true
-NULL  NULL
+1   true
+NULL NULL
 
 # Mixed type arrays
 query error could not parse \"2\" as type bool
@@ -1513,40 +1513,40 @@ NULL
 # Test json_to_recordset
 query TIBTFTTTTT
 SELECT t.* FROM j, json_to_recordset(j.j || '[]' || j.j) AS t(
-  str TEXT,
-  int INT,
-  bool BOOL,
-  nul TEXT,
-  dec DECIMAL,
-  arrint INT[],
-  arrmixed TEXT,
-  arrstr TEXT[],
-  arrbool BOOL[],
-  obj TEXT
+ str TEXT,
+ int INT,
+ bool BOOL,
+ nul TEXT,
+ dec DECIMAL,
+ arrint INT[],
+ arrmixed TEXT,
+ arrstr TEXT[],
+ arrbool BOOL[],
+ obj TEXT
 ) ORDER BY rowid
 ----
-a    1     true  NULL  2.45  {1,2}  [1, 2, true]  {a,b}  {t,f}  {"i": 3, "t": "blah", "z": true}
-a    1     true  NULL  2.45  {1,2}  [1, 2, true]  {a,b}  {t,f}  {"i": 3, "t": "blah", "z": true}
-zzz  NULL  NULL  NULL  NULL  NULL   NULL          NULL   NULL   NULL
-zzz  NULL  NULL  NULL  NULL  NULL   NULL          NULL   NULL   NULL
+a  1   true NULL 2.45 {1,2} [1, 2, true] {a,b} {t,f} {"i": 3, "t": "blah", "z": true}
+a  1   true NULL 2.45 {1,2} [1, 2, true] {a,b} {t,f} {"i": 3, "t": "blah", "z": true}
+zzz NULL NULL NULL NULL NULL  NULL     NULL  NULL  NULL
+zzz NULL NULL NULL NULL NULL  NULL     NULL  NULL  NULL
 
 query TT rowsort
 SELECT * FROM jsonb_to_recordset('[{"foo": "bar"}, {"foo": "bar2"}]') AS t(foo TEXT),
-              jsonb_to_recordset('[{"foo": "blah"}, {"foo": "blah2"}]') AS u(foo TEXT)
+       jsonb_to_recordset('[{"foo": "blah"}, {"foo": "blah2"}]') AS u(foo TEXT)
 ----
-bar   blah
-bar   blah2
-bar2  blah
-bar2  blah2
+bar  blah
+bar  blah2
+bar2 blah
+bar2 blah2
 
 # Regression test for incorrectly using jsonString.String() for asserting that
 # keys are ordered in the jsonObject (#121326).
 query T rowsort
 WITH cte(col) AS (
-  VALUES
-    ('false'::JSONB),
-    (jsonb_object(ARRAY['0', '', e'\x14', '']::TEXT[]))
-  )
+ VALUES
+  ('false'::JSONB),
+  (jsonb_object(ARRAY['0', '', e'\x14', '']::TEXT[]))
+ )
 SELECT jsonb_object_agg('k', 'v') OVER (PARTITION BY cte.col) FROM cte;
 ----
 {"k": "v"}

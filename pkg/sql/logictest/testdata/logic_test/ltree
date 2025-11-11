@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.2 !local-mixed-25.3
+# LogicTest: !!local-mixed-25.3
 
 statement ok
 CREATE TABLE l (lt LTREE);
@@ -346,10 +346,10 @@ SELECT text2ltree('foo..bar');
 
 query TBB
 SELECT ltree2text('foo_bar-baz.baz'::LTREE),
-    ltree2text('foo'::LTREE) = 'foo'::TEXT,
-    ltree2text(NULL::LTREE) IS NULL;
+  ltree2text('foo'::LTREE) = 'foo'::TEXT,
+  ltree2text(NULL::LTREE) IS NULL;
 ----
-foo_bar-baz.baz  true  true
+foo_bar-baz.baz true true
 
 query T
 SELECT lca('A.B.C'::LTREE, 'A.B.C.D'::LTREE, 'A.B.C.E'::LTREE);
@@ -414,9 +414,9 @@ NULL
 
 statement ok
 CREATE TABLE t_defaults (
-  id INT PRIMARY KEY,
-  path LTREE DEFAULT 'default.path',
-  path_null LTREE DEFAULT NULL
+ id INT PRIMARY KEY,
+ path LTREE DEFAULT 'default.path',
+ path_null LTREE DEFAULT NULL
 )
 
 statement ok
@@ -425,7 +425,7 @@ INSERT INTO t_defaults (id) VALUES (1)
 query ITT
 SELECT * FROM t_defaults
 ----
-1  default.path  NULL
+1 default.path NULL
 
 statement ok
 INSERT INTO t_defaults (id, path) VALUES (2, 'custom.path')
@@ -433,8 +433,8 @@ INSERT INTO t_defaults (id, path) VALUES (2, 'custom.path')
 query ITT rowsort
 SELECT * FROM t_defaults
 ----
-1  default.path  NULL
-2  custom.path   NULL
+1 default.path NULL
+2 custom.path  NULL
 
 statement ok
 DROP TABLE t_defaults
@@ -443,16 +443,16 @@ DROP TABLE t_defaults
 
 statement error could not parse ltree
 CREATE TABLE t_invalid_default (
-  id INT PRIMARY KEY,
-  path LTREE DEFAULT 'invalid..path'
+ id INT PRIMARY KEY,
+ path LTREE DEFAULT 'invalid..path'
 )
 
 # Tests for CHECK constraints with LTREE
 
 statement ok
 CREATE TABLE t_check (
-  id INT PRIMARY KEY,
-  path LTREE CHECK (path @> 'root.a.b')
+ id INT PRIMARY KEY,
+ path LTREE CHECK (path @> 'root.a.b')
 )
 
 statement ok
@@ -464,8 +464,8 @@ INSERT INTO t_check VALUES (2, 'root')
 query IT rowsort
 SELECT * FROM t_check
 ----
-1  root.a.b
-2  root
+1 root.a.b
+2 root
 
 statement error failed to satisfy CHECK constraint
 INSERT INTO t_check VALUES (3, 'other.path')
@@ -483,8 +483,8 @@ DROP TABLE t_check
 
 statement ok
 CREATE TABLE t_check2 (
-  id INT PRIMARY KEY,
-  path LTREE CHECK (path <@ 'org.company')
+ id INT PRIMARY KEY,
+ path LTREE CHECK (path <@ 'org.company')
 )
 
 statement ok
@@ -506,8 +506,8 @@ DROP TABLE t_check2
 
 statement ok
 CREATE TABLE t_check3 (
-  id INT PRIMARY KEY,
-  path LTREE CHECK (nlevel(path) >= 2)
+ id INT PRIMARY KEY,
+ path LTREE CHECK (nlevel(path) >= 2)
 )
 
 statement ok
@@ -541,8 +541,8 @@ ALTER TABLE t_schema ADD COLUMN path LTREE
 query ITS rowsort
 SELECT * FROM t_schema
 ----
-1  first   NULL
-2  second  NULL
+1 first  NULL
+2 second NULL
 
 statement ok
 INSERT INTO t_schema VALUES (3, 'third', 'a.b.c')
@@ -550,9 +550,9 @@ INSERT INTO t_schema VALUES (3, 'third', 'a.b.c')
 query ITT rowsort
 SELECT * FROM t_schema
 ----
-1  first   NULL
-2  second  NULL
-3  third   a.b.c
+1 first  NULL
+2 second NULL
+3 third  a.b.c
 
 # ALTER TABLE ADD COLUMN with DEFAULT
 
@@ -562,9 +562,9 @@ ALTER TABLE t_schema ADD COLUMN path2 LTREE DEFAULT 'default.value'
 query ITTT rowsort
 SELECT * FROM t_schema
 ----
-1  first   NULL   default.value
-2  second  NULL   default.value
-3  third   a.b.c  default.value
+1 first  NULL  default.value
+2 second NULL  default.value
+3 third  a.b.c default.value
 
 # ALTER TABLE DROP COLUMN
 
@@ -574,9 +574,9 @@ ALTER TABLE t_schema DROP COLUMN path
 query ITT rowsort
 SELECT * FROM t_schema
 ----
-1  first   default.value
-2  second  default.value
-3  third   default.value
+1 first  default.value
+2 second default.value
+3 third  default.value
 
 statement ok
 DROP TABLE t_schema
@@ -595,8 +595,8 @@ CREATE INDEX idx_path ON t_index (path)
 query IT
 SELECT * FROM t_index@idx_path WHERE path <@ 'a.b' ORDER BY id
 ----
-1  a.b
-2  a.b.c
+1 a.b
+2 a.b.c
 
 # DROP INDEX
 
@@ -606,8 +606,8 @@ DROP INDEX idx_path
 query IT
 SELECT * FROM t_index WHERE path <@ 'a.b' ORDER BY id
 ----
-1  a.b
-2  a.b.c
+1 a.b
+2 a.b.c
 
 statement ok
 DROP TABLE t_index
@@ -631,8 +631,8 @@ skipif config local-legacy-schema-changer
 query IT rowsort
 SELECT * FROM t_alter_type
 ----
-1  a.b.c
-2  x.y
+1 a.b.c
+2 x.y
 
 # Verify it's actually LTREE now
 
@@ -652,8 +652,8 @@ skipif config local-legacy-schema-changer
 query IT rowsort
 SELECT * FROM t_alter_type
 ----
-1  a.b.c
-2  x.y
+1 a.b.c
+2 x.y
 
 skipif config local-legacy-schema-changer
 query T
@@ -691,9 +691,9 @@ skipif config local-legacy-schema-changer
 query IT rowsort
 SELECT * FROM t_alter_invalid
 ----
-1  valid.path
-2  invalid..path
-3  also.valid
+1 valid.path
+2 invalid..path
+3 also.valid
 
 skipif config local-legacy-schema-changer
 statement ok
@@ -706,51 +706,51 @@ CREATE TABLE t_view_base (id INT PRIMARY KEY, path LTREE, name STRING)
 
 statement ok
 INSERT INTO t_view_base VALUES
-  (1, 'org.engineering.backend', 'Backend'),
-  (2, 'org.engineering.frontend', 'Frontend'),
-  (3, 'org.sales', 'Sales'),
-  (4, 'org.engineering.backend.api', 'API')
+ (1, 'org.engineering.backend', 'Backend'),
+ (2, 'org.engineering.frontend', 'Frontend'),
+ (3, 'org.sales', 'Sales'),
+ (4, 'org.engineering.backend.api', 'API')
 
 statement ok
 CREATE VIEW v_engineering AS
-  SELECT id, path, name
-  FROM t_view_base
-  WHERE path <@ 'org.engineering'
+ SELECT id, path, name
+ FROM t_view_base
+ WHERE path <@ 'org.engineering'
 
 query ITT rowsort
 SELECT * FROM v_engineering
 ----
-1  org.engineering.backend      Backend
-2  org.engineering.frontend     Frontend
-4  org.engineering.backend.api  API
+1 org.engineering.backend   Backend
+2 org.engineering.frontend   Frontend
+4 org.engineering.backend.api API
 
 # View with LTREE functions
 
 statement ok
 CREATE VIEW v_with_functions AS
-  SELECT id, path, name, nlevel(path) as depth, subpath(path, 0, 2) as top_level
-  FROM t_view_base
+ SELECT id, path, name, nlevel(path) as depth, subpath(path, 0, 2) as top_level
+ FROM t_view_base
 
 query ITTIT rowsort
 SELECT * FROM v_with_functions
 ----
-1  org.engineering.backend      Backend        3  org.engineering
-2  org.engineering.frontend     Frontend       3  org.engineering
-3  org.sales                    Sales          2  org.sales
-4  org.engineering.backend.api  API            4  org.engineering
+1 org.engineering.backend   Backend    3 org.engineering
+2 org.engineering.frontend   Frontend    3 org.engineering
+3 org.sales          Sales     2 org.sales
+4 org.engineering.backend.api API      4 org.engineering
 
 # View with LTREE operators
 
 statement ok
 CREATE VIEW v_top_level AS
-  SELECT id, path, name
-  FROM t_view_base
-  WHERE path <@ 'org' AND nlevel(path) = 2
+ SELECT id, path, name
+ FROM t_view_base
+ WHERE path <@ 'org' AND nlevel(path) = 2
 
 query ITT rowsort
 SELECT * FROM v_top_level
 ----
-3  org.sales  Sales
+3 org.sales Sales
 
 statement ok
 DROP VIEW v_engineering
@@ -768,24 +768,24 @@ DROP TABLE t_view_base
 
 statement ok
 CREATE TABLE t_computed (
-  id INT PRIMARY KEY,
-  path LTREE,
-  depth INT AS (nlevel(path)) STORED,
-  parent_path LTREE AS (subpath(path, 0, nlevel(path) - 1)) STORED
+ id INT PRIMARY KEY,
+ path LTREE,
+ depth INT AS (nlevel(path)) STORED,
+ parent_path LTREE AS (subpath(path, 0, nlevel(path) - 1)) STORED
 )
 
 statement ok
 INSERT INTO t_computed (id, path) VALUES
-  (1, 'a.b.c'),
-  (2, 'x.y'),
-  (3, 'p.q.r.s.t')
+ (1, 'a.b.c'),
+ (2, 'x.y'),
+ (3, 'p.q.r.s.t')
 
 query ITIT rowsort
 SELECT id, path, depth, parent_path FROM t_computed
 ----
-1  a.b.c      3  a.b
-2  x.y        2  x
-3  p.q.r.s.t  5  p.q.r.s
+1 a.b.c   3 a.b
+2 x.y    2 x
+3 p.q.r.s.t 5 p.q.r.s
 
 # Verify computed columns are updated on insert
 
@@ -795,7 +795,7 @@ INSERT INTO t_computed (id, path) VALUES (4, 'single')
 query ITIT
 SELECT id, path, depth, parent_path FROM t_computed WHERE id = 4
 ----
-4  single  1  ·
+4 single 1 ·
 
 # Update path and verify computed columns change
 
@@ -805,7 +805,7 @@ UPDATE t_computed SET path = 'a.b.c.d.e' WHERE id = 1
 query ITIT
 SELECT id, path, depth, parent_path FROM t_computed WHERE id = 1
 ----
-1  a.b.c.d.e  5  a.b.c.d
+1 a.b.c.d.e 5 a.b.c.d
 
 statement ok
 DROP TABLE t_computed
@@ -814,9 +814,9 @@ DROP TABLE t_computed
 
 statement ok
 CREATE TABLE t_computed_invalid_stored (
-  id INT PRIMARY KEY,
-  path TEXT,
-  invalid_path LTREE AS ((path || '..invalid')::LTREE) STORED
+ id INT PRIMARY KEY,
+ path TEXT,
+ invalid_path LTREE AS ((path || '..invalid')::LTREE) STORED
 )
 
 statement error could not parse ltree
@@ -829,9 +829,9 @@ DROP TABLE t_computed_invalid_stored
 
 statement ok
 CREATE TABLE t_computed_invalid_virtual (
-  id INT PRIMARY KEY,
-  path TEXT,
-  invalid_path LTREE AS ((path || '..invalid')::LTREE) VIRTUAL
+ id INT PRIMARY KEY,
+ path TEXT,
+ invalid_path LTREE AS ((path || '..invalid')::LTREE) VIRTUAL
 )
 
 statement error could not parse ltree
@@ -949,7 +949,7 @@ SELECT ARRAY['valid', 'invalid..path']::TEXT[]::LTREE[]
 
 statement ok
 CREATE FUNCTION get_depth(path LTREE) RETURNS INT AS $$
-  SELECT nlevel(path)
+ SELECT nlevel(path)
 $$ LANGUAGE SQL
 
 query I
@@ -971,7 +971,7 @@ NULL
 
 statement ok
 CREATE FUNCTION make_path(a TEXT, b TEXT) RETURNS LTREE AS $$
-  SELECT (a || '.' || b)::LTREE
+ SELECT (a || '.' || b)::LTREE
 $$ LANGUAGE SQL
 
 query T
@@ -988,7 +988,7 @@ a.b
 
 statement ok
 CREATE FUNCTION is_descendant(child LTREE, parent LTREE) RETURNS BOOL AS $$
-  SELECT child <@ parent
+ SELECT child <@ parent
 $$ LANGUAGE SQL
 
 query B
@@ -1010,10 +1010,10 @@ false
 
 statement ok
 CREATE FUNCTION get_parent(path LTREE) RETURNS LTREE AS $$
-  SELECT CASE
-    WHEN nlevel(path) <= 1 THEN NULL::LTREE
-    ELSE subpath(path, 0, nlevel(path) - 1)
-  END
+ SELECT CASE
+  WHEN nlevel(path) <= 1 THEN NULL::LTREE
+  ELSE subpath(path, 0, nlevel(path) - 1)
+ END
 $$ LANGUAGE SQL
 
 query T
@@ -1036,14 +1036,14 @@ NULL
 statement ok
 CREATE FUNCTION count_ancestors(path LTREE) RETURNS INT AS $$
 DECLARE
-  count INT := 0;
-  current_path LTREE := path;
+ count INT := 0;
+ current_path LTREE := path;
 BEGIN
-  WHILE nlevel(current_path) > 0 LOOP
-    count := count + 1;
-    current_path := subpath(current_path, 0, nlevel(current_path) - 1);
-  END LOOP;
-  RETURN count;
+ WHILE nlevel(current_path) > 0 LOOP
+  count := count + 1;
+  current_path := subpath(current_path, 0, nlevel(current_path) - 1);
+ END LOOP;
+ RETURN count;
 END;
 $$ LANGUAGE PLpgSQL
 
@@ -1067,16 +1067,16 @@ SELECT count_ancestors('')
 statement ok
 CREATE FUNCTION build_path(labels TEXT[]) RETURNS LTREE AS $$
 DECLARE
-  result TEXT := '';
+ result TEXT := '';
 BEGIN
-  FOR i IN 1..array_length(labels, 1) LOOP
-    IF result = '' THEN
-      result = labels[i];
-    ELSE
-      result = result || '.' || labels[i];
-    END IF;
-  END LOOP;
-  RETURN result::LTREE;
+ FOR i IN 1..array_length(labels, 1) LOOP
+  IF result = '' THEN
+   result = labels[i];
+  ELSE
+   result = result || '.' || labels[i];
+  END IF;
+ END LOOP;
+ RETURN result::LTREE;
 END;
 $$ LANGUAGE PLpgSQL
 
@@ -1117,48 +1117,48 @@ CREATE TABLE t_sort (id INT PRIMARY KEY, path LTREE)
 
 statement ok
 INSERT INTO t_sort VALUES
-  (1, 'org.zoo'),
-  (2, 'org.apple.beta'),
-  (3, 'org.apple'),
-  (4, 'org'),
-  (5, 'prod'),
-  (6, 'org.apple.beta.v1'),
-  (7, ''),
-  (8, 'org.application'),
-  (9, NULL),
-  (10, 'org.apple.alpha')
+ (1, 'org.zoo'),
+ (2, 'org.apple.beta'),
+ (3, 'org.apple'),
+ (4, 'org'),
+ (5, 'prod'),
+ (6, 'org.apple.beta.v1'),
+ (7, ''),
+ (8, 'org.application'),
+ (9, NULL),
+ (10, 'org.apple.alpha')
 
 # ORDER BY ASC with PK scan - verify label-by-label comparison
 
 query IT
 SELECT * FROM t_sort@t_sort_pkey ORDER BY path ASC
 ----
-9   NULL
-7   ·
-4   org
-3   org.apple
-10  org.apple.alpha
-2   org.apple.beta
-6   org.apple.beta.v1
-8   org.application
-1   org.zoo
-5   prod
+9  NULL
+7  ·
+4  org
+3  org.apple
+10 org.apple.alpha
+2  org.apple.beta
+6  org.apple.beta.v1
+8  org.application
+1  org.zoo
+5  prod
 
 # ORDER BY DESC with PK scan
 
 query IT
 SELECT * FROM t_sort@t_sort_pkey ORDER BY path DESC
 ----
-5   prod
-1   org.zoo
-8   org.application
-6   org.apple.beta.v1
-2   org.apple.beta
-10  org.apple.alpha
-3   org.apple
-4   org
-7   ·
-9   NULL
+5  prod
+1  org.zoo
+8  org.application
+6  org.apple.beta.v1
+2  org.apple.beta
+10 org.apple.alpha
+3  org.apple
+4  org
+7  ·
+9  NULL
 
 # Create index and verify same results with index
 
@@ -1170,32 +1170,32 @@ CREATE INDEX idx_sort_path ON t_sort (path)
 query IT
 SELECT * FROM t_sort@idx_sort_path ORDER BY path ASC
 ----
-9   NULL
-7   ·
-4   org
-3   org.apple
-10  org.apple.alpha
-2   org.apple.beta
-6   org.apple.beta.v1
-8   org.application
-1   org.zoo
-5   prod
+9  NULL
+7  ·
+4  org
+3  org.apple
+10 org.apple.alpha
+2  org.apple.beta
+6  org.apple.beta.v1
+8  org.application
+1  org.zoo
+5  prod
 
 # ORDER BY DESC with index
 
 query IT
 SELECT * FROM t_sort@idx_sort_path ORDER BY path DESC
 ----
-5   prod
-1   org.zoo
-8   org.application
-6   org.apple.beta.v1
-2   org.apple.beta
-10  org.apple.alpha
-3   org.apple
-4   org
-7   ·
-9   NULL
+5  prod
+1  org.zoo
+8  org.application
+6  org.apple.beta.v1
+2  org.apple.beta
+10 org.apple.alpha
+3  org.apple
+4  org
+7  ·
+9  NULL
 
 statement ok
 DROP TABLE t_sort
@@ -1209,11 +1209,11 @@ CREATE TABLE t_multi_idx (id INT PRIMARY KEY, path LTREE, status STRING)
 
 statement ok
 INSERT INTO t_multi_idx VALUES
-  (1, 'org.sales', 'active'),
-  (2, 'org.engineering', 'active'),
-  (3, 'org.sales', 'inactive'),
-  (4, 'org.engineering.backend', 'active'),
-  (5, 'org.engineering.frontend', 'inactive')
+ (1, 'org.sales', 'active'),
+ (2, 'org.engineering', 'active'),
+ (3, 'org.sales', 'inactive'),
+ (4, 'org.engineering.backend', 'active'),
+ (5, 'org.engineering.frontend', 'inactive')
 
 statement ok
 CREATE INDEX idx_path_status ON t_multi_idx (path, status)
@@ -1221,14 +1221,14 @@ CREATE INDEX idx_path_status ON t_multi_idx (path, status)
 query ITT
 SELECT * FROM t_multi_idx@idx_path_status WHERE path = 'org.sales' ORDER BY status
 ----
-1  org.sales  active
-3  org.sales  inactive
+1 org.sales active
+3 org.sales inactive
 
 query ITT
 SELECT * FROM t_multi_idx@idx_path_status WHERE path <@ 'org.engineering' AND status = 'active' ORDER BY path
 ----
-2  org.engineering         active
-4  org.engineering.backend active
+2 org.engineering     active
+4 org.engineering.backend active
 
 # Index with LTREE as second column
 
@@ -1238,15 +1238,15 @@ CREATE INDEX idx_status_path ON t_multi_idx (status, path)
 query ITT
 SELECT * FROM t_multi_idx@idx_status_path WHERE status = 'active' ORDER BY path
 ----
-2  org.engineering         active
-4  org.engineering.backend active
-1  org.sales               active
+2 org.engineering     active
+4 org.engineering.backend active
+1 org.sales        active
 
 query ITT
 SELECT * FROM t_multi_idx@idx_status_path WHERE status = 'inactive' AND path <@ 'org' ORDER BY path
 ----
-5  org.engineering.frontend  inactive
-3  org.sales                 inactive
+5 org.engineering.frontend inactive
+3 org.sales         inactive
 
 # Multi-column index with multiple types
 
@@ -1258,10 +1258,10 @@ CREATE TABLE t_multi_idx2 (id INT PRIMARY KEY, category INT, path LTREE, name ST
 
 statement ok
 INSERT INTO t_multi_idx2 VALUES
-  (1, 1, 'a.b', 'first'),
-  (2, 1, 'a.b.c', 'second'),
-  (3, 2, 'a.b', 'third'),
-  (4, 2, 'x.y', 'fourth')
+ (1, 1, 'a.b', 'first'),
+ (2, 1, 'a.b.c', 'second'),
+ (3, 2, 'a.b', 'third'),
+ (4, 2, 'x.y', 'fourth')
 
 statement ok
 CREATE INDEX idx_cat_path ON t_multi_idx2 (category, path)
@@ -1269,13 +1269,13 @@ CREATE INDEX idx_cat_path ON t_multi_idx2 (category, path)
 query IITT
 SELECT * FROM t_multi_idx2@idx_cat_path WHERE category = 1 ORDER BY path
 ----
-1  1  a.b    first
-2  1  a.b.c  second
+1 1 a.b  first
+2 1 a.b.c second
 
 query IITT
 SELECT * FROM t_multi_idx2@idx_cat_path WHERE category = 2 AND path <@ 'a' ORDER BY id
 ----
-3  2  a.b  third
+3 2 a.b third
 
 statement ok
 DROP TABLE t_multi_idx2
@@ -1345,10 +1345,10 @@ SELECT 'trailing.dot.'::LTREE
 
 statement ok
 INSERT INTO t_boundary VALUES
-  ('valid_underscore'::LTREE),
-  ('valid-hyphen'::LTREE),
-  ('MixedCase123'::LTREE),
-  ('a1-b2_c3'::LTREE)
+ ('valid_underscore'::LTREE),
+ ('valid-hyphen'::LTREE),
+ ('MixedCase123'::LTREE),
+ ('a1-b2_c3'::LTREE)
 
 query I
 SELECT count(*) FROM t_boundary WHERE nlevel(path) = 1
@@ -1362,10 +1362,10 @@ DROP TABLE t_boundary
 # <@ (contained-by) operator.
 statement ok
 CREATE TABLE t156478 (
-  k INT PRIMARY KEY,
-  l LTREE,
-  INDEX idx (l),
-  INDEX idx_desc (l DESC)
+ k INT PRIMARY KEY,
+ l LTREE,
+ INDEX idx (l),
+ INDEX idx_desc (l DESC)
 )
 
 statement ok

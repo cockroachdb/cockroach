@@ -2,7 +2,7 @@
 # non-nil txn, which is not available in job-based flows like INSPECT. Using
 # them causes a nil pointer panic in the span resolver setup.
 #
-# LogicTest: !fakedist !fakedist-vec-off !fakedist-disk !local-mixed-25.2 !local-mixed-25.3
+# LogicTest: !fakedist !fakedist-vec-off !fakedist-disk !!local-mixed-25.3
 
 
 # Helper view to show the most recent INSPECT job.
@@ -12,8 +12,8 @@
 statement ok
 CREATE VIEW last_inspect_job AS
 SELECT status, jsonb_array_length(
-    crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->'inspectDetails'->'checks'
-  ) AS num_checks
+  crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->'inspectDetails'->'checks'
+ ) AS num_checks
 FROM crdb_internal.system_jobs
 WHERE job_type = 'INSPECT'
 ORDER BY id DESC
@@ -99,7 +99,7 @@ INSPECT TABLE foo WITH OPTIONS DETACHED = TRUE
 query TI retry
 SELECT * FROM last_inspect_job
 ----
-succeeded  2
+succeeded 2
 
 statement notice NOTICE: INSPECT job [0-9]+ running in the background
 INSPECT TABLE foo WITH OPTIONS DETACHED
@@ -107,7 +107,7 @@ INSPECT TABLE foo WITH OPTIONS DETACHED
 query TI retry
 SELECT * FROM last_inspect_job
 ----
-succeeded  2
+succeeded 2
 
 # DETACHED = TRUE with a specific index (verify the number of checks).
 statement notice NOTICE: INSPECT job [0-9]+ running in the background
@@ -116,7 +116,7 @@ INSPECT TABLE foo WITH OPTIONS DETACHED = TRUE, INDEX (idx_c1)
 query TI retry
 SELECT * FROM last_inspect_job
 ----
-succeeded  1
+succeeded 1
 
 # Test regular (non-detached) inspect operations.
 
@@ -126,7 +126,7 @@ INSPECT TABLE foo;
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  2
+succeeded 2
 
 statement ok
 INSPECT TABLE foo WITH OPTIONS INDEX (idx_c1);
@@ -134,7 +134,7 @@ INSPECT TABLE foo WITH OPTIONS INDEX (idx_c1);
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  1
+succeeded 1
 
 # Names are quietly deduplicated.
 statement ok
@@ -143,7 +143,7 @@ INSPECT TABLE foo WITH OPTIONS INDEX (idx_c1, foo@idx_c1);
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  1
+succeeded 1
 
 statement ok
 INSPECT TABLE foo AS OF SYSTEM TIME '$foo_created_ts' WITH OPTIONS INDEX (idx_c1,idx_c2);
@@ -151,7 +151,7 @@ INSPECT TABLE foo AS OF SYSTEM TIME '$foo_created_ts' WITH OPTIONS INDEX (idx_c1
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  2
+succeeded 2
 
 statement error pq: index "idx_c3" does not exist
 INSPECT TABLE foo WITH OPTIONS INDEX (idx_c3);
@@ -162,7 +162,7 @@ INSPECT TABLE foo WITH OPTIONS INDEX ALL;
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  2
+succeeded 2
 
 statement ok
 INSPECT DATABASE test;
@@ -170,7 +170,7 @@ INSPECT DATABASE test;
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  2
+succeeded 2
 
 statement error index "idx_c3" does not exist
 INSPECT DATABASE test WITH OPTIONS INDEX (idx_c1, idx_c3);
@@ -184,7 +184,7 @@ INSPECT TABLE bar;
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  NULL
+succeeded NULL
 
 statement ok
 CREATE INDEX idx_c1 ON bar (c1);
@@ -205,7 +205,7 @@ INSPECT DATABASE test WITH OPTIONS INDEX (foo@idx_c1, test.public.bar@idx_c1, te
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  3
+succeeded 3
 
 subtest end
 
@@ -251,15 +251,15 @@ user root
 # Table has both unsupported indexes and two regular indexes.
 statement ok
 CREATE TABLE t2 (
-    x INT, y INT, z INT,
-    j JSONB NULL,
-    INDEX hash_idx (x) USING HASH,
-    INDEX expr_idx ((y + z)),
-    INDEX regular_idx_y (y),
-    INDEX regular_idx_z (z),
-    VECTOR INDEX vector_idx ((CAST(j->>'v' AS VECTOR(3)))),
-    INDEX partial_idx (j) WHERE 1=1,
-    INVERTED INDEX inverted_idx (j)
+  x INT, y INT, z INT,
+  j JSONB NULL,
+  INDEX hash_idx (x) USING HASH,
+  INDEX expr_idx ((y + z)),
+  INDEX regular_idx_y (y),
+  INDEX regular_idx_z (z),
+  VECTOR INDEX vector_idx ((CAST(j->>'v' AS VECTOR(3)))),
+  INDEX partial_idx (j) WHERE 1=1,
+  INVERTED INDEX inverted_idx (j)
 );
 
 statement ok
@@ -273,7 +273,7 @@ INSPECT TABLE t2 AS OF SYSTEM TIME '-1us';
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  2
+succeeded 2
 
 statement error pq: index "t2_pkey" on table "t2" is not supported for index consistency checking
 INSPECT TABLE t2 WITH OPTIONS INDEX (t2@t2_pkey);
@@ -297,7 +297,7 @@ INSPECT TABLE t2 WITH OPTIONS INDEX (inverted_idx);
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  2
+succeeded 2
 
 statement ok
 DROP TABLE t2;
@@ -311,11 +311,11 @@ user root
 # Test that indexes on virtual columns are not supported for INSPECT.
 statement ok
 CREATE TABLE t_virtual (
-    c1 INT,
-    c2 INT AS (c1 + 1) VIRTUAL,
-    c3 INT,
-    INDEX idx_c2 (c2),
-    INDEX idx_c3 (c3)
+  c1 INT,
+  c2 INT AS (c1 + 1) VIRTUAL,
+  c3 INT,
+  INDEX idx_c2 (c2),
+  INDEX idx_c3 (c3)
 );
 
 statement ok
@@ -329,7 +329,7 @@ INSPECT TABLE t_virtual AS OF SYSTEM TIME '-1us';
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  1
+succeeded 1
 
 # Explicitly specifying the virtual column index should fail.
 statement error pq: index "idx_c2" on table "t_virtual" is not supported for index consistency checking
@@ -342,17 +342,17 @@ INSPECT TABLE t_virtual WITH OPTIONS INDEX (idx_c3);
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  1
+succeeded 1
 
 # Test with multiple virtual columns in the same index.
 statement ok
 CREATE TABLE t_multi_virtual (
-    c1 INT,
-    c2 INT AS (c1 + 1) VIRTUAL,
-    c3 INT AS (c1 * 2) VIRTUAL,
-    c4 INT,
-    INDEX idx_virtual_combo (c2, c3),
-    INDEX idx_regular (c4)
+  c1 INT,
+  c2 INT AS (c1 + 1) VIRTUAL,
+  c3 INT AS (c1 * 2) VIRTUAL,
+  c4 INT,
+  INDEX idx_virtual_combo (c2, c3),
+  INDEX idx_regular (c4)
 );
 
 statement ok
@@ -365,7 +365,7 @@ INSPECT TABLE t_multi_virtual AS OF SYSTEM TIME '-1us';
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  1
+succeeded 1
 
 # Explicitly specifying the index with virtual columns should fail.
 statement error pq: index "idx_virtual_combo" on table "t_multi_virtual" is not supported for index consistency checking
@@ -518,8 +518,8 @@ CREATE TABLE refcursor_tbl (id INT PRIMARY KEY, a INT, c REFCURSOR, d REFCURSOR[
 
 statement ok
 INSERT INTO refcursor_tbl VALUES
-  (1, 10, 'cursor1', ARRAY['c1a', 'c1b']::REFCURSOR[]),
-  (2, 20, 'cursor2', ARRAY['c2a', 'c2b']::REFCURSOR[]);
+ (1, 10, 'cursor1', ARRAY['c1a', 'c1b']::REFCURSOR[]),
+ (2, 20, 'cursor2', ARRAY['c2a', 'c2b']::REFCURSOR[]);
 
 # Verify that we cannot index the refcursor. They can only be included
 # in an index as stored columns.
@@ -538,7 +538,7 @@ INSPECT TABLE refcursor_tbl WITH OPTIONS INDEX ALL;
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  2
+succeeded 2
 
 # Test with hash optimization disabled to ensure JOIN-based consistency check works.
 statement ok
@@ -550,7 +550,7 @@ INSPECT TABLE refcursor_tbl WITH OPTIONS INDEX ALL;
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  2
+succeeded 2
 
 # Re-enable hash optimization.
 statement ok
@@ -590,16 +590,16 @@ subtest inspect_non_key_encodable_types
 
 statement ok
 CREATE TABLE tsvector_tbl (
-  id INT PRIMARY KEY,
-  a INT,
-  tsv TSVECTOR NOT NULL,
-  INDEX idx_a_tsv (a) STORING (tsv)
+ id INT PRIMARY KEY,
+ a INT,
+ tsv TSVECTOR NOT NULL,
+ INDEX idx_a_tsv (a) STORING (tsv)
 );
 
 statement ok
 INSERT INTO tsvector_tbl VALUES
-  (1, 10, 'hello world'::TSVECTOR),
-  (2, 20, 'foo bar'::TSVECTOR);
+ (1, 10, 'hello world'::TSVECTOR),
+ (2, 20, 'foo bar'::TSVECTOR);
 
 # First verify that datums_to_bytes does not support TSVECTOR
 statement error pq: illegal argument 0 of type tsvector
@@ -613,20 +613,20 @@ INSPECT TABLE tsvector_tbl WITH OPTIONS INDEX (idx_a_tsv);
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  1
+succeeded 1
 
 statement ok
 CREATE TABLE tsquery_tbl (
-  id INT PRIMARY KEY,
-  a INT,
-  tsq TSQUERY NOT NULL,
-  INDEX idx_a_tsq (a) STORING (tsq)
+ id INT PRIMARY KEY,
+ a INT,
+ tsq TSQUERY NOT NULL,
+ INDEX idx_a_tsq (a) STORING (tsq)
 );
 
 statement ok
 INSERT INTO tsquery_tbl VALUES
-  (1, 10, 'search & term'::TSQUERY),
-  (2, 20, 'another | query'::TSQUERY);
+ (1, 10, 'search & term'::TSQUERY),
+ (2, 20, 'another | query'::TSQUERY);
 
 # First verify that datums_to_bytes does not support TSQUERY
 statement error pq: illegal argument 0 of type tsquery
@@ -640,20 +640,20 @@ INSPECT TABLE tsquery_tbl WITH OPTIONS INDEX (idx_a_tsq);
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  1
+succeeded 1
 
 statement ok
 CREATE TABLE pgvector_tbl (
-  id INT PRIMARY KEY,
-  a INT,
-  vec VECTOR(3) NOT NULL,
-  INDEX idx_a_vec (a) STORING (vec)
+ id INT PRIMARY KEY,
+ a INT,
+ vec VECTOR(3) NOT NULL,
+ INDEX idx_a_vec (a) STORING (vec)
 );
 
 statement ok
 INSERT INTO pgvector_tbl VALUES
-  (1, 10, '[1.0, 2.0, 3.0]'::VECTOR(3)),
-  (2, 20, '[4.0, 5.0, 6.0]'::VECTOR(3));
+ (1, 10, '[1.0, 2.0, 3.0]'::VECTOR(3)),
+ (2, 20, '[4.0, 5.0, 6.0]'::VECTOR(3));
 
 # First verify that datums_to_bytes does not support VECTOR
 statement error pq: illegal argument 0 of type vector
@@ -667,23 +667,23 @@ INSPECT TABLE pgvector_tbl WITH OPTIONS INDEX (idx_a_vec);
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  1
+succeeded 1
 
 # Test with multiple problematic types in the same index.
 statement ok
 CREATE TABLE multi_type_tbl (
-  id INT PRIMARY KEY,
-  a INT,
-  tsv TSVECTOR,
-  tsq TSQUERY NOT NULL,
-  vec VECTOR(2),
-  INDEX idx_a_multi (a) STORING (tsv, tsq, vec)
+ id INT PRIMARY KEY,
+ a INT,
+ tsv TSVECTOR,
+ tsq TSQUERY NOT NULL,
+ vec VECTOR(2),
+ INDEX idx_a_multi (a) STORING (tsv, tsq, vec)
 );
 
 statement ok
 INSERT INTO multi_type_tbl VALUES
-  (1, 10, 'word1 word2'::TSVECTOR, 'search'::TSQUERY, '[1.0, 2.0]'::VECTOR(2)),
-  (2, 20, NULL, 'query'::TSQUERY, NULL);
+ (1, 10, 'word1 word2'::TSVECTOR, 'search'::TSQUERY, '[1.0, 2.0]'::VECTOR(2)),
+ (2, 20, NULL, 'query'::TSQUERY, NULL);
 
 # Verify that datums_to_bytes fails on each type individually.
 statement error pq: illegal argument 0 of type tsvector
@@ -703,7 +703,7 @@ INSPECT TABLE multi_type_tbl WITH OPTIONS INDEX (idx_a_multi);
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  1
+succeeded 1
 
 statement ok
 DROP TABLE tsvector_tbl;

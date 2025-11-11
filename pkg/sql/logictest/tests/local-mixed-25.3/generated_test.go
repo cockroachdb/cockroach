@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 21
+const configIdx = 20
 
 var logicTestDir string
 
@@ -1039,6 +1039,13 @@ func TestLogic_insert(
 	runLogicTest(t, "insert")
 }
 
+func TestLogic_inspect(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inspect")
+}
+
 func TestLogic_int_size(
 	t *testing.T,
 ) {
@@ -1233,6 +1240,13 @@ func TestLogic_lookup_join_spans(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "lookup_join_spans")
+}
+
+func TestLogic_ltree(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "ltree")
 }
 
 func TestLogic_manual_retry(
@@ -1669,6 +1683,13 @@ func TestLogic_routine_schema_change(
 	runLogicTest(t, "routine_schema_change")
 }
 
+func TestLogic_row_level_security(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "row_level_security")
+}
+
 func TestLogic_row_level_ttl(
 	t *testing.T,
 ) {
@@ -2080,6 +2101,13 @@ func TestLogic_srfs(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "srfs")
+}
+
+func TestLogic_statement_hint_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "statement_hint_builtins")
 }
 
 func TestLogic_statement_source(

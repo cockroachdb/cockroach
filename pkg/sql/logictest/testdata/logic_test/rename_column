@@ -1,10 +1,10 @@
 statement ok
 CREATE TABLE users (
-  uid    INT PRIMARY KEY,
-  name  VARCHAR NOT NULL,
-  title VARCHAR,
-  INDEX foo (name) STORING (title),
-  UNIQUE INDEX bar (uid, name)
+ uid  INT PRIMARY KEY,
+ name VARCHAR NOT NULL,
+ title VARCHAR,
+ INDEX foo (name) STORING (title),
+ UNIQUE INDEX bar (uid, name)
 )
 
 statement ok
@@ -13,9 +13,9 @@ INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 query ITT colnames,rowsort
 SELECT * FROM users
 ----
-uid name  title
-1  tom   cat
-2  jerry rat
+uid name title
+1 tom  cat
+2 jerry rat
 
 statement error pq: column "name" of relation "users" already exists
 ALTER TABLE users RENAME COLUMN title TO name
@@ -41,9 +41,9 @@ ALTER TABLE users RENAME COLUMN title TO species
 query ITT colnames,rowsort
 SELECT * FROM users
 ----
-id name  species
-1  tom   cat
-2  jerry rat
+id name species
+1 tom  cat
+2 jerry rat
 
 user testuser
 
@@ -65,23 +65,23 @@ user root
 query ITT colnames,rowsort
 SELECT * FROM users
 ----
-id username  species
-1  tom       cat
-2  jerry     rat
+id username species
+1 tom    cat
+2 jerry   rat
 
 # Renaming a column updates the column names in an index.
 query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-users       bar         false       1             id           id          ASC        false    false     true     1
-users       bar         false       2             username     username    ASC        false    false     true     1
-users       foo         true        1             username     username    ASC        false    false     true     1
-users       foo         true        2             species      species     N/A        true     false     true     1
-users       foo         true        3             id           id          ASC        false    true      true     1
-users       users_pkey  false       1             id           id          ASC        false    false     true     1
-users       users_pkey  false       2             username     username    N/A        true     false     true     1
-users       users_pkey  false       3             species      species     N/A        true     false     true     1
+table_name index_name non_unique seq_in_index column_name definition direction storing implicit visible visibility
+users    bar     false    1       id      id     ASC    false  false   true   1
+users    bar     false    2       username   username  ASC    false  false   true   1
+users    foo     true    1       username   username  ASC    false  false   true   1
+users    foo     true    2       species   species   N/A    true   false   true   1
+users    foo     true    3       id      id     ASC    false  true   true   1
+users    users_pkey false    1       id      id     ASC    false  false   true   1
+users    users_pkey false    2       username   username  N/A    true   false   true   1
+users    users_pkey false    3       species   species   N/A    true   false   true   1
 
 statement ok
 CREATE VIEW v1 AS SELECT id FROM users WHERE username = 'tom'
@@ -146,7 +146,7 @@ ALTER TABLE users SET (schema_locked=false);
 # Check that a column can be added and renamed in the same statement
 statement ok
 ALTER TABLE users RENAME COLUMN title TO title_old,
-                  ADD COLUMN title STRING AS (title_old || ' woo') STORED
+         ADD COLUMN title STRING AS (title_old || ' woo') STORED
 
 skipif config schema-locked-disabled
 statement ok
@@ -168,26 +168,26 @@ CREATE TABLE foo (j INT);
 
 statement ok
 BEGIN;
-    ALTER TABLE foo ADD CONSTRAINT check_not_negative CHECK (j >= 0);
-    ALTER TABLE foo RENAME COLUMN j TO i;
+  ALTER TABLE foo ADD CONSTRAINT check_not_negative CHECK (j >= 0);
+  ALTER TABLE foo RENAME COLUMN j TO i;
 COMMIT;
 
 statement ok
 BEGIN;
-    ALTER TABLE foo ADD COLUMN k INT AS (i+1) STORED;
-    ALTER TABLE foo RENAME COLUMN i TO j;
+  ALTER TABLE foo ADD COLUMN k INT AS (i+1) STORED;
+  ALTER TABLE foo RENAME COLUMN i TO j;
 COMMIT;
 
 statement ok
 BEGIN;
-    ALTER TABLE foo ALTER COLUMN j SET NOT NULL;
-    ALTER TABLE foo RENAME COLUMN j TO i;
+  ALTER TABLE foo ALTER COLUMN j SET NOT NULL;
+  ALTER TABLE foo RENAME COLUMN j TO i;
 COMMIT;
 
 statement ok
 BEGIN;
-    CREATE INDEX ON foo(i) WHERE i > 0;
-    ALTER TABLE foo RENAME COLUMN i TO j;
+  CREATE INDEX ON foo(i) WHERE i > 0;
+  ALTER TABLE foo RENAME COLUMN i TO j;
 COMMIT;
 
 statement ok
@@ -196,14 +196,14 @@ INSERT INTO foo(j) VALUES (1);
 query II
 SELECT j, k FROM foo;
 ----
-1  2
+1 2
 
 # Test that mixed-case column names are handled correctly for rename operations.
 statement ok
 CREATE TABLE mixed_case_table (
-    "CamelCase" INT PRIMARY KEY,
-    "snake_case" TEXT,
-    "UPPERCASE" DECIMAL
+  "CamelCase" INT PRIMARY KEY,
+  "snake_case" TEXT,
+  "UPPERCASE" DECIMAL
 );
 
 statement error column "UPPERCASE" of relation "mixed_case_table" already exists
@@ -239,69 +239,69 @@ CREATE TABLE rename_add_alter_pk_tbl (a INT PRIMARY KEY, b INT, FAMILY f (a, b))
 statement ok
 INSERT INTO rename_add_alter_pk_tbl VALUES (1, 10), (2, 20);
 
-skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.3 local-mixed-25.4
 statement ok
 ALTER TABLE rename_add_alter_pk_tbl RENAME COLUMN a TO b_old,
-              ADD COLUMN a INT NOT NULL DEFAULT 0,
-              ALTER PRIMARY KEY USING COLUMNS (b_old);
+       ADD COLUMN a INT NOT NULL DEFAULT 0,
+       ALTER PRIMARY KEY USING COLUMNS (b_old);
 
-skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.3 local-mixed-25.4
 query III colnames,rowsort
 SELECT b_old, b, a FROM rename_add_alter_pk_tbl;
 ----
-b_old  b   a
-1      10  0
-2      20  0
+b_old b  a
+1   10 0
+2   20 0
 
-skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.3 local-mixed-25.4
 query TTBITTTBBBF colnames,rowsort
 SHOW INDEXES FROM rename_add_alter_pk_tbl;
 ----
-table_name             index_name                  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
-rename_add_alter_pk_tbl  rename_add_alter_pk_tbl_pkey  false       1             b_old        b_old       ASC        false    false     true     1
-rename_add_alter_pk_tbl  rename_add_alter_pk_tbl_pkey  false       2             b            b           N/A        true     false     true     1
-rename_add_alter_pk_tbl  rename_add_alter_pk_tbl_pkey  false       3             a            a           N/A        true     false     true     1
+table_name       index_name         non_unique seq_in_index column_name definition direction storing implicit visible visibility
+rename_add_alter_pk_tbl rename_add_alter_pk_tbl_pkey false    1       b_old    b_old    ASC    false  false   true   1
+rename_add_alter_pk_tbl rename_add_alter_pk_tbl_pkey false    2       b      b      N/A    true   false   true   1
+rename_add_alter_pk_tbl rename_add_alter_pk_tbl_pkey false    3       a      a      N/A    true   false   true   1
 
-skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.3 local-mixed-25.4
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE rename_add_alter_pk_tbl];
 ----
 CREATE TABLE public.rename_add_alter_pk_tbl (
-  b_old INT8 NOT NULL,
-  b INT8 NULL,
-  a INT8 NOT NULL DEFAULT 0:::INT8,
-  CONSTRAINT rename_add_alter_pk_tbl_pkey PRIMARY KEY (b_old ASC),
-  FAMILY f (b_old, b, a)
+ b_old INT8 NOT NULL,
+ b INT8 NULL,
+ a INT8 NOT NULL DEFAULT 0:::INT8,
+ CONSTRAINT rename_add_alter_pk_tbl_pkey PRIMARY KEY (b_old ASC),
+ FAMILY f (b_old, b, a)
 ) WITH (schema_locked = true);
 
-skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.3 local-mixed-25.4
 statement ok
 UPDATE rename_add_alter_pk_tbl SET a = 10 WHERE b_old = 2;
 
-skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.3 local-mixed-25.4
 statement ok
 ALTER TABLE rename_add_alter_pk_tbl RENAME COLUMN b_old TO b_orig,
-              ADD COLUMN b_old INT NOT NULL DEFAULT 100,
-              ALTER PRIMARY KEY USING COLUMNS (a);
+       ADD COLUMN b_old INT NOT NULL DEFAULT 100,
+       ALTER PRIMARY KEY USING COLUMNS (a);
 
-skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.3 local-mixed-25.4
 query IIII colnames,rowsort
 SELECT b_old, b_orig, a, b FROM rename_add_alter_pk_tbl;
 ----
-b_old  b_orig  a   b
-100    1       0   10
-100    2       10  20
+b_old b_orig a  b
+100  1    0  10
+100  2    10 20
 
-skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.3 local-mixed-25.4
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE rename_add_alter_pk_tbl];
 ----
 CREATE TABLE public.rename_add_alter_pk_tbl (
-  b_orig INT8 NOT NULL,
-  b INT8 NULL,
-  a INT8 NOT NULL DEFAULT 0:::INT8,
-  b_old INT8 NOT NULL DEFAULT 100:::INT8,
-  CONSTRAINT rename_add_alter_pk_tbl_pkey PRIMARY KEY (a ASC),
-  UNIQUE INDEX rename_add_alter_pk_tbl_b_orig_key (b_orig ASC),
-  FAMILY f (b_orig, b, a, b_old)
+ b_orig INT8 NOT NULL,
+ b INT8 NULL,
+ a INT8 NOT NULL DEFAULT 0:::INT8,
+ b_old INT8 NOT NULL DEFAULT 100:::INT8,
+ CONSTRAINT rename_add_alter_pk_tbl_pkey PRIMARY KEY (a ASC),
+ UNIQUE INDEX rename_add_alter_pk_tbl_b_orig_key (b_orig ASC),
+ FAMILY f (b_orig, b, a, b_old)
 ) WITH (schema_locked = true);

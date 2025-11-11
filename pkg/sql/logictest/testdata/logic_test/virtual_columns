@@ -2,35 +2,35 @@
 # Test that we don't allow FAMILY constraints with virtual columns.
 statement error virtual computed column "v" cannot be part of a family
 CREATE TABLE t (
-  a INT PRIMARY KEY,
-  b INT,
-  v INT AS (a+b) VIRTUAL,
-  FAMILY (a, b, v)
+ a INT PRIMARY KEY,
+ b INT,
+ v INT AS (a+b) VIRTUAL,
+ FAMILY (a, b, v)
 )
 
 statement error virtual computed column "v" cannot be part of a family
 CREATE TABLE t (
-  a INT PRIMARY KEY,
-  b INT,
-  v INT AS (a+b) VIRTUAL,
-  FAMILY (a),
-  FAMILY (b),
-  FAMILY (v)
+ a INT PRIMARY KEY,
+ b INT,
+ v INT AS (a+b) VIRTUAL,
+ FAMILY (a),
+ FAMILY (b),
+ FAMILY (v)
 )
 
 statement error pgcode 0A000 index cannot store virtual column v
 CREATE TABLE t (
-  a INT PRIMARY KEY,
-  b INT,
-  v INT AS (a+b) VIRTUAL,
-  INDEX (b) STORING (v)
+ a INT PRIMARY KEY,
+ b INT,
+ v INT AS (a+b) VIRTUAL,
+ INDEX (b) STORING (v)
 )
 
 statement ok
 CREATE TABLE t (
-  a INT PRIMARY KEY,
-  b INT,
-  v INT AS (a+b) VIRTUAL
+ a INT PRIMARY KEY,
+ b INT,
+ v INT AS (a+b) VIRTUAL
 )
 
 statement error pgcode 42611 column "v" is not a stored computed column
@@ -52,9 +52,9 @@ INSERT INTO t VALUES (2, 2, 0)
 query III colnames,rowsort
 SELECT * FROM t
 ----
-a  b  v
-1  1  2
-2  2  4
+a b v
+1 1 2
+2 2 4
 
 statement ok
 DELETE FROM t WHERE a > 0
@@ -70,10 +70,10 @@ DELETE FROM t WHERE a = 1 RETURNING v
 query III colnames,rowsort
 SELECT * FROM t
 ----
-a  b   v
-2  20  22
-3  30  33
-4  40  44
+a b  v
+2 20 22
+3 30 33
+4 40 44
 
 statement ok
 DELETE FROM t WHERE v = 33
@@ -81,9 +81,9 @@ DELETE FROM t WHERE v = 33
 query III colnames,rowsort
 SELECT * FROM t
 ----
-a  b   v
-2  20  22
-4  40  44
+a b  v
+2 20 22
+4 40 44
 
 statement error cannot write directly to computed column
 UPDATE t SET v=1
@@ -94,26 +94,26 @@ UPDATE t SET a=a+1
 query III colnames,rowsort
 SELECT * FROM t
 ----
-a   b   v
-3  20  23
-5  40  45
+a  b  v
+3 20 23
+5 40 45
 
 query III colnames,rowsort
 UPDATE t SET b=b+1 WHERE v=45 RETURNING a,b,v
 ----
-a  b   v
-5  41  46
+a b  v
+5 41 46
 
 # Tests with an index on the virtual column.
 statement ok
 CREATE TABLE t_idx (
-  a INT PRIMARY KEY,
-  b INT,
-  c INT,
-  v INT AS (a+b) VIRTUAL,
-  w INT AS (c+1) VIRTUAL,
-  INDEX (v),
-  UNIQUE (w)
+ a INT PRIMARY KEY,
+ b INT,
+ c INT,
+ v INT AS (a+b) VIRTUAL,
+ w INT AS (c+1) VIRTUAL,
+ INDEX (v),
+ UNIQUE (w)
 )
 
 statement ok
@@ -146,19 +146,19 @@ SELECT a FROM t_idx WHERE w IN (4,6)
 query II rowsort
 SELECT v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_idx@t_idx_v_idx ON u.x = t_idx.v
 ----
-2   2
-5   5
-10  10
-10  10
+2  2
+5  5
+10 10
+10 10
 
 # Non-covering lookup join that requires a second join on the primary index.
 query IIII rowsort
 SELECT a, b, v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_idx@t_idx_v_idx ON u.x = t_idx.v
 ----
-1  1  2   2
-2  8  10  10
-4  6  10  10
-5  0  5   5
+1 1 2  2
+2 8 10 10
+4 6 10 10
+5 0 5  5
 
 statement ok
 DELETE FROM t_idx WHERE v = 6
@@ -166,11 +166,11 @@ DELETE FROM t_idx WHERE v = 6
 query IIIII colnames,rowsort
 SELECT * FROM t_idx
 ----
-a  b  c  v   w
-1  1  1  2   2
-2  8  2  10  3
-4  6  4  10  5
-5  0  5  5   6
+a b c v  w
+1 1 1 2  2
+2 8 2 10 3
+4 6 4 10 5
+5 0 5 5  6
 
 statement ok
 DELETE FROM t_idx WHERE a+b = 10
@@ -178,9 +178,9 @@ DELETE FROM t_idx WHERE a+b = 10
 query IIIII colnames,rowsort
 SELECT * FROM t_idx
 ----
-a  b  c  v  w
-1  1  1  2  2
-5  0  5  5  6
+a b c v w
+1 1 1 2 2
+5 0 5 5 6
 
 # Update PK; ensure indexes are updated.
 statement ok
@@ -189,9 +189,9 @@ UPDATE t_idx SET a=a+1
 query IIIII colnames,rowsort
 SELECT * FROM t_idx
 ----
-a  b  c  v  w
-2  1  1  3  2
-6  0  5  6  6
+a b c v w
+2 1 1 3 2
+6 0 5 6 6
 
 query I
 SELECT a FROM t_idx WHERE v=3
@@ -210,9 +210,9 @@ UPDATE t_idx SET b=b+1
 query IIIII colnames,rowsort
 SELECT * FROM t_idx
 ----
-a  b  c  v  w
-2  2  1  4  2
-6  1  5  7  6
+a b c v w
+2 2 1 4 2
+6 1 5 7 6
 
 query I
 SELECT a FROM t_idx WHERE v=4
@@ -231,9 +231,9 @@ UPDATE t_idx SET c=c+1
 query IIIII colnames,rowsort
 SELECT * FROM t_idx
 ----
-a  b  c  v  w
-2  2  2  4  3
-6  1  6  7  7
+a b c v w
+2 2 2 4 3
+6 1 6 7 7
 
 query I
 SELECT a FROM t_idx WHERE v=4
@@ -252,9 +252,9 @@ UPDATE t_idx SET c=6 WHERE a=2
 query III colnames,rowsort
 UPDATE t_idx SET a=a+1 RETURNING a,v,w
 ----
-a  v  w
-3  5  3
-7  8  7
+a v w
+3 5 3
+7 8 7
 
 query I rowsort
 UPDATE t_idx SET b=b+1 RETURNING w
@@ -286,11 +286,11 @@ UPSERT INTO t VALUES (1, 10), (2, 20), (3, 30), (4, 40)
 query III colnames,rowsort
 SELECT * FROM t
 ----
-a  b   v
-1  10  11
-2  20  22
-3  30  33
-4  40  44
+a b  v
+1 10 11
+2 20 22
+3 30 33
+4 40 44
 
 query I colnames,rowsort
 UPSERT INTO t VALUES (3, 31), (5, 50) RETURNING v
@@ -308,13 +308,13 @@ v
 query III colnames,rowsort
 SELECT * FROM t
 ----
-a  b   v
-1  10  11
-2  20  22
-3  31  34
-4  40  44
-5  50  55
-6  60  66
+a b  v
+1 10 11
+2 20 22
+3 31 34
+4 40 44
+5 50 55
+6 60 66
 
 statement ok
 INSERT INTO t VALUES (4, 100), (6, 100), (7, 100) ON CONFLICT (a) DO UPDATE SET b = t.v
@@ -322,14 +322,14 @@ INSERT INTO t VALUES (4, 100), (6, 100), (7, 100) ON CONFLICT (a) DO UPDATE SET 
 query III colnames,rowsort
 SELECT * FROM t
 ----
-a  b    v
-1  10   11
-2  20   22
-3  31   34
-4  44   48
-5  50   55
-6  66   72
-7  100  107
+a b  v
+1 10  11
+2 20  22
+3 31  34
+4 44  48
+5 50  55
+6 66  72
+7 100 107
 
 statement ok
 INSERT INTO t VALUES (2, 100), (5, 100), (8, 100) ON CONFLICT (a) DO UPDATE SET b = excluded.v
@@ -337,15 +337,15 @@ INSERT INTO t VALUES (2, 100), (5, 100), (8, 100) ON CONFLICT (a) DO UPDATE SET 
 query III colnames,rowsort
 SELECT * FROM t
 ----
-a  b    v
-1  10   11
-2  102  104
-3  31   34
-4  44   48
-5  105  110
-6  66   72
-7  100  107
-8  100  108
+a b  v
+1 10  11
+2 102 104
+3 31  34
+4 44  48
+5 105 110
+6 66  72
+7 100 107
+8 100 108
 
 # Upsert tests on t_idx.
 
@@ -371,18 +371,18 @@ UPSERT INTO t_idx VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300), (4, 40, 400)
 query IIIII colnames,rowsort
 SELECT * FROM t_idx
 ----
-a  b   c    v   w
-1  10  100  11  101
-2  20  200  22  201
-3  30  300  33  301
-4  40  400  44  401
+a b  c  v  w
+1 10 100 11 101
+2 20 200 22 201
+3 30 300 33 301
+4 40 400 44 401
 
 query III colnames,rowsort
 UPSERT INTO t_idx VALUES (3, 31, 301), (5, 50, 500) RETURNING a, v, w
 ----
-a  v   w
-3  34  302
-5  55  501
+a v  w
+3 34 302
+5 55 501
 
 # Some rows conflict on the PK, some on w.
 query I colnames,rowsort
@@ -394,13 +394,13 @@ w
 query IIIII colnames,rowsort
 SELECT * FROM t_idx
 ----
-a  b   c    v   w
-1  10  100  11  101
-2  20  200  22  201
-3  31  301  34  302
-4  40  400  44  401
-5  50  500  55  501
-6  60  600  66  601
+a b  c  v  w
+1 10 100 11 101
+2 20 200 22 201
+3 31 301 34 302
+4 40 400 44 401
+5 50 500 55 501
+6 60 600 66 601
 
 # Conflict on a.
 statement error violates unique constraint
@@ -417,22 +417,22 @@ INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a
 query IIIII colnames,rowsort
 INSERT INTO t_idx VALUES (4, 10, 100), (6, 10, 100), (7, 70, 700) ON CONFLICT (a) DO UPDATE SET c = t_idx.w RETURNING a, b, c, v, w
 ----
-a  b   c    v   w
-4  40  401  44  402
-6  60  601  66  602
-7  70  700  77  701
+a b  c  v  w
+4 40 401 44 402
+6 60 601 66 602
+7 70 700 77 701
 
 query IIIII colnames,rowsort
 SELECT * FROM t_idx
 ----
-a  b   c    v   w
-1  10  100  11  101
-2  20  200  22  201
-3  31  301  34  302
-4  40  401  44  402
-5  50  500  55  501
-6  60  601  66  602
-7  70  700  77  701
+a b  c  v  w
+1 10 100 11 101
+2 20 200 22 201
+3 31 301 34 302
+4 40 401 44 402
+5 50 500 55 501
+6 60 601 66 602
+7 70 700 77 701
 
 statement ok
 INSERT INTO t_idx VALUES (8, 80, 800), (10, 100, 700) ON CONFLICT (w) DO UPDATE SET a = excluded.a, c = excluded.v
@@ -440,50 +440,50 @@ INSERT INTO t_idx VALUES (8, 80, 800), (10, 100, 700) ON CONFLICT (w) DO UPDATE 
 query IIIII colnames,rowsort
 SELECT * FROM t_idx
 ----
-a   b   c    v   w
-1   10  100  11  101
-2   20  200  22  201
-3   31  301  34  302
-4   40  401  44  402
-5   50  500  55  501
-6   60  601  66  602
-8   80  800  88  801
-10  70  110  80  111
+a  b  c  v  w
+1  10 100 11 101
+2  20 200 22 201
+3  31 301 34 302
+4  40 401 44 402
+5  50 500 55 501
+6  60 601 66 602
+8  80 800 88 801
+10 70 110 80 111
 
 # Verify that FK relations on virtual columns are disallowed.
 statement ok
 CREATE TABLE fk (
-  a INT PRIMARY KEY,
-  b INT,
-  c INT,
-  u INT UNIQUE AS (b+c) VIRTUAL
+ a INT PRIMARY KEY,
+ b INT,
+ c INT,
+ u INT UNIQUE AS (b+c) VIRTUAL
 )
 
 statement error virtual column "u" cannot be referenced by a foreign key
 CREATE TABLE fk2 (
-  p INT PRIMARY KEY,
-  c INT REFERENCES fk(u)
+ p INT PRIMARY KEY,
+ c INT REFERENCES fk(u)
 )
 
 statement error virtual column "c" cannot reference a foreign key
 CREATE TABLE fk2 (
-  p INT PRIMARY KEY,
-  c INT AS (p+1) VIRTUAL REFERENCES fk(a)
+ p INT PRIMARY KEY,
+ c INT AS (p+1) VIRTUAL REFERENCES fk(a)
 )
 
 statement error virtual column "u" cannot be referenced by a foreign key
 CREATE TABLE fk2 (
-  p INT PRIMARY KEY,
-  q INT,
-  r INT,
-  CONSTRAINT fk FOREIGN KEY (q,r) REFERENCES fk(a,u)
+ p INT PRIMARY KEY,
+ q INT,
+ r INT,
+ CONSTRAINT fk FOREIGN KEY (q,r) REFERENCES fk(a,u)
 )
 
 statement ok
 CREATE TABLE fk2 (
-  x INT PRIMARY KEY,
-  y INT,
-  v INT AS (x+y) VIRTUAL
+ x INT PRIMARY KEY,
+ y INT,
+ v INT AS (x+y) VIRTUAL
 )
 
 statement error virtual column "u" cannot be referenced by a foreign key
@@ -497,9 +497,9 @@ subtest NotNull
 
 statement ok
 CREATE TABLE n (
-  a INT PRIMARY KEY,
-  b INT,
-  v INT NOT NULL AS (a+b) VIRTUAL
+ a INT PRIMARY KEY,
+ b INT,
+ v INT NOT NULL AS (a+b) VIRTUAL
 )
 
 statement error null value in column "v" violates not-null constraint
@@ -534,11 +534,11 @@ subtest Checks
 
 statement ok
 CREATE TABLE t_check (
-  a INT PRIMARY KEY,
-  b INT,
-  v INT AS (a+b) VIRTUAL CHECK (v >= 10),
-  w INT AS (a*b) VIRTUAL,
-  CHECK (v < w)
+ a INT PRIMARY KEY,
+ b INT,
+ v INT AS (a+b) VIRTUAL CHECK (v >= 10),
+ w INT AS (a*b) VIRTUAL,
+ CHECK (v < w)
 )
 
 statement error failed to satisfy CHECK constraint
@@ -556,9 +556,9 @@ UPDATE t_check SET b=b+1
 query IIII colnames,rowsort
 SELECT * FROM t_check
 ----
-a  b  v   w
-5  6  11  30
-6  7  13  42
+a b v  w
+5 6 11 30
+6 7 13 42
 
 statement error failed to satisfy CHECK constraint
 UPSERT INTO t_check VALUES (5, 2), (8, 8)
@@ -572,10 +572,10 @@ UPSERT INTO t_check VALUES (5, 10), (8, 8)
 query IIII colnames,rowsort
 SELECT * FROM t_check
 ----
-a  b   v   w
-5  10  15  50
-6  7   13  42
-8  8   16  64
+a b  v  w
+5 10 15 50
+6 7  13 42
+8 8  16 64
 
 statement error failed to satisfy CHECK constraint
 INSERT INTO t_check VALUES (5, 1) ON CONFLICT (a) DO UPDATE SET b=3
@@ -586,19 +586,19 @@ INSERT INTO t_check VALUES (5, 1) ON CONFLICT (a) DO UPDATE SET b=5
 query IIII colnames,rowsort
 SELECT * FROM t_check
 ----
-a  b  v   w
-5  5  10  25
-6  7  13  42
-8  8  16  64
+a b v  w
+5 5 10 25
+6 7 13 42
+8 8 16 64
 
 # Tests with unique indexes and constraints involving virtual columns.
 subtest NotNull
 
 statement ok
 CREATE TABLE uniq_simple (
-  a INT PRIMARY KEY,
-  b INT,
-  v INT UNIQUE AS (a+b) VIRTUAL
+ a INT PRIMARY KEY,
+ b INT,
+ v INT UNIQUE AS (a+b) VIRTUAL
 )
 
 statement ok
@@ -619,16 +619,16 @@ INSERT INTO uniq_simple VALUES (5, 6) ON CONFLICT (v) DO UPDATE SET b=15
 query III colnames,rowsort
 SELECT * FROM uniq_simple
 ----
-a  b   v
-1  15  16
-2  20  22
+a b  v
+1 15 16
+2 20 22
 
 statement ok
 CREATE TABLE uniq_partial (
-  a INT PRIMARY KEY,
-  b INT,
-  v INT AS (a+b) VIRTUAL,
-  UNIQUE INDEX (v) WHERE b > 10
+ a INT PRIMARY KEY,
+ b INT,
+ v INT AS (a+b) VIRTUAL,
+ UNIQUE INDEX (v) WHERE b > 10
 )
 
 statement ok
@@ -643,10 +643,10 @@ INSERT INTO uniq_partial VALUES (4, 7)
 query III colnames,rowsort
 SELECT * FROM uniq_partial
 ----
-a  b   v
-1  10  11
-2  20  22
-4  7   11
+a b  v
+1 10 11
+2 20 22
+4 7  11
 
 statement error duplicate key value violates unique constraint
 UPDATE uniq_partial SET b = 30-a
@@ -657,10 +657,10 @@ UPDATE uniq_partial SET b = 10-a
 query III colnames,rowsort
 SELECT * FROM uniq_partial
 ----
-a  b  v
-1  9  10
-2  8  10
-4  6  10
+a b v
+1 9 10
+2 8 10
+4 6 10
 
 statement ok
 UPSERT INTO uniq_partial VALUES (3, 7), (20, 20)
@@ -670,11 +670,11 @@ UPSERT INTO uniq_partial VALUES (15, 25)
 
 statement ok
 CREATE TABLE uniq_partial_pred (
-  a INT PRIMARY KEY,
-  b INT,
-  c INT,
-  v INT AS (a+b) VIRTUAL,
-  UNIQUE INDEX (c) WHERE v > 10
+ a INT PRIMARY KEY,
+ b INT,
+ c INT,
+ v INT AS (a+b) VIRTUAL,
+ UNIQUE INDEX (c) WHERE v > 10
 )
 
 statement ok
@@ -691,11 +691,11 @@ UPDATE uniq_partial_pred SET b=10-a
 
 statement ok
 CREATE TABLE uniq_partial_multi (
-  a INT PRIMARY KEY,
-  b INT,
-  c INT,
-  v INT AS (a+b) VIRTUAL,
-  UNIQUE INDEX (c, v) WHERE (v > 10)
+ a INT PRIMARY KEY,
+ b INT,
+ c INT,
+ v INT AS (a+b) VIRTUAL,
+ UNIQUE INDEX (c, v) WHERE (v > 10)
 )
 
 statement ok
@@ -715,10 +715,10 @@ SET experimental_enable_unique_without_index_constraints = true
 
 statement ok
 CREATE TABLE uniq_no_index (
-  a INT PRIMARY KEY,
-  b INT,
-  v INT AS (a+b) VIRTUAL,
-  UNIQUE WITHOUT INDEX (v)
+ a INT PRIMARY KEY,
+ b INT,
+ v INT AS (a+b) VIRTUAL,
+ UNIQUE WITHOUT INDEX (v)
 )
 
 skipif config #110873 weak-iso-level-configs
@@ -745,17 +745,17 @@ skipif config #110873 weak-iso-level-configs
 query III colnames,rowsort
 SELECT * FROM uniq_no_index
 ----
-a  b   v
-1  15  16
-2  20  22
+a b  v
+1 15 16
+2 20 22
 
 statement ok
 CREATE TABLE uniq_no_index_multi (
-  a INT PRIMARY KEY,
-  b INT,
-  c INT,
-  v INT AS (a+b) VIRTUAL,
-  UNIQUE WITHOUT INDEX (v, c)
+ a INT PRIMARY KEY,
+ b INT,
+ c INT,
+ v INT AS (a+b) VIRTUAL,
+ UNIQUE WITHOUT INDEX (v, c)
 )
 
 skipif config #110873 weak-iso-level-configs
@@ -795,10 +795,10 @@ ALTER TABLE sc ADD COLUMN v INT AS (a+b) VIRTUAL
 query III rowsort,colnames
 SELECT * FROM sc
 ----
-a  b   v
-1  10  11
-2  20  22
-3  30  33
+a b  v
+1 10 11
+2 20 22
+3 30 33
 
 statement ok
 ALTER TABLE sc ADD COLUMN x INT AS (a+1) VIRTUAL, ADD COLUMN y INT AS (b+1) VIRTUAL, ADD COLUMN z INT AS (a+b) VIRTUAL
@@ -806,10 +806,10 @@ ALTER TABLE sc ADD COLUMN x INT AS (a+1) VIRTUAL, ADD COLUMN y INT AS (b+1) VIRT
 query IIIIII rowsort,colnames
 SELECT * FROM sc
 ----
-a  b   v   x  y   z
-1  10  11  2  11  11
-2  20  22  3  21  22
-3  30  33  4  31  33
+a b  v  x y  z
+1 10 11 2 11 11
+2 20 22 3 21 22
+3 30 33 4 31 33
 
 statement error VIRTUAL COMPUTED COLUMN expression cannot reference computed columns
 ALTER TABLE sc ADD COLUMN u INT AS (a+v) VIRTUAL
@@ -820,10 +820,10 @@ ALTER TABLE sc DROP COLUMN z
 query IIIII rowsort,colnames
 SELECT * FROM sc
 ----
-a  b   v   x  y
-1  10  11  2  11
-2  20  22  3  21
-3  30  33  4  31
+a b  v  x y
+1 10 11 2 11
+2 20 22 3 21
+3 30 33 4 31
 
 statement ok
 ALTER TABLE sc DROP COLUMN x, DROP COLUMN y
@@ -831,10 +831,10 @@ ALTER TABLE sc DROP COLUMN x, DROP COLUMN y
 query III rowsort,colnames
 SELECT * FROM sc
 ----
-a  b   v
-1  10  11
-2  20  22
-3  30  33
+a b  v
+1 10 11
+2 20 22
+3 30 33
 
 skipif config schema-locked-disabled
 statement ok
@@ -861,10 +861,10 @@ ALTER TABLE sc SET (schema_locked = true);
 query IIIII rowsort,colnames
 SELECT * FROM sc
 ----
-a  b   v   w1  w2
-1  10  11  10  20
-2  20  22  40  40
-3  30  33  90  60
+a b  v  w1 w2
+1 10 11 10 20
+2 20 22 40 40
+3 30 33 90 60
 
 statement ok
 ALTER TABLE sc DROP COLUMN w1, DROP COLUMN w2
@@ -872,10 +872,10 @@ ALTER TABLE sc DROP COLUMN w1, DROP COLUMN w2
 query III rowsort,colnames
 SELECT * FROM sc
 ----
-a  b   v
-1  10  11
-2  20  22
-3  30  33
+a b  v
+1 10 11
+2 20 22
+3 30 33
 
 # Create an index on the virtual column and check that it works.
 statement ok
@@ -977,12 +977,12 @@ INSERT INTO sc VALUES (10, 10), (11, 9)
 query III rowsort,colnames
 SELECT * FROM sc
 ----
-a   b   v
-1   10  11
-2   20  22
-3   30  33
-10  10  20
-11  9   20
+a  b  v
+1  10 11
+2  20 22
+3  30 33
+10 10 20
+11 9  20
 
 # Create a partial unique index on v which should fail.
 statement error violates unique constraint
@@ -1013,36 +1013,36 @@ subtest InvertedIndexes
 
 statement ok
 CREATE TABLE inv (
-  k INT PRIMARY KEY,
-  i INT,
-  j JSON,
-  iv INT AS (i + 10) VIRTUAL,
-  jv JSON AS (j->'a') VIRTUAL,
-  INVERTED INDEX jv_idx (jv),
-  INVERTED INDEX i_jv_idx (i, jv),
-  INVERTED INDEX iv_j_idx (iv, j),
-  INVERTED INDEX iv_jv_idx (iv, jv)
+ k INT PRIMARY KEY,
+ i INT,
+ j JSON,
+ iv INT AS (i + 10) VIRTUAL,
+ jv JSON AS (j->'a') VIRTUAL,
+ INVERTED INDEX jv_idx (jv),
+ INVERTED INDEX i_jv_idx (i, jv),
+ INVERTED INDEX iv_j_idx (iv, j),
+ INVERTED INDEX iv_jv_idx (iv, jv)
 )
 
 statement ok
 INSERT INTO inv VALUES
-  (1, 10, NULL),
-  (2, 10, '1'),
-  (3, 10, '"a"'),
-  (4, 10, 'true'),
-  (5, 10, 'null'),
-  (6, 10, '{}'),
-  (7, 10, '[]'),
-  (8, 10, '{"a": "b"}'),
-  (9, 10, '{"a": "b", "c": "d"}'),
-  (10, 10, '{"a": {}, "b": "c"}'),
-  (11, 10, '{"a": {"b": "c"}, "d": "e"}'),
-  (12, 10, '{"a": {"b": "c", "d": "e"}}'),
-  (13, 10, '{"a": [], "d": "e"}'),
-  (14, 10, '{"a": ["b", "c"], "d": "e"}'),
-  (15, 10, '["a"]'),
-  (16, 10, '["a", "b", "c"]'),
-  (17, 10, '[{"a": "b"}, "c"]')
+ (1, 10, NULL),
+ (2, 10, '1'),
+ (3, 10, '"a"'),
+ (4, 10, 'true'),
+ (5, 10, 'null'),
+ (6, 10, '{}'),
+ (7, 10, '[]'),
+ (8, 10, '{"a": "b"}'),
+ (9, 10, '{"a": "b", "c": "d"}'),
+ (10, 10, '{"a": {}, "b": "c"}'),
+ (11, 10, '{"a": {"b": "c"}, "d": "e"}'),
+ (12, 10, '{"a": {"b": "c", "d": "e"}}'),
+ (13, 10, '{"a": [], "d": "e"}'),
+ (14, 10, '{"a": ["b", "c"], "d": "e"}'),
+ (15, 10, '["a"]'),
+ (16, 10, '["a", "b", "c"]'),
+ (17, 10, '[{"a": "b"}, "c"]')
 
 statement ok
 INSERT INTO inv
@@ -1051,67 +1051,67 @@ SELECT k+17, 20, j FROM inv
 query IT
 SELECT k, jv FROM inv@jv_idx WHERE jv @> '{"b": "c"}' ORDER BY k
 ----
-11  {"b": "c"}
-12  {"b": "c", "d": "e"}
-28  {"b": "c"}
-29  {"b": "c", "d": "e"}
+11 {"b": "c"}
+12 {"b": "c", "d": "e"}
+28 {"b": "c"}
+29 {"b": "c", "d": "e"}
 
 query IT
 SELECT k, jv FROM inv@jv_idx WHERE jv->'b' = '"c"' ORDER BY k
 ----
-11  {"b": "c"}
-12  {"b": "c", "d": "e"}
-28  {"b": "c"}
-29  {"b": "c", "d": "e"}
+11 {"b": "c"}
+12 {"b": "c", "d": "e"}
+28 {"b": "c"}
+29 {"b": "c", "d": "e"}
 
 query IT
 SELECT k, jv FROM inv@jv_idx WHERE jv @> '"b"' ORDER BY k
 ----
-8   "b"
-9   "b"
-14  ["b", "c"]
-25  "b"
-26  "b"
-31  ["b", "c"]
+8  "b"
+9  "b"
+14 ["b", "c"]
+25 "b"
+26 "b"
+31 ["b", "c"]
 
 query IIT
 SELECT k, i, jv FROM inv@i_jv_idx WHERE i IN (10, 20, 30) AND jv @> '{"b": "c"}' ORDER BY k
 ----
-11  10  {"b": "c"}
-12  10  {"b": "c", "d": "e"}
-28  20  {"b": "c"}
-29  20  {"b": "c", "d": "e"}
+11 10 {"b": "c"}
+12 10 {"b": "c", "d": "e"}
+28 20 {"b": "c"}
+29 20 {"b": "c", "d": "e"}
 
 query IIT
 SELECT k, i, jv FROM inv@i_jv_idx WHERE i = 20 AND jv @> '{"b": "c"}' ORDER BY k
 ----
-28  20  {"b": "c"}
-29  20  {"b": "c", "d": "e"}
+28 20 {"b": "c"}
+29 20 {"b": "c", "d": "e"}
 
 query IIT
 SELECT k, iv, j FROM inv@iv_j_idx WHERE iv IN (10, 20, 30) AND j @> '{"b": "c"}' ORDER BY k
 ----
-10  20  {"a": {}, "b": "c"}
-27  30  {"a": {}, "b": "c"}
+10 20 {"a": {}, "b": "c"}
+27 30 {"a": {}, "b": "c"}
 
 query IIT
 SELECT k, iv, j FROM inv@iv_j_idx WHERE iv = 20 AND j @> '{"b": "c"}' ORDER BY k
 ----
-10  20  {"a": {}, "b": "c"}
+10 20 {"a": {}, "b": "c"}
 
 query IIT
 SELECT k, iv, jv FROM inv@iv_jv_idx WHERE iv IN (10, 20, 30) AND jv @> '{"b": "c"}' ORDER BY k
 ----
-11  20  {"b": "c"}
-12  20  {"b": "c", "d": "e"}
-28  30  {"b": "c"}
-29  30  {"b": "c", "d": "e"}
+11 20 {"b": "c"}
+12 20 {"b": "c", "d": "e"}
+28 30 {"b": "c"}
+29 30 {"b": "c", "d": "e"}
 
 query IIT
 SELECT k, iv, jv FROM inv@iv_jv_idx WHERE iv = 20 AND jv @> '{"b": "c"}' ORDER BY k
 ----
-11  20  {"b": "c"}
-12  20  {"b": "c", "d": "e"}
+11 20 {"b": "c"}
+12 20 {"b": "c", "d": "e"}
 
 # Test that virtual computed columns which reference mutation columns cannot
 # be added.
@@ -1120,28 +1120,28 @@ subtest referencing_mutations
 statement ok
 CREATE TABLE t_ref (i INT PRIMARY KEY) WITH (schema_locked = false);
 
-onlyif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3
+onlyif config local-legacy-schema-changer local-mixed-25.3
 statement error pgcode 0A000 virtual computed column "k" referencing columns \("j"\) added in the current transaction
 ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42,
-   ADD COLUMN k INT AS (i+j) VIRTUAL;
+  ADD COLUMN k INT AS (i+j) VIRTUAL;
 
-onlyif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3
+onlyif config local-legacy-schema-changer local-mixed-25.3
 statement error pgcode 0A000 virtual computed column "l" referencing columns \("j", "k"\) added in the current transaction
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-    SET LOCAL autocommit_before_ddl = false;
-    ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42;
-    ALTER TABLE t_ref ADD COLUMN k INT NOT NULL DEFAULT 42;
-    ALTER TABLE t_ref ADD COLUMN l INT AS (i+j+k) VIRTUAL;
+  SET LOCAL autocommit_before_ddl = false;
+  ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42;
+  ALTER TABLE t_ref ADD COLUMN k INT NOT NULL DEFAULT 42;
+  ALTER TABLE t_ref ADD COLUMN l INT AS (i+j+k) VIRTUAL;
 COMMIT;
 
 statement ok
 ROLLBACK;
 
 # The declarative schema changer allows this.
-skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.3 local-mixed-25.4
 statement ok
 ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42,
-   ADD COLUMN k INT AS (i+j) VIRTUAL;
+  ADD COLUMN k INT AS (i+j) VIRTUAL;
 
 # Test that adding virtual computed columns to tables which have been created
 # in the current transaction is fine.
@@ -1151,10 +1151,10 @@ DROP TABLE t_ref;
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-    SET LOCAL autocommit_before_ddl = false;
-    CREATE TABLE t_ref (i INT PRIMARY KEY);
-    ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42;
-    ALTER TABLE t_ref ADD COLUMN k INT AS (i+j) VIRTUAL;
+  SET LOCAL autocommit_before_ddl = false;
+  CREATE TABLE t_ref (i INT PRIMARY KEY);
+  ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42;
+  ALTER TABLE t_ref ADD COLUMN k INT AS (i+j) VIRTUAL;
 COMMIT;
 
 statement ok
@@ -1168,26 +1168,26 @@ CREATE TABLE p (p INT PRIMARY KEY)
 
 statement ok
 CREATE TABLE c_update (
-  p_cascade INT REFERENCES p (p) ON UPDATE CASCADE,
-  p_default INT DEFAULT 0 REFERENCES p (p) ON UPDATE SET DEFAULT,
-  p_null INT REFERENCES p (p) ON UPDATE SET NULL,
-  v_cascade INT AS (p_cascade + 100) VIRTUAL,
-  v_default INT AS (p_default) VIRTUAL,
-  v_null INT AS (p_null + 100) VIRTUAL
+ p_cascade INT REFERENCES p (p) ON UPDATE CASCADE,
+ p_default INT DEFAULT 0 REFERENCES p (p) ON UPDATE SET DEFAULT,
+ p_null INT REFERENCES p (p) ON UPDATE SET NULL,
+ v_cascade INT AS (p_cascade + 100) VIRTUAL,
+ v_default INT AS (p_default) VIRTUAL,
+ v_null INT AS (p_null + 100) VIRTUAL
 )
 
 statement ok
 CREATE TABLE c_delete_cascade (
-  p_cascade INT REFERENCES p (p) ON DELETE CASCADE,
-  v_cascade INT AS (p_cascade + 100) VIRTUAL
+ p_cascade INT REFERENCES p (p) ON DELETE CASCADE,
+ v_cascade INT AS (p_cascade + 100) VIRTUAL
 )
 
 statement ok
 CREATE TABLE c_delete_set (
-  p_default INT DEFAULT 0 REFERENCES p (p) ON DELETE SET DEFAULT,
-  p_null INT REFERENCES p (p) ON DELETE SET NULL,
-  v_default INT AS (p_default) VIRTUAL,
-  v_null INT AS (p_null + 100) VIRTUAL
+ p_default INT DEFAULT 0 REFERENCES p (p) ON DELETE SET DEFAULT,
+ p_null INT REFERENCES p (p) ON DELETE SET NULL,
+ v_default INT AS (p_default) VIRTUAL,
+ v_null INT AS (p_null + 100) VIRTUAL
 )
 
 statement ok
@@ -1202,9 +1202,9 @@ UPDATE p SET p = 10 WHERE p = 1
 query IIIIII colnames,rowsort
 SELECT * FROM c_update
 ----
-p_cascade  p_default  p_null  v_cascade  v_default  v_null
-2          2          2       102        2          102
-10         0          NULL    110        0          NULL
+p_cascade p_default p_null v_cascade v_default v_null
+2     2     2    102    2     102
+10     0     NULL  110    0     NULL
 
 statement ok
 INSERT INTO c_delete_cascade VALUES (2), (3);
@@ -1216,15 +1216,15 @@ DELETE FROM p WHERE p = 3
 query II colnames,rowsort
 SELECT * FROM c_delete_cascade
 ----
-p_cascade  v_cascade
-2          102
+p_cascade v_cascade
+2     102
 
 query IIII colnames,rowsort
 SELECT * FROM c_delete_set
 ----
-p_default  p_null  v_default  v_null
-0          NULL    0          NULL
-2          2       2          102
+p_default p_null v_default v_null
+0     NULL  0     NULL
+2     2    2     102
 
 # Regression test for #63167. CREATE TABLE LIKE should copy VIRTUAL columns as
 # VIRTUAL, not STORED.
@@ -1237,10 +1237,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t63167_b]
 ----
 CREATE TABLE public.t63167_b (
-  a INT8 NULL,
-  v INT8 NULL AS (a + 1:::INT8) VIRTUAL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t63167_b_pkey PRIMARY KEY (rowid ASC)
+ a INT8 NULL,
+ v INT8 NULL AS (a + 1:::INT8) VIRTUAL,
+ rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+ CONSTRAINT t63167_b_pkey PRIMARY KEY (rowid ASC)
 );
 
 skipif config schema-locked-disabled
@@ -1248,10 +1248,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t63167_b]
 ----
 CREATE TABLE public.t63167_b (
-  a INT8 NULL,
-  v INT8 NULL AS (a + 1:::INT8) VIRTUAL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t63167_b_pkey PRIMARY KEY (rowid ASC)
+ a INT8 NULL,
+ v INT8 NULL AS (a + 1:::INT8) VIRTUAL,
+ rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+ CONSTRAINT t63167_b_pkey PRIMARY KEY (rowid ASC)
 ) WITH (schema_locked = true);
 
 # Test that columns backfills to tables with virtual columns work.
@@ -1267,7 +1267,7 @@ ALTER TABLE t_65915 ADD COLUMN k INT DEFAULT 42;
 query III
 SELECT * FROM t_65915;
 ----
-1  2  42
+1 2 42
 
 statement ok
 DROP TABLE t_65915
@@ -1277,8 +1277,8 @@ subtest 67528
 
 statement ok
 CREATE TABLE t67528 (
-  s STRING,
-  v STRING AS (lower(s)) VIRTUAL NOT NULL
+ s STRING,
+ v STRING AS (lower(s)) VIRTUAL NOT NULL
 )
 
 statement ok
@@ -1293,10 +1293,10 @@ subtest 73372
 
 statement ok
 CREATE TABLE t73372 (
-  i INT NOT NULL,
-  s STRING NOT NULL,
-  v INT AS (i) VIRTUAL NOT NULL,
-  INDEX idx (i) WHERE v >= 0
+ i INT NOT NULL,
+ s STRING NOT NULL,
+ v INT AS (i) VIRTUAL NOT NULL,
+ INDEX idx (i) WHERE v >= 0
 )
 
 statement ok
@@ -1308,28 +1308,28 @@ ALTER TABLE t73372 ALTER PRIMARY KEY USING COLUMNS (s, i)
 query ITI
 SELECT * FROM t73372
 ----
-0  foo  0
+0 foo 0
 
 # Regression test for #75147. The optimizer should consider virtual PK columns
 # as stored to prevent infinite recursion during query planning.
 statement ok
 CREATE TABLE t75147 (
-  a INT,
-  b INT,
-  c INT,
-  v1 INT AS (c) VIRTUAL,
-  v2 INT AS (c) VIRTUAL,
-  PRIMARY KEY (b, v1, v2),
-  INDEX (a)
+ a INT,
+ b INT,
+ c INT,
+ v1 INT AS (c) VIRTUAL,
+ v2 INT AS (c) VIRTUAL,
+ PRIMARY KEY (b, v1, v2),
+ INDEX (a)
 );
 
 statement ok
 SELECT 'foo'
 FROM t75147 AS t1
 JOIN t75147 AS t2 ON
-  t1.v2 = t2.v2
-  AND t1.v1 = t2.v1
-  AND t1.b = t2.b
+ t1.v2 = t2.v2
+ AND t1.v1 = t2.v1
+ AND t1.b = t2.b
 JOIN t75147 AS t3 ON t1.a = t3.a;
 
 # This is a regression test for #80780. Prior to the patch introducing this
@@ -1339,13 +1339,13 @@ subtest add_column_to_table_with_virtual_primary_key
 
 statement ok
 CREATE TABLE virtual_pk (
-  a INT,
-  b INT,
-  c INT,
-  v1 INT AS (c) VIRTUAL,
-  v2 INT AS (c) VIRTUAL,
-  PRIMARY KEY (b, v1, v2),
-  INDEX (a)
+ a INT,
+ b INT,
+ c INT,
+ v1 INT AS (c) VIRTUAL,
+ v2 INT AS (c) VIRTUAL,
+ PRIMARY KEY (b, v1, v2),
+ INDEX (a)
 );
 
 statement ok
@@ -1409,13 +1409,13 @@ ALTER TABLE t_added ADD COLUMN i2 INT2 GENERATED ALWAYS AS (2) VIRTUAL;
 # Before the PR which introduced this test, the below query would output:
 #
 # CREATE TABLE public.t_added (
-#    i INT8 NOT NULL,
-#    i4n UNKNOWN NULL AS (NULL) VIRTUAL,
-#    dn UNKNOWN NULL AS (NULL) VIRTUAL,
-#    d DECIMAL NULL AS (123.1:::DECIMAL) VIRTUAL,
-#    i4 INT8 NULL AS (4:::INT8) VIRTUAL,
-#    i2 INT8 NULL AS (2:::INT8) VIRTUAL,
-#    CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
+#  i INT8 NOT NULL,
+#  i4n UNKNOWN NULL AS (NULL) VIRTUAL,
+#  dn UNKNOWN NULL AS (NULL) VIRTUAL,
+#  d DECIMAL NULL AS (123.1:::DECIMAL) VIRTUAL,
+#  i4 INT8 NULL AS (4:::INT8) VIRTUAL,
+#  i2 INT8 NULL AS (2:::INT8) VIRTUAL,
+#  CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
 # )
 
 onlyif config schema-locked-disabled
@@ -1423,13 +1423,13 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_added]
 ----
 CREATE TABLE public.t_added (
-  i INT8 NOT NULL,
-  i4n INT4 NULL AS (NULL) VIRTUAL,
-  dn DECIMAL(5,2) NULL AS (NULL) VIRTUAL,
-  d DECIMAL(5,2) NULL AS (123.1:::DECIMAL) VIRTUAL,
-  i4 INT4 NULL AS (4:::INT8) VIRTUAL,
-  i2 INT2 NULL AS (2:::INT8) VIRTUAL,
-  CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
+ i INT8 NOT NULL,
+ i4n INT4 NULL AS (NULL) VIRTUAL,
+ dn DECIMAL(5,2) NULL AS (NULL) VIRTUAL,
+ d DECIMAL(5,2) NULL AS (123.1:::DECIMAL) VIRTUAL,
+ i4 INT4 NULL AS (4:::INT8) VIRTUAL,
+ i2 INT2 NULL AS (2:::INT8) VIRTUAL,
+ CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
 );
 
 skipif config schema-locked-disabled
@@ -1437,13 +1437,13 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_added]
 ----
 CREATE TABLE public.t_added (
-  i INT8 NOT NULL,
-  i4n INT4 NULL AS (NULL) VIRTUAL,
-  dn DECIMAL(5,2) NULL AS (NULL) VIRTUAL,
-  d DECIMAL(5,2) NULL AS (123.1:::DECIMAL) VIRTUAL,
-  i4 INT4 NULL AS (4:::INT8) VIRTUAL,
-  i2 INT2 NULL AS (2:::INT8) VIRTUAL,
-  CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
+ i INT8 NOT NULL,
+ i4n INT4 NULL AS (NULL) VIRTUAL,
+ dn DECIMAL(5,2) NULL AS (NULL) VIRTUAL,
+ d DECIMAL(5,2) NULL AS (123.1:::DECIMAL) VIRTUAL,
+ i4 INT4 NULL AS (4:::INT8) VIRTUAL,
+ i2 INT2 NULL AS (2:::INT8) VIRTUAL,
+ CONSTRAINT t_added_pkey PRIMARY KEY (i ASC)
 ) WITH (schema_locked = true);
 
 statement ok
@@ -1478,9 +1478,9 @@ subtest regression_91817
 
 statement ok
 CREATE TABLE t91817a (
-  s STRING,
-  comp_s "char" AS (s) STORED,
-  comp_v "char" AS (s) VIRTUAL
+ s STRING,
+ comp_s "char" AS (s) STORED,
+ comp_v "char" AS (s) VIRTUAL
 );
 INSERT INTO t91817a VALUES ('foo')
 
@@ -1488,12 +1488,12 @@ INSERT INTO t91817a VALUES ('foo')
 query TTT
 SELECT * FROM t91817a
 ----
-foo  f  f
+foo f f
 
 statement ok
 CREATE TABLE t91817b (
-  k INT2 PRIMARY KEY,
-  v INT2 GENERATED ALWAYS AS (k + 1) VIRTUAL
+ k INT2 PRIMARY KEY,
+ v INT2 GENERATED ALWAYS AS (k + 1) VIRTUAL
 );
 INSERT INTO t91817b VALUES (0)
 

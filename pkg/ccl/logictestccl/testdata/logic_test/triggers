@@ -181,13 +181,13 @@ DROP FUNCTION f;
 # Variable declaration and assignment.
 statement ok
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE
-    x INT := 1;
-    y INT;
-  BEGIN
-    y := 2;
-    RETURN NULL;
-  END
+ DECLARE
+  x INT := 1;
+  y INT;
+ BEGIN
+  y := 2;
+  RETURN NULL;
+ END
 $$;
 
 statement ok
@@ -203,13 +203,13 @@ DROP FUNCTION f;
 # IF statement.
 statement ok
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    IF now() > '2021-07-12 09:02:10-08:00'::TIMESTAMPTZ THEN
-      RETURN NULL;
-    ELSE
-      RETURN ROW(1, 2, 3);
-    END IF;
-  END
+ BEGIN
+  IF now() > '2021-07-12 09:02:10-08:00'::TIMESTAMPTZ THEN
+   RETURN NULL;
+  ELSE
+   RETURN ROW(1, 2, 3);
+  END IF;
+ END
 $$;
 
 statement ok
@@ -218,14 +218,14 @@ DROP FUNCTION f;
 # WHILE statement.
 statement ok
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE
-    x INT := 0;
-  BEGIN
-    WHILE x < 10 LOOP
-      x := x + 1;
-    END LOOP;
-    RETURN ROW(x);
-  END
+ DECLARE
+  x INT := 0;
+ BEGIN
+  WHILE x < 10 LOOP
+   x := x + 1;
+  END LOOP;
+  RETURN ROW(x);
+ END
 $$;
 
 statement ok
@@ -234,15 +234,15 @@ DROP FUNCTION f;
 # OPEN and FETCH statements.
 statement ok
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE
-    c CURSOR FOR SELECT 1;
-    x INT;
-  BEGIN
-    OPEN c;
-    FETCH c INTO x;
-    CLOSE c;
-    RETURN ROW(x);
-  END
+ DECLARE
+  c CURSOR FOR SELECT 1;
+  x INT;
+ BEGIN
+  OPEN c;
+  FETCH c INTO x;
+  CLOSE c;
+  RETURN ROW(x);
+ END
 $$;
 
 statement ok
@@ -251,17 +251,17 @@ DROP FUNCTION f;
 # Combination of statements.
 statement ok
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE
-    x INT := 1;
-    y INT := 2;
-  BEGIN
-    RAISE NOTICE 'x: %, y: %', x, y;
-    IF x = 1 THEN
-      RETURN ROW(1, 2);
-    ELSE
-      RETURN ROW(3, 4);
-    END IF;
-  END
+ DECLARE
+  x INT := 1;
+  y INT := 2;
+ BEGIN
+  RAISE NOTICE 'x: %, y: %', x, y;
+  IF x = 1 THEN
+   RETURN ROW(1, 2);
+  ELSE
+   RETURN ROW(3, 4);
+  END IF;
+ END
 $$;
 
 statement ok
@@ -280,33 +280,33 @@ CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN; END $$;
 # Assigning to a nonexistent variable is not allowed.
 statement error pgcode 42601 pq: "nonexistent" is not a known variable
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    nonexistent := 'foo';
-    RAISE NOTICE '%', nonexistent;
-    RETURN NULL;
-  END
+ BEGIN
+  nonexistent := 'foo';
+  RAISE NOTICE '%', nonexistent;
+  RETURN NULL;
+ END
 $$;
 
 # Cannot assign to a constant variable.
 statement error pgcode 22005 pq: variable "x" is declared CONSTANT
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE
-    x CONSTANT INT := 1;
-  BEGIN
-    x := 2;
-    RETURN NULL;
-  END
+ DECLARE
+  x CONSTANT INT := 1;
+ BEGIN
+  x := 2;
+  RETURN NULL;
+ END
 $$;
 
 # Cursor cannot be opened with an INSERT statement.
 statement error pgcode 42P11 pq: cannot open INSERT query as cursor
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE
-    c CURSOR FOR INSERT INTO t VALUES (1);
-  BEGIN
-    OPEN c;
-    RETURN NULL;
-  END
+ DECLARE
+  c CURSOR FOR INSERT INTO t VALUES (1);
+ BEGIN
+  OPEN c;
+  RETURN NULL;
+ END
 $$;
 
 # Transaction control statements are not allowed.
@@ -322,13 +322,13 @@ CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN COMMIT; RETURN 
 # currently case-sensitive.
 statement ok
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    TG_NAME := 'foo';
-    SELECT t INTO tg_op FROM ops_table;
-    OLD := ROW(1, 2, 3);
-    NEW := (SELECT * FROM xyz LIMIT 1);
-    RETURN NEW;
-  END
+ BEGIN
+  TG_NAME := 'foo';
+  SELECT t INTO tg_op FROM ops_table;
+  OLD := ROW(1, 2, 3);
+  NEW := (SELECT * FROM xyz LIMIT 1);
+  RETURN NEW;
+ END
 $$;
 
 statement ok
@@ -337,11 +337,11 @@ DROP FUNCTION f;
 # Shadowing the implicit variables is not allowed (tracked in #117508).
 statement error pgcode 0A000 pq: unimplemented: variable shadowing is not yet implemented
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE
-    tg_op TEXT := 'foo';
-  BEGIN
-    RETURN NEW;
-  END
+ DECLARE
+  tg_op TEXT := 'foo';
+ BEGIN
+  RETURN NEW;
+ END
 $$;
 
 # ==============================================================================
@@ -354,13 +354,13 @@ subtest lazy_analysis
 # in an unbound PL/pgSQL trigger function, even if they do not exist.
 statement ok
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE
-    foo INT := NEW.x;
-  BEGIN
-    RAISE NOTICE '%', NEW.this_field_may_not_exist;
-    RAISE NOTICE '%', OLD.we_do_not_now_until_trigger_creation;
-    RETURN OLD.y + foo;
-  END
+ DECLARE
+  foo INT := NEW.x;
+ BEGIN
+  RAISE NOTICE '%', NEW.this_field_may_not_exist;
+  RAISE NOTICE '%', OLD.we_do_not_now_until_trigger_creation;
+  RETURN OLD.y + foo;
+ END
 $$;
 
 statement ok
@@ -370,12 +370,12 @@ DROP FUNCTION f;
 # even if they do not exist.
 statement ok
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE
-    foo INT := (SELECT x FROM new_rows LIMIT 1);
-  BEGIN
-    RAISE NOTICE 'bar: %', (SELECT one, two FROM non_existent_table);
-    RETURN (SELECT y FROM old_rows LIMIT 1) + foo;
-  END
+ DECLARE
+  foo INT := (SELECT x FROM new_rows LIMIT 1);
+ BEGIN
+  RAISE NOTICE 'bar: %', (SELECT one, two FROM non_existent_table);
+  RETURN (SELECT y FROM old_rows LIMIT 1) + foo;
+ END
 $$;
 
 statement ok
@@ -384,10 +384,10 @@ DROP FUNCTION f;
 # SQL statements must still have correct syntax.
 statement error pgcode 42601 pq: at or near ";": at or near "sel": syntax error
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    SEL y FROM old_rows LIMIT 1;
-    RETURN foo;
-  END
+ BEGIN
+  SEL y FROM old_rows LIMIT 1;
+  RETURN foo;
+ END
 $$;
 
 # ==============================================================================
@@ -407,16 +407,16 @@ query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f];
 ----
 CREATE FUNCTION public.f()
-  RETURNS TRIGGER
-  VOLATILE
-  NOT LEAKPROOF
-  CALLED ON NULL INPUT
-  LANGUAGE plpgsql
-  SECURITY INVOKER
-  AS $$
-  BEGIN
-  RETURN NULL;
-  END;
+ RETURNS TRIGGER
+ VOLATILE
+ NOT LEAKPROOF
+ CALLED ON NULL INPUT
+ LANGUAGE plpgsql
+ SECURITY INVOKER
+ AS $$
+ BEGIN
+ RETURN NULL;
+ END;
 $$
 
 statement ok
@@ -427,16 +427,16 @@ query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f];
 ----
 CREATE FUNCTION public.f()
-  RETURNS TRIGGER
-  VOLATILE
-  NOT LEAKPROOF
-  CALLED ON NULL INPUT
-  LANGUAGE plpgsql
-  SECURITY INVOKER
-  AS $$
-  BEGIN
-  RETURN (1, 2);
-  END;
+ RETURNS TRIGGER
+ VOLATILE
+ NOT LEAKPROOF
+ CALLED ON NULL INPUT
+ LANGUAGE plpgsql
+ SECURITY INVOKER
+ AS $$
+ BEGIN
+ RETURN (1, 2);
+ END;
 $$
 
 statement ok
@@ -450,16 +450,16 @@ query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION f];
 ----
 CREATE FUNCTION public.f()
-  RETURNS TRIGGER
-  VOLATILE
-  NOT LEAKPROOF
-  CALLED ON NULL INPUT
-  LANGUAGE plpgsql
-  SECURITY INVOKER
-  AS $$
-  BEGIN
-  RETURN NULL;
-  END;
+ RETURNS TRIGGER
+ VOLATILE
+ NOT LEAKPROOF
+ CALLED ON NULL INPUT
+ LANGUAGE plpgsql
+ SECURITY INVOKER
+ AS $$
+ BEGIN
+ RETURN NULL;
+ END;
 $$
 
 statement ok
@@ -479,10 +479,10 @@ CREATE MATERIALIZED VIEW mv AS SELECT * FROM xy;
 
 statement ok
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE 'foo!';
-    RETURN NULL;
-  END;
+ BEGIN
+  RAISE NOTICE 'foo!';
+  RETURN NULL;
+ END;
 $$;
 
 # Nonexistent table.
@@ -620,10 +620,10 @@ subtest early_binding
 # Case with a nonexistent table.
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER AS $$
-  BEGIN
-    INSERT INTO nonexistent VALUES (1, 2);
-    RETURN NULL;
-  END;
+ BEGIN
+  INSERT INTO nonexistent VALUES (1, 2);
+  RETURN NULL;
+ END;
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 42P01 pq: relation "nonexistent" does not exist
@@ -632,13 +632,13 @@ CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
 statement ok
 DROP FUNCTION g;
 CREATE FUNCTION g() RETURNS TRIGGER AS $$
-  BEGIN
-    IF (SELECT count(*) FROM nonexistent) > 0 THEN
-      RETURN NULL;
-    ELSE
-      RETURN NEW;
-    END IF;
-  END;
+ BEGIN
+  IF (SELECT count(*) FROM nonexistent) > 0 THEN
+   RETURN NULL;
+  ELSE
+   RETURN NEW;
+  END IF;
+ END;
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 42P01 pq: relation "nonexistent" does not exist
@@ -648,10 +648,10 @@ CREATE TRIGGER foo AFTER UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
 statement ok
 DROP FUNCTION g;
 CREATE FUNCTION g() RETURNS TRIGGER AS $$
-  BEGIN
-    RAISE NOTICE '%', f_nonexistent();
-    RETURN NEW;
-  END;
+ BEGIN
+  RAISE NOTICE '%', f_nonexistent();
+  RETURN NEW;
+ END;
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 42883 pq: unknown function: f_nonexistent()
@@ -661,9 +661,9 @@ CREATE TRIGGER foo AFTER DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
 statement ok
 DROP FUNCTION g;
 CREATE FUNCTION g() RETURNS TRIGGER AS $$
-  BEGIN
-    RETURN ROW(1, 2)::typ_nonexistent;
-  END;
+ BEGIN
+  RETURN ROW(1, 2)::typ_nonexistent;
+ END;
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 42704 pq: type "typ_nonexistent" does not exist
@@ -673,13 +673,13 @@ CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
 statement ok
 DROP FUNCTION g;
 CREATE FUNCTION g() RETURNS TRIGGER AS $$
-  BEGIN
-    IF 'not a bool' THEN
-      RETURN NEW;
-    ELSE
-      RETURN NULL;
-    END IF;
-  END;
+ BEGIN
+  IF 'not a bool' THEN
+   RETURN NEW;
+  ELSE
+   RETURN NULL;
+  END IF;
+ END;
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 22P02 pq: could not parse "not a bool" as type bool: invalid bool value
@@ -689,10 +689,10 @@ CREATE TRIGGER foo AFTER UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
 statement ok
 DROP FUNCTION g;
 CREATE FUNCTION g() RETURNS TRIGGER AS $$
-  BEGIN
-    CREATE TABLE foo (x INT, y INT);
-    RETURN NEW;
-  END;
+ BEGIN
+  CREATE TABLE foo (x INT, y INT);
+  RETURN NEW;
+ END;
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 0A000 pq: unimplemented: CREATE TABLE usage inside a function definition
@@ -705,10 +705,10 @@ DROP FUNCTION g;
 statement ok
 CREATE TABLE t (a INT, b INT);
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL IMMUTABLE AS $$
-  BEGIN
-    SELECT count(*) FROM t;
-    RETURN NEW;
-  END;
+ BEGIN
+  SELECT count(*) FROM t;
+  RETURN NEW;
+ END;
 $$;
 
 statement error pgcode 22023 pq: referencing relations is not allowed in immutable function
@@ -759,10 +759,10 @@ CREATE TABLE t (a INT, b INT);
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    INSERT INTO t VALUES (1, 2);
-    RETURN NULL;
-  END;
+ BEGIN
+  INSERT INTO t VALUES (1, 2);
+  RETURN NULL;
+ END;
 $$;
 
 statement ok
@@ -796,10 +796,10 @@ CREATE TABLE t2 (a INT, b INT);
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    INSERT INTO t2 VALUES ((NEW).a, (NEW).b);
-    RETURN NEW;
-  END
+ BEGIN
+  INSERT INTO t2 VALUES ((NEW).a, (NEW).b);
+  RETURN NEW;
+ END
 $$;
 
 statement ok
@@ -829,11 +829,11 @@ CREATE TYPE typ AS (x INT, y INT);
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE
-    a typ;
-  BEGIN
-    RETURN a;
-  END;
+ DECLARE
+  a typ;
+ BEGIN
+  RETURN a;
+ END;
 $$;
 
 statement ok
@@ -870,10 +870,10 @@ CREATE FUNCTION g() RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
 
 statement ok
 CREATE FUNCTION g2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '%', g();
-    RETURN NULL;
-  END;
+ BEGIN
+  RAISE NOTICE '%', g();
+  RETURN NULL;
+ END;
 $$;
 
 statement ok
@@ -916,24 +916,24 @@ CREATE FUNCTION g() RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
 
 statement ok
 CREATE FUNCTION trigger_func() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE
-    a typ;
-  BEGIN
-    RAISE NOTICE '%, %', g(), nextval('s');
-    INSERT INTO t VALUES (1, 2);
-    RETURN a;
-  END;
+ DECLARE
+  a typ;
+ BEGIN
+  RAISE NOTICE '%, %', g(), nextval('s');
+  INSERT INTO t VALUES (1, 2);
+  RETURN a;
+ END;
 $$;
 
 statement ok
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION trigger_func();
 
 # Relations are referenced by name, so renaming the table is not allowed.
-onlyif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3
+onlyif config local-legacy-schema-changer local-mixed-25.3
 statement error pgcode 2BP01 cannot rename relation "t" because trigger "foo" on table "xy" depends on it
 ALTER TABLE t RENAME TO t2;
 
-skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3
+skipif config local-legacy-schema-changer local-mixed-25.3
 statement error pgcode 2BP01 cannot rename relation "test.public.t" because trigger "foo" on table "xy" depends on it
 ALTER TABLE t RENAME TO t2;
 
@@ -1160,10 +1160,10 @@ CREATE TABLE s.xy (x INT, y INT);
 
 statement ok
 CREATE FUNCTION s.f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE 'bar!';
-    RETURN NULL;
-  END;
+ BEGIN
+  RAISE NOTICE 'bar!';
+  RETURN NULL;
+ END;
 $$;
 
 statement ok
@@ -1177,10 +1177,10 @@ CREATE TABLE xy (x INT, y INT);
 
 statement ok
 CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE 'baz!';
-    RETURN NULL;
-  END;
+ BEGIN
+  RAISE NOTICE 'baz!';
+  RETURN NULL;
+ END;
 $$;
 
 statement ok
@@ -1218,10 +1218,10 @@ CREATE TRIGGER foo AFTER INSERT ON db.public.xy FOR EACH ROW EXECUTE FUNCTION db
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    INSERT INTO db.xy VALUES (1, 2);
-    RETURN NULL;
-  END;
+ BEGIN
+  INSERT INTO db.xy VALUES (1, 2);
+  RETURN NULL;
+ END;
 $$;
 
 statement error pgcode 0A000 pq: dependent relation xy cannot be from another database
@@ -1232,10 +1232,10 @@ DROP FUNCTION g;
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '%', pg_typeof(ROW(1, 2)::db.typ);
-    RETURN NULL;
-  END;
+ BEGIN
+  RAISE NOTICE '%', pg_typeof(ROW(1, 2)::db.typ);
+  RETURN NULL;
+ END;
 $$;
 
 statement error pgcode 0A000 pq: cross database type references are not supported: db.public.typ
@@ -1261,16 +1261,16 @@ CREATE TABLE t (a INT, b INT);
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE
-    cnt INT := 0;
-  BEGIN
-    SELECT count(*) INTO cnt FROM t;
-    IF cnt < 10 THEN
-      INSERT INTO t VALUES (1, 2);
-    END IF;
-    RAISE NOTICE 'HERE';
-    RETURN NULL;
-  END;
+ DECLARE
+  cnt INT := 0;
+ BEGIN
+  SELECT count(*) INTO cnt FROM t;
+  IF cnt < 10 THEN
+   INSERT INTO t VALUES (1, 2);
+  END IF;
+  RAISE NOTICE 'HERE';
+  RETURN NULL;
+ END;
 $$;
 
 # NOTE: the trigger is both attached to table "t", and references it via the
@@ -1301,31 +1301,31 @@ SELECT oid FROM pg_class WHERE relname = 'xy';
 
 statement ok
 CREATE PROCEDURE show_triggers() LANGUAGE PLpgSQL AS $$
-  DECLARE
-    foo JSON;
-    name JSON;
-    body JSON;
-    curs REFCURSOR;
-  BEGIN
-    SELECT
-      crdb_internal.pb_to_json(
-        'cockroach.sql.sqlbase.Descriptor',
-        descriptor,
-        false
-      ) INTO foo
-    FROM
-      system.descriptor
-    WHERE id = $xy_oid;
-    foo := foo->'table'->'triggers';
-    OPEN curs FOR SELECT value->'name', value->'funcBody' FROM jsonb_array_elements(foo);
-    LOOP
-      FETCH curs INTO name, body;
-      IF name IS NULL THEN
-        EXIT;
-      END IF;
-      RAISE NOTICE '%->%', name, split_part(split_part(body::TEXT, ' ', 7), ')', 1);
-    END LOOP;
-  END;
+ DECLARE
+  foo JSON;
+  name JSON;
+  body JSON;
+  curs REFCURSOR;
+ BEGIN
+  SELECT
+   crdb_internal.pb_to_json(
+    'cockroach.sql.sqlbase.Descriptor',
+    descriptor,
+    false
+   ) INTO foo
+  FROM
+   system.descriptor
+  WHERE id = $xy_oid;
+  foo := foo->'table'->'triggers';
+  OPEN curs FOR SELECT value->'name', value->'funcBody' FROM jsonb_array_elements(foo);
+  LOOP
+   FETCH curs INTO name, body;
+   IF name IS NULL THEN
+    EXIT;
+   END IF;
+   RAISE NOTICE '%->%', name, split_part(split_part(body::TEXT, ' ', 7), ')', 1);
+  END LOOP;
+ END;
 $$;
 
 statement ok
@@ -1339,10 +1339,10 @@ CREATE TABLE s.t (a INT, b INT);
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '%', (SELECT max(a) FROM t);
-    RETURN NULL;
-  END
+ BEGIN
+  RAISE NOTICE '%', (SELECT max(a) FROM t);
+  RETURN NULL;
+ END
 $$;
 
 statement ok
@@ -1373,19 +1373,19 @@ NOTICE: "bar"->test.s.t
 query TT
 SHOW CREATE FUNCTION g;
 ----
-g  CREATE FUNCTION public.g()
-     RETURNS TRIGGER
-     VOLATILE
-     NOT LEAKPROOF
-     CALLED ON NULL INPUT
-     LANGUAGE plpgsql
-     SECURITY INVOKER
-     AS $$
-     BEGIN
-     RAISE NOTICE '%', (SELECT max(a) FROM t);
-     RETURN NULL;
-     END;
-   $$
+g CREATE FUNCTION public.g()
+   RETURNS TRIGGER
+   VOLATILE
+   NOT LEAKPROOF
+   CALLED ON NULL INPUT
+   LANGUAGE plpgsql
+   SECURITY INVOKER
+   AS $$
+   BEGIN
+   RAISE NOTICE '%', (SELECT max(a) FROM t);
+   RETURN NULL;
+   END;
+  $$
 
 statement ok
 RESET search_path;
@@ -1414,10 +1414,10 @@ subtest before_row_basic
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
-    RETURN COALESCE(NEW, OLD);
-  END
+ BEGIN
+  RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+  RETURN COALESCE(NEW, OLD);
+ END
 $$;
 
 statement ok
@@ -1498,8 +1498,8 @@ NOTICE: INSERT: old: <NULL>, new: (3,4)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  2
-3  4
+1 2
+3 4
 
 # Repeat, but with some conflicting rows.
 query T noticetrace
@@ -1514,9 +1514,9 @@ NOTICE: INSERT: old: <NULL>, new: (5,6)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  12
-3  14
-5  6
+1 12
+3 14
+5 6
 
 # Example with the explicit UPSERT syntax.
 query T noticetrace
@@ -1533,10 +1533,10 @@ NOTICE: INSERT: old: <NULL>, new: (7,-8)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  -2
-3  -4
-5  -6
-7  -8
+1 -2
+3 -4
+5 -6
+7 -8
 
 statement ok
 DELETE FROM xy WHERE True;
@@ -1555,12 +1555,12 @@ subtest before_row_modify
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE new_new xy;
-  BEGIN
-    new_new = ROW((NEW).x, (NEW).y + 10);
-    RAISE NOTICE '%: old: %, new: %, new_new: %', TG_OP, OLD, NEW, new_new;
-    RETURN new_new;
-  END
+ DECLARE new_new xy;
+ BEGIN
+  new_new = ROW((NEW).x, (NEW).y + 10);
+  RAISE NOTICE '%: old: %, new: %, new_new: %', TG_OP, OLD, NEW, new_new;
+  RETURN new_new;
+ END
 $$;
 
 # Test an INSERT trigger that modifies the row.
@@ -1577,8 +1577,8 @@ NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  12
-3  14
+1 12
+3 14
 
 # Test an UPDATE trigger that modifies the row.
 statement ok
@@ -1593,8 +1593,8 @@ NOTICE: UPDATE: old: (1,12), new: (5,12), new_new: (5,22)
 query II rowsort
 SELECT * FROM xy;
 ----
-3  14
-5  22
+3 14
+5 22
 
 # The trigger function updates the row after the update is applied.
 query T noticetrace
@@ -1605,8 +1605,8 @@ NOTICE: UPDATE: old: (5,22), new: (5,220), new_new: (5,230)
 query II rowsort
 SELECT * FROM xy;
 ----
-3  14
-5  230
+3 14
+5 230
 
 statement ok
 DELETE FROM xy WHERE True;
@@ -1615,8 +1615,8 @@ INSERT INTO xy VALUES (1, 2), (3, 4);
 query II rowsort
 SELECT * FROM xy;
 ----
-1  12
-3  14
+1 12
+3 14
 
 # When both INSERT and UPDATE triggers fire, modifications from both are applied
 # to the row. First the INSERT trigger's modification will be applied, then the
@@ -1634,9 +1634,9 @@ NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  130
-3  150
-5  16
+1 130
+3 150
+5 16
 
 # No update is applied for ON CONFLICT DO NOTHING.
 query T noticetrace
@@ -1649,9 +1649,9 @@ NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  130
-3  150
-5  16
+1 130
+3 150
+5 16
 
 statement ok
 DELETE FROM xy WHERE x = 5;
@@ -1670,9 +1670,9 @@ NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  22
-3  24
-5  16
+1 22
+3 24
+5 16
 
 # Similar to the previous case, but modifying the EXCLUDED row in the DO UPDATE
 # clause.
@@ -1689,9 +1689,9 @@ NOTICE: UPDATE: old: (5,16), new: (5,15), new_new: (5,25)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  21
-3  23
-5  25
+1 21
+3 23
+5 25
 
 statement ok
 DELETE FROM xy WHERE x = 5;
@@ -1709,9 +1709,9 @@ NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  22
-3  24
-5  16
+1 22
+3 24
+5 16
 
 statement ok
 DELETE FROM xy WHERE x = 5;
@@ -1729,9 +1729,9 @@ NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  42
-3  44
-5  16
+1 42
+3 44
+5 16
 
 # When there is a WHERE clause for the DO UPDATE part of the UPSERT, the UPDATE
 # trigger fires only for the rows that are actually updated. The INSERT trigger
@@ -1750,9 +1750,9 @@ NOTICE: UPDATE: old: (5,16), new: (5,116), new_new: (5,126)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  152
-3  44
-5  126
+1 152
+3 44
+5 126
 
 statement ok
 DROP TRIGGER foo ON xy;
@@ -1767,12 +1767,12 @@ DROP FUNCTION g;
 # any non-NULL value will have the same effect.
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE ret xy;
-  BEGIN
-    ret := ROW((OLD).x + 10, (OLD).y + 10);
-    RAISE NOTICE '%: old: %, new: %, ret: %', TG_OP, OLD, NEW, ret;
-    RETURN ret;
-  END
+ DECLARE ret xy;
+ BEGIN
+  ret := ROW((OLD).x + 10, (OLD).y + 10);
+  RAISE NOTICE '%: old: %, new: %, ret: %', TG_OP, OLD, NEW, ret;
+  RETURN ret;
+ END
 $$;
 
 statement ok
@@ -1787,8 +1787,8 @@ NOTICE: DELETE: old: (3,44), new: <NULL>, ret: (13,54)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  152
-5  126
+1 152
+5 126
 
 statement ok
 DROP TRIGGER foo ON xy;
@@ -1807,15 +1807,15 @@ subtest before_row_filter
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE val xy := COALESCE(NEW, OLD);
-  BEGIN
-    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
-    IF (val).x % 2 = 0 THEN
-      RETURN val;
-    ELSE
-      RETURN NULL;
-    END IF;
-  END
+ DECLARE val xy := COALESCE(NEW, OLD);
+ BEGIN
+  RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+  IF (val).x % 2 = 0 THEN
+   RETURN val;
+  ELSE
+   RETURN NULL;
+  END IF;
+ END
 $$;
 
 statement ok
@@ -1832,8 +1832,8 @@ NOTICE: INSERT: old: <NULL>, new: (4,4)
 query II rowsort
 SELECT * FROM xy;
 ----
-2  2
-4  4
+2 2
+4 4
 
 statement ok
 DROP TRIGGER foo ON xy;
@@ -1856,10 +1856,10 @@ NOTICE: UPDATE: old: (4,4), new: (4,14)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  1
-2  12
-3  3
-4  14
+1 1
+2 12
+3 3
+4 14
 
 query T noticetrace
 DELETE FROM xy WHERE True;
@@ -1872,8 +1872,8 @@ NOTICE: DELETE: old: (4,14), new: <NULL>
 query II rowsort
 SELECT * FROM xy;
 ----
-1  1
-3  3
+1 1
+3 3
 
 statement ok
 DROP TRIGGER foo ON xy;
@@ -1888,10 +1888,10 @@ CREATE TABLE nullable (a INT, foo INT NOT VISIBLE, b INT, bar INT NOT VISIBLE DE
 # A tuple with only NULL elements does not cause the filter to remove rows.
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
-    RETURN ROW(NULL, NULL);
-  END
+ BEGIN
+  RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+  RETURN ROW(NULL, NULL);
+ END
 $$;
 
 statement ok
@@ -1908,9 +1908,9 @@ NOTICE: INSERT: old: <NULL>, new: (3,3)
 query III rowsort
 SELECT *, bar FROM nullable;
 ----
-NULL  NULL  1
-NULL  NULL  1
-NULL  NULL  1
+NULL NULL 1
+NULL NULL 1
+NULL NULL 1
 
 query T noticetrace
 UPDATE nullable SET b = 10;
@@ -1922,9 +1922,9 @@ NOTICE: UPDATE: old: (,), new: (,10)
 query III rowsort
 SELECT *, bar FROM nullable;
 ----
-NULL  NULL  1
-NULL  NULL  1
-NULL  NULL  1
+NULL NULL 1
+NULL NULL 1
+NULL NULL 1
 
 query T noticetrace
 DELETE FROM nullable WHERE a IS NULL LIMIT 2;
@@ -1935,7 +1935,7 @@ NOTICE: DELETE: old: (,), new: <NULL>
 query III rowsort
 SELECT *, bar FROM nullable;
 ----
-NULL  NULL  1
+NULL NULL 1
 
 statement ok
 DROP TABLE nullable;
@@ -1954,10 +1954,10 @@ subtest before_row_where
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
-    RETURN COALESCE(NEW, OLD);
-  END
+ BEGIN
+  RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+  RETURN COALESCE(NEW, OLD);
+ END
 $$;
 
 statement ok
@@ -1974,10 +1974,10 @@ NOTICE: INSERT: old: <NULL>, new: (4,4)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  1
-2  2
-3  3
-4  4
+1 1
+2 2
+3 3
+4 4
 
 statement ok
 CREATE TRIGGER foo2 BEFORE UPDATE OR DELETE ON xy FOR EACH ROW WHEN ((OLD).x % 2 = 0) EXECUTE FUNCTION g();
@@ -1993,10 +1993,10 @@ NOTICE: UPDATE: old: (4,4), new: (4,14)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  11
-2  12
-3  13
-4  14
+1 11
+2 12
+3 13
+4 14
 
 # The trigger should not fire for the odd values, but they should still be
 # deleted.
@@ -2030,10 +2030,10 @@ subtest after_row
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
-    RETURN COALESCE(NEW, OLD);
-  END
+ BEGIN
+  RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+  RETURN COALESCE(NEW, OLD);
+ END
 $$;
 
 # Test a basic INSERT trigger.
@@ -2107,8 +2107,8 @@ NOTICE: INSERT: old: <NULL>, new: (3,4)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  2
-3  4
+1 2
+3 4
 
 # Repeat, but with some conflicting rows.
 query T noticetrace
@@ -2121,9 +2121,9 @@ NOTICE: INSERT: old: <NULL>, new: (5,6)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  12
-3  14
-5  6
+1 12
+3 14
+5 6
 
 # Example with the explicit UPSERT syntax.
 query T noticetrace
@@ -2137,10 +2137,10 @@ NOTICE: INSERT: old: <NULL>, new: (7,-8)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  -2
-3  -4
-5  -6
-7  -8
+1 -2
+3 -4
+5 -6
+7 -8
 
 statement ok
 DROP TRIGGER foo ON xy;
@@ -2154,10 +2154,10 @@ DELETE FROM xy WHERE True;
 # The return value of an AFTER trigger is ignored.
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
-    RETURN ROW(1000, -10000);
-  END
+ BEGIN
+  RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+  RETURN ROW(1000, -10000);
+ END
 $$;
 
 statement ok
@@ -2171,7 +2171,7 @@ NOTICE: INSERT: old: <NULL>, new: (1,2)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  2
+1 2
 
 statement ok
 DROP TRIGGER foo ON xy;
@@ -2190,10 +2190,10 @@ subtest after_row_where
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
-    RETURN NULL;
-  END
+ BEGIN
+  RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+  RETURN NULL;
+ END
 $$;
 
 statement ok
@@ -2209,10 +2209,10 @@ NOTICE: INSERT: old: <NULL>, new: (4,4)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  1
-2  2
-3  3
-4  4
+1 1
+2 2
+3 3
+4 4
 
 statement ok
 CREATE TRIGGER foo2 AFTER UPDATE OR DELETE ON xy FOR EACH ROW WHEN ((OLD).x % 2 = 0) EXECUTE FUNCTION g();
@@ -2227,10 +2227,10 @@ NOTICE: UPDATE: old: (4,4), new: (4,14)
 query II rowsort
 SELECT * FROM xy;
 ----
-1  11
-2  12
-3  13
-4  14
+1 11
+2 12
+3 13
+4 14
 
 # The trigger should not fire for the odd values.
 query T noticetrace
@@ -2263,14 +2263,14 @@ subtest before_after_row
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '% %: % -> %', TG_WHEN, TG_OP, OLD, NEW;
-    IF NEW IS NOT NULL AND TG_WHEN = 'BEFORE' THEN
-      NEW.x := (NEW).x * 10;
-      RAISE NOTICE 'changing the row to %', NEW;
-    END IF;
-    RETURN COALESCE(NEW, OLD);
-  END
+ BEGIN
+  RAISE NOTICE '% %: % -> %', TG_WHEN, TG_OP, OLD, NEW;
+  IF NEW IS NOT NULL AND TG_WHEN = 'BEFORE' THEN
+   NEW.x := (NEW).x * 10;
+   RAISE NOTICE 'changing the row to %', NEW;
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+ END
 $$;
 
 statement ok
@@ -2293,8 +2293,8 @@ NOTICE: AFTER INSERT: <NULL> -> (30,4)
 query II rowsort
 SELECT * FROM xy;
 ----
-10  2
-30  4
+10 2
+30 4
 
 statement ok
 DROP TRIGGER foo ON xy;
@@ -2324,24 +2324,24 @@ SET recursion_depth_limit = 10;
 
 statement ok
 CREATE FUNCTION insert_t1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE ' ';
-    RAISE NOTICE '% trigger % with NEW: %', TG_WHEN, TG_NAME, NEW;
-    RAISE NOTICE 'max t1.a: %, max t2.a: %', (SELECT max(a) FROM t1), (SELECT max(a) FROM t2);
-    RAISE NOTICE 'inserting into t1: %', ROW((NEW).a + 1, (NEW).b);
-    INSERT INTO t1 VALUES ((NEW).a + 1, (NEW).b);
-    RETURN NEW;
-  END
+ BEGIN
+  RAISE NOTICE ' ';
+  RAISE NOTICE '% trigger % with NEW: %', TG_WHEN, TG_NAME, NEW;
+  RAISE NOTICE 'max t1.a: %, max t2.a: %', (SELECT max(a) FROM t1), (SELECT max(a) FROM t2);
+  RAISE NOTICE 'inserting into t1: %', ROW((NEW).a + 1, (NEW).b);
+  INSERT INTO t1 VALUES ((NEW).a + 1, (NEW).b);
+  RETURN NEW;
+ END
 $$;
 CREATE FUNCTION insert_t2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE ' ';
-    RAISE NOTICE '% trigger % with NEW: %', TG_WHEN, TG_NAME, NEW;
-    RAISE NOTICE 'max t1.a: %, max t2.a: %', (SELECT max(a) FROM t1), (SELECT max(a) FROM t2);
-    RAISE NOTICE 'inserting into t2: %', ROW((NEW).a + 1, (NEW).b);
-    INSERT INTO t2 VALUES ((NEW).a + 1, (NEW).b);
-    RETURN NEW;
-  END
+ BEGIN
+  RAISE NOTICE ' ';
+  RAISE NOTICE '% trigger % with NEW: %', TG_WHEN, TG_NAME, NEW;
+  RAISE NOTICE 'max t1.a: %, max t2.a: %', (SELECT max(a) FROM t1), (SELECT max(a) FROM t2);
+  RAISE NOTICE 'inserting into t2: %', ROW((NEW).a + 1, (NEW).b);
+  INSERT INTO t2 VALUES ((NEW).a + 1, (NEW).b);
+  RETURN NEW;
+ END
 $$;
 
 statement ok
@@ -2384,15 +2384,15 @@ NOTICE: inserting into t1: (5,1)
 query II rowsort
 SELECT * FROM t1;
 ----
-1  1
-3  1
-5  1
+1 1
+3 1
+5 1
 
 query II rowsort
 SELECT * FROM t2;
 ----
-2  1
-4  1
+2 1
+4 1
 
 statement ok
 DELETE FROM t1 WHERE True;
@@ -2447,15 +2447,15 @@ NOTICE: inserting into t1: (5,1)
 query II rowsort
 SELECT * FROM t1;
 ----
-1  1
-3  1
-5  1
+1 1
+3 1
+5 1
 
 query II rowsort
 SELECT * FROM t2;
 ----
-2  1
-4  1
+2 1
+4 1
 
 statement ok
 DELETE FROM t1 WHERE True;
@@ -2504,15 +2504,15 @@ NOTICE: inserting into t1: (5,1)
 query II rowsort
 SELECT * FROM t1;
 ----
-1  1
-3  1
-5  1
+1 1
+3 1
+5 1
 
 query II rowsort
 SELECT * FROM t2;
 ----
-2  1
-4  1
+2 1
+4 1
 
 statement ok
 DELETE FROM t1 WHERE True;
@@ -2564,11 +2564,11 @@ NOTICE: inserting into t1: (5,1)
 query II rowsort
 SELECT * FROM t1;
 ----
-1  1
-2  1
-3  1
-4  1
-5  1
+1 1
+2 1
+3 1
+4 1
+5 1
 
 statement ok
 DELETE FROM t1 WHERE True;
@@ -2613,11 +2613,11 @@ NOTICE: inserting into t1: (5,1)
 query II rowsort
 SELECT * FROM t1;
 ----
-1  1
-2  1
-3  1
-4  1
-5  1
+1 1
+2 1
+3 1
+4 1
+5 1
 
 statement ok
 DELETE FROM t1 WHERE True;
@@ -2646,10 +2646,10 @@ CREATE TABLE child (k INT PRIMARY KEY, v INT REFERENCES parent(k) ON UPDATE CASC
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '% % ON %: % -> %', TG_WHEN, TG_OP, TG_TABLE_NAME, OLD, NEW;
-    RETURN COALESCE(NEW, OLD);
-  END
+ BEGIN
+  RAISE NOTICE '% % ON %: % -> %', TG_WHEN, TG_OP, TG_TABLE_NAME, OLD, NEW;
+  RETURN COALESCE(NEW, OLD);
+ END
 $$;
 
 statement ok
@@ -2710,19 +2710,19 @@ subtest before_trigger_fires_cascades
 # updates and delete on the "parent" table.
 statement ok
 CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  DECLARE
-    from_k INT := (NEW).a;
-    to_k INT := (NEW).b;
-  BEGIN
-    IF to_k IS NULL THEN
-      RAISE NOTICE 'delete from parent in trigger where k = %', from_k;
-      DELETE FROM parent WHERE k = from_k;
-    ELSE
-      RAISE NOTICE 'update parent.k to % in trigger where k = %', to_k, from_k;
-      UPDATE parent SET k = to_k WHERE k = from_k;
-    END IF;
-    RETURN COALESCE(NEW, OLD);
-  END
+ DECLARE
+  from_k INT := (NEW).a;
+  to_k INT := (NEW).b;
+ BEGIN
+  IF to_k IS NULL THEN
+   RAISE NOTICE 'delete from parent in trigger where k = %', from_k;
+   DELETE FROM parent WHERE k = from_k;
+  ELSE
+   RAISE NOTICE 'update parent.k to % in trigger where k = %', to_k, from_k;
+   UPDATE parent SET k = to_k WHERE k = from_k;
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+ END
 $$;
 
 statement ok
@@ -2840,24 +2840,24 @@ INSERT INTO child2 VALUES (1, 1), (2, 2), (3, 2), (4, 3);
 # Create procedures to print when a FK violation is encountered.
 statement ok
 CREATE PROCEDURE wrap_parent_update(k_old INT, k_new INT) LANGUAGE PLpgSQL AS $$
-  BEGIN
-    IF k_new IS NULL THEN
-      DELETE FROM parent WHERE k = k_old;
-    ELSE
-      UPDATE parent SET k = k_new WHERE k = k_old;
-    END IF;
-  EXCEPTION WHEN foreign_key_violation THEN
-    RAISE NOTICE 'FK violation updating parent from % to %', k_old, k_new;
-  END
+ BEGIN
+  IF k_new IS NULL THEN
+   DELETE FROM parent WHERE k = k_old;
+  ELSE
+   UPDATE parent SET k = k_new WHERE k = k_old;
+  END IF;
+ EXCEPTION WHEN foreign_key_violation THEN
+  RAISE NOTICE 'FK violation updating parent from % to %', k_old, k_new;
+ END
 $$;
 
 statement ok
 CREATE PROCEDURE wrap_child2_insert(k INT, v INT) LANGUAGE PLpgSQL AS $$
-  BEGIN
-    INSERT INTO child2 VALUES (k, v);
-  EXCEPTION WHEN foreign_key_violation THEN
-    RAISE NOTICE 'FK violation inserting (%, %) into child2', k, v;
-  END
+ BEGIN
+  INSERT INTO child2 VALUES (k, v);
+ EXCEPTION WHEN foreign_key_violation THEN
+  RAISE NOTICE 'FK violation inserting (%, %) into child2', k, v;
+ END
 $$;
 
 # Try deleting a referenced row in the parent table.
@@ -2896,18 +2896,18 @@ subtest triggers_modify_fk_cascades
 
 statement ok
 CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    NEW.k := (NEW).k + 100;
-    OLD.k := (OLD).k + 100;
-    RETURN COALESCE(NEW, OLD);
-  END
+ BEGIN
+  NEW.k := (NEW).k + 100;
+  OLD.k := (OLD).k + 100;
+  RETURN COALESCE(NEW, OLD);
+ END
 $$;
 
 statement ok
 CREATE FUNCTION filter() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RETURN NULL;
-  END
+ BEGIN
+  RETURN NULL;
+ END
 $$;
 
 statement ok
@@ -2999,10 +2999,10 @@ NOTICE: AFTER UPDATE ON child: (3,2) -> (3,112)
 query II rowsort
 SELECT * FROM child;
 ----
-1  111
-2  112
-3  112
-4  3
+1 111
+2 112
+3 112
+4 3
 
 query T noticetrace
 DELETE FROM parent WHERE k > 3;
@@ -3021,7 +3021,7 @@ NOTICE: AFTER DELETE ON child: (3,112) -> <NULL>
 query II rowsort
 SELECT * FROM child;
 ----
-4  3
+4 3
 
 statement ok
 DROP TRIGGER mod ON parent;
@@ -3051,9 +3051,9 @@ CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON child2 FOR EACH ROW EXECU
 
 statement ok
 CREATE TABLE grandchild (
-  k INT PRIMARY KEY,
-  v INT REFERENCES child(v) ON UPDATE CASCADE ON DELETE CASCADE,
-  v2 INT REFERENCES child2(v) ON UPDATE CASCADE ON DELETE CASCADE
+ k INT PRIMARY KEY,
+ v INT REFERENCES child(v) ON UPDATE CASCADE ON DELETE CASCADE,
+ v2 INT REFERENCES child2(v) ON UPDATE CASCADE ON DELETE CASCADE
 );
 
 statement ok
@@ -3103,24 +3103,24 @@ NOTICE: AFTER UPDATE ON grandchild: (3,12,2) -> (3,12,12)
 query II rowsort
 SELECT * FROM child;
 ----
-1  11
-2  12
-3  3
+1 11
+2 12
+3 3
 
 query II rowsort
 SELECT * FROM child2;
 ----
-1  11
-2  12
-3  3
+1 11
+2 12
+3 3
 
 query III rowsort
 SELECT * FROM grandchild;
 ----
-1  11  11
-2  12  12
-3  12  12
-4  3   3
+1 11 11
+2 12 12
+3 12 12
+4 3  3
 
 statement ok
 DROP TABLE grandchild;
@@ -3140,10 +3140,10 @@ CREATE TABLE child (v INT NOT NULL REFERENCES parent(k) ON DELETE CASCADE);
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '%', TG_OP;
-    RETURN COALESCE(NEW, OLD);
-  END
+ BEGIN
+  RAISE NOTICE '%', TG_OP;
+  RETURN COALESCE(NEW, OLD);
+ END
 $$;
 
 statement ok
@@ -3175,18 +3175,18 @@ subtest before_row_order
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '%: old: %, new: %', TG_NAME, OLD, NEW;
-    RETURN COALESCE(NEW, OLD);
-  END
+ BEGIN
+  RAISE NOTICE '%: old: %, new: %', TG_NAME, OLD, NEW;
+  RETURN COALESCE(NEW, OLD);
+ END
 $$;
 
 statement ok
 CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '%: old: %, new: %', TG_NAME, OLD, NEW;
-    RETURN COALESCE(NEW, OLD);
-  END
+ BEGIN
+  RAISE NOTICE '%: old: %, new: %', TG_NAME, OLD, NEW;
+  RETURN COALESCE(NEW, OLD);
+ END
 $$;
 
 statement ok
@@ -3271,10 +3271,10 @@ subtest before_after_row_order
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '% %: old: %, new: %', TG_WHEN, TG_OP, OLD, NEW;
-    RETURN COALESCE(NEW, OLD);
-  END
+ BEGIN
+  RAISE NOTICE '% %: old: %, new: %', TG_WHEN, TG_OP, OLD, NEW;
+  RETURN COALESCE(NEW, OLD);
+ END
 $$;
 
 statement ok
@@ -3334,14 +3334,14 @@ CREATE TABLE computed (a INT, b INT, c INT AS (a + b) STORED, d INT AS (a - b) V
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE 'g()';
-    RAISE NOTICE 'NEW: %', NEW;
-    NEW.c = 12345;
-    NEW.d = 67890;
-    RAISE NOTICE 'NEW after change: %', NEW;
-    RETURN NEW;
-  END
+ BEGIN
+  RAISE NOTICE 'g()';
+  RAISE NOTICE 'NEW: %', NEW;
+  NEW.c = 12345;
+  NEW.d = 67890;
+  RAISE NOTICE 'NEW after change: %', NEW;
+  RETURN NEW;
+ END
 $$;
 
 statement ok
@@ -3360,7 +3360,7 @@ NOTICE: NEW after change: (1,2,12345,67890)
 query IIII rowsort
 SELECT * FROM computed;
 ----
-1  2  3  -1
+1 2 3 -1
 
 query T noticetrace
 UPDATE computed SET a = 10, b = 20 WHERE a = 1;
@@ -3372,20 +3372,20 @@ NOTICE: NEW after change: (10,20,12345,67890)
 query IIII rowsort
 SELECT * FROM computed;
 ----
-10  20  30  -10
+10 20 30 -10
 
 # The computed column *does* show the effect of modifications to the columns it
 # depends on.
 statement ok
 CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE 'h()';
-    RAISE NOTICE 'NEW: %', NEW;
-    NEW.a = (NEW).a + 100;
-    NEW.b = (NEW).b + 200;
-    RAISE NOTICE 'NEW after change: %', NEW;
-    RETURN NEW;
-  END
+ BEGIN
+  RAISE NOTICE 'h()';
+  RAISE NOTICE 'NEW: %', NEW;
+  NEW.a = (NEW).a + 100;
+  NEW.b = (NEW).b + 200;
+  RAISE NOTICE 'NEW after change: %', NEW;
+  RETURN NEW;
+ END
 $$;
 
 # Create triggers that fire before and after the previous one.
@@ -3411,8 +3411,8 @@ NOTICE: NEW after change: (203,404,12345,67890)
 query IIII rowsort
 SELECT * FROM computed;
 ----
-10   20   30   -10
-203  404  607  -201
+10  20  30  -10
+203 404 607 -201
 
 query T noticetrace
 UPDATE computed SET a = 30, b = 40 WHERE a = 203;
@@ -3430,8 +3430,8 @@ NOTICE: NEW after change: (230,440,12345,67890)
 query IIII rowsort
 SELECT * FROM computed;
 ----
-10   20   30   -10
-230  440  670  -210
+10  20  30  -10
+230 440 670 -210
 
 # AFTER triggers observe the values of computed columns. They can also modify
 # computed columns, but the updated value is ignored (in fact, any modification
@@ -3460,9 +3460,9 @@ NOTICE: NEW after change: (205,406,12345,67890)
 query IIII rowsort
 SELECT * FROM computed;
 ----
-10   20   30   -10
-230  440  670  -210
-205  406  611  -201
+10  20  30  -10
+230 440 670 -210
+205 406 611 -201
 
 query T noticetrace
 UPDATE computed SET a = 50, b = 60 WHERE a = 230;
@@ -3483,9 +3483,9 @@ NOTICE: NEW after change: (250,460,12345,67890)
 query IIII rowsort
 SELECT * FROM computed;
 ----
-10   20   30   -10
-250  460  710  -210
-205  406  611  -201
+10  20  30  -10
+250 460 710 -210
+205 406 611 -201
 
 statement ok
 DROP TRIGGER trig ON computed;
@@ -3525,10 +3525,10 @@ NOTICE: NEW after change: (7,8,12345,67890)
 query IIII rowsort
 SELECT * FROM computed;
 ----
-10   20   30   -10
-250  460  710  -210
-205  406  611  -201
-7    8    15   -1
+10  20  30  -10
+250 460 710 -210
+205 406 611 -201
+7  8  15  -1
 
 query T noticetrace
 UPDATE computed SET a = 70, b = 80 WHERE a = 7;
@@ -3543,10 +3543,10 @@ NOTICE: NEW after change: (70,80,12345,67890)
 query IIII rowsort
 SELECT * FROM computed;
 ----
-10   20   30   -10
-250  460  710  -210
-205  406  611  -201
-70   80   150  -10
+10  20  30  -10
+250 460 710 -210
+205 406 611 -201
+70  80  150 -10
 
 statement ok
 DROP TABLE computed;
@@ -3568,7 +3568,7 @@ CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END
 query TB colnames
 SHOW TRIGGERS FROM t;
 ----
-trigger_name  enabled
+trigger_name enabled
 
 statement ok
 CREATE TRIGGER foo BEFORE INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
@@ -3576,8 +3576,8 @@ CREATE TRIGGER foo BEFORE INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
 query TB colnames
 SHOW TRIGGERS FROM t;
 ----
-trigger_name  enabled
-foo           true
+trigger_name enabled
+foo      true
 
 statement ok
 CREATE TRIGGER bar AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
@@ -3585,9 +3585,9 @@ CREATE TRIGGER bar AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
 query TB colnames,rowsort
 SHOW TRIGGERS FROM t;
 ----
-trigger_name  enabled
-foo           true
-bar           true
+trigger_name enabled
+foo      true
+bar      true
 
 statement ok
 DROP TRIGGER foo ON t;
@@ -3595,8 +3595,8 @@ DROP TRIGGER foo ON t;
 query TB colnames
 SHOW TRIGGERS FROM t;
 ----
-trigger_name  enabled
-bar           true
+trigger_name enabled
+bar      true
 
 statement ok
 DROP TRIGGER bar ON t;
@@ -3604,7 +3604,7 @@ DROP TRIGGER bar ON t;
 query TB colnames
 SHOW TRIGGERS FROM t;
 ----
-trigger_name  enabled
+trigger_name enabled
 
 subtest show_triggers_privileges
 
@@ -3670,20 +3670,20 @@ CREATE TRIGGER tr3 AFTER INSERT OR UPDATE ON t FOR EACH ROW WHEN ((NEW).a < 5) E
 query TT colnames
 SHOW CREATE TRIGGER tr ON t;
 ----
-trigger_name  create_statement
-tr            CREATE TRIGGER tr AFTER INSERT ON test.public.t FOR EACH ROW EXECUTE FUNCTION test.public.g()
+trigger_name create_statement
+tr      CREATE TRIGGER tr AFTER INSERT ON test.public.t FOR EACH ROW EXECUTE FUNCTION test.public.g()
 
 query TT colnames
 SHOW CREATE TRIGGER tr2 ON t;
 ----
-trigger_name  create_statement
-tr2           CREATE TRIGGER tr2 BEFORE UPDATE ON test.public.t FOR EACH ROW EXECUTE FUNCTION test.public.g()
+trigger_name create_statement
+tr2      CREATE TRIGGER tr2 BEFORE UPDATE ON test.public.t FOR EACH ROW EXECUTE FUNCTION test.public.g()
 
 query TT colnames
 SHOW CREATE TRIGGER tr3 ON t;
 ----
-trigger_name  create_statement
-tr3           CREATE TRIGGER tr3 AFTER INSERT OR UPDATE ON test.public.t FOR EACH ROW WHEN (new).a < 5:::INT8 EXECUTE FUNCTION test.public.g()
+trigger_name create_statement
+tr3      CREATE TRIGGER tr3 AFTER INSERT OR UPDATE ON test.public.t FOR EACH ROW WHEN (new).a < 5:::INT8 EXECUTE FUNCTION test.public.g()
 
 statement ok
 DROP TRIGGER tr ON t;
@@ -3743,18 +3743,18 @@ CREATE TABLE child (k INT PRIMARY KEY, v INT REFERENCES parent(k) ON DELETE CASC
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    INSERT INTO t2 VALUES (100, 200);
-    RETURN COALESCE(NEW, OLD);
-  END
+ BEGIN
+  INSERT INTO t2 VALUES (100, 200);
+  RETURN COALESCE(NEW, OLD);
+ END
 $$;
 
 statement ok
 CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    UPDATE t2 SET b = b + 100 WHERE a = 100;
-    RETURN COALESCE(NEW, OLD);
-  END
+ BEGIN
+  UPDATE t2 SET b = b + 100 WHERE a = 100;
+  RETURN COALESCE(NEW, OLD);
+ END
 $$;
 
 statement ok
@@ -4024,10 +4024,10 @@ DROP FUNCTION h;
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    UPDATE child SET k = k + 1 WHERE True;
-    RETURN OLD;
-  END
+ BEGIN
+  UPDATE child SET k = k + 1 WHERE True;
+  RETURN OLD;
+ END
 $$;
 
 statement ok
@@ -4126,8 +4126,8 @@ create or replace function update_listing_balance()
 returns TRIGGER language PLpgSQL AS
 $$
 BEGIN
-  INSERT INTO listings_balance VALUES (1);
-  RETURN NEW;
+ INSERT INTO listings_balance VALUES (1);
+ RETURN NEW;
 END
 $$;
 
@@ -4167,22 +4167,22 @@ drop table listings_balance cascade;
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE 'NEW: %', NEW;
-    RAISE NOTICE 'OLD: %', OLD;
-    RAISE NOTICE 'TG_NAME: %', TG_NAME;
-    RAISE NOTICE 'TG_WHEN: %', TG_WHEN;
-    RAISE NOTICE 'TG_LEVEL: %', TG_LEVEL;
-    RAISE NOTICE 'TG_OP: %', TG_OP;
-    RAISE NOTICE 'TG_RELID: %', TG_RELID;
-    RAISE NOTICE 'TG_RELNAME: %', TG_RELNAME;
-    RAISE NOTICE 'TG_TABLE_NAME: %', TG_TABLE_NAME;
-    RAISE NOTICE 'TG_TABLE_SCHEMA: %', TG_TABLE_SCHEMA;
-    RAISE NOTICE 'TG_NARGS: %', TG_NARGS;
-    -- TODO(#135311): uncomment this when we support TG_ARGV.
-    --RAISE NOTICE 'TG_ARGV: %s', TG_ARGV;
-    RETURN NEW;
-  END
+ BEGIN
+  RAISE NOTICE 'NEW: %', NEW;
+  RAISE NOTICE 'OLD: %', OLD;
+  RAISE NOTICE 'TG_NAME: %', TG_NAME;
+  RAISE NOTICE 'TG_WHEN: %', TG_WHEN;
+  RAISE NOTICE 'TG_LEVEL: %', TG_LEVEL;
+  RAISE NOTICE 'TG_OP: %', TG_OP;
+  RAISE NOTICE 'TG_RELID: %', TG_RELID;
+  RAISE NOTICE 'TG_RELNAME: %', TG_RELNAME;
+  RAISE NOTICE 'TG_TABLE_NAME: %', TG_TABLE_NAME;
+  RAISE NOTICE 'TG_TABLE_SCHEMA: %', TG_TABLE_SCHEMA;
+  RAISE NOTICE 'TG_NARGS: %', TG_NARGS;
+  -- TODO(#135311): uncomment this when we support TG_ARGV.
+  --RAISE NOTICE 'TG_ARGV: %s', TG_ARGV;
+  RETURN NEW;
+ END
 $$;
 
 statement ok
@@ -4265,23 +4265,23 @@ subtest create_drop_in_batch_statement
 
 statement ok
 CREATE TABLE tab_141810 (
-  id  INT PRIMARY KEY,
-  a   INT,
-  b   INT
+ id INT PRIMARY KEY,
+ a  INT,
+ b  INT
 );
 CREATE OR REPLACE FUNCTION func_141810() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    IF TG_OP = 'INSERT' THEN
-      NEW.a := 1;
-    END IF;
-    NEW.b := 2;
-    RETURN NEW;
-  END;
+ BEGIN
+  IF TG_OP = 'INSERT' THEN
+   NEW.a := 1;
+  END IF;
+  NEW.b := 2;
+  RETURN NEW;
+ END;
 $$;
 CREATE TRIGGER trg_141810
-  BEFORE INSERT OR UPDATE ON tab_141810
-  FOR EACH ROW
-  EXECUTE FUNCTION func_141810();
+ BEFORE INSERT OR UPDATE ON tab_141810
+ FOR EACH ROW
+ EXECUTE FUNCTION func_141810();
 INSERT INTO tab_141810 (id) VALUES (1);
 DROP TRIGGER trg_141810 ON tab_141810;
 INSERT INTO tab_141810 (id) VALUES (2);
@@ -4289,8 +4289,8 @@ INSERT INTO tab_141810 (id) VALUES (2);
 query III
 SELECT id, a, b FROM tab_141810 ORDER BY id
 ----
-1  1     2
-2  NULL  NULL
+1 1   2
+2 NULL NULL
 
 # Test that CREATE and DROP TRIGGER work in a prepared statement.
 
@@ -4317,10 +4317,10 @@ INSERT INTO tab_141810 VALUES (4);
 query III
 SELECT id, a, b FROM tab_141810 ORDER BY id
 ----
-1  1     2
-2  NULL  NULL
-3  1     2
-4  NULL  NULL
+1 1   2
+2 NULL NULL
+3 1   2
+4 NULL NULL
 
 # ==============================================================================
 # Test case sensitivity of column names in triggers
@@ -4357,34 +4357,34 @@ CREATE TABLE t3 ("FOO_BAR" INT);
 # Trigger functions with different quoting/casing styles
 statement ok
 CREATE FUNCTION f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    NEW.foo_bar := 1;
-    RETURN NEW;
-  END;
+ BEGIN
+  NEW.foo_bar := 1;
+  RETURN NEW;
+ END;
 $$;
 
 statement ok
 CREATE FUNCTION f2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    NEW.FOO_BAR := 1;
-    RETURN NEW;
-  END;
+ BEGIN
+  NEW.FOO_BAR := 1;
+  RETURN NEW;
+ END;
 $$;
 
 statement ok
 CREATE FUNCTION f3() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    NEW."foo_bar" := 1;
-    RETURN NEW;
-  END;
+ BEGIN
+  NEW."foo_bar" := 1;
+  RETURN NEW;
+ END;
 $$;
 
 statement ok
 CREATE FUNCTION f4() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    NEW."FOO_BAR" := 1;
-    RETURN NEW;
-  END;
+ BEGIN
+  NEW."FOO_BAR" := 1;
+  RETURN NEW;
+ END;
 $$;
 
 # Attach each function to each table and check success/failure
@@ -4452,11 +4452,11 @@ DROP FUNCTION IF EXISTS g;
 
 statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE 'g()';
-    RAISE NOTICE 'TG_ARGV[1]: %', TG_ARGV[1];
-    RETURN NEW;
-  END
+ BEGIN
+  RAISE NOTICE 'g()';
+  RAISE NOTICE 'TG_ARGV[1]: %', TG_ARGV[1];
+  RETURN NEW;
+ END
 $$;
 
 statement error pgcode 0A000 pq: unimplemented: referencing the TG_ARGV trigger function parameter is not yet supported
@@ -4507,10 +4507,10 @@ INSERT INTO child146889 VALUES (1);
 
 statement ok
 CREATE FUNCTION f146889() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
-  BEGIN
-    RAISE NOTICE '%', (SELECT count(*) FROM parent146889);
-    RETURN NULL;
-  END
+ BEGIN
+  RAISE NOTICE '%', (SELECT count(*) FROM parent146889);
+  RETURN NULL;
+ END
 $$;
 
 statement ok
@@ -4548,7 +4548,7 @@ CREATE FUNCTION f1 ()
 RETURNS VOID
 LANGUAGE SQL
 AS $$
-  SELECT 1
+ SELECT 1
 $$;
 
 statement ok
@@ -4556,16 +4556,16 @@ CREATE TYPE e AS ENUM('a');
 
 statement ok
 CREATE OR REPLACE FUNCTION audit_changes()
-                                RETURNS TRIGGER AS $$
-                                BEGIN
-                                 SELECT f1();
-                                 SELECT *, 'a'::e FROM t1@i1 WHERE j=32;
-                                 SELECT *, 'a'::e FROM t1@i2 WHERE j=32;
-                                 SELECT *, 'a'::e FROM other@i1 WHERE j=32;
-                                 SELECT *, 'a'::e FROM other@i2 WHERE j=32;
-                                 RETURN NULL;
-                                END;
-                                $$ LANGUAGE PLpgSQL;
+                RETURNS TRIGGER AS $$
+                BEGIN
+                 SELECT f1();
+                 SELECT *, 'a'::e FROM t1@i1 WHERE j=32;
+                 SELECT *, 'a'::e FROM t1@i2 WHERE j=32;
+                 SELECT *, 'a'::e FROM other@i1 WHERE j=32;
+                 SELECT *, 'a'::e FROM other@i2 WHERE j=32;
+                 RETURN NULL;
+                END;
+                $$ LANGUAGE PLpgSQL;
 
 statement ok
 CREATE TRIGGER audit_trigger AFTER INSERT OR UPDATE OR DELETE ON t1 FOR EACH ROW EXECUTE FUNCTION audit_changes();
@@ -4712,8 +4712,8 @@ CREATE SCHEMA sc1;
 
 statement ok
 CREATE TABLE sc1.tab1 (
-    col1 INT,
-    PRIMARY KEY (col1)
+  col1 INT,
+  PRIMARY KEY (col1)
 );
 
 # Self-referencing FK
@@ -4727,8 +4727,8 @@ ON DELETE CASCADE;
 statement ok
 CREATE FUNCTION tf1() RETURNS TRIGGER AS $$
 BEGIN
-  SELECT 1 FROM sc1.tab1;
-  RETURN NULL;
+ SELECT 1 FROM sc1.tab1;
+ RETURN NULL;
 END;
 $$ LANGUAGE PLpgSQL;
 
@@ -4775,34 +4775,34 @@ subtest trigger_introspection
 # Create test tables and trigger functions.
 statement ok
 CREATE TABLE test_triggers (
-    id INT PRIMARY KEY,
-    name TEXT,
-    value INT
+  id INT PRIMARY KEY,
+  name TEXT,
+  value INT
 );
 
 statement ok
 CREATE TABLE audit_log (
-    id SERIAL PRIMARY KEY,
-    table_name TEXT,
-    operation TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id SERIAL PRIMARY KEY,
+  table_name TEXT,
+  operation TEXT,
+  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 statement ok
 CREATE FUNCTION trigger_func1() RETURNS TRIGGER AS $$
-  BEGIN
-    INSERT INTO audit_log (table_name, operation)
-    VALUES (TG_TABLE_NAME, TG_OP);
-    RETURN NEW;
-  END;
+ BEGIN
+  INSERT INTO audit_log (table_name, operation)
+  VALUES (TG_TABLE_NAME, TG_OP);
+  RETURN NEW;
+ END;
 $$ LANGUAGE PLpgSQL;
 
 statement ok
 CREATE FUNCTION trigger_func2() RETURNS TRIGGER AS $$
-  BEGIN
-    RAISE NOTICE 'Trigger fired';
-    RETURN NEW;
-  END;
+ BEGIN
+  RAISE NOTICE 'Trigger fired';
+  RETURN NEW;
+ END;
 $$ LANGUAGE PLpgSQL;
 
 statement ok
@@ -4826,45 +4826,45 @@ EXECUTE FUNCTION trigger_func1();
 
 query TTTTTTITTTTT colnames
 SELECT 
-    trigger_catalog,
-    trigger_schema,
-    trigger_name,
-    event_manipulation,
-    event_object_schema,
-    event_object_table,
-    action_order,
-    action_orientation,
-    action_timing,
-    action_reference_old_table,
-    action_reference_new_table,
-    created
+  trigger_catalog,
+  trigger_schema,
+  trigger_name,
+  event_manipulation,
+  event_object_schema,
+  event_object_table,
+  action_order,
+  action_orientation,
+  action_timing,
+  action_reference_old_table,
+  action_reference_new_table,
+  created
 FROM information_schema.triggers
 WHERE event_object_table = 'test_triggers'
 ORDER BY trigger_name;
 ----
-trigger_catalog  trigger_schema  trigger_name       event_manipulation  event_object_schema  event_object_table  action_order  action_orientation  action_timing  action_reference_old_table  action_reference_new_table  created
-test             public          after_delete_row   DELETE              public               test_triggers       NULL          ROW                 AFTER          NULL                        NULL                        NULL
-test             public          after_insert_row   INSERT              public               test_triggers       NULL          ROW                 AFTER          NULL                        NULL                        NULL
-test             public          before_update_row  UPDATE              public               test_triggers       NULL          ROW                 BEFORE         NULL                        NULL                        NULL
+trigger_catalog trigger_schema trigger_name    event_manipulation event_object_schema event_object_table action_order action_orientation action_timing action_reference_old_table action_reference_new_table created
+test       public     after_delete_row  DELETE       public        test_triggers    NULL     ROW         AFTER     NULL            NULL            NULL
+test       public     after_insert_row  INSERT       public        test_triggers    NULL     ROW         AFTER     NULL            NULL            NULL
+test       public     before_update_row UPDATE       public        test_triggers    NULL     ROW         BEFORE     NULL            NULL            NULL
 
 # Test trigger with WHEN condition.
 query TTT colnames
 SELECT 
-    trigger_name,
-    action_condition,
-    action_statement
+  trigger_name,
+  action_condition,
+  action_statement
 FROM information_schema.triggers
 WHERE trigger_name = 'before_update_row';
 ----
-trigger_name       action_condition     action_statement
-before_update_row  ((new).value > 100)  EXECUTE FUNCTION trigger_func2()
+trigger_name    action_condition   action_statement
+before_update_row ((new).value > 100) EXECUTE FUNCTION trigger_func2()
 
 # Create trigger with transition tables.
 statement ok
 CREATE FUNCTION trigger_func3() RETURNS TRIGGER AS $$
-  BEGIN
-    RETURN NULL;
-  END;
+ BEGIN
+  RETURN NULL;
+ END;
 $$ LANGUAGE PLpgSQL;
 
 # TODO(#126362, #135655): Enable tests for statement-level triggers when supported.
@@ -4877,30 +4877,30 @@ EXECUTE FUNCTION trigger_func3();
 
 # TODO(#126362, #135655): Enable tests for statement-level triggers when supported.
 # The expected results are:
-# trigger_name             action_orientation  action_reference_old_table  action_reference_new_table  action_reference_old_row
-# after_update_transition  STATEMENT           old_data                    new_data                    NULL
+# trigger_name       action_orientation action_reference_old_table action_reference_new_table action_reference_old_row
+# after_update_transition STATEMENT      old_data          new_data          NULL
 query TTTTT colnames
 SELECT
-    trigger_name,
-    action_orientation,
-    action_reference_old_table,
-    action_reference_new_table,
-    action_reference_old_row
+  trigger_name,
+  action_orientation,
+  action_reference_old_table,
+  action_reference_new_table,
+  action_reference_old_row
 FROM information_schema.triggers
 WHERE trigger_name = 'after_update_transition';
 ----
-trigger_name  action_orientation  action_reference_old_table  action_reference_new_table  action_reference_old_row
+trigger_name action_orientation action_reference_old_table action_reference_new_table action_reference_old_row
 
 # TODO(#126362, #135655): Populate tgoldtable and tgnewtable.
 # The expected results are:
-# tgname                   tgoldtable  tgnewtable
-# after_update_transition  old_data    new_data
+# tgname          tgoldtable tgnewtable
+# after_update_transition old_data  new_data
 query TTT colnames
 SELECT tgname, tgoldtable, tgnewtable
 FROM pg_catalog.pg_trigger
 WHERE tgname = 'after_update_transition';
 ----
-tgname  tgoldtable  tgnewtable
+tgname tgoldtable tgnewtable
 
 # Test multiple event types (create a trigger for multiple events).
 statement ok
@@ -4912,17 +4912,17 @@ EXECUTE FUNCTION trigger_func1();
 # Each event should appear as a separate row.
 query TTT colnames
 SELECT 
-    trigger_name,
-    event_manipulation,
-    action_timing
+  trigger_name,
+  event_manipulation,
+  action_timing
 FROM information_schema.triggers
 WHERE trigger_name = 'multi_event_trigger'
 ORDER BY event_manipulation;
 ----
-trigger_name         event_manipulation  action_timing
-multi_event_trigger  DELETE              BEFORE
-multi_event_trigger  INSERT              BEFORE
-multi_event_trigger  UPDATE              BEFORE
+trigger_name     event_manipulation action_timing
+multi_event_trigger DELETE       BEFORE
+multi_event_trigger INSERT       BEFORE
+multi_event_trigger UPDATE       BEFORE
 
 # Create a schema and add a trigger there.
 statement ok
@@ -4939,16 +4939,16 @@ EXECUTE FUNCTION trigger_func1();
 
 query TI colnames
 SELECT 
-    trigger_schema,
-    count(*) AS trigger_count
+  trigger_schema,
+  count(*) AS trigger_count
 FROM information_schema.triggers
 WHERE trigger_catalog = 'test'
 GROUP BY trigger_schema
 ORDER BY trigger_schema;
 ----
-trigger_schema  trigger_count
-other_schema    1
-public          7
+trigger_schema trigger_count
+other_schema  1
+public     7
 
 # Create a trigger with arguments to test tgnargs and tgargs.
 statement ok
@@ -4960,23 +4960,23 @@ EXECUTE FUNCTION trigger_func1('arg1', 'arg2', 'test value with spaces');
 # Test pg_catalog.pg_trigger.
 query TIBITTT colnames
 SELECT 
-    tgname,
-    tgtype,
-    tgfoid > 0 AS has_func_oid,
-    tgnargs,
-    tgenabled,
-    tgoldtable,
-    tgnewtable
+  tgname,
+  tgtype,
+  tgfoid > 0 AS has_func_oid,
+  tgnargs,
+  tgenabled,
+  tgoldtable,
+  tgnewtable
 FROM pg_catalog.pg_trigger
 WHERE tgrelid = 'test_triggers'::regclass
 ORDER BY tgname;
 ----
-tgname              tgtype  has_func_oid  tgnargs  tgenabled  tgoldtable  tgnewtable
-after_delete_row    9       true          0        A          NULL        NULL
-after_insert_row    5       true          0        A          NULL        NULL
-before_update_row   19      true          0        A          NULL        NULL
-multi_event_trigger 31      true          0        A          NULL        NULL
-trigger_with_args   5       true          3        A          NULL        NULL
+tgname       tgtype has_func_oid tgnargs tgenabled tgoldtable tgnewtable
+after_delete_row  9    true     0    A     NULL    NULL
+after_insert_row  5    true     0    A     NULL    NULL
+before_update_row  19   true     0    A     NULL    NULL
+multi_event_trigger 31   true     0    A     NULL    NULL
+trigger_with_args  5    true     3    A     NULL    NULL
 
 # Test INSTEAD OF triggers (not yet implemented)
 statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
@@ -5007,67 +5007,67 @@ FOR EACH STATEMENT EXECUTE FUNCTION trigger_func1();
 # TODO(#126363, #135657): Add tests for INSTEAD OF and TRUNCATE triggers here when supported.
 query TBBBBBBB colnames
 SELECT 
-    tgname,
-    (tgtype::INT & 1) > 0 AS is_row_level,
-    (tgtype::INT & 2) > 0 AS is_before,
-    (tgtype::INT & 4) > 0 AS has_insert,
-    (tgtype::INT & 8) > 0 AS has_delete,
-    (tgtype::INT & 16) > 0 AS has_update,
-    (tgtype::INT & 32) > 0 AS has_instead,
-    (tgtype::INT & 64) > 0 AS has_truncate
+  tgname,
+  (tgtype::INT & 1) > 0 AS is_row_level,
+  (tgtype::INT & 2) > 0 AS is_before,
+  (tgtype::INT & 4) > 0 AS has_insert,
+  (tgtype::INT & 8) > 0 AS has_delete,
+  (tgtype::INT & 16) > 0 AS has_update,
+  (tgtype::INT & 32) > 0 AS has_instead,
+  (tgtype::INT & 64) > 0 AS has_truncate
 FROM pg_catalog.pg_trigger
 WHERE tgrelid = 'test_triggers'::regclass
 ORDER BY tgname;
 ----
-tgname               is_row_level  is_before  has_insert  has_delete  has_update  has_instead  has_truncate
-after_delete_row     true          false      false       true        false       false        false
-after_insert_row     true          false      true        false       false       false        false
-before_update_row    true          true       false       false       true        false        false
-multi_event_trigger  true          true       true        true        true        false        false
-trigger_with_args    true          false      true        false       false       false        false
+tgname        is_row_level is_before has_insert has_delete has_update has_instead has_truncate
+after_delete_row   true     false   false    true    false    false    false
+after_insert_row   true     false   true    false    false    false    false
+before_update_row  true     true    false    false    true    false    false
+multi_event_trigger true     true    true    true    true    false    false
+trigger_with_args  true     false   true    false    false    false    false
 
 # Check trigger arguments and column attributes.
 # TODO(#135656): Populate the tgattr column.
 query TITT colnames
 SELECT 
-    tgname,
-    tgnargs,
-    encode(tgargs, 'escape') AS tgargs,
-    tgattr
+  tgname,
+  tgnargs,
+  encode(tgargs, 'escape') AS tgargs,
+  tgattr
 FROM pg_catalog.pg_trigger
 WHERE tgrelid = 'test_triggers'::regclass
 ORDER BY tgname;
 ----
-tgname               tgnargs  tgargs                                      tgattr
-after_delete_row     0        ·                                           ·
-after_insert_row     0        ·                                           ·
-before_update_row    0        ·                                           ·
-multi_event_trigger  0        ·                                           ·
-trigger_with_args    3        arg1\000arg2\000test value with spaces\000  ·
+tgname        tgnargs tgargs                   tgattr
+after_delete_row   0    ·                      ·
+after_insert_row   0    ·                      ·
+before_update_row  0    ·                      ·
+multi_event_trigger 0    ·                      ·
+trigger_with_args  3    arg1\000arg2\000test value with spaces\000 ·
 
 # Test trigger with WHEN condition.
 query TTT colnames
 SELECT 
-    tgname,
-    tgqual,
-    tgattr
+  tgname,
+  tgqual,
+  tgattr
 FROM pg_catalog.pg_trigger
 WHERE tgrelid = 'test_triggers'::regclass AND tgqual IS NOT NULL;
 ----
-tgname             tgqual               tgattr
-before_update_row  ((new).value > 100)  ·
+tgname       tgqual        tgattr
+before_update_row ((new).value > 100) ·
 
 # Test cross-schema trigger.
 query TTT colnames
 SELECT 
-    tgname,
-    tgrelid::regclass::text AS table_name,
-    tgfoid::regproc::text AS trigger_func_name
+  tgname,
+  tgrelid::regclass::text AS table_name,
+  tgfoid::regproc::text AS trigger_func_name
 FROM pg_catalog.pg_trigger
 WHERE tgrelid = 'other_schema.test_table'::regclass;
 ----
-tgname                table_name  trigger_func_name
-other_schema_trigger  test_table  trigger_func1
+tgname        table_name trigger_func_name
+other_schema_trigger test_table trigger_func1
 
 # Clean up
 statement ok
@@ -5102,8 +5102,8 @@ CREATE TABLE sc_tr_tbl ();
 statement ok
 CREATE FUNCTION sc_tr_backref_f1() RETURNS TRIGGER AS $$
 BEGIN
-  SELECT nextval('sc_tr_backref');
-  RETURN NULL;
+ SELECT nextval('sc_tr_backref');
+ RETURN NULL;
 END;
 $$ LANGUAGE PLpgSQL;
 
@@ -5114,7 +5114,7 @@ FOR EACH ROW EXECUTE FUNCTION sc_tr_backref_f1();
 
 statement ok
 ALTER TABLE sc_tr_tbl
-  ADD CONSTRAINT ck1 CHECK (nextval('sc_tr_backref') < 1000);
+ ADD CONSTRAINT ck1 CHECK (nextval('sc_tr_backref') < 1000);
 
 statement ok
 ALTER TABLE sc_tr_tbl DROP CONSTRAINT ck1;

@@ -5,91 +5,91 @@
 
 statement ok
 CREATE TABLE with_no_column_refs (
-  a INT,
-  b INT,
-  c INT AS (3) STORED,
-  FAMILY "primary" (a, b, c, rowid)
+ a INT,
+ b INT,
+ c INT AS (3) STORED,
+ FAMILY "primary" (a, b, c, rowid)
 )
 
 onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE with_no_column_refs
 ----
-with_no_column_refs  CREATE TABLE public.with_no_column_refs (
-                       a INT8 NULL,
-                       b INT8 NULL,
-                       c INT8 NULL AS (3:::INT8) STORED,
-                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                       CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
-                     );
+with_no_column_refs CREATE TABLE public.with_no_column_refs (
+            a INT8 NULL,
+            b INT8 NULL,
+            c INT8 NULL AS (3:::INT8) STORED,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
+           );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE with_no_column_refs
 ----
-with_no_column_refs  CREATE TABLE public.with_no_column_refs (
-                       a INT8 NULL,
-                       b INT8 NULL,
-                       c INT8 NULL AS (3:::INT8) STORED,
-                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                       CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
-                     ) WITH (schema_locked = true);
+with_no_column_refs CREATE TABLE public.with_no_column_refs (
+            a INT8 NULL,
+            b INT8 NULL,
+            c INT8 NULL AS (3:::INT8) STORED,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
+           ) WITH (schema_locked = true);
 
 onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE with_no_column_refs WITH REDACT
 ----
-with_no_column_refs  CREATE TABLE public.with_no_column_refs (
-                       a INT8 NULL,
-                       b INT8 NULL,
-                       c INT8 NULL AS (‹×›:::INT8) STORED,
-                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                       CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
-                     );
+with_no_column_refs CREATE TABLE public.with_no_column_refs (
+            a INT8 NULL,
+            b INT8 NULL,
+            c INT8 NULL AS (‹×›:::INT8) STORED,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
+           );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE with_no_column_refs WITH REDACT
 ----
-with_no_column_refs  CREATE TABLE public.with_no_column_refs (
-                       a INT8 NULL,
-                       b INT8 NULL,
-                       c INT8 NULL AS (‹×›:::INT8) STORED,
-                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                       CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
-                     ) WITH (schema_locked = true);
+with_no_column_refs CREATE TABLE public.with_no_column_refs (
+            a INT8 NULL,
+            b INT8 NULL,
+            c INT8 NULL AS (‹×›:::INT8) STORED,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
+           ) WITH (schema_locked = true);
 
 statement ok
 CREATE TABLE extra_parens (
-  a INT,
-  b INT,
-  c INT AS ((3)) STORED,
-  FAMILY "primary" (a, b, c, rowid)
+ a INT,
+ b INT,
+ c INT AS ((3)) STORED,
+ FAMILY "primary" (a, b, c, rowid)
 )
 
 onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE extra_parens
 ----
-extra_parens  CREATE TABLE public.extra_parens (
-                a INT8 NULL,
-                b INT8 NULL,
-                c INT8 NULL AS (3:::INT8) STORED,
-                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                CONSTRAINT extra_parens_pkey PRIMARY KEY (rowid ASC)
-              );
+extra_parens CREATE TABLE public.extra_parens (
+        a INT8 NULL,
+        b INT8 NULL,
+        c INT8 NULL AS (3:::INT8) STORED,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT extra_parens_pkey PRIMARY KEY (rowid ASC)
+       );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE extra_parens
 ----
-extra_parens  CREATE TABLE public.extra_parens (
-                a INT8 NULL,
-                b INT8 NULL,
-                c INT8 NULL AS (3:::INT8) STORED,
-                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                CONSTRAINT extra_parens_pkey PRIMARY KEY (rowid ASC)
-              ) WITH (schema_locked = true);
+extra_parens CREATE TABLE public.extra_parens (
+        a INT8 NULL,
+        b INT8 NULL,
+        c INT8 NULL AS (3:::INT8) STORED,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT extra_parens_pkey PRIMARY KEY (rowid ASC)
+       ) WITH (schema_locked = true);
 
 statement error cannot write directly to computed column "c"
 INSERT INTO with_no_column_refs VALUES (1, 2, 3)
@@ -126,48 +126,48 @@ SELECT c FROM with_no_column_refs
 
 statement ok
 CREATE TABLE x (
-  a INT DEFAULT 3,
-  b INT DEFAULT 7,
-  c INT AS (a) STORED,
-  d INT AS (a + b) STORED,
-  FAMILY "primary" (a, b, c, d, rowid)
+ a INT DEFAULT 3,
+ b INT DEFAULT 7,
+ c INT AS (a) STORED,
+ d INT AS (a + b) STORED,
+ FAMILY "primary" (a, b, c, d, rowid)
 )
 
 onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
-x  CREATE TABLE public.x (
-     a INT8 NULL DEFAULT 3:::INT8,
-     b INT8 NULL DEFAULT 7:::INT8,
-     c INT8 NULL AS (a) STORED,
-     d INT8 NULL AS (a + b) STORED,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
-   );
+x CREATE TABLE public.x (
+   a INT8 NULL DEFAULT 3:::INT8,
+   b INT8 NULL DEFAULT 7:::INT8,
+   c INT8 NULL AS (a) STORED,
+   d INT8 NULL AS (a + b) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
+  );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
-x  CREATE TABLE public.x (
-     a INT8 NULL DEFAULT 3:::INT8,
-     b INT8 NULL DEFAULT 7:::INT8,
-     c INT8 NULL AS (a) STORED,
-     d INT8 NULL AS (a + b) STORED,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
-   ) WITH (schema_locked = true);
+x CREATE TABLE public.x (
+   a INT8 NULL DEFAULT 3:::INT8,
+   b INT8 NULL DEFAULT 7:::INT8,
+   c INT8 NULL AS (a) STORED,
+   d INT8 NULL AS (a + b) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
+  ) WITH (schema_locked = true);
 
 query TTBTTTB colnames
-SELECT * FROM  [SHOW COLUMNS FROM x] ORDER BY column_name
+SELECT * FROM [SHOW COLUMNS FROM x] ORDER BY column_name
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
-a            INT8       true         3               ·                      {x_pkey}  false
-b            INT8       true         7               ·                      {x_pkey}  false
-c            INT8       true         NULL            a                      {x_pkey}  false
-d            INT8       true         NULL            a + b                  {x_pkey}  false
-rowid        INT8       false        unique_rowid()  ·                      {x_pkey}  true
+column_name data_type is_nullable column_default generation_expression indices  is_hidden
+a      INT8    true     3        ·           {x_pkey} false
+b      INT8    true     7        ·           {x_pkey} false
+c      INT8    true     NULL      a           {x_pkey} false
+d      INT8    true     NULL      a + b         {x_pkey} false
+rowid    INT8    false    unique_rowid() ·           {x_pkey} true
 
 statement error cannot write directly to computed column "c"
 INSERT INTO x (c) VALUES (1)
@@ -191,10 +191,10 @@ DROP TABLE x
 
 statement ok
 CREATE TABLE x (
-  a INT NOT NULL,
-  b INT,
-  c INT AS (a) STORED,
-  d INT AS (a + b) STORED
+ a INT NOT NULL,
+ b INT,
+ c INT AS (a) STORED,
+ d INT AS (a + b) STORED
 )
 
 statement ok
@@ -206,7 +206,7 @@ INSERT INTO x (b) VALUES (1)
 query II
 SELECT c, d FROM x
 ----
-1  NULL
+1 NULL
 
 statement ok
 DROP TABLE x
@@ -214,10 +214,10 @@ DROP TABLE x
 # Check with upserts
 statement ok
 CREATE TABLE x (
-  a INT PRIMARY KEY,
-  b INT,
-  c INT AS (b + 1) STORED,
-  d INT AS (b - 1) STORED
+ a INT PRIMARY KEY,
+ b INT,
+ c INT AS (b + 1) STORED,
+ d INT AS (b - 1) STORED
 )
 
 statement ok
@@ -325,8 +325,8 @@ DROP TABLE x
 # TODO(justin): #22434
 # statement ok
 # CREATE TABLE x (
-#   b INT AS a STORED,
-#   a INT
+#  b INT AS a STORED,
+#  a INT
 # )
 #
 # statement ok
@@ -346,12 +346,12 @@ DROP TABLE x
 
 statement error use AS \( <expr> \) STORED or AS \( <expr> \) VIRTUAL
 CREATE TABLE y (
-  a INT AS 3 STORED
+ a INT AS 3 STORED
 )
 
 statement error use AS \( <expr> \) STORED or AS \( <expr> \) VIRTUAL
 CREATE TABLE y (
-  a INT AS (3)
+ a INT AS (3)
 )
 
 statement ok
@@ -362,20 +362,20 @@ DROP TABLE tmp
 
 statement error expected STORED COMPUTED COLUMN expression to have type int, but ''not an integer!'::STRING' has type string
 CREATE TABLE y (
-  a INT AS ('not an integer!'::STRING) STORED
+ a INT AS ('not an integer!'::STRING) STORED
 )
 
 # We utilize the types from other columns.
 
 statement error expected STORED COMPUTED COLUMN expression to have type int, but 'a' has type string
 CREATE TABLE y (
-  a STRING,
-  b INT AS (a) STORED
+ a STRING,
+ b INT AS (a) STORED
 )
 
 statement ok
 CREATE TABLE x (
-  a INT
+ a INT
 )
 
 statement error expected STORED COMPUTED COLUMN expression to have type string, but .* has type int
@@ -386,67 +386,67 @@ DROP TABLE x
 
 statement error now\(\): context-dependent operators are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE y (
-  a TIMESTAMP AS (now()) STORED
+ a TIMESTAMP AS (now()) STORED
 )
 
 statement error string::timestamptz: context-dependent operators are not allowed in STORED COMPUTED COLUM
 CREATE TABLE y (
-  a STRING,
-  b TIMESTAMPTZ AS (a::TIMESTAMPTZ) STORED
+ a STRING,
+ b TIMESTAMPTZ AS (a::TIMESTAMPTZ) STORED
 )
 
 # Make sure the error has a hint that mentions parse_timestamp().
 statement error string::timestamp: context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT:.*use parse_timestamp
 CREATE TABLE y (
-  a STRING,
-  b TIMESTAMP AS (a::TIMESTAMP) STORED
+ a STRING,
+ b TIMESTAMP AS (a::TIMESTAMP) STORED
 )
 
 # Make sure the error has a hint that mentions AT TIME ZONE.
 statement error timestamptz::string: context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT:.*AT TIME ZONE
 CREATE TABLE y (
-  a TIMESTAMPTZ,
-  b STRING AS (a::STRING) STORED
+ a TIMESTAMPTZ,
+ b STRING AS (a::STRING) STORED
 )
 
 # Make sure the error has a hint that mentions AT TIME ZONE.
 statement error timestamptz::timestamp: context-dependent operators are not allowed in STORED COMPUTED COLUMN\nHINT: TIMESTAMPTZ to TIMESTAMP
 CREATE TABLE y (
-  a TIMESTAMPTZ,
-  b TIMESTAMP AS (a::TIMESTAMP) STORED
+ a TIMESTAMPTZ,
+ b TIMESTAMP AS (a::TIMESTAMP) STORED
 )
 
 statement error \+: context-dependent operators are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE y (
-  a TIMESTAMPTZ,
-  b INTERVAL,
-  c TIMESTAMPTZ AS (a+ b) STORED
+ a TIMESTAMPTZ,
+ b INTERVAL,
+ c TIMESTAMPTZ AS (a+ b) STORED
 )
 
 statement error pq: concat\(\): error type checking resolved expression:: uuid_v4\(\): volatile functions are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE y (
-  a STRING AS (concat('foo', uuid_v4()::STRING)) STORED
+ a STRING AS (concat('foo', uuid_v4()::STRING)) STORED
 )
 
 statement error STORED COMPUTED COLUMN expression cannot reference computed columns
 CREATE TABLE y (
-  a INT AS (3) STORED,
-  b INT AS (a) STORED
+ a INT AS (3) STORED,
+ b INT AS (a) STORED
 )
 
 statement error column "a" does not exist
 CREATE TABLE y (
-  b INT AS (a) STORED
+ b INT AS (a) STORED
 )
 
 statement error count\(\): aggregate functions are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE y (
-  b INT AS (count(1)) STORED
+ b INT AS (count(1)) STORED
 )
 
 statement error STORED COMPUTED COLUMN cannot have default values
 CREATE TABLE y (
-  a INT AS (3) STORED DEFAULT 4
+ a INT AS (3) STORED DEFAULT 4
 )
 
 statement ok
@@ -454,7 +454,7 @@ CREATE TABLE x (a INT PRIMARY KEY)
 
 statement ok
 CREATE TABLE y (
-  r INT AS (1) STORED REFERENCES x (a)
+ r INT AS (1) STORED REFERENCES x (a)
 );
 
 statement ok
@@ -462,7 +462,7 @@ DROP TABLE y;
 
 statement ok
 CREATE TABLE y (
-  r INT AS (1) STORED REFERENCES x
+ r INT AS (1) STORED REFERENCES x
 );
 
 statement ok
@@ -470,8 +470,8 @@ DROP TABLE y;
 
 statement ok
 CREATE TABLE y (
-  a INT,
-  r INT AS (1) STORED REFERENCES x
+ a INT,
+ r INT AS (1) STORED REFERENCES x
 );
 
 statement ok
@@ -485,26 +485,26 @@ CREATE TABLE p (p INT PRIMARY KEY)
 
 statement ok
 CREATE TABLE c_update (
-  p_cascade INT REFERENCES p (p) ON UPDATE CASCADE,
-  p_default INT DEFAULT 0 REFERENCES p (p) ON UPDATE SET DEFAULT,
-  p_null INT REFERENCES p (p) ON UPDATE SET NULL,
-  c_cascade INT AS (p_cascade + 100) STORED,
-  c_default INT AS (p_default) STORED,
-  c_null INT AS (p_null + 100) STORED
+ p_cascade INT REFERENCES p (p) ON UPDATE CASCADE,
+ p_default INT DEFAULT 0 REFERENCES p (p) ON UPDATE SET DEFAULT,
+ p_null INT REFERENCES p (p) ON UPDATE SET NULL,
+ c_cascade INT AS (p_cascade + 100) STORED,
+ c_default INT AS (p_default) STORED,
+ c_null INT AS (p_null + 100) STORED
 )
 
 statement ok
 CREATE TABLE c_delete_cascade (
-  p_cascade INT REFERENCES p (p) ON DELETE CASCADE,
-  c_cascade INT AS (p_cascade + 100) STORED
+ p_cascade INT REFERENCES p (p) ON DELETE CASCADE,
+ c_cascade INT AS (p_cascade + 100) STORED
 )
 
 statement ok
 CREATE TABLE c_delete_set (
-  p_default INT DEFAULT 0 REFERENCES p (p) ON DELETE SET DEFAULT,
-  p_null INT REFERENCES p (p) ON DELETE SET NULL,
-  c_default INT AS (p_default) STORED,
-  c_null INT AS (p_null + 100) STORED
+ p_default INT DEFAULT 0 REFERENCES p (p) ON DELETE SET DEFAULT,
+ p_null INT REFERENCES p (p) ON DELETE SET NULL,
+ c_default INT AS (p_default) STORED,
+ c_null INT AS (p_null + 100) STORED
 )
 
 statement ok
@@ -519,9 +519,9 @@ UPDATE p SET p = 10 WHERE p = 1
 query IIIIII colnames,rowsort
 SELECT * FROM c_update
 ----
-p_cascade  p_default  p_null  c_cascade  c_default  c_null
-2          2          2       102        2          102
-10         0          NULL    110        0          NULL
+p_cascade p_default p_null c_cascade c_default c_null
+2     2     2    102    2     102
+10     0     NULL  110    0     NULL
 
 statement ok
 INSERT INTO c_delete_cascade VALUES (2), (3);
@@ -533,15 +533,15 @@ DELETE FROM p WHERE p = 3
 query II colnames,rowsort
 SELECT * FROM c_delete_cascade
 ----
-p_cascade  c_cascade
-2          102
+p_cascade c_cascade
+2     102
 
 query IIII colnames,rowsort
 SELECT * FROM c_delete_set
 ----
-p_default  p_null  c_default  c_null
-0          NULL    0          NULL
-2          2       2          102
+p_default p_null c_default c_null
+0     NULL  0     NULL
+2     2    2     102
 
 # Regression test for #36036.
 statement ok
@@ -557,9 +557,9 @@ ALTER TABLE tt ADD COLUMN c INT8 AS (i) STORED
 
 statement ok
 CREATE TABLE xx (
-  a INT,
-  b INT,
-  UNIQUE (a, b)
+ a INT,
+ b INT,
+ UNIQUE (a, b)
 );
 
 statement ok
@@ -567,9 +567,9 @@ INSERT INTO xx VALUES (3,3);
 
 statement ok
 CREATE TABLE yy (
-  x INT,
-  y INT AS (3) STORED,
-  FOREIGN KEY (x, y) REFERENCES xx (a, b)
+ x INT,
+ y INT AS (3) STORED,
+ FOREIGN KEY (x, y) REFERENCES xx (a, b)
 );
 
 statement ok
@@ -610,9 +610,9 @@ DROP TABLE xx;
 
 statement ok
 CREATE TABLE aa (
-  a INT,
-  b INT,
-  UNIQUE (a, b)
+ a INT,
+ b INT,
+ UNIQUE (a, b)
 );
 
 statement ok
@@ -620,9 +620,9 @@ INSERT INTO aa VALUES (3,3);
 
 statement ok
 CREATE TABLE bb (
-  x INT,
-  y INT AS (3) STORED,
-  FOREIGN KEY (y, x) REFERENCES aa (a, b)
+ x INT,
+ y INT AS (3) STORED,
+ FOREIGN KEY (y, x) REFERENCES aa (a, b)
 );
 
 statement ok
@@ -639,8 +639,8 @@ DROP TABLE aa;
 
 statement ok
 CREATE TABLE y (
-  r INT AS (1) STORED,
-  INDEX (r)
+ r INT AS (1) STORED,
+ INDEX (r)
 );
 
 statement ok
@@ -651,24 +651,24 @@ DROP TABLE y;
 
 statement error variable sub-expressions are not allowed in STORED COMPUTED COLUMN
 CREATE TABLE y (
-  r INT AS ((SELECT 1)) STORED
+ r INT AS ((SELECT 1)) STORED
 )
 
 statement error no data source matches prefix: x
 CREATE TABLE y (
-  r INT AS (x.a) STORED
+ r INT AS (x.a) STORED
 )
 
 statement error no data source matches prefix: x
 CREATE TABLE y (
-  q INT,
-  r INT AS (x.q) STORED
+ q INT,
+ r INT AS (x.q) STORED
 )
 
 statement ok
 CREATE TABLE y (
-  q INT,
-  r INT AS (y.q) STORED
+ q INT,
+ r INT AS (y.q) STORED
 )
 
 statement ok
@@ -677,8 +677,8 @@ DROP TABLE y
 # It's ok if they exist and we don't reference them.
 statement ok
 CREATE TABLE y (
-  q INT REFERENCES x (a) ON UPDATE CASCADE,
-  r INT AS (3) STORED
+ q INT REFERENCES x (a) ON UPDATE CASCADE,
+ r INT AS (3) STORED
 )
 
 statement ok
@@ -690,10 +690,10 @@ DROP TABLE x
 # Indexes on computed columns
 statement ok
 CREATE TABLE x (
-  k INT PRIMARY KEY,
-  a JSON,
-  b TEXT AS (a->>'q') STORED,
-  INDEX (b)
+ k INT PRIMARY KEY,
+ a JSON,
+ b TEXT AS (a->>'q') STORED,
+ INDEX (b)
 )
 
 statement error cannot write directly to computed column
@@ -716,8 +716,8 @@ DROP TABLE x
 
 statement ok
 CREATE TABLE x (
-  k INT AS ((data->>'id')::INT) STORED PRIMARY KEY,
-  data JSON
+ k INT AS ((data->>'id')::INT) STORED PRIMARY KEY,
+ data JSON
 )
 
 statement ok
@@ -754,7 +754,7 @@ ernie
 # Referencing a computed column.
 statement ok
 create table y (
-  a INT REFERENCES x (k)
+ a INT REFERENCES x (k)
 )
 
 statement ok
@@ -768,10 +768,10 @@ DROP TABLE x CASCADE
 
 statement ok
 CREATE TABLE x (
-  a INT,
-  b INT,
-  c INT,
-  d INT[] AS (ARRAY[a, b, c]) STORED
+ a INT,
+ b INT,
+ c INT,
+ d INT[] AS (ARRAY[a, b, c]) STORED
 )
 
 statement ok
@@ -856,32 +856,32 @@ DROP TABLE x
 
 statement ok
 CREATE TABLE x (
-  a INT,
-  b INT as (x.a) STORED,
-  FAMILY "primary" (a, b, rowid)
+ a INT,
+ b INT as (x.a) STORED,
+ FAMILY "primary" (a, b, rowid)
 )
 
 onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
-x  CREATE TABLE public.x (
-     a INT8 NULL,
-     b INT8 NULL AS (a) STORED,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
-   );
+x CREATE TABLE public.x (
+   a INT8 NULL,
+   b INT8 NULL AS (a) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
+  );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
-x  CREATE TABLE public.x (
-     a INT8 NULL,
-     b INT8 NULL AS (a) STORED,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
-   ) WITH (schema_locked = true);
+x CREATE TABLE public.x (
+   a INT8 NULL,
+   b INT8 NULL AS (a) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
+  ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE x
@@ -889,9 +889,9 @@ DROP TABLE x
 # Check that computed columns are resilient to column renames.
 statement ok
 CREATE TABLE x (
-  a INT,
-  b INT AS (a) STORED,
-  FAMILY "primary" (a, b, rowid)
+ a INT,
+ b INT AS (a) STORED,
+ FAMILY "primary" (a, b, rowid)
 )
 
 statement ok
@@ -901,32 +901,32 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
-x  CREATE TABLE public.x (
-     c INT8 NULL,
-     b INT8 NULL AS (c) STORED,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
-   );
+x CREATE TABLE public.x (
+   c INT8 NULL,
+   b INT8 NULL AS (c) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
+  );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
-x  CREATE TABLE public.x (
-     c INT8 NULL,
-     b INT8 NULL AS (c) STORED,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
-   ) WITH (schema_locked = true);
+x CREATE TABLE public.x (
+   c INT8 NULL,
+   b INT8 NULL AS (c) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
+  ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE x
 
 statement ok
 CREATE TABLE x (
-  a INT,
-  b INT AS (a * 2) STORED,
-  FAMILY "primary" (a, b, rowid)
+ a INT,
+ b INT AS (a * 2) STORED,
+ FAMILY "primary" (a, b, rowid)
 )
 
 query T colnames
@@ -953,49 +953,49 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
-x  CREATE TABLE public.x (
-     a INT8 NULL,
-     b INT8 NULL AS (a * 2:::INT8) STORED,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     c INT8 NOT NULL AS (a + 4:::INT8) STORED,
-     CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
-   );
+x CREATE TABLE public.x (
+   a INT8 NULL,
+   b INT8 NULL AS (a * 2:::INT8) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   c INT8 NOT NULL AS (a + 4:::INT8) STORED,
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
+  );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x
 ----
-x  CREATE TABLE public.x (
-     a INT8 NULL,
-     b INT8 NULL AS (a * 2:::INT8) STORED,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     c INT8 NOT NULL AS (a + 4:::INT8) STORED,
-     CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
-   ) WITH (schema_locked = true);
+x CREATE TABLE public.x (
+   a INT8 NULL,
+   b INT8 NULL AS (a * 2:::INT8) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   c INT8 NOT NULL AS (a + 4:::INT8) STORED,
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
+  ) WITH (schema_locked = true);
 
 onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x WITH REDACT
 ----
-x  CREATE TABLE public.x (
-     a INT8 NULL,
-     b INT8 NULL AS (a * ‹×›:::INT8) STORED,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     c INT8 NOT NULL AS (a + ‹×›:::INT8) STORED,
-     CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
-   );
+x CREATE TABLE public.x (
+   a INT8 NULL,
+   b INT8 NULL AS (a * ‹×›:::INT8) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   c INT8 NOT NULL AS (a + ‹×›:::INT8) STORED,
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
+  );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE x WITH REDACT
 ----
-x  CREATE TABLE public.x (
-     a INT8 NULL,
-     b INT8 NULL AS (a * ‹×›:::INT8) STORED,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     c INT8 NOT NULL AS (a + ‹×›:::INT8) STORED,
-     CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
-   ) WITH (schema_locked = true);
+x CREATE TABLE public.x (
+   a INT8 NULL,
+   b INT8 NULL AS (a * ‹×›:::INT8) STORED,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   c INT8 NOT NULL AS (a + ‹×›:::INT8) STORED,
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
+  ) WITH (schema_locked = true);
 
 statement ok
 INSERT INTO x VALUES (6)
@@ -1013,13 +1013,13 @@ ALTER TABLE x SET (schema_locked=false);
 # Multiple ADD COLUMNs can only reference columns that are defined previously.
 statement error pq: column "t" does not exist, referenced in "lower\(t\)"
 ALTER TABLE x
-    ADD COLUMN s STRING AS (lower(t)) STORED,
-    ADD COLUMN t STRING
+  ADD COLUMN s STRING AS (lower(t)) STORED,
+  ADD COLUMN t STRING
 
 statement ok
 ALTER TABLE x
-    ADD COLUMN s STRING,
-    ADD COLUMN t STRING AS (lower(s)) STORED
+  ADD COLUMN s STRING,
+  ADD COLUMN t STRING AS (lower(s)) STORED
 
 skipif config schema-locked-disabled
 statement ok
@@ -1045,8 +1045,8 @@ DROP TABLE x
 # Regression test for #23109
 statement ok
 CREATE TABLE x (
-  a INT DEFAULT 1,
-  b INT AS (2) STORED
+ a INT DEFAULT 1,
+ b INT AS (2) STORED
 )
 
 statement ok
@@ -1057,8 +1057,8 @@ DROP TABLE x
 
 statement ok
 CREATE TABLE x (
-  b INT AS (2) STORED,
-  a INT DEFAULT 1
+ b INT AS (2) STORED,
+ a INT DEFAULT 1
 )
 
 statement ok
@@ -1092,8 +1092,8 @@ UPSERT INTO error_check VALUES (3, 'foo')
 
 statement ok
 CREATE TABLE x (
-  a INT PRIMARY KEY,
-  b INT AS (a+1) STORED
+ a INT PRIMARY KEY,
+ b INT AS (a+1) STORED
 )
 
 statement ok
@@ -1102,7 +1102,7 @@ INSERT INTO x VALUES(1.4)
 query II
 SELECT * FROM x
 ----
-1  2
+1 2
 
 query error value type date doesn't match type int of column "a"
 INSERT INTO x VALUES('1970-01-01'::date)
@@ -1121,7 +1121,7 @@ ALTER TABLE t34901 ADD COLUMN y STRING AS (concat(x, 'b')) STORED
 query TT
 SELECT * FROM t34901
 ----
-a  ab
+a ab
 
 # Regression test for #42418.
 statement disable-cf-mutator ok
@@ -1134,23 +1134,23 @@ onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t42418
 ----
-t42418  CREATE TABLE public.t42418 (
-          x INT8 NULL AS (1:::INT8) STORED,
-          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          y INT8 NULL AS (1:::INT8) STORED,
-          CONSTRAINT t42418_pkey PRIMARY KEY (rowid ASC)
-        );
+t42418 CREATE TABLE public.t42418 (
+     x INT8 NULL AS (1:::INT8) STORED,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     y INT8 NULL AS (1:::INT8) STORED,
+     CONSTRAINT t42418_pkey PRIMARY KEY (rowid ASC)
+    );
 
 skipif config schema-locked-disabled
 query TT
 SHOW CREATE t42418
 ----
-t42418  CREATE TABLE public.t42418 (
-          x INT8 NULL AS (1:::INT8) STORED,
-          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          y INT8 NULL AS (1:::INT8) STORED,
-          CONSTRAINT t42418_pkey PRIMARY KEY (rowid ASC)
-        ) WITH (schema_locked = true);
+t42418 CREATE TABLE public.t42418 (
+     x INT8 NULL AS (1:::INT8) STORED,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     y INT8 NULL AS (1:::INT8) STORED,
+     CONSTRAINT t42418_pkey PRIMARY KEY (rowid ASC)
+    ) WITH (schema_locked = true);
 
 # Tests for computed column rewrites.
 statement error timestamptz::string: context-dependent operators are not allowed in STORED COMPUTED COLUMN
@@ -1173,11 +1173,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
 CREATE TABLE public.trewrite (
-  k INT8 NOT NULL,
-  ts TIMESTAMPTZ NULL,
-  c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
-  CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
-  FAMILY fam_0_k_ts_c (k, ts, c)
+ k INT8 NOT NULL,
+ ts TIMESTAMPTZ NULL,
+ c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+ CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
+ FAMILY fam_0_k_ts_c (k, ts, c)
 );
 
 skipif config schema-locked-disabled
@@ -1185,11 +1185,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
 CREATE TABLE public.trewrite (
-  k INT8 NOT NULL,
-  ts TIMESTAMPTZ NULL,
-  c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
-  CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
-  FAMILY fam_0_k_ts_c (k, ts, c)
+ k INT8 NOT NULL,
+ ts TIMESTAMPTZ NULL,
+ c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+ CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
+ FAMILY fam_0_k_ts_c (k, ts, c)
 ) WITH (schema_locked = true);
 
 statement ok
@@ -1206,11 +1206,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
 CREATE TABLE public.trewrite (
-  k INT8 NOT NULL,
-  ts TIMESTAMPTZ NULL,
-  c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
-  CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
-  FAMILY fam_0_k_ts (k, ts, c)
+ k INT8 NOT NULL,
+ ts TIMESTAMPTZ NULL,
+ c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+ CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
+ FAMILY fam_0_k_ts (k, ts, c)
 );
 
 skipif config schema-locked-disabled
@@ -1218,11 +1218,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
 CREATE TABLE public.trewrite (
-  k INT8 NOT NULL,
-  ts TIMESTAMPTZ NULL,
-  c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
-  CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
-  FAMILY fam_0_k_ts (k, ts, c)
+ k INT8 NOT NULL,
+ ts TIMESTAMPTZ NULL,
+ c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+ CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
+ FAMILY fam_0_k_ts (k, ts, c)
 ) WITH (schema_locked = true);
 
 statement ok
@@ -1236,10 +1236,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite_copy]
 ----
 CREATE TABLE public.trewrite_copy (
-  k INT8 NOT NULL,
-  ts TIMESTAMPTZ NULL,
-  c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
-  CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC)
+ k INT8 NOT NULL,
+ ts TIMESTAMPTZ NULL,
+ c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+ CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC)
 );
 
 skipif config schema-locked-disabled
@@ -1247,10 +1247,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite_copy]
 ----
 CREATE TABLE public.trewrite_copy (
-  k INT8 NOT NULL,
-  ts TIMESTAMPTZ NULL,
-  c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
-  CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC)
+ k INT8 NOT NULL,
+ ts TIMESTAMPTZ NULL,
+ c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+ CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC)
 ) WITH (schema_locked = true);
 
 statement ok
@@ -1262,21 +1262,21 @@ DROP TABLE trewrite_copy
 # Test multiple rewrites.
 statement ok
 SET experimental_computed_column_rewrites = "
-  (ts::STRING) -> (to_char(ts AT TIME ZONE 'utc')),
-  (mod(fnv32(b::STRING), 4)) -> (mod(fnv32(b), 4)),
-  (str::TIMESTAMP) -> (parse_timestamp(str))
+ (ts::STRING) -> (to_char(ts AT TIME ZONE 'utc')),
+ (mod(fnv32(b::STRING), 4)) -> (mod(fnv32(b), 4)),
+ (str::TIMESTAMP) -> (parse_timestamp(str))
 "
 
 statement ok
 CREATE TABLE trewrite2(
-  k INT PRIMARY KEY,
-  ts TIMESTAMPTZ,
-  b BYTES,
-  str STRING,
-  c1 STRING AS (ts::STRING) STORED,
-  c2 TIMESTAMP AS (str::TIMESTAMP) STORED,
-  c3 INT AS (mod(fnv32(b::STRING), 4)) STORED,
-  FAMILY (k,ts,b,str,c1,c2,c3)
+ k INT PRIMARY KEY,
+ ts TIMESTAMPTZ,
+ b BYTES,
+ str STRING,
+ c1 STRING AS (ts::STRING) STORED,
+ c2 TIMESTAMP AS (str::TIMESTAMP) STORED,
+ c3 INT AS (mod(fnv32(b::STRING), 4)) STORED,
+ FAMILY (k,ts,b,str,c1,c2,c3)
 )
 
 onlyif config schema-locked-disabled
@@ -1284,15 +1284,15 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite2]
 ----
 CREATE TABLE public.trewrite2 (
-  k INT8 NOT NULL,
-  ts TIMESTAMPTZ NULL,
-  b BYTES NULL,
-  str STRING NULL,
-  c1 STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
-  c2 TIMESTAMP NULL AS (parse_timestamp(str)) STORED,
-  c3 INT8 NULL AS (mod(fnv32(b), 4:::INT8)) STORED,
-  CONSTRAINT trewrite2_pkey PRIMARY KEY (k ASC),
-  FAMILY fam_0_k_ts_b_str_c1_c2_c3 (k, ts, b, str, c1, c2, c3)
+ k INT8 NOT NULL,
+ ts TIMESTAMPTZ NULL,
+ b BYTES NULL,
+ str STRING NULL,
+ c1 STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+ c2 TIMESTAMP NULL AS (parse_timestamp(str)) STORED,
+ c3 INT8 NULL AS (mod(fnv32(b), 4:::INT8)) STORED,
+ CONSTRAINT trewrite2_pkey PRIMARY KEY (k ASC),
+ FAMILY fam_0_k_ts_b_str_c1_c2_c3 (k, ts, b, str, c1, c2, c3)
 );
 
 
@@ -1301,15 +1301,15 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite2]
 ----
 CREATE TABLE public.trewrite2 (
-  k INT8 NOT NULL,
-  ts TIMESTAMPTZ NULL,
-  b BYTES NULL,
-  str STRING NULL,
-  c1 STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
-  c2 TIMESTAMP NULL AS (parse_timestamp(str)) STORED,
-  c3 INT8 NULL AS (mod(fnv32(b), 4:::INT8)) STORED,
-  CONSTRAINT trewrite2_pkey PRIMARY KEY (k ASC),
-  FAMILY fam_0_k_ts_b_str_c1_c2_c3 (k, ts, b, str, c1, c2, c3)
+ k INT8 NOT NULL,
+ ts TIMESTAMPTZ NULL,
+ b BYTES NULL,
+ str STRING NULL,
+ c1 STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+ c2 TIMESTAMP NULL AS (parse_timestamp(str)) STORED,
+ c3 INT8 NULL AS (mod(fnv32(b), 4:::INT8)) STORED,
+ CONSTRAINT trewrite2_pkey PRIMARY KEY (k ASC),
+ FAMILY fam_0_k_ts_b_str_c1_c2_c3 (k, ts, b, str, c1, c2, c3)
 ) WITH (schema_locked = true);
 
 statement ok
@@ -1325,8 +1325,8 @@ SET CLUSTER SETTING sql.defaults.experimental_computed_column_rewrites = "bad"
 # assignment casts have been performed.
 statement ok
 CREATE TABLE t69327 (
-  c "char",
-  v STRING AS (c) STORED
+ c "char",
+ v STRING AS (c) STORED
 );
 INSERT INTO t69327 VALUES ('foo'::STRING)
 
@@ -1334,7 +1334,7 @@ INSERT INTO t69327 VALUES ('foo'::STRING)
 query TT
 SELECT * FROM t69327
 ----
-f  f
+f f
 
 # Regression test for #72881. Computed columns can't have a DEFAULT expr.
 statement error pgcode 42601 computed column "v" cannot also have a DEFAULT or ON UPDATE expression
@@ -1344,8 +1344,8 @@ ALTER TABLE t69327 ALTER COLUMN v SET DEFAULT 'foo'
 # assignment casts have been performed.
 statement ok
 CREATE TABLE t69665 (
-  c CHAR,
-  v STRING AS (c) STORED
+ c CHAR,
+ v STRING AS (c) STORED
 );
 INSERT INTO t69665 VALUES (' '::STRING)
 
@@ -1353,7 +1353,7 @@ INSERT INTO t69665 VALUES (' '::STRING)
 query II
 SELECT length(c), length(v) FROM t69665
 ----
-0  0
+0 0
 
 # Regression test for #75907. During a backfill, expressions of the form
 # j->'a' = '1' should not be normalized to j @> '{"a": 1}'.
@@ -1365,8 +1365,8 @@ ALTER TABLE t75907 ADD COLUMN c BOOL AS (j->'b' = '1') STORED
 query TBB colnames
 SELECT j, c, j->'b' = '1' AS expected_c FROM t75907
 ----
-j         c     expected_c
-{"a": 1}  NULL  NULL
+j     c   expected_c
+{"a": 1} NULL NULL
 
 subtest regression_88128
 
@@ -1378,12 +1378,12 @@ ALTER TABLE t88128 ADD COLUMN b2 BOOL as (t + '5 hrs'::INTERVAL > '01:00:00'::TI
 
 query BBBB colnames
 SELECT
-  b1, t - '5 hrs'::INTERVAL < '23:00:00'::TIME AS expected_b1,
-  b2, t + '5 hrs'::INTERVAL > '01:00:00'::TIME AS expected_b2
+ b1, t - '5 hrs'::INTERVAL < '23:00:00'::TIME AS expected_b1,
+ b2, t + '5 hrs'::INTERVAL > '01:00:00'::TIME AS expected_b2
 FROM t88128
 ----
-b1    expected_b1  b2    expected_b2
-true  true         true  true
+b1  expected_b1 b2  expected_b2
+true true     true true
 
 # Regression test for #127522 where we do not properly block adding a default
 # value to a computed column.
@@ -1391,10 +1391,10 @@ subtest computed_column_with_default
 
 statement ok
 CREATE TABLE foooooo (
-    id INT PRIMARY KEY,
-    x INT NOT NULL,
-    y INT NOT NULL,
-    gen INT AS (x + y) STORED
+  id INT PRIMARY KEY,
+  x INT NOT NULL,
+  y INT NOT NULL,
+  gen INT AS (x + y) STORED
 );
 
 statement error pgcode 42601 computed column "gen" cannot also have a DEFAULT or ON UPDATE expression
@@ -1433,9 +1433,9 @@ subtest drop_column_cascade_stored_computed
 
 statement ok
 CREATE TABLE test_table (
-    id INT PRIMARY KEY,
-    col_to_drop STRING,
-    other_col INT
+  id INT PRIMARY KEY,
+  col_to_drop STRING,
+  other_col INT
 )
 
 statement ok
@@ -1450,9 +1450,9 @@ INSERT INTO test_table (id, col_to_drop, other_col) VALUES (1, 'test1', 100), (2
 query ITT colnames,rowsort
 SELECT id, col_to_drop, computed_col FROM test_table
 ----
-id  col_to_drop  computed_col
-1   test1        test1
-2   test2        test2
+id col_to_drop computed_col
+1  test1    test1
+2  test2    test2
 
 # Dropping a column that has a dependent computed column is not supported in
 # the legacy schema changer.
@@ -1460,7 +1460,7 @@ id  col_to_drop  computed_col
 # In versions older than 25.4, we cannot drop 'col_to_drop' and 'computed_col'
 # (as a cascade) in the same statement. We drop them separately. Newer versions
 # can do this due to a change in the dep rules.
-onlyif config local-mixed-25.3 local-mixed-25.2 local-legacy-schema-changer
+onlyif config local-mixed-25.3 local-legacy-schema-changer
 statement ok
 ALTER TABLE test_table DROP COLUMN computed_col
 
@@ -1481,9 +1481,9 @@ SELECT index_name FROM [SHOW INDEXES FROM test_table] WHERE index_name != 'test_
 query II colnames,rowsort
 SELECT * FROM test_table
 ----
-id  other_col
-1   100
-2   200
+id other_col
+1  100
+2  200
 
 statement ok
 DROP TABLE test_table
@@ -1494,9 +1494,9 @@ subtest drop_column_cascade_virtual_computed
 
 statement ok
 CREATE TABLE test_virtual (
-    id INT PRIMARY KEY,
-    col_to_drop STRING,
-    other_col INT
+  id INT PRIMARY KEY,
+  col_to_drop STRING,
+  other_col INT
 )
 
 statement ok
@@ -1514,7 +1514,7 @@ INSERT INTO test_virtual (id, col_to_drop, other_col) VALUES (1, 'virtual1', 300
 # In versions older than 25.4, we cannot drop 'col_to_drop' and 'computed_col'
 # (as a cascade) in the same statement. We drop them separately. Newer versions
 # can do this due to a change in the dep rules.
-onlyif config local-mixed-25.3 local-mixed-25.2 local-legacy-schema-changer
+onlyif config local-mixed-25.3 local-legacy-schema-changer
 statement ok
 ALTER TABLE test_virtual DROP COLUMN computed_col
 

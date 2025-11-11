@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.2 !local-prepared
+# LogicTest: !!local-prepared
 
 query T
 SELECT pg_typeof(CITEXT 'Foo')
@@ -22,19 +22,19 @@ Foo
 
 statement disable-cf-mutator ok
 CREATE TABLE t (
-  c CITEXT
+ c CITEXT
 )
 
 onlyif config schema-locked-disabled
 query TT colnames
 SHOW CREATE TABLE t
 ----
-table_name  create_statement
-t           CREATE TABLE public.t (
-              c CITEXT NULL,
-              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-            );
+table_name create_statement
+t      CREATE TABLE public.t (
+       c CITEXT NULL,
+       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+       CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+      );
 
 statement ok
 INSERT INTO t VALUES ('test')
@@ -51,19 +51,19 @@ test
 
 statement disable-cf-mutator ok
 CREATE TABLE r (
-  c CITEXT[]
+ c CITEXT[]
 )
 
 onlyif config schema-locked-disabled
 query TT colnames
 SHOW CREATE TABLE r
 ----
-table_name  create_statement
-r           CREATE TABLE public.r (
-               c CITEXT[] NULL,
-               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-               CONSTRAINT r_pkey PRIMARY KEY (rowid ASC)
-            );
+table_name create_statement
+r      CREATE TABLE public.r (
+        c CITEXT[] NULL,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT r_pkey PRIMARY KEY (rowid ASC)
+      );
 
 statement ok
 INSERT INTO r VALUES (ARRAY['test', 'TESTER'])
@@ -88,24 +88,24 @@ DROP TABLE IF EXISTS t;
 
 statement ok
 CREATE TABLE t (
-  k INT PRIMARY KEY,
-  c CITEXT,
-  FAMILY (k),
-  FAMILY (c)
+ k INT PRIMARY KEY,
+ c CITEXT,
+ FAMILY (k),
+ FAMILY (c)
 )
 
 onlyif config schema-locked-disabled
 query TT colnames
 SHOW CREATE TABLE t
 ----
-table_name  create_statement
-t           CREATE TABLE public.t (
-              k INT8 NOT NULL,
-              c CITEXT NULL,
-              CONSTRAINT t_pkey PRIMARY KEY (k ASC),
-              FAMILY fam_0_k (k),
-              FAMILY fam_1_c (c)
-            );
+table_name create_statement
+t      CREATE TABLE public.t (
+       k INT8 NOT NULL,
+       c CITEXT NULL,
+       CONSTRAINT t_pkey PRIMARY KEY (k ASC),
+       FAMILY fam_0_k (k),
+       FAMILY fam_1_c (c)
+      );
 
 statement ok
 INSERT INTO t VALUES (1, 'test')
@@ -125,24 +125,24 @@ DROP TABLE IF EXISTS r;
 
 statement ok
 CREATE TABLE r (
-  k INT PRIMARY KEY,
-  c CITEXT[],
-  FAMILY (k),
-  FAMILY (c)
+ k INT PRIMARY KEY,
+ c CITEXT[],
+ FAMILY (k),
+ FAMILY (c)
 )
 
 onlyif config schema-locked-disabled
 query TT colnames
 SHOW CREATE TABLE r
 ----
-table_name  create_statement
-r           CREATE TABLE public.r (
-              k INT8 NOT NULL,
-              c CITEXT[] NULL,
-              CONSTRAINT r_pkey PRIMARY KEY (k ASC),
-              FAMILY fam_0_k (k),
-              FAMILY fam_1_c (c)
-            );
+table_name create_statement
+r      CREATE TABLE public.r (
+       k INT8 NOT NULL,
+       c CITEXT[] NULL,
+       CONSTRAINT r_pkey PRIMARY KEY (k ASC),
+       FAMILY fam_0_k (k),
+       FAMILY fam_1_c (c)
+      );
 
 statement ok
 INSERT INTO r VALUES (1, ARRAY['test', 'TESTER'])

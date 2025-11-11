@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.2 !local-mixed-25.3 !local-prepared
+# LogicTest: !!local-mixed-25.3 !local-prepared
 
 statement ok
 CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX (y));
@@ -13,8 +13,8 @@ SELECT count(*) FROM system.statement_hints;
 
 let $hint1
 SELECT crdb_internal.inject_hint(
-  'SELECT * FROM xy WHERE y = 10',
-  'SELECT * FROM xy@primary WHERE y = 10'
+ 'SELECT * FROM xy WHERE y = 10',
+ 'SELECT * FROM xy@primary WHERE y = 10'
 );
 
 # Verify that the returned hint ID is in the table.
@@ -25,8 +25,8 @@ SELECT * FROM xy WHERE y = 10
 
 let $hint2
 SELECT crdb_internal.inject_hint(
-  'SELECT * FROM xy WHERE y = 10',
-  'SELECT * FROM xy@xy_y_idx WHERE y = 10'
+ 'SELECT * FROM xy WHERE y = 10',
+ 'SELECT * FROM xy@xy_y_idx WHERE y = 10'
 );
 
 # Verify that the returned hint ID is in the table.
@@ -37,8 +37,8 @@ SELECT * FROM xy WHERE y = 10
 
 let $hint3
 SELECT crdb_internal.inject_hint(
-  'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b',
-  'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b'
+ 'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b',
+ 'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b'
 );
 
 # Verify that the returned hint ID is in the table.
@@ -76,8 +76,8 @@ BEGIN;
 
 let $hint4
 SELECT crdb_internal.inject_hint(
-  'SELECT * FROM xy WHERE y = 10',
-  'SELECT * FROM xy@{NO_FULL_SCAN} WHERE y = 10'
+ 'SELECT * FROM xy WHERE y = 10',
+ 'SELECT * FROM xy@{NO_FULL_SCAN} WHERE y = 10'
 );
 
 query T
@@ -97,8 +97,8 @@ SELECT count(*) FROM system.statement_hints;
 
 statement ok
 SELECT crdb_internal.inject_hint(
-  'SELECT * FROM xy WHERE x > y',
-  'SELECT * FROM xy WHERE x > y'
+ 'SELECT * FROM xy WHERE x > y',
+ 'SELECT * FROM xy WHERE x > y'
 )
 
 statement ok
