@@ -3815,6 +3815,7 @@ func bufferedWritesIsAllowedForIsolationLevel(
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
 	*evalCtx = extendedEvalContext{
 		Context: eval.Context{
+			SessionCtx:                       ex.ctxHolder.ctx(),
 			Planner:                          p,
 			StreamManagerFactory:             p,
 			PrivilegedAccessor:               p,
@@ -3910,6 +3911,8 @@ func (ex *connExecutor) GetPCRReaderTimestamp() hlc.Timestamp {
 // Safe for concurrent use.
 func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, stmtTS time.Time) {
 	newTxn := txn == nil || evalCtx.Txn != txn
+	// Keep the session context up to date (accounts for session tracing hijack).
+	evalCtx.SessionCtx = ex.ctxHolder.ctx()
 	evalCtx.TxnState = ex.getTransactionState()
 	evalCtx.TxnReadOnly = ex.state.readOnly.Load()
 	evalCtx.TxnImplicit = ex.implicitTxn()

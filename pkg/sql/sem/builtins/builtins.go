@@ -4669,15 +4669,11 @@ value if you rely on the HLC for accuracy.`,
 		Volatility: volatility.Volatile,
 		ReturnType: tree.FixedReturnType(types.MakeArray(types.Json)),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			var err error
-			// ignore queue_name for now; we only support one queue
-			// ditto limit lol
 			qn := args[0].(*tree.DString)
-			qr, err := getQueueManager(evalCtx).GetOrInitReader(ctx, string(*qn))
+			qr, err := getQueueManager(evalCtx).GetOrInitReader(evalCtx.SessionCtx, string(*qn))
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrapf(err, "get or init reader for queue %s", string(*qn))
 			}
-			// attach commit hook to txn to confirm receipt
 
 			ret := tree.NewDArray(types.Json)
 
@@ -4685,6 +4681,7 @@ value if you rely on the HLC for accuracy.`,
 			if err != nil {
 				return nil, err
 			}
+			// attach commit hook to txn to confirm receipt
 			// or something... todo on rollback/abort
 			evalCtx.Txn.AddCommitTrigger(func(ctx context.Context) {
 				qr.ConfirmReceipt(ctx)
