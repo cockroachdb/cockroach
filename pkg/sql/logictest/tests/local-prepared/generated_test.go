@@ -822,6 +822,20 @@ func TestLogic_merge_join(
 	runLogicTest(t, "merge_join")
 }
 
+func TestLogic_mixed_version_char(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_char")
+}
+
+func TestLogic_mixed_version_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_citext")
+}
+
 func TestLogic_name_escapes(
 	t *testing.T,
 ) {
@@ -1716,6 +1730,13 @@ func TestLogic_values(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "values")
+}
+
+func TestLogic_vector_index_mixed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vector_index_mixed")
 }
 
 func TestLogic_vectorize_agg(

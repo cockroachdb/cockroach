@@ -1274,6 +1274,20 @@ func TestRepeatableReadLogic_merge_join(
 	runLogicTest(t, "merge_join")
 }
 
+func TestRepeatableReadLogic_mixed_version_char(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_char")
+}
+
+func TestRepeatableReadLogic_mixed_version_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_citext")
+}
+
 func TestRepeatableReadLogic_multi_statement(
 	t *testing.T,
 ) {
@@ -2595,6 +2609,13 @@ func TestRepeatableReadLogic_vector_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "vector_index")
+}
+
+func TestRepeatableReadLogic_vector_index_mixed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vector_index_mixed")
 }
 
 func TestRepeatableReadLogic_vectorize_agg(

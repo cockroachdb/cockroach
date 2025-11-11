@@ -1,4 +1,3 @@
-# LogicTest: cockroach-go-testserver-25.2
 
 # Test version gating of op classes in vector index
 
@@ -13,17 +12,17 @@ SET CLUSTER SETTING feature.vector_index.enabled = on
 
 statement error cannot use vector_cosine_ops until finalizing on 25.3
 CREATE TABLE simple (
-  a INT PRIMARY KEY,
-  v VECTOR(3),
-  VECTOR INDEX (v vector_cosine_ops),
-  FAMILY (a, v)
+ a INT PRIMARY KEY,
+ v VECTOR(3),
+ VECTOR INDEX (v vector_cosine_ops),
+ FAMILY (a, v)
 )
 
 statement ok
 CREATE TABLE simple (
-  a INT PRIMARY KEY,
-  v VECTOR(3),
-  FAMILY (a, v)
+ a INT PRIMARY KEY,
+ v VECTOR(3),
+ FAMILY (a, v)
 )
 
 statement error cannot use vector_ip_ops until finalizing on 25.3

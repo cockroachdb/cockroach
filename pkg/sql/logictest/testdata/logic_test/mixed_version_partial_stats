@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-25.2 cockroach-go-testserver-25.3
+# LogicTest: cockroach-go-testserver-25.3
 
 # Sanity check that partial stats with a WHERE clause can only be collected once
 # the cluster is upgraded to 25.4.
@@ -43,5 +43,5 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count, par
 FROM [SHOW STATISTICS FOR TABLE t]
 WHERE statistics_name = 'pstat'
 ----
-statistics_name  column_names  row_count  distinct_count  null_count  partial_predicate
-pstat            {a}           3          3               0           a > 2
+statistics_name column_names row_count distinct_count null_count partial_predicate
+pstat      {a}      3     3        0      a > 2

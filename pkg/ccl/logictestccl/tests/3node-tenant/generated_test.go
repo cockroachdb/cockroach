@@ -1296,6 +1296,20 @@ func TestTenantLogic_merge_join(
 	runLogicTest(t, "merge_join")
 }
 
+func TestTenantLogic_mixed_version_char(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_char")
+}
+
+func TestTenantLogic_mixed_version_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_citext")
+}
+
 func TestTenantLogic_multi_statement(
 	t *testing.T,
 ) {
@@ -2652,6 +2666,13 @@ func TestTenantLogic_vector_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "vector_index")
+}
+
+func TestTenantLogic_vector_index_mixed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vector_index_mixed")
 }
 
 func TestTenantLogic_vectorize(

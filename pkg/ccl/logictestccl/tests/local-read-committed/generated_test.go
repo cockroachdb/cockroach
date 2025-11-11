@@ -1315,6 +1315,20 @@ func TestReadCommittedLogic_merge_join(
 	runLogicTest(t, "merge_join")
 }
 
+func TestReadCommittedLogic_mixed_version_char(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_char")
+}
+
+func TestReadCommittedLogic_mixed_version_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_citext")
+}
+
 func TestReadCommittedLogic_multi_statement(
 	t *testing.T,
 ) {
@@ -2636,6 +2650,13 @@ func TestReadCommittedLogic_vector_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "vector_index")
+}
+
+func TestReadCommittedLogic_vector_index_mixed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vector_index_mixed")
 }
 
 func TestReadCommittedLogic_vectorize_agg(
