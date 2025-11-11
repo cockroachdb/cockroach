@@ -77,7 +77,7 @@ func (i *MVCCIterator) Valid() (bool, error) {
 // SeekGE is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) SeekGE(key storage.MVCCKey) {
 	i.i.SeekGE(key)
-	i.checkAllowed(roachpb.Span{Key: key.Key}, true)
+	i.checkAllowed(TrickySpan{Key: key.Key}, true)
 }
 
 // SeekLT is part of the storage.MVCCIterator interface.
@@ -85,7 +85,7 @@ func (i *MVCCIterator) SeekLT(key storage.MVCCKey) {
 	i.i.SeekLT(key)
 	// CheckAllowed{At} supports the span representation of [,key), which
 	// corresponds to the span [key.Prev(),).
-	i.checkAllowed(roachpb.Span{EndKey: key.Key}, true)
+	i.checkAllowed(TrickySpan{EndKey: key.Key}, true)
 }
 
 // Next is part of the storage.MVCCIterator interface.
@@ -117,12 +117,12 @@ func (i *MVCCIterator) checkAllowedCurrPosForward(errIfDisallowed bool) {
 		// as long as the iterator itself is configured with proper boundaries.
 		return
 	}
-	i.checkAllowedValidPos(roachpb.Span{Key: i.UnsafeKey().Key}, errIfDisallowed)
+	i.checkAllowedValidPos(TrickySpan{Key: i.UnsafeKey().Key}, errIfDisallowed)
 }
 
 // checkAllowed checks the provided span if the current iterator position is
 // valid.
-func (i *MVCCIterator) checkAllowed(span roachpb.Span, errIfDisallowed bool) {
+func (i *MVCCIterator) checkAllowed(span TrickySpan, errIfDisallowed bool) {
 	i.invalid = false
 	i.err = nil
 	if ok, _ := i.i.Valid(); !ok {
@@ -134,7 +134,7 @@ func (i *MVCCIterator) checkAllowed(span roachpb.Span, errIfDisallowed bool) {
 	i.checkAllowedValidPos(span, errIfDisallowed)
 }
 
-func (i *MVCCIterator) checkAllowedValidPos(span roachpb.Span, errIfDisallowed bool) {
+func (i *MVCCIterator) checkAllowedValidPos(span TrickySpan, errIfDisallowed bool) {
 	var err error
 	if i.spansOnly {
 		err = i.spans.CheckAllowed(SpanReadOnly, span)
@@ -213,11 +213,11 @@ func (i *MVCCIterator) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (storage.MVCCKey, error) {
 	if i.spansOnly {
-		if err := i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
+		if err := i.spans.CheckAllowed(SpanReadOnly, TrickySpan{Key: start, EndKey: end}); err != nil {
 			return storage.MVCCKey{}, err
 		}
 	} else {
-		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}, i.ts); err != nil {
+		if err := i.spans.CheckAllowedAt(SpanReadOnly, TrickySpan{Key: start, EndKey: end}, i.ts); err != nil {
 			return storage.MVCCKey{}, err
 		}
 	}
@@ -261,10 +261,10 @@ func (i *EngineIterator) SeekEngineKeyGE(key storage.EngineKey) (valid bool, err
 	}
 	if key.IsMVCCKey() && !i.spansOnly {
 		mvccKey, _ := key.ToMVCCKey()
-		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: mvccKey.Key}, i.ts); err != nil {
+		if err := i.spans.CheckAllowedAt(SpanReadOnly, TrickySpan{Key: mvccKey.Key}, i.ts); err != nil {
 			return false, err
 		}
-	} else if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
+	} else if err = i.spans.CheckAllowed(SpanReadOnly, TrickySpan{Key: key.Key}); err != nil {
 		return false, err
 	}
 	return valid, err
@@ -278,10 +278,10 @@ func (i *EngineIterator) SeekEngineKeyLT(key storage.EngineKey) (valid bool, err
 	}
 	if key.IsMVCCKey() && !i.spansOnly {
 		mvccKey, _ := key.ToMVCCKey()
-		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: mvccKey.Key}, i.ts); err != nil {
+		if err := i.spans.CheckAllowedAt(SpanReadOnly, TrickySpan{Key: mvccKey.Key}, i.ts); err != nil {
 			return false, err
 		}
-	} else if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{EndKey: key.Key}); err != nil {
+	} else if err = i.spans.CheckAllowed(SpanReadOnly, TrickySpan{EndKey: key.Key}); err != nil {
 		return false, err
 	}
 	return valid, err
@@ -313,7 +313,7 @@ func (i *EngineIterator) SeekEngineKeyGEWithLimit(
 	if state != pebble.IterValid {
 		return state, err
 	}
-	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
+	if err = i.spans.CheckAllowed(SpanReadOnly, TrickySpan{Key: key.Key}); err != nil {
 		return pebble.IterExhausted, err
 	}
 	return state, err
@@ -327,7 +327,7 @@ func (i *EngineIterator) SeekEngineKeyLTWithLimit(
 	if state != pebble.IterValid {
 		return state, err
 	}
-	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{EndKey: key.Key}); err != nil {
+	if err = i.spans.CheckAllowed(SpanReadOnly, TrickySpan{EndKey: key.Key}); err != nil {
 		return pebble.IterExhausted, err
 	}
 	return state, err
@@ -354,11 +354,11 @@ func (i *EngineIterator) checkKeyAllowed() (valid bool, err error) {
 	}
 	if key.IsMVCCKey() && !i.spansOnly {
 		mvccKey, _ := key.ToMVCCKey()
-		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: mvccKey.Key}, i.ts); err != nil {
+		if err := i.spans.CheckAllowedAt(SpanReadOnly, TrickySpan{Key: mvccKey.Key}, i.ts); err != nil {
 			// Invalid, but no error.
 			return false, nil // nolint:returnerrcheck
 		}
-	} else if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
+	} else if err = i.spans.CheckAllowed(SpanReadOnly, TrickySpan{Key: key.Key}); err != nil {
 		// Invalid, but no error.
 		return false, nil // nolint:returnerrcheck
 	}
@@ -469,11 +469,11 @@ func (s spanSetReader) MVCCIterate(
 	f func(storage.MVCCKeyValue, storage.MVCCRangeKeyStack) error,
 ) error {
 	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
+		if err := s.spans.CheckAllowed(SpanReadOnly, TrickySpan{Key: start, EndKey: end}); err != nil {
 			return err
 		}
 	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}, s.ts); err != nil {
+		if err := s.spans.CheckAllowedAt(SpanReadOnly, TrickySpan{Key: start, EndKey: end}, s.ts); err != nil {
 			return err
 		}
 	}
@@ -535,11 +535,11 @@ func (s spanSetWriter) ApplyBatchRepr(repr []byte, sync bool) error {
 
 func (s spanSetWriter) checkAllowed(key roachpb.Key) error {
 	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key}); err != nil {
+		if err := s.spans.CheckAllowed(SpanReadWrite, TrickySpan{Key: key}); err != nil {
 			return err
 		}
 	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: key}, s.ts); err != nil {
+		if err := s.spans.CheckAllowedAt(SpanReadWrite, TrickySpan{Key: key}, s.ts); err != nil {
 			return err
 		}
 	}
@@ -561,7 +561,7 @@ func (s spanSetWriter) ClearUnversioned(key roachpb.Key, opts storage.ClearOptio
 }
 
 func (s spanSetWriter) ClearEngineKey(key storage.EngineKey, opts storage.ClearOptions) error {
-	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
+	if err := s.spans.CheckAllowed(SpanReadWrite, TrickySpan{Key: key.Key}); err != nil {
 		return err
 	}
 	return s.w.ClearEngineKey(key, opts)
@@ -575,11 +575,11 @@ func (s spanSetWriter) SingleClearEngineKey(key storage.EngineKey) error {
 
 func (s spanSetWriter) checkAllowedRange(start, end roachpb.Key) error {
 	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start, EndKey: end}); err != nil {
+		if err := s.spans.CheckAllowed(SpanReadWrite, TrickySpan{Key: start, EndKey: end}); err != nil {
 			return err
 		}
 	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: start, EndKey: end}, s.ts); err != nil {
+		if err := s.spans.CheckAllowedAt(SpanReadWrite, TrickySpan{Key: start, EndKey: end}, s.ts); err != nil {
 			return err
 		}
 	}
@@ -661,11 +661,11 @@ func (s spanSetWriter) ClearMVCCRangeKey(rangeKey storage.MVCCRangeKey) error {
 
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
 	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
+		if err := s.spans.CheckAllowed(SpanReadWrite, TrickySpan{Key: key.Key}); err != nil {
 			return err
 		}
 	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: key.Key}, s.ts); err != nil {
+		if err := s.spans.CheckAllowedAt(SpanReadWrite, TrickySpan{Key: key.Key}, s.ts); err != nil {
 			return err
 		}
 	}
@@ -697,7 +697,7 @@ func (s spanSetWriter) PutEngineKey(key storage.EngineKey, value []byte) error {
 	if !s.spansOnly {
 		panic("cannot do timestamp checking for putting EngineKey")
 	}
-	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
+	if err := s.spans.CheckAllowed(SpanReadWrite, TrickySpan{Key: key.Key}); err != nil {
 		return err
 	}
 	return s.w.PutEngineKey(key, value)
