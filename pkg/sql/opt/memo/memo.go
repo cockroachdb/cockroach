@@ -690,6 +690,11 @@ func (m *Memo) DisableCheckExpr() {
 	m.disableCheckExpr = true
 }
 
+// UseCanaryStatsStatus returns the status of useCanaryStats for this memo.
+func (m *Memo) UseCanaryStatsStatus() eval.UseCanaryStatsVal {
+	return m.useCanaryStats
+}
+
 // String prints the current expression tree stored in the memo. It should only
 // be used for testing and debugging.
 func (m *Memo) String() string {

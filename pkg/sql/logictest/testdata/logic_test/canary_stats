@@ -45,3 +45,92 @@ CREATE TABLE public.canary_table (
   CONSTRAINT canary_table_pkey PRIMARY KEY (x ASC),
   FAMILY fam_0_x_y (x, y)
 ) WITH (stats_canary_window = '20s')
+
+subtest canary_stats_with_query_cache
+
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='0';
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+# The first execution should miss the query cache.
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache miss
+query cache hit (prepare)
+query cache add
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+# The second execution should hit the query cache.
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit
+
+# Now we test the case where always use canary stats.
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='1.0';
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+not using query cache
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+not using query cache
+
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='0.0';
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+# We should see the original cache is still there.
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit
+
+subtest end
