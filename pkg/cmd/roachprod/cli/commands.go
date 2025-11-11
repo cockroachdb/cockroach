@@ -2256,3 +2256,30 @@ If a destination is not provided, the certs will be downloaded to a default %s d
 		}),
 	}
 }
+
+func (cr *commandRegistry) buildUICmd() *cobra.Command {
+	uiCmd := &cobra.Command{
+		Use:   "ui",
+		Short: "start the roachprod web UI",
+		Long: `Start a web-based user interface for managing roachprod clusters.
+
+The UI provides a graphical interface for:
+  - Listing and filtering clusters
+  - Creating new clusters with a wizard
+  - Deleting clusters
+  - Extending cluster lifetimes
+  - SSH access to cluster nodes via an interactive terminal
+
+The UI server will start on the specified port (default 7763) and can be
+accessed via a web browser at http://localhost:<port>.
+
+Press Ctrl+C to stop the server.
+`,
+		Args: cobra.NoArgs,
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.StartUIServer(uiPort)
+		}),
+	}
+	uiCmd.Flags().IntVarP(&uiPort, "port", "p", 7763, "Port for the web UI server")
+	return uiCmd
+}

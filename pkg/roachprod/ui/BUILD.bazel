@@ -1,18 +1,39 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
+# Generate compressed asset bundle from webpack output
+genrule(
+    name = "genassets",
+    srcs = ["//pkg/ui/workspaces/roachprod-ui"],
+    outs = ["assets.tar.zst"],
+    cmd = """$(location //pkg/util/assetbundle/gen) $@ $(SRCS)""",
+    tools = ["//pkg/util/assetbundle/gen"],
+    visibility = ["//pkg/gen:__subpackages__"],
+)
+
 go_library(
     name = "ui",
     srcs = [
+        "broadcast_writer.go",
         "collate_errors.go",
+        "handlers.go",
+        "interface.go",
+        "log_broadcaster.go",
+        "server.go",
         "spinner.go",
+        "types.go",
+        "websocket.go",
         "writer.go",
     ],
+    embedsrcs = [":genassets"],  # keep
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/ui",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
+        "//pkg/util/assetbundle",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gorilla_websocket//:websocket",
         "@org_golang_x_sync//errgroup",
     ],
 )

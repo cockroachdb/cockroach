@@ -6,3 +6,4 @@ packages:
   - "./workspaces/db-console"
   - "./workspaces/e2e-tests"
   - "./workspaces/crdb-api-client"
+  - "./workspaces/roachprod-ui"

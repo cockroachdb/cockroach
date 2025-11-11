@@ -66,3 +66,5 @@ pkg/testutils/serverutils/*_generated.go
 .DS_Store
 .idea/
 .vscode/
+/pkg/roachprod/ui/dist/
+/pkg/roachprod/ui/assets.tar.zst

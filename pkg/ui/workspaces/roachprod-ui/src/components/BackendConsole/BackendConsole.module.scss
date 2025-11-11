@@ -1,0 +1,120 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+.consoleContainer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  background: #1e1e1e;
+  border: 1px solid #444;
+  border-bottom: none;
+  border-left: none;
+  border-top-right-radius: 8px;
+  z-index: 999;
+  transition: all 0.3s ease;
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 12px;
+  box-shadow: 2px -2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.collapsed {
+  width: 200px !important;
+  height: 36px !important;
+  resize: none !important;
+}
+
+.expanded {
+  width: 600px;
+  height: 300px;
+  max-width: 80vw;
+  max-height: 80vh;
+  resize: both;
+  overflow: hidden;
+}
+
+.consoleHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #2d2d2d;
+  border-top-right-radius: 8px;
+  border-bottom: 1px solid #444;
+  cursor: pointer;
+}
+
+.consoleTitle {
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 13px;
+  user-select: none;
+}
+
+.consoleActions {
+  display: flex;
+  gap: 4px;
+
+  button {
+    color: #aaa !important;
+
+    &:hover {
+      color: #fff !important;
+      background: rgba(255, 255, 255, 0.1) !important;
+    }
+  }
+}
+
+.consoleContent {
+  padding: 12px;
+  height: calc(100% - 36px);
+  overflow-y: auto;
+  background: #1e1e1e;
+  color: #d4d4d4;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #2d2d2d;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+
+    &:hover {
+      background: #666;
+    }
+  }
+}
+
+.emptyState {
+  color: #888;
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+}
+
+.logEntry {
+  padding: 4px 0;
+  line-height: 1.5;
+  word-wrap: break-word;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+
+.logText {
+  margin: 0;
+  padding: 0;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
