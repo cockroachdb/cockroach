@@ -7,6 +7,7 @@ package spanset
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -140,7 +141,7 @@ func TestSpanSetCheckAllowedBoundaries(t *testing.T) {
 	bdGkq.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")})
 	bdGkq.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("q")})
 
-	allowed := []roachpb.Span{
+	allowed := []TrickySpan{
 		// Exactly as declared.
 		{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")},
 		{Key: roachpb.Key("g")},
@@ -161,7 +162,7 @@ func TestSpanSetCheckAllowedBoundaries(t *testing.T) {
 		}
 	}
 
-	disallowed := []roachpb.Span{
+	disallowed := []TrickySpan{
 		// Points outside the declared spans, and on the endpoints.
 		{Key: roachpb.Key("a")},
 		{Key: roachpb.Key("d")},
@@ -203,25 +204,25 @@ func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
 	ss.AddNonMVCC(SpanReadWrite, roachpb.Span{Key: keys.RangeGCThresholdKey(1)})
 
 	var allowedRO = []struct {
-		span roachpb.Span
+		span TrickySpan
 		ts   hlc.Timestamp
 	}{
 		// Read access allowed for a subspan or included point at a timestamp
 		// equal to or below associated timestamp.
-		{roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 2}},
-		{roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 1}},
-		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 3}},
-		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 2}},
-		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 1}},
-		{roachpb.Span{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 2}},
-		{roachpb.Span{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 1}},
-		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 3}},
-		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 2}},
-		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 1}},
+		{TrickySpan{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 2}},
+		{TrickySpan{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 1}},
+		{TrickySpan{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 3}},
+		{TrickySpan{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 2}},
+		{TrickySpan{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 1}},
+		{TrickySpan{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 2}},
+		{TrickySpan{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 1}},
+		{TrickySpan{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 3}},
+		{TrickySpan{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 2}},
+		{TrickySpan{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 1}},
 
 		// Local keys.
-		{roachpb.Span{Key: keys.RangeGCThresholdKey(1)}, hlc.Timestamp{}},
-		{roachpb.Span{Key: keys.RangeGCThresholdKey(1)}, hlc.Timestamp{WallTime: 1}},
+		{TrickySpan{Key: keys.RangeGCThresholdKey(1)}, hlc.Timestamp{}},
+		{TrickySpan{Key: keys.RangeGCThresholdKey(1)}, hlc.Timestamp{WallTime: 1}},
 	}
 	for _, tc := range allowedRO {
 		if err := ss.CheckAllowedAt(SpanReadOnly, tc.span, tc.ts); err != nil {
@@ -230,29 +231,29 @@ func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
 	}
 
 	var allowedRW = []struct {
-		span roachpb.Span
+		span TrickySpan
 		ts   hlc.Timestamp
 	}{
 		// Write access allowed for a subspan or included point at exactly the
 		// declared timestamp.
-		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 2}},
-		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 3}},
-		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 2}},
-		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 3}},
+		{TrickySpan{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 2}},
+		{TrickySpan{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 3}},
+		{TrickySpan{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 2}},
+		{TrickySpan{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 3}},
 
 		// Points within the non-zero-length span.
-		{roachpb.Span{Key: roachpb.Key("n")}, hlc.Timestamp{WallTime: 2}},
+		{TrickySpan{Key: roachpb.Key("n")}, hlc.Timestamp{WallTime: 2}},
 
 		// Points within the non-zero-length span at a timestamp higher than what's
 		// declared.
-		{roachpb.Span{Key: roachpb.Key("n")}, hlc.Timestamp{WallTime: 3}},
+		{TrickySpan{Key: roachpb.Key("n")}, hlc.Timestamp{WallTime: 3}},
 
 		// Sub span at and above the declared timestamp.
-		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 2}},
-		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 3}},
+		{TrickySpan{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 2}},
+		{TrickySpan{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 3}},
 
 		// Local keys.
-		{roachpb.Span{Key: keys.RangeGCThresholdKey(1)}, hlc.Timestamp{}},
+		{TrickySpan{Key: keys.RangeGCThresholdKey(1)}, hlc.Timestamp{}},
 	}
 	for _, tc := range allowedRW {
 		if err := ss.CheckAllowedAt(SpanReadWrite, tc.span, tc.ts); err != nil {
@@ -264,13 +265,13 @@ func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
 	writeErr := "cannot write undeclared span"
 
 	var disallowedRO = []struct {
-		span roachpb.Span
+		span TrickySpan
 		ts   hlc.Timestamp
 	}{
 		// Read access disallowed for subspan or included point at timestamp greater
 		// than the associated timestamp.
-		{roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 3}},
-		{roachpb.Span{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 3}},
+		{TrickySpan{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 3}},
+		{TrickySpan{Key: roachpb.Key("g")}, hlc.Timestamp{WallTime: 3}},
 	}
 	for _, tc := range disallowedRO {
 		if err := ss.CheckAllowedAt(SpanReadOnly, tc.span, tc.ts); !testutils.IsError(err, readErr) {
@@ -279,24 +280,24 @@ func TestSpanSetCheckAllowedAtTimestamps(t *testing.T) {
 	}
 
 	var disallowedRW = []struct {
-		span roachpb.Span
+		span TrickySpan
 		ts   hlc.Timestamp
 	}{
 		// Write access disallowed for subspan or included point at timestamp
 		// less than the associated timestamp.
-		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 1}},
-		{roachpb.Span{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 1}},
+		{TrickySpan{Key: roachpb.Key("m"), EndKey: roachpb.Key("o")}, hlc.Timestamp{WallTime: 1}},
+		{TrickySpan{Key: roachpb.Key("s")}, hlc.Timestamp{WallTime: 1}},
 
 		// Read only spans.
-		{roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 2}},
-		{roachpb.Span{Key: roachpb.Key("c")}, hlc.Timestamp{WallTime: 2}},
+		{TrickySpan{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")}, hlc.Timestamp{WallTime: 2}},
+		{TrickySpan{Key: roachpb.Key("c")}, hlc.Timestamp{WallTime: 2}},
 
 		// Points within the non-zero-length span at a timestamp lower than what's
 		// declared.
-		{roachpb.Span{Key: roachpb.Key("n")}, hlc.Timestamp{WallTime: 1}},
+		{TrickySpan{Key: roachpb.Key("n")}, hlc.Timestamp{WallTime: 1}},
 
 		// Sub span below the declared timestamp.
-		{roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 1}},
+		{TrickySpan{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")}, hlc.Timestamp{WallTime: 1}},
 	}
 	for _, tc := range disallowedRW {
 		if err := ss.CheckAllowedAt(SpanReadWrite, tc.span, tc.ts); !testutils.IsError(err, writeErr) {
@@ -313,7 +314,7 @@ func TestSpanSetCheckAllowedReversed(t *testing.T) {
 	bdGkq.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")})
 	bdGkq.AddNonMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("q")})
 
-	allowed := []roachpb.Span{
+	allowed := []TrickySpan{
 		// Exactly as declared.
 		{EndKey: roachpb.Key("d")},
 		{EndKey: roachpb.Key("q")},
@@ -324,7 +325,7 @@ func TestSpanSetCheckAllowedReversed(t *testing.T) {
 		}
 	}
 
-	disallowed := []roachpb.Span{
+	disallowed := []TrickySpan{
 		// Points outside the declared spans, and on the endpoints.
 		{EndKey: roachpb.Key("b")},
 		{EndKey: roachpb.Key("g")},
@@ -346,7 +347,7 @@ func TestSpanSetCheckAllowedAtReversed(t *testing.T) {
 	bdGkq.AddMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("g")}, ts)
 	bdGkq.AddMVCC(SpanReadOnly, roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("q")}, ts)
 
-	allowed := []roachpb.Span{
+	allowed := []TrickySpan{
 		// Exactly as declared.
 		{EndKey: roachpb.Key("d")},
 		{EndKey: roachpb.Key("q")},
@@ -357,7 +358,7 @@ func TestSpanSetCheckAllowedAtReversed(t *testing.T) {
 		}
 	}
 
-	disallowed := []roachpb.Span{
+	disallowed := []TrickySpan{
 		// Points outside the declared spans, and on the endpoints.
 		{EndKey: roachpb.Key("b")},
 		{EndKey: roachpb.Key("g")},
@@ -381,16 +382,132 @@ func TestSpanSetWriteImpliesRead(t *testing.T) {
 	ss.AddNonMVCC(SpanReadOnly, roSpan)
 	ss.AddNonMVCC(SpanReadWrite, rwSpan)
 
-	if err := ss.CheckAllowed(SpanReadOnly, roSpan); err != nil {
+	if err := ss.CheckAllowed(SpanReadOnly, TrickySpan(roSpan)); err != nil {
 		t.Errorf("expected to be allowed to read roSpan, error: %+v", err)
 	}
-	if err := ss.CheckAllowed(SpanReadWrite, roSpan); err == nil {
+	if err := ss.CheckAllowed(SpanReadWrite, TrickySpan(roSpan)); err == nil {
 		t.Errorf("expected not to be allowed to write roSpan")
 	}
-	if err := ss.CheckAllowed(SpanReadOnly, rwSpan); err != nil {
+	if err := ss.CheckAllowed(SpanReadOnly, TrickySpan(rwSpan)); err != nil {
 		t.Errorf("expected to be allowed to read rwSpan, error: %+v", err)
 	}
-	if err := ss.CheckAllowed(SpanReadWrite, rwSpan); err != nil {
+	if err := ss.CheckAllowed(SpanReadWrite, TrickySpan(rwSpan)); err != nil {
 		t.Errorf("expected to be allowed to read rwSpan, error: %+v", err)
+	}
+}
+
+// makeSpanHelper accepts strings like: "a-d", and returns a span with
+// startKey = a, and endKey = d. It also accepts `X` which represents nil. For
+// example, "X-d" returns a span with a nil startKey, and endKey = d.
+func makeSpanHelper(t *testing.T, s string) roachpb.Span {
+	parts := strings.Split(s, "-")
+	require.Len(t, parts, 2)
+
+	var start roachpb.Key
+	var end roachpb.Key
+
+	if parts[0] != "X" {
+		start = roachpb.Key(parts[0])
+	}
+
+	if parts[1] != "X" {
+		end = roachpb.Key(parts[1])
+	}
+
+	return roachpb.Span{
+		Key:    start,
+		EndKey: end,
+	}
+}
+
+// Test that Contains correctly determines if s1 contains s2, including
+// support for spans with nil start/end keys.
+func TestContains(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		s1       string
+		s2       string
+		expected bool
+	}{
+		// s1 equals s2.
+		{s1: "a-c", s2: "a-c", expected: true},
+		// s1 contains s2.
+		{s1: "a-d", s2: "b-c", expected: true},
+		// s1 contains point s2.
+		{s1: "a-d", s2: "a-X", expected: true},
+		// Point s1 contains point s2.
+		{s1: "a-X", s2: "a-X", expected: true},
+		// s1 contains point s2 with nil startKey.
+		{s1: "a-d", s2: "X-d", expected: true},
+		// Point s1 contains point s2 with nil startKey.
+		{s1: "a-X", s2: "X-a\x00", expected: true},
+		// s1 does not contain s2.
+		{s1: "a-c", s2: "d-f", expected: false},
+		{s1: "a-c", s2: "b-d", expected: false},
+		{s1: "b-c", s2: "a-d", expected: false},
+		// s1 does not contain s2 point.
+		{s1: "a-c", s2: "d-X", expected: false},
+		// Point s1 does not contain s2.
+		{s1: "a-X", s2: "b-d", expected: false},
+		// Point s1 does not contain point s2.
+		{s1: "a-X", s2: "b-X", expected: false},
+		// s1 does not contain point s2 with nil startKey.
+		{s1: "a-d", s2: "X-e", expected: false},
+		// Point s1 does not contain point s2 with nil startKey.
+		{s1: "a-X", s2: "X-b", expected: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			span1 := makeSpanHelper(t, tc.s1)
+			span2 := makeSpanHelper(t, tc.s2)
+			require.Equal(t, tc.expected, Contains(span1, TrickySpan(span2)))
+		})
+	}
+}
+
+// Test that Overlaps correctly determines if s1 overlaps s2, including
+// support for spans with nil start/end keys.
+func TestOverlaps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		s1       string
+		s2       string
+		expected bool
+	}{
+		// s1 equals s2.
+		{s1: "a-c", s2: "a-c", expected: true},
+		// s1 overlaps s2.
+		{s1: "a-c", s2: "b-d", expected: true},
+		// s1 contains s2.
+		{s1: "a-d", s2: "b-c", expected: true},
+		// s2 contains s1.
+		{s1: "b-c", s2: "a-d", expected: true},
+		// s1 overlaps point s2.
+		{s1: "a-d", s2: "a-X", expected: true},
+		// s1 overlaps point s2 with nil startKey.
+		{s1: "a-d", s2: "X-d", expected: true},
+		// Point s1 overlaps point s2 with nil startKey.
+		{s1: "a-X", s2: "X-a\x00", expected: true},
+		// Point s1 overlaps point s2.
+		{s1: "a-X", s2: "a-X", expected: true},
+		// s1 doesn't overlap s2.
+		{s1: "a-c", s2: "d-f", expected: false},
+		{s1: "a-c", s2: "c-d", expected: false},
+		// s1 doesn't overlap point s2.
+		{s1: "a-c", s2: "c-X", expected: false},
+		// s1 doesn't overlap point s2 with nil startKey.
+		{s1: "a-c", s2: "X-a", expected: false},
+		{s1: "a-c", s2: "X-d", expected: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			span1 := makeSpanHelper(t, tc.s1)
+			span2 := makeSpanHelper(t, tc.s2)
+			require.Equal(t, tc.expected, Overlaps(span1, TrickySpan(span2)))
+		})
 	}
 }

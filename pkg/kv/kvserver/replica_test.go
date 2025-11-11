@@ -2732,7 +2732,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 		{spanset.SpanReadWrite, roachpb.Key("b"), false},
 		{spanset.SpanReadWrite, roachpb.Key("d"), true},
 	} {
-		err := spans.CheckAllowed(tc.access, roachpb.Span{Key: tc.key})
+		err := spans.CheckAllowed(tc.access, spanset.TrickySpan{Key: tc.key})
 		if tc.expectAccess {
 			require.NoError(t, err)
 		} else {
