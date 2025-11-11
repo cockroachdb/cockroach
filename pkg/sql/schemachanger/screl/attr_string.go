@@ -20,7 +20,7 @@ func _() {
 	_ = x[ConstraintID-5]
 	_ = x[Name-6]
 	_ = x[ReferencedDescID-7]
-	_ = x[Comment-8]
+	_ = x[Value-8]
 	_ = x[TemporaryIndexID-9]
 	_ = x[SourceIndexID-10]
 	_ = x[RecreateSourceIndexID-11]
@@ -59,8 +59,8 @@ func (i Attr) String() string {
 		return "Name"
 	case ReferencedDescID:
 		return "ReferencedDescID"
-	case Comment:
-		return "Comment"
+	case Value:
+		return "Value"
 	case TemporaryIndexID:
 		return "TemporaryIndexID"
 	case SourceIndexID:

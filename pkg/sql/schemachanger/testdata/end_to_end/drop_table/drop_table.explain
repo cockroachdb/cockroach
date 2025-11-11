@@ -18,7 +18,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (t-), Name: "root"}
  │         │    ├── PUBLIC → DROPPED Table:{DescID: 107 (t-)}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 107 (t-), ReferencedDescID: 106 (sc)}
- │         │    ├── PUBLIC → ABSENT  TableComment:{DescID: 107 (t-), Comment: "t has a comment"}
+ │         │    ├── PUBLIC → ABSENT  TableComment:{DescID: 107 (t-), Value: "t has a comment"}
  │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 107 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107 (t-), ColumnID: 1 (k-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107 (t-), Name: "k", ColumnID: 1 (k-)}
@@ -106,7 +106,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 107 (t-), Name: "root"}
  │    │    │    ├── DROPPED → PUBLIC Table:{DescID: 107 (t-)}
  │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 107 (t-), ReferencedDescID: 106 (sc)}
- │    │    │    ├── ABSENT  → PUBLIC TableComment:{DescID: 107 (t-), Comment: "t has a comment"}
+ │    │    │    ├── ABSENT  → PUBLIC TableComment:{DescID: 107 (t-), Value: "t has a comment"}
  │    │    │    ├── ABSENT  → PUBLIC ColumnFamily:{DescID: 107 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 107 (t-), ColumnID: 1 (k-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 107 (t-), Name: "k", ColumnID: 1 (k-)}
@@ -147,7 +147,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (t-), Name: "root"}
  │         │    ├── PUBLIC → DROPPED Table:{DescID: 107 (t-)}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 107 (t-), ReferencedDescID: 106 (sc)}
- │         │    ├── PUBLIC → ABSENT  TableComment:{DescID: 107 (t-), Comment: "t has a comment"}
+ │         │    ├── PUBLIC → ABSENT  TableComment:{DescID: 107 (t-), Value: "t has a comment"}
  │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 107 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107 (t-), ColumnID: 1 (k-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107 (t-), Name: "k", ColumnID: 1 (k-)}

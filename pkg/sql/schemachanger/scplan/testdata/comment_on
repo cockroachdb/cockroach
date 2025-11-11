@@ -13,20 +13,20 @@ COMMENT ON DATABASE db1 IS 'db1 is good';
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[DatabaseComment:{DescID: 104, Comment: db1 is good}, PUBLIC], ABSENT] -> PUBLIC
+    [[DatabaseComment:{DescID: 104, Value: db1 is good}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertDatabaseComment
       Comment: db1 is good
       DatabaseID: 104
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[DatabaseComment:{DescID: 104, Comment: db1 is good}, PUBLIC], PUBLIC] -> ABSENT
+    [[DatabaseComment:{DescID: 104, Value: db1 is good}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[DatabaseComment:{DescID: 104, Comment: db1 is good}, PUBLIC], ABSENT] -> PUBLIC
+    [[DatabaseComment:{DescID: 104, Value: db1 is good}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertDatabaseComment
       Comment: db1 is good
@@ -37,20 +37,20 @@ COMMENT ON SCHEMA db1.sc1 IS 'sc1 is good';
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[SchemaComment:{DescID: 106, Comment: sc1 is good}, PUBLIC], ABSENT] -> PUBLIC
+    [[SchemaComment:{DescID: 106, Value: sc1 is good}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertSchemaComment
       Comment: sc1 is good
       SchemaID: 106
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[SchemaComment:{DescID: 106, Comment: sc1 is good}, PUBLIC], PUBLIC] -> ABSENT
+    [[SchemaComment:{DescID: 106, Value: sc1 is good}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[SchemaComment:{DescID: 106, Comment: sc1 is good}, PUBLIC], ABSENT] -> PUBLIC
+    [[SchemaComment:{DescID: 106, Value: sc1 is good}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertSchemaComment
       Comment: sc1 is good
@@ -61,20 +61,20 @@ COMMENT ON TABLE db1.sc1.t1 IS 't1 is good';
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[TableComment:{DescID: 107, Comment: t1 is good}, PUBLIC], ABSENT] -> PUBLIC
+    [[TableComment:{DescID: 107, Value: t1 is good}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertTableComment
       Comment: t1 is good
       TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[TableComment:{DescID: 107, Comment: t1 is good}, PUBLIC], PUBLIC] -> ABSENT
+    [[TableComment:{DescID: 107, Value: t1 is good}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[TableComment:{DescID: 107, Comment: t1 is good}, PUBLIC], ABSENT] -> PUBLIC
+    [[TableComment:{DescID: 107, Value: t1 is good}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertTableComment
       Comment: t1 is good
@@ -85,7 +85,7 @@ COMMENT ON COLUMN db1.sc1.t1.id IS 'id is important';
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[ColumnComment:{DescID: 107, ColumnID: 1, Comment: id is important}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnComment:{DescID: 107, ColumnID: 1, Value: id is important}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertColumnComment
       ColumnID: 1
@@ -93,13 +93,13 @@ StatementPhase stage 1 of 1 with 1 MutationType op
       TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[ColumnComment:{DescID: 107, ColumnID: 1, Comment: id is important}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnComment:{DescID: 107, ColumnID: 1, Value: id is important}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[ColumnComment:{DescID: 107, ColumnID: 1, Comment: id is important}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnComment:{DescID: 107, ColumnID: 1, Value: id is important}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertColumnComment
       ColumnID: 1
@@ -111,7 +111,7 @@ COMMENT ON INDEX db1.sc1.t1_pkey IS 'pkey is good';
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexComment:{DescID: 107, IndexID: 1, Value: pkey is good}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertIndexComment
       Comment: pkey is good
@@ -119,13 +119,13 @@ StatementPhase stage 1 of 1 with 1 MutationType op
       TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, PUBLIC], PUBLIC] -> ABSENT
+    [[IndexComment:{DescID: 107, IndexID: 1, Value: pkey is good}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexComment:{DescID: 107, IndexID: 1, Value: pkey is good}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertIndexComment
       Comment: pkey is good
@@ -137,7 +137,7 @@ COMMENT ON CONSTRAINT t1_amount_gt_10 ON db1.sc1.t1 IS 'this is a rule';
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[ConstraintComment:{DescID: 107, ConstraintID: 2, Comment: this is a rule}, PUBLIC], ABSENT] -> PUBLIC
+    [[ConstraintComment:{DescID: 107, ConstraintID: 2, Value: this is a rule}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertConstraintComment
       Comment: this is a rule
@@ -145,13 +145,13 @@ StatementPhase stage 1 of 1 with 1 MutationType op
       TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[ConstraintComment:{DescID: 107, ConstraintID: 2, Comment: this is a rule}, PUBLIC], PUBLIC] -> ABSENT
+    [[ConstraintComment:{DescID: 107, ConstraintID: 2, Value: this is a rule}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[ConstraintComment:{DescID: 107, ConstraintID: 2, Comment: this is a rule}, PUBLIC], ABSENT] -> PUBLIC
+    [[ConstraintComment:{DescID: 107, ConstraintID: 2, Value: this is a rule}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertConstraintComment
       Comment: this is a rule
@@ -172,19 +172,19 @@ COMMENT ON DATABASE db1 IS NULL;
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[DatabaseComment:{DescID: 104, Comment: db1 is good}, ABSENT], PUBLIC] -> ABSENT
+    [[DatabaseComment:{DescID: 104, Value: db1 is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveDatabaseComment
       DatabaseID: 104
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[DatabaseComment:{DescID: 104, Comment: db1 is good}, ABSENT], ABSENT] -> PUBLIC
+    [[DatabaseComment:{DescID: 104, Value: db1 is good}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[DatabaseComment:{DescID: 104, Comment: db1 is good}, ABSENT], PUBLIC] -> ABSENT
+    [[DatabaseComment:{DescID: 104, Value: db1 is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveDatabaseComment
       DatabaseID: 104
@@ -194,19 +194,19 @@ COMMENT ON SCHEMA db1.sc1 IS NULL;
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[SchemaComment:{DescID: 106, Comment: sc1 is good}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaComment:{DescID: 106, Value: sc1 is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveSchemaComment
       SchemaID: 106
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[SchemaComment:{DescID: 106, Comment: sc1 is good}, ABSENT], ABSENT] -> PUBLIC
+    [[SchemaComment:{DescID: 106, Value: sc1 is good}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[SchemaComment:{DescID: 106, Comment: sc1 is good}, ABSENT], PUBLIC] -> ABSENT
+    [[SchemaComment:{DescID: 106, Value: sc1 is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveSchemaComment
       SchemaID: 106
@@ -216,19 +216,19 @@ COMMENT ON TABLE db1.sc1.t1 IS NULL;
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[TableComment:{DescID: 107, Comment: t1 is good}, ABSENT], PUBLIC] -> ABSENT
+    [[TableComment:{DescID: 107, Value: t1 is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveTableComment
       TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[TableComment:{DescID: 107, Comment: t1 is good}, ABSENT], ABSENT] -> PUBLIC
+    [[TableComment:{DescID: 107, Value: t1 is good}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[TableComment:{DescID: 107, Comment: t1 is good}, ABSENT], PUBLIC] -> ABSENT
+    [[TableComment:{DescID: 107, Value: t1 is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveTableComment
       TableID: 107
@@ -238,7 +238,7 @@ COMMENT ON COLUMN db1.sc1.t1.id IS NULL;
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[ColumnComment:{DescID: 107, ColumnID: 1, Comment: id is important}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComment:{DescID: 107, ColumnID: 1, Value: id is important}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveColumnComment
       ColumnID: 1
@@ -246,13 +246,13 @@ StatementPhase stage 1 of 1 with 1 MutationType op
       TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[ColumnComment:{DescID: 107, ColumnID: 1, Comment: id is important}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnComment:{DescID: 107, ColumnID: 1, Value: id is important}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[ColumnComment:{DescID: 107, ColumnID: 1, Comment: id is important}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComment:{DescID: 107, ColumnID: 1, Value: id is important}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveColumnComment
       ColumnID: 1
@@ -264,20 +264,20 @@ COMMENT ON INDEX db1.sc1.t1_pkey IS NULL;
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexComment:{DescID: 107, IndexID: 1, Value: pkey is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveIndexComment
       IndexID: 1
       TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, ABSENT], ABSENT] -> PUBLIC
+    [[IndexComment:{DescID: 107, IndexID: 1, Value: pkey is good}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[IndexComment:{DescID: 107, IndexID: 1, Comment: pkey is good}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexComment:{DescID: 107, IndexID: 1, Value: pkey is good}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveIndexComment
       IndexID: 1
@@ -288,20 +288,20 @@ COMMENT ON CONSTRAINT t1_amount_gt_10 ON db1.sc1.t1 IS NULL;
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[ConstraintComment:{DescID: 107, ConstraintID: 2, Comment: this is a rule}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintComment:{DescID: 107, ConstraintID: 2, Value: this is a rule}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveConstraintComment
       ConstraintID: 2
       TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[ConstraintComment:{DescID: 107, ConstraintID: 2, Comment: this is a rule}, ABSENT], ABSENT] -> PUBLIC
+    [[ConstraintComment:{DescID: 107, ConstraintID: 2, Value: this is a rule}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[ConstraintComment:{DescID: 107, ConstraintID: 2, Comment: this is a rule}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintComment:{DescID: 107, ConstraintID: 2, Value: this is a rule}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveConstraintComment
       ConstraintID: 2
@@ -317,20 +317,20 @@ COMMENT ON TYPE roach_dwellings IS 'First CRDB comment on types';
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[TypeComment:{DescID: 108, Comment: First CRDB comment on types}, PUBLIC], ABSENT] -> PUBLIC
+    [[TypeComment:{DescID: 108, Value: First CRDB comment on types}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertTypeComment
       Comment: First CRDB comment on types
       TypeID: 108
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[TypeComment:{DescID: 108, Comment: First CRDB comment on types}, PUBLIC], PUBLIC] -> ABSENT
+    [[TypeComment:{DescID: 108, Value: First CRDB comment on types}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[TypeComment:{DescID: 108, Comment: First CRDB comment on types}, PUBLIC], ABSENT] -> PUBLIC
+    [[TypeComment:{DescID: 108, Value: First CRDB comment on types}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertTypeComment
       Comment: First CRDB comment on types
@@ -341,20 +341,20 @@ COMMENT ON TYPE roach_legs IS 'Second CRDB comment on types';
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[TypeComment:{DescID: 110, Comment: Second CRDB comment on types}, PUBLIC], ABSENT] -> PUBLIC
+    [[TypeComment:{DescID: 110, Value: Second CRDB comment on types}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertTypeComment
       Comment: Second CRDB comment on types
       TypeID: 110
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[TypeComment:{DescID: 110, Comment: Second CRDB comment on types}, PUBLIC], PUBLIC] -> ABSENT
+    [[TypeComment:{DescID: 110, Value: Second CRDB comment on types}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[TypeComment:{DescID: 110, Comment: Second CRDB comment on types}, PUBLIC], ABSENT] -> PUBLIC
+    [[TypeComment:{DescID: 110, Value: Second CRDB comment on types}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.UpsertTypeComment
       Comment: Second CRDB comment on types
@@ -370,19 +370,19 @@ COMMENT ON TYPE roach_dwellings IS NULL;
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[TypeComment:{DescID: 108, Comment: First CRDB comment on types}, ABSENT], PUBLIC] -> ABSENT
+    [[TypeComment:{DescID: 108, Value: First CRDB comment on types}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveTypeComment
       TypeID: 108
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[TypeComment:{DescID: 108, Comment: First CRDB comment on types}, ABSENT], ABSENT] -> PUBLIC
+    [[TypeComment:{DescID: 108, Value: First CRDB comment on types}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[TypeComment:{DescID: 108, Comment: First CRDB comment on types}, ABSENT], PUBLIC] -> ABSENT
+    [[TypeComment:{DescID: 108, Value: First CRDB comment on types}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveTypeComment
       TypeID: 108
@@ -392,19 +392,19 @@ COMMENT ON TYPE roach_legs IS NULL;
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
-    [[TypeComment:{DescID: 110, Comment: Second CRDB comment on types}, ABSENT], PUBLIC] -> ABSENT
+    [[TypeComment:{DescID: 110, Value: Second CRDB comment on types}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveTypeComment
       TypeID: 110
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[TypeComment:{DescID: 110, Comment: Second CRDB comment on types}, ABSENT], ABSENT] -> PUBLIC
+    [[TypeComment:{DescID: 110, Value: Second CRDB comment on types}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 1 MutationType op
   transitions:
-    [[TypeComment:{DescID: 110, Comment: Second CRDB comment on types}, ABSENT], PUBLIC] -> ABSENT
+    [[TypeComment:{DescID: 110, Value: Second CRDB comment on types}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveTypeComment
       TypeID: 110
