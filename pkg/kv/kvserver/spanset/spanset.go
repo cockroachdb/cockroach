@@ -370,7 +370,7 @@ func (s *SpanSet) checkAllowed(
 
 		for ac := access; ac < NumSpanAccess; ac++ {
 			for _, cur := range s.spans[ac][scope] {
-				if contains(cur.Span, span) && check(ac, cur) {
+				if Contains(cur.Span, span) && check(ac, cur) {
 					return nil
 				}
 			}
@@ -382,11 +382,20 @@ func (s *SpanSet) checkAllowed(
 	return nil
 }
 
-// contains returns whether s1 contains s2. Unlike Span.Contains, this function
-// supports spans with a nil start key and a non-nil end key (e.g. "[nil, c)").
-// In this form, s2.Key (inclusive) is considered to be the previous key to
-// s2.EndKey (exclusive).
-func contains(s1, s2 roachpb.Span) bool {
+// Contains returns whether s1 contains s2. Unlike Span.Contains, this function
+// supports spans (both s1 and s2) with a nil start key and a non-nil end
+// key (e.g. "[nil, c)"). In this form, the span with nil Key is considered to
+// represent: [EndKey.Prev(), EndKey).
+func Contains(s1, s2 roachpb.Span) bool {
+	if s1.Key == nil {
+		// In this case, s1 can only contain s2 is a point span that equals s1.
+		if s2.Key == nil {
+			return s1.EndKey.Compare(s2.EndKey) == 0
+		}
+		return s2.Key.IsPrev(s1.EndKey) &&
+			(s2.EndKey == nil || s1.EndKey.Compare(s2.EndKey) == 0)
+	}
+
 	if s2.Key != nil {
 		// The common case.
 		return s1.Contains(s2)
@@ -399,6 +408,43 @@ func contains(s1, s2 roachpb.Span) bool {
 		return s1.Key.IsPrev(s2.EndKey)
 	}
 
+	return s1.Key.Compare(s2.EndKey) < 0 && s1.EndKey.Compare(s2.EndKey) >= 0
+}
+
+// Overlaps returns whether s1 overlaps s2. Unlike Span.Overlaps, this function
+// supports spans with a nil start key and a non-nil end key (e.g. "[nil, c)").
+// In this form, the span with nil Key is considered to represent:
+// [EndKey.Prev(), EndKey).
+func Overlaps(s1, s2 roachpb.Span) bool {
+	// If both keys have a nil start, the spans overlap if the end keys are the
+	// same.
+	if s1.Key == nil && s2.Key == nil {
+		return s1.EndKey.Compare(s2.EndKey) == 0
+	}
+
+	// Handle the case where s1.Key is nil but not s2.Key by swapping and
+	// recursing. This way, the rest of the function assumes that s1.Key is not
+	// nil.
+	if s1.Key == nil && s2.Key != nil {
+		return Overlaps(s2, s1)
+	}
+
+	// The common case: both spans have non-nil start keys.
+	if s2.Key != nil {
+		return s1.Overlaps(s2)
+	}
+
+	// s1.Key is not nil, but s2.Key is nil.
+	// The following is equivalent to:
+	//   s1.Overlaps(roachpb.Span{Key: s2.EndKey.Prev()})
+
+	if s1.EndKey == nil {
+		// s1 is a point span, overlaps with s2 iff s1.Key is the prev of s2.EndKey
+		return s1.Key.IsPrev(s2.EndKey)
+	}
+
+	// s1 is [s1.Key, s1.EndKey), s2 is [s2.EndKey.Prev(), s2.EndKey)
+	// They overlap iff s2.EndKey.Prev() is in [s1.Key, s1.EndKey).
 	return s1.Key.Compare(s2.EndKey) < 0 && s1.EndKey.Compare(s2.EndKey) >= 0
 }
 
