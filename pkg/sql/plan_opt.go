@@ -237,7 +237,8 @@ func (p *planner) prepareUsingOptimizer(
 		} else {
 			stmt.Prepared.BaseMemo = memo
 		}
-		if opc.useCache {
+		// We only cache memos that don't use canary stats.
+		if opc.useCache && memo.UseCanaryStatsStatus() != eval.UseCanaryStatsValTrue {
 			// execPrepare sets the Metadata.InferredTypes field after this
 			// point. However, once the Metadata goes into the cache, it
 			// can't be modified without causing race conditions. So make a copy of
@@ -842,7 +843,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	}
 
 	p := opc.p
-	if opc.useCache {
+	if opc.useCache && p.EvalContext().UseCanaryStats != eval.UseCanaryStatsValTrue {
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.p.stmt.SQL)
 		if ok {
@@ -906,8 +907,10 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	// any VolatilityStable operators, add it to the cache.
 	// Note that non-prepared statements from pgwire clients cannot have
 	// placeholders.
+	// We also only cache memo that is not using canary stats.
 	if opc.useCache && !bld.HadPlaceholders && !bld.DisableMemoReuse &&
-		!f.FoldingControl().PermittedStableFold() {
+		!f.FoldingControl().PermittedStableFold() &&
+		p.EvalContext().UseCanaryStats != eval.UseCanaryStatsValTrue {
 		opc.log(ctx, "query cache add")
 		memo := opc.optimizer.DetachMemo(ctx)
 		cachedData := querycache.CachedData{

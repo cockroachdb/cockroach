@@ -167,6 +167,11 @@ var detailedLatencyMetrics = settings.RegisterBoolSetting(
 // The selection is atomic per query: if a query is chosen for canary evaluation,
 // it will use canary statistics for ALL tables it references (where available).
 // A query never uses a mix of canary and stable statistics.
+//
+// Note: Non-PREPARE statements selected for canary statistics bypass
+// the query cache entirely. They neither read from nor write to the
+// cache. Instead, a one-time-use memo is created exclusively for that
+// statement's execution.
 var canaryFraction = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"sql.stats.canary_fraction",
