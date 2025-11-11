@@ -460,7 +460,7 @@ func (e *executor) executeBenchmarks() error {
 			if e.postIssues && benchmarkResponse.key == e.postConfig.binary {
 				artifactsDir := fmt.Sprintf("%s/%s", e.outputDir, benchmarkResponse.key)
 				formatter, req := createBenchmarkPostRequest(artifactsDir, response, timeout)
-				err = postIssuesToGitHub(context.Background(), e.log, formatter, req)
+				err = postBenchmarkIssue(context.Background(), e.log, formatter, req)
 				if err != nil {
 					e.log.Errorf("Failed to post benchmark issue - %v", err)
 					executorError = errors.CombineErrors(executorError, errors.Wrap(err, "failed to post benchmark issue"))
