@@ -25,7 +25,7 @@ func TestFeedCreation(t *testing.T) {
 
 	db := srv.ApplicationLayer().InternalDB().(isql.DB)
 	// expect an error when trying to read from a queue that doesn't exist
-	qm := NewManager(db, srv.RangeFeedFactory().(*rangefeed.Factory), srv.Codec(), srv.ApplicationLayer().LeaseManager().(*lease.Manager))
+	qm := NewManager(ctx, db, srv.RangeFeedFactory().(*rangefeed.Factory), srv.Codec(), srv.ApplicationLayer().LeaseManager().(*lease.Manager))
 	_, err := qm.GetOrInitReader(context.Background(), "test")
 	require.ErrorContains(t, err, "queue feed not found")
 
