@@ -250,7 +250,10 @@ func (p *planner) prepareUsingOptimizer(
 				Memo:     memo,
 				Metadata: &pm,
 			}
-			p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
+			// We only cache non-canary-stats plans.
+			if memo.UseCanaryStatsStatus() != eval.UseCanaryStatsValTrue {
+				p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
+			}
 		}
 	}
 	return opc.flags, nil
@@ -849,7 +852,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	}
 
 	p := opc.p
-	if opc.useCache {
+	if opc.useCache && p.EvalContext().UseCanaryStats != eval.UseCanaryStatsValTrue {
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.p.stmt.SQL)
 		if ok {
@@ -913,8 +916,10 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	// any VolatilityStable operators, add it to the cache.
 	// Note that non-prepared statements from pgwire clients cannot have
 	// placeholders.
+	// We also only cache memo that is not using canary stats.
 	if opc.useCache && !bld.HadPlaceholders && !bld.DisableMemoReuse &&
-		!f.FoldingControl().PermittedStableFold() {
+		!f.FoldingControl().PermittedStableFold() &&
+		p.EvalContext().UseCanaryStats != eval.UseCanaryStatsValTrue {
 		opc.log(ctx, "query cache add")
 		memo := opc.optimizer.DetachMemo(ctx)
 		cachedData := querycache.CachedData{
