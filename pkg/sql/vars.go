@@ -4474,7 +4474,27 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	canaryStatsModeVarName: {
+		GetStringVal: makePostgresBoolGetStringValFn(canaryStatsModeVarName),
+		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			mode, ok := sessiondatapb.CanaryStatsModeFromString(s)
+			if !ok {
+				return newVarValueError(canaryStatsModeVarName, s, "auto", "off", "on")
+			}
+			m.SetCanaryStatsMode(mode)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return evalCtx.SessionData().CanaryStatsMode.String(), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return sessiondatapb.CanaryStatsModeAuto.String()
+		},
+	},
 }
+
+const canaryStatsModeVarName = `canary_stats_mode`
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
 	if strings.ToLower(s) == "database" {

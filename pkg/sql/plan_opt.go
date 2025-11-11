@@ -156,6 +156,7 @@ func (p *planner) prepareUsingOptimizer(
 					stmt.Hints = pm.Hints
 					stmt.HintIDs = pm.HintIDs
 					stmt.HintsGeneration = pm.HintsGeneration
+					stmt.Prepared.UseCanaryStats = pm.UseCanaryStats
 					if cachedData.Memo.IsOptimized() {
 						// A cache, fully optimized memo is an "ideal generic
 						// memo".
@@ -176,7 +177,7 @@ func (p *planner) prepareUsingOptimizer(
 		opc.flags.Set(planFlagOptCacheMiss)
 	}
 
-	// Build the memo. Do not attempt to build a generic plan at PREPARE-time.
+	// Build the memo. Do not attempt to build a non-ideal generic plan at PREPARE-time.
 	memo, _, err := opc.buildReusableMemo(ctx, false /* allowNonIdealGeneric */)
 	if err != nil {
 		return 0, err
@@ -758,6 +759,10 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 	prep := p.stmt.Prepared
 	if !opc.allowMemoReuse || prep == nil {
 		return nil, nil
+	}
+
+	if prep.UseCanaryStats != eval.UseCanaryStatsValUnset {
+		opc.p.EvalContext().UseCanaryStats = prep.UseCanaryStats
 	}
 
 	// If the statement was previously prepared, check for a reusable memo.

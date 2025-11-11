@@ -52,6 +52,7 @@ backslash_quote                                                  safe_encoding
 buffered_writes_use_locking_on_non_unique_indexes                off
 bypass_pcr_reader_catalog_aost                                   off
 bytea_output                                                     hex
+canary_stats_mode                                                auto
 check_function_bodies                                            on
 client_encoding                                                  UTF8
 client_min_messages                                              notice
