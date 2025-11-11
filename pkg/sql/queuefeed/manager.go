@@ -110,6 +110,7 @@ func (m *Manager) GetOrInitReader(ctx context.Context, name string) (queuebase.R
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("get or init reader for queue %s with table desc id: %d\n", name, tableDescID)
 	reader := NewReader(ctx, m.executor, m, m.rff, m.codec, m.leaseMgr, name, tableDescID)
 	return reader, nil
 }

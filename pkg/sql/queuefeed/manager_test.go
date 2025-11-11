@@ -5,10 +5,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +25,7 @@ func TestFeedCreation(t *testing.T) {
 
 	db := srv.ApplicationLayer().InternalDB().(isql.DB)
 	// expect an error when trying to read from a queue that doesn't exist
-	qm := NewManager(db)
+	qm := NewManager(db, srv.RangeFeedFactory().(*rangefeed.Factory), srv.Codec(), srv.ApplicationLayer().LeaseManager().(*lease.Manager))
 	_, err := qm.GetOrInitReader(context.Background(), "test")
 	require.ErrorContains(t, err, "queue feed not found")
 
@@ -33,5 +36,5 @@ func TestFeedCreation(t *testing.T) {
 	reader, err := qm.GetOrInitReader(context.Background(), "test")
 	require.NoError(t, err)
 	require.NotNil(t, reader)
-	reader.cancel()
+	reader.(*Reader).cancel(errors.New("test shutdown"))
 }

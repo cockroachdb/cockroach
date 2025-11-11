@@ -44,6 +44,7 @@ type Reader struct {
 	rff      *rangefeed.Factory
 	mgr      *Manager
 	name     string
+	tableID  descpb.ID
 
 	// stuff for decoding data. this is ripped from rowfetcher_cache.go in changefeeds
 	codec    keys.SQLCodec
@@ -71,6 +72,7 @@ func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, rff *rangefe
 		leaseMgr:                    leaseMgr,
 		name:                        name,
 		rff:                         rff,
+		tableID:                     descpb.ID(tableDescID),
 		triggerCheckForReassignment: make(chan struct{}),
 	}
 	r.mu.state = readerStateBatching
@@ -87,9 +89,7 @@ func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, rff *rangefe
 		r.mu.poppedWakeup.Broadcast()
 	}
 
-	// TODO(queuefeed): Re-enable once queue data table and spans are implemented.
-	// We will use the table descriptor id to set up a rangefeed on the table.
-	// r.setupRangefeed(ctx)
+	r.setupRangefeed(ctx)
 	go r.run(ctx)
 	return r
 }
@@ -159,7 +159,14 @@ func (r *Reader) setupRangefeed(ctx context.Context) {
 	// TODO: why are we given a zero codec?
 	r.codec = keys.MakeSQLCodec(roachpb.SystemTenantID)
 
-	spans := []roachpb.Span{desc.Underlying().(catalog.TableDescriptor).TableSpan(r.codec)}
+	tk := roachpb.Span{
+		Key: r.codec.TablePrefix(uint32(r.tableID)),
+	}
+	tk.EndKey = tk.Key.PrefixEnd()
+	spans := []roachpb.Span{tk}
+
+	fmt.Printf("starting rangefeed with spans: %+v\n", spans)
+
 	if err := rf.Start(ctx, spans); err != nil {
 		setErr(err)
 		return
