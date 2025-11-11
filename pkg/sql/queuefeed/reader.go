@@ -89,8 +89,6 @@ func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, rff *rangefe
 		r.mu.poppedWakeup.Broadcast()
 	}
 
-	// TODO(queuefeed): Re-enable once queue data table and spans are implemented.
-	// We will use the table descriptor id to set up a rangefeed on the table.
 	r.setupRangefeed(ctx)
 	go r.run(ctx)
 	return r
