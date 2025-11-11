@@ -91,6 +91,7 @@ func (m *Manager) CreateQueue(ctx context.Context, queueName string, tableDescID
 func (m *Manager) GetOrInitReader(ctx context.Context, name string) (queuebase.Reader, error) {
 	// TODO: get if exists already
 	var tableDescID int64
+	// TODO: this ctx on the other hand should be stmt scoped
 	err := m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, err := txn.Exec(ctx, "create_q", txn.KV(), createQueueTableSQL)
 		if err != nil {

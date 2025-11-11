@@ -228,7 +228,7 @@ func (r *Reader) GetRows(ctx context.Context, limit int) ([]tree.Datums, error) 
 		go func() {
 			select {
 			case <-ctx.Done():
-				r.cancel(errors.Wrapf(context.Cause(ctx), "GetRows canceled"))
+				r.cancel(errors.Wrapf(ctx.Err(), "GetRows canceled"))
 			case <-done:
 				return
 			}
@@ -237,10 +237,10 @@ func (r *Reader) GetRows(ctx context.Context, limit int) ([]tree.Datums, error) 
 			r.mu.pushedWakeup.Wait()
 		}
 		if ctx.Err() != nil {
-			return nil, errors.Wrapf(context.Cause(ctx), "GetRows canceled")
+			return nil, errors.Wrapf(ctx.Err(), "GetRows canceled")
 		}
 		if r.goroCtx.Err() != nil {
-			return nil, errors.Wrapf(context.Cause(r.goroCtx), "reader shutting down")
+			return nil, errors.Wrapf(r.goroCtx.Err(), "reader shutting down")
 		}
 	}
 

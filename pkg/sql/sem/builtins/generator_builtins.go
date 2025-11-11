@@ -4395,9 +4395,7 @@ func (g *queueFeedGenerator) ResolvedType() *types.T {
 
 // Start implements the eval.ValueGenerator interface.
 func (g *queueFeedGenerator) Start(ctx context.Context, txn *kv.Txn) error {
-	// Ignoring queue_name for now; we only support one queue. Same for limit.
-	// TODO(queuefeed): support multiple queues and limit.
-	qr, err := getQueueManager(g.evalCtx).GetOrInitReader(ctx, g.queueName)
+	qr, err := getQueueManager(g.evalCtx).GetOrInitReader(g.evalCtx.SessionCtx, g.queueName)
 	if err != nil {
 		return err
 	}
