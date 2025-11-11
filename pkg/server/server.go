@@ -674,7 +674,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
 		transport, err := storeliveness.NewTransport(
 			cfg.AmbientCtx, stopper, clock, kvNodeDialer,
-			grpcServer.Server, drpcServer.DRPCServer, nil, /* knobs */
+			grpcServer.Server, drpcServer.DRPCServer, st, nil, /* knobs */
 		)
 		if err != nil {
 			return nil, err
