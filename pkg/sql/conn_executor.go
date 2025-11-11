@@ -156,6 +156,59 @@ var detailedLatencyMetrics = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+// canaryFraction controls the probabilistic sampling rate for queries
+// participating in the canary statistics rollout feature.
+//
+// This cluster-level setting determines what fraction of queries will use
+// "canary statistics" (newly collected stats within their canary window)
+// versus "stable statistics" (previously proven stats). For example, a value
+// of 0.2 means 20% of queries will test canary stats while 80% use stable stats.
+//
+// The selection is atomic per query: if a query is chosen for canary evaluation,
+// it will use canary statistics for ALL tables it references (where available).
+// A query never uses a mix of canary and stable statistics.
+var canaryFraction = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"sql.stats.canary_fraction",
+	"probability that table statistics will use canary mode instead of stable mode for query planning [0.0-1.0]",
+	0.1,
+	settings.Fraction,
+	settings.WithPublic,
+)
+
+// canaryRollDice performs the probabilistic check to determine if a query
+// should use the "canary path" for statistics.
+// This selection is atomic per query. We don't roll the dice in the following cases:
+// 1. Internal queries;
+// 2. Executing a prepared statement (only roll once at prepare time).
+func canaryRollDice(evalCtx *eval.Context, rng *rand.Rand) eval.UseCanaryStatsVal {
+	switch m := evalCtx.SessionData().CanaryStatsMode; m {
+	case sessiondatapb.CanaryStatsModeAuto:
+		threshold := canaryFraction.Get(&evalCtx.Settings.SV)
+		// If the fraction is 0, never use canary stats.
+		if threshold == 0 {
+			return eval.UseCanaryStatsValFalse
+		}
+		// If the fraction is 1, always use canary stats.
+		if threshold == 1 {
+			return eval.UseCanaryStatsValTrue
+		}
+
+		actual := rng.Float64()
+		if actual < threshold {
+			return eval.UseCanaryStatsValTrue
+		}
+		return eval.UseCanaryStatsValFalse
+	case sessiondatapb.CanaryStatsModeOff:
+		return eval.UseCanaryStatsValFalse
+	case sessiondatapb.CanaryStatsModeOn:
+		return eval.UseCanaryStatsValTrue
+	}
+	// This should not happen but just in case of an unknown mode, we
+	// default to not using canary stats.
+	return eval.UseCanaryStatsValFalse
+}
+
 // The metric label name we'll use to facet latency metrics by statement fingerprint.
 var detailedLatencyMetricLabel = "fingerprint"
 
@@ -1804,7 +1857,8 @@ type connExecutor struct {
 	// rng contains random number generators for this session.
 	rng struct {
 		// internal is used for internal operations like determining the query
-		// cancel key and whether sampling execution stats should be performed.
+		// cancel key, whether sampling execution stats should be performed, and
+		// whether the query should use canary stats versus stable stats.
 		internal *rand.Rand
 		// external is used to power random() builtin. It is important to store
 		// this field by value so that the same RNG is reused throughout the
@@ -3934,6 +3988,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.SkipNormalize = false
 	evalCtx.SchemaChangerState = ex.extraTxnState.schemaChangerState
 	evalCtx.DescIDGenerator = ex.getDescIDGenerator()
+	evalCtx.UseCanaryStats = eval.UseCanaryStatsValUnset
 
 	// See resetPlanner for more context on setting the maximum timestamp for
 	// AOST read retries.

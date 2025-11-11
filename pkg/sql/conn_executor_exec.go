@@ -568,6 +568,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache)
 		res.ResetStmtType(ps.AST)
 
+		// We reuse the prepared statement's useCanaryStats setting, so
+		// that we don't re-roll the dice.
+		if ps.UseCanaryStats != eval.UseCanaryStatsValUnset {
+			p.EvalContext().UseCanaryStats = ps.UseCanaryStats
+		}
+
 		if e.DiscardRows {
 			ih.SetDiscardRows()
 		}
@@ -1467,6 +1473,12 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		vars.stmt.HintsGeneration = ps.HintsGeneration
 		vars.stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache)
 		res.ResetStmtType(ps.AST)
+
+		// We reuse the prepared statement's useCanaryStats setting, so
+		// that we don't re-roll the dice.
+		if ps.UseCanaryStats != eval.UseCanaryStatsValUnset {
+			p.EvalContext().UseCanaryStats = ps.UseCanaryStats
+		}
 
 		if e.DiscardRows {
 			ih.SetDiscardRows()
@@ -3224,6 +3236,10 @@ func (ex *connExecutor) makeExecPlan(
 ) (context.Context, error) {
 	if err := ex.maybeAdjustTxnForDDL(ctx, planner.stmt); err != nil {
 		return ctx, err
+	}
+
+	if planner.EvalContext().UseCanaryStats == eval.UseCanaryStatsValUnset && !planner.SessionData().Internal {
+		planner.EvalContext().UseCanaryStats = canaryRollDice(planner.EvalContext(), ex.rng.internal)
 	}
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
