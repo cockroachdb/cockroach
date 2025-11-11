@@ -83,8 +83,14 @@ type Span struct {
 // The Span slice for a particular access and scope contains non-overlapping
 // spans in increasing key order after calls to SortAndDedup.
 type SpanSet struct {
-	spans           [NumSpanAccess][NumSpanScope][]Span
-	allowUndeclared bool
+	spans [NumSpanAccess][NumSpanScope][]Span
+	// forbiddenSpansMatchers are functions that return an error if the given span
+	// shouldn't be accessed (forbidden). This allows for complex pattern matching
+	// like forbidding specific keys across all range IDs without enumerating them
+	// explicitly.
+	forbiddenSpansMatchers []func(roachpb.Span) error
+	allowUndeclared        bool
+	allowForbidden         bool
 }
 
 var spanSetPool = sync.Pool{
@@ -113,6 +119,8 @@ func (s *SpanSet) Release() {
 			s.spans[sa][ss] = recycle
 		}
 	}
+	s.forbiddenSpansMatchers = nil
+	s.allowForbidden = false
 	s.allowUndeclared = false
 	spanSetPool.Put(s)
 }
@@ -155,7 +163,9 @@ func (s *SpanSet) Copy() *SpanSet {
 			n.spans[sa][ss] = append(n.spans[sa][ss], s.spans[sa][ss]...)
 		}
 	}
+	n.forbiddenSpansMatchers = append(n.forbiddenSpansMatchers, s.forbiddenSpansMatchers...)
 	n.allowUndeclared = s.allowUndeclared
+	n.allowForbidden = s.allowForbidden
 	return n
 }
 
@@ -201,6 +211,12 @@ func (s *SpanSet) AddMVCC(access SpanAccess, span roachpb.Span, timestamp hlc.Ti
 	s.spans[access][scope] = append(s.spans[access][scope], Span{Span: span, Timestamp: timestamp})
 }
 
+// AddForbiddenMatcher adds a forbidden span matcher. The matcher is a function
+// that is called for each span access to check if it should be forbidden.
+func (s *SpanSet) AddForbiddenMatcher(matcher func(roachpb.Span) error) {
+	s.forbiddenSpansMatchers = append(s.forbiddenSpansMatchers, matcher)
+}
+
 // Merge merges all spans in s2 into s. s2 is not modified.
 func (s *SpanSet) Merge(s2 *SpanSet) {
 	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
@@ -208,7 +224,9 @@ func (s *SpanSet) Merge(s2 *SpanSet) {
 			s.spans[sa][ss] = append(s.spans[sa][ss], s2.spans[sa][ss]...)
 		}
 	}
+	s.forbiddenSpansMatchers = append(s.forbiddenSpansMatchers, s2.forbiddenSpansMatchers...)
 	s.allowUndeclared = s2.allowUndeclared
+	s.allowForbidden = s2.allowForbidden
 	s.SortAndDedup()
 }
 
@@ -331,27 +349,37 @@ func (s *SpanSet) CheckAllowedAt(
 func (s *SpanSet) checkAllowed(
 	access SpanAccess, span roachpb.Span, check func(SpanAccess, Span) bool,
 ) error {
-	if s.allowUndeclared {
-		// If the request has specified that undeclared spans are allowed, do
-		// nothing.
-		return nil
-	}
-
-	scope := SpanGlobal
-	if (span.Key != nil && keys.IsLocal(span.Key)) ||
-		(span.EndKey != nil && keys.IsLocal(span.EndKey)) {
-		scope = SpanLocal
-	}
-
-	for ac := access; ac < NumSpanAccess; ac++ {
-		for _, cur := range s.spans[ac][scope] {
-			if contains(cur.Span, span) && check(ac, cur) {
-				return nil
+	// Unless explicitly disabled, check if we access any forbidden spans.
+	if !s.allowForbidden {
+		// Check if the span is forbidden.
+		for _, matcher := range s.forbiddenSpansMatchers {
+			if err := matcher(span); err != nil {
+				return errors.Errorf("cannot %s span %s: matches forbidden pattern",
+					access, span)
 			}
 		}
 	}
 
-	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s\nstack:\n%s", access, span, s, debugutil.Stack())
+	// Unless explicitly disabled, check if we access any undeclared spans.
+	if !s.allowUndeclared {
+		scope := SpanGlobal
+		if (span.Key != nil && keys.IsLocal(span.Key)) ||
+			(span.EndKey != nil && keys.IsLocal(span.EndKey)) {
+			scope = SpanLocal
+		}
+
+		for ac := access; ac < NumSpanAccess; ac++ {
+			for _, cur := range s.spans[ac][scope] {
+				if contains(cur.Span, span) && check(ac, cur) {
+					return nil
+				}
+			}
+		}
+
+		return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s\nstack:\n%s", access, span, s, debugutil.Stack())
+	}
+
+	return nil
 }
 
 // contains returns whether s1 contains s2. Unlike Span.Contains, this function
@@ -395,4 +423,9 @@ func (s *SpanSet) Validate() error {
 // other forms of synchronization for correctness (e.g. GCRequest).
 func (s *SpanSet) DisableUndeclaredAccessAssertions() {
 	s.allowUndeclared = true
+}
+
+// DisableForbiddenAssertions disables forbidden spans assertions.
+func (s *SpanSet) DisableForbiddenSpansAssertions() {
+	s.allowForbidden = true
 }

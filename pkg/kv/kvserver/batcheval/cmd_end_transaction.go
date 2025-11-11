@@ -719,7 +719,7 @@ func resolveLocalLocksWithPagination(
 				// If requested, replace point tombstones with range tombstones.
 				if ok && evalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes {
 					if err := storage.ReplacePointTombstonesWithRangeTombstones(
-						ctx, spanset.DisableReadWriterAssertions(readWriter),
+						ctx, spanset.DisableLatchAssertions(readWriter),
 						ms, update.Key, update.EndKey); err != nil {
 						return 0, 0, 0, errors.Wrapf(err,
 							"replacing point tombstones with range tombstones for write intent at %s on end transaction [%s]",
@@ -757,7 +757,7 @@ func resolveLocalLocksWithPagination(
 			// If requested, replace point tombstones with range tombstones.
 			if evalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes {
 				if err := storage.ReplacePointTombstonesWithRangeTombstones(
-					ctx, spanset.DisableReadWriterAssertions(readWriter),
+					ctx, spanset.DisableLatchAssertions(readWriter),
 					ms, update.Key, update.EndKey); err != nil {
 					return 0, 0, 0, errors.Wrapf(err,
 						"replacing point tombstones with range tombstones for write intent range at %s on end transaction [%s]",
