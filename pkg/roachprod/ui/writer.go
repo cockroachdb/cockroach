@@ -25,13 +25,17 @@ func (w *Writer) Flush(out io.Writer) error {
 	}
 	w.clearLines(out)
 
+	// Count lines in the current buffer
+	newLineCount := 0
 	for _, b := range w.buf.Bytes() {
 		if b == '\n' {
-			w.lineCount++
+			newLineCount++
 		}
 	}
 	_, err := out.Write(w.buf.Bytes())
 	w.buf.Reset()
+	// Update line count to reflect only the lines we just wrote
+	w.lineCount = newLineCount
 	return err
 }
 
@@ -41,5 +45,4 @@ func (w *Writer) Write(b []byte) (n int, err error) {
 
 func (w *Writer) clearLines(out io.Writer) {
 	fmt.Fprint(out, strings.Repeat("\033[1A\033[2K\r", w.lineCount))
-	w.lineCount = 0
 }
