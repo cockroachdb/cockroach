@@ -193,6 +193,48 @@ func (c *CustomFuncs) IsConstValueOrGroupOfConstValues(input opt.ScalarExpr) boo
 	return memo.CanExtractConstDatum(input)
 }
 
+// FoldComparisonWithAny evaluates a comparison expression with a constant on
+// the left-hand side and an ANY/SOME clause of constants on the right-hand
+// side. It returns TrueExpr if at least one constant in the clause makes the
+// comparison true. Otherwise, it returns NullExpr if every element in the
+// clause is a constant and at least one constant makes the comparison null.
+// Otherwise, it returns FalseExpr if every element in the clause is a constant
+// and every constant makes the comparison false. Otherwise, it returns
+// (nil, false).
+func (c *CustomFuncs) FoldComparisonWithAny(
+	cmp opt.Operator, left, right opt.ScalarExpr,
+) (opt.ScalarExpr, bool) {
+	rightTuple := right.(*memo.TupleExpr)
+	allConst := true
+	hasNull := false
+	for _, expr := range rightTuple.Elems {
+		if !c.IsConstValueOrGroupOfConstValues(expr) {
+			allConst = false
+			continue
+		}
+		folded, ok := c.FoldComparison(cmp, left, expr)
+		if !ok {
+			continue
+		}
+		if _, ok := folded.(*memo.TrueExpr); ok {
+			return folded, true
+		}
+		if _, ok := folded.(*memo.NullExpr); ok {
+			hasNull = true
+		}
+	}
+	if allConst {
+		// In case every element in right tuple is a constant but none of them
+		// made the comparison return TrueExpr, we can safely fold
+		// expression to either FalseExpr or NullExpr.
+		if hasNull {
+			return c.f.ConstructNull(types.Bool), true
+		}
+		return c.f.ConstructFalse(), true
+	}
+	return nil, false
+}
+
 // IsNeverNull returns true if the input is a non-null constant value,
 // any tuple, or any array.
 func (c *CustomFuncs) IsNeverNull(input opt.ScalarExpr) bool {
