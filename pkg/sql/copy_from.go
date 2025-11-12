@@ -428,6 +428,19 @@ func (c *copyMachine) canSupportVectorized(table catalog.TableDescriptor) bool {
 	if len(table.VectorIndexes()) > 0 {
 		return false
 	}
+	forcePut := table.GetPrimaryIndex().ForcePut()
+	secondaryIndexes := table.WritableNonPrimaryIndexes()
+	for i := 0; !forcePut && i < len(secondaryIndexes); i++ {
+		forcePut = secondaryIndexes[i].ForcePut()
+	}
+	if forcePut {
+		// Even though the vector encoder supports ForcePut behavior, testing
+		// COPY with a concurrent ALTER PRIMARY KEY has resulted in different
+		// corruption scenarios. The non-vectorized COPY doesn't hit those, so
+		// we choose to fall back.
+		// TODO(#157198): investigate this.
+		return false
+	}
 	// Vectorized COPY doesn't support foreign key checks, no reason it couldn't
 	// but it doesn't work right now because we don't have the ability to
 	// hold the results in a bufferNode. We wouldn't want to enable it
