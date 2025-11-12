@@ -534,7 +534,7 @@ func coreChangefeed(
 			knobs.BeforeDistChangefeed()
 		}
 
-		err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, description, localState, resultsCh, nil, targets)
+		err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, description, localState, resultsCh, nil, targets, hlc.Timestamp{})
 		if err == nil {
 			log.Changefeed.Infof(ctx, "core changefeed completed with no error")
 			return nil
@@ -744,7 +744,8 @@ func createChangefeedJobRecord(
 		return nil, changefeedbase.Targets{}, errors.AssertionFailedf("unknown changefeed level: %s", changefeedStmt.Level)
 	}
 
-	targets, err := AllTargets(ctx, details, p.ExecCfg())
+	// get the statement time
+	targets, err := AllTargetsWithTS(ctx, details, p.ExecCfg(), details.StatementTime)
 	if err != nil {
 		return nil, changefeedbase.Targets{}, err
 	}
@@ -1757,13 +1758,20 @@ func (b *changefeedResumer) resumeWithRetries(
 
 			confPoller := make(chan struct{})
 			g := ctxgroup.WithContext(ctx)
-			targets, err := AllTargets(ctx, details, execCfg)
+			var changefeedStartTS hlc.Timestamp
+			if h := localState.progress.GetHighWater(); h != nil && !h.IsEmpty() {
+				changefeedStartTS = *h
+			} else {
+				changefeedStartTS = details.StatementTime
+			}
+			targets, err := AllTargetsWithTS(ctx, details, execCfg, changefeedStartTS)
 			if err != nil {
 				return err
 			}
+			fmt.Printf("resumeWithRetries initially found %d target tables\n", targets.NumUniqueTables())
 			g.GoCtx(func(ctx context.Context) error {
 				defer close(confPoller)
-				return distChangefeedFlow(ctx, jobExec, jobID, details, description, localState, startedCh, onTracingEvent, targets)
+				return distChangefeedFlow(ctx, jobExec, jobID, details, description, localState, startedCh, onTracingEvent, targets, changefeedStartTS)
 			})
 			g.GoCtx(func(ctx context.Context) error {
 				t := time.NewTicker(15 * time.Second)
@@ -1800,6 +1808,11 @@ func (b *changefeedResumer) resumeWithRetries(
 			if knobs != nil && knobs.HandleDistChangefeedError != nil {
 				flowErr = knobs.HandleDistChangefeedError(flowErr)
 			}
+		}
+
+		if flowErr != nil {
+			fmt.Printf("resumeWithRetries flowErr: %v\n", flowErr)
+			return flowErr
 		}
 
 		// Terminate changefeed if needed.

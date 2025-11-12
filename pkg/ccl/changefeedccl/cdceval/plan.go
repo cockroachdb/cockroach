@@ -7,6 +7,7 @@ package cdceval
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -172,6 +173,7 @@ func withPlanner(
 	fn func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error,
 ) error {
 	return sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		fmt.Printf("withPlanner: setting fixed timestamp to %s\n", schemaTS)
 		if err := txn.KV().SetFixedTimestamp(ctx, schemaTS); err != nil {
 			return err
 		}

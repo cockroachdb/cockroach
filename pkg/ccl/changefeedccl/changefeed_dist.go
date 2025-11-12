@@ -84,6 +84,7 @@ func distChangefeedFlow(
 	resultsCh chan<- tree.Datums,
 	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
 	targets changefeedbase.Targets,
+	schemaTSOverride hlc.Timestamp,
 ) error {
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	progress := localState.progress
@@ -136,6 +137,14 @@ func distChangefeedFlow(
 			knobs.StartDistChangefeedInitialHighwater(ctx, initialHighWater)
 		}
 	}
+	if !schemaTSOverride.IsEmpty() {
+		fmt.Printf("overriding schemaTS from %s to %s\n", schemaTS, schemaTSOverride)
+		schemaTS = schemaTSOverride
+		initialHighWater = schemaTSOverride
+	}
+
+	fmt.Printf("distChangefeedFlow has num target tables: %d\n", targets.NumUniqueTables())
+
 	return startDistChangefeed(
 		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh, onTracingEvent, targets)
 }
@@ -244,6 +253,7 @@ func startDistChangefeed(
 	if err != nil {
 		return err
 	}
+	fmt.Printf("fetched table descriptors at timestamp %s\n", schemaTS)
 
 	if schemaTS.IsEmpty() {
 		schemaTS = details.StatementTime
@@ -524,6 +534,7 @@ func makePlan(
 				}
 			}
 
+			fmt.Printf("creating change aggregator spec with initial high water: %s\n", initialHighWater)
 			aggregatorSpecs[i] = &execinfrapb.ChangeAggregatorSpec{
 				Watches:             watches,
 				InitialHighWater:    &initialHighWater,
@@ -551,6 +562,7 @@ func makePlan(
 			Description:         description,
 			ProgressConfig:      progressConfig,
 			ResolvedSpans:       resolvedSpans,
+			InitialHighWater:    &initialHighWater,
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
