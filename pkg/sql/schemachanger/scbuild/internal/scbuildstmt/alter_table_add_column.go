@@ -399,27 +399,17 @@ func alterTableAddColumnSerialOrGeneratedIdentity(
 		return catalog.UseUnorderedRowID(*d), nil
 	}
 
-	// Start with a fixed sequence number and find the first one
-	// that is free.
-	nameBase := tree.Name(tn.Table() + "_" + string(d.Name) + "_seq")
-	seqName := tree.NewTableNameWithSchema(
-		tn.CatalogName,
-		tn.SchemaName,
-		nameBase)
+	return alterTableCreateColumnSequence(b, d, tn, serialNormalizationMode, defType)
+}
 
-	for idx := 0; ; idx++ {
-		ers := b.ResolveRelation(seqName.ToUnresolvedObjectName(),
-			ResolveParams{
-				IsExistenceOptional: true,
-				RequiredPrivilege:   privilege.USAGE,
-				WithOffline:         true, // We search sequence with provided name, including offline ones.
-				ResolveTypes:        true, // Check for collisions with type names.
-			})
-		if ers.IsEmpty() {
-			break
-		}
-		seqName.ObjectName = tree.Name(fmt.Sprintf("%s%d", nameBase, idx))
-	}
+func alterTableCreateColumnSequence(
+	b BuildCtx,
+	d *tree.ColumnTableDef,
+	tn *tree.TableName,
+	serialNormalizationMode sessiondatapb.SerialNormalizationMode,
+	defType *types.T,
+) (newDef *tree.ColumnTableDef, colDefaultExpression *scpb.Expression) {
+	seqName := getNextAvailableSeqName(b, d.Name, tn)
 
 	seqOptions, err := catalog.SequenceOptionsFromNormalizationMode(serialNormalizationMode, b.ClusterSettings(), d, defType)
 	if err != nil {
@@ -450,6 +440,31 @@ func alterTableAddColumnSerialOrGeneratedIdentity(
 		Expr:            catpb.Expression(tree.Serialize(expr)),
 		UsesSequenceIDs: []catid.DescID{sequenceElem.SequenceID},
 	}
+}
+
+func getNextAvailableSeqName(b BuildCtx, colName tree.Name, tn *tree.TableName) *tree.TableName {
+	// Start with a fixed sequence number and find the first one
+	// that is free.
+	nameBase := tree.Name(tn.Table() + "_" + string(colName) + "_seq")
+	seqName := tree.NewTableNameWithSchema(
+		tn.CatalogName,
+		tn.SchemaName,
+		nameBase)
+
+	for idx := 0; ; idx++ {
+		ers := b.ResolveRelation(seqName.ToUnresolvedObjectName(),
+			ResolveParams{
+				IsExistenceOptional: true,
+				RequiredPrivilege:   privilege.USAGE,
+				WithOffline:         true, // We search sequence with provided name, including offline ones.
+				ResolveTypes:        true, // Check for collisions with type names.
+			})
+		if ers.IsEmpty() {
+			break
+		}
+		seqName.ObjectName = tree.Name(fmt.Sprintf("%s%d", nameBase, idx))
+	}
+	return seqName
 }
 
 func columnNamesToIDs(b BuildCtx, tbl *scpb.Table) map[string]descpb.ColumnID {

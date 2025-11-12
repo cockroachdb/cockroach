@@ -11,7 +11,7 @@ CREATE TABLE customer (
 build
 COMMENT ON DATABASE defaultdb IS 'defaultdb is good';
 ----
-- [[DatabaseComment:{DescID: 100, Comment: defaultdb is good}, PUBLIC], ABSENT]
+- [[DatabaseComment:{DescID: 100, Value: defaultdb is good}, PUBLIC], ABSENT]
   {comment: defaultdb is good, databaseId: 100}
 
 setup
@@ -21,13 +21,13 @@ COMMENT ON DATABASE defaultdb IS 'defaultdb real comment';
 build
 COMMENT ON DATABASE defaultdb IS 'defaultdb is better';
 ----
-- [[DatabaseComment:{DescID: 100, Comment: defaultdb is better}, PUBLIC], ABSENT]
+- [[DatabaseComment:{DescID: 100, Value: defaultdb is better}, PUBLIC], ABSENT]
   {comment: defaultdb is better, databaseId: 100}
 
 build
 COMMENT ON DATABASE defaultdb IS NULL;
 ----
-- [[DatabaseComment:{DescID: 100, Comment: defaultdb real comment}, ABSENT], PUBLIC]
+- [[DatabaseComment:{DescID: 100, Value: defaultdb real comment}, ABSENT], PUBLIC]
   {comment: defaultdb real comment, databaseId: 100}
 
 setup
@@ -41,7 +41,7 @@ COMMENT ON SCHEMA test_schema IS 'public schema real comment';
 build
 COMMENT ON SCHEMA test_schema IS 'public schema is good';
 ----
-- [[SchemaComment:{DescID: 105, Comment: public schema is good}, PUBLIC], ABSENT]
+- [[SchemaComment:{DescID: 105, Value: public schema is good}, PUBLIC], ABSENT]
   {comment: public schema is good, schemaId: 105}
 
 setup
@@ -51,13 +51,13 @@ COMMENT ON SCHEMA test_schema IS 'public schema real comment';
 build
 COMMENT ON SCHEMA test_schema IS 'public schema is better';
 ----
-- [[SchemaComment:{DescID: 105, Comment: public schema is better}, PUBLIC], ABSENT]
+- [[SchemaComment:{DescID: 105, Value: public schema is better}, PUBLIC], ABSENT]
   {comment: public schema is better, schemaId: 105}
 
 build
 COMMENT ON SCHEMA test_schema IS NULL;
 ----
-- [[SchemaComment:{DescID: 105, Comment: public schema real comment}, ABSENT], PUBLIC]
+- [[SchemaComment:{DescID: 105, Value: public schema real comment}, ABSENT], PUBLIC]
   {comment: public schema real comment, schemaId: 105}
 
 build
@@ -69,7 +69,7 @@ COMMENT ON TABLE customer IS 'customer is god';
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[TableComment:{DescID: 104, Comment: customer is god}, PUBLIC], ABSENT]
+- [[TableComment:{DescID: 104, Value: customer is god}, PUBLIC], ABSENT]
   {comment: customer is god, tableId: 104}
 
 setup
@@ -85,13 +85,13 @@ COMMENT ON TABLE customer IS 'customer gets better';
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[TableComment:{DescID: 104, Comment: customer gets better}, PUBLIC], ABSENT]
+- [[TableComment:{DescID: 104, Value: customer gets better}, PUBLIC], ABSENT]
   {comment: customer gets better, tableId: 104}
 
 build
 COMMENT ON TABLE customer IS NULL;
 ----
-- [[TableComment:{DescID: 104, Comment: customer real comment}, ABSENT], PUBLIC]
+- [[TableComment:{DescID: 104, Value: customer real comment}, ABSENT], PUBLIC]
   {comment: customer real comment, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
@@ -109,7 +109,7 @@ COMMENT ON COLUMN customer.name IS 'some comment for name';
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[ColumnComment:{DescID: 104, ColumnID: 2, Comment: some comment for name}, PUBLIC], ABSENT]
+- [[ColumnComment:{DescID: 104, ColumnID: 2, Value: some comment for name}, PUBLIC], ABSENT]
   {columnId: 2, comment: some comment for name, tableId: 104}
 
 setup
@@ -125,13 +125,13 @@ COMMENT ON COLUMN customer.name IS 'some better comment for name';
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[ColumnComment:{DescID: 104, ColumnID: 2, Comment: some better comment for name}, PUBLIC], ABSENT]
+- [[ColumnComment:{DescID: 104, ColumnID: 2, Value: some better comment for name}, PUBLIC], ABSENT]
   {columnId: 2, comment: some better comment for name, tableId: 104}
 
 build
 COMMENT ON COLUMN customer.name IS NULL;
 ----
-- [[ColumnComment:{DescID: 104, ColumnID: 2, Comment: real comment for name}, ABSENT], PUBLIC]
+- [[ColumnComment:{DescID: 104, ColumnID: 2, Value: real comment for name}, ABSENT], PUBLIC]
   {columnId: 2, comment: real comment for name, pgAttributeNum: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
@@ -149,7 +149,7 @@ COMMENT ON INDEX customer@idx_customer_name IS 'comment on name index';
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: comment on name index}, PUBLIC], ABSENT]
+- [[IndexComment:{DescID: 104, IndexID: 2, Value: comment on name index}, PUBLIC], ABSENT]
   {comment: comment on name index, indexId: 2, tableId: 104}
 
 build
@@ -161,7 +161,7 @@ COMMENT ON INDEX public.idx_customer_name IS 'comment on name index';
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: comment on name index}, PUBLIC], ABSENT]
+- [[IndexComment:{DescID: 104, IndexID: 2, Value: comment on name index}, PUBLIC], ABSENT]
   {comment: comment on name index, indexId: 2, tableId: 104}
 
 build
@@ -173,7 +173,7 @@ COMMENT ON INDEX defaultdb.idx_customer_name IS 'comment on name index';
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: comment on name index}, PUBLIC], ABSENT]
+- [[IndexComment:{DescID: 104, IndexID: 2, Value: comment on name index}, PUBLIC], ABSENT]
   {comment: comment on name index, indexId: 2, tableId: 104}
 
 setup
@@ -189,7 +189,7 @@ COMMENT ON INDEX customer@idx_customer_name IS 'better comment for name index';
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: better comment for name index}, PUBLIC], ABSENT]
+- [[IndexComment:{DescID: 104, IndexID: 2, Value: better comment for name index}, PUBLIC], ABSENT]
   {comment: better comment for name index, indexId: 2, tableId: 104}
 
 build
@@ -197,7 +197,7 @@ COMMENT ON INDEX customer@idx_customer_name IS NULL;
 ----
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: real comment on name index}, ABSENT], PUBLIC]
+- [[IndexComment:{DescID: 104, IndexID: 2, Value: real comment on name index}, ABSENT], PUBLIC]
   {comment: real comment on name index, indexId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
@@ -213,7 +213,7 @@ COMMENT ON INDEX customer@idx_customer_name IS 'better comment for name index'
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: better comment for name index}, PUBLIC], ABSENT]
+- [[IndexComment:{DescID: 104, IndexID: 2, Value: better comment for name index}, PUBLIC], ABSENT]
   {comment: better comment for name index, indexId: 2, tableId: 104}
 
 build
@@ -221,7 +221,7 @@ COMMENT ON INDEX customer@idx_customer_name IS NULL;
 ----
 - [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 104}
-- [[IndexComment:{DescID: 104, IndexID: 2, Comment: real comment on name index}, ABSENT], PUBLIC]
+- [[IndexComment:{DescID: 104, IndexID: 2, Value: real comment on name index}, ABSENT], PUBLIC]
   {comment: real comment on name index, indexId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
@@ -237,7 +237,7 @@ COMMENT ON CONSTRAINT customer_age_gt_21 ON customer IS 'better be old enough'
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Comment: better be old enough}, PUBLIC], ABSENT]
+- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Value: better be old enough}, PUBLIC], ABSENT]
   {comment: better be old enough, constraintId: 2, tableId: 104}
 
 setup
@@ -253,7 +253,7 @@ COMMENT ON CONSTRAINT customer_age_gt_21 ON customer IS 'better be old enough'
   {indexId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Comment: better be old enough}, PUBLIC], ABSENT]
+- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Value: better be old enough}, PUBLIC], ABSENT]
   {comment: better be old enough, constraintId: 2, tableId: 104}
 
 build
@@ -263,7 +263,7 @@ COMMENT ON CONSTRAINT customer_age_gt_21 ON customer IS NULL
   {indexId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC]
   {indexId: 2, tableId: 104}
-- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Comment: real constraint comment}, ABSENT], PUBLIC]
+- [[ConstraintComment:{DescID: 104, ConstraintID: 2, Value: real constraint comment}, ABSENT], PUBLIC]
   {comment: real constraint comment, constraintId: 2, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
@@ -276,13 +276,13 @@ CREATE TYPE roach_legs AS (legs INT);
 build
 COMMENT ON TYPE roach_dwellings IS 'First CRDB comment on types';
 ----
-- [[TypeComment:{DescID: 106, Comment: First CRDB comment on types}, PUBLIC], ABSENT]
+- [[TypeComment:{DescID: 106, Value: First CRDB comment on types}, PUBLIC], ABSENT]
   {comment: First CRDB comment on types, typeId: 106}
 
 build
 COMMENT ON TYPE roach_legs IS 'Second CRDB comment on types';
 ----
-- [[TypeComment:{DescID: 108, Comment: Second CRDB comment on types}, PUBLIC], ABSENT]
+- [[TypeComment:{DescID: 108, Value: Second CRDB comment on types}, PUBLIC], ABSENT]
   {comment: Second CRDB comment on types, typeId: 108}
 
 setup
@@ -293,11 +293,11 @@ COMMENT ON TYPE roach_legs IS 'Second CRDB comment on types';
 build
 COMMENT ON TYPE roach_dwellings IS NULL;
 ----
-- [[TypeComment:{DescID: 106, Comment: First CRDB comment on types}, ABSENT], PUBLIC]
+- [[TypeComment:{DescID: 106, Value: First CRDB comment on types}, ABSENT], PUBLIC]
   {comment: First CRDB comment on types, typeId: 106}
 
 build
 COMMENT ON TYPE roach_legs IS NULL;
 ----
-- [[TypeComment:{DescID: 108, Comment: Second CRDB comment on types}, ABSENT], PUBLIC]
+- [[TypeComment:{DescID: 108, Value: Second CRDB comment on types}, ABSENT], PUBLIC]
   {comment: Second CRDB comment on types, typeId: 108}

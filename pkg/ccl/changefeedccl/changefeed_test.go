@@ -12772,3 +12772,144 @@ func TestCreateTableLevelChangefeedWithDBPrivilege(t *testing.T) {
 	}
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
+
+func TestDatabaseLevelChangefeedChangingTableset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	makeKnobs := func(createTableCh chan struct{}) func(*base.TestingKnobs) {
+		return func(knobs *base.TestingKnobs) {
+			if knobs.DistSQL == nil {
+				knobs.DistSQL = &execinfra.TestingKnobs{}
+			}
+			if knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed == nil {
+				knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed = &TestingKnobs{}
+			}
+			cfKnobs := knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+			cfKnobs.AfterComputeDistChangefeedTimestamps = func(ctx context.Context) {
+				select {
+				case createTableCh <- struct{}{}:
+					// signal delivered
+				case <-time.After(5 * time.Second):
+					t.Error("callback timed out waiting for table creation signal to be consumed")
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}
+
+	// This tests adding a table to a database while a db-level changefeed is
+	// being created. If table descriptor fetches for the changefeed targets
+	// are done at different times, the changefeed could fail with a descriptor
+	// not found error.
+	t.Run("add a table during creation", func(t *testing.T) {
+		createTableCh := make(chan struct{})
+		testFnAdd := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+			sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+			// goroutine to make tables. Signaled to begin creating tables from test
+			// knob callback after resumeWithRetries picks the first targets.
+			go func() {
+				defer wg.Done()
+				<-createTableCh
+				sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `INSERT INTO bar VALUES (0, 'initial')`)
+			}()
+			foo := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
+			defer closeFeed(t, foo)
+			assertPayloads(t, foo, []string{
+				`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
+				// Don't expect bar because it was created after the changefeed
+				// statement time that the changefeed starts from.
+			})
+			wg.Wait()
+		}
+		cdcTest(t, testFnAdd, withKnobsFn(makeKnobs(createTableCh)))
+	})
+
+	// This tests adding tables to a database while a db-level changefeed is
+	// being resumed.
+	t.Run("add a table during resume", func(t *testing.T) {
+		createTablech := make(chan struct{})
+		testFnAddDuringResume := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+			baseFeed := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
+			jobFeed := baseFeed.(cdctest.EnterpriseTestFeed)
+			defer closeFeed(t, baseFeed)
+			<-createTablech
+
+			require.NoError(t, jobFeed.Pause())
+
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+			sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+			sqlDB.Exec(t, `INSERT INTO bar VALUES (0, 'initial')`)
+			var wg sync.WaitGroup
+			wg.Add(1)
+			// goroutine to make tables. Signaled to begin creating tables from test
+			// knob callback after resumeWithRetries picks the first targets.
+			go func() {
+				defer wg.Done()
+				<-createTablech
+				sqlDB.Exec(t, `CREATE TABLE baz (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `INSERT INTO baz VALUES (0, 'initial')`)
+			}()
+			require.NoError(t, jobFeed.Resume())
+
+			assertPayloads(t, baseFeed, []string{
+				`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
+				// Don't expect bar because it was created after the changefeed was
+				// paused. The changefeed resumes from where it left off.
+			})
+			wg.Wait()
+		}
+		cdcTest(t, testFnAddDuringResume, withKnobsFn(makeKnobs(createTablech)), feedTestEnterpriseSinks)
+	})
+
+	// This tests the specific code path for fetching descriptors for enriched
+	// changefeeds.
+	t.Run("add a table during creation of enriched changefeed", func(t *testing.T) {
+		createTableCh := make(chan struct{})
+		testFnAddEnriched := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+			// goroutine to make tables. Signaled to begin creating tables from test
+			// knob callback after resumeWithRetries picks the first targets.
+			go func() {
+				defer wg.Done()
+				<-createTableCh
+				sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `INSERT INTO bar VALUES (0, 'initial')`)
+			}()
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope='enriched', enriched_properties='source'`)
+			defer closeFeed(t, foo)
+			assertPayloadsEnriched(t, foo, []string{
+				`foo: {"a": 0}->{"after": {"a": 0, "b": "initial"}, "op": "c"}`,
+				// Don't expect bar because it was created after the changefeed
+				// statement time that the changefeed starts from.
+			}, func(source map[string]any) {
+				require.NotNil(t, source)
+				require.Equal(t, "d", source["database_name"])
+				require.Equal(t, "foo", source["table_name"])
+				require.Equal(t, []any{"a"}, source["primary_keys"])
+			})
+			wg.Wait()
+		}
+		// Enriched envelope option is supported only for these sink types.
+		supportedSinks := []string{"kafka", "pubsub", "sinkless", "webhook"}
+		for _, sink := range supportedSinks {
+			cdcTest(t, testFnAddEnriched, withKnobsFn(makeKnobs(createTableCh)), feedTestForceSink(sink))
+		}
+	})
+}

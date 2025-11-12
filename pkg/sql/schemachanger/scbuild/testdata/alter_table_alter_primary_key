@@ -16,9 +16,9 @@ ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (j)
   {constraintId: 1, indexId: 1, isUnique: true, tableId: 104}
 - [[IndexName:{DescID: 104, Name: pkey, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, name: pkey, tableId: 104}
-- [[IndexComment:{DescID: 104, IndexID: 1, Comment: pkey is an index}, ABSENT], PUBLIC]
+- [[IndexComment:{DescID: 104, IndexID: 1, Value: pkey is an index}, ABSENT], PUBLIC]
   {comment: pkey is an index, indexId: 1, tableId: 104}
-- [[ConstraintComment:{DescID: 104, ConstraintID: 1, Comment: pkey is a constraint}, ABSENT], PUBLIC]
+- [[ConstraintComment:{DescID: 104, ConstraintID: 1, Value: pkey is a constraint}, ABSENT], PUBLIC]
   {comment: pkey is a constraint, constraintId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 104}
@@ -32,9 +32,9 @@ ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (j)
   {columnId: 1, indexId: 4, kind: STORED, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, PUBLIC], ABSENT]
   {columnId: 2, indexId: 4, tableId: 104}
-- [[IndexComment:{DescID: 104, IndexID: 4, Comment: pkey is an index}, PUBLIC], ABSENT]
+- [[IndexComment:{DescID: 104, IndexID: 4, Value: pkey is an index}, PUBLIC], ABSENT]
   {comment: pkey is an index, indexId: 4, tableId: 104}
-- [[ConstraintComment:{DescID: 104, ConstraintID: 4, Comment: pkey is a constraint}, PUBLIC], ABSENT]
+- [[ConstraintComment:{DescID: 104, ConstraintID: 4, Value: pkey is a constraint}, PUBLIC], ABSENT]
   {comment: pkey is a constraint, constraintId: 4, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 4}, PUBLIC], ABSENT]
   {indexId: 4, tableId: 104}

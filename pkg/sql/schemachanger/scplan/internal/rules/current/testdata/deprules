@@ -4276,6 +4276,20 @@ deprules
     - $descriptor-Node[CurrentStatus] = ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($descriptor, $descriptor-Target, $descriptor-Node)
+- name: old column generated as identity is dropped before new one is added
+  from: old-column-generated-as-identity-Node
+  kind: SameStagePrecedence
+  to: new-column-generated-as-identity-Node
+  query:
+    - $old-column-generated-as-identity[Type] = '*scpb.ColumnGeneratedAsIdentity'
+    - $new-column-generated-as-identity[Type] = '*scpb.ColumnGeneratedAsIdentity'
+    - joinOnColumnID($old-column-generated-as-identity, $new-column-generated-as-identity, $table-id, $col-id)
+    - $old-column-generated-as-identity-Target[TargetStatus] = ABSENT
+    - $old-column-generated-as-identity-Node[CurrentStatus] = ABSENT
+    - $new-column-generated-as-identity-Target[TargetStatus] = PUBLIC
+    - $new-column-generated-as-identity-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-column-generated-as-identity, $old-column-generated-as-identity-Target, $old-column-generated-as-identity-Node)
+    - joinTargetNode($new-column-generated-as-identity, $new-column-generated-as-identity-Target, $new-column-generated-as-identity-Node)
 - name: old column name is dropped before new column name is added
   from: old-column-name-Node
   kind: Precedence
@@ -9513,6 +9527,20 @@ deprules
     - $descriptor-Node[CurrentStatus] = ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($descriptor, $descriptor-Target, $descriptor-Node)
+- name: old column generated as identity is dropped before new one is added
+  from: old-column-generated-as-identity-Node
+  kind: SameStagePrecedence
+  to: new-column-generated-as-identity-Node
+  query:
+    - $old-column-generated-as-identity[Type] = '*scpb.ColumnGeneratedAsIdentity'
+    - $new-column-generated-as-identity[Type] = '*scpb.ColumnGeneratedAsIdentity'
+    - joinOnColumnID($old-column-generated-as-identity, $new-column-generated-as-identity, $table-id, $col-id)
+    - $old-column-generated-as-identity-Target[TargetStatus] = ABSENT
+    - $old-column-generated-as-identity-Node[CurrentStatus] = ABSENT
+    - $new-column-generated-as-identity-Target[TargetStatus] = PUBLIC
+    - $new-column-generated-as-identity-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-column-generated-as-identity, $old-column-generated-as-identity-Target, $old-column-generated-as-identity-Node)
+    - joinTargetNode($new-column-generated-as-identity, $new-column-generated-as-identity-Target, $new-column-generated-as-identity-Node)
 - name: old column name is dropped before new column name is added
   from: old-column-name-Node
   kind: Precedence
