@@ -397,6 +397,10 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		handleTable(w, r, cfg)
 	}).Methods("GET")
 
+	futureRouter.HandleFunc("/tables/{id}/reset-index-stats", func(w http.ResponseWriter, r *http.Request) {
+		handleResetIndexStats(w, r, cfg)
+	}).Methods("POST")
+
 	futureRouter.HandleFunc("/sqlactivity", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/future/sqlactivity/statements", http.StatusFound)
 	}).Methods("GET")
@@ -841,7 +845,7 @@ func handleTable(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	}
 
 	// Fetch index statistics
-	indexes, err := fetchIndexStats(ctx, cfg, tableDetailsResp.Metadata.DbName, tableDetailsResp.Metadata.TableName)
+	indexes, indexStatsReset, err := fetchIndexStats(ctx, cfg, tableDetailsResp.Metadata.DbName, tableDetailsResp.Metadata.TableName)
 	if err != nil {
 		log.Dev.Warningf(ctx, "Failed to fetch index stats: %v", err)
 		// Continue without index stats - not critical
@@ -856,6 +860,7 @@ func handleTable(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 		Grants:          grants,
 		Indexes:         indexes,
 		LastUpdated:     &tableDetailsResp.Metadata.LastUpdated,
+		IndexStatsReset: indexStatsReset,
 	}
 
 	// Execute the pre-parsed template
@@ -863,6 +868,65 @@ func handleTable(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 		IndexHTMLArgs: cfg,
 		Data:          pageData,
 	})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
+}
+
+func handleResetIndexStats(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	ctx := r.Context()
+
+	// Extract table ID from URL path
+	vars := mux.Vars(r)
+	tableIDStr := vars["id"]
+	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid table ID", http.StatusBadRequest)
+		return
+	}
+
+	// Call the ResetIndexUsageStats RPC to reset all index stats across the cluster
+	_, err = cfg.Status.ResetIndexUsageStats(ctx, &serverpb.ResetIndexUsageStatsRequest{})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to reset index stats: %v", err)
+		http.Error(w, "Failed to reset index stats", http.StatusInternalServerError)
+		return
+	}
+
+	// Fetch table metadata to get database and table name
+	var tableDetailsResp apiTableMetadataWithDetails
+	tableURL := fmt.Sprintf("%s/api/v2/table_metadata/%d/", apiBaseURL, tableID)
+	if err := fetchJSON(ctx, tableURL, &tableDetailsResp); err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch table details: %v", err)
+		http.Error(w, "Failed to fetch table details", http.StatusInternalServerError)
+		return
+	}
+
+	// Fetch updated index statistics
+	indexes, indexStatsReset, err := fetchIndexStats(ctx, cfg, tableDetailsResp.Metadata.DbName, tableDetailsResp.Metadata.TableName)
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch index stats: %v", err)
+		http.Error(w, "Failed to fetch index stats", http.StatusInternalServerError)
+		return
+	}
+
+	// Return HTML fragment with updated index stats
+	type IndexStatsData struct {
+		Indexes         []IndexInfo
+		IndexStatsReset *time.Time
+		TableID         int64
+	}
+
+	data := IndexStatsData{
+		Indexes:         indexes,
+		IndexStatsReset: indexStatsReset,
+		TableID:         tableID,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	err = templates.ExecuteTemplate(w, "index_stats_partial.html", data)
 	if err != nil {
 		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
@@ -1621,6 +1685,7 @@ type TablePageData struct {
 	Grants          []TableGrant
 	Indexes         []IndexInfo
 	LastUpdated     *time.Time
+	IndexStatsReset *time.Time // Last time index stats were reset
 }
 
 // TableGrant represents a privilege grant on a table
@@ -1730,14 +1795,14 @@ func fetchTableGrants(ctx context.Context, cfg IndexHTMLArgs, dbName, schemaName
 }
 
 // fetchIndexStats fetches index statistics for a table
-func fetchIndexStats(ctx context.Context, cfg IndexHTMLArgs, dbName, tableName string) ([]IndexInfo, error) {
+func fetchIndexStats(ctx context.Context, cfg IndexHTMLArgs, dbName, tableName string) ([]IndexInfo, *time.Time, error) {
 	// Use the TableIndexStats RPC which is specifically for getting index stats for a table
 	resp, err := cfg.Status.TableIndexStats(ctx, &serverpb.TableIndexStatsRequest{
 		Database: dbName,
 		Table:    tableName,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch table index stats: %w", err)
+		return nil, nil, fmt.Errorf("failed to fetch table index stats: %w", err)
 	}
 
 	var indexes []IndexInfo
@@ -1766,7 +1831,13 @@ func fetchIndexStats(ctx context.Context, cfg IndexHTMLArgs, dbName, tableName s
 		return indexes[i].IndexName < indexes[j].IndexName
 	})
 
-	return indexes, nil
+	// Get last reset time - resp.LastReset is time.Time with stdtime = true
+	var lastReset *time.Time
+	if resp.LastReset != nil && !resp.LastReset.IsZero() {
+		lastReset = resp.LastReset
+	}
+
+	return indexes, lastReset, nil
 }
 
 // handleMetricsDashboard serves the metrics dashboard page
