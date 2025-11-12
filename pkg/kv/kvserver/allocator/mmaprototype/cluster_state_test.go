@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -519,8 +521,15 @@ func TestClusterState(t *testing.T) {
 					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
 					rng := rand.New(rand.NewSource(0))
 					dsm := newDiversityScoringMemo()
-					cs.rebalanceStores(context.Background(), storeID, rng, dsm)
-					return printPendingChangesTest(testingGetPendingChanges(t, cs))
+					tr := tracing.NewTracer()
+					tr.SetRedactable(true)
+					defer tr.Close()
+					ctx, finishAndGet := tracing.ContextWithRecordingSpan(context.Background(), tr, "rebalance-stores")
+					cs.rebalanceStores(ctx, storeID, rng, dsm)
+					rec := finishAndGet()
+					var sb redact.StringBuilder
+					rec.SafeFormatMinimal(&sb)
+					return sb.String() + printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "tick":
 					seconds := dd.ScanArg[int](t, d, "seconds")
