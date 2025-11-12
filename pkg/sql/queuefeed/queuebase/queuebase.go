@@ -14,4 +14,5 @@ type Manager interface {
 type Reader interface {
 	GetRows(ctx context.Context, limit int) ([]tree.Datums, error)
 	ConfirmReceipt(ctx context.Context)
+	RollbackBatch(ctx context.Context)
 }

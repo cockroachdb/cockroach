@@ -4400,11 +4400,14 @@ func (g *queueFeedGenerator) Start(ctx context.Context, txn *kv.Txn) error {
 		return err
 	}
 
-	// Attach commit hook to txn to confirm receipt
-	// or something... todo on rollback/abort.
+	// Attach commit hook to txn to confirm receipt on successful commit.
 	txn.AddCommitTrigger(func(ctx context.Context) {
-		// TODO(queuefeed): handle error properly.
 		qr.ConfirmReceipt(ctx)
+	})
+	// On rollback, we don't confirm receipt since the transaction didn't commit
+	// and the rows shouldn't be considered consumed.
+	txn.AddRollbackTrigger(func(ctx context.Context) {
+		qr.RollbackBatch(ctx)
 	})
 
 	rows, err := qr.GetRows(ctx, g.limit)

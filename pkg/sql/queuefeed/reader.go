@@ -288,6 +288,25 @@ func (r *Reader) ConfirmReceipt(ctx context.Context) {
 	}
 }
 
+func (r *Reader) RollbackBatch(ctx context.Context) {
+	if r.isShutdown.Load() {
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	fmt.Printf("rolling back batch with inflightBuffer len: %d\n", len(r.mu.inflightBuffer))
+
+	newBuf := make([]tree.Datums, 0, len(r.mu.inflightBuffer)+len(r.mu.buf))
+	newBuf = append(newBuf, r.mu.inflightBuffer...)
+	newBuf = append(newBuf, r.mu.buf...)
+	r.mu.buf = newBuf
+	r.mu.inflightBuffer = r.mu.inflightBuffer[:0]
+
+	r.mu.state = readerStateBatching
+}
+
 func (r *Reader) IsAlive() bool {
 	return !r.isShutdown.Load()
 }
