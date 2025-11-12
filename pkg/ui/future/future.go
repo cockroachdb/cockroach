@@ -101,6 +101,14 @@ func init() {
 		"timeSub": func(a, b time.Time) time.Duration {
 			return a.Sub(b)
 		},
+		"dict": func(values ...interface{}) map[string]interface{} {
+			dict := make(map[string]interface{})
+			for i := 0; i < len(values); i += 2 {
+				key := values[i].(string)
+				dict[key] = values[i+1]
+			}
+			return dict
+		},
 	}
 	templates, err = template.New("").Funcs(funcMap).ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
@@ -290,7 +298,7 @@ type SQLActivityData struct {
 	Params        SQLActivityParams
 	TotalWorkload float64 // Sum of (count * service_lat.mean) across all statements
 	// DiagnosticStates maps statement fingerprint ID to its diagnostic state
-	DiagnosticStates map[string]DiagnosticState
+	DiagnosticStates map[string]*DiagnosticState
 }
 
 // OverviewData contains cluster overview information
@@ -417,7 +425,7 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		handleGetDiagnosticsControls(w, r, cfg)
 	}).Methods("GET")
 
-	futureRouter.HandleFunc("/sqlactivity/statements/diagnostics", func(w http.ResponseWriter, r *http.Request) {
+	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}/diagnostics", func(w http.ResponseWriter, r *http.Request) {
 		handleCreateDiagnostics(w, r, cfg)
 	}).Methods("POST")
 
@@ -918,28 +926,92 @@ func handleResetIndexStats(w http.ResponseWriter, r *http.Request, cfg IndexHTML
 }
 
 func handleGetDiagnosticsControls(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	ctx := r.Context()
+	vars := mux.Vars(r)
+	stmtID, ok := vars["stmtID"]
+	if !ok || stmtID == "" {
+		http.Error(w, "Missing statement ID", http.StatusBadRequest)
+		return
+	}
 
+	// Get fingerprint from query param
+	fingerprint := r.URL.Query().Get("fingerprint")
+	if fingerprint == "" {
+		http.Error(w, "Missing fingerprint query parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch diagnostic reports to determine state for this fingerprint
+	diagResp, err := cfg.Status.StatementDiagnosticsRequests(ctx, &serverpb.StatementDiagnosticsReportsRequest{})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch diagnostic reports: %v", err)
+		http.Error(w, "Failed to fetch diagnostic reports", http.StatusInternalServerError)
+		return
+	}
+
+	stmtIDParsed, err := strconv.ParseUint(stmtID, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid diagnostic ID", http.StatusBadRequest)
+		return
+	}
+
+	// Build diagnostic state for this fingerprint
+	diagState := DiagnosticState{
+		Query: fingerprint,
+		ID:    appstatspb.StmtFingerprintID(stmtIDParsed),
+	}
+
+	for _, report := range diagResp.Reports {
+		if report.StatementFingerprint == fingerprint {
+			if !report.Completed {
+				diagState.HasPendingRequest = true
+				diagState.PendingRequestID = report.Id
+			} else if report.StatementDiagnosticsId > 0 {
+				bundle := DiagnosticBundle{
+					ID:          report.StatementDiagnosticsId,
+					CollectedAt: report.RequestedAt,
+					DownloadURL: fmt.Sprintf("/_status/stmtdiag/%d", report.StatementDiagnosticsId),
+				}
+				diagState.CompletedBundles = append(diagState.CompletedBundles, bundle)
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Execute the pre-parsed template
+	err = templates.ExecuteTemplate(w, "statement_diagnostics_controls.html", PageData{
+		IndexHTMLArgs: cfg,
+		Data:          diagState,
+	})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
 }
 
 func handleCancelDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
-	// Parse form data
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+	vars := mux.Vars(r)
+	stmtID, ok := vars["stmtID"]
+	if !ok || stmtID == "" {
+		http.Error(w, "Missing statement ID", http.StatusBadRequest)
 		return
 	}
 
-	requestIDStr := r.FormValue("request_id")
-
-	if requestIDStr == "" {
-		http.Error(w, "Missing request_id", http.StatusBadRequest)
+	diagID, ok := vars["diagID"]
+	if !ok || diagID == "" {
+		http.Error(w, "Missing diagnostic ID", http.StatusBadRequest)
 		return
 	}
 
-	requestID, err := strconv.ParseInt(requestIDStr, 10, 64)
+	requestID, err := strconv.ParseInt(diagID, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid request_id", http.StatusBadRequest)
+		http.Error(w, "Invalid diagnostic ID", http.StatusBadRequest)
 		return
 	}
+
+	// Get fingerprint from query param for redirect
+	fingerprint := r.URL.Query().Get("fingerprint")
 
 	// Call the API to cancel the diagnostics request
 	cancelResp, err := cfg.Status.CancelStatementDiagnosticsReport(r.Context(), &serverpb.CancelStatementDiagnosticsReportRequest{
@@ -962,10 +1034,22 @@ func handleCancelDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHT
 		return
 	}
 
-	// TODO: redirect to GET /StmtID/diag
+	// Redirect with fingerprint query param if provided
+	redirectURL := fmt.Sprintf("/future/sqlactivity/statements/%s/diagnostics", stmtID)
+	if fingerprint != "" {
+		redirectURL += fmt.Sprintf("?fingerprint=%s", fingerprint)
+	}
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
 
 func handleCreateDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	vars := mux.Vars(r)
+	stmtID, ok := vars["stmtID"]
+	if !ok || stmtID == "" {
+		http.Error(w, "Missing statement ID", http.StatusBadRequest)
+		return
+	}
+
 	// Parse form data
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
@@ -982,16 +1066,16 @@ func handleCreateDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHT
 	expiresAfter := r.FormValue("expiresafter")
 	expiresAfterMinStr := r.FormValue("expiresaftermin")
 	redact := r.FormValue("redact")
-	fingerprintID := r.FormValue("fingerprint_id")
+	fingerprint := r.FormValue("fingerprint")
 
-	if fingerprintID == "" {
+	if fingerprint == "" {
 		http.Error(w, "Missing fingerprint_id", http.StatusBadRequest)
 		return
 	}
 
 	// Build the request
 	req := &serverpb.CreateStatementDiagnosticsReportRequest{
-		StatementFingerprint: fingerprintID,
+		StatementFingerprint: fingerprint,
 	}
 
 	// Parse sampling probability and latency based on collection mode
@@ -1050,10 +1134,7 @@ func handleCreateDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHT
 		return
 	}
 
-	// Return button update and clear any errors (popover will close via @htmx:after-swap)
-	successHTML := `<button disabled class="pending">Pending...</button>
-<div id="diagnostics-error" hx-swap-oob="true"></div>`
-	_, _ = w.Write([]byte(successHTML))
+	http.Redirect(w, r, fmt.Sprintf("/future/sqlactivity/statements/%s/diagnostics?fingerprint=%s", stmtID, fingerprint), http.StatusFound)
 }
 
 func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
@@ -1144,7 +1225,7 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 	}
 
 	// Fetch diagnostic reports to determine state for each statement
-	diagnosticStates := make(map[string]DiagnosticState)
+	diagnosticStates := make(map[string]*DiagnosticState)
 	diagResp, err := cfg.Status.StatementDiagnosticsRequests(r.Context(), &serverpb.StatementDiagnosticsReportsRequest{})
 	if err != nil {
 		log.Dev.Warningf(r.Context(), "Failed to fetch diagnostic reports: %v", err)
@@ -1152,7 +1233,11 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 	} else {
 		// Group diagnostic reports by statement fingerprint
 		for _, report := range diagResp.Reports {
-			state := diagnosticStates[report.StatementFingerprint]
+			state, ok := diagnosticStates[report.StatementFingerprint]
+			if !ok {
+				diagnosticStates[report.StatementFingerprint] = &DiagnosticState{}
+				state = diagnosticStates[report.StatementFingerprint]
+			}
 
 			if !report.Completed {
 				// This is a pending request
@@ -1171,6 +1256,24 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 			diagnosticStates[report.StatementFingerprint] = state
 		}
 	}
+
+	for _, stmt := range resp.Statements {
+		log.Dev.Errorf(r.Context(), "processing statement: %d (%s)", uint64(stmt.ID), stmt.Key.KeyData.Query)
+		s, ok := diagnosticStates[stmt.Key.KeyData.Query]
+		if !ok {
+			log.Dev.Errorf(r.Context(), "inserting %d", stmt.ID)
+			diagnosticStates[stmt.Key.KeyData.Query] = &DiagnosticState{
+				ID:    stmt.ID,
+				Query: stmt.Key.KeyData.Query,
+			}
+		} else {
+			log.Dev.Errorf(r.Context(), "inserting else %d", stmt.ID)
+			s.ID = stmt.ID
+			s.Query = stmt.Key.KeyData.Query
+		}
+	}
+
+	log.Dev.Errorf(r.Context(), "resulting states: %+v", diagnosticStates)
 
 	// Build the data structure with params
 	data := SQLActivityData{

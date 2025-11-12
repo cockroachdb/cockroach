@@ -1,30 +1,134 @@
 {{ define "statement_diagnostics_controls" }}
-<div id="diag-controls-{{.ID}}">
-  {{if .HasPendingRequest}}
+<div id="diag-controls-{{.Data.ID}}" hx-include="#diag-controls-query-{{.Data.ID}}">
+  {{if .Data.HasPendingRequest}}
     {{/* State 2: Pending request - show Waiting + Cancel */}}
-    <div class="flex-row crowded" id="diag-btn-{{.ID}}">
+    <div class="flex-row crowded" id="diag-btn-{{.Data.ID}}">
       <button disabled class="warn">Waiting</button>
       <button class="bad"
-              hx-delete="/future/sqlactivity/statements/123/diagnostics/{{ .PendingRequestID }}"
-              hx-target="#diag-controls-{{.ID}}"
+              hx-delete="/future/sqlactivity/statements/{{.Data.ID}}/diagnostics/{{ .Data.PendingRequestID }}"
+              hx-target="#diag-controls-{{.Data.ID}}"
+              hx-select="#diag-controls-{{.Data.ID}}"
               hx-swap="outerHTML"
               title="Cancel diagnostic request">X</button>
     </div>
-  {{else if .CompletedBundles}}
+  {{else if .Data.CompletedBundles}}
     {{/* State 3: Completed bundles - show Download button with popover */}}
-    <div id="diag-btn-{{.ID}}">
-      <button class="ok" aria-label="Download diagnostics" popovertarget="diagnostic-select-{{.ID}}" x-ref="diagnostic-select-button-{{.ID}}">
+    <div>
+      <button class="ok"
+        id="diag-btn-{{.Data.ID}}"
+        popovertarget="diagnostics-popover-{{.Data.ID}}">
+        Activate
+      </button>
+      <button class="ok" aria-label="Download diagnostics" popovertarget="diagnostic-select-{{.Data.ID}}" x-ref="diagnostic-select-button-{{.Data.ID}}">
         Download
       </button>
-      <div popover id="diagnostic-select-{{.ID}}" x-anchor="$refs['diagnostic-select-button-{{.ID}}']" class="flex-column">
+      <div popover id="diagnostic-select-{{.Data.ID}}" x-anchor="$refs['diagnostic-select-button-{{.Data.ID}}']" class="flex-column">
         {{range .CompletedBundles}}
-          <a href="{{.DownloadURL}}">Bundle #{{.ID}} ({{.CollectedAt.Format "2006-01-02 15:04:05"}})</a>
+          <a href="{{.Data.DownloadURL}}">Bundle #{{.Data.ID}} ({{.Data.CollectedAt.Format "2006-01-02 15:04:05"}})</a>
         {{end}}
       </div>
     </div>
   {{else}}
     {{/* State 1: No diagnostic activity - show Activate button */}}
-    <button class="ok" id="diag-btn-{{.ID}}" popovertarget="diagnostics" @click="$store.diagnosticsTarget = '{{.ID}}'; $store.diagnosticsFingerprint = {{.Query | printf "%q"}}">Activate</button>
+    <button class="ok"
+      id="diag-btn-{{.Data.ID}}"
+      popovertarget="diagnostics-popover-{{.Data.ID}}">
+      Activate
+    </button>
   {{end}}
+  <input type="hidden" id="diag-controls-query-{{.Data.ID}}" name="fingerprint" value="{{.Data.Query}}">
+</div>
+<div id="diagnostics-popover-{{.Data.ID}}" popover class="padding container" style="margin-block-end: auto">
+  <h3>Activate statement diagnostics</h3>
+  <div id="diagnostics-error"></div>
+  <p>
+    Diagnostics will be collected for the next execution that
+    matches this statement fingerprint, or according to the trace and
+    latency thresholds set below. The request is cancelled when a single
+    diagnostics bundle is captured. Learn more
+  </p>
+  <form method="POST" action="/future/sqlactivity/statements/{{.Data.ID}}/diagnostics"
+        hx-post="/future/sqlactivity/statements/{{.Data.ID}}/diagnostics"
+        hx-target="#diag-controls-{{ .Data.ID }}"
+        hx-select="#diag-controls-{{ .Data.ID }}"
+        hx-swap="outerHTML"
+        hx-on::after-request="if(event.detail.successful) this.closest('[popover]').hidePopover()"
+        x-data="{ sampled: 'sampled', plangist: 'all' }"
+        class="flex-column">
+    <div role=radiogroup aria-labelledby=sampled-lbl>
+      <h4 id=sampled-lbl>Collect diagnostics:</h4>
+      <div class="flex-column">
+        <div>
+          <label>
+            <input type=radio name=sampled value="sampled" checked x-model="sampled"> Trace and collect diagnostics
+          </label>
+          <blockquote class="crowded-inside">
+            <label for=samplerate>At a sampled rate of: </label>
+            <div class="flex-row align-items:center">
+               <select id=samplerate name=samplerate :disabled="sampled != 'sampled'">
+                <option value="1%" selected>1% (recommended)</option>
+                <option value="2%" >2%</option>
+                <option value="3%" >3%</option>
+                <option value="4%" >4%</option>
+                <option value="5%" >5%</option>
+                <option value="100%" >100% (not recommended)</option>
+              </select>
+              <div>
+                <small>
+                  We recommend starting at 1% to minimize the impact on performance.
+                </small>
+              </div>
+            </div>
+            <p>
+              When the statement execution latency exceeds:
+            </p>
+            <div class="flex-row">
+              <input type="text" name="latthreshold" value="100" size=5 :disabled="sampled != 'sampled'">
+              <div>
+                <select id=latunit name=latunit :disabled="sampled != 'sampled'">
+                  <option value="milliseconds" selected>milliseconds</option>
+                  <option value="seconds" >seconds</option>
+                </select>
+              </div>
+            </div>
+          </blockquote>
+        </div>
+        <div>
+          <label>
+            <input type=radio name=sampled value="next" x-model="sampled"> Trace and collect diagnostics on the next statement execution
+          </label>
+        </div>
+      </div>
+    </div>
+    <hr>
+    <div role=radiogroup>
+      <label>
+        <input type=radio name=plangist value=all checked x-model="plangist"> For all plan gists
+      </label>
+      <div class="flex-row align-items:center">
+        <label>
+          <input type=radio name=plangist value=selected x-model="plangist"> For the following plan gist:
+        </label>
+        <select id=plangistselect name=plangistselect :disabled="plangist != 'selected'">
+          <option value="AhgDSFHSFHSFASH" selected>AhgDSFHSFHSFASH</option>
+        </select>
+      </div>
+    </div>
+    <hr>
+    <div>
+      <label for=expiresafter><input type=checkbox id=expiresafter name=expiresafter checked> Diagnostics request expires after</label>
+      <label for=expiresaftermin><input type=text id=expiresaftermin name=expiresaftermin value=15 size=3> Minutes</label>
+    </div>
+    <hr>
+    <div>
+      <label for=redact><input type=checkbox id=redact name=redact> Redact</label>
+    </div>
+    <div class="flex-row justify-content:end">
+      <button class="<big>">Submit</button>
+      <input type="hidden" name="fingerprint" value="{{ .Data.Query }}">
+    </div>
+  </form>
 </div>
 {{ end }}
+
+{{ template "statement_diagnostics_controls" .}}
