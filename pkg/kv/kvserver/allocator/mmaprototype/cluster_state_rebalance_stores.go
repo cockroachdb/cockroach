@@ -36,8 +36,6 @@ type rebalanceState struct {
 	rangeMoveCount int
 	// leaseTransferCount tracks the number of lease transfers made.
 	leaseTransferCount int
-	// shouldContinue indicates the outer loop should continue to the next iteration.
-	shouldContinue bool
 	// maxRangeMoveCount is the maximum number of range moves allowed.
 	maxRangeMoveCount int
 	// maxLeaseTransferCount is the maximum number of lease transfers allowed.
@@ -177,7 +175,6 @@ func (cs *clusterState) rebalanceStores(
 		changes:                       []PendingRangeChange{},
 		rangeMoveCount:                0,
 		leaseTransferCount:            0,
-		shouldContinue:                false,
 		maxRangeMoveCount:             maxRangeMoveCount,
 		maxLeaseTransferCount:         maxLeaseTransferCount,
 		lastFailedChangeDelayDuration: lastFailedChangeDelayDuration,
@@ -189,10 +186,6 @@ func (cs *clusterState) rebalanceStores(
 			break
 		}
 		rs.rebalanceStore(store, ctx, localStoreID, now)
-		if rs.shouldContinue {
-			rs.shouldContinue = false
-			continue
-		}
 	}
 	return rs.changes
 }
@@ -412,7 +405,6 @@ func (rs *rebalanceState) rebalanceStore(
 			// lease transfers -- so be it.
 			log.KvDistribution.VInfof(ctx, 2, "skipping replica transfers for s%d: done shedding=%v, lease_transfers=%d",
 				store.StoreID, doneShedding, rs.leaseTransferCount)
-			rs.shouldContinue = true
 			return
 		}
 	} else {
@@ -425,7 +417,6 @@ func (rs *rebalanceState) rebalanceStore(
 	if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
 		now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
 		log.KvDistribution.VInfof(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
-		rs.shouldContinue = true
 		return
 	}
 	// If the node is cpu overloaded, or the store/node is not fdOK, exclude
@@ -620,7 +611,6 @@ func (rs *rebalanceState) rebalanceStore(
 	// rebalancing to work well is not in scope.
 	if doneShedding {
 		log.KvDistribution.VInfof(ctx, 2, "store s%d is done shedding, moving to next store", store.StoreID)
-		rs.shouldContinue = true
 		return
 	}
 }
