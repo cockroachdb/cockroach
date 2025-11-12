@@ -1265,40 +1265,42 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	clientTestingKnobs := &kvcoord.ClientTestingKnobs{
 		MaxTxnRefreshAttempts: refreshAttempts,
 	}
+	var params base.TestServerArgs
+	params.RaftConfig.SetDefaults()
+	leaseDuration := params.RaftConfig.RangeLeaseDuration
 
 	testKey := []byte("test_key")
 	var s serverutils.ApplicationLayerInterface
 	var nodeID roachpb.NodeID
-	var clockUpdate, restartDone int32
+	var clockUpdate atomic.Bool
+	var restartDone atomic.Int32
 	testingResponseFilter := func(
 		ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
 	) *kvpb.Error {
 		for _, ru := range ba.Requests {
-			if req := ru.GetGet(); req != nil {
-				if bytes.Contains(req.Key, testKey) {
-					if atomic.LoadInt32(&clockUpdate) == 0 {
-						atomic.AddInt32(&clockUpdate, 1)
-						// Hack to advance the transaction timestamp on a
-						// transaction restart.
-						const advancement = 2 * base.DefaultDescriptorLeaseDuration
-						now := s.Clock().NowAsClockTimestamp()
-						now.WallTime += advancement.Nanoseconds()
-						s.Clock().Update(now)
-					}
+			if req := ru.GetGet(); req == nil || !bytes.Contains(req.Key, testKey) {
+				continue
+			}
+			if !clockUpdate.Load() {
+				clockUpdate.Store(true)
+				// Hack to advance the transaction timestamp on a transaction restart.
+				advancement := 2 * leaseDuration
+				now := s.Clock().NowAsClockTimestamp()
+				now.WallTime += advancement.Nanoseconds()
+				s.Clock().Update(now)
+			}
 
-					// Allow a set number of restarts so that the auto retry on
-					// the first few uncertainty interval errors also fails.
-					if atomic.LoadInt32(&restartDone) <= refreshAttempts {
-						atomic.AddInt32(&restartDone, 1)
-						// Return ReadWithinUncertaintyIntervalError to update
-						// the transaction timestamp on retry.
-						txn := ba.Txn.Clone()
-						txn.ResetObservedTimestamps()
-						now := s.Clock().NowAsClockTimestamp()
-						txn.UpdateObservedTimestamp(nodeID, now)
-						return kvpb.NewErrorWithTxn(kvpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
-					}
-				}
+			// Allow a set number of restarts so that the auto retry on the first few
+			// uncertainty interval errors also fails.
+			if restartDone.Load() <= refreshAttempts {
+				restartDone.Add(1)
+				// Return ReadWithinUncertaintyIntervalError to update the transaction
+				// timestamp on retry.
+				txn := ba.Txn.Clone()
+				txn.ResetObservedTimestamps()
+				now := s.Clock().NowAsClockTimestamp()
+				txn.UpdateObservedTimestamp(nodeID, now)
+				return kvpb.NewErrorWithTxn(kvpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
 			}
 		}
 		return nil
@@ -1310,40 +1312,30 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 		DisableMaxOffsetCheck: true,
 	}
 
-	var params base.TestServerArgs
 	params.Knobs.Store = storeTestingKnobs
 	params.Knobs.KVClient = clientTestingKnobs
-	params.DefaultTestTenant = base.TestDoesNotWorkWithExternalProcessMode(156333)
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s = srv.ApplicationLayer()
 	nodeID = srv.NodeID()
 
 	sqlDB.SetMaxOpenConns(1)
-	if _, err := sqlDB.Exec(`
+	_, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
 INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
-`); err != nil {
-		t.Fatal(err)
-	}
+`)
+	require.NoError(t, err)
 	// Acquire the lease and enable the auto-retry. The first few read attempts
 	// will trigger ReadWithinUncertaintyIntervalError and advance the
 	// transaction timestamp due to txnSpanRefresher-initiated span refreshes.
 	// The transaction timestamp will exceed the lease expiration time, and the
 	// last read attempt will re-acquire the lease.
-	if _, err := sqlDB.Exec(`
-SELECT * from t.test WHERE k = 'test_key';
-`); err != nil {
-		t.Fatal(err)
-	}
+	_, err = sqlDB.Exec(`SELECT * from t.test WHERE k = 'test_key';`)
+	require.NoError(t, err)
 
-	if u := atomic.LoadInt32(&clockUpdate); u != 1 {
-		t.Errorf("expected exacltly one clock update, but got %d", u)
-	}
-	if u, e := atomic.LoadInt32(&restartDone), int32(refreshAttempts+1); u != e {
-		t.Errorf("expected exactly %d restarts, but got %d", e, u)
-	}
+	require.True(t, clockUpdate.Load())
+	require.Equal(t, int32(refreshAttempts)+1, restartDone.Load())
 }
 
 // Verifies that the uncommitted descriptor cache is flushed on a txn restart.
