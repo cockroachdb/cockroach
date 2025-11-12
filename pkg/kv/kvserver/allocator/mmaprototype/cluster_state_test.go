@@ -522,6 +522,8 @@ func TestClusterState(t *testing.T) {
 					rng := rand.New(rand.NewSource(0))
 					dsm := newDiversityScoringMemo()
 					tr := tracing.NewTracer()
+					tr.SetRedactable(true)
+					defer tr.Close()
 					ctx, finishAndGet := tracing.ContextWithRecordingSpan(context.Background(), tr, "rebalance-stores")
 					cs.rebalanceStores(ctx, storeID, rng, dsm)
 					rec := finishAndGet()
