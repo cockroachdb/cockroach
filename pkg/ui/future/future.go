@@ -393,6 +393,10 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		handleDatabase(w, r, cfg)
 	}).Methods("GET")
 
+	futureRouter.HandleFunc("/databases/{id}/refresh", func(w http.ResponseWriter, r *http.Request) {
+		handleDatabaseMetadataRefresh(w, r, cfg)
+	}).Methods("POST")
+
 	futureRouter.HandleFunc("/tables/{id}", func(w http.ResponseWriter, r *http.Request) {
 		handleTable(w, r, cfg)
 	}).Methods("GET")
@@ -612,7 +616,15 @@ func handleDatabaseMetadataRefresh(w http.ResponseWriter, r *http.Request, cfg I
 		return
 	}
 
-	http.Redirect(w, r, "/future/databases", http.StatusFound)
+	// Extract database ID from URL path
+	vars := mux.Vars(r)
+	dbIDStr, ok := vars["id"]
+
+	if !ok {
+		http.Redirect(w, r, "/future/databases", http.StatusFound)
+	} else {
+		http.Redirect(w, r, fmt.Sprintf("/future/databases/%s", dbIDStr), http.StatusFound)
+	}
 }
 
 // formatElapsedTime formats a duration into a human-readable string
@@ -751,15 +763,27 @@ func handleDatabase(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 		// Continue without grants - not critical
 		grants = []DatabaseGrant{}
 	}
+	// Fetch table metadata job status
+	var jobStatus apiTableMetadataJobStatus
+	jobStatusURL := fmt.Sprintf("%s/api/v2/table_metadata/updatejob/", apiBaseURL)
+	jobInfo := &MetadataJobInfo{}
+	if err := fetchJSON(ctx, jobStatusURL, &jobStatus); err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch job status: %v", err)
+		// Continue without job info
+	} else {
+		jobInfo.LastCompletedAt = jobStatus.LastCompletedTime
+		jobInfo.IsRunning = jobStatus.CurrentStatus == "RUNNING"
+	}
 
 	pageData := DatabasePageData{
-		DatabaseID:    dbDetailsResp.Metadata.DbID,
-		DatabaseName:  dbDetailsResp.Metadata.DbName,
-		Tables:        tablesResp.Results,
-		SearchFilter:  searchFilter,
-		SelectedNode:  selectedNode,
-		NodesByRegion: nodesByRegion,
-		Grants:        grants,
+		DatabaseID:      dbDetailsResp.Metadata.DbID,
+		DatabaseName:    dbDetailsResp.Metadata.DbName,
+		Tables:          tablesResp.Results,
+		SearchFilter:    searchFilter,
+		SelectedNode:    selectedNode,
+		NodesByRegion:   nodesByRegion,
+		Grants:          grants,
+		MetadataJobInfo: jobInfo,
 	}
 
 	// Execute the pre-parsed template
@@ -1620,13 +1644,14 @@ type DatabaseWithRegions struct {
 
 // DatabasePageData contains data for a single database page
 type DatabasePageData struct {
-	DatabaseID    int64
-	DatabaseName  string
-	Tables        []apiTableMetadata
-	SearchFilter  string
-	SelectedNode  int32
-	NodesByRegion map[string][]NodeDisplayInfo
-	Grants        []DatabaseGrant
+	DatabaseID      int64
+	DatabaseName    string
+	Tables          []apiTableMetadata
+	SearchFilter    string
+	SelectedNode    int32
+	NodesByRegion   map[string][]NodeDisplayInfo
+	Grants          []DatabaseGrant
+	MetadataJobInfo *MetadataJobInfo
 }
 
 // DatabaseGrant represents a privilege grant on a database

@@ -16,7 +16,8 @@
 
 
 <div id=tables role=tabpanel>
-  <form class="box flex-row" method="get">
+  <div class="box flex-row align-items:end">
+  <form class="flex-row align-items:end" method="get">
     <div>
       <label for=search>Search:</label>
       <input type="text" name=search id=search placeholder="Search tables" value="{{ .Data.SearchFilter }}">
@@ -34,11 +35,39 @@
         {{ end }}
       </select>
     </div>
-    <div class="flex-grow:2"></div>
-    <div class="flex-column justify-content:end">
-      <button type="submit">Apply Filters</button>
+    <div>
+      <button type="submit" class="<big>">Filter</button>
     </div>
-  </form>
+    </form>
+    <div class="flex-grow:2"></div>
+
+    <div class="flex-column">
+        {{ if .Data.MetadataJobInfo.IsRunning }}
+      	<label id="database-metadata-last-refreshed"
+      	       hx-get="/future/databases/{{ .Data.DatabaseID }}"
+               hx-select="#database-metadata-last-refreshed"
+               hx-target="#database-metadata-last-refreshed"
+               hx-select-oob="#databases-table"
+      	       hx-trigger="load delay:1s"
+      	       hx-swap="outerHTML" for=refresh>
+      	  Last refreshed: {{ if .Data.MetadataJobInfo.LastCompletedAt }}{{ $now := timeNow }}{{ formatElapsedTime (timeSub $now .Data.MetadataJobInfo.LastCompletedAt) }}{{ else }}never{{ end }}
+      				<button type="button" id=refresh disabled>Refreshing</button>
+      	</label>
+        {{ else }}
+      	<label id="database-metadata-last-refreshed" for=refresh>
+      	  Last refreshed: {{ if .Data.MetadataJobInfo.LastCompletedAt }}{{ $now := timeNow }}{{ formatElapsedTime (timeSub $now .Data.MetadataJobInfo.LastCompletedAt) }}{{ else }}never{{ end }}
+      	  <button type="button" id=refresh
+      	          hx-post="/future/databases/{{ .Data.DatabaseID }}/refresh"
+                  hx-select="#database-metadata-last-refreshed"
+                  hx-select-oob="#databases-table"
+      	          hx-target="#database-metadata-last-refreshed"
+      	          hx-swap="outerHTML">
+      	    Refresh
+      	  </button>
+      	</label>
+        {{ end }}
+      </div>
+    </div>
 
   <div x-data="tableSort()" style="overflow-x: auto;">
     <table id="table-data">
