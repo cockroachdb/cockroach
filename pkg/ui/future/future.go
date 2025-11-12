@@ -92,6 +92,13 @@ func init() {
 		"join": func(elements []string, separator string) string {
 			return strings.Join(elements, separator)
 		},
+		"joinInt64": func(elements []int64, separator string) string {
+			strs := make([]string, len(elements))
+			for i, v := range elements {
+				strs[i] = fmt.Sprintf("%d", v)
+			}
+			return strings.Join(strs, separator)
+		},
 		"formatTime":        formatTimeWrapper,
 		"formatBytes":       formatBytesWrapper,
 		"formatNumber":      formatNumberWrapper,
@@ -303,6 +310,15 @@ type SQLActivityData struct {
 	DiagnosticStates map[string]*DiagnosticState
 }
 
+// StatementFingerprintPageData contains data for a single statement fingerprint page
+type StatementFingerprintPageData struct {
+	Statement   serverpb.StatementDetailsResponse_CollectedStatementSummary
+	StmtID      string // Statement fingerprint ID (may be string hash or uint64)
+	Params      SQLActivityParams
+	Diagnostics DiagnosticState
+	PlanStats   []serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash
+}
+
 // OverviewData contains cluster overview information
 type OverviewData struct {
 	// Capacity information
@@ -421,6 +437,10 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 
 	futureRouter.HandleFunc("/sqlactivity/statements", func(w http.ResponseWriter, r *http.Request) {
 		handleSqlActivityStatements(w, r, cfg)
+	}).Methods("GET")
+
+	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}", func(w http.ResponseWriter, r *http.Request) {
+		handleSqlActivityStatementFingerprint(w, r, cfg)
 	}).Methods("GET")
 
 	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}/diagnostics", func(w http.ResponseWriter, r *http.Request) {
@@ -1146,6 +1166,164 @@ func handleCreateDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHT
 	http.Redirect(w, r, fmt.Sprintf("/future/sqlactivity/statements/%s/diagnostics?fingerprint=%s", stmtID, fingerprint), http.StatusFound)
 }
 
+func handleSqlActivityStatementFingerprint(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs,
+) {
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Extract statement ID from URL path
+	vars := mux.Vars(r)
+	stmtID := vars["stmtID"]
+	if stmtID == "" {
+		http.Error(w, "Missing statement ID", http.StatusBadRequest)
+		return
+	}
+
+	// Parse statement ID to uint64 for display purposes
+	stmtIDParsed, err := strconv.ParseUint(stmtID, 10, 64)
+	if err != nil {
+		// If it can't be parsed as uint64, it might already be a fingerprint ID string
+		stmtIDParsed = 0
+	}
+
+	// Parse query parameters for time range
+	intervalStr := r.URL.Query().Get("interval")
+	startStr := r.URL.Query().Get("start")
+	endStr := r.URL.Query().Get("end")
+
+	// Set defaults
+	interval := "1h" // default interval
+
+	// Parse interval parameter
+	if intervalStr != "" {
+		interval = intervalStr
+	}
+
+	// Calculate time range - use query params if provided, otherwise default to last hour
+	var startTime, endTime time.Time
+	var startUnix, endUnix int64
+
+	if startStr != "" && endStr != "" {
+		// Parse Unix timestamps from query parameters (in seconds)
+		if val, err := strconv.ParseInt(startStr, 10, 64); err == nil {
+			startTime = time.Unix(val, 0)
+			startUnix = val
+		}
+		if val, err := strconv.ParseInt(endStr, 10, 64); err == nil {
+			endTime = time.Unix(val, 0)
+			endUnix = val
+		}
+	}
+
+	// If parsing failed or params not provided, use default (last hour)
+	if startTime.IsZero() || endTime.IsZero() {
+		now := timeutil.Now()
+		startTime = now.Add(-1 * time.Hour)
+		endTime = now
+		startUnix = startTime.Unix()
+		endUnix = endTime.Unix()
+	}
+
+	// Get timezone (default to America/New_York for now)
+	timezone := "America/New_York"
+
+	// Fetch statement details using the dedicated endpoint
+	// Use the stmtID directly as the fingerprint_id
+	resp, err := cfg.Status.StatementDetails(ctx, &serverpb.StatementDetailsRequest{
+		FingerprintId: stmtID,
+		Start:         startUnix,
+		End:           endUnix,
+	})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to get statement details: %v", err)
+		http.Error(w, "Failed to get statement details", http.StatusInternalServerError)
+		return
+	}
+
+	// Extract the statement summary
+	stmt := &resp.Statement
+
+	// Format timestamps for display
+	loc, _ := timeutil.LoadLocation(timezone)
+	startTimeStr := startTime.In(loc).Format("2006-01-02 15:04:05")
+	endTimeStr := endTime.In(loc).Format("2006-01-02 15:04:05")
+
+	// Extract query from metadata
+	query := stmt.Metadata.Query
+
+	// Fetch diagnostic reports for this fingerprint
+	diagResp, err := cfg.Status.StatementDiagnosticsRequests(ctx, &serverpb.StatementDiagnosticsReportsRequest{})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch diagnostic reports: %v", err)
+		// Continue without diagnostic states
+	}
+
+	// Collect unique plan gists from plan-grouped stats
+	planGistSet := make(map[string]bool)
+	for _, planStat := range resp.StatementStatisticsPerPlanHash {
+		if planStat.ExplainPlan != "" {
+			planGistSet[planStat.ExplainPlan] = true
+		}
+	}
+	var planGists []string
+	for gist := range planGistSet {
+		planGists = append(planGists, gist)
+	}
+
+	// Build diagnostic state for this fingerprint
+	diagState := DiagnosticState{
+		Query:     query,
+		ID:        appstatspb.StmtFingerprintID(stmtIDParsed), // Used for display only
+		PlanGists: planGists,
+	}
+
+	if diagResp != nil {
+		for _, report := range diagResp.Reports {
+			if report.StatementFingerprint == query {
+				if !report.Completed {
+					diagState.HasPendingRequest = true
+					diagState.PendingRequestID = report.Id
+				} else if report.StatementDiagnosticsId > 0 {
+					bundle := DiagnosticBundle{
+						ID:          report.StatementDiagnosticsId,
+						CollectedAt: report.RequestedAt,
+						DownloadURL: fmt.Sprintf("/future/sqlactivity/stmtdiagnostics/%d/download", report.StatementDiagnosticsId),
+					}
+					diagState.CompletedBundles = append(diagState.CompletedBundles, bundle)
+				}
+			}
+		}
+	}
+
+	// Build page data
+	pageData := StatementFingerprintPageData{
+		Statement:   *stmt,
+		StmtID:      stmtID,
+		Params:      SQLActivityParams{
+			Interval:  interval,
+			Start:     startUnix,
+			End:       endUnix,
+			StartTime: startTimeStr,
+			EndTime:   endTimeStr,
+			Timezone:  timezone,
+		},
+		Diagnostics: diagState,
+		PlanStats:   resp.StatementStatisticsPerPlanHash,
+	}
+
+	// Execute the pre-parsed template
+	err = templates.ExecuteTemplate(w, "statement_fingerprint.html", PageData{
+		IndexHTMLArgs: cfg,
+		Data:          pageData,
+	})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
+}
+
 func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	// Parse query parameters with defaults
 	topStr := r.URL.Query().Get("top")
@@ -1267,7 +1445,6 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 	}
 
 	for _, stmt := range resp.Statements {
-		log.Dev.Errorf(r.Context(), "processing statement: %d (%s)", uint64(stmt.ID), stmt.Key.KeyData.Query)
 		s, ok := diagnosticStates[stmt.Key.KeyData.Query]
 		if !ok {
 			log.Dev.Errorf(r.Context(), "inserting %d", stmt.ID)
@@ -1277,14 +1454,11 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 				PlanGists: stmt.Stats.PlanGists,
 			}
 		} else {
-			log.Dev.Errorf(r.Context(), "inserting else %d", stmt.ID)
 			s.ID = stmt.ID
 			s.Query = stmt.Key.KeyData.Query
 			s.PlanGists = stmt.Stats.PlanGists
 		}
 	}
-
-	log.Dev.Errorf(r.Context(), "resulting states: %+v", diagnosticStates)
 
 	// Build the data structure with params
 	data := SQLActivityData{
