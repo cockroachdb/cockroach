@@ -386,10 +386,6 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		handleDatabaseMetadataRefresh(w, r, cfg)
 	}).Methods("POST")
 
-	futureRouter.HandleFunc("/databases/refresh-status", func(w http.ResponseWriter, r *http.Request) {
-		handleDatabaseMetadataRefreshStatus(w, r, cfg)
-	}).Methods("GET")
-
 	futureRouter.HandleFunc("/databases/{id}", func(w http.ResponseWriter, r *http.Request) {
 		handleDatabase(w, r, cfg)
 	}).Methods("GET")
@@ -609,40 +605,7 @@ func handleDatabaseMetadataRefresh(w http.ResponseWriter, r *http.Request, cfg I
 		return
 	}
 
-	http.Redirect(w, r, "/future/databases/refresh-status", http.StatusFound)
-}
-
-func handleDatabaseMetadataRefreshStatus(
-	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs,
-) {
-	ctx := r.Context()
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-	// Check the job status
-	var jobStatus apiTableMetadataJobStatus
-	jobStatusURL := fmt.Sprintf("%s/api/v2/table_metadata/updatejob/", apiBaseURL)
-	if err := fetchJSON(ctx, jobStatusURL, &jobStatus); err != nil {
-		log.Dev.Warningf(ctx, "Failed to fetch job status: %v", err)
-		http.Error(w, "Failed to fetch job status", http.StatusInternalServerError)
-		return
-	}
-
-	metadataJobInfo := MetadataJobInfo{
-		LastCompletedAt: jobStatus.LastCompletedTime,
-		IsRunning:       jobStatus.CurrentStatus == "RUNNING",
-	}
-
-	// Execute the pre-parsed template
-	err := templates.ExecuteTemplate(w, "table_metadata_job_info.html", PageData{
-		IndexHTMLArgs: cfg,
-		Data:          metadataJobInfo,
-	})
-	if err != nil {
-		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
-		http.Error(w, "Failed to render template", http.StatusInternalServerError)
-		return
-	}
-
+	http.Redirect(w, r, "/future/databases", http.StatusFound)
 }
 
 // formatElapsedTime formats a duration into a human-readable string

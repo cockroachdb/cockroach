@@ -40,12 +40,35 @@
     <div class="justify-item:end">
       Auto stats collection: <chip class="ok">enabled</chip>
     </div>
-    {{ template "table-metadata-job-info" .Data.MetadataJobInfo}}
+    {{ if .Data.MetadataJobInfo.IsRunning }}
+  	<label id="database-metadata-last-refreshed"
+  	       hx-get="/future/databases"
+           hx-select="#database-metadata-last-refreshed"
+           hx-target="#database-metadata-last-refreshed"
+           hx-select-oob="#databases-table"
+  	       hx-trigger="load delay:1s"
+  	       hx-swap="outerHTML" for=refresh>
+  	  Last refreshed: {{ if .Data.MetadataJobInfo.LastCompletedAt }}{{ $now := timeNow }}{{ formatElapsedTime (timeSub $now .Data.MetadataJobInfo.LastCompletedAt) }}{{ else }}never{{ end }}
+  				<button type="button" id=refresh disabled>Refreshing</button>
+  	</label>
+    {{ else }}
+  	<label id="database-metadata-last-refreshed" for=refresh>
+  	  Last refreshed: {{ if .Data.MetadataJobInfo.LastCompletedAt }}{{ $now := timeNow }}{{ formatElapsedTime (timeSub $now .Data.MetadataJobInfo.LastCompletedAt) }}{{ else }}never{{ end }}
+  	  <button type="button" id=refresh
+  	          hx-post="/future/databases/refresh"
+              hx-select="#database-metadata-last-refreshed"
+              hx-select-oob="#databases-table"
+  	          hx-target="#database-metadata-last-refreshed"
+  	          hx-swap="outerHTML">
+  	    Refresh
+  	  </button>
+  	</label>
+    {{ end }}
   </div>
 </div>
 
 <div id="databases-table" x-data="tableSort()" style="overflow-x: auto;">
-  <table id="table-data">
+  <table id="table-data" class="width:100%">
     <thead>
       <tr>
         <th>Name</th>
