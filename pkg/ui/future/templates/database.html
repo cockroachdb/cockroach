@@ -4,8 +4,8 @@
 
 <nav class="breadcrumbs" aria-label="Breadcrumbs">
   <ul>
-    <li class="<h1>">Databases</li>
-    <li class="<h2>">Database: movr</li>
+    <li class="<h1>"><a href="/future/databases">Databases</a></li>
+    <li class="<h2>">Database: {{ .Data.DatabaseName }}</li>
   </ul>
 </nav>
 
@@ -16,32 +16,27 @@
 
 
 <div id=tables role=tabpanel>
-  <form class="box flex-row">
+  <form class="box flex-row" method="get">
     <div>
       <label for=search>Search:</label>
-      <input type="text" name=search id=search placeholder="Search tables">
+      <input type="text" name=search id=search placeholder="Search tables" value="{{ .Data.SearchFilter }}">
     </div>
     <div>
-      <label for=nodes>Nodes:</label>
-      <select id=nodes name=nodes>
-        <option value="all">All</option>
-        <optgroup label="us-east1">
-          <option value="all-us-east1">All in us-east1</option>
-          <option value="n1">n1</option>
-          <option value="n2">n2</option>
-          <option value="n3">n3</option>
+      <label for=nodeId>Nodes:</label>
+      <select id=nodeId name=nodeId onchange="this.form.submit()">
+        <option value="" {{ if eq .Data.SelectedNode 0 }}selected{{ end }}>All</option>
+        {{ range $region, $nodes := .Data.NodesByRegion }}
+        <optgroup label="{{ $region }}">
+          {{ range $node := $nodes }}
+          <option value="{{ $node.NodeID }}" {{ if eq (printf "%d" $.Data.SelectedNode) $node.NodeID }}selected{{ end }}>n{{ $node.NodeID }} ({{ $node.Address }})</option>
+          {{ end }}
         </optgroup>
-        <optgroup label="us-west2">
-          <option value="all-us-west2">All in us-west2</option>
-          <option value="n4">n4</option>
-          <option value="n5">n5</option>
-          <option value="n6">n6</option>
-        </optgroup>
+        {{ end }}
       </select>
     </div>
     <div class="flex-grow:2"></div>
     <div class="flex-column justify-content:end">
-      <label for=refresh>Last refreshed: a few seconds ago <button id=refresh name=refresh>Refresh</button></label>
+      <button type="submit">Apply Filters</button>
     </div>
   </form>
 
@@ -54,31 +49,55 @@
           <th>Ranges</th>
           <th>Columns</th>
           <th>Indexes</th>
-          <th>Regions / Nodes	</th>
           <th>% of Live data</th>
           <th>Table auto stats enabled</th>
           <th>Stats last updated</th>
         </tr>
       </thead>
       <tbody>
+        {{ if eq (len .Data.Tables) 0 }}
         <tr>
-          <td>public.promo_codes</td>
-          <td>2.4 MiB</td>
-          <td>5</td>
-          <td>5</td>
-          <td>3</td>
-          <td>
-            <chip>us-east1 (3)</chip>
-            <chip>us-west1 (3)</chip>
-            <chip>europe-west1 (3)</chip>
+          <td colspan="8" style="text-align: center; padding: 2rem;">
+            {{ if .Data.SearchFilter }}
+              No tables found matching "{{ .Data.SearchFilter }}"
+            {{ else }}
+              No tables found in this database
+            {{ end }}
           </td>
-          <td>
-            100.0 %
-  1.2 MiB live data / 1.2 MiB total
-          </td>
-          <td><chip class="ok">Enabled</chip></td>
-          <td>Nov 11, 2025 at 19:34:58 UTC</td>
         </tr>
+        {{ end }}
+        {{ range .Data.Tables }}
+        <tr>
+          <td><a href="/future/tables/{{ .TableID }}">{{ .SchemaName }}.{{ .TableName }}</a></td>
+          <td>{{ formatBytes .ReplicationSizeBytes }}</td>
+          <td>{{ .RangeCount }}</td>
+          <td>{{ .ColumnCount }}</td>
+          <td>{{ .IndexCount }}</td>
+          <td>
+            {{ if .PercentLiveData }}
+              {{ formatPercent .PercentLiveData }}
+              <br>
+              <small>{{ formatBytes .TotalLiveDataBytes }} live / {{ formatBytes .TotalDataBytes }} total</small>
+            {{ else }}
+              N/A
+            {{ end }}
+          </td>
+          <td>
+            {{ if .AutoStatsEnabled }}
+              <chip class="ok">Enabled</chip>
+            {{ else }}
+              <chip class="warn">Disabled</chip>
+            {{ end }}
+          </td>
+          <td>
+            {{ if .StatsLastUpdated }}
+              {{ .StatsLastUpdated.Format "Jan 02, 2006 at 15:04:05 UTC" }}
+            {{ else }}
+              Never
+            {{ end }}
+          </td>
+        </tr>
+        {{ end }}
       </tbody>
     </table>
     <div class="flex-row" style="justify-content: space-between; align-items: center; margin-top: 1rem;">
@@ -113,18 +132,19 @@
       </tr>
     </thead>
     <tbody>
+      {{ if eq (len .Data.Grants) 0 }}
       <tr>
-        <td>admin</td>
-        <td>ALL</td>
+        <td colspan="2" style="text-align: center; padding: 2rem;">
+          No grants found for this database
+        </td>
       </tr>
+      {{ end }}
+      {{ range .Data.Grants }}
       <tr>
-        <td>public</td>
-        <td>CONNECT</td>
+        <td>{{ .Grantee }}</td>
+        <td>{{ join .Privileges ", " }}</td>
       </tr>
-      <tr>
-        <td>root</td>
-        <td>ALL</td>
-      </tr>
+      {{ end }}
     </tbody>
   </table>
 </div>

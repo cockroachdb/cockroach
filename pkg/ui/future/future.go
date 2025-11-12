@@ -89,6 +89,9 @@ func init() {
 			}
 			return template.JS(jsonBytes)
 		},
+		"join": func(elements []string, separator string) string {
+			return strings.Join(elements, separator)
+		},
 		"formatTime":        formatTimeWrapper,
 		"formatBytes":       formatBytesWrapper,
 		"formatNumber":      formatNumberWrapper,
@@ -645,28 +648,114 @@ func handleDatabase(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 		return
 	}
 
+	// Parse query parameters for filtering
+	searchFilter := r.URL.Query().Get("search")
+	nodeIDStr := r.URL.Query().Get("nodeId")
+	var selectedNode int32
+	if nodeIDStr != "" {
+		if parsed, err := strconv.ParseInt(nodeIDStr, 10, 32); err == nil {
+			selectedNode = int32(parsed)
+		}
+	}
+
 	// Fetch database details
 	var dbDetailsResp apiDbMetadataWithDetails
-	dbURL := fmt.Sprintf("%s/api/v2/database_metadata/%d", apiBaseURL, dbID)
+	dbURL := fmt.Sprintf("%s/api/v2/database_metadata/%d/", apiBaseURL, dbID)
 	if err := fetchJSON(ctx, dbURL, &dbDetailsResp); err != nil {
 		log.Dev.Warningf(ctx, "Failed to fetch database details: %v", err)
 		http.Error(w, "Failed to fetch database details", http.StatusInternalServerError)
 		return
 	}
 
+	// Fetch nodes to map stores to regions
+	nodesResp, err := cfg.Status.NodesUI(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch nodes: %v", err)
+		http.Error(w, "Failed to fetch nodes", http.StatusInternalServerError)
+		return
+	}
+
+	// Build a map of storeID -> (nodeID, region) and collect nodes by region
+	storeToNodeRegion := make(map[int64]struct {
+		nodeID int32
+		region string
+	})
+	nodesByRegion := make(map[string][]NodeDisplayInfo)
+	nodeToStores := make(map[int32][]int64) // Track which stores belong to each node
+
+	for _, node := range nodesResp.Nodes {
+		region := extractRegion(&node.Desc.Locality)
+		nodeID := int32(node.Desc.NodeID)
+
+		// Add node to region group
+		nodesByRegion[region] = append(nodesByRegion[region], NodeDisplayInfo{
+			NodeID:  fmt.Sprintf("%d", nodeID),
+			Address: node.Desc.Address.AddressField,
+		})
+
+		// Map stores to nodes
+		for _, store := range node.StoreStatuses {
+			storeID := int64(store.Desc.StoreID)
+			storeToNodeRegion[storeID] = struct {
+				nodeID int32
+				region string
+			}{
+				nodeID: nodeID,
+				region: region,
+			}
+			nodeToStores[nodeID] = append(nodeToStores[nodeID], storeID)
+		}
+	}
+
+	// Sort nodes within each region
+	for region := range nodesByRegion {
+		sort.Slice(nodesByRegion[region], func(i, j int) bool {
+			return nodesByRegion[region][i].NodeID < nodesByRegion[region][j].NodeID
+		})
+	}
+
+	// Build API URL with filters for tables
+	tablesURL := fmt.Sprintf("%s/api/v2/table_metadata/?dbId=%d", apiBaseURL, dbID)
+	params := make([]string, 0, 2)
+	if searchFilter != "" {
+		params = append(params, fmt.Sprintf("name=%s", searchFilter))
+	}
+	// If filtering by node, add all stores from that node
+	if selectedNode > 0 {
+		if storeIDs, ok := nodeToStores[selectedNode]; ok {
+			for _, storeID := range storeIDs {
+				params = append(params, fmt.Sprintf("storeId=%d", storeID))
+			}
+		}
+	}
+	if len(params) > 0 {
+		tablesURL += "&" + strings.Join(params, "&")
+	}
+
 	// Fetch tables for this database
 	var tablesResp apiPaginatedResponse[[]apiTableMetadata]
-	tablesURL := fmt.Sprintf("%s/api/v2/table_metadata/?dbId=%d", apiBaseURL, dbID)
 	if err := fetchJSON(ctx, tablesURL, &tablesResp); err != nil {
 		log.Dev.Warningf(ctx, "Failed to fetch tables: %v", err)
 		http.Error(w, "Failed to fetch tables", http.StatusInternalServerError)
 		return
 	}
 
+	// Fetch database grants
+	grants, err := fetchDatabaseGrants(ctx, cfg, dbDetailsResp.Metadata.DbName)
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch database grants: %v", err)
+		// Continue without grants - not critical
+		grants = []DatabaseGrant{}
+	}
+
 	pageData := DatabasePageData{
-		DatabaseID:   dbDetailsResp.Metadata.DbID,
-		DatabaseName: dbDetailsResp.Metadata.DbName,
-		Tables:       tablesResp.Results,
+		DatabaseID:    dbDetailsResp.Metadata.DbID,
+		DatabaseName:  dbDetailsResp.Metadata.DbName,
+		Tables:        tablesResp.Results,
+		SearchFilter:  searchFilter,
+		SelectedNode:  selectedNode,
+		NodesByRegion: nodesByRegion,
+		Grants:        grants,
 	}
 
 	// Execute the pre-parsed template
@@ -1447,9 +1536,19 @@ type DatabaseWithRegions struct {
 
 // DatabasePageData contains data for a single database page
 type DatabasePageData struct {
-	DatabaseID   int64
-	DatabaseName string
-	Tables       []apiTableMetadata
+	DatabaseID    int64
+	DatabaseName  string
+	Tables        []apiTableMetadata
+	SearchFilter  string
+	SelectedNode  int32
+	NodesByRegion map[string][]NodeDisplayInfo
+	Grants        []DatabaseGrant
+}
+
+// DatabaseGrant represents a privilege grant on a database
+type DatabaseGrant struct {
+	Grantee    string
+	Privileges []string
 }
 
 // TablePageData contains data for a single table page
@@ -1480,6 +1579,39 @@ func fetchJSON(ctx context.Context, url string, target interface{}) error {
 	}
 
 	return json.NewDecoder(resp.Body).Decode(target)
+}
+
+// fetchDatabaseGrants fetches the grants for a database
+func fetchDatabaseGrants(ctx context.Context, cfg IndexHTMLArgs, dbName string) ([]DatabaseGrant, error) {
+	// Use the DatabaseDetails RPC to get grant information
+	resp, err := cfg.Admin.DatabaseDetails(ctx, &serverpb.DatabaseDetailsRequest{
+		Database: dbName,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch database details: %w", err)
+	}
+
+	// Convert grants from the response to our format
+	grantsMap := make(map[string][]string)
+	for _, grant := range resp.Grants {
+		grantsMap[grant.User] = append(grantsMap[grant.User], grant.Privileges...)
+	}
+
+	// Convert map to slice
+	var grants []DatabaseGrant
+	for grantee, privileges := range grantsMap {
+		grants = append(grants, DatabaseGrant{
+			Grantee:    grantee,
+			Privileges: privileges,
+		})
+	}
+
+	// Sort by grantee for consistent ordering
+	sort.Slice(grants, func(i, j int) bool {
+		return grants[i].Grantee < grants[j].Grantee
+	})
+
+	return grants, nil
 }
 
 // handleMetricsDashboard serves the metrics dashboard page
