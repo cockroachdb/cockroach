@@ -147,6 +147,8 @@ func (cs *clusterState) rebalanceStores(
 	rangeMoveCount := 0
 	leaseTransferCount := 0
 	for idx /*logging only*/, store := range sheddingStores {
+		shouldReturnEarly := false
+		shouldContinue := false
 		{
 			log.KvDistribution.Infof(ctx, "start processing shedding store s%d: cpu node load %s, store load %s, worst dim %s",
 				store.StoreID, store.nls, store.sls, store.worstDim)
@@ -341,7 +343,8 @@ func (cs *clusterState) rebalanceStores(
 						targetSS.maxFractionPendingIncrease, targetSS.maxFractionPendingDecrease)
 					if leaseTransferCount >= maxLeaseTransferCount {
 						log.KvDistribution.VInfof(ctx, 2, "reached max lease transfer count %d, returning", maxLeaseTransferCount)
-						return changes
+						shouldReturnEarly = true
+						break
 					}
 					doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
 					if doneShedding {
@@ -360,7 +363,8 @@ func (cs *clusterState) rebalanceStores(
 					// lease transfers -- so be it.
 					log.KvDistribution.VInfof(ctx, 2, "skipping replica transfers for s%d: done shedding=%v, lease_transfers=%d",
 						store.StoreID, doneShedding, leaseTransferCount)
-					continue
+					shouldContinue = true
+					break
 				}
 			} else {
 				log.KvDistribution.VInfof(ctx, 2, "skipping lease shedding: s%v != local store s%s or cpu is not overloaded: %v",
@@ -372,7 +376,8 @@ func (cs *clusterState) rebalanceStores(
 			if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
 				now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
 				log.KvDistribution.VInfof(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
-				continue
+				shouldContinue = true
+				break
 			}
 			// If the node is cpu overloaded, or the store/node is not fdOK, exclude
 			// the other stores on this node from receiving replicas shed by this
@@ -550,7 +555,8 @@ func (cs *clusterState) rebalanceStores(
 					rangeID, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1], ss.adjusted.load, targetSS.adjusted.load)
 				if rangeMoveCount >= maxRangeMoveCount {
 					log.KvDistribution.VInfof(ctx, 2, "s%d has reached max range move count %d: mma returning with %d stores left in shedding stores", store.StoreID, maxRangeMoveCount, len(sheddingStores)-(idx+1))
-					return changes
+					shouldReturnEarly = true
+					break
 				}
 				doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
 				if doneShedding {
@@ -566,8 +572,15 @@ func (cs *clusterState) rebalanceStores(
 			// rebalancing to work well is not in scope.
 			if doneShedding {
 				log.KvDistribution.VInfof(ctx, 2, "store s%d is done shedding, moving to next store", store.StoreID)
-				continue
+				shouldContinue = true
+				break
 			}
+		}
+		if shouldReturnEarly {
+			return changes
+		}
+		if shouldContinue {
+			continue
 		}
 	}
 	return changes
