@@ -347,10 +347,19 @@ func TestTraceFieldDecomposition(t *testing.T) {
 			},
 		},
 	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
 
 	sqlDB.SetMaxOpenConns(1)
+
+	if srv.DeploymentMode() == serverutils.ExternalProcess {
+		// Disable RU estimation because it adds a structured payload to the
+		// trace that - when stringified - can have unexpected whitespace (i.e.
+		// it'll be of the form 'r_u:0.625 ').
+		if _, err := sqlDB.Exec("SET CLUSTER SETTING sql.tenant_ru_estimation.enabled = false;"); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	if _, err := sqlDB.Exec("SET tracing = ON"); err != nil {
 		t.Fatal(err)
