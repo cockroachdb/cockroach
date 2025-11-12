@@ -23,6 +23,27 @@ import (
 
 var mmaid = atomic.Int64{}
 
+// rebalanceState tracks the state and outcomes of a rebalanceStores invocation.
+type rebalanceState struct {
+	cs *clusterState
+	// changes accumulates the pending range changes made during rebalancing.
+	changes []PendingRangeChange
+	// rangeMoveCount tracks the number of range moves made.
+	rangeMoveCount int
+	// leaseTransferCount tracks the number of lease transfers made.
+	leaseTransferCount int
+	// shouldReturnEarly indicates the outer loop should return immediately.
+	shouldReturnEarly bool
+	// shouldContinue indicates the outer loop should continue to the next iteration.
+	shouldContinue bool
+	// maxRangeMoveCount is the maximum number of range moves allowed.
+	maxRangeMoveCount int
+	// maxLeaseTransferCount is the maximum number of lease transfers allowed.
+	maxLeaseTransferCount int
+	// lastFailedChangeDelayDuration is the delay after a failed change before retrying.
+	lastFailedChangeDelayDuration time.Duration
+}
+
 // Called periodically, say every 10s.
 //
 // We do not want to shed replicas for CPU from a remote store until its had a
@@ -126,7 +147,6 @@ func (cs *clusterState) rebalanceStores(
 		}
 	}
 
-	var changes []PendingRangeChange
 	var disj [1]constraintsConj
 	var storesToExclude storeSet
 	var storesToExcludeForRange storeSet
@@ -144,13 +164,22 @@ func (cs *clusterState) rebalanceStores(
 	const maxLeaseTransferCount = 8
 	// See the long comment where rangeState.lastFailedChange is declared.
 	const lastFailedChangeDelayDuration time.Duration = 60 * time.Second
-	rangeMoveCount := 0
-	leaseTransferCount := 0
+	rs := &rebalanceState{
+		cs:                            cs,
+		changes:                       []PendingRangeChange{},
+		rangeMoveCount:                0,
+		leaseTransferCount:            0,
+		shouldReturnEarly:             false,
+		shouldContinue:                false,
+		maxRangeMoveCount:             maxRangeMoveCount,
+		maxLeaseTransferCount:         maxLeaseTransferCount,
+		lastFailedChangeDelayDuration: lastFailedChangeDelayDuration,
+	}
 	for idx /*logging only*/, store := range sheddingStores {
-		shouldReturnEarly, shouldContinue := func() (bool, bool) {
+		func() {
 			log.KvDistribution.Infof(ctx, "start processing shedding store s%d: cpu node load %s, store load %s, worst dim %s",
 				store.StoreID, store.nls, store.sls, store.worstDim)
-			ss := cs.stores[store.StoreID]
+			ss := rs.cs.stores[store.StoreID]
 
 			doneShedding := false
 			if true {
@@ -161,7 +190,7 @@ func (cs *clusterState) rebalanceStores(
 					var b strings.Builder
 					for i := 0; i < n; i++ {
 						rangeID := topKRanges.index(i)
-						rstate := cs.ranges[rangeID]
+						rstate := rs.cs.ranges[rangeID]
 						load := rstate.load.Load
 						if !ss.adjusted.replicas[rangeID].IsLeaseholder {
 							load[CPURate] = rstate.load.RaftCPU
@@ -192,7 +221,7 @@ func (cs *clusterState) rebalanceStores(
 				n := topKRanges.len()
 				for i := 0; i < n; i++ {
 					rangeID := topKRanges.index(i)
-					rstate := cs.ranges[rangeID]
+					rstate := rs.cs.ranges[rangeID]
 					if len(rstate.pendingChanges) > 0 {
 						// If the range has pending changes, don't make more changes.
 						log.KvDistribution.VInfof(ctx, 2, "skipping r%d: has pending changes", rangeID)
@@ -214,11 +243,11 @@ func (cs *clusterState) rebalanceStores(
 								" changes but is not leaseholder: %+v", rstate)
 						}
 					}
-					if now.Sub(rstate.lastFailedChange) < lastFailedChangeDelayDuration {
+					if now.Sub(rstate.lastFailedChange) < rs.lastFailedChangeDelayDuration {
 						log.KvDistribution.VInfof(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
 						continue
 					}
-					if !cs.ensureAnalyzedConstraints(rstate) {
+					if !rs.cs.ensureAnalyzedConstraints(rstate) {
 						log.KvDistribution.VInfof(ctx, 2, "skipping r%d: constraints analysis failed", rangeID)
 						continue
 					}
@@ -251,8 +280,8 @@ func (cs *clusterState) rebalanceStores(
 						continue // leaseholder is the only candidate
 					}
 					clear(scratchNodes)
-					means := computeMeansForStoreSet(cs, candsPL, scratchNodes, scratchStores)
-					sls := cs.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
+					means := computeMeansForStoreSet(rs.cs, candsPL, scratchNodes, scratchStores)
+					sls := rs.cs.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
 					log.KvDistribution.VInfof(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
 					if sls.dimSummary[CPURate] < overloadSlow {
 						// This store is not cpu overloaded relative to these candidates for
@@ -262,13 +291,13 @@ func (cs *clusterState) rebalanceStores(
 					}
 					var candsSet candidateSet
 					for _, cand := range cands {
-						if disp := cs.stores[cand.storeID].adjusted.replicas[rangeID].LeaseDisposition; disp != LeaseDispositionOK {
+						if disp := rs.cs.stores[cand.storeID].adjusted.replicas[rangeID].LeaseDisposition; disp != LeaseDispositionOK {
 							// Don't transfer lease to a store that is lagging.
 							log.KvDistribution.Infof(ctx, "skipping store s%d for lease transfer: lease disposition %v",
 								cand.storeID, disp)
 							continue
 						}
-						candSls := cs.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)
+						candSls := rs.cs.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)
 						candsSet.candidates = append(candsSet.candidates, candidateInfo{
 							StoreID:              cand.storeID,
 							storeLoadSummary:     candSls,
@@ -297,7 +326,7 @@ func (cs *clusterState) rebalanceStores(
 							ss.NodeID, ss.StoreID, rangeID)
 						continue
 					}
-					targetSS := cs.stores[targetStoreID]
+					targetSS := rs.cs.stores[targetStoreID]
 					var addedLoad LoadVector
 					// Only adding leaseholder CPU.
 					addedLoad[CPURate] = rstate.load.Load[CPURate] - rstate.load.RaftCPU
@@ -307,7 +336,7 @@ func (cs *clusterState) rebalanceStores(
 						addedLoad[CPURate] = 0
 						panic("raft cpu higher than total cpu")
 					}
-					if !cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, &means, true, CPURate) {
+					if !rs.cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, &means, true, CPURate) {
 						log.KvDistribution.VInfof(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
 							store.StoreID, targetStoreID, rangeID, addedLoad)
 						continue
@@ -323,25 +352,26 @@ func (cs *clusterState) rebalanceStores(
 					replicaChanges := MakeLeaseTransferChanges(
 						rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
 					leaseChange := MakePendingRangeChange(rangeID, replicaChanges[:])
-					if err := cs.preCheckOnApplyReplicaChanges(leaseChange.pendingReplicaChanges); err != nil {
+					if err := rs.cs.preCheckOnApplyReplicaChanges(leaseChange.pendingReplicaChanges); err != nil {
 						panic(errors.Wrapf(err, "pre-check failed for lease transfer %v", leaseChange))
 					}
-					cs.addPendingRangeChange(leaseChange)
-					changes = append(changes, leaseChange)
-					leaseTransferCount++
-					if changes[len(changes)-1].IsChangeReplicas() || !changes[len(changes)-1].IsTransferLease() {
-						panic(fmt.Sprintf("lease transfer is invalid: %v", changes[len(changes)-1]))
+					rs.cs.addPendingRangeChange(leaseChange)
+					rs.changes = append(rs.changes, leaseChange)
+					rs.leaseTransferCount++
+					if rs.changes[len(rs.changes)-1].IsChangeReplicas() || !rs.changes[len(rs.changes)-1].IsTransferLease() {
+						panic(fmt.Sprintf("lease transfer is invalid: %v", rs.changes[len(rs.changes)-1]))
 					}
 					log.KvDistribution.Infof(ctx,
 						"result(success): shedding r%v lease from s%v to s%v [change:%v] with "+
 							"resulting loads source:%v target:%v (means: %v) (frac_pending: (src:%.2f,target:%.2f) (src:%.2f,target:%.2f))",
-						rangeID, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1],
+						rangeID, removeTarget.StoreID, addTarget.StoreID, rs.changes[len(rs.changes)-1],
 						ss.adjusted.load, targetSS.adjusted.load, means.storeLoad.load,
 						ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease,
 						targetSS.maxFractionPendingIncrease, targetSS.maxFractionPendingDecrease)
-					if leaseTransferCount >= maxLeaseTransferCount {
-						log.KvDistribution.VInfof(ctx, 2, "reached max lease transfer count %d, returning", maxLeaseTransferCount)
-						return true, false
+					if rs.leaseTransferCount >= rs.maxLeaseTransferCount {
+						log.KvDistribution.VInfof(ctx, 2, "reached max lease transfer count %d, returning", rs.maxLeaseTransferCount)
+						rs.shouldReturnEarly = true
+						return
 					}
 					doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
 					if doneShedding {
@@ -350,7 +380,7 @@ func (cs *clusterState) rebalanceStores(
 						break
 					}
 				}
-				if doneShedding || leaseTransferCount > 0 {
+				if doneShedding || rs.leaseTransferCount > 0 {
 					// If managed to transfer a lease, wait for it to be done, before
 					// shedding replicas from this store (which is more costly). Otherwise
 					// we may needlessly start moving replicas. Note that the store
@@ -359,8 +389,9 @@ func (cs *clusterState) rebalanceStores(
 					// pending from a load perspective, so we *may* not be able to do more
 					// lease transfers -- so be it.
 					log.KvDistribution.VInfof(ctx, 2, "skipping replica transfers for s%d: done shedding=%v, lease_transfers=%d",
-						store.StoreID, doneShedding, leaseTransferCount)
-					return false, true
+						store.StoreID, doneShedding, rs.leaseTransferCount)
+					rs.shouldContinue = true
+					return
 				}
 			} else {
 				log.KvDistribution.VInfof(ctx, 2, "skipping lease shedding: s%v != local store s%s or cpu is not overloaded: %v",
@@ -372,7 +403,8 @@ func (cs *clusterState) rebalanceStores(
 			if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
 				now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
 				log.KvDistribution.VInfof(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
-				return false, true
+				rs.shouldContinue = true
+				return
 			}
 			// If the node is cpu overloaded, or the store/node is not fdOK, exclude
 			// the other stores on this node from receiving replicas shed by this
@@ -381,7 +413,7 @@ func (cs *clusterState) rebalanceStores(
 			storesToExclude = storesToExclude[:0]
 			if excludeStoresOnNode {
 				nodeID := ss.NodeID
-				for _, storeID := range cs.nodes[nodeID].stores {
+				for _, storeID := range rs.cs.nodes[nodeID].stores {
 					storesToExclude.insert(storeID)
 				}
 				log.KvDistribution.VInfof(ctx, 2, "excluding all stores on n%d due to overload/fd status", nodeID)
@@ -404,11 +436,11 @@ func (cs *clusterState) rebalanceStores(
 					log.KvDistribution.VInfof(ctx, 2, "skipping r%d: has pending changes", rangeID)
 					continue
 				}
-				if now.Sub(rstate.lastFailedChange) < lastFailedChangeDelayDuration {
+				if now.Sub(rstate.lastFailedChange) < rs.lastFailedChangeDelayDuration {
 					log.KvDistribution.VInfof(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
 					continue
 				}
-				if !cs.ensureAnalyzedConstraints(rstate) {
+				if !rs.cs.ensureAnalyzedConstraints(rstate) {
 					log.KvDistribution.VInfof(ctx, 2, "skipping r%d: constraints analysis failed", rangeID)
 					continue
 				}
@@ -447,13 +479,13 @@ func (cs *clusterState) rebalanceStores(
 						// we have already excluded those stores above.
 						continue
 					}
-					nodeID := cs.stores[storeID].NodeID
-					for _, storeID := range cs.nodes[nodeID].stores {
+					nodeID := rs.cs.stores[storeID].NodeID
+					for _, storeID := range rs.cs.nodes[nodeID].stores {
 						storesToExcludeForRange.insert(storeID)
 					}
 				}
 				// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
-				cands, ssSLS := cs.computeCandidatesForRange(ctx, disj[:], storesToExcludeForRange, store.StoreID)
+				cands, ssSLS := rs.cs.computeCandidatesForRange(ctx, disj[:], storesToExcludeForRange, store.StoreID)
 				log.KvDistribution.VInfof(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
 					rangeID, store.StoreID, ss.adjusted.load)
 				if log.V(2) {
@@ -478,10 +510,10 @@ func (cs *clusterState) rebalanceStores(
 				// Set the diversity score and lease preference index of the candidates.
 				for _, cand := range cands.candidates {
 					cand.diversityScore = localities.getScoreChangeForRebalance(
-						ss.localityTiers, cs.stores[cand.StoreID].localityTiers)
+						ss.localityTiers, rs.cs.stores[cand.StoreID].localityTiers)
 					if isLeaseholder {
 						cand.leasePreferenceIndex = matchedLeasePreferenceIndex(
-							cand.StoreID, rstate.constraints.spanConfig.leasePreferences, cs.constraintMatcher)
+							cand.StoreID, rstate.constraints.spanConfig.leasePreferences, rs.cs.constraintMatcher)
 					}
 				}
 				// Consider a cluster where s1 is overloadSlow, s2 is loadNoChange, and
@@ -512,12 +544,12 @@ func (cs *clusterState) rebalanceStores(
 						"(threshold %s; %s)", rangeID, ssSLS.sls, ignoreLevel)
 					continue
 				}
-				targetSS := cs.stores[targetStoreID]
+				targetSS := rs.cs.stores[targetStoreID]
 				addedLoad := rstate.load.Load
 				if !isLeaseholder {
 					addedLoad[CPURate] = rstate.load.RaftCPU
 				}
-				if !cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, cands.means, false, loadDim) {
+				if !rs.cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, cands.means, false, loadDim) {
 					log.KvDistribution.VInfof(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
 						store.StoreID, targetStoreID, rangeID, addedLoad)
 					continue
@@ -538,19 +570,20 @@ func (cs *clusterState) rebalanceStores(
 				replicaChanges := makeRebalanceReplicaChanges(
 					rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
 				rangeChange := MakePendingRangeChange(rangeID, replicaChanges[:])
-				if err = cs.preCheckOnApplyReplicaChanges(rangeChange.pendingReplicaChanges); err != nil {
+				if err = rs.cs.preCheckOnApplyReplicaChanges(rangeChange.pendingReplicaChanges); err != nil {
 					panic(errors.Wrapf(err, "pre-check failed for replica changes: %v for %v",
 						replicaChanges, rangeID))
 				}
-				cs.addPendingRangeChange(rangeChange)
-				changes = append(changes, rangeChange)
-				rangeMoveCount++
+				rs.cs.addPendingRangeChange(rangeChange)
+				rs.changes = append(rs.changes, rangeChange)
+				rs.rangeMoveCount++
 				log.KvDistribution.VInfof(ctx, 2,
 					"result(success): rebalancing r%v from s%v to s%v [change: %v] with resulting loads source: %v target: %v",
-					rangeID, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1], ss.adjusted.load, targetSS.adjusted.load)
-				if rangeMoveCount >= maxRangeMoveCount {
-					log.KvDistribution.VInfof(ctx, 2, "s%d has reached max range move count %d: mma returning with %d stores left in shedding stores", store.StoreID, maxRangeMoveCount, len(sheddingStores)-(idx+1))
-					return true, false
+					rangeID, removeTarget.StoreID, addTarget.StoreID, rs.changes[len(rs.changes)-1], ss.adjusted.load, targetSS.adjusted.load)
+				if rs.rangeMoveCount >= rs.maxRangeMoveCount {
+					log.KvDistribution.VInfof(ctx, 2, "s%d has reached max range move count %d: mma returning with %d stores left in shedding stores", store.StoreID, rs.maxRangeMoveCount, len(sheddingStores)-(idx+1))
+					rs.shouldReturnEarly = true
+					return
 				}
 				doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
 				if doneShedding {
@@ -566,16 +599,17 @@ func (cs *clusterState) rebalanceStores(
 			// rebalancing to work well is not in scope.
 			if doneShedding {
 				log.KvDistribution.VInfof(ctx, 2, "store s%d is done shedding, moving to next store", store.StoreID)
-				return false, true
+				rs.shouldContinue = true
+				return
 			}
-			return false, false
 		}()
-		if shouldReturnEarly {
-			return changes
+		if rs.shouldReturnEarly {
+			return rs.changes
 		}
-		if shouldContinue {
+		if rs.shouldContinue {
+			rs.shouldContinue = false
 			continue
 		}
 	}
-	return changes
+	return rs.changes
 }
