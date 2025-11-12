@@ -176,7 +176,7 @@ func (cs *clusterState) rebalanceStores(
 		lastFailedChangeDelayDuration: lastFailedChangeDelayDuration,
 	}
 	for idx /*logging only*/, store := range sheddingStores {
-		func() {
+		func(rs *rebalanceState) {
 			log.KvDistribution.Infof(ctx, "start processing shedding store s%d: cpu node load %s, store load %s, worst dim %s",
 				store.StoreID, store.nls, store.sls, store.worstDim)
 			ss := rs.cs.stores[store.StoreID]
@@ -602,7 +602,7 @@ func (cs *clusterState) rebalanceStores(
 				rs.shouldContinue = true
 				return
 			}
-		}()
+		}(rs)
 		if rs.shouldReturnEarly {
 			return rs.changes
 		}
