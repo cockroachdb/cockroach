@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -25,6 +26,13 @@ type Manager struct {
 	rff      *rangefeed.Factory
 	codec    keys.SQLCodec
 	leaseMgr *lease.Manager
+
+	mu struct {
+		syncutil.Mutex
+		// name -> reader
+		// TODO: this should actually be a map of (session id, name) -> reader, or smth
+		readers map[string]*Reader
+	}
 }
 
 func NewManager(
@@ -36,7 +44,9 @@ func NewManager(
 ) *Manager {
 	// setup rangefeed on partitions table (/poll)
 	// handle handoff from one server to another
-	return &Manager{executor: executor, rff: rff, codec: codec, leaseMgr: leaseMgr}
+	m := &Manager{executor: executor, rff: rff, codec: codec, leaseMgr: leaseMgr}
+	m.mu.readers = make(map[string]*Reader)
+	return m
 }
 
 const createQueueCursorTableSQL = `
@@ -116,7 +126,23 @@ func (m *Manager) CreateQueue(ctx context.Context, queueName string, tableDescID
 }
 
 func (m *Manager) GetOrInitReader(ctx context.Context, name string) (queuebase.Reader, error) {
-	// TODO: get if exists already
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	reader, ok := m.mu.readers[name]
+	if ok && reader.IsAlive() {
+		fmt.Printf("get or init reader for queue %s found in cache\n", name)
+		return reader, nil
+	}
+	fmt.Printf("get or init reader for queue %s not found in cache\n", name)
+	reader, err := m.getOrInitReaderUncached(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	m.mu.readers[name] = reader
+	return reader, nil
+}
+
+func (m *Manager) getOrInitReaderUncached(ctx context.Context, name string) (*Reader, error) {
 	var tableDescID int64
 	// TODO: this ctx on the other hand should be stmt scoped
 	err := m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -146,6 +172,14 @@ func (m *Manager) GetOrInitReader(ctx context.Context, name string) (queuebase.R
 
 func (m *Manager) reassessAssignments(ctx context.Context, name string) (bool, error) {
 	return false, nil
+}
+
+func (m *Manager) forgetReader(name string) {
+	func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		delete(m.mu.readers, name)
+	}()
 }
 
 var _ queuebase.Manager = &Manager{}
