@@ -26,6 +26,10 @@ var mmaid = atomic.Int64{}
 // rebalanceState tracks the state and outcomes of a rebalanceStores invocation.
 type rebalanceState struct {
 	cs *clusterState
+	// rng is the random number generator for non-deterministic decisions.
+	rng *rand.Rand
+	// dsm is the diversity scoring memo for computing diversity scores.
+	dsm *diversityScoringMemo
 	// changes accumulates the pending range changes made during rebalancing.
 	changes []PendingRangeChange
 	// rangeMoveCount tracks the number of range moves made.
@@ -166,6 +170,8 @@ func (cs *clusterState) rebalanceStores(
 	const lastFailedChangeDelayDuration time.Duration = 60 * time.Second
 	rs := &rebalanceState{
 		cs:                            cs,
+		rng:                           rng,
+		dsm:                           dsm,
 		changes:                       []PendingRangeChange{},
 		rangeMoveCount:                0,
 		leaseTransferCount:            0,
@@ -176,7 +182,7 @@ func (cs *clusterState) rebalanceStores(
 		lastFailedChangeDelayDuration: lastFailedChangeDelayDuration,
 	}
 	for _, store := range sheddingStores {
-		func(rs *rebalanceState, store sheddingStore) {
+		func(rs *rebalanceState, store sheddingStore, ctx context.Context, localStoreID roachpb.StoreID, now time.Time) {
 			log.KvDistribution.Infof(ctx, "start processing shedding store s%d: cpu node load %s, store load %s, worst dim %s",
 				store.StoreID, store.nls, store.sls, store.worstDim)
 			ss := rs.cs.stores[store.StoreID]
@@ -318,7 +324,7 @@ func (cs *clusterState) rebalanceStores(
 					// will only add CPU to the target store (so it is ok to ignore other
 					// dimensions on the target).
 					targetStoreID := sortTargetCandidateSetAndPick(
-						ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, rng)
+						ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, rs.rng)
 					if targetStoreID == 0 {
 						log.KvDistribution.Infof(
 							ctx,
@@ -505,7 +511,7 @@ func (cs *clusterState) rebalanceStores(
 				} else {
 					rlocalities = rstate.constraints.replicaLocalityTiers
 				}
-				localities := dsm.getExistingReplicaLocalities(rlocalities)
+				localities := rs.dsm.getExistingReplicaLocalities(rlocalities)
 				isLeaseholder := rstate.constraints.leaseholderID == store.StoreID
 				// Set the diversity score and lease preference index of the candidates.
 				for _, cand := range cands.candidates {
@@ -538,7 +544,7 @@ func (cs *clusterState) rebalanceStores(
 						ignoreLevel, ssSLS.sls, rangeID, overloadDur)
 				}
 				targetStoreID := sortTargetCandidateSetAndPick(
-					ctx, cands, ssSLS.sls, ignoreLevel, loadDim, rng)
+					ctx, cands, ssSLS.sls, ignoreLevel, loadDim, rs.rng)
 				if targetStoreID == 0 {
 					log.KvDistribution.VInfof(ctx, 2, "result(failed): no suitable target found among candidates for r%d "+
 						"(threshold %s; %s)", rangeID, ssSLS.sls, ignoreLevel)
@@ -602,7 +608,7 @@ func (cs *clusterState) rebalanceStores(
 				rs.shouldContinue = true
 				return
 			}
-		}(rs, store)
+		}(rs, store, ctx, localStoreID, now)
 		if rs.shouldReturnEarly {
 			return rs.changes
 		}
