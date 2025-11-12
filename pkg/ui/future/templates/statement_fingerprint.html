@@ -1,0 +1,29 @@
+{{ template "layout-start" .}}
+
+
+<nav class="breadcrumbs" aria-label="Breadcrumbs">
+  <ul>
+    <li class="<h1>"><a href="/future/sqlactivity/statements">Statements</a></li>
+    <li class="<h2>"><a href="/future/sqlactivity/statements/123">Statement Fingerprint 123</a></li>
+  </ul>
+</nav>
+
+<div role=tablist aria-label="Statement Fingerprint">
+  <button role=tab aria-controls=overview aria-selected=true>Overview</button>
+  <button role=tab aria-controls=explainplans>Explain Plans</button>
+  <button role=tab aria-controls=diagnostics>Diagnostics</button>
+</div>
+
+<div id=overview role=tabpanel>
+Overview
+</div>
+
+<div id=explainplans role=tabpanel>
+Explain Plans
+</div>
+
+<div id=diagnostics role=tabpanel>
+Diagnostics
+</div>
+
+{{ template "layout-end" .}}

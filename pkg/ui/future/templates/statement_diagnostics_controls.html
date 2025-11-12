@@ -111,7 +111,9 @@
           <input type=radio name=plangist value=selected x-model="plangist"> For the following plan gist:
         </label>
         <select id=plangistselect name=plangistselect :disabled="plangist != 'selected'">
-          <option value="AhgDSFHSFHSFASH" selected>AhgDSFHSFHSFASH</option>
+          {{range .Data.PlanGists}}
+            <option value="{{.}}">{{.}}</option>
+          {{end}}
         </select>
       </div>
     </div>

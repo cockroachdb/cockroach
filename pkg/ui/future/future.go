@@ -290,6 +290,8 @@ type DiagnosticState struct {
 	ID appstatspb.StmtFingerprintID
 	// Query is the string fingerprint corresponding to this set of diagnostics.
 	Query string
+	// PlanGists is the list of plan gists for this statement fingerprint
+	PlanGists []string
 }
 
 // SQLActivityData combines the API response with form parameters
@@ -1270,13 +1272,15 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 		if !ok {
 			log.Dev.Errorf(r.Context(), "inserting %d", stmt.ID)
 			diagnosticStates[stmt.Key.KeyData.Query] = &DiagnosticState{
-				ID:    stmt.ID,
-				Query: stmt.Key.KeyData.Query,
+				ID:        stmt.ID,
+				Query:     stmt.Key.KeyData.Query,
+				PlanGists: stmt.Stats.PlanGists,
 			}
 		} else {
 			log.Dev.Errorf(r.Context(), "inserting else %d", stmt.ID)
 			s.ID = stmt.ID
 			s.Query = stmt.Key.KeyData.Query
+			s.PlanGists = stmt.Stats.PlanGists
 		}
 	}
 
