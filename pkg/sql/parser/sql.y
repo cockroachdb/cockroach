@@ -2988,6 +2988,15 @@ alter_table_cmd:
   {
     return unimplemented(sqllex, "alter table alter column add")
   }
+  // ALTER TABLE <name> DROP PARTITION IF EXISTS <name> WITH DATA
+| DROP PARTITION IF EXISTS partition_name WITH DATA
+  {
+    $$.val = &tree.AlterTableDropPartition{
+      IfExists: true,
+      Partition: tree.Name($5),
+      WithData: true,
+    }
+  }
   // ALTER TABLE <name> DROP PARTITION <name> WITH DATA
 | DROP PARTITION partition_name WITH DATA
   {
