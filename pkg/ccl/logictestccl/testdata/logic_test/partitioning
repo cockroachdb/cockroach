@@ -28,7 +28,6 @@ ALTER TABLE t_range DROP PARTITION p1 WITH DATA
 query T
 SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_range] ORDER BY partition_name
 ----
-p1
 p2
 p3
 
@@ -58,24 +57,20 @@ ALTER TABLE t_list DROP PARTITION p1 WITH DATA
 query T
 SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_list] ORDER BY partition_name
 ----
-p1
 p2
 p3
 
 # Test error case: dropping non-existent partition
-statement error pq: partition "nonexistent" of relation "t_list" does not exist
+statement error pgcode 42704 partition "nonexistent" of relation "t_list" does not exist
 ALTER TABLE t_list DROP PARTITION nonexistent WITH DATA
 
 # Test multiple DROP PARTITION in one statement
 statement ok
-ALTER TABLE t_list DROP PARTITION p1 WITH DATA, DROP PARTITION p2 WITH DATA
+ALTER TABLE t_list DROP PARTITION p2 WITH DATA, DROP PARTITION p3 WITH DATA
 
 query T
 SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_list] ORDER BY partition_name
 ----
-p1
-p2
-p3
 
 # Clean up
 statement ok
@@ -143,10 +138,15 @@ SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_test_drop] ORDER BY par
 p1
 p2
 
-# Test 5: Successfully accept DROP command for an existing partition.
-# Note: Full partition dropping implementation is not yet complete, so partition still exists.
+# Test 5: Successfully drop an existing partition.
 statement ok
 ALTER TABLE t_test_drop DROP PARTITION p1 WITH DATA
+
+# Verify partition is dropped.
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_test_drop] ORDER BY partition_name
+----
+p2
 
 # Test 6: Test with LIST partition.
 statement ok
@@ -167,9 +167,16 @@ p1
 p2
 p3
 
-# Successfully accept DROP command for LIST partition.
+# Successfully drop LIST partition.
 statement ok
 ALTER TABLE t_list_drop DROP PARTITION p2 WITH DATA
+
+# Verify partition is dropped.
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_list_drop] ORDER BY partition_name
+----
+p1
+p3
 
 # Clean up test tables.
 statement ok

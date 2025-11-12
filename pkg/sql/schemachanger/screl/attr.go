@@ -114,6 +114,9 @@ const (
 	// PolicyID is an attribute for row-level security policies to uniquely
 	// identify a policy within a table.
 	PolicyID
+	// PartitionPath is the hierarchical path to a partition, used to uniquely
+	// identify partition entries within an index.
+	PartitionPath
 
 	// AttrMax is the largest possible Attr value.
 	// Note: add any new enum values before TargetStatus, leave these at the end.
@@ -339,6 +342,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.IndexPartitionEntry)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(PartitionPath, "PartitionPath"),
 	),
 	// Constraint elements.
 	rel.EntityMapping(t((*scpb.ConstraintWithoutIndexName)(nil)),

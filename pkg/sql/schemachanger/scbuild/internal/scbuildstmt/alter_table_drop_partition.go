@@ -22,9 +22,9 @@ func alterTableDropPartition(
 ) {
 	partitionName := string(t.Partition)
 
-	// Find all partition entries for this table.
-	var foundPartition *scpb.IndexPartitionEntry
-	var foundTarget scpb.TargetStatus
+	// Find all partition entries for this table that match the partition name.
+	var foundPartitions []scpb.IndexPartitionEntry
+	var foundTargets []scpb.TargetStatus
 
 	b.QueryByID(tbl.TableID).ForEach(func(
 		_ scpb.Status, target scpb.TargetStatus, e scpb.Element,
@@ -35,14 +35,15 @@ func alterTableDropPartition(
 			// For a top-level partition, we check if the last element equals the partition name.
 			if len(partEntry.PartitionPath) > 0 &&
 				partEntry.PartitionPath[len(partEntry.PartitionPath)-1] == partitionName {
-				foundPartition = partEntry
-				foundTarget = target
+				// Clone the entry to avoid pointer reuse issues
+				foundPartitions = append(foundPartitions, *partEntry)
+				foundTargets = append(foundTargets, target)
 			}
 		}
 	})
 
 	// Handle IF EXISTS case: if partition not found and IF EXISTS is specified.
-	if foundPartition == nil {
+	if len(foundPartitions) == 0 {
 		if t.IfExists {
 			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b, pgnotice.Newf(
 				"partition %q of relation %q does not exist, skipping", partitionName, tn.Table()))
@@ -53,13 +54,14 @@ func alterTableDropPartition(
 			"partition %q of relation %q does not exist", partitionName, tn.Table()))
 	}
 
-	// Mark the partition for dropping if it's targeting ToPublic.
-	// We also need to handle any related zone configurations.
-	if foundTarget == scpb.ToPublic {
-		b.Drop(foundPartition)
-	} else {
-		// Partition is already being dropped or in some other state.
-		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"partition %q is not in a valid state to be dropped", partitionName))
+	// Mark all matching partitions for dropping if they're targeting ToPublic.
+	for i := range foundPartitions {
+		if foundTargets[i] == scpb.ToPublic {
+			b.Drop(&foundPartitions[i])
+		} else {
+			// Partition is already being dropped or in some other state.
+			panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"partition %q is not in a valid state to be dropped", partitionName))
+		}
 	}
 }

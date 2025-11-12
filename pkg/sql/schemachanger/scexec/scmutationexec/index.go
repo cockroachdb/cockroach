@@ -357,11 +357,80 @@ func (i *immediateVisitor) RemoveIndexPartitionEntry(
 	if err != nil {
 		return err
 	}
-	// TODO: Implement actual partition removal logic.
-	// This requires navigating the partition tree using PartitionPath
-	// and removing the partition at the correct location.
-	_ = index
+
+	// Get the index descriptor to modify.
+	idx := index.IndexDesc()
+	if idx.Partitioning.NumColumns == 0 {
+		// No partitions exist, nothing to do.
+		return nil
+	}
+
+	// Navigate to the partition to remove using PartitionPath.
+	partitionPath := op.PartitionEntry.PartitionPath
+	if len(partitionPath) == 0 {
+		return errors.AssertionFailedf("partition path cannot be empty")
+	}
+
+	// Remove the partition from the tree.
+	if err := removePartitionFromDescriptor(&idx.Partitioning, partitionPath, 0); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// removePartitionFromDescriptor recursively navigates the partition tree and removes
+// the partition at the specified path.
+func removePartitionFromDescriptor(
+	partitioning *catpb.PartitioningDescriptor, partitionPath []string, depth int,
+) error {
+	if depth >= len(partitionPath) {
+		return errors.AssertionFailedf("depth exceeds partition path length")
+	}
+
+	targetName := partitionPath[depth]
+	isLastLevel := depth == len(partitionPath)-1
+
+	// Handle LIST partitions.
+	for idx, listPart := range partitioning.List {
+		if listPart.Name == targetName {
+			if isLastLevel {
+				// Found the partition to remove at this level.
+				// Remove it by creating a new slice without this entry.
+				partitioning.List = append(partitioning.List[:idx], partitioning.List[idx+1:]...)
+				// If we've removed all partitions at this level, reset NumColumns.
+				if len(partitioning.List) == 0 && len(partitioning.Range) == 0 {
+					partitioning.NumColumns = 0
+				}
+				return nil
+			}
+			// Need to go deeper into subpartitions.
+			if listPart.Subpartitioning.NumColumns == 0 {
+				return errors.Newf("subpartition %q not found under partition %q", partitionPath[depth+1], targetName)
+			}
+			return removePartitionFromDescriptor(&partitioning.List[idx].Subpartitioning, partitionPath, depth+1)
+		}
+	}
+
+	// Handle RANGE partitions.
+	for idx, rangePart := range partitioning.Range {
+		if rangePart.Name == targetName {
+			if isLastLevel {
+				// Found the partition to remove at this level.
+				// Remove it by creating a new slice without this entry.
+				partitioning.Range = append(partitioning.Range[:idx], partitioning.Range[idx+1:]...)
+				// If we've removed all partitions at this level, reset NumColumns.
+				if len(partitioning.List) == 0 && len(partitioning.Range) == 0 {
+					partitioning.NumColumns = 0
+				}
+				return nil
+			}
+			// Range partitions don't support subpartitioning in the same way.
+			return errors.Newf("subpartition %q not found under range partition %q", partitionPath[depth+1], targetName)
+		}
+	}
+
+	return errors.Newf("partition %q not found at path depth %d", targetName, depth)
 }
 
 func (i *immediateVisitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error {
