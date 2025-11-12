@@ -5,9 +5,9 @@
 
 <nav class="breadcrumbs" aria-label="Breadcrumbs">
   <ul>
-    <li class="<h1>">Databases</li>
-    <li class="<h2>">Database: movr</li>
-    <li class="<h3>">public.promo_codes</li>
+    <li class="<h1>"><a href="/future/databases">Databases</a></li>
+    <li class="<h2>"><a href="/future/databases/{{ .Data.Table.DbID }}">Database: {{ .Data.DatabaseName }}</a></li>
+    <li class="<h3>">{{ .Data.Table.SchemaName }}.{{ .Data.Table.TableName }}</li>
   </ul>
 </nav>
 
@@ -20,43 +20,53 @@
 
 <div id=overview role=tabpanel>
   <div class="box">
-    <pre><code class="language-sql">CREATE TABLE public.order_line (
-  ol_o_id INT8 NOT NULL,
-  ol_d_id INT8 NOT NULL,
-  ol_w_id INT8 NOT NULL,
-  ol_number INT8 NOT NULL,
-  ol_i_id INT8 NOT NULL,
-  ol_supply_w_id INT8 NULL,
-  ol_delivery_d TIMESTAMP NULL,
-  ol_quantity INT8 NULL,
-  ol_amount DECIMAL(6,2) NULL,
-  ol_dist_info CHAR(24) NULL,
-  CONSTRAINT order_line_pkey PRIMARY KEY (ol_w_id ASC, ol_d_id ASC, ol_o_id DESC, ol_number ASC),
-  CONSTRAINT order_line_ol_w_id_ol_d_id_ol_o_id_fkey FOREIGN KEY (ol_w_id, ol_d_id, ol_o_id) REFERENCES public."order"(o_w_id, o_d_id, o_id) NOT VALID,
-  CONSTRAINT order_line_ol_supply_w_id_ol_i_id_fkey FOREIGN KEY (ol_supply_w_id, ol_i_id) REFERENCES public.stock(s_w_id, s_i_id) NOT VALID
-);</code></pre>
+    <pre><code class="language-sql">{{ .Data.CreateStatement }}</code></pre>
   </div>
 
+  {{ if .Data.LastUpdated }}
   <div class="flex-row justify-content:end">
-    <div>Last updated: 17 minutes ago</div>
+    <div>Last updated: {{ formatElapsedTime (timeSub timeNow .Data.LastUpdated) }}</div>
   </div>
+  {{ end }}
 
   <div class="flex-switch">
     <div class="box">
       <dl class="table rows" style="width: auto;">
-        <div><dt>Size:     </dt><dd>670.0 GiB</dd></div>
-        <div><dt>Ranges:    </dt><dd>1766</dd></div>
-        <div><dt>Replicas:  </dt><dd>5298</dd></div>
-        <div><dt>Regions/Nodes:   </dt><dd><chip>N1</chip><chip>N2</chip></dd></div>
-      </dl>      
+        <div><dt>Size:</dt><dd>{{ formatBytes .Data.Table.ReplicationSizeBytes }}</dd></div>
+        <div><dt>Ranges:</dt><dd>{{ .Data.Table.RangeCount }}</dd></div>
+        <div><dt>Replicas:</dt><dd>{{ .Data.Table.ReplicaCount }}</dd></div>
+        <div><dt>Regions/Nodes:</dt><dd>
+          {{ range $region, $nodes := .Data.RegionNodes }}
+            {{ range $nodes }}<chip>N{{ . }}</chip>{{ end }}
+          {{ end }}
+        </dd></div>
+      </dl>
     </div>
 
     <div class="box">
       <dl class="table rows" style="width: auto;">
-        <div><dt>% of Live data:     </dt><dd>97.9 %
-531.4 GiB live data / 542.8 GiB total</dd></div>
-        <div><dt>Auto stats collections:    </dt><dd><chip class="ok">Enabled</chip></dd></div>
-        <div><dt>Stats last updated:  </dt><dd>Nov 10, 2025 at 23:14:57 EST</dd></div>
+        <div><dt>% of Live data:</dt><dd>
+          {{ if .Data.Table.PercentLiveData }}
+            {{ formatPercent .Data.Table.PercentLiveData }}<br>
+            {{ formatBytes .Data.Table.TotalLiveDataBytes }} live data / {{ formatBytes .Data.Table.TotalDataBytes }} total
+          {{ else }}
+            N/A
+          {{ end }}
+        </dd></div>
+        <div><dt>Auto stats collections:</dt><dd>
+          {{ if .Data.Table.AutoStatsEnabled }}
+            <chip class="ok">Enabled</chip>
+          {{ else }}
+            <chip class="warn">Disabled</chip>
+          {{ end }}
+        </dd></div>
+        <div><dt>Stats last updated:</dt><dd>
+          {{ if .Data.Table.StatsLastUpdated }}
+            {{ .Data.Table.StatsLastUpdated.Format "Jan 02, 2006 at 15:04:05 UTC" }}
+          {{ else }}
+            Never
+          {{ end }}
+        </dd></div>
       </dl>
     </div>
   </div>
@@ -72,18 +82,19 @@
       </tr>
     </thead>
     <tbody>
+      {{ if eq (len .Data.Grants) 0 }}
       <tr>
-        <td>admin</td>
-        <td>ALL</td>
+        <td colspan="2" style="text-align: center; padding: 2rem;">
+          No grants found for this table
+        </td>
       </tr>
+      {{ end }}
+      {{ range .Data.Grants }}
       <tr>
-        <td>public</td>
-        <td>CONNECT</td>
+        <td>{{ .Grantee }}</td>
+        <td>{{ join .Privileges ", " }}</td>
       </tr>
-      <tr>
-        <td>root</td>
-        <td>ALL</td>
-      </tr>
+      {{ end }}
     </tbody>
   </table>
 </div>
@@ -104,13 +115,28 @@
       </tr>
     </thead>
     <tbody>
+      {{ if eq (len .Data.Indexes) 0 }}
       <tr>
-        <td>promo_codes_pkey</td>
-        <td>Nov 11, 2025 at 21:23:04 UTC</td>
-        <td>1878</td>
-        <td>None</td>
+        <td colspan="5" style="text-align: center; padding: 2rem;">
+          No index statistics found for this table
+        </td>
+      </tr>
+      {{ end }}
+      {{ range .Data.Indexes }}
+      <tr>
+        <td>{{ .IndexName }}</td>
+        <td>
+          {{ if .LastRead }}
+            {{ .LastRead.Format "Jan 02, 2006 at 15:04:05 UTC" }}
+          {{ else }}
+            Never
+          {{ end }}
+        </td>
+        <td>{{ .TotalReads }}</td>
+        <td>{{ .Recommendation }}</td>
         <td></td>
       </tr>
+      {{ end }}
     </tbody>
   </table>
 </div>

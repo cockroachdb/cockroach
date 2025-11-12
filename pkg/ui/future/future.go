@@ -785,16 +785,77 @@ func handleTable(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 
 	// Fetch table details including create statement
 	var tableDetailsResp apiTableMetadataWithDetails
-	tableURL := fmt.Sprintf("%s/api/v2/table_metadata/%d", apiBaseURL, tableID)
+	tableURL := fmt.Sprintf("%s/api/v2/table_metadata/%d/", apiBaseURL, tableID)
 	if err := fetchJSON(ctx, tableURL, &tableDetailsResp); err != nil {
 		log.Dev.Warningf(ctx, "Failed to fetch table details: %v", err)
 		http.Error(w, "Failed to fetch table details", http.StatusInternalServerError)
 		return
 	}
 
+	// Fetch nodes to map stores to regions
+	nodesResp, err := cfg.Status.NodesUI(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch nodes: %v", err)
+		http.Error(w, "Failed to fetch nodes", http.StatusInternalServerError)
+		return
+	}
+
+	// Build a map of storeID -> (nodeID, region)
+	storeToNodeRegion := make(map[int64]struct {
+		nodeID int32
+		region string
+	})
+	for _, node := range nodesResp.Nodes {
+		region := extractRegion(&node.Desc.Locality)
+		nodeID := int32(node.Desc.NodeID)
+		for _, store := range node.StoreStatuses {
+			storeID := int64(store.Desc.StoreID)
+			storeToNodeRegion[storeID] = struct {
+				nodeID int32
+				region string
+			}{
+				nodeID: nodeID,
+				region: region,
+			}
+		}
+	}
+
+	// Calculate region/nodes for this table
+	regionNodes := make(map[string][]int32)
+	nodesSeen := make(map[int32]bool)
+	for _, storeID := range tableDetailsResp.Metadata.StoreIDs {
+		if info, ok := storeToNodeRegion[storeID]; ok {
+			if !nodesSeen[info.nodeID] {
+				regionNodes[info.region] = append(regionNodes[info.region], info.nodeID)
+				nodesSeen[info.nodeID] = true
+			}
+		}
+	}
+
+	// Fetch table grants
+	grants, err := fetchTableGrants(ctx, cfg, tableDetailsResp.Metadata.DbName, tableDetailsResp.Metadata.SchemaName, tableDetailsResp.Metadata.TableName)
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch table grants: %v", err)
+		// Continue without grants - not critical
+		grants = []TableGrant{}
+	}
+
+	// Fetch index statistics
+	indexes, err := fetchIndexStats(ctx, cfg, tableDetailsResp.Metadata.DbName, tableDetailsResp.Metadata.TableName)
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch index stats: %v", err)
+		// Continue without index stats - not critical
+		indexes = []IndexInfo{}
+	}
+
 	pageData := TablePageData{
 		Table:           tableDetailsResp.Metadata,
 		CreateStatement: tableDetailsResp.CreateStatement,
+		DatabaseName:    tableDetailsResp.Metadata.DbName,
+		RegionNodes:     regionNodes,
+		Grants:          grants,
+		Indexes:         indexes,
+		LastUpdated:     &tableDetailsResp.Metadata.LastUpdated,
 	}
 
 	// Execute the pre-parsed template
@@ -1555,6 +1616,25 @@ type DatabaseGrant struct {
 type TablePageData struct {
 	Table           apiTableMetadata
 	CreateStatement string
+	DatabaseName    string
+	RegionNodes     map[string][]int32 // Map of region name to node IDs
+	Grants          []TableGrant
+	Indexes         []IndexInfo
+	LastUpdated     *time.Time
+}
+
+// TableGrant represents a privilege grant on a table
+type TableGrant struct {
+	Grantee    string
+	Privileges []string
+}
+
+// IndexInfo contains information about a table index
+type IndexInfo struct {
+	IndexName       string
+	LastRead        *time.Time
+	TotalReads      int64
+	Recommendation  string
 }
 
 // fetchJSON makes an HTTP GET request and unmarshals the JSON response
@@ -1612,6 +1692,81 @@ func fetchDatabaseGrants(ctx context.Context, cfg IndexHTMLArgs, dbName string) 
 	})
 
 	return grants, nil
+}
+
+// fetchTableGrants fetches the grants for a table
+func fetchTableGrants(ctx context.Context, cfg IndexHTMLArgs, dbName, schemaName, tableName string) ([]TableGrant, error) {
+	// Use the TableDetails RPC to get grant information
+	fullyQualifiedTableName := fmt.Sprintf("%s.%s.%s", dbName, schemaName, tableName)
+	resp, err := cfg.Admin.TableDetails(ctx, &serverpb.TableDetailsRequest{
+		Database: dbName,
+		Table:    fullyQualifiedTableName,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch table details: %w", err)
+	}
+
+	// Convert grants from the response to our format
+	grantsMap := make(map[string][]string)
+	for _, grant := range resp.Grants {
+		grantsMap[grant.User] = append(grantsMap[grant.User], grant.Privileges...)
+	}
+
+	// Convert map to slice
+	var grants []TableGrant
+	for grantee, privileges := range grantsMap {
+		grants = append(grants, TableGrant{
+			Grantee:    grantee,
+			Privileges: privileges,
+		})
+	}
+
+	// Sort by grantee for consistent ordering
+	sort.Slice(grants, func(i, j int) bool {
+		return grants[i].Grantee < grants[j].Grantee
+	})
+
+	return grants, nil
+}
+
+// fetchIndexStats fetches index statistics for a table
+func fetchIndexStats(ctx context.Context, cfg IndexHTMLArgs, dbName, tableName string) ([]IndexInfo, error) {
+	// Use the TableIndexStats RPC which is specifically for getting index stats for a table
+	resp, err := cfg.Status.TableIndexStats(ctx, &serverpb.TableIndexStatsRequest{
+		Database: dbName,
+		Table:    tableName,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch table index stats: %w", err)
+	}
+
+	var indexes []IndexInfo
+	for _, stat := range resp.Statistics {
+		var lastRead *time.Time
+		if !stat.Statistics.Stats.LastRead.IsZero() {
+			lastRead = &stat.Statistics.Stats.LastRead
+		}
+
+		recommendation := "None"
+		// Add basic recommendation logic
+		if stat.Statistics.Stats.TotalReadCount == 0 {
+			recommendation = "Consider dropping - no reads detected"
+		}
+
+		indexes = append(indexes, IndexInfo{
+			IndexName:      stat.IndexName,
+			LastRead:       lastRead,
+			TotalReads:     int64(stat.Statistics.Stats.TotalReadCount),
+			Recommendation: recommendation,
+		})
+	}
+
+	// Sort by index name
+	sort.Slice(indexes, func(i, j int) bool {
+		return indexes[i].IndexName < indexes[j].IndexName
+	})
+
+	return indexes, nil
 }
 
 // handleMetricsDashboard serves the metrics dashboard page
