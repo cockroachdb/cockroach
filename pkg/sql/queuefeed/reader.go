@@ -46,7 +46,7 @@ type Reader struct {
 	rff      *rangefeed.Factory
 	mgr      *Manager
 	name     string
-	tableID  descpb.ID
+	assigner *PartitionAssignments
 
 	// stuff for decoding data. this is ripped from rowfetcher_cache.go in changefeeds
 	codec    keys.SQLCodec
@@ -61,7 +61,10 @@ type Reader struct {
 		pushedWakeup   *sync.Cond
 	}
 
-	triggerCheckForReassignment chan struct{}
+	// TODO: handle the case where an assignment can change.
+	session    Session
+	assignment *Assignment
+	rangefeed  *rangefeed.RangeFeed
 
 	cancel     context.CancelCauseFunc
 	goroCtx    context.Context
@@ -75,18 +78,21 @@ func NewReader(
 	rff *rangefeed.Factory,
 	codec keys.SQLCodec,
 	leaseMgr *lease.Manager,
+	session Session,
+	assigner *PartitionAssignments,
 	name string,
-	tableDescID int64,
-) *Reader {
+) (*Reader, error) {
 	r := &Reader{
-		executor:                    executor,
-		mgr:                         mgr,
-		codec:                       codec,
-		leaseMgr:                    leaseMgr,
-		name:                        name,
-		rff:                         rff,
-		tableID:                     descpb.ID(tableDescID),
-		triggerCheckForReassignment: make(chan struct{}),
+		executor: executor,
+		mgr:      mgr,
+		codec:    codec,
+		leaseMgr: leaseMgr,
+		name:     name,
+		rff:      rff,
+		// stored so we can use it in methods using a different context than the main goro ie GetRows and ConfirmReceipt
+		goroCtx:  ctx,
+		assigner: assigner,
+		session:  session,
 	}
 	r.mu.state = readerStateBatching
 	r.mu.buf = make([]tree.Datums, 0, maxBufSize)
@@ -100,14 +106,21 @@ func NewReader(
 		r.mu.poppedWakeup.Broadcast()
 		r.mu.pushedWakeup.Broadcast()
 	}
-	r.goroCtx = ctx
 
-	r.setupRangefeed(ctx)
+	assignment, err := assigner.RegisterSession(ctx, session)
+	if err != nil {
+		return nil, errors.Wrap(err, "registering session for reader")
+	}
+	if len(assignment.Partitions) == 0 {
+		return nil, errors.New("no partitions assigned to reader: todo support this case by polling for assignment")
+	}
+
+	r.setupRangefeed(ctx, assignment)
 	go r.run(ctx)
-	return r
+	return r, nil
 }
 
-func (r *Reader) setupRangefeed(ctx context.Context) {
+func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) {
 	defer func() {
 		fmt.Println("setupRangefeed done")
 	}()
@@ -161,9 +174,10 @@ func (r *Reader) setupRangefeed(ctx context.Context) {
 		fmt.Sprintf("queuefeed.reader.name=%s", r.name), initialTS, onValue, opts...,
 	)
 
-	tk := roachpb.Span{Key: r.codec.TablePrefix(uint32(r.tableID))}
-	tk.EndKey = tk.Key.PrefixEnd()
-	spans := []roachpb.Span{tk}
+	// TODO: handle the case where there are no partitions in the assignment. In
+	// that case we should poll `RefreshAssignment` until we get one. This would
+	// only occur if every assignment was handed out already.
+	spans := []roachpb.Span{assignment.Partitions[0].Span}
 
 	fmt.Printf("starting rangefeed with spans: %+v\n", spans)
 
@@ -171,10 +185,16 @@ func (r *Reader) setupRangefeed(ctx context.Context) {
 		setErr(err)
 		return
 	}
-	_ = context.AfterFunc(r.goroCtx, func() {
+
+	_ = context.AfterFunc(ctx, func() {
+		// TODO(queuefeed): move this to Close and hook Close into
+		// connExecutor.Close().
 		fmt.Println("closing rangefeed")
 		rf.Close()
 	})()
+
+	r.rangefeed = rf
+	r.assignment = assignment
 }
 
 // - [x] setup rangefeed on data
@@ -196,12 +216,6 @@ func (r *Reader) run(ctx context.Context) {
 		case <-ctx.Done():
 			fmt.Printf("run: ctx done: %s; cause: %s\n", ctx.Err(), context.Cause(ctx))
 			return
-		case <-r.triggerCheckForReassignment:
-			fmt.Printf("triggerCheckForReassignment\n")
-			if err := r.checkForReassignment(ctx); err != nil {
-				r.cancel(err)
-				return
-			}
 		}
 	}
 }
@@ -256,6 +270,9 @@ func (r *Reader) GetRows(ctx context.Context, limit int) ([]tree.Datums, error) 
 	fmt.Printf("GetRows done with inflightBuffer len: %d, buf len: %d\n", len(r.mu.inflightBuffer), len(r.mu.buf))
 
 	return slices.Clone(r.mu.inflightBuffer), nil
+
+	// and then trigger the goro to check if m wants us to change assignments
+	// if it does, handle that stuff before doing a new batch
 }
 
 func (r *Reader) ConfirmReceipt(ctx context.Context) {
@@ -278,7 +295,15 @@ func (r *Reader) ConfirmReceipt(ctx context.Context) {
 		return
 	case <-r.goroCtx.Done():
 		return
-	case r.triggerCheckForReassignment <- struct{}{}:
+	default:
+		// TODO only set caughtUp to true if our frontier is near the current time.
+		newAssignment, err := r.assigner.RefreshAssignment(r.session /*caughtUp=*/, true)
+		if err != nil {
+			r.cancel(errors.Wrap(err, "refreshing assignment"))
+		}
+		if newAssignment != nil {
+			// TODO restart the rangefeed with the new partitions
+		}
 	}
 }
 
@@ -306,8 +331,9 @@ func (r *Reader) IsAlive() bool {
 }
 
 func (r *Reader) Close() error {
+	err := r.assigner.UnregisterSession(r.goroCtx, r.session)
 	r.cancel(errors.New("reader closing"))
-	return nil
+	return err
 }
 
 func (r *Reader) checkForReassignment(ctx context.Context) error {

@@ -21,7 +21,7 @@ type Partition struct {
 	// `sql_liveness_session_successor` assigned to the partition.
 	Successor Session
 	// Span is decoded from the `partition_spec` column.
-	Span *roachpb.Span
+	Span roachpb.Span
 }
 
 type partitionTable struct {
@@ -175,18 +175,15 @@ func (s Session) Empty() bool {
 	return s.ConnectionID == uuid.Nil && s.LivenessID == ""
 }
 
-func decodeSpan(data []byte) (*roachpb.Span, error) {
+func decodeSpan(data []byte) (roachpb.Span, error) {
 	var span roachpb.Span
 	if err := span.Unmarshal(data); err != nil {
-		return nil, err
+		return roachpb.Span{}, err
 	}
-	return &span, nil
+	return span, nil
 }
 
-func encodeSpan(span *roachpb.Span) []byte {
-	if span == nil {
-		return nil
-	}
+func encodeSpan(span roachpb.Span) []byte {
 	data, err := span.Marshal()
 	if err != nil {
 		return nil

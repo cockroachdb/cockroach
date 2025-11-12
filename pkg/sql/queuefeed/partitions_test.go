@@ -95,7 +95,7 @@ func TestUpdatePartition(t *testing.T) {
 	// Update the partition
 	newSessionID := uuid.MakeV4()
 	newConnectionID := uuid.MakeV4()
-	span := &roachpb.Span{Key: roachpb.Key("new"), EndKey: roachpb.Key("span")}
+	span := roachpb.Span{Key: roachpb.Key("new"), EndKey: roachpb.Key("span")}
 
 	partition := Partition{
 		ID: 1,
@@ -145,7 +145,7 @@ func TestInsertPartition(t *testing.T) {
 	// Insert partition
 	sessionID := uuid.MakeV4()
 	connectionID := uuid.MakeV4()
-	span := &roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
+	span := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
 
 	partition := Partition{
 		ID: 1,

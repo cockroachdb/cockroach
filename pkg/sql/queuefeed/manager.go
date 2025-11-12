@@ -15,7 +15,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,6 +34,8 @@ type Manager struct {
 		// name -> reader
 		// TODO: this should actually be a map of (session id, name) -> reader, or smth
 		readers map[string]*Reader
+
+		queueAssignment map[string]*PartitionAssignments
 	}
 }
 
@@ -46,6 +50,7 @@ func NewManager(
 	// handle handoff from one server to another
 	m := &Manager{executor: executor, rff: rff, codec: codec, leaseMgr: leaseMgr}
 	m.mu.readers = make(map[string]*Reader)
+	m.mu.queueAssignment = make(map[string]*PartitionAssignments)
 	return m
 }
 
@@ -118,7 +123,7 @@ func (m *Manager) CreateQueue(ctx context.Context, queueName string, tableDescID
 		}
 		partition := Partition{
 			ID:   1,
-			Span: &primaryKeySpan,
+			Span: primaryKeySpan,
 		}
 
 		return pt.InsertPartition(ctx, txn, partition)
@@ -134,7 +139,11 @@ func (m *Manager) GetOrInitReader(ctx context.Context, name string) (queuebase.R
 		return reader, nil
 	}
 	fmt.Printf("get or init reader for queue %s not found in cache\n", name)
-	reader, err := m.getOrInitReaderUncached(ctx, name)
+	reader, err := m.newReaderLocked(ctx, name, Session{
+		// TODO(queuefeed): get a real session here.
+		ConnectionID: uuid.MakeV4(),
+		LivenessID:   sqlliveness.SessionID("1"),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -142,8 +151,17 @@ func (m *Manager) GetOrInitReader(ctx context.Context, name string) (queuebase.R
 	return reader, nil
 }
 
-func (m *Manager) getOrInitReaderUncached(ctx context.Context, name string) (*Reader, error) {
+func (m *Manager) newReaderLocked(
+	ctx context.Context, name string, session Session,
+) (*Reader, error) {
 	var tableDescID int64
+
+	assigner, ok := m.mu.queueAssignment[name]
+	if !ok {
+		assigner = NewPartitionAssignments(m.executor, name)
+		m.mu.queueAssignment[name] = assigner
+	}
+
 	// TODO: this ctx on the other hand should be stmt scoped
 	err := m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, err := txn.Exec(ctx, "create_q", txn.KV(), createQueueTableSQL)
@@ -166,8 +184,7 @@ func (m *Manager) getOrInitReaderUncached(ctx context.Context, name string) (*Re
 		return nil, err
 	}
 	fmt.Printf("get or init reader for queue %s with table desc id: %d\n", name, tableDescID)
-	reader := NewReader(ctx, m.executor, m, m.rff, m.codec, m.leaseMgr, name, tableDescID)
-	return reader, nil
+	return NewReader(ctx, m.executor, m, m.rff, m.codec, m.leaseMgr, session, assigner, name)
 }
 
 func (m *Manager) reassessAssignments(ctx context.Context, name string) (bool, error) {
@@ -183,5 +200,3 @@ func (m *Manager) forgetReader(name string) {
 }
 
 var _ queuebase.Manager = &Manager{}
-
-type PartitionAssignment struct{}

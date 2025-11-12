@@ -63,9 +63,11 @@ func (p *PartitionAssignments) RegisterSession(
 			return err
 		}
 		for _, partition := range partitions {
-			if !partition.Session.Empty() {
-				continue
-			}
+			// TODO we really shouldn't force assign partitions, but we are not watch
+			// sql liveness so we can't detect dead sessions yet.
+			//if !partition.Session.Empty() {
+			//	continue
+			//}
 			partition.Session = session
 			if err := p.partitionTable.UpdatePartition(ctx, txn, partition); err != nil {
 				return errors.Wrapf(err, "updating partition %d for session %s", partition.ID, session.ConnectionID)
@@ -82,6 +84,9 @@ func (p *PartitionAssignments) RegisterSession(
 }
 
 func (p *PartitionAssignments) UnregisterSession(ctx context.Context, session Session) error {
+	// TODO: this should probably be pushed onto some task queue that is
+	// independent of the pgwire session so we can retry without block connection
+	// cleanup.
 	return p.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		partitions, err := p.partitionTable.ListPartitions(ctx, txn)
 		if err != nil {
