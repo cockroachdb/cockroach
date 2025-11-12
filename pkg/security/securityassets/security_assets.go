@@ -69,6 +69,12 @@ func readDir(dirname string) ([]os.FileInfo, error) {
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
+			// Skip files that disappeared between ReadDir and Info().
+			// This can happen when the directory contains transient files
+			// like Unix socket lock files that are created/deleted rapidly.
+			if oserror.IsNotExist(err) {
+				continue
+			}
 			return nil, err
 		}
 		infos = append(infos, info)
