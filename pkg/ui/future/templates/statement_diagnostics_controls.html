@@ -19,13 +19,14 @@
         popovertarget="diagnostics-popover-{{.Data.ID}}">
         Activate
       </button>
-      <button class="ok" aria-label="Download diagnostics" popovertarget="diagnostic-select-{{.Data.ID}}" x-ref="diagnostic-select-button-{{.Data.ID}}">
-        Download
-      </button>
-      <div popover id="diagnostic-select-{{.Data.ID}}" x-anchor="$refs['diagnostic-select-button-{{.Data.ID}}']" class="flex-column">
-        {{range .CompletedBundles}}
-          <a href="{{.Data.DownloadURL}}">Bundle #{{.Data.ID}} ({{.Data.CollectedAt.Format "2006-01-02 15:04:05"}})</a>
-        {{end}}
+      <div style="position:relative;">
+        <button id=menubutton aria-haspopup=menu aria-controls=my-menu aria-expanded=false
+          >Download</button>
+        <div role=menu hidden id=my-menu aria-labelledby=menubutton>
+          {{range .Data.CompletedBundles}}
+            <a role=menuitem href="{{.DownloadURL}}">Bundle #{{.ID}} ({{formatTime .CollectedAt}})</a>
+          {{end}}
+        </div>
       </div>
     </div>
   {{else}}

@@ -433,6 +433,13 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		handleCancelDiagnostics(w, r, cfg)
 	}).Methods("DELETE")
 
+	// Redirect diagnostics download to the remote HTTP server
+	futureRouter.HandleFunc("/sqlactivity/stmtdiagnostics/{diagID}/download", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		diagID := vars["diagID"]
+		http.Redirect(w, r, fmt.Sprintf("%s/_admin/v1/stmtbundle/%s", apiBaseURL, diagID), http.StatusFound)
+	}).Methods("GET")
+
 	// Timeseries query endpoint
 	futureRouter.HandleFunc("/ts/query", func(w http.ResponseWriter, r *http.Request) {
 		handleTSQuery(w, r, cfg)
@@ -970,7 +977,7 @@ func handleGetDiagnosticsControls(w http.ResponseWriter, r *http.Request, cfg In
 				bundle := DiagnosticBundle{
 					ID:          report.StatementDiagnosticsId,
 					CollectedAt: report.RequestedAt,
-					DownloadURL: fmt.Sprintf("/_status/stmtdiag/%d", report.StatementDiagnosticsId),
+					DownloadURL: fmt.Sprintf("/future/sqlactivity/stmtdiagnostics/%d/download", report.StatementDiagnosticsId),
 				}
 				diagState.CompletedBundles = append(diagState.CompletedBundles, bundle)
 			}
@@ -1248,7 +1255,7 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 				bundle := DiagnosticBundle{
 					ID:          report.StatementDiagnosticsId,
 					CollectedAt: report.RequestedAt, // Using RequestedAt as placeholder
-					DownloadURL: fmt.Sprintf("/_status/stmtdiag/%d", report.StatementDiagnosticsId),
+					DownloadURL: fmt.Sprintf("/future/sqlactivity/stmtdiagnostics/%d/download", report.StatementDiagnosticsId),
 				}
 				state.CompletedBundles = append(state.CompletedBundles, bundle)
 			}
