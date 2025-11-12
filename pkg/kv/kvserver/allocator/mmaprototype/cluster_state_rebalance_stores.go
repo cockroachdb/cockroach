@@ -36,8 +36,6 @@ type rebalanceState struct {
 	rangeMoveCount int
 	// leaseTransferCount tracks the number of lease transfers made.
 	leaseTransferCount int
-	// shouldReturnEarly indicates the outer loop should return immediately.
-	shouldReturnEarly bool
 	// shouldContinue indicates the outer loop should continue to the next iteration.
 	shouldContinue bool
 	// maxRangeMoveCount is the maximum number of range moves allowed.
@@ -179,7 +177,6 @@ func (cs *clusterState) rebalanceStores(
 		changes:                       []PendingRangeChange{},
 		rangeMoveCount:                0,
 		leaseTransferCount:            0,
-		shouldReturnEarly:             false,
 		shouldContinue:                false,
 		maxRangeMoveCount:             maxRangeMoveCount,
 		maxLeaseTransferCount:         maxLeaseTransferCount,
@@ -188,10 +185,10 @@ func (cs *clusterState) rebalanceStores(
 	rs.scratch.nodes = map[roachpb.NodeID]*NodeLoad{}
 	rs.scratch.stores = map[roachpb.StoreID]struct{}{}
 	for _, store := range sheddingStores {
-		rs.rebalanceStore(store, ctx, localStoreID, now)
-		if rs.shouldReturnEarly {
-			return rs.changes
+		if rs.rangeMoveCount >= rs.maxRangeMoveCount || rs.leaseTransferCount >= rs.maxLeaseTransferCount {
+			break
 		}
+		rs.rebalanceStore(store, ctx, localStoreID, now)
 		if rs.shouldContinue {
 			rs.shouldContinue = false
 			continue
@@ -396,7 +393,6 @@ func (rs *rebalanceState) rebalanceStore(
 				targetSS.maxFractionPendingIncrease, targetSS.maxFractionPendingDecrease)
 			if rs.leaseTransferCount >= rs.maxLeaseTransferCount {
 				log.KvDistribution.VInfof(ctx, 2, "reached max lease transfer count %d, returning", rs.maxLeaseTransferCount)
-				rs.shouldReturnEarly = true
 				return
 			}
 			doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
@@ -608,7 +604,6 @@ func (rs *rebalanceState) rebalanceStore(
 			rangeID, removeTarget.StoreID, addTarget.StoreID, rs.changes[len(rs.changes)-1], ss.adjusted.load, targetSS.adjusted.load)
 		if rs.rangeMoveCount >= rs.maxRangeMoveCount {
 			log.KvDistribution.VInfof(ctx, 2, "s%d has reached max range move count %d: mma returning", store.StoreID, rs.maxRangeMoveCount)
-			rs.shouldReturnEarly = true
 			return
 		}
 		doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
