@@ -1085,11 +1085,17 @@ type CreateSequenceDescriptor struct {
 	Temporary  bool
 }
 
-type SetSequenceOptions struct {
+type SetSequenceOption struct {
 	immediateMutationOp
 	SequenceID descpb.ID
 	Key        string
 	Value      string
+}
+
+type UnsetSequenceOption struct {
+	immediateMutationOp
+	SequenceID descpb.ID
+	Key        string
 }
 
 type InitSequence struct {

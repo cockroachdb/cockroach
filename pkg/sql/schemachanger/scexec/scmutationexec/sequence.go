@@ -48,9 +48,7 @@ func (i *immediateVisitor) CreateSequenceDescriptor(
 	return nil
 }
 
-func (i *immediateVisitor) SetSequenceOptions(
-	ctx context.Context, op scop.SetSequenceOptions,
-) error {
+func (i *immediateVisitor) SetSequenceOption(ctx context.Context, op scop.SetSequenceOption) error {
 	sc, err := i.checkOutTable(ctx, op.SequenceID)
 	if err != nil {
 		return err
@@ -86,6 +84,13 @@ func (i *immediateVisitor) SetSequenceOptions(
 		}},
 	}
 	return sequenceOptionMeta[op.Key].SetFunc(op.Value)
+}
+
+// TODO: implement
+func (i *immediateVisitor) UnsetSequenceOption(
+	ctx context.Context, op scop.UnsetSequenceOption,
+) error {
+	panic("unimplemented")
 }
 
 func (i *immediateVisitor) InitSequence(ctx context.Context, op scop.InitSequence) error {
