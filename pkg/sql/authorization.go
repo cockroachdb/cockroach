@@ -125,7 +125,8 @@ func (p *planner) HasPrivilege(
 	// Do a safety check on the object, if it is considered unsafe
 	// does the caller have the appropriate session data to access it?
 	if p.objectIsUnsafe(ctx, privilegeObject) {
-		if err := unsafesql.CheckInternalsAccess(ctx, p.SessionData(), p.stmt.AST, p.extendedEvalCtx.Annotations, &p.ExecCfg().Settings.SV); err != nil {
+		unsafeOverride := p.ExecCfg().EvalContextTestingKnobs.UnsafeOverride
+		if err := unsafesql.CheckInternalsAccess(ctx, p.SessionData(), p.stmt.AST, p.extendedEvalCtx.Annotations, &p.ExecCfg().Settings.SV, unsafeOverride); err != nil {
 			return false, err
 		}
 	}
@@ -961,7 +962,7 @@ func (p *planner) objectIsUnsafe(ctx context.Context, privilegeObject privilege.
 		return false
 	}
 
-	// All system descriptors are considered unsafe.
+	// All system descriptors are considered unsafe
 	if catalog.IsSystemDescriptor(d) {
 		return true
 	}

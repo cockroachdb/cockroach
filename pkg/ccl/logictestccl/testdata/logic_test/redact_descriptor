@@ -1,4 +1,5 @@
 # LogicTest: !schema-locked-disabled
+# knob-opt: allow-unsafe
 
 # NB: "Xw==" is the byte representation of "_", which is what we use to redact fields.
 statement ok
