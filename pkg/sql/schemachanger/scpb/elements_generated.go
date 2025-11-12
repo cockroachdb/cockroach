@@ -1453,6 +1453,43 @@ func (c *ElementCollection[E]) FilterIndexName() *ElementCollection[*IndexName] 
 	return (*ElementCollection[*IndexName])(ret)
 }
 
+func (e IndexPartitionEntry) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_IndexPartitionEntry) Element() Element {
+	return e.IndexPartitionEntry
+}
+
+// ForEachIndexPartitionEntry iterates over elements of type IndexPartitionEntry.
+// Deprecated
+func ForEachIndexPartitionEntry(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *IndexPartitionEntry),
+) {
+  c.FilterIndexPartitionEntry().ForEach(fn)
+}
+
+// FindIndexPartitionEntry finds the first element of type IndexPartitionEntry.
+// Deprecated
+func FindIndexPartitionEntry(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *IndexPartitionEntry) {
+	if tc := c.FilterIndexPartitionEntry(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*IndexPartitionEntry)
+	}
+	return current, target, element
+}
+
+// IndexPartitionEntryElements filters elements of type IndexPartitionEntry.
+func (c *ElementCollection[E]) FilterIndexPartitionEntry() *ElementCollection[*IndexPartitionEntry] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*IndexPartitionEntry)
+		return ok
+	})
+	return (*ElementCollection[*IndexPartitionEntry])(ret)
+}
+
 func (e IndexPartitioning) element() {}
 
 // Element implements ElementGetter.
@@ -3423,6 +3460,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_IndexData{ IndexData: t}
 		case *IndexName:
 			e.ElementOneOf = &ElementProto_IndexName{ IndexName: t}
+		case *IndexPartitionEntry:
+			e.ElementOneOf = &ElementProto_IndexPartitionEntry{ IndexPartitionEntry: t}
 		case *IndexPartitioning:
 			e.ElementOneOf = &ElementProto_IndexPartitioning{ IndexPartitioning: t}
 		case *IndexZoneConfig:
@@ -3570,6 +3609,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_IndexComment)(nil)),
 	((*ElementProto_IndexData)(nil)),
 	((*ElementProto_IndexName)(nil)),
+	((*ElementProto_IndexPartitionEntry)(nil)),
 	((*ElementProto_IndexPartitioning)(nil)),
 	((*ElementProto_IndexZoneConfig)(nil)),
 	((*ElementProto_LDRJobIDs)(nil)),
@@ -3667,6 +3707,7 @@ func GetElementTypes() []interface{} {
 	((*IndexComment)(nil)),
 	((*IndexData)(nil)),
 	((*IndexName)(nil)),
+	((*IndexPartitionEntry)(nil)),
 	((*IndexPartitioning)(nil)),
 	((*IndexZoneConfig)(nil)),
 	((*LDRJobIDs)(nil)),

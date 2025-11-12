@@ -287,7 +287,7 @@ func isIndexDependent(e scpb.Element) bool {
 	case *scpb.IndexName, *scpb.IndexComment, *scpb.IndexColumn,
 		*scpb.IndexZoneConfig:
 		return true
-	case *scpb.IndexPartitioning, *scpb.PartitionZoneConfig:
+	case *scpb.IndexPartitioning, *scpb.IndexPartitionEntry, *scpb.PartitionZoneConfig:
 		return true
 	}
 	return false

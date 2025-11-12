@@ -740,6 +740,8 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 				IndexID:                idx.GetID(),
 				PartitioningDescriptor: cpy.Partitioning,
 			})
+			// Also create IndexPartitionEntry elements for each individual partition.
+			w.walkPartitioning(tbl.GetID(), idx.GetID(), &cpy.Partitioning, nil)
 		}
 	}
 	w.ev(scpb.Status_PUBLIC, &scpb.IndexName{
@@ -767,6 +769,49 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 		TableID: tbl.GetID(),
 		IndexID: idx.GetID(),
 	})
+}
+
+// walkPartitioning recursively walks a partitioning descriptor and creates
+// IndexPartitionEntry elements for each partition.
+func (w *walkCtx) walkPartitioning(
+	tableID catid.DescID,
+	indexID catid.IndexID,
+	p *catpb.PartitioningDescriptor,
+	parentPath []string,
+) {
+	// Process list partitions.
+	for _, listPartition := range p.List {
+		partitionPath := append(append([]string(nil), parentPath...), listPartition.Name)
+		w.ev(scpb.Status_PUBLIC, &scpb.IndexPartitionEntry{
+			TableID:           tableID,
+			IndexID:           indexID,
+			PartitionPath:     partitionPath,
+			NumColumns:        p.NumColumns,
+			NumImplicitColumns: p.NumImplicitColumns,
+			Partition: &scpb.IndexPartitionEntry_ListPartition{
+				ListPartition: &listPartition,
+			},
+		})
+		// Recursively process subpartitions if they exist.
+		if listPartition.Subpartitioning.NumColumns > 0 {
+			w.walkPartitioning(tableID, indexID, &listPartition.Subpartitioning, partitionPath)
+		}
+	}
+
+	// Process range partitions.
+	for _, rangePartition := range p.Range {
+		partitionPath := append(append([]string(nil), parentPath...), rangePartition.Name)
+		w.ev(scpb.Status_PUBLIC, &scpb.IndexPartitionEntry{
+			TableID:           tableID,
+			IndexID:           indexID,
+			PartitionPath:     partitionPath,
+			NumColumns:        p.NumColumns,
+			NumImplicitColumns: p.NumImplicitColumns,
+			Partition: &scpb.IndexPartitionEntry_RangePartition{
+				RangePartition: &rangePartition,
+			},
+		})
+	}
 }
 
 func (w *walkCtx) walkUniqueWithoutIndexConstraint(

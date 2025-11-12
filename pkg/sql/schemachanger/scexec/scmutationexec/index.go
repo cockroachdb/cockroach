@@ -328,6 +328,42 @@ func (i *immediateVisitor) AddIndexPartitionInfo(
 	return nil
 }
 
+func (i *immediateVisitor) AddIndexPartitionEntry(
+	ctx context.Context, op scop.AddIndexPartitionEntry,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.PartitionEntry.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	index, err := catalog.MustFindIndexByID(tbl, op.PartitionEntry.IndexID)
+	if err != nil {
+		return err
+	}
+	// TODO: Implement actual partition addition logic.
+	// This requires navigating the partition tree using PartitionPath
+	// and adding the new partition at the correct location.
+	_ = index
+	return nil
+}
+
+func (i *immediateVisitor) RemoveIndexPartitionEntry(
+	ctx context.Context, op scop.RemoveIndexPartitionEntry,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.PartitionEntry.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	index, err := catalog.MustFindIndexByID(tbl, op.PartitionEntry.IndexID)
+	if err != nil {
+		return err
+	}
+	// TODO: Implement actual partition removal logic.
+	// This requires navigating the partition tree using PartitionPath
+	// and removing the partition at the correct location.
+	_ = index
+	return nil
+}
+
 func (i *immediateVisitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {

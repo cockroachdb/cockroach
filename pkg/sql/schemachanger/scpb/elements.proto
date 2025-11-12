@@ -120,6 +120,7 @@ message ElementProto {
     IndexComment index_comment = 43 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
     IndexColumn index_column = 44 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, TemporaryIndex, Column\""];
     IndexData index_data = 45 [(gogoproto.customname) = "IndexData", (gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, TemporaryIndex\""];
+    IndexPartitionEntry index_partition_entry = 46 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
 
     // Constraint elements.
     ConstraintWithoutIndexName constraint_without_index_name = 51 [(gogoproto.moretags) = "parent:\"UniqueWithoutIndexConstraint, CheckConstraint, ForeignKeyConstraint\""];
@@ -738,6 +739,24 @@ message IndexPartitioning {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
   cockroach.sql.catalog.catpb.PartitioningDescriptor partitioning = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message IndexPartitionEntry {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  // PartitionPath represents the hierarchical path to this partition.
+  // For a top-level partition "west", this would be ["west"].
+  // For a subpartition "seattle" under "west", this would be ["west", "seattle"].
+  repeated string partition_path = 3;
+  // NumColumns is how many columns are used in partitioning at this level.
+  uint32 num_columns = 4;
+  // NumImplicitColumns specifies the number of columns that implicitly prefix the index.
+  uint32 num_implicit_columns = 5;
+  // Exactly one of list_partition or range_partition must be set.
+  oneof partition {
+    cockroach.sql.catalog.catpb.PartitioningDescriptor.List list_partition = 6;
+    cockroach.sql.catalog.catpb.PartitioningDescriptor.Range range_partition = 7;
+  }
 }
 
 message RowLevelTTL {

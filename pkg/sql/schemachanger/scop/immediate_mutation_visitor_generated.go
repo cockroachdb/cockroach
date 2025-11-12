@@ -77,6 +77,8 @@ type ImmediateMutationVisitor interface {
 	RemoveSchemaParent(context.Context, RemoveSchemaParent) error
 	AddSchemaParent(context.Context, AddSchemaParent) error
 	AddIndexPartitionInfo(context.Context, AddIndexPartitionInfo) error
+	AddIndexPartitionEntry(context.Context, AddIndexPartitionEntry) error
+	RemoveIndexPartitionEntry(context.Context, RemoveIndexPartitionEntry) error
 	AddColumnFamily(context.Context, AddColumnFamily) error
 	AssertColumnFamilyIsRemoved(context.Context, AssertColumnFamilyIsRemoved) error
 	AddColumnDefaultExpression(context.Context, AddColumnDefaultExpression) error
@@ -474,6 +476,16 @@ func (op AddSchemaParent) Visit(ctx context.Context, v ImmediateMutationVisitor)
 // Visit is part of the ImmediateMutationOp interface.
 func (op AddIndexPartitionInfo) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.AddIndexPartitionInfo(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op AddIndexPartitionEntry) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddIndexPartitionEntry(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveIndexPartitionEntry) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveIndexPartitionEntry(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

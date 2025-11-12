@@ -256,6 +256,15 @@ IndexName :  TableID
 IndexName :  IndexID
 IndexName :  Name
 
+object IndexPartitionEntry
+
+IndexPartitionEntry :  TableID
+IndexPartitionEntry :  IndexID
+IndexPartitionEntry : []PartitionPath
+IndexPartitionEntry :  NumColumns
+IndexPartitionEntry :  NumImplicitColumns
+IndexPartitionEntry :  Partition
+
 object IndexPartitioning
 
 IndexPartitioning :  TableID
@@ -615,6 +624,8 @@ SecondaryIndex <|-- IndexData
 TemporaryIndex <|-- IndexData
 PrimaryIndex <|-- IndexName
 SecondaryIndex <|-- IndexName
+PrimaryIndex <|-- IndexPartitionEntry
+SecondaryIndex <|-- IndexPartitionEntry
 PrimaryIndex <|-- IndexPartitioning
 SecondaryIndex <|-- IndexPartitioning
 Index <|-- IndexZoneConfig

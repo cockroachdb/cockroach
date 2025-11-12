@@ -499,6 +499,18 @@ type AddIndexPartitionInfo struct {
 	Partitioning scpb.IndexPartitioning
 }
 
+// AddIndexPartitionEntry adds an individual partition entry to an index.
+type AddIndexPartitionEntry struct {
+	immediateMutationOp
+	PartitionEntry scpb.IndexPartitionEntry
+}
+
+// RemoveIndexPartitionEntry removes an individual partition entry from an index.
+type RemoveIndexPartitionEntry struct {
+	immediateMutationOp
+	PartitionEntry scpb.IndexPartitionEntry
+}
+
 // AddColumnFamily adds a new column family to the table.
 type AddColumnFamily struct {
 	immediateMutationOp
