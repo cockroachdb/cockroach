@@ -1,5 +1,8 @@
 # LogicTest: !local-prepared
 
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction = '0';
+
 subtest types
 
 statement error pgcode 42P13 pq: function result type must be int because of OUT parameters
