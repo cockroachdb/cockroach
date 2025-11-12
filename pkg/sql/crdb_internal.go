@@ -3227,7 +3227,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 				addRow func(...tree.Datum) error,
 			) (matched bool, err error) {
 				id := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
-				scName, typDesc, err := getSchemaAndTypeByTypeID(ctx, p, id)
+				scName, typDesc, err := getSchemaAndTypeByTypeID(ctx, p, id, true /* includeMetaData */)
 				if err != nil || typDesc == nil {
 					return false, err
 				}

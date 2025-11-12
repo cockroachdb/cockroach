@@ -3796,9 +3796,13 @@ func addPGAttributeRowForCompositeType(
 }
 
 func getSchemaAndTypeByTypeID(
-	ctx context.Context, p *planner, id descpb.ID,
+	ctx context.Context, p *planner, id descpb.ID, includeMetaData bool,
 ) (catalog.SchemaDescriptor, catalog.TypeDescriptor, error) {
-	typDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Type(ctx, id)
+	getter := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV)
+	if includeMetaData {
+		getter = getter.WithMetaData()
+	}
+	typDesc, err := getter.WithoutNonPublic().Get().Type(ctx, id)
 	if err != nil {
 		// If the type was not found, it may be a table.
 		if !(errors.Is(err, catalog.ErrDescriptorNotFound) || pgerror.GetPGCode(err) == pgcode.UndefinedObject) {
@@ -3897,7 +3901,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 
 				id := typedesc.UserDefinedTypeOIDToID(ooid)
 
-				sc, typDesc, err := getSchemaAndTypeByTypeID(ctx, p, id)
+				sc, typDesc, err := getSchemaAndTypeByTypeID(ctx, p, id, false /* includeMetaData */)
 				if err != nil || typDesc == nil {
 					return false, err
 				}

@@ -80,6 +80,13 @@ func TestLogic_comment_on(
 	runLogicTest(t, "comment_on")
 }
 
+func TestLogic_crdb_internal(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "crdb_internal")
+}
+
 func TestLogic_pg_catalog(
 	t *testing.T,
 ) {
