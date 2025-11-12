@@ -87,8 +87,6 @@ func NewReader(
 		rff:                         rff,
 		tableID:                     descpb.ID(tableDescID),
 		triggerCheckForReassignment: make(chan struct{}),
-		// stored so we can use it in methods using a different context than the main goro ie GetRows and ConfirmReceipt
-		goroCtx: ctx,
 	}
 	r.mu.state = readerStateBatching
 	r.mu.buf = make([]tree.Datums, 0, maxBufSize)
@@ -102,6 +100,7 @@ func NewReader(
 		r.mu.poppedWakeup.Broadcast()
 		r.mu.pushedWakeup.Broadcast()
 	}
+	r.goroCtx = ctx
 
 	r.setupRangefeed(ctx)
 	go r.run(ctx)
@@ -172,15 +171,16 @@ func (r *Reader) setupRangefeed(ctx context.Context) {
 		setErr(err)
 		return
 	}
-	_ = rf
-	// TODO:  rf.Close() on close
-
+	_ = context.AfterFunc(r.goroCtx, func() {
+		fmt.Println("closing rangefeed")
+		rf.Close()
+	})()
 }
 
 // - [x] setup rangefeed on data
 // - [ ] handle only watching my partitions
 // - [ ] after each batch, ask mgr if i need to change assignments
-// - [ ] buffer rows in the background before being asked for them
+// - [X] buffer rows in the background before being asked for them
 // - [ ] checkpoint frontier if our frontier has advanced and we confirmed receipt
 // - [ ] gonna need some way to clean stuff up on conn_executor.close()
 
@@ -256,9 +256,6 @@ func (r *Reader) GetRows(ctx context.Context, limit int) ([]tree.Datums, error) 
 	fmt.Printf("GetRows done with inflightBuffer len: %d, buf len: %d\n", len(r.mu.inflightBuffer), len(r.mu.buf))
 
 	return slices.Clone(r.mu.inflightBuffer), nil
-
-	// and then trigger the goro to check if m wants us to change assignments
-	// if it does, handle that stuff before doing a new batch
 }
 
 func (r *Reader) ConfirmReceipt(ctx context.Context) {
@@ -336,7 +333,6 @@ func (r *Reader) checkForReassignment(ctx context.Context) error {
 	return nil
 }
 
-// TODO: this is all highly sus
 func (r *Reader) decodeRangefeedValue(
 	ctx context.Context, rfv *kvpb.RangeFeedValue,
 ) (tree.Datums, error) {
