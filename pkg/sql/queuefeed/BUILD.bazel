@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "assignments.go",
         "manager.go",
+        "partition_cache.go",
         "partitions.go",
         "reader.go",
     ],
@@ -42,6 +43,7 @@ go_test(
         "assignments_test.go",
         "main_test.go",
         "manager_test.go",
+        "partition_cache_test.go",
         "partitions_test.go",
         "smoke_test.go",
     ],

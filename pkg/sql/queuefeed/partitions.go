@@ -171,7 +171,7 @@ type Session struct {
 	LivenessID sqlliveness.SessionID
 }
 
-func (s *Session) Empty() bool {
+func (s Session) Empty() bool {
 	return s.ConnectionID == uuid.Nil && s.LivenessID == ""
 }
 
