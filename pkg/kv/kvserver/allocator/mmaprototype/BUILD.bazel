@@ -6,6 +6,7 @@ go_library(
         "allocator.go",
         "allocator_state.go",
         "cluster_state.go",
+        "cluster_state_rebalance_stores.go",
         "constraint.go",
         "constraint_matcher.go",
         "doc.go",
@@ -31,6 +32,7 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_redact//interfaces",
+        "@com_github_pkg_errors//:errors",
     ],
 )
 
