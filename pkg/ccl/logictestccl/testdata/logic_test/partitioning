@@ -84,6 +84,8 @@ DROP TABLE t_range
 statement ok
 DROP TABLE t_list
 
+subtest end
+
 # Test ADD PARTITION syntax
 subtest add_partition
 
@@ -93,13 +95,15 @@ CREATE TABLE t_range (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
 )
 
 statement ok
-ALTER TABLE t_range SET (schema_locked = false)
-
-statement error unimplemented: ALTER TABLE ADD PARTITION
 ALTER TABLE t_range ADD PARTITION p2 VALUES FROM (100) TO (200)
 
-statement error unimplemented: ALTER TABLE ADD PARTITION
-ALTER TABLE t_range ADD PARTITION p2 VALUES FROM (100) TO (200), ADD PARTITION p3 VALUES FROM (200) TO (300)
+statement ok
+ALTER TABLE t_range ADD PARTITION p3 VALUES FROM (200) TO (300), ADD PARTITION p4 VALUES FROM (300) TO (400)
+
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_range] ORDER BY partition_name
+----
+p1
 
 statement ok
 DROP TABLE t_range

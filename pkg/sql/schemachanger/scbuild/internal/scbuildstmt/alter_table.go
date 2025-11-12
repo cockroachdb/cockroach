@@ -46,6 +46,7 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableRenameColumn)(nil)):       {fn: alterTableRenameColumn, on: true, checks: isV254Active},
 	reflect.TypeOf((*tree.AlterTableDropStored)(nil)):         {fn: alterTableDropStored, on: true, checks: isV261Active},
 	reflect.TypeOf((*tree.AlterTableRenameConstraint)(nil)):   {fn: alterTableRenameConstraint, on: true, checks: isV261Active},
+	reflect.TypeOf((*tree.AlterTableAddPartition)(nil)):       {fn: alterTableAddPartition, on: true, checks: isV261Active},
 }
 
 func init() {
