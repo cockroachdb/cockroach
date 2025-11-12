@@ -1,5 +1,111 @@
 # LogicTest: local
 
+subtest drop_partition
+
+# Test DROP PARTITION WITH DATA on range partitioned table
+statement ok
+CREATE TABLE t_range (
+    a INT,
+    b INT,
+    PRIMARY KEY (a, b)
+) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (1) TO (10),
+    PARTITION p2 VALUES FROM (10) TO (20),
+    PARTITION p3 VALUES FROM (20) TO (30)
+)
+
+# Verify partitions exist
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_range] ORDER BY partition_name
+----
+p1
+p2
+p3
+
+statement ok
+ALTER TABLE t_range DROP PARTITION p1 WITH DATA
+
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_range] ORDER BY partition_name
+----
+p1
+p2
+p3
+
+# Test DROP PARTITION WITH DATA on list partitioned table
+statement ok
+CREATE TABLE t_list (
+    a INT,
+    b INT,
+    PRIMARY KEY (a, b)
+) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1, 2, 3),
+    PARTITION p2 VALUES IN (4, 5, 6),
+    PARTITION p3 VALUES IN (7, 8, 9)
+)
+
+# Verify partitions exist
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_list] ORDER BY partition_name
+----
+p1
+p2
+p3
+
+statement ok
+ALTER TABLE t_list DROP PARTITION p1 WITH DATA
+
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_list] ORDER BY partition_name
+----
+p1
+p2
+p3
+
+# Test error case: dropping non-existent partition
+statement ok
+ALTER TABLE t_list DROP PARTITION nonexistent WITH DATA
+
+# Test multiple DROP PARTITION in one statement
+statement ok
+ALTER TABLE t_list DROP PARTITION p1 WITH DATA, DROP PARTITION p2 WITH DATA
+
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_list] ORDER BY partition_name
+----
+p1
+p2
+p3
+
+# Clean up
+statement ok
+DROP TABLE t_range
+
+statement ok
+DROP TABLE t_list
+
+# Test ADD PARTITION syntax
+subtest add_partition
+
+statement ok
+CREATE TABLE t_range (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM (1) TO (100)
+)
+
+statement ok
+ALTER TABLE t_range SET (schema_locked = false)
+
+statement error unimplemented: ALTER TABLE ADD PARTITION
+ALTER TABLE t_range ADD PARTITION p2 VALUES FROM (100) TO (200)
+
+statement error unimplemented: ALTER TABLE ADD PARTITION
+ALTER TABLE t_range ADD PARTITION p2 VALUES FROM (100) TO (200), ADD PARTITION p3 VALUES FROM (200) TO (300)
+
+statement ok
+DROP TABLE t_range
+
+subtest end
+
 statement error syntax
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST ()
 
@@ -1579,114 +1685,5 @@ FROM subzone_spans;
 /1/2
 /2/1
 /2/2
-
-subtest end
-
-subtest drop_partition
-
-# Test DROP PARTITION WITH DATA on range partitioned table
-statement ok
-CREATE TABLE t_range (
-    a INT,
-    b INT,
-    PRIMARY KEY (a, b)
-) PARTITION BY RANGE (a) (
-    PARTITION p1 VALUES FROM (1) TO (10),
-    PARTITION p2 VALUES FROM (10) TO (20),
-    PARTITION p3 VALUES FROM (20) TO (30)
-)
-
-# Verify partitions exist
-query T
-SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_range] ORDER BY partition_name
-----
-p1
-p2
-p3
-
-statement ok
-ALTER TABLE t_range DROP PARTITION p1 WITH DATA
-
-query T
-SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_range] ORDER BY partition_name
-----
-p1
-p2
-p3
-
-# Test DROP PARTITION WITH DATA on list partitioned table
-statement ok
-CREATE TABLE t_list (
-    a INT,
-    b INT,
-    PRIMARY KEY (a, b)
-) PARTITION BY LIST (a) (
-    PARTITION p1 VALUES IN (1, 2, 3),
-    PARTITION p2 VALUES IN (4, 5, 6),
-    PARTITION p3 VALUES IN (7, 8, 9)
-)
-
-# Verify partitions exist
-query T
-SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_list] ORDER BY partition_name
-----
-p1
-p2
-p3
-
-statement ok
-ALTER TABLE t_list DROP PARTITION p1 WITH DATA
-
-query T
-SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_list] ORDER BY partition_name
-----
-p1
-p2
-p3
-
-# Test error case: dropping non-existent partition
-statement ok
-ALTER TABLE t_list DROP PARTITION nonexistent WITH DATA
-
-# Test multiple DROP PARTITION in one statement
-statement ok
-ALTER TABLE t_list DROP PARTITION p1 WITH DATA, DROP PARTITION p2 WITH DATA
-
-query T
-SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_list] ORDER BY partition_name
-----
-p1
-p2
-p3
-
-# Clean up
-statement ok
-DROP TABLE t_range
-
-statement ok
-DROP TABLE t_list
-
-statement ok
-DROP TABLE t_locked
-
-# Test ADD PARTITION syntax
-subtest add_partition
-
-statement ok
-CREATE TABLE t_range (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
-    PARTITION p1 VALUES FROM (1) TO (100)
-)
-
-statement ok
-ALTER TABLE t_range SET (schema_locked = false)
-
-statement error unimplemented: ALTER TABLE ADD PARTITION
-ALTER TABLE t_range ADD PARTITION p2 VALUES FROM (100) TO (200)
-
-statement error unimplemented: ALTER TABLE ADD PARTITION
-ALTER TABLE t_range ADD PARTITION p2 VALUES FROM (100) TO (200), ADD PARTITION p3 VALUES FROM (200) TO (300)
-
-statement ok
-DROP TABLE t_range
 
 subtest end
