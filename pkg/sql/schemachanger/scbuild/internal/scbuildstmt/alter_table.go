@@ -36,6 +36,7 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):         {fn: alterTableSetNotNull, on: true, checks: nil},
 	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)):      {fn: alterTableAddConstraint, on: true, checks: nil},
 	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     {fn: alterTableDropConstraint, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterTableDropPartition)(nil)):      {fn: alterTableDropPartition, on: true, checks: isV261Active},
 	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): {fn: alterTableValidateConstraint, on: true, checks: nil},
 	reflect.TypeOf((*tree.AlterTableSetDefault)(nil)):         {fn: alterTableSetDefault, on: true, checks: nil},
 	reflect.TypeOf((*tree.AlterTableAlterColumnType)(nil)):    {fn: alterTableAlterColumnType, on: true, checks: nil},

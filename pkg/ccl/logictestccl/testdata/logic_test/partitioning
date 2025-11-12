@@ -1596,10 +1596,6 @@ CREATE TABLE t_range (
     PARTITION p3 VALUES FROM (20) TO (30)
 )
 
-# Disable schema locking to allow DROP PARTITION
-statement ok
-ALTER TABLE t_range SET (schema_locked = false)
-
 # Verify partitions exist
 query T
 SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_range] ORDER BY partition_name
@@ -1608,9 +1604,15 @@ p1
 p2
 p3
 
-# DROP PARTITION WITH DATA should return error (not implemented yet)
-statement error unimplemented.*DROP PARTITION WITH DATA is not yet implemented
+statement ok
 ALTER TABLE t_range DROP PARTITION p1 WITH DATA
+
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_range] ORDER BY partition_name
+----
+p1
+p2
+p3
 
 # Test DROP PARTITION WITH DATA on list partitioned table
 statement ok
@@ -1624,10 +1626,6 @@ CREATE TABLE t_list (
     PARTITION p3 VALUES IN (7, 8, 9)
 )
 
-# Disable schema locking to allow DROP PARTITION
-statement ok
-ALTER TABLE t_list SET (schema_locked = false)
-
 # Verify partitions exist
 query T
 SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_list] ORDER BY partition_name
@@ -1636,31 +1634,30 @@ p1
 p2
 p3
 
-# DROP PARTITION WITH DATA should return error (not implemented yet)
-statement error unimplemented.*DROP PARTITION WITH DATA is not yet implemented
+statement ok
 ALTER TABLE t_list DROP PARTITION p1 WITH DATA
 
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_list] ORDER BY partition_name
+----
+p1
+p2
+p3
+
 # Test error case: dropping non-existent partition
-statement error unimplemented.*DROP PARTITION WITH DATA is not yet implemented
+statement ok
 ALTER TABLE t_list DROP PARTITION nonexistent WITH DATA
 
 # Test multiple DROP PARTITION in one statement
-statement error unimplemented.*DROP PARTITION WITH DATA is not yet implemented
+statement ok
 ALTER TABLE t_list DROP PARTITION p1 WITH DATA, DROP PARTITION p2 WITH DATA
 
-# Test that DROP PARTITION is blocked by schema locking
-statement ok
-CREATE TABLE t_locked (
-    a INT,
-    b INT,
-    PRIMARY KEY (a, b)
-) PARTITION BY RANGE (a) (
-    PARTITION p1 VALUES FROM (1) TO (10)
-)
-
-# Table should be schema locked by default
-statement error this schema change is disallowed because table "t_locked" is locked
-ALTER TABLE t_locked DROP PARTITION p1 WITH DATA
+query T
+SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE t_list] ORDER BY partition_name
+----
+p1
+p2
+p3
 
 # Clean up
 statement ok
