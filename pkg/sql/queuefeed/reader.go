@@ -162,9 +162,6 @@ func (r *Reader) setupRangefeed(ctx context.Context) {
 		fmt.Sprintf("queuefeed.reader.name=%s", r.name), initialTS, onValue, opts...,
 	)
 
-	// TODO: why are we given a zero codec?
-	r.codec = keys.MakeSQLCodec(roachpb.SystemTenantID)
-
 	tk := roachpb.Span{Key: r.codec.TablePrefix(uint32(r.tableID))}
 	tk.EndKey = tk.Key.PrefixEnd()
 	spans := []roachpb.Span{tk}
