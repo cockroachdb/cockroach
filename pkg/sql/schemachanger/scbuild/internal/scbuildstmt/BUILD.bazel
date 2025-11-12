@@ -122,6 +122,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/interval",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/protoutil",
