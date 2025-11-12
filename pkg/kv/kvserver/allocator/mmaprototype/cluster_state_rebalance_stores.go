@@ -175,8 +175,8 @@ func (cs *clusterState) rebalanceStores(
 		maxLeaseTransferCount:         maxLeaseTransferCount,
 		lastFailedChangeDelayDuration: lastFailedChangeDelayDuration,
 	}
-	for idx /*logging only*/, store := range sheddingStores {
-		func(rs *rebalanceState) {
+	for _, store := range sheddingStores {
+		func(rs *rebalanceState, store sheddingStore) {
 			log.KvDistribution.Infof(ctx, "start processing shedding store s%d: cpu node load %s, store load %s, worst dim %s",
 				store.StoreID, store.nls, store.sls, store.worstDim)
 			ss := rs.cs.stores[store.StoreID]
@@ -581,7 +581,7 @@ func (cs *clusterState) rebalanceStores(
 					"result(success): rebalancing r%v from s%v to s%v [change: %v] with resulting loads source: %v target: %v",
 					rangeID, removeTarget.StoreID, addTarget.StoreID, rs.changes[len(rs.changes)-1], ss.adjusted.load, targetSS.adjusted.load)
 				if rs.rangeMoveCount >= rs.maxRangeMoveCount {
-					log.KvDistribution.VInfof(ctx, 2, "s%d has reached max range move count %d: mma returning with %d stores left in shedding stores", store.StoreID, rs.maxRangeMoveCount, len(sheddingStores)-(idx+1))
+					log.KvDistribution.VInfof(ctx, 2, "s%d has reached max range move count %d: mma returning", store.StoreID, rs.maxRangeMoveCount)
 					rs.shouldReturnEarly = true
 					return
 				}
@@ -602,7 +602,7 @@ func (cs *clusterState) rebalanceStores(
 				rs.shouldContinue = true
 				return
 			}
-		}(rs)
+		}(rs, store)
 		if rs.shouldReturnEarly {
 			return rs.changes
 		}
