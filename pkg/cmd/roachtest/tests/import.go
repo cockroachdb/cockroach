@@ -276,6 +276,13 @@ var tests = []importTestSpec{
 				})
 		},
 	},
+	// Test cancellation of import jobs.
+	{
+		subtestName:  "cancellation",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyDataset),
+		importRunner: importCancellationRunner,
+	},
 }
 
 func registerImport(r registry.Registry) {
@@ -486,9 +493,120 @@ func runImportTest(
 	m.Wait()
 }
 
+// importCancellationRunner() is the test runner for the import cancellation
+// test. This test makes a number of attempts at importing a dataset, cancelling
+// all but the last. Each attempt imports a random subset of files from the
+// dataset in an effort to perturb tombstone errors.
+func importCancellationRunner(
+	ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, rng *rand.Rand, ds dataset,
+) error {
+	conn := c.Conn(ctx, l, 1)
+	defer conn.Close()
+
+	// Set a random GC TTL that is relatively short. We want to exercise GC
+	// of MVCC range tombstones, and would like a mix of live MVCC Range
+	// Tombstones and the Pebble RangeKeyUnset tombstones that clear them.
+	ttl_stmt := fmt.Sprintf(`ALTER TABLE import_test.%s CONFIGURE ZONE USING gc.ttlseconds = $1`, ds.getTableName())
+	_, err := conn.ExecContext(ctx, ttl_stmt, randutil.RandIntInRange(rng, 10*60 /* 10m */, 20*60 /* 20m */))
+	if err != nil {
+		return errors.Wrapf(err, "%s", ttl_stmt)
+	}
+
+	numAttempts := randutil.RandIntInRange(rng, 2, 5)
+	finalAttempt := numAttempts - 1
+	urlsToImport := ds.getDataURLs()
+	for attempt := range numAttempts {
+		if len(urlsToImport) == 0 {
+			break
+		}
+		urls := urlsToImport
+
+		// If not the last attempt, import a subset of the files available.
+		// This will create MVCC range tombstones across separate regions of
+		// the table's keyspace.
+		if attempt != finalAttempt {
+			rng.Shuffle(len(urls), func(i, j int) {
+				urls[i], urls[j] = urls[j], urls[i]
+			})
+			urls = urls[:randutil.RandIntInRange(rng, 1, len(urls)+1)]
+		}
+
+		t.WorkerStatus(fmt.Sprintf("beginning attempt %d for %s using files: %s", attempt+1, ds.getTableName(),
+			strings.Join(urls, ", ")))
+
+		var jobID jobspb.JobID
+		jobID, err = runRawAsyncImportJob(ctx, conn, ds.getTableName(), urls)
+		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+
+		if attempt != finalAttempt {
+			var timeout time.Duration
+			// Local tests tend to finish before we cancel if we use the full range.
+			if c.IsLocal() {
+				timeout = time.Duration(randutil.RandIntInRange(rng, 5, 20)) * time.Second
+			} else {
+				timeout = time.Duration(randutil.RandIntInRange(rng, 10, 60*3)) * time.Second
+			}
+			select {
+			case <-time.After(timeout):
+				t.WorkerStatus(fmt.Sprintf("Cancelling import job for attempt %d/%d for table %s after %v.",
+					attempt+1, numAttempts, ds.getTableName(), timeout))
+				_, err = conn.ExecContext(ctx,
+					`CANCEL JOBS (WITH x AS (SHOW JOBS)
+						        SELECT job_id
+								  FROM x
+								 WHERE job_id = $1
+								   AND status IN ('pending', 'running', 'retrying'))`, jobID)
+				if err != nil {
+					return err
+				}
+			case <-ctx.Done():
+				return nil
+			}
+		}
+
+		// Block until the job is complete. Afterwards, it either completed
+		// succesfully before we cancelled it, or the cancellation has finished
+		// reverting the keys it wrote prior to cancellation.
+		var status string
+		err = conn.QueryRowContext(
+			ctx,
+			`WITH x AS (SHOW JOBS WHEN COMPLETE (SELECT $1)) SELECT status FROM x`,
+			jobID,
+		).Scan(&status)
+		if err != nil {
+			return err
+		}
+		t.WorkerStatus(fmt.Sprintf("Import job for attempt %d/%d for table %s (%d files) completed with status %s.",
+			attempt+1, numAttempts, ds.getTableName(), len(urls), status))
+
+		// If the IMPORT was successful (eg, our cancellation came in too late),
+		// remove the files that succeeded so we don't try to import them again.
+		// If this was the last attempt, this should remove all the remaining
+		// files and `filesToImport` should be empty.
+		if status == "succeeded" {
+			t.L().PrintfCtx(ctx, "Removing files [%s] from consideration; completed", strings.Join(urls, ", "))
+			urlsToImport = slices.DeleteFunc(urlsToImport, func(url string) bool {
+				return slices.Contains(urls, url)
+			})
+		} else if status == "failed" {
+			return errors.Newf("Job %s failed.\n", jobID)
+		}
+	}
+	if len(urlsToImport) != 0 {
+		return errors.Newf("Expected zero remaining %q files after final attempt, but %d remaining.",
+			ds.getTableName(), len(urlsToImport))
+	}
+
+	// Restore GC TTLs so we don't interfere with post-import table validation.
+	_, err = conn.ExecContext(ctx, ttl_stmt, 60*60*4 /* 4 hours */)
+	return err
+}
+
 // runSyncImportJob() runs an import job and waits for it to complete.
 func runSyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) error {
-	importStmt := formatImportStmt(ds, false)
+	importStmt := formatImportStmt(ds.getTableName(), ds.getDataURLs(), false)
 	_, err := conn.ExecContext(ctx, importStmt)
 	if err != nil {
 		err = errors.Wrapf(err, "%s", importStmt)
@@ -498,7 +616,14 @@ func runSyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) error {
 
 // runAsyncImportJob() runs an import job and returns the job id immediately.
 func runAsyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) (jobspb.JobID, error) {
-	importStmt := formatImportStmt(ds, true)
+	return runRawAsyncImportJob(ctx, conn, ds.getTableName(), ds.getDataURLs())
+}
+
+// runRawAsyncImportJob() runs an import job using the table name and files provided.
+func runRawAsyncImportJob(
+	ctx context.Context, conn *gosql.DB, tableName string, urls []string,
+) (jobspb.JobID, error) {
+	importStmt := formatImportStmt(tableName, urls, true)
 
 	var jobID jobspb.JobID
 	err := conn.QueryRowContext(ctx, importStmt).Scan(&jobID)
@@ -511,14 +636,10 @@ func runAsyncImportJob(ctx context.Context, conn *gosql.DB, ds dataset) (jobspb.
 
 // formatImportStmt() takes a dataset and formats a SQL import statment for that
 // dataset.
-func formatImportStmt(d dataset, detached bool) string {
+func formatImportStmt(tableName string, urls []string, detached bool) string {
 	var stmt strings.Builder
-	fmt.Fprintf(
-		&stmt,
-		`IMPORT INTO import_test.%s CSV DATA ('%s') WITH delimiter='|'`,
-		d.getTableName(),
-		strings.Join(d.getDataURLs(), "', '"),
-	)
+	fmt.Fprintf(&stmt, `IMPORT INTO import_test.%s CSV DATA ('%s') WITH delimiter='|'`,
+		tableName, strings.Join(urls, "', '"))
 
 	if detached {
 		stmt.WriteString(", detached")
