@@ -44,14 +44,30 @@
     <table id="table-data">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Replication Size</th>
-          <th>Ranges</th>
-          <th>Columns</th>
-          <th>Indexes</th>
-          <th>% of Live data</th>
-          <th>Table auto stats enabled</th>
-          <th>Stats last updated</th>
+          <th @click="sort('name', 0)" style="cursor: pointer;">
+            Name <span x-text="getSortIndicator('name')"></span>
+          </th>
+          <th @click="sort('size', 1)" style="cursor: pointer;">
+            Replication Size <span x-text="getSortIndicator('size')"></span>
+          </th>
+          <th @click="sort('ranges', 2)" style="cursor: pointer;">
+            Ranges <span x-text="getSortIndicator('ranges')"></span>
+          </th>
+          <th @click="sort('columns', 3)" style="cursor: pointer;">
+            Columns <span x-text="getSortIndicator('columns')"></span>
+          </th>
+          <th @click="sort('indexes', 4)" style="cursor: pointer;">
+            Indexes <span x-text="getSortIndicator('indexes')"></span>
+          </th>
+          <th @click="sort('livedata', 5)" style="cursor: pointer;">
+            % of Live data <span x-text="getSortIndicator('livedata')"></span>
+          </th>
+          <th @click="sort('autostats', 6)" style="cursor: pointer;">
+            Table auto stats enabled <span x-text="getSortIndicator('autostats')"></span>
+          </th>
+          <th @click="sort('statsupdated', 7)" style="cursor: pointer;">
+            Stats last updated <span x-text="getSortIndicator('statsupdated')"></span>
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -69,11 +85,11 @@
         {{ range .Data.Tables }}
         <tr>
           <td><a href="/future/tables/{{ .TableID }}">{{ .SchemaName }}.{{ .TableName }}</a></td>
-          <td>{{ formatBytes .ReplicationSizeBytes }}</td>
+          <td data-sort="{{ .ReplicationSizeBytes }}">{{ formatBytes .ReplicationSizeBytes }}</td>
           <td>{{ .RangeCount }}</td>
           <td>{{ .ColumnCount }}</td>
           <td>{{ .IndexCount }}</td>
-          <td>
+          <td data-sort="{{ if .PercentLiveData }}{{ .PercentLiveData }}{{ else }}0{{ end }}">
             {{ if .PercentLiveData }}
               {{ formatPercent .PercentLiveData }}
               <br>
@@ -82,14 +98,14 @@
               N/A
             {{ end }}
           </td>
-          <td>
+          <td data-sort="{{ if .AutoStatsEnabled }}1{{ else }}0{{ end }}">
             {{ if .AutoStatsEnabled }}
               <chip class="ok">Enabled</chip>
             {{ else }}
               <chip class="warn">Disabled</chip>
             {{ end }}
           </td>
-          <td>
+          <td data-sort="{{ if .StatsLastUpdated }}{{ .StatsLastUpdated.Unix }}{{ else }}0{{ end }}">
             {{ if .StatsLastUpdated }}
               {{ .StatsLastUpdated.Format "Jan 02, 2006 at 15:04:05 UTC" }}
             {{ else }}

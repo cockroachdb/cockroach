@@ -109,7 +109,7 @@
           Never
         {{ end }}
       </div>
-      <form method="post" action="/future/tables/{{ .Data.Table.TableID }}/reset-index-stats" style="display: inline;" hx-post="/future/tables/{{ .Data.Table.TableID }}/reset-index-stats" hx-target="#index-stats-content" hx-swap="outerHTML">
+      <form method="post" action="/future/tables/{{ .Data.Table.TableID }}/reset-index-stats" style="display: inline;" hx-post="/future/tables/{{ .Data.Table.TableID }}/reset-index-stats" hx-target="#index-stats-content" hx-select="#index-stats-content" hx-swap="outerHTML">
         <button type="submit" class="warn" onclick="return confirm('Are you sure you want to reset all index statistics for the entire cluster? This action cannot be undone.')">Reset all index stats</button>
       </form>
     </div>

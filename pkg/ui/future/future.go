@@ -881,57 +881,16 @@ func handleResetIndexStats(w http.ResponseWriter, r *http.Request, cfg IndexHTML
 	// Extract table ID from URL path
 	vars := mux.Vars(r)
 	tableIDStr := vars["id"]
-	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid table ID", http.StatusBadRequest)
-		return
-	}
 
 	// Call the ResetIndexUsageStats RPC to reset all index stats across the cluster
-	_, err = cfg.Status.ResetIndexUsageStats(ctx, &serverpb.ResetIndexUsageStatsRequest{})
+	_, err := cfg.Status.ResetIndexUsageStats(ctx, &serverpb.ResetIndexUsageStatsRequest{})
 	if err != nil {
 		log.Dev.Warningf(ctx, "Failed to reset index stats: %v", err)
 		http.Error(w, "Failed to reset index stats", http.StatusInternalServerError)
 		return
 	}
 
-	// Fetch table metadata to get database and table name
-	var tableDetailsResp apiTableMetadataWithDetails
-	tableURL := fmt.Sprintf("%s/api/v2/table_metadata/%d/", apiBaseURL, tableID)
-	if err := fetchJSON(ctx, tableURL, &tableDetailsResp); err != nil {
-		log.Dev.Warningf(ctx, "Failed to fetch table details: %v", err)
-		http.Error(w, "Failed to fetch table details", http.StatusInternalServerError)
-		return
-	}
-
-	// Fetch updated index statistics
-	indexes, indexStatsReset, err := fetchIndexStats(ctx, cfg, tableDetailsResp.Metadata.DbName, tableDetailsResp.Metadata.TableName)
-	if err != nil {
-		log.Dev.Warningf(ctx, "Failed to fetch index stats: %v", err)
-		http.Error(w, "Failed to fetch index stats", http.StatusInternalServerError)
-		return
-	}
-
-	// Return HTML fragment with updated index stats
-	type IndexStatsData struct {
-		Indexes         []IndexInfo
-		IndexStatsReset *time.Time
-		TableID         int64
-	}
-
-	data := IndexStatsData{
-		Indexes:         indexes,
-		IndexStatsReset: indexStatsReset,
-		TableID:         tableID,
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	err = templates.ExecuteTemplate(w, "index_stats_partial.html", data)
-	if err != nil {
-		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
-		http.Error(w, "Failed to render template", http.StatusInternalServerError)
-		return
-	}
+	http.Redirect(w, r, fmt.Sprintf("/future/tables/%s", tableIDStr), http.StatusFound)
 }
 
 func handleGetDiagnosticsControls(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
@@ -1696,10 +1655,10 @@ type TableGrant struct {
 
 // IndexInfo contains information about a table index
 type IndexInfo struct {
-	IndexName       string
-	LastRead        *time.Time
-	TotalReads      int64
-	Recommendation  string
+	IndexName      string
+	LastRead       *time.Time
+	TotalReads     int64
+	Recommendation string
 }
 
 // fetchJSON makes an HTTP GET request and unmarshals the JSON response
@@ -1727,7 +1686,9 @@ func fetchJSON(ctx context.Context, url string, target interface{}) error {
 }
 
 // fetchDatabaseGrants fetches the grants for a database
-func fetchDatabaseGrants(ctx context.Context, cfg IndexHTMLArgs, dbName string) ([]DatabaseGrant, error) {
+func fetchDatabaseGrants(
+	ctx context.Context, cfg IndexHTMLArgs, dbName string,
+) ([]DatabaseGrant, error) {
 	// Use the DatabaseDetails RPC to get grant information
 	resp, err := cfg.Admin.DatabaseDetails(ctx, &serverpb.DatabaseDetailsRequest{
 		Database: dbName,
@@ -1760,7 +1721,9 @@ func fetchDatabaseGrants(ctx context.Context, cfg IndexHTMLArgs, dbName string) 
 }
 
 // fetchTableGrants fetches the grants for a table
-func fetchTableGrants(ctx context.Context, cfg IndexHTMLArgs, dbName, schemaName, tableName string) ([]TableGrant, error) {
+func fetchTableGrants(
+	ctx context.Context, cfg IndexHTMLArgs, dbName, schemaName, tableName string,
+) ([]TableGrant, error) {
 	// Use the TableDetails RPC to get grant information
 	fullyQualifiedTableName := fmt.Sprintf("%s.%s.%s", dbName, schemaName, tableName)
 	resp, err := cfg.Admin.TableDetails(ctx, &serverpb.TableDetailsRequest{
@@ -1795,7 +1758,9 @@ func fetchTableGrants(ctx context.Context, cfg IndexHTMLArgs, dbName, schemaName
 }
 
 // fetchIndexStats fetches index statistics for a table
-func fetchIndexStats(ctx context.Context, cfg IndexHTMLArgs, dbName, tableName string) ([]IndexInfo, *time.Time, error) {
+func fetchIndexStats(
+	ctx context.Context, cfg IndexHTMLArgs, dbName, tableName string,
+) ([]IndexInfo, *time.Time, error) {
 	// Use the TableIndexStats RPC which is specifically for getting index stats for a table
 	resp, err := cfg.Status.TableIndexStats(ctx, &serverpb.TableIndexStatsRequest{
 		Database: dbName,

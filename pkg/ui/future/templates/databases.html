@@ -71,10 +71,18 @@
   <table id="table-data" class="width:100%">
     <thead>
       <tr>
-        <th>Name</th>
-        <th>Size</th>
-        <th>Tables</th>
-        <th>Regions/Nodes</th>
+        <th @click="sort('name', 0)" style="cursor: pointer;">
+          Name <span x-text="getSortIndicator('name')"></span>
+        </th>
+        <th @click="sort('size', 1)" style="cursor: pointer;">
+          Size <span x-text="getSortIndicator('size')"></span>
+        </th>
+        <th @click="sort('tables', 2)" style="cursor: pointer;">
+          Tables <span x-text="getSortIndicator('tables')"></span>
+        </th>
+        <th @click="sort('regions', 3)" style="cursor: pointer;">
+          Regions/Nodes <span x-text="getSortIndicator('regions')"></span>
+        </th>
       </tr>
     </thead>
     <tbody>
@@ -82,9 +90,9 @@
         {{ range .Data.Databases }}
       <tr>
         <td><a href="/future/databases/{{ .DbID }}">{{ .DbName }}</a></td>
-        <td>{{ formatBytes .SizeBytes }}</td>
+        <td data-sort="{{ .SizeBytes }}">{{ formatBytes .SizeBytes }}</td>
         <td>{{ .TableCount }}</td>
-        <td>
+        <td data-sort="{{ len .RegionNodes }}">
           {{ if .RegionNodes }}
             {{ range $region, $nodes := .RegionNodes }}
               <chip>{{ $region }} ({{ len $nodes }})</chip>
