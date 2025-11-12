@@ -1,44 +1,110 @@
 {{ define "statement_diagnostics_controls" }}
-<div id="diag-controls-{{.Data.ID}}" hx-include="#diag-controls-query-{{.Data.ID}}">
-  {{if .Data.HasPendingRequest}}
-    {{/* State 2: Pending request - show Waiting + Cancel */}}
-    <div class="flex-row crowded" id="diag-btn-{{.Data.ID}}">
-      <button disabled class="warn">Waiting</button>
-      <button class="bad"
-              hx-delete="/future/sqlactivity/statements/{{.Data.ID}}/diagnostics/{{ .Data.PendingRequestID }}"
-              hx-target="#diag-controls-{{.Data.ID}}"
-              hx-select="#diag-controls-{{.Data.ID}}"
-              hx-swap="outerHTML"
-              title="Cancel diagnostic request">X</button>
-    </div>
-  {{else if .Data.CompletedBundles}}
-    {{/* State 3: Completed bundles - show Download button with popover */}}
+{{/* Check if we're in table mode by looking for a TableMode field */}}
+
+{{ if .Data.TableMode }}
+  {{/* Table mode: Always show Activate button, list diagnostics in a table */}}
+  <div id="diag-controls-{{.Data.ID}}"
+    hx-include="#diag-controls-query-{{.Data.ID}}, #diag-controls-tableMode"
+    hx-get="/future/sqlactivity/statements/{{.Data.ID}}/diagnostics"
+    hx-trigger="every 10s"
+    hx-target="#diag-controls-{{ .Data.ID }}"
+    hx-select="#diag-controls-{{ .Data.ID }}"
+    hx-swap="outerHTML"
+    class="flex-column"
+    >
     <div>
+      <button class="<big> ok"
+        id="diag-btn-{{.Data.ID}}"
+        popovertarget="diagnostics-popover-{{.Data.ID}}">
+        Activate
+      </button>
+      <input type="hidden" id="diag-controls-query-{{.Data.ID}}" name="fingerprint" value="{{.Data.Query}}">
+      <input type="hidden" id="diag-controls-tableMode" name="tableMode" value="true">
+    </div>
+    {{/* Show diagnostics table if there are any */}}
+    {{ if or .Data.HasPendingRequest .Data.CompletedBundles }}
+    <table class="width:100%">
+      <thead>
+        <tr>
+          <th>Activated on</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr> 
+      </thead>
+      <tbody>
+        {{ if .Data.HasPendingRequest }}
+        <tr>
+          <td>Pending</td>
+          <td><chip class="ok">Waiting for next execution</chip></td>
+          <td>
+            <button
+              hx-delete="/future/sqlactivity/statements/{{ .Data.ID }}/diagnostics/{{ .Data.PendingRequestID }}?fingerprint={{ .Data.Query }}"
+              hx-target="closest .box"
+              hx-swap="innerHTML"
+              class="bad">
+              Cancel
+            </button>
+          </td>
+        </tr>
+        {{ end }}
+        {{ range .Data.CompletedBundles }}
+        <tr>
+          <td>{{ .CollectedAt.Format "2006-01-02 15:04:05" }}</td>
+          <td><chip class="good">Ready</chip></td>
+          <td>
+            <a href="{{ .DownloadURL }}" class="button">Download</a>
+          </td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+    {{ end }}
+  </div>
+{{ else }}
+  {{/* Compact mode: State-dependent button with tiny menu */}}
+  <div id="diag-controls-{{.Data.ID}}"
+    hx-include="#diag-controls-query-{{.Data.ID}}, #diag-controls-tableMode">
+    {{if .Data.HasPendingRequest}}
+      {{/* State 2: Pending request - show Waiting + Cancel */}}
+      <div class="flex-row crowded" id="diag-btn-{{.Data.ID}}">
+        <button disabled class="warn">Waiting</button>
+        <button class="bad"
+                hx-delete="/future/sqlactivity/statements/{{.Data.ID}}/diagnostics/{{ .Data.PendingRequestID }}"
+                hx-target="#diag-controls-{{.Data.ID}}"
+                hx-select="#diag-controls-{{.Data.ID}}"
+                hx-swap="outerHTML"
+                title="Cancel diagnostic request">X</button>
+      </div>
+    {{else if .Data.CompletedBundles}}
+      {{/* State 3: Completed bundles - show Download button with popover */}}
+      <div>
+        <button class="ok"
+          id="diag-btn-{{.Data.ID}}"
+          popovertarget="diagnostics-popover-{{.Data.ID}}">
+          Activate
+        </button>
+        <div style="position:relative;">
+          <button id=menubutton aria-haspopup=menu aria-controls=my-menu aria-expanded=false
+            >Download</button>
+          <div role=menu hidden id=my-menu aria-labelledby=menubutton>
+            {{range .Data.CompletedBundles}}
+              <a role=menuitem href="{{.DownloadURL}}">Bundle #{{.ID}} ({{formatTime .CollectedAt}})</a>
+            {{end}}
+          </div>
+        </div>
+      </div>
+    {{else}}
+      {{/* State 1: No diagnostic activity - show Activate button */}}
       <button class="ok"
         id="diag-btn-{{.Data.ID}}"
         popovertarget="diagnostics-popover-{{.Data.ID}}">
         Activate
       </button>
-      <div style="position:relative;">
-        <button id=menubutton aria-haspopup=menu aria-controls=my-menu aria-expanded=false
-          >Download</button>
-        <div role=menu hidden id=my-menu aria-labelledby=menubutton>
-          {{range .Data.CompletedBundles}}
-            <a role=menuitem href="{{.DownloadURL}}">Bundle #{{.ID}} ({{formatTime .CollectedAt}})</a>
-          {{end}}
-        </div>
-      </div>
-    </div>
-  {{else}}
-    {{/* State 1: No diagnostic activity - show Activate button */}}
-    <button class="ok"
-      id="diag-btn-{{.Data.ID}}"
-      popovertarget="diagnostics-popover-{{.Data.ID}}">
-      Activate
-    </button>
-  {{end}}
-  <input type="hidden" id="diag-controls-query-{{.Data.ID}}" name="fingerprint" value="{{.Data.Query}}">
-</div>
+    {{end}}
+    <input type="hidden" id="diag-controls-query-{{.Data.ID}}" name="fingerprint" value="{{.Data.Query}}">
+    <input type="hidden" id="diag-controls-tableMode" value="true">
+  </div>
+{{ end }}
 <div id="diagnostics-popover-{{.Data.ID}}" popover class="padding container" style="margin-block-end: auto">
   <h3>Activate statement diagnostics</h3>
   <div id="diagnostics-error"></div>
@@ -129,6 +195,7 @@
     <div class="flex-row justify-content:end">
       <button class="<big>">Submit</button>
       <input type="hidden" name="fingerprint" value="{{ .Data.Query }}">
+      <input type="hidden" name="tableMode" value="{{ .Data.TableMode }}">
     </div>
   </form>
 </div>

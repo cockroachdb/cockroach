@@ -167,7 +167,7 @@
       {{range .Data.Statements.Statements}}
       <tr>
         <td>
-          {{.Key.KeyData.Query}}
+          <a href="/future/sqlactivity/statements/{{ .ID }}">{{.Key.KeyData.Query}}</a>
         </td>
         <td data-sort="{{.Stats.Count}}">
           {{formatNumber .Stats.Count}}

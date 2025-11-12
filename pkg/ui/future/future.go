@@ -299,6 +299,7 @@ type DiagnosticState struct {
 	Query string
 	// PlanGists is the list of plan gists for this statement fingerprint
 	PlanGists []string
+	TableMode bool
 }
 
 // SQLActivityData combines the API response with form parameters
@@ -970,6 +971,43 @@ func handleGetDiagnosticsControls(w http.ResponseWriter, r *http.Request, cfg In
 		return
 	}
 
+	tableMode := r.URL.Query().Get("tableMode") == "true"
+
+	stmtIDParsed, err := strconv.ParseUint(stmtID, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid diagnostic ID", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch statement details to get plan gists
+	// Use a reasonable time range - last 24 hours
+	now := timeutil.Now()
+	startTime := now.Add(-24 * time.Hour)
+	resp, err := cfg.Status.StatementDetails(ctx, &serverpb.StatementDetailsRequest{
+		FingerprintId: stmtID,
+		Start:         startTime.Unix(),
+		End:           now.Unix(),
+	})
+
+	// Collect unique plan gists from plan-grouped stats
+	var planGists []string
+	if err == nil && resp != nil {
+		planGistSet := make(map[string]bool)
+		for _, planStat := range resp.StatementStatisticsPerPlanHash {
+			// Extract plan gists from the Stats.PlanGists array
+			for _, gist := range planStat.Stats.PlanGists {
+				if gist != "" {
+					planGistSet[gist] = true
+				}
+			}
+		}
+		for gist := range planGistSet {
+			planGists = append(planGists, gist)
+		}
+		// Sort for consistent ordering
+		sort.Strings(planGists)
+	}
+
 	// Fetch diagnostic reports to determine state for this fingerprint
 	diagResp, err := cfg.Status.StatementDiagnosticsRequests(ctx, &serverpb.StatementDiagnosticsReportsRequest{})
 	if err != nil {
@@ -978,16 +1016,12 @@ func handleGetDiagnosticsControls(w http.ResponseWriter, r *http.Request, cfg In
 		return
 	}
 
-	stmtIDParsed, err := strconv.ParseUint(stmtID, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid diagnostic ID", http.StatusBadRequest)
-		return
-	}
-
 	// Build diagnostic state for this fingerprint
 	diagState := DiagnosticState{
-		Query: fingerprint,
-		ID:    appstatspb.StmtFingerprintID(stmtIDParsed),
+		Query:     fingerprint,
+		ID:        appstatspb.StmtFingerprintID(stmtIDParsed),
+		PlanGists: planGists,
+		TableMode: tableMode,
 	}
 
 	for _, report := range diagResp.Reports {
@@ -1039,9 +1073,6 @@ func handleCancelDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHT
 		return
 	}
 
-	// Get fingerprint from query param for redirect
-	fingerprint := r.URL.Query().Get("fingerprint")
-
 	// Call the API to cancel the diagnostics request
 	cancelResp, err := cfg.Status.CancelStatementDiagnosticsReport(r.Context(), &serverpb.CancelStatementDiagnosticsReportRequest{
 		RequestID: requestID,
@@ -1064,10 +1095,7 @@ func handleCancelDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHT
 	}
 
 	// Redirect with fingerprint query param if provided
-	redirectURL := fmt.Sprintf("/future/sqlactivity/statements/%s/diagnostics", stmtID)
-	if fingerprint != "" {
-		redirectURL += fmt.Sprintf("?fingerprint=%s", fingerprint)
-	}
+	redirectURL := fmt.Sprintf("/future/sqlactivity/statements/%s/diagnostics?%s", stmtID, r.URL.Query().Encode())
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
 
@@ -1096,6 +1124,7 @@ func handleCreateDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHT
 	expiresAfterMinStr := r.FormValue("expiresaftermin")
 	redact := r.FormValue("redact")
 	fingerprint := r.FormValue("fingerprint")
+	tableMode := r.FormValue("tableMode")
 
 	if fingerprint == "" {
 		http.Error(w, "Missing fingerprint_id", http.StatusBadRequest)
@@ -1163,7 +1192,7 @@ func handleCreateDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHT
 		return
 	}
 
-	http.Redirect(w, r, fmt.Sprintf("/future/sqlactivity/statements/%s/diagnostics?fingerprint=%s", stmtID, fingerprint), http.StatusFound)
+	http.Redirect(w, r, fmt.Sprintf("/future/sqlactivity/statements/%s/diagnostics?fingerprint=%s&tableMode=%s", stmtID, fingerprint, tableMode), http.StatusFound)
 }
 
 func handleSqlActivityStatementFingerprint(
@@ -1262,20 +1291,26 @@ func handleSqlActivityStatementFingerprint(
 	// Collect unique plan gists from plan-grouped stats
 	planGistSet := make(map[string]bool)
 	for _, planStat := range resp.StatementStatisticsPerPlanHash {
-		if planStat.ExplainPlan != "" {
-			planGistSet[planStat.ExplainPlan] = true
+		// Extract plan gists from the Stats.PlanGists array
+		for _, gist := range planStat.Stats.PlanGists {
+			if gist != "" {
+				planGistSet[gist] = true
+			}
 		}
 	}
 	var planGists []string
 	for gist := range planGistSet {
 		planGists = append(planGists, gist)
 	}
+	// Sort for consistent ordering
+	sort.Strings(planGists)
 
 	// Build diagnostic state for this fingerprint
 	diagState := DiagnosticState{
 		Query:     query,
 		ID:        appstatspb.StmtFingerprintID(stmtIDParsed), // Used for display only
 		PlanGists: planGists,
+		TableMode: true,
 	}
 
 	if diagResp != nil {
@@ -1298,9 +1333,9 @@ func handleSqlActivityStatementFingerprint(
 
 	// Build page data
 	pageData := StatementFingerprintPageData{
-		Statement:   *stmt,
-		StmtID:      stmtID,
-		Params:      SQLActivityParams{
+		Statement: *stmt,
+		StmtID:    stmtID,
+		Params: SQLActivityParams{
 			Interval:  interval,
 			Start:     startUnix,
 			End:       endUnix,

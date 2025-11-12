@@ -117,9 +117,9 @@
   </div>
 </div>
 
-<div id=explainplans role=tabpanel hidden>
+<div id=explainplans role=tabpanel hidden class="overflow-x:scroll">
   {{ if $planStats }}
-  <table>
+  <table class="width:100%">
     <thead>
       <tr>
         <th>Plan Gist</th>
@@ -140,7 +140,7 @@
     <tbody>
       {{ range $planStats }}
       <tr onclick="document.getElementById('plan-{{ .PlanHash }}').toggleAttribute('hidden')" style="cursor: pointer;">
-        <td><code>{{ .PlanHash }}</code></td>
+        <td><code>{{ if .Stats.PlanGists }}{{ index .Stats.PlanGists 0 }}{{ else }}{{ .PlanHash }}{{ end }}</code></td>
         <td>{{ if .IndexRecommendations }}{{ join .IndexRecommendations ", " }}{{ else }}N/A{{ end }}</td>
         <td>None</td>
         <td>{{ .Stats.LastExecTimestamp.Format "Jan 2, 2006 at 15:04 MST" }}</td>
@@ -194,53 +194,8 @@
 
 <div id=diagnostics role=tabpanel hidden>
   <div class="box">
-    <div id="diagnostics-error"></div>
-    <div
-      id="diagnostics-controls"
-      hx-get="/future/sqlactivity/statements/{{ $stmtID }}/diagnostics?fingerprint={{ $diag.Query }}"
-      hx-trigger="load"
-      hx-swap="innerHTML">
-      Loading diagnostics...
-    </div>
+    {{ template "statement_diagnostics_controls" (dict "Data" $diag "IndexHTMLArgs" .IndexHTMLArgs) }}
   </div>
-
-  {{ if or $diag.HasPendingRequest $diag.CompletedBundles }}
-  <table>
-    <thead>
-      <tr>
-        <th>Activated on</th>
-        <th>Status</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      {{ if $diag.HasPendingRequest }}
-      <tr>
-        <td>Pending</td>
-        <td><chip class="ok">Waiting for next execution</chip></td>
-        <td>
-          <button
-            hx-delete="/future/sqlactivity/statements/{{ $stmt.ID }}/diagnostics/{{ $diag.PendingRequestID }}?fingerprint={{ $diag.Query }}"
-            hx-target="#diagnostics-controls"
-            hx-swap="outerHTML"
-            class="bad">
-            Cancel
-          </button>
-        </td>
-      </tr>
-      {{ end }}
-      {{ range $diag.CompletedBundles }}
-      <tr>
-        <td>{{ .CollectedAt.Format "2006-01-02 15:04:05" }}</td>
-        <td><chip class="good">Ready</chip></td>
-        <td>
-          <a href="{{ .DownloadURL }}" class="button">Download</a>
-        </td>
-      </tr>
-      {{ end }}
-    </tbody>
-  </table>
-  {{ end }}
 </div>
 
 {{ template "layout-end" .}}
