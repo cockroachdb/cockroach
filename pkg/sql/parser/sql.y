@@ -1037,6 +1037,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
 %token <str> INDEX_BEFORE_PAREN INDEX_BEFORE_NAME_THEN_PAREN INDEX_AFTER_ORDER_BY_BEFORE_AT
+%token <str> PARTITION_AFTER_ADD
 %token <str> INNER INOUT INPUT INSENSITIVE INSERT INSPECT INSTEAD INT INTEGER
 %token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED INVOKER IS ISERROR ISNULL ISOLATION
 
@@ -2874,6 +2875,17 @@ alter_table_cmd:
 | RENAME CONSTRAINT column_name TO column_name
   {
     $$.val = &tree.AlterTableRenameConstraint{Constraint: tree.Name($3), NewName: tree.Name($5) }
+  }
+  // ALTER TABLE <name> ADD PARTITION <name> VALUES FROM (...) TO (...)
+| ADD PARTITION_AFTER_ADD name VALUES FROM '(' expr_list ')' TO '(' expr_list ')'
+  {
+    $$.val = &tree.AlterTableAddPartition{
+      Partition: tree.RangePartition{
+        Name: tree.Name($3),
+        From: $7.exprs(),
+        To: $11.exprs(),
+      },
+    }
   }
   // ALTER TABLE <name> ADD <coldef>
 | ADD column_table_def

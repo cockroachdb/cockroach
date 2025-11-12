@@ -211,6 +211,35 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 			}
 		}
 
+	case PARTITION:
+		// Disambiguate between:
+		//
+		// ALTER TABLE t ADD PARTITION p1 VALUES FROM ...  -- keyword PARTITION
+		// ALTER TABLE t ADD partition INT                 -- column name "partition"
+		//
+		// The ADD PARTITION syntax always has VALUES following the partition
+		// name (with optional whitespace/identifiers in between), while ADD
+		// column never has VALUES in that position.
+		//
+		var prevID int32
+		if l.lastPos > 0 {
+			prevID = l.tokens[l.lastPos-1].id
+		}
+
+		if prevID == ADD {
+			// Look ahead to see if VALUES appears at position +2.
+			// Pattern: ADD PARTITION <name> VALUES FROM ...
+			// We specifically check position +2 because the partition name should
+			// be at position +1, and VALUES should be at position +2.
+			var secondID int32
+			if l.lastPos+2 < len(l.tokens) {
+				secondID = l.tokens[l.lastPos+2].id
+			}
+			if secondID == VALUES {
+				lval.id = PARTITION_AFTER_ADD
+			}
+		}
+
 	case NOT, WITH, AS, GENERATED, NULLS, RESET, ROLE, USER, ON, TENANT, CLUSTER, SET, CREATE, FOR:
 		nextToken := sqlSymType{}
 		if l.lastPos+1 < len(l.tokens) {

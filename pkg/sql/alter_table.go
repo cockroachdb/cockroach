@@ -489,6 +489,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"unsupported constraint: %T", t.ConstraintDef)
 			}
 
+		case *tree.AlterTableAddPartition:
+			// TODO(partition): Implement ADD PARTITION for range-partitioned tables.
+			// This should:
+			// 1. Validate that the table is already PARTITION BY RANGE
+			// 2. Validate partition boundaries are non-overlapping and ordered
+			// 3. Validate that the partition span is empty (no existing data)
+			// 4. Issue AdminSplit at partition boundaries
+			// 5. Append partition metadata to the index descriptor
+			// 6. Create or inherit zone config if specified
+			// 7. Queue stats refresh for the new partition spans
+			return unimplemented.NewWithIssue(0, "ALTER TABLE ADD PARTITION")
+
 		case *tree.AlterTableAlterPrimaryKey:
 			// For `ALTER PRIMARY KEY`, carry over the primary index name, like how we
 			// carried over comments associated with the old primary index.

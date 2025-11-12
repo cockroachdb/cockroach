@@ -55,6 +55,7 @@ type AlterTableCmd interface {
 
 func (*AlterTableAddColumn) alterTableCmd()          {}
 func (*AlterTableAddConstraint) alterTableCmd()      {}
+func (*AlterTableAddPartition) alterTableCmd()       {}
 func (*AlterTableAlterColumnType) alterTableCmd()    {}
 func (*AlterTableAlterPrimaryKey) alterTableCmd()    {}
 func (*AlterTableDropColumn) alterTableCmd()         {}
@@ -82,6 +83,7 @@ func (*AlterTableSetRLSMode) alterTableCmd()         {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
+var _ AlterTableCmd = &AlterTableAddPartition{}
 var _ AlterTableCmd = &AlterTableAlterColumnType{}
 var _ AlterTableCmd = &AlterTableDropColumn{}
 var _ AlterTableCmd = &AlterTableDropConstraint{}
@@ -965,6 +967,27 @@ func (node *AlterTableSetRLSMode) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ")
 	ctx.WriteString(node.Mode.String())
 	ctx.WriteString(" ROW LEVEL SECURITY")
+}
+
+// AlterTableAddPartition represents an ADD PARTITION command.
+type AlterTableAddPartition struct {
+	Partition RangePartition
+}
+
+// TelemetryName implements the AlterTableCmd interface.
+func (node *AlterTableAddPartition) TelemetryName() string {
+	return "add_partition"
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableAddPartition) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ADD PARTITION ")
+	ctx.FormatNode(&node.Partition.Name)
+	ctx.WriteString(" VALUES FROM (")
+	ctx.FormatNode(&node.Partition.From)
+	ctx.WriteString(") TO (")
+	ctx.FormatNode(&node.Partition.To)
+	ctx.WriteString(")")
 }
 
 // GetTableType returns a string representing the type of table the command
