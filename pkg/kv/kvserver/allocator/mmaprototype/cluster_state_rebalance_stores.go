@@ -46,6 +46,14 @@ type rebalanceState struct {
 	maxLeaseTransferCount int
 	// lastFailedChangeDelayDuration is the delay after a failed change before retrying.
 	lastFailedChangeDelayDuration time.Duration
+	// Scratch variables reused across iterations.
+	scratch struct {
+		disj                    [1]constraintsConj
+		storesToExclude         storeSet
+		storesToExcludeForRange storeSet
+		nodes                   map[roachpb.NodeID]*NodeLoad
+		stores                  map[roachpb.StoreID]struct{}
+	}
 }
 
 // Called periodically, say every 10s.
@@ -151,11 +159,6 @@ func (cs *clusterState) rebalanceStores(
 		}
 	}
 
-	var disj [1]constraintsConj
-	var storesToExclude storeSet
-	var storesToExcludeForRange storeSet
-	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
-	scratchStores := map[roachpb.StoreID]struct{}{}
 	// The caller has a fixed concurrency limit it can move ranges at, when it
 	// is the sender of the snapshot. So we don't want to create too many
 	// changes, since then the allocator gets too far ahead of what has been
@@ -181,6 +184,8 @@ func (cs *clusterState) rebalanceStores(
 		maxLeaseTransferCount:         maxLeaseTransferCount,
 		lastFailedChangeDelayDuration: lastFailedChangeDelayDuration,
 	}
+	rs.scratch.nodes = map[roachpb.NodeID]*NodeLoad{}
+	rs.scratch.stores = map[roachpb.StoreID]struct{}{}
 	for _, store := range sheddingStores {
 		func(rs *rebalanceState, store sheddingStore, ctx context.Context, localStoreID roachpb.StoreID, now time.Time) {
 			log.KvDistribution.Infof(ctx, "start processing shedding store s%d: cpu node load %s, store load %s, worst dim %s",
@@ -285,8 +290,8 @@ func (cs *clusterState) rebalanceStores(
 					if len(candsPL) <= 1 {
 						continue // leaseholder is the only candidate
 					}
-					clear(scratchNodes)
-					means := computeMeansForStoreSet(rs.cs, candsPL, scratchNodes, scratchStores)
+					clear(rs.scratch.nodes)
+					means := computeMeansForStoreSet(rs.cs, candsPL, rs.scratch.nodes, rs.scratch.stores)
 					sls := rs.cs.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
 					log.KvDistribution.VInfof(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
 					if sls.dimSummary[CPURate] < overloadSlow {
@@ -416,16 +421,16 @@ func (cs *clusterState) rebalanceStores(
 			// the other stores on this node from receiving replicas shed by this
 			// store.
 			excludeStoresOnNode := store.nls > overloadSlow
-			storesToExclude = storesToExclude[:0]
+			rs.scratch.storesToExclude = rs.scratch.storesToExclude[:0]
 			if excludeStoresOnNode {
 				nodeID := ss.NodeID
 				for _, storeID := range rs.cs.nodes[nodeID].stores {
-					storesToExclude.insert(storeID)
+					rs.scratch.storesToExclude.insert(storeID)
 				}
 				log.KvDistribution.VInfof(ctx, 2, "excluding all stores on n%d due to overload/fd status", nodeID)
 			} else {
 				// This store is excluded of course.
-				storesToExclude.insert(store.StoreID)
+				rs.scratch.storesToExclude.insert(store.StoreID)
 			}
 
 			// Iterate over top-K ranges first and try to move them.
@@ -474,8 +479,8 @@ func (cs *clusterState) rebalanceStores(
 					log.KvDistribution.VInfof(ctx, 2, "skipping r%d: constraint violation needs fixing first: %v", rangeID, err)
 					continue
 				}
-				disj[0] = conj
-				storesToExcludeForRange = append(storesToExcludeForRange[:0], storesToExclude...)
+				rs.scratch.disj[0] = conj
+				rs.scratch.storesToExcludeForRange = append(rs.scratch.storesToExcludeForRange[:0], rs.scratch.storesToExclude...)
 				// Also exclude all stores on nodes that have existing replicas.
 				for _, replica := range rstate.replicas {
 					storeID := replica.StoreID
@@ -487,11 +492,11 @@ func (cs *clusterState) rebalanceStores(
 					}
 					nodeID := rs.cs.stores[storeID].NodeID
 					for _, storeID := range rs.cs.nodes[nodeID].stores {
-						storesToExcludeForRange.insert(storeID)
+						rs.scratch.storesToExcludeForRange.insert(storeID)
 					}
 				}
 				// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
-				cands, ssSLS := rs.cs.computeCandidatesForRange(ctx, disj[:], storesToExcludeForRange, store.StoreID)
+				cands, ssSLS := rs.cs.computeCandidatesForRange(ctx, rs.scratch.disj[:], rs.scratch.storesToExcludeForRange, store.StoreID)
 				log.KvDistribution.VInfof(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
 					rangeID, store.StoreID, ss.adjusted.load)
 				if log.V(2) {
