@@ -475,6 +475,9 @@ type Config struct {
 	// RPCHearbeatTimeout is the timeout for Ping requests.
 	RPCHeartbeatTimeout time.Duration
 
+	// UseDRPC indicates whether to use DRPC as the RPC framework instead of gRPC.
+	UseDRPC bool
+
 	// ApplicationInternalRPCPortMin/PortMax define the range of TCP ports
 	// used to start the internal RPC service for application-level
 	// servers. This service is used for node-to-node RPC traffic and to
