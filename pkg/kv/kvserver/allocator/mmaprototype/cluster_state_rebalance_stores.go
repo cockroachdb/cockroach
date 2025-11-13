@@ -227,192 +227,7 @@ func (rs *rebalanceState) rebalanceStore(
 	// behalf of a particular store (vs. being called on behalf of the set
 	// of local store IDs)?
 	if ss.StoreID == localStoreID && store.dimSummary[CPURate] >= overloadSlow {
-		shouldSkipReplicaMoves := func(rs *rebalanceState, ss *storeState, store sheddingStore, ctx context.Context, localStoreID roachpb.StoreID, now time.Time) bool {
-			log.KvDistribution.VInfof(ctx, 2, "local store s%d is CPU overloaded (%v >= %v), attempting lease transfers first",
-				store.StoreID, store.dimSummary[CPURate], overloadSlow)
-			// This store is local, and cpu overloaded. Shed leases first.
-			//
-			// NB: any ranges at this store that don't have pending changes must
-			// have this local store as the leaseholder.
-			localLeaseTransferCount := 0
-			topKRanges := ss.adjusted.topKRanges[localStoreID]
-			n := topKRanges.len()
-			doneShedding := false
-			for i := 0; i < n; i++ {
-				rangeID := topKRanges.index(i)
-				rstate := rs.cs.ranges[rangeID]
-				if len(rstate.pendingChanges) > 0 {
-					// If the range has pending changes, don't make more changes.
-					log.KvDistribution.VInfof(ctx, 2, "skipping r%d: has pending changes", rangeID)
-					continue
-				}
-				for _, repl := range rstate.replicas {
-					if repl.StoreID != localStoreID { // NB: localStoreID == ss.StoreID == store.StoreID
-						continue
-					}
-					if !repl.IsLeaseholder {
-						// TODO(tbg): is this true? Can't there be ranges with replicas on
-						// multiple local stores, and wouldn't this assertion fire in that
-						// case once rebalanceStores is invoked on whichever of the two
-						// stores doesn't hold the lease?
-						//
-						// TODO(tbg): see also the other assertion below (leaseholderID !=
-						// store.StoreID) which seems similar to this one.
-						log.KvDistribution.Fatalf(ctx, "internal state inconsistency: replica considered for lease shedding has no pending"+
-							" changes but is not leaseholder: %+v", rstate)
-					}
-				}
-				if now.Sub(rstate.lastFailedChange) < rs.lastFailedChangeDelayDuration {
-					log.KvDistribution.VInfof(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
-					continue
-				}
-				if !rs.cs.ensureAnalyzedConstraints(rstate) {
-					log.KvDistribution.VInfof(ctx, 2, "skipping r%d: constraints analysis failed", rangeID)
-					continue
-				}
-				if rstate.constraints.leaseholderID != store.StoreID {
-					// We should not panic here since the leaseQueue may have shed the
-					// lease and informed MMA, since the last time MMA computed the
-					// top-k ranges. This is useful for debugging in the prototype, due
-					// to the lack of unit tests.
-					//
-					// TODO(tbg): can the above scenario currently happen? ComputeChanges
-					// first processes the leaseholder message and then, still under the
-					// lock, immediately calls into rebalanceStores (i.e. this store).
-					// Doesn't this mean that the leaseholder view is up to date?
-					panic(fmt.Sprintf("internal state inconsistency: "+
-						"store=%v range_id=%v should be leaseholder but isn't",
-						store.StoreID, rangeID))
-				}
-				cands, _ := rstate.constraints.candidatesToMoveLease()
-				var candsPL storeSet
-				for _, cand := range cands {
-					candsPL.insert(cand.storeID)
-				}
-				// Always consider the local store (which already holds the lease) as a
-				// candidate, so that we don't move the lease away if keeping it would be
-				// the better option overall.
-				// TODO(tbg): is this really needed? We intentionally exclude the leaseholder
-				// in candidatesToMoveLease, so why reinsert it now?
-				candsPL.insert(store.StoreID)
-				if len(candsPL) <= 1 {
-					continue // leaseholder is the only candidate
-				}
-				clear(rs.scratch.nodes)
-				means := computeMeansForStoreSet(rs.cs, candsPL, rs.scratch.nodes, rs.scratch.stores)
-				sls := rs.cs.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
-				log.KvDistribution.VInfof(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
-				if sls.dimSummary[CPURate] < overloadSlow {
-					// This store is not cpu overloaded relative to these candidates for
-					// this range.
-					log.KvDistribution.VInfof(ctx, 2, "result(failed): skipping r%d since store not overloaded relative to candidates", rangeID)
-					continue
-				}
-				var candsSet candidateSet
-				for _, cand := range cands {
-					if disp := rs.cs.stores[cand.storeID].adjusted.replicas[rangeID].LeaseDisposition; disp != LeaseDispositionOK {
-						// Don't transfer lease to a store that is lagging.
-						log.KvDistribution.Infof(ctx, "skipping store s%d for lease transfer: lease disposition %v",
-							cand.storeID, disp)
-						continue
-					}
-					candSls := rs.cs.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)
-					candsSet.candidates = append(candsSet.candidates, candidateInfo{
-						StoreID:              cand.storeID,
-						storeLoadSummary:     candSls,
-						diversityScore:       0,
-						leasePreferenceIndex: cand.leasePreferenceIndex,
-					})
-				}
-				if len(candsSet.candidates) == 0 {
-					log.KvDistribution.Infof(
-						ctx,
-						"result(failed): no candidates to move lease from n%vs%v for r%v before sortTargetCandidateSetAndPick [pre_filter_candidates=%v]",
-						ss.NodeID, ss.StoreID, rangeID, candsPL)
-					continue
-				}
-				// Have candidates. We set ignoreLevel to
-				// ignoreHigherThanLoadThreshold since this is the only allocator that
-				// can shed leases for this store, and lease shedding is cheap, and it
-				// will only add CPU to the target store (so it is ok to ignore other
-				// dimensions on the target).
-				targetStoreID := sortTargetCandidateSetAndPick(
-					ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, rs.rng)
-				if targetStoreID == 0 {
-					log.KvDistribution.Infof(
-						ctx,
-						"result(failed): no candidates to move lease from n%vs%v for r%v after sortTargetCandidateSetAndPick",
-						ss.NodeID, ss.StoreID, rangeID)
-					continue
-				}
-				targetSS := rs.cs.stores[targetStoreID]
-				var addedLoad LoadVector
-				// Only adding leaseholder CPU.
-				addedLoad[CPURate] = rstate.load.Load[CPURate] - rstate.load.RaftCPU
-				if addedLoad[CPURate] < 0 {
-					// TODO(sumeer): remove this panic once we are not in an
-					// experimental phase.
-					addedLoad[CPURate] = 0
-					panic("raft cpu higher than total cpu")
-				}
-				if !rs.cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, &means, true, CPURate) {
-					log.KvDistribution.VInfof(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
-						store.StoreID, targetStoreID, rangeID, addedLoad)
-					continue
-				}
-				addTarget := roachpb.ReplicationTarget{
-					NodeID:  targetSS.NodeID,
-					StoreID: targetSS.StoreID,
-				}
-				removeTarget := roachpb.ReplicationTarget{
-					NodeID:  ss.NodeID,
-					StoreID: ss.StoreID,
-				}
-				replicaChanges := MakeLeaseTransferChanges(
-					rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
-				leaseChange := MakePendingRangeChange(rangeID, replicaChanges[:])
-				if err := rs.cs.preCheckOnApplyReplicaChanges(leaseChange.pendingReplicaChanges); err != nil {
-					panic(errors.Wrapf(err, "pre-check failed for lease transfer %v", leaseChange))
-				}
-				rs.cs.addPendingRangeChange(leaseChange)
-				rs.changes = append(rs.changes, leaseChange)
-				rs.leaseTransferCount++
-				localLeaseTransferCount++
-				if rs.changes[len(rs.changes)-1].IsChangeReplicas() || !rs.changes[len(rs.changes)-1].IsTransferLease() {
-					panic(fmt.Sprintf("lease transfer is invalid: %v", rs.changes[len(rs.changes)-1]))
-				}
-				log.KvDistribution.Infof(ctx,
-					"result(success): shedding r%v lease from s%v to s%v [change:%v] with "+
-						"resulting loads source:%v target:%v (means: %v) (frac_pending: (src:%.2f,target:%.2f) (src:%.2f,target:%.2f))",
-					rangeID, removeTarget.StoreID, addTarget.StoreID, rs.changes[len(rs.changes)-1],
-					ss.adjusted.load, targetSS.adjusted.load, means.storeLoad.load,
-					ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease,
-					targetSS.maxFractionPendingIncrease, targetSS.maxFractionPendingDecrease)
-				if rs.leaseTransferCount >= rs.maxLeaseTransferCount {
-					log.KvDistribution.VInfof(ctx, 2, "reached max lease transfer count %d, returning", rs.maxLeaseTransferCount)
-					break
-				}
-				doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
-				if doneShedding {
-					log.KvDistribution.VInfof(ctx, 2, "s%d has reached pending decrease threshold(%.2f>=%.2f) after lease transfers: done shedding with %d left in topK",
-						store.StoreID, ss.maxFractionPendingDecrease, maxFractionPendingThreshold, n-(i+1))
-					break
-				}
-			}
-			if doneShedding || localLeaseTransferCount > 0 {
-				// If managed to transfer a lease, wait for it to be done, before
-				// shedding replicas from this store (which is more costly). Otherwise
-				// we may needlessly start moving replicas. Note that the store
-				// rebalancer will call the rebalance method again after the lease
-				// transfer is done and we may still be considering those transfers as
-				// pending from a load perspective, so we *may* not be able to do more
-				// lease transfers -- so be it.
-				log.KvDistribution.VInfof(ctx, 2, "skipping replica transfers for s%d: done shedding=%v, lease_transfers=%d",
-					store.StoreID, doneShedding, localLeaseTransferCount)
-				return true
-			}
-			return false
-		}(rs, ss, store, ctx, localStoreID, now)
+		shouldSkipReplicaMoves := rs.rebalanceLeases(ss, store, ctx, localStoreID, now)
 		if shouldSkipReplicaMoves {
 			return
 		}
@@ -622,4 +437,197 @@ func (rs *rebalanceState) rebalanceStore(
 		log.KvDistribution.VInfof(ctx, 2, "store s%d is done shedding, moving to next store", store.StoreID)
 		return
 	}
+}
+
+func (rs *rebalanceState) rebalanceLeases(
+	ss *storeState,
+	store sheddingStore,
+	ctx context.Context,
+	localStoreID roachpb.StoreID,
+	now time.Time,
+) bool {
+	log.KvDistribution.VInfof(ctx, 2, "local store s%d is CPU overloaded (%v >= %v), attempting lease transfers first",
+		store.StoreID, store.dimSummary[CPURate], overloadSlow)
+	// This store is local, and cpu overloaded. Shed leases first.
+	//
+	// NB: any ranges at this store that don't have pending changes must
+	// have this local store as the leaseholder.
+	localLeaseTransferCount := 0
+	topKRanges := ss.adjusted.topKRanges[localStoreID]
+	n := topKRanges.len()
+	doneShedding := false
+	for i := 0; i < n; i++ {
+		rangeID := topKRanges.index(i)
+		rstate := rs.cs.ranges[rangeID]
+		if len(rstate.pendingChanges) > 0 {
+			// If the range has pending changes, don't make more changes.
+			log.KvDistribution.VInfof(ctx, 2, "skipping r%d: has pending changes", rangeID)
+			continue
+		}
+		for _, repl := range rstate.replicas {
+			if repl.StoreID != localStoreID { // NB: localStoreID == ss.StoreID == store.StoreID
+				continue
+			}
+			if !repl.IsLeaseholder {
+				// TODO(tbg): is this true? Can't there be ranges with replicas on
+				// multiple local stores, and wouldn't this assertion fire in that
+				// case once rebalanceStores is invoked on whichever of the two
+				// stores doesn't hold the lease?
+				//
+				// TODO(tbg): see also the other assertion below (leaseholderID !=
+				// store.StoreID) which seems similar to this one.
+				log.KvDistribution.Fatalf(ctx, "internal state inconsistency: replica considered for lease shedding has no pending"+
+					" changes but is not leaseholder: %+v", rstate)
+			}
+		}
+		if now.Sub(rstate.lastFailedChange) < rs.lastFailedChangeDelayDuration {
+			log.KvDistribution.VInfof(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
+			continue
+		}
+		if !rs.cs.ensureAnalyzedConstraints(rstate) {
+			log.KvDistribution.VInfof(ctx, 2, "skipping r%d: constraints analysis failed", rangeID)
+			continue
+		}
+		if rstate.constraints.leaseholderID != store.StoreID {
+			// We should not panic here since the leaseQueue may have shed the
+			// lease and informed MMA, since the last time MMA computed the
+			// top-k ranges. This is useful for debugging in the prototype, due
+			// to the lack of unit tests.
+			//
+			// TODO(tbg): can the above scenario currently happen? ComputeChanges
+			// first processes the leaseholder message and then, still under the
+			// lock, immediately calls into rebalanceStores (i.e. this store).
+			// Doesn't this mean that the leaseholder view is up to date?
+			panic(fmt.Sprintf("internal state inconsistency: "+
+				"store=%v range_id=%v should be leaseholder but isn't",
+				store.StoreID, rangeID))
+		}
+		cands, _ := rstate.constraints.candidatesToMoveLease()
+		var candsPL storeSet
+		for _, cand := range cands {
+			candsPL.insert(cand.storeID)
+		}
+		// Always consider the local store (which already holds the lease) as a
+		// candidate, so that we don't move the lease away if keeping it would be
+		// the better option overall.
+		// TODO(tbg): is this really needed? We intentionally exclude the leaseholder
+		// in candidatesToMoveLease, so why reinsert it now?
+		candsPL.insert(store.StoreID)
+		if len(candsPL) <= 1 {
+			continue // leaseholder is the only candidate
+		}
+		clear(rs.scratch.nodes)
+		means := computeMeansForStoreSet(rs.cs, candsPL, rs.scratch.nodes, rs.scratch.stores)
+		sls := rs.cs.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
+		log.KvDistribution.VInfof(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
+		if sls.dimSummary[CPURate] < overloadSlow {
+			// This store is not cpu overloaded relative to these candidates for
+			// this range.
+			log.KvDistribution.VInfof(ctx, 2, "result(failed): skipping r%d since store not overloaded relative to candidates", rangeID)
+			continue
+		}
+		var candsSet candidateSet
+		for _, cand := range cands {
+			if disp := rs.cs.stores[cand.storeID].adjusted.replicas[rangeID].LeaseDisposition; disp != LeaseDispositionOK {
+				// Don't transfer lease to a store that is lagging.
+				log.KvDistribution.Infof(ctx, "skipping store s%d for lease transfer: lease disposition %v",
+					cand.storeID, disp)
+				continue
+			}
+			candSls := rs.cs.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)
+			candsSet.candidates = append(candsSet.candidates, candidateInfo{
+				StoreID:              cand.storeID,
+				storeLoadSummary:     candSls,
+				diversityScore:       0,
+				leasePreferenceIndex: cand.leasePreferenceIndex,
+			})
+		}
+		if len(candsSet.candidates) == 0 {
+			log.KvDistribution.Infof(
+				ctx,
+				"result(failed): no candidates to move lease from n%vs%v for r%v before sortTargetCandidateSetAndPick [pre_filter_candidates=%v]",
+				ss.NodeID, ss.StoreID, rangeID, candsPL)
+			continue
+		}
+		// Have candidates. We set ignoreLevel to
+		// ignoreHigherThanLoadThreshold since this is the only allocator that
+		// can shed leases for this store, and lease shedding is cheap, and it
+		// will only add CPU to the target store (so it is ok to ignore other
+		// dimensions on the target).
+		targetStoreID := sortTargetCandidateSetAndPick(
+			ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, rs.rng)
+		if targetStoreID == 0 {
+			log.KvDistribution.Infof(
+				ctx,
+				"result(failed): no candidates to move lease from n%vs%v for r%v after sortTargetCandidateSetAndPick",
+				ss.NodeID, ss.StoreID, rangeID)
+			continue
+		}
+		targetSS := rs.cs.stores[targetStoreID]
+		var addedLoad LoadVector
+		// Only adding leaseholder CPU.
+		addedLoad[CPURate] = rstate.load.Load[CPURate] - rstate.load.RaftCPU
+		if addedLoad[CPURate] < 0 {
+			// TODO(sumeer): remove this panic once we are not in an
+			// experimental phase.
+			addedLoad[CPURate] = 0
+			panic("raft cpu higher than total cpu")
+		}
+		if !rs.cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, &means, true, CPURate) {
+			log.KvDistribution.VInfof(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
+				store.StoreID, targetStoreID, rangeID, addedLoad)
+			continue
+		}
+		addTarget := roachpb.ReplicationTarget{
+			NodeID:  targetSS.NodeID,
+			StoreID: targetSS.StoreID,
+		}
+		removeTarget := roachpb.ReplicationTarget{
+			NodeID:  ss.NodeID,
+			StoreID: ss.StoreID,
+		}
+		replicaChanges := MakeLeaseTransferChanges(
+			rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
+		leaseChange := MakePendingRangeChange(rangeID, replicaChanges[:])
+		if err := rs.cs.preCheckOnApplyReplicaChanges(leaseChange.pendingReplicaChanges); err != nil {
+			panic(errors.Wrapf(err, "pre-check failed for lease transfer %v", leaseChange))
+		}
+		rs.cs.addPendingRangeChange(leaseChange)
+		rs.changes = append(rs.changes, leaseChange)
+		rs.leaseTransferCount++
+		localLeaseTransferCount++
+		if rs.changes[len(rs.changes)-1].IsChangeReplicas() || !rs.changes[len(rs.changes)-1].IsTransferLease() {
+			panic(fmt.Sprintf("lease transfer is invalid: %v", rs.changes[len(rs.changes)-1]))
+		}
+		log.KvDistribution.Infof(ctx,
+			"result(success): shedding r%v lease from s%v to s%v [change:%v] with "+
+				"resulting loads source:%v target:%v (means: %v) (frac_pending: (src:%.2f,target:%.2f) (src:%.2f,target:%.2f))",
+			rangeID, removeTarget.StoreID, addTarget.StoreID, rs.changes[len(rs.changes)-1],
+			ss.adjusted.load, targetSS.adjusted.load, means.storeLoad.load,
+			ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease,
+			targetSS.maxFractionPendingIncrease, targetSS.maxFractionPendingDecrease)
+		if rs.leaseTransferCount >= rs.maxLeaseTransferCount {
+			log.KvDistribution.VInfof(ctx, 2, "reached max lease transfer count %d, returning", rs.maxLeaseTransferCount)
+			break
+		}
+		doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
+		if doneShedding {
+			log.KvDistribution.VInfof(ctx, 2, "s%d has reached pending decrease threshold(%.2f>=%.2f) after lease transfers: done shedding with %d left in topK",
+				store.StoreID, ss.maxFractionPendingDecrease, maxFractionPendingThreshold, n-(i+1))
+			break
+		}
+	}
+	if doneShedding || localLeaseTransferCount > 0 {
+		// If managed to transfer a lease, wait for it to be done, before
+		// shedding replicas from this store (which is more costly). Otherwise
+		// we may needlessly start moving replicas. Note that the store
+		// rebalancer will call the rebalance method again after the lease
+		// transfer is done and we may still be considering those transfers as
+		// pending from a load perspective, so we *may* not be able to do more
+		// lease transfers -- so be it.
+		log.KvDistribution.VInfof(ctx, 2, "skipping replica transfers for s%d: done shedding=%v, lease_transfers=%d",
+			store.StoreID, doneShedding, localLeaseTransferCount)
+		return true
+	}
+	return false
 }
