@@ -413,11 +413,9 @@ func (cs *clusterState) rebalanceStores(
 			}
 			isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
 			if !isVoter && !isNonVoter {
-				// We should not panic here since the replicateQueue may have shed the
-				// lease and informed MMA, since the last time MMA computed the top-k
-				// ranges. This is useful for debugging in the prototype, due to the
-				// lack of unit tests.
-				panic(fmt.Sprintf("internal state inconsistency: "+
+				// Due to REQUIREMENT(change-computation), the top-k is up to date, so
+				// this must never happen.
+				panic(errors.AssertionFailedf("internal state inconsistency: "+
 					"store=%v range_id=%v pending-changes=%v "+
 					"rstate_replicas=%v rstate_constraints=%v",
 					store.StoreID, rangeID, rstate.pendingChanges, rstate.replicas, rstate.constraints))
