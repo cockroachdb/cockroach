@@ -6,6 +6,7 @@
 package apply
 
 import (
+	"context"
 	fmt "fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -14,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -113,7 +115,8 @@ func (a *Asserter) forRange(rangeID roachpb.RangeID) *rangeAsserter {
 // In the common case, this only needs to look at the previous entry.
 func (r *rangeAsserter) stateAt(index kvpb.RaftIndex) applyState {
 	if int(index) >= len(r.log) {
-		panic(fmt.Sprintf("index %d is beyond end of log at %d", index, len(r.log)-1))
+		log.KvExec.Fatalf(context.Background(),
+			"index %d is beyond end of log at %d", index, len(r.log)-1)
 	}
 	// All entries (except gaps) have cmdID, raftIndex, and raftTerm, so we're
 	// done once we also find a LAI and closed timestamp.
@@ -157,8 +160,8 @@ func (r *rangeAsserter) propose(
 	req *kvpb.BatchRequest,
 ) {
 	fail := func(msg string, args ...interface{}) {
-		panic(fmt.Sprintf("r%d/%d cmd %s: %s (%s)",
-			r.rangeID, replicaID, cmdID, fmt.Sprintf(msg, args...), req))
+		log.KvExec.Fatalf(context.Background(), "r%d/%d cmd %s: %s (%s)",
+			r.rangeID, replicaID, cmdID, fmt.Sprintf(msg, args...), req)
 	}
 
 	// INVARIANT: all proposals have a command ID.
@@ -242,8 +245,8 @@ func (r *rangeAsserter) apply(
 	}
 
 	fail := func(msg string, args ...interface{}) {
-		panic(fmt.Sprintf("r%d/%d: %s (%s)\ndata: %x",
-			r.rangeID, replicaID, fmt.Sprintf(msg, args...), entry, raftEntry.Data))
+		log.KvExec.Fatalf(context.Background(), "r%d/%d: %s (%s)\ndata: %x",
+			r.rangeID, replicaID, fmt.Sprintf(msg, args...), entry, raftEntry.Data)
 	}
 
 	// INVARIANT: all commands have a command ID. etcd/raft may commit noop
@@ -368,8 +371,9 @@ func (r *rangeAsserter) applySnapshot(
 	}
 
 	fail := func(msg string, args ...interface{}) {
-		panic(fmt.Sprintf("r%d/%d snapshot from %d at index %d: %s (%s)",
-			r.rangeID, replicaID, sender, index, fmt.Sprintf(msg, args...), state))
+		log.KvExec.Fatalf(context.Background(),
+			"r%d/%d snapshot from %d at index %d and state (%s): %s",
+			r.rangeID, replicaID, sender, index, state, fmt.Sprintf(msg, args...))
 	}
 
 	r.Lock()
@@ -410,6 +414,6 @@ func (r *rangeAsserter) applySnapshot(
 		state.raftTerm = logState.raftTerm
 	}
 	if state != logState {
-		fail("state differs from log state: %s", state)
+		fail("state differs from log state: (%s)", logState)
 	}
 }
