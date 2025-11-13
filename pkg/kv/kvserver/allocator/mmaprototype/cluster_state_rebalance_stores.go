@@ -227,7 +227,7 @@ func (rs *rebalanceState) rebalanceStore(
 	// behalf of a particular store (vs. being called on behalf of the set
 	// of local store IDs)?
 	if ss.StoreID == localStoreID && store.dimSummary[CPURate] >= overloadSlow {
-		{
+		shouldSkipReplicaMoves := func(rs *rebalanceState, ss *storeState, store sheddingStore, ctx context.Context, localStoreID roachpb.StoreID, now time.Time) bool {
 			log.KvDistribution.VInfof(ctx, 2, "local store s%d is CPU overloaded (%v >= %v), attempting lease transfers first",
 				store.StoreID, store.dimSummary[CPURate], overloadSlow)
 			// This store is local, and cpu overloaded. Shed leases first.
@@ -237,6 +237,7 @@ func (rs *rebalanceState) rebalanceStore(
 			localLeaseTransferCount := 0
 			topKRanges := ss.adjusted.topKRanges[localStoreID]
 			n := topKRanges.len()
+			doneShedding := false
 			for i := 0; i < n; i++ {
 				rangeID := topKRanges.index(i)
 				rstate := rs.cs.ranges[rangeID]
@@ -389,7 +390,7 @@ func (rs *rebalanceState) rebalanceStore(
 					targetSS.maxFractionPendingIncrease, targetSS.maxFractionPendingDecrease)
 				if rs.leaseTransferCount >= rs.maxLeaseTransferCount {
 					log.KvDistribution.VInfof(ctx, 2, "reached max lease transfer count %d, returning", rs.maxLeaseTransferCount)
-					return
+					break
 				}
 				doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
 				if doneShedding {
@@ -408,8 +409,12 @@ func (rs *rebalanceState) rebalanceStore(
 				// lease transfers -- so be it.
 				log.KvDistribution.VInfof(ctx, 2, "skipping replica transfers for s%d: done shedding=%v, lease_transfers=%d",
 					store.StoreID, doneShedding, localLeaseTransferCount)
-				return
+				return true
 			}
+			return false
+		}(rs, ss, store, ctx, localStoreID, now)
+		if shouldSkipReplicaMoves {
+			return
 		}
 	} else {
 		log.KvDistribution.VInfof(ctx, 2, "skipping lease shedding: s%v != local store s%s or cpu is not overloaded: %v",
