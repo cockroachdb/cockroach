@@ -158,7 +158,7 @@ func convertReplicaChangeToMMA(
 	}
 	if lhBeingRemoved && !pickedLeaseholder {
 		return mmaprototype.PendingRangeChange{},
-			errors.Errorf("leaseholder being removed but no new leaseholder picked from %v", changes)
+			errors.AssertionFailedf("leaseholder being removed but no new leaseholder picked from %v", changes)
 	}
 	for target, ch := range changeMap {
 		var replicaChange mmaprototype.ReplicaChange
@@ -170,7 +170,7 @@ func convertReplicaChangeToMMA(
 		case mmaprototype.ChangeReplica:
 			replicaChange = mmaprototype.MakeReplicaTypeChange(desc.RangeID, rLoad, ch.prev, ch.next, target)
 		default:
-			panic("unimplemented change type")
+			panic(errors.AssertionFailedf("unimplemented change type"))
 		}
 		replicaChanges = append(replicaChanges, replicaChange)
 	}
