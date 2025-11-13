@@ -6,8 +6,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -18,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -27,6 +27,8 @@ import (
 type Manager struct {
 	executor isql.DB
 	rff      *rangefeed.Factory
+	rdi      rangedesc.IteratorFactory
+	rc       *rangecache.RangeCache
 	codec    keys.SQLCodec
 	leaseMgr *lease.Manager
 
@@ -40,12 +42,13 @@ func NewManager(
 	_ context.Context,
 	executor isql.DB,
 	rff *rangefeed.Factory,
+	rdi rangedesc.IteratorFactory,
 	codec keys.SQLCodec,
 	leaseMgr *lease.Manager,
 ) *Manager {
 	// setup rangefeed on partitions table (/poll)
 	// handle handoff from one server to another
-	m := &Manager{executor: executor, rff: rff, codec: codec, leaseMgr: leaseMgr}
+	m := &Manager{executor: executor, rff: rff, rdi: rdi, codec: codec, leaseMgr: leaseMgr}
 	m.mu.queueAssignment = make(map[string]*PartitionAssignments)
 	return m
 }
@@ -127,46 +130,16 @@ func (m *Manager) CreateQueue(ctx context.Context, queueName string, tableDescID
 			EndKey: primaryIndexPrefix.PrefixEnd(),
 		}
 
-		// Extract DistSender from the executor's KV DB to iterate over ranges.
-		txnWrapperSender, ok := m.executor.KV().NonTransactionalSender().(*kv.CrossRangeTxnWrapperSender)
-		if !ok {
-			return errors.Errorf("failed to extract a %T from %T",
-				(*kv.CrossRangeTxnWrapperSender)(nil), m.executor.KV().NonTransactionalSender())
-		}
-		distSender, ok := txnWrapperSender.Wrapped().(*kvcoord.DistSender)
-		if !ok {
-			return errors.Errorf("failed to extract a %T from %T",
-				(*kvcoord.DistSender)(nil), txnWrapperSender.Wrapped())
-		}
-
-		// Convert the span to an RSpan for range iteration.
-		rSpan, err := keys.SpanAddr(primaryKeySpan)
+		spans, err := m.splitOnRanges(ctx, primaryKeySpan)
 		if err != nil {
-			return errors.Wrapf(err, "converting primary key span to address span")
+			return err
 		}
 
-		// Iterate over all ranges covering the primary key span.
-		it := kvcoord.MakeRangeIterator(distSender)
 		partitionID := int64(1)
-		for it.Seek(ctx, rSpan.Key, kvcoord.Ascending); ; it.Next(ctx) {
-			if !it.Valid() {
-				return errors.Wrapf(it.Error(), "iterating ranges for primary key span")
-			}
-
-			// Get the range descriptor and trim its span to the primary key span boundaries.
-			desc := it.Desc()
-			startKey := desc.StartKey
-			if startKey.Compare(rSpan.Key) < 0 {
-				startKey = rSpan.Key
-			}
-			endKey := desc.EndKey
-			if endKey.Compare(rSpan.EndKey) > 0 {
-				endKey = rSpan.EndKey
-			}
-
+		for _, span := range spans {
 			partition := Partition{
 				ID:   partitionID,
-				Span: roachpb.Span{Key: startKey.AsRawKey(), EndKey: endKey.AsRawKey()},
+				Span: span,
 			}
 
 			if err := pt.InsertPartition(ctx, txn, partition); err != nil {
@@ -174,11 +147,6 @@ func (m *Manager) CreateQueue(ctx context.Context, queueName string, tableDescID
 			}
 
 			partitionID++
-
-			// Check if we need to continue to the next range.
-			if !it.NeedAnother(rSpan) {
-				break
-			}
 		}
 
 		return nil
@@ -274,6 +242,38 @@ func (m *Manager) ReadCheckpoint(
 	})
 
 	return ts, err
+}
+
+func (m *Manager) splitOnRanges(ctx context.Context, span roachpb.Span) ([]roachpb.Span, error) {
+	const pageSize = 100
+	rdi, err := m.rdi.NewLazyIterator(ctx, span, pageSize)
+	if err != nil {
+		return nil, err
+	}
+
+	var spans []roachpb.Span
+	remainingSpan := span
+
+	for ; rdi.Valid(); rdi.Next() {
+		rangeDesc := rdi.CurRangeDescriptor()
+		rangeSpan := roachpb.Span{Key: rangeDesc.StartKey.AsRawKey(), EndKey: rangeDesc.EndKey.AsRawKey()}
+		subspan := remainingSpan.Intersect(rangeSpan)
+		if !subspan.Valid() {
+			return nil, errors.AssertionFailedf("%s not in %s of %s", rangeSpan, remainingSpan, span)
+		}
+		spans = append(spans, subspan)
+		remainingSpan.Key = subspan.EndKey
+	}
+
+	if err := rdi.Error(); err != nil {
+		return nil, err
+	}
+
+	if remainingSpan.Valid() {
+		spans = append(spans, remainingSpan)
+	}
+
+	return spans, nil
 }
 
 var _ queuebase.Manager = &Manager{}

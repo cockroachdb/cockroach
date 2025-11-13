@@ -455,32 +455,38 @@ func (r *Reader) checkForReassignment(ctx context.Context) error {
 func (r *Reader) decodeRangefeedValue(
 	ctx context.Context, rfv *kvpb.RangeFeedValue,
 ) (tree.Datums, error) {
-	key, value := rfv.Key, rfv.Value
-	key, err := r.codec.StripTenantPrefix(key)
+	partialKey := rfv.Key
+	partialKey, err := r.codec.StripTenantPrefix(partialKey)
 	if err != nil {
-		return nil, errors.Wrapf(err, "stripping tenant prefix: %s", keys.PrettyPrint(nil, key))
+		return nil, errors.Wrapf(err, "stripping tenant prefix: %s", keys.PrettyPrint(nil, partialKey))
 	}
 
-	_, tableID, _, err := rowenc.DecodePartialTableIDIndexID(key)
+	_, tableID, _, err := rowenc.DecodePartialTableIDIndexID(partialKey)
 	if err != nil {
-		return nil, errors.Wrapf(err, "decoding partial table id index id: %s", keys.PrettyPrint(nil, key))
+		return nil, errors.Wrapf(err, "decoding partial table id index id: %s", keys.PrettyPrint(nil, partialKey))
 	}
-	tableDesc, err := r.fetchTableDesc(ctx, tableID, value.Timestamp)
+
+	familyID, err := keys.DecodeFamilyKey(partialKey)
 	if err != nil {
-		return nil, errors.Wrapf(err, "fetching table descriptor: %s", keys.PrettyPrint(nil, key))
+		return nil, errors.Wrapf(err, "decoding family key: %s", keys.PrettyPrint(nil, partialKey))
 	}
-	familyDesc, err := catalog.MustFindFamilyByID(tableDesc, 0)
+
+	tableDesc, err := r.fetchTableDesc(ctx, tableID, rfv.Value.Timestamp)
 	if err != nil {
-		return nil, errors.Wrapf(err, "fetching family descriptor: %s", keys.PrettyPrint(nil, key))
+		return nil, errors.Wrapf(err, "fetching table descriptor: %s", keys.PrettyPrint(nil, partialKey))
+	}
+	familyDesc, err := catalog.MustFindFamilyByID(tableDesc, descpb.FamilyID(familyID))
+	if err != nil {
+		return nil, errors.Wrapf(err, "fetching family descriptor: %s", keys.PrettyPrint(nil, partialKey))
 	}
 	cols, err := getRelevantColumnsForFamily(tableDesc, familyDesc)
 	if err != nil {
-		return nil, errors.Wrapf(err, "getting relevant columns for family: %s", keys.PrettyPrint(nil, key))
+		return nil, errors.Wrapf(err, "getting relevant columns for family: %s", keys.PrettyPrint(nil, partialKey))
 	}
 
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(&spec, r.codec, tableDesc, tableDesc.GetPrimaryIndex(), cols); err != nil {
-		return nil, errors.Wrapf(err, "initializing index fetch spec: %s", keys.PrettyPrint(nil, key))
+		return nil, errors.Wrapf(err, "initializing index fetch spec: %s", keys.PrettyPrint(nil, partialKey))
 	}
 	rf := row.Fetcher{}
 	if err := rf.Init(ctx, row.FetcherInitArgs{
@@ -489,15 +495,15 @@ func (r *Reader) decodeRangefeedValue(
 		TraceKV:           true,
 		TraceKVEvery:      &util.EveryN{N: 1},
 	}); err != nil {
-		return nil, errors.Wrapf(err, "initializing row fetcher: %s", keys.PrettyPrint(nil, key))
+		return nil, errors.Wrapf(err, "initializing row fetcher: %s", keys.PrettyPrint(nil, partialKey))
 	}
-	kvProvider := row.KVProvider{KVs: []roachpb.KeyValue{{Key: key, Value: value}}}
+	kvProvider := row.KVProvider{KVs: []roachpb.KeyValue{{Key: rfv.Key, Value: rfv.Value}}}
 	if err := rf.ConsumeKVProvider(ctx, &kvProvider); err != nil {
-		return nil, errors.Wrapf(err, "consuming kv provider: %s", keys.PrettyPrint(nil, key))
+		return nil, errors.Wrapf(err, "consuming kv provider: %s", keys.PrettyPrint(nil, partialKey))
 	}
 	encDatums, _, err := rf.NextRow(ctx)
 	if err != nil {
-		return nil, errors.Wrapf(err, "fetching next row: %s", keys.PrettyPrint(nil, key))
+		return nil, errors.Wrapf(err, "fetching next row: %s", keys.PrettyPrint(nil, partialKey))
 	}
 	_ = encDatums
 

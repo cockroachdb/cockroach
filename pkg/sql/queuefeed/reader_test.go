@@ -39,7 +39,7 @@ func TestReaderBasic(t *testing.T) {
 		LivenessID:   sqlliveness.SessionID("1"),
 	})
 	require.NoError(t, err)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	db.Exec(t, `INSERT INTO t VALUES ('row1', 10), ('row2', 20), ('row3', 30)`)
 
@@ -73,7 +73,7 @@ func TestReaderRollback(t *testing.T) {
 		LivenessID:   sqlliveness.SessionID("1"),
 	})
 	require.NoError(t, err)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	db.Exec(t, `INSERT INTO t VALUES ('row1', 100), ('row2', 200)`)
 
@@ -143,7 +143,7 @@ func TestCheckpointRestoration(t *testing.T) {
 
 	reader2, err := qm.CreateReaderForSession(ctx, "checkpoint_test", session)
 	require.NoError(t, err)
-	defer reader2.Close()
+	defer func() { _ = reader2.Close() }()
 
 	rows2 := pollForRows(t, ctx, reader2, 2)
 

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ import (
 func NewTestManager(t *testing.T, a serverutils.ApplicationLayerInterface) *Manager {
 	ctx := context.Background()
 	db := a.InternalDB().(isql.DB)
-	m := NewManager(ctx, db, a.RangeFeedFactory().(*rangefeed.Factory), a.Codec(), a.LeaseManager().(*lease.Manager))
+	m := NewManager(ctx, db, a.RangeFeedFactory().(*rangefeed.Factory), a.RangeDescIteratorFactory().(rangedesc.IteratorFactory), a.Codec(), a.LeaseManager().(*lease.Manager))
 	require.NotNil(t, m.codec)
 	return m
 }

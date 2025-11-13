@@ -16,6 +16,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
+        "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
@@ -32,6 +33,7 @@ go_library(
         "//pkg/sql/sqlliveness",
         "//pkg/util",
         "//pkg/util/hlc",
+        "//pkg/util/rangedesc",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
@@ -51,6 +53,7 @@ go_test(
         "smoke_test.go",
     ],
     embed = [":queuefeed"],
+		shard_count = 4,
     deps = [
         "//pkg/base",
         "//pkg/kv/kvclient/rangefeed",

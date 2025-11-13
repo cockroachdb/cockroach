@@ -1065,7 +1065,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TenantReadOnly:             cfg.SQLConfig.TenantReadOnly,
 		CidrLookup:                 cfg.BaseConfig.CidrLookup,
 		LicenseEnforcer:            cfg.SQLConfig.LicenseEnforcer,
-		QueueManager:               queuefeed.NewManager(ctx, cfg.internalDB, cfg.rangeFeedFactory, codec, leaseMgr),
+		QueueManager:               queuefeed.NewManager(ctx, cfg.internalDB, cfg.rangeFeedFactory, cfg.rangeDescIteratorFactory, codec, leaseMgr),
 	}
 
 	if codec.ForSystemTenant() {
@@ -1462,7 +1462,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		internalDBMemMonitor:           internalDBMonitor,
 		upgradeManager:                 upgradeMgr,
 		serviceMode:                    cfg.serviceMode,
-		queueManager:                   queuefeed.NewManager(ctx, cfg.internalDB, cfg.rangeFeedFactory, execCfg.Codec, leaseMgr),
+		queueManager:                   queuefeed.NewManager(ctx, cfg.internalDB, cfg.rangeFeedFactory, cfg.rangeDescIteratorFactory, execCfg.Codec, leaseMgr),
 	}, nil
 }
 
