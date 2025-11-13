@@ -1,7 +1,9 @@
 package queuefeed
 
 import (
+	"cmp"
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/errors"
@@ -38,10 +40,36 @@ func NewPartitionAssignments(db isql.DB, queueName string) *PartitionAssignments
 // If a partition has a successor session, then calling RefreshAssignment will
 // return an assignment that does not include that partition.
 func (p *PartitionAssignments) RefreshAssignment(
-	session Session, caughtUp bool,
+	ctx context.Context, session Session, caughtUp bool,
 ) (updatedAssignment *Assignment, err error) {
-	// This is a stub implementation that assumes there is a single partition.
-	return nil, nil
+	// find my assignments and see if any of them have a successor session. return the ones that don't.
+	// TODO: this should be done in sql
+	// TODO: this handles partition handoff, but not hand...on... (?)
+	var myPartitions []Partition
+	anyChanged := false
+	err = p.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		partitions, err := p.partitionTable.ListPartitions(ctx, txn)
+		if err != nil {
+			return err
+		}
+		for _, partition := range partitions {
+			if partition.Session != session {
+				continue
+			}
+			if !partition.Successor.Empty() {
+				anyChanged = true
+				continue
+			}
+			myPartitions = append(myPartitions, partition)
+		}
+		return nil
+	})
+	if !anyChanged {
+		return nil, nil
+	}
+
+	slices.SortFunc(myPartitions, func(a, b Partition) int { return cmp.Compare(a.ID, b.ID) })
+	return &Assignment{Session: session, Partitions: myPartitions}, nil
 }
 
 // RegisterSession registers a new session. The session may be assigned zero
@@ -110,14 +138,16 @@ func (p *PartitionAssignments) UnregisterSession(ctx context.Context, session Se
 	})
 }
 
-func (p *PartitionAssignments) constructAssignment(session Session) (*Assignment, error) {
-	// Build an assignment for the given session from the partition cache.
-	return nil, errors.New("not implemented")
-}
-
-func (p *PartitionAssignments) tryClaim(session Session, partition *Partition) (Partition, error) {
-	// Try to claim an unassigned partition for the given session.
-	return Partition{}, nil
+// Try to claim a partition for the given session.
+func (p *PartitionAssignments) TryClaim(ctx context.Context, session Session, partition Partition) (Partition, error) {
+	partition.Successor = session
+	err := p.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return p.partitionTable.UpdatePartition(ctx, txn, partition)
+	})
+	if err != nil {
+		return Partition{}, errors.Wrapf(err, "updating partition %d for session %s", partition.ID, session.ConnectionID)
+	}
+	return partition, nil
 }
 
 func (p *PartitionAssignments) tryRelease(session Session, toRelease []Partition) error {

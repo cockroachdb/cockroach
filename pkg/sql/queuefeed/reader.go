@@ -111,22 +111,28 @@ func NewReader(
 	if err != nil {
 		return nil, errors.Wrap(err, "registering session for reader")
 	}
-	if len(assignment.Partitions) == 0 {
-		return nil, errors.New("no partitions assigned to reader: todo support this case by polling for assignment")
+	if err := r.setupRangefeed(ctx, assignment); err != nil {
+		return nil, errors.Wrap(err, "setting up rangefeed")
 	}
-
-	r.setupRangefeed(ctx, assignment)
 	go r.run(ctx)
 	return r, nil
 }
 
-func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) {
+var ErrNoPartitionsAssigned = errors.New("no partitions assigned to reader: todo support this case by polling for assignment")
+
+func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) error {
 	defer func() {
 		fmt.Println("setupRangefeed done")
 	}()
 
+	// TODO: handle the case where there are no partitions in the assignment. In
+	// that case we should poll `RefreshAssignment` until we get one. This would
+	// only occur if every assignment was handed out already.
+	if len(assignment.Partitions) == 0 {
+		return errors.Wrap(ErrNoPartitionsAssigned, "setting up rangefeed")
+	}
+
 	incomingResolveds := make(chan hlc.Timestamp)
-	setErr := func(err error) { r.cancel(err) }
 
 	onValue := func(ctx context.Context, value *kvpb.RangeFeedValue) {
 		fmt.Printf("onValue: %+v\n", value)
@@ -138,9 +144,13 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) {
 			r.mu.poppedWakeup.Wait()
 		}
 
+		if !value.Value.IsPresent() {
+			// not handling diffs/deletes rn
+			return
+		}
 		datums, err := r.decodeRangefeedValue(ctx, value)
 		if err != nil {
-			setErr(errors.Wrapf(err, "decoding rangefeed value: %+v", value))
+			r.cancel(errors.Wrapf(err, "decoding rangefeed value: %+v", value))
 			return
 		}
 		r.mu.buf = append(r.mu.buf, datums)
@@ -162,7 +172,7 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) {
 			default: // TODO: handle resolveds (dont actually default here)
 			}
 		}),
-		rangefeed.WithOnInternalError(func(ctx context.Context, err error) { setErr(err) }),
+		rangefeed.WithOnInternalError(func(ctx context.Context, err error) { r.cancel(err) }),
 		rangefeed.WithConsumerID(42),
 		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),
 		rangefeed.WithFiltering(false),
@@ -174,16 +184,12 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) {
 		fmt.Sprintf("queuefeed.reader.name=%s", r.name), initialTS, onValue, opts...,
 	)
 
-	// TODO: handle the case where there are no partitions in the assignment. In
-	// that case we should poll `RefreshAssignment` until we get one. This would
-	// only occur if every assignment was handed out already.
 	spans := []roachpb.Span{assignment.Partitions[0].Span}
 
 	fmt.Printf("starting rangefeed with spans: %+v\n", spans)
 
 	if err := rf.Start(ctx, spans); err != nil {
-		setErr(err)
-		return
+		return errors.Wrap(err, "starting rangefeed")
 	}
 
 	_ = context.AfterFunc(ctx, func() {
@@ -195,15 +201,17 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) {
 
 	r.rangefeed = rf
 	r.assignment = assignment
+	return nil
 }
 
 // - [x] setup rangefeed on data
 // - [ ] handle only watching my partitions
-// - [ ] after each batch, ask mgr if i need to change assignments
+// - [X] after each batch, ask mgr if i need to  assignments
 // - [X] buffer rows in the background before being asked for them
 // - [ ] checkpoint frontier if our frontier has advanced and we confirmed receipt
 // - [ ] gonna need some way to clean stuff up on conn_executor.close()
 
+// TODO: this loop isnt doing much anymore. if we dont need it for anything else, let's remove it
 func (r *Reader) run(ctx context.Context) {
 	defer func() {
 		fmt.Println("run done")
@@ -270,9 +278,6 @@ func (r *Reader) GetRows(ctx context.Context, limit int) ([]tree.Datums, error) 
 	fmt.Printf("GetRows done with inflightBuffer len: %d, buf len: %d\n", len(r.mu.inflightBuffer), len(r.mu.buf))
 
 	return slices.Clone(r.mu.inflightBuffer), nil
-
-	// and then trigger the goro to check if m wants us to change assignments
-	// if it does, handle that stuff before doing a new batch
 }
 
 func (r *Reader) ConfirmReceipt(ctx context.Context) {
@@ -297,14 +302,23 @@ func (r *Reader) ConfirmReceipt(ctx context.Context) {
 		return
 	default:
 		// TODO only set caughtUp to true if our frontier is near the current time.
-		newAssignment, err := r.assigner.RefreshAssignment(r.session /*caughtUp=*/, true)
+		newAssignment, err := r.assigner.RefreshAssignment(ctx, r.session /*caughtUp=*/, true)
 		if err != nil {
 			r.cancel(errors.Wrap(err, "refreshing assignment"))
+			return
 		}
 		if newAssignment != nil {
-			// TODO restart the rangefeed with the new partitions
+			if err := r.updateAssignment(newAssignment); err != nil {
+				r.cancel(errors.Wrap(err, "updating assignment"))
+				return
+			}
 		}
 	}
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.mu.state = readerStateBatching
+	}()
 }
 
 func (r *Reader) RollbackBatch(ctx context.Context) {
@@ -334,6 +348,24 @@ func (r *Reader) Close() error {
 	err := r.assigner.UnregisterSession(r.goroCtx, r.session)
 	r.cancel(errors.New("reader closing"))
 	return err
+}
+
+func (r *Reader) updateAssignment(assignment *Assignment) error {
+	defer func() {
+		fmt.Printf("updateAssignment done with assignment: %+v\n", assignment)
+	}()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.assignment = assignment
+	r.rangefeed.Close()
+	r.mu.buf = r.mu.buf[:0]
+
+	if err := r.setupRangefeed(r.goroCtx, assignment); err != nil {
+		return errors.Wrapf(err, "setting up rangefeed for new assignment: %+v", assignment)
+	}
+	return nil
 }
 
 func (r *Reader) checkForReassignment(ctx context.Context) error {
