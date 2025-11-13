@@ -43,7 +43,7 @@ func (p *partitionTable) CreateSchema(ctx context.Context, txn isql.Txn) error {
 
 func (p *partitionTable) ListPartitions(ctx context.Context, txn isql.Txn) ([]Partition, error) {
 	rows, err := txn.QueryBuffered(ctx, "list-partitions", txn.KV(), fmt.Sprintf(`
-		SELECT 
+		SELECT
 			partition_id,
 			sql_liveness_session,
 			user_session,
@@ -112,7 +112,7 @@ func (p *partitionTable) InsertPartition(
 	spanBytes := encodeSpan(partition.Span)
 
 	_, err := txn.Exec(ctx, "insert-partition", txn.KV(),
-		fmt.Sprintf(`INSERT INTO defaultdb.queue_partition_%s 
+		fmt.Sprintf(`INSERT INTO defaultdb.queue_partition_%s
 			(partition_id, sql_liveness_session, user_session, sql_liveness_session_successor, user_session_successor, partition_spec)
 			VALUES ($1, $2, $3, $4, $5, $6)`, p.queueName),
 		partition.ID, sessionLivenessID, sessionConnectionID,
@@ -146,7 +146,7 @@ func (p *partitionTable) UpdatePartition(
 	spanBytes := encodeSpan(partition.Span)
 
 	_, err := txn.Exec(ctx, "update-partition", txn.KV(),
-		fmt.Sprintf(`UPDATE defaultdb.queue_partition_%s 
+		fmt.Sprintf(`UPDATE defaultdb.queue_partition_%s
 			SET sql_liveness_session = $2,
 				user_session = $3,
 				sql_liveness_session_successor = $4,
@@ -189,4 +189,8 @@ func encodeSpan(span roachpb.Span) []byte {
 		return nil
 	}
 	return data
+}
+
+func TestNewPartitionsTable(queueName string) *partitionTable {
+	return &partitionTable{queueName: queueName}
 }
