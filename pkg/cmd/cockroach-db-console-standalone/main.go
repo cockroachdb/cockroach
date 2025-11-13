@@ -120,6 +120,9 @@ func run() error {
 		Admin:     adminClient,
 		Status:    statusClient,
 		TS:        tsClient,
+		// TODO(davidh): Get these license values remotely
+		LicenseType:               "Future",
+		SecondsUntilLicenseExpiry: 1000000,
 	})
 
 	// Create HTTP server

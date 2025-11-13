@@ -48,6 +48,16 @@ type IndexHTMLArgs struct {
 	Admin                     serverpb.AdminClient
 	Status                    serverpb.StatusClient
 	TS                        tspb.TimeSeriesClient
+
+	// Generated license notification fields
+	LicenseNotificationText    string
+	LicenseNotificationTooltip string
+	LicenseNotificationClass   string
+
+	// Generated throttle warning fields
+	ThrottleWarningText    string
+	ThrottleWarningTooltip string
+	ThrottleWarningClass   string
 }
 
 //go:embed assets/*
@@ -378,6 +388,11 @@ type NodeInfo struct {
 }
 
 func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
+	// Generate license notification text and tooltip
+	// TODO(davidh): Should make this fully dynamic to recompute on each request
+	cfg.LicenseNotificationText, cfg.LicenseNotificationTooltip, cfg.LicenseNotificationClass = generateLicenseNotification(
+		cfg.LicenseType, cfg.SecondsUntilLicenseExpiry, log.RedactionPolicyManaged,
+	)
 	// Create a new Gorilla Mux router
 	router := mux.NewRouter()
 
@@ -1752,7 +1767,6 @@ func fetchOverviewData(ctx context.Context, cfg IndexHTMLArgs) (*OverviewData, e
 		// Extract locality grouping (cloud, region, az)
 		region := extractLocalityGroup(&node.Desc.Locality)
 
-		log.Dev.Errorf(ctx, "extracted %s", region)
 		// Calculate node-level metrics
 		var nodeReplicas int
 		var nodeCapacityUsed, nodeCapacityTotal int64
@@ -1967,6 +1981,61 @@ func formatUptime(seconds int64) string {
 	}
 	days := hours / 24
 	return fmt.Sprintf("%d days", days)
+}
+
+// GenerateLicenseNotification generates the license notification text, tooltip, and CSS class
+// based on the license type and days until expiry. Returns empty strings if no notification needed.
+// Based on logic from pkg/ui/workspaces/db-console/src/views/app/containers/licenseNotification/licenseNotification.tsx
+func generateLicenseNotification(
+	licenseType string, secondsUntilExpiry int64, isManaged bool,
+) (text, tooltip, class string) {
+	const daysToWarn = 30 // Equal to trial period
+
+	// No notification for clusters without license or managed clusters
+	if licenseType == "None" || isManaged {
+		return "", "", ""
+	}
+
+	daysUntilExpiry := secondsUntilExpiry / 86400 // Convert seconds to days
+	expirationDate := timeutil.Now().Add(time.Duration(secondsUntilExpiry) * time.Second).Format("January 2, 2006")
+
+	learnMoreLink := "https://cockroachlabs.com/docs/stable/licensing-faqs.html"
+
+	if daysUntilExpiry > daysToWarn {
+		// Info notification - more than 30 days until expiry
+		text = fmt.Sprintf("License expires in %d days", absInt64(daysUntilExpiry))
+		tooltip = fmt.Sprintf("You are using an %s license of CockroachDB. To avoid service disruption, please renew before the expiration date of %s. <a href=\"%s\" target=\"_blank\" rel=\"noreferrer\">Learn more</a>",
+			licenseType, expirationDate, learnMoreLink)
+		class = "info"
+	} else if daysUntilExpiry == 0 {
+		// Warning - expires today
+		text = fmt.Sprintf("License expires in %d days", absInt64(daysUntilExpiry))
+		tooltip = fmt.Sprintf("Your %s license of CockroachDB expired today. To re-enable Enterprise features, please renew your license. <a href=\"%s\" target=\"_blank\" rel=\"noreferrer\">Learn more</a>",
+			licenseType, learnMoreLink)
+		class = "warn"
+	} else if daysUntilExpiry <= 0 {
+		// Error - already expired
+		text = fmt.Sprintf("License expired %d days ago", absInt64(daysUntilExpiry))
+		tooltip = fmt.Sprintf("Your %s license of CockroachDB expired on %s. To re-enable Enterprise features, please renew your license. <a href=\"%s\" target=\"_blank\" rel=\"noreferrer\">Learn more</a>",
+			licenseType, expirationDate, learnMoreLink)
+		class = "bad"
+	} else if daysUntilExpiry <= daysToWarn {
+		// Warning - 30 days or less until expiry
+		text = fmt.Sprintf("License expires in %d days", daysUntilExpiry)
+		tooltip = fmt.Sprintf("You are using an %s license of CockroachDB. To avoid service disruption, please renew before the expiration date of %s. <a href=\"%s\" target=\"_blank\" rel=\"noreferrer\">Learn more</a>",
+			licenseType, expirationDate, learnMoreLink)
+		class = "warn"
+	}
+
+	return text, tooltip, class
+}
+
+// absInt64 returns the absolute value of an int64
+func absInt64(n int64) int64 {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 // buildRegionGroups creates RegionGroup entries with aggregated metrics
