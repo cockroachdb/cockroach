@@ -54,6 +54,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
+	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed"
+	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
@@ -65,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
@@ -91,6 +94,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tochar"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -1206,6 +1210,7 @@ func (s *Server) newConnExecutor(
 		totalActiveTimeStopWatch:  timeutil.NewStopWatch(),
 		txnFingerprintIDCache:     NewTxnFingerprintIDCache(ctx, s.cfg.Settings, &txnFingerprintIDCacheAcc),
 		txnFingerprintIDAcc:       &txnFingerprintIDCacheAcc,
+		queuefeedReaders:          make(map[string]*queuefeed.Reader),
 	}
 	ex.rng.internal = rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
@@ -1408,6 +1413,14 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	} else if closeType == externalTxnClose {
 		ex.state.finishExternalTxn()
 	}
+
+	// Close all queuefeed readers
+	for name, reader := range ex.queuefeedReaders {
+		if err := reader.Close(); err != nil {
+			log.Dev.Warningf(ctx, "error closing queuefeed reader %s: %v", name, err)
+		}
+	}
+	ex.queuefeedReaders = nil
 
 	ex.resetExtraTxnState(ctx, txnEvent{eventType: txnEvType}, payloadErr)
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
@@ -1902,6 +1915,10 @@ type connExecutor struct {
 	// PCR reader catalog, which is done by checking for the ReplicatedPCRVersion
 	// field on the system database (which is set during tenant bootstrap).
 	isPCRReaderCatalog bool
+
+	// queuefeedReaders stores queuefeed readers created for this connection.
+	// Readers are closed when the connection closes.
+	queuefeedReaders map[string]*queuefeed.Reader
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -3858,6 +3875,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		localSQLStats:        ex.server.localSqlStats,
 		indexUsageStats:      ex.indexUsageStats,
 		statementPreparer:    ex,
+		QueueReaderProvider:  ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
 }
@@ -4576,6 +4594,49 @@ func (ex *connExecutor) getCreatedSequencesAccessor() createdSequences {
 	return connExCreatedSequencesAccessor{
 		ex: ex,
 	}
+}
+
+// GetOrInitReader gets or creates a queuefeed reader for the given queue name.
+// Readers are stored per-connection and closed when the connection closes.
+func (ex *connExecutor) GetOrInitReader(ctx context.Context, name string) (queuebase.Reader, error) {
+	if reader, ok := ex.queuefeedReaders[name]; ok && reader.IsAlive() {
+		return reader, nil
+	}
+
+	if ex.server.cfg.QueueManager == nil {
+		return nil, errors.New("queue manager not configured")
+	}
+	mgr := ex.server.cfg.QueueManager
+
+	// Construct Session.
+	sessionID := ex.planner.extendedEvalCtx.SessionID
+	connectionIDBytes := sessionID.GetBytes()
+	connectionID, err := uuid.FromBytes(connectionIDBytes)
+	if err != nil {
+		return nil, errors.Wrapf(err, "converting session ID to UUID")
+	}
+
+	var livenessID sqlliveness.SessionID
+	if ex.server.cfg.SQLLiveness != nil {
+		session, err := ex.server.cfg.SQLLiveness.Session(ex.Ctx())
+		if err != nil {
+			return nil, errors.Wrapf(err, "getting sqlliveness session")
+		}
+		if session == nil {
+			return nil, errors.New("sqlliveness session is nil")
+		}
+		livenessID = session.ID()
+	}
+
+	session := queuefeed.Session{ConnectionID: connectionID, LivenessID: livenessID}
+
+	reader, err := mgr.CreateReaderForSession(ctx, name, session)
+	if err != nil {
+		return nil, errors.Wrapf(err, "creating reader for queue %s", name)
+	}
+
+	ex.queuefeedReaders[name] = reader
+	return reader, nil
 }
 
 // sessionEventf logs a message to the session event log (if any).

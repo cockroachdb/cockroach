@@ -218,31 +218,23 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) err
 		return errors.Wrap(err, "starting rangefeed")
 	}
 
-	_ = context.AfterFunc(ctx, func() {
-		// TODO(queuefeed): move this to Close and hook Close into
-		// connExecutor.Close().
-		fmt.Println("closing rangefeed")
-		rf.Close()
-	})()
-
 	r.rangefeed = rf
 	r.assignment = assignment
 	return nil
 }
 
 // - [x] setup rangefeed on data
-// - [ ] handle only watching my partitions
+// - [X] handle only watching my partitions
 // - [X] after each batch, ask mgr if i need to  assignments
 // - [X] buffer rows in the background before being asked for them
 // - [ ] checkpoint frontier if our frontier has advanced and we confirmed receipt
-// - [ ] gonna need some way to clean stuff up on conn_executor.close()
+// - [X] gonna need some way to clean stuff up on conn_executor.close()
 
 // TODO: this loop isnt doing much anymore. if we dont need it for anything else, let's remove it
 func (r *Reader) run(ctx context.Context) {
 	defer func() {
 		fmt.Println("run done")
 		r.isShutdown.Store(true)
-		r.mgr.forgetReader(r.name)
 	}()
 
 	for {
@@ -415,6 +407,7 @@ func (r *Reader) IsAlive() bool {
 func (r *Reader) Close() error {
 	err := r.assigner.UnregisterSession(r.goroCtx, r.session)
 	r.cancel(errors.New("reader closing"))
+	r.rangefeed.Close()
 	return err
 }
 

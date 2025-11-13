@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,7 +39,10 @@ func TestFeedCreation(t *testing.T) {
 
 	// expect an error when trying to read from a queue that doesn't exist
 	qm := NewTestManager(t, srv.ApplicationLayer())
-	_, err := qm.GetOrInitReader(context.Background(), "test")
+	_, err := qm.CreateReaderForSession(context.Background(), "test", Session{
+		ConnectionID: uuid.MakeV4(),
+		LivenessID:   "",
+	})
 	require.ErrorContains(t, err, "queue feed not found")
 
 	// expect no error when creating a queue
@@ -51,10 +54,13 @@ func TestFeedCreation(t *testing.T) {
 	require.NoError(t, qm.CreateQueue(context.Background(), "test", tableID))
 
 	// now we can read from the queue
-	reader, err := qm.GetOrInitReader(context.Background(), "test")
+	reader, err := qm.CreateReaderForSession(context.Background(), "test", Session{
+		ConnectionID: uuid.MakeV4(),
+		LivenessID:   "",
+	})
 	require.NoError(t, err)
 	require.NotNil(t, reader)
-	reader.(*Reader).cancel(errors.New("test shutdown"))
+	_ = reader.Close()
 }
 
 func TestQueuefeedCtxCancel(t *testing.T) {
@@ -157,7 +163,10 @@ func TestFeedCreationPartitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start a reader and verify it reads all the partitions.
-	reader, err := qm.GetOrInitReader(ctx, "test")
+	reader, err := qm.CreateReaderForSession(ctx, "test", Session{
+		ConnectionID: uuid.MakeV4(),
+		LivenessID:   "",
+	})
 	require.NoError(t, err)
 	require.NotNil(t, reader)
 	defer func() { _ = reader.Close() }()
@@ -166,7 +175,7 @@ func TestFeedCreationPartitions(t *testing.T) {
 		partitions, err := pt.ListPartitions(ctx, txn)
 		require.NoError(t, err)
 
-		session := reader.(*Reader).session
+		session := reader.session
 		for _, partition := range partitions {
 			assert.Equal(t, session, partition.Session)
 			assert.True(t, partition.Successor.Empty(), "partition %d should not have a successor", partition.ID)

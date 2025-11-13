@@ -4395,7 +4395,7 @@ func (g *queueFeedGenerator) ResolvedType() *types.T {
 
 // Start implements the eval.ValueGenerator interface.
 func (g *queueFeedGenerator) Start(ctx context.Context, txn *kv.Txn) error {
-	qr, err := getQueueManager(g.evalCtx).GetOrInitReader(g.evalCtx.SessionCtx, g.queueName)
+	qr, err := getQueueReaderProvider(g.evalCtx).GetOrInitReader(g.evalCtx.SessionCtx, g.queueName)
 	if err != nil {
 		return err
 	}
