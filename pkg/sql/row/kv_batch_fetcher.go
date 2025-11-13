@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -90,6 +91,11 @@ type sendFunc func(
 type identifiableSpans struct {
 	roachpb.Spans
 	spanIDs []int
+
+	// spanIDToPos can be used to efficiently find the position of a span ID in
+	// the spans slice. It is only used when spanIDs is non-nil, and is populated
+	// on demand.
+	spanIDToPos map[int]int
 }
 
 // swap swaps two spans as well as their span IDs.
@@ -121,11 +127,72 @@ func (s *identifiableSpans) push(span roachpb.Span, spanID int) {
 	}
 }
 
+// getPos returns the position of the span with the given spanID in the
+// spans slice. If the spanID is not found, ok will be false and pos will be 0.
+func (s *identifiableSpans) getPos(spanID int) (int, bool) {
+	if s.spanIDs == nil {
+		return 0, false
+	}
+	if s.spanIDToPos == nil {
+		s.spanIDToPos = make(map[int]int, len(s.spanIDs))
+		for i, id := range s.spanIDs {
+			s.spanIDToPos[id] = i
+		}
+	}
+	pos, ok := s.spanIDToPos[spanID]
+	return pos, ok
+}
+
 // reset sets up s for reuse - the underlying slices will be overwritten with
 // future calls to push().
 func (s *identifiableSpans) reset() {
 	s.Spans = s.Spans[:0]
 	s.spanIDs = s.spanIDs[:0]
+	s.spanIDToPos = nil
+}
+
+// perScanKeyLimitHelper is a helper to allow dropping spans that have
+// encountered a key limit after the client has indicated that it no longer
+// needs them.
+type perScanKeyLimitHelper struct {
+	droppedSpanIDs *intsets.Sparse
+
+	// droppedRequestPosScratch is only used for the streamer. It identifies
+	// requests by their relative position in the most recent call to Enqueue().
+	droppedRequestPosScratch *intsets.Sparse
+}
+
+// reset prepares the perScanKeyLimitHelper for use. It should be called on each
+// call to SetupNextFetch().
+func (h *perScanKeyLimitHelper) reset() {
+	if h.droppedSpanIDs != nil {
+		h.droppedSpanIDs.Clear()
+	}
+	if h.droppedRequestPosScratch != nil {
+		h.droppedRequestPosScratch.Clear()
+	}
+}
+
+// dropSpan registers a span as dropped, meaning that the client no longer needs
+// results from it. It can only be called if the client provided span IDs.
+func (h *perScanKeyLimitHelper) dropSpan(spans *identifiableSpans, spanID int) error {
+	if _, ok := spans.getPos(spanID); !ok {
+		return errors.AssertionFailedf("cannot find span %d", spanID)
+	}
+	if h.droppedSpanIDs == nil {
+		h.droppedSpanIDs = new(intsets.Sparse)
+	}
+	h.droppedSpanIDs.Add(spanID)
+	return nil
+}
+
+// spanIsDropped checks whether the span with the given spanID has been dropped
+// by the client.
+func (h *perScanKeyLimitHelper) spanIsDropped(spanID int) bool {
+	if h.droppedSpanIDs == nil {
+		return false
+	}
+	return h.droppedSpanIDs.Contains(spanID)
 }
 
 // txnKVFetcher handles retrieval of key/values.
@@ -138,7 +205,7 @@ type txnKVFetcher struct {
 	// single-key fetch and may use a GetRequest under the hood.
 	spans identifiableSpans
 	// spansScratch is the initial state of spans (given to the fetcher when
-	// starting the scan) that we need to hold on to since we're poping off
+	// starting the scan) that we need to hold on to since we're popping off
 	// spans in nextBatch(). Any resume spans are copied into this struct when
 	// processing each response.
 	//
@@ -203,6 +270,10 @@ type txnKVFetcher struct {
 
 	// getResponseScratch is reused to return the result of Get requests.
 	getResponseScratch [1]roachpb.KeyValue
+
+	// keyLimitHelper helps to track which requests have reached the per-scan
+	// request key limit, if one was set.
+	keyLimitHelper perScanKeyLimitHelper
 
 	acc *mon.BoundAccount
 	// spansAccountedFor, batchResponseAccountedFor, and reqsScratchAccountedFor
@@ -493,6 +564,7 @@ func (f *txnKVFetcher) SetupNextFetch(
 	spansCanOverlap bool,
 ) error {
 	f.reset(ctx)
+	f.keyLimitHelper.reset()
 
 	if firstBatchKeyLimit < 0 || (batchBytesLimit == 0 && firstBatchKeyLimit != 0) {
 		// Passing firstBatchKeyLimit without batchBytesLimit doesn't make sense
@@ -803,6 +875,11 @@ func popBatch(
 	return nil, nil, colBatch, remainingColBatches
 }
 
+// DropSpan implements the KVBatchFetcher interface.
+func (f *txnKVFetcher) DropSpan(spanID int) error {
+	return f.keyLimitHelper.dropSpan(&f.spans, spanID)
+}
+
 // NextBatch implements the KVBatchFetcher interface.
 func (f *txnKVFetcher) NextBatch(ctx context.Context) (KVBatchFetcherResponse, error) {
 	resp, err := f.nextBatch(ctx)
@@ -860,7 +937,10 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 		// Any requests that were not fully completed will have the ResumeSpan set.
 		// Here we accumulate all of them.
 		if resumeSpan := header.ResumeSpan; resumeSpan != nil {
-			f.scratchSpans.push(*resumeSpan, f.curSpanID)
+			// Do not resume spans that the client indicated are no longer needed.
+			if !f.keyLimitHelper.spanIsDropped(f.curSpanID) {
+				f.scratchSpans.push(*resumeSpan, f.curSpanID)
+			}
 		}
 
 		ret := KVBatchFetcherResponse{

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bitmap"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -285,6 +286,11 @@ type Streamer struct {
 
 		avgResponseEstimator avgResponseEstimator
 
+		// bufferedResumeRequests is the set of requests that have encountered a
+		// scan key limit and are waiting for the client to signal whether more
+		// results are needed.
+		bufferedResumeRequests []singleRangeBatch
+
 		// In OutOfOrder mode, numRangesPerScanRequest tracks how many
 		// ranges a particular originally enqueued ScanRequest touches, but
 		// scanning of those ranges isn't complete.
@@ -302,6 +308,10 @@ type Streamer struct {
 		// already left requestsToServe queue, but for which we haven't received
 		// the results yet).
 		numRequestsInFlight int
+
+		// currentEnqueuedRequests tracks the number of requests that were added
+		// into the Streamer on the last call to Enqueue().
+		currentEnqueuedRequests int
 
 		// done is set to true once the Streamer is closed meaning the worker
 		// coordinator must exit.
@@ -828,10 +838,15 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 // mode is OutOfOrder, any result will do, and the caller is expected to examine
 // Result.Position to understand which request the result corresponds to. For
 // InOrder, only head-of-line results will do. Zero-length result slice is
-// returned once all enqueued requests have been responded to.
+// returned once all enqueued requests have been responded to. The caller may
+// provide a set of requests for which no more work should be done. This is
+// useful when the client only needs a limited number of results from each
+// scan request.
 //
 // Calling GetResults() invalidates the results returned on the previous call.
-func (s *Streamer) GetResults(ctx context.Context) (retResults []Result, retErr error) {
+func (s *Streamer) GetResults(
+	ctx context.Context, droppedRequests *intsets.Sparse,
+) (retResults []Result, retErr error) {
 	log.VEvent(ctx, 2, "GetResults")
 	defer func() {
 		log.VEventf(ctx, 2, "exiting GetResults (%d results, err=%v)", len(retResults), retErr)
@@ -841,12 +856,44 @@ func (s *Streamer) GetResults(ctx context.Context) (retResults []Result, retErr 
 		if len(results) > 0 || allComplete || err != nil {
 			return results, err
 		}
+		s.startBufferedResumeRequests(ctx, droppedRequests)
 		log.VEvent(ctx, 2, "waiting in GetResults")
 		if err = s.results.wait(ctx); err != nil {
 			s.results.setError(err)
 			return nil, err
 		}
 	}
+}
+
+// startBufferedResumeRequests is used to resume processing of scan resume
+// requests that were paused due to hitting a key limit. This should be called
+// once the client has indicated that it needs more results for the current
+// in-flight requests. droppedRequests may be nil.
+func (s *Streamer) startBufferedResumeRequests(
+	ctx context.Context, droppedRequests *intsets.Sparse,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.mu.bufferedResumeRequests) == 0 {
+		return
+	}
+	// NOTE: the single-range batch requests are shallow-copied, so we can reuse
+	// the slice after this method returns.
+	requests := s.mu.bufferedResumeRequests
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "issuing %d buffered resume requests", len(requests))
+	}
+	// The client has indicated that more results are required for the current
+	// in-flight requests, so any resume requests that were buffered due to
+	// hitting a key limit should be issued now.
+	for i, req := range requests {
+		req.removeDroppedRequests(droppedRequests)
+		if req.Len() > 0 {
+			s.requestsToServe.add(req)
+		}
+		requests[i] = singleRangeBatch{}
+	}
+	s.mu.bufferedResumeRequests = requests[:0]
 }
 
 // Close cancels all in-flight operations and releases all of the resources of
@@ -1676,7 +1723,7 @@ func calculateFootprint(
 			if len(batchResponses) > 0 {
 				fp.memoryFootprintBytes += scanResponseSize(reply)
 			}
-			resumeSpan, resumeReason := getScanResumeSpan(reply)
+			resumeSpan, _ := getScanResumeSpan(reply)
 			if len(batchResponses) > 0 || resumeSpan == nil {
 				fp.responsesOverhead += scanResponseOverhead
 				fp.numScanResults++
@@ -1687,9 +1734,8 @@ func calculateFootprint(
 					req.isScanStarted.Set(pos)
 				}
 			}
-			if resumeReason != kvpb.RESUME_KEY_LIMIT && resumeSpan != nil {
-				// This Scan wasn't completed. Note that we do not resume scanning after
-				// encountering a key limit.
+			if resumeSpan != nil {
+				// This Scan wasn't completed.
 				fp.resumeReqsMemUsage += scanRequestSize(resumeSpan.Key, resumeSpan.EndKey)
 				fp.numIncompleteScans++
 			}
@@ -1715,7 +1761,14 @@ func processSingleRangeResponse(
 ) {
 	processSingleRangeResults(ctx, s, req, br, fp)
 	if fp.hasIncomplete() {
-		resumeReq := buildResumeSingleRangeBatch(s, req, br, fp)
+		resumeReq, hitKeyLimit := buildResumeSingleRangeBatch(s, req, br, fp)
+		if hitKeyLimit {
+			log.VEventf(ctx, 2, "buffering resume batch %v due to scan limit", resumeReq)
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			s.mu.bufferedResumeRequests = append(s.mu.bufferedResumeRequests, resumeReq)
+			return
+		}
 		log.VEventf(ctx, 2, "adding resume batch %v", resumeReq)
 		s.requestsToServe.add(resumeReq)
 	}
@@ -1813,7 +1866,7 @@ func processSingleRangeResults(
 
 		case *kvpb.ScanResponse, *kvpb.ReverseScanResponse:
 			batchResponses := GetScanBatchResponses(response)
-			resumeSpan := getScanResumeSpan(response)
+			resumeSpan, _ := getScanResumeSpan(response)
 			if len(batchResponses) == 0 && resumeSpan != nil {
 				// Only the first part of the conditional is true whenever we
 				// received an empty response for the Scan request (i.e. there
@@ -1881,7 +1934,7 @@ func processSingleRangeResults(
 // requests.
 func buildResumeSingleRangeBatch(
 	s *Streamer, req singleRangeBatch, br *kvpb.BatchResponse, fp singleRangeBatchResponseFootprint,
-) (resumeReq singleRangeBatch) {
+) (resumeReq singleRangeBatch, hitKeyLimit bool) {
 	numIncompleteRequests := fp.numIncompleteGets + fp.numIncompleteScans
 	// We have to allocate the new Get and Scan requests, but we can reuse reqs,
 	// positions, and subRequestIdx slices.
@@ -1952,9 +2005,12 @@ func buildResumeSingleRangeBatch(
 			get.ResumeSpan = nil
 
 		case *kvpb.ScanResponse, *kvpb.ReverseScanResponse:
-			resumeSpan := getScanResumeSpan(response)
+			resumeSpan, resumeReason := getScanResumeSpan(response)
 			if resumeSpan == nil {
 				continue
+			}
+			if resumeReason == kvpb.RESUME_KEY_LIMIT {
+				hitKeyLimit = true
 			}
 			// This Scan wasn't completed - create a new request according to
 			// the ResumeSpan and include it into the batch.
@@ -2027,5 +2083,5 @@ func buildResumeSingleRangeBatch(
 	atomic.AddInt64(&s.atomics.resumeBatchRequests, 1)
 	atomic.AddInt64(&s.atomics.resumeSingleRangeRequests, int64(numIncompleteRequests))
 
-	return resumeReq
+	return resumeReq, hitKeyLimit
 }

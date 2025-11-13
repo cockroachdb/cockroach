@@ -31,6 +31,7 @@ go_library(
         "//pkg/util/bitmap",
         "//pkg/util/buildutil",
         "//pkg/util/humanizeutil",
+        "//pkg/util/intsets",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/mon",

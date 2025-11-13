@@ -408,6 +408,11 @@ func (f *KVProvider) SetupNextFetch(
 	return nil
 }
 
+// DropSpan implements the KVBatchFetcher interface.
+func (f *KVProvider) DropSpan(spanID int) error {
+	return nil
+}
+
 // GetBytesRead implements the KVBatchFetcher interface.
 func (f *KVProvider) GetBytesRead() int64 {
 	return 0

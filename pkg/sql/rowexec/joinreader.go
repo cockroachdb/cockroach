@@ -518,7 +518,11 @@ func newJoinReader(
 	if memoryLimit < minMemoryLimit {
 		memoryLimit = minMemoryLimit
 	}
-	perLookupKeyLimit := perLookupRowLimit * int(spec.FetchSpec.MaxKeysPerRow)
+	perLookupKeyLimit := perLookupRowLimit*int(spec.FetchSpec.MaxKeysPerRow)
+	if spec.FetchSpec.MaxKeysPerRow > 1 {
+    // Add an extra key
+    perLookupKeyLimit++
+	}
 
 	var streamingKVFetcher *row.KVFetcher
 	if jr.usesStreamer {

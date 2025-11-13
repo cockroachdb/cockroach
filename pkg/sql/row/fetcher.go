@@ -130,6 +130,14 @@ type KVBatchFetcher interface {
 		spansCanOverlap bool,
 	) error
 
+	// DropSpan registers a span for which the client no longer needs results. It
+	// is only valid to call this method after SetupNextFetch() has been called,
+	// and only if spanIDs were provided and a per-scan-request limit is set.
+	//
+	// Calling DropSpan is not necessary for correctness, but can prevent
+	// unnecessary work.
+	DropSpan(spanID int) error
+
 	// NextBatch returns the next batch of rows. See KVBatchFetcherResponse for
 	// details on what is returned.
 	NextBatch(ctx context.Context) (KVBatchFetcherResponse, error)
