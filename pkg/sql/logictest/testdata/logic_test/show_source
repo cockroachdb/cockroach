@@ -503,7 +503,6 @@ v           CREATE VIEW public.v (
             ) AS SELECT id FROM system.public.descriptor;
 
 
-skipif config local-mixed-25.2
 query TTT colnames
 SELECT username,options,member_of FROM [SHOW USERS] ORDER BY 1
 ----

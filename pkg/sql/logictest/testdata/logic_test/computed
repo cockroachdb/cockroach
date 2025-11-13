@@ -1460,7 +1460,7 @@ id  col_to_drop  computed_col
 # In versions older than 25.4, we cannot drop 'col_to_drop' and 'computed_col'
 # (as a cascade) in the same statement. We drop them separately. Newer versions
 # can do this due to a change in the dep rules.
-onlyif config local-mixed-25.3 local-mixed-25.2 local-legacy-schema-changer
+onlyif config local-mixed-25.3 local-legacy-schema-changer
 statement ok
 ALTER TABLE test_table DROP COLUMN computed_col
 
@@ -1514,7 +1514,7 @@ INSERT INTO test_virtual (id, col_to_drop, other_col) VALUES (1, 'virtual1', 300
 # In versions older than 25.4, we cannot drop 'col_to_drop' and 'computed_col'
 # (as a cascade) in the same statement. We drop them separately. Newer versions
 # can do this due to a change in the dep rules.
-onlyif config local-mixed-25.3 local-mixed-25.2 local-legacy-schema-changer
+onlyif config local-mixed-25.3 local-legacy-schema-changer
 statement ok
 ALTER TABLE test_virtual DROP COLUMN computed_col
 

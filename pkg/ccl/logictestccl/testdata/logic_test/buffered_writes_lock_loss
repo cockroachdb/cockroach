@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant !local-mixed-25.2
+# LogicTest: !3node-tenant
 # cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
 
 # We set the max_buffer_size to avoid unexpected buffer flush since this test expects certain writes to have been
