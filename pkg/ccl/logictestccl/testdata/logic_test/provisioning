@@ -1,4 +1,3 @@
-# LogicTest: !local-mixed-25.2
 # Tests for parsing/validation of the PROVISIONSRC role option.
 
 statement error role "root" cannot have a PROVISIONSRC

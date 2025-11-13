@@ -63,7 +63,7 @@ func alterPrimaryKey(
 	// Check if sql_safe_updates is enabled and the table has a vector index
 	tableElts := b.QueryByID(tbl.TableID).Filter(notFilter(absentTargetFilter))
 	scpb.ForEachSecondaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
-		if idx.Type == idxtype.VECTOR && !b.EvalCtx().Settings.Version.ActiveVersion(b).AtLeast(clusterversion.V25_2.Version()) {
+		if idx.Type == idxtype.VECTOR && !b.EvalCtx().Settings.Version.ActiveVersion(b).AtLeast(clusterversion.TODO_Delete_V25_2.Version()) {
 			panic(pgerror.Newf(pgcode.FeatureNotSupported, "cannot alter primary key on a table with vector indexes until finalizing on 25.2"))
 		}
 	})
@@ -995,7 +995,7 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 		// ALTER PRIMARY KEY IN the same transaction. (Otherwise, secondary indexes
 		// can be made public too early). Without this rule versions before 25.2 will fail
 		// during runtime trying to create the new secondary index.
-		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) &&
+		if !b.ClusterSettings().Version.IsActive(b, clusterversion.TODO_Delete_V25_2) &&
 			!b.QueryByID(tableID).Filter(ghostElementFilter).FilterSecondaryIndex().IsEmpty() {
 			panic(scerrors.NotImplementedErrorf(n, "ghost secondary index elements found"))
 		}

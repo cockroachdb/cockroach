@@ -1193,7 +1193,7 @@ func checkTableSchemaChangePrerequisites(
 	maybeCleanupSchemaLockedFn = func() {}
 	if schemaLocked != nil && !tree.IsSetOrResetSchemaLocked(n) {
 		// Before 25.2 we don't support auto-unsetting schema locked.
-		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) {
+		if !b.ClusterSettings().Version.IsActive(b, clusterversion.TODO_Delete_V25_2) {
 			ns := tableElements.FilterNamespace().MustGetOneElement()
 			panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
 		}

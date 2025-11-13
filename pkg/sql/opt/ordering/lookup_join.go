@@ -94,7 +94,7 @@ func LookupJoinCanProvideOrdering(
 	if ok && direction == ReverseDirection {
 		// Make sure the cluster is at least at v25.2 before planning a lookup
 		// join with reverse scans.
-		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_2) {
+		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V25_2) {
 			return false, EitherDirection
 		}
 		// Check the session setting.

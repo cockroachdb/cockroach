@@ -133,7 +133,7 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 	case *scpb.NamedRangeZoneConfig, *scpb.Policy, *scpb.PolicyName:
 		return version.IsActive(clusterversion.V25_1)
 	case *scpb.PolicyRole, *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr, *scpb.PolicyDeps, *scpb.RowLevelSecurityEnabled, *scpb.RowLevelSecurityForced:
-		return version.IsActive(clusterversion.V25_2)
+		return version.IsActive(clusterversion.TODO_Delete_V25_2)
 	case *scpb.TableLocalityRegionalByRowUsingConstraint:
 		return version.IsActive(clusterversion.V25_3)
 	case *scpb.ColumnGeneratedAsIdentity:

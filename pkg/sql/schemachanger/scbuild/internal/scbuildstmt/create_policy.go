@@ -30,7 +30,7 @@ import (
 
 // CreatePolicy implements CREATE POLICY.
 func CreatePolicy(b BuildCtx, n *tree.CreatePolicy) {
-	if !b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V25_2) {
+	if !b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.TODO_Delete_V25_2) {
 		panic(unimplemented.NewWithIssue(136696, "CREATE POLICY is not yet implemented"))
 	}
 	b.IncrementSchemaChangeCreateCounter("policy")
