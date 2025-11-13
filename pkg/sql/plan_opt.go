@@ -921,7 +921,14 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		return memo, nil
 	}
 
-	return f.ReleaseMemo(), nil
+	resMemo := f.ReleaseMemo()
+
+	// TODO(janexing): debug only, remove later.
+	if resMemo.UseCanaryStatsStatus() != p.EvalContext().UseCanaryStats {
+		panic("canary stats status mismatch for res memo")
+	}
+
+	return resMemo, nil
 }
 
 // runExecBuilder execbuilds a plan using the given factory and stores the
