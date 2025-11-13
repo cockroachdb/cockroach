@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -75,6 +76,15 @@ INSERT INTO defaultdb.queue_feeds (queue_feed_name, table_desc_id) VALUES ($1, $
 
 const fetchQueueFeedSQL = `
 SELECT table_desc_id FROM defaultdb.queue_feeds WHERE queue_feed_name = $1
+`
+
+const updateCheckpointSQL = `
+UPSERT INTO defaultdb.queue_cursor_%s (partition_id, updated_at, cursor)
+VALUES ($1, now(), $2)
+`
+
+const readCheckpointSQL = `
+SELECT cursor FROM defaultdb.queue_cursor_%s WHERE partition_id = $1
 `
 
 // should take a txn
@@ -249,6 +259,48 @@ func (m *Manager) forgetReader(name string) {
 		defer m.mu.Unlock()
 		delete(m.mu.readers, name)
 	}()
+}
+
+func (m *Manager) WriteCheckpoint(
+	ctx context.Context, queueName string, partitionID int64, ts hlc.Timestamp,
+) error {
+	// Serialize the timestamp as bytes
+	cursorBytes, err := ts.Marshal()
+	if err != nil {
+		return errors.Wrap(err, "marshaling checkpoint timestamp")
+	}
+
+	sql := fmt.Sprintf(updateCheckpointSQL, queueName)
+	return m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := txn.Exec(ctx, "write_checkpoint", txn.KV(), sql, partitionID, cursorBytes)
+		return err
+	})
+}
+
+func (m *Manager) ReadCheckpoint(
+	ctx context.Context, queueName string, partitionID int64,
+) (hlc.Timestamp, error) {
+	var ts hlc.Timestamp
+	sql := fmt.Sprintf(readCheckpointSQL, queueName)
+
+	err := m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		row, err := txn.QueryRowEx(ctx, "read_checkpoint", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride, sql, partitionID)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			return nil
+		}
+
+		cursorBytes := []byte(*row[0].(*tree.DBytes))
+		if err := ts.Unmarshal(cursorBytes); err != nil {
+			return errors.Wrap(err, "unmarshaling checkpoint timestamp")
+		}
+		return nil
+	})
+
+	return ts, err
 }
 
 var _ queuebase.Manager = &Manager{}

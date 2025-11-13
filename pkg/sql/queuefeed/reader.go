@@ -39,6 +39,15 @@ const (
 	readerStateDead
 )
 
+// bufferedEvent represents either a data row or a checkpoint timestamp
+// in the reader's buffer. Exactly one of row or resolved will be set.
+type bufferedEvent struct {
+	// row is set for data events. nil for checkpoint events.
+	row tree.Datums
+	// resolved is set for checkpoint events. Empty for data events.
+	resolved hlc.Timestamp
+}
+
 // has rangefeed on data. reads from it. handles handoff
 // state machine around handing out batches and handing stuff off
 type Reader struct {
@@ -55,8 +64,8 @@ type Reader struct {
 	mu struct {
 		syncutil.Mutex
 		state          readerState
-		buf            []tree.Datums
-		inflightBuffer []tree.Datums
+		buf            []bufferedEvent
+		inflightBuffer []bufferedEvent
 		poppedWakeup   *sync.Cond
 		pushedWakeup   *sync.Cond
 	}
@@ -95,7 +104,7 @@ func NewReader(
 		session:  session,
 	}
 	r.mu.state = readerStateBatching
-	r.mu.buf = make([]tree.Datums, 0, maxBufSize)
+	r.mu.buf = make([]bufferedEvent, 0, maxBufSize)
 	r.mu.poppedWakeup = sync.NewCond(&r.mu.Mutex)
 	r.mu.pushedWakeup = sync.NewCond(&r.mu.Mutex)
 
@@ -132,8 +141,6 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) err
 		return errors.Wrap(ErrNoPartitionsAssigned, "setting up rangefeed")
 	}
 
-	incomingResolveds := make(chan hlc.Timestamp)
-
 	onValue := func(ctx context.Context, value *kvpb.RangeFeedValue) {
 		fmt.Printf("onValue: %+v\n", value)
 		r.mu.Lock()
@@ -153,7 +160,7 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) err
 			r.cancel(errors.Wrapf(err, "decoding rangefeed value: %+v", value))
 			return
 		}
-		r.mu.buf = append(r.mu.buf, datums)
+		r.mu.buf = append(r.mu.buf, bufferedEvent{row: datums})
 		r.mu.pushedWakeup.Broadcast()
 		fmt.Printf("onValue done with buf len: %d\n", len(r.mu.buf))
 	}
@@ -166,11 +173,20 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) err
 			if checkpoint.ResolvedTS.IsEmpty() {
 				return
 			}
-			select {
-			case incomingResolveds <- checkpoint.ResolvedTS:
-			case <-ctx.Done():
-			default: // TODO: handle resolveds (dont actually default here)
+
+			r.mu.Lock()
+			defer r.mu.Unlock()
+
+			// Wait for rows to be read before adding more, if necessary.
+			for ctx.Err() == nil && len(r.mu.buf) > maxBufSize {
+				r.mu.poppedWakeup.Wait()
 			}
+
+			if ctx.Err() != nil {
+				return
+			}
+
+			r.mu.buf = append(r.mu.buf, bufferedEvent{resolved: checkpoint.ResolvedTS})
 		}),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) { r.cancel(err) }),
 		rangefeed.WithConsumerID(42),
@@ -178,8 +194,18 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) err
 		rangefeed.WithFiltering(false),
 	}
 
-	// TODO: resume from cursor
-	initialTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	// Resume from checkpoint if available
+	// TODO: Support multiple partitions
+	partitionID := int64(1)
+	initialTS, err := r.mgr.ReadCheckpoint(ctx, r.name, partitionID)
+	if err != nil {
+		return errors.Wrap(err, "reading checkpoint")
+	}
+	if initialTS.IsEmpty() {
+		// No checkpoint found, start from now
+		initialTS = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	}
+
 	rf := r.rff.New(
 		fmt.Sprintf("queuefeed.reader.name=%s", r.name), initialTS, onValue, opts...,
 	)
@@ -245,55 +271,99 @@ func (r *Reader) GetRows(ctx context.Context, limit int) ([]tree.Datums, error) 
 		return nil, errors.AssertionFailedf("getrows called with nonempty inflight buffer")
 	}
 
-	if len(r.mu.buf) == 0 {
-		fmt.Printf("GetRows called with empty buf. waiting for pushedWakeup\n")
+	// Helper to count data events (not checkpoints) in buffer
+	hasDataEvents := func() bool {
+		for _, event := range r.mu.buf {
+			if event.resolved.IsEmpty() {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Wait until we have at least one data event (not just checkpoints)
+	if !hasDataEvents() {
 		// shut down the reader if this ctx (which is distinct from the goro ctx) is canceled
 		defer context.AfterFunc(ctx, func() {
 			r.cancel(errors.Wrapf(ctx.Err(), "GetRows canceled"))
 		})()
-		for ctx.Err() == nil && r.goroCtx.Err() == nil && len(r.mu.buf) == 0 {
+		for ctx.Err() == nil && r.goroCtx.Err() == nil && !hasDataEvents() {
 			r.mu.pushedWakeup.Wait()
 		}
 		if ctx.Err() != nil {
 			return nil, errors.Wrapf(ctx.Err(), "GetRows canceled")
 		}
-		if r.goroCtx.Err() != nil {
-			return nil, errors.Wrapf(r.goroCtx.Err(), "reader shutting down")
+	}
+
+	// Find the position of the (limit+1)th data event (not checkpoint)
+	// We'll take everything up to that point, which gives us up to `limit` data rows
+	// plus any checkpoints that came before/between them.
+	bufferEndIdx := len(r.mu.buf)
+
+	// Optimization: if the entire buffer is smaller than limit, take it all
+	if len(r.mu.buf) > limit {
+		dataCount := 0
+		for i, event := range r.mu.buf {
+			if event.resolved.IsEmpty() {
+				dataCount++
+				if dataCount > limit {
+					bufferEndIdx = i
+					break
+				}
+			}
 		}
 	}
 
-	if limit > len(r.mu.buf) {
-		limit = len(r.mu.buf)
-	}
-
-	fmt.Printf("GetRows called with limit: %d, buf len: %d\n", limit, len(r.mu.buf))
-
-	r.mu.inflightBuffer = append(r.mu.inflightBuffer, r.mu.buf[0:limit]...)
-	r.mu.buf = r.mu.buf[limit:]
+	r.mu.inflightBuffer = append(r.mu.inflightBuffer, r.mu.buf[0:bufferEndIdx]...)
+	r.mu.buf = r.mu.buf[bufferEndIdx:]
 
 	r.mu.state = readerStateHasUncommittedBatch
-
 	r.mu.poppedWakeup.Broadcast()
 
-	fmt.Printf("GetRows done with inflightBuffer len: %d, buf len: %d\n", len(r.mu.inflightBuffer), len(r.mu.buf))
+	// Here we filter to return only data events to the user.
+	result := make([]tree.Datums, 0, limit)
+	for _, event := range r.mu.inflightBuffer {
+		if event.resolved.IsEmpty() {
+			result = append(result, event.row)
+		}
+	}
 
-	return slices.Clone(r.mu.inflightBuffer), nil
+	return result, nil
 }
 
+// ConfirmReceipt is called when we commit a transaction that reads from the queue.
+// We will checkpoint if we have checkpoint events in our inflightBuffer.
 func (r *Reader) ConfirmReceipt(ctx context.Context) {
 	if r.isShutdown.Load() {
 		return
 	}
 
+	var checkpointToWrite hlc.Timestamp
 	func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 
-		fmt.Printf("confirming receipt with inflightBuffer len: %d\n", len(r.mu.inflightBuffer))
+		// Find the last checkpoint in inflightBuffer
+		for _, event := range r.mu.inflightBuffer {
+			if !event.resolved.IsEmpty() {
+				checkpointToWrite = event.resolved
+			}
+		}
 
 		r.mu.inflightBuffer = r.mu.inflightBuffer[:0]
 		r.mu.state = readerStateCheckingForReassignment
 	}()
+
+	// Persist the checkpoint if we have one.
+	if !checkpointToWrite.IsEmpty() {
+		// TODO: Support multiple partitions - for now we only have partition 1.
+		partitionID := int64(1)
+		if err := r.mgr.WriteCheckpoint(ctx, r.name, partitionID, checkpointToWrite); err != nil {
+			fmt.Printf("error writing checkpoint: %s\n", err)
+			// TODO: decide how to handle checkpoint write errors. Since the txn
+			// has already committed, I don't think we can really fail at this point.
+		}
+	}
 
 	select {
 	case <-ctx.Done():
@@ -329,9 +399,7 @@ func (r *Reader) RollbackBatch(ctx context.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	fmt.Printf("rolling back batch with inflightBuffer len: %d\n", len(r.mu.inflightBuffer))
-
-	newBuf := make([]tree.Datums, 0, len(r.mu.inflightBuffer)+len(r.mu.buf))
+	newBuf := make([]bufferedEvent, 0, len(r.mu.inflightBuffer)+len(r.mu.buf))
 	newBuf = append(newBuf, r.mu.inflightBuffer...)
 	newBuf = append(newBuf, r.mu.buf...)
 	r.mu.buf = newBuf
