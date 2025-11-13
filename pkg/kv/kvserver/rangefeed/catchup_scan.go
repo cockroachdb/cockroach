@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -223,8 +224,6 @@ func (i *CatchUpSnapshot) CatchUpScan(
 	var meta enginepb.MVCCMetadata
 	iter.SeekGE(storage.MVCCKey{Key: i.span.Key})
 
-	var keyCount uint64
-
 	for {
 		if ok, err := iter.Valid(); err != nil {
 			return err
@@ -240,7 +239,6 @@ func (i *CatchUpSnapshot) CatchUpScan(
 		unsafeKey := iter.UnsafeKey()
 		sameKey := bytes.Equal(unsafeKey.Key, lastKey)
 		if !sameKey {
-			keyCount++
 
 			// If so, output events for the last key encountered.
 			if err := outputEvents(); err != nil {
@@ -263,7 +261,15 @@ func (i *CatchUpSnapshot) CatchUpScan(
 			// proved a bit slow.
 			forceRecreateUnderTest := false
 			if util.RaceEnabled {
-				forceRecreateUnderTest = keyCount%10 == 0
+				// Hash the pointer of the current iterator into the range [0, 3] to
+				// give us a ~25% chance of recreating the iterator.
+				//
+				// unsafe.Pointer's documentation implies that this uintptr is not
+				// technically guaranteed to be stable across multiple calls. So, we
+				// could make a different decision for the same iterator. That's OK, the
+				// goal here is to force recreation occasionally, nothing more.
+				ptr := uintptr(unsafe.Pointer(&iter))
+				forceRecreateUnderTest = util.FibHash(uint64(ptr), 2) == 0
 			}
 
 			// We sample the current time only when readmitted is true, to avoid
