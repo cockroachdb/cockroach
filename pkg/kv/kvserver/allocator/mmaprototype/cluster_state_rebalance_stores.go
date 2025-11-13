@@ -236,7 +236,8 @@ func (rs *rebalanceState) rebalanceStore(
 	}
 
 	log.KvDistribution.VInfof(ctx, 2, "attempting to shed replicas next")
-	{
+	rs.rebalanceReplicas(ctx, store, ss, localStoreID, now)
+	func(rs *rebalanceState, ctx context.Context, store sheddingStore, ss *storeState, localStoreID roachpb.StoreID, now time.Time) {
 		doneShedding := false
 		if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
 			now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
@@ -437,7 +438,17 @@ func (rs *rebalanceState) rebalanceStore(
 			log.KvDistribution.VInfof(ctx, 2, "store s%d is done shedding, moving to next store", store.StoreID)
 			return
 		}
-	}
+	}(rs, ctx, store, ss, localStoreID, now)
+}
+
+func (rs *rebalanceState) rebalanceReplicas(
+	ctx context.Context,
+	store sheddingStore,
+	ss *storeState,
+	localStoreID roachpb.StoreID,
+	now time.Time,
+) {
+	// TODO: code will be moved here in next step.
 }
 
 func (rs *rebalanceState) rebalanceLeases(
