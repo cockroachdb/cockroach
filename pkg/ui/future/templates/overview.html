@@ -113,7 +113,7 @@
       {{/* Individual node rows */}}
       {{range .Nodes}}
       <tr x-show="expanded">
-        <td>{{.Address}} (n{{.NodeID}})</td>
+        <td><a href="/future/nodes/{{.NodeID}}">{{.Address}} (n{{.NodeID}})</a></td>
         <td></td>
         <td>{{.UptimeFormatted}}</td>
         <td>{{.Replicas}}</td>
@@ -127,9 +127,10 @@
       {{end}}
       {{else}}
       {{/* Single node - no expansion needed */}}
+      {{ $region := . }}
       {{range .Nodes}}
       <tr>
-        <td>{{.Address}} (n{{.NodeID}})</td>
+        <td><a href="/future/nodes/{{.NodeID}}">{{.Address}} (n{{.NodeID}})</a> [{{ if $region.RegionName}}{{$region.RegionName}}{{else}}(no region){{end}}]</td>
         <td></td>
         <td>{{.UptimeFormatted}}</td>
         <td>{{.Replicas}}</td>

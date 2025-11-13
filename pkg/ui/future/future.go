@@ -478,12 +478,140 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 	return router.ServeHTTP
 }
 
+// NodePageData contains data for the node details page
+type NodePageData struct {
+	NodeID       int32
+	Address      string
+	Health       string
+	LastUpdate   time.Time
+	BuildVersion string
+	Stores       []StoreInfo
+	NodeTotals   StoreTotals
+}
+
+// StoreInfo contains metrics for a single store
+type StoreInfo struct {
+	StoreID int32
+	Totals  StoreTotals
+}
+
+// StoreTotals contains aggregated metrics
+type StoreTotals struct {
+	LiveBytes          int64
+	KeyBytes           int64
+	ValueBytes         int64
+	RangeKeyBytes      int64
+	RangeValueBytes    int64
+	IntentBytes        int64
+	SystemBytes        int64
+	GCBytesAge         int64
+	TotalReplicas      int64
+	RaftLeaders        int64
+	TotalRanges        int64
+	UnavailablePercent float64
+	UnderRepPercent    float64
+	UsedCapacity       int64
+	AvailableCapacity  int64
+	MaximumCapacity    int64
+}
+
 func handleNode(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	ctx := r.Context()
+
+	// Extract node ID from URL path
+	vars := mux.Vars(r)
+	nodeIDStr := vars["nodeID"]
+	nodeID, err := strconv.ParseInt(nodeIDStr, 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid node ID", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch all nodes to find the requested node
+	nodesResp, err := cfg.Status.NodesUI(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch nodes: %v", err)
+		http.Error(w, "Failed to fetch nodes", http.StatusInternalServerError)
+		return
+	}
+
+	// Find the specific node
+	var targetNode *serverpb.NodeResponse
+	for i := range nodesResp.Nodes {
+		if int32(nodesResp.Nodes[i].Desc.NodeID) == int32(nodeID) {
+			targetNode = &nodesResp.Nodes[i]
+			break
+		}
+	}
+
+	if targetNode == nil {
+		http.Error(w, "Node not found", http.StatusNotFound)
+		return
+	}
+
+	// Build page data
+	pageData := NodePageData{
+		NodeID:       int32(targetNode.Desc.NodeID),
+		Address:      targetNode.Desc.Address.AddressField,
+		Health:       "Healthy", // Simplified - could check liveness
+		LastUpdate:   time.Unix(0, targetNode.UpdatedAt),
+		BuildVersion: targetNode.BuildInfo.Tag,
+		Stores:       make([]StoreInfo, 0, len(targetNode.StoreStatuses)),
+	}
+
+	// Initialize node totals
+	var nodeTotals StoreTotals
+
+	// Process each store
+	for _, store := range targetNode.StoreStatuses {
+		// Get MVCC stats from metrics
+		storeStats := StoreTotals{
+			LiveBytes:          int64(store.Metrics["livebytes"]),
+			KeyBytes:           int64(store.Metrics["keybytes"]),
+			ValueBytes:         int64(store.Metrics["valbytes"]),
+			RangeKeyBytes:      int64(store.Metrics["rangekeybytes"]),
+			RangeValueBytes:    int64(store.Metrics["rangevalbytes"]),
+			IntentBytes:        int64(store.Metrics["intentbytes"]),
+			SystemBytes:        int64(store.Metrics["sysbytes"]),
+			GCBytesAge:         int64(store.Metrics["gcbytesage"]),
+			TotalReplicas:      int64(store.Desc.Capacity.RangeCount),
+			RaftLeaders:        int64(store.Desc.Capacity.LeaseCount),
+			TotalRanges:        int64(store.Metrics["ranges"]),
+			UnavailablePercent: 0, // TODO: Calculate from problem ranges
+			UnderRepPercent:    0, // TODO: Calculate from problem ranges
+			UsedCapacity:       store.Desc.Capacity.Used,
+			AvailableCapacity:  store.Desc.Capacity.Available,
+			MaximumCapacity:    store.Desc.Capacity.Capacity,
+		}
+
+		pageData.Stores = append(pageData.Stores, StoreInfo{
+			StoreID: int32(store.Desc.StoreID),
+			Totals:  storeStats,
+		})
+
+		// Aggregate to node totals
+		nodeTotals.LiveBytes += storeStats.LiveBytes
+		nodeTotals.KeyBytes += storeStats.KeyBytes
+		nodeTotals.ValueBytes += storeStats.ValueBytes
+		nodeTotals.RangeKeyBytes += storeStats.RangeKeyBytes
+		nodeTotals.RangeValueBytes += storeStats.RangeValueBytes
+		nodeTotals.IntentBytes += storeStats.IntentBytes
+		nodeTotals.SystemBytes += storeStats.SystemBytes
+		nodeTotals.GCBytesAge += storeStats.GCBytesAge
+		nodeTotals.TotalReplicas += storeStats.TotalReplicas
+		nodeTotals.RaftLeaders += storeStats.RaftLeaders
+		nodeTotals.TotalRanges += storeStats.TotalRanges
+		nodeTotals.UsedCapacity += storeStats.UsedCapacity
+		nodeTotals.AvailableCapacity += storeStats.AvailableCapacity
+		nodeTotals.MaximumCapacity += storeStats.MaximumCapacity
+	}
+
+	pageData.NodeTotals = nodeTotals
+
 	// Execute the pre-parsed template
-	err := templates.ExecuteTemplate(w, "node.html", PageData{
+	err = templates.ExecuteTemplate(w, "node.html", PageData{
 		IndexHTMLArgs: cfg,
-		Data:          nil,
+		Data:          pageData,
 	})
 	if err != nil {
 		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
@@ -1615,15 +1743,16 @@ func fetchOverviewData(ctx context.Context, cfg IndexHTMLArgs) (*OverviewData, e
 		return nil, fmt.Errorf("failed to fetch nodes: %w", err)
 	}
 
-	// Group nodes by region
+	// Group nodes by locality (cloud, region, az)
 	regionMap := make(map[string][]NodeInfo)
 	data.TotalNodes = len(nodesResp.Nodes)
 
 	// Process nodes data to calculate capacity and node status counts
 	for _, node := range nodesResp.Nodes {
-		// Extract region from locality
-		region := extractRegion(&node.Desc.Locality)
+		// Extract locality grouping (cloud, region, az)
+		region := extractLocalityGroup(&node.Desc.Locality)
 
+		log.Dev.Errorf(ctx, "extracted %s", region)
 		// Calculate node-level metrics
 		var nodeReplicas int
 		var nodeCapacityUsed, nodeCapacityTotal int64
@@ -1760,6 +1889,44 @@ func extractRegion(locality *serverpb.Locality) string {
 		}
 	}
 	return ""
+}
+
+// extractLocalityGroup creates a human-readable locality grouping string
+// combining cloud, region, and az (availability zone) if available
+func extractLocalityGroup(locality *serverpb.Locality) string {
+	if locality == nil {
+		return "(no locality)"
+	}
+
+	var cloud, region, az string
+	for _, tier := range locality.Tiers {
+		switch tier.Key {
+		case "cloud":
+			cloud = tier.Value
+		case "region":
+			region = tier.Value
+		case "az", "availability-zone", "zone":
+			az = tier.Value
+		}
+	}
+
+	// Build the group name from available locality tags
+	var parts []string
+	if cloud != "" {
+		parts = append(parts, cloud)
+	}
+	if region != "" {
+		parts = append(parts, region)
+	}
+	if az != "" {
+		parts = append(parts, az)
+	}
+
+	if len(parts) == 0 {
+		return "(no locality)"
+	}
+
+	return strings.Join(parts, ", ")
 }
 
 // getNodeStatus returns a human-readable status and CSS class for a liveness status
