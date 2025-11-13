@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"text/tabwriter"
 	"time"
@@ -1126,7 +1127,7 @@ type logicTest struct {
 
 	// allowUnsafe is a variable which controls whether the test can access
 	// unsafe internals.
-	allowUnsafe bool
+	allowUnsafe atomic.Bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1501,7 +1502,10 @@ func (t *logicTest) newCluster(
 			DisableOptimizerRuleProbability: *disableOptRuleProbability,
 			OptimizerCostPerturbation:       *optimizerCostPerturbation,
 			ForceProductionValues:           serverArgs.ForceProductionValues,
-			UnsafeOverride:                  func() *bool { return &t.allowUnsafe },
+			UnsafeOverride: func() *bool {
+				v := t.allowUnsafe.Load()
+				return &v
+			},
 		}
 		knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 			DeterministicExplain:            true,
@@ -4649,8 +4653,8 @@ func RunLogicTest(
 		perErrorSummary:            make(map[string][]string),
 		rng:                        rng,
 		declarativeCorpusCollector: cc,
-		allowUnsafe:                true,
 	}
+	lt.allowUnsafe.Store(true)
 	if *printErrorSummary {
 		defer lt.printErrorSummary()
 	}
@@ -4940,8 +4944,8 @@ func (t *logicTest) setSafetyGate(sql string, skip bool) func() {
 		return func() {}
 	}
 
-	t.allowUnsafe = false
+	t.allowUnsafe.Store(false)
 	return func() {
-		t.allowUnsafe = true
+		t.allowUnsafe.Store(true)
 	}
 }
