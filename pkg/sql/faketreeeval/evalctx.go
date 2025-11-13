@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -363,6 +364,11 @@ func (p *DummyEvalPlanner) StartHistoryRetentionJob(
 
 func (p *DummyEvalPlanner) ExtendHistoryRetention(ctx context.Context, id jobspb.JobID) error {
 	return errors.WithStack(errEvalPlanner)
+}
+
+// GetQueueReaderProvider is part of the eval.Planner interface.
+func (*DummyEvalPlanner) GetQueueReaderProvider() queuebase.ReaderProvider {
+	return nil
 }
 
 var _ eval.Planner = &DummyEvalPlanner{}

@@ -83,7 +83,11 @@ func TestPartitionReassignments(t *testing.T) {
 
 	pa := queuefeed.NewPartitionAssignments(s.ExecutorConfig().(sql.ExecutorConfig).InternalDB, queueName)
 
-	reader, err := manager.GetOrInitReader(ctx, "test_queue")
+	session := queuefeed.Session{
+		ConnectionID: uuid.MakeV4(),
+		LivenessID:   sqlliveness.SessionID("1"),
+	}
+	reader, err := manager.CreateReaderForSession(ctx, "test_queue", session)
 	require.NoError(t, err)
 
 	// get the session the reader is using

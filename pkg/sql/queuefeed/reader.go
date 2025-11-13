@@ -242,7 +242,6 @@ func (r *Reader) run(ctx context.Context) {
 	defer func() {
 		fmt.Println("run done")
 		r.isShutdown.Store(true)
-		r.mgr.forgetReader(r.name)
 	}()
 
 	for {

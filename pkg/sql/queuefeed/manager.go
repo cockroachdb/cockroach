@@ -17,10 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -34,10 +32,6 @@ type Manager struct {
 
 	mu struct {
 		syncutil.Mutex
-		// name -> reader
-		// TODO: this should actually be a map of (session id, name) -> reader, or smth
-		readers map[string]*Reader
-
 		queueAssignment map[string]*PartitionAssignments
 	}
 }
@@ -52,7 +46,6 @@ func NewManager(
 	// setup rangefeed on partitions table (/poll)
 	// handle handoff from one server to another
 	m := &Manager{executor: executor, rff: rff, codec: codec, leaseMgr: leaseMgr}
-	m.mu.readers = make(map[string]*Reader)
 	m.mu.queueAssignment = make(map[string]*PartitionAssignments)
 	return m
 }
@@ -192,27 +185,6 @@ func (m *Manager) CreateQueue(ctx context.Context, queueName string, tableDescID
 	})
 }
 
-func (m *Manager) GetOrInitReader(ctx context.Context, name string) (queuebase.Reader, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	reader, ok := m.mu.readers[name]
-	if ok && reader.IsAlive() {
-		fmt.Printf("get or init reader for queue %s found in cache\n", name)
-		return reader, nil
-	}
-	fmt.Printf("get or init reader for queue %s not found in cache\n", name)
-	reader, err := m.newReaderLocked(ctx, name, Session{
-		// TODO(queuefeed): get a real session here.
-		ConnectionID: uuid.MakeV4(),
-		LivenessID:   sqlliveness.SessionID("1"),
-	})
-	if err != nil {
-		return nil, err
-	}
-	m.mu.readers[name] = reader
-	return reader, nil
-}
-
 func (m *Manager) newReaderLocked(
 	ctx context.Context, name string, session Session,
 ) (*Reader, error) {
@@ -253,12 +225,14 @@ func (m *Manager) reassessAssignments(ctx context.Context, name string) (bool, e
 	return false, nil
 }
 
-func (m *Manager) forgetReader(name string) {
-	func() {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		delete(m.mu.readers, name)
-	}()
+// CreateReaderForSession creates a new reader for the given queue name and session.
+// This method handles locking and partition assignment lookup internally.
+func (m *Manager) CreateReaderForSession(
+	ctx context.Context, name string, session Session,
+) (*Reader, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.newReaderLocked(ctx, name, session)
 }
 
 func (m *Manager) WriteCheckpoint(

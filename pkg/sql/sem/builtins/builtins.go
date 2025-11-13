@@ -4670,7 +4670,7 @@ value if you rely on the HLC for accuracy.`,
 		ReturnType: tree.FixedReturnType(types.MakeArray(types.Json)),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			qn := args[0].(*tree.DString)
-			qr, err := getQueueManager(evalCtx).GetOrInitReader(evalCtx.SessionCtx, string(*qn))
+			qr, err := getQueueReaderProvider(evalCtx).GetOrInitReader(evalCtx.SessionCtx, string(*qn))
 			if err != nil {
 				return nil, errors.Wrapf(err, "get or init reader for queue %s", string(*qn))
 			}
@@ -12912,4 +12912,8 @@ var nilRegionsError = errors.AssertionFailedf("evalCtx.Regions is nil")
 
 func getQueueManager(evalCtx *eval.Context) queuebase.Manager {
 	return evalCtx.Planner.ExecutorConfig().(interface{ GetQueueManager() queuebase.Manager }).GetQueueManager()
+}
+
+func getQueueReaderProvider(evalCtx *eval.Context) queuebase.ReaderProvider {
+	return evalCtx.Planner.GetQueueReaderProvider()
 }

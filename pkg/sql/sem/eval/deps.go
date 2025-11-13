@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -296,6 +297,10 @@ type Planner interface {
 	// (false, err) means that there was an error running the query on
 	// the `system.users` table
 	UserHasAdminRole(ctx context.Context, user username.SQLUsername) (bool, error)
+
+	// GetQueueReaderProvider returns the ReaderProvider for queuefeed readers,
+	// or nil if not available.
+	GetQueueReaderProvider() queuebase.ReaderProvider
 
 	// MemberOfWithAdminOption is used to collect a list of roles (direct and
 	// indirect) that the member is part of. See the comment on the planner
