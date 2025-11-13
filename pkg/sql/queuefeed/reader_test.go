@@ -121,11 +121,11 @@ func TestCheckpointRestoration(t *testing.T) {
 	qm := NewTestManager(t, srv.ApplicationLayer())
 	require.NoError(t, qm.CreateQueue(ctx, "checkpoint_test", tableID))
 
-	session1 := Session{
+	session := Session{
 		ConnectionID: uuid.MakeV4(),
 		LivenessID:   sqlliveness.SessionID("1"),
 	}
-	reader1, err := qm.CreateReaderForSession(ctx, "checkpoint_test", session1)
+	reader1, err := qm.CreateReaderForSession(ctx, "checkpoint_test", session)
 	require.NoError(t, err)
 
 	db.Exec(t, `INSERT INTO t VALUES ('batch1_row1', 1), ('batch1_row2', 2)`)
@@ -141,11 +141,7 @@ func TestCheckpointRestoration(t *testing.T) {
 
 	db.Exec(t, `INSERT INTO t VALUES ('batch2_row1', 3), ('batch2_row2', 4)`)
 
-	session2 := Session{
-		ConnectionID: uuid.MakeV4(),
-		LivenessID:   sqlliveness.SessionID("2"),
-	}
-	reader2, err := qm.CreateReaderForSession(ctx, "checkpoint_test", session2)
+	reader2, err := qm.CreateReaderForSession(ctx, "checkpoint_test", session)
 	require.NoError(t, err)
 	defer reader2.Close()
 
