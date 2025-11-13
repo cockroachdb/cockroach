@@ -2908,14 +2908,812 @@ git checkout -b enable-upgrade-tests-25.4-code
 
 ---
 
+## M.4: Bump MinSupported Version
+
+This section provides step-by-step instructions for the M.4 task: "Bump MinSupported version" on the master branch. This task removes support for the oldest version in the rolling upgrade window.
+
+### Overview
+
+**When to perform:** After the final release is published (e.g., after v25.2.0 is released, bump MinSupported from v25.2 to v25.3).
+
+**What it does:**
+- Updates the MinSupported constant to the next version, narrowing the upgrade window
+- Removes obsolete version gates and compatibility code for the old MinSupported version
+- Deletes bootstrap data, schema changer rules, and test configurations for the old version
+- Cleans up test files that reference the old version
+
+**Why:** CockroachDB maintains a rolling upgrade window of N-2 versions. When a new version is released (e.g., 25.4), the oldest version in the window (e.g., 25.2) is no longer supported for direct upgrades. This allows removal of compatibility code and reduces maintenance burden.
+
+**Dependencies:**
+- The final release must be published (e.g., v25.2.0)
+- Previous master branch tasks (M.1, M.2, M.3) should be complete
+
+### Prerequisites
+
+Before starting, ensure:
+1. The final release is published and documented (e.g., v25.2.0)
+2. You know which version to bump from and to (e.g., from v25.2 to v25.3)
+3. You have the reference PR for the pattern (e.g., #147634 for v25.1 → v25.2)
+4. You're working on the `master` branch
+
+### Commit Organization Strategy
+
+This task should be organized into **6 logical commits** based on the reference PR #147634:
+
+1. **Commit 1**: Prefix version keys with TODO_Delete_
+2. **Commit 2**: Bump MinSupported constant
+3. **Commit 4**: Remove schema changer rules (skip commit 3 if test doesn't exist)
+4. **Commit 5**: Remove bootstrap data
+5. **Commit 6**: Update mixed_version tests
+6. **Commit 7**: Remove local-mixed test configuration
+
+**Note:** Commits 3, 8, 9 from reference PR may not exist in your codebase and should be skipped.
+
+### Step-by-Step Checklist
+
+#### Commit 1: Prefix Version Keys with TODO_Delete_
+
+Mark old version keys for future removal by prefixing them with `TODO_Delete_`.
+
+**File:** `pkg/clusterversion/cockroach_versions.go`
+
+**Find all version keys below the new MinSupported** (e.g., all V25_2* keys when bumping to V25_3):
+
+```bash
+# Example for bumping MinSupported from V25_2 to V25_3
+# Find all V25_2 version keys:
+grep -n "^\s*V25_2" pkg/clusterversion/cockroach_versions.go
+```
+
+**Add TODO_Delete_ prefix:**
+```go
+// Before:
+V25_2_Start
+V25_2_AddSystemStatementHintsTable
+V25_2
+
+// After:
+TODO_Delete_V25_2_Start
+TODO_Delete_V25_2_AddSystemStatementHintsTable
+TODO_Delete_V25_2
+```
+
+**Create commit:**
+```bash
+git add pkg/clusterversion/cockroach_versions.go
+git commit -m "clusterversion: prefix version keys below 25.3 with TODO_Delete_
+
+Part of the quarterly M.4 \"Bump MinSupported\" task as outlined in
+\`pkg/clusterversion/README.md\`.
+
+This commit marks version keys below v25.3 with the TODO_Delete_ prefix
+to indicate they will be removed in the next major release.
+
+Part of #147634 (reference PR for this quarterly task).
+
+Release note: None"
+```
+
+#### Commit 2: Bump MinSupported Constant
+
+Update the MinSupported constant and all code that references it.
+
+**File:** `pkg/clusterversion/cockroach_versions.go` (line ~362)
+
+```go
+// Before:
+const MinSupported Key = V25_2
+
+// After:
+const MinSupported Key = V25_3
+```
+
+**Find all files that reference MinSupported:**
+```bash
+# Search for files that need updates
+git grep -l "MinSupported" pkg/ | grep -v "_test.go" | grep -v "CLAUDE.md"
+```
+
+**Common files to update** (grep for old version constant like V25_2):
+- `pkg/crosscluster/logical/logical_replication_writer_processor.go`
+- `pkg/crosscluster/physical/alter_replication_job.go`
+- `pkg/kv/kvserver/closedts/policyrefresher/policy_refresher.go`
+- `pkg/kv/kvserver/closedts/sidetransport/sender.go`
+- `pkg/kv/kvserver/obsolete_code_test.go`
+- `pkg/sql/backfill/mvcc_index_merger.go`
+- `pkg/sql/catalog/funcdesc/helpers.go`
+- `pkg/sql/conn_executor.go`
+- `pkg/sql/create_index.go`
+- `pkg/sql/create_table.go`
+- `pkg/sql/distsql_running.go`
+- `pkg/sql/execversion/version.go`
+
+**Update each file** by changing references from the old MinSupported version to the new one.
+
+**Example pattern to search for:**
+```bash
+# Find files with V25_2 that aren't in testdata
+git grep "V25_2" pkg/ | grep -v testdata | grep -v CLAUDE.md | grep -v "_test.go"
+```
+
+**Create commit:**
+```bash
+git add pkg/clusterversion/cockroach_versions.go <other-modified-files>
+git commit -m "clusterversion: bump MinSupported from v25.2 to v25.3
+
+Part of the quarterly M.4 \"Bump MinSupported\" task as outlined in
+\`pkg/clusterversion/README.md\`.
+
+This commit updates the MinSupported constant from V25_2 to V25_3,
+along with all code that references the MinSupported version.
+
+After this change, clusters running v25.2 can no longer connect to
+clusters running master, and direct upgrades from v25.2 to master are
+no longer supported.
+
+Changes include updates to:
+- Cross-cluster logical and physical replication
+- Closed timestamp policy handling
+- KV server obsolete code tracking
+- SQL backfill and index merging
+- Catalog function descriptors
+- Connection executor and DDL operations
+- Distributed SQL execution versioning
+
+Part of #147634 (reference PR for this quarterly task).
+
+Release note: None"
+```
+
+#### Commit 4: Remove Schema Changer Rules
+
+Remove the frozen schema changer rules for the old MinSupported version.
+
+**Directory to delete:** `pkg/sql/schemachanger/scplan/internal/rules/release_25_2/`
+
+```bash
+# Delete the entire directory
+rm -rf pkg/sql/schemachanger/scplan/internal/rules/release_25_2/
+```
+
+**File:** `pkg/sql/schemachanger/scplan/plan.go`
+
+Remove the import:
+```go
+// Remove this line:
+"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_25_2"
+```
+
+Remove from rulesForReleases array (around line 158):
+```go
+// Remove this line:
+{activeVersion: clusterversion.TODO_Delete_V25_2, rulesRegistry: release_25_2.GetRegistry()},
+```
+
+**File:** `pkg/sql/schemachanger/scplan/BUILD.bazel`
+
+Remove the dependency:
+```bazel
+# Remove from deps list:
+"//pkg/sql/schemachanger/scplan/internal/rules/release_25_2",
+```
+
+**Create commit:**
+```bash
+git add -A  # Captures deletions
+git commit -m "schemachanger: remove release_25_2 schema changer rules
+
+Part of the quarterly M.4 \"Bump MinSupported\" task as outlined in
+\`pkg/clusterversion/README.md\`.
+
+After bumping MinSupported from v25.2 to v25.3, the frozen schema
+changer rules for release 25.2 are no longer needed. These rules were
+used to ensure schema changes work correctly in mixed-version clusters
+with v25.2 nodes, which are no longer supported.
+
+This commit removes:
+- The entire release_25_2 rules directory
+- Import and registry entry from plan.go
+- Bazel dependency
+
+Part of #147634 (reference PR for this quarterly task).
+
+Release note: None"
+```
+
+#### Commit 5: Remove Bootstrap Data
+
+Delete the bootstrap data files for the old MinSupported version.
+
+**Files to delete:**
+```bash
+rm pkg/sql/catalog/bootstrap/data/25_2_system.keys
+rm pkg/sql/catalog/bootstrap/data/25_2_system.sha256
+rm pkg/sql/catalog/bootstrap/data/25_2_tenant.keys
+rm pkg/sql/catalog/bootstrap/data/25_2_tenant.sha256
+```
+
+**File:** `pkg/sql/catalog/bootstrap/initial_values.go`
+
+Remove the V25_2 entry from initialValuesFactoryByKey map (around line 66):
+```go
+// REMOVE this entire block:
+clusterversion.TODO_Delete_V25_2: hardCodedInitialValues{
+    system:        v25_2_system_keys,
+    systemHash:    v25_2_system_sha256,
+    nonSystem:     v25_2_tenant_keys,
+    nonSystemHash: v25_2_tenant_sha256,
+}.build,
+```
+
+Remove the go:embed variables (around lines 147-157):
+```go
+// REMOVE these lines:
+//go:embed data/25_2_system.keys
+var v25_2_system_keys string
+
+//go:embed data/25_2_system.sha256
+var v25_2_system_sha256 string
+
+//go:embed data/25_2_tenant.keys
+var v25_2_tenant_keys string
+
+//go:embed data/25_2_tenant.sha256
+var v25_2_tenant_sha256 string
+```
+
+**File:** `pkg/sql/catalog/bootstrap/BUILD.bazel`
+
+Remove embedsrcs entries (around line 10):
+```bazel
+# REMOVE these 4 lines:
+"data/25_2_system.keys",
+"data/25_2_system.sha256",
+"data/25_2_tenant.keys",
+"data/25_2_tenant.sha256",
+```
+
+**Create commit:**
+```bash
+git add -A
+git commit -m "bootstrap: remove 25.2 bootstrap data
+
+Part of the quarterly M.4 \"Bump MinSupported\" task as outlined in
+\`pkg/clusterversion/README.md\`.
+
+This commit removes the bootstrap data for v25.2, which is now below the
+minimum supported version after bumping MinSupported from v25.2 to v25.3.
+
+The bootstrap data files are used to initialize clusters at specific
+versions. Since clusters can no longer start at v25.2 (it's below
+MinSupported), these files are no longer needed.
+
+Changes:
+- Removed 25_2_system.keys and 25_2_system.sha256
+- Removed 25_2_tenant.keys and 25_2_tenant.sha256
+- Removed V25_2 entry from initialValuesFactoryByKey map in initial_values.go
+- Removed go:embed variables for v25.2 bootstrap data
+- Updated BUILD.bazel to remove embedsrcs for deleted files
+
+Part of #147634 (reference PR for this quarterly task).
+
+Release note: None"
+```
+
+#### Commit 6: Update Mixed Version Tests
+
+Update tests that use the cockroach-go-testserver configuration to reference the new MinSupported version.
+
+**Files to update:**
+```bash
+# Find mixed_version test files
+ls pkg/sql/logictest/testdata/logic_test/mixed_version_*
+```
+
+Common files:
+- `pkg/sql/logictest/testdata/logic_test/mixed_version_char`
+- `pkg/sql/logictest/testdata/logic_test/mixed_version_citext`
+- `pkg/sql/logictest/testdata/logic_test/mixed_version_ltree`
+- `pkg/sql/logictest/testdata/logic_test/mixed_version_partial_stats`
+
+**Update LogicTest headers:**
+
+For files with single config (char, citext):
+```diff
+-# LogicTest: cockroach-go-testserver-25.2
++# LogicTest: cockroach-go-testserver-25.3
+```
+
+For files with multiple configs (ltree, partial_stats):
+```diff
+-# LogicTest: cockroach-go-testserver-25.2 cockroach-go-testserver-25.3
++# LogicTest: cockroach-go-testserver-25.3
+```
+
+**Create commit:**
+```bash
+git add pkg/sql/logictest/testdata/logic_test/mixed_version_*
+git commit -m "logictest: update mixed_version tests to use 25.3 testserver
+
+Part of the quarterly M.4 \"Bump MinSupported\" task as outlined in
+\`pkg/clusterversion/README.md\`.
+
+After bumping MinSupported from v25.2 to v25.3, tests that use the
+cockroach-go-testserver predecessor binary configuration need to be
+updated to test against v25.3 instead of v25.2.
+
+This commit updates the LogicTest headers for mixed-version tests that
+validate feature compatibility across version boundaries:
+- mixed_version_char: Tests CHAR type upgrades
+- mixed_version_citext: Tests case-insensitive text type upgrades
+- mixed_version_ltree: Tests ltree type availability after upgrade
+- mixed_version_partial_stats: Tests partial statistics with WHERE clause
+
+For ltree and partial_stats, which previously tested with both 25.2 and
+25.3 testservers, the headers now only reference 25.3 since 25.2 is
+below MinSupported.
+
+Part of #147634 (reference PR for this quarterly task).
+
+Release note: None"
+```
+
+#### Commit 7: Remove Local-Mixed Test Configuration
+
+Remove the local-mixed-X.Y test configuration for the old MinSupported version and all references to it.
+
+**File:** `pkg/sql/logictest/logictestbase/logictestbase.go`
+
+Remove the config definition (around lines 501-515):
+```go
+// REMOVE this entire block:
+{
+    Name:                        "local-mixed-25.2",
+    NumNodes:                    1,
+    OverrideDistSQLMode:         "off",
+    BootstrapVersion:            clusterversion.TODO_Delete_V25_2,
+    DisableUpgrade:              true,
+    DeclarativeCorpusCollection: true,
+    DisableSchemaLockedByDefault: true,
+},
+```
+
+Remove from default-configs set (around line 660):
+```go
+// REMOVE "local-mixed-25.2" from this list:
+"default-configs": makeConfigSet(
+    "local",
+    // ...
+    "local-mixed-25.2",  // REMOVE THIS LINE
+    "local-mixed-25.3",
+    "local-mixed-25.4",
+),
+```
+
+Remove from schema-locked-disabled set (around lines 684-686):
+```go
+// REMOVE "local-mixed-25.2" from this set:
+"schema-locked-disabled": makeConfigSet(
+    "local-legacy-schema-changer",
+    "local-mixed-25.2",  // REMOVE THIS LINE
+),
+```
+
+**Delete test directories:**
+```bash
+rm -rf pkg/ccl/logictestccl/tests/local-mixed-25.2/
+rm -rf pkg/sql/logictest/tests/local-mixed-25.2/
+rm -rf pkg/sql/sqlitelogictest/tests/local-mixed-25.2/
+```
+
+**Remove references from test files:**
+
+Find all files with local-mixed-25.2 references:
+```bash
+grep -r "local-mixed-25\.2" pkg/sql/logictest/testdata/logic_test/ \
+     pkg/ccl/logictestccl/testdata/logic_test/ | cut -d: -f1 | sort -u
+```
+
+For each file, remove local-mixed-25.2 using targeted sed commands:
+```bash
+# For files with LogicTest headers, skipif, or onlyif on dedicated lines:
+sed -i '' \
+  -e '/^# LogicTest:/s/ !*local-mixed-25\.2//g' \
+  -e '/^skipif config local-mixed-25\.2$/d' \
+  -e '/^onlyif config local-mixed-25\.2$/d' \
+  "$file"
+
+# For files with multi-config onlyif/skipif lines:
+sed -i '' \
+  -e '/^onlyif config/s/ local-mixed-25\.2//g' \
+  -e '/^skipif config/s/ local-mixed-25\.2//g' \
+  "$file"
+```
+
+**Remove empty LogicTest directive lines:**
+
+If any files have headers like `# LogicTest: !local-mixed-25.2` that become empty `# LogicTest:`, remove them:
+```bash
+# Find files with empty LogicTest directives
+grep -l "^# LogicTest:$" pkg/sql/logictest/testdata/logic_test/* \
+     pkg/ccl/logictestccl/testdata/logic_test/*
+
+# Remove the empty lines
+sed -i '' '/^# LogicTest:$/d' <file>
+```
+
+**Regenerate Bazel files:**
+```bash
+./dev gen bazel
+```
+
+**Verify the changes:**
+```bash
+# Should succeed
+./dev build short
+```
+
+**Create commit:**
+```bash
+git add -A
+git commit -m "logictest: remove local-mixed-25.2 test configuration
+
+Part of the quarterly M.4 \"Bump MinSupported\" task as outlined in
+\`pkg/clusterversion/README.md\`.
+
+After bumping MinSupported from v25.2 to v25.3, the local-mixed-25.2
+test configuration is no longer needed since it simulates a mixed-version
+cluster with v25.2 nodes, which can no longer connect to the cluster.
+
+This commit:
+- Removes the local-mixed-25.2 config from logictestbase.go
+- Removes it from the default-configs and schema-locked-disabled sets
+- Deletes the generated test directories for local-mixed-25.2
+- Removes all references from logic test files (skipif/onlyif directives)
+- Removes empty LogicTest directive lines that resulted from deletions
+- Regenerates Bazel BUILD files via \`./dev gen bazel\`
+
+Changes affect 34 test files that had skipif or onlyif directives
+referencing local-mixed-25.2, plus the generated test files and BUILD
+files that were auto-generated based on the removed configuration.
+
+Part of #147634 (reference PR for this quarterly task).
+
+Release note: None"
+```
+
+### Expected Files Modified
+
+A typical M.4 bump should modify approximately 70-80 files across the 6 commits:
+
+**Commit 1 (1 file):**
+1. `pkg/clusterversion/cockroach_versions.go` - Prefix version keys
+
+**Commit 2 (~12 files):**
+1. `pkg/clusterversion/cockroach_versions.go` - MinSupported constant
+2. `pkg/crosscluster/logical/logical_replication_writer_processor.go`
+3. `pkg/crosscluster/physical/alter_replication_job.go`
+4. `pkg/kv/kvserver/closedts/policyrefresher/policy_refresher.go`
+5. `pkg/kv/kvserver/closedts/sidetransport/sender.go`
+6. `pkg/kv/kvserver/obsolete_code_test.go`
+7. `pkg/sql/backfill/mvcc_index_merger.go`
+8. `pkg/sql/catalog/funcdesc/helpers.go`
+9. `pkg/sql/conn_executor.go`
+10. `pkg/sql/create_index.go`
+11. `pkg/sql/create_table.go`
+12. `pkg/sql/distsql_running.go`
+13. `pkg/sql/execversion/version.go`
+
+**Commit 4 (~30 files):**
+1. `pkg/sql/schemachanger/scplan/internal/rules/release_25_2/` - Entire directory deleted (~25 files)
+2. `pkg/sql/schemachanger/scplan/plan.go`
+3. `pkg/sql/schemachanger/scplan/BUILD.bazel`
+4. Various testdata files in the deleted directory
+
+**Commit 5 (6 files):**
+1. `pkg/sql/catalog/bootstrap/data/25_2_system.keys` - Deleted
+2. `pkg/sql/catalog/bootstrap/data/25_2_system.sha256` - Deleted
+3. `pkg/sql/catalog/bootstrap/data/25_2_tenant.keys` - Deleted
+4. `pkg/sql/catalog/bootstrap/data/25_2_tenant.sha256` - Deleted
+5. `pkg/sql/catalog/bootstrap/initial_values.go`
+6. `pkg/sql/catalog/bootstrap/BUILD.bazel`
+
+**Commit 6 (4 files):**
+1. `pkg/sql/logictest/testdata/logic_test/mixed_version_char`
+2. `pkg/sql/logictest/testdata/logic_test/mixed_version_citext`
+3. `pkg/sql/logictest/testdata/logic_test/mixed_version_ltree`
+4. `pkg/sql/logictest/testdata/logic_test/mixed_version_partial_stats`
+
+**Commit 7 (~64 files):**
+1. `pkg/sql/logictest/logictestbase/logictestbase.go` - Config removal
+2. `pkg/ccl/logictestccl/tests/local-mixed-25.2/BUILD.bazel` - Deleted
+3. `pkg/ccl/logictestccl/tests/local-mixed-25.2/generated_test.go` - Deleted
+4. `pkg/sql/logictest/tests/local-mixed-25.2/BUILD.bazel` - Deleted
+5. `pkg/sql/logictest/tests/local-mixed-25.2/generated_test.go` - Deleted
+6. `pkg/sql/sqlitelogictest/tests/local-mixed-25.2/BUILD.bazel` - Deleted
+7. `pkg/sql/sqlitelogictest/tests/local-mixed-25.2/generated_test.go` - Deleted
+8. ~34 logic test files with skipif/onlyif updates
+9. ~20 generated test files updated by `./dev gen bazel`
+10. `pkg/BUILD.bazel` - Binary file updated
+11. Various other files with version-gated logic
+
+### Validation and Verification
+
+#### Before Creating PR
+
+**1. Run core tests:**
+```bash
+./dev test pkg/clusterversion pkg/storage
+```
+
+Expected: All tests should pass.
+
+**2. Verify build:**
+```bash
+./dev build short
+```
+
+Expected: Build completes successfully.
+
+**3. Check commit structure:**
+```bash
+git log --oneline HEAD~6..HEAD
+```
+
+Expected: Should show 6 commits in the correct order.
+
+**4. Verify file counts:**
+```bash
+git diff --stat <base-branch>
+```
+
+Expected: Approximately 70-80 files changed, with significant deletions (~5,000-6,000 lines).
+
+#### CRITICAL: Validate Against Previous PR
+
+**This task is performed every quarter.** Before creating the PR, validate that changes follow the same pattern as the reference PR.
+
+**Step 1: Compare file lists**
+```bash
+# Get files from reference PR #147634
+gh pr view 147634 --json files --jq '.files[].path' | sort > /tmp/ref_m4_files.txt
+
+# Get your current files
+git diff --name-only <base-branch> | sort > /tmp/current_m4_files.txt
+
+# Compare
+echo "=== Files ONLY in current PR (investigate!) ==="
+comm -13 /tmp/ref_m4_files.txt /tmp/current_m4_files.txt
+
+echo "=== Files ONLY in reference PR (might be missing!) ==="
+comm -23 /tmp/ref_m4_files.txt /tmp/current_m4_files.txt
+```
+
+**Step 2: Justify differences**
+
+For each file that appears in your PR but NOT in the reference PR:
+1. Understand why it changed
+2. Verify it matches a pattern from the runbook
+3. Document or revert if unexpected
+
+**Step 3: Verify commit messages match pattern**
+```bash
+# Check that commit messages follow the established pattern
+git log --format="%s" HEAD~6..HEAD
+```
+
+Expected format:
+- `clusterversion: prefix version keys below 25.3 with TODO_Delete_`
+- `clusterversion: bump MinSupported from v25.2 to v25.3`
+- `schemachanger: remove release_25_2 schema changer rules`
+- `bootstrap: remove 25.2 bootstrap data`
+- `logictest: update mixed_version tests to use 25.3 testserver`
+- `logictest: remove local-mixed-25.2 test configuration`
+
+### Common Errors and Solutions
+
+#### Error 1: Bazel generation failure after removing config
+
+**Error:** `panic: unknown config name local-mixed-25.2`
+
+**Cause:** Test files still reference local-mixed-25.2 after the config was removed from logictestbase.go.
+
+**Fix:**
+```bash
+# Find all references
+grep -r "local-mixed-25\.2" pkg/sql/logictest/testdata/logic_test/ \
+     pkg/ccl/logictestccl/testdata/logic_test/
+
+# Remove them with sed (see Commit 7 instructions above)
+```
+
+#### Error 2: Accidentally removed newlines with aggressive regex
+
+**Error:** File corruption where lines are concatenated (e.g., `# LogicTest: !local-legacy-schema-changer# A basic sanity check...`)
+
+**Cause:** Using overly aggressive perl or sed commands like `perl -pi -e 's/\s*local-mixed-25\.2\s*/ /g; s/\s+$//; s/\s+/ /g'`
+
+**Fix:** Don't use global whitespace replacement. Use targeted sed:
+```bash
+# WRONG (removes newlines):
+perl -pi -e 's/\s*local-mixed-25\.2\s*/ /g; s/\s+$//; s/\s+/ /g'
+
+# RIGHT (preserves structure):
+sed -i '' \
+  -e '/^# LogicTest:/s/ !*local-mixed-25\.2//g' \
+  -e '/^skipif config local-mixed-25\.2$/d' \
+  -e '/^onlyif config local-mixed-25\.2$/d'
+```
+
+#### Error 3: Empty LogicTest directive
+
+**Error:** `empty LogicTest directive` during bazel generation
+
+**Cause:** Files had headers like `# LogicTest: !local-mixed-25.2` which became `# LogicTest:` after removal.
+
+**Fix:**
+```bash
+# Find files with empty directives
+grep -l "^# LogicTest:$" pkg/sql/logictest/testdata/logic_test/* \
+     pkg/ccl/logictestccl/testdata/logic_test/*
+
+# Remove the empty lines
+sed -i '' '/^# LogicTest:$/d' <files>
+```
+
+#### Error 4: Committed local files accidentally
+
+**Error:** Local files (`.claude/`, `PLAN_*.md`, etc.) appear in commit.
+
+**Cause:** Used `git add -A` without excluding local files.
+
+**Fix:**
+```bash
+# Reset the commit
+git reset HEAD~ --soft
+
+# Unstage local files
+git reset HEAD .claude/settings.local.json PLAN_*.md *.local.md
+
+# Re-commit without local files
+git commit -m "..."
+```
+
+#### Error 5: Missing file deletions in commit
+
+**Error:** Deleted directories don't appear in commit.
+
+**Cause:** Forgot to use `git add -A` or `git add -u` which capture deletions.
+
+**Fix:**
+```bash
+# Always use git add -A for commits with deletions
+git add -A  # Adds modifications AND deletions
+```
+
+### Quick Reference Commands
+
+**Commit 1 - Prefix version keys:**
+```bash
+# Edit pkg/clusterversion/cockroach_versions.go manually
+git add pkg/clusterversion/cockroach_versions.go
+git commit -m "clusterversion: prefix version keys below 25.3 with TODO_Delete_..."
+```
+
+**Commit 2 - Bump MinSupported:**
+```bash
+# Find files to update
+git grep -l "MinSupported" pkg/ | grep -v "_test.go"
+git grep "V25_2" pkg/ | grep -v testdata
+
+# Update files manually
+git add pkg/clusterversion/cockroach_versions.go <other-files>
+git commit -m "clusterversion: bump MinSupported from v25.2 to v25.3..."
+```
+
+**Commit 4 - Remove schema changer rules:**
+```bash
+rm -rf pkg/sql/schemachanger/scplan/internal/rules/release_25_2/
+# Edit plan.go and BUILD.bazel
+git add -A
+git commit -m "schemachanger: remove release_25_2 schema changer rules..."
+```
+
+**Commit 5 - Remove bootstrap data:**
+```bash
+rm pkg/sql/catalog/bootstrap/data/25_2_*
+# Edit initial_values.go and BUILD.bazel
+git add -A
+git commit -m "bootstrap: remove 25.2 bootstrap data..."
+```
+
+**Commit 6 - Update mixed_version tests:**
+```bash
+# Edit 4 mixed_version test files
+git add pkg/sql/logictest/testdata/logic_test/mixed_version_*
+git commit -m "logictest: update mixed_version tests to use 25.3 testserver..."
+```
+
+**Commit 7 - Remove local-mixed config:**
+```bash
+# Edit logictestbase.go
+rm -rf pkg/ccl/logictestccl/tests/local-mixed-25.2/
+rm -rf pkg/sql/logictest/tests/local-mixed-25.2/
+rm -rf pkg/sql/sqlitelogictest/tests/local-mixed-25.2/
+
+# Remove references from test files
+find pkg/sql/logictest/testdata/logic_test/ \
+     pkg/ccl/logictestccl/testdata/logic_test/ \
+     -type f -exec grep -l "local-mixed-25\.2" {} \; | while read file; do
+  sed -i '' \
+    -e '/^# LogicTest:/s/ !*local-mixed-25\.2//g' \
+    -e '/^skipif config local-mixed-25\.2$/d' \
+    -e '/^onlyif config local-mixed-25\.2$/d' \
+    "$file"
+done
+
+# Handle multi-config lines
+find pkg/sql/logictest/testdata/logic_test/ \
+     pkg/ccl/logictestccl/testdata/logic_test/ \
+     -type f -exec grep -l "local-mixed-25\.2" {} \; | while read file; do
+  sed -i '' \
+    -e '/^onlyif config/s/ local-mixed-25\.2//g' \
+    -e '/^skipif config/s/ local-mixed-25\.2//g' \
+    "$file"
+done
+
+# Remove empty LogicTest directives
+sed -i '' '/^# LogicTest:$/d' pkg/sql/logictest/testdata/logic_test/udf_in_index \
+          pkg/ccl/logictestccl/testdata/logic_test/provisioning
+
+./dev gen bazel
+git add -A
+git commit -m "logictest: remove local-mixed-25.2 test configuration..."
+```
+
+**Verification:**
+```bash
+# Test
+./dev test pkg/clusterversion pkg/storage
+
+# Build
+./dev build short
+
+# View commits
+git log --oneline HEAD~6..HEAD
+```
+
+### Timeline Context
+
+In the release cycle:
+- **M.1 (complete)**: Master bumped to next major version
+- **M.2 (complete)**: Mixed-cluster logic tests enabled
+- **M.3 (complete)**: Upgrade tests enabled with RC binaries
+- **Now (M.4)**: Bump MinSupported to narrow upgrade window
+- **M.5 (later)**: Finalize version gates when final release is published
+
+### Notes
+
+- **Timing:** M.4 should be performed shortly after the final release is published (e.g., v25.2.0)
+- **Upgrade window:** After M.4, the upgrade window narrows from N-2 to the new MinSupported
+- **Testing:** Some test failures related to DNS lookup or network issues are unrelated and can be ignored
+- **File count:** Total file changes should be around 70-80 files with ~5,000-6,000 deletions
+- **Commit organization:** Following the 6-commit structure makes review easier and matches the established pattern
+
+### Example PRs
+
+- 25.1 → 25.2 bump: [#147634](https://github.com/cockroachdb/cockroach/pull/147634)
+
+---
+
 ### Next Steps
 
-**For future Claude sessions working on M.4 or M.5:**
+**For future Claude sessions working on M.5:**
 
-The remaining master branch tasks (M.4, M.5) have checklists in `pkg/clusterversion/README.md` but do not yet have detailed runbooks in this file. When implementing these tasks:
+The M.5 task has a checklist in `pkg/clusterversion/README.md` but does not yet have a detailed runbook in this file. When implementing M.5:
 
-1. **Add a detailed runbook section to this file** following the pattern established by R.1, R.2, M.1, and M.2
-2. **Ensure the README.md has a "Claude Prompt"** that references this file (already added for M.3, M.4, M.5)
+1. **Add a detailed runbook section to this file** following the pattern established by R.1, R.2, M.1, M.2, M.3, and M.4
+2. **Ensure the README.md has a "Claude Prompt"** that references this file (already added for M.5)
 3. **Follow the established structure:** Overview, Prerequisites, Step-by-Step Checklist, Expected Files Modified, Validation/Verification, Common Errors, Quick Reference Commands
 4. **Base your runbook on:** Previous PRs listed in README.md, the checklist, and lessons learned during implementation
 

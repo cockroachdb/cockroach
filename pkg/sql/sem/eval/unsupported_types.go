@@ -48,7 +48,7 @@ func (tc *unsupportedTypeChecker) CheckType(ctx context.Context, typ *types.T) e
 	// NB: when adding an unsupported type here, change the constructor to not
 	// return nil.
 	if (typ.Oid() == oidext.T_jsonpath || typ.Oid() == oidext.T__jsonpath) &&
-		!tc.version.IsActive(ctx, clusterversion.V25_2) {
+		!tc.version.IsActive(ctx, clusterversion.TODO_Delete_V25_2) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"%s not supported until version 25.2", typ.String(),
 		)
