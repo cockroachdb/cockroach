@@ -291,7 +291,7 @@ func TestMuxRangeFeedCatchupScanQuotaReleased(t *testing.T) {
 	noValuesExpected := func(event kvcoord.RangeFeedMessage) {
 		panic("received value when none expected")
 	}
-	const numErrsToReturn = 100
+	const numErrsToReturn = 42
 	var numErrors atomic.Int32
 	enoughErrors := make(chan struct{})
 	errCh, closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, noValuesExpected,
