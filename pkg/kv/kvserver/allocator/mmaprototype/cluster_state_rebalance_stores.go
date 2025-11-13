@@ -188,13 +188,13 @@ func (cs *clusterState) rebalanceStores(
 		if rs.rangeMoveCount >= rs.maxRangeMoveCount || rs.leaseTransferCount >= rs.maxLeaseTransferCount {
 			break
 		}
-		rs.rebalanceStore(store, ctx, localStoreID)
+		rs.rebalanceStore(ctx, store, localStoreID)
 	}
 	return rs.changes
 }
 
 func (rs *rebalanceState) rebalanceStore(
-	store sheddingStore, ctx context.Context, localStoreID roachpb.StoreID,
+	ctx context.Context, store sheddingStore, localStoreID roachpb.StoreID,
 ) {
 	log.KvDistribution.Infof(ctx, "start processing shedding store s%d: cpu node load %s, store load %s, worst dim %s",
 		store.StoreID, store.nls, store.sls, store.worstDim)
@@ -229,7 +229,7 @@ func (rs *rebalanceState) rebalanceStore(
 	// behalf of a particular store (vs. being called on behalf of the set
 	// of local store IDs)?
 	if ss.StoreID == localStoreID && store.dimSummary[CPURate] >= overloadSlow {
-		shouldSkipReplicaMoves := rs.rebalanceLeases(ss, store, ctx, localStoreID)
+		shouldSkipReplicaMoves := rs.rebalanceLeases(ctx, ss, store, localStoreID)
 		if shouldSkipReplicaMoves {
 			return
 		}
@@ -451,9 +451,9 @@ func (rs *rebalanceState) rebalanceReplicas(
 }
 
 func (rs *rebalanceState) rebalanceLeases(
+	ctx context.Context,
 	ss *storeState,
 	store sheddingStore,
-	ctx context.Context,
 	localStoreID roachpb.StoreID,
 ) bool {
 	log.KvDistribution.VInfof(ctx, 2, "local store s%d is CPU overloaded (%v >= %v), attempting lease transfers first",
