@@ -29,14 +29,14 @@ fi
 $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh $arch
 if [[ $arch != "s390x" ]]; then
   # Do not build arm64 if the probability is 0.
-  # Use `bc` for float comparison, bash supports only integer comparison.
-  if (( $(echo "$arm_probability > 0" | bc -l) )); then
+  # Using `awk` because bash only supports integer comparison, and `bc` is not installed.
+  if awk -v n="$arm_probability" 'BEGIN { exit (n+0 > 0) ? 0 : 1 }'; then
     $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh arm64
   fi
   # N.B. FIPS is metamoprhically always on as of PR#139510
   # Do not build fips if the probability is 0.
-  # Use `bc` for float comparison, bash supports only integer comparison.
-  if (( $(echo "$fips_probability > 0" | bc -l) )); then
+  # Using `awk` because bash only supports integer comparison, and `bc` is not installed.
+  if awk -v n="$fips_probability" 'BEGIN { exit (n+0 > 0) ? 0 : 1 }'; then
     $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh amd64-fips
   fi
 fi
