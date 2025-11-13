@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -389,38 +388,14 @@ func (etc *externalSSTTestCluster) requireNotFoundError(t *testing.T, err error)
 // TODO(ibrahim): condense the test into fewer subtests.
 //
 // Test setup can be visualized in the following diagram:
-/*
-             a                d                g                z
-             |                |                |                |
-             v                v                v                v
-Keyspace:    |----------------|----------------|----------------|
-             Range 1          Range 2          Range 3
-
-      txn2:  | a-txn2         |                | g-txn2         |
-             |                |                |                |
-             |                |                |                |
-      txn1:  | a-txn1         | d-txn1         | g-txn1         |
-             | b-txn1         | e-txn1         | h-txn1         |
-             | c-txn1         | f-txn1         | ...            |
-             |                |                |                |
-             |                |                |                |
-      Writes:| a-intent       | d-intent       | g-intent       |
-             | b-intent       | e-intent       | h-intent       |
-             | c-intent       | f-intent       | ...            |
-             |                |                |                |
-             |                |                |                |
- ^    SST:   |================|================|================|
- |           |  Many KVs:     |  Many KVs:     |  Many KVs:     |
- |           |  a-00000...    |  d-00000...    |  g-00000...    |
- |           |  b-00000...    |  e-00000...    |  h-00000...    |
-Time         |  c-00000...    |  f-00000...    |  ...           |
-*/
+// a d g z | | | | v v v v Keyspace: |----------------|----------------|----------------| Range 1 Range 2 Range 3 txn2: | a-txn2 | | g-txn2 | | | | | | | | |
+// txn1: | a-txn1 | d-txn1 | g-txn1 | | b-txn1 | e-txn1 | h-txn1 | | c-txn1 | f-txn1 | ... | | | | | | | | | Writes:| a-intent | d-intent | g-intent | |
+// b-intent | e-intent | h-intent | | c-intent | f-intent | ... | | | | | | | | | ^ SST: |================|================|================| | | Many KVs: |
+// Many KVs: | Many KVs: | | | a-00000... | d-00000... | g-00000... | | | b-00000... | e-00000... | h-00000... | Time | c-00000... | f-00000... | ... | */
 func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
-
-	skip.UnderRace(t) // too slow under stressrace
 
 	testCases := []struct {
 		name                     string
@@ -890,21 +865,8 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 // an excise command is issued.
 //
 // Test setup can be visualized in the following diagram:
-/*
-             a                d                g                z
-             |                |                |                |
-             v                v                v                v
-Keyspace:    |----------------|----------------|----------------|
-             Range 1          Range 2          Range 3
-             |                |                |                |
-RangeFeeds:  |---- RF1 -------|---- RF2 -------|---- RF3 -------|
-             |                |                |                |
-                              |<-- External SSTable -->|
-                              |                        |
-                              |<--- Excised Range ---->|
-                              |                        |
-                              d                        k
-*/
+// a d g z | | | | v v v v Keyspace: |----------------|----------------|----------------| Range 1 Range 2 Range 3 | | | | RangeFeeds: |---- RF1 -------|---- RF2
+// -------|---- RF3 -------| | | | | |<-- External SSTable -->| | | |<--- Excised Range ---->| | | d k */
 func TestRangeFeedWithExcise(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
