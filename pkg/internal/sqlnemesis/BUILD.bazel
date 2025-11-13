@@ -1,9 +1,10 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "sqlnemesis",
     srcs = [
         "generator.go",
+        "rigr.go",
         "sqlnemesis.go",
         "validators.go",
     ],
@@ -11,6 +12,33 @@ go_library(
     visibility = ["//pkg:__subpackages__"],
     deps = [
         "//pkg/internal/sqlsmith",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/idxtype",
+        "//pkg/sql/sem/tree",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "sqlnemesis_test",
+    size = "medium",
+    srcs = [
+        "main_test.go",
+        "rigr_test.go",
+    ],
+    data = ["//c-deps:libgeos"],
+    embed = [":sqlnemesis"],
+    deps = [
+        "//pkg/ccl",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
     ],
 )

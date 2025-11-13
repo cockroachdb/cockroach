@@ -12,7 +12,7 @@ import (
 )
 
 // TODO: figure out observability / reproducibility story.
-func log(s string) {
+func debugLog(s string) {
 	fmt.Printf("%s\n", s)
 }
 
@@ -31,7 +31,7 @@ func RunNemesis(db *gosql.DB, rng *rand.Rand, config GeneratorConfig) ([]error, 
 	}
 
 	for iteration := 0; iteration < config.NumIterations; iteration++ {
-		log(fmt.Sprintf("-- iteration %d", iteration))
+		debugLog(fmt.Sprintf("-- iteration %d", iteration))
 		// TODO: not sure if this should be multi-threaded or single-threaded?
 		// start with single thread for now
 		for i := 0; i < config.OpsPerIteration; i++ {
@@ -39,11 +39,11 @@ func RunNemesis(db *gosql.DB, rng *rand.Rand, config GeneratorConfig) ([]error, 
 			err = apply(db, op)
 			if err != nil {
 				if !ignoreErrors {
-					log(op)
+					debugLog(op)
 					return nil, err
 				}
 			} else {
-				log(op)
+				debugLog(op)
 			}
 		}
 

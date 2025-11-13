@@ -27,7 +27,7 @@ func (i *InspectValidator) Init(db *gosql.DB, rng *rand.Rand) error {
 		`SET enable_inspect_command = true;`,
 	}...)
 	for _, stmt := range setup {
-		log(stmt)
+		debugLog(stmt)
 		if _, err := db.Exec(stmt); err != nil {
 			return err
 		}
@@ -63,7 +63,7 @@ func (i *InspectValidator) Validate(db *gosql.DB) error {
 		dbNames = append(dbNames, dbName)
 	}
 	for _, dbName := range dbNames {
-		log(`INSPECT DATABASE ` + dbName)
+		debugLog(`INSPECT DATABASE ` + dbName)
 		_, err = db.Exec(`INSPECT DATABASE ` + dbName)
 		if err != nil {
 			// TODO: maybe also query the inspect errors.
