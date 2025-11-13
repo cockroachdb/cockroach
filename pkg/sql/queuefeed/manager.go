@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -115,18 +117,68 @@ func (m *Manager) CreateQueue(ctx context.Context, queueName string, tableDescID
 
 		pt := &partitionTable{queueName: queueName}
 
-		// Create a single initial partition that covers the table's primary key.
+		// Make a partition for each range of the table's primary span, covering the span of that range.
 		primaryIndexPrefix := m.codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(tableDesc.GetPrimaryIndexID()))
 		primaryKeySpan := roachpb.Span{
 			Key:    primaryIndexPrefix,
 			EndKey: primaryIndexPrefix.PrefixEnd(),
 		}
-		partition := Partition{
-			ID:   1,
-			Span: primaryKeySpan,
+
+		// Extract DistSender from the executor's KV DB to iterate over ranges.
+		txnWrapperSender, ok := m.executor.KV().NonTransactionalSender().(*kv.CrossRangeTxnWrapperSender)
+		if !ok {
+			return errors.Errorf("failed to extract a %T from %T",
+				(*kv.CrossRangeTxnWrapperSender)(nil), m.executor.KV().NonTransactionalSender())
+		}
+		distSender, ok := txnWrapperSender.Wrapped().(*kvcoord.DistSender)
+		if !ok {
+			return errors.Errorf("failed to extract a %T from %T",
+				(*kvcoord.DistSender)(nil), txnWrapperSender.Wrapped())
 		}
 
-		return pt.InsertPartition(ctx, txn, partition)
+		// Convert the span to an RSpan for range iteration.
+		rSpan, err := keys.SpanAddr(primaryKeySpan)
+		if err != nil {
+			return errors.Wrapf(err, "converting primary key span to address span")
+		}
+
+		// Iterate over all ranges covering the primary key span.
+		it := kvcoord.MakeRangeIterator(distSender)
+		partitionID := int64(1)
+		for it.Seek(ctx, rSpan.Key, kvcoord.Ascending); ; it.Next(ctx) {
+			if !it.Valid() {
+				return errors.Wrapf(it.Error(), "iterating ranges for primary key span")
+			}
+
+			// Get the range descriptor and trim its span to the primary key span boundaries.
+			desc := it.Desc()
+			startKey := desc.StartKey
+			if startKey.Compare(rSpan.Key) < 0 {
+				startKey = rSpan.Key
+			}
+			endKey := desc.EndKey
+			if endKey.Compare(rSpan.EndKey) > 0 {
+				endKey = rSpan.EndKey
+			}
+
+			partition := Partition{
+				ID:   partitionID,
+				Span: roachpb.Span{Key: startKey.AsRawKey(), EndKey: endKey.AsRawKey()},
+			}
+
+			if err := pt.InsertPartition(ctx, txn, partition); err != nil {
+				return errors.Wrapf(err, "inserting partition %d for range", partitionID)
+			}
+
+			partitionID++
+
+			// Check if we need to continue to the next range.
+			if !it.NeedAnother(rSpan) {
+				break
+			}
+		}
+
+		return nil
 	})
 }
 
