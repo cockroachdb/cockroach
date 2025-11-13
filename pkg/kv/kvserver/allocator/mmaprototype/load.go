@@ -128,6 +128,15 @@ func (lv *SecondaryLoadVector) subtract(other SecondaryLoadVector) {
 	}
 }
 
+func (lv SecondaryLoadVector) String() string {
+	return redact.StringWithoutMarkers(lv)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (lv SecondaryLoadVector) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("[lease:%d, replica:%d]", lv[LeaseCount], lv[ReplicaCount])
+}
+
 type RangeLoad struct {
 	Load LoadVector
 	// Nanos per second. RaftCPU <= Load[cpu]. Handling this as a special case,

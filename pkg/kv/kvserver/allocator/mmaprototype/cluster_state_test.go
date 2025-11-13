@@ -246,7 +246,7 @@ func printPendingChangesTest(changes []*pendingReplicaChange) string {
 	fmt.Fprintf(&buf, "pending(%d)", len(changes))
 	for _, change := range changes {
 		fmt.Fprintf(&buf, "\nchange-id=%d store-id=%v node-id=%v range-id=%v load-delta=%v start=%v",
-			change.ChangeID, change.target.StoreID, change.target.NodeID, change.rangeID,
+			change.changeID, change.target.StoreID, change.target.NodeID, change.rangeID,
 			change.loadDelta, change.startTime.Sub(testingBaseTime),
 		)
 		if !(change.enactedAtTime == time.Time{}) {
@@ -294,21 +294,21 @@ func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaC
 	// NB: Although redundant, we compare all of the de-normalized pending change
 	// to ensure that they are in sync.
 	sort.Slice(clusterPendingChangeList, func(i, j int) bool {
-		return clusterPendingChangeList[i].ChangeID < clusterPendingChangeList[j].ChangeID
+		return clusterPendingChangeList[i].changeID < clusterPendingChangeList[j].changeID
 	})
 	sort.Slice(storeLoadPendingChangeList, func(i, j int) bool {
-		return storeLoadPendingChangeList[i].ChangeID < storeLoadPendingChangeList[j].ChangeID
+		return storeLoadPendingChangeList[i].changeID < storeLoadPendingChangeList[j].changeID
 	})
 	sort.Slice(rangePendingChangeList, func(i, j int) bool {
-		return rangePendingChangeList[i].ChangeID < rangePendingChangeList[j].ChangeID
+		return rangePendingChangeList[i].changeID < rangePendingChangeList[j].changeID
 	})
 	require.EqualValues(t, clusterPendingChangeList, rangePendingChangeList)
 	require.LessOrEqual(t, len(clusterPendingChangeList), len(storeLoadPendingChangeList))
 	i, j := 0, 0
 	for i < len(clusterPendingChangeList) && j < len(storeLoadPendingChangeList) {
 		require.GreaterOrEqual(
-			t, clusterPendingChangeList[i].ChangeID, storeLoadPendingChangeList[j].ChangeID)
-		if clusterPendingChangeList[i].ChangeID > storeLoadPendingChangeList[j].ChangeID {
+			t, clusterPendingChangeList[i].changeID, storeLoadPendingChangeList[j].changeID)
+		if clusterPendingChangeList[i].changeID > storeLoadPendingChangeList[j].changeID {
 			// Enacted.
 			require.NotEqual(t, time.Time{}, storeLoadPendingChangeList[j].enactedAtTime)
 			j++
@@ -462,15 +462,13 @@ func TestClusterState(t *testing.T) {
 							changes = append(changes, transferChanges[:]...)
 						case "add-replica":
 							add, _, replType := parseChangeAddRemove(t, parts[1])
-							replState := ReplicaState{
-								ReplicaIDAndType: ReplicaIDAndType{
-									ReplicaType: ReplicaType{
-										ReplicaType: replType,
-									},
+							replIDAndType := ReplicaIDAndType{
+								ReplicaType: ReplicaType{
+									ReplicaType: replType,
 								},
 							}
 							addTarget := roachpb.ReplicationTarget{NodeID: cs.stores[add].NodeID, StoreID: add}
-							changes = append(changes, MakeAddReplicaChange(rangeID, rState.load, replState, addTarget))
+							changes = append(changes, MakeAddReplicaChange(rangeID, rState.load, replIDAndType, addTarget))
 						case "remove-replica":
 							_, remove, _ := parseChangeAddRemove(t, parts[1])
 							var removeRepl StoreIDAndReplicaState
@@ -498,7 +496,7 @@ func TestClusterState(t *testing.T) {
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "reject-pending-changes":
-					changeIDsInt := dd.ScanArg[[]ChangeID](t, d, "change-ids")
+					changeIDsInt := dd.ScanArg[[]changeID](t, d, "change-ids")
 					expectPanic := false
 					if d.HasArg("expect-panic") {
 						expectPanic = true
