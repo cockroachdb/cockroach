@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gorilla/mux"
 )
@@ -482,6 +483,10 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		handleNode(w, r, cfg)
 	})
 
+	futureRouter.HandleFunc("/nodes/{nodeID}/logs", func(w http.ResponseWriter, r *http.Request) {
+		handleNodeLogs(w, r, cfg)
+	})
+
 	// Timeseries query endpoint
 	futureRouter.HandleFunc("/ts/query", func(w http.ResponseWriter, r *http.Request) {
 		handleTSQuery(w, r, cfg)
@@ -528,6 +533,25 @@ type StoreTotals struct {
 	UsedCapacity       int64
 	AvailableCapacity  int64
 	MaximumCapacity    int64
+}
+
+// NodeLogsPageData contains data for the node logs page
+type NodeLogsPageData struct {
+	NodeID  int32
+	Address string
+	Entries []LogEntry
+}
+
+// LogEntry represents a single log entry
+type LogEntry struct {
+	Timestamp     int64  // Nanoseconds since epoch
+	FormattedTime string // Human-readable timestamp
+	Severity      int32
+	SeverityName  string
+	Message       string
+	File          string
+	Line          int64
+	Tags          string
 }
 
 func handleNode(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
@@ -632,6 +656,110 @@ func handleNode(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
 		return
+	}
+}
+
+func handleNodeLogs(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	ctx := r.Context()
+
+	// Extract node ID from URL path
+	vars := mux.Vars(r)
+	nodeIDStr := vars["nodeID"]
+	nodeID, err := strconv.ParseInt(nodeIDStr, 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid node ID", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch all nodes to get the address for the requested node
+	nodesResp, err := cfg.Status.NodesUI(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch nodes: %v", err)
+		http.Error(w, "Failed to fetch nodes", http.StatusInternalServerError)
+		return
+	}
+
+	// Find the specific node to get its address
+	var targetNode *serverpb.NodeResponse
+	for i := range nodesResp.Nodes {
+		if int32(nodesResp.Nodes[i].Desc.NodeID) == int32(nodeID) {
+			targetNode = &nodesResp.Nodes[i]
+			break
+		}
+	}
+
+	if targetNode == nil {
+		http.Error(w, "Node not found", http.StatusNotFound)
+		return
+	}
+
+	// Fetch logs using the Logs RPC
+	logsResp, err := cfg.Status.Logs(ctx, &serverpb.LogsRequest{
+		NodeId: fmt.Sprintf("%d", nodeID),
+	})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch logs: %v", err)
+		http.Error(w, "Failed to fetch logs", http.StatusInternalServerError)
+		return
+	}
+
+	// Convert log entries to our format
+	var entries []LogEntry
+	for _, entry := range logsResp.Entries {
+		// Convert timestamp to time.Time (nanoseconds to time)
+		t := time.Unix(0, entry.Time)
+		formattedTime := t.Format("2006-01-02 15:04:05.000000")
+
+		// Map severity to name
+		//
+		severityName := logpb.Severity_name[int32(entry.Severity)]
+
+		entries = append(entries, LogEntry{
+			Timestamp:     entry.Time,
+			FormattedTime: formattedTime,
+			Severity:      int32(entry.Severity),
+			SeverityName:  severityName,
+			Message:       entry.Message,
+			File:          entry.File,
+			Line:          entry.Line,
+			Tags:          entry.Tags,
+		})
+	}
+
+	// Build page data
+	pageData := NodeLogsPageData{
+		NodeID:  int32(nodeID),
+		Address: targetNode.Desc.Address.AddressField,
+		Entries: entries,
+	}
+
+	// Execute the pre-parsed template
+	err = templates.ExecuteTemplate(w, "node_logs.html", PageData{
+		IndexHTMLArgs: cfg,
+		Data:          pageData,
+	})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
+}
+
+// getSeverityName maps severity integer to human-readable name
+func getSeverityName(severity int32) string {
+	switch severity {
+	case 0:
+		return "UNKNOWN"
+	case 1:
+		return "INFO"
+	case 2:
+		return "WARNING"
+	case 3:
+		return "ERROR"
+	case 4:
+		return "FATAL"
+	default:
+		return fmt.Sprintf("SEVERITY_%d", severity)
 	}
 }
 

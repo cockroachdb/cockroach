@@ -122,7 +122,7 @@
         <td>{{.VCPUs}}</td>
         <td>{{.Version}}</td>
         <td><chip class="{{.StatusClass}}">{{.Status}}</chip></td>
-        <td><a href="#">Logs</a></td>
+        <td><a href="/future/nodes/{{.NodeID}}/logs">Logs</a></td>
       </tr>
       {{end}}
       {{else}}
@@ -139,7 +139,7 @@
         <td>{{.VCPUs}}</td>
         <td>{{.Version}}</td>
         <td><chip class="{{.StatusClass}}">{{.Status}}</chip></td>
-        <td><a href="#">Logs</a></td>
+        <td><a href="/future/nodes/{{.NodeID}}/logs">Logs</a></td>
       </tr>
       {{end}}
       {{end}}
