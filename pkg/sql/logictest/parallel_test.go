@@ -67,15 +67,15 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 	// Set up a dummy logicTest structure to use that code.
 	rng, _ := randutil.NewTestRand()
 	l := &logicTest{
-		rootT:       t.T,
-		cluster:     t.cluster,
-		nodeIdx:     nodeIdx,
-		db:          db,
-		user:        username.RootUser,
-		verbose:     testing.Verbose() || log.V(1),
-		rng:         rng,
-		allowUnsafe: true,
+		rootT:   t.T,
+		cluster: t.cluster,
+		nodeIdx: nodeIdx,
+		db:      db,
+		user:    username.RootUser,
+		verbose: testing.Verbose() || log.V(1),
+		rng:     rng,
 	}
+	l.allowUnsafe.Store(true)
 	if err := l.processTestFile(path, logictest.TestClusterConfig{}); err != nil {
 		log.Dev.Errorf(context.Background(), "error processing %s: %s", path, err)
 		t.Error(err)
