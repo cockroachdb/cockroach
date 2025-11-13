@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-25.2 cockroach-go-testserver-25.3
+# LogicTest: cockroach-go-testserver-25.3
 
 # Sanity check that partial stats with a WHERE clause can only be collected once
 # the cluster is upgraded to 25.4.
