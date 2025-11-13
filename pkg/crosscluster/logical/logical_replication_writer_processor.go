@@ -680,7 +680,7 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 	}
 
 	writer := sqlclustersettings.LDRWriterType(lrw.spec.WriterType)
-	if writer == "" && !lrw.FlowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.V25_2) {
+	if writer == "" && !lrw.FlowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V25_2) {
 		var err error
 		writer, err = getWriterType(
 			ctx, lrw.spec.Mode, lrw.FlowCtx.Cfg.Settings,
