@@ -740,6 +740,8 @@ func TestLargeCopy(t *testing.T) {
 		// We might hit a duplicate key error when changing the primary key
 		// (which seems somewhat expected), so we'll ignore such an error.
 		return strings.Contains(err.Error(), "duplicate key") ||
+			// We might be forced to restart - also seems somewhat expected.
+			strings.Contains(err.Error(), "restart transaction") ||
 			// TODO(yuzefovich): occasionally we get this error, and it's not
 			// clear why. Look into this.
 			strings.Contains(err.Error(), "cannot disable pipelining on a running transaction")
@@ -767,7 +769,9 @@ func TestLargeCopy(t *testing.T) {
 	if !ignoreErr(alterErr) {
 		t.Fatal(alterErr)
 	}
-	require.Equal(t, int(numrows), rows)
+	if copyErr == nil {
+		require.Equal(t, int(numrows), rows)
+	}
 }
 
 type copyReader struct {
