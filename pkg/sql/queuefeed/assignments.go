@@ -5,6 +5,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/errors"
 )
@@ -17,6 +18,14 @@ type Assignment struct {
 	// Partitions is the list of partitions assigned to the session. It is sorted
 	// by ID.
 	Partitions []Partition
+}
+
+func (a *Assignment) Spans() []roachpb.Span {
+	sg := roachpb.SpanGroup{}
+	for _, partition := range a.Partitions {
+		sg.Add(partition.Span)
+	}
+	return sg.Slice()
 }
 
 type PartitionAssignments struct {
