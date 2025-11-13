@@ -24,7 +24,7 @@ func TestObsoleteCode(t *testing.T) {
 	msv := clusterversion.RemoveDevOffset(clusterversion.MinSupported.Version())
 	t.Logf("MinSupported: %v", msv)
 
-	v25dot2 := clusterversion.RemoveDevOffset(clusterversion.V25_2.Version())
+	v25dot2 := clusterversion.RemoveDevOffset(clusterversion.TODO_Delete_V25_2.Version())
 
 	// v25.2 is the last version to interpret RangeKeysInOrder. 25.3+ ignores
 	// the field on incoming snapshots but continues to set it on outgoing
