@@ -21,7 +21,8 @@
   </head>
   <body>
     <header class="navbar margin-block-end:0 flex-column padding:0 packed">
-      <div class="flex-row width:100% padding dense">
+      <div class="flex-row width:100% padding dense align-items:center">
+        <img src="/future/assets/crl.svg" alt="CockroachDB Logo">
         <div class="flex-grow:2">ClusterID: {{.ClusterID}}</div>
         <div><chip class="info">{{.Tag}}</chip></div>
         {{if .LicenseNotificationText}}<div><chip class="{{.LicenseNotificationClass}}">{{.LicenseNotificationText}}</chip></div>{{end}}
