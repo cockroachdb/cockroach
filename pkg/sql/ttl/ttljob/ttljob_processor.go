@@ -156,12 +156,12 @@ func (t *ttlProcessor) Start(context.Context) {}
 func (t *ttlProcessor) Run(ctx context.Context, output execinfra.RowReceiver) {
 	ctx = t.StartInternal(ctx, "ttl")
 	v := execversion.FromContext(ctx)
-	// TTL processors support two progress update models. The legacy model (used in V25_2)
+	// TTL processors support two progress update models. The legacy model (used in TODO_Delete_V25_2)
 	// has each processor write progress directly to the job table. The newer model flows
 	// progress metadata back to the coordinator, which handles the job table updates centrally.
 	// The selected behavior is gated on the active cluster version.
 	// TODO(spilchen): remove directJobProgerssUpdater once 25.4 is the minimum supported version.
-	if v == execversion.V25_2 {
+	if v == execversion.TODO_Delete_V25_2 {
 		t.progressUpdater = &directJobProgressUpdater{proc: t}
 	} else {
 		t.progressUpdater = &coordinatorStreamUpdater{proc: t, progressLogger: log.Every(1 * time.Minute)}

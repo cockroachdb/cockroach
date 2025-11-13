@@ -1777,7 +1777,6 @@ subtest end
 
 subtest cluster_inspect_errors_view
 
-skipif config local-mixed-25.2
 skipif config local-mixed-25.3
 query TT colnames
 SELECT column_name, data_type
@@ -1797,7 +1796,6 @@ primary_key                text
 details                    jsonb
 crdb_internal_expiration   timestamp with time zone
 
-skipif config local-mixed-25.2
 skipif config local-mixed-25.3
 statement ok
 SELECT count(*) FROM crdb_internal.cluster_inspect_errors
