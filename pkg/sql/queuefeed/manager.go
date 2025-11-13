@@ -226,7 +226,6 @@ func (m *Manager) reassessAssignments(ctx context.Context, name string) (bool, e
 }
 
 // CreateReaderForSession creates a new reader for the given queue name and session.
-// This method handles locking and partition assignment lookup internally.
 func (m *Manager) CreateReaderForSession(
 	ctx context.Context, name string, session Session,
 ) (*Reader, error) {

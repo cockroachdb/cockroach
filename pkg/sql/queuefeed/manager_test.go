@@ -60,7 +60,7 @@ func TestFeedCreation(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, reader)
-	reader.Close()
+	_ = reader.Close()
 }
 
 func TestQueuefeedCtxCancel(t *testing.T) {

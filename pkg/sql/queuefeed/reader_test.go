@@ -8,10 +8,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,9 +34,12 @@ func TestReaderBasic(t *testing.T) {
 	qm := NewTestManager(t, srv.ApplicationLayer())
 	require.NoError(t, qm.CreateQueue(ctx, "test_queue", tableID))
 
-	reader, err := qm.GetOrInitReader(ctx, "test_queue")
+	reader, err := qm.CreateReaderForSession(ctx, "test_queue", Session{
+		ConnectionID: uuid.MakeV4(),
+		LivenessID:   sqlliveness.SessionID("1"),
+	})
 	require.NoError(t, err)
-	defer reader.(*Reader).Close()
+	defer reader.Close()
 
 	db.Exec(t, `INSERT INTO t VALUES ('row1', 10), ('row2', 20), ('row3', 30)`)
 
@@ -63,9 +68,12 @@ func TestReaderRollback(t *testing.T) {
 	qm := NewTestManager(t, srv.ApplicationLayer())
 	require.NoError(t, qm.CreateQueue(ctx, "rollback_test", tableID))
 
-	reader, err := qm.GetOrInitReader(ctx, "rollback_test")
+	reader, err := qm.CreateReaderForSession(ctx, "rollback_test", Session{
+		ConnectionID: uuid.MakeV4(),
+		LivenessID:   sqlliveness.SessionID("1"),
+	})
 	require.NoError(t, err)
-	defer reader.(*Reader).Close()
+	defer reader.Close()
 
 	db.Exec(t, `INSERT INTO t VALUES ('row1', 100), ('row2', 200)`)
 
@@ -113,7 +121,11 @@ func TestCheckpointRestoration(t *testing.T) {
 	qm := NewTestManager(t, srv.ApplicationLayer())
 	require.NoError(t, qm.CreateQueue(ctx, "checkpoint_test", tableID))
 
-	reader1, err := qm.GetOrInitReader(ctx, "checkpoint_test")
+	session1 := Session{
+		ConnectionID: uuid.MakeV4(),
+		LivenessID:   sqlliveness.SessionID("1"),
+	}
+	reader1, err := qm.CreateReaderForSession(ctx, "checkpoint_test", session1)
 	require.NoError(t, err)
 
 	db.Exec(t, `INSERT INTO t VALUES ('batch1_row1', 1), ('batch1_row2', 2)`)
@@ -125,13 +137,17 @@ func TestCheckpointRestoration(t *testing.T) {
 	_ = pollForRows(t, ctx, reader1, 2)
 
 	reader1.ConfirmReceipt(ctx)
-	require.NoError(t, reader1.(*Reader).Close())
+	require.NoError(t, reader1.Close())
 
 	db.Exec(t, `INSERT INTO t VALUES ('batch2_row1', 3), ('batch2_row2', 4)`)
 
-	reader2, err := qm.GetOrInitReader(ctx, "checkpoint_test")
+	session2 := Session{
+		ConnectionID: uuid.MakeV4(),
+		LivenessID:   sqlliveness.SessionID("2"),
+	}
+	reader2, err := qm.CreateReaderForSession(ctx, "checkpoint_test", session2)
 	require.NoError(t, err)
-	defer reader2.(*Reader).Close()
+	defer reader2.Close()
 
 	rows2 := pollForRows(t, ctx, reader2, 2)
 

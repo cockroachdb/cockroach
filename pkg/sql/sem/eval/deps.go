@@ -298,8 +298,7 @@ type Planner interface {
 	// the `system.users` table
 	UserHasAdminRole(ctx context.Context, user username.SQLUsername) (bool, error)
 
-	// GetQueueReaderProvider returns the ReaderProvider for queuefeed readers,
-	// or nil if not available.
+	// GetQueueReaderProvider returns the ReaderProvider for queuefeed readers.
 	GetQueueReaderProvider() queuebase.ReaderProvider
 
 	// MemberOfWithAdminOption is used to collect a list of roles (direct and

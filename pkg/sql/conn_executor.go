@@ -4599,18 +4599,16 @@ func (ex *connExecutor) getCreatedSequencesAccessor() createdSequences {
 // GetOrInitReader gets or creates a queuefeed reader for the given queue name.
 // Readers are stored per-connection and closed when the connection closes.
 func (ex *connExecutor) GetOrInitReader(ctx context.Context, name string) (queuebase.Reader, error) {
-	// Check if reader already exists and is alive
 	if reader, ok := ex.queuefeedReaders[name]; ok && reader.IsAlive() {
 		return reader, nil
 	}
 
-	// Need to create a new reader
 	if ex.server.cfg.QueueManager == nil {
 		return nil, errors.New("queue manager not configured")
 	}
 	mgr := ex.server.cfg.QueueManager
 
-	// Construct Session from connExecutor data
+	// Construct Session.
 	sessionID := ex.planner.extendedEvalCtx.SessionID
 	connectionIDBytes := sessionID.GetBytes()
 	connectionID, err := uuid.FromBytes(connectionIDBytes)
@@ -4618,31 +4616,25 @@ func (ex *connExecutor) GetOrInitReader(ctx context.Context, name string) (queue
 		return nil, errors.Wrapf(err, "converting session ID to UUID")
 	}
 
-	// Get sqlliveness session ID
 	var livenessID sqlliveness.SessionID
 	if ex.server.cfg.SQLLiveness != nil {
 		session, err := ex.server.cfg.SQLLiveness.Session(ex.Ctx())
 		if err != nil {
-			// If we can't get sqlliveness session, we'll use empty string
-			// This might happen in some environments
-			livenessID = ""
-		} else if session != nil {
-			livenessID = session.ID()
+			return nil, errors.Wrapf(err, "getting sqlliveness session")
 		}
+		if session == nil {
+			return nil, errors.New("sqlliveness session is nil")
+		}
+		livenessID = session.ID()
 	}
 
-	session := queuefeed.Session{
-		ConnectionID: connectionID,
-		LivenessID:   livenessID,
-	}
+	session := queuefeed.Session{ConnectionID: connectionID, LivenessID: livenessID}
 
-	// Create reader using Manager's helper method
 	reader, err := mgr.CreateReaderForSession(ctx, name, session)
 	if err != nil {
 		return nil, errors.Wrapf(err, "creating reader for queue %s", name)
 	}
 
-	// Store reader
 	ex.queuefeedReaders[name] = reader
 	return reader, nil
 }

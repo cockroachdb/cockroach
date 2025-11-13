@@ -10,8 +10,7 @@ type Manager interface {
 	CreateQueue(ctx context.Context, name string, tableID int64) error
 }
 
-// ReaderProvider provides access to queuefeed readers. This interface allows
-// connExecutor to provide readers without creating circular dependencies.
+// Implemented by the conn executor in reality
 type ReaderProvider interface {
 	GetOrInitReader(ctx context.Context, name string) (Reader, error)
 }
