@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-25.2
+# LogicTest: cockroach-go-testserver-25.3
 
 subtest regression_152629
 
