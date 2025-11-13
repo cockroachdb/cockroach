@@ -230,6 +230,13 @@ var tests = []importTestSpec{
 		calibrate:    true,
 		datasetNames: FromFunc(allDatasets),
 	},
+	// Small dataset for quickly iterating while developing this test.
+	{
+		subtestName:  "smoke",
+		nodes:        []int{4},
+		manualOnly:   true,
+		datasetNames: One("tpch/supplier"),
+	},
 	// Basic test w/o injected failures.
 	{
 		subtestName:  "basic",
@@ -300,6 +307,13 @@ var tests = []importTestSpec{
 		datasetNames: FromFunc(anyThreeDatasets),
 		importRunner: importCancellationRunner,
 	},
+	// Test column families.
+	{
+		subtestName:  "colfam",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyDataset),
+		preTestHook:  makeColumnFamilies,
+	},
 }
 
 func registerImport(r registry.Registry) {
@@ -357,9 +371,9 @@ func runImportTest(
 	// Create and use a test database
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
-	_, err := conn.Exec(`CREATE DATABASE import_test`)
+	_, err := conn.ExecContext(ctx, `CREATE DATABASE import_test`)
 	require.NoError(t, err)
-	_, err = conn.Exec(`USE import_test`)
+	_, err = conn.ExecContext(ctx, `USE import_test`)
 	require.NoError(t, err)
 
 	// Initialize datasets and create tables.
@@ -372,7 +386,7 @@ func runImportTest(
 			require.NotNilf(t, ds.getFingerprint(),
 				"dataset '%s' has no fingerprint. Run calibrate manually.", name)
 		}
-		_, err = conn.Exec(ds.getCreateTableStmt())
+		_, err = conn.ExecContext(ctx, ds.getCreateTableStmt())
 		require.NoError(t, err)
 	}
 
@@ -475,6 +489,11 @@ func runImportTest(
 			t.WorkerStatus("validating ", datasetName)
 			defer t.WorkerStatus()
 
+			err = validateNoRowFragmentation(ctx, l, conn, ds.getTableName())
+			if err != nil {
+				return err
+			}
+
 			var rows *gosql.Rows
 			rows, err = conn.Query(fmt.Sprintf(`SHOW FINGERPRINTS FROM TABLE import_test.%s`, ds.getTableName()))
 			if err != nil {
@@ -508,6 +527,117 @@ func runImportTest(
 		})
 	}
 	m.Wait()
+}
+
+// validateNoRowFragmentation verifies that IMPORT did not split rows with multiple
+// column families across range boundaries. It queries the table schema and range
+// boundaries to ensure that no range starts with a key that includes a column family suffix.
+// This validation only checks the primary index, as secondary indexes don't use column family
+// suffixes.
+func validateNoRowFragmentation(
+	ctx context.Context, l *logger.Logger, conn *gosql.DB, tableName string,
+) error {
+	var pkName string
+	var numKeyCols int
+	err := conn.QueryRowContext(ctx,
+		fmt.Sprintf(`SELECT index_name,
+							count(*)
+					   FROM [SHOW INDEXES FROM import_test.%s]
+					  WHERE NOT storing
+					    AND index_name LIKE '%%_pkey'
+				   GROUP BY index_name`, tableName)).Scan(&pkName, &numKeyCols)
+
+	l.Printf("Validating primary key %s with %d key columns", pkName, numKeyCols)
+
+	// 3. Validate the primary index using SHOW RANGES FROM INDEX
+	var violations []string
+
+	// Get range boundaries for the primary index
+	query := fmt.Sprintf(`SELECT start_key, end_key, range_id
+							FROM [SHOW RANGES FROM INDEX import_test.%s@%s]`, tableName, pkName)
+	rows, err := conn.QueryContext(ctx, query)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get ranges for primary index %s@%s", tableName, pkName)
+	}
+
+	// Validate each range boundary for the primary index
+	for rows.Next() {
+		var startKey, endKey string
+		var rangeID int64
+
+		err := rows.Scan(&startKey, &endKey, &rangeID)
+		if err != nil {
+			return errors.Wrapf(err, "failed to scan SHOW RANGES row for index %s", pkName)
+		}
+
+		// Check if start key has a column family suffix
+		if violation := checkKeyForFamilySuffix(startKey, numKeyCols); violation != "" {
+			violations = append(violations, fmt.Sprintf("Range %d: %s", rangeID, violation))
+		}
+		// Check if end key has a column family suffix
+		if violation := checkKeyForFamilySuffix(endKey, numKeyCols); violation != "" {
+			violations = append(violations, fmt.Sprintf("Range %d: %s", rangeID, violation))
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return errors.Wrapf(err, "error iterating SHOW RANGES results for primary index %s", pkName)
+	}
+
+	if len(violations) > 0 {
+		return errors.Newf("found ranges with mid-row splits in primary index %s@%s (%d violations):\n  %s",
+			tableName, pkName, len(violations), strings.Join(violations, "\n  "))
+	}
+
+	return nil
+}
+
+// checkKeyForFamilySuffix checks if a pretty-printed key from SHOW RANGES contains
+// a column family suffix, which would indicate a mid-row split.
+// maxAllowed is the maximum number of key segments expected for this index (before family suffix).
+// Returns an error message if a violation is found, empty string otherwise.
+func checkKeyForFamilySuffix(prettyKey string, maxAllowed int) string {
+	// Skip special boundary markers
+	if strings.HasPrefix(prettyKey, "<before:") || strings.HasPrefix(prettyKey, "<after:") ||
+		strings.Contains(prettyKey, "Min>") || strings.Contains(prettyKey, "Max>") {
+		return ""
+	}
+
+	// Parse the key: remove "…" prefix and split by "/"
+	key := strings.TrimPrefix(prettyKey, "…")
+	if key == "" {
+		return ""
+	}
+	key = strings.TrimPrefix(key, "/")
+
+	parts := strings.Split(key, "/")
+
+	// When using SHOW RANGES FROM INDEX, the output strips the table/index prefix
+	// so we just get the data segments directly
+	// For example: "…/2/3" instead of "…/Table/105/1/2/3"
+	// The parts are just the key values after the index ID
+
+	// Count the data segments (everything after removing prefix markers)
+	actualSegments := len(parts)
+
+	// Adjust for leading empty string if key started with /
+	if len(parts) > 0 && parts[0] == "" {
+		actualSegments = len(parts) - 1
+	}
+
+	// Check if we have more segments than expected (indicating family suffix)
+	if actualSegments > maxAllowed {
+		extraSegments := actualSegments - maxAllowed
+		// A column family suffix adds:
+		// - 1 segment for family 0 (just the family ID)
+		// - 2 segments for family N>0 (family ID + length)
+		if extraSegments == 1 || extraSegments == 2 {
+			return fmt.Sprintf("start key %s has %d segments (expected max %d) - likely has column family suffix",
+				prettyKey, actualSegments, maxAllowed)
+		}
+	}
+
+	return ""
 }
 
 // importCancellationRunner() is the test runner for the import cancellation
@@ -619,6 +749,88 @@ func importCancellationRunner(
 	// Restore GC TTLs so we don't interfere with post-import table validation.
 	_, err = conn.ExecContext(ctx, ttl_stmt, 60*60*4 /* 4 hours */)
 	return err
+}
+
+// makeColumnFamilies() is a pre-test hook that changes the tables
+// in import_test to use column families. To do this, we iterate the
+// tables in the database, reading the schema for each table, modifying
+// the schema and then re-creating the table. For each table, we assign
+// each non-index column to a different column family. Because CRDB
+// does not allow altering a column's family, we simply drop and
+// re-create the entire table.
+func makeColumnFamilies(ctx context.Context, t test.Test, c cluster.Cluster) {
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+
+	// Read table names
+	rows, err := conn.QueryContext(ctx, `SELECT table_name FROM [SHOW TABLES FROM import_test]`)
+	require.NoError(t, err)
+	tableNames, err := scanStrings(rows)
+	require.NoError(t, err)
+
+	for _, tableName := range tableNames {
+		// Pull all the non-indexed, non-computed columns
+		rows, err = conn.QueryContext(ctx,
+			fmt.Sprintf(
+				`SELECT column_name
+	           FROM [SHOW COLUMNS FROM import_test.%s]
+	           JOIN [SHOW INDEXES FROM import_test.%s]
+	          USING (column_name)
+	          WHERE indices = '{%s_pkey}'
+	            AND storing
+		        AND column_name = definition`,
+				tableName, tableName, tableName))
+		require.NoError(t, err)
+		columns, err := scanStrings(rows)
+		require.NoError(t, err)
+
+		if len(columns) == 0 {
+			t.L().Printf("No unindexed columns in table %s", tableName)
+			continue
+		}
+
+		var createStmt string
+		err = conn.QueryRowContext(ctx,
+			fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE import_test.%s]`,
+				tableName)).Scan(&createStmt)
+		require.NoError(t, err)
+
+		// Rewrite the CREATE TABLE statement
+		lines := strings.Split(createStmt, "\n")
+		for i, expr := range lines {
+			colName := strings.Fields(expr)[0]
+
+			if !slices.Contains(columns, colName) {
+				continue
+			}
+
+			lines[i] = fmt.Sprintf("%s FAMILY fam_%s (%s),", expr, colName, colName)
+		}
+		lines[0] = strings.Replace(lines[0], "public", "import_test", 1)
+		createStmt = strings.Join(lines, "\n")
+
+		t.L().Printf("Using: %s", createStmt)
+		_, err = conn.ExecContext(ctx, fmt.Sprintf(`DROP TABLE import_test.%s`, tableName))
+		require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, createStmt)
+		require.NoError(t, err)
+	}
+}
+
+// scanStrings() reads a slice of strings from rows.
+func scanStrings(rows *gosql.Rows) ([]string, error) {
+	var strings []string
+	for rows.Next() {
+		var str string
+		if err := rows.Scan(&str); err != nil {
+			return nil, err
+		}
+		strings = append(strings, str)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return strings, nil
 }
 
 // runSyncImportJob() runs an import job and waits for it to complete.

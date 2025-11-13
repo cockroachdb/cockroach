@@ -375,6 +375,7 @@ go_test(
         "blocklist_test.go",
         "cdc_helper_test.go",
         "drt_test.go",
+        "import_test.go",
         "kv_rangefeed_test.go",
         "nodejs_helpers_test.go",
         "query_comparison_util_test.go",
