@@ -1236,6 +1236,70 @@ storage.initial_stats_complete becomes true.
 		Measurement: "Ratio",
 		Unit:        metric.Unit_CONST,
 	}
+	metaBytesCompressedL5Data = metric.Metadata{
+		Name:         "storage.bytes-compressed.l5.data",
+		Help:         "Total number of logical bytes compressed for L5 data blocks.",
+		Measurement:  "Bytes",
+		Unit:         metric.Unit_BYTES,
+		LabeledName:  "storage.bytes-compressed",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "5", metric.LabelType, "data"),
+	}
+	metaBytesDecompressedL5Data = metric.Metadata{
+		Name:         "storage.bytes-decompressed.l5.data",
+		Help:         "Total number of logical bytes decompressed for L5 data blocks.",
+		Measurement:  "Bytes",
+		Unit:         metric.Unit_BYTES,
+		LabeledName:  "storage.bytes-decompressed",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "5", metric.LabelType, "data"),
+	}
+	metaBytesCompressedL5Values = metric.Metadata{
+		Name:         "storage.bytes-compressed.l5.values",
+		Help:         "Total number of logical bytes compressed for L5 value blocks.",
+		Measurement:  "Bytes",
+		Unit:         metric.Unit_BYTES,
+		LabeledName:  "storage.bytes-compressed",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "5", metric.LabelType, "values"),
+	}
+	metaBytesDecompressedL5Values = metric.Metadata{
+		Name:         "storage.bytes-decompressed.l5.values",
+		Help:         "Total number of logical bytes decompressed for L5 value blocks.",
+		Measurement:  "Bytes",
+		Unit:         metric.Unit_BYTES,
+		LabeledName:  "storage.bytes-decompressed",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "5", metric.LabelType, "values"),
+	}
+	metaBytesCompressedL6Data = metric.Metadata{
+		Name:         "storage.bytes-compressed.l6.data",
+		Help:         "Total number of logical bytes compressed for L6 data blocks.",
+		Measurement:  "Bytes",
+		Unit:         metric.Unit_BYTES,
+		LabeledName:  "storage.bytes-compressed",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "6", metric.LabelType, "data"),
+	}
+	metaBytesDecompressedL6Data = metric.Metadata{
+		Name:         "storage.bytes-decompressed.l6.data",
+		Help:         "Total number of logical bytes decompressed for L6 data blocks.",
+		Measurement:  "Bytes",
+		Unit:         metric.Unit_BYTES,
+		LabeledName:  "storage.bytes-decompressed",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "6", metric.LabelType, "data"),
+	}
+	metaBytesCompressedL6Values = metric.Metadata{
+		Name:         "storage.bytes-compressed.l6.values",
+		Help:         "Total number of logical bytes compressed for L6 value blocks.",
+		Measurement:  "Bytes",
+		Unit:         metric.Unit_BYTES,
+		LabeledName:  "storage.bytes-compressed",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "6", metric.LabelType, "values"),
+	}
+	metaBytesDecompressedL6Values = metric.Metadata{
+		Name:         "storage.bytes-decompressed.l6.values",
+		Help:         "Total number of logical bytes decompressed for L6 value blocks.",
+		Measurement:  "Bytes",
+		Unit:         metric.Unit_BYTES,
+		LabeledName:  "storage.bytes-decompressed",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelLevel, "6", metric.LabelType, "values"),
+	}
 )
 
 var (
@@ -2935,6 +2999,9 @@ Note that the measurement does not include the duration for replicating the eval
 )
 
 // StoreMetrics is the set of metrics for a given store.
+//
+// Note: any non-embedded struct fields must implement the metric.Struct
+// interface.
 type StoreMetrics struct {
 	registry *metric.Registry
 
@@ -3105,6 +3172,7 @@ type StoreMetrics struct {
 	SSTableRemoteBytes                *metric.Gauge
 	SSTableRemoteCount                *metric.Gauge
 
+	// Compression metrics for currently live sstables and blob files.
 	CompressionSnappyBytes  *metric.Gauge
 	CompressionSnappyCR     *metric.GaugeFloat64
 	CompressionMinLZBytes   *metric.Gauge
@@ -3114,6 +3182,16 @@ type StoreMetrics struct {
 	CompressionNoneBytes    *metric.Gauge
 	CompressionUnknownBytes *metric.Gauge
 	CompressionOverallCR    *metric.GaugeFloat64
+
+	// Runtime metrics for compression.
+	BytesCompressedL5Values   *metric.Counter
+	BytesCompressedL5Data     *metric.Counter
+	BytesCompressedL6Values   *metric.Counter
+	BytesCompressedL6Data     *metric.Counter
+	BytesDecompressedL5Values *metric.Counter
+	BytesDecompressedL5Data   *metric.Counter
+	BytesDecompressedL6Values *metric.Counter
+	BytesDecompressedL6Data   *metric.Counter
 
 	categoryIterMetrics                pebbleCategoryIterMetricsContainer
 	categoryDiskWriteMetrics           pebbleCategoryDiskWriteMetricsContainer
@@ -3872,6 +3950,15 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		CompressionUnknownBytes: metric.NewGauge(metaCompressionUnknownBytes),
 		CompressionOverallCR:    metric.NewGaugeFloat64(metaCompressionOverallCR),
 
+		BytesCompressedL5Data:     metric.NewCounter(metaBytesCompressedL5Data),
+		BytesCompressedL5Values:   metric.NewCounter(metaBytesCompressedL5Values),
+		BytesCompressedL6Data:     metric.NewCounter(metaBytesCompressedL6Data),
+		BytesCompressedL6Values:   metric.NewCounter(metaBytesCompressedL6Values),
+		BytesDecompressedL5Data:   metric.NewCounter(metaBytesDecompressedL5Data),
+		BytesDecompressedL5Values: metric.NewCounter(metaBytesDecompressedL5Values),
+		BytesDecompressedL6Data:   metric.NewCounter(metaBytesDecompressedL6Data),
+		BytesDecompressedL6Values: metric.NewCounter(metaBytesDecompressedL6Values),
+
 		categoryDiskWriteMetrics: pebbleCategoryDiskWriteMetricsContainer{
 			registry: storeRegistry,
 		},
@@ -4212,6 +4299,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ClosedTimestampPolicyChange:       metric.NewCounter(metaClosedTimestampPolicyChange),
 		ClosedTimestampLatencyInfoMissing: metric.NewCounter(metaClosedTimestampLatencyInfoMissing),
 	}
+
 	sm.categoryIterMetrics.init(storeRegistry)
 
 	storeRegistry.AddMetricStruct(sm)
@@ -4377,6 +4465,15 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	// We cannot use CompressedBytesWithoutStats for the overall compression
 	// ratio; we estimate it from the data we do have.
 	sm.CompressionOverallCR.Update(overall.CompressionRatio())
+
+	sm.BytesCompressedL5Values.Update(int64(m.CompressionCounters.LogicalBytesCompressed.L5.ValueBlocks))
+	sm.BytesCompressedL5Data.Update(int64(m.CompressionCounters.LogicalBytesCompressed.L5.DataBlocks))
+	sm.BytesCompressedL6Values.Update(int64(m.CompressionCounters.LogicalBytesCompressed.L6.ValueBlocks))
+	sm.BytesCompressedL6Data.Update(int64(m.CompressionCounters.LogicalBytesCompressed.L6.DataBlocks))
+	sm.BytesDecompressedL5Values.Update(int64(m.CompressionCounters.LogicalBytesDecompressed.L5.ValueBlocks))
+	sm.BytesDecompressedL5Data.Update(int64(m.CompressionCounters.LogicalBytesDecompressed.L5.DataBlocks))
+	sm.BytesDecompressedL6Values.Update(int64(m.CompressionCounters.LogicalBytesDecompressed.L6.ValueBlocks))
+	sm.BytesDecompressedL6Data.Update(int64(m.CompressionCounters.LogicalBytesDecompressed.L6.DataBlocks))
 
 	sm.categoryIterMetrics.update(m.CategoryStats)
 	sm.categoryDiskWriteMetrics.update(m.DiskWriteStats)
