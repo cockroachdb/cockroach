@@ -237,205 +237,206 @@ func (rs *rebalanceState) rebalanceStore(
 	}
 
 	log.KvDistribution.VInfof(ctx, 2, "attempting to shed replicas next")
-
-	if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
-		now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
-		log.KvDistribution.VInfof(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
-		return
-	}
-	// If the node is cpu overloaded, or the store/node is not fdOK, exclude
-	// the other stores on this node from receiving replicas shed by this
-	// store.
-	excludeStoresOnNode := store.nls > overloadSlow
-	rs.scratch.storesToExclude = rs.scratch.storesToExclude[:0]
-	if excludeStoresOnNode {
-		nodeID := ss.NodeID
-		for _, storeID := range rs.cs.nodes[nodeID].stores {
-			rs.scratch.storesToExclude.insert(storeID)
-		}
-		log.KvDistribution.VInfof(ctx, 2, "excluding all stores on n%d due to overload/fd status", nodeID)
-	} else {
-		// This store is excluded of course.
-		rs.scratch.storesToExclude.insert(store.StoreID)
-	}
-
-	// Iterate over top-K ranges first and try to move them.
-	topKRanges := ss.adjusted.topKRanges[localStoreID]
-	n := topKRanges.len()
-	loadDim := topKRanges.dim
-	for i := 0; i < n; i++ {
-		rangeID := topKRanges.index(i)
-		// TODO(sumeer): the following code belongs in a closure, since we will
-		// repeat it for some random selection of non topKRanges.
-		rstate := rs.cs.ranges[rangeID]
-		if len(rstate.pendingChanges) > 0 {
-			// If the range has pending changes, don't make more changes.
-			log.KvDistribution.VInfof(ctx, 2, "skipping r%d: has pending changes", rangeID)
-			continue
-		}
-		if now.Sub(rstate.lastFailedChange) < rs.lastFailedChangeDelayDuration {
-			log.KvDistribution.VInfof(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
-			continue
-		}
-		if !rs.cs.ensureAnalyzedConstraints(rstate) {
-			log.KvDistribution.VInfof(ctx, 2, "skipping r%d: constraints analysis failed", rangeID)
-			continue
-		}
-		isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
-		if !isVoter && !isNonVoter {
-			// We should not panic here since the replicateQueue may have shed the
-			// lease and informed MMA, since the last time MMA computed the top-k
-			// ranges. This is useful for debugging in the prototype, due to the
-			// lack of unit tests.
-			panic(fmt.Sprintf("internal state inconsistency: "+
-				"store=%v range_id=%v pending-changes=%v "+
-				"rstate_replicas=%v rstate_constraints=%v",
-				store.StoreID, rangeID, rstate.pendingChanges, rstate.replicas, rstate.constraints))
-		}
-		var conj constraintsConj
-		var err error
-		if isVoter {
-			conj, err = rstate.constraints.candidatesToReplaceVoterForRebalance(store.StoreID)
-		} else {
-			conj, err = rstate.constraints.candidatesToReplaceNonVoterForRebalance(store.StoreID)
-		}
-		if err != nil {
-			// This range has some constraints that are violated. Let those be
-			// fixed first.
-			log.KvDistribution.VInfof(ctx, 2, "skipping r%d: constraint violation needs fixing first: %v", rangeID, err)
-			continue
-		}
-		rs.scratch.disj[0] = conj
-		rs.scratch.storesToExcludeForRange = append(rs.scratch.storesToExcludeForRange[:0], rs.scratch.storesToExclude...)
-		// Also exclude all stores on nodes that have existing replicas.
-		for _, replica := range rstate.replicas {
-			storeID := replica.StoreID
-			if storeID == store.StoreID {
-				// We don't exclude other stores on this node, since we are allowed to
-				// transfer the range to them. If the node is overloaded or not fdOK,
-				// we have already excluded those stores above.
-				continue
-			}
-			nodeID := rs.cs.stores[storeID].NodeID
-			for _, storeID := range rs.cs.nodes[nodeID].stores {
-				rs.scratch.storesToExcludeForRange.insert(storeID)
-			}
-		}
-		// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
-		cands, ssSLS := rs.cs.computeCandidatesForRange(ctx, rs.scratch.disj[:], rs.scratch.storesToExcludeForRange, store.StoreID)
-		log.KvDistribution.VInfof(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
-			rangeID, store.StoreID, ss.adjusted.load)
-		if log.V(2) {
-			log.KvDistribution.Infof(ctx, "candidates are:")
-			for _, c := range cands.candidates {
-				log.KvDistribution.Infof(ctx, " s%d: %s", c.StoreID, c.storeLoadSummary)
-			}
-		}
-
-		if len(cands.candidates) == 0 {
-			log.KvDistribution.VInfof(ctx, 2, "result(failed): no candidates found for r%d after exclusions", rangeID)
-			continue
-		}
-		var rlocalities replicasLocalityTiers
-		if isVoter {
-			rlocalities = rstate.constraints.voterLocalityTiers
-		} else {
-			rlocalities = rstate.constraints.replicaLocalityTiers
-		}
-		localities := rs.dsm.getExistingReplicaLocalities(rlocalities)
-		isLeaseholder := rstate.constraints.leaseholderID == store.StoreID
-		// Set the diversity score and lease preference index of the candidates.
-		for _, cand := range cands.candidates {
-			cand.diversityScore = localities.getScoreChangeForRebalance(
-				ss.localityTiers, rs.cs.stores[cand.StoreID].localityTiers)
-			if isLeaseholder {
-				cand.leasePreferenceIndex = matchedLeasePreferenceIndex(
-					cand.StoreID, rstate.constraints.spanConfig.leasePreferences, rs.cs.constraintMatcher)
-			}
-		}
-		// Consider a cluster where s1 is overloadSlow, s2 is loadNoChange, and
-		// s3, s4 are loadNormal. Now s4 is considering rebalancing load away
-		// from s1, but the candidate top-k range has replicas {s1, s3, s4}. So
-		// the only way to shed load from s1 is a s1 => s2 move. But there may
-		// be other ranges at other leaseholder stores which can be moved from
-		// s1 => {s3, s4}. So we should not be doing this sub-optimal transfer
-		// of load from s1 => s2 unless s1 is not seeing any load shedding for
-		// some interval of time. We need a way to capture this information in a
-		// simple but effective manner. For now, we capture this using these
-		// grace duration thresholds.
-		ignoreLevel := ignoreLoadNoChangeAndHigher
-		overloadDur := now.Sub(ss.overloadStartTime)
-		if overloadDur > ignoreHigherThanLoadThresholdGraceDuration {
-			ignoreLevel = ignoreHigherThanLoadThreshold
-			log.KvDistribution.VInfof(ctx, 3, "using level %v (threshold:%v) for r%d based on overload duration %v",
-				ignoreLevel, ssSLS.sls, rangeID, overloadDur)
-		} else if overloadDur > ignoreLoadThresholdAndHigherGraceDuration {
-			ignoreLevel = ignoreLoadThresholdAndHigher
-			log.KvDistribution.VInfof(ctx, 3, "using level %v (threshold:%v) for r%d based on overload duration %v",
-				ignoreLevel, ssSLS.sls, rangeID, overloadDur)
-		}
-		targetStoreID := sortTargetCandidateSetAndPick(
-			ctx, cands, ssSLS.sls, ignoreLevel, loadDim, rs.rng)
-		if targetStoreID == 0 {
-			log.KvDistribution.VInfof(ctx, 2, "result(failed): no suitable target found among candidates for r%d "+
-				"(threshold %s; %s)", rangeID, ssSLS.sls, ignoreLevel)
-			continue
-		}
-		targetSS := rs.cs.stores[targetStoreID]
-		addedLoad := rstate.load.Load
-		if !isLeaseholder {
-			addedLoad[CPURate] = rstate.load.RaftCPU
-		}
-		if !rs.cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, cands.means, false, loadDim) {
-			log.KvDistribution.VInfof(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
-				store.StoreID, targetStoreID, rangeID, addedLoad)
-			continue
-		}
-		addTarget := roachpb.ReplicationTarget{
-			NodeID:  targetSS.NodeID,
-			StoreID: targetSS.StoreID,
-		}
-		removeTarget := roachpb.ReplicationTarget{
-			NodeID:  ss.NodeID,
-			StoreID: ss.StoreID,
-		}
-		if addTarget.StoreID == removeTarget.StoreID {
-			panic(fmt.Sprintf("internal state inconsistency: "+
-				"add=%v==remove_target=%v range_id=%v candidates=%v",
-				addTarget, removeTarget, rangeID, cands.candidates))
-		}
-		replicaChanges := makeRebalanceReplicaChanges(
-			rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
-		rangeChange := MakePendingRangeChange(rangeID, replicaChanges[:])
-		if err = rs.cs.preCheckOnApplyReplicaChanges(rangeChange.pendingReplicaChanges); err != nil {
-			panic(errors.Wrapf(err, "pre-check failed for replica changes: %v for %v",
-				replicaChanges, rangeID))
-		}
-		rs.cs.addPendingRangeChange(rangeChange)
-		rs.changes = append(rs.changes, rangeChange)
-		rs.rangeMoveCount++
-		log.KvDistribution.VInfof(ctx, 2,
-			"result(success): rebalancing r%v from s%v to s%v [change: %v] with resulting loads source: %v target: %v",
-			rangeID, removeTarget.StoreID, addTarget.StoreID, rs.changes[len(rs.changes)-1], ss.adjusted.load, targetSS.adjusted.load)
-		if rs.rangeMoveCount >= rs.maxRangeMoveCount {
-			log.KvDistribution.VInfof(ctx, 2, "s%d has reached max range move count %d: mma returning", store.StoreID, rs.maxRangeMoveCount)
+	{
+		if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
+			now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
+			log.KvDistribution.VInfof(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
 			return
 		}
-		doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
-		if doneShedding {
-			log.KvDistribution.VInfof(ctx, 2, "s%d has reached pending decrease threshold(%.2f>=%.2f) after rebalancing: done shedding with %d left in topk",
-				store.StoreID, ss.maxFractionPendingDecrease, maxFractionPendingThreshold, n-(i+1))
-			break
+		// If the node is cpu overloaded, or the store/node is not fdOK, exclude
+		// the other stores on this node from receiving replicas shed by this
+		// store.
+		excludeStoresOnNode := store.nls > overloadSlow
+		rs.scratch.storesToExclude = rs.scratch.storesToExclude[:0]
+		if excludeStoresOnNode {
+			nodeID := ss.NodeID
+			for _, storeID := range rs.cs.nodes[nodeID].stores {
+				rs.scratch.storesToExclude.insert(storeID)
+			}
+			log.KvDistribution.VInfof(ctx, 2, "excluding all stores on n%d due to overload/fd status", nodeID)
+		} else {
+			// This store is excluded of course.
+			rs.scratch.storesToExclude.insert(store.StoreID)
 		}
-	}
-	// TODO(sumeer): For regular rebalancing, we will wait until those top-K
-	// move and then continue with the rest. There is a risk that the top-K
-	// have some constraint that prevents rebalancing, while the rest can be
-	// moved. Running with underprovisioned clusters and expecting load-based
-	// rebalancing to work well is not in scope.
-	if doneShedding {
-		log.KvDistribution.VInfof(ctx, 2, "store s%d is done shedding, moving to next store", store.StoreID)
-		return
+
+		// Iterate over top-K ranges first and try to move them.
+		topKRanges := ss.adjusted.topKRanges[localStoreID]
+		n := topKRanges.len()
+		loadDim := topKRanges.dim
+		for i := 0; i < n; i++ {
+			rangeID := topKRanges.index(i)
+			// TODO(sumeer): the following code belongs in a closure, since we will
+			// repeat it for some random selection of non topKRanges.
+			rstate := rs.cs.ranges[rangeID]
+			if len(rstate.pendingChanges) > 0 {
+				// If the range has pending changes, don't make more changes.
+				log.KvDistribution.VInfof(ctx, 2, "skipping r%d: has pending changes", rangeID)
+				continue
+			}
+			if now.Sub(rstate.lastFailedChange) < rs.lastFailedChangeDelayDuration {
+				log.KvDistribution.VInfof(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
+				continue
+			}
+			if !rs.cs.ensureAnalyzedConstraints(rstate) {
+				log.KvDistribution.VInfof(ctx, 2, "skipping r%d: constraints analysis failed", rangeID)
+				continue
+			}
+			isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
+			if !isVoter && !isNonVoter {
+				// We should not panic here since the replicateQueue may have shed the
+				// lease and informed MMA, since the last time MMA computed the top-k
+				// ranges. This is useful for debugging in the prototype, due to the
+				// lack of unit tests.
+				panic(fmt.Sprintf("internal state inconsistency: "+
+					"store=%v range_id=%v pending-changes=%v "+
+					"rstate_replicas=%v rstate_constraints=%v",
+					store.StoreID, rangeID, rstate.pendingChanges, rstate.replicas, rstate.constraints))
+			}
+			var conj constraintsConj
+			var err error
+			if isVoter {
+				conj, err = rstate.constraints.candidatesToReplaceVoterForRebalance(store.StoreID)
+			} else {
+				conj, err = rstate.constraints.candidatesToReplaceNonVoterForRebalance(store.StoreID)
+			}
+			if err != nil {
+				// This range has some constraints that are violated. Let those be
+				// fixed first.
+				log.KvDistribution.VInfof(ctx, 2, "skipping r%d: constraint violation needs fixing first: %v", rangeID, err)
+				continue
+			}
+			rs.scratch.disj[0] = conj
+			rs.scratch.storesToExcludeForRange = append(rs.scratch.storesToExcludeForRange[:0], rs.scratch.storesToExclude...)
+			// Also exclude all stores on nodes that have existing replicas.
+			for _, replica := range rstate.replicas {
+				storeID := replica.StoreID
+				if storeID == store.StoreID {
+					// We don't exclude other stores on this node, since we are allowed to
+					// transfer the range to them. If the node is overloaded or not fdOK,
+					// we have already excluded those stores above.
+					continue
+				}
+				nodeID := rs.cs.stores[storeID].NodeID
+				for _, storeID := range rs.cs.nodes[nodeID].stores {
+					rs.scratch.storesToExcludeForRange.insert(storeID)
+				}
+			}
+			// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
+			cands, ssSLS := rs.cs.computeCandidatesForRange(ctx, rs.scratch.disj[:], rs.scratch.storesToExcludeForRange, store.StoreID)
+			log.KvDistribution.VInfof(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
+				rangeID, store.StoreID, ss.adjusted.load)
+			if log.V(2) {
+				log.KvDistribution.Infof(ctx, "candidates are:")
+				for _, c := range cands.candidates {
+					log.KvDistribution.Infof(ctx, " s%d: %s", c.StoreID, c.storeLoadSummary)
+				}
+			}
+
+			if len(cands.candidates) == 0 {
+				log.KvDistribution.VInfof(ctx, 2, "result(failed): no candidates found for r%d after exclusions", rangeID)
+				continue
+			}
+			var rlocalities replicasLocalityTiers
+			if isVoter {
+				rlocalities = rstate.constraints.voterLocalityTiers
+			} else {
+				rlocalities = rstate.constraints.replicaLocalityTiers
+			}
+			localities := rs.dsm.getExistingReplicaLocalities(rlocalities)
+			isLeaseholder := rstate.constraints.leaseholderID == store.StoreID
+			// Set the diversity score and lease preference index of the candidates.
+			for _, cand := range cands.candidates {
+				cand.diversityScore = localities.getScoreChangeForRebalance(
+					ss.localityTiers, rs.cs.stores[cand.StoreID].localityTiers)
+				if isLeaseholder {
+					cand.leasePreferenceIndex = matchedLeasePreferenceIndex(
+						cand.StoreID, rstate.constraints.spanConfig.leasePreferences, rs.cs.constraintMatcher)
+				}
+			}
+			// Consider a cluster where s1 is overloadSlow, s2 is loadNoChange, and
+			// s3, s4 are loadNormal. Now s4 is considering rebalancing load away
+			// from s1, but the candidate top-k range has replicas {s1, s3, s4}. So
+			// the only way to shed load from s1 is a s1 => s2 move. But there may
+			// be other ranges at other leaseholder stores which can be moved from
+			// s1 => {s3, s4}. So we should not be doing this sub-optimal transfer
+			// of load from s1 => s2 unless s1 is not seeing any load shedding for
+			// some interval of time. We need a way to capture this information in a
+			// simple but effective manner. For now, we capture this using these
+			// grace duration thresholds.
+			ignoreLevel := ignoreLoadNoChangeAndHigher
+			overloadDur := now.Sub(ss.overloadStartTime)
+			if overloadDur > ignoreHigherThanLoadThresholdGraceDuration {
+				ignoreLevel = ignoreHigherThanLoadThreshold
+				log.KvDistribution.VInfof(ctx, 3, "using level %v (threshold:%v) for r%d based on overload duration %v",
+					ignoreLevel, ssSLS.sls, rangeID, overloadDur)
+			} else if overloadDur > ignoreLoadThresholdAndHigherGraceDuration {
+				ignoreLevel = ignoreLoadThresholdAndHigher
+				log.KvDistribution.VInfof(ctx, 3, "using level %v (threshold:%v) for r%d based on overload duration %v",
+					ignoreLevel, ssSLS.sls, rangeID, overloadDur)
+			}
+			targetStoreID := sortTargetCandidateSetAndPick(
+				ctx, cands, ssSLS.sls, ignoreLevel, loadDim, rs.rng)
+			if targetStoreID == 0 {
+				log.KvDistribution.VInfof(ctx, 2, "result(failed): no suitable target found among candidates for r%d "+
+					"(threshold %s; %s)", rangeID, ssSLS.sls, ignoreLevel)
+				continue
+			}
+			targetSS := rs.cs.stores[targetStoreID]
+			addedLoad := rstate.load.Load
+			if !isLeaseholder {
+				addedLoad[CPURate] = rstate.load.RaftCPU
+			}
+			if !rs.cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, cands.means, false, loadDim) {
+				log.KvDistribution.VInfof(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
+					store.StoreID, targetStoreID, rangeID, addedLoad)
+				continue
+			}
+			addTarget := roachpb.ReplicationTarget{
+				NodeID:  targetSS.NodeID,
+				StoreID: targetSS.StoreID,
+			}
+			removeTarget := roachpb.ReplicationTarget{
+				NodeID:  ss.NodeID,
+				StoreID: ss.StoreID,
+			}
+			if addTarget.StoreID == removeTarget.StoreID {
+				panic(fmt.Sprintf("internal state inconsistency: "+
+					"add=%v==remove_target=%v range_id=%v candidates=%v",
+					addTarget, removeTarget, rangeID, cands.candidates))
+			}
+			replicaChanges := makeRebalanceReplicaChanges(
+				rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
+			rangeChange := MakePendingRangeChange(rangeID, replicaChanges[:])
+			if err = rs.cs.preCheckOnApplyReplicaChanges(rangeChange.pendingReplicaChanges); err != nil {
+				panic(errors.Wrapf(err, "pre-check failed for replica changes: %v for %v",
+					replicaChanges, rangeID))
+			}
+			rs.cs.addPendingRangeChange(rangeChange)
+			rs.changes = append(rs.changes, rangeChange)
+			rs.rangeMoveCount++
+			log.KvDistribution.VInfof(ctx, 2,
+				"result(success): rebalancing r%v from s%v to s%v [change: %v] with resulting loads source: %v target: %v",
+				rangeID, removeTarget.StoreID, addTarget.StoreID, rs.changes[len(rs.changes)-1], ss.adjusted.load, targetSS.adjusted.load)
+			if rs.rangeMoveCount >= rs.maxRangeMoveCount {
+				log.KvDistribution.VInfof(ctx, 2, "s%d has reached max range move count %d: mma returning", store.StoreID, rs.maxRangeMoveCount)
+				return
+			}
+			doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
+			if doneShedding {
+				log.KvDistribution.VInfof(ctx, 2, "s%d has reached pending decrease threshold(%.2f>=%.2f) after rebalancing: done shedding with %d left in topk",
+					store.StoreID, ss.maxFractionPendingDecrease, maxFractionPendingThreshold, n-(i+1))
+				break
+			}
+		}
+		// TODO(sumeer): For regular rebalancing, we will wait until those top-K
+		// move and then continue with the rest. There is a risk that the top-K
+		// have some constraint that prevents rebalancing, while the rest can be
+		// moved. Running with underprovisioned clusters and expecting load-based
+		// rebalancing to work well is not in scope.
+		if doneShedding {
+			log.KvDistribution.VInfof(ctx, 2, "store s%d is done shedding, moving to next store", store.StoreID)
+			return
+		}
 	}
 }
 
