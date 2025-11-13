@@ -328,7 +328,7 @@ func (cs *clusterState) rebalanceStores(
 				cs.addPendingRangeChange(leaseChange)
 				changes = append(changes, leaseChange)
 				leaseTransferCount++
-				if changes[len(changes)-1].IsChangeReplicas() || !changes[len(changes)-1].IsTransferLease() {
+				if !changes[len(changes)-1].IsTransferLease() {
 					panic(fmt.Sprintf("lease transfer is invalid: %v", changes[len(changes)-1]))
 				}
 				log.KvDistribution.Infof(ctx,

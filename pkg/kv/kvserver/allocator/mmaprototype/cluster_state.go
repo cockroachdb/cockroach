@@ -139,8 +139,6 @@ type ReplicaChangeType int
 
 const (
 	Unknown ReplicaChangeType = iota
-	AddLease
-	RemoveLease
 	// AddReplica represents a single replica being added.
 	AddReplica
 	// RemoveReplica represents a single replica being removed.
@@ -154,10 +152,6 @@ func (s ReplicaChangeType) String() string {
 	switch s {
 	case Unknown:
 		return "Unknown"
-	case AddLease:
-		return "AddLease"
-	case RemoveLease:
-		return "RemoveLease"
 	case AddReplica:
 		return "AddReplica"
 	case RemoveReplica:
@@ -201,13 +195,15 @@ type ReplicaChange struct {
 	//   AddReplica.
 	//
 	// - exists(prev.replicaID) && exists(next.replicaID):
-	//   - If prev.ReplicaType == next.ReplicaType, ReplicaChangeType must be
-	//     AddLease or RemoveLease, with a change in the IsLeaseholder bit.
-	//   - If prev.ReplicaType != next.ReplicaType, ReplicaChangeType is
-	//     ChangeReplica, and this is a promotion/demotion. The IsLeaseholder
-	//     bit can change or be false in both prev and next (it can't be true in
-	//     both since a promoted replica can't have been the leaseholder and a
-	//     replica being demoted cannot retain the lease).
+	//   - ReplicaChangeType must be ChangeReplica.
+	//   - If prev.ReplicaType == next.ReplicaType, there must be a change in the
+	//     IsLeaseholder bit - this is a pure lease transfer.
+	//   - If prev.ReplicaType != next.ReplicaType, and this is a promotion/demotion.
+	//     Additionally, either of prev.IsLeaseholder or next.IsLeaseholder may be
+	//     set, indicating that the lease is being lost/gained as part of the
+	//     demotion/promotion. It can't be true in both since a promoted replica
+	//     can't have been the leaseholder and a replica being demoted cannot
+	//     retain the lease).
 	//
 	// NB: The prev value is always the state before the change. Typically, this
 	// will be the source of truth provided by the leaseholder in the RangeMsg,
@@ -257,14 +253,21 @@ func (rc ReplicaChange) isAddition() bool {
 // isUpdate returns true if the change is an update to the replica type or
 // leaseholder status. This includes promotion/demotion changes.
 func (rc ReplicaChange) isUpdate() bool {
-	return rc.replicaChangeType == AddLease || rc.replicaChangeType == RemoveLease ||
-		rc.replicaChangeType == ChangeReplica
+	return rc.replicaChangeType == ChangeReplica
 }
 
 // isPromoDemo returns true if the change is a promotion or demotion of a
 // replica (potentially with a lease change).
 func (rc ReplicaChange) isPromoDemo() bool {
-	return rc.replicaChangeType == ChangeReplica
+	// A ChangeReplica is a promo/demo if it changes the replica type
+	// (distinguishing it from a pure lease transfer).
+	return rc.replicaChangeType == ChangeReplica && rc.prev.ReplicaType.ReplicaType != rc.next.ReplicaType.ReplicaType
+}
+
+// isPureLeaseTransfer returns true if the change is a pure lease transfer,
+// i.e. not one coupled with a change in replica type.
+func (rc ReplicaChange) isPureLeaseTransfer() bool {
+	return rc.replicaChangeType == ChangeReplica && rc.prev.ReplicaType.ReplicaType == rc.next.ReplicaType.ReplicaType
 }
 
 func MakeLeaseTransferChanges(
@@ -312,14 +315,14 @@ func MakeLeaseTransferChanges(
 		rangeID:           rangeID,
 		prev:              remove.ReplicaState,
 		next:              remove.ReplicaIDAndType,
-		replicaChangeType: RemoveLease,
+		replicaChangeType: ChangeReplica,
 	}
 	addLease := ReplicaChange{
 		target:            addTarget,
 		rangeID:           rangeID,
 		prev:              add.ReplicaState,
 		next:              add.ReplicaIDAndType,
-		replicaChangeType: AddLease,
+		replicaChangeType: ChangeReplica,
 	}
 	removeLease.next.IsLeaseholder = false
 	addLease.next.IsLeaseholder = true
@@ -587,8 +590,9 @@ func (prc PendingRangeChange) IsChangeReplicas() bool {
 	return true
 }
 
-// IsTransferLease returns true if the pending range change is a transfer lease
-// operation.
+// IsTransferLease returns true if the pending range change is a pure lease
+// transfer, i.e. a change in leaseholder without any replica additions,
+// removals, or type changes.
 func (prc PendingRangeChange) IsTransferLease() bool {
 	if len(prc.pendingReplicaChanges) != 2 {
 		return false
@@ -633,10 +637,7 @@ func (prc PendingRangeChange) ReplicationChanges() kvpb.ReplicationChanges {
 	chgs := make([]kvpb.ReplicationChange, 0, len(prc.pendingReplicaChanges))
 	newLeaseholderIndex := -1
 	for _, c := range prc.pendingReplicaChanges {
-		switch c.replicaChangeType {
-		case ChangeReplica, AddReplica, RemoveReplica:
-			// These are the only permitted cases.
-		default:
+		if c.isPureLeaseTransfer() {
 			panic(errors.AssertionFailedf("change type %v is not a change replicas", c.replicaChangeType))
 		}
 		// The kvserver code represents a change in replica type as an
