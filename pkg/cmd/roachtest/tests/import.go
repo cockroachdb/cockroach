@@ -174,9 +174,20 @@ func allDatasets(_ *rand.Rand) []string {
 	return slices.Collect(maps.Keys(datasets))
 }
 
-func anyDataset(rng *rand.Rand) []string {
+func nDatasets(rng *rand.Rand, n int) []string {
 	allDatasets := allDatasets(rng)
-	return []string{allDatasets[rng.Intn(len(allDatasets))]}
+	rng.Shuffle(len(allDatasets), func(i, j int) {
+		allDatasets[i], allDatasets[j] = allDatasets[j], allDatasets[i]
+	})
+	return allDatasets[:n]
+}
+
+func anyThreeDatasets(rng *rand.Rand) []string {
+	return nDatasets(rng, 3)
+}
+
+func anyDataset(rng *rand.Rand) []string {
+	return nDatasets(rng, 1)
 }
 
 // importTestSpec represents a subtest within the import test.
@@ -232,6 +243,12 @@ var tests = []importTestSpec{
 		nodes:        []int{4},
 		datasetNames: One("tpch/lineitem"),
 	},
+	// Basic test importing three datasets concurrently.
+	{
+		subtestName:  "concurrency",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyThreeDatasets),
+	},
 	// Test with a decommissioned node.
 	{
 		subtestName:  "decommissioned",
@@ -280,7 +297,7 @@ var tests = []importTestSpec{
 	{
 		subtestName:  "cancellation",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anyThreeDatasets),
 		importRunner: importCancellationRunner,
 	},
 }
