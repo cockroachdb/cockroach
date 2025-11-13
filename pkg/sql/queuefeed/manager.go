@@ -186,12 +186,6 @@ func (m *Manager) newReaderLocked(
 ) (*Reader, error) {
 	var tableDescID int64
 
-	assigner, ok := m.mu.queueAssignment[name]
-	if !ok {
-		assigner = NewPartitionAssignments(m.executor, name)
-		m.mu.queueAssignment[name] = assigner
-	}
-
 	// TODO: this ctx on the other hand should be stmt scoped
 	err := m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, err := txn.Exec(ctx, "create_q", txn.KV(), createQueueTableSQL)
@@ -213,6 +207,17 @@ func (m *Manager) newReaderLocked(
 	if err != nil {
 		return nil, err
 	}
+
+	assigner, ok := m.mu.queueAssignment[name]
+	if !ok {
+		var err error
+		assigner, err = NewPartitionAssignments(m.executor, name)
+		if err != nil {
+			return nil, err
+		}
+		m.mu.queueAssignment[name] = assigner
+	}
+
 	fmt.Printf("get or init reader for queue %s with table desc id: %d\n", name, tableDescID)
 	return NewReader(ctx, m.executor, m, m.rff, m.codec, m.leaseMgr, session, assigner, name)
 }

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -110,15 +111,15 @@ func NewReader(
 
 	ctx, cancel := context.WithCancelCause(ctx)
 	r.cancel = func(cause error) {
-		fmt.Printf("canceling with cause: %s\n", cause)
+		fmt.Printf("canceling with cause: %+v\n", cause)
 		cancel(cause)
 		r.mu.poppedWakeup.Broadcast()
 		r.mu.pushedWakeup.Broadcast()
 	}
 
-	assignment, err := assigner.RegisterSession(ctx, session)
+	assignment, err := r.waitForAssignment(ctx, session)
 	if err != nil {
-		return nil, errors.Wrap(err, "registering session for reader")
+		return nil, errors.Wrap(err, "waiting for assignment")
 	}
 	if err := r.setupRangefeed(ctx, assignment); err != nil {
 		return nil, errors.Wrap(err, "setting up rangefeed")
@@ -128,6 +129,31 @@ func NewReader(
 }
 
 var ErrNoPartitionsAssigned = errors.New("no partitions assigned to reader: todo support this case by polling for assignment")
+
+func (r *Reader) waitForAssignment(ctx context.Context, session Session) (*Assignment, error) {
+	// We can rapidly poll this because the assigner has an in-memory cache of
+	// assignments.
+	//
+	// TODO: should this retry loop be in RegisterSession instead?
+	timer := time.NewTicker(100 * time.Millisecond)
+	defer timer.Stop()
+	for {
+		assignment, err := r.assigner.RegisterSession(ctx, session)
+		if err != nil {
+			return nil, errors.Wrap(err, "registering session for reader")
+		}
+		if len(assignment.Partitions) != 0 {
+			return assignment, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, errors.Wrap(ctx.Err(), "waiting for assignment")
+		case <-timer.C:
+			// continue
+		}
+	}
+}
 
 func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) error {
 	defer func() {
@@ -364,7 +390,7 @@ func (r *Reader) ConfirmReceipt(ctx context.Context) {
 		return
 	default:
 		// TODO only set caughtUp to true if our frontier is near the current time.
-		newAssignment, err := r.assigner.RefreshAssignment(ctx, r.session /*caughtUp=*/, true)
+		newAssignment, err := r.assigner.RefreshAssignment(ctx, r.assignment, true /*=caughtUp*/)
 		if err != nil {
 			r.cancel(errors.Wrap(err, "refreshing assignment"))
 			return

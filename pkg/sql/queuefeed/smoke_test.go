@@ -3,16 +3,19 @@ package queuefeed
 import (
 	"context"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -79,6 +82,8 @@ func TestQueuefeedSmoketestMultipleRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(jeffswenson): rewrite this test to use normal sessions.
+
 	ctx := context.Background()
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
@@ -104,12 +109,15 @@ func TestQueuefeedSmoketestMultipleRanges(t *testing.T) {
 
 		// TODO: use the built ins once readers are properly assigned to a session.
 		reader, err := qm.newReaderLocked(ctx, "test_multi", Session{
-			ConnectionID: uuid.NewV4(),
+			ConnectionID: session,
 			LivenessID:   sqlliveness.SessionID("1"),
 		})
 		require.NoError(t, err)
 		return reader
 	}
+
+	var rowsRead1, rowsRead2 atomic.Int64
+	session1, session2 := uuid.NewV4(), uuid.NewV4()
 
 	ctx, cancel := context.WithCancel(ctx)
 	group, ctx := errgroup.WithContext(ctx)
@@ -123,17 +131,81 @@ func TestQueuefeedSmoketestMultipleRanges(t *testing.T) {
 		return nil
 	})
 
-	readRows := 0
-	reader := newReader(uuid.NewV4())
-	for readRows < 100 {
-		rows, err := reader.GetRows(ctx, 10)
-		require.NoError(t, err)
-		reader.ConfirmReceipt(ctx)
-		t.Log("reader read", len(rows), "rows")
-		readRows += len(rows)
-		require.NoError(t, err)
+	reader1 := newReader(session1)
+	group.Go(func() error {
+		for ctx.Err() == nil {
+			rows, err := reader1.GetRows(ctx, 10)
+			if err != nil {
+				t.Log("reader 1 got error:", err)
+				return err
+			}
+			reader1.ConfirmReceipt(ctx)
+			t.Log("reader 1 read", len(rows), "rows")
+			rowsRead1.Add(int64(len(rows)))
+		}
+		t.Log("reader 1 stopping")
+		return nil
+	})
+
+	countPartitions := func() map[string]int {
+		partitions := map[string]int{}
+		rows := db.Query(t, `SELECT COALESCE(user_session::STRING, ''), COUNT(*) FROM defaultdb.queue_partition_test_multi GROUP BY 1`)
+		defer rows.Close()
+		for rows.Next() {
+			var sessionID string
+			var count int
+			require.NoError(t, rows.Scan(&sessionID, &count))
+			partitions[sessionID] = count
+		}
+		return partitions
 	}
 
+	testutils.SucceedsWithin(t, func() error {
+		partitions := countPartitions()
+		if partitions[session1.String()] != 2 {
+			//t.Logf("expected reader '%s' to have 2 partitions, got %+v", session1.String(), partitions)
+			return errors.Newf("expected reader '%s' to have 2 partitions, got %+v", session1.String(), partitions)
+		}
+		t.Log("reader 1 has 2 partitions:", partitions)
+		return nil
+	}, 10*time.Second)
+	t.Log("reader 1 has 2 partitions")
+
+	reader2 := newReader(session2)
+	group.Go(func() error {
+		t.Log("reader 2 started")
+		for ctx.Err() == nil {
+			rows, err := reader2.GetRows(ctx, 10)
+			if err != nil {
+				t.Log("reader 2 got error:", err)
+				return err
+
+			}
+			reader2.ConfirmReceipt(ctx)
+			rowsRead2.Add(int64(len(rows)))
+		}
+		return nil
+	})
+
+	testutils.SucceedsWithin(t, func() error {
+		partitions := countPartitions()
+		if partitions[session1.String()] != 1 && partitions[session2.String()] != 1 {
+			return errors.Newf("expected each reader to have 1 partition found: %+v", partitions)
+		}
+		if rowsRead1.Load() == 0 {
+			return errors.New("expected reader 1 to have read some rows")
+		}
+		if rowsRead2.Load() == 0 {
+			return errors.New("epected reader 2 to have read some rows")
+		}
+		return nil
+	}, 10*time.Second)
+	t.Log("partitions are balanced and both readers have read some rows")
+
 	cancel()
-	_ = group.Wait()
+	err = group.Wait()
+	if err != nil {
+		t.Log("group finished with error:", err)
+		require.ErrorIs(t, err, context.Canceled)
+	}
 }
