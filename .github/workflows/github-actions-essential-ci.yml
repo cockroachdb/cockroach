@@ -132,7 +132,7 @@ jobs:
         run: ./cockroach/build/github/cleanup-engflow-keys.sh
         if: always()
   lint:
-    runs-on: [self-hosted, ubuntu_big_2004]
+    runs-on: [self-hosted, ubuntu_huge_2004]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
