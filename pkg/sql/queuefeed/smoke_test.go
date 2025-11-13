@@ -8,13 +8,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -78,7 +76,7 @@ func TestQueuefeedSmoketest(t *testing.T) {
 	require.NoError(t, group.Wait())
 }
 
-func TestQueuefeedSmoketestMultipleRanges(t *testing.T) {
+func TestQueuefeedSmoketestMultipleReaders(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -94,118 +92,83 @@ func TestQueuefeedSmoketestMultipleRanges(t *testing.T) {
 
 	// Create table with composite primary key and split it
 	db.Exec(t, `CREATE TABLE t (k1 INT, k2 INT, v string, PRIMARY KEY (k1, k2))`)
-	db.Exec(t, `ALTER TABLE t SPLIT AT VALUES (1)`)
+	db.Exec(t, `ALTER TABLE t SPLIT AT VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9)`)
 
 	var tableID int64
 	db.QueryRow(t, "SELECT id FROM system.namespace where name = 't'").Scan(&tableID)
-	db.Exec(t, `SELECT crdb_internal.create_queue_feed('test_multi', $1)`, tableID)
-
-	// Create two managers for separate readers
-	qm := NewTestManager(t, srv.ApplicationLayer())
-	defer qm.Close()
-	newReader := func(session uuid.UUID) *Reader {
-		qm.mu.Lock()
-		defer qm.mu.Unlock()
-
-		// TODO: use the built ins once readers are properly assigned to a session.
-		reader, err := qm.newReaderLocked(ctx, "test_multi", Session{
-			ConnectionID: session,
-			LivenessID:   sqlliveness.SessionID("1"),
-		})
-		require.NoError(t, err)
-		return reader
-	}
-
-	var rowsRead1, rowsRead2 atomic.Int64
-	session1, session2 := uuid.NewV4(), uuid.NewV4()
+	db.Exec(t, `SELECT crdb_internal.create_queue_feed('t_queue', $1)`, tableID)
 
 	ctx, cancel := context.WithCancel(ctx)
 	group, ctx := errgroup.WithContext(ctx)
 
 	group.Go(func() error {
-		for ctx.Err() == nil {
-			db.Exec(t, `INSERT INTO t VALUES ($1, $2, 'foo')`, rand.Intn(3), rand.Int())
-			time.Sleep(10 * time.Millisecond)
+		for i := 0; ctx.Err() == nil; i++ {
+			_, err := sqlDB.ExecContext(ctx, `INSERT INTO t VALUES ($1, $2)`, i%10, rand.Int())
+			if err != nil {
+				return errors.Wrap(err, "inserting a row")
+			}
 		}
-		t.Log("inserter stopping")
-		return nil
+		return ctx.Err()
 	})
 
-	reader1 := newReader(session1)
-	group.Go(func() error {
-		for ctx.Err() == nil {
-			rows, err := reader1.GetRows(ctx, 10)
+	numWriters := rand.Intn(10) + 1 // create [1, 10] writers
+	rowsSeen := make([]atomic.Int64, numWriters)
+	t.Logf("spawning %d readers", numWriters)
+	for i := range numWriters {
+		group.Go(func() error {
+			time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+
+			conn, err := srv.SQLConn(t).Conn(ctx)
 			if err != nil {
-				t.Log("reader 1 got error:", err)
 				return err
 			}
-			reader1.ConfirmReceipt(ctx)
-			t.Log("reader 1 read", len(rows), "rows")
-			rowsRead1.Add(int64(len(rows)))
-		}
-		t.Log("reader 1 stopping")
-		return nil
-	})
 
-	countPartitions := func() map[string]int {
-		partitions := map[string]int{}
-		rows := db.Query(t, `SELECT COALESCE(user_session::STRING, ''), COUNT(*) FROM defaultdb.queue_partition_test_multi GROUP BY 1`)
-		defer rows.Close()
-		for rows.Next() {
-			var sessionID string
-			var count int
-			require.NoError(t, rows.Scan(&sessionID, &count))
-			partitions[sessionID] = count
-		}
-		return partitions
+			for ctx.Err() == nil {
+				cursor, err := conn.QueryContext(ctx, `SELECT * FROM crdb_internal.select_from_queue_feed('t_queue', 1000)`)
+				if err != nil {
+					return err
+				}
+				for cursor.Next() {
+					var e string
+					if err := cursor.Scan(&e); err != nil {
+						return errors.Wrap(err, "scanning queue feed row")
+					}
+					rowsSeen[i].Add(1)
+				}
+				require.NoError(t, cursor.Close())
+			}
+
+			return ctx.Err()
+		})
 	}
 
-	testutils.SucceedsWithin(t, func() error {
-		partitions := countPartitions()
-		if partitions[session1.String()] != 2 {
-			//t.Logf("expected reader '%s' to have 2 partitions, got %+v", session1.String(), partitions)
-			return errors.Newf("expected reader '%s' to have 2 partitions, got %+v", session1.String(), partitions)
+	// Wait for every reader to observe rows and every partition to be assigned.
+	testutils.SucceedsSoon(t, func() error {
+		for _, row := range db.QueryStr(t, "SELECT partition_id, user_session, user_session_successor FROM defaultdb.queue_partition_t_queue") {
+			t.Logf("partition row: %v", row)
 		}
-		t.Log("reader 1 has 2 partitions:", partitions)
-		return nil
-	}, 10*time.Second)
-	t.Log("reader 1 has 2 partitions")
 
-	reader2 := newReader(session2)
-	group.Go(func() error {
-		t.Log("reader 2 started")
-		for ctx.Err() == nil {
-			rows, err := reader2.GetRows(ctx, 10)
-			if err != nil {
-				t.Log("reader 2 got error:", err)
-				return err
+		seen := make([]int64, numWriters)
+		for i := range numWriters {
+			seen[i] = rowsSeen[i].Load()
+		}
+		t.Logf("row counts %v", seen)
 
+		for i := range numWriters {
+			if seen[i] == 0 {
+				return errors.Newf("reader %d has not seen any rows yet", i)
 			}
-			reader2.ConfirmReceipt(ctx)
-			rowsRead2.Add(int64(len(rows)))
 		}
+
+		var unassignedPartitions int
+		db.QueryRow(t, "SELECT COUNT(*) FROM defaultdb.queue_partition_t_queue WHERE user_session IS NULL").Scan(&unassignedPartitions)
+		if unassignedPartitions != 0 {
+			return errors.Newf("%d unassigned partitions remain", unassignedPartitions)
+		}
+
 		return nil
 	})
-
-	testutils.SucceedsWithin(t, func() error {
-		partitions := countPartitions()
-		if partitions[session1.String()] != 1 && partitions[session2.String()] != 1 {
-			return errors.Newf("expected each reader to have 1 partition found: %+v", partitions)
-		}
-		if rowsRead1.Load() == 0 {
-			return errors.New("expected reader 1 to have read some rows")
-		}
-		if rowsRead2.Load() == 0 {
-			return errors.New("epected reader 2 to have read some rows")
-		}
-		return nil
-	}, 10*time.Second)
-	t.Log("partitions are balanced and both readers have read some rows")
 
 	cancel()
-	err = group.Wait()
-	if err != nil {
-		t.Log("group finished with error:", err)
-		require.ErrorIs(t, err, context.Canceled)
-	}
+	_ = group.Wait()
 }

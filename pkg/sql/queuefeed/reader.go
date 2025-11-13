@@ -447,12 +447,14 @@ func (r *Reader) updateAssignment(assignment *Assignment) error {
 		fmt.Printf("updateAssignment done with assignment: %+v\n", assignment)
 	}()
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.assignment = assignment
 	r.rangefeed.Close()
-	r.mu.buf = r.mu.buf[:0]
+	r.assignment = assignment
+
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.mu.buf = r.mu.buf[:0]
+	}()
 
 	if err := r.setupRangefeed(r.goroCtx, assignment); err != nil {
 		return errors.Wrapf(err, "setting up rangefeed for new assignment: %+v", assignment)

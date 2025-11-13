@@ -16,6 +16,9 @@ type partitionCache struct {
 	// assignmentIndex is a map of sessions to assigned partitions.
 	assignmentIndex map[Session]map[int64]struct{}
 
+	// successorIndex is a map of successor sessions to partitions.
+	successorIndex map[Session]map[int64]struct{}
+
 	sessions map[Session]struct{}
 }
 
@@ -65,12 +68,37 @@ func (p *partitionCache) DebugString() string {
 		}
 	}
 
+	// Print successor index
+	result.WriteString("\nSuccessor Index (successor session -> partitions):\n")
+	if len(p.successorIndex) == 0 {
+		result.WriteString("  (none)\n")
+	} else {
+		for session, partitions := range p.successorIndex {
+			result.WriteString(fmt.Sprintf("  %s: [", session.ConnectionID.String()[:8]))
+			partitionIDs := make([]int64, 0, len(partitions))
+			for id := range partitions {
+				partitionIDs = append(partitionIDs, id)
+			}
+			sort.Slice(partitionIDs, func(i, j int) bool {
+				return partitionIDs[i] < partitionIDs[j]
+			})
+			for i, id := range partitionIDs {
+				if i > 0 {
+					result.WriteString(", ")
+				}
+				result.WriteString(fmt.Sprintf("%d", id))
+			}
+			result.WriteString("]\n")
+		}
+	}
+
 	return result.String()
 }
 
 func (p *partitionCache) Init(partitions []Partition) {
 	p.partitions = make(map[int64]Partition)
 	p.assignmentIndex = make(map[Session]map[int64]struct{})
+	p.successorIndex = make(map[Session]map[int64]struct{})
 
 	for _, partition := range partitions {
 		p.addPartition(partition)
@@ -111,6 +139,16 @@ func (p *partitionCache) removePartition(partitionID int64) {
 			}
 		}
 	}
+
+	// Remove from successor index
+	if !partition.Successor.Empty() {
+		if successors, ok := p.successorIndex[partition.Successor]; ok {
+			delete(successors, partitionID)
+			if len(successors) == 0 {
+				delete(p.successorIndex, partition.Successor)
+			}
+		}
+	}
 }
 
 func (p *partitionCache) addPartition(partition Partition) {
@@ -125,6 +163,13 @@ func (p *partitionCache) addPartition(partition Partition) {
 		p.assignmentIndex[partition.Session][partition.ID] = struct{}{}
 	}
 
+	// Add to successor index for successor session
+	if !partition.Successor.Empty() {
+		if _, ok := p.successorIndex[partition.Successor]; !ok {
+			p.successorIndex[partition.Successor] = make(map[int64]struct{})
+		}
+		p.successorIndex[partition.Successor][partition.ID] = struct{}{}
+	}
 }
 
 func (p *partitionCache) updatePartition(oldPartition, newPartition Partition) {
@@ -147,6 +192,24 @@ func (p *partitionCache) updatePartition(oldPartition, newPartition Partition) {
 			p.assignmentIndex[newPartition.Session] = make(map[int64]struct{})
 		}
 		p.assignmentIndex[newPartition.Session][newPartition.ID] = struct{}{}
+	}
+
+	// Remove old successor assignments
+	if !oldPartition.Successor.Empty() {
+		if successors, ok := p.successorIndex[oldPartition.Successor]; ok {
+			delete(successors, oldPartition.ID)
+			if len(successors) == 0 {
+				delete(p.successorIndex, oldPartition.Successor)
+			}
+		}
+	}
+
+	// Add new successor assignments
+	if !newPartition.Successor.Empty() {
+		if _, ok := p.successorIndex[newPartition.Successor]; !ok {
+			p.successorIndex[newPartition.Successor] = make(map[int64]struct{})
+		}
+		p.successorIndex[newPartition.Successor][newPartition.ID] = struct{}{}
 	}
 }
 
@@ -216,6 +279,11 @@ func (p *partitionCache) planAssignment(
 		if partition.Session.Empty() {
 			return nil, partition, Partition{}
 		}
+	}
+
+	if p.successorIndex[session] != nil {
+		// If the session is trying to steal already, do not steal another session.
+		return nil, Partition{}, Partition{}
 	}
 
 	// maxPartitions is the maximum number of partitions we would expect to be
