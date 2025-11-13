@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
@@ -167,6 +169,7 @@ func (i *CatchUpSnapshot) CatchUpScan(
 	withOmitRemote bool,
 	bulkDeliverySize int,
 ) error {
+	log.KvExec.Infof(ctx, "starting catch-up scan for %s", i.span)
 	var a bufalloc.ByteAllocator
 	// MVCCIterator will encounter historical values for each key in
 	// reverse-chronological order. To output in chronological order, store
@@ -253,6 +256,16 @@ func (i *CatchUpSnapshot) CatchUpScan(
 			recreateIter := false
 			// recreateIter => now is initialized.
 			var now crtime.Mono
+
+			// Under race tests we want to recreate the iterator more often. Doing
+			// this on every iteration proved a bit slow.
+			forceRecreateUnderTest := false
+			if util.RaceEnabled {
+				// Fibonacci hash https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
+				simpleHash := (11400714819323198485 * uint64(uintptr(unsafe.Pointer(&iter)))) >> 63
+				forceRecreateUnderTest = simpleHash == 0
+			}
+
 			// We sample the current time only when readmitted is true, to avoid
 			// doing it in every iteration of the loop. In practice, readmitted is
 			// true after every 100ms of cpu time, and there is no wall time limit
@@ -262,12 +275,13 @@ func (i *CatchUpSnapshot) CatchUpScan(
 			// Pace. We also need to consider the CPU cost of recreating the
 			// iterator, and using the cpu time to amortize that cost seems
 			// reasonable.
-			if (readmitted && i.iterRecreateDuration > 0) || util.RaceEnabled {
+			shouldSampleTime := (readmitted && i.iterRecreateDuration > 0) || forceRecreateUnderTest
+			if shouldSampleTime {
 				// If enough walltime has elapsed, close iter and reopen. This
 				// prevents the iter from holding on to Pebble memtables for too long,
 				// which can cause OOMs.
 				now = crtime.NowMono()
-				recreateIter = now.Sub(lastIterCreateTime) > i.iterRecreateDuration || util.RaceEnabled
+				recreateIter = now.Sub(lastIterCreateTime) > i.iterRecreateDuration || forceRecreateUnderTest
 			}
 			if recreateIter {
 				lastIterCreateTime = now
