@@ -42,6 +42,8 @@ type rebalanceState struct {
 	maxLeaseTransferCount int
 	// lastFailedChangeDelayDuration is the delay after a failed change before retrying.
 	lastFailedChangeDelayDuration time.Duration
+	// now is the timestamp when rebalancing started.
+	now time.Time
 	// Scratch variables reused across iterations.
 	scratch struct {
 		disj                    [1]constraintsConj
@@ -178,6 +180,7 @@ func (cs *clusterState) rebalanceStores(
 		maxRangeMoveCount:             maxRangeMoveCount,
 		maxLeaseTransferCount:         maxLeaseTransferCount,
 		lastFailedChangeDelayDuration: lastFailedChangeDelayDuration,
+		now:                           now,
 	}
 	rs.scratch.nodes = map[roachpb.NodeID]*NodeLoad{}
 	rs.scratch.stores = map[roachpb.StoreID]struct{}{}
@@ -185,13 +188,13 @@ func (cs *clusterState) rebalanceStores(
 		if rs.rangeMoveCount >= rs.maxRangeMoveCount || rs.leaseTransferCount >= rs.maxLeaseTransferCount {
 			break
 		}
-		rs.rebalanceStore(store, ctx, localStoreID, now)
+		rs.rebalanceStore(store, ctx, localStoreID)
 	}
 	return rs.changes
 }
 
 func (rs *rebalanceState) rebalanceStore(
-	store sheddingStore, ctx context.Context, localStoreID roachpb.StoreID, now time.Time,
+	store sheddingStore, ctx context.Context, localStoreID roachpb.StoreID,
 ) {
 	log.KvDistribution.Infof(ctx, "start processing shedding store s%d: cpu node load %s, store load %s, worst dim %s",
 		store.StoreID, store.nls, store.sls, store.worstDim)
@@ -226,7 +229,7 @@ func (rs *rebalanceState) rebalanceStore(
 	// behalf of a particular store (vs. being called on behalf of the set
 	// of local store IDs)?
 	if ss.StoreID == localStoreID && store.dimSummary[CPURate] >= overloadSlow {
-		shouldSkipReplicaMoves := rs.rebalanceLeases(ss, store, ctx, localStoreID, now)
+		shouldSkipReplicaMoves := rs.rebalanceLeases(ss, store, ctx, localStoreID)
 		if shouldSkipReplicaMoves {
 			return
 		}
@@ -236,7 +239,7 @@ func (rs *rebalanceState) rebalanceStore(
 	}
 
 	log.KvDistribution.VInfof(ctx, 2, "attempting to shed replicas next")
-	rs.rebalanceReplicas(ctx, store, ss, localStoreID, now)
+	rs.rebalanceReplicas(ctx, store, ss, localStoreID)
 }
 
 func (rs *rebalanceState) rebalanceReplicas(
@@ -244,11 +247,10 @@ func (rs *rebalanceState) rebalanceReplicas(
 	store sheddingStore,
 	ss *storeState,
 	localStoreID roachpb.StoreID,
-	now time.Time,
 ) {
 	doneShedding := false
 	if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
-		now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
+		rs.now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
 		log.KvDistribution.VInfof(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
 		return
 	}
@@ -282,7 +284,7 @@ func (rs *rebalanceState) rebalanceReplicas(
 			log.KvDistribution.VInfof(ctx, 2, "skipping r%d: has pending changes", rangeID)
 			continue
 		}
-		if now.Sub(rstate.lastFailedChange) < rs.lastFailedChangeDelayDuration {
+		if rs.now.Sub(rstate.lastFailedChange) < rs.lastFailedChangeDelayDuration {
 			log.KvDistribution.VInfof(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
 			continue
 		}
@@ -373,7 +375,7 @@ func (rs *rebalanceState) rebalanceReplicas(
 		// simple but effective manner. For now, we capture this using these
 		// grace duration thresholds.
 		ignoreLevel := ignoreLoadNoChangeAndHigher
-		overloadDur := now.Sub(ss.overloadStartTime)
+		overloadDur := rs.now.Sub(ss.overloadStartTime)
 		if overloadDur > ignoreHigherThanLoadThresholdGraceDuration {
 			ignoreLevel = ignoreHigherThanLoadThreshold
 			log.KvDistribution.VInfof(ctx, 3, "using level %v (threshold:%v) for r%d based on overload duration %v",
@@ -453,7 +455,6 @@ func (rs *rebalanceState) rebalanceLeases(
 	store sheddingStore,
 	ctx context.Context,
 	localStoreID roachpb.StoreID,
-	now time.Time,
 ) bool {
 	log.KvDistribution.VInfof(ctx, 2, "local store s%d is CPU overloaded (%v >= %v), attempting lease transfers first",
 		store.StoreID, store.dimSummary[CPURate], overloadSlow)
@@ -489,7 +490,7 @@ func (rs *rebalanceState) rebalanceLeases(
 					" changes but is not leaseholder: %+v", rstate)
 			}
 		}
-		if now.Sub(rstate.lastFailedChange) < rs.lastFailedChangeDelayDuration {
+		if rs.now.Sub(rstate.lastFailedChange) < rs.lastFailedChangeDelayDuration {
 			log.KvDistribution.VInfof(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
 			continue
 		}
