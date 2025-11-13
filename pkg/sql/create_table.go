@@ -1964,7 +1964,7 @@ func NewTableDesc(
 				}
 			}
 			if d.Type == idxtype.VECTOR {
-				if !evalCtx.Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.V25_2.Version()) {
+				if !evalCtx.Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.TODO_Delete_V25_2.Version()) {
 					return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot create a vector index until finalizing on 25.2")
 				}
 				// Disable vector indexes by default in 25.2.
@@ -2604,7 +2604,7 @@ func newTableDesc(
 		n.StorageParams.GetVal("schema_locked") == nil &&
 		!params.p.SessionData().Internal &&
 		params.p.SessionData().CreateTableWithSchemaLocked &&
-		params.p.IsActive(params.ctx, clusterversion.V25_2) {
+		params.p.IsActive(params.ctx, clusterversion.TODO_Delete_V25_2) {
 		ret.SchemaLocked = true
 	}
 

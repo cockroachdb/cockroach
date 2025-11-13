@@ -137,7 +137,7 @@ func (pr *PolicyRefresher) getCurrentLatencies() map[roachpb.NodeID]time.Duratio
 	if pr.knobs != nil && pr.knobs.InjectedLatencies != nil {
 		return pr.knobs.InjectedLatencies()
 	}
-	if !closedts.LeadForGlobalReadsAutoTuneEnabled.Get(&pr.settings.SV) || !pr.settings.Version.IsActive(context.TODO(), clusterversion.V25_2) {
+	if !closedts.LeadForGlobalReadsAutoTuneEnabled.Get(&pr.settings.SV) || !pr.settings.Version.IsActive(context.TODO(), clusterversion.TODO_Delete_V25_2) {
 		return nil
 	}
 	pr.mu.RLock()

@@ -238,7 +238,7 @@ func alterReplicationJobHook(
 		if err := p.CheckPrivilege(
 			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPLICATIONDEST,
 		); err != nil {
-			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V25_2) {
+			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V25_2) {
 				p.BufferClientNotice(ctx, pgnotice.Newf("this command will require the REPLICATIONDEST privilege on a fully upgraded 25.2+ cluster"))
 			} else {
 				return err

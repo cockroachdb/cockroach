@@ -3784,7 +3784,7 @@ func (ex *connExecutor) bufferedWritesEnabled(ctx context.Context) bool {
 	if ex.sessionData() == nil {
 		return false
 	}
-	return ex.sessionData().BufferedWritesEnabled && ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.V25_2)
+	return ex.sessionData().BufferedWritesEnabled && ex.server.cfg.Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V25_2)
 }
 
 func (ex *connExecutor) bufferedWritesIsAllowedForIsolationLevel(

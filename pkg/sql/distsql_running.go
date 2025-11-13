@@ -461,7 +461,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(statementSQL) > setupFlowRequestStmtMaxLength {
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
-	v := execversion.V25_2
+	v := execversion.TODO_Delete_V25_2
 	if dsp.st.Version.IsActive(ctx, clusterversion.V25_4) {
 		v = execversion.V25_4
 	}
