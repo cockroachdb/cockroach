@@ -126,12 +126,10 @@ document.addEventListener('alpine:init', () => {
 
 document.addEventListener('alpine:init', () => {
       Alpine.store('timeRange', {
-        interval: 'Last 10m',
-        startTime: '',
-        endTime: '',
-        startTimeFull: null,
-        endTimeFull: null,
-        timezone: 'America/New_York',
+        _interval: '10m',
+        startUTCSeconds: 0,
+        endUTCSeconds: 0,
+        timezone: 'UTC',
         pollingInterval: null,
 
         init() {
@@ -139,13 +137,18 @@ document.addEventListener('alpine:init', () => {
           this.startPolling();
         },
 
-        handleIntervalChange() {
+        set interval(newInterval) {
+          this._interval = newInterval
           if (this.interval !== 'Custom') {
             this.updateTimeRangeFromInterval();
             this.startPolling();
           } else {
             this.stopPolling();
           }
+        },
+
+        get interval() {
+          return this._interval
         },
 
         startPolling() {
@@ -165,37 +168,39 @@ document.addEventListener('alpine:init', () => {
         },
 
         updateTimeRangeFromInterval() {
-          const now = new Date();
-          const end = now;
-          let start = new Date();
-
-          switch (this.interval) {
-            case 'Last 10m':
-              start.setMinutes(now.getMinutes() - 10);
-              break;
-            case 'Last 30m':
-              start.setMinutes(now.getMinutes() - 30);
-              break;
-            case 'Last 1h':
-              start.setHours(now.getHours() - 1);
-              break;
-            default:
-              return;
+          const end = Math.floor(new Date().getTime() / 1000)
+          if (this.interval === '10m') {
+            this.startUTCSeconds = end - 10 * 60
+          }
+          if (this.interval === '1h') {
+            this.startUTCSeconds = end - 60 * 60
+          }
+          if (this.interval === '6h') {
+            this.startUTCSeconds = end - 6 * 60 * 60
+          }
+          if (this.interval === '1d') {
+            this.startUTCSeconds = end - 24 * 60 * 60
+          }
+          if (this.interval === '2d') {
+            this.startUTCSeconds = end - 2 * 24 * 60 * 60
+          }
+          if (this.interval === '3d') {
+            this.startUTCSeconds = end - 3 * 24 * 60 * 60
+          }
+          if (this.interval === '1w') {
+            this.startUTCSeconds = end - 7 * 24 * 60 * 60
+          }
+          if (this.interval === '2w') {
+            this.startUTCSeconds = end - 14 * 24 * 60 * 60
+          }
+          if (this.interval === '1m') {
+            this.startUTCSeconds = end - 30 * 24 * 60 * 60
+          }
+          if (this.interval === '2m') {
+            this.startUTCSeconds = end - 60 * 24 * 60 * 60
           }
 
-          this.startTime = this.formatDateTimeLocal(start);
-          this.endTime = this.formatDateTimeLocal(end);
-          this.startTimeFull = start
-          this.endTimeFull = end
-        },
-
-        formatDateTimeLocal(date) {
-          const year = date.getFullYear();
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const day = String(date.getDate()).padStart(2, '0');
-          const hours = String(date.getHours()).padStart(2, '0');
-          const minutes = String(date.getMinutes()).padStart(2, '0');
-          return `${year}-${month}-${day}T${hours}:${minutes}`;
+          this.endUTCSeconds = end
         },
 
         dateTimeLocalToNanos(date) {
@@ -203,12 +208,28 @@ document.addEventListener('alpine:init', () => {
         },
 
         getStartNanos() {
-          return this.dateTimeLocalToNanos(this.startTimeFull).toString();
+          return (BigInt(this.startUTCSeconds * 1000) * 1_000_000n).toString();
         },
 
         getEndNanos() {
-          return this.dateTimeLocalToNanos(this.endTimeFull).toString();
-        }
+          return (BigInt(this.endUTCSeconds * 1000) * 1_000_000n).toString();
+        },
+
+        set startFormatted(date) {
+          this.startUTCSeconds = Math.floor(new Date(date + 'Z').getTime() / 1000);
+        },
+
+        get startFormatted() {
+          return new Date(this.startUTCSeconds * 1000).toISOString().slice(0, 16);
+        },
+
+        set endFormatted(date) {
+          this.endUTCSeconds = Math.floor(new Date(date + 'Z').getTime() / 1000);
+        },
+
+        get endFormatted() {
+          return new Date(this.endUTCSeconds * 1000).toISOString().slice(0, 16);
+        },
       });
 
       // Initialize the time range

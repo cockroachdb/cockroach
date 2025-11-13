@@ -6,24 +6,24 @@
   background: var(--box-bg);
   color: var(--fg);
   border: 1px solid var(--muted-fg);
-  padding: 8px;
-  border-radius: 4px;
-  font-size: 12px;
+  padding: var(--gap);
+  border-radius: var(--border-radius);
+  font-size: 0.8rem;
   pointer-events: none;
   z-index: 1000;
 }
 .u-time {
-  margin-bottom: 4px;
+  margin-bottom: var(--gap);
   font-weight: bold;
 }
 .u-series {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--gap);
 }
 .u-marker {
-  width: 10px;
-  height: 10px;
+  width: 1rem;
+  height: 1rem;
 }
 .u-label {
   font-weight: 500;
@@ -46,36 +46,16 @@
 .u-legend tbody > tr:first-child {
   flex-basis: 100%;
   text-align: left;
-  color: #808080;
+  color: var(--muted-fg);
 }
 .u-legend tbody > tr:first-child .u-marker {
   display: none;
 }
 .u-legend .u-marker {
-  width: 1em;
-  height: 1em;
-  margin-right: 4px;
+  width: 1rem;
+  height: 1rem;
+  margin-right: var(--gap);
   background-clip: padding-box !important;
-}
-.status {
-  padding: 10px;
-  margin: 10px;
-  border-radius: 4px;
-}
-.status.loading {
-  background: var(--box-bg);
-  color: var(--muted-fg);
-  border: 1px solid var(--muted-fg);
-}
-.status.error {
-  background: var(--error-bg);
-  color: var(--error-fg);
-  border: 1px solid var(--error-fg);
-}
-.status.success {
-  background: var(--ok-bg);
-  color: var(--ok-fg);
-  border: 1px solid var(--ok-fg);
 }
 </style>
 <nav class="breadcrumbs" aria-label="Breadcrumbs">
@@ -120,12 +100,20 @@
       <select
         id=category
         placeholder="Select a category..."
-        x-model="$store.timeRange.interval"
-        @change="$store.timeRange.handleIntervalChange()">
-        <option>Last 10m</option>
-        <option>Last 30m</option>
-        <option>Last 1h</option>
-        <option>Custom</option>
+        x-model="$store.timeRange.interval">
+        <option value="10m">Past 10m</option>
+        <option value="30m">Past 30m</option>
+        <option value="1h">Past Hour</option>
+        <option value="6h">Past 6 Hours</option>
+        <option value="1d">Past Day</option>
+        <option value="2d">Past 2 Days</option>
+        <option value="3d">Past 3 Days</option>
+        <option value="1w">Past Week</option>
+        <option value="2w">Past 2 Weeks</option>
+        <option value="1m">Past Month</option>
+        <option value="2m">Past 2 Months</option>
+        <hr>
+        <option value="custom">Custom time interval</option>
       </select>
     </div>
     <div>
@@ -134,8 +122,8 @@
         type="datetime-local"
         id="start-time"
         name="start-time"
-        x-model="$store.timeRange.startTime"
-        :disabled="$store.timeRange.interval !== 'Custom'" />
+        x-model="$store.timeRange.startFormatted"
+        :disabled="$store.timeRange.interval !== 'Custom'" >
     </div>
     <div>
       <label for="end-time">End:</label>
@@ -143,8 +131,8 @@
         type="datetime-local"
         id="end-time"
         name="end-time"
-        x-model="$store.timeRange.endTime"
-        :disabled="$store.timeRange.interval !== 'Custom'" />
+        x-model="$store.timeRange.endFormatted"
+        :disabled="$store.timeRange.interval !== 'Custom'" >
     </div>
   </form>
 </div>

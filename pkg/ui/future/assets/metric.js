@@ -90,7 +90,7 @@ const DATE_WITH_SECONDS_FORMAT_24_TZ = {
 
 function FormatWithTimezone(milliseconds, format, timezone) {
   const date = new Date(milliseconds);
-  const formatter = new Intl.DateTimeFormat('en-US', {timezone: timezone, ...format});
+  const formatter = new Intl.DateTimeFormat('en-US', {timeZone: timezone, ...format});
   return formatter.format(date)
 }
 
@@ -944,7 +944,6 @@ function updateuPlotChart(u, axis, newData) {
   u.setData(uPlotData);
 }
 
-const timezone = 'America/New_York'
 
 
 // const myPlot = makeuPlotChart(metrics, axis, timeInfo, timezone, jsonOutput, document.getElementById("graph1"))
@@ -1306,7 +1305,7 @@ function metricGraph() {
       this.fetchAndRender();
 
       // Watch for time range updates using Alpine reactivity
-      this.$watch(() => [this.$store.timeRange.startTimeFull, this.$store.timeRange.endTimeFull], () => {
+      this.$watch(() => [this.$store.timeRange.startUTCSeconds, this.$store.timeRange.endUTCSeconds], () => {
         this.fetchAndRender();
       });
 
