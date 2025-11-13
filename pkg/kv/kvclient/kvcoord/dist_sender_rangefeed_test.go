@@ -258,7 +258,7 @@ func TestMuxRangeFeedConnectsToNodeOnce(t *testing.T) {
 	}
 }
 
-func TestMuxRangeCatchupScanQuotaReleased(t *testing.T) {
+func TestMuxRangeFeedCatchupScanQuotaReleased(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -427,7 +427,7 @@ func TestMuxRangeFeedDoesNotStallOnError(t *testing.T) {
 
 // Test to make sure the various metrics used by rangefeed are correctly
 // updated during the lifetime of the rangefeed and when the rangefeed completes.
-func TestRangeFeedMetricsManagement(t *testing.T) {
+func TestMuxRangeFeedMetricsManagement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -587,9 +587,9 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 	require.EqualValues(t, numCatchupToBlock, metrics.RangefeedCatchupRanges.Value())
 }
 
-// TestRangefeedRangeObserver ensures the kvcoord.WithRangeObserver option
+// TestMuxRangefeedRangeObserver ensures the kvcoord.WithRangeObserver option
 // works correctly.
-func TestRangefeedRangeObserver(t *testing.T) {
+func TestMuxRangefeedRangeObserver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
