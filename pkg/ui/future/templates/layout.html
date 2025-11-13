@@ -25,7 +25,7 @@
         <img src="/future/assets/crl.svg" alt="CockroachDB Logo">
         <div class="flex-grow:2">ClusterID: {{.ClusterID}}</div>
         <div><chip class="info">{{.Tag}}</chip></div>
-        {{if .LicenseNotificationText}}<div><chip class="{{.LicenseNotificationClass}}">{{.LicenseNotificationText}}</chip></div>{{end}}
+        {{if .Common.LicenseNotificationText}}<div><chip class="{{.Common.LicenseNotificationClass}}">{{.Common.LicenseNotificationText}}</chip></div>{{end}}
         <div>{{if .Insecure}}<chip class="bad">Insecure Mode</chip>{{end}}</div>
         </div>
       <div class="bg crowded padding text-align:center warn width:100%">

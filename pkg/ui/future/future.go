@@ -49,16 +49,6 @@ type IndexHTMLArgs struct {
 	Admin                     serverpb.AdminClient
 	Status                    serverpb.StatusClient
 	TS                        tspb.TimeSeriesClient
-
-	// Generated license notification fields
-	LicenseNotificationText    string
-	LicenseNotificationTooltip string
-	LicenseNotificationClass   string
-
-	// Generated throttle warning fields
-	ThrottleWarningText    string
-	ThrottleWarningTooltip string
-	ThrottleWarningClass   string
 }
 
 //go:embed assets/*
@@ -269,10 +259,24 @@ type TemplateData struct {
 	ClusterID string
 }
 
+// CommonData contains data computed on each request that should be available to all pages
+type CommonData struct {
+	// License notification fields
+	LicenseNotificationText    string
+	LicenseNotificationTooltip string
+	LicenseNotificationClass   string
+
+	// Throttle warning fields
+	ThrottleWarningText    string
+	ThrottleWarningTooltip string
+	ThrottleWarningClass   string
+}
+
 // PageData combines base IndexHTMLArgs with page-specific data
 type PageData struct {
 	IndexHTMLArgs
-	Data interface{}
+	Common CommonData
+	Data   interface{}
 }
 
 // SQLActivityParams holds the form parameters for SQL activity page
@@ -388,12 +392,32 @@ type NodeInfo struct {
 	StatusClass     string // CSS class: "info", "warn", "bad"
 }
 
+// handlerWithCommonData wraps a handler to automatically compute and inject common data
+func handlerWithCommonData(
+	cfg IndexHTMLArgs,
+	handler func(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData),
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		commonData := computeCommonData(cfg)
+		handler(w, r, cfg, commonData)
+	}
+}
+
+// computeCommonData generates all common data needed across pages
+func computeCommonData(cfg IndexHTMLArgs) CommonData {
+	data := CommonData{}
+
+	// Compute license notification
+	data.LicenseNotificationText, data.LicenseNotificationTooltip, data.LicenseNotificationClass =
+		generateLicenseNotification(cfg.LicenseType, cfg.SecondsUntilLicenseExpiry, cfg.IsManaged)
+
+	// TODO: Compute throttle warning when logic is implemented
+	// For now, throttle warning fields remain empty
+
+	return data
+}
+
 func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
-	// Generate license notification text and tooltip
-	// TODO(davidh): Should make this fully dynamic to recompute on each request
-	cfg.LicenseNotificationText, cfg.LicenseNotificationTooltip, cfg.LicenseNotificationClass = generateLicenseNotification(
-		cfg.LicenseType, cfg.SecondsUntilLicenseExpiry, log.RedactionPolicyManaged,
-	)
 	// Create a new Gorilla Mux router
 	router := mux.NewRouter()
 
@@ -411,38 +435,28 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 	}).Methods("GET")
 
 	// Serve the overview page
-	futureRouter.HandleFunc("/overview", func(w http.ResponseWriter, r *http.Request) {
-		handleOverview(w, r, cfg)
-	}).Methods("GET")
+	futureRouter.HandleFunc("/overview", handlerWithCommonData(cfg, handleOverview)).Methods("GET")
 
 	// Serve the login page
 	futureRouter.HandleFunc("/login", handleLogin).Methods("GET")
 
 	// Serve specific dashboard
-	futureRouter.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		handleMetricsDashboard(w, r, cfg)
-	}).Methods("GET")
+	futureRouter.HandleFunc("/metrics", handlerWithCommonData(cfg, handleMetricsDashboard)).Methods("GET")
 
-	futureRouter.HandleFunc("/databases", func(w http.ResponseWriter, r *http.Request) {
-		handleDatabases(w, r, cfg)
-	}).Methods("GET")
+	futureRouter.HandleFunc("/databases", handlerWithCommonData(cfg, handleDatabases)).Methods("GET")
 
 	// Database metadata refresh endpoints
 	futureRouter.HandleFunc("/databases/refresh", func(w http.ResponseWriter, r *http.Request) {
 		handleDatabaseMetadataRefresh(w, r, cfg)
 	}).Methods("POST")
 
-	futureRouter.HandleFunc("/databases/{id}", func(w http.ResponseWriter, r *http.Request) {
-		handleDatabase(w, r, cfg)
-	}).Methods("GET")
+	futureRouter.HandleFunc("/databases/{id}", handlerWithCommonData(cfg, handleDatabase)).Methods("GET")
 
 	futureRouter.HandleFunc("/databases/{id}/refresh", func(w http.ResponseWriter, r *http.Request) {
 		handleDatabaseMetadataRefresh(w, r, cfg)
 	}).Methods("POST")
 
-	futureRouter.HandleFunc("/tables/{id}", func(w http.ResponseWriter, r *http.Request) {
-		handleTable(w, r, cfg)
-	}).Methods("GET")
+	futureRouter.HandleFunc("/tables/{id}", handlerWithCommonData(cfg, handleTable)).Methods("GET")
 
 	futureRouter.HandleFunc("/tables/{id}/reset-index-stats", func(w http.ResponseWriter, r *http.Request) {
 		handleResetIndexStats(w, r, cfg)
@@ -452,25 +466,15 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		http.Redirect(w, r, "/future/sqlactivity/statements", http.StatusFound)
 	}).Methods("GET")
 
-	futureRouter.HandleFunc("/sqlactivity/statements", func(w http.ResponseWriter, r *http.Request) {
-		handleSqlActivityStatements(w, r, cfg)
-	}).Methods("GET")
+	futureRouter.HandleFunc("/sqlactivity/statements", handlerWithCommonData(cfg, handleSqlActivityStatements)).Methods("GET")
 
-	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}", func(w http.ResponseWriter, r *http.Request) {
-		handleSqlActivityStatementFingerprint(w, r, cfg)
-	}).Methods("GET")
+	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}", handlerWithCommonData(cfg, handleSqlActivityStatementFingerprint)).Methods("GET")
 
-	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}/diagnostics", func(w http.ResponseWriter, r *http.Request) {
-		handleGetDiagnosticsControls(w, r, cfg)
-	}).Methods("GET")
+	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}/diagnostics", handlerWithCommonData(cfg, handleGetDiagnosticsControls)).Methods("GET")
 
-	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}/diagnostics", func(w http.ResponseWriter, r *http.Request) {
-		handleCreateDiagnostics(w, r, cfg)
-	}).Methods("POST")
+	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}/diagnostics", handlerWithCommonData(cfg, handleCreateDiagnostics)).Methods("POST")
 
-	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}/diagnostics/{diagID}", func(w http.ResponseWriter, r *http.Request) {
-		handleCancelDiagnostics(w, r, cfg)
-	}).Methods("DELETE")
+	futureRouter.HandleFunc("/sqlactivity/statements/{stmtID}/diagnostics/{diagID}", handlerWithCommonData(cfg, handleCancelDiagnostics)).Methods("DELETE")
 
 	// Redirect diagnostics download to the remote HTTP server
 	futureRouter.HandleFunc("/sqlactivity/stmtdiagnostics/{diagID}/download", func(w http.ResponseWriter, r *http.Request) {
@@ -479,13 +483,9 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		http.Redirect(w, r, fmt.Sprintf("%s/_admin/v1/stmtbundle/%s", apiBaseURL, diagID), http.StatusFound)
 	}).Methods("GET")
 
-	futureRouter.HandleFunc("/nodes/{nodeID}", func(w http.ResponseWriter, r *http.Request) {
-		handleNode(w, r, cfg)
-	})
+	futureRouter.HandleFunc("/nodes/{nodeID}", handlerWithCommonData(cfg, handleNode))
 
-	futureRouter.HandleFunc("/nodes/{nodeID}/logs", func(w http.ResponseWriter, r *http.Request) {
-		handleNodeLogs(w, r, cfg)
-	})
+	futureRouter.HandleFunc("/nodes/{nodeID}/logs", handlerWithCommonData(cfg, handleNodeLogs))
 
 	// Timeseries query endpoint
 	futureRouter.HandleFunc("/ts/query", func(w http.ResponseWriter, r *http.Request) {
@@ -554,7 +554,7 @@ type LogEntry struct {
 	Tags          string
 }
 
-func handleNode(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+func handleNode(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData) {
 	ctx := r.Context()
 
 	// Extract node ID from URL path
@@ -650,6 +650,7 @@ func handleNode(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	// Execute the pre-parsed template
 	err = templates.ExecuteTemplate(w, "node.html", PageData{
 		IndexHTMLArgs: cfg,
+		Common:        commonData,
 		Data:          pageData,
 	})
 	if err != nil {
@@ -659,7 +660,9 @@ func handleNode(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	}
 }
 
-func handleNodeLogs(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+func handleNodeLogs(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData,
+) {
 	ctx := r.Context()
 
 	// Extract node ID from URL path
@@ -736,6 +739,7 @@ func handleNodeLogs(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	// Execute the pre-parsed template
 	err = templates.ExecuteTemplate(w, "node_logs.html", PageData{
 		IndexHTMLArgs: cfg,
+		Common:        commonData,
 		Data:          pageData,
 	})
 	if err != nil {
@@ -763,7 +767,9 @@ func getSeverityName(severity int32) string {
 	}
 }
 
-func handleDatabases(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+func handleDatabases(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData,
+) {
 	ctx := r.Context()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
@@ -906,6 +912,7 @@ func handleDatabases(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) 
 	// Execute the pre-parsed template
 	err = templates.ExecuteTemplate(w, "databases.html", PageData{
 		IndexHTMLArgs: cfg,
+		Common:        commonData,
 		Data:          pageData,
 	})
 	if err != nil {
@@ -978,7 +985,9 @@ func formatElapsedTime(d time.Duration) string {
 	return fmt.Sprintf("%d days ago", days)
 }
 
-func handleDatabase(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+func handleDatabase(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData,
+) {
 	ctx := r.Context()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
@@ -1116,6 +1125,7 @@ func handleDatabase(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	// Execute the pre-parsed template
 	err = templates.ExecuteTemplate(w, "database.html", PageData{
 		IndexHTMLArgs: cfg,
+		Common:        commonData,
 		Data:          pageData,
 	})
 	if err != nil {
@@ -1125,7 +1135,7 @@ func handleDatabase(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	}
 }
 
-func handleTable(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+func handleTable(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData) {
 	ctx := r.Context()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
@@ -1217,6 +1227,7 @@ func handleTable(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	// Execute the pre-parsed template
 	err = templates.ExecuteTemplate(w, "table.html", PageData{
 		IndexHTMLArgs: cfg,
+		Common:        commonData,
 		Data:          pageData,
 	})
 	if err != nil {
@@ -1244,7 +1255,9 @@ func handleResetIndexStats(w http.ResponseWriter, r *http.Request, cfg IndexHTML
 	http.Redirect(w, r, fmt.Sprintf("/future/tables/%s", tableIDStr), http.StatusFound)
 }
 
-func handleGetDiagnosticsControls(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+func handleGetDiagnosticsControls(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData,
+) {
 	ctx := r.Context()
 	vars := mux.Vars(r)
 	stmtID, ok := vars["stmtID"]
@@ -1333,6 +1346,7 @@ func handleGetDiagnosticsControls(w http.ResponseWriter, r *http.Request, cfg In
 	// Execute the pre-parsed template
 	err = templates.ExecuteTemplate(w, "statement_diagnostics_controls.html", PageData{
 		IndexHTMLArgs: cfg,
+		Common:        commonData,
 		Data:          diagState,
 	})
 	if err != nil {
@@ -1342,7 +1356,9 @@ func handleGetDiagnosticsControls(w http.ResponseWriter, r *http.Request, cfg In
 	}
 }
 
-func handleCancelDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+func handleCancelDiagnostics(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData,
+) {
 	vars := mux.Vars(r)
 	stmtID, ok := vars["stmtID"]
 	if !ok || stmtID == "" {
@@ -1388,7 +1404,9 @@ func handleCancelDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHT
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
 
-func handleCreateDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+func handleCreateDiagnostics(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData,
+) {
 	vars := mux.Vars(r)
 	stmtID, ok := vars["stmtID"]
 	if !ok || stmtID == "" {
@@ -1485,7 +1503,7 @@ func handleCreateDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHT
 }
 
 func handleSqlActivityStatementFingerprint(
-	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs,
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData,
 ) {
 	ctx := r.Context()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1639,6 +1657,7 @@ func handleSqlActivityStatementFingerprint(
 	// Execute the pre-parsed template
 	err = templates.ExecuteTemplate(w, "statement_fingerprint.html", PageData{
 		IndexHTMLArgs: cfg,
+		Common:        commonData,
 		Data:          pageData,
 	})
 	if err != nil {
@@ -1648,7 +1667,9 @@ func handleSqlActivityStatementFingerprint(
 	}
 }
 
-func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+func handleSqlActivityStatements(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData,
+) {
 	// Parse query parameters with defaults
 	topStr := r.URL.Query().Get("top")
 	byStr := r.URL.Query().Get("by")
@@ -1771,7 +1792,6 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 	for _, stmt := range resp.Statements {
 		s, ok := diagnosticStates[stmt.Key.KeyData.Query]
 		if !ok {
-			log.Dev.Errorf(r.Context(), "inserting %d", stmt.ID)
 			diagnosticStates[stmt.Key.KeyData.Query] = &DiagnosticState{
 				ID:        stmt.ID,
 				Query:     stmt.Key.KeyData.Query,
@@ -1807,6 +1827,7 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 	// Execute the pre-parsed template
 	err = templates.ExecuteTemplate(w, "sql_activity.html", PageData{
 		IndexHTMLArgs: cfg,
+		Common:        commonData,
 		Data:          data,
 	})
 	if err != nil {
@@ -1849,7 +1870,9 @@ func mapSortByToEnum(sortBy string) serverpb.StatsSortOptions {
 }
 
 // handleOverview serves the overview.html template
-func handleOverview(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+func handleOverview(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData,
+) {
 	// Set cache control headers to prevent stale data
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
@@ -1867,6 +1890,7 @@ func handleOverview(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	// Execute the pre-parsed template
 	err = templates.ExecuteTemplate(w, "overview.html", PageData{
 		IndexHTMLArgs: cfg,
+		Common:        commonData,
 		Data:          data,
 	})
 	if err != nil {
@@ -2536,7 +2560,9 @@ func fetchIndexStats(
 }
 
 // handleMetricsDashboard serves the metrics dashboard page
-func handleMetricsDashboard(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+func handleMetricsDashboard(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData,
+) {
 	dashboardName := r.URL.Query().Get("dashboard")
 	if dashboardName == "" {
 		dashboardName = "overview"
@@ -2617,6 +2643,7 @@ func handleMetricsDashboard(w http.ResponseWriter, r *http.Request, cfg IndexHTM
 	// Execute the pre-parsed template
 	err = templates.ExecuteTemplate(w, "metrics.html", PageData{
 		IndexHTMLArgs: cfg,
+		Common:        commonData,
 		Data:          data,
 	})
 	if err != nil {
