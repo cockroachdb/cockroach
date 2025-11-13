@@ -2957,12 +2957,18 @@ Mark old version keys for future removal by prefixing them with `TODO_Delete_`.
 
 **File:** `pkg/clusterversion/cockroach_versions.go`
 
-**Find all version keys below the new MinSupported** (e.g., all V25_2* keys when bumping to V25_3):
+**⚠️ IMPORTANT: DO NOT prefix the final release key (e.g., V25_2)**
+
+The final release key (e.g., `V25_2`) is special and should NOT be prefixed with `TODO_Delete_` even when it becomes the old MinSupported version. Only prefix the internal version keys (e.g., `V25_2_Start`, `V25_2_AddSystemStatementHintsTable`).
+
+**Why:** The final release keys are referenced in other parts of the codebase and tooling, and they serve as anchors for release tracking.
+
+**Find all INTERNAL version keys below the new MinSupported** (e.g., all V25_2_* keys when bumping to V25_3):
 
 ```bash
 # Example for bumping MinSupported from V25_2 to V25_3
-# Find all V25_2 version keys:
-grep -n "^\s*V25_2" pkg/clusterversion/cockroach_versions.go
+# Find all V25_2_* version keys (NOT V25_2 itself):
+grep -n "^\s*V25_2_" pkg/clusterversion/cockroach_versions.go
 ```
 
 **Add TODO_Delete_ prefix:**
@@ -2970,12 +2976,12 @@ grep -n "^\s*V25_2" pkg/clusterversion/cockroach_versions.go
 // Before:
 V25_2_Start
 V25_2_AddSystemStatementHintsTable
-V25_2
+V25_2  // ← DO NOT PREFIX THIS ONE!
 
 // After:
 TODO_Delete_V25_2_Start
 TODO_Delete_V25_2_AddSystemStatementHintsTable
-TODO_Delete_V25_2
+V25_2  // ← Keep as-is, no TODO_Delete_ prefix
 ```
 
 **Create commit:**
@@ -3026,9 +3032,38 @@ git grep -l "MinSupported" pkg/ | grep -v "_test.go" | grep -v "CLAUDE.md"
 - `pkg/sql/create_index.go`
 - `pkg/sql/create_table.go`
 - `pkg/sql/distsql_running.go`
-- `pkg/sql/execversion/version.go`
+- **`pkg/storage/pebble.go`** - Update `MinimumSupportedFormatVersion` constant
+
+**⚠️ IMPORTANT: DO NOT modify `pkg/sql/execversion/version.go`**
+
+This file uses a separate versioning mechanism and is owned by the **SQL Queries team**. It should NOT be modified as part of the M.4 MinSupported bump task. If you see version references in this file during your search, leave them unchanged.
 
 **Update each file** by changing references from the old MinSupported version to the new one.
+
+**CRITICAL: Update pkg/storage/pebble.go (around line 2459):**
+
+When bumping MinSupported, you must also update the `MinimumSupportedFormatVersion` constant to match the Pebble format version for the new MinSupported version.
+
+**How to determine the correct value:**
+1. Look at `pebbleFormatVersionMap` in the same file (around line 2450)
+2. Find the entry for the new MinSupported version (e.g., `clusterversion.V25_3`)
+3. Use that Pebble format version for `MinimumSupportedFormatVersion`
+
+**Example for bumping MinSupported from V25_2 to V25_3:**
+```go
+// pebbleFormatVersionMap shows:
+// V25_3: pebble.FormatValueSeparation
+// V25_2: pebble.FormatTableFormatV6  (being removed)
+
+// Therefore, update MinimumSupportedFormatVersion:
+-const MinimumSupportedFormatVersion = pebble.FormatTableFormatV6
++const MinimumSupportedFormatVersion = pebble.FormatValueSeparation
+```
+
+**Why this is important:**
+- The test `TestMinimumSupportedFormatVersion` validates: `MinimumSupportedFormatVersion == pebbleFormatVersionMap[MinSupported]`
+- If you forget this change, the test will fail showing: `expected: 0xNN, actual: 0xMM`
+- This ensures new stores are created with the correct minimum Pebble format version
 
 **Example pattern to search for:**
 ```bash
@@ -3038,8 +3073,8 @@ git grep "V25_2" pkg/ | grep -v testdata | grep -v CLAUDE.md | grep -v "_test.go
 
 **Create commit:**
 ```bash
-git add pkg/clusterversion/cockroach_versions.go <other-modified-files>
-git commit -m "clusterversion: bump MinSupported from v25.2 to v25.3
+git add pkg/clusterversion/cockroach_versions.go pkg/storage/pebble.go <other-modified-files>
+git commit -m "clusterversion, storage: bump MinSupported from v25.2 to v25.3
 
 Part of the quarterly M.4 \"Bump MinSupported\" task as outlined in
 \`pkg/clusterversion/README.md\`.
@@ -3059,6 +3094,7 @@ Changes include updates to:
 - Catalog function descriptors
 - Connection executor and DDL operations
 - Distributed SQL execution versioning
+- Storage layer: MinimumSupportedFormatVersion updated to match new MinSupported
 
 Part of #147634 (reference PR for this quarterly task).
 
@@ -3308,6 +3344,67 @@ rm -rf pkg/sql/sqlitelogictest/tests/local-mixed-25.2/
 
 **Remove references from test files:**
 
+**⚠️ CRITICAL: Understanding `onlyif` and `skipif` Directives**
+
+The `onlyif config` and `skipif config` directives in logic tests **guard the next statement(s)**:
+- `onlyif config local-mixed-25.2` → Run the next statement ONLY on local-mixed-25.2
+- `skipif config local-mixed-25.2` → Skip the next statement on local-mixed-25.2
+
+**IMPORTANT: These two directives require DIFFERENT handling when removing a config:**
+
+**Rule 1: For `onlyif config local-mixed-25.2` directives:**
+- Remove BOTH the directive AND the guarded statement(s)
+- The guarded statement is version-specific and won't be needed after the config is removed
+
+**Rule 2: For `skipif config local-mixed-25.2` directives:**
+- Remove ONLY the directive itself
+- KEEP the guarded statement(s)
+- The guarded statement should run in all configs now that local-mixed-25.2 is removed
+
+**Examples:**
+
+```bash
+# Example 1: onlyif directive (remove both directive AND statement)
+
+# BEFORE:
+onlyif config local-mixed-25.2
+statement error pgcode 0A000 pq: unimplemented: usage of user-defined function
+CREATE TABLE t1(a INT PRIMARY KEY, b INT DEFAULT f1());
+
+statement ok
+CREATE TABLE t1(a INT PRIMARY KEY, b INT DEFAULT f1());
+
+# AFTER (CORRECT - removed both directive and guarded statement):
+statement ok
+CREATE TABLE t1(a INT PRIMARY KEY, b INT DEFAULT f1());
+
+# Example 2: skipif directive (remove ONLY directive, keep statement)
+
+# BEFORE:
+skipif config local-mixed-25.2
+statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
+ALTER TABLE test_tbl_t ADD COLUMN c int AS (test_tbl_f()) stored;
+
+# AFTER (CORRECT - removed only directive, kept statement):
+statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
+ALTER TABLE test_tbl_t ADD COLUMN c int AS (test_tbl_f()) stored;
+```
+
+**Why the difference?**
+- `onlyif`: The guarded statement was ONLY for that specific config. Removing the config means we don't need that statement anymore (there's usually an unguarded version later)
+- `skipif`: The guarded statement was for ALL configs EXCEPT the one being removed. Now that we're removing that config, the statement should run everywhere
+
+**Pattern to follow for `onlyif`:**
+1. Find `onlyif config local-mixed-25.2` line
+2. Identify what statement it guards (usually the next 3-10 lines until blank line or next directive)
+3. Remove BOTH the directive AND the guarded statement
+4. If this leaves an empty subtest or empty user block, remove those too
+
+**Pattern to follow for `skipif`:**
+1. Find `skipif config local-mixed-25.2` line
+2. Remove ONLY the directive line
+3. Keep all following statements unchanged
+
 Find all files with local-mixed-25.2 references:
 ```bash
 grep -r "local-mixed-25\.2" pkg/sql/logictest/testdata/logic_test/ \
@@ -3328,6 +3425,24 @@ sed -i '' \
   -e '/^onlyif config/s/ local-mixed-25\.2//g' \
   -e '/^skipif config/s/ local-mixed-25\.2//g' \
   "$file"
+```
+
+**⚠️ IMPORTANT: Manual review required after sed**
+
+The sed commands above only remove the *directives*, not the statements they guard. You MUST:
+1. Manually review each file that had `onlyif config local-mixed-25.2`
+2. Identify and remove guarded statements that would cause duplicates
+3. For `skipif config local-mixed-25.2`, the sed commands are sufficient - no manual work needed
+4. Run tests to catch "relation already exists" or similar errors
+
+**How to find files needing manual review (onlyif only):**
+```bash
+# Find files that had onlyif with local-mixed-25.2 (these need manual review)
+git diff pkg/sql/logictest/testdata/logic_test/ pkg/ccl/logictestccl/testdata/logic_test/ | \
+  grep -B 2 "^-onlyif config.*local-mixed-25\.2" | \
+  grep "^diff --git" | sed 's/.*b\///' | sort -u
+
+# Files with skipif don't need manual review - the directive removal is sufficient
 ```
 
 **Remove empty LogicTest directive lines:**
@@ -3389,7 +3504,7 @@ A typical M.4 bump should modify approximately 70-80 files across the 6 commits:
 **Commit 1 (1 file):**
 1. `pkg/clusterversion/cockroach_versions.go` - Prefix version keys
 
-**Commit 2 (~12 files):**
+**Commit 2 (~13 files):**
 1. `pkg/clusterversion/cockroach_versions.go` - MinSupported constant
 2. `pkg/crosscluster/logical/logical_replication_writer_processor.go`
 3. `pkg/crosscluster/physical/alter_replication_job.go`
@@ -3403,6 +3518,7 @@ A typical M.4 bump should modify approximately 70-80 files across the 6 commits:
 11. `pkg/sql/create_table.go`
 12. `pkg/sql/distsql_running.go`
 13. `pkg/sql/execversion/version.go`
+14. **`pkg/storage/pebble.go`** - MinimumSupportedFormatVersion constant
 
 **Commit 4 (~30 files):**
 1. `pkg/sql/schemachanger/scplan/internal/rules/release_25_2/` - Entire directory deleted (~25 files)
@@ -3512,7 +3628,58 @@ Expected format:
 
 ### Common Errors and Solutions
 
-#### Error 1: Bazel generation failure after removing config
+#### Error 1: TestMinimumSupportedFormatVersion test failure
+
+**Error:** Test fails with message like:
+```
+Error:          Not equal:
+                expected: 0x18
+                actual  : 0x15
+Test:           TestMinimumSupportedFormatVersion
+Messages:       MinimumSupportedFormatVersion must match the format version for 1000025.3
+```
+
+**Cause:** After bumping MinSupported from V25_2 to V25_3, forgot to update `MinimumSupportedFormatVersion` in `pkg/storage/pebble.go`.
+
+**Why this happens:**
+- The test validates: `MinimumSupportedFormatVersion == pebbleFormatVersionMap[MinSupported]`
+- Old value (0x15 = `FormatTableFormatV6`) was correct for V25_2
+- New MinSupported (V25_3) requires new value (0x18 = `FormatValueSeparation`)
+
+**Fix:**
+```bash
+# Edit pkg/storage/pebble.go (around line 2459)
+# Look at pebbleFormatVersionMap to find the correct format for V25_3
+
+# Example for V25_2 → V25_3:
+# pebbleFormatVersionMap shows:
+#   V25_3: pebble.FormatValueSeparation
+# Therefore:
+-const MinimumSupportedFormatVersion = pebble.FormatTableFormatV6
++const MinimumSupportedFormatVersion = pebble.FormatValueSeparation
+
+# Add to the MinSupported commit (Commit 2)
+git add pkg/storage/pebble.go
+
+# If already committed, amend:
+git commit --amend --no-edit
+
+# Or if there are later commits, use interactive rebase:
+# (See the detailed instructions in Commit 2 section above)
+```
+
+**Verification:**
+```bash
+./dev test pkg/storage -f TestMinimumSupportedFormatVersion -v
+```
+
+Expected: Test passes.
+
+**Reference:** This pattern is followed in all previous MinSupported bumps:
+- Commit accc0455bf9 (v25.1 → v25.2): Updated to `FormatTableFormatV6`
+- Commit 5807873f56f (v25.2 → v25.3): Updated to `FormatValueSeparation`
+
+#### Error 2: Bazel generation failure after removing config
 
 **Error:** `panic: unknown config name local-mixed-25.2`
 
@@ -3591,6 +3758,105 @@ git commit -m "..."
 git add -A  # Adds modifications AND deletions
 ```
 
+#### Error 6: "relation already exists" or duplicate statement errors in logic tests
+
+**Error:** Test failures like:
+```
+expected success, but found
+(42P07) relation "test.public.t1" already exists
+```
+
+**Cause:** Removed `onlyif config local-mixed-25.2` directives but forgot to remove the statements they guarded, resulting in duplicate statements that both execute.
+
+**Example from udf_in_table:**
+```bash
+# File had two CREATE TABLE statements:
+# 1. Guarded by "onlyif config local-mixed-25.2" (lines 88-98)
+# 2. Unguarded default version (lines 533-547)
+
+# After removing ONLY the directive (WRONG):
+statement ok
+CREATE TABLE t1(...)   # ← Was guarded, now runs on all configs!
+
+# Later:
+statement ok
+CREATE TABLE t1(...)   # ← Unguarded, always runs → DUPLICATE!
+```
+
+**How to identify:**
+```bash
+# After removing directives with sed, search git diff for removed onlyif lines
+git diff pkg/sql/logictest/testdata/logic_test/ | grep "^-onlyif config.*local-mixed-25\.2"
+
+# For each file, manually check if guarded statements should also be removed
+```
+
+**Fix:**
+1. Read the test file and identify what the removed `onlyif` directive was guarding
+2. Determine if the guarded statement is a duplicate of an unguarded statement elsewhere
+3. If duplicate: remove the guarded statement (usually 3-10 lines after the removed directive)
+4. If the removal leaves an empty subtest or user block, remove those too
+
+**Example fix for udf_in_table:**
+```bash
+# Remove the entire guarded statement block (lines 88-98)
+# Keep only the unguarded version (lines 533-547)
+```
+
+**Prevention:**
+- When running sed to remove directives, immediately grep for removed `onlyif` lines
+- Manually review each file that had `onlyif` to check for guarded statements
+- Run tests early to catch duplicate statement errors: `./dev testlogic`
+
+#### Error 7: Incorrect pebble format version change during rebase
+
+**Error:** After rebasing against master, `pkg/storage/pebble.go` has the wrong pebble format version for V25_3.
+
+**Symptom:**
+```go
+// WRONG - V25_3 value changed when it shouldn't have:
+var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
+	clusterversion.V25_4_PebbleFormatV2BlobFiles: pebble.FormatV2BlobFiles,
+	clusterversion.V25_3:                         pebble.FormatTableFormatV6,  // ← WRONG!
+}
+
+// CORRECT - Only removed V25_2, kept V25_3 unchanged:
+var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
+	clusterversion.V25_4_PebbleFormatV2BlobFiles: pebble.FormatV2BlobFiles,
+	clusterversion.V25_3:                         pebble.FormatValueSeparation,  // ← CORRECT
+}
+```
+
+**Cause:** During rebase, git may auto-merge changes to `pebbleFormatVersionMap` incorrectly. The commit that removes `local-mixed-25.2` should only remove the V25_2 entry from this map, not change the V25_3 value.
+
+**How to identify:**
+```bash
+# Check the pebble format version in the logictest removal commit
+git show <commit-sha>:pkg/storage/pebble.go | grep -A 4 "pebbleFormatVersionMap ="
+
+# Compare with master to see what the correct V25_3 value should be
+git show master:pkg/storage/pebble.go | grep -A 4 "pebbleFormatVersionMap ="
+```
+
+**Fix:**
+```bash
+# Start interactive rebase to edit the problematic commit
+git rebase -i <base-commit>
+
+# Mark the commit with pebble.go for 'edit'
+# Then fix the file:
+# Edit pkg/storage/pebble.go to restore correct V25_3 value
+git add pkg/storage/pebble.go
+git commit --amend --no-edit
+git rebase --continue
+```
+
+**Prevention:**
+- After rebase, always check `pkg/storage/pebble.go` changes carefully
+- The change should only be a deletion of the old version's line (V25_2)
+- Never change the values for existing newer versions (V25_3, V25_4, etc.)
+- Reference PR #147634 to verify the expected pattern
+
 ### Quick Reference Commands
 
 **Commit 1 - Prefix version keys:**
@@ -3606,9 +3872,15 @@ git commit -m "clusterversion: prefix version keys below 25.3 with TODO_Delete_.
 git grep -l "MinSupported" pkg/ | grep -v "_test.go"
 git grep "V25_2" pkg/ | grep -v testdata
 
-# Update files manually
-git add pkg/clusterversion/cockroach_versions.go <other-files>
-git commit -m "clusterversion: bump MinSupported from v25.2 to v25.3..."
+# Update files manually (including pkg/storage/pebble.go!)
+# In pkg/storage/pebble.go, update MinimumSupportedFormatVersion to match
+# the pebbleFormatVersionMap entry for the new MinSupported version
+
+git add pkg/clusterversion/cockroach_versions.go pkg/storage/pebble.go <other-files>
+git commit -m "clusterversion, storage: bump MinSupported from v25.2 to v25.3..."
+
+# Verify with test
+./dev test pkg/storage -f TestMinimumSupportedFormatVersion -v
 ```
 
 **Commit 4 - Remove schema changer rules:**
