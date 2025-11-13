@@ -3308,6 +3308,62 @@ rm -rf pkg/sql/sqlitelogictest/tests/local-mixed-25.2/
 
 **Remove references from test files:**
 
+**⚠️ CRITICAL: Understanding `onlyif` and `skipif` Directives**
+
+The `onlyif config` and `skipif config` directives in logic tests **guard the next statement(s)**:
+- `onlyif config local-mixed-25.2` → Run the next statement ONLY on local-mixed-25.2
+- `skipif config local-mixed-25.2` → Skip the next statement on local-mixed-25.2
+
+**When you remove these directives, you MUST also consider what they guard:**
+
+```bash
+# Example from pkg/sql/logictest/testdata/logic_test/udf_in_table:
+
+# BEFORE (with onlyif directive):
+onlyif config local-mixed-25.2       # ← Directive
+statement ok                         # ← Guarded statement
+CREATE TABLE t1(                     # ← Guarded statement continues
+  a INT PRIMARY KEY,
+  b INT DEFAULT f1()
+);
+
+# Later in the same file (unguarded version):
+statement ok
+CREATE TABLE t1(
+  a INT PRIMARY KEY,
+  b INT DEFAULT f1()
+);
+
+# AFTER removing directive (WRONG - causes "relation already exists" error):
+statement ok                         # ← Left the guarded statement!
+CREATE TABLE t1(
+  a INT PRIMARY KEY,
+  b INT DEFAULT f1()
+);
+
+# Later in file:
+statement ok
+CREATE TABLE t1(                     # ← Duplicate CREATE TABLE!
+  a INT PRIMARY KEY,
+  b INT DEFAULT f1()
+);
+
+# AFTER removing directive (CORRECT):
+# (Remove both directive AND guarded statement)
+# Later in file:
+statement ok
+CREATE TABLE t1(                     # ← Only one CREATE TABLE remains
+  a INT PRIMARY KEY,
+  b INT DEFAULT f1()
+);
+```
+
+**Pattern to follow:**
+1. Find `onlyif config local-mixed-25.2` line
+2. Identify what statement it guards (usually the next 3-10 lines until blank line or next directive)
+3. Remove BOTH the directive AND the guarded statement
+4. If this leaves an empty subtest or empty user block, remove those too
+
 Find all files with local-mixed-25.2 references:
 ```bash
 grep -r "local-mixed-25\.2" pkg/sql/logictest/testdata/logic_test/ \
@@ -3328,6 +3384,21 @@ sed -i '' \
   -e '/^onlyif config/s/ local-mixed-25\.2//g' \
   -e '/^skipif config/s/ local-mixed-25\.2//g' \
   "$file"
+```
+
+**⚠️ IMPORTANT: Manual review required after sed**
+
+The sed commands above only remove the *directives*, not the statements they guard. You MUST:
+1. Manually review each file that had `onlyif config local-mixed-25.2`
+2. Identify and remove guarded statements that would cause duplicates
+3. Run tests to catch "relation already exists" or similar errors
+
+**How to find files needing manual review:**
+```bash
+# Find files that had onlyif/skipif with local-mixed-25.2 (before sed)
+git diff pkg/sql/logictest/testdata/logic_test/ pkg/ccl/logictestccl/testdata/logic_test/ | \
+  grep -B 2 "^-onlyif config.*local-mixed-25\.2\|^-skipif config.*local-mixed-25\.2" | \
+  grep "^diff --git" | sed 's/.*b\///' | sort -u
 ```
 
 **Remove empty LogicTest directive lines:**
@@ -3590,6 +3661,56 @@ git commit -m "..."
 # Always use git add -A for commits with deletions
 git add -A  # Adds modifications AND deletions
 ```
+
+#### Error 6: "relation already exists" or duplicate statement errors in logic tests
+
+**Error:** Test failures like:
+```
+expected success, but found
+(42P07) relation "test.public.t1" already exists
+```
+
+**Cause:** Removed `onlyif config local-mixed-25.2` directives but forgot to remove the statements they guarded, resulting in duplicate statements that both execute.
+
+**Example from udf_in_table:**
+```bash
+# File had two CREATE TABLE statements:
+# 1. Guarded by "onlyif config local-mixed-25.2" (lines 88-98)
+# 2. Unguarded default version (lines 533-547)
+
+# After removing ONLY the directive (WRONG):
+statement ok
+CREATE TABLE t1(...)   # ← Was guarded, now runs on all configs!
+
+# Later:
+statement ok
+CREATE TABLE t1(...)   # ← Unguarded, always runs → DUPLICATE!
+```
+
+**How to identify:**
+```bash
+# After removing directives with sed, search git diff for removed onlyif lines
+git diff pkg/sql/logictest/testdata/logic_test/ | grep "^-onlyif config.*local-mixed-25\.2"
+
+# For each file, manually check if guarded statements should also be removed
+```
+
+**Fix:**
+1. Read the test file and identify what the removed `onlyif` directive was guarding
+2. Determine if the guarded statement is a duplicate of an unguarded statement elsewhere
+3. If duplicate: remove the guarded statement (usually 3-10 lines after the removed directive)
+4. If the removal leaves an empty subtest or user block, remove those too
+
+**Example fix for udf_in_table:**
+```bash
+# Remove the entire guarded statement block (lines 88-98)
+# Keep only the unguarded version (lines 533-547)
+```
+
+**Prevention:**
+- When running sed to remove directives, immediately grep for removed `onlyif` lines
+- Manually review each file that had `onlyif` to check for guarded statements
+- Run tests early to catch duplicate statement errors: `./dev testlogic`
 
 ### Quick Reference Commands
 
