@@ -209,21 +209,13 @@ type ReplicaChange struct {
 	//     both since a promoted replica can't have been the leaseholder and a
 	//     replica being demoted cannot retain the lease).
 	//
-	// NB: The prev value is always the state before the change. Typically, this
-	// will be the source of truth provided by the leaseholder in the RangeMsg,
-	// so will have real ReplicaIDs (if already a replica) and real ReplicaTypes
-	// (including types beyond VOTER_FULL and NON_VOTER). However, because of
-	// AdjustPendingChangeDisposition, we can remove pending changes and
-	// rangeState.replicas can have replicas with unknownReplicaID. Technically,
-	// there is nothing preventing someone from trying to construct another
-	// change to the range, where the prev state would include unknownReplicaID
-	// -- the data-structures allow for this. However, we do expect integration
-	// code to typically provide a new source of truth for the range from the
-	// leaseholder, before constructing more changes. Currently, this happens
-	// because the rebalancer atomically provide a new StoreLeaseholderMsg and
-	// then constructs more changes. We expect that the replicate and lease
-	// queues, when trying to construct a change for range, will first provide
-	// the source of truth for the range.
+	// NB: The prev value is always the state before the change. This is the
+	// source of truth provided by the leaseholder in the RangeMsg, so will
+	// have real ReplicaIDs (if already a replica) and real ReplicaTypes
+	// (including types beyond VOTER_FULL and NON_VOTER). This source-of-truth
+	// claim is guaranteed by REQUIREMENT(change-computation) documented
+	// elsewhere, and the fact that new changes are computed only when there
+	// are no pending changes for a range.
 	//
 	// The ReplicaType in next is either the zero value (for removals), or
 	// {VOTER_FULL, NON_VOTER} for additions/change, i.e., it represents the
@@ -808,24 +800,30 @@ type storeState struct {
 		// This is consistent with the union of state in clusterState.ranges,
 		// filtered for replicas that are on this store.
 		//
-		// NB: this can include LEARNER and VOTER_DEMOTING_LEARNER replicas.
+		// NB: this can include roachpb.ReplicaTypes other than VOTER_FULL and
+		// NON_VOTER, e.g. LEARNER, VOTER_DEMOTING_LEARNER etc.
 		replicas map[roachpb.RangeID]ReplicaState
 		// topKRanges along some load dimension. If the store is overloaded along
 		// one resource dimension, that is the dimension chosen when picking the
 		// top-k.
 		//
 		// It includes ranges whose replicas are being removed via pending
-		// changes, or lease transfers. That is, it does not account for pending
-		// or enacted changes made since the last time top-k was computed.
+		// changes, or lease transfers. That is, it does not account for
+		// pending or enacted changes made since the last time top-k was
+		// computed. It does account for pending changes that were pending
+		// when the top-k was computed.
 		//
 		// The key in this map is a local store-id.
 		//
-		// NB: this does not include LEARNER and VOTER_DEMOTING_LEARNER replicas.
+		// NB: this only includes replicas that satisfy the isVoter() or
+		// isNonVoter() methods, i.e., {VOTER_FULL, VOTER_INCOMING, NON_VOTER,
+		// VOTER_DEMOTING_NON_VOTER}. This is justified in that these are the
+		// only replica types where the allocator wants to explicitly consider
+		// shedding, since the other states are transient states, that are
+		// either going away, or will soon transition to a full-fledged state.
 		//
 		// We may decide to keep this top-k up-to-date incrementally instead of
-		// recomputing it from scratch on each StoreLeaseholderMsg. Since
-		// StoreLeaseholderMsg is incremental about the ranges it reports, that
-		// may provide a building block for the incremental computation.
+		// recomputing it from scratch on each StoreLeaseholderMsg.
 		//
 		// Example:
 		// Assume the local node has two stores, s1 and s2.
@@ -1324,6 +1322,12 @@ func (rs *rangeState) removePendingChangeTracking(changeID changeID) {
 // nodes, and even though we have rebalancing components per store, we want to
 // reduce the sub-optimal decisions they make -- having a single clusterState
 // is important for that.
+//
+// REQUIREMENT(change-computation): Any request to compute a change
+// (rebalancing stores, or a change specifically for a range), must be atomic
+// with the leaseholder providing the current authoritative state for all its
+// ranges (for rebalancing) or for the specific range (for a range-specific
+// change).
 type clusterState struct {
 	ts     timeutil.TimeSource
 	nodes  map[roachpb.NodeID]*nodeState
@@ -1788,10 +1792,13 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		}
 		topk.threshold = threshold
 	}
-	// TODO: replica is already adjusted for some ongoing changes, which may be
-	// undone. So if s10 is a replica for range r1 whose leaseholder is the
-	// local store s1 that is trying to transfer the lease away, s10 will not
-	// see r1 below.
+	// NB: localss.adjusted.replicas is already adjusted for ongoing changes,
+	// which may be undone. For example, if s1 is the local store, and it is
+	// transferring its replica for range r1 to remote store s2, then
+	// localss.adjusted.replicas will not have r1. This is fine in that s1
+	// should not be making more decisions about r1. If the change is undone
+	// later, we will again compute the top-k, which will consider r1, before
+	// computing new changes (due to REQUIREMENT(change-computation)).
 	for rangeID, state := range localss.adjusted.replicas {
 		if !state.IsLeaseholder {
 			// We may have transferred the lease away previously but still have a
@@ -1807,7 +1814,14 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			continue
 		}
 		rs := cs.ranges[rangeID]
-		// TODO: replicas is also already adjusted.
+		// NB: rs.replicas is already adjusted for ongoing changes. For
+		// example, if s10 is a remote replica for range r1, which is being
+		// transferred to another store s11, s10 will not see r1 below. We
+		// make this choice to avoid cluttering the top-k for s10 with
+		// replicas that are going away. If it is undone, r1 will not be in
+		// the top-k for s10, but due to REQUIREMENT(change-computation), a
+		// new authoritative state will be provided and the top-k recomputed,
+		// before computing any new changes.
 		for _, replica := range rs.replicas {
 			typ := replica.ReplicaState.ReplicaType.ReplicaType
 			if isVoter(typ) || isNonVoter(typ) {
