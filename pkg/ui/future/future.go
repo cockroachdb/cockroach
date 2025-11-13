@@ -463,6 +463,10 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		http.Redirect(w, r, fmt.Sprintf("%s/_admin/v1/stmtbundle/%s", apiBaseURL, diagID), http.StatusFound)
 	}).Methods("GET")
 
+	futureRouter.HandleFunc("/nodes/{nodeID}", func(w http.ResponseWriter, r *http.Request) {
+		handleNode(w, r, cfg)
+	})
+
 	// Timeseries query endpoint
 	futureRouter.HandleFunc("/ts/query", func(w http.ResponseWriter, r *http.Request) {
 		handleTSQuery(w, r, cfg)
@@ -472,6 +476,20 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 	futureRouter.PathPrefix("/assets/").HandlerFunc(handleAssets)
 
 	return router.ServeHTTP
+}
+
+func handleNode(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	ctx := r.Context()
+	// Execute the pre-parsed template
+	err := templates.ExecuteTemplate(w, "node.html", PageData{
+		IndexHTMLArgs: cfg,
+		Data:          nil,
+	})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
 }
 
 func handleDatabases(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {

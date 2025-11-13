@@ -1,0 +1,58 @@
+{{ template "layout-start" .}}
+
+
+<nav class="breadcrumbs" aria-label="Breadcrumbs">
+  <ul>
+    <li class="<h1>">Overview</li>
+    <li class="<h2>">Node 1 / 10.142.0.6:26257</li>
+  </ul>
+</nav>
+
+<div class="box">
+	<h4>Node Summary</h4>
+	<dl class="table rows" style="width: auto;">
+		<div><dt>Health:</dt><dd>Healthy</dd></div>
+		<div><dt>Last Update:</dt><dd>Nov 13, 2025 at 10:58 EST
+</dd></div>
+		<div><dt>Build:</dt><dd>v25.4.0-alpha.2-dev-96930c7210dca3029d406549c36e72633a39f6cc
+</dd></div>
+		<div><dt>Logs:</dt><dd>View Logs</dd></div>
+	</dl>
+</div>
+
+<div class="box overflow-x:scroll">
+<table>
+	<thead>
+		<tr>
+			<th></th>
+			<th>Node 1</th>
+			<th>Store 1</th>
+			<th>Store 2</th>
+			<th>Store 3</th>
+			<th>Store 4</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr><td>Live Bytes</td><td>	786.2 GiB</td><td>	198.5 GiB</td><td>	185.3 GiB</td><td>	195.8 GiB</td><td>	206.6 GiB</td></tr>
+		<tr><td>Key Bytes</td><td>	241.5 GiB</td><td>	63.9 GiB</td><td>	59.7 GiB</td><td>	58.1 GiB</td><td>	59.8 GiB</td></tr>
+		<tr><td>Value Bytes</td><td>	923.1 GiB</td><td>	248.9 GiB</td><td>	210.7 GiB</td><td>	223.8 GiB</td><td>	239.8 GiB</td></tr>
+		<tr><td>MVCC Range Key Bytes</td><td>	39.7 KiB</td><td>	11.2 KiB</td><td>	9.8 KiB</td><td>	10.1 KiB</td><td>	8.5 KiB</td></tr>
+		<tr><td>MVCC Range Value Bytes</td><td>	0 B</td><td>	0 B</td><td>	0 B</td><td>	0 B</td><td>	0 B</td></tr>
+		<tr><td>Intent Bytes</td><td>	8.9 KiB</td><td>	1.8 KiB</td><td>	6.8 KiB</td><td>	168.0 B</td><td>	120.0 B</td></tr>
+		<tr><td>System Bytes</td><td>	20.6 MiB</td><td>	5.5 MiB</td><td>	4.0 MiB</td><td>	3.9 MiB</td><td>	7.2 MiB</td></tr>
+		<tr><td>GC Bytes Age</td><td>	-222602090858597760</td><td>	-53819062950705070</td><td>	-55979096943444000</td><td>	-54603075310292130</td><td>	-58200855654156584</td></tr>
+		<tr><td>Total Replicas</td><td>	3912</td><td>	1026</td><td>	948</td><td>	962</td><td>	976</td></tr>
+		<tr><td>Raft Leaders</td><td>	1313</td><td>	325</td><td>	344</td><td>	327</td><td>	317</td></tr>
+		<tr><td>Total Ranges</td><td>	1313</td><td>	325</td><td>	344</td><td>	327</td><td>	317</td></tr>
+		<tr><td>Unavailable %</td><td>	0 %</td><td>	0 %</td><td>	0 %</td><td>	0 %</td><td>	0 %</td></tr>
+		<tr><td>Under Replicated %</td><td>	0 %</td><td>	0 %</td><td>	0 %</td><td>	0 %</td><td>	0 %</td></tr>
+		<tr><td>Used Capacity</td><td>	313.9 GiB</td><td>	82.2 GiB</td><td>	75.1 GiB</td><td>	76.1 GiB</td><td>	80.4 GiB</td></tr>
+		<tr><td>Available Capacity</td><td>	1.1 TiB</td><td>	285.5 GiB</td><td>	291.6 GiB</td><td>	290.6 GiB</td><td>	286.3 GiB</td></tr>
+		<tr><td>Maximum Capacity</td><td>	1.4 TiB</td><td>	369.0 GiB</td><td>	368.0 GiB</td><td>	368.0 GiB</td><td>	368.0 GiB</td></tr>
+	</tbody>
+</table>
+</div>
+
+
+{{ template "layout-end" .}}
+
