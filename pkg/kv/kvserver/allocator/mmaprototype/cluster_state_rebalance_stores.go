@@ -197,7 +197,6 @@ func (rs *rebalanceState) rebalanceStore(
 		store.StoreID, store.nls, store.sls, store.worstDim)
 	ss := rs.cs.stores[store.StoreID]
 
-	doneShedding := false
 	if true {
 		// Debug logging.
 		topKRanges := ss.adjusted.topKRanges[localStoreID]
@@ -238,6 +237,7 @@ func (rs *rebalanceState) rebalanceStore(
 
 	log.KvDistribution.VInfof(ctx, 2, "attempting to shed replicas next")
 	{
+		doneShedding := false
 		if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
 			now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
 			log.KvDistribution.VInfof(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
