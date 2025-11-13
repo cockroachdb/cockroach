@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/util/fileutil",
         "//pkg/util/log",
     ],
 )
@@ -18,6 +19,7 @@ go_test(
     srcs = ["dumpstore_test.go"],
     embed = [":dumpstore"],
     deps = [
+        "//pkg/util/fileutil",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

@@ -6,11 +6,13 @@ go_library(
         "copy.go",
         "escape.go",
         "move.go",
+        "readdir.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/fileutil",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/sysutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
     ],
 )

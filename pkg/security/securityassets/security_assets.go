@@ -6,9 +6,9 @@
 package securityassets
 
 import (
-	"io/fs"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/errors/oserror"
 )
 
@@ -21,7 +21,7 @@ type Loader struct {
 
 // defaultLoader uses real filesystem calls.
 var defaultLoader = Loader{
-	ReadDir:  readDir,
+	ReadDir:  fileutil.ReadDir,
 	ReadFile: os.ReadFile,
 	Stat:     os.Stat,
 }
@@ -56,28 +56,3 @@ func (al Loader) FileExists(filename string) (bool, error) {
 	return true, nil
 }
 
-// readDir reads the directory named by dirname and returns a list of
-// fs.FileInfo for the directory's contents, sorted by filename. If an error
-// occurs reading the directory, ReadDir returns no directory entries along with
-// the error.
-func readDir(dirname string) ([]os.FileInfo, error) {
-	entries, err := os.ReadDir(dirname)
-	if err != nil {
-		return nil, err
-	}
-	infos := make([]fs.FileInfo, 0, len(entries))
-	for _, entry := range entries {
-		info, err := entry.Info()
-		if err != nil {
-			// Skip files that disappeared between ReadDir and Info().
-			// This can happen when the directory contains transient files
-			// like Unix socket lock files that are created/deleted rapidly.
-			if oserror.IsNotExist(err) {
-				continue
-			}
-			return nil, err
-		}
-		infos = append(infos, info)
-	}
-	return infos, nil
-}

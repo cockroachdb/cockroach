@@ -7,13 +7,13 @@ package dumpstore
 
 import (
 	"context"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -83,21 +83,12 @@ func (s *DumpStore) GetFullPath(fileName string) string {
 
 // GC runs the GC policy on this store.
 func (s *DumpStore) GC(ctx context.Context, now time.Time, dumper Dumper) {
-	// NB: ioutil.ReadDir sorts the file names in ascending order.
+	// NB: fileutil.ReadDir sorts the file names in ascending order.
 	// This brings the oldest files first.
-	entries, err := os.ReadDir(s.dir)
+	files, err := fileutil.ReadDir(s.dir)
 	if err != nil {
 		log.Dev.Warningf(ctx, "%v", err)
 		return
-	}
-	files := make([]fs.FileInfo, 0, len(entries))
-	for _, entry := range entries {
-		info, err := entry.Info()
-		if err != nil {
-			log.Dev.Warningf(ctx, "%v", err)
-			return
-		}
-		files = append(files, info)
 	}
 
 	maxS := s.maxCombinedFileSizeSetting.Get(&s.st.SV)

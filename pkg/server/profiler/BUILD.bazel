@@ -52,6 +52,7 @@ go_test(
     deps = [
         "//pkg/server/dumpstore",
         "//pkg/settings/cluster",
+        "//pkg/util/fileutil",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/timeutil",
