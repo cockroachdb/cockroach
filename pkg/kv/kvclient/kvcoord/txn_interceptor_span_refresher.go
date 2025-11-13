@@ -50,12 +50,11 @@ var MaxTxnRefreshSpansBytes = settings.RegisterIntSetting(
 // to impact customers because they should already be able to handle
 // serialization errors; in case any unforeseen customer issues arise, the
 // setting here allows us to revert to the old behavior.
-// TODO(mira): set the default to true after #113765.
 var KeepRefreshSpansOnSavepointRollback = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"kv.transaction.keep_refresh_spans_on_savepoint_rollback.enabled",
 	"if enabled, all refresh spans accumulated since a savepoint was created are kept after the savepoint is rolled back",
-	false)
+	true)
 
 // txnSpanRefresher is a txnInterceptor that collects the read spans of a
 // serializable transaction in the event it gets a serializable retry error. It

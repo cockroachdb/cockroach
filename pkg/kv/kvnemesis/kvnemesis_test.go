@@ -175,8 +175,6 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	// TODO(mira): Remove this cluster setting once the default is set to true.
-	kvcoord.KeepRefreshSpansOnSavepointRollback.Override(ctx, &st.SV, true)
 	kvcoord.NonTransactionalWritesNotIdempotent.Override(ctx, &st.SV, true)
 	if cfg.leaseTypeOverride != 0 {
 		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, cfg.leaseTypeOverride)
