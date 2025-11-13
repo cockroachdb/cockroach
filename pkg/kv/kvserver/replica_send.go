@@ -1167,10 +1167,11 @@ func (r *Replica) collectSpans(
 
 	// If the request is using a key limit, we may want it to perform optimistic
 	// evaluation, depending on how large the limit is.
-	considerOptEvalForLimit := considerOptEval && ba.Header.MaxSpanRequestKeys > 0
+	considerOptEvalForLimit := considerOptEval &&
+		(ba.Header.MaxSpanRequestKeys > 0 || ba.Header.MaxPerScanRequestKeys > 0)
 	// When considerOptEvalForLimit, these are computed below and used to decide
 	// whether to actually do optimistic evaluation.
-	hasScans := false
+	numScans := 0
 	numGets := 0
 
 	// For non-local, MVCC spans we annotate them with the request timestamp
@@ -1194,7 +1195,7 @@ func (r *Replica) collectSpans(
 			if considerOptEvalForLimit {
 				switch inner.(type) {
 				case *kvpb.ScanRequest, *kvpb.ReverseScanRequest:
-					hasScans = true
+					numScans++
 				case *kvpb.GetRequest:
 					numGets++
 				}
@@ -1232,8 +1233,8 @@ func (r *Replica) collectSpans(
 		//
 		// This case is not uncommon; for example, a Scan which requests the entire
 		// range but has a limit of 1 result. We want to avoid allowing overly broad
-		// spans from backing up the latch manager, or encountering too much contention
-		// in the lock table.
+		// spans from backing up the latch manager, or encountering too much
+		// contention in the lock table.
 		//
 		// The heuristic is upper bound = k * liveCount, where k <= 1. The use of
 		// k=1 below is an un-tuned setting.
@@ -1243,10 +1244,14 @@ func (r *Replica) collectSpans(
 		// Additionally, it does not consider TargetBytes.
 		const k = 1
 		upperBoundKeys := k * liveCount
-		if !hasScans && int64(numGets) < upperBoundKeys {
+		if numScans == 0 && int64(numGets) < upperBoundKeys {
 			upperBoundKeys = int64(numGets)
 		}
-		if ba.Header.MaxSpanRequestKeys < upperBoundKeys {
+		if ba.Header.MaxSpanRequestKeys > 0 && ba.Header.MaxSpanRequestKeys < upperBoundKeys {
+			optEvalForLimit = true
+		}
+		if ba.Header.MaxPerScanRequestKeys > 0 && numScans > 0 &&
+			ba.Header.MaxPerScanRequestKeys*int64(numScans)+int64(numGets) < upperBoundKeys {
 			optEvalForLimit = true
 		}
 	}

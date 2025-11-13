@@ -597,6 +597,46 @@ func TestClientBatch(t *testing.T) {
 		checkKVs(t, b.Results[1].Rows)
 	}
 
+	// Try a limit applied individually to 2 scans.
+	{
+		b := &kv.Batch{}
+		b.Header.MaxPerScanRequestKeys = 1
+		b.Scan(testUser+"/key 00", testUser+"/key 05")
+		b.Scan(testUser+"/key 05", testUser+"/key 10")
+		if err := db.Run(ctx, b); err != nil {
+			t.Error(err)
+		}
+		checkKVs(t, b.Results[0].Rows, keys[0], 0)
+		checkKVs(t, b.Results[1].Rows, keys[5], 5)
+	}
+
+	// Try a limit applied individually to 2 reverse scans.
+	{
+		b := &kv.Batch{}
+		b.Header.MaxPerScanRequestKeys = 1
+		b.ReverseScan(testUser+"/key 00", testUser+"/key 05")
+		b.ReverseScan(testUser+"/key 05", testUser+"/key 10")
+		if err := db.Run(ctx, b); err != nil {
+			t.Error(err)
+		}
+		checkKVs(t, b.Results[0].Rows, keys[4], 4)
+		checkKVs(t, b.Results[1].Rows, keys[9], 9)
+	}
+
+	// The per-scan limit applies before the batch limit.
+	{
+		b := &kv.Batch{}
+		b.Header.MaxPerScanRequestKeys = 2
+		b.Header.MaxSpanRequestKeys = 3
+		b.Scan(testUser+"/key 00", testUser+"/key 05")
+		b.Scan(testUser+"/key 05", testUser+"/key 10")
+		if err := db.Run(ctx, b); err != nil {
+			t.Error(err)
+		}
+		checkKVs(t, b.Results[0].Rows, keys[0], 0, keys[1], 1)
+		checkKVs(t, b.Results[1].Rows, keys[5], 5)
+	}
+
 	// Induce a non-transactional failure.
 	{
 		key := roachpb.Key("conditionalPut")

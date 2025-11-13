@@ -198,6 +198,7 @@ func NewStreamingKVFetcher(
 	maintainOrdering bool,
 	singleRowLookup bool,
 	maxKeysPerRow int,
+	perScanRequestKeyLimit int,
 	reverse bool,
 	diskBuffer kvstreamer.ResultDiskBuffer,
 	kvFetcherMemAcc *mon.BoundAccount,
@@ -234,6 +235,7 @@ func NewStreamingKVFetcher(
 			SingleRowLookup: singleRowLookup,
 		},
 		maxKeysPerRow,
+		perScanRequestKeyLimit,
 		diskBuffer,
 	)
 	return newKVFetcher(newTxnKVStreamer(

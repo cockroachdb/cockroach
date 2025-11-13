@@ -613,6 +613,7 @@ func NewColIndexJoin(
 			maintainOrdering,
 			true, /* singleRowLookup */
 			int(spec.FetchSpec.MaxKeysPerRow),
+			0,     /* perScanRequestKeyLimit */
 			false, /* reverse */
 			diskBuffer,
 			kvFetcherMemAcc,

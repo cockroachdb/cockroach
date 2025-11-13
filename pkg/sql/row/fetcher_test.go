@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type initFetcherArgs struct {
@@ -64,6 +65,7 @@ func initFetcher(
 	txn *kv.Txn,
 	entry initFetcherArgs,
 	reverseScan bool,
+	perScanKeyLimit rowinfra.KeyLimit,
 	alloc *tree.DatumAlloc,
 	memMon *mon.BytesMonitor,
 ) *Fetcher {
@@ -74,11 +76,12 @@ func initFetcher(
 	if err := fetcher.Init(
 		context.Background(),
 		FetcherInitArgs{
-			Txn:        txn,
-			Reverse:    reverseScan,
-			Alloc:      alloc,
-			MemMonitor: memMon,
-			Spec:       &spec,
+			Txn:                    txn,
+			Reverse:                reverseScan,
+			Alloc:                  alloc,
+			MemMonitor:             memMon,
+			Spec:                   &spec,
+			PerScanRequestKeyLimit: perScanKeyLimit,
 		},
 	); err != nil {
 		t.Fatal(err)
@@ -151,7 +154,9 @@ func TestNextRowSingle(t *testing.T) {
 			}
 
 			txn := kv.NewTxn(ctx, kvDB, 0)
-			rf := initFetcher(t, codec, txn, args, false /*reverseScan*/, alloc, nil /* memMon */)
+			rf := initFetcher(
+				t, codec, txn, args, false /*reverseScan*/, 0 /* perScanKeyLimit */, alloc, nil, /* memMon */
+			)
 
 			if err := rf.StartScan(
 				ctx,
@@ -201,7 +206,7 @@ func TestNextRowSingle(t *testing.T) {
 	}
 }
 
-func TestNextRowBatchLimiting(t *testing.T) {
+func TestNextRowWithLimiting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -209,6 +214,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	codec := srv.ApplicationLayer().Codec()
+	alloc := &tree.DatumAlloc{}
 
 	tables := map[string]fetcherEntryArgs{
 		"t1": {
@@ -234,6 +240,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 	}
 
 	// Initialize tables first.
+	const numFamilies = 2
 	for tableName, table := range tables {
 		sqlutils.CreateTable(
 			t, sqlDB, tableName,
@@ -243,64 +250,88 @@ func TestNextRowBatchLimiting(t *testing.T) {
 		)
 	}
 
-	alloc := &tree.DatumAlloc{}
-
-	// We try to read rows from each table.
-	for tableName, table := range tables {
-		t.Run(tableName, func(t *testing.T) {
-			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, sqlutils.TestDB, tableName)
-
-			args := initFetcherArgs{
-				tableDesc: tableDesc,
-				indexIdx:  0,
-			}
-
-			txn := kv.NewTxn(ctx, kvDB, 0)
-			rf := initFetcher(t, codec, txn, args, false /*reverseScan*/, alloc, nil /*memMon*/)
-
-			if err := rf.StartScan(
-				ctx,
-				roachpb.Spans{tableDesc.IndexSpan(codec, tableDesc.GetPrimaryIndexID())},
-				nil, /* spanIDs */
-				rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
-				10, /*limitHint*/
-			); err != nil {
-				t.Fatal(err)
-			}
-
-			count := 0
-
-			expectedVals := [2]int64{1, 1}
-			for {
-				datums, _, err := rf.NextRowDecoded(ctx)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if datums == nil {
-					break
-				}
-
-				count++
-
-				if table.nCols != len(datums) {
-					t.Fatalf("expected %d columns, got %d columns", table.nCols, len(datums))
-				}
-
-				for i, expected := range expectedVals {
-					actual := int64(*datums[i].(*tree.DInt))
-					if expected != actual {
-						t.Fatalf("unexpected value for row %d, col %d.\nexpected: %d\nactual: %d", count, i, expected, actual)
+	for _, tc := range []struct {
+		batchRowLimit    rowinfra.RowLimit
+		perScanKeyLimit  rowinfra.KeyLimit
+		expectedRowLimit int
+	}{
+		//{ // Batch key limit. After a batch hits the limit, the fetcher should
+		//	// issue resume scans, so all table rows should be fetched.
+		//	batchRowLimit: 10,
+		//},
+		//{ // Per-scan key limit stops returning rows after the limit is hit.
+		//	perScanKeyLimit:  1 * numFamilies,
+		//	expectedRowLimit: 1,
+		//},
+		{ // Odd per-scan key limit.
+			perScanKeyLimit:  1*numFamilies + 1,
+			expectedRowLimit: 1,
+		},
+		//{ // Larger per-scan key limit.
+		//	perScanKeyLimit:  10 * numFamilies,
+		//	expectedRowLimit: 10,
+		//},
+	} {
+		t.Run(fmt.Sprintf("perScanKeyLimit=%d_batchRowLimit=%d", tc.perScanKeyLimit, tc.batchRowLimit), func(t *testing.T) {
+			for tableName, table := range tables {
+				t.Run(tableName, func(t *testing.T) {
+					tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, sqlutils.TestDB, tableName)
+					args := initFetcherArgs{
+						tableDesc: tableDesc,
+						indexIdx:  0,
 					}
-				}
 
-				expectedVals[0]++
-				expectedVals[1]++
-				// Value column is in terms of a modulo.
-				expectedVals[1] %= int64(table.modFactor)
-			}
+					txn := kv.NewTxn(ctx, kvDB, 0)
+					rf := initFetcher(
+						t, codec, txn, args, false /*reverseScan*/, tc.perScanKeyLimit, alloc, nil, /*memMon*/
+					)
 
-			if table.nRows != count {
-				t.Fatalf("expected %d rows, got %d rows", table.nRows, count)
+					if err := rf.StartScan(
+						ctx,
+						roachpb.Spans{tableDesc.IndexSpan(codec, tableDesc.GetPrimaryIndexID())},
+						nil, /* spanIDs */
+						rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
+						tc.batchRowLimit,
+					); err != nil {
+						t.Fatal(err)
+					}
+
+					count := 0
+					expectedVals := [2]int64{1, 1}
+					for {
+						datums, _, err := rf.NextRowDecoded(ctx)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if datums == nil {
+							break
+						}
+
+						count++
+
+						if table.nCols != len(datums) {
+							t.Fatalf("expected %d columns, got %d columns", table.nCols, len(datums))
+						}
+
+						for i, expected := range expectedVals {
+							actual := int64(*datums[i].(*tree.DInt))
+							if expected != actual {
+								t.Fatalf("unexpected value for row %d, col %d.\nexpected: %d\nactual: %d", count, i, expected, actual)
+							}
+						}
+
+						expectedVals[0]++
+						expectedVals[1]++
+						// Value column is in terms of a modulo.
+						expectedVals[1] %= int64(table.modFactor)
+					}
+
+					expectedRows := table.nRows
+					if tc.expectedRowLimit > 0 && tc.expectedRowLimit < expectedRows {
+						expectedRows = tc.expectedRowLimit
+					}
+					require.Equal(t, expectedRows, count)
+				})
 			}
 		})
 	}
@@ -353,7 +384,9 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 	memMon.Start(ctx, nil, mon.NewStandaloneBudget(1<<20))
 	defer memMon.Stop(ctx)
 	txn := kv.NewTxn(ctx, kvDB, 0)
-	rf := initFetcher(t, codec, txn, args, false /*reverseScan*/, alloc, memMon)
+	rf := initFetcher(
+		t, codec, txn, args, false /*reverseScan*/, 0 /* perScanKeyLimit */, alloc, memMon,
+	)
 	defer rf.Close(ctx)
 
 	err := rf.StartScan(
@@ -414,7 +447,9 @@ INDEX(c)
 	}
 
 	txn := kv.NewTxn(ctx, kvDB, 0)
-	rf := initFetcher(t, codec, txn, args, false /*reverseScan*/, alloc, nil /*memMon*/)
+	rf := initFetcher(
+		t, codec, txn, args, false /*reverseScan*/, 0 /* perScanKeyLimit */, alloc, nil, /*memMon*/
+	)
 
 	// Start a scan that has multiple input spans, to tickle the codepath that
 	// sees an "empty batch". When we have multiple input spans, the kv server
@@ -591,7 +626,9 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			}
 
 			txn := kv.NewTxn(ctx, kvDB, 0)
-			rf := initFetcher(t, codec, txn, args, false /*reverseScan*/, alloc, nil /*memMon*/)
+			rf := initFetcher(
+				t, codec, txn, args, false /*reverseScan*/, 0 /* perScanKeyLimit */, alloc, nil, /*memMon*/
+			)
 
 			if err := rf.StartScan(
 				ctx,
@@ -705,9 +742,11 @@ func TestRowFetcherReset(t *testing.T) {
 		indexIdx:  0,
 	}
 	da := tree.DatumAlloc{}
-	fetcher := initFetcher(t, codec, txn, args, false, &da, nil /*memMon*/)
+	fetcher := initFetcher(t, codec, txn, args, false, 0 /* perScanKeyLimit */, &da, nil /*memMon*/)
 
-	resetFetcher := initFetcher(t, codec, txn, args, false /*reverseScan*/, &da, nil /*memMon*/)
+	resetFetcher := initFetcher(
+		t, codec, txn, args, false /*reverseScan*/, 0 /* perScanKeyLimit */, &da, nil, /*memMon*/
+	)
 
 	resetFetcher.Reset()
 

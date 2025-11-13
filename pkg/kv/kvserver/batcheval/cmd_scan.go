@@ -45,13 +45,20 @@ func Scan(
 	var err error
 
 	readCategory := ScanReadCategory(cArgs.EvalCtx.AdmissionHeader())
+	maxKeys := h.MaxSpanRequestKeys
+	skipResumeSpanForKeyLimit := false
+	if h.MaxPerScanRequestKeys > 0 && (maxKeys == 0 || h.MaxPerScanRequestKeys < maxKeys) {
+		maxKeys = h.MaxPerScanRequestKeys
+		skipResumeSpanForKeyLimit = true
+	}
+
 	opts := storage.MVCCScanOptions{
 		Inconsistent:            h.ReadConsistency != kvpb.CONSISTENT,
 		SkipLocked:              h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                     h.Txn,
 		ScanStats:               cArgs.ScanStats,
 		Uncertainty:             cArgs.Uncertainty,
-		MaxKeys:                 h.MaxSpanRequestKeys,
+		MaxKeys:                 maxKeys,
 		MaxLockConflicts:        storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetLockConflictBytes: storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetBytes:             h.TargetBytes,
@@ -102,9 +109,13 @@ func Scan(
 	reply.NumBytes = scanRes.NumBytes
 
 	if scanRes.ResumeSpan != nil {
-		reply.ResumeSpan = scanRes.ResumeSpan
-		reply.ResumeReason = scanRes.ResumeReason
-		reply.ResumeNextBytes = scanRes.ResumeNextBytes
+		// Swallow the resume span if we stopped due to MaxPerScanRequestKeys, since
+		// the caller does not expect a resume span in that case.
+		if scanRes.ResumeReason != kvpb.RESUME_KEY_LIMIT || !skipResumeSpanForKeyLimit {
+			reply.ResumeSpan = scanRes.ResumeSpan
+			reply.ResumeReason = scanRes.ResumeReason
+			reply.ResumeNextBytes = scanRes.ResumeNextBytes
+		}
 	}
 
 	if h.ReadConsistency == kvpb.READ_UNCOMMITTED {
