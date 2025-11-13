@@ -217,8 +217,6 @@ type SQLServer struct {
 
 	// serviceMode is the service mode this server was started with.
 	serviceMode mtinfopb.TenantServiceMode
-
-	queueManager *queuefeed.Manager
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -1065,7 +1063,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TenantReadOnly:             cfg.SQLConfig.TenantReadOnly,
 		CidrLookup:                 cfg.BaseConfig.CidrLookup,
 		LicenseEnforcer:            cfg.SQLConfig.LicenseEnforcer,
-		QueueManager:               queuefeed.NewManager(ctx, cfg.internalDB, cfg.rangeFeedFactory, cfg.rangeDescIteratorFactory, codec, leaseMgr),
+		QueueManager:               queuefeed.NewManager(ctx, cfg.internalDB, cfg.rangeFeedFactory, cfg.rangeDescIteratorFactory, codec, leaseMgr, cfg.sqlLivenessProvider.CachedReader()),
 	}
 
 	if codec.ForSystemTenant() {
@@ -1462,7 +1460,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		internalDBMemMonitor:           internalDBMonitor,
 		upgradeManager:                 upgradeMgr,
 		serviceMode:                    cfg.serviceMode,
-		queueManager:                   queuefeed.NewManager(ctx, cfg.internalDB, cfg.rangeFeedFactory, cfg.rangeDescIteratorFactory, execCfg.Codec, leaseMgr),
 	}, nil
 }
 
@@ -1795,6 +1792,11 @@ func (s *SQLServer) preStart(
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
 
 	s.startLicenseEnforcer(ctx, knobs)
+
+	// Close queue manager when the stopper stops.
+	stopper.AddCloser(stop.CloserFn(func() {
+		s.execCfg.QueueManager.Close()
+	}))
 
 	// Report a warning if the server is being shut down via the stopper
 	// before it was gracefully drained. This warning may be innocuous

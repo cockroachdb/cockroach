@@ -4,6 +4,8 @@ package queuefeed
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -16,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -25,31 +29,55 @@ import (
 // watch queue partition table
 // and create it too??
 type Manager struct {
-	executor isql.DB
-	rff      *rangefeed.Factory
-	rdi      rangedesc.IteratorFactory
-	rc       *rangecache.RangeCache
-	codec    keys.SQLCodec
-	leaseMgr *lease.Manager
+	executor          isql.DB
+	rff               *rangefeed.Factory
+	rdi               rangedesc.IteratorFactory
+	rc                *rangecache.RangeCache
+	codec             keys.SQLCodec
+	leaseMgr          *lease.Manager
+	sqlLivenessReader sqlliveness.Reader
 
 	mu struct {
 		syncutil.Mutex
 		queueAssignment map[string]*PartitionAssignments
 	}
+
+	// watchCtx and watchCancel are used to control the watchForDeadSessions goroutine.
+	watchCtx    context.Context
+	watchCancel context.CancelFunc
+	watchWg     sync.WaitGroup
 }
 
 func NewManager(
-	_ context.Context,
+	ctx context.Context,
 	executor isql.DB,
 	rff *rangefeed.Factory,
 	rdi rangedesc.IteratorFactory,
 	codec keys.SQLCodec,
 	leaseMgr *lease.Manager,
+	sqlLivenessReader sqlliveness.Reader,
 ) *Manager {
 	// setup rangefeed on partitions table (/poll)
 	// handle handoff from one server to another
-	m := &Manager{executor: executor, rff: rff, rdi: rdi, codec: codec, leaseMgr: leaseMgr}
+	watchCtx, watchCancel := context.WithCancel(ctx)
+	m := &Manager{
+		executor:          executor,
+		rff:               rff,
+		rdi:               rdi,
+		codec:             codec,
+		leaseMgr:          leaseMgr,
+		sqlLivenessReader: sqlLivenessReader,
+		watchCtx:          watchCtx,
+		watchCancel:       watchCancel,
+	}
 	m.mu.queueAssignment = make(map[string]*PartitionAssignments)
+
+	m.watchWg.Add(1)
+	go func() {
+		defer m.watchWg.Done()
+		m.watchForDeadSessions(watchCtx)
+	}()
+
 	return m
 }
 
@@ -274,6 +302,143 @@ func (m *Manager) splitOnRanges(ctx context.Context, span roachpb.Span) ([]roach
 	}
 
 	return spans, nil
+}
+
+// A loop that looks for partitions that are assigned to sql liveness sessions
+// that are no longer alive and removes all of their partition claims. (see the
+// IsAlive method in the sqlliveness packages)
+func (m *Manager) watchForDeadSessions(ctx context.Context) {
+	// Check for dead sessions every 10 seconds.
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := m.checkAndClearDeadSessions(ctx); err != nil {
+				log.Dev.Warningf(ctx, "error checking for dead sessions: %v", err)
+			}
+		}
+	}
+}
+
+const listQueueFeedsSQL = `SELECT queue_feed_name FROM defaultdb.queue_feeds`
+
+// checkAndClearDeadSessions checks all partitions across all queues for dead sessions
+// and clears their claims.
+func (m *Manager) checkAndClearDeadSessions(ctx context.Context) error {
+	// Get all queue names.
+	var queueNames []string
+	err := m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		rows, err := txn.QueryBuffered(ctx, "list-queue-feeds", txn.KV(), listQueueFeedsSQL)
+		if err != nil {
+			return err
+		}
+		queueNames = make([]string, 0, len(rows))
+		for _, row := range rows {
+			queueNames = append(queueNames, string(tree.MustBeDString(row[0])))
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "listing queue feeds")
+	}
+
+	// Check each queue for dead sessions.
+	for _, queueName := range queueNames {
+		if err := m.checkQueueForDeadSessions(ctx, queueName); err != nil {
+			log.Dev.Warningf(ctx, "error checking queue %s for dead sessions: %v", queueName, err)
+			// Continue checking other queues even if one fails.
+		}
+	}
+
+	return nil
+}
+
+// checkQueueForDeadSessions checks all partitions in a queue for dead sessions
+// and clears their claims.
+func (m *Manager) checkQueueForDeadSessions(ctx context.Context, queueName string) error {
+	pt := &partitionTable{queueName: queueName}
+	var partitionsToUpdate []Partition
+
+	err := m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		partitions, err := pt.ListPartitions(ctx, txn)
+		if err != nil {
+			return err
+		}
+
+		for _, partition := range partitions {
+			needsUpdate := false
+			updatedPartition := partition
+
+			// Check if the Session is assigned to a dead session.
+			if partition.Session.LivenessID != "" {
+				alive, err := m.sqlLivenessReader.IsAlive(ctx, partition.Session.LivenessID)
+				if err != nil {
+					// If we can't determine liveness, err on the side of caution and don't clear.
+					log.Dev.Warningf(ctx, "error checking liveness for session %s: %v", partition.Session.LivenessID, err)
+					continue
+				}
+				if !alive {
+					// Session is dead. Clear the claim.
+					// If there's a successor, promote it to Session.
+					if !partition.Successor.Empty() {
+						updatedPartition.Session = partition.Successor
+						updatedPartition.Successor = Session{}
+					} else {
+						updatedPartition.Session = Session{}
+					}
+					needsUpdate = true
+				}
+			}
+
+			// Check if the Successor is assigned to a dead session.
+			if partition.Successor.LivenessID != "" {
+				alive, err := m.sqlLivenessReader.IsAlive(ctx, partition.Successor.LivenessID)
+				if err != nil {
+					log.Dev.Warningf(ctx, "error checking liveness for successor session %s: %v", partition.Successor.LivenessID, err)
+					continue
+				}
+				if !alive {
+					// Successor session is dead. Clear it.
+					updatedPartition.Successor = Session{}
+					needsUpdate = true
+				}
+			}
+
+			if needsUpdate {
+				partitionsToUpdate = append(partitionsToUpdate, updatedPartition)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return errors.Wrapf(err, "listing partitions for queue %s", queueName)
+	}
+
+	// Update partitions that need to be cleared.
+	if len(partitionsToUpdate) > 0 {
+		return m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			for _, partition := range partitionsToUpdate {
+				if err := pt.UpdatePartition(ctx, txn, partition); err != nil {
+					return errors.Wrapf(err, "updating partition %d for queue %s", partition.ID, queueName)
+				}
+				fmt.Printf("pruning dead sessions: updated partition %d for queue %s\n", partition.ID, queueName)
+			}
+			return nil
+		})
+	}
+
+	return nil
+}
+
+// Close stops the Manager and waits for all background goroutines to exit.
+func (m *Manager) Close() {
+	m.watchCancel()
+	m.watchWg.Wait()
 }
 
 var _ queuebase.Manager = &Manager{}
