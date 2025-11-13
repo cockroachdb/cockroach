@@ -234,6 +234,7 @@ func (rs *rebalanceState) rebalanceStore(
 			//
 			// NB: any ranges at this store that don't have pending changes must
 			// have this local store as the leaseholder.
+			localLeaseTransferCount := 0
 			topKRanges := ss.adjusted.topKRanges[localStoreID]
 			n := topKRanges.len()
 			for i := 0; i < n; i++ {
@@ -375,6 +376,7 @@ func (rs *rebalanceState) rebalanceStore(
 				rs.cs.addPendingRangeChange(leaseChange)
 				rs.changes = append(rs.changes, leaseChange)
 				rs.leaseTransferCount++
+				localLeaseTransferCount++
 				if rs.changes[len(rs.changes)-1].IsChangeReplicas() || !rs.changes[len(rs.changes)-1].IsTransferLease() {
 					panic(fmt.Sprintf("lease transfer is invalid: %v", rs.changes[len(rs.changes)-1]))
 				}
@@ -396,7 +398,7 @@ func (rs *rebalanceState) rebalanceStore(
 					break
 				}
 			}
-			if doneShedding || rs.leaseTransferCount > 0 {
+			if doneShedding || localLeaseTransferCount > 0 {
 				// If managed to transfer a lease, wait for it to be done, before
 				// shedding replicas from this store (which is more costly). Otherwise
 				// we may needlessly start moving replicas. Note that the store
@@ -405,7 +407,7 @@ func (rs *rebalanceState) rebalanceStore(
 				// pending from a load perspective, so we *may* not be able to do more
 				// lease transfers -- so be it.
 				log.KvDistribution.VInfof(ctx, 2, "skipping replica transfers for s%d: done shedding=%v, lease_transfers=%d",
-					store.StoreID, doneShedding, rs.leaseTransferCount)
+					store.StoreID, doneShedding, localLeaseTransferCount)
 				return
 			}
 		}
