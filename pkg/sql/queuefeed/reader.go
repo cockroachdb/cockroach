@@ -210,7 +210,7 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) err
 		fmt.Sprintf("queuefeed.reader.name=%s", r.name), initialTS, onValue, opts...,
 	)
 
-	spans := []roachpb.Span{assignment.Partitions[0].Span}
+	spans := assignment.Spans()
 
 	fmt.Printf("starting rangefeed with spans: %+v\n", spans)
 
