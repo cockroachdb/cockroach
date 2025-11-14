@@ -8,13 +8,13 @@ set-store
   store-id=4 node-id=4
 ----
 node-id=1 locality-tiers=node=1
-  store-id=1 attrs= locality-code=1:
+  store-id=1 attrs=
 node-id=2 locality-tiers=node=2
-  store-id=2 attrs= locality-code=2:
+  store-id=2 attrs=
 node-id=3 locality-tiers=node=3
-  store-id=3 attrs= locality-code=3:
+  store-id=3 attrs=
 node-id=4 locality-tiers=node=4
-  store-id=4 attrs= locality-code=4:
+  store-id=4 attrs=
 
 store-load-msg
   store-id=1 node-id=1 load=[500,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s

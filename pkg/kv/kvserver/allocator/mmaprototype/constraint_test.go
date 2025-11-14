@@ -264,7 +264,7 @@ func printRangeAnalyzedConstraints(
 	printStoreAndLocality := func(prefix string, sAndL []storeAndLocality) {
 		fmt.Fprintf(b, "%s", prefix)
 		for _, elem := range sAndL {
-			fmt.Fprintf(b, " %s(%s)", elem.StoreID.String(), lti.unintern(elem.localityTiers).String())
+			fmt.Fprintf(b, " %s(%v)", elem.StoreID.String(), lti.unintern(elem.localityTiers))
 		}
 		fmt.Fprintf(b, "\n")
 	}

@@ -2,7 +2,7 @@ set-store
   store-id=1 node-id=1 attrs=purple locality-tiers=region=foo
 ----
 node-id=1 locality-tiers=region=foo,node=1
-  store-id=1 attrs=purple locality-code=1:2:
+  store-id=1 attrs=purple
 
 set-store-status store-id=1 health=unhealthy replicas=refusing leases=shedding
 ----

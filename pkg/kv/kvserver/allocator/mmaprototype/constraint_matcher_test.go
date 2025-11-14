@@ -32,6 +32,11 @@ func parseStoreAttributedAndLocality(t *testing.T, in string) StoreAttributesAnd
 				sal.StoreAttrs.Attrs,
 				strings.Split(parts[1], ",")...,
 			)
+		case "node-attrs":
+			sal.NodeAttrs.Attrs = append(
+				sal.NodeAttrs.Attrs,
+				strings.Split(parts[1], ",")...,
+			)
 		case "locality-tiers":
 			sal.NodeLocality = parseLocalityTiers(t, parts[1])
 		default:
