@@ -11,7 +11,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1134,10 +1132,7 @@ func (e *AutoCommitError) Error() string {
 func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
-	retryOpts := base.DefaultRetryOptions()
-	retryOpts.InitialBackoff = 20 * time.Millisecond
-	retryOpts.MaxBackoff = 200 * time.Millisecond
-	for r := retry.Start(retryOpts); r.Next(); {
+	for attempt := 1; ; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return errors.Wrap(err, "txn exec")
 		}
@@ -1203,8 +1198,6 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		// cluster setting to be changed while a transaction is stuck in a retry
 		// loop.
 		maxRetries := txn.MaxAutoRetries()
-		// Add 1 because r.CurrentAttempt() starts at 0.
-		attempt := r.CurrentAttempt() + 1
 		if attempt > maxRetries {
 			// If the retries limit has been exceeded, rollback and return an error.
 			rollbackErr := txn.Rollback(ctx)
