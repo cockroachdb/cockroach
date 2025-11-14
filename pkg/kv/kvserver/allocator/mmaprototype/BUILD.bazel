@@ -39,6 +39,7 @@ go_test(
     name = "mmaprototype_test",
     srcs = [
         "allocator_state_test.go",
+        "cluster_state_rebalance_stores_test.go",
         "cluster_state_test.go",
         "constraint_matcher_test.go",
         "constraint_test.go",
