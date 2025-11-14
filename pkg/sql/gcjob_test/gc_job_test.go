@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -609,6 +610,8 @@ func TestDropWithDeletedDescriptor(t *testing.T) {
 	runTest := func(t *testing.T, dropIndex bool, beforeDelRange bool) {
 		ctx, cancel := context.WithCancel(context.Background())
 		gcJobID := make(chan jobspb.JobID)
+		var hookShouldExecuteOnce sync.Once
+
 		knobs := base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			GCJob: &sql.GCJobTestingKnobs{
@@ -645,15 +648,19 @@ func TestDropWithDeletedDescriptor(t *testing.T) {
 					if len(k) == 0 {
 						return nil
 					}
-					ch := make(chan struct{})
-					select {
-					case delRangeChan <- ch:
-					case <-ctx.Done():
-					}
-					select {
-					case <-ch:
-					case <-ctx.Done():
-					}
+					// Disable the channel logic after the first execution in case
+					// any retries happen in the KV dist sender.
+					hookShouldExecuteOnce.Do(func() {
+						ch := make(chan struct{})
+						select {
+						case delRangeChan <- ch:
+						case <-ctx.Done():
+						}
+						select {
+						case <-ch:
+						case <-ctx.Done():
+						}
+					})
 					return nil
 				},
 			}
