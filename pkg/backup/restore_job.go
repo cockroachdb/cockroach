@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -215,7 +216,7 @@ func restoreWithRetry(
 	// dying), so if we receive a retryable error, re-plan and retry the restore.
 	retryOpts, progThreshold := getRetryOptionsAndProgressThreshold(execCtx)
 	logRate := restoreRetryLogRate.Get(&execCtx.ExecCfg().Settings.SV)
-	logThrottler := util.Every(logRate)
+	logThrottler := util.EveryMono(logRate)
 	var (
 		res                roachpb.RowCount
 		err                error
@@ -255,7 +256,7 @@ func restoreWithRetry(
 
 		log.Dev.Warningf(ctx, "encountered retryable error: %+v", err)
 
-		if logThrottler.ShouldProcess(timeutil.Now()) {
+		if logThrottler.ShouldProcess(crtime.NowMono()) {
 			// We throttle the logging of errors to the jobs messages table to avoid
 			// flooding the table during the hot loop of a retry.
 			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {

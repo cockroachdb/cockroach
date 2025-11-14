@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
@@ -1056,7 +1057,7 @@ type Replica struct {
 	// information and without explicit throttling some replicas will offer once
 	// per applied Raft command, which is silly and also clogs up the queues'
 	// semaphores.
-	splitQueueThrottle, mergeQueueThrottle util.EveryN
+	splitQueueThrottle, mergeQueueThrottle util.EveryN[crtime.Mono]
 
 	// loadBasedSplitter keeps information about load-based splitting.
 	loadBasedSplitter split.Decider

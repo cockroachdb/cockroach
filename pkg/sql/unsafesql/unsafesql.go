@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/redact"
 )
 
@@ -64,14 +64,14 @@ func CheckInternalsAccess(
 	// If an override is set, allow access to this virtual table.
 	if allowUnsafe {
 		// Log this access to the SENSITIVE_ACCESS channel since the override condition bypassed normal access controls.
-		if accessedLogLimiter.ShouldProcess(timeutil.Now()) {
+		if accessedLogLimiter.ShouldProcess(crtime.NowMono()) {
 			log.StructuredEvent(ctx, severity.WARNING, &eventpb.UnsafeInternalsAccessed{Query: q})
 		}
 		return nil
 	}
 
 	// Log this access to the SENSITIVE_ACCESS channel to show where failing internals accesses are happening.
-	if deniedLogLimiter.ShouldProcess(timeutil.Now()) {
+	if deniedLogLimiter.ShouldProcess(crtime.NowMono()) {
 		log.StructuredEvent(ctx, severity.WARNING, &eventpb.UnsafeInternalsDenied{Query: q})
 	}
 
