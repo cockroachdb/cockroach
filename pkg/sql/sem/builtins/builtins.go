@@ -4646,15 +4646,20 @@ value if you rely on the HLC for accuracy.`,
 	"crdb_internal.create_queue_feed": makeBuiltin(defProps(), tree.Overload{
 		Types: tree.ParamTypes{
 			{Name: "queue_name", Typ: types.String},
-			{Name: "table_descriptor_id", Typ: types.Int},
+			{Name: "table_name", Typ: types.String},
 		},
 		Volatility: volatility.Volatile,
 		ReturnType: tree.FixedReturnType(types.Void),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			qn := args[0].(*tree.DString)
+			tableName := tree.MustBeDString(args[1])
+			dOid, err := eval.ParseDOid(ctx, evalCtx, string(tableName), types.RegClass)
+			if err != nil {
+				return nil, err
+			}
+
 			qm := getQueueManager(evalCtx)
-			tID := args[1].(*tree.DInt)
-			if err := qm.CreateQueue(ctx, string(*qn), int64(*tID)); err != nil {
+			if err := qm.CreateQueue(ctx, string(*qn), int64(dOid.Oid)); err != nil {
 				return nil, err
 			}
 			return tree.DVoidDatum, nil
@@ -4664,24 +4669,28 @@ value if you rely on the HLC for accuracy.`,
 	"crdb_internal.create_queue_feed_from_cursor": makeBuiltin(defProps(), tree.Overload{
 		Types: tree.ParamTypes{
 			{Name: "queue_name", Typ: types.String},
-			{Name: "table_descriptor_id", Typ: types.Int},
+			{Name: "table_name", Typ: types.String},
 			{Name: "cursor", Typ: types.Decimal},
 		},
 		Volatility: volatility.Volatile,
 		ReturnType: tree.FixedReturnType(types.Void),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			qn := args[0].(*tree.DString)
-			qm := getQueueManager(evalCtx)
-			tID := args[1].(*tree.DInt)
-			cursorDecimal := tree.MustBeDDecimal(args[2])
 
-			// Convert the decimal cursor to hlc.Timestamp
+			tableName := tree.MustBeDString(args[1])
+			dOid, err := eval.ParseDOid(ctx, evalCtx, string(tableName), types.RegClass)
+			if err != nil {
+				return nil, err
+			}
+
+			cursorDecimal := tree.MustBeDDecimal(args[2])
 			cursor, err := hlc.DecimalToHLC(&cursorDecimal.Decimal)
 			if err != nil {
 				return nil, errors.Wrap(err, "converting cursor decimal to HLC timestamp")
 			}
 
-			if err := qm.CreateQueueFromCursor(ctx, string(*qn), int64(*tID), cursor); err != nil {
+			qm := getQueueManager(evalCtx)
+			if err := qm.CreateQueueFromCursor(ctx, string(*qn), int64(dOid.Oid), cursor); err != nil {
 				return nil, err
 			}
 			return tree.DVoidDatum, nil

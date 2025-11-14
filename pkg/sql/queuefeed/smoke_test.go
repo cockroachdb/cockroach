@@ -31,9 +31,7 @@ func TestQueuefeedSmoketest(t *testing.T) {
 	_, err := srv.SystemLayer().SQLConn(t).Exec(`SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	require.NoError(t, err)
 
-	var tableID int64
-	db.QueryRow(t, "SELECT id FROM system.namespace where name = 't'").Scan(&tableID)
-	db.Exec(t, `SELECT crdb_internal.create_queue_feed('test_queue', $1)`, tableID)
+	db.Exec(t, `SELECT crdb_internal.create_queue_feed('test_queue', 't')`)
 
 	// TODO improve this test once creating the queue sets an accurate cursor. We
 	// should be able to read an expected set of rows.
@@ -94,9 +92,7 @@ func TestQueuefeedSmoketestMultipleReaders(t *testing.T) {
 	db.Exec(t, `CREATE TABLE t (k1 INT, k2 INT, v string, PRIMARY KEY (k1, k2))`)
 	db.Exec(t, `ALTER TABLE t SPLIT AT VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9)`)
 
-	var tableID int64
-	db.QueryRow(t, "SELECT id FROM system.namespace where name = 't'").Scan(&tableID)
-	db.Exec(t, `SELECT crdb_internal.create_queue_feed('t_queue', $1)`, tableID)
+	db.Exec(t, `SELECT crdb_internal.create_queue_feed('t_queue', 't')`)
 
 	ctx, cancel := context.WithCancel(ctx)
 	group, ctx := errgroup.WithContext(ctx)
