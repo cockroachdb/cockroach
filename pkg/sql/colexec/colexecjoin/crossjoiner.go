@@ -175,6 +175,7 @@ func (c *crossJoiner) consumeRightInput(ctx context.Context) {
 	// Consume the right input if necessary.
 	if needRightTuples || needOnlyNumRightTuples {
 		for {
+			c.cancelChecker.CheckEveryCall()
 			batch := c.InputTwo.Next()
 			if needRightTuples {
 				c.rightTuples.Enqueue(ctx, batch)
