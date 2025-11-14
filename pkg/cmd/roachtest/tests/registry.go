@@ -131,6 +131,7 @@ func RegisterTests(r registry.Registry) {
 	registerPruneDanglingSnapshotsAndDisks(r)
 	registerPTP(r)
 	registerQueue(r)
+	registerQueuefeed(r)
 	registerQuitTransfersLeases(r)
 	registerRebalanceLoad(r)
 	registerReplicaGC(r)

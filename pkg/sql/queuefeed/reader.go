@@ -231,7 +231,10 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) err
 			return errors.Wrapf(err, "reading checkpoint for partition %d", partition.ID)
 		}
 		if !checkpointTS.IsEmpty() {
-			frontier.Forward(partition.Span, checkpointTS)
+			_, err := frontier.Forward(partition.Span, checkpointTS)
+			if err != nil {
+				return errors.Wrapf(err, "advancing frontier for partition %d to checkpoint %s", partition.ID, checkpointTS)
+			}
 		} else {
 			return errors.Errorf("checkpoint is empty for partition %d", partition.ID)
 		}
