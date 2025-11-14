@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -238,6 +239,7 @@ func (i *CatchUpSnapshot) CatchUpScan(
 		unsafeKey := iter.UnsafeKey()
 		sameKey := bytes.Equal(unsafeKey.Key, lastKey)
 		if !sameKey {
+
 			// If so, output events for the last key encountered.
 			if err := outputEvents(); err != nil {
 				return err
@@ -253,6 +255,23 @@ func (i *CatchUpSnapshot) CatchUpScan(
 			recreateIter := false
 			// recreateIter => now is initialized.
 			var now crtime.Mono
+
+			// Under race tests we want to recreate the iterator more often to
+			// increase test coverage of this code. Doing this on every iteration
+			// proved a bit slow.
+			forceRecreateUnderTest := false
+			if util.RaceEnabled {
+				// Hash the pointer of the current iterator into the range [0, 3] to
+				// give us a ~25% chance of recreating the iterator.
+				//
+				// unsafe.Pointer's documentation implies that this uintptr is not
+				// technically guaranteed to be stable across multiple calls. So, we
+				// could make a different decision for the same iterator. That's OK, the
+				// goal here is to force recreation occasionally, nothing more.
+				ptr := uintptr(unsafe.Pointer(&iter))
+				forceRecreateUnderTest = util.FibHash(uint64(ptr), 2) == 0
+			}
+
 			// We sample the current time only when readmitted is true, to avoid
 			// doing it in every iteration of the loop. In practice, readmitted is
 			// true after every 100ms of cpu time, and there is no wall time limit
@@ -262,12 +281,13 @@ func (i *CatchUpSnapshot) CatchUpScan(
 			// Pace. We also need to consider the CPU cost of recreating the
 			// iterator, and using the cpu time to amortize that cost seems
 			// reasonable.
-			if (readmitted && i.iterRecreateDuration > 0) || util.RaceEnabled {
+			shouldSampleTime := (readmitted && i.iterRecreateDuration > 0) || forceRecreateUnderTest
+			if shouldSampleTime {
 				// If enough walltime has elapsed, close iter and reopen. This
 				// prevents the iter from holding on to Pebble memtables for too long,
 				// which can cause OOMs.
 				now = crtime.NowMono()
-				recreateIter = now.Sub(lastIterCreateTime) > i.iterRecreateDuration || util.RaceEnabled
+				recreateIter = now.Sub(lastIterCreateTime) > i.iterRecreateDuration || forceRecreateUnderTest
 			}
 			if recreateIter {
 				lastIterCreateTime = now
