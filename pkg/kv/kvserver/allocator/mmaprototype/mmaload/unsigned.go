@@ -8,9 +8,8 @@ package mmaload
 import "github.com/cockroachdb/redact"
 
 // LoadDimension is an enum of load dimensions corresponding to "real"
-// resources. Such resources can sometimes have a capacity. It is generally
-// important to rebalance based on these. The code in this package should be
-// structured that adding additional resource dimensions is easy.
+// resources that can be subject to rebalancing. This type is also used
+// to define capacities.
 type LoadDimension uint8
 
 const (
@@ -40,7 +39,7 @@ func (dim LoadDimension) String() string {
 	return redact.StringWithoutMarkers(dim)
 }
 
-// LoadValue is the load on a resource.
+// LoadValue is the load on a resource, represented as a *nonnegative* integer.
 type LoadValue int64
 
 // LoadVector represents a vector of loads, with one element for each resource
@@ -64,6 +63,7 @@ func (lv *LoadVector) Add(other LoadVector) {
 	}
 }
 
+// TODO(tbg): Subtract should be removed; LoadVector must be positive.
 func (lv *LoadVector) Subtract(other LoadVector) {
 	for i := range other {
 		(*lv)[i] -= other[i]
