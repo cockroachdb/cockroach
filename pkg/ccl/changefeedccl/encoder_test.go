@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -621,7 +620,6 @@ func TestAvroEnum(t *testing.T) {
 }
 
 func TestAvroSchemaNaming(t *testing.T) {
-	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -641,9 +639,11 @@ func TestAvroSchemaNaming(t *testing.T) {
 		sqlDB.Exec(t,
 			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
 		)
-
+		optOutOfDBLevelChangefeed := optOutOfMetamorphicDBLevelChangefeed{
+			reason: "changefeed watches tables not in the default database",
+		}
 		movrFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s`, changefeedbase.OptFormatAvro))
+			`WITH format=%s`, changefeedbase.OptFormatAvro), optOutOfDBLevelChangefeed)
 		defer closeFeed(t, movrFeed)
 
 		foo := movrFeed.(*kafkaFeed)
@@ -658,7 +658,8 @@ func TestAvroSchemaNaming(t *testing.T) {
 		})
 
 		fqnFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, full_table_name`, changefeedbase.OptFormatAvro))
+			`WITH format=%s, full_table_name`, changefeedbase.OptFormatAvro),
+			optOutOfDBLevelChangefeed)
 		defer closeFeed(t, fqnFeed)
 
 		foo = fqnFeed.(*kafkaFeed)
@@ -673,8 +674,8 @@ func TestAvroSchemaNaming(t *testing.T) {
 		})
 
 		prefixFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, avro_schema_prefix=super`,
-			changefeedbase.OptFormatAvro))
+			`WITH format=%s, avro_schema_prefix=super`, changefeedbase.OptFormatAvro),
+			optOutOfDBLevelChangefeed)
 		defer closeFeed(t, prefixFeed)
 
 		foo = prefixFeed.(*kafkaFeed)
@@ -689,7 +690,8 @@ func TestAvroSchemaNaming(t *testing.T) {
 		})
 
 		prefixFQNFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, avro_schema_prefix=super, full_table_name`, changefeedbase.OptFormatAvro))
+			`WITH format=%s, avro_schema_prefix=super, full_table_name`, changefeedbase.OptFormatAvro),
+			optOutOfDBLevelChangefeed)
 		defer closeFeed(t, prefixFQNFeed)
 
 		foo = prefixFQNFeed.(*kafkaFeed)
@@ -709,7 +711,8 @@ func TestAvroSchemaNaming(t *testing.T) {
 
 		sqlDB.Exec(t, `ALTER TABLE movr.drivers ADD COLUMN vehicle_id int CREATE FAMILY volatile`)
 		multiFamilyFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, %s`, changefeedbase.OptFormatAvro, changefeedbase.OptSplitColumnFamilies))
+			`WITH format=%s, %s`, changefeedbase.OptFormatAvro, changefeedbase.OptSplitColumnFamilies),
+			optOutOfDBLevelChangefeed)
 		defer closeFeed(t, multiFamilyFeed)
 		foo = multiFamilyFeed.(*kafkaFeed)
 
@@ -735,7 +738,6 @@ func TestAvroSchemaNaming(t *testing.T) {
 }
 
 func TestAvroSchemaNamespace(t *testing.T) {
-	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -747,8 +749,11 @@ func TestAvroSchemaNamespace(t *testing.T) {
 			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
 		)
 
+		optOutOfDBLevelChangefeed := optOutOfMetamorphicDBLevelChangefeed{
+			reason: "changefeed watches tables not in the default database",
+		}
 		noNamespaceFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s`, changefeedbase.OptFormatAvro))
+			`WITH format=%s`, changefeedbase.OptFormatAvro), optOutOfDBLevelChangefeed)
 		defer closeFeed(t, noNamespaceFeed)
 
 		assertPayloads(t, noNamespaceFeed, []string{
@@ -761,7 +766,8 @@ func TestAvroSchemaNamespace(t *testing.T) {
 		require.NotContains(t, foo.registry.SchemaForSubject(`drivers-value`), `namespace`)
 
 		namespaceFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, avro_schema_prefix=super`, changefeedbase.OptFormatAvro))
+			`WITH format=%s, avro_schema_prefix=super`, changefeedbase.OptFormatAvro),
+			optOutOfDBLevelChangefeed)
 		defer closeFeed(t, namespaceFeed)
 
 		foo = namespaceFeed.(*kafkaFeed)
