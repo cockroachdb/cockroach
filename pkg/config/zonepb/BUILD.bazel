@@ -25,7 +25,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//proto",
-        "@in_gopkg_yaml_v2//:yaml_v2",
+        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )
 
@@ -43,9 +43,10 @@ go_test(
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/timeutil",
+        "//pkg/util/yamlutil",
         "@com_github_gogo_protobuf//proto",
         "@com_github_stretchr_testify//require",
-        "@in_gopkg_yaml_v2//:yaml_v2",
+        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )
 

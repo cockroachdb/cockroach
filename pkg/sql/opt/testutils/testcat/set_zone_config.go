@@ -11,7 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"gopkg.in/yaml.v2"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 )
 
 // SetZoneConfig is a partial implementation of the ALTER TABLE ... CONFIGURE
@@ -77,7 +77,7 @@ func makeZoneConfig(options tree.KVOptions) cat.Zone {
 		case "constraints":
 			constraintsList := &zonepb.ConstraintsList{}
 			value := options[i].Value.(*tree.StrVal).RawString()
-			if err := yaml.UnmarshalStrict([]byte(value), constraintsList); err != nil {
+			if err := yamlutil.UnmarshalStrict([]byte(value), constraintsList); err != nil {
 				panic(err)
 			}
 			zone.Constraints = constraintsList.Constraints
@@ -85,7 +85,7 @@ func makeZoneConfig(options tree.KVOptions) cat.Zone {
 		case "voter_constraints":
 			constraintsList := &zonepb.ConstraintsList{}
 			value := options[i].Value.(*tree.StrVal).RawString()
-			if err := yaml.UnmarshalStrict([]byte(value), constraintsList); err != nil {
+			if err := yamlutil.UnmarshalStrict([]byte(value), constraintsList); err != nil {
 				panic(err)
 			}
 			zone.VoterConstraints = constraintsList.Constraints
@@ -93,7 +93,7 @@ func makeZoneConfig(options tree.KVOptions) cat.Zone {
 
 		case "lease_preferences":
 			value := options[i].Value.(*tree.StrVal).RawString()
-			if err := yaml.UnmarshalStrict([]byte(value), &zone.LeasePreferences); err != nil {
+			if err := yamlutil.UnmarshalStrict([]byte(value), &zone.LeasePreferences); err != nil {
 				panic(err)
 			}
 		}

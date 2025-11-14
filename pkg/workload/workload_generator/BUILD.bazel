@@ -26,13 +26,14 @@ go_library(
         "//pkg/util/bufalloc",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/yamlutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//:pq",
         "@com_github_spf13_pflag//:pflag",
-        "@in_gopkg_yaml_v2//:yaml_v2",
+        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )
 

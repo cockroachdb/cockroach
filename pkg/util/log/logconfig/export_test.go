@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
-	"gopkg.in/yaml.v2"
 )
 
 func TestExport(t *testing.T) {
@@ -28,7 +28,7 @@ func TestExport(t *testing.T) {
 		}
 
 		c := DefaultConfig()
-		if err := yaml.UnmarshalStrict([]byte(d.Input), &c); err != nil {
+		if err := yamlutil.UnmarshalStrict([]byte(d.Input), &c); err != nil {
 			t.Fatal(err)
 		}
 		defaultDir := "/default-dir"

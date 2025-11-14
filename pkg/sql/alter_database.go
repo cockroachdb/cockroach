@@ -39,8 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
-	yaml "gopkg.in/yaml.v2"
 )
 
 type alterDatabaseOwnerNode struct {
@@ -2408,7 +2408,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 		// empty, in which case the unmarshaling will be a no-op. This is
 		// innocuous.
 		newZone := zonepb.NewZoneConfig()
-		if err := yaml.UnmarshalStrict([]byte(yamlConfig), newZone); err != nil {
+		if err := yamlutil.UnmarshalStrict([]byte(yamlConfig), newZone); err != nil {
 			return pgerror.Wrap(err, pgcode.CheckViolation, "could not parse zone config")
 		}
 

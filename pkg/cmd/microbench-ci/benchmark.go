@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
-	yaml "gopkg.in/yaml.v2"
 )
 
 type (
@@ -108,7 +108,7 @@ func loadBenchmarkConfig(path string) ([]Benchmark, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to read config file %s", path)
 	}
-	err = yaml.UnmarshalStrict(fileContent, &c)
+	err = yamlutil.UnmarshalStrict(fileContent, &c)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal config file %s", path)
 	}

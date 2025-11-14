@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"gopkg.in/yaml.v2"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 )
 
 func TestUnion(t *testing.T) {
@@ -163,7 +163,7 @@ func TestGetRegionsFromZone(t *testing.T) {
 
 		if tc.constraints != "" {
 			constraintsList := &zonepb.ConstraintsList{}
-			if err := yaml.UnmarshalStrict([]byte(tc.constraints), constraintsList); err != nil {
+			if err := yamlutil.UnmarshalStrict([]byte(tc.constraints), constraintsList); err != nil {
 				t.Fatal(err)
 			}
 			zone.Constraints = constraintsList.Constraints
@@ -171,14 +171,14 @@ func TestGetRegionsFromZone(t *testing.T) {
 
 		if tc.voterConstraints != "" {
 			constraintsList := &zonepb.ConstraintsList{}
-			if err := yaml.UnmarshalStrict([]byte(tc.voterConstraints), constraintsList); err != nil {
+			if err := yamlutil.UnmarshalStrict([]byte(tc.voterConstraints), constraintsList); err != nil {
 				t.Fatal(err)
 			}
 			zone.VoterConstraints = constraintsList.Constraints
 		}
 
 		if tc.leasePrefs != "" {
-			if err := yaml.UnmarshalStrict([]byte(tc.leasePrefs), &zone.LeasePreferences); err != nil {
+			if err := yamlutil.UnmarshalStrict([]byte(tc.leasePrefs), &zone.LeasePreferences); err != nil {
 				t.Fatal(err)
 			}
 		}
