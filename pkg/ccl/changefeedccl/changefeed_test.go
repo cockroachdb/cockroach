@@ -903,9 +903,9 @@ func TestChangefeedIdleness(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE bar (b INT PRIMARY KEY)`)
 		// TODO(#148858): Add coverage for DB-level changefeed testing.
 		cf1 := feed(t, f, "CREATE CHANGEFEED FOR TABLE foo WITH resolved='10ms'", // higher resolved frequency for faster test
-			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
+			optOutOfDBLevelChangefeedUnwatchedTables)
 		cf2 := feed(t, f, "CREATE CHANGEFEED FOR TABLE bar WITH resolved='10ms'",
-			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
+			optOutOfDBLevelChangefeedUnwatchedTables)
 		defer closeFeed(t, cf1)
 
 		go workload()
@@ -2459,7 +2459,7 @@ func TestChangefeedColumnDropsOnMultipleFamiliesWithTheSameName(t *testing.T) {
 			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
 		}
 		// TODO(#148858): Add coverage for DB-level changefeed testing.
-		args = append(args, optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
+		args = append(args, optOutOfDBLevelChangefeedUnwatchedTables)
 
 		// Open up the changefeed.
 		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c, TABLE alsohasfams FAMILY id_a`, args...)
@@ -2688,7 +2688,6 @@ func TestChangefeedExternalIODisabled(t *testing.T) {
 // Test how Changefeeds react to schema changes that do not require a backfill
 // operation.
 func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
-	skip.WithIssue(t, 148858) // Uses initial scan logic, so maybe should opt out.
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >1 min under race")
@@ -2712,7 +2711,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			sqlDB.Exec(t, `ALTER TABLE historical ADD COLUMN c INT`)
 			sqlDB.Exec(t, `INSERT INTO historical (a) VALUES (3)`)
 			sqlDB.Exec(t, `INSERT INTO historical (a, c) VALUES (4, 14)`)
-			historical := feed(t, f, `CREATE CHANGEFEED FOR historical WITH cursor=$1`, start)
+			historical := feed(t, f, `CREATE CHANGEFEED FOR historical WITH cursor=$1`, start,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, historical)
 			assertPayloads(t, historical, []string{
 				`historical: [0]->{"after": {"a": 0, "b": "0"}}`,
@@ -2727,7 +2727,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			// NB: the default is a nullable column
 			sqlDB.Exec(t, `CREATE TABLE add_column (a INT PRIMARY KEY)`)
 			sqlDB.Exec(t, `INSERT INTO add_column VALUES (1)`)
-			addColumn := feed(t, f, `CREATE CHANGEFEED FOR add_column`)
+			addColumn := feed(t, f, `CREATE CHANGEFEED FOR add_column`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, addColumn)
 			assertPayloads(t, addColumn, []string{
 				`add_column: [1]->{"after": {"a": 1}}`,
@@ -2742,7 +2743,9 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 		t.Run(`rename column`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE rename_column (a INT PRIMARY KEY, b STRING)`)
 			sqlDB.Exec(t, `INSERT INTO rename_column VALUES (1, '1')`)
-			renameColumn := feed(t, f, `CREATE CHANGEFEED FOR rename_column`)
+			renameColumn := feed(t, f, `CREATE CHANGEFEED FOR rename_column`,
+				optOutOfDBLevelChangefeedUnwatchedTables,
+			)
 			defer closeFeed(t, renameColumn)
 			assertPayloads(t, renameColumn, []string{
 				`rename_column: [1]->{"after": {"a": 1, "b": "1"}}`,
@@ -2757,7 +2760,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 		t.Run(`add default`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_default (a INT PRIMARY KEY, b STRING)`)
 			sqlDB.Exec(t, `INSERT INTO add_default (a, b) VALUES (1, '1')`)
-			addDefault := feed(t, f, `CREATE CHANGEFEED FOR add_default`)
+			addDefault := feed(t, f, `CREATE CHANGEFEED FOR add_default`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, addDefault)
 			sqlDB.Exec(t, `ALTER TABLE add_default ALTER COLUMN b SET DEFAULT 'd'`)
 			sqlDB.Exec(t, `INSERT INTO add_default (a) VALUES (2)`)
@@ -2770,7 +2774,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 		t.Run(`drop default`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE drop_default (a INT PRIMARY KEY, b STRING DEFAULT 'd')`)
 			sqlDB.Exec(t, `INSERT INTO drop_default (a) VALUES (1)`)
-			dropDefault := feed(t, f, `CREATE CHANGEFEED FOR drop_default`)
+			dropDefault := feed(t, f, `CREATE CHANGEFEED FOR drop_default`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, dropDefault)
 			sqlDB.Exec(t, `ALTER TABLE drop_default ALTER COLUMN b DROP DEFAULT`)
 			sqlDB.Exec(t, `INSERT INTO drop_default (a) VALUES (2)`)
@@ -2783,7 +2788,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 		t.Run(`drop not null`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE drop_notnull (a INT PRIMARY KEY, b STRING NOT NULL)`)
 			sqlDB.Exec(t, `INSERT INTO drop_notnull VALUES (1, '1')`)
-			dropNotNull := feed(t, f, `CREATE CHANGEFEED FOR drop_notnull`)
+			dropNotNull := feed(t, f, `CREATE CHANGEFEED FOR drop_notnull`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, dropNotNull)
 			sqlDB.Exec(t, `ALTER TABLE drop_notnull ALTER b DROP NOT NULL`)
 			sqlDB.Exec(t, `INSERT INTO drop_notnull VALUES (2, NULL)`)
@@ -2796,7 +2802,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 		t.Run(`checks`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE checks (a INT PRIMARY KEY)`)
 			sqlDB.Exec(t, `INSERT INTO checks VALUES (1)`)
-			checks := feed(t, f, `CREATE CHANGEFEED FOR checks`)
+			checks := feed(t, f, `CREATE CHANGEFEED FOR checks`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, checks)
 			sqlDB.Exec(t, `ALTER TABLE checks ADD CONSTRAINT c CHECK (a < 5) NOT VALID`)
 			sqlDB.Exec(t, `INSERT INTO checks VALUES (2)`)
@@ -2815,7 +2822,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 		t.Run(`add index`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_index (a INT PRIMARY KEY, b STRING)`)
 			sqlDB.Exec(t, `INSERT INTO add_index VALUES (1, '1')`)
-			addIndex := feed(t, f, `CREATE CHANGEFEED FOR add_index`)
+			addIndex := feed(t, f, `CREATE CHANGEFEED FOR add_index`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, addIndex)
 			sqlDB.Exec(t, `CREATE INDEX b_idx ON add_index (b)`)
 			sqlDB.Exec(t, `SELECT * FROM add_index@b_idx`)
@@ -2829,7 +2837,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 		t.Run(`unique`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE "unique" (a INT PRIMARY KEY, b STRING)`)
 			sqlDB.Exec(t, `INSERT INTO "unique" VALUES (1, '1')`)
-			unique := feed(t, f, `CREATE CHANGEFEED FOR "unique"`)
+			unique := feed(t, f, `CREATE CHANGEFEED FOR "unique"`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, unique)
 			sqlDB.Exec(t, `ALTER TABLE "unique" ADD CONSTRAINT u UNIQUE (b)`)
 			sqlDB.Exec(t, `INSERT INTO "unique" VALUES (2, '2')`)
@@ -2843,7 +2852,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			sqlDB.Exec(
 				t, `CREATE TABLE alter_default (a INT PRIMARY KEY, b STRING DEFAULT 'before')`)
 			sqlDB.Exec(t, `INSERT INTO alter_default (a) VALUES (1)`)
-			alterDefault := feed(t, f, `CREATE CHANGEFEED FOR alter_default`)
+			alterDefault := feed(t, f, `CREATE CHANGEFEED FOR alter_default`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, alterDefault)
 			sqlDB.Exec(t, `ALTER TABLE alter_default ALTER COLUMN b SET DEFAULT 'after'`)
 			sqlDB.Exec(t, `INSERT INTO alter_default (a) VALUES (2)`)
@@ -2857,7 +2867,8 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 		t.Run(`add column with DEFAULT NULL`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY)`)
 			sqlDB.Exec(t, `INSERT INTO t VALUES (1)`)
-			defaultNull := feed(t, f, `CREATE CHANGEFEED FOR t`)
+			defaultNull := feed(t, f, `CREATE CHANGEFEED FOR t`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, defaultNull)
 			sqlDB.Exec(t, `ALTER TABLE t ADD COLUMN c INT DEFAULT NULL`)
 			sqlDB.Exec(t, `INSERT INTO t VALUES (2, 2)`)
@@ -3057,8 +3068,6 @@ WITH resolved='50ms', min_checkpoint_frequency='50ms', no_initial_scan, cursor=$
 // Test checkpointing during schema change backfills that can be paused and
 // resumed multiple times during execution
 func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
-	skip.WithIssue(t, 148858) // Also uses initial scan.
-
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -6556,10 +6565,10 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 			`BEGIN; INSERT INTO truncate VALUES (1); INSERT INTO truncate_cascade VALUES (1); COMMIT`)
 		// TODO(#148858): Add coverage for DB-level changefeed testing.
 		truncate := feed(t, f, `CREATE CHANGEFEED FOR truncate`,
-			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
+			optOutOfDBLevelChangefeedUnwatchedTables)
 		defer closeFeed(t, truncate)
 		truncateCascade := feed(t, f, `CREATE CHANGEFEED FOR truncate_cascade`,
-			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
+			optOutOfDBLevelChangefeedUnwatchedTables)
 		defer closeFeed(t, truncateCascade)
 		assertPayloads(t, truncate, []string{`truncate: [1]->{"after": {"a": 1}}`})
 		assertPayloads(t, truncateCascade, []string{`truncate_cascade: [1]->{"after": {"b": 1}}`})
@@ -6577,7 +6586,7 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE drop (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO drop VALUES (1)`)
 		drop := feed(t, f, `CREATE CHANGEFEED FOR drop`,
-			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
+			optOutOfDBLevelChangefeedUnwatchedTables)
 		defer closeFeed(t, drop)
 		assertPayloads(t, drop, []string{`drop: [1]->{"after": {"a": 1}}`})
 		sqlDB.Exec(t, `DROP TABLE drop`)
@@ -8034,26 +8043,9 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
-// Fails
-// --- FAIL: TestChangefeedPauseUnpauseCursorAndInitialScan (0.69s)
-//     --- FAIL: TestChangefeedPauseUnpauseCursorAndInitialScan/kafka (0.69s)
-// panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
-// [signal SIGSEGV: segmentation violation code=0x2 addr=0x20 pc=0x106fdce50]
-
-// goroutine 1725266 [running]:
-// testing.tRunner.func1.2({0x1090fa240, 0x10e5aa100})
-//
-//	GOROOT/src/testing/testing.go:1872 +0x190
-//
-// testing.tRunner.func1()
-//
-//	GOROOT/src/testing/testing.go:1875 +0x31c
-//
-// panic({0x1090fa240?, 0x10e5aa100?})
 func TestChangefeedPauseUnpauseCursorAndInitialScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 148858) // Uses initial scan.
 	skip.UnderRaceWithIssue(t, 67565)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -8224,10 +8216,10 @@ func TestChangefeedTelemetry(t *testing.T) {
 		// Start some feeds (and read from them to make sure they've started.
 		// TODO(#148858): Add coverage for DB-level changefeed testing.
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`,
-			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
+			optOutOfDBLevelChangefeedUnwatchedTables)
 		defer closeFeed(t, foo)
 		fooBar := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH format=json`,
-			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
+			optOutOfDBLevelChangefeedUnwatchedTables)
 		defer closeFeed(t, fooBar)
 		assertPayloads(t, foo, []string{
 			`foo: [1]->{"after": {"a": 1}}`,
@@ -8444,7 +8436,7 @@ func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
 
 // Fails: this could be something real
 func TestChangefeedHandlesDrainingNodes(t *testing.T) {
-	skip.WithIssue(t, 148858) // ?
+	skip.WithIssue(t, 148858) // Doesn't use the default DB
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -8534,7 +8526,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 // Verifies changefeed updates checkpoint when cluster undergoes rolling
 // restart.
 func TestChangefeedHandlesRollingRestart(t *testing.T) {
-	skip.WithIssue(t, 148858)
+	skip.WithIssue(t, 148858) // Doesn't use the default DB
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer testingUseFastRetry()()
@@ -9753,7 +9745,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 }
 
 func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
-	skip.WithIssue(t, 148858)
+	skip.WithIssue(t, 148858) // Unwatched tables
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -10033,7 +10025,7 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 }
 
 func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
-	skip.WithIssue(t, 148858)
+	skip.WithIssue(t, 148858) // Unwatched tables for first two cases
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -11114,7 +11106,7 @@ func TestSchemachangeDoesNotBreakSinklessFeed(t *testing.T) {
 }
 
 func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
-	skip.WithIssue(t, 148858) // Relies on initial scan.
+	skip.WithIssue(t, 148858) // Unwatched tables for some
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

@@ -1151,6 +1151,10 @@ type optOutOfMetamorphicDBLevelChangefeed struct {
 	reason string
 }
 
+var optOutOfDBLevelChangefeedUnwatchedTables = optOutOfMetamorphicDBLevelChangefeed{
+	reason: "test initializes multiple tables but doesn't watch all of them",
+}
+
 func feed(
 	t testing.TB, f cdctest.TestFeedFactory, create string, args ...interface{},
 ) cdctest.TestFeed {
@@ -1220,7 +1224,7 @@ func maybeForceDBLevelChangefeed(
 		// TODO(#148858): Do I need this equalFold that copilot added?
 		key := opt.Key.String()
 		if strings.EqualFold(key, "initial_scan") {
-			if opt.Value.String() == "yes" || opt.Value.String() == "only" {
+			if opt.Value != nil && (opt.Value.String() == "yes" || opt.Value.String() == "only") {
 				t.Logf("did not force DB level changefeed for %s because it has an initial scan", create)
 				return create, args, nil
 			}

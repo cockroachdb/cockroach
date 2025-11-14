@@ -674,11 +674,7 @@ func TestAlterChangefeedErrors(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`,
-			optOutOfMetamorphicDBLevelChangefeed{
-				reason: "changefeed doesn't watch all database tables",
-			},
-		)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`, optOutOfDBLevelChangefeedUnwatchedTables)
 		defer closeFeed(t, testFeed)
 
 		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
