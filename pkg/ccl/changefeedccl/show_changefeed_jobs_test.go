@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -59,7 +58,6 @@ func (d *fakeResumer) CollectProfile(context.Context, interface{}) error {
 }
 
 func TestShowChangefeedJobsDatabaseLevel(t *testing.T) {
-	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -70,7 +68,11 @@ func TestShowChangefeedJobsDatabaseLevel(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO bar VALUES (1, 'initial')`)
 
-		tcf := feed(t, f, `CREATE CHANGEFEED FOR d.foo, d.bar`)
+		tcf := feed(t, f, `CREATE CHANGEFEED FOR d.foo, d.bar`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test asserts how DB-level and table-level changefeeds differ",
+			},
+		)
 		defer closeFeed(t, tcf)
 		assertPayloads(t, tcf, []string{
 			`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
@@ -156,7 +158,6 @@ func TestShowChangefeedJobsDatabaseLevel(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 func TestShowChangefeedJobsBasic(t *testing.T) {
-	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -164,7 +165,11 @@ func TestShowChangefeedJobsBasic(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH format='json'`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH format='json'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				// NB: We test WITH WATCHED_TABLES in another test. This one specifically does not.
+				reason: "db level changefeeds don't have full_table_names without WITH WATCHED_TABLES",
+			})
 		defer closeFeed(t, foo)
 
 		type row struct {
@@ -261,7 +266,6 @@ func TestShowChangefeedJobsShowsHighWaterTimestamp(t *testing.T) {
 // CHANGEFEED JOBS, and SHOW JOBS redact sensitive information (including keys
 // and secrets) for its output. Regression for #113503.
 func TestShowChangefeedJobsRedacted(t *testing.T) {
-	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -296,7 +300,9 @@ func TestShowChangefeedJobsRedacted(t *testing.T) {
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE foo INTO '%s'`, tc.uri),
-					optOutOfMetamorphicEnrichedEnvelope{reason: "compares text of changefeed statement"})
+					optOutOfMetamorphicEnrichedEnvelope{reason: "compares text of changefeed statement"},
+					optOutOfMetamorphicDBLevelChangefeed{reason: "compares text of changefeed statement"},
+				)
 				defer closeFeed(t, foo)
 
 				efoo, ok := foo.(cdctest.EnterpriseTestFeed)
@@ -550,7 +556,6 @@ func TestShowChangefeedJobsNoResults(t *testing.T) {
 }
 
 func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
-	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -559,7 +564,10 @@ func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`, optOutOfMetamorphicEnrichedEnvelope{reason: "compares text of changefeed statement"})
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`,
+			optOutOfMetamorphicEnrichedEnvelope{reason: "compares text of changefeed statement"},
+			optOutOfMetamorphicDBLevelChangefeed{reason: "compares text of changefeed statement"},
+		)
 		defer closeFeed(t, foo)
 
 		feed, ok := foo.(cdctest.EnterpriseTestFeed)
