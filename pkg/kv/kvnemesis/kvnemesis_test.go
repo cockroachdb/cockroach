@@ -170,6 +170,9 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 			}
 			return 0, nil
 		}
+		storeKnobs.AfterSplitApplication = func(desc roachpb.ReplicaDescriptor, state kvserverpb.ReplicaState) {
+			// TODO(pav-kv): notify the asserter.
+		}
 		storeKnobs.AfterSnapshotApplication = func(
 			desc roachpb.ReplicaDescriptor, state kvserverpb.ReplicaState, snap kvserver.IncomingSnapshot,
 		) {
