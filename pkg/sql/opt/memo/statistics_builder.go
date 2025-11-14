@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -649,6 +650,32 @@ func GetTableStats(md *opt.Metadata, tabID opt.TableID) (*props.Statistics, bool
 	return stats, ok
 }
 
+func isEligibleFullStats(
+	stat cat.TableStatistic, sd *sessiondata.SessionData, asOf hlc.Timestamp,
+) bool {
+	createdAtTS := hlc.Timestamp{WallTime: stat.CreatedAt().UnixNano()}
+	if stat.IsPartial() ||
+		stat.IsMerged() && !sd.OptimizerUseMergedPartialStatistics ||
+		stat.IsForecast() && !sd.OptimizerUseForecasts || createdAtTS.After(asOf) {
+		return false
+	}
+	return true
+}
+
+// getNextFullStats returns the index of the next eligible full statistics.
+func getNextFullStats(
+	start int, tab cat.Table, sd *sessiondata.SessionData, asOf hlc.Timestamp,
+) int {
+	for i := start; i < tab.StatisticCount(); i++ {
+		stat := tab.Statistic(i)
+		if !isEligibleFullStats(stat, sd, asOf) {
+			continue
+		}
+		return i
+	}
+	return -1
+}
+
 // makeTableStatistics returns the available statistics for the given table.
 // Statistics are derived lazily and are cached in the metadata, since they may
 // be accessed multiple times during query optimization. For more details, see
@@ -698,31 +725,30 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	var first int
 	sd := sb.evalCtx.SessionData()
 	for first < tab.StatisticCount() {
-		stat := tab.Statistic(first)
-		createdAtTS := hlc.Timestamp{WallTime: stat.CreatedAt().UnixNano()}
-		if stat.IsPartial() ||
-			stat.IsMerged() && !sd.OptimizerUseMergedPartialStatistics ||
-			stat.IsForecast() && !sd.OptimizerUseForecasts {
-			first++
-			continue
-		} else if createdAtTS.After(asOfTs) {
-			// The stats is too new, skip it.
-			first++
-			continue
-		} else if statsCanaryWindow > 0 && !useCanary && first < tab.StatisticCount()-1 {
-			// The following, we are getting full statistics for the stable stats,
-			// in contrast to the canary stats. The canary stats is skipped.
-			// If there remains only one full statistics, don't skip.
-			if stat.CreatedAt() == skippedStatsCreationTimestamp && !skippedStatsCreationTimestamp.IsZero() {
-				// We've already seen this canary stat, so skip it.
-				first++
-				continue
-			}
-			// Found a canary stats (defined as creation time within the canary window size). Register the
-			// creation timestamp and move on the next older one.
-			if createdAtTS.AddDuration(statsCanaryWindow).After(asOfTs) {
+		first = getNextFullStats(first, tab, sd, asOfTs)
+		if first < 0 {
+			break
+		}
+		if statsCanaryWindow > 0 && !useCanary {
+			// We should use stable stats, which is defined as the second most recent full stats.
+			stat := tab.Statistic(first)
+			createdAtTS := hlc.Timestamp{WallTime: stat.CreatedAt().UnixNano()}
+			// Check if the current full stats is the last available one. If yes,
+			// use it as both canary and stable stats.
+			nextFullStatsIdx := getNextFullStats(first+1, tab, sd, asOfTs)
+			if nextFullStatsIdx != -1 {
+				// The following, we are getting full statistics for the stable stats,
+				// in contrast to the canary stats. The canary stats is skipped.
+				// If there remains only one full statistics, don't skip.
+				if stat.CreatedAt() == skippedStatsCreationTimestamp && !skippedStatsCreationTimestamp.IsZero() {
+					// We've already seen this canary stat, so skip it.
+					first++
+					continue
+				}
+				// Found a canary stats (defined as creation time within the canary window size). Register the
+				// creation timestamp and move on the next older one.
 				// If there is already a canary stats skipped, we don't skip again.
-				if skippedStatsCreationTimestamp.IsZero() {
+				if createdAtTS.AddDuration(statsCanaryWindow).After(asOfTs) && skippedStatsCreationTimestamp.IsZero() {
 					skippedStatsCreationTimestamp = stat.CreatedAt()
 					first++
 					continue
@@ -732,7 +758,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		break
 	}
 
-	if first >= tab.StatisticCount() {
+	if first >= tab.StatisticCount() || first < 0 {
 		// No statistics.
 		stats.Available = false
 		stats.RowCount = unknownRowCount
@@ -750,13 +776,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	EachStat:
 		for i := first; i < tab.StatisticCount(); i++ {
 			stat := tab.Statistic(i)
-			if stat.IsPartial() {
-				continue
-			}
-			if stat.IsMerged() && !sb.evalCtx.SessionData().OptimizerUseMergedPartialStatistics {
-				continue
-			}
-			if stat.IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts {
+			if !isEligibleFullStats(stat, sd, asOfTs) {
 				continue
 			}
 			if stat.ColumnCount() > 1 && !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
