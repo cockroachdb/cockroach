@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -234,7 +233,7 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) err
 		if !checkpointTS.IsEmpty() {
 			frontier.Forward(partition.Span, checkpointTS)
 		} else {
-			frontier.Forward(partition.Span, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			return errors.Errorf("checkpoint is empty for partition %d", partition.ID)
 		}
 	}
 
@@ -379,11 +378,8 @@ func (r *Reader) ConfirmReceipt(ctx context.Context) {
 	}()
 
 	// Persist the checkpoint if we have one.
-	fmt.Printf("persisting checkpoint: %+v\n", checkpointToWrite)
 	if !checkpointToWrite.IsEmpty() {
-		fmt.Printf("persisting checkpoint to %d partitions\n", len(r.assignment.Partitions))
 		for _, partition := range r.assignment.Partitions {
-			fmt.Printf("persisting checkpoint to partition %d\n", partition.ID)
 			if err := r.mgr.WriteCheckpoint(ctx, r.name, partition.ID, checkpointToWrite); err != nil {
 				fmt.Printf("error writing checkpoint for partition %d: %s\n", partition.ID, err)
 				// TODO: decide how to handle checkpoint write errors. Since the txn

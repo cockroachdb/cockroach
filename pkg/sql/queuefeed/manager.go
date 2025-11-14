@@ -174,6 +174,12 @@ func (m *Manager) CreateQueue(ctx context.Context, queueName string, tableDescID
 				return errors.Wrapf(err, "inserting partition %d for range", partitionID)
 			}
 
+			// checkpoint the partition at the transaction timestamp
+			err = m.WriteCheckpoint(ctx, queueName, partitionID, txn.KV().ReadTimestamp())
+			if err != nil {
+				return errors.Wrapf(err, "writing checkpoint for partition %d", partitionID)
+			}
+
 			partitionID++
 		}
 
