@@ -1823,6 +1823,155 @@ func handleSqlActivityStatements(
 		},
 	}
 
+	// Check if request accepts JSON
+	acceptHeader := r.Header.Get("Accept")
+	if strings.Contains(acceptHeader, "application/json") {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Build columns array for AntD
+		columns := []map[string]interface{}{
+			{"title": "Statements", "dataIndex": "query", "key": "query"},
+			{"title": "Execution Count", "dataIndex": "executionCount", "key": "executionCount"},
+			{"title": "Database", "dataIndex": "database", "key": "database"},
+			{"title": "Application Name", "dataIndex": "applicationName", "key": "applicationName"},
+			{"title": "Statement Time", "dataIndex": "statementTime", "key": "statementTime"},
+			{"title": "% of All Runtime", "dataIndex": "pctRuntime", "key": "pctRuntime"},
+			{"title": "Contention Time", "dataIndex": "contentionTime", "key": "contentionTime"},
+			{"title": "SQL CPU Time", "dataIndex": "sqlCPUTime", "key": "sqlCPUTime"},
+			{"title": "Min Latency", "dataIndex": "minLatency", "key": "minLatency"},
+			{"title": "Max Latency", "dataIndex": "maxLatency", "key": "maxLatency"},
+			{"title": "Rows Processed", "dataIndex": "rowsProcessed", "key": "rowsProcessed"},
+			{"title": "Bytes Read", "dataIndex": "bytesRead", "key": "bytesRead"},
+			{"title": "Max Memory", "dataIndex": "maxMemory", "key": "maxMemory"},
+			{"title": "Network", "dataIndex": "network", "key": "network"},
+			{"title": "Retries", "dataIndex": "retries", "key": "retries"},
+			{"title": "Last Execution Time", "dataIndex": "lastExecTime", "key": "lastExecTime"},
+			{"title": "Statement Fingerprint ID", "dataIndex": "fingerprintID", "key": "fingerprintID"},
+			{"title": "Diagnostics", "dataIndex": "diagnostics", "key": "diagnostics"},
+		}
+
+		// Prepare total workload for % calculations
+		totalWorkload := data.TotalWorkload
+
+		// Build rows (dataSource) array
+		rows := []map[string]interface{}{}
+		for _, stmt := range data.Statements.Statements {
+			// Calculate needed values
+			var pctRuntime float64
+			if totalWorkload != 0 {
+				pctRuntime = 100.0 * (stmt.Stats.ServiceLat.Mean * float64(stmt.Stats.Count)) / totalWorkload
+			}
+			lastExecTime := ""
+			if !stmt.Stats.LastExecTimestamp.IsZero() {
+				lastExecTime = stmt.Stats.LastExecTimestamp.Format("2006-01-02 15:04:05")
+			}
+
+			diagnostics := ""
+			if s, ok := data.DiagnosticStates[stmt.Key.KeyData.Query]; ok && s != nil {
+				if s.HasPendingRequest {
+					diagnostics = "Pending"
+				} else if len(s.CompletedBundles) > 0 {
+					diagnostics = "Completed"
+				} else {
+					diagnostics = ""
+				}
+			}
+
+			// Format values using Go formatting functions
+			// formatPercent expects a decimal (0-1), so divide by 100
+			pctRuntimeFormatted := formatPercent(pctRuntime / 100.0)
+			// formatTime expects nanoseconds as float64
+			statementTimeFormatted := formatTime(stmt.Stats.ServiceLat.Mean)
+			contentionTimeFormatted := formatTime(stmt.Stats.ExecStats.ContentionTime.Mean)
+			sqlCPUTimeFormatted := formatTime(stmt.Stats.ExecStats.CPUSQLNanos.Mean)
+			minLatencyFormatted := formatTime(stmt.Stats.LatencyInfo.Min)
+			maxLatencyFormatted := formatTime(stmt.Stats.LatencyInfo.Max)
+			// formatBytes expects bytes as float64
+			bytesReadFormatted := formatBytes(stmt.Stats.BytesRead.Mean)
+			maxMemoryFormatted := formatBytes(stmt.Stats.ExecStats.MaxMemUsage.Mean)
+			networkFormatted := formatBytes(stmt.Stats.ExecStats.NetworkBytes.Mean)
+
+			row := map[string]interface{}{
+				"key":             stmt.ID,
+				"query":           stmt.Key.KeyData.Query,
+				"executionCount":  stmt.Stats.Count,
+				"database":        stmt.Key.KeyData.Database,
+				"applicationName": stmt.Key.KeyData.App,
+				"statementTime":   statementTimeFormatted,
+				"pctRuntime":      pctRuntimeFormatted,
+				"contentionTime":  contentionTimeFormatted,
+				"sqlCPUTime":      sqlCPUTimeFormatted,
+				"minLatency":      minLatencyFormatted,
+				"maxLatency":      maxLatencyFormatted,
+				"rowsProcessed":   stmt.Stats.RowsRead.Mean + stmt.Stats.RowsWritten.Mean,
+				"rowsRead":        stmt.Stats.RowsRead.Mean,
+				"rowsWritten":     stmt.Stats.RowsWritten.Mean,
+				"bytesRead":       bytesReadFormatted,
+				"maxMemory":       maxMemoryFormatted,
+				"network":         networkFormatted,
+				"retries":         stmt.Stats.Count - stmt.Stats.FirstAttemptCount,
+				"lastExecTime":    lastExecTime,
+				"fingerprintID":   stmt.ID,
+				"diagnostics":     diagnostics,
+			}
+			rows = append(rows, row)
+		}
+
+		// Build diagnostic states for each row
+		diagnosticStatesMap := make(map[string]interface{})
+		for query, diagState := range data.DiagnosticStates {
+			diagnosticStatesMap[query] = map[string]interface{}{
+				"hasPendingRequest": diagState.HasPendingRequest,
+				"pendingRequestID":  diagState.PendingRequestID,
+				"completedBundles":  diagState.CompletedBundles,
+				"id":                diagState.ID,
+				"query":             diagState.Query,
+				"planGists":         diagState.PlanGists,
+			}
+		}
+
+		// Build interval options with keys and display values
+		intervalOptions := []map[string]string{
+			{"key": "1h", "value": "Past Hour"},
+			{"key": "6h", "value": "Past 6 Hours"},
+			{"key": "1d", "value": "Past Day"},
+			{"key": "2d", "value": "Past 2 Days"},
+			{"key": "3d", "value": "Past 3 Days"},
+			{"key": "1w", "value": "Past Week"},
+			{"key": "2w", "value": "Past 2 Weeks"},
+			{"key": "1m", "value": "Past Month"},
+			{"key": "Custom", "value": "Custom"},
+		}
+
+		result := map[string]interface{}{
+			"columns":    columns,
+			"dataSource": rows,
+			"meta": map[string]interface{}{
+				"total":     len(rows),
+				"interval":  data.Params.Interval,
+				"startTime": data.Params.StartTime,
+				"endTime":   data.Params.EndTime,
+				"timezone":  data.Params.Timezone,
+				"sortBy":    data.Params.By,
+				"top":       data.Params.Top,
+				"start":     data.Params.Start,
+				"end":       data.Params.End,
+			},
+			"filters": map[string]interface{}{
+				"topOptions":      []int{25, 50, 100, 500, 1000, 5000, 10000},
+				"byOptions":       []string{"% of All Runtime", "Contention Time", "Execution Count", "SQL CPU Time", "Statement Time", "Last Execution Time", "Max Latency", "Max Memory", "Min Latency", "Network", "Retries", "Rows Processed"},
+				"intervalOptions": intervalOptions,
+			},
+			"diagnosticStates": diagnosticStatesMap,
+		}
+
+		if err := json.NewEncoder(w).Encode(result); err != nil {
+			log.Dev.Warningf(r.Context(), "Failed to encode JSON response: %v", err)
+			http.Error(w, "Failed to encode JSON response", http.StatusInternalServerError)
+		}
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Execute the pre-parsed template
 	err = templates.ExecuteTemplate(w, "sql_activity.html", PageData{
