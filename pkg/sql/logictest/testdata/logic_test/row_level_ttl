@@ -1756,3 +1756,79 @@ ALTER TABLE tbl_to_add_ttl SET (ttl_expiration_expression = 'expire_at')
 NOTICE: Columns within table tbl_to_add_ttl are referenced as foreign keys. This will make TTL deletion jobs more expensive as dependent rows in other tables will need to be updated as well. To improve performance of the TTL job, consider reducing the value of ttl_delete_batch_size.
 
 subtest end
+
+subtest execute_schedule
+
+statement ok
+CREATE TABLE tbl_execute_schedule (
+  id INT PRIMARY KEY,
+  expire_at TIMESTAMPTZ NOT NULL DEFAULT now() - '1 day'
+) WITH (ttl_expiration_expression = 'expire_at', ttl_job_cron = '@daily')
+
+statement ok
+CREATE TABLE tbl_execute_schedule_2 (
+  id INT PRIMARY KEY,
+  expire_at TIMESTAMPTZ NOT NULL DEFAULT now() - '1 day'
+) WITH (ttl_expiration_expression = 'expire_at', ttl_job_cron = '@daily')
+
+# Get the schedule IDs.
+let $schedule_id_1
+SELECT id FROM [SHOW SCHEDULES] WHERE label LIKE '%tbl_execute_schedule%' ORDER BY id LIMIT 1
+
+let $schedule_id_2
+SELECT id FROM [SHOW SCHEDULES] WHERE label LIKE '%tbl_execute_schedule_2%'
+
+# Verify both schedules exist.
+query I
+SELECT count(*) FROM [SHOW SCHEDULES] WHERE label LIKE '%tbl_execute_schedule%'
+----
+2
+
+# Verify the schedules are initially set to run in the future (@daily means tomorrow).
+query I
+SELECT count(*) FROM [SHOW SCHEDULES] WHERE label LIKE '%tbl_execute_schedule%' AND next_run > now()
+----
+2
+
+# Verify EXECUTE SCHEDULE syntax works with a schedule ID and updates next_run to the past.
+statement ok
+EXECUTE SCHEDULE $schedule_id_1
+
+# Verify that next_run was updated to now (or past) for schedule 1.
+# This proves EXECUTE SCHEDULE changed next_run from the future to the past.
+query B
+SELECT next_run <= now() FROM [SHOW SCHEDULES] WHERE id = $schedule_id_1
+----
+true
+
+# Verify EXECUTE SCHEDULES syntax works with a SELECT statement returning one schedule.
+statement ok
+EXECUTE SCHEDULES SELECT $schedule_id_2
+
+# Verify that next_run was updated for schedule 2.
+query B
+SELECT next_run <= now() FROM [SHOW SCHEDULES] WHERE id = $schedule_id_2
+----
+true
+
+# Verify EXECUTE SCHEDULES works with multiple schedules.
+statement ok
+EXECUTE SCHEDULES (SELECT id FROM [SHOW SCHEDULES] WHERE label LIKE '%tbl_execute_schedule%')
+
+# Verify both schedules have next_run <= now().
+query I
+SELECT count(*) FROM [SHOW SCHEDULES] WHERE label LIKE '%tbl_execute_schedule%' AND next_run <= now()
+----
+2
+
+# Paused schedules should not be runnable.
+statement ok
+PAUSE SCHEDULE $schedule_id_1
+
+statement error cannot execute a paused schedule; use RESUME SCHEDULE instead
+EXECUTE SCHEDULE $schedule_id_1
+
+statement ok
+RESUME SCHEDULE $schedule_id_1
+
+subtest end
