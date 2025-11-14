@@ -776,7 +776,8 @@ type storeState struct {
 		// NB: these load values can become negative due to applying pending
 		// changes. We need to let them be negative to retain the ability to undo
 		// pending changes.
-		load          mmaload.SignedLoadVector
+		load mmaload.SignedLoadVector
+		// TODO: make this a signed vector, like adjusted load.
 		secondaryLoad mmaload.SecondaryLoadVector
 		// Pending changes for computing loadReplicas and load.
 		// Added to at the same time as clusterState.pendingChanges.
