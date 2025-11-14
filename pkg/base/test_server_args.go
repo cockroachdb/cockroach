@@ -565,6 +565,12 @@ func TestDoesNotWorkWithExternalProcessMode(issueNumber int) DefaultTestTenantOp
 	return testSkippedForExternalProcessMode(issueNumber)
 }
 
+// TestSkipForExternalProcessMode disables selecting the external process
+// virtual cluster for tests that are not applicable to that mode.
+func TestSkipForExternalProcessMode() DefaultTestTenantOptions {
+	return testSkippedForExternalProcessMode(0 /* issueNumber */)
+}
+
 func testSkippedForExternalProcessMode(issueNumber int) DefaultTestTenantOptions {
 	return DefaultTestTenantOptions{
 		testBehavior:           ttSharedProcess,
