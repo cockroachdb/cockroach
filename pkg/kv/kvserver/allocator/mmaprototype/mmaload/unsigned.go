@@ -52,8 +52,10 @@ func (lv LoadVector) String() string {
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (lv LoadVector) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("[cpu:%d, write-bandwidth:%d, byte-size:%d]", lv[CPURate], lv[WriteBandwidth], lv[ByteSize])
+func (lv LoadVector) SafeFormat(w redact.SafePrinter, r rune) {
+	var v SignedLoadVector
+	v.Add(lv)
+	v.SafeFormat(w, r)
 }
 
 func (lv *LoadVector) Add(other LoadVector) {

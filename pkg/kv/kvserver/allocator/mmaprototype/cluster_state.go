@@ -776,8 +776,8 @@ type storeState struct {
 		// NB: these load values can become negative due to applying pending
 		// changes. We need to let them be negative to retain the ability to undo
 		// pending changes.
-		load          mmaload.LoadVector
-		secondaryLoad SecondaryLoadVector
+		load          mmaload.SignedLoadVector
+		secondaryLoad mmaload.SecondaryLoadVector
 		// Pending changes for computing loadReplicas and load.
 		// Added to at the same time as clusterState.pendingChanges.
 		//
@@ -938,32 +938,44 @@ func (ss *storeState) computePendingChangesReflectedInLatestLoad(
 }
 
 func (ss *storeState) computeMaxFractionPending() {
-	fracIncrease := 0.0
-	fracDecrease := 0.0
-	for i := range ss.reportedLoad {
-		if ss.reportedLoad[i] == ss.adjusted.load[i] && ss.reportedLoad[i] == 0 {
-			// Avoid setting ss.maxFractionPendingIncrease and
-			// ss.maxFractionPendingDecrease to 1000 when the reported load and
-			// adjusted load are both 0 since some dimension is expected to have zero
-			// (e.g. write bandwidth during read-only workloads).
-			continue
-		}
-		if ss.reportedLoad[i] == 0 {
-			fracIncrease = 1000
-			fracDecrease = 1000
-			break
-		}
-		f := math.Abs(float64(ss.adjusted.load[i]-ss.reportedLoad[i])) / float64(ss.reportedLoad[i])
-		if ss.adjusted.load[i] > ss.reportedLoad[i] {
-			if f > fracIncrease {
-				fracIncrease = f
-			}
-		} else if f > fracDecrease {
-			fracDecrease = f
+	ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease = computeMaxFractionPending(ss.reportedLoad, ss.adjusted.load)
+}
+
+// TODO(tbg): unit test this function.
+func computeMaxFractionPending(rep mmaload.LoadVector, adj mmaload.SignedLoadVector) (maxFracInc, maxFracDec float64) {
+	for i := range rep {
+		// The fraction pending expresses the absolute difference of the adjusted
+		// and reported load as a multiple of the reported load. Note that this
+		// is the case even if the adjusted load is negative: if, say, the adjusted
+		// load is -50 and the reported load is 100, it is still correct to say that
+		// a "magnitude 1.5x" change is pending (from 100 to -50).
+		diff := adj[i].Subtract(rep[i])
+
+		switch {
+		case diff.Abs() == 0:
+			// Reported and adjusted are equal, so nothing is pending.
+			// This also handles the case in which both are zero.
+			// We don't need to update maxFracInc or maxFracDec because
+			// they started at zero and only go up from there.
+		case rep[i] == 0:
+			// The adjusted load is nonzero, but the reported one is zero. We can't
+			// express the load change as a multiple of zero. Arbitrarily assign large
+			// value to both increase and decrease, indicating that no more changes
+			// should be made until either the pending change clears (and we get a
+			// zero diff above) or we register positive reported load.
+			maxFracInc = max(maxFracInc, 1000)
+			maxFracDec = max(maxFracInc, 1000)
+		case diff.Nonnegative() > 0:
+			// Vanilla case of adjusted > reported, i.e. we have load incoming.
+			// We don't need to update maxFracDec.
+			maxFracInc = max(maxFracInc, math.Abs(float64(diff.Abs())/float64(rep[i])))
+		default:
+			// Vanilla case of adjusted < reported, i.e. we have load incoming.
+			// We don't need to update maxFracInc.
+			maxFracDec = max(maxFracDec, math.Abs(float64(diff.Abs())/float64(rep[i])))
 		}
 	}
-	ss.maxFractionPendingIncrease = fracIncrease
-	ss.maxFractionPendingDecrease = fracDecrease
+	return maxFracInc, maxFracDec
 }
 
 func newStoreState() *storeState {
@@ -1401,11 +1413,17 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 	if ss == nil {
 		panic(fmt.Sprintf("store %d not found", storeMsg.StoreID))
 	}
+	// TODO(tbg): review the math here, check for negative values, and explain
+	// what's going on.
 	ns.ReportedCPU += storeMsg.Load[mmaload.CPURate] - ss.reportedLoad[mmaload.CPURate]
 	ns.CapacityCPU += storeMsg.Capacity[mmaload.CPURate] - ss.capacity[mmaload.CPURate]
 	// Undo the adjustment for the store. We will apply the adjustment again
 	// below.
-	ns.adjustedCPU += storeMsg.Load[mmaload.CPURate] - ss.adjusted.load[mmaload.CPURate]
+	// TODO(tbg): how do we know ssAdjCPU is positive? We probably don't, and need
+	// to handle this case. Revisit and avoid the direct unverified conversion to
+	// LoadValue.
+	ssAdjCPU, _ := ss.adjusted.load.UnwrapAt(mmaload.CPURate)
+	ns.adjustedCPU += storeMsg.Load[mmaload.CPURate] - mmaload.LoadValue(ssAdjCPU)
 
 	// The store's load sequence number is incremented on each load change. The
 	// store's load is updated below.
@@ -1416,7 +1434,8 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 
 	// Reset the adjusted load to be the reported load. We will re-apply any
 	// remaining pending change deltas to the updated adjusted load.
-	ss.adjusted.load = storeMsg.Load
+	ss.adjusted.load = mmaload.SignedLoadVector{}
+	ss.adjusted.load.Add(storeMsg.Load)
 	ss.adjusted.secondaryLoad = storeMsg.SecondaryLoad
 	ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease = 0, 0
 
@@ -1784,7 +1803,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// The max(0, ...) is defensive, in case the adjusted load is negative.
 		// Given that this is a most overloaded dim, the likelihood of the
 		// adjusted load being negative is very low.
-		adjustedStoreLoadValue := max(0, ss.adjusted.load[topk.dim])
+		adjustedStoreLoadValue := ss.adjusted.load[topk.dim].Nonnegative()
 		threshold := mmaload.LoadValue(float64(adjustedStoreLoadValue) * fraction)
 		if ss.reportedSecondaryLoad[mmaload.ReplicaCount] > 0 {
 			// Allow all ranges above 90% of the mean. This is quite arbitrary.
@@ -2413,9 +2432,9 @@ func (cs *clusterState) canShedAndAddLoad(
 	// transitions to overloadSlow along one dimension, to allow for an
 	// exchange.
 	overloadedDimFractionIncrease := math.MaxFloat64
-	if targetSS.adjusted.load[overloadedDim] > 0 {
+	if adjLoad, pos := targetSS.adjusted.load.NonnegativeAt(overloadedDim); pos {
 		overloadedDimFractionIncrease = float64(deltaToAdd[overloadedDim]) /
-			float64(targetSS.adjusted.load[overloadedDim])
+			float64(adjLoad)
 	} else {
 		// Else, the adjusted load on the overloadedDim is zero or negative, which
 		// is possible, but extremely rare in practice. We arbitrarily set the
@@ -2433,8 +2452,8 @@ func (cs *clusterState) canShedAndAddLoad(
 		}
 		// This is an overloaded dimension in the target. Only allow small
 		// increases along this dimension.
-		if targetSS.adjusted.load[dim] > 0 {
-			dimFractionIncrease := float64(deltaToAdd[dim]) / float64(targetSS.adjusted.load[dim])
+		if adjLoad, pos := targetSS.adjusted.load.NonnegativeAt(dim); pos {
+			dimFractionIncrease := float64(deltaToAdd[dim]) / float64(adjLoad)
 			// The use of 33% is arbitrary.
 			if dimFractionIncrease > overloadedDimFractionIncrease/3 {
 				log.KvDistribution.Infof(ctx, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
@@ -2535,7 +2554,8 @@ func computeLoadSummary(
 	var worstDim mmaload.LoadDimension
 	for i := range msl.load {
 		const nodeIDForLogging = 0
-		ls := loadSummaryForDimension(ctx, ss.StoreID, nodeIDForLogging, mmaload.LoadDimension(i), ss.adjusted.load[i], ss.capacity[i],
+		ls := loadSummaryForDimension(ctx, ss.StoreID, nodeIDForLogging, mmaload.LoadDimension(i), ss.adjusted.load.Nonnegative()[i],
+			ss.capacity[i],
 			msl.load[i], msl.util[i])
 		if ls > sls {
 			sls = ls
@@ -2544,7 +2564,7 @@ func computeLoadSummary(
 		dimSummary[i] = ls
 		switch mmaload.LoadDimension(i) {
 		case mmaload.ByteSize:
-			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i])
+			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load.Nonnegative()[i], ss.capacity[i])
 		}
 	}
 	const storeIDForLogging = 0
