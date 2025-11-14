@@ -1229,10 +1229,15 @@ func maybeForceDBLevelChangefeed(
 			t.Logf("did not force DB level changefeed for %s because it set initial scan only", create)
 			return create, args, nil
 		}
-		// skip resolved because of split column families.
+		// Since DB level feeds set split column families, and split column families is incompatible
+		// with resolved for kafka and pubsub sinks, we skip DB level feeds metamorphic testing in
+		// that case.
 		if strings.EqualFold(key, "resolved") {
-			t.Logf("did not force DB level changefeed for %s because it set resolved", create)
-			return create, args, nil
+			switch f.(type) {
+			case *kafkaFeedFactory, *pubsubFeedFactory:
+				t.Logf("did not force DB level changefeed for %s because it set resolved", create)
+				return create, args, nil
+			}
 		}
 	}
 

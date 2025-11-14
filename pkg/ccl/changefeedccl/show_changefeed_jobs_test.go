@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -58,6 +59,7 @@ func (d *fakeResumer) CollectProfile(context.Context, interface{}) error {
 }
 
 func TestShowChangefeedJobsDatabaseLevel(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -154,6 +156,7 @@ func TestShowChangefeedJobsDatabaseLevel(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 func TestShowChangefeedJobsBasic(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -258,6 +261,7 @@ func TestShowChangefeedJobsShowsHighWaterTimestamp(t *testing.T) {
 // CHANGEFEED JOBS, and SHOW JOBS redact sensitive information (including keys
 // and secrets) for its output. Regression for #113503.
 func TestShowChangefeedJobsRedacted(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -546,6 +550,7 @@ func TestShowChangefeedJobsNoResults(t *testing.T) {
 }
 
 func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

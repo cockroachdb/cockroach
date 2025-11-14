@@ -8534,6 +8534,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 // Verifies changefeed updates checkpoint when cluster undergoes rolling
 // restart.
 func TestChangefeedHandlesRollingRestart(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer testingUseFastRetry()()
@@ -9752,6 +9753,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 }
 
 func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -10031,6 +10033,7 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 }
 
 func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

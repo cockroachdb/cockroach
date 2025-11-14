@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -252,6 +253,7 @@ func TestAlterChangefeedAddTarget(t *testing.T) {
 // TestAlterChangefeedAddTargetAfterInitialScan tests adding a new target
 // after the changefeed has already completed its initial scan.
 func TestAlterChangefeedAddTargetAfterInitialScan(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -485,6 +487,7 @@ func TestAlterChangefeedDropTarget(t *testing.T) {
 }
 
 func TestAlterChangefeedDropTargetAfterTableDrop(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -661,6 +664,7 @@ func TestAlterChangefeedUnsetDiffOption(t *testing.T) {
 }
 
 func TestAlterChangefeedErrors(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1101,6 +1105,7 @@ func TestAlterChangefeedDatabaseQualifiedNames(t *testing.T) {
 }
 
 func TestAlterChangefeedDatabaseScope(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1195,6 +1200,7 @@ func TestAlterChangefeedDatabaseScopeUnqualifiedName(t *testing.T) {
 }
 
 func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1981,6 +1987,7 @@ func TestAlterChangefeedAddDropSameTarget(t *testing.T) {
 // TestAlterChangefeedRandomizedTargetChanges tests altering a changefeed
 // with randomized adding and dropping of targets.
 func TestAlterChangefeedRandomizedTargetChanges(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

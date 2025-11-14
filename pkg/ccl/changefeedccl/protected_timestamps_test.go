@@ -375,7 +375,7 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 // It verifies that we do not lose track of existing PTS records nor create
 // extraneous PTS records when altering a changefeed by adding a table.
 func TestChangefeedAlterPTS(t *testing.T) {
-	skip.WithIssue(t, 148858) // Might be real
+	skip.WithIssue(t, 148858) // This is an issue with having too many PTS records.
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1141,8 +1141,6 @@ WITH resolved='10ms', min_checkpoint_frequency='100ms', initial_scan='no'`
 func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 148858) // I think that this isn't respecting per table pts.
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
