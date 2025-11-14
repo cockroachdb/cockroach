@@ -1,4 +1,4 @@
-change_session_size 2KB
+change_session_size 2.0KiB
 ----
 
 let $large_string
