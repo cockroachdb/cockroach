@@ -238,7 +238,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 				out := colexectestutils.NewOpTestOutput(o, data[:len(tc.selection)])
 				in.Init(ctx)
 				for {
-					b := in.Next()
+					b, _ := in.Next()
 					pushSelectionIntoBatch(b, tc.selection)
 					o.addBatch(ctx, b)
 					if b.Length() == 0 {
@@ -282,7 +282,7 @@ func TestRouterOutputNext(t *testing.T) {
 			// is data available.
 			unblockEvent: func(in colexecop.Operator, o *routerOutputOp) {
 				for {
-					b := in.Next()
+					b, _ := in.Next()
 					pushSelectionIntoBatch(b, fullSelection)
 					o.addBatch(ctx, b)
 					if b.Length() == 0 {
@@ -349,7 +349,7 @@ func TestRouterOutputNext(t *testing.T) {
 				wg.Add(1)
 				go func() {
 					for {
-						b := o.Next()
+						b, _ := o.Next()
 						batchChan <- b
 						if b.Length() == 0 {
 							break
@@ -464,14 +464,14 @@ func TestRouterOutputNext(t *testing.T) {
 			out := colexectestutils.NewOpTestOutput(o, expected)
 			in.Init(ctx)
 
-			b := in.Next()
+			b, _ := in.Next()
 			// Make sure the output doesn't consider itself blocked. We're right at the
 			// limit but not over.
 			pushSelectionIntoBatch(b, selection)
 			if o.addBatch(ctx, b) {
 				t.Fatal("unexpectedly blocked")
 			}
-			b = in.Next()
+			b, _ = in.Next()
 			// This addBatch call should now block the output.
 			pushSelectionIntoBatch(b, selection)
 			if !o.addBatch(ctx, b) {
@@ -480,7 +480,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 			// Add the rest of the data.
 			for {
-				b = in.Next()
+				b, _ = in.Next()
 				pushSelectionIntoBatch(b, selection)
 				if o.addBatch(ctx, b) {
 					t.Fatal("should only return true when switching from unblocked to blocked")
@@ -568,7 +568,7 @@ func TestRouterOutputRandom(t *testing.T) {
 					defer wg.Done()
 					lastBlockedState := false
 					for {
-						b := inputs[0].Next()
+						b, _ := inputs[0].Next()
 						selection := b.Selection()
 						if selection == nil {
 							selection = coldatatestutils.RandomSel(rng, b.Length(), rng.Float64())
@@ -630,7 +630,7 @@ func TestRouterOutputRandom(t *testing.T) {
 				go func() {
 					o.Init(ctx)
 					for {
-						b := o.Next()
+						b, _ := o.Next()
 						actual.Add(coldatatestutils.CopyBatch(b, typs, tu.testColumnFactory), typs)
 						if b.Length() == 0 {
 							wg.Done()
@@ -760,7 +760,11 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		nil,         /* unblockEventsChan */
 		outputs,
 	)
-	for r.processNextBatch(ctx) {
+	for {
+		done, _ := r.processNextBatch(ctx)
+		if done {
+			break
+		}
 	}
 
 	if len(valsYetToSee) != 0 {
@@ -1152,7 +1156,7 @@ func TestHashRouterRandom(t *testing.T) {
 						for {
 							var b coldata.Batch
 							err := colexecerror.CatchVectorizedRuntimeError(func() {
-								b = outputsAsOps[i].Next()
+								b, _ = outputsAsOps[i].Next()
 							})
 							if err != nil || b.Length() == 0 || isTerminationScenario(outputRng, 0.5, hashRouterPrematureDrainMeta) {
 								resultsByOp[i].err = err
@@ -1377,7 +1381,7 @@ func BenchmarkHashRouter(b *testing.B) {
 						go func(j int) {
 							outputs[j].Init(ctx)
 							for {
-								oBatch := outputs[j].Next()
+								oBatch, _ := outputs[j].Next()
 								actualDistribution[j] += oBatch.Length()
 								if oBatch.Length() == 0 {
 									_ = outputs[j].DrainMeta()

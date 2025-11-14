@@ -300,9 +300,9 @@ func (i *Inbox) Init(ctx context.Context) {
 // Next returns the next batch. It will block until there is data available.
 // The Inbox will exit when either the context passed in Init() is canceled or
 // when DrainMeta goroutine tells it to do so.
-func (i *Inbox) Next() coldata.Batch {
+func (i *Inbox) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if i.done {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	var ungracefulStreamTermination bool
@@ -336,7 +336,7 @@ func (i *Inbox) Next() coldata.Batch {
 			if err == io.EOF {
 				// Done.
 				i.close()
-				return coldata.ZeroBatch
+				return coldata.ZeroBatch, nil
 			}
 			// Note that here err can be stream's context cancellation.
 			// Regardless of the cause we want to propagate such an error as
@@ -409,7 +409,7 @@ func (i *Inbox) Next() coldata.Batch {
 		// processed), so we update the allocator accordingly.
 		i.allocator.AdjustMemoryUsage(-numSerializedBytes)
 		atomic.AddInt64(&i.statsAtomics.rowsRead, int64(batch.Length()))
-		return batch
+		return batch, nil
 	}
 }
 

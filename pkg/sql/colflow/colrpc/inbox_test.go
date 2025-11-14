@@ -389,7 +389,7 @@ func TestInboxShutdown(t *testing.T) {
 									}
 									var done bool
 									for !done && err == nil {
-										err = colexecerror.CatchVectorizedRuntimeError(func() { b := inbox.Next(); done = b.Length() == 0 })
+										err = colexecerror.CatchVectorizedRuntimeError(func() { b, _ := inbox.Next(); done = b.Length() == 0 })
 										if drainScenario == drainMetaPrematurely {
 											_ = inbox.DrainMeta()
 											return

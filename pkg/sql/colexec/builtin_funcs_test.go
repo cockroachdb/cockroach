@@ -249,7 +249,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		b.SetBytes(int64(len("hello there") * coldata.BatchSize()))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			b := defaultOp.Next()
+			b, _ := defaultOp.Next()
 			// Due to the flat byte updates, we have to reset the output
 			// bytes col after each next call.
 			b.ColVec(outputIdx).Bytes().Reset()
@@ -260,7 +260,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		b.SetBytes(int64(len("hello there") * coldata.BatchSize()))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			b := specOp.Next()
+			b, _ := specOp.Next()
 			// Due to the flat byte updates, we have to reset the output
 			// bytes col after each next call.
 			b.ColVec(outputIdx).Bytes().Reset()

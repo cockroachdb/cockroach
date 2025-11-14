@@ -104,7 +104,7 @@ func TestDiskQueue(t *testing.T) {
 					// since that is the common pattern.
 					dest := coldata.NewMemBatch(typs, testColumnFactory)
 					for {
-						src := op.Next()
+						src, _ := op.Next()
 						require.NoError(t, q.Enqueue(ctx, src))
 						if src.Length() == 0 {
 							break
@@ -259,7 +259,7 @@ func BenchmarkDiskQueue(b *testing.B) {
 		q, err := colcontainer.NewDiskQueue(ctx, typs, queueCfg, testDiskAcc, testMemAcc)
 		require.NoError(b, err)
 		for {
-			batchToEnqueue := op.Next()
+			batchToEnqueue, _ := op.Next()
 			if err := q.Enqueue(ctx, batchToEnqueue); err != nil {
 				b.Fatal(err)
 			}

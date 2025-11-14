@@ -155,11 +155,14 @@ func (t *topKSorter) Init(ctx context.Context) {
 	t.cancelChecker.Init(t.Ctx)
 }
 
-func (t *topKSorter) Next() coldata.Batch {
+func (t *topKSorter) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
 		switch t.state {
 		case topKSortSpooling:
-			t.spool()
+			meta := t.spool()
+			if meta != nil {
+				return nil, meta
+			}
 			t.state = topKSortEmitting
 		case topKSortEmitting:
 			output := t.emit()
@@ -167,13 +170,13 @@ func (t *topKSorter) Next() coldata.Batch {
 				t.state = topKSortDone
 				continue
 			}
-			return output
+			return output, nil
 		case topKSortDone:
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("invalid sort state %v", t.state))
 			// This code is unreachable, but the compiler cannot infer that.
-			return nil
+			return nil, nil
 		}
 	}
 }

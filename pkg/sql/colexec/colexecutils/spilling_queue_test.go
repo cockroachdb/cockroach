@@ -176,7 +176,7 @@ func TestSpillingQueue(t *testing.T) {
 			}
 
 			for {
-				b = op.Next()
+				b, _ = op.Next()
 				q.Enqueue(ctx, b)
 				if b.Length() == 0 {
 					break
@@ -296,7 +296,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	)
 
 	for {
-		b := op.Next()
+		b, _ := op.Next()
 		q.Enqueue(ctx, b)
 		b, err := q.Dequeue(ctx)
 		require.NoError(t, err)

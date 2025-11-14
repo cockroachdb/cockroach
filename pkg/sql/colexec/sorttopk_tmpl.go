@@ -25,14 +25,19 @@ import (
 
 // execgen:template<partialOrder>
 // execgen:inline
-func nextBatch(t *topKSorter, partialOrder bool) {
+func nextBatch(t *topKSorter, partialOrder bool) *execinfrapb.ProducerMetadata {
 	t.cancelChecker.CheckEveryCall()
-	t.inputBatch = t.Input.Next()
+	var meta *execinfrapb.ProducerMetadata
+	t.inputBatch, meta = t.Input.Next()
+	if meta != nil {
+		return meta
+	}
 	if partialOrder {
 		t.orderState.distincterInput.SetBatch(t.inputBatch)
-		t.orderState.distincter.Next()
+		t.orderState.distincter.Next() // cannot produce metadata
 	}
 	t.firstUnprocessedTupleIdx = 0
+	return nil
 }
 
 // processGroupsInBatch associates a row in the top K heap with its distinct
@@ -110,14 +115,17 @@ func processBatch(
 // and the group of the Kth row have been processed. If it's false, we assume
 // that the input is unordered, and process all rows.
 // execgen:template<partialOrder>
-func spool(t *topKSorter, partialOrder bool) {
+func spool(t *topKSorter, partialOrder bool) *execinfrapb.ProducerMetadata {
 	// Fill up t.topK by spooling up to K rows from the input.
 	// We don't need to check for distinct groups until after we have filled
 	// t.topK.
 	// TODO(harding): We could emit the first N < K rows if the N rows are in one
 	// or more distinct and complete groups, and then use a K-N size heap to find
 	// the remaining top K-N rows.
-	nextBatch(t, partialOrder)
+	meta := nextBatch(t, partialOrder)
+	if meta != nil {
+		return meta
+	}
 	remainingRows := t.k
 	groupId := 0
 	for remainingRows > 0 && t.inputBatch.Length() > 0 {
@@ -142,7 +150,10 @@ func spool(t *topKSorter, partialOrder bool) {
 		t.topK.AppendTuples(t.inputBatch, 0 /* startIdx */, fromLength)
 		remainingRows -= uint64(fromLength)
 		if fromLength == t.inputBatch.Length() {
-			nextBatch(t, partialOrder)
+			meta = nextBatch(t, partialOrder)
+			if meta != nil {
+				return meta
+			}
 		}
 	}
 	t.updateComparators(topKVecIdx, t.topK)
@@ -188,7 +199,10 @@ func spool(t *topKSorter, partialOrder bool) {
 				break
 			}
 		}
-		nextBatch(t, partialOrder)
+		meta = nextBatch(t, partialOrder)
+		if meta != nil {
+			return meta
+		}
 	}
 	// t.topK now contains the top K rows unsorted. Create a selection vector
 	// which specifies the rows in sorted order by popping everything off the
@@ -198,6 +212,7 @@ func spool(t *topKSorter, partialOrder bool) {
 	for i := 0; i < t.topK.Length(); i++ {
 		t.sel[len(t.sel)-i-1] = heap.Pop(t.heaper).(int)
 	}
+	return nil
 }
 
 // execgen:template<partialOrder>
@@ -245,12 +260,11 @@ func compareRow(
 // After all the input has been read, we pop everything off the heap to
 // determine the final output ordering. This is used in emit() to output the rows
 // in sorted order.
-func (t *topKSorter) spool() {
+func (t *topKSorter) spool() *execinfrapb.ProducerMetadata {
 	if t.hasPartialOrder {
-		spool(t, true /* partialOrder */)
-	} else {
-		spool(t, false /* partialOrder */)
+		return spool(t, true /* partialOrder */)
 	}
+	return spool(t, false /* partialOrder */)
 }
 
 // topKHeaper implements part of the heap.Interface for non-ordered input.

@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -40,10 +41,10 @@ func (b *BatchBuffer) Add(batch coldata.Batch, _ []*types.T) {
 func (b *BatchBuffer) Init(context.Context) {}
 
 // Next is part of the Operator interface.
-func (b *BatchBuffer) Next() coldata.Batch {
+func (b *BatchBuffer) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	batch := b.buffer[0]
 	b.buffer = b.buffer[1:]
-	return batch
+	return batch, nil
 }
 
 // RepeatableBatchSource is an Operator that returns the same batch forever.
@@ -98,10 +99,10 @@ func NewRepeatableBatchSource(
 }
 
 // Next is part of the Operator interface.
-func (s *RepeatableBatchSource) Next() coldata.Batch {
+func (s *RepeatableBatchSource) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	s.batchesReturned++
 	if s.batchesToReturn != 0 && s.batchesReturned > s.batchesToReturn {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	s.output.ResetInternalBatch()
 	if s.sel != nil {
@@ -118,7 +119,7 @@ func (s *RepeatableBatchSource) Next() coldata.Batch {
 		})
 	}
 	s.output.SetLength(s.batchLen)
-	return s.output
+	return s.output, nil
 }
 
 // Init is part of the Operator interface.
@@ -151,11 +152,11 @@ func (o *CallbackOperator) Init(ctx context.Context) {
 }
 
 // Next is part of the Operator interface.
-func (o *CallbackOperator) Next() coldata.Batch {
+func (o *CallbackOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if o.NextCb == nil {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
-	return o.NextCb()
+	return o.NextCb(), nil
 }
 
 // Close is part of the ClosableOperator interface.

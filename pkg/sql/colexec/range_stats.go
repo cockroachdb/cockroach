@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -71,16 +72,19 @@ func appendKey(keys []roachpb.Key, inBytes *coldata.Bytes, i int) []roachpb.Key 
 	return append(keys, keyCopy)
 }
 
-func (r *rangeStatsOperator) Next() coldata.Batch {
+func (r *rangeStatsOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	// Naively take the input batch and use it to define the batch size.
 	//
 	// TODO(ajwerner): As a first step towards being more sophisticated,
 	// this code could accumulate up to some minimum batch size before
 	// sending the first batch.
-	batch := r.Input.Next()
+	batch, meta := r.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	inSel := batch.Selection()
 	inVec := batch.ColVec(r.argumentCol)
@@ -171,7 +175,7 @@ func (r *rangeStatsOperator) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type rangeStatsWithErrors struct {

@@ -193,7 +193,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 				b.StartTimer()
 				tr.Init(ctx)
 				for {
-					bat := tr.Next()
+					bat, _ := tr.Next()
 					if bat.Length() == 0 {
 						break
 					}

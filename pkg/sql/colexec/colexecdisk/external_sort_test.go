@@ -124,7 +124,7 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	require.NoError(t, err)
 
 	sorter.Init(ctx)
-	for b := sorter.Next(); b.Length() > 0; b = sorter.Next() {
+	for b, _ := sorter.Next(); b.Length() > 0; b, _ = sorter.Next() {
 	}
 
 	require.True(t, spilled)

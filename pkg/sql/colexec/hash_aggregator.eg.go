@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -78,7 +79,7 @@ const _ = "template_findSplit"
 // input tuples are processed before emitting any data.
 const _ = "template_getNext"
 
-func (op *hashAggregator) Next() coldata.Batch {
+func (op *hashAggregator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if len(op.spec.OrderedGroupCols) > 0 {
 		return getNext_true(op)
 	} else {
@@ -198,7 +199,7 @@ func populateEqChains_false(
 //
 // If partialOrder is false, there are no guarantees on input ordering and all
 // input tuples are processed before emitting any data.
-func getNext_true(op *hashAggregator) coldata.Batch {
+func getNext_true(op *hashAggregator) (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
 		switch op.state {
 		case hashAggregatorBuffering:
@@ -288,10 +289,14 @@ func getNext_true(op *hashAggregator) coldata.Batch {
 				)
 			}
 
-			op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx = op.Input.Next(), 0
+			var meta *execinfrapb.ProducerMetadata
+			op.bufferingState.pendingBatch, meta = op.Input.Next()
+			if meta != nil {
+				return nil, meta
+			}
 			op.bufferingState.unprocessedIdx = 0
 			op.distincterInput.SetBatch(op.bufferingState.pendingBatch)
-			op.distincter.Next()
+			op.distincter.Next() // cannot produce metadata
 			n := op.bufferingState.pendingBatch.Length()
 			if op.inputTrackingState.tuples != nil {
 				op.inputTrackingState.tuples.Enqueue(op.Ctx, op.bufferingState.pendingBatch)
@@ -496,15 +501,15 @@ func getNext_true(op *hashAggregator) coldata.Batch {
 				}
 			}
 			op.output.SetLength(curOutputIdx)
-			return op.output
+			return op.output, nil
 
 		case hashAggregatorDone:
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("hash aggregator in unhandled state"))
 			// This code is unreachable, but the compiler cannot infer that.
-			return nil
+			return nil, nil
 		}
 	}
 }
@@ -522,7 +527,7 @@ func getNext_true(op *hashAggregator) coldata.Batch {
 //
 // If partialOrder is false, there are no guarantees on input ordering and all
 // input tuples are processed before emitting any data.
-func getNext_false(op *hashAggregator) coldata.Batch {
+func getNext_false(op *hashAggregator) (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
 		switch op.state {
 		case hashAggregatorBuffering:
@@ -532,7 +537,11 @@ func getNext_false(op *hashAggregator) coldata.Batch {
 				)
 			}
 
-			op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx = op.Input.Next(), 0
+			var meta *execinfrapb.ProducerMetadata
+			op.bufferingState.pendingBatch, meta = op.Input.Next()
+			if meta != nil {
+				return nil, meta
+			}
 			op.bufferingState.unprocessedIdx = 0
 			n := op.bufferingState.pendingBatch.Length()
 			if op.inputTrackingState.tuples != nil {
@@ -612,15 +621,15 @@ func getNext_false(op *hashAggregator) coldata.Batch {
 				op.state = hashAggregatorDone
 			}
 			op.output.SetLength(curOutputIdx)
-			return op.output
+			return op.output, nil
 
 		case hashAggregatorDone:
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("hash aggregator in unhandled state"))
 			// This code is unreachable, but the compiler cannot infer that.
-			return nil
+			return nil, nil
 		}
 	}
 }

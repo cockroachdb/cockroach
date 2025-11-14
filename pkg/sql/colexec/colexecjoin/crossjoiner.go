@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -85,22 +86,32 @@ func (c *crossJoiner) Init(ctx context.Context) {
 	c.crossJoinerBase.init(c.TwoInputInitHelper.Ctx)
 }
 
-func (c *crossJoiner) Next() coldata.Batch {
+func (c *crossJoiner) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	c.cancelChecker.CheckEveryCall()
 	if c.done {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	if !c.rightInputConsumed {
-		c.consumeRightInput(c.Ctx)
-		c.setupForBuilding()
+		meta := c.consumeRightInput(c.Ctx)
+		if meta != nil {
+			return nil, meta
+		}
+		meta = c.setupForBuilding()
+		if meta != nil {
+			// TODO: we need to ensure setupForBuilding is finished.
+			return nil, meta
+		}
 	}
-	willEmit := c.willEmit()
+	willEmit, meta := c.willEmit()
+	if meta != nil {
+		return nil, meta
+	}
 	if willEmit == 0 {
 		if err := c.Close(c.Ctx); err != nil {
 			colexecerror.InternalError(err)
 		}
 		c.done = true
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	c.output, _ = c.helper.ResetMaybeReallocate(c.outputTypes, c.output, willEmit)
 	if willEmit > c.output.Capacity() {
@@ -123,16 +134,19 @@ func (c *crossJoiner) Next() coldata.Batch {
 	c.output.SetLength(willEmit)
 	c.builderState.numEmittedCurLeftBatch += willEmit
 	c.builderState.numEmittedTotal += willEmit
-	return c.output
+	return c.output, nil
 }
 
 // readNextLeftBatch fetches the next batch from the left input, prepares the
 // builder for it (assuming that all rows in the batch contribute to the cross
 // product), and returns the length of the batch.
-func (c *crossJoiner) readNextLeftBatch() int {
-	leftBatch := c.InputOne.Next()
+func (c *crossJoiner) readNextLeftBatch() (int, *execinfrapb.ProducerMetadata) {
+	leftBatch, meta := c.InputOne.Next()
+	if meta != nil {
+		return 0, meta
+	}
 	c.prepareForNextLeftBatch(leftBatch, 0 /* startIdx */, leftBatch.Length())
-	return leftBatch.Length()
+	return leftBatch.Length(), nil
 }
 
 // consumeRightInput determines the kind of information the cross joiner needs
@@ -140,30 +154,28 @@ func (c *crossJoiner) readNextLeftBatch() int {
 // the right) and consumes the right input accordingly. It also checks whether
 // we need any tuples from the left and possibly reads a single batch, depending
 // on the join type.
-func (c *crossJoiner) consumeRightInput(ctx context.Context) {
-	c.rightInputConsumed = true
-
+func (c *crossJoiner) consumeRightInput(ctx context.Context) *execinfrapb.ProducerMetadata {
 	// Figure out how to consume the right input.
 	var needRightTuples, needOnlyNumRightTuples bool
 	switch c.joinType {
 	case descpb.InnerJoin, descpb.LeftOuterJoin, descpb.RightOuterJoin, descpb.FullOuterJoin:
 		needRightTuples = true
-	case descpb.LeftSemiJoin:
-		// With LEFT SEMI join we only need to know whether the right input is
-		// empty or not.
-		c.numRightTuples = c.InputTwo.Next().Length()
-	case descpb.RightSemiJoin:
-		// With RIGHT SEMI join we only need to know whether the left input is
-		// empty or not.
-		needRightTuples = c.readNextLeftBatch() != 0
-	case descpb.LeftAntiJoin:
-		// With LEFT ANTI join we only need to know whether the right input is
-		// empty or not.
-		c.numRightTuples = c.InputTwo.Next().Length()
-	case descpb.RightAntiJoin:
-		// With RIGHT ANTI join we only need to know whether the left input is
-		// empty or not.
-		needRightTuples = c.readNextLeftBatch() == 0
+	case descpb.LeftSemiJoin, descpb.LeftAntiJoin:
+		// With LEFT SEMI and LEFT ANTI joins we only need to know whether the
+		// right input is empty or not.
+		batch, meta := c.InputTwo.Next()
+		if meta != nil {
+			return meta
+		}
+		c.numRightTuples = batch.Length()
+	case descpb.RightSemiJoin, descpb.RightAntiJoin:
+		// With RIGHT SEMI and RIGHT ANTI joins we only need to know whether the
+		// left input is empty or not.
+		leftBatchLength, meta := c.readNextLeftBatch()
+		if meta != nil {
+			return meta
+		}
+		needRightTuples = leftBatchLength != 0
 	case descpb.IntersectAllJoin, descpb.ExceptAllJoin:
 		// With set-operation joins we only need the number of tuples from the
 		// right input.
@@ -176,7 +188,11 @@ func (c *crossJoiner) consumeRightInput(ctx context.Context) {
 	if needRightTuples || needOnlyNumRightTuples {
 		for {
 			c.cancelChecker.CheckEveryCall()
-			batch := c.InputTwo.Next()
+			batch, meta := c.InputTwo.Next()
+			if meta != nil {
+				// TODO: we need to remember some state if we exit here.
+				return meta
+			}
 			if needRightTuples {
 				c.rightTuples.Enqueue(ctx, batch)
 			}
@@ -203,26 +219,40 @@ func (c *crossJoiner) consumeRightInput(ctx context.Context) {
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unexpected join type %s", c.joinType.String()))
 	}
+
+	c.rightInputConsumed = true
+	return nil
 }
 
 // setupForBuilding prepares the cross joiner to build the output. This method
 // must be called after the right input has been fully "processed" (which might
 // mean it wasn't fully read, depending on the join type).
-func (c *crossJoiner) setupForBuilding() {
+func (c *crossJoiner) setupForBuilding() *execinfrapb.ProducerMetadata {
 	switch c.joinType {
 	case descpb.LeftOuterJoin:
 		c.isRightAllNulls = c.numRightTuples == 0
 	case descpb.RightOuterJoin:
-		c.isLeftAllNulls = c.readNextLeftBatch() == 0
+		leftBatchLength, meta := c.readNextLeftBatch()
+		if meta != nil {
+			return meta
+		}
+		c.isLeftAllNulls = leftBatchLength == 0
 	case descpb.FullOuterJoin:
-		c.isLeftAllNulls = c.readNextLeftBatch() == 0
+		leftBatchLength, meta := c.readNextLeftBatch()
+		if meta != nil {
+			return meta
+		}
+		c.isLeftAllNulls = leftBatchLength == 0
 		c.isRightAllNulls = c.numRightTuples == 0
 	case descpb.ExceptAllJoin:
 		// For EXCEPT ALL joins we build # left tuples - # right tuples output
 		// rows (if positive), so we have to discard first numRightTuples rows
 		// from the left.
 		for c.numRightTuples > 0 {
-			leftBatch := c.InputOne.Next()
+			leftBatch, meta := c.InputOne.Next()
+			if meta != nil {
+				return meta
+			}
 			c.builderState.left.currentBatch = leftBatch
 			if leftBatch.Length() == 0 {
 				break
@@ -243,58 +273,63 @@ func (c *crossJoiner) setupForBuilding() {
 		c.numRightTuples = 1
 	}
 	c.setupLeftBuilder()
+	return nil
 }
 
 // willEmit returns the number of tuples the cross joiner will emit based on the
 // current left batch. If the current left batch is exhausted, then a new left
 // batch is fetched. If 0 is returned, then the cross joiner has fully emitted
 // the output.
-func (c *crossJoiner) willEmit() int {
+func (c *crossJoiner) willEmit() (int, *execinfrapb.ProducerMetadata) {
 	if c.needLeftTuples {
 		if c.isLeftAllNulls {
 			if c.isRightAllNulls {
 				// This can happen only in FULL OUTER join when both inputs are
 				// empty.
-				return 0
+				return 0, nil
 			}
 			// All tuples from the right are unmatched and will be emitted once.
 			c.builderState.setup.rightNumRepeats = 1
-			return c.numRightTuples - c.builderState.numEmittedCurLeftBatch
+			return c.numRightTuples - c.builderState.numEmittedCurLeftBatch, nil
 		}
 		if c.builderState.left.currentBatch == nil || c.canEmit() == 0 {
 			// Get the next left batch if we haven't fetched one yet or we
 			// have fully built the output using the current left batch.
-			if c.readNextLeftBatch() == 0 {
-				return 0
+			leftBatchLength, meta := c.readNextLeftBatch()
+			if meta != nil {
+				return 0, meta
+			}
+			if leftBatchLength == 0 {
+				return 0, nil
 			}
 		}
-		return c.canEmit()
+		return c.canEmit(), nil
 	}
 	switch c.joinType {
 	case descpb.InnerJoin, descpb.RightOuterJoin, descpb.IntersectAllJoin:
 		// We don't need the left tuples, and in case of INNER, RIGHT OUTER, and
 		// INTERSECT ALL joins this means that the right input was empty, so the
 		// cross join is empty.
-		return 0
+		return 0, nil
 	case descpb.LeftSemiJoin, descpb.LeftAntiJoin:
 		// We don't need the left tuples, and in case of LEFT SEMI/ANTI this
 		// means that the right input was empty/non-empty, so the cross join
 		// is empty.
-		return 0
+		return 0, nil
 	case descpb.RightSemiJoin, descpb.RightAntiJoin:
 		if c.numRightTuples == 0 {
 			// For RIGHT SEMI, we didn't fetch any right tuples if the left
 			// input was empty; for RIGHT ANTI - if the left input wasn't
 			// empty. In both such cases the cross join is empty.
-			return 0
+			return 0, nil
 		}
-		return c.canEmit()
+		return c.canEmit(), nil
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"unexpectedly don't need left tuples for %s", c.joinType,
 		))
 		// This code is unreachable, but the compiler cannot infer that.
-		return 0
+		return 0, nil
 	}
 }
 

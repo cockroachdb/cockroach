@@ -744,7 +744,9 @@ func (o *mergeJoinBase) sourceFinished() bool {
 func (o *mergeJoinBase) continueLeftBufferedGroup() {
 	// Get the next batch from the left.
 	o.cancelChecker.CheckEveryCall()
-	o.proberState.lIdx, o.proberState.lBatch = 0, o.InputOne.Next()
+	// TODO: meta
+	o.proberState.lBatch, _ = o.InputOne.Next()
+	o.proberState.lIdx = 0
 	o.proberState.lLength = o.proberState.lBatch.Length()
 	o.bufferedGroup.leftGroupStartIdx = 0
 	if o.proberState.lLength == 0 {
@@ -767,7 +769,7 @@ func (o *mergeJoinBase) continueLeftBufferedGroup() {
 	groupLength := 1
 	var sel []int
 	o.left.distincterInput.SetBatch(o.proberState.lBatch)
-	o.left.distincter.Next()
+	_, _ = o.left.distincter.Next() // cannot produce metadata
 
 	sel = o.proberState.lBatch.Selection()
 	if sel != nil {
@@ -811,7 +813,9 @@ func (o *mergeJoinBase) finishRightBufferedGroup() {
 func (o *mergeJoinBase) completeRightBufferedGroup() {
 	// Get the next batch from the right.
 	o.cancelChecker.CheckEveryCall()
-	o.proberState.rIdx, o.proberState.rBatch = 0, o.InputTwo.Next()
+	// TODO: meta
+	o.proberState.rBatch, _ = o.InputTwo.Next()
+	o.proberState.rIdx = 0
 	o.proberState.rLength = o.proberState.rBatch.Length()
 	// The right input has been fully exhausted.
 	if o.proberState.rLength == 0 {
@@ -842,7 +846,7 @@ func (o *mergeJoinBase) completeRightBufferedGroup() {
 		// so the distincter - in a sense - compares the incoming tuples to the
 		// first tuple of the first iteration (which we know is the same group).
 		o.right.distincterInput.SetBatch(o.proberState.rBatch)
-		o.right.distincter.Next()
+		_, _ = o.right.distincter.Next() // cannot produce metadata
 
 		sel = o.proberState.rBatch.Selection()
 		var groupLength int
@@ -877,7 +881,9 @@ func (o *mergeJoinBase) completeRightBufferedGroup() {
 			// just appended all the tuples from batch to it, so we need to get a
 			// fresh batch from the input.
 			o.cancelChecker.CheckEveryCall()
-			o.proberState.rIdx, o.proberState.rBatch = 0, o.InputTwo.Next()
+			// TODO: meta
+			o.proberState.rBatch, _ = o.InputTwo.Next()
+			o.proberState.rIdx = 0
 			o.proberState.rLength = o.proberState.rBatch.Length()
 			if o.proberState.rLength == 0 {
 				// The input has been exhausted, so the buffered group is now complete.

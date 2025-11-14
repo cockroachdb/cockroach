@@ -51,7 +51,7 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 	c.Init(ctx)
 	foundRows := 0
 	for {
-		batch := c.Next()
+		batch, _ := c.Next()
 		require.Nil(t, batch.Selection(), "Columnarizer didn't reset the internal batch")
 		if batch.Length() == 0 {
 			break
@@ -146,7 +146,7 @@ func BenchmarkColumnarize(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		foundRows := 0
 		for {
-			batch := c.Next()
+			batch, _ := c.Next()
 			if batch.Length() == 0 {
 				break
 			}

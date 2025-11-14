@@ -167,14 +167,19 @@ const (
 )
 
 // Next is part of the Operator interface.
-func (s *ColIndexJoin) Next() coldata.Batch {
+func (s *ColIndexJoin) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
 		switch s.state {
 		case indexJoinConstructingSpans:
 			var rowCount int64
 			var spans roachpb.Spans
 			s.mem.inputBatchSize = 0
-			for s.next() {
+			for {
+				if readMore, meta := s.next(); meta != nil {
+					return nil, meta
+				} else if !readMore {
+					break
+				}
 				// Because index joins discard input rows, we do not have to maintain a
 				// reference to input tuples after span generation. So, we can discard
 				// the input batch reference on each iteration.
@@ -265,12 +270,12 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			s.mu.Lock()
 			s.mu.rowsRead += int64(n)
 			s.mu.Unlock()
-			return batch
+			return batch, nil
 		case indexJoinDone:
 			// Eagerly close the index joiner. Note that closeInternal() is
 			// idempotent, so it's ok if it'll be closed again.
 			s.closeInternal()
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 	}
 }
@@ -374,18 +379,22 @@ func (s *ColIndexJoin) getBatchSize() int64 {
 // and performs initial processing of the batch. This includes performing
 // interface conversions up front and retrieving the overall memory footprint of
 // the data. next returns false once the input is finished, and otherwise true.
-func (s *ColIndexJoin) next() bool {
+func (s *ColIndexJoin) next() (bool, *execinfrapb.ProducerMetadata) {
 	if s.batch == nil || s.startIdx >= s.batch.Length() {
 		// The current batch is finished.
+		var meta *execinfrapb.ProducerMetadata
+		s.batch, meta = s.Input.Next()
+		if meta != nil {
+			return false, meta
+		}
 		s.startIdx = 0
-		s.batch = s.Input.Next()
 		if s.batch.Length() == 0 {
-			return false
+			return false, nil
 		}
 		s.mem.currentBatchSize = s.getBatchSize()
 	}
 	if !s.mem.hasVarSizeCols {
-		return true
+		return true, nil
 	}
 	s.mem.byteLikeCols = s.mem.byteLikeCols[:0]
 	s.mem.decimalCols = s.mem.decimalCols[:0]
@@ -403,7 +412,7 @@ func (s *ColIndexJoin) next() bool {
 			s.mem.datumCols = append(s.mem.datumCols, vec.Datum())
 		}
 	}
-	return true
+	return true, nil
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.

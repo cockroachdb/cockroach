@@ -42,7 +42,7 @@ func TestNumBatches(t *testing.T) {
 	)
 	vsc.Init(ctx)
 	for {
-		b := vsc.Next()
+		b, _ := vsc.Next()
 		if b.Length() == 0 {
 			break
 		}
@@ -68,7 +68,7 @@ func TestNumTuples(t *testing.T) {
 		)
 		vsc.Init(ctx)
 		for {
-			b := vsc.Next()
+			b, _ := vsc.Next()
 			if b.Length() == 0 {
 				break
 			}
@@ -135,7 +135,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		mjStatsCollector.Init(ctx)
 		batchCount, tupleCount := 0, 0
 		for {
-			b := mjStatsCollector.Next()
+			b, _ := mjStatsCollector.Next()
 			if b.Length() == 0 {
 				break
 			}
@@ -176,10 +176,10 @@ type timeAdvancingOperator struct {
 
 var _ colexecop.Operator = &timeAdvancingOperator{}
 
-func (o *timeAdvancingOperator) Next() coldata.Batch {
-	b := o.Input.Next()
+func (o *timeAdvancingOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	b, _ := o.Input.Next()
 	if b.Length() > 0 {
 		o.timeSource.Advance()
 	}
-	return b
+	return b, nil
 }

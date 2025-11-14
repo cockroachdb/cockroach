@@ -116,9 +116,9 @@ func wrapRowSources(
 	batchAllocator := colmem.NewAllocator(ctx, args.MonitorRegistry.NewStreamingMemAccount(flowCtx), factory)
 	var c *colexec.Columnarizer
 	if proc.MustBeStreaming() {
-		c = colexec.NewStreamingColumnarizer(batchAllocator, getStreamingMemAccount(args, flowCtx), flowCtx, processorID, toWrap)
+		c = colexec.NewStreamingColumnarizer(batchAllocator, flowCtx, processorID, toWrap)
 	} else {
-		c = colexec.NewBufferingColumnarizer(batchAllocator, getStreamingMemAccount(args, flowCtx), flowCtx, processorID, toWrap)
+		c = colexec.NewBufferingColumnarizer(batchAllocator, flowCtx, processorID, toWrap)
 	}
 	return c, nil
 }
@@ -189,7 +189,7 @@ func supportedNatively(core *execinfrapb.ProcessorCoreUnion) error {
 		if !core.MergeJoiner.OnExpr.Empty() && core.MergeJoiner.Type != descpb.InnerJoin {
 			return errNonInnerMergeJoinWithOnExpr
 		}
-		return nil
+		return errors.New("TODO: merge joiner disabled")
 
 	case core.HashGroupJoiner != nil:
 		return nil

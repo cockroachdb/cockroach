@@ -190,7 +190,7 @@ func TestRandomComparisons(t *testing.T) {
 			require.NoError(t, err)
 			op.Init(ctx)
 			var idx int
-			for batch := op.Next(); batch.Length() > 0; batch = op.Next() {
+			for batch, _ := op.Next(); batch.Length() > 0; batch, _ = op.Next() {
 				for i := 0; i < batch.Length(); i++ {
 					absIdx := idx + i
 					assert.Equal(t, expected[absIdx], batch.ColVec(2).Bool()[i],
