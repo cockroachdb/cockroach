@@ -463,11 +463,6 @@ type ApplicationLayerInterface interface {
 		ctx context.Context, span roachpb.Span,
 	) (*serverpb.TableStatsResponse, error)
 
-	// ForceTableGC forces a KV GC round on the key range for the given table.
-	ForceTableGC(
-		ctx context.Context, database, table string, timestamp hlc.Timestamp,
-	) error
-
 	// DefaultZoneConfig is a convenience function that accesses
 	// .SystemConfigProvider().GetSystemConfig().DefaultZoneConfig.
 	DefaultZoneConfig() zonepb.ZoneConfig
@@ -732,6 +727,17 @@ type StorageLayerInterface interface {
 
 	// RaftConfig retrieves a copy of the raft configuration.
 	RaftConfig() base.RaftConfig
+
+	// ForceTableGC forces a KV GC round on the key range for the given table.
+	//
+	// Note that we don't provide this functionality as part of the
+	// ApplicationLayerInterface because on secondary tenants we don't put
+	// split points between all tables, so the KV GC request could affect other
+	// system tables (since they could share the underlying range with the user
+	// table).
+	ForceTableGC(
+		ctx context.Context, database, table string, timestamp hlc.Timestamp,
+	) error
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

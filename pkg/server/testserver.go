@@ -1297,13 +1297,6 @@ func (t *testTenant) TracerI() interface{} {
 	return t.Tracer()
 }
 
-// ForceTableGC is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) ForceTableGC(
-	ctx context.Context, database, table string, timestamp hlc.Timestamp,
-) error {
-	return internalForceTableGC(ctx, t, database, table, timestamp)
-}
-
 // DefaultZoneConfig is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) DefaultZoneConfig() zonepb.ZoneConfig {
 	return *t.SystemConfigProvider().GetSystemConfig().DefaultZoneConfig
@@ -2294,25 +2287,16 @@ func (ts *testServer) Tracer() *tracing.Tracer {
 	return ts.node.storeCfg.AmbientCtx.Tracer
 }
 
-// ForceTableGC is part of the serverutils.ApplicationLayerInterface.
+// ForceTableGC is part of the serverutils.StorageLayerInterface.
 func (ts *testServer) ForceTableGC(
 	ctx context.Context, database, table string, timestamp hlc.Timestamp,
 ) error {
-	return internalForceTableGC(ctx, ts, database, table, timestamp)
-}
-
-func internalForceTableGC(
-	ctx context.Context,
-	app serverutils.ApplicationLayerInterface,
-	database, table string,
-	timestamp hlc.Timestamp,
-) error {
-	tableID, err := app.QueryTableID(ctx, username.RootUserName(), database, table)
+	tableID, err := ts.QueryTableID(ctx, username.RootUserName(), database, table)
 	if err != nil {
 		return err
 	}
 
-	tblKey := app.Codec().TablePrefix(uint32(tableID))
+	tblKey := ts.Codec().TablePrefix(uint32(tableID))
 	gcr := kvpb.GCRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key:    tblKey,
@@ -2320,7 +2304,7 @@ func internalForceTableGC(
 		},
 		Threshold: timestamp,
 	}
-	_, pErr := kv.SendWrapped(ctx, app.DistSenderI().(kv.Sender), &gcr)
+	_, pErr := kv.SendWrapped(ctx, ts.DistSenderI().(kv.Sender), &gcr)
 	return pErr.GoError()
 }
 
