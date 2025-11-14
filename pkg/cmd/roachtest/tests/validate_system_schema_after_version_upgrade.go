@@ -196,8 +196,9 @@ func runValidateSystemSchemaAfterVersionUpgrade(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	validateSystemSchemaAfterUpgradeTest(ctx, t, c,
-		// The test is not expected to work on versions older than 22.2.
-		mixedversion.MinimumBootstrapVersion("v22.2.0"),
+		// The test requires the cluster to start at or above MinSupported.
+		// Updated to v25.3.0 after bumping MinSupported from v25.2 to v25.3.
+		mixedversion.MinimumBootstrapVersion("v25.3.0"),
 		// Fixtures are generated on a version that's too old for this test.
 		mixedversion.NeverUseFixtures,
 		// Separate-process deployments can't run in 1-node clusters since
@@ -217,8 +218,9 @@ func runValidateSystemSchemaAfterVersionUpgradeSeparateProcess(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	validateSystemSchemaAfterUpgradeTest(ctx, t, c,
-		// The test is not expected to work on versions older than 22.2.
-		mixedversion.MinimumBootstrapVersion("v22.2.0"),
+		// The test requires the cluster to start at or above MinSupported.
+		// Updated to v25.3.0 after bumping MinSupported from v25.2 to v25.3.
+		mixedversion.MinimumBootstrapVersion("v25.3.0"),
 		// Fixtures are generated on a version that's too old for this test.
 		mixedversion.NeverUseFixtures,
 		mixedversion.EnabledDeploymentModes(mixedversion.SeparateProcessDeployment),
