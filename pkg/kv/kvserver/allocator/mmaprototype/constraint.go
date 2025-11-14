@@ -1845,6 +1845,13 @@ func newStringInterner() *stringInterner {
 	return si
 }
 
+// lookup is like toCode, but is a pure lookup that won't intern the string.
+// Unless it's already interned, returns (0, false), otherwise (*, true).
+func (si *stringInterner) lookup(s string) (stringCode, bool) {
+	code, ok := si.stringToCode[s]
+	return code, ok
+}
+
 func (si *stringInterner) toCode(s string) stringCode {
 	code, ok := si.stringToCode[s]
 	if !ok {
@@ -1898,6 +1905,19 @@ type localityTierInterner struct {
 
 func newLocalityTierInterner(interner *stringInterner) *localityTierInterner {
 	return &localityTierInterner{si: interner}
+}
+
+func (lti *localityTierInterner) changed(existing localityTiers, current roachpb.Locality) bool {
+	if len(existing.tiers) != len(current.Tiers) {
+		return true
+	}
+
+	for i, tier := range current.Tiers {
+		if code, ok := lti.si.lookup(tier.Value); !ok || code != existing.tiers[i] {
+			return true
+		}
+	}
+	return false
 }
 
 // intern is called occasionally, when we have a new store, or the locality of

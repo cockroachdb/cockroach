@@ -344,8 +344,13 @@ func TestClusterState(t *testing.T) {
 				var buf strings.Builder
 				for _, nodeID := range nodeList {
 					ns := cs.nodes[roachpb.NodeID(nodeID)]
-					fmt.Fprintf(&buf, "node-id=%s locality-tiers=%s\n",
-						ns.NodeID, cs.stores[ns.stores[0]].StoreAttributesAndLocality.locality())
+					sal := cs.stores[ns.stores[0]].StoreAttributesAndLocality
+					fmt.Fprintf(&buf, "node-id=%s locality-tiers=%s",
+						ns.NodeID, sal.locality())
+					if len(sal.NodeAttrs.Attrs) > 0 {
+						fmt.Fprintf(&buf, " node-attrs=%s", strings.Join(sal.NodeAttrs.Attrs, ","))
+					}
+					fmt.Fprintln(&buf)
 					for _, storeID := range ns.stores {
 						ss := cs.stores[storeID]
 						fmt.Fprintf(&buf, "  store-id=%v attrs=%s locality-code=%s\n",

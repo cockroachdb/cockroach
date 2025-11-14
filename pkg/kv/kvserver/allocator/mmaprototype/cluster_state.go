@@ -2251,10 +2251,6 @@ func (cs *clusterState) undoChangeLoadDelta(change ReplicaChange) {
 
 // setStore updates the store attributes and locality in the cluster state. If
 // the store hasn't been seen before, it is also added to the cluster state.
-//
-// TODO: We currently assume that the locality and attributes associated with a
-// store/node are fixed. This is a reasonable assumption for the locality,
-// however it is not for the attributes.
 func (cs *clusterState) setStore(sal StoreAttributesAndLocality) {
 	ns, ok := cs.nodes[sal.NodeID]
 	if !ok {
@@ -2271,13 +2267,31 @@ func (cs *clusterState) setStore(sal StoreAttributesAndLocality) {
 		// replicas on it (nor will we try to shed any that are already reported to
 		// have replicas on it).
 		ss.status = MakeStatus(HealthUnknown, LeaseDispositionRefusing, ReplicaDispositionRefusing)
-		ss.localityTiers = cs.localityTierInterner.intern(sal.locality())
 		ss.overloadStartTime = cs.ts.Now()
 		ss.overloadEndTime = cs.ts.Now()
-		ss.StoreAttributesAndLocality = sal
-		cs.constraintMatcher.setStore(sal)
 		cs.stores[sal.StoreID] = ss
 		ns.stores = append(ns.stores, sal.StoreID)
+	}
+
+	// If the store is new or the locality/attributes changed, we need to update
+	// the locality and attributes.
+	loc := sal.locality()
+	oldAttrs := cs.stores[sal.StoreID].StoreAttributesAndLocality
+	locsChanged := cs.localityTierInterner.changed(cs.stores[sal.StoreID].localityTiers, loc)
+	attrsChanged := !slices.Equal(
+		oldAttrs.StoreAttrs.Attrs,
+		sal.StoreAttrs.Attrs,
+	) || !slices.Equal(
+		oldAttrs.NodeAttrs.Attrs,
+		sal.NodeAttrs.Attrs,
+	)
+
+	if !ok || attrsChanged || locsChanged {
+		cs.stores[sal.StoreID].localityTiers = cs.localityTierInterner.intern(sal.locality())
+		cs.stores[sal.StoreID].StoreAttributesAndLocality = sal
+		// TODO(during review): is there more that needs to be updated when the
+		// data changes?
+		cs.constraintMatcher.setStore(sal)
 	}
 }
 
