@@ -220,12 +220,21 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) err
 		rangefeed.WithFiltering(false),
 	}
 
-	// Resume from checkpoint if available
-	// TODO: Support multiple partitions
-	partitionID := int64(1)
-	initialTS, err := r.mgr.ReadCheckpoint(ctx, r.name, partitionID)
-	if err != nil {
-		return errors.Wrap(err, "reading checkpoint")
+	var initialTS hlc.Timestamp
+	fmt.Printf("reading checkpoints for %d partitions\n", len(assignment.Partitions))
+	for _, partition := range assignment.Partitions {
+		fmt.Printf("reading checkpoint for partition %d\n", partition.ID)
+		checkpointTS, err := r.mgr.ReadCheckpoint(ctx, r.name, partition.ID)
+		if err != nil {
+			return errors.Wrapf(err, "reading checkpoint for partition %d", partition.ID)
+		}
+		fmt.Printf("checkpoint for partition %d: %+v\n", partition.ID, checkpointTS)
+		if !checkpointTS.IsEmpty() {
+			if initialTS.IsEmpty() || checkpointTS.Less(initialTS) {
+				initialTS = checkpointTS
+			}
+		}
+		fmt.Printf("initialTS: %+v\n", initialTS)
 	}
 	if initialTS.IsEmpty() {
 		// No checkpoint found, start from now
@@ -373,13 +382,16 @@ func (r *Reader) ConfirmReceipt(ctx context.Context) {
 	}()
 
 	// Persist the checkpoint if we have one.
+	fmt.Printf("persisting checkpoint: %+v\n", checkpointToWrite)
 	if !checkpointToWrite.IsEmpty() {
-		// TODO: Support multiple partitions - for now we only have partition 1.
-		partitionID := int64(1)
-		if err := r.mgr.WriteCheckpoint(ctx, r.name, partitionID, checkpointToWrite); err != nil {
-			fmt.Printf("error writing checkpoint: %s\n", err)
-			// TODO: decide how to handle checkpoint write errors. Since the txn
-			// has already committed, I don't think we can really fail at this point.
+		fmt.Printf("persisting checkpoint to %d partitions\n", len(r.assignment.Partitions))
+		for _, partition := range r.assignment.Partitions {
+			fmt.Printf("persisting checkpoint to partition %d\n", partition.ID)
+			if err := r.mgr.WriteCheckpoint(ctx, r.name, partition.ID, checkpointToWrite); err != nil {
+				fmt.Printf("error writing checkpoint for partition %d: %s\n", partition.ID, err)
+				// TODO: decide how to handle checkpoint write errors. Since the txn
+				// has already committed, I don't think we can really fail at this point.
+			}
 		}
 	}
 
