@@ -1495,6 +1495,7 @@ GO_TARGETS = [
     "//pkg/kv/kvserver/allocator/allocatorimpl:allocatorimpl_test",
     "//pkg/kv/kvserver/allocator/load:load",
     "//pkg/kv/kvserver/allocator/load:load_test",
+    "//pkg/kv/kvserver/allocator/mmaprototype/mmaload:mmaload",
     "//pkg/kv/kvserver/allocator/mmaprototype:mmaprototype",
     "//pkg/kv/kvserver/allocator/mmaprototype:mmaprototype_test",
     "//pkg/kv/kvserver/allocator/plan:plan",

@@ -9,14 +9,15 @@ import (
 	"container/heap"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmaload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type topKReplicas struct {
 	k         int
-	dim       LoadDimension
-	threshold LoadValue
+	dim       mmaload.LoadDimension
+	threshold mmaload.LoadValue
 	// Decreasing load.
 	replicas    []replicaLoad
 	replicaHeap replicaHeap
@@ -24,7 +25,7 @@ type topKReplicas struct {
 
 type replicaLoad struct {
 	roachpb.RangeID
-	load LoadValue
+	load mmaload.LoadValue
 }
 
 // Reset when using a StoreLeaseholderMsg to reevaluate from scratch.
@@ -35,7 +36,7 @@ func (t *topKReplicas) startInit() {
 func (t *topKReplicas) addReplica(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
-	loadValue LoadValue,
+	loadValue mmaload.LoadValue,
 	replicaStoreID roachpb.StoreID,
 	msgStoreID roachpb.StoreID,
 ) {

@@ -8,6 +8,7 @@ package mmaprototype
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmaload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -117,12 +118,12 @@ func (a *allocatorState) IsInConflictWithMMA(
 	// TODO(wenyihu6): unify the branches below by assigning based on sls.worstDim and cpuOnly.
 	var conflict bool
 	if cpuOnly {
-		conflict = candSLS.dimSummary[CPURate] > existingSLS.dimSummary[CPURate]
+		conflict = candSLS.dimSummary[mmaload.CPURate] > existingSLS.dimSummary[mmaload.CPURate]
 		if conflict {
 			log.KvDistribution.VEventf(
 				ctx, 2,
 				"mma rejected candidate s%d(cpu-only) as a replacement for s%d: candidate=%v(cpu) > existing=%v(cpu)",
-				cand, advisor.existingStoreID, candSLS.dimSummary[CPURate], existingSLS.dimSummary[CPURate],
+				cand, advisor.existingStoreID, candSLS.dimSummary[mmaload.CPURate], existingSLS.dimSummary[mmaload.CPURate],
 			)
 		}
 	} else {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmaload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -71,10 +72,10 @@ func MakeStoreLeaseholderMsgFromState(
 
 		var rl mmaprototype.RangeLoad
 		load := s.RangeUsageInfo(rng.RangeID(), replica.StoreID())
-		rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(load.WriteBytesPerSecond)
-		rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(load.LogicalBytes)
-		rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(load.RaftCPUNanosPerSecond + load.RequestCPUNanosPerSecond)
-		rl.RaftCPU = mmaprototype.LoadValue(load.RaftCPUNanosPerSecond)
+		rl.Load[mmaload.WriteBandwidth] = mmaload.LoadValue(load.WriteBytesPerSecond)
+		rl.Load[mmaload.ByteSize] = mmaload.LoadValue(load.LogicalBytes)
+		rl.Load[mmaload.CPURate] = mmaload.LoadValue(load.RaftCPUNanosPerSecond + load.RequestCPUNanosPerSecond)
+		rl.RaftCPU = mmaload.LoadValue(load.RaftCPUNanosPerSecond)
 
 		rangeMessages = append(rangeMessages, mmaprototype.RangeMsg{
 			RangeID:                  roachpb.RangeID(replica.Range()),

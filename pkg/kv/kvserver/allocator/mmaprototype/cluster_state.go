@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmaload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -173,8 +174,8 @@ func (s ReplicaChangeType) String() string {
 type ReplicaChange struct {
 	// The load this change adds to a store. The values will be negative if the
 	// load is being removed.
-	loadDelta          LoadVector
-	secondaryLoadDelta SecondaryLoadVector
+	loadDelta          mmaload.SignedLoadVector
+	secondaryLoadDelta mmaload.SecondaryLoadVector
 
 	// target is the target {store,node} for the change.
 	target roachpb.ReplicationTarget
@@ -303,12 +304,18 @@ func MakeLeaseTransferChanges(
 			rangeID, addTarget, add.ReplicaState, existingReplicas))
 	}
 
+	// Only account for the leaseholder CPU, all other primary load dimensions
+	// are ignored. Byte size and write bytes are not impacted by having a range
+	// lease.
+
+	nonRaftCPU := rLoad.Load[mmaload.CPURate] - rLoad.RaftCPU
 	removeLease := ReplicaChange{
 		target:            removeTarget,
 		rangeID:           rangeID,
 		prev:              remove.ReplicaState,
 		next:              remove.ReplicaIDAndType,
 		replicaChangeType: RemoveLease,
+		loadDelta:         mmaload.SignedLoadVector{mmaload.CPURate: nonRaftCPU.Signed()},
 	}
 	addLease := ReplicaChange{
 		target:            addTarget,
@@ -316,18 +323,13 @@ func MakeLeaseTransferChanges(
 		prev:              add.ReplicaState,
 		next:              add.ReplicaIDAndType,
 		replicaChangeType: AddLease,
+		loadDelta:         mmaload.SignedLoadVector{mmaload.CPURate: loadToAdd(nonRaftCPU).Signed()},
 	}
 	removeLease.next.IsLeaseholder = false
 	addLease.next.IsLeaseholder = true
-	removeLease.secondaryLoadDelta[LeaseCount] = -1
-	addLease.secondaryLoadDelta[LeaseCount] = 1
+	removeLease.secondaryLoadDelta[mmaload.LeaseCount] = -1
+	addLease.secondaryLoadDelta[mmaload.LeaseCount] = 1
 
-	// Only account for the leaseholder CPU, all other primary load dimensions
-	// are ignored. Byte size and write bytes are not impacted by having a range
-	// lease.
-	nonRaftCPU := rLoad.Load[CPURate] - rLoad.RaftCPU
-	removeLease.loadDelta[CPURate] = -nonRaftCPU
-	addLease.loadDelta[CPURate] = loadToAdd(nonRaftCPU)
 	return [2]ReplicaChange{removeLease, addLease}
 }
 
@@ -354,13 +356,13 @@ func MakeAddReplicaChange(
 		replicaChangeType: AddReplica,
 	}
 	addReplica.next.ReplicaID = unknownReplicaID
-	addReplica.loadDelta.add(loadVectorToAdd(rLoad.Load))
+	addReplica.loadDelta.Add(loadVectorToAdd(rLoad.Load))
 	if replicaIDAndType.IsLeaseholder {
-		addReplica.secondaryLoadDelta[LeaseCount] = 1
+		addReplica.secondaryLoadDelta[mmaload.LeaseCount] = 1
 	} else {
 		// Set the load delta for CPU to be just the raft CPU. The non-raft CPU we
 		// assume is associated with the lease.
-		addReplica.loadDelta[CPURate] = loadToAdd(rLoad.RaftCPU)
+		addReplica.loadDelta[mmaload.CPURate] = loadToAdd(rLoad.RaftCPU)
 	}
 	return addReplica
 }
@@ -382,13 +384,13 @@ func MakeRemoveReplicaChange(
 		},
 		replicaChangeType: RemoveReplica,
 	}
-	removeReplica.loadDelta.subtract(rLoad.Load)
+	removeReplica.loadDelta.Subtract(rLoad.Load)
 	if replicaState.IsLeaseholder {
-		removeReplica.secondaryLoadDelta[LeaseCount] = -1
+		removeReplica.secondaryLoadDelta[mmaload.LeaseCount] = -1
 	} else {
 		// Set the load delta for CPU to be just the raft CPU. The non-raft CPU is
 		// associated with the lease.
-		removeReplica.loadDelta[CPURate] = -rLoad.RaftCPU
+		removeReplica.loadDelta[mmaload.CPURate] = -rLoad.RaftCPU
 	}
 	return removeReplica
 }
@@ -412,11 +414,11 @@ func MakeReplicaTypeChange(
 		replicaChangeType: ChangeReplica,
 	}
 	if next.IsLeaseholder {
-		change.secondaryLoadDelta[LeaseCount] = 1
-		change.loadDelta[CPURate] = loadToAdd(rLoad.Load[CPURate] - rLoad.RaftCPU)
+		change.secondaryLoadDelta[mmaload.LeaseCount] = 1
+		change.loadDelta[mmaload.CPURate] = loadToAdd(rLoad.Load[mmaload.CPURate] - rLoad.RaftCPU)
 	} else if prev.IsLeaseholder {
-		change.secondaryLoadDelta[LeaseCount] = -1
-		change.loadDelta[CPURate] = rLoad.RaftCPU - rLoad.Load[CPURate]
+		change.secondaryLoadDelta[mmaload.LeaseCount] = -1
+		change.loadDelta[mmaload.CPURate] = rLoad.RaftCPU - rLoad.Load[mmaload.CPURate]
 	}
 	return change
 }
@@ -767,8 +769,9 @@ type storeState struct {
 		// NB: these load values can become negative due to applying pending
 		// changes. We need to let them be negative to retain the ability to undo
 		// pending changes.
-		load          LoadVector
-		secondaryLoad SecondaryLoadVector
+		load mmaload.SignedLoadVector
+		// TODO: make this a signed vector, like adjusted load.
+		secondaryLoad mmaload.SecondaryLoadVector
 		// Pending changes for computing loadReplicas and load.
 		// Added to at the same time as clusterState.pendingChanges.
 		//
@@ -935,32 +938,44 @@ func (ss *storeState) computePendingChangesReflectedInLatestLoad(
 }
 
 func (ss *storeState) computeMaxFractionPending() {
-	fracIncrease := 0.0
-	fracDecrease := 0.0
-	for i := range ss.reportedLoad {
-		if ss.reportedLoad[i] == ss.adjusted.load[i] && ss.reportedLoad[i] == 0 {
-			// Avoid setting ss.maxFractionPendingIncrease and
-			// ss.maxFractionPendingDecrease to 1000 when the reported load and
-			// adjusted load are both 0 since some dimension is expected to have zero
-			// (e.g. write bandwidth during read-only workloads).
-			continue
-		}
-		if ss.reportedLoad[i] == 0 {
-			fracIncrease = 1000
-			fracDecrease = 1000
-			break
-		}
-		f := math.Abs(float64(ss.adjusted.load[i]-ss.reportedLoad[i])) / float64(ss.reportedLoad[i])
-		if ss.adjusted.load[i] > ss.reportedLoad[i] {
-			if f > fracIncrease {
-				fracIncrease = f
-			}
-		} else if f > fracDecrease {
-			fracDecrease = f
+	ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease = computeMaxFractionPending(ss.reportedLoad, ss.adjusted.load)
+}
+
+// TODO(tbg): unit test this function.
+func computeMaxFractionPending(rep mmaload.LoadVector, adj mmaload.SignedLoadVector) (maxFracInc, maxFracDec float64) {
+	for i := range rep {
+		// The fraction pending expresses the absolute difference of the adjusted
+		// and reported load as a multiple of the reported load. Note that this
+		// is the case even if the adjusted load is negative: if, say, the adjusted
+		// load is -50 and the reported load is 100, it is still correct to say that
+		// a "magnitude 1.5x" change is pending (from 100 to -50).
+		diff := adj[i].Subtract(rep[i])
+
+		switch {
+		case diff.Abs() == 0:
+			// Reported and adjusted are equal, so nothing is pending.
+			// This also handles the case in which both are zero.
+			// We don't need to update maxFracInc or maxFracDec because
+			// they started at zero and only go up from there.
+		case rep[i] == 0:
+			// The adjusted load is nonzero, but the reported one is zero. We can't
+			// express the load change as a multiple of zero. Arbitrarily assign large
+			// value to both increase and decrease, indicating that no more changes
+			// should be made until either the pending change clears (and we get a
+			// zero diff above) or we register positive reported load.
+			maxFracInc = max(maxFracInc, 1000)
+			maxFracDec = max(maxFracInc, 1000)
+		case diff.Nonnegative() > 0:
+			// Vanilla case of adjusted > reported, i.e. we have load incoming.
+			// We don't need to update maxFracDec.
+			maxFracInc = max(maxFracInc, math.Abs(float64(diff.Abs())/float64(rep[i])))
+		default:
+			// Vanilla case of adjusted < reported, i.e. we have load incoming.
+			// We don't need to update maxFracInc.
+			maxFracDec = max(maxFracDec, math.Abs(float64(diff.Abs())/float64(rep[i])))
 		}
 	}
-	ss.maxFractionPendingIncrease = fracIncrease
-	ss.maxFractionPendingDecrease = fracDecrease
+	return maxFracInc, maxFracDec
 }
 
 func newStoreState() *storeState {
@@ -975,7 +990,7 @@ type nodeState struct {
 	stores []roachpb.StoreID
 	NodeLoad
 	// NB: adjustedCPU can be negative.
-	adjustedCPU LoadValue
+	adjustedCPU mmaload.LoadValue
 }
 
 func newNodeState(nodeID roachpb.NodeID) *nodeState {
@@ -1404,11 +1419,17 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 	if ss == nil {
 		panic(fmt.Sprintf("store %d not found", storeMsg.StoreID))
 	}
-	ns.ReportedCPU += storeMsg.Load[CPURate] - ss.reportedLoad[CPURate]
-	ns.CapacityCPU += storeMsg.Capacity[CPURate] - ss.capacity[CPURate]
+	// TODO(tbg): review the math here, check for negative values, and explain
+	// what's going on.
+	ns.ReportedCPU += storeMsg.Load[mmaload.CPURate] - ss.reportedLoad[mmaload.CPURate]
+	ns.CapacityCPU += storeMsg.Capacity[mmaload.CPURate] - ss.capacity[mmaload.CPURate]
 	// Undo the adjustment for the store. We will apply the adjustment again
 	// below.
-	ns.adjustedCPU += storeMsg.Load[CPURate] - ss.adjusted.load[CPURate]
+	// TODO(tbg): how do we know ssAdjCPU is positive? We probably don't, and need
+	// to handle this case. Revisit and avoid the direct unverified conversion to
+	// LoadValue.
+	ssAdjCPU, _ := ss.adjusted.load.UnwrapAt(mmaload.CPURate)
+	ns.adjustedCPU += storeMsg.Load[mmaload.CPURate] - mmaload.LoadValue(ssAdjCPU)
 
 	// The store's load sequence number is incremented on each load change. The
 	// store's load is updated below.
@@ -1419,7 +1440,8 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 
 	// Reset the adjusted load to be the reported load. We will re-apply any
 	// remaining pending change deltas to the updated adjusted load.
-	ss.adjusted.load = storeMsg.Load
+	ss.adjusted.load = mmaload.SignedLoadVector{}
+	ss.adjusted.load.Add(storeMsg.Load)
 	ss.adjusted.secondaryLoad = storeMsg.SecondaryLoad
 	ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease = 0, 0
 
@@ -1706,18 +1728,18 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		topk.startInit()
 		sls := cs.computeLoadSummary(ctx, ss.StoreID, &clusterMeans.storeLoad, &clusterMeans.nodeLoad)
 		if ss.StoreID == localss.StoreID {
-			topk.dim = CPURate
+			topk.dim = mmaload.CPURate
 		} else {
-			topk.dim = WriteBandwidth
+			topk.dim = mmaload.WriteBandwidth
 		}
 		if sls.highDiskSpaceUtilization {
-			topk.dim = ByteSize
+			topk.dim = mmaload.ByteSize
 		} else if sls.sls > loadNoChange {
 			// If multiple dimensions are contributing the same loadSummary, we will pick
 			// CPURate before WriteBandwidth before ByteSize.
 			for i := range sls.dimSummary {
 				if sls.dimSummary[i] == sls.sls {
-					topk.dim = LoadDimension(i)
+					topk.dim = mmaload.LoadDimension(i)
 					break
 				}
 			}
@@ -1779,7 +1801,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			minReplicaLoadFraction = 0.02
 		)
 		fraction := minReplicaLoadFraction
-		if ss.StoreID == msg.StoreID && topk.dim == CPURate {
+		if ss.StoreID == msg.StoreID && topk.dim == mmaload.CPURate {
 			// We are assuming we will be able to shed leases, but if we can't we
 			// will start shedding replicas, so this is just a heuristic.
 			fraction = minLeaseLoadFraction
@@ -1787,11 +1809,11 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// The max(0, ...) is defensive, in case the adjusted load is negative.
 		// Given that this is a most overloaded dim, the likelihood of the
 		// adjusted load being negative is very low.
-		adjustedStoreLoadValue := max(0, ss.adjusted.load[topk.dim])
-		threshold := LoadValue(float64(adjustedStoreLoadValue) * fraction)
-		if ss.reportedSecondaryLoad[ReplicaCount] > 0 {
+		adjustedStoreLoadValue := ss.adjusted.load[topk.dim].Nonnegative()
+		threshold := mmaload.LoadValue(float64(adjustedStoreLoadValue) * fraction)
+		if ss.reportedSecondaryLoad[mmaload.ReplicaCount] > 0 {
 			// Allow all ranges above 90% of the mean. This is quite arbitrary.
-			meanLoad := (adjustedStoreLoadValue * 9) / (ss.reportedSecondaryLoad[ReplicaCount] * 10)
+			meanLoad := (adjustedStoreLoadValue * 9) / (ss.reportedSecondaryLoad[mmaload.ReplicaCount] * 10)
 			threshold = min(meanLoad, threshold)
 		}
 		topk.threshold = threshold
@@ -1832,16 +1854,16 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				ss := cs.stores[replica.StoreID]
 				topk := ss.adjusted.topKRanges[msg.StoreID]
 				switch topk.dim {
-				case CPURate:
-					l := rs.load.Load[CPURate]
+				case mmaload.CPURate:
+					l := rs.load.Load[mmaload.CPURate]
 					if !replica.ReplicaState.IsLeaseholder {
 						l = rs.load.RaftCPU
 					}
 					topk.addReplica(ctx, rangeID, l, replica.StoreID, msg.StoreID)
-				case WriteBandwidth:
-					topk.addReplica(ctx, rangeID, rs.load.Load[WriteBandwidth], replica.StoreID, msg.StoreID)
-				case ByteSize:
-					topk.addReplica(ctx, rangeID, rs.load.Load[ByteSize], replica.StoreID, msg.StoreID)
+				case mmaload.WriteBandwidth:
+					topk.addReplica(ctx, rangeID, rs.load.Load[mmaload.WriteBandwidth], replica.StoreID, msg.StoreID)
+				case mmaload.ByteSize:
+					topk.addReplica(ctx, rangeID, rs.load.Load[mmaload.ByteSize], replica.StoreID, msg.StoreID)
 				}
 			}
 		}
@@ -2231,22 +2253,22 @@ func (cs *clusterState) undoReplicaChange(change ReplicaChange) {
 // store and node affected.
 func (cs *clusterState) applyChangeLoadDelta(change ReplicaChange) {
 	ss := cs.stores[change.target.StoreID]
-	ss.adjusted.load.add(change.loadDelta)
-	ss.adjusted.secondaryLoad.add(change.secondaryLoadDelta)
+	ss.adjusted.load.Add(change.loadDelta)
+	ss.adjusted.secondaryLoad.Add(change.secondaryLoadDelta)
 	ss.loadSeqNum++
 	ss.computeMaxFractionPending()
-	cs.nodes[ss.NodeID].adjustedCPU += change.loadDelta[CPURate]
+	cs.nodes[ss.NodeID].adjustedCPU += change.loadDelta[mmaload.CPURate]
 }
 
 // undoChangeLoadDelta subtracts the change load delta from the adjusted load
 // of the store and node affected.
 func (cs *clusterState) undoChangeLoadDelta(change ReplicaChange) {
 	ss := cs.stores[change.target.StoreID]
-	ss.adjusted.load.subtract(change.loadDelta)
-	ss.adjusted.secondaryLoad.subtract(change.secondaryLoadDelta)
+	ss.adjusted.load.Subtract(change.loadDelta)
+	ss.adjusted.secondaryLoad.Subtract(change.secondaryLoadDelta)
 	ss.loadSeqNum++
 	ss.computeMaxFractionPending()
-	cs.nodes[ss.NodeID].adjustedCPU -= change.loadDelta[CPURate]
+	cs.nodes[ss.NodeID].adjustedCPU -= change.loadDelta[mmaload.CPURate]
 }
 
 // setStore updates the store attributes and locality in the cluster state. If
@@ -2317,12 +2339,12 @@ func (cs *clusterState) canShedAndAddLoad(
 	ctx context.Context,
 	srcSS *storeState,
 	targetSS *storeState,
-	delta LoadVector,
+	delta mmaload.LoadVector,
 	means *meansLoad,
 	onlyConsiderTargetCPUSummary bool,
-	overloadedDim LoadDimension,
+	overloadedDim mmaload.LoadDimension,
 ) (canAddLoad bool) {
-	if overloadedDim == NumLoadDimensions {
+	if overloadedDim == mmaload.NumLoadDimensions {
 		panic("overloadedDim must not be NumLoadDimensions")
 	}
 	// TODO(tbg): in experiments, we often see interesting behavior right when
@@ -2332,26 +2354,26 @@ func (cs *clusterState) canShedAndAddLoad(
 	targetNS := cs.nodes[targetSS.NodeID]
 	// Add the delta.
 	deltaToAdd := loadVectorToAdd(delta)
-	targetSS.adjusted.load.add(deltaToAdd)
+	targetSS.adjusted.load.Add(deltaToAdd)
 	// TODO(tbg): why does NodeLoad have an adjustedCPU field but not fields for
 	// the other load dimensions? We just added deltaToAdd to targetSS.adjusted,
 	// shouldn't this be wholly reflected in targetNS as well, not just for CPU?
 	// Or maybe CPU is the only dimension that matters at the node level. It feels
 	// sloppy/confusing though.
-	targetNS.adjustedCPU += deltaToAdd[CPURate]
+	targetNS.adjustedCPU += deltaToAdd[mmaload.CPURate]
 	targetSLS := computeLoadSummary(ctx, targetSS, targetNS, &means.storeLoad, &means.nodeLoad)
 	// Undo the addition.
-	targetSS.adjusted.load.subtract(deltaToAdd)
-	targetNS.adjustedCPU -= deltaToAdd[CPURate]
+	targetSS.adjusted.load.Subtract(deltaToAdd)
+	targetNS.adjustedCPU -= deltaToAdd[mmaload.CPURate]
 
 	// Remove the delta.
 	srcNS := cs.nodes[srcSS.NodeID]
-	srcSS.adjusted.load.subtract(delta)
-	srcNS.adjustedCPU -= delta[CPURate]
+	srcSS.adjusted.load.Subtract(delta)
+	srcNS.adjustedCPU -= delta[mmaload.CPURate]
 	srcSLS := computeLoadSummary(ctx, srcSS, srcNS, &means.storeLoad, &means.nodeLoad)
 	// Undo the removal.
-	srcSS.adjusted.load.add(delta)
-	srcNS.adjustedCPU += delta[CPURate]
+	srcSS.adjusted.load.Add(delta)
+	srcNS.adjustedCPU += delta[mmaload.CPURate]
 
 	var reason strings.Builder
 	defer func() {
@@ -2379,7 +2401,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	// loadNoChange, and the source must have been > loadNoChange.
 	var targetSummary loadSummary
 	if onlyConsiderTargetCPUSummary {
-		targetSummary = targetSLS.dimSummary[CPURate]
+		targetSummary = targetSLS.dimSummary[mmaload.CPURate]
 		if targetSummary < targetSLS.nls {
 			targetSummary = targetSLS.nls
 		}
@@ -2426,9 +2448,9 @@ func (cs *clusterState) canShedAndAddLoad(
 	// transitions to overloadSlow along one dimension, to allow for an
 	// exchange.
 	overloadedDimFractionIncrease := math.MaxFloat64
-	if targetSS.adjusted.load[overloadedDim] > 0 {
+	if adjLoad, pos := targetSS.adjusted.load.NonnegativeAt(overloadedDim); pos {
 		overloadedDimFractionIncrease = float64(deltaToAdd[overloadedDim]) /
-			float64(targetSS.adjusted.load[overloadedDim])
+			float64(adjLoad)
 	} else {
 		// Else, the adjusted load on the overloadedDim is zero or negative, which
 		// is possible, but extremely rare in practice. We arbitrarily set the
@@ -2437,7 +2459,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	}
 	otherDimensionsBecameWorseInTarget := false
 	for i := range targetSLS.dimSummary {
-		dim := LoadDimension(i)
+		dim := mmaload.LoadDimension(i)
 		if dim == overloadedDim {
 			continue
 		}
@@ -2446,8 +2468,8 @@ func (cs *clusterState) canShedAndAddLoad(
 		}
 		// This is an overloaded dimension in the target. Only allow small
 		// increases along this dimension.
-		if targetSS.adjusted.load[dim] > 0 {
-			dimFractionIncrease := float64(deltaToAdd[dim]) / float64(targetSS.adjusted.load[dim])
+		if adjLoad, pos := targetSS.adjusted.load.NonnegativeAt(dim); pos {
+			dimFractionIncrease := float64(deltaToAdd[dim]) / float64(adjLoad)
 			// The use of 33% is arbitrary.
 			if dimFractionIncrease > overloadedDimFractionIncrease/3 {
 				log.KvDistribution.Infof(ctx, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
@@ -2544,24 +2566,25 @@ func computeLoadSummary(
 ) storeLoadSummary {
 	sls := loadLow
 	var highDiskSpaceUtil bool
-	var dimSummary [NumLoadDimensions]loadSummary
-	var worstDim LoadDimension
+	var dimSummary [mmaload.NumLoadDimensions]loadSummary
+	var worstDim mmaload.LoadDimension
 	for i := range msl.load {
 		const nodeIDForLogging = 0
-		ls := loadSummaryForDimension(ctx, ss.StoreID, nodeIDForLogging, LoadDimension(i), ss.adjusted.load[i], ss.capacity[i],
+		ls := loadSummaryForDimension(ctx, ss.StoreID, nodeIDForLogging, mmaload.LoadDimension(i), ss.adjusted.load.Nonnegative()[i],
+			ss.capacity[i],
 			msl.load[i], msl.util[i])
 		if ls > sls {
 			sls = ls
-			worstDim = LoadDimension(i)
+			worstDim = mmaload.LoadDimension(i)
 		}
 		dimSummary[i] = ls
-		switch LoadDimension(i) {
-		case ByteSize:
-			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i])
+		switch mmaload.LoadDimension(i) {
+		case mmaload.ByteSize:
+			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load.Nonnegative()[i], ss.capacity[i])
 		}
 	}
 	const storeIDForLogging = 0
-	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
+	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, mmaload.CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
 		worstDim:                   worstDim,
 		sls:                        sls,
