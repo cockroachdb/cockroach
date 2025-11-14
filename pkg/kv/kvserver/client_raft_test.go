@@ -2285,6 +2285,12 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 					StickyVFSRegistry: fs.NewStickyRegistry(),
 					WallClock:         manualClock,
 				},
+				// In this test, under duress, we can occasionally fail enough
+				// heartbeats to exceed the 10s timeout in execChangeReplicasTxn to
+				// verify liveness of a post-change quorum.
+				//
+				// See: https://github.com/cockroachdb/cockroach/issues/156689
+				Store: &kvserver.StoreTestingKnobs{AllowDangerousReplicationChanges: true},
 			},
 		}
 	}
