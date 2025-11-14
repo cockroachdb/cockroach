@@ -58,10 +58,10 @@ func parseLoadVector(t *testing.T, in string) mmaload.LoadVector {
 	return vec
 }
 
-func parseSecondaryLoadVector(t *testing.T, in string) SecondaryLoadVector {
-	var vec SecondaryLoadVector
+func parseSecondaryLoadVector(t *testing.T, in string) mmaload.SecondaryLoadVector {
+	var vec mmaload.SecondaryLoadVector
 	parts := strings.Split(stripBrackets(t, in), ",")
-	require.LessOrEqual(t, len(parts), int(NumSecondaryLoadDimensions))
+	require.LessOrEqual(t, len(parts), int(mmaload.NumSecondaryLoadDimensions))
 	for dim := range parts {
 		vec[dim] = mmaload.LoadValue(parseInt(t, parts[dim]))
 	}

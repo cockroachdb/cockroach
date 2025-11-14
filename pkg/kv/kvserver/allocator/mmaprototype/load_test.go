@@ -89,7 +89,7 @@ func TestMeansMemo(t *testing.T) {
 					reportedLoad: mmaload.LoadVector{mmaload.LoadValue(cpuLoad), mmaload.LoadValue(wbLoad), mmaload.LoadValue(bsLoad)},
 					capacity: mmaload.LoadVector{
 						mmaload.LoadValue(cpuCapacity), mmaload.LoadValue(wbCapacity), mmaload.LoadValue(bsCapacity)},
-					reportedSecondaryLoad: SecondaryLoadVector{leaseCountLoad},
+					reportedSecondaryLoad: mmaload.SecondaryLoadVector{leaseCountLoad},
 				}
 				for i := range sLoad.capacity {
 					if sLoad.capacity[i] < 0 {

@@ -175,7 +175,7 @@ type ReplicaChange struct {
 	// The load this change adds to a store. The values will be negative if the
 	// load is being removed.
 	loadDelta          mmaload.LoadVector
-	secondaryLoadDelta SecondaryLoadVector
+	secondaryLoadDelta mmaload.SecondaryLoadVector
 
 	// target is the target {store,node} for the change.
 	target roachpb.ReplicationTarget
@@ -328,8 +328,8 @@ func MakeLeaseTransferChanges(
 	}
 	removeLease.next.IsLeaseholder = false
 	addLease.next.IsLeaseholder = true
-	removeLease.secondaryLoadDelta[LeaseCount] = -1
-	addLease.secondaryLoadDelta[LeaseCount] = 1
+	removeLease.secondaryLoadDelta[mmaload.LeaseCount] = -1
+	addLease.secondaryLoadDelta[mmaload.LeaseCount] = 1
 
 	// Only account for the leaseholder CPU, all other primary load dimensions
 	// are ignored. Byte size and write bytes are not impacted by having a range
@@ -365,7 +365,7 @@ func MakeAddReplicaChange(
 	addReplica.next.ReplicaID = unknownReplicaID
 	addReplica.loadDelta.Add(loadVectorToAdd(rLoad.Load))
 	if replicaIDAndType.IsLeaseholder {
-		addReplica.secondaryLoadDelta[LeaseCount] = 1
+		addReplica.secondaryLoadDelta[mmaload.LeaseCount] = 1
 	} else {
 		// Set the load delta for CPU to be just the raft CPU. The non-raft CPU we
 		// assume is associated with the lease.
@@ -393,7 +393,7 @@ func MakeRemoveReplicaChange(
 	}
 	removeReplica.loadDelta.Subtract(rLoad.Load)
 	if replicaState.IsLeaseholder {
-		removeReplica.secondaryLoadDelta[LeaseCount] = -1
+		removeReplica.secondaryLoadDelta[mmaload.LeaseCount] = -1
 	} else {
 		// Set the load delta for CPU to be just the raft CPU. The non-raft CPU is
 		// associated with the lease.
@@ -421,10 +421,10 @@ func MakeReplicaTypeChange(
 		replicaChangeType: ChangeReplica,
 	}
 	if next.IsLeaseholder {
-		change.secondaryLoadDelta[LeaseCount] = 1
+		change.secondaryLoadDelta[mmaload.LeaseCount] = 1
 		change.loadDelta[mmaload.CPURate] = loadToAdd(rLoad.Load[mmaload.CPURate] - rLoad.RaftCPU)
 	} else if prev.IsLeaseholder {
-		change.secondaryLoadDelta[LeaseCount] = -1
+		change.secondaryLoadDelta[mmaload.LeaseCount] = -1
 		change.loadDelta[mmaload.CPURate] = rLoad.RaftCPU - rLoad.Load[mmaload.CPURate]
 	}
 	return change
@@ -1786,9 +1786,9 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// adjusted load being negative is very low.
 		adjustedStoreLoadValue := max(0, ss.adjusted.load[topk.dim])
 		threshold := mmaload.LoadValue(float64(adjustedStoreLoadValue) * fraction)
-		if ss.reportedSecondaryLoad[ReplicaCount] > 0 {
+		if ss.reportedSecondaryLoad[mmaload.ReplicaCount] > 0 {
 			// Allow all ranges above 90% of the mean. This is quite arbitrary.
-			meanLoad := (adjustedStoreLoadValue * 9) / (ss.reportedSecondaryLoad[ReplicaCount] * 10)
+			meanLoad := (adjustedStoreLoadValue * 9) / (ss.reportedSecondaryLoad[mmaload.ReplicaCount] * 10)
 			threshold = min(meanLoad, threshold)
 		}
 		topk.threshold = threshold
@@ -2219,7 +2219,7 @@ func (cs *clusterState) undoReplicaChange(change ReplicaChange) {
 func (cs *clusterState) applyChangeLoadDelta(change ReplicaChange) {
 	ss := cs.stores[change.target.StoreID]
 	ss.adjusted.load.Add(change.loadDelta)
-	ss.adjusted.secondaryLoad.add(change.secondaryLoadDelta)
+	ss.adjusted.secondaryLoad.Add(change.secondaryLoadDelta)
 	ss.loadSeqNum++
 	ss.computeMaxFractionPending()
 	cs.nodes[ss.NodeID].adjustedCPU += change.loadDelta[mmaload.CPURate]
@@ -2230,7 +2230,7 @@ func (cs *clusterState) applyChangeLoadDelta(change ReplicaChange) {
 func (cs *clusterState) undoChangeLoadDelta(change ReplicaChange) {
 	ss := cs.stores[change.target.StoreID]
 	ss.adjusted.load.Subtract(change.loadDelta)
-	ss.adjusted.secondaryLoad.subtract(change.secondaryLoadDelta)
+	ss.adjusted.secondaryLoad.Subtract(change.secondaryLoadDelta)
 	ss.loadSeqNum++
 	ss.computeMaxFractionPending()
 	cs.nodes[ss.NodeID].adjustedCPU -= change.loadDelta[mmaload.CPURate]

@@ -25,7 +25,7 @@ type StoreLoadMsg struct {
 	// derive a node level capacity, and then dividing that by the number of
 	// stores.
 	Capacity      mmaload.LoadVector
-	SecondaryLoad SecondaryLoadVector
+	SecondaryLoad mmaload.SecondaryLoadVector
 
 	LoadTime time.Time
 }
