@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -158,6 +159,50 @@ func TestCheckpointRestoration(t *testing.T) {
 		require.NotContains(t, val, "batch1", "should not see batch1 data after checkpoint")
 		require.Contains(t, val, "batch2", "should see batch2 data")
 	}
+}
+
+func TestCreateQueueFeedFromCursor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	db := sqlutils.MakeSQLRunner(conn)
+	db.Exec(t, `CREATE TABLE t (a STRING, b INT)`)
+
+	var tableID int64
+	db.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 't'").Scan(&tableID)
+
+	// Insert first batch of data (should NOT be read).
+	db.Exec(t, `INSERT INTO t VALUES ('batch1_row1', 10), ('batch1_row2', 20)`)
+
+	// Get cursor timestamp after first batch.
+	var cursorStr string
+	db.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&cursorStr)
+	cursor, err := hlc.ParseHLC(cursorStr)
+
+	// Insert second batch of data (should be read).
+	db.Exec(t, `INSERT INTO t VALUES ('batch2_row1', 30), ('batch2_row2', 40)`)
+
+	qm := NewTestManager(t, srv.ApplicationLayer())
+	defer qm.Close()
+	require.NoError(t, qm.CreateQueueFromCursor(ctx, "cursor_test", tableID, cursor))
+
+	reader, err := qm.CreateReaderForSession(ctx, "cursor_test", Session{
+		ConnectionID: uuid.MakeV4(),
+		LivenessID:   sqlliveness.SessionID("1"),
+	})
+	require.NoError(t, err)
+	defer func() { _ = reader.Close() }()
+
+	// Should only get the second batch.
+	rows := pollForRows(t, ctx, reader, 2)
+	requireRow(t, rows[0], "batch2_row1", 30)
+	requireRow(t, rows[1], "batch2_row2", 40)
+
+	reader.ConfirmReceipt(ctx)
 }
 
 // pollForRows waits for the reader to return expectedCount rows.

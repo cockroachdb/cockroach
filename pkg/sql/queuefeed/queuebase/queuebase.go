@@ -4,10 +4,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 type Manager interface {
 	CreateQueue(ctx context.Context, name string, tableID int64) error
+	CreateQueueFromCursor(ctx context.Context, name string, tableID int64, cursor hlc.Timestamp) error
 }
 
 // Implemented by the conn executor in reality

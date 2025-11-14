@@ -4661,6 +4661,33 @@ value if you rely on the HLC for accuracy.`,
 		},
 	}),
 
+	"crdb_internal.create_queue_feed_from_cursor": makeBuiltin(defProps(), tree.Overload{
+		Types: tree.ParamTypes{
+			{Name: "queue_name", Typ: types.String},
+			{Name: "table_descriptor_id", Typ: types.Int},
+			{Name: "cursor", Typ: types.Decimal},
+		},
+		Volatility: volatility.Volatile,
+		ReturnType: tree.FixedReturnType(types.Void),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			qn := args[0].(*tree.DString)
+			qm := getQueueManager(evalCtx)
+			tID := args[1].(*tree.DInt)
+			cursorDecimal := tree.MustBeDDecimal(args[2])
+
+			// Convert the decimal cursor to hlc.Timestamp
+			cursor, err := hlc.DecimalToHLC(&cursorDecimal.Decimal)
+			if err != nil {
+				return nil, errors.Wrap(err, "converting cursor decimal to HLC timestamp")
+			}
+
+			if err := qm.CreateQueueFromCursor(ctx, string(*qn), int64(*tID), cursor); err != nil {
+				return nil, err
+			}
+			return tree.DVoidDatum, nil
+		},
+	}),
+
 	"crdb_internal.select_array_from_queue_feed": makeBuiltin(defProps(), tree.Overload{
 		Types: tree.ParamTypes{
 			{Name: "queue_name", Typ: types.String},

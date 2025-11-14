@@ -113,6 +113,9 @@ SELECT cursor FROM defaultdb.queue_cursor_%s WHERE partition_id = $1
 
 // should take a txn
 func (m *Manager) CreateQueue(ctx context.Context, queueName string, tableDescID int64) error {
+	return m.CreateQueueFromCursor(ctx, queueName, tableDescID, hlc.Timestamp{})
+}
+func (m *Manager) CreateQueueFromCursor(ctx context.Context, queueName string, tableDescID int64, cursor hlc.Timestamp) error {
 	err := m.executor.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, err := txn.Exec(ctx, "create_q", txn.KV(), createQueueTableSQL)
 		if err != nil {
@@ -174,8 +177,12 @@ func (m *Manager) CreateQueue(ctx context.Context, queueName string, tableDescID
 				return errors.Wrapf(err, "inserting partition %d for range", partitionID)
 			}
 
+			checkpointTS := txn.KV().ReadTimestamp()
+			if !cursor.IsEmpty() {
+				checkpointTS = cursor
+			}
 			// checkpoint the partition at the transaction timestamp
-			err = m.WriteCheckpoint(ctx, queueName, partitionID, txn.KV().ReadTimestamp())
+			err = m.WriteCheckpoint(ctx, queueName, partitionID, checkpointTS)
 			if err != nil {
 				return errors.Wrapf(err, "writing checkpoint for partition %d", partitionID)
 			}
