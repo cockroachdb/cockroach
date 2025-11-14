@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -220,36 +221,32 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) err
 		rangefeed.WithFiltering(false),
 	}
 
-	var initialTS hlc.Timestamp
-	fmt.Printf("reading checkpoints for %d partitions\n", len(assignment.Partitions))
+	frontier, err := span.MakeFrontier(assignment.Spans()...)
+	if err != nil {
+		return errors.Wrap(err, "creating frontier")
+	}
+
 	for _, partition := range assignment.Partitions {
-		fmt.Printf("reading checkpoint for partition %d\n", partition.ID)
 		checkpointTS, err := r.mgr.ReadCheckpoint(ctx, r.name, partition.ID)
 		if err != nil {
 			return errors.Wrapf(err, "reading checkpoint for partition %d", partition.ID)
 		}
-		fmt.Printf("checkpoint for partition %d: %+v\n", partition.ID, checkpointTS)
 		if !checkpointTS.IsEmpty() {
-			if initialTS.IsEmpty() || checkpointTS.Less(initialTS) {
-				initialTS = checkpointTS
-			}
+			frontier.Forward(partition.Span, checkpointTS)
+		} else {
+			frontier.Forward(partition.Span, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		}
-		fmt.Printf("initialTS: %+v\n", initialTS)
 	}
-	if initialTS.IsEmpty() {
-		// No checkpoint found, start from now
-		initialTS = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+	if frontier.Frontier().IsEmpty() {
+		return errors.New("frontier is empty")
 	}
 
 	rf := r.rff.New(
-		fmt.Sprintf("queuefeed.reader.name=%s", r.name), initialTS, onValue, opts...,
+		fmt.Sprintf("queuefeed.reader.name=%s", r.name), frontier.Frontier(), onValue, opts...,
 	)
 
-	spans := assignment.Spans()
-
-	fmt.Printf("starting rangefeed with spans: %+v\n", spans)
-
-	if err := rf.Start(ctx, spans); err != nil {
+	if err := rf.StartFromFrontier(ctx, frontier); err != nil {
 		return errors.Wrap(err, "starting rangefeed")
 	}
 
