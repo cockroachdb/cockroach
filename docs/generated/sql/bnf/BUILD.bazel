@@ -153,6 +153,7 @@ FILES = [
     "drop_trigger",
     "drop_type",
     "drop_view",
+    "execute_schedules_stmt",
     "execute_stmt",
     "experimental_audit",
     "explain_analyze_stmt",
