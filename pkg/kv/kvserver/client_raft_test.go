@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	raft "github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -2294,6 +2294,12 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 					StickyVFSRegistry: fs.NewStickyRegistry(),
 					WallClock:         manualClock,
 				},
+				// In this test, under duress, we can occasionally fail enough
+				// heartbeats to exceed the 10s timeout in execChangeReplicasTxn to
+				// verify liveness of a post-change quorum.
+				//
+				// See: https://github.com/cockroachdb/cockroach/issues/156689
+				Store: &kvserver.StoreTestingKnobs{AllowDangerousReplicationChanges: true},
 			},
 		}
 	}
