@@ -937,32 +937,49 @@ func (ss *storeState) computePendingChangesReflectedInLatestLoad(
 }
 
 func (ss *storeState) computeMaxFractionPending() {
-	fracIncrease := 0.0
-	fracDecrease := 0.0
-	for i := range ss.reportedLoad {
-		if ss.reportedLoad[i] == ss.adjusted.load[i] && ss.reportedLoad[i] == 0 {
-			// Avoid setting ss.maxFractionPendingIncrease and
-			// ss.maxFractionPendingDecrease to 1000 when the reported load and
-			// adjusted load are both 0 since some dimension is expected to have zero
-			// (e.g. write bandwidth during read-only workloads).
-			continue
-		}
-		if ss.reportedLoad[i] == 0 {
-			fracIncrease = 1000
-			fracDecrease = 1000
-			break
-		}
-		f := math.Abs(float64(ss.adjusted.load[i]-ss.reportedLoad[i])) / float64(ss.reportedLoad[i])
-		if ss.adjusted.load[i] > ss.reportedLoad[i] {
-			if f > fracIncrease {
-				fracIncrease = f
+	ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease = computeMaxFractionPendingIncDec(ss.reportedLoad, ss.adjusted.load)
+}
+
+func computeMaxFractionPendingIncDec(rep, adj LoadVector) (maxFracInc, maxFracDec float64) {
+	for i := range rep {
+		inc, dec := func(rep, adj LoadValue) (inc, dec float64) {
+			// The fraction pending expresses the absolute difference of the adjusted
+			// and reported load as a multiple of the reported load. Note that this
+			// is the case even if the adjusted load is negative: if, say, the adjusted
+			// load is -50 and the reported load is 100, it is still correct to say that
+			// a "magnitude 1.5x" change is pending (from 100 to -50).
+			diff := adj - rep
+
+			switch {
+			case diff == 0:
+				// Reported and adjusted are equal, so nothing is pending.
+				// This also handles the case in which both are zero.
+				// We don't need to update maxFracInc or maxFracDec because
+				// they started at zero and only go up from there.
+				return 0, 0
+			case rep == 0:
+				// The adjusted load is nonzero, but the reported one is zero. We can't
+				// express the load change as a multiple of zero. Arbitrarily assign large
+				// value to both increase and decrease, indicating that no more changes
+				// should be made until either the pending change clears (and we get a
+				// zero diff above) or we register positive reported load.
+				return 1000, 1000
+			case diff > 0:
+				// Vanilla case of adjusted > reported, i.e. we have load incoming.
+				// We don't need to update maxFracDec.
+				return math.Abs(float64(diff) / float64(rep)), 0
+			case diff < 0:
+				// Vanilla case of adjusted < reported, i.e. we have load incoming.
+				// We don't need to update maxFracInc.
+				return 0, math.Abs(float64(diff) / float64(rep))
+			default:
+				panic("impossible")
 			}
-		} else if f > fracDecrease {
-			fracDecrease = f
-		}
+		}(rep[i], adj[i])
+		maxFracInc = max(maxFracInc, inc)
+		maxFracDec = max(maxFracDec, dec)
 	}
-	ss.maxFractionPendingIncrease = fracIncrease
-	ss.maxFractionPendingDecrease = fracDecrease
+	return maxFracInc, maxFracDec
 }
 
 func newStoreState() *storeState {
