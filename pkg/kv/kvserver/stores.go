@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -44,6 +45,7 @@ type Stores struct {
 		biLatestTS hlc.Timestamp         // Timestamp of gossip bootstrap info
 		latestBI   *gossip.BootstrapInfo // Latest cached bootstrap info
 	}
+	sendQueueLogger *rac2.SendQueueLogger
 }
 
 var _ kv.Sender = &Stores{}      // Stores implements the client.Sender interface
@@ -52,9 +54,11 @@ var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interfa
 // NewStores returns a local-only sender which directly accesses
 // a collection of stores.
 func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
+	const numStreamsToLog = 20
 	return &Stores{
-		AmbientContext: ambient,
-		clock:          clock,
+		AmbientContext:  ambient,
+		clock:           clock,
+		sendQueueLogger: rac2.NewSendQueueLogger(numStreamsToLog),
 	}
 }
 
@@ -353,4 +357,22 @@ func (ls *Stores) GetAggregatedStoreStats(
 		return 0, 0, err
 	}
 	return storesCPURate, numStores, nil
+}
+
+func (ls *Stores) TryLogFlowControlSendQueues(ctx context.Context) {
+	coll, ok := ls.sendQueueLogger.TryStartLog()
+	if !ok {
+		return
+	}
+	rangeSendStats := rac2.RangeSendStreamStats{}
+	_ = ls.VisitStores(func(s *Store) error {
+		newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
+			rangeSendStats.Clear()
+			rep.SendStreamStats(&rangeSendStats)
+			coll.ObserveRangeStats(&rangeSendStats)
+			return true
+		})
+		return nil
+	})
+	ls.sendQueueLogger.FinishLog(ctx, coll)
 }
