@@ -35,14 +35,15 @@ func TestReaderBasic(t *testing.T) {
 	defer qm.Close()
 	require.NoError(t, qm.CreateQueue(ctx, "test_queue", tableID))
 
+	// These should be readable as long as they were written after the queue was created.
+	db.Exec(t, `INSERT INTO t VALUES ('row1', 10), ('row2', 20), ('row3', 30)`)
+
 	reader, err := qm.CreateReaderForSession(ctx, "test_queue", Session{
 		ConnectionID: uuid.MakeV4(),
 		LivenessID:   sqlliveness.SessionID("1"),
 	})
 	require.NoError(t, err)
 	defer func() { _ = reader.Close() }()
-
-	db.Exec(t, `INSERT INTO t VALUES ('row1', 10), ('row2', 20), ('row3', 30)`)
 
 	rows := pollForRows(t, ctx, reader, 3)
 

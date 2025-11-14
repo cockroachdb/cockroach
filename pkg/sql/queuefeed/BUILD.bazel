@@ -34,6 +34,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/rangedesc",
+        "//pkg/util/span",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",

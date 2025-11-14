@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -220,27 +220,32 @@ func (r *Reader) setupRangefeed(ctx context.Context, assignment *Assignment) err
 		rangefeed.WithFiltering(false),
 	}
 
-	// Resume from checkpoint if available
-	// TODO: Support multiple partitions
-	partitionID := int64(1)
-	initialTS, err := r.mgr.ReadCheckpoint(ctx, r.name, partitionID)
+	frontier, err := span.MakeFrontier(assignment.Spans()...)
 	if err != nil {
-		return errors.Wrap(err, "reading checkpoint")
+		return errors.Wrap(err, "creating frontier")
 	}
-	if initialTS.IsEmpty() {
-		// No checkpoint found, start from now
-		initialTS = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+	for _, partition := range assignment.Partitions {
+		checkpointTS, err := r.mgr.ReadCheckpoint(ctx, r.name, partition.ID)
+		if err != nil {
+			return errors.Wrapf(err, "reading checkpoint for partition %d", partition.ID)
+		}
+		if !checkpointTS.IsEmpty() {
+			frontier.Forward(partition.Span, checkpointTS)
+		} else {
+			return errors.Errorf("checkpoint is empty for partition %d", partition.ID)
+		}
+	}
+
+	if frontier.Frontier().IsEmpty() {
+		return errors.New("frontier is empty")
 	}
 
 	rf := r.rff.New(
-		fmt.Sprintf("queuefeed.reader.name=%s", r.name), initialTS, onValue, opts...,
+		fmt.Sprintf("queuefeed.reader.name=%s", r.name), frontier.Frontier(), onValue, opts...,
 	)
 
-	spans := assignment.Spans()
-
-	fmt.Printf("starting rangefeed with spans: %+v\n", spans)
-
-	if err := rf.Start(ctx, spans); err != nil {
+	if err := rf.StartFromFrontier(ctx, frontier); err != nil {
 		return errors.Wrap(err, "starting rangefeed")
 	}
 
@@ -374,12 +379,12 @@ func (r *Reader) ConfirmReceipt(ctx context.Context) {
 
 	// Persist the checkpoint if we have one.
 	if !checkpointToWrite.IsEmpty() {
-		// TODO: Support multiple partitions - for now we only have partition 1.
-		partitionID := int64(1)
-		if err := r.mgr.WriteCheckpoint(ctx, r.name, partitionID, checkpointToWrite); err != nil {
-			fmt.Printf("error writing checkpoint: %s\n", err)
-			// TODO: decide how to handle checkpoint write errors. Since the txn
-			// has already committed, I don't think we can really fail at this point.
+		for _, partition := range r.assignment.Partitions {
+			if err := r.mgr.WriteCheckpoint(ctx, r.name, partition.ID, checkpointToWrite); err != nil {
+				fmt.Printf("error writing checkpoint for partition %d: %s\n", partition.ID, err)
+				// TODO: decide how to handle checkpoint write errors. Since the txn
+				// has already committed, I don't think we can really fail at this point.
+			}
 		}
 	}
 
