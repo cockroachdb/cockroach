@@ -11,7 +11,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
@@ -468,13 +467,6 @@ func TestSupportsSkipUpgradeTo(t *testing.T) {
 	expect := func(verStr string, expected bool) {
 		t.Helper()
 		v := clusterupgrade.MustParseVersion(verStr)
-		r := clusterversion.Latest.ReleaseSeries()
-		currentMajor := version.MajorVersion{Year: int(r.Major), Ordinal: int(r.Minor)}
-		if currentMajor.Equals(v.Version.Major()) {
-			// We have to special case the current series, to allow for bumping the
-			// min supported version separately from the current version.
-			expected = len(clusterversion.SupportedPreviousReleases()) > 1
-		}
 		require.Equal(t, expected, mvt.supportsSkipUpgradeTo(prev, v))
 	}
 	for _, v := range []string{"v24.3.0", "v24.3.0-beta.1", "v25.2.1", "v25.2.0-rc.1"} {
