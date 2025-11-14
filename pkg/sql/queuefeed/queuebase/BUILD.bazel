@@ -5,5 +5,8 @@ go_library(
     srcs = ["queuebase.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/sql/sem/tree"],
+    deps = [
+        "//pkg/sql/sem/tree",
+        "//pkg/util/hlc",
+    ],
 )
