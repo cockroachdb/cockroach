@@ -32,6 +32,7 @@ func TestReaderBasic(t *testing.T) {
 	db.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 't'").Scan(&tableID)
 
 	qm := NewTestManager(t, srv.ApplicationLayer())
+	defer qm.Close()
 	require.NoError(t, qm.CreateQueue(ctx, "test_queue", tableID))
 
 	reader, err := qm.CreateReaderForSession(ctx, "test_queue", Session{
@@ -66,6 +67,7 @@ func TestReaderRollback(t *testing.T) {
 	db.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 't'").Scan(&tableID)
 
 	qm := NewTestManager(t, srv.ApplicationLayer())
+	defer qm.Close()
 	require.NoError(t, qm.CreateQueue(ctx, "rollback_test", tableID))
 
 	reader, err := qm.CreateReaderForSession(ctx, "rollback_test", Session{
@@ -119,6 +121,7 @@ func TestCheckpointRestoration(t *testing.T) {
 	db.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 't'").Scan(&tableID)
 
 	qm := NewTestManager(t, srv.ApplicationLayer())
+	defer qm.Close()
 	require.NoError(t, qm.CreateQueue(ctx, "checkpoint_test", tableID))
 
 	session := Session{

@@ -25,10 +25,10 @@ import (
 )
 
 func NewTestManager(t *testing.T, a serverutils.ApplicationLayerInterface) *Manager {
-	ctx := context.Background()
 	db := a.InternalDB().(isql.DB)
-	m := NewManager(ctx, db, a.RangeFeedFactory().(*rangefeed.Factory), a.RangeDescIteratorFactory().(rangedesc.IteratorFactory), a.Codec(), a.LeaseManager().(*lease.Manager), nil)
+	m := NewManager(context.Background(), db, a.RangeFeedFactory().(*rangefeed.Factory), a.RangeDescIteratorFactory().(rangedesc.IteratorFactory), a.Codec(), a.LeaseManager().(*lease.Manager), nil)
 	require.NotNil(t, m.codec)
+	t.Cleanup(m.Close)
 	return m
 }
 
@@ -42,6 +42,7 @@ func TestFeedCreation(t *testing.T) {
 
 	// expect an error when trying to read from a queue that doesn't exist
 	qm := NewTestManager(t, srv.ApplicationLayer())
+	defer qm.Close()
 	_, err := qm.CreateReaderForSession(context.Background(), "test", Session{
 		ConnectionID: uuid.MakeV4(),
 		LivenessID:   "",
@@ -107,6 +108,7 @@ func TestFeedCreationPartitions(t *testing.T) {
 	var tableID int64
 	db.QueryRow(t, "SELECT id FROM system.namespace where name = 't'").Scan(&tableID)
 	qm := NewTestManager(t, srv.ApplicationLayer())
+	defer qm.Close()
 	require.NoError(t, qm.CreateQueue(ctx, "test", tableID))
 
 	// Get the table descriptor to determine the primary index span.

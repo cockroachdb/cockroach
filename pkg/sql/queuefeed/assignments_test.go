@@ -33,6 +33,7 @@ func TestPartitionAssignments(t *testing.T) {
 
 	// Create queue using QueueManager
 	manager := queuefeed.NewTestManager(t, s.ApplicationLayer())
+	defer manager.Close()
 	queueName := "test_queue"
 	err := manager.CreateQueue(ctx, queueName, tableDescID)
 	require.NoError(t, err)
@@ -77,6 +78,7 @@ func TestPartitionReassignments(t *testing.T) {
 
 	// Create queue using QueueManager
 	manager := queuefeed.NewTestManager(t, s.ApplicationLayer())
+	defer manager.Close()
 	queueName := "test_queue"
 	err := manager.CreateQueue(ctx, queueName, tableDescID)
 	require.NoError(t, err)

@@ -97,6 +97,7 @@ func TestQueuefeedSmoketestMultipleRanges(t *testing.T) {
 
 	// Create two managers for separate readers
 	qm := NewTestManager(t, srv.ApplicationLayer())
+	defer qm.Close()
 	newReader := func(session uuid.UUID) *Reader {
 		qm.mu.Lock()
 		defer qm.mu.Unlock()
