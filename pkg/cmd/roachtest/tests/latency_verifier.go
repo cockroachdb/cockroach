@@ -115,9 +115,10 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		}
 		return
 	}
-
+	justSwitchedToSteadyState := false
 	if lv.targetSteadyLatency == 0 || latency < lv.targetSteadyLatency {
 		lv.latencyBecameSteady = true
+		justSwitchedToSteadyState = true
 	}
 	if !lv.latencyBecameSteady {
 		// Before we have RangeFeed, the polls just get
@@ -146,6 +147,10 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 			"%s: end-to-end steady latency %s; max steady latency so far %s; highwater %s",
 			lv.name, latency.Truncate(time.Millisecond), lv.maxSeenSteadyLatency.Truncate(time.Millisecond), highwaterTime)
 		lv.setTestStatus(update)
+	}
+	if justSwitchedToSteadyState {
+		lv.logger.Printf("just reached steady state, sleeping for 2 minutes to ensure no temporary latency regressions")
+		time.Sleep(2 * time.Minute)
 	}
 }
 
