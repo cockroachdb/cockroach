@@ -103,14 +103,14 @@ func (sfr *SimpleFlightRecorder) TimestampedFilename() string {
 var fileMatchRegexp = regexp.MustCompile("^executiontrace.*out$")
 
 // CheckOwnsFile is part of the `Dumper` interface.
-func (sfr *SimpleFlightRecorder) CheckOwnsFile(ctx context.Context, fi os.FileInfo) bool {
+func (sfr *SimpleFlightRecorder) CheckOwnsFile(ctx context.Context, fi os.DirEntry) bool {
 	return fileMatchRegexp.MatchString(fi.Name())
 }
 
 // PreFilter is part of the `Dumper` interface. In this case we do not mark any
 // files for preservation.
 func (sfr *SimpleFlightRecorder) PreFilter(
-	ctx context.Context, files []os.FileInfo, cleanupFn func(fileName string) error,
+	ctx context.Context, files []os.DirEntry, cleanupFn func(fileName string) error,
 ) (preserved map[int]bool, err error) {
 	return nil, nil
 }

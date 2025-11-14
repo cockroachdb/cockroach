@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
-	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
 )
@@ -208,7 +207,7 @@ func TestCleanupLastRampup(t *testing.T) {
 	}
 }
 
-func populate(t *testing.T, dirName string, fileNames []string) []os.FileInfo {
+func populate(t *testing.T, dirName string, fileNames []string) []os.DirEntry {
 	for _, fn := range fileNames {
 		f, err := os.Create(filepath.Join(dirName, fn))
 		if err != nil {
@@ -221,7 +220,7 @@ func populate(t *testing.T, dirName string, fileNames []string) []os.FileInfo {
 	}
 
 	// Retrieve the file list for the remainder of the test.
-	files, err := fileutil.ReadDir(dirName)
+	files, err := os.ReadDir(dirName)
 	if err != nil {
 		t.Fatal(err)
 	}

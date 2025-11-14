@@ -8,20 +8,19 @@ package securityassets
 import (
 	"os"
 
-	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/errors/oserror"
 )
 
 // Loader describes the functions necessary to read certificate and key files.
 type Loader struct {
-	ReadDir  func(dirname string) ([]os.FileInfo, error)
+	ReadDir  func(dirname string) ([]os.DirEntry, error)
 	ReadFile func(filename string) ([]byte, error)
 	Stat     func(name string) (os.FileInfo, error)
 }
 
 // defaultLoader uses real filesystem calls.
 var defaultLoader = Loader{
-	ReadDir:  fileutil.ReadDir,
+	ReadDir:  os.ReadDir,
 	ReadFile: os.ReadFile,
 	Stat:     os.Stat,
 }
@@ -55,4 +54,3 @@ func (al Loader) FileExists(filename string) (bool, error) {
 	}
 	return true, nil
 }
-

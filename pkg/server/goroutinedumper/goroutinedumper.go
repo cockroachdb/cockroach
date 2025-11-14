@@ -136,7 +136,7 @@ func (gd *GoroutineDumper) gcDumps(ctx context.Context, now time.Time) {
 
 // PreFilter is part of the dumpstore.Dumper interface.
 func (gd *GoroutineDumper) PreFilter(
-	ctx context.Context, files []os.FileInfo, cleanupFn func(fileName string) error,
+	ctx context.Context, files []os.DirEntry, cleanupFn func(fileName string) error,
 ) (preserved map[int]bool, _ error) {
 	preserved = make(map[int]bool)
 	for i := len(files) - 1; i >= 0; i-- {
@@ -150,7 +150,7 @@ func (gd *GoroutineDumper) PreFilter(
 }
 
 // CheckOwnsFile is part of the dumpstore.Dumper interface.
-func (gd *GoroutineDumper) CheckOwnsFile(_ context.Context, fi os.FileInfo) bool {
+func (gd *GoroutineDumper) CheckOwnsFile(_ context.Context, fi os.DirEntry) bool {
 	return strings.HasPrefix(fi.Name(), goroutineDumpPrefix)
 }
 
