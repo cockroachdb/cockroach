@@ -74,10 +74,7 @@ func TestQueuefeedCtxCancel(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(conn)
 	db.Exec(t, `CREATE TABLE t (a string)`)
-	// get table id
-	var tableID int64
-	db.QueryRow(t, "SELECT id FROM system.namespace where name = 't'").Scan(&tableID)
-	db.Exec(t, `SELECT crdb_internal.create_queue_feed('hi', $1)`, tableID)
+	db.Exec(t, `SELECT crdb_internal.create_queue_feed('hi', 't')`)
 
 	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
