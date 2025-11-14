@@ -58,7 +58,12 @@ import (
 var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 100)
 
 func (cfg kvnemesisTestCfg) testClusterArgs(
-	ctx context.Context, tr *SeqTracker, partitioner *rpc.Partitioner, mode TestMode,
+	ctx context.Context,
+	t testing.TB,
+	rng *rand.Rand,
+	tr *SeqTracker,
+	partitioner *rpc.Partitioner,
+	mode TestMode,
 ) (base.TestClusterArgs, stop.Closer) {
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		DisableRaftLogQueue:                   true,
@@ -258,15 +263,28 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 			for i := 0; i < cfg.numNodes; i++ {
 				nodeId := i + 1
 				ctk := rpc.ContextTestingKnobs{}
+				// Test clock injection
+				//
+				// We need to stay away within 80% of the max offset, so we set our
+				// offset to 70% of the configured MaxOffset. Since MaxOffset is
+				// relatively small, this doesn't give us much wiggle room.
+				//
+				// NOTE(ssd): If we see flakes because of untrustworthy remote clocks,
+				// don't hesitate to increase this safety margin for now.
+				maxOffset := time.Duration(float64(storeKnobs.MaxOffset) * 0.70)
+				period := 1 * time.Second
+				clock := NewTestClock(maxOffset, period, rng)
+				t.Logf("n%d using %s", nodeId, clock)
 				partitioner.RegisterTestingKnobs(roachpb.NodeID(nodeId), &ctk)
 				perNodeServerArgs := commonServerArgs
 				perNodeServerArgs.Knobs.Server = &server.TestingKnobs{
+					StickyVFSRegistry:   reg,
+					WallClock:           clock,
 					ContextTestingKnobs: ctk,
 				}
 				perNodeServerArgs.Locality = roachpb.Locality{
 					Tiers: []roachpb.Tier{{Key: "node", Value: fmt.Sprintf("n%d", nodeId)}},
 				}
-				perNodeServerArgs.Knobs.Server = &server.TestingKnobs{StickyVFSRegistry: reg}
 				perNodeServerArgs.StoreSpecs = append(
 					perNodeServerArgs.StoreSpecs,
 					base.StoreSpec{InMemory: true, StickyVFSID: strconv.Itoa(nodeId)},
@@ -608,7 +626,7 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	ctx := context.Background()
 	tr := &SeqTracker{}
 	var partitioner rpc.Partitioner
-	args, closer := cfg.testClusterArgs(ctx, tr, &partitioner, cfg.mode)
+	args, closer := cfg.testClusterArgs(ctx, t, rng, tr, &partitioner, cfg.mode)
 	tc := testcluster.StartTestCluster(t, cfg.numNodes, args)
 	tc.Stopper().AddCloser(closer)
 	defer tc.Stopper().Stop(ctx)
