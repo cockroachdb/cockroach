@@ -2531,6 +2531,11 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 			constraint.GetName(),
 		)
 	} else if constraint.AsForeignKey() != nil {
+		// If the constraint being dropped is the regional-by-row constraint,
+		// we must clear the reference to it.
+		if desc.RBRUsingConstraint == constraint.GetConstraintID() {
+			desc.RBRUsingConstraint = descpb.ConstraintID(0)
+		}
 		for i, fk := range desc.OutboundFKs {
 			if fk.Name == constraint.GetName() {
 				desc.OutboundFKs = append(desc.OutboundFKs[:i], desc.OutboundFKs[i+1:]...)
