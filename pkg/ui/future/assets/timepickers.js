@@ -172,6 +172,9 @@ document.addEventListener('alpine:init', () => {
           if (this.interval === '10m') {
             this.startUTCSeconds = end - 10 * 60
           }
+          if (this.interval === '30m') {
+            this.startUTCSeconds = end - 30 * 60
+          }
           if (this.interval === '1h') {
             this.startUTCSeconds = end - 60 * 60
           }
