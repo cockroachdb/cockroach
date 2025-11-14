@@ -174,7 +174,7 @@ func (s ReplicaChangeType) String() string {
 type ReplicaChange struct {
 	// The load this change adds to a store. The values will be negative if the
 	// load is being removed.
-	loadDelta          mmaload.LoadVector
+	loadDelta          mmaload.SignedLoadVector
 	secondaryLoadDelta mmaload.SecondaryLoadVector
 
 	// target is the target {store,node} for the change.
@@ -312,12 +312,18 @@ func MakeLeaseTransferChanges(
 			rangeID, addTarget, add.ReplicaState, existingReplicas))
 	}
 
+	// Only account for the leaseholder CPU, all other primary load dimensions
+	// are ignored. Byte size and write bytes are not impacted by having a range
+	// lease.
+
+	nonRaftCPU := rLoad.Load[mmaload.CPURate] - rLoad.RaftCPU
 	removeLease := ReplicaChange{
 		target:            removeTarget,
 		rangeID:           rangeID,
 		prev:              remove.ReplicaState,
 		next:              remove.ReplicaIDAndType,
 		replicaChangeType: RemoveLease,
+		loadDelta:         mmaload.SignedLoadVector{mmaload.CPURate: nonRaftCPU.Signed()},
 	}
 	addLease := ReplicaChange{
 		target:            addTarget,
@@ -325,18 +331,13 @@ func MakeLeaseTransferChanges(
 		prev:              add.ReplicaState,
 		next:              add.ReplicaIDAndType,
 		replicaChangeType: AddLease,
+		loadDelta:         mmaload.SignedLoadVector{mmaload.CPURate: loadToAdd(nonRaftCPU).Signed()},
 	}
 	removeLease.next.IsLeaseholder = false
 	addLease.next.IsLeaseholder = true
 	removeLease.secondaryLoadDelta[mmaload.LeaseCount] = -1
 	addLease.secondaryLoadDelta[mmaload.LeaseCount] = 1
 
-	// Only account for the leaseholder CPU, all other primary load dimensions
-	// are ignored. Byte size and write bytes are not impacted by having a range
-	// lease.
-	nonRaftCPU := rLoad.Load[mmaload.CPURate] - rLoad.RaftCPU
-	removeLease.loadDelta[mmaload.CPURate] = -nonRaftCPU
-	addLease.loadDelta[mmaload.CPURate] = loadToAdd(nonRaftCPU)
 	return [2]ReplicaChange{removeLease, addLease}
 }
 

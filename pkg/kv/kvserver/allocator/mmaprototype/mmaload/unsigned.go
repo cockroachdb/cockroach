@@ -42,6 +42,10 @@ func (dim LoadDimension) String() string {
 // LoadValue is the load on a resource, represented as a *nonnegative* integer.
 type LoadValue int64
 
+func (lv LoadValue) Signed() SignedLoadValue {
+	return SignedLoadValue{n: int64(lv)}
+}
+
 // LoadVector represents a vector of loads, with one element for each resource
 // dimension.
 type LoadVector [NumLoadDimensions]LoadValue
