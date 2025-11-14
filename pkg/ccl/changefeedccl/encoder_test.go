@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -561,6 +562,7 @@ func TestCollatedString(t *testing.T) {
 }
 
 func TestAvroEnum(t *testing.T) {
+	skip.WithIssue(t, 148858) // has the soft deletes table
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

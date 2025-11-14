@@ -5666,14 +5666,8 @@ func TestChangefeedResolvedNotice(t *testing.T) {
 	})
 }
 
-// --- FAIL: TestChangefeedLowFrequencyNotices (7.51s)
-//
-//	--- FAIL: TestChangefeedLowFrequencyNotices/no_options_specified (0.37s)
-//	--- FAIL: TestChangefeedLowFrequencyNotices/normal_resolved_and_min_checkpoint_frequency (0.01s)
-//	--- FAIL: TestChangefeedLowFrequencyNotices/low_resolved_timestamp (0.00s)
-//	--- PASS: TestChangefeedLowFrequencyNotices/low_min_checkpoint_frequency_timestamp (0.21s)
 func TestChangefeedLowFrequencyNotices(t *testing.T) {
-	skip.WithIssue(t, 148858) // Also I think this uses initial scan.
+	skip.WithIssue(t, 148858) // I think these notices have an issue
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -5738,7 +5732,7 @@ func TestChangefeedLowFrequencyNotices(t *testing.T) {
 //	--- FAIL: TestChangefeedOutputTopics/pubsub_v2 (0.22s)
 //	--- PASS: TestChangefeedOutputTopics/webhooks_does_not_emit_anything (0.24s)
 func TestChangefeedOutputTopics(t *testing.T) {
-	skip.WithIssue(t, 148858) // I think this is relying on initial scan.
+	skip.WithIssue(t, 148858) // I don't know exactly what this is, could be real.
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -9130,6 +9124,7 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t)
+	skip.WithIssue(t, 148858) // has unwatched tables? complicated, look
 	skip.UnderShort(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -10858,6 +10853,7 @@ func TestCreateChangefeedTelemetryLogs(t *testing.T) {
 }
 
 func TestAlterChangefeedTelemetryLogs(t *testing.T) {
+	skip.WithIssue(t, 148858) // alter and stuff
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

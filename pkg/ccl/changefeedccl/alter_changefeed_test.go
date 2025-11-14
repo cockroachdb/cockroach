@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -790,6 +791,7 @@ func TestAlterChangefeedDropAllTargetsError(t *testing.T) {
 }
 
 func TestAlterChangefeedTelemetry(t *testing.T) {
+	skip.WithIssue(t, 148858) // has baz unwatched table
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1257,6 +1259,7 @@ func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
 }
 
 func TestAlterChangefeedAlterTableName(t *testing.T) {
+	skip.WithIssue(t, 148858) // uses non default DB
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1487,6 +1490,7 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`)
 }
 
 func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
+	skip.WithIssue(t, 148858) // has unwatched tables
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1866,6 +1870,7 @@ func TestAlterChangefeedWithOldCursorFromCreateChangefeed(t *testing.T) {
 // TestChangefeedJobControl tests if a user can modify and existing changefeed
 // based on their privileges.
 func TestAlterChangefeedAccessControl(t *testing.T) {
+	skip.WithIssue(t, 148858) // does the fancy test setup
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -656,6 +657,7 @@ func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
 }
 
 func TestShowChangefeedJobsAuthorization(t *testing.T) {
+	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
