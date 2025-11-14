@@ -26,6 +26,7 @@ var activeRecordBlocklist = blocklist{
 	`ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_using_timestamp_with_timestamptz_as_default`: "unknown",
 	`ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_with_timestamptz`:                            "unknown",
 	`ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_with_timestamptz_as_default`:                 "unknown",
+	`ActiveRecord::InvertibleMigrationTest#test_migrate_revert_add_unique_constraint_with_invalid_option`:                               "drop UNIQUE constraint does not support CASCADE",
 	`CompatibilityTest4_2#test_datetime_doesnt_set_precision_on_change_column`:                                                          "unknown",
 	`CompatibilityTest4_2#test_options_are_not_validated`:                                                                               "unknown",
 	`CompatibilityTest5_0#test_datetime_doesnt_set_precision_on_change_column`:                                                          "unknown",
