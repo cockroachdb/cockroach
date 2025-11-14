@@ -1580,8 +1580,9 @@ func TestRangeController(t *testing.T) {
 				for _, repl := range sortReplicas(r) {
 					replStats, ok := stats.ReplicaSendStreamStats(repl.ReplicaID)
 					require.True(t, ok)
-					buf.WriteString(fmt.Sprintf("%v: is_state_replicate=%-5v has_send_queue=%-5v send_queue_size=%v / %v entries\n",
+					buf.WriteString(fmt.Sprintf("%v: stream=%v is_state_replicate=%-5v has_send_queue=%-5v send_queue_size=%v / %v entries\n",
 						repl,
+						replStats.Stream,
 						replStats.IsStateReplicate,
 						replStats.HasSendQueue,
 						// Cast for formatting.
@@ -2476,6 +2477,10 @@ func TestRangeSendStreamStatsString(t *testing.T) {
 	stats := RangeSendStreamStats{
 		internal: []ReplicaSendStreamStats{
 			{
+				Stream: kvflowcontrol.Stream{
+					TenantID: roachpb.MustMakeTenantID(1),
+					StoreID:  roachpb.StoreID(1),
+				},
 				IsStateReplicate: false,
 				HasSendQueue:     true,
 				ReplicaSendQueueStats: ReplicaSendQueueStats{
@@ -2485,6 +2490,10 @@ func TestRangeSendStreamStatsString(t *testing.T) {
 				},
 			},
 			{
+				Stream: kvflowcontrol.Stream{
+					TenantID: roachpb.MustMakeTenantID(2),
+					StoreID:  roachpb.StoreID(2),
+				},
 				IsStateReplicate: true,
 				HasSendQueue:     false,
 				ReplicaSendQueueStats: ReplicaSendQueueStats{
