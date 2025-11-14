@@ -11,6 +11,7 @@ import (
 	"math"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmaload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
@@ -18,72 +19,11 @@ import (
 
 // Misc helper classes for working with range, store and node load.
 
-// LoadDimension is an enum of load dimensions corresponding to "real"
-// resources. Such resources can sometimes have a capacity. It is generally
-// important to rebalance based on these. The code in this package should be
-// structured that adding additional resource dimensions is easy.
-type LoadDimension uint8
-
-const (
-	// CPURate is in nanos per second.
-	CPURate LoadDimension = iota
-	// WriteBandwidth is the writes in bytes/s.
-	WriteBandwidth
-	// ByteSize is the size in bytes.
-	ByteSize
-	NumLoadDimensions
-)
-
-func (dim LoadDimension) SafeFormat(w redact.SafePrinter, _ rune) {
-	switch dim {
-	case CPURate:
-		w.Printf("CPURate")
-	case WriteBandwidth:
-		w.Print("WriteBandwidth")
-	case ByteSize:
-		w.Printf("ByteSize")
-	default:
-		panic("unknown LoadDimension")
-	}
-}
-
-func (dim LoadDimension) String() string {
-	return redact.StringWithoutMarkers(dim)
-}
-
-// LoadValue is the load on a resource.
-type LoadValue int64
-
-// LoadVector represents a vector of loads, with one element for each resource
-// dimension.
-type LoadVector [NumLoadDimensions]LoadValue
-
-func (lv LoadVector) String() string {
-	return redact.StringWithoutMarkers(lv)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (lv LoadVector) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("[cpu:%d, write-bandwidth:%d, byte-size:%d]", lv[CPURate], lv[WriteBandwidth], lv[ByteSize])
-}
-
-func (lv *LoadVector) add(other LoadVector) {
-	for i := range other {
-		(*lv)[i] += other[i]
-	}
-}
-
-func (lv *LoadVector) subtract(other LoadVector) {
-	for i := range other {
-		(*lv)[i] -= other[i]
-	}
-}
-
 // A resource can have a capacity, which is also expressed using LoadValue.
 // There are some special case capacity values, enumerated here.
 const (
 	// UnknownCapacity is currenly only used for WriteBandwidth.
-	UnknownCapacity LoadValue = math.MaxInt64
+	UnknownCapacity mmaload.LoadValue = math.MaxInt64
 )
 
 // SecondaryLoadDimension represents secondary load dimensions that should be
@@ -114,7 +54,7 @@ const (
 	NumSecondaryLoadDimensions
 )
 
-type SecondaryLoadVector [NumSecondaryLoadDimensions]LoadValue
+type SecondaryLoadVector [NumSecondaryLoadDimensions]mmaload.LoadValue
 
 func (lv *SecondaryLoadVector) add(other SecondaryLoadVector) {
 	for i := range other {
@@ -138,7 +78,7 @@ func (lv SecondaryLoadVector) SafeFormat(w redact.SafePrinter, _ rune) {
 }
 
 type RangeLoad struct {
-	Load LoadVector
+	Load mmaload.LoadVector
 	// Nanos per second. RaftCPU <= Load[cpu]. Handling this as a special case,
 	// rather than trying to (over) generalize, since currently this is the only
 	// resource broken down into two components.
@@ -147,7 +87,7 @@ type RangeLoad struct {
 	// proposals and can vary across replicas. Pessimistically, one can assume
 	// that if this replica is the leaseholder and we move the lease to a
 	// different existing replica, it will see an addition of Load[cpu]-RaftCPU.
-	RaftCPU LoadValue
+	RaftCPU mmaload.LoadValue
 }
 
 // storeLoad is the load information for a store. Roughly, this is the
@@ -157,7 +97,7 @@ type storeLoad struct {
 	// Aggregate store load. In general, we don't require this to be a sum of
 	// the range loads (since a sharded allocator may only have information
 	// about a subset of ranges).
-	reportedLoad LoadVector
+	reportedLoad mmaload.LoadVector
 
 	// Capacity information for this store.
 	//
@@ -169,7 +109,7 @@ type storeLoad struct {
 	//
 	// TODO(sumeer): add diskBandwidth, since we will become more aware of
 	// provisioned disk bandwidth in the near future.
-	capacity LoadVector
+	capacity mmaload.LoadVector
 
 	reportedSecondaryLoad SecondaryLoadVector
 }
@@ -179,24 +119,24 @@ type NodeLoad struct {
 	NodeID roachpb.NodeID
 	// ReportedCPU and CapacityCPU are simply the sum of what we get for all
 	// stores on this node.
-	ReportedCPU LoadValue
-	CapacityCPU LoadValue
+	ReportedCPU mmaload.LoadValue
+	CapacityCPU mmaload.LoadValue
 }
 
 // The mean store load for a set of stores.
 type meanStoreLoad struct {
-	load     LoadVector
-	capacity LoadVector
+	load     mmaload.LoadVector
+	capacity mmaload.LoadVector
 	// Util is 0 for CPURate, WriteBandwidth. Non-zero for ByteSize.
-	util [NumLoadDimensions]float64
+	util [mmaload.NumLoadDimensions]float64
 
 	secondaryLoad SecondaryLoadVector
 }
 
 // The mean node load for a set of NodeLoad.
 type meanNodeLoad struct {
-	loadCPU     LoadValue
-	capacityCPU LoadValue
+	loadCPU     mmaload.LoadValue
+	capacityCPU mmaload.LoadValue
 	utilCPU     float64
 }
 
@@ -400,14 +340,14 @@ func computeMeansForStoreSet(
 		if means.storeLoad.capacity[i] != UnknownCapacity {
 			means.storeLoad.util[i] =
 				float64(means.storeLoad.load[i]) / float64(means.storeLoad.capacity[i])
-			means.storeLoad.capacity[i] /= LoadValue(n)
+			means.storeLoad.capacity[i] /= mmaload.LoadValue(n)
 		} else {
 			means.storeLoad.util[i] = 0
 		}
-		means.storeLoad.load[i] /= LoadValue(n)
+		means.storeLoad.load[i] /= mmaload.LoadValue(n)
 	}
 	for i := range means.storeLoad.secondaryLoad {
-		means.storeLoad.secondaryLoad[i] /= LoadValue(n)
+		means.storeLoad.secondaryLoad[i] /= mmaload.LoadValue(n)
 	}
 
 	n = len(scratchNodes)
@@ -417,8 +357,8 @@ func computeMeansForStoreSet(
 	}
 	means.nodeLoad.utilCPU =
 		float64(means.nodeLoad.loadCPU) / float64(means.nodeLoad.capacityCPU)
-	means.nodeLoad.loadCPU /= LoadValue(n)
-	means.nodeLoad.capacityCPU /= LoadValue(n)
+	means.nodeLoad.loadCPU /= mmaload.LoadValue(n)
+	means.nodeLoad.capacityCPU /= mmaload.LoadValue(n)
 	return means
 }
 
@@ -477,14 +417,14 @@ func loadSummaryForDimension(
 	ctx context.Context,
 	storeID roachpb.StoreID,
 	nodeID roachpb.NodeID,
-	dim LoadDimension,
-	load LoadValue,
-	capacity LoadValue,
-	meanLoad LoadValue,
+	dim mmaload.LoadDimension,
+	load mmaload.LoadValue,
+	capacity mmaload.LoadValue,
+	meanLoad mmaload.LoadValue,
 	meanUtil float64,
 ) (summary loadSummary) {
 	summ := loadLow
-	if dim == WriteBandwidth && capacity == UnknownCapacity {
+	if dim == mmaload.WriteBandwidth && capacity == UnknownCapacity {
 		// Ignore smaller than 1MiB differences in write bandwidth. This 1MiB
 		// value is somewhat arbitrary, but is based on EBS gp3 having a default
 		// provisioned bandwidth of 125 MiB/s, and assuming that a write amp of
@@ -521,12 +461,12 @@ func loadSummaryForDimension(
 	// Be less aggressive about the ByteSize dimension when the fractionUsed is
 	// low. Rebalancing along too many dimensions results in more thrashing due
 	// to concurrent rebalancing actions by many leaseholders.
-	if dim == ByteSize && capacity != UnknownCapacity && fractionUsed < 0.5 {
+	if dim == mmaload.ByteSize && capacity != UnknownCapacity && fractionUsed < 0.5 {
 		summaryUpperBound = loadNormal
 	}
 	// Don't bother equalizing CPURate by shedding, if the utilization is < 5%.
 	// The choice of 5% here is arbitrary.
-	if dim == CPURate && capacity != UnknownCapacity && fractionUsed < 0.05 {
+	if dim == mmaload.CPURate && capacity != UnknownCapacity && fractionUsed < 0.05 {
 		summaryUpperBound = loadNormal
 	}
 	// TODO(sumeer): consider adding a summaryUpperBound for small
@@ -571,7 +511,7 @@ func loadSummaryForDimension(
 	return min(summaryUpperBound, summ)
 }
 
-func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {
+func highDiskSpaceUtilization(load mmaload.LoadValue, capacity mmaload.LoadValue) bool {
 	if capacity == UnknownCapacity {
 		log.KvDistribution.Errorf(context.Background(), "disk capacity is unknown")
 		return false
@@ -582,12 +522,12 @@ func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {
 
 const loadMultiplierForAddition = 1.1
 
-func loadToAdd(l LoadValue) LoadValue {
-	return LoadValue(float64(l) * loadMultiplierForAddition)
+func loadToAdd(l mmaload.LoadValue) mmaload.LoadValue {
+	return mmaload.LoadValue(float64(l) * loadMultiplierForAddition)
 }
 
-func loadVectorToAdd(lv LoadVector) LoadVector {
-	var result LoadVector
+func loadVectorToAdd(lv mmaload.LoadVector) mmaload.LoadVector {
+	var result mmaload.LoadVector
 	for i := range lv {
 		result[i] = loadToAdd(lv[i])
 	}
@@ -608,6 +548,6 @@ var _ = storeLoad{}.reportedSecondaryLoad
 var _ = NodeLoad{}.NodeID
 var _ = NodeLoad{}.ReportedCPU
 var _ = NodeLoad{}.CapacityCPU
-var _ = CPURate
-var _ = WriteBandwidth
-var _ = ByteSize
+var _ = mmaload.CPURate
+var _ = mmaload.WriteBandwidth
+var _ = mmaload.ByteSize

@@ -8,6 +8,7 @@ package mmaprototype
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmaload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -18,12 +19,12 @@ type StoreLoadMsg struct {
 	roachpb.NodeID
 	roachpb.StoreID
 
-	Load LoadVector
+	Load mmaload.LoadVector
 	// Capacity[CPURate] is derived based on considering the aggregate usage
 	// across all stores, and using the utilization observed at the node, to
 	// derive a node level capacity, and then dividing that by the number of
 	// stores.
-	Capacity      LoadVector
+	Capacity      mmaload.LoadVector
 	SecondaryLoad SecondaryLoadVector
 
 	LoadTime time.Time

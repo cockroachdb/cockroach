@@ -23,6 +23,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/allocator/mmaprototype/mmaload",
         "//pkg/roachpb",
         "//pkg/util/log",
         "//pkg/util/metric",
@@ -48,6 +49,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":mmaprototype"],
     deps = [
+        "//pkg/kv/kvserver/allocator/mmaprototype/mmaload",
         "//pkg/roachpb",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils/datapathutils",

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmaload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/datadriven"
@@ -83,11 +84,11 @@ func TestMeansMemo(t *testing.T) {
 				d.ScanArgs(t, "load", &cpuLoad, &wbLoad, &bsLoad)
 				var cpuCapacity, wbCapacity, bsCapacity int64
 				d.ScanArgs(t, "capacity", &cpuCapacity, &wbCapacity, &bsCapacity)
-				leaseCountLoad := dd.ScanArg[LoadValue](t, d, "secondary-load")
+				leaseCountLoad := dd.ScanArg[mmaload.LoadValue](t, d, "secondary-load")
 				sLoad := &storeLoad{
-					reportedLoad: LoadVector{LoadValue(cpuLoad), LoadValue(wbLoad), LoadValue(bsLoad)},
-					capacity: LoadVector{
-						LoadValue(cpuCapacity), LoadValue(wbCapacity), LoadValue(bsCapacity)},
+					reportedLoad: mmaload.LoadVector{mmaload.LoadValue(cpuLoad), mmaload.LoadValue(wbLoad), mmaload.LoadValue(bsLoad)},
+					capacity: mmaload.LoadVector{
+						mmaload.LoadValue(cpuCapacity), mmaload.LoadValue(wbCapacity), mmaload.LoadValue(bsCapacity)},
 					reportedSecondaryLoad: SecondaryLoadVector{leaseCountLoad},
 				}
 				for i := range sLoad.capacity {
@@ -105,8 +106,8 @@ func TestMeansMemo(t *testing.T) {
 			case "node-load":
 				nLoad := &NodeLoad{
 					NodeID:      dd.ScanArg[roachpb.NodeID](t, d, "node-id"),
-					ReportedCPU: dd.ScanArg[LoadValue](t, d, "cpu-load"),
-					CapacityCPU: dd.ScanArg[LoadValue](t, d, "cpu-capacity"),
+					ReportedCPU: dd.ScanArg[mmaload.LoadValue](t, d, "cpu-load"),
+					CapacityCPU: dd.ScanArg[mmaload.LoadValue](t, d, "cpu-capacity"),
 				}
 				loadProvider.nloads[nLoad.NodeID] = nLoad
 				return ""
@@ -127,12 +128,12 @@ func TestMeansMemo(t *testing.T) {
 				printPostingList(&b, mss.stores)
 				fmt.Fprintf(&b, "\nstore-means (load,cap,util): ")
 				for i := range mss.storeLoad.load {
-					switch LoadDimension(i) {
-					case CPURate:
+					switch mmaload.LoadDimension(i) {
+					case mmaload.CPURate:
 						fmt.Fprintf(&b, "cpu: ")
-					case WriteBandwidth:
+					case mmaload.WriteBandwidth:
 						fmt.Fprintf(&b, " write-bw: ")
-					case ByteSize:
+					case mmaload.ByteSize:
 						fmt.Fprintf(&b, " bytes: ")
 					}
 					capacity := mss.storeLoad.capacity[i]

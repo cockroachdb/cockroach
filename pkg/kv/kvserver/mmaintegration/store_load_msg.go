@@ -7,6 +7,7 @@ package mmaintegration
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmaload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -17,8 +18,8 @@ import (
 func MakeStoreLoadMsg(
 	desc roachpb.StoreDescriptor, origTimestampNanos int64,
 ) mmaprototype.StoreLoadMsg {
-	var load, capacity mmaprototype.LoadVector
-	load[mmaprototype.CPURate] = mmaprototype.LoadValue(desc.Capacity.CPUPerSecond)
+	var load, capacity mmaload.LoadVector
+	load[mmaload.CPURate] = mmaload.LoadValue(desc.Capacity.CPUPerSecond)
 	if desc.NodeCapacity.NodeCPURateCapacity > 0 {
 		// CPU is a shared resource across all stores on a node, and furthermore
 		// there are consumers that we don't track on a per-replica (and thus
@@ -83,43 +84,43 @@ func MakeStoreLoadMsg(
 			// 800% util.
 			nodeCapacity := float64(desc.NodeCapacity.StoresCPURate) / cpuUtil
 			storeCapacity := nodeCapacity / float64(desc.NodeCapacity.NumStores)
-			capacity[mmaprototype.CPURate] = mmaprototype.LoadValue(storeCapacity)
+			capacity[mmaload.CPURate] = mmaload.LoadValue(storeCapacity)
 		} else {
 			// almostZeroUtil or StoresCPURate is zero. We assume that only 50% of
 			// the usage can be accounted for in StoresCPURate, so we divide 50% of
 			// the NodeCPURateCapacity among all the stores.
-			capacity[mmaprototype.CPURate] = mmaprototype.LoadValue(
+			capacity[mmaload.CPURate] = mmaload.LoadValue(
 				float64(desc.NodeCapacity.NodeCPURateCapacity/2) / float64(desc.NodeCapacity.NumStores))
 		}
 	} else {
 		// TODO(sumeer): remove this hack of defaulting to 50% utilization, since
 		// NodeCPURateCapacity should never be 0.
 		// TODO(tbg): when do we expect to hit this branch? Mixed version cluster?
-		capacity[mmaprototype.CPURate] = load[mmaprototype.CPURate] * 2
+		capacity[mmaload.CPURate] = load[mmaload.CPURate] * 2
 	}
-	load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(desc.Capacity.WriteBytesPerSecond)
-	capacity[mmaprototype.WriteBandwidth] = mmaprototype.UnknownCapacity
+	load[mmaload.WriteBandwidth] = mmaload.LoadValue(desc.Capacity.WriteBytesPerSecond)
+	capacity[mmaload.WriteBandwidth] = mmaprototype.UnknownCapacity
 	// ByteSize is based on LogicalBytes since that is how we measure the size
 	// of each range
-	load[mmaprototype.ByteSize] = mmaprototype.LoadValue(desc.Capacity.LogicalBytes)
+	load[mmaload.ByteSize] = mmaload.LoadValue(desc.Capacity.LogicalBytes)
 	// Available does not compensate for the ballast, so utilization will look
 	// higher than actual. This is fine since the ballast is small (default is
 	// 1% of capacity) and is for use in an emergency.
 	byteSizeUtil :=
 		float64(desc.Capacity.Capacity-desc.Capacity.Available) / float64(desc.Capacity.Capacity)
 	almostZeroUtil := byteSizeUtil < 0.01
-	if load[mmaprototype.ByteSize] != 0 && !almostZeroUtil {
+	if load[mmaload.ByteSize] != 0 && !almostZeroUtil {
 		// Normal case. The store has some ranges, and is not almost empty.
-		capacity[mmaprototype.ByteSize] = mmaprototype.LoadValue(float64(load[mmaprototype.ByteSize]) / byteSizeUtil)
+		capacity[mmaload.ByteSize] = mmaload.LoadValue(float64(load[mmaload.ByteSize]) / byteSizeUtil)
 	} else {
 		// Has no ranges or is almost empty. This is likely a new store. Since
 		// LogicalBytes are uncompressed, we start with the compressed available,
 		// which is desirably pessimistic.
-		capacity[mmaprototype.ByteSize] = mmaprototype.LoadValue(desc.Capacity.Available)
+		capacity[mmaload.ByteSize] = mmaload.LoadValue(desc.Capacity.Available)
 	}
 	var secondaryLoad mmaprototype.SecondaryLoadVector
-	secondaryLoad[mmaprototype.LeaseCount] = mmaprototype.LoadValue(desc.Capacity.LeaseCount)
-	secondaryLoad[mmaprototype.ReplicaCount] = mmaprototype.LoadValue(desc.Capacity.RangeCount)
+	secondaryLoad[mmaprototype.LeaseCount] = mmaload.LoadValue(desc.Capacity.LeaseCount)
+	secondaryLoad[mmaprototype.ReplicaCount] = mmaload.LoadValue(desc.Capacity.RangeCount)
 	// TODO(tbg): this triggers early in tests, probably we're making load messages
 	// before having received the first capacity. Still, this is bad, should fix.
 	// or handle properly by communicating an unknown capacity.

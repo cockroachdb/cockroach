@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmaload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -107,13 +108,13 @@ func NewAllocatorSync(
 // can refactor to use the same helper function.
 func mmaRangeLoad(rangeUsageInfo allocator.RangeUsageInfo) mmaprototype.RangeLoad {
 	var rl mmaprototype.RangeLoad
-	rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(
+	rl.Load[mmaload.CPURate] = mmaload.LoadValue(
 		rangeUsageInfo.RequestCPUNanosPerSecond + rangeUsageInfo.RaftCPUNanosPerSecond)
-	rl.RaftCPU = mmaprototype.LoadValue(rangeUsageInfo.RaftCPUNanosPerSecond)
-	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(rangeUsageInfo.WriteBytesPerSecond)
+	rl.RaftCPU = mmaload.LoadValue(rangeUsageInfo.RaftCPUNanosPerSecond)
+	rl.Load[mmaload.WriteBandwidth] = mmaload.LoadValue(rangeUsageInfo.WriteBytesPerSecond)
 	// Note that LogicalBytes is already populated as enginepb.MVCCStats.Total()
 	// in repl.RangeUsageInfo().
-	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(rangeUsageInfo.LogicalBytes)
+	rl.Load[mmaload.ByteSize] = mmaload.LoadValue(rangeUsageInfo.LogicalBytes)
 	return rl
 }
 

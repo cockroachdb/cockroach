@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmaload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -211,7 +212,7 @@ func (re *rebalanceEnv) rebalanceStore(
 				rstate := re.ranges[rangeID]
 				load := rstate.load.Load
 				if !ss.adjusted.replicas[rangeID].IsLeaseholder {
-					load[CPURate] = rstate.load.RaftCPU
+					load[mmaload.CPURate] = rstate.load.RaftCPU
 				}
 				fmt.Fprintf(&b, " r%d:%v", rangeID, load)
 			}
@@ -228,14 +229,14 @@ func (re *rebalanceEnv) rebalanceStore(
 	// More generally, does it make sense that rebalanceStores is called on
 	// behalf of a particular store (vs. being called on behalf of the set
 	// of local store IDs)?
-	if ss.StoreID == localStoreID && store.dimSummary[CPURate] >= overloadSlow {
+	if ss.StoreID == localStoreID && store.dimSummary[mmaload.CPURate] >= overloadSlow {
 		shouldSkipReplicaMoves := re.rebalanceLeases(ctx, ss, store, localStoreID)
 		if shouldSkipReplicaMoves {
 			return
 		}
 	} else {
 		log.KvDistribution.VInfof(ctx, 2, "skipping lease shedding: s%v != local store s%s or cpu is not overloaded: %v",
-			ss.StoreID, localStoreID, store.dimSummary[CPURate])
+			ss.StoreID, localStoreID, store.dimSummary[mmaload.CPURate])
 	}
 
 	log.KvDistribution.VInfof(ctx, 2, "attempting to shed replicas next")
@@ -246,7 +247,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 	ctx context.Context, store sheddingStore, ss *storeState, localStoreID roachpb.StoreID,
 ) {
 	doneShedding := false
-	if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
+	if store.StoreID != localStoreID && store.dimSummary[mmaload.CPURate] >= overloadSlow &&
 		re.now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
 		log.KvDistribution.VInfof(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
 		return
@@ -392,7 +393,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		targetSS := re.stores[targetStoreID]
 		addedLoad := rstate.load.Load
 		if !isLeaseholder {
-			addedLoad[CPURate] = rstate.load.RaftCPU
+			addedLoad[mmaload.CPURate] = rstate.load.RaftCPU
 		}
 		if !re.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, cands.means, false, loadDim) {
 			log.KvDistribution.VInfof(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
@@ -451,7 +452,7 @@ func (re *rebalanceEnv) rebalanceLeases(
 	ctx context.Context, ss *storeState, store sheddingStore, localStoreID roachpb.StoreID,
 ) bool {
 	log.KvDistribution.VInfof(ctx, 2, "local store s%d is CPU overloaded (%v >= %v), attempting lease transfers first",
-		store.StoreID, store.dimSummary[CPURate], overloadSlow)
+		store.StoreID, store.dimSummary[mmaload.CPURate], overloadSlow)
 	// This store is local, and cpu overloaded. Shed leases first.
 	//
 	// NB: any ranges at this store that don't have pending changes must
@@ -524,7 +525,7 @@ func (re *rebalanceEnv) rebalanceLeases(
 		means := computeMeansForStoreSet(re, candsPL, re.scratch.nodes, re.scratch.stores)
 		sls := re.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
 		log.KvDistribution.VInfof(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
-		if sls.dimSummary[CPURate] < overloadSlow {
+		if sls.dimSummary[mmaload.CPURate] < overloadSlow {
 			// This store is not cpu overloaded relative to these candidates for
 			// this range.
 			log.KvDistribution.VInfof(ctx, 2, "result(failed): skipping r%d since store not overloaded relative to candidates", rangeID)
@@ -559,7 +560,7 @@ func (re *rebalanceEnv) rebalanceLeases(
 		// will only add CPU to the target store (so it is ok to ignore other
 		// dimensions on the target).
 		targetStoreID := sortTargetCandidateSetAndPick(
-			ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, re.rng)
+			ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, mmaload.CPURate, re.rng)
 		if targetStoreID == 0 {
 			log.KvDistribution.Infof(
 				ctx,
@@ -568,16 +569,16 @@ func (re *rebalanceEnv) rebalanceLeases(
 			continue
 		}
 		targetSS := re.stores[targetStoreID]
-		var addedLoad LoadVector
+		var addedLoad mmaload.LoadVector
 		// Only adding leaseholder CPU.
-		addedLoad[CPURate] = rstate.load.Load[CPURate] - rstate.load.RaftCPU
-		if addedLoad[CPURate] < 0 {
+		addedLoad[mmaload.CPURate] = rstate.load.Load[mmaload.CPURate] - rstate.load.RaftCPU
+		if addedLoad[mmaload.CPURate] < 0 {
 			// TODO(sumeer): remove this panic once we are not in an
 			// experimental phase.
-			addedLoad[CPURate] = 0
+			addedLoad[mmaload.CPURate] = 0
 			panic("raft cpu higher than total cpu")
 		}
-		if !re.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, &means, true, CPURate) {
+		if !re.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, &means, true, mmaload.CPURate) {
 			log.KvDistribution.VInfof(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
 				store.StoreID, targetStoreID, rangeID, addedLoad)
 			continue

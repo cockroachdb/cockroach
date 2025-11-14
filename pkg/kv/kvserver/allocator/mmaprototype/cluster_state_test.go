@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmaload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -47,12 +48,12 @@ func stripBrackets(t *testing.T, in string) string {
 	return lrTrim
 }
 
-func parseLoadVector(t *testing.T, in string) LoadVector {
-	var vec LoadVector
+func parseLoadVector(t *testing.T, in string) mmaload.LoadVector {
+	var vec mmaload.LoadVector
 	parts := strings.Split(stripBrackets(t, in), ",")
-	require.Len(t, parts, int(NumLoadDimensions))
+	require.Len(t, parts, int(mmaload.NumLoadDimensions))
 	for dim := range vec {
-		vec[dim] = LoadValue(parseInt(t, parts[dim]))
+		vec[dim] = mmaload.LoadValue(parseInt(t, parts[dim]))
 	}
 	return vec
 }
@@ -62,7 +63,7 @@ func parseSecondaryLoadVector(t *testing.T, in string) SecondaryLoadVector {
 	parts := strings.Split(stripBrackets(t, in), ",")
 	require.LessOrEqual(t, len(parts), int(NumSecondaryLoadDimensions))
 	for dim := range parts {
-		vec[dim] = LoadValue(parseInt(t, parts[dim]))
+		vec[dim] = mmaload.LoadValue(parseInt(t, parts[dim]))
 	}
 	return vec
 }
@@ -178,7 +179,7 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 					rMsg.RangeLoad.Load = parseLoadVector(t, parts[1])
 					rMsg.MaybeSpanConfIsPopulated = true
 				case "raft-cpu":
-					rMsg.RangeLoad.RaftCPU = LoadValue(parseInt(t, parts[1]))
+					rMsg.RangeLoad.RaftCPU = mmaload.LoadValue(parseInt(t, parts[1]))
 					rMsg.MaybeSpanConfIsPopulated = true
 				case "not-populated":
 					notPopulatedOverride = true

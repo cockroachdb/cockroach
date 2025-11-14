@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmaload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
@@ -25,11 +26,11 @@ func mmaRangeLoad(
 	loadStats load.ReplicaLoadStats, mvccStats enginepb.MVCCStats,
 ) mmaprototype.RangeLoad {
 	var rl mmaprototype.RangeLoad
-	rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(
+	rl.Load[mmaload.CPURate] = mmaload.LoadValue(
 		loadStats.RequestCPUNanosPerSecond + loadStats.RaftCPUNanosPerSecond)
-	rl.RaftCPU = mmaprototype.LoadValue(loadStats.RaftCPUNanosPerSecond)
-	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(loadStats.WriteBytesPerSecond)
-	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(mvccStats.Total())
+	rl.RaftCPU = mmaload.LoadValue(loadStats.RaftCPUNanosPerSecond)
+	rl.Load[mmaload.WriteBandwidth] = mmaload.LoadValue(loadStats.WriteBytesPerSecond)
+	rl.Load[mmaload.ByteSize] = mmaload.LoadValue(mvccStats.Total())
 	return rl
 }
 

@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype/mmaload"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -492,7 +493,7 @@ func sortTargetCandidateSetAndPick(
 	cands candidateSet,
 	loadThreshold loadSummary,
 	ignoreLevel ignoreLevel,
-	overloadedDim LoadDimension,
+	overloadedDim mmaload.LoadDimension,
 	rng *rand.Rand,
 ) roachpb.StoreID {
 	var b strings.Builder
@@ -570,7 +571,7 @@ func sortTargetCandidateSetAndPick(
 			if j == 0 {
 				// This is the lowestLoad set being considered now.
 				lowestLoadSet = cand.sls
-			} else if ignoreLevel < ignoreHigherThanLoadThreshold || overloadedDim == NumLoadDimensions {
+			} else if ignoreLevel < ignoreHigherThanLoadThreshold || overloadedDim == mmaload.NumLoadDimensions {
 				// Past the lowestLoad set. We don't care about these.
 				break
 			}
@@ -583,7 +584,7 @@ func sortTargetCandidateSetAndPick(
 		}
 		candDiscardedByNLS := cand.nls > loadThreshold ||
 			(cand.nls == loadThreshold && ignoreLevel < ignoreHigherThanLoadThreshold)
-		candDiscardedByOverloadDim := overloadedDim != NumLoadDimensions &&
+		candDiscardedByOverloadDim := overloadedDim != mmaload.NumLoadDimensions &&
 			cand.dimSummary[overloadedDim] >= loadNoChange
 		if candDiscardedByNLS || candDiscardedByOverloadDim ||
 			cand.maxFractionPendingIncrease >= maxFractionPendingThreshold {
@@ -664,7 +665,7 @@ func sortTargetCandidateSetAndPick(
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
-	if lowestLoadSet != highestLoadSet || (lowestLoadSet >= loadNoChange && overloadedDim != NumLoadDimensions) {
+	if lowestLoadSet != highestLoadSet || (lowestLoadSet >= loadNoChange && overloadedDim != mmaload.NumLoadDimensions) {
 		// Sort candidates from lowest to highest along overloaded dimension. We
 		// limit when we do this, since this will further restrict the pool of
 		// candidates and in general we don't want to restrict the pool.
