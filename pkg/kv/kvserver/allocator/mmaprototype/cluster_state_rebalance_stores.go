@@ -607,7 +607,7 @@ func (re *rebalanceEnv) rebalanceLeases(
 		re.addPendingRangeChange(leaseChange)
 		re.changes = append(re.changes, leaseChange)
 		leaseTransferCount++
-		if re.changes[len(re.changes)-1].IsChangeReplicas() || !re.changes[len(re.changes)-1].IsTransferLease() {
+		if !re.changes[len(re.changes)-1].IsTransferLease() {
 			panic(fmt.Sprintf("lease transfer is invalid: %v", re.changes[len(re.changes)-1]))
 		}
 		log.KvDistribution.Infof(ctx,
