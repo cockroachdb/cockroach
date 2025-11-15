@@ -37,6 +37,9 @@ const (
 	WindowedHistogramWrapNum = 2
 	// CardinalityLimit is the max number of distinct label values combinations for any given MetricVec.
 	CardinalityLimit = 2000
+	// HighCardinalityMetricsLimit is the max number of distinct label values combinations for any given
+	//HighCardinality metrics.
+	HighCardinalityMetricsLimit = 5000
 )
 
 // Maintaining a list of static label names here to avoid duplication and
@@ -320,6 +323,24 @@ const nativeHistogramsBucketCountMultiplierEnvVar = "COCKROACH_PROMETHEUS_NATIVE
 
 var nativeHistogramsBucketCountMultiplier = envutil.EnvOrDefaultFloat64(nativeHistogramsBucketCountMultiplierEnvVar, 1)
 
+// maxLabelValuesEnvVar can be used to configure the maximum number of distinct
+// label value combinations for high cardinality metrics before eviction starts.
+const maxLabelValuesEnvVar = "COCKROACH_HIGH_CARDINALITY_METRICS_MAX_LABEL_VALUES"
+
+// MaxLabelValues is the configured maximum number of distinct label value combinations
+// for high cardinality metrics before eviction starts, read from the environment variable.
+var MaxLabelValues = envutil.EnvOrDefaultInt(maxLabelValuesEnvVar, 0)
+
+// retentionTimeTillEvictionEnvVar can be used to configure the time duration
+// after which unused label value combinations can be evicted from the cache.
+const retentionTimeTillEvictionEnvVar = "COCKROACH_HIGH_CARDINALITY_METRICS_RETENTION_TIME_TILL_EVICTION"
+
+// RetentionTimeTillEviction is the configured time duration after which unused
+// label value combinations can be evicted from the cache, read from the environment variable.
+// We are making sure that metrics would be scraped in at least one scrape as we have a default 10 second
+// scrape interval.
+var RetentionTimeTillEviction = envutil.EnvOrDefaultDuration(retentionTimeTillEvictionEnvVar, 10*time.Second)
+
 type HistogramMode byte
 
 const (
@@ -341,6 +362,25 @@ const (
 	// HdrHistogram model, since suitable defaults are used for both.
 	HistogramModePreferHdrLatency
 )
+
+// HighCardinalityMetricOptions defines the configuration options for high cardinality metrics
+// (Counter, Gauge, Histogram) that use cache storage. This allows fine-grained control over
+// eviction policies to manage memory usage for metrics with many distinct label combinations.
+type HighCardinalityMetricOptions struct {
+	// Metadata is the metric Metadata associated with the high cardinality metric.
+	Metadata Metadata
+	// MaxLabelValues sets the maximum number of distinct label value combinations
+	// that can be stored in the cache before eviction starts. When this limit is reached,
+	// the cache will evict entries based on the configured eviction policy.
+	// If set to 0, the default 5000 value is used.
+	MaxLabelValues int
+	// RetentionTimeTillEviction specifies the time duration after which unused
+	// label value combinations can be evicted from the cache. Entries that haven't
+	// been accessed for longer than this duration may be evicted.
+	// If set to 0, the default value of 20 seconds is used to ensure the label value is
+	// scraped at least once with default scrape interval of 10 seconds.
+	RetentionTimeTillEviction time.Duration
+}
 
 type HistogramOptions struct {
 	// Metadata is the metric Metadata associated with the histogram.
@@ -366,6 +406,9 @@ type HistogramOptions struct {
 	// Mode defines the type of histogram to be used. See individual
 	// comments on each HistogramMode value for details.
 	Mode HistogramMode
+	// HighCardinalityOpts configures cache eviction for high cardinality histograms.
+	// Only applies when using NewHighCardinalityHistogram.
+	HighCardinalityOpts HighCardinalityMetricOptions
 }
 
 func NewHistogram(opt HistogramOptions) IHistogram {
