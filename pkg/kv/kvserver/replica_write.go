@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -24,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -808,14 +809,18 @@ func (r *Replica) newBatchedEngine(g *concurrency.Guard) (storage.Batch, *storag
 		opLogger = storage.NewOpLoggerBatch(batch)
 		batch = opLogger
 	}
-	if util.RaceEnabled {
+	if buildutil.CrdbTestBuild {
 		// During writes we may encounter a versioned value newer than the request
 		// timestamp, and may have to retry at a higher timestamp. This is still
 		// safe as we're only ever writing at timestamps higher than the timestamp
 		// any write latch would be declared at. But because of this, we don't
 		// assert on access timestamps using spanset.NewBatchAt.
-		batch = spanset.NewBatch(batch, g.LatchSpans())
+		spans := g.LatchSpans()
+		spans.AddForbiddenMatcher(overlapsUnreplicatedRangeIDLocalKeys)
+		spans.AddForbiddenMatcher(overlapsStoreLocalKeys)
+		batch = spanset.NewBatch(batch, spans)
 	}
+
 	return batch, opLogger
 }
 
@@ -883,4 +888,109 @@ func newMVCCStats() *enginepb.MVCCStats {
 func releaseMVCCStats(ms *enginepb.MVCCStats) {
 	ms.Reset()
 	mvccStatsPool.Put(ms)
+}
+
+// overlapsUnreplicatedRangeIDLocalKeys checks if the provided span overlaps
+// with any unreplicated rangeID local keys.
+func overlapsUnreplicatedRangeIDLocalKeys(span roachpb.Span) error {
+	// getRangeIDLocalSpan is a helper function that returns the full
+	// unreplicated RangeID span for a given RangeID.
+	getRangeIDLocalSpan := func(rangeID roachpb.RangeID) roachpb.Span {
+		return roachpb.Span{Key: keys.MakeRangeIDUnreplicatedPrefix(rangeID),
+			EndKey: keys.MakeRangeIDUnreplicatedPrefix(rangeID).PrefixEnd()}
+	}
+
+	fullRangeIDLocalSpans := roachpb.Span{
+		Key:    keys.MakeRangeIDUnreplicatedPrefix(0),
+		EndKey: keys.LocalRangePrefix,
+	}
+
+	// If the provided span is completely outside the rangeID local spans for any
+	// rangeID, then there is no overlap with any rangeID local keys.
+	if !spanset.Overlaps(fullRangeIDLocalSpans, span) {
+		return nil
+	}
+
+	// Overlapping the full rangeID local span. We must be overlapping rangeID
+	// local keys.
+	if spanset.Contains(span, fullRangeIDLocalSpans) {
+		return errors.Errorf("overlapping an unreplicated rangeID span")
+	}
+
+	// At this point, we know that there is an overlap. If our span is not fully
+	// inside fullRangeIDLocalSpans, then we must be partially overlapping with
+	// RangeID local spans.
+	if !spanset.Contains(fullRangeIDLocalSpans, span) {
+		return errors.Errorf("partially overlapping an unreplicated rangeID span")
+	}
+
+	// At this point we know that our span is fully inside fullRangeIDLocalSpans.
+
+	if span.Key == nil {
+		if span.EndKey.Compare(fullRangeIDLocalSpans.Key) == 0 {
+			return nil // endKey is at keys.MakeRangeIDUnreplicatedPrefix(0)
+		}
+
+		if span.EndKey.Compare(fullRangeIDLocalSpans.EndKey) == 0 {
+			return errors.Errorf("overlapping an unreplicated rangeID span") // endKey is at keys.LocalRangePrefix
+		}
+
+		rangeID, err := keys.DecodeRangeIDPrefix(span.EndKey)
+		if err != nil {
+			panic(err) // shouldn't be possible
+		}
+
+		if spanset.Overlaps(getRangeIDLocalSpan(rangeID), span) {
+			return errors.Errorf("overlapping an unreplicated rangeID span")
+		}
+
+		return nil
+	}
+
+	// We know that Span.Key != nil.
+	rangeID, err := keys.DecodeRangeIDPrefix(span.Key)
+	if err != nil {
+		panic(err) // shouldn't be possible
+	}
+
+	if spanset.Overlaps(getRangeIDLocalSpan(rangeID), span) {
+		return errors.Errorf("overlapping an unreplicated rangeID span")
+	}
+
+	// One last case to check. If the start key is just at the end of some RangeID
+	// local key, we need to check if the span is overlapping some RangeID local
+	// keys that are ahead of startKey (on the next RangeID).
+	if span.EndKey != nil {
+		endRangeID, err := keys.DecodeRangeIDPrefix(span.EndKey)
+		if err != nil {
+			panic(err) // cannot happen
+		}
+
+		if endRangeID-rangeID > 1 {
+			// If we are crossing more than one rangeID, we must have overlapped with
+			// some unreplicated local RangeID keys.
+			return errors.Errorf("overlapping an unreplicated rangeID span")
+		}
+
+		if spanset.Overlaps(getRangeIDLocalSpan(endRangeID), span) {
+			return errors.Errorf("overlapping an unreplicated rangeID span")
+		}
+	}
+
+	return nil
+}
+
+// overlapsStoreLocalKeys returns an error if the provided span overlaps
+// with any store local keys.
+func overlapsStoreLocalKeys(span roachpb.Span) error {
+	localStoreSpan := roachpb.Span{
+		Key:    keys.LocalStorePrefix,
+		EndKey: keys.LocalStoreMax,
+	}
+
+	if spanset.Overlaps(localStoreSpan, span) {
+		return errors.Errorf("overlaps with store local keys")
+	}
+
+	return nil
 }
