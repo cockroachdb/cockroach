@@ -867,6 +867,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/clusterunique",
+        "//pkg/sql/colfetcher",
         "//pkg/sql/contentionpb",
         "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
