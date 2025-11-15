@@ -24,7 +24,7 @@ ALTER TABLE t ALTER s TYPE STRING, ALTER sl TYPE STRING(6), ALTER ts TYPE TIMEST
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM t
 ----
-column_name  data_type    is_nullable  column_default  generation_expression  indices   is_hidden
+column_name  data_type    is_nullable  column_default  generation_expression  indexes   is_hidden
 s            STRING       true         NULL            ·                      {t_pkey}  false
 sl           STRING(6)    true         NULL            ·                      {t_pkey}  false
 t            TIME         true         NULL            ·                      {t_pkey}  false
@@ -123,7 +123,7 @@ CREATE TABLE t (a INT)
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
+column_name  data_type  is_nullable  column_default  generation_expression  indexes   is_hidden
 a            INT8       true         NULL            ·                      {t_pkey}  false
 rowid        INT8       false        unique_rowid()  ·                      {t_pkey}  true
 
@@ -133,7 +133,7 @@ ALTER TABLE t ALTER a TYPE INTEGER
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
+column_name  data_type  is_nullable  column_default  generation_expression  indexes   is_hidden
 a            INT8       true         NULL            ·                      {t_pkey}  false
 rowid        INT8       false        unique_rowid()  ·                      {t_pkey}  true
 
