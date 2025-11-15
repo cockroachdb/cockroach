@@ -9,15 +9,15 @@ range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3,(n4,s4):4,(n5,s5):5]
 t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s5: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Make replica 2 and 3 have positive send tokens, so they don't form a
 # send-queue. Replica 1 can't form a send-queue because it is the leader.
@@ -26,15 +26,15 @@ adjust_tokens send
   store_id=3 pri=HighPri tokens=512KiB
 ----
 t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB
+       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB
+       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s5: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Append one entry. Replicas 4, 5 have a send-queue.
 raft_event pull-mode
@@ -43,15 +43,15 @@ range_id=1
     term=1 index=1 pri=NormalPri size=1MiB
 ----
 t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-512 KiB/+16 MiB ela=-512 KiB/+8.0 MiB
+       send reg=-512 KiB/+16 MiB ela=-512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-512 KiB/+16 MiB ela=-512 KiB/+8.0 MiB
+       send reg=-512 KiB/+16 MiB ela=-512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s5: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -219,15 +219,15 @@ adjust_tokens send
   store_id=5 pri=LowPri tokens=-1MiB
 ----
 t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-512 KiB/+16 MiB ela=-512 KiB/+8.0 MiB
+       send reg=-512 KiB/+16 MiB ela=-512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB
+       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s5: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Replica 3 transitions to StateSnapshot again. Replica 4 is picked to
 # force-flush since it is less overloaded wrt bucketed elastic send tokens.
@@ -316,15 +316,15 @@ adjust_tokens send
   store_id=5 pri=LowPri tokens=768KiB
 ----
 t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-512 KiB/+16 MiB ela=-512 KiB/+8.0 MiB
+       send reg=-512 KiB/+16 MiB ela=-512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB
+       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-512 KiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s5: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-256 KiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-256 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Make replica 5 look more overloaded wrt elastic eval tokens. Since this is
 # the second field in the tuple comparison and the first field is equal, this
@@ -333,15 +333,15 @@ adjust_tokens eval
   store_id=5 pri=LowPri tokens=-512KiB
 ----
 t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-512 KiB/+16 MiB ela=-512 KiB/+8.0 MiB
+       send reg=-512 KiB/+16 MiB ela=-512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB
+       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-512 KiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s5: eval reg=+0 B/+16 MiB ela=-1.5 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-256 KiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-256 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Replica 3 transitions to StateSnapshot again. Replica 4 is picked to
 # force-flush since it is less overloaded wrt elastic eval tokens.
@@ -568,15 +568,15 @@ raft_event
 range_id=1
 ----
 t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB
+       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB
+       send reg=+512 KiB/+16 MiB ela=+512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-512 KiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-512 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s5: eval reg=-1.0 MiB/+16 MiB ela=-1.5 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-256 KiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-256 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 stream_state range_id=1
 ----

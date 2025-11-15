@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -91,6 +90,10 @@ func makeInspectStream(
 // InspectStream returns a snapshot of a specific underlying {eval,send} stream
 // and its available {regular,elastic} tokens. It's used to power
 // /inspectz.
+//
+// TODO(sumeer): add inflight tokens if we think these inspectz pages are
+// useful. I suspect no one looks at them since we are almost never looking at
+// a live incident.
 func (p *StreamTokenCounterProvider) InspectStream(
 	stream kvflowcontrol.Stream,
 ) kvflowinspectpb.Stream {
@@ -118,9 +121,9 @@ func (p *StreamTokenCounterProvider) Inspect(_ context.Context) []kvflowinspectp
 // UpdateMetricGauges updates the gauge token metrics and logs blocked streams.
 func (p *StreamTokenCounterProvider) UpdateMetricGauges() {
 	var (
-		count           [NumTokenTypes][admissionpb.NumWorkClasses]int64
-		blockedCount    [NumTokenTypes][admissionpb.NumWorkClasses]int64
-		tokensAvailable [NumTokenTypes][admissionpb.NumWorkClasses]int64
+		count           [NumTokenTypes][NumWorkClassOrInflight]int64
+		blockedCount    [NumTokenTypes][NumWorkClassOrInflight]int64
+		tokensAvailable [NumTokenTypes][NumWorkClassOrInflight]int64
 	)
 	now := p.clock.PhysicalTime()
 
@@ -130,18 +133,27 @@ func (p *StreamTokenCounterProvider) UpdateMetricGauges() {
 	gaugeUpdateFn := func(metricType TokenType) func(
 		kvflowcontrol.Stream, *tokenCounter) bool {
 		return func(stream kvflowcontrol.Stream, t *tokenCounter) bool {
-			regularTokens := t.tokens(admissionpb.RegularWorkClass)
-			elasticTokens := t.tokens(admissionpb.ElasticWorkClass)
-			count[metricType][regular]++
-			count[metricType][elastic]++
-			tokensAvailable[metricType][regular] += int64(regularTokens)
-			tokensAvailable[metricType][elastic] += int64(elasticTokens)
+			regularTokens := t.tokens(RegularWC)
+			elasticTokens := t.tokens(ElasticWC)
+			count[metricType][RegularWC]++
+			count[metricType][ElasticWC]++
+			tokensAvailable[metricType][RegularWC] += int64(regularTokens)
+			tokensAvailable[metricType][ElasticWC] += int64(elasticTokens)
 
 			if regularTokens <= 0 {
-				blockedCount[metricType][regular]++
+				blockedCount[metricType][RegularWC]++
 			}
 			if elasticTokens <= 0 {
-				blockedCount[metricType][elastic]++
+				blockedCount[metricType][ElasticWC]++
+			}
+			var inflightTokens kvflowcontrol.Tokens
+			if metricType == SendToken {
+				inflightTokens = t.tokens(InFlight)
+				count[metricType][InFlight]++
+				tokensAvailable[metricType][InFlight] += int64(inflightTokens)
+				if inflightTokens <= 0 {
+					blockedCount[metricType][InFlight]++
+				}
 			}
 
 			return true
@@ -154,10 +166,11 @@ func (p *StreamTokenCounterProvider) UpdateMetricGauges() {
 		EvalToken,
 		SendToken,
 	} {
-		for _, wc := range []admissionpb.WorkClass{
-			admissionpb.RegularWorkClass,
-			admissionpb.ElasticWorkClass,
-		} {
+		numWC := NumWorkClassOrInflight
+		if typ == EvalToken {
+			numWC = InFlight
+		}
+		for wc := WorkClassOrInflight(0); wc < numWC; wc++ {
 			p.tokenMetrics.StreamMetrics[typ].Count[wc].Update(count[typ][wc])
 			p.tokenMetrics.StreamMetrics[typ].BlockedCount[wc].Update(blockedCount[typ][wc])
 			p.tokenMetrics.StreamMetrics[typ].TokensAvailable[wc].Update(tokensAvailable[typ][wc])
@@ -165,16 +178,17 @@ func (p *StreamTokenCounterProvider) UpdateMetricGauges() {
 	}
 
 	// Next, check if any of the blocked stream loggers are ready to log, if so
-	// we iterate over every (token|send) stream and observe the stream state.
+	// we iterate over every (eval|send) stream and observe the stream state.
 	// When vmodule=2, the logger is always ready.
 	logStreamFn := func(logger *blockedStreamLogger) func(
 		stream kvflowcontrol.Stream, t *tokenCounter) bool {
 		return func(stream kvflowcontrol.Stream, t *tokenCounter) bool {
 			// NB: We reset each stream's stats here. The stat returned will be the
 			// delta between the last stream observation and now.
-			regularStats, elasticStats := t.GetAndResetStats(now)
+			regularStats, elasticStats, inflightStats := t.GetAndResetStats(now)
 			logger.observeStream(stream, now,
-				t.tokens(regular), t.tokens(elastic), regularStats, elasticStats)
+				t.tokens(RegularWC), t.tokens(ElasticWC), t.tokens(InFlight),
+				regularStats, elasticStats, inflightStats)
 			return true
 		}
 	}
@@ -219,10 +233,11 @@ type blockedStreamLogger struct {
 	//   blockedRegularCount=5
 	//   blockedElasticCount=5
 	//   blockedCount=5
-	blockedCount        int
-	blockedElasticCount int
-	blockedRegularCount int
-	elaBuf, regBuf      strings.Builder
+	blockedCount                int
+	blockedElasticCount         int
+	blockedRegularCount         int
+	blockedInFlightCount        int
+	elaBuf, regBuf, inflightBuf strings.Builder
 }
 
 func newBlockedStreamLogger(metricType TokenType) *blockedStreamLogger {
@@ -245,18 +260,24 @@ func (b *blockedStreamLogger) flushLogs() {
 		log.KvDistribution.Warningf(context.Background(), "%d blocked %s elastic replication stream(s): %s",
 			b.blockedElasticCount, b.metricType, redact.SafeString(b.elaBuf.String()))
 	}
+	if b.blockedInFlightCount > 0 {
+		log.KvDistribution.Warningf(context.Background(), "%d blocked %s inflight replication stream(s): %s",
+			b.blockedInFlightCount, b.metricType, redact.SafeString(b.inflightBuf.String()))
+	}
 	b.elaBuf.Reset()
 	b.regBuf.Reset()
+	b.inflightBuf.Reset()
 	b.blockedCount = 0
 	b.blockedRegularCount = 0
 	b.blockedElasticCount = 0
+	b.blockedInFlightCount = 0
 }
 
 func (b *blockedStreamLogger) observeStream(
 	stream kvflowcontrol.Stream,
 	now time.Time,
-	regularTokens, elasticTokens kvflowcontrol.Tokens,
-	regularStats, elasticStats deltaStats,
+	regularTokens, elasticTokens, inflightTokens kvflowcontrol.Tokens,
+	regularStats, elasticStats, inflightStats deltaStats,
 ) {
 	// Log stats, which reflect both elastic and regular at the interval defined
 	// by blockedStreamLoggingInteval. If a high-enough log verbosity is
@@ -282,7 +303,12 @@ func (b *blockedStreamLogger) observeStream(
 		b.blockedElasticCount++
 		logBlockedStream(stream, b.blockedElasticCount, &b.elaBuf)
 	}
-	if regularStats.noTokenDuration == 0 && elasticStats.noTokenDuration == 0 {
+	if b.metricType == SendToken && inflightTokens <= 0 {
+		b.blockedInFlightCount++
+		logBlockedStream(stream, b.blockedInFlightCount, &b.inflightBuf)
+	}
+	if regularStats.noTokenDuration == 0 && elasticStats.noTokenDuration == 0 &&
+		inflightStats.noTokenDuration == 0 {
 		return
 	}
 
@@ -297,8 +323,12 @@ func (b *blockedStreamLogger) observeStream(
 		if elasticStats.noTokenDuration > 0 {
 			fmt.Fprintf(&bb, " elastic %s", elasticStats.noTokenDuration.String())
 		}
+		if inflightStats.noTokenDuration > 0 {
+			fmt.Fprintf(&bb, " inflight %s", inflightStats.noTokenDuration.String())
+		}
 		regularDelta := regularStats.tokensReturned - regularStats.tokensDeducted
 		elasticDelta := elasticStats.tokensReturned - elasticStats.tokensDeducted
+		inflightDelta := inflightStats.tokensReturned - inflightStats.tokensDeducted
 		fmt.Fprintf(&bb, " tokens delta: regular %s (%s - %s) elastic %s (%s - %s)",
 			pprintTokens(regularDelta),
 			pprintTokens(regularStats.tokensReturned),
@@ -306,6 +336,10 @@ func (b *blockedStreamLogger) observeStream(
 			pprintTokens(elasticDelta),
 			pprintTokens(elasticStats.tokensReturned),
 			pprintTokens(elasticStats.tokensDeducted))
+		if b.metricType == SendToken {
+			fmt.Fprintf(&bb, " inflight %s (%s - %s)", pprintTokens(inflightDelta),
+				pprintTokens(inflightStats.tokensReturned), pprintTokens(inflightStats.tokensDeducted))
+		}
 		deductionKindFunc := func(class string, stats deltaStats) {
 			if stats.tokensDeductedForceFlush == 0 && stats.tokensDeductedPreventSendQueue == 0 {
 				return
@@ -321,6 +355,8 @@ func (b *blockedStreamLogger) observeStream(
 		}
 		deductionKindFunc("regular", regularStats)
 		deductionKindFunc("elastic", elasticStats)
+		fmt.Fprintf(&bb, " total reg: %s, elastic: %s, inflight: %s", pprintTokens(regularTokens),
+			pprintTokens(elasticTokens), pprintTokens(inflightTokens))
 		log.KvDistribution.Infof(context.Background(), "%s", redact.SafeString(bb.String()))
 	} else if b.blockedCount == streamStatsCountCap+1 {
 		log.KvDistribution.Infof(context.Background(), "skipped logging some streams that were blocked")
@@ -334,27 +370,29 @@ func pprintTokens(t kvflowcontrol.Tokens) string {
 	return humanize.IBytes(uint64(t))
 }
 
-// SendTokenWatcher can be used for watching and waiting on available elastic
-// send tokens. The caller registers a notification, which will be called when
-// elastic tokens are available for the given stream being watched. Note that
-// only elastic tokens are watched, as the SendTokenWatcher is intended to be
-// used when a send queue exists for a replication stream, requiring only one
-// goroutine per stream.
+// SendTokenWatcher can be used for watching and waiting on available send
+// tokens for a particular WorkClassOrInflight value. The caller registers a
+// notification, which will be called when tokens are available for the given
+// stream being watched. The SendTokenWatcher is intended to be used for two
+// cases (a) watching for elastic tokens, when a send queue exists for a
+// replication stream, (b) watching for in-flight tokens, when force-flushing
+// a send queue. It uses a single goroutine per stream.
 type SendTokenWatcher struct {
-	stopper  *stop.Stopper
-	clock    timeutil.TimeSource
+	stopper *stop.Stopper
+	clock   timeutil.TimeSource
+	wc      WorkClassOrInflight
+
 	watchers syncutil.Map[kvflowcontrol.Stream, sendStreamTokenWatcher]
 }
 
 // NewSendTokenWatcher creates a new SendTokenWatcher.
-func NewSendTokenWatcher(stopper *stop.Stopper, clock timeutil.TimeSource) *SendTokenWatcher {
-	return &SendTokenWatcher{stopper: stopper, clock: clock}
+func NewSendTokenWatcher(
+	stopper *stop.Stopper, clock timeutil.TimeSource, wc WorkClassOrInflight,
+) *SendTokenWatcher {
+	return &SendTokenWatcher{stopper: stopper, clock: clock, wc: wc}
 }
 
 const (
-	// sendTokenWatcherWC is the class of tokens the send token watcher is
-	// watching.
-	sendTokenWatcherWC = admissionpb.ElasticWorkClass
 	// watcherIdleCloseDuration is the duration after which the watcher will stop
 	// if there are no registered notifications.
 	watcherIdleCloseDuration = 1 * time.Minute
@@ -363,12 +401,14 @@ const (
 // TokenGrantNotification is an interface that is called when tokens are
 // available.
 type TokenGrantNotification interface {
-	// Notify is called when tokens are available to be granted.
-	Notify(context.Context)
+	// Notify is called when tokens are available to be granted. The wc
+	// parameter disambiguates to the callee which tokens are becoming
+	// available.
+	Notify(_ context.Context, wc WorkClassOrInflight)
 }
 
 // SendTokenWatcherHandle is a unique handle that is watching for available
-// elastic send tokens on a stream.
+// send tokens on a stream.
 type SendTokenWatcherHandle struct {
 	// id is the unique identifier for this handle.
 	id uint64
@@ -405,7 +445,7 @@ func (s *SendTokenWatcher) watcher(tc *tokenCounter) *sendStreamTokenWatcher {
 		return w
 	}
 	w, _ := s.watchers.LoadOrStore(
-		tc.Stream(), newSendStreamTokenWatcher(s.stopper, tc, s.clock.NewTimer()))
+		tc.Stream(), newSendStreamTokenWatcher(s.stopper, tc, s.wc, s.clock.NewTimer()))
 	return w
 }
 
@@ -415,6 +455,7 @@ func (s *SendTokenWatcher) watcher(tc *tokenCounter) *sendStreamTokenWatcher {
 type sendStreamTokenWatcher struct {
 	stopper *stop.Stopper
 	tc      *tokenCounter
+	wc      WorkClassOrInflight
 	// nonEmptyCh is used to signal the watcher that there are events to process.
 	// When the queue is empty, the watcher will wait for the next event to be
 	// added before processing, by waiting on this channel.
@@ -439,11 +480,12 @@ type sendStreamTokenWatcher struct {
 }
 
 func newSendStreamTokenWatcher(
-	stopper *stop.Stopper, tc *tokenCounter, timer timeutil.TimerI,
+	stopper *stop.Stopper, tc *tokenCounter, wc WorkClassOrInflight, timer timeutil.TimerI,
 ) *sendStreamTokenWatcher {
 	w := &sendStreamTokenWatcher{
 		stopper:    stopper,
 		tc:         tc,
+		wc:         wc,
 		timer:      timer,
 		nonEmptyCh: make(chan struct{}, 1),
 	}
@@ -547,7 +589,7 @@ func (w *sendStreamTokenWatcher) run(_ context.Context) {
 			}
 		}
 
-		available, handle := w.tc.TokensAvailable(sendTokenWatcherWC)
+		available, handle := w.tc.TokensAvailable(w.wc)
 		// When there are no tokens available, wait for token counter channel to be
 		// signaled, or until the stopper is quiescing.
 		if !available {
@@ -568,8 +610,8 @@ func (w *sendStreamTokenWatcher) run(_ context.Context) {
 		// handle in line.
 		if grant, found := w.nextGrant(); found {
 			log.KvDistribution.VInfof(ctx, 4,
-				"notifying %v of available tokens for stream %v", grant, w.tc.stream)
-			grant.Notify(ctx)
+				"notifying %v of available %v tokens for stream %v", grant, w.wc, w.tc.stream)
+			grant.Notify(ctx, w.wc)
 		}
 	}
 }
