@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 type Writer struct {
@@ -99,7 +101,20 @@ func (s *Writer) flushBuffer(ctx context.Context) error {
 	rowSample := s.kv[s.rowPicker.Intn(len(s.kv))].Key
 	start := s.kv[0].Key.Clone()
 	end := s.kv[len(s.kv)-1].Key.Next().Clone()
-	span := roachpb.Span{Key: start.Key, EndKey: end.Key}
+
+	// Ensure the span boundaries are at safe split points (i.e., row boundaries,
+	// not column family boundaries). This ensures that all SSTs emitted have safe
+	// boundaries that can be used directly for range splits without adjustment.
+	safeStart, err := keys.EnsureSafeSplitKey(start.Key)
+	if err != nil {
+		return errors.Wrapf(err, "failed to split start key %s", start.Key)
+	}
+	safeEnd, err := keys.EnsureSafeSplitKey(end.Key)
+	if err != nil {
+		return errors.Wrapf(err, "failed to split end key %s", end.Key)
+	}
+
+	span := roachpb.Span{Key: safeStart, EndKey: safeEnd}
 	if err := s.flushSST(ctx, span, rowSample.Key); err != nil {
 		return err
 	}
