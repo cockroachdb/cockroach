@@ -12165,6 +12165,66 @@ memo (optimized, ~38KB, required=[presentation: a:1] [ordering: +2])
  ├── G51: (filters G39)
  └── G52: (scalar-list G48)
 
+# Regression test for #157073: explore splitting a disjunction on the same
+# column if there are multiple partial indexes with predicates on that column
+# that could be used.
+
+exec-ddl
+CREATE TABLE t157073 (
+  a INT NOT NULL PRIMARY KEY,
+  b INT NOT NULL,
+  c INT NOT NULL,
+  INDEX (c) WHERE b < 0,
+  INDEX (c) WHERE b >= 9990
+)
+----
+
+opt expect=SplitDisjunction
+SELECT c, a FROM t157073 WHERE c = 5 AND (b < 0 OR b >= 9990)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── distinct-on
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── grouping columns: a:1!null
+      ├── internal-ordering: +1
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── union-all
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── left columns: a:6 b:7 c:8
+      │    ├── right columns: a:11 b:12 c:13
+      │    ├── ordering: +1
+      │    ├── index-join t157073
+      │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: ()-->(8), (6)-->(7)
+      │    │    ├── ordering: +6 opt(8) [actual: +6]
+      │    │    └── scan t157073@t157073_c_idx,partial
+      │    │         ├── columns: a:6!null c:8!null
+      │    │         ├── constraint: /8/6: [/5 - /5]
+      │    │         ├── key: (6)
+      │    │         ├── fd: ()-->(8)
+      │    │         └── ordering: +6 opt(8) [actual: +6]
+      │    └── index-join t157073
+      │         ├── columns: a:11!null b:12!null c:13!null
+      │         ├── key: (11)
+      │         ├── fd: ()-->(13), (11)-->(12)
+      │         ├── ordering: +11 opt(13) [actual: +11]
+      │         └── scan t157073@t157073_c_idx1,partial
+      │              ├── columns: a:11!null c:13!null
+      │              ├── constraint: /13/11: [/5 - /5]
+      │              ├── key: (11)
+      │              ├── fd: ()-->(13)
+      │              └── ordering: +11 opt(13) [actual: +11]
+      └── aggregations
+           ├── const-agg [as=b:2, outer=(2)]
+           │    └── b:2
+           └── const-agg [as=c:3, outer=(3)]
+                └── c:3
+
 # --------------------------------------------------
 # SplitDisjunctionAddKey
 # --------------------------------------------------
