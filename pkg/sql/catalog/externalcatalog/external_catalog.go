@@ -124,6 +124,7 @@ func IngestExternalCatalog(
 	schemaID descpb.ID,
 	setOffline bool,
 	ingestingUnqualifiedTableNames []string,
+	transform func(parent descpb.TableDescriptor, ingested *tabledesc.Mutable),
 ) (externalpb.ExternalCatalog, error) {
 
 	ingestedCatalog := externalpb.ExternalCatalog{}
@@ -157,6 +158,9 @@ func IngestExternalCatalog(
 		mutTable.ParentID = dbDesc.GetID()
 		mutTable.Version = 1
 		mutTable.ID = newID
+		if transform != nil {
+			transform(table, mutTable)
+		}
 		tablesToWrite = append(tablesToWrite, mutTable)
 		ingestedCatalog.Tables = append(ingestedCatalog.Tables, mutTable.TableDescriptor)
 	}
