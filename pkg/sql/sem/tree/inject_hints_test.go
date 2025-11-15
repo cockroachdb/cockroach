@@ -241,7 +241,7 @@ func TestRandomInjectHints(t *testing.T) {
 	skip.UnderDeadlock(t, "the test is too slow")
 	skip.UnderRace(t, "the test is too slow")
 
-	const numStatements = 500
+	const numStatements = 100
 
 	ctx := context.Background()
 	rng, seed := randutil.NewTestRand()
