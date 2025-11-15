@@ -346,6 +346,13 @@ func TestVectorIndexMergingDuringBackfillWithPrefix(t *testing.T) {
 	blockBackfill := make(chan struct{})
 	backfillBlocked := make(chan struct{})
 
+	var testTenant base.DefaultTestTenantOptions
+	if syncutil.DeadlockEnabled {
+		// The cluster can get overloaded under deadlock with external process
+		// mode.
+		testTenant = base.TestSkipForExternalProcessMode()
+	}
+
 	ctx := context.Background()
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -357,6 +364,7 @@ func TestVectorIndexMergingDuringBackfillWithPrefix(t *testing.T) {
 				},
 			},
 		},
+		DefaultTestTenant: testTenant,
 	})
 	defer srv.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
