@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
@@ -4641,6 +4642,104 @@ value if you rely on the HLC for accuracy.`,
 				},
 			}
 		}()...),
+
+	"crdb_internal.create_queue_feed": makeBuiltin(defProps(), tree.Overload{
+		Types: tree.ParamTypes{
+			{Name: "queue_name", Typ: types.String},
+			{Name: "table_name", Typ: types.String},
+		},
+		Volatility: volatility.Volatile,
+		ReturnType: tree.FixedReturnType(types.Void),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			qn := args[0].(*tree.DString)
+			tableName := tree.MustBeDString(args[1])
+			dOid, err := eval.ParseDOid(ctx, evalCtx, string(tableName), types.RegClass)
+			if err != nil {
+				return nil, err
+			}
+
+			qm := getQueueManager(evalCtx)
+			if err := qm.CreateQueue(ctx, string(*qn), int64(dOid.Oid)); err != nil {
+				return nil, err
+			}
+			return tree.DVoidDatum, nil
+		},
+	}),
+
+	"crdb_internal.create_queue_feed_from_cursor": makeBuiltin(defProps(), tree.Overload{
+		Types: tree.ParamTypes{
+			{Name: "queue_name", Typ: types.String},
+			{Name: "table_name", Typ: types.String},
+			{Name: "cursor", Typ: types.Decimal},
+		},
+		Volatility: volatility.Volatile,
+		ReturnType: tree.FixedReturnType(types.Void),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			qn := args[0].(*tree.DString)
+
+			tableName := tree.MustBeDString(args[1])
+			dOid, err := eval.ParseDOid(ctx, evalCtx, string(tableName), types.RegClass)
+			if err != nil {
+				return nil, err
+			}
+
+			cursorDecimal := tree.MustBeDDecimal(args[2])
+			cursor, err := hlc.DecimalToHLC(&cursorDecimal.Decimal)
+			if err != nil {
+				return nil, errors.Wrap(err, "converting cursor decimal to HLC timestamp")
+			}
+
+			qm := getQueueManager(evalCtx)
+			if err := qm.CreateQueueFromCursor(ctx, string(*qn), int64(dOid.Oid), cursor); err != nil {
+				return nil, err
+			}
+			return tree.DVoidDatum, nil
+		},
+	}),
+
+	"crdb_internal.select_array_from_queue_feed": makeBuiltin(defProps(), tree.Overload{
+		Types: tree.ParamTypes{
+			{Name: "queue_name", Typ: types.String},
+			{Name: "limit", Typ: types.Int},
+		},
+		Volatility: volatility.Volatile,
+		ReturnType: tree.FixedReturnType(types.MakeArray(types.Json)),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			qn := args[0].(*tree.DString)
+			qr, err := getQueueReaderProvider(evalCtx).GetOrInitReader(evalCtx.SessionCtx, string(*qn))
+			if err != nil {
+				return nil, errors.Wrapf(err, "get or init reader for queue %s", string(*qn))
+			}
+
+			ret := tree.NewDArray(types.Json)
+
+			rowResult, err := qr.GetRows(ctx, int(tree.MustBeDInt(args[1])))
+			if err != nil {
+				return nil, err
+			}
+			// attach commit hook to txn to confirm receipt
+			// or something... todo on rollback/abort
+			evalCtx.Txn.AddCommitTrigger(func(ctx context.Context) {
+				qr.ConfirmReceipt(ctx)
+			})
+
+			for _, row := range rowResult {
+				obj := json.NewObjectBuilder(len(row))
+				for i, d := range row {
+					fmt.Printf("d: %#+v\n", d)
+					j, err := tree.AsJSON(d, evalCtx.SessionData().DataConversionConfig, evalCtx.GetLocation())
+					if err != nil {
+						return nil, err
+					}
+					obj.Add(fmt.Sprintf("f%d", i+1), j)
+				}
+				if err := ret.Append(tree.NewDJSON(obj.Build())); err != nil {
+					return nil, err
+				}
+			}
+			return ret, nil
+		},
+	}),
 
 	"crdb_internal.json_to_pb": makeBuiltin(
 		jsonProps(),
@@ -12846,3 +12945,11 @@ func exprSliceToStrSlice(exprs []tree.Expr) []string {
 }
 
 var nilRegionsError = errors.AssertionFailedf("evalCtx.Regions is nil")
+
+func getQueueManager(evalCtx *eval.Context) queuebase.Manager {
+	return evalCtx.Planner.ExecutorConfig().(interface{ GetQueueManager() queuebase.Manager }).GetQueueManager()
+}
+
+func getQueueReaderProvider(evalCtx *eval.Context) queuebase.ReaderProvider {
+	return evalCtx.Planner.GetQueueReaderProvider()
+}

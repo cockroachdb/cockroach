@@ -65,6 +65,7 @@ go_library(
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/pgwire/pgwirecancel",
         "//pkg/sql/privilege",
+        "//pkg/sql/queuefeed/queuebase",
         "//pkg/sql/sem/builtins/builtinsregistry",
         "//pkg/sql/sem/cast",
         "//pkg/sql/sem/catid",
