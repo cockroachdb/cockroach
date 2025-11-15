@@ -76,7 +76,7 @@ func registerJasyncSQL(r registry.Registry) {
 			c,
 			node,
 			"install java and gradle",
-			`sudo apt-get -qq install default-jre openjdk-11-jdk-headless gradle`,
+			`sudo apt-get update -qq && sudo apt-get -qq install default-jre openjdk-11-jdk-headless gradle`,
 		); err != nil {
 			t.Fatal(err)
 		}

@@ -161,8 +161,8 @@ func putKerberosConfigOnAllNodes(
 func installKerberosRelatedPackages(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodeListOptions option.NodeListOption,
 ) {
-	cmd := "sudo apt install -yyq krb5-kdc krb5-admin-server ghostscript " +
-		"graphviz postgresql-client libjemalloc-dev"
+	cmd := "sudo apt update -qq && sudo DEBIAN_FRONTEND=noninteractive apt install -yyq krb5-kdc " +
+		"krb5-admin-server ghostscript graphviz postgresql-client libjemalloc-dev"
 	err := c.RunE(ctx, option.WithNodes(nodeListOptions), cmd)
 	require.NoError(t, err)
 }
