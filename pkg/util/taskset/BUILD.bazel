@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "taskset",
+    srcs = [
+        "task_set.go",
+        "task_span.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/taskset",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "taskset_test",
+    srcs = ["task_set_test.go"],
+    embed = [":taskset"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)
