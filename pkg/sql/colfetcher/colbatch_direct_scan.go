@@ -67,6 +67,18 @@ func (s *ColBatchDirectScan) Init(ctx context.Context) {
 
 // Next implements the colexecop.Operator interface.
 func (s *ColBatchDirectScan) Next() (ret coldata.Batch, metadata *execinfrapb.ProducerMetadata) {
+	// Check if it is time to emit a progress update.
+	if s.getRowsReadSinceLastMeta() >= scanProgressFrequency {
+		meta := execinfrapb.GetProducerMeta()
+		meta.Metrics = execinfrapb.GetMetricsMeta()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		meta.Metrics.RowsRead = s.mu.rowsReadSinceLastMeta
+		meta.Metrics.StageID = s.stageID
+		s.mu.rowsReadSinceLastMeta = 0
+		return nil, meta
+	}
+
 	var res row.KVBatchFetcherResponse
 	var err error
 	for {
@@ -116,6 +128,7 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch, metadata *execinfrapb.Pr
 	batch := s.deserializer.Deserialize(res.BatchResponse)
 	s.mu.Lock()
 	s.mu.rowsRead += int64(batch.Length())
+	s.mu.rowsReadSinceLastMeta += int64(batch.Length())
 	s.mu.Unlock()
 	return batch, nil
 }
@@ -126,7 +139,7 @@ func (s *ColBatchDirectScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta := execinfrapb.GetProducerMeta()
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = s.GetBytesRead()
-	meta.Metrics.RowsRead = s.GetRowsRead()
+	meta.Metrics.RowsRead = s.getRowsReadSinceLastMeta()
 	meta.Metrics.KVCPUTime = s.GetKVResponseCPUTime()
 	meta.Metrics.StageID = s.stageID
 	trailingMeta = append(trailingMeta, *meta)
