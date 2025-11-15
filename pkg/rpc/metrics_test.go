@@ -60,7 +60,7 @@ func TestMetricsRelease(t *testing.T) {
 		return metricFields
 	}
 
-	const expectedCount = 13
+	const expectedCount = 14
 	k1 := peerKey{NodeID: 5, TargetAddr: "192.168.0.1:1234", Class: rpcbase.DefaultClass}
 	k2 := peerKey{NodeID: 6, TargetAddr: "192.168.0.1:1234", Class: rpcbase.DefaultClass}
 	l1 := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}}}
