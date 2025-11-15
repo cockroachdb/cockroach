@@ -6,7 +6,6 @@
 package securityassets
 
 import (
-	"io/fs"
 	"os"
 
 	"github.com/cockroachdb/errors/oserror"
@@ -14,14 +13,14 @@ import (
 
 // Loader describes the functions necessary to read certificate and key files.
 type Loader struct {
-	ReadDir  func(dirname string) ([]os.FileInfo, error)
+	ReadDir  func(dirname string) ([]os.DirEntry, error)
 	ReadFile func(filename string) ([]byte, error)
 	Stat     func(name string) (os.FileInfo, error)
 }
 
 // defaultLoader uses real filesystem calls.
 var defaultLoader = Loader{
-	ReadDir:  readDir,
+	ReadDir:  os.ReadDir,
 	ReadFile: os.ReadFile,
 	Stat:     os.Stat,
 }
@@ -54,30 +53,4 @@ func (al Loader) FileExists(filename string) (bool, error) {
 		return false, err
 	}
 	return true, nil
-}
-
-// readDir reads the directory named by dirname and returns a list of
-// fs.FileInfo for the directory's contents, sorted by filename. If an error
-// occurs reading the directory, ReadDir returns no directory entries along with
-// the error.
-func readDir(dirname string) ([]os.FileInfo, error) {
-	entries, err := os.ReadDir(dirname)
-	if err != nil {
-		return nil, err
-	}
-	infos := make([]fs.FileInfo, 0, len(entries))
-	for _, entry := range entries {
-		info, err := entry.Info()
-		if err != nil {
-			// Skip files that disappeared between ReadDir and Info().
-			// This can happen when the directory contains transient files
-			// like Unix socket lock files that are created/deleted rapidly.
-			if oserror.IsNotExist(err) {
-				continue
-			}
-			return nil, err
-		}
-		infos = append(infos, info)
-	}
-	return infos, nil
 }
