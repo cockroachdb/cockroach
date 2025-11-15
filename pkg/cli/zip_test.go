@@ -419,10 +419,11 @@ func TestConcurrentZip(t *testing.T) {
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
 
-	out, err := c.RunWithCapture("debug zip --timeout=30s --cpu-profile-duration=0s " + os.DevNull)
-	if err != nil {
-		t.Fatal(err)
-	}
+	out, err := c.RunWithCapture(fmt.Sprintf(
+		"debug zip --timeout=30s --cpu-profile-duration=0s --cluster-name=%s %s",
+		tc.ClusterName(), os.DevNull,
+	))
+	require.NoError(t, err)
 
 	// Strip any non-deterministic messages.
 	out = eraseNonDeterministicZipOutput(out)
@@ -431,6 +432,8 @@ func TestConcurrentZip(t *testing.T) {
 	lines := strings.Split(out, "\n")
 	sort.Strings(lines)
 	out = strings.TrimSpace(strings.Join(lines, "\n"))
+	// Replace the non-deterministic cluster name with a placeholder.
+	out = eraseClusterName(out, tc.ClusterName())
 
 	// We use datadriven simply to read the golden output file; we don't actually
 	// run any commands. Using datadriven allows TESTFLAGS=-rewrite.
@@ -535,9 +538,8 @@ func TestUnavailableZip(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-
-			Insecure: true,
-			Knobs:    base.TestingKnobs{Store: knobs},
+			Insecure:          true,
+			Knobs:             base.TestingKnobs{Store: knobs},
 		}})
 	defer tc.Stopper().Stop(context.Background())
 
@@ -553,9 +555,10 @@ func TestUnavailableZip(t *testing.T) {
 	defer close(ch)
 
 	// Run debug zip against node 1.
-	debugZipCommand :=
-		"debug zip --concurrency=1 --cpu-profile-duration=0 " + os.
-			DevNull + " --timeout=.5s"
+	debugZipCommand := fmt.Sprintf(
+		"debug zip --concurrency=1 --cpu-profile-duration=0 --timeout=.5s --cluster-name=%s %s",
+		tc.ClusterName(), os.DevNull,
+	)
 
 	t.Run("server 1", func(t *testing.T) {
 		c := TestCLI{
@@ -646,6 +649,10 @@ func baseZipOutput(nodeId int) []string {
 	return output
 }
 
+func eraseClusterName(str, name string) string {
+	return strings.ReplaceAll(str, name, "<cluster-name>")
+}
+
 func eraseNonDeterministicZipOutput(out string) string {
 	re := regexp.MustCompile(`(?m)postgresql://.*$`)
 	out = re.ReplaceAllString(out, `postgresql://...`)
@@ -729,13 +736,15 @@ func TestPartialZip(t *testing.T) {
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0s " + os.DevNull)
-	if err != nil {
-		t.Fatal(err)
-	}
+	out, err := c.RunWithCapture(fmt.Sprintf(
+		"debug zip --concurrency=1 --cpu-profile-duration=0s --cluster-name=%s %s",
+		tc.ClusterName(), os.DevNull,
+	))
+	require.NoError(t, err)
 
 	// Strip any non-deterministic messages.
 	t.Log(out)
+	out = eraseClusterName(out, tc.ClusterName())
 	out = eraseNonDeterministicZipOutput(out)
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "zip", "partial1"),
@@ -744,11 +753,13 @@ func TestPartialZip(t *testing.T) {
 		})
 
 	// Now do it again and exclude the down node explicitly.
-	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	out, err = c.RunWithCapture(fmt.Sprintf(
+		"debug zip --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0 --cluster-name=%s %s",
+		tc.ClusterName(), os.DevNull,
+	))
+	require.NoError(t, err)
 
+	out = eraseClusterName(out, tc.ClusterName())
 	out = eraseNonDeterministicZipOutput(out)
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "zip", "partial1_excluded"),
 		func(t *testing.T, td *datadriven.TestData) string {
@@ -759,12 +770,11 @@ func TestPartialZip(t *testing.T) {
 	// skips over it automatically. We specifically use --wait=none because
 	// we're decommissioning a node in a 3-node cluster, so there's no node to
 	// up-replicate the under-replicated ranges to.
-	{
-		_, err := c.RunWithCapture(fmt.Sprintf("node decommission --checks=skip --wait=none %d", 2))
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+	_, err = c.RunWithCapture(fmt.Sprintf(
+		"node decommission --checks=skip --wait=none --cluster-name=%s %d",
+		tc.ClusterName(), 2,
+	))
+	require.NoError(t, err)
 
 	// We use .Override() here instead of SET CLUSTER SETTING in SQL to
 	// override the 1m15s minimum placed on the cluster setting. There
@@ -779,12 +789,13 @@ func TestPartialZip(t *testing.T) {
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "zip", "partial2"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			f := func() string {
-				out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0 " + os.DevNull)
-				if err != nil {
-					t.Fatal(err)
-				}
-
+				out, err := c.RunWithCapture(fmt.Sprintf(
+					"debug zip --concurrency=1 --cpu-profile-duration=0 --cluster-name=%s %s",
+					tc.ClusterName(), os.DevNull,
+				))
+				require.NoError(t, err)
 				// Strip any non-deterministic messages.
+				out = eraseClusterName(out, tc.ClusterName())
 				return eraseNonDeterministicZipOutput(out)
 			}
 
