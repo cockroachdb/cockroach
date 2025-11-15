@@ -123,6 +123,9 @@ type TestServerArgs struct {
 
 	// If set, this will be configured in the test server to check connections
 	// from other test servers and to report in the SQL introspection.
+	//
+	// If empty (most cases), a unique ClusterName is generated automatically, or
+	// a higher-level default is used (e.g. taken from TestClusterArgs).
 	ClusterName string
 
 	// Stopper can be used to stop the server. If not set, a stopper will be
