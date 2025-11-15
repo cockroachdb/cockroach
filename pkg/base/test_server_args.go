@@ -122,7 +122,14 @@ type TestServerArgs struct {
 	UseDatabase string
 
 	// If set, this will be configured in the test server to check connections
-	// from other test servers and to report in the SQL introspection.
+	// from other test servers and to report in the SQL introspection. It is
+	// advised to make the name sufficiently unique, in order to prevent a
+	// TestCluster from accidentally getting messages from unrelated clusters in
+	// the same environment that used the same TCP ports recently (e.g. see
+	// https://github.com/cockroachdb/cockroach/issues/157838).
+	//
+	// If empty (most cases), a unique ClusterName is generated automatically, or
+	// a higher-level default is used (e.g. taken from TestClusterArgs).
 	ClusterName string
 
 	// Stopper can be used to stop the server. If not set, a stopper will be
