@@ -1,5 +1,9 @@
 # savetables is the name of the database where tables created by the
 # saveTableNode are stored.
+
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction = '0';
+
 statement ok
 CREATE DATABASE savetables; USE savetables
 

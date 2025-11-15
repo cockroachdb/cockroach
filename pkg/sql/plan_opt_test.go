@@ -64,6 +64,7 @@ func makeQueryCacheTestHelper(tb testing.TB, numConns int) *queryCacheTestHelper
 		r.Exec(tb, "SET DATABASE = db1")
 	}
 	r0.Exec(tb, "SET CLUSTER SETTING sql.query_cache.enabled = true")
+	r0.Exec(tb, "SET CLUSTER SETTING sql.stats.canary_fraction = '0'")
 	h.ResetStats()
 	return h
 }

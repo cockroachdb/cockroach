@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
@@ -53,6 +54,10 @@ type Metadata struct {
 	// HintsGeneration is the generation of the hints cache at the time the
 	// hints were retrieved, used for invalidation of cached plans.
 	HintsGeneration int64
+
+	// UseCanaryStats determines if the optimizer will use the canary stats
+	// for planning rather than using the stable stats.
+	UseCanaryStats eval.UseCanaryStatsVal
 }
 
 // MemoryEstimate returns an estimation (in bytes) of how much memory is used by

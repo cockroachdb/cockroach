@@ -14,6 +14,7 @@ go_library(
         "//pkg/sql/hintpb",
         "//pkg/sql/opt/memo",
         "//pkg/sql/parser/statements",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/log",
