@@ -6543,7 +6543,10 @@ func TestChangefeedMonitoring(t *testing.T) {
 				`CREATE TABLE foo (a INT PRIMARY KEY) WITH (schema_locked=%t)`, schemaLocked))
 			sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
-			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_messages`); c != 0 {
+			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_row_messages`); c != 0 {
+				t.Errorf(`expected 0 got %d`, c)
+			}
+			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_resolved_messages`); c != 0 {
 				t.Errorf(`expected 0 got %d`, c)
 			}
 			if c := s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 0 {
@@ -6571,13 +6574,16 @@ func TestChangefeedMonitoring(t *testing.T) {
 				t.Errorf(`expected 0 got %d`, c)
 			}
 
-			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='tier0'`)
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='tier0', resolved`)
 			_, err := foo.Next()
 			require.NoError(t, err)
 
 			testutils.SucceedsSoon(t, func() error {
-				if c := s.Server.MustGetSQLCounter(`changefeed.emitted_messages`); c != 1 {
+				if c := s.Server.MustGetSQLCounter(`changefeed.emitted_row_messages`); c != 1 {
 					return errors.Errorf(`expected 1 got %d`, c)
+				}
+				if c := s.Server.MustGetSQLCounter(`changefeed.emitted_resolved_messages`); c <= 2 {
+					return errors.Errorf(`expected > 2 got %d`, c)
 				}
 				if c := s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 22 {
 					return errors.Errorf(`expected 22 got %d`, c)
@@ -6622,14 +6628,17 @@ func TestChangefeedMonitoring(t *testing.T) {
 			// Check that two changefeeds add correctly.
 			// Set cluster settings back so we don't interfere with schema changes.
 			sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
-			fooCopy := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+			fooCopy := feed(t, f, `CREATE CHANGEFEED FOR foo with resolved`)
 			_, _ = fooCopy.Next()
 			_, _ = fooCopy.Next()
 			testutils.SucceedsSoon(t, func() error {
 				// We can't assert exactly 4 or 88 in case we get (allowed) duplicates
 				// from RangeFeed.
-				if c := s.Server.MustGetSQLCounter(`changefeed.emitted_messages`); c < 4 {
-					return errors.Errorf(`expected >= 4 got %d`, c)
+				if c := s.Server.MustGetSQLCounter(`changefeed.emitted_row_messages`); c < 3 {
+					return errors.Errorf(`expected >= 3 got %d`, c)
+				}
+				if c := s.Server.MustGetSQLCounter(`changefeed.emitted_resolved_messages`); c < 2 {
+					return errors.Errorf(`expected >= 2 got %d`, c)
 				}
 				if c := s.Server.MustGetSQLCounter(`changefeed.emitted_bytes`); c < 88 {
 					return errors.Errorf(`expected >= 88 got %d`, c)
