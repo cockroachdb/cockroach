@@ -547,6 +547,18 @@ func (pb *ProcessorBaseNoHelper) MoveToDraining(err error) {
 	}
 
 	if err != nil {
+		// If processor ctx was canceled, reply with that err rather than whatever
+		// error was passed to MoveToDraining by a processor running on top of a
+		// canceled context, which is expected to error. Generally the error passed
+		// in this case will be context.Canceled anyway, but doing this ensures that
+		// distsql can promise that if it cancels a context, the emitted error will
+		// reflect that, making cancellation detectable by callers.
+		if pb.ctx.Err() != nil {
+			if !errors.Is(err, pb.ctx.Err()) {
+				log.Dev.Warningf(pb.ctx, "overriding non-cancelation emitted after context cancellation: %+v", err)
+			}
+			err = pb.ctx.Err()
+		}
 		pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{Err: err})
 	}
 	if pb.curInputToDrain < len(pb.inputsToDrain) {
