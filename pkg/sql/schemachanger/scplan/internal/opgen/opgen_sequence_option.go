@@ -15,8 +15,8 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.SequenceOption) *scop.SetSequenceOptions {
-					return &scop.SetSequenceOptions{
+				emit(func(this *scpb.SequenceOption) *scop.SetSequenceOption {
+					return &scop.SetSequenceOption{
 						SequenceID: this.SequenceID,
 						Key:        this.Key,
 						Value:      this.Value,
