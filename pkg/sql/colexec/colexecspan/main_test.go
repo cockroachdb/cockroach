@@ -11,9 +11,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -30,6 +32,7 @@ func TestMain(m *testing.M) {
 				colexecerror.InternalError(err)
 			}
 		}
+		defer serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabledRandomly)()
 		return m.Run()
 	}())
 }

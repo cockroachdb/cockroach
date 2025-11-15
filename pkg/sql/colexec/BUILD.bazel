@@ -142,6 +142,7 @@ go_test(
     embed = [":colexec"],
     shard_count = 16,
     deps = [
+        "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
@@ -176,6 +177,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/colcontainerutils",
         "//pkg/testutils/distsqlutils",
+        "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/util/duration",
         "//pkg/util/encoding",
