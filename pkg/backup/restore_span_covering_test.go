@@ -364,7 +364,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const numAccounts = 1
+	const numAccounts = 2
 	ctx := context.Background()
 
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts,
@@ -774,7 +774,7 @@ func runTestRestoreEntryCoverForSpanAndFileCounts(
 ) {
 	r, _ := randutil.NewTestRand()
 	ctx := context.Background()
-	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
+	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 2, InitManualReplication)
 	defer cleanupFn()
 	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
 
@@ -885,7 +885,7 @@ func TestRestoreEntryCoverZeroSizeFiles(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
+	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 2, InitManualReplication)
 	defer cleanupFn()
 	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
 	c := makeCoverUtils(ctx, t, &execCfg)
