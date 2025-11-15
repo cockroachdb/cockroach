@@ -8,16 +8,20 @@ package rowexec
 import (
 	"context"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -438,6 +442,7 @@ func (s *sampleAggregator) sampleRow(
 }
 
 // writeResults inserts the new statistics into system.table_statistics.
+// 1)
 func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// Turn off tracing so these writes don't affect the results of EXPLAIN
 	// ANALYZE.
@@ -453,39 +458,29 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// closure.
 	if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		for _, si := range s.sketches {
+			columnIDs := make([]descpb.ColumnID, len(si.spec.Columns))
+			for i, c := range si.spec.Columns {
+				columnIDs[i] = s.sampledCols[c]
+			}
+			tableDesc := tabledesc.NewBuilder(&si.spec.Table).BuildImmutableTable()
+
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram {
 				colIdx := int(si.spec.Columns[0])
 				typ := s.inTypes[colIdx]
-
-				var lowerBound tree.Datum
-				if si.spec.PrevLowerBound != "" {
-					lbExpr, err := parser.ParseExpr(si.spec.PrevLowerBound)
-					if err != nil {
-						return err
-					}
-					lbTypedExpr, err := lbExpr.TypeCheck(ctx, &s.SemaCtx, typ)
-					if err != nil {
-						return err
-					}
-					// Lower bounds are serialized datums, so evaluating the
-					// expression shouldn't modify the eval context.
-					lowerBound, err = eval.Expr(ctx, s.FlowCtx.EvalCtx, lbTypedExpr)
-					if err != nil {
-						return err
-					}
-				}
 
 				h, err := s.generateHistogram(
 					ctx,
 					s.FlowCtx.EvalCtx,
 					&s.sr,
 					colIdx,
+					columnIDs,
 					typ,
 					si.numRows-si.numNulls,
 					s.getDistinctCount(&si, false /* includeNulls */),
 					int(si.spec.HistogramMaxBuckets),
-					lowerBound,
+					si.spec.PartialSpans,
+					tableDesc,
 				)
 				if err != nil {
 					return err
@@ -512,21 +507,18 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 					s.FlowCtx.EvalCtx,
 					invSr,
 					0, /* colIdx */
+					columnIDs,
 					types.Bytes,
 					invSketch.numRows-invSketch.numNulls,
 					invDistinctCount,
 					int(invSketch.spec.HistogramMaxBuckets),
-					nil,
+					nil, /* partialSpans */
+					tableDesc,
 				)
 				if err != nil {
 					return err
 				}
 				histogram = &h
-			}
-
-			columnIDs := make([]descpb.ColumnID, len(si.spec.Columns))
-			for i, c := range si.spec.Columns {
-				columnIDs[i] = s.sampledCols[c]
 			}
 
 			// Delete old stats that have been superseded,
@@ -632,6 +624,71 @@ func (s *sampleAggregator) getDistinctCount(si *sketchInfo, includeNulls bool) i
 	return distinctCount
 }
 
+func partitionBySpans(
+	evalCtx *eval.Context,
+	values tree.Datums,
+	spans roachpb.Spans,
+	tableDesc catalog.TableDescriptor,
+	columnID descpb.ColumnID,
+) ([]tree.Datums, error) {
+	sort.Sort(spans)
+	if len(values) == 0 {
+		return nil, nil
+	}
+	if len(spans) == 0 {
+		return nil, errors.Errorf("expected partial statistic spans")
+	}
+
+	_, tableID, indexID, err := evalCtx.Codec.DecodeIndexPrefix(spans[0].Key)
+	if err != nil {
+		return nil, err
+	}
+	index, err := catalog.MustFindIndexByID(tableDesc, descpb.IndexID(indexID))
+	if err != nil {
+		return nil, err
+	}
+	keyPrefix := evalCtx.Codec.IndexPrefix(tableID, indexID)
+
+	var colMap catalog.TableColMap
+	colMap.Set(columnID, 0)
+
+	partitions := make([]tree.Datums, len(spans))
+	for _, v := range values {
+		indexKey, _, err := rowenc.EncodeIndexKey(tableDesc, index, colMap, tree.Datums{v}, keyPrefix)
+		if err != nil {
+			return nil, err
+		}
+		foundSpan := false
+		for s := range spans {
+			if spans[s].ContainsKey(indexKey) {
+				foundSpan = true
+				partitions[s] = append(partitions[s], v)
+				break
+			}
+		}
+		if !foundSpan {
+			return nil, errors.Errorf(
+				"sampled value did not fit any partial statistic span")
+		}
+	}
+
+	// Return partitions in ascending order regardless of index direction so that
+	// histogram buckets created in ConstructPartialHistogram are in ascending
+	// order.
+	dir := index.GetKeyColumnDirection(0)
+	res := make([]tree.Datums, 0, len(spans))
+	for _, partition := range partitions {
+		if len(partition) > 0 {
+			if dir == catenumpb.IndexColumn_DESC {
+				res = append([]tree.Datums{partition}, res...)
+			} else {
+				res = append(res, partition)
+			}
+		}
+	}
+	return res, nil
+}
+
 // generateHistogram returns a histogram (on a given column) from a set of
 // samples.
 // numRows is the total number of rows from which values were sampled
@@ -641,11 +698,13 @@ func (s *sampleAggregator) generateHistogram(
 	evalCtx *eval.Context,
 	sr *stats.SampleReservoir,
 	colIdx int,
+	colIDs []descpb.ColumnID,
 	colType *types.T,
 	numRows int64,
 	distinctCount int64,
 	maxBuckets int,
-	lowerBound tree.Datum,
+	partialSpans roachpb.Spans,
+	tableDesc catalog.TableDescriptor,
 ) (stats.HistogramData, error) {
 	prevCapacity := sr.Cap()
 	values, err := sr.GetNonNullDatums(ctx, &s.tempMemAcc, colIdx)
@@ -660,9 +719,15 @@ func (s *sampleAggregator) generateHistogram(
 		)
 	}
 
-	if lowerBound != nil {
-		h, buckets, err := stats.ConstructExtremesHistogram(ctx, evalCtx, colType, values, numRows, distinctCount, maxBuckets, lowerBound, evalCtx.Settings)
-		_ = buckets
+	if partialSpans != nil {
+		partitionedValues, err := partitionBySpans(evalCtx, values, partialSpans,
+			tableDesc, colIDs[0])
+		if err != nil {
+			return stats.HistogramData{}, err
+		}
+
+		h, _, err := stats.ConstructPartialHistogram(ctx, evalCtx, colType,
+			partitionedValues, numRows, distinctCount, maxBuckets, evalCtx.Settings)
 		return h, err
 	}
 
