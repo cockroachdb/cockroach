@@ -1,0 +1,407 @@
+# Test case that queues ma1 (MsgApp) followed by o1 (non-MsgApp), then drains.
+init
+----
+queue state:
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+append msg=ma1
+----
+shouldQ=true size=68 appended=true
+queue state:
+ normal-stream: [ma1]
+ paused-stream: []
+ queuedAtRaftScheduler: true
+ pacer: decision: all, accountingBytes: 0
+
+append msg=o1
+----
+shouldQ=false size=47 appended=true
+queue state:
+ normal-stream: [ma1 o1]
+ paused-stream: []
+ queuedAtRaftScheduler: true
+ pacer: decision: all, accountingBytes: 0
+
+drain
+----
+drained msgs: [ma1 o1]
+queue state:
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+recycle
+----
+queue state:
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+destroy
+----
+pacer.Deregister calls 1
+queue state:
+ destroyed
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+# Test case that queues ma2 (MsgApp) drains and queues ma1 (MsgApp) and o1
+# (non-MsgApp) and checks o1, ma1 are not clobbered by recycle.
+init
+----
+queue state:
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+next-should-pause-says-yes
+----
+
+# Empty paused stream and message is low-priority-override, and will pause,
+# hence the Pause call.
+append msg=ma2
+----
+shouldQ=false size=97 appended=true
+pacer.Pause calls 1
+queue state:
+ normal-stream: []
+ paused-stream: [ma2]
+ queuedAtRaftScheduler: false
+ pacer: decision: skip-paused, accountingBytes: 0
+
+# Nothing drain, since ma2 is in the paused stream.
+drain
+----
+drained msgs: []
+queue state:
+ normal-stream: []
+ paused-stream: [ma2]
+ queuedAtRaftScheduler: false
+ pacer: decision: skip-paused, accountingBytes: 0
+
+transition-to-dequeue-all
+----
+queue state:
+ normal-stream: []
+ paused-stream: [ma2]
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+# Message ma2 drains.
+drain
+----
+drained msgs: [ma2]
+pacer.DrainingMsgApps calls 1
+queue state:
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+append msg=ma1
+----
+shouldQ=true size=68 appended=true
+queue state:
+ normal-stream: [ma1]
+ paused-stream: []
+ queuedAtRaftScheduler: true
+ pacer: decision: all, accountingBytes: 0
+
+append msg=o1
+----
+shouldQ=false size=47 appended=true
+queue state:
+ normal-stream: [ma1 o1]
+ paused-stream: []
+ queuedAtRaftScheduler: true
+ pacer: decision: all, accountingBytes: 0
+
+recycle
+----
+queue state:
+ normal-stream: [ma1 o1]
+ paused-stream: []
+ queuedAtRaftScheduler: true
+ pacer: decision: all, accountingBytes: 0
+
+destroy
+----
+pacer.Deregister calls 1
+queue state:
+ destroyed
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+# Test case that queues o1 (non-MsgApp) drains and queues o2 (non-MsgApp) and
+# ma2, and checks ma2 and o2 are not clobbered by recycle.
+init
+----
+queue state:
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+append msg=o1
+----
+shouldQ=true size=47 appended=true
+queue state:
+ normal-stream: [o1]
+ paused-stream: []
+ queuedAtRaftScheduler: true
+ pacer: decision: all, accountingBytes: 0
+
+drain
+----
+drained msgs: [o1]
+queue state:
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+append msg=o2
+----
+shouldQ=true size=47 appended=true
+queue state:
+ normal-stream: [o2]
+ paused-stream: []
+ queuedAtRaftScheduler: true
+ pacer: decision: all, accountingBytes: 0
+
+next-should-pause-says-yes
+----
+
+append msg=ma2
+----
+shouldQ=false size=97 appended=true
+pacer.Pause calls 1
+queue state:
+ normal-stream: [o2]
+ paused-stream: [ma2]
+ queuedAtRaftScheduler: true
+ pacer: decision: skip-paused, accountingBytes: 0
+
+recycle
+----
+queue state:
+ normal-stream: [o2]
+ paused-stream: [ma2]
+ queuedAtRaftScheduler: true
+ pacer: decision: skip-paused, accountingBytes: 0
+
+destroy
+----
+pacer.DrainingMsgApps calls 1
+pacer.Deregister calls 1
+queue state:
+ destroyed
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+# Test case that drains only non-MsgApps and drains MsgApps on destroy.
+init
+----
+queue state:
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+next-should-pause-says-yes
+----
+
+# Transitioning from empty to non-empty with low-priority-override, hence the
+# Pause call.
+append msg=ma2
+----
+shouldQ=false size=97 appended=true
+pacer.Pause calls 1
+queue state:
+ normal-stream: []
+ paused-stream: [ma2]
+ queuedAtRaftScheduler: false
+ pacer: decision: skip-paused, accountingBytes: 0
+
+append msg=ma1
+----
+shouldQ=false size=68 appended=true
+queue state:
+ normal-stream: []
+ paused-stream: [ma2 ma1]
+ queuedAtRaftScheduler: false
+ pacer: decision: skip-paused, accountingBytes: 0
+
+append msg=o1
+----
+shouldQ=true size=47 appended=true
+queue state:
+ normal-stream: [o1]
+ paused-stream: [ma2 ma1]
+ queuedAtRaftScheduler: true
+ pacer: decision: skip-paused, accountingBytes: 0
+
+# Only o1 drains.
+drain
+----
+drained msgs: [o1]
+queue state:
+ normal-stream: []
+ paused-stream: [ma2 ma1]
+ queuedAtRaftScheduler: false
+ pacer: decision: skip-paused, accountingBytes: 0
+
+recycle
+----
+queue state:
+ normal-stream: []
+ paused-stream: [ma2 ma1]
+ queuedAtRaftScheduler: false
+ pacer: decision: skip-paused, accountingBytes: 0
+
+# The MsgApps are drained because queue is being destroyed.
+destroy
+----
+pacer.DrainingMsgApps calls 1
+pacer.Deregister calls 1
+queue state:
+ destroyed
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+# Test case that drains only non-MsgApps and drains MsgApps when the decision
+# changes.
+init
+----
+queue state:
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+next-should-pause-says-yes
+----
+
+# Transitioning from empty to non-empty with low-priority-override, hence the
+# MaybePause call.
+append msg=ma2
+----
+shouldQ=false size=97 appended=true
+pacer.Pause calls 1
+queue state:
+ normal-stream: []
+ paused-stream: [ma2]
+ queuedAtRaftScheduler: false
+ pacer: decision: skip-paused, accountingBytes: 0
+
+append msg=o1
+----
+shouldQ=true size=47 appended=true
+queue state:
+ normal-stream: [o1]
+ paused-stream: [ma2]
+ queuedAtRaftScheduler: true
+ pacer: decision: skip-paused, accountingBytes: 0
+
+# Only o1 drains.
+drain
+----
+drained msgs: [o1]
+queue state:
+ normal-stream: []
+ paused-stream: [ma2]
+ queuedAtRaftScheduler: false
+ pacer: decision: skip-paused, accountingBytes: 0
+
+recycle
+----
+queue state:
+ normal-stream: []
+ paused-stream: [ma2]
+ queuedAtRaftScheduler: false
+ pacer: decision: skip-paused, accountingBytes: 0
+
+transition-to-dequeue-all
+----
+queue state:
+ normal-stream: []
+ paused-stream: [ma2]
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+append msg=o2
+----
+shouldQ=true size=47 appended=true
+queue state:
+ normal-stream: [o2]
+ paused-stream: [ma2]
+ queuedAtRaftScheduler: true
+ pacer: decision: all, accountingBytes: 0
+
+drain
+----
+drained msgs: [o2 ma2]
+pacer.DrainingMsgApps calls 1
+queue state:
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+append msg=ma1
+----
+shouldQ=true size=68 appended=true
+queue state:
+ normal-stream: [ma1]
+ paused-stream: []
+ queuedAtRaftScheduler: true
+ pacer: decision: all, accountingBytes: 0
+
+recycle
+----
+queue state:
+ normal-stream: [ma1]
+ paused-stream: []
+ queuedAtRaftScheduler: true
+ pacer: decision: all, accountingBytes: 0
+
+drain
+----
+drained msgs: [ma1]
+queue state:
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+recycle
+----
+queue state:
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
+
+destroy
+----
+pacer.Deregister calls 1
+queue state:
+ destroyed
+ normal-stream: []
+ paused-stream: []
+ queuedAtRaftScheduler: false
+ pacer: decision: all, accountingBytes: 0
