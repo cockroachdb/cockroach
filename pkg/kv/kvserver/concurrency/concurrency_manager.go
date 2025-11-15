@@ -710,6 +710,20 @@ func (m *managerImpl) OnRangeSplit(rhsStartKey roachpb.Key) []roachpb.LockAcquis
 	}
 }
 
+func (m *managerImpl) OnRangeSplitRHS(ctx context.Context) (func(), error) {
+	// Create a latchspan set that covers everything. No one may pass.
+	latchSpans := &spanset.SpanSet{}
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.LocalPrefix, EndKey: keys.LocalMax})
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey})
+	g, err := m.lm.AcquireFromEmpty(latchSpans)
+	if err != nil {
+		return nil, err
+	}
+	return func() {
+		m.lm.Release(ctx, g)
+	}, nil
+}
+
 // OnRangeMerge implements the RangeStateListener interface.
 func (m *managerImpl) OnRangeMerge() {
 	// Disable all queues - the range is being merged into its LHS neighbor.
