@@ -1380,12 +1380,13 @@ func (r *testRunner) runTest(
 					t.Error(liveMigrationError(liveMigrationVMNames))
 				}
 
-				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
+				// Construct failureMsg which will be shouted and githubMsg which will
+				// be passed to github.MaybePost to be formatted in the github issue
+				// body
+				failureMsg = fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
+				githubMsg := t.getGithubMessage(failureMsg)
+
 				params := getTestParameters(t, issueInfo.cluster, issueInfo.vmCreateOpts)
-				githubMsg := output
-				if testGithubMsg := t.getGithubMessage(); testGithubMsg != "" {
-					githubMsg = fmt.Sprintf("%s\n%s", output, testGithubMsg)
-				}
 				logTestParameters(l, params)
 				issue, err := github.MaybePost(t, issueInfo, l, githubMsg, params)
 				if err != nil {
@@ -1394,23 +1395,23 @@ func (r *testRunner) runTest(
 				}
 
 				// If an issue was created (or comment added) on GitHub,
-				// include that information in the output so that it can be
+				// include that information in the failureMsg so that it can be
 				// easily inspected on the TeamCity overview page.
 				if issue != nil {
-					output += "\n" + issue.String()
+					failureMsg += "\n" + issue.String()
 				}
 				if roachtestflags.TeamCity {
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 					// TeamCity regards the test as successful.
 					shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
-						s.Name, TeamCityEscape(output), testRunID)
+						s.Name, TeamCityEscape(failureMsg), testRunID)
 				}
 
-				shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", testRunID, durationStr, output)
+				shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", testRunID, durationStr, failureMsg)
 
 				if roachtestflags.GitHubActions {
-					outputLines := strings.Split(strings.TrimSpace(output), "\n")
-					for _, line := range outputLines {
+					stdoutMsgLines := strings.Split(strings.TrimSpace(failureMsg), "\n")
+					for _, line := range stdoutMsgLines {
 						shout(ctx, l, stdout, "::error title=%s failed::%s", s.Name, line)
 					}
 				}
@@ -1616,7 +1617,7 @@ func (r *testRunner) runTest(
 	if err := r.teardownTest(ctx, t, c, timedOut); err != nil {
 		l.PrintfCtx(ctx, "error during test teardown: %v; see test-teardown.log for details", err)
 	}
-	if err := r.inspectArtifacts(ctx, t, l); err != nil {
+	if err := r.inspectArtifacts(ctx, t, c, l); err != nil {
 		// inspect artifacts and potentially add helpful triage information for failed tests
 		l.PrintfCtx(ctx, "error during artifact inspection: %v", err)
 	}
@@ -1880,33 +1881,67 @@ func (r *testRunner) teardownTest(
 	return nil
 }
 
-// inspectArtifacts inspects node logs and attempts to write helpful triage
-// information to the test log and testRunner.githubMessage
+// inspectArtifacts inspects logs and attempts to write helpful triage
+// information to the test log and testRunner to be used in github issues.
 // This method is best effort and should not fail a test.
 // This method writes to both testLogger which is expected to be test.log and
 // t.L() which is test-teardown.log since inspectArtifacts is called after
 // teardownTest
 func (r *testRunner) inspectArtifacts(
-	ctx context.Context, t *testImpl, testLogger *logger.Logger,
-) error {
+	ctx context.Context, t *testImpl, c *clusterImpl, testLogger *logger.Logger,
+) (inspectArtifactsErr error) {
 
 	if t.Failed() || roachtestflags.AlwaysCollectArtifacts {
 		t.L().Printf("Attempting to gather node fatal level logs for triage.")
-		out, err := gatherFatalNodeLogs(t, testLogger)
-		if err != nil {
-			return err
-		}
-		if out == "" {
+		fatalOut, gatherFatalErr := gatherFatalNodeLogs(t, testLogger)
+		if gatherFatalErr != nil {
+			// even if we encounter an error continue on, this is best effort
+			inspectArtifactsErr = errors.Join(inspectArtifactsErr, gatherFatalErr)
+		} else if fatalOut == "" {
 			t.L().Printf("No fatal level logs found.")
-			return nil
 		} else {
 			testLogger.PrintfCtx(ctx, "CockroachDB contains Fatal level logs. Up to the first 10 "+
-				"will be shown here. See node logs in artifacts for more details.\n%s", out)
-			t.appendGithubMessage(out)
-			return nil
+				"will be shown here. See node logs in artifacts for more details.\n%s", fatalOut)
+			t.appendGithubFatalLogs(fatalOut)
+		}
+
+		t.L().Printf("Attempting to gather ip node mapping")
+		ipNodeMapOut, gatherNodeIpErr := gatherNodeIpMapping(t, c)
+		if gatherNodeIpErr != nil {
+			inspectArtifactsErr = errors.Join(inspectArtifactsErr, gatherNodeIpErr)
+		} else {
+			t.appendGithubIpToNodeMapping(ipNodeMapOut)
 		}
 	}
-	return nil
+	return inspectArtifactsErr
+}
+
+// gatherNodeIpMapping attempts to gather cluster node ip information for debug
+func gatherNodeIpMapping(t *testImpl, c *clusterImpl) (string, error) {
+	var table [][]string
+	cachedCluster, err := getCachedCluster(c.name)
+	if err != nil {
+		return "", err
+	}
+	// The regex to select out this table in issues.roachtestNodeToIpRE is not
+	// strict on the number of columns i.e. columns can be added / removed
+	// without a regex change
+	table = append(table, []string{"Node", "Public IP", "Private IP"})
+	for _, vmInstance := range cachedCluster.VMs {
+		table = append(table, []string{vmInstance.Name, vmInstance.PublicIP, vmInstance.PrivateIP})
+	}
+	nodeIpTable, err := roachtestutil.ToMarkdownTable(table)
+	if err != nil {
+		return "", err
+	}
+	testClusterLogger, err := c.l.ChildLogger("node-ips", logger.QuietStderr, logger.QuietStdout)
+	if err != nil {
+		// Best effort, swallowing error
+		t.L().Printf("unable to create logger %s: %s", "node-ips", err)
+		return nodeIpTable, nil
+	}
+	testClusterLogger.Printf("\n%s", nodeIpTable)
+	return nodeIpTable, nil
 }
 
 // gatherFatalNodeLogs attempts to gather fatal level node logs to help with
@@ -1914,19 +1949,19 @@ func (r *testRunner) inspectArtifacts(
 func gatherFatalNodeLogs(t *testImpl, testLogger *logger.Logger) (string, error) {
 	logPattern := `^F[0-9]{6}`
 	filePattern := "logs/*unredacted/cockroach*.log"
-	// *unredacted captures patterns for single node and multi-node clusters
-	// e.g. unredacted, 1.unredacted
+	// * wildcard to capture patterns for single node and multi-node clusters
+	// e.g. single node: unredacted, multi-node: 1.unredacted, ...
 	joinedFilePath := filepath.Join(t.ArtifactsDir(), filePattern)
 	targetFiles, err := filepath.Glob(joinedFilePath)
 	if err != nil {
 		return "", err
 	} else if len(targetFiles) == 0 {
-		return "", errors.Newf("No matching log files found for log pattern: %s and file pattern: %s",
+		t.L().Printf("No matching log files found for log pattern: %s and file pattern: %s",
 			logPattern, filePattern)
+		return "", nil
 	}
 	args := append([]string{"-E", "-m", "10", "-a", logPattern}, targetFiles...)
-	command := "grep"
-	t.L().Printf("Gathering fatal level logs with command: %q %s", command, strings.Join(args, " "))
+	t.L().Printf("Gathering fatal level logs with command: %s %s", "grep", strings.Join(args, " "))
 	// Works with local and remote node clusters because we will always download
 	// the artifacts if there's a test failure (except for timeout)
 	cmd := exec.Command("grep", args...)

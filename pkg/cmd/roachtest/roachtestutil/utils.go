@@ -395,3 +395,42 @@ var ClusterSettingRetryOpts = retry.Options{
 	MaxBackoff:     5 * time.Second,
 	MaxRetries:     5,
 }
+
+var (
+	errEmptyTableData = errors.New("empty table data")
+	errMismatchedCols = errors.New("row has mismatched number of columns")
+)
+
+// ToMarkdownTable renders a 2D list of strings as a Markdown table. Assumes
+// header is the first entry.
+//
+// Example:
+//
+//	| Name    | Age | City          |
+//	| ---     | --- | ---           |
+//	| Alice   | 30  | New York      |
+//	| Bob     | 25  | San Francisco |
+//	| Charlie | 35  | Chicago       |
+func ToMarkdownTable(data [][]string) (string, error) {
+	if len(data) == 0 || len(data[0]) == 0 {
+		return "", errEmptyTableData
+	}
+	var sb strings.Builder
+	// Write header row
+	sb.WriteString("| " + strings.Join(data[0], " | ") + " |\n")
+	// Write separator row (--- under each header)
+	separators := make([]string, len(data[0]))
+	for i := range separators {
+		separators[i] = "---"
+	}
+	sb.WriteString("| " + strings.Join(separators, " | ") + " |\n")
+	// Write remaining rows
+	for i, row := range data[1:] {
+		if len(data[0]) != len(row) {
+			return "", fmt.Errorf("%w: row %d has %d columns, expected %d",
+				errMismatchedCols, i, len(row), len(data[0]))
+		}
+		sb.WriteString("| " + strings.Join(row, " | ") + " |\n")
+	}
+	return sb.String(), nil
+}
