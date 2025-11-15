@@ -320,6 +320,8 @@ func (q *RangeSendQueueStats) Clear() {
 // ReplicaSendStreamStats contains the stats for a replica send stream that may
 // be used to inform placement decisions pertaining to the replica.
 type ReplicaSendStreamStats struct {
+	// Stream is the flow control stream for the replica.
+	Stream kvflowcontrol.Stream
 	// IsStateReplicate is true iff the replica is being sent entries.
 	IsStateReplicate bool
 	// HasSendQueue is true when a replica has a non-zero amount of queued
@@ -1721,6 +1723,7 @@ func (rc *rangeController) SendStreamStats(statsToSet *RangeSendStreamStats) {
 		// end up overwriting the same state at most twice, not a big issue.
 		for _, vs := range vss {
 			stats := ReplicaSendStreamStats{
+				Stream:           vs.stateForWaiters.evalTokenCounter.stream,
 				IsStateReplicate: vs.isStateReplicate,
 				HasSendQueue:     vs.hasSendQ,
 			}
@@ -1731,6 +1734,7 @@ func (rc *rangeController) SendStreamStats(statsToSet *RangeSendStreamStats) {
 	// Now handle the non-voters.
 	for _, nv := range rc.mu.nonVoterSet {
 		stats := ReplicaSendStreamStats{
+			Stream:           nv.evalTokenCounter.stream,
 			IsStateReplicate: nv.isStateReplicate,
 			HasSendQueue:     nv.hasSendQ,
 		}

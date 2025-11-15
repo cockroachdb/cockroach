@@ -1239,6 +1239,7 @@ func (n *Node) computeMetricsPeriodically(
 	})
 	n.updateNodeRangeCount()
 	n.storeCfg.KVFlowStreamTokenProvider.UpdateMetricGauges()
+	n.stores.TryLogFlowControlSendQueues(ctx)
 	return err
 }
 
