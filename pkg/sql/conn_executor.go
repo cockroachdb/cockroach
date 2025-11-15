@@ -43,7 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatstypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -1260,15 +1260,12 @@ func (s *Server) newConnExecutor(
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
 	ex.applicationStats = applicationStats
-	// We ignore statements and transactions run by the internal executor by
-	// passing a nil writer.
 	ex.statsCollector = sslocal.NewStatsCollector(
 		s.cfg.Settings,
 		applicationStats,
 		s.sqlStatsIngester,
 		ex.phaseTimes,
 		s.localSqlStats.GetCounters(),
-		s.cfg.SQLStatsTestingKnobs,
 	)
 	ex.dataMutatorIterator.OnApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
@@ -1703,7 +1700,7 @@ type connExecutor struct {
 		// this transaction should collect execution stats.
 		shouldCollectTxnExecutionStats bool
 		// accumulatedStats are the accumulated stats of all statements.
-		accumulatedStats execstats.QueryLevelStats
+		accumulatedStats execstatstypes.QueryLevelStats
 
 		// idleLatency is the cumulative amount of time spent waiting for the
 		// client to send statements while holding the transaction open.
@@ -3968,7 +3965,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.cancelChecker.Reset(ctx)
 
 	ex.initEvalCtx(ctx, &p.extendedEvalCtx, p)
-
+	p.statsCollector = ex.statsCollector
 	p.sessionDataMutatorIterator = ex.dataMutatorIterator
 	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/quantile"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
 type detector interface {
@@ -172,7 +173,7 @@ var prefixesToIgnore = []string{"SET ", "EXPLAIN "}
 // shouldIgnoreStatement returns true if we don't want to analyze the statement.
 func shouldIgnoreStatement(s *sqlstats.RecordedStmtStats) bool {
 	for _, start := range prefixesToIgnore {
-		if strings.HasPrefix(s.Query, start) {
+		if strings.HasPrefix(s.Query, start) || s.StatementID.Equal(uint128.Uint128{}) {
 			return true
 		}
 	}

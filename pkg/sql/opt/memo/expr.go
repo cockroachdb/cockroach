@@ -742,6 +742,8 @@ type UDFDefinition struct {
 	// at the same position in Body.
 	BodyProps []*physical.Required
 
+	BodyASTs []tree.Statement
+
 	// BodyStmts, if set, is the string representation of each statement in
 	// Body. It is only populated when verbose tracing is enabled.
 	BodyStmts []string

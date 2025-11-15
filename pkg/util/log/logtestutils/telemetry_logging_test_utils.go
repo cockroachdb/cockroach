@@ -8,7 +8,7 @@ package logtestutils
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatstypes"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -35,18 +35,18 @@ func (s *StubTime) TimeNow() time.Time {
 // StubQueryStats is a helper struct to stub query level stats.
 type StubQueryStats struct {
 	syncutil.RWMutex
-	stats execstats.QueryLevelStats
+	stats execstatstypes.QueryLevelStats
 }
 
 // SetQueryLevelStats sets the stubbed query level stats.
-func (s *StubQueryStats) SetQueryLevelStats(stats execstats.QueryLevelStats) {
+func (s *StubQueryStats) SetQueryLevelStats(stats execstatstypes.QueryLevelStats) {
 	s.RWMutex.Lock()
 	defer s.RWMutex.Unlock()
 	s.stats = stats
 }
 
 // QueryLevelStats returns the current stubbed query level stats.
-func (s *StubQueryStats) QueryLevelStats() execstats.QueryLevelStats {
+func (s *StubQueryStats) QueryLevelStats() execstatstypes.QueryLevelStats {
 	s.RWMutex.RLock()
 	defer s.RWMutex.RUnlock()
 	return s.stats

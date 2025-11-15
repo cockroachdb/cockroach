@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "settings",
+    srcs = ["settings.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter/settings",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/sql/parser",
+    ],
+)

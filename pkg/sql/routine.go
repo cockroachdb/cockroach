@@ -19,13 +19,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -325,7 +328,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	rrw := NewRowResultWriter(&g.rch)
 	var cursorHelper *plpgsqlCursorHelper
 	err = g.expr.ForEachPlan(ctx, ef, rrw, g.args,
-		func(plan tree.RoutinePlan, stmtForDistSQLDiagram string, isFinalPlan bool) error {
+		func(plan tree.RoutinePlan, statsBuilder *sqlstats.RecordedStatementStatsBuilder[*sqlstats.LatencyRecorder], stmtForDistSQLDiagram string, isFinalPlan bool) error {
 			stmtIdx++
 			opName := "routine-stmt-" + g.expr.Name + "-" + strconv.Itoa(stmtIdx)
 			ctx, sp := tracing.ChildSpan(ctx, opName)
@@ -365,13 +368,50 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 					return err
 				}
 			}
-
+			var latencyRecorder *sqlstats.LatencyRecorder
 			// Run the plan.
 			params := runParams{ctx, g.p.ExtendedEvalContext(), g.p}
+			if statsBuilder != nil {
+				latencyRecorder = statsBuilder.GetLatencyRecorder()
+				defer func() {
+					flags := plan.(*planComponents).flags
+					latencyRecorder.RecordPhase(sqlstats.StatementEnd, crtime.NowMono())
+					if g.p.statsCollector == nil {
+						if buildutil.CrdbTestBuild {
+							panic("No stats collector exists on the planner, cannot record statement stats")
+						}
+						log.Dev.Error(ctx, "No stats collector exists on the planner, cannot record statement stats")
+						return
+					}
+					stmtStats := statsBuilder.
+						SessionID(g.p.ExtendedEvalContext().SessionID).
+						LatencyRecorder(latencyRecorder).
+						PlanMetadata(
+							flags.IsSet(planFlagGeneric),
+							flags.ShouldBeDistributed(),
+							flags.IsSet(planFlagVectorized),
+							flags.IsSet(planFlagImplicitTxn),
+							flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
+						).
+						PlanGist("", 0). // TODO: is there a gist we can put here? I don't think so
+						Build()
+					g.p.statsCollector.RecordStatement(ctx,
+						stmtStats,
+					)
+				}()
+			}
+			if latencyRecorder != nil {
+				latencyRecorder.RecordPhase(sqlstats.StatementStartExec, crtime.NowMono())
+			}
 			queryStats, err := runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram)
+			if latencyRecorder != nil {
+				latencyRecorder.RecordPhase(sqlstats.StatementEndExec, crtime.NowMono())
+			}
 			if err != nil {
+				statsBuilder.StatementError(err)
 				return err
 			}
+			statsBuilder.QueryLevelStats(queryStats.bytesRead, queryStats.rowsRead, queryStats.rowsWritten)
 			forwardInnerQueryStats(g.p.routineMetadataForwarder, queryStats)
 			if openCursor {
 				return cursorHelper.createCursor(g.p)
