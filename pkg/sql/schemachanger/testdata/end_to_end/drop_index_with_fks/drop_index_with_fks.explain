@@ -72,9 +72,10 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"Pending: Updatin..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 4 in PostCommitNonRevertiblePhase
-      │    ├── 10 elements transitioning toward ABSENT
+      │    ├── 11 elements transitioning toward ABSENT
       │    │    ├── PUBLIC    → WRITE_ONLY  Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-)}
       │    │    ├── PUBLIC    → ABSENT      ColumnName:{DescID: 104 (t), Name: "crdb_internal_i_j_shard_16", ColumnID: 4 (crdb_internal_i_j_shard_16-)}
+      │    │    ├── PUBLIC    → ABSENT      ColumnHidden:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-)}
       │    │    ├── VALIDATED → ABSENT      ColumnNotNull:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-), IndexID: 0}
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16-), IndexID: 2 (idx-)}
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 2 (idx-)}
@@ -83,13 +84,14 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │    │    ├── PUBLIC    → ABSENT      IndexName:{DescID: 104 (t), Name: "idx", IndexID: 2 (idx-)}
       │    │    ├── VALIDATED → ABSENT      CheckConstraint:{DescID: 104 (t), IndexID: 0, ConstraintID: 2 (check_crdb_internal_i_j_shard_16-), ReferencedColumnIDs: [4]}
       │    │    └── VALIDATED → ABSENT      ForeignKeyConstraint:{DescID: 106 (t_ref), IndexID: 0, ConstraintID: 2 (j_t_fk-), ReferencedColumnIDs: [2 1], ReferencedDescID: 104 (t)}
-      │    └── 14 Mutation operations
+      │    └── 15 Mutation operations
       │         ├── RemoveColumnNotNull {"ColumnID":4,"TableID":104}
       │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
       │         ├── RemoveForeignKeyBackReference {"OriginConstraintID":2,"OriginTableID":106,"ReferencedTableID":104}
       │         ├── RemoveForeignKeyConstraint {"ConstraintID":2,"TableID":106}
       │         ├── MakePublicColumnWriteOnly {"ColumnID":4,"TableID":104}
       │         ├── SetColumnName {"ColumnID":4,"Name":"crdb_internal_co...","TableID":104}
+      │         ├── MakeColumnVisible {"ColumnID":4,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":2,"TableID":104}

@@ -13,7 +13,7 @@ EXPLAIN (DDL) rollback at post-commit stage 13 of 24;
 Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regional_by_row ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (k) USING HASH;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
-      │    ├── 52 elements transitioning toward ABSENT
+      │    ├── 53 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY            → DELETE_ONLY Column:{DescID: 108 (table_regional_by_row), ColumnID: 5 (m-)}
       │    │    ├── PUBLIC                → ABSENT      ColumnName:{DescID: 108 (table_regional_by_row), Name: "m", ColumnID: 5 (m-)}
       │    │    ├── VALIDATED             → DELETE_ONLY PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey-), ConstraintID: 7, TemporaryIndexID: 9, SourceIndexID: 1 (table_regional_by_row_pkey+)}
@@ -46,6 +46,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (m-), IndexID: 11}
       │    │    ├── WRITE_ONLY            → DELETE_ONLY Column:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-)}
       │    │    ├── PUBLIC                → ABSENT      ColumnName:{DescID: 108 (table_regional_by_row), Name: "crdb_internal_k_shard_16", ColumnID: 6 (crdb_internal_k_shard_16-)}
+      │    │    ├── PUBLIC                → ABSENT      ColumnHidden:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-)}
       │    │    ├── WRITE_ONLY            → ABSENT      ColumnNotNull:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 10 (table_regional_by_row_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 10 (table_regional_by_row_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 11}
@@ -66,7 +67,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │    │    ├── PUBLIC                → ABSENT      TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 3}
       │    │    ├── PUBLIC                → ABSENT      TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 4}
       │    │    └── PUBLIC                → ABSENT      TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 5}
-      │    └── 48 Mutation operations
+      │    └── 49 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":5,"TableID":108}
       │         ├── SetColumnName {"ColumnID":5,"Name":"crdb_internal_co...","TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":9,"TableID":108}
@@ -82,6 +83,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":11,"Kind":2,"Ordinal":2,"TableID":108}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":6,"TableID":108}
       │         ├── SetColumnName {"ColumnID":6,"Name":"crdb_internal_co...","TableID":108}
+      │         ├── MakeColumnVisible {"ColumnID":6,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":11,"Ordinal":1,"TableID":108}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":5,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":5,"TableID":108}

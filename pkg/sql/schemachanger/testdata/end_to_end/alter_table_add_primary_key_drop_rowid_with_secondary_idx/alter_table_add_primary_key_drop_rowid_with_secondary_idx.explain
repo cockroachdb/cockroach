@@ -9,7 +9,7 @@ EXPLAIN (DDL) alter table t add primary key (a) USING HASH WITH (bucket_count=10
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIMARY KEY (‹a›) USING HASH WITH ('bucket_count' = ‹10›);
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 20 elements transitioning toward PUBLIC
+ │         ├── 21 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 12 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 13, SourceIndexID: 10 (t_pkey~)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 12 (t_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 12 (t_pkey+)}
@@ -18,6 +18,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "crdb_internal_a_shard_10", ColumnID: 5 (crdb_internal_a_shard_10+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 5 (crdb_internal_a_shard_10+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+), ReferencedColumnIDs: [1], Usage: REGULAR}
+ │         │    ├── ABSENT → PUBLIC        ColumnHidden:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+), IndexID: 12 (t_pkey+)}
  │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 6 (idx_b+)}
@@ -55,12 +56,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │         │    └── PUBLIC → ABSENT        TableSchemaLocked:{DescID: 104 (t)}
  │         ├── 1 element transitioning toward ABSENT
  │         │    └── PUBLIC → VALIDATED     ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 0}
- │         └── 38 Mutation operations
+ │         └── 39 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
- │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":5,"IsHidden":true,"TableID":104}}
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":5,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":5,"Name":"crdb_internal_a_...","TableID":104}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":5,"IsVirtual":true,"TableID":104}}
  │              ├── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":5,"TableID":104}}
+ │              ├── MakeColumnHidden {"ColumnID":5,"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":6,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":6,"Kind":1,"TableID":104}
@@ -96,7 +98,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │              └── AddColumnToIndex {"ColumnID":1,"IndexID":12,"Ordinal":1,"TableID":104}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 20 elements transitioning toward PUBLIC
+ │    │    ├── 21 elements transitioning toward PUBLIC
  │    │    │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 12 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 13, SourceIndexID: 10 (t_pkey~)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 12 (t_pkey+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 12 (t_pkey+)}
@@ -105,6 +107,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 104 (t), Name: "crdb_internal_a_shard_10", ColumnID: 5 (crdb_internal_a_shard_10+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 5 (crdb_internal_a_shard_10+), TypeName: "INT8"}
  │    │    │    ├── PUBLIC        → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+), ReferencedColumnIDs: [1], Usage: REGULAR}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnHidden:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+), IndexID: 12 (t_pkey+)}
  │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 6 (idx_b+)}
@@ -145,7 +148,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 20 elements transitioning toward PUBLIC
+ │         ├── 21 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 12 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 13, SourceIndexID: 10 (t_pkey~)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 12 (t_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 12 (t_pkey+)}
@@ -154,6 +157,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "crdb_internal_a_shard_10", ColumnID: 5 (crdb_internal_a_shard_10+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 5 (crdb_internal_a_shard_10+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+), ReferencedColumnIDs: [1], Usage: REGULAR}
+ │         │    ├── ABSENT → PUBLIC        ColumnHidden:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+), IndexID: 12 (t_pkey+)}
  │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 6 (idx_b+), ConstraintID: 4, TemporaryIndexID: 7, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 10}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 6 (idx_b+)}
@@ -191,12 +195,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │         │    └── PUBLIC → ABSENT        TableSchemaLocked:{DescID: 104 (t)}
  │         ├── 1 element transitioning toward ABSENT
  │         │    └── PUBLIC → VALIDATED     ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 0}
- │         └── 47 Mutation operations
+ │         └── 48 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
- │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":5,"IsHidden":true,"TableID":104}}
+ │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":5,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":5,"Name":"crdb_internal_a_...","TableID":104}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":5,"IsVirtual":true,"TableID":104}}
  │              ├── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":5,"TableID":104}}
+ │              ├── MakeColumnHidden {"ColumnID":5,"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── MaybeAddSplitForIndex {"IndexID":6,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":6,"TableID":104}
@@ -450,9 +455,10 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 9}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 9}
       │    │    └── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10+), IndexID: 9}
-      │    ├── 16 elements transitioning toward ABSENT
+      │    ├── 17 elements transitioning toward ABSENT
       │    │    ├── PUBLIC                → WRITE_ONLY       Column:{DescID: 104 (t), ColumnID: 3 (rowid-)}
       │    │    ├── PUBLIC                → ABSENT           ColumnName:{DescID: 104 (t), Name: "rowid", ColumnID: 3 (rowid-)}
+      │    │    ├── PUBLIC                → ABSENT           ColumnHidden:{DescID: 104 (t), ColumnID: 3 (rowid-)}
       │    │    ├── VALIDATED             → ABSENT           ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 0}
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 1 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 1 (t_pkey-)}
@@ -467,7 +473,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
       │    │    ├── PUBLIC                → ABSENT           IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 4 (idx_c-)}
       │    │    ├── VALIDATED             → DELETE_ONLY      SecondaryIndex:{DescID: 104 (t), IndexID: 4 (idx_c-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    └── PUBLIC                → ABSENT           IndexName:{DescID: 104 (t), Name: "idx_c", IndexID: 4 (idx_c-)}
-      │    └── 36 Mutation operations
+      │    └── 37 Mutation operations
       │         ├── RemoveColumnNotNull {"ColumnID":3,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":11,"Ordinal":1,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":11,"Kind":2,"Ordinal":1,"TableID":104}
@@ -484,6 +490,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":9,"Kind":1,"Ordinal":1,"TableID":104}
       │         ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
       │         ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
+      │         ├── MakeColumnVisible {"ColumnID":3,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}

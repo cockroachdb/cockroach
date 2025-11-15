@@ -19,7 +19,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │    │    ├── ABSENT                → PUBLIC      IndexName:{DescID: 108 (table_regional_by_row), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey+)}
       │    │    ├── VALIDATED             → PUBLIC      SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (idx_v+), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    └── ABSENT                → PUBLIC      IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 2 (idx_v+)}
-      │    ├── 56 elements transitioning toward ABSENT
+      │    ├── 57 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY            → DELETE_ONLY Column:{DescID: 108 (table_regional_by_row), ColumnID: 5 (m-)}
       │    │    ├── PUBLIC                → ABSENT      ColumnName:{DescID: 108 (table_regional_by_row), Name: "m", ColumnID: 5 (m-)}
       │    │    ├── PUBLIC                → VALIDATED   PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey-), ConstraintID: 7, TemporaryIndexID: 9, SourceIndexID: 1 (table_regional_by_row_pkey+)}
@@ -48,6 +48,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 5 (m-), IndexID: 11}
       │    │    ├── WRITE_ONLY            → DELETE_ONLY Column:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-)}
       │    │    ├── PUBLIC                → ABSENT      ColumnName:{DescID: 108 (table_regional_by_row), Name: "crdb_internal_k_shard_16", ColumnID: 6 (crdb_internal_k_shard_16-)}
+      │    │    ├── PUBLIC                → ABSENT      ColumnHidden:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-)}
       │    │    ├── PUBLIC                → VALIDATED   ColumnNotNull:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 10 (table_regional_by_row_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 10 (table_regional_by_row_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 6 (crdb_internal_k_shard_16-), IndexID: 11}
@@ -76,7 +77,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │    │    ├── PUBLIC                → ABSENT      TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 4}
       │    │    ├── PUBLIC                → ABSENT      IndexName:{DescID: 108 (table_regional_by_row), Name: "table_regional_by_row_rowid_key", IndexID: 6 (table_regional_by_row_rowid_key-)}
       │    │    └── PUBLIC                → ABSENT      TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 5}
-      │    └── 57 Mutation operations
+      │    └── 58 Mutation operations
       │         ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":1,"TableID":108}}
       │         ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":2,"TableID":108}}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":5,"TableID":108}
@@ -95,6 +96,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":11,"Kind":2,"Ordinal":2,"TableID":108}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":6,"TableID":108}
       │         ├── SetColumnName {"ColumnID":6,"Name":"crdb_internal_co...","TableID":108}
+      │         ├── MakeColumnVisible {"ColumnID":6,"TableID":108}
       │         ├── MakePublicColumnNotNullValidated {"ColumnID":6,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":11,"Ordinal":1,"TableID":108}
       │         ├── MakePublicSecondaryIndexWriteOnly {"IndexID":4,"TableID":108}

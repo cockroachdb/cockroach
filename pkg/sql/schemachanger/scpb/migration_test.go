@@ -176,3 +176,40 @@ func TestDeprecatedColumnGeneratedAsIdentity(t *testing.T) {
 	require.Equal(t, state.CurrentStatuses[1], Status_PUBLIC)
 	require.Equal(t, state.TargetRanks[1], uint32(2))
 }
+
+func TestDeprecatedColumnHiddenMigration(t *testing.T) {
+	state := DescriptorState{
+		Targets: []Target{
+			MakeTarget(ToPublic,
+				&Column{
+					TableID:  100,
+					ColumnID: 105,
+					IsHidden: true,
+				},
+				nil,
+			),
+		},
+		CurrentStatuses: []Status{Status_PUBLIC},
+		TargetRanks:     []uint32{1},
+	}
+	migrationOccurred := MigrateDescriptorState(
+		clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()},
+		1,
+		&state,
+	)
+	require.True(t, migrationOccurred)
+	require.Len(t, state.CurrentStatuses, 2)
+	require.Len(t, state.Targets, 2)
+
+	column := state.Targets[0].GetColumn()
+	require.NotNil(t, column)
+	require.False(t, column.IsHidden)
+
+	columnHidden := state.Targets[1].GetColumnHidden()
+	require.NotNil(t, columnHidden)
+
+	require.Equal(t, column.TableID, columnHidden.TableID)
+	require.Equal(t, column.ColumnID, columnHidden.ColumnID)
+	require.Equal(t, state.CurrentStatuses[1], Status_PUBLIC)
+	require.Equal(t, state.TargetRanks[1], uint32(2))
+}

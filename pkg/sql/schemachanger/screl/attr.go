@@ -131,8 +131,9 @@ const (
 
 var t = reflect.TypeOf
 
+// elementSchemaOptions maps attributes to the elements' fields.
 var elementSchemaOptions = []rel.SchemaOption{
-	// We need this `Element` attribute to be of type `protoulti.Message`
+	// We need this `Element` attribute to be of type `protoutil.Message`
 	// interface and better have it as the first in the schema option list. This
 	// is because the schema needs to know a type of each attribute, and it
 	// creates a mapping between attribute and the type. If you're trying to add a
@@ -145,6 +146,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	// concrete type underneath an interface value, so we won't have a problem
 	// evaluating field values within a concrete Element struct.
 	rel.AttrType(Element, t((*protoutil.Message)(nil)).Elem()),
+
 	// Top-level elements.
 	rel.EntityMapping(t((*scpb.Database)(nil)),
 		rel.EntityAttr(DescID, "DatabaseID"),
@@ -336,6 +338,10 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(ColumnID, "ColumnID"),
 		rel.EntityAttr(GeneratedAsIdentityType, "Type"),
 		rel.EntityAttr(Value, "SequenceOption"),
+	),
+	rel.EntityMapping(t((*scpb.ColumnHidden)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ColumnID, "ColumnID"),
 	),
 	// Index elements.
 	rel.EntityMapping(t((*scpb.IndexName)(nil)),

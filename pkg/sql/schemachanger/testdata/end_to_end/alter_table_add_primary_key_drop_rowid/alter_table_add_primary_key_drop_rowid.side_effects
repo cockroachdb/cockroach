@@ -660,7 +660,7 @@ begin transaction #17
 validate forward indexes [4] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 5 with 13 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 5 with 14 MutationType ops
 upsert descriptor #104
    table:
   -  checks:
@@ -792,7 +792,6 @@ upsert descriptor #104
        state: DELETE_ONLY
   +  - column:
   +      defaultExpr: unique_rowid()
-  +      hidden: true
   +      id: 2
   +      name: crdb_internal_column_2_name_placeholder
   +      nullable: true
@@ -830,7 +829,6 @@ upsert descriptor #104
   -  - direction: ADD
   +  - column:
   +      defaultExpr: unique_rowid()
-  +      hidden: true
   +      id: 2
   +      name: crdb_internal_column_2_name_placeholder
   +      nullable: true
@@ -897,7 +895,6 @@ upsert descriptor #104
   -    state: DELETE_ONLY
   -  - column:
   -      defaultExpr: unique_rowid()
-  -      hidden: true
   -      id: 2
   -      name: crdb_internal_column_2_name_placeholder
   -      nullable: true
@@ -976,7 +973,6 @@ upsert descriptor #104
   -  mutations:
   -  - column:
   -      defaultExpr: unique_rowid()
-  -      hidden: true
   -      id: 2
   -      name: crdb_internal_column_2_name_placeholder
   -      nullable: true

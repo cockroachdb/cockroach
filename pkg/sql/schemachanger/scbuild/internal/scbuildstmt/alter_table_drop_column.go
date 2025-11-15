@@ -326,7 +326,7 @@ func walkColumnDependencies(
 				*scpb.UniqueWithoutIndexConstraint, *scpb.CheckConstraint,
 				*scpb.UniqueWithoutIndexConstraintUnvalidated, *scpb.CheckConstraintUnvalidated,
 				*scpb.RowLevelTTL, *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr,
-				*scpb.TriggerDeps, *scpb.ColumnGeneratedAsIdentity:
+				*scpb.TriggerDeps, *scpb.ColumnGeneratedAsIdentity, *scpb.ColumnHidden:
 				fn(e, op, objType)
 			case *scpb.ColumnType:
 				if elt.ColumnID == col.ColumnID {
