@@ -111,8 +111,21 @@ message IndexFetchSpec {
   // index ID. It is used to speed up the decoding process.
   optional uint32 key_prefix_length = 11 [(gogoproto.nullable) = false];
 
+  // MaxFamilyID is the highest family ID in the table. It is used for the
+  // same purpose as MaxFamilyIDForIndex pre-26.1 (determining SQL row
+  // boundaries), but is less strict, and therefore can result in scanning more
+  // KVs than necessary. TODO(drewk,yuzefovich): we can remove this field after
+  // the 26.2 branch is cut.
   optional uint32 max_family_id = 12 [(gogoproto.nullable) = false,
                                       (gogoproto.customname) = "MaxFamilyID",
+                                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
+
+  // MaxFamilyIDForIndex is the highest family ID that is included in the index.
+  // This can be smaller than MaxFamilyID. It is used to quickly determine SQL
+  // row boundaries for tables with multiple families, which otherwise requires
+  // comparing against a key from the next SQL row.
+  optional uint32 max_family_id_for_index = 18 [(gogoproto.nullable) = false,
+                                      (gogoproto.customname) = "MaxFamilyIDForIndex",
                                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
 
   // FamilyDefaultColumns contains the default column IDs for families with a
@@ -143,5 +156,5 @@ message IndexFetchSpec {
   // it is stored outside the span of the object.
   optional ExternalRowData external  = 17 [(gogoproto.nullable) = true];
 
-  // NEXT ID 18.
+  // NEXT ID 19.
 }
