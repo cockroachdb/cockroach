@@ -188,6 +188,10 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 // planTypes returns the types schema of the rows produced by this planNode. See
 // comments on planColumns for more details.
 func planTypes(plan planNode) []*types.T {
+	if resultIsRowsAffected(plan) {
+		// TODO(drewk): consider using a global singleton to avoid allocating.
+		return []*types.T{types.Int}
+	}
 	columns := planColumns(plan)
 	typs := make([]*types.T, len(columns))
 	for i := range typs {

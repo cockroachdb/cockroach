@@ -23,7 +23,7 @@ func TestInputStatCollector(t *testing.T) {
 
 	const numRows = 100
 
-	isc := newInputStatCollector(
+	isc := NewInputStatCollector(
 		distsqlutils.NewRowBuffer(types.OneIntCol, randgen.MakeIntRows(numRows, 1), distsqlutils.RowBufferArgs{}),
 	)
 	for row, meta := isc.Next(); row != nil || meta != nil; row, meta = isc.Next() {

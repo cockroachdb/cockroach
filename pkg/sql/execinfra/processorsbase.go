@@ -1028,7 +1028,7 @@ func NewLimitedMonitorNoFlowCtx(
 }
 
 // LocalProcessor is a RowSourcedProcessor that needs to be initialized with its
-// processorID and post-processing spec. Most processors can accept these
+// input, processorID and post-processing spec. Most processors can accept these
 // objects at creation time.
 type LocalProcessor interface {
 	RowSourcedProcessor
@@ -1037,6 +1037,8 @@ type LocalProcessor interface {
 	// SetInput initializes this LocalProcessor with an input RowSource. Not all
 	// LocalProcessors need inputs, but this needs to be called if a
 	// LocalProcessor expects to get its data from another RowSource.
+	//
+	// SetInput should be called after Init.
 	SetInput(ctx context.Context, input RowSource) error
 }
 
