@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -237,7 +238,22 @@ func (s *topLevelServer) DecommissionPreCheck(
 				continue
 			}
 
-			action, _, recording, rErr := evalStore.AllocatorCheckRange(ctx, &desc, collectTraces, overrideStorePool)
+			// Retry for transient errors such as stores throttling. Throttled stores
+			// typically lasts FailedReservationsTimeout (5 seconds by default).
+			var action allocatorimpl.AllocatorAction
+			var recording tracingpb.Recording
+			var rErr error
+			retryOpts := retry.Options{
+				InitialBackoff: 2 * time.Second,
+				MaxBackoff:     5 * time.Second,
+				MaxRetries:     5,
+			}
+			for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+				action, _, recording, rErr = evalStore.AllocatorCheckRange(ctx, &desc, collectTraces, overrideStorePool)
+				if rErr == nil {
+					break
+				}
+			}
 			rangesChecked += 1
 			actionCounts[action.String()] += 1
 
