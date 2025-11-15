@@ -16,8 +16,8 @@ var schemaExprContextAllowingUDF = map[tree.SchemaExprContext]clusterversion.Key
 	tree.ColumnDefaultExprInNewTable:   clusterversion.MinSupported,
 	tree.ColumnDefaultExprInSetDefault: clusterversion.MinSupported,
 
-	tree.PolicyUsingExpr:     clusterversion.V25_2,
-	tree.PolicyWithCheckExpr: clusterversion.V25_2,
+	tree.PolicyUsingExpr:     clusterversion.TODO_Delete_V25_2,
+	tree.PolicyWithCheckExpr: clusterversion.TODO_Delete_V25_2,
 
 	tree.ColumnDefaultExprInAddColumn: clusterversion.V25_3,
 	tree.ColumnDefaultExprInNewView:   clusterversion.V25_3,

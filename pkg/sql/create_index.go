@@ -61,7 +61,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 
 	// Check if sql_safe_updates is enabled and this is a vector index
 	if n.Type == idxtype.VECTOR {
-		if !p.EvalContext().Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.V25_2.Version()) {
+		if !p.EvalContext().Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.TODO_Delete_V25_2.Version()) {
 			return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot create a vector index until finalizing on 25.2")
 		} else if p.EvalContext().SessionData().SafeUpdates {
 			return nil, pgerror.DangerousStatementf("CREATE VECTOR INDEX will disable writes to the table while the index is being built")

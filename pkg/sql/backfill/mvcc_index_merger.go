@@ -135,7 +135,7 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 	// Starting 25.2 we can skip newer timestamps in the temporary index because
 	// of new logic to always write values to the newly created index during
 	// the merge process.
-	ibm.skipNewerTimestamps = ibm.flowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.V25_2)
+	ibm.skipNewerTimestamps = ibm.flowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V25_2)
 	ctx, span := execinfra.ProcessorSpan(ctx, ibm.flowCtx, opName, ibm.processorID)
 	defer span.Finish()
 	// This method blocks until all worker goroutines exit, so it's safe to

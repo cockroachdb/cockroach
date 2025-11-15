@@ -408,7 +408,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 	case tree.RoutineLangPLpgSQL:
 		if isSetReturning {
-			if !b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V25_2) {
+			if !b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.TODO_Delete_V25_2) {
 				panic(unimplemented.Newf("PL/pgSQL set-returning functions",
 					"PL/pgSQL set-returning functions are only supported in v25.2 and later"))
 			}

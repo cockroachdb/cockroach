@@ -2,7 +2,7 @@
 # non-nil txn, which is not available in job-based flows like INSPECT. Using
 # them causes a nil pointer panic in the span resolver setup.
 #
-# LogicTest: !fakedist !fakedist-vec-off !fakedist-disk !local-mixed-25.2 !local-mixed-25.3
+# LogicTest: !fakedist !fakedist-vec-off !fakedist-disk !local-mixed-25.3
 # knob-opt: allow-unsafe
 
 

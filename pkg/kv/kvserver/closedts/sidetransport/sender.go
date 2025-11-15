@@ -330,7 +330,7 @@ func (s *Sender) UnregisterLeaseholder(
 // maxClosedTimestampPolicy returns the distinct number of closed timestamp
 // policies for which the side transport should send updates.
 func (s *Sender) maxClosedTimestampPolicy() int {
-	if s.st.Version.IsActive(context.TODO(), clusterversion.V25_2) {
+	if s.st.Version.IsActive(context.TODO(), clusterversion.TODO_Delete_V25_2) {
 		return int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY)
 	}
 	// If the cluster is not fully upgraded, only look at closed timestamps

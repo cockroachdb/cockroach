@@ -754,13 +754,11 @@ orders      orders_product_fkey  FOREIGN KEY      FOREIGN KEY (product) REFERENC
 orders      valid_customer       FOREIGN KEY      FOREIGN KEY (customer) REFERENCES customers(id)                                       true
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-25.2
 skipif config local-mixed-25.3
 statement error pq: "products_upc_key" is referenced by foreign key from table "delivery"
 DROP INDEX products@products_upc_key
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-25.2
 skipif config local-mixed-25.3
 statement error pq: "products_upc_key" is referenced by foreign key from table "delivery"
 DROP INDEX products@products_upc_key RESTRICT
