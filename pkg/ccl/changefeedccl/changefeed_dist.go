@@ -411,7 +411,8 @@ func makePlan(
 		oracle := replicaoracle.NewOracle(replicaOracleChoice, dsp.ReplicaOracleConfig(locFilter))
 		if useBulkOracle.Get(&evalCtx.Settings.SV) {
 			log.Changefeed.Infof(ctx, "using bulk oracle for DistSQL planning")
-			oracle = kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), locFilter, kvfollowerreadsccl.StreakConfig{})
+			strictFiltering := false
+			oracle = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), strictFiltering, locFilter)
 		}
 		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil, /* planner */
 			blankTxn, sql.DistributionType(distMode), oracle, locFilter)

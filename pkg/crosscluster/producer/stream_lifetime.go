@@ -295,8 +295,8 @@ func (r *replicationStreamManagerImpl) buildReplicationStreamSpec(
 			Min: 10, SmallPlanMin: 3, SmallPlanThreshold: 3, MaxSkew: 0.95,
 		}
 	}
-	oracle := kvfollowerreadsccl.NewBulkOracle(
-		dsp.ReplicaOracleConfig(evalCtx.Locality), noLoc, streaks,
+	oracle := kvfollowerreadsccl.NewStreakBulkOracle(
+		dsp.ReplicaOracleConfig(evalCtx.Locality), streaks,
 	)
 
 	planCtx := dsp.NewPlanningCtxWithOracle(
