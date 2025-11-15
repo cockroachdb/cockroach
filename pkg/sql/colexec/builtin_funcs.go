@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -37,11 +38,14 @@ type defaultBuiltinFuncOperator struct {
 var _ colexecop.Operator = &defaultBuiltinFuncOperator{}
 var _ execreleasable.Releasable = &defaultBuiltinFuncOperator{}
 
-func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
-	batch := b.Input.Next()
+func (b *defaultBuiltinFuncOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := b.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	sel := batch.Selection()
@@ -90,7 +94,7 @@ func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 // Release is part of the execinfra.Releasable interface.

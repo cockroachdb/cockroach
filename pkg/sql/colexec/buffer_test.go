@@ -28,7 +28,7 @@ func TestBufferOp(t *testing.T) {
 
 	t.Run("TestBufferReturnsInputCorrectly", func(t *testing.T) {
 		buffer.advance()
-		b := buffer.Next()
+		b, _ := buffer.Next()
 		require.Nil(t, b.Selection())
 		require.Equal(t, len(inputTuples), b.Length())
 		for i, val := range inputTuples {
@@ -36,7 +36,7 @@ func TestBufferOp(t *testing.T) {
 		}
 
 		// We've read over the batch, so we now should get a zero-length batch.
-		b = buffer.Next()
+		b, _ = buffer.Next()
 		require.Nil(t, b.Selection())
 		require.Equal(t, 0, b.Length())
 	})

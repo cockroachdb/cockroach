@@ -94,6 +94,7 @@ type ParallelUnorderedSynchronizer struct {
 	lastReadInputIdx int
 	// batches are the last batches read from the corresponding input.
 	batches []coldata.Batch
+	metas   []*execinfrapb.ProducerMetadata
 	// nextBatch is a slice of functions each of which obtains a next batch from
 	// the corresponding to it input.
 	nextBatch []func()
@@ -222,6 +223,7 @@ func NewParallelUnorderedSynchronizer(
 		tracingSpans:        make([]*tracing.Span, len(inputs)),
 		readNextBatch:       readNextBatch,
 		batches:             make([]coldata.Batch, len(inputs)),
+		metas:               make([]*execinfrapb.ProducerMetadata, len(inputs)),
 		nextBatch:           make([]func(), len(inputs)),
 		outputBatch:         allocator.NewMemBatchNoCols(inputTypes, coldata.BatchSize() /* capacity */),
 		externalWaitGroup:   wg,
@@ -255,7 +257,7 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 		input.Root.Init(inputCtx)
 		s.nextBatch[i] = func(inputOp colexecop.Operator, inputIdx int) func() {
 			return func() {
-				s.batches[inputIdx] = inputOp.Next()
+				s.batches[inputIdx], s.metas[inputIdx] = inputOp.Next()
 			}
 		}(input.Root, i)
 	}
@@ -309,6 +311,7 @@ func (s *ParallelUnorderedSynchronizer) init() {
 				// invalid to call Next or DrainMeta on it. Exit early.
 				return
 			}
+			var bufferedMeta []execinfrapb.ProducerMetadata
 			msg := &unorderedSynchronizerMsg{
 				inputIdx: inputIdx,
 			}
@@ -337,6 +340,11 @@ func (s *ParallelUnorderedSynchronizer) init() {
 						s.setState(parallelUnorderedSynchronizerStateDraining)
 						continue
 					}
+					if s.metas[inputIdx] != nil {
+						// TODO: figure out how to propagate immediately.
+						bufferedMeta = append(bufferedMeta, *s.metas[inputIdx])
+						continue
+					}
 					msg.b = s.batches[inputIdx]
 					if s.batches[inputIdx].Length() != 0 {
 						// Send the batch.
@@ -349,6 +357,7 @@ func (s *ParallelUnorderedSynchronizer) init() {
 					// overwritten since it might still be in the channel.
 					msg = &unorderedSynchronizerMsg{
 						inputIdx: inputIdx,
+						meta:     bufferedMeta,
 					}
 					if span != nil {
 						for _, s := range input.StatsCollectors {
@@ -402,12 +411,12 @@ func (s *ParallelUnorderedSynchronizer) init() {
 }
 
 // Next is part of the colexecop.Operator interface.
-func (s *ParallelUnorderedSynchronizer) Next() coldata.Batch {
+func (s *ParallelUnorderedSynchronizer) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
 		state := s.getState()
 		switch state {
 		case parallelUnorderedSynchronizerStateDone:
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		case parallelUnorderedSynchronizerStateUninitialized:
 			s.setState(parallelUnorderedSynchronizerStateRunning)
 			s.init()
@@ -444,7 +453,7 @@ func (s *ParallelUnorderedSynchronizer) Next() coldata.Batch {
 				default:
 				}
 				s.setState(parallelUnorderedSynchronizerStateDone)
-				return coldata.ZeroBatch
+				return coldata.ZeroBatch, nil
 			}
 			s.lastReadInputIdx = msg.inputIdx
 			if msg.meta != nil {
@@ -456,7 +465,7 @@ func (s *ParallelUnorderedSynchronizer) Next() coldata.Batch {
 				s.outputBatch.ReplaceCol(vec, i)
 			}
 			colexecutils.UpdateBatchState(s.outputBatch, msg.b.Length(), msg.b.Selection() != nil /* usesSel */, msg.b.Selection())
-			return s.outputBatch
+			return s.outputBatch, nil
 		}
 	}
 }

@@ -98,11 +98,14 @@ func (r *rankNoPartitionOp) Init(ctx context.Context) {
 	r.rankIncrement = 1
 }
 
-func (r *rankNoPartitionOp) Next() coldata.Batch {
-	batch := r.Input.Next()
+func (r *rankNoPartitionOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := r.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	peersCol := batch.ColVec(r.peersColIdx).Bool()
 	rankVec := batch.ColVec(r.outputColIdx)
@@ -136,7 +139,7 @@ func (r *rankNoPartitionOp) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type rankWithPartitionOp struct {
@@ -163,11 +166,14 @@ func (r *rankWithPartitionOp) Init(ctx context.Context) {
 	r.rankIncrement = 1
 }
 
-func (r *rankWithPartitionOp) Next() coldata.Batch {
-	batch := r.Input.Next()
+func (r *rankWithPartitionOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := r.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
 	peersCol := batch.ColVec(r.peersColIdx).Bool()
@@ -220,7 +226,7 @@ func (r *rankWithPartitionOp) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type denseRankNoPartitionOp struct {
@@ -247,11 +253,14 @@ func (r *denseRankNoPartitionOp) Init(ctx context.Context) {
 	r.rankIncrement = 1
 }
 
-func (r *denseRankNoPartitionOp) Next() coldata.Batch {
-	batch := r.Input.Next()
+func (r *denseRankNoPartitionOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := r.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	peersCol := batch.ColVec(r.peersColIdx).Bool()
 	rankVec := batch.ColVec(r.outputColIdx)
@@ -283,7 +292,7 @@ func (r *denseRankNoPartitionOp) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type denseRankWithPartitionOp struct {
@@ -310,11 +319,14 @@ func (r *denseRankWithPartitionOp) Init(ctx context.Context) {
 	r.rankIncrement = 1
 }
 
-func (r *denseRankWithPartitionOp) Next() coldata.Batch {
-	batch := r.Input.Next()
+func (r *denseRankWithPartitionOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := r.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
 	peersCol := batch.ColVec(r.peersColIdx).Bool()
@@ -365,5 +377,5 @@ func (r *denseRankWithPartitionOp) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }

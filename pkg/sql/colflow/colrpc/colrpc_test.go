@@ -341,7 +341,7 @@ func TestOutboxInbox(t *testing.T) {
 				// Note that it is ok that we call Init on every iteration - it
 				// is a noop every time except for the first one.
 				inbox.Init(readerCtx)
-				outputBatch = inbox.Next()
+				outputBatch, _ = inbox.Next()
 			}); err != nil {
 				readerErr = err
 				break
@@ -392,8 +392,8 @@ func TestOutboxInbox(t *testing.T) {
 			// If no cancellation happened, the output can be fully verified
 			// against the input.
 			for batchNum := 0; ; batchNum++ {
-				outputBatch := outputBatches.Next()
-				inputBatch := inputBatches.Next()
+				outputBatch, _ := outputBatches.Next()
+				inputBatch, _ := inputBatches.Next()
 				require.Equal(t, outputBatch.Length(), inputBatch.Length())
 				if outputBatch.Length() == 0 {
 					break
@@ -632,7 +632,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			numBatches: 4,
 			test: func(ctx context.Context, inbox *Inbox) []execinfrapb.ProducerMetadata {
 				for {
-					b := inbox.Next()
+					b, _ := inbox.Next()
 					if b.Length() == 0 {
 						break
 					}
@@ -662,7 +662,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				for {
 					var b coldata.Batch
 					if err := colexecerror.CatchVectorizedRuntimeError(func() {
-						b = inbox.Next()
+						b, _ = inbox.Next()
 					}); err != nil {
 						return []execinfrapb.ProducerMetadata{{Err: err}}
 					}

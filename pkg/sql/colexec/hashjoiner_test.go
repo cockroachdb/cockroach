@@ -1140,7 +1140,11 @@ func BenchmarkHashJoiner(b *testing.B) {
 									hj.Init(ctx)
 
 									b.StartTimer()
-									for hj.Next().Length() != 0 {
+									for {
+										batch, _ := hj.Next()
+										if batch.Length() == 0 {
+											break
+										}
 									}
 									b.StopTimer()
 									leftSource.Reset(ctx)
@@ -1219,7 +1223,7 @@ func TestHashJoinerProjection(t *testing.T) {
 	hjOp, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
 	hjOp.Root.Init(ctx)
-	for b := hjOp.Root.Next(); b.Length() > 0; b = hjOp.Root.Next() {
+	for b, _ := hjOp.Root.Next(); b.Length() > 0; b, _ = hjOp.Root.Next() {
 		// The output types should be {Int64, Int64, Bool, Decimal, Float64, Bytes}
 		// and we check this explicitly.
 		b.ColVec(0).Int64()

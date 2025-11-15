@@ -8,6 +8,7 @@ package colexec
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // limitOp is an operator that implements limit, returning only the first n
@@ -35,21 +36,25 @@ func NewLimitOp(input colexecop.Operator, limit uint64) colexecop.Operator {
 	return c
 }
 
-func (c *limitOp) Next() coldata.Batch {
+func (c *limitOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	// TODO: think about 'done' behavior and meta.
 	if c.done {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
-	bat := c.Input.Next()
+	bat, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	length := bat.Length()
 	if length == 0 {
-		return bat
+		return bat, nil
 	}
 	newSeen := c.seen + uint64(length)
 	if newSeen >= c.limit {
 		c.done = true
 		bat.SetLength(int(c.limit - c.seen))
-		return bat
+		return bat, nil
 	}
 	c.seen = newSeen
-	return bat
+	return bat, nil
 }

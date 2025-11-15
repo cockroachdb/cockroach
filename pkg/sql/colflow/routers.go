@@ -230,7 +230,7 @@ func (o *routerOutputOp) nextErrorLocked(err error) {
 // Next returns the next coldata.Batch from the routerOutputOp. Note that Next
 // is designed for only one concurrent caller and will block until data is
 // ready.
-func (o *routerOutputOp) Next() coldata.Batch {
+func (o *routerOutputOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	for o.mu.forwardedErr == nil && o.mu.state == routerOutputOpRunning && o.mu.data.Empty() {
@@ -241,7 +241,7 @@ func (o *routerOutputOp) Next() coldata.Batch {
 		colexecerror.ExpectedError(o.mu.forwardedErr)
 	}
 	if o.mu.state == routerOutputOpDraining {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	b, err := o.mu.data.Dequeue(o.Ctx)
 	if err == nil && o.testingKnobs.nextTestInducedErrorCb != nil {
@@ -266,7 +266,7 @@ func (o *routerOutputOp) Next() coldata.Batch {
 		// possible disk infrastructure.
 		o.closeLocked(o.Ctx)
 	}
-	return b
+	return b, nil
 }
 
 func (o *routerOutputOp) DrainMeta() []execinfrapb.ProducerMetadata {
@@ -573,6 +573,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 	if span != nil {
 		defer span.Finish()
 	}
+	var bufferedMeta []execinfrapb.ProducerMetadata
 	var inputInitialized bool
 	// Since HashRouter runs in a separate goroutine, we want to be safe and
 	// make sure that we catch errors in all code paths, so we wrap the whole
@@ -582,8 +583,9 @@ func (r *HashRouter) Run(ctx context.Context) {
 		r.Input.Init(ctx)
 		inputInitialized = true
 		var done bool
+		var meta *execinfrapb.ProducerMetadata
 		processNextBatch := func() {
-			done = r.processNextBatch(ctx)
+			done, meta = r.processNextBatch(ctx)
 		}
 		for {
 			if r.getDrainState() != hashRouterDrainStateRunning {
@@ -625,6 +627,9 @@ func (r *HashRouter) Run(ctx context.Context) {
 				r.cancelOutputs(ctx, err)
 				return
 			}
+			if meta != nil {
+				bufferedMeta = append(bufferedMeta, *meta)
+			}
 			if done {
 				// The input was done and we have notified the routerOutputs that there
 				// is no more data.
@@ -635,7 +640,6 @@ func (r *HashRouter) Run(ctx context.Context) {
 		r.cancelOutputs(ctx, err)
 	}
 
-	var bufferedMeta []execinfrapb.ProducerMetadata
 	if inputInitialized {
 		// Retrieving stats and draining the metadata is only safe if the input
 		// to the hash router was properly initialized.
@@ -658,8 +662,11 @@ func (r *HashRouter) Run(ctx context.Context) {
 // processNextBatch reads the next batch from its input, hashes it and adds
 // each column to its corresponding output, returning whether the input is
 // done.
-func (r *HashRouter) processNextBatch(ctx context.Context) bool {
-	b := r.Input.Next()
+func (r *HashRouter) processNextBatch(ctx context.Context) (bool, *execinfrapb.ProducerMetadata) {
+	b, meta := r.Input.Next()
+	if meta != nil {
+		return false, meta
+	}
 	n := b.Length()
 	if n == 0 {
 		// Done. Push an empty batch to outputs to tell them the data is done as
@@ -667,7 +674,7 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 		for _, o := range r.outputs {
 			o.addBatch(ctx, b)
 		}
-		return true
+		return true, nil
 	}
 
 	// It is ok that we call Init() on every batch since all calls except for
@@ -683,7 +690,7 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 			}
 		}
 	}
-	return false
+	return false, nil
 }
 
 // resetForTests resets the HashRouter for a test or benchmark run.

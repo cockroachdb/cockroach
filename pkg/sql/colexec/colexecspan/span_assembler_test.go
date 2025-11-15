@@ -134,7 +134,7 @@ func TestSpanAssembler(t *testing.T) {
 									}()
 
 									var testSpans roachpb.Spans
-									for batch := source.Next(); ; batch = source.Next() {
+									for batch, _ := source.Next(); ; batch, _ = source.Next() {
 										if batch.Length() == 0 {
 											// Reached the end of the input.
 											testSpans = append(testSpans, colBuilder.GetSpans()...)
@@ -149,7 +149,7 @@ func TestSpanAssembler(t *testing.T) {
 									}
 
 									var oracleSpans roachpb.Spans
-									for batch := oracleSource.Next(); batch.Length() > 0; batch = oracleSource.Next() {
+									for batch, _ := oracleSource.Next(); batch.Length() > 0; batch, _ = oracleSource.Next() {
 										batch.SetSelection(true)
 										copy(batch.Selection(), sel)
 										batch.SetLength(len(sel))

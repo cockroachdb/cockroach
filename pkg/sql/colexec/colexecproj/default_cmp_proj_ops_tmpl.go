@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -44,11 +45,14 @@ type defaultCmp_KINDProjOp struct {
 var _ colexecop.Operator = &defaultCmp_KINDProjOp{}
 var _ execreleasable.Releasable = &defaultCmp_KINDProjOp{}
 
-func (d *defaultCmp_KINDProjOp) Next() coldata.Batch {
-	batch := d.Input.Next()
+func (d *defaultCmp_KINDProjOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := d.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	output := batch.ColVec(d.outputIdx)
@@ -94,7 +98,7 @@ func (d *defaultCmp_KINDProjOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 func (d *defaultCmp_KINDProjOp) Release() {

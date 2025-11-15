@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -34,6 +35,7 @@ var (
 	_ duration.Duration
 	_ = coldataext.CompareDatum
 	_ json.JSON
+	_ *execinfrapb.ProducerMetadata
 )
 
 // selConstOpBase contains all of the fields for binary selections with a
@@ -55,11 +57,14 @@ type selEQBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p *selEQBoolBoolConstOp) Next() coldata.Batch {
+func (p *selEQBoolBoolConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -186,7 +191,7 @@ func (p *selEQBoolBoolConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -195,11 +200,14 @@ type selEQBoolBoolOp struct {
 	selOpBase
 }
 
-func (p *selEQBoolBoolOp) Next() coldata.Batch {
+func (p *selEQBoolBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -337,7 +345,7 @@ func (p *selEQBoolBoolOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -347,11 +355,14 @@ type selEQBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p *selEQBytesBytesConstOp) Next() coldata.Batch {
+func (p *selEQBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -444,7 +455,7 @@ func (p *selEQBytesBytesConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -453,11 +464,14 @@ type selEQBytesBytesOp struct {
 	selOpBase
 }
 
-func (p *selEQBytesBytesOp) Next() coldata.Batch {
+func (p *selEQBytesBytesOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -559,7 +573,7 @@ func (p *selEQBytesBytesOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -569,11 +583,14 @@ type selEQDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p *selEQDecimalInt16ConstOp) Next() coldata.Batch {
+func (p *selEQDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -692,7 +709,7 @@ func (p *selEQDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -701,11 +718,14 @@ type selEQDecimalInt16Op struct {
 	selOpBase
 }
 
-func (p *selEQDecimalInt16Op) Next() coldata.Batch {
+func (p *selEQDecimalInt16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -835,7 +855,7 @@ func (p *selEQDecimalInt16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -845,11 +865,14 @@ type selEQDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p *selEQDecimalInt32ConstOp) Next() coldata.Batch {
+func (p *selEQDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -968,7 +991,7 @@ func (p *selEQDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -977,11 +1000,14 @@ type selEQDecimalInt32Op struct {
 	selOpBase
 }
 
-func (p *selEQDecimalInt32Op) Next() coldata.Batch {
+func (p *selEQDecimalInt32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -1111,7 +1137,7 @@ func (p *selEQDecimalInt32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -1121,11 +1147,14 @@ type selEQDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p *selEQDecimalInt64ConstOp) Next() coldata.Batch {
+func (p *selEQDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -1244,7 +1273,7 @@ func (p *selEQDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -1253,11 +1282,14 @@ type selEQDecimalInt64Op struct {
 	selOpBase
 }
 
-func (p *selEQDecimalInt64Op) Next() coldata.Batch {
+func (p *selEQDecimalInt64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -1387,7 +1419,7 @@ func (p *selEQDecimalInt64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -1397,11 +1429,14 @@ type selEQDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p *selEQDecimalFloat64ConstOp) Next() coldata.Batch {
+func (p *selEQDecimalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -1528,7 +1563,7 @@ func (p *selEQDecimalFloat64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -1537,11 +1572,14 @@ type selEQDecimalFloat64Op struct {
 	selOpBase
 }
 
-func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
+func (p *selEQDecimalFloat64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -1679,7 +1717,7 @@ func (p *selEQDecimalFloat64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -1689,11 +1727,14 @@ type selEQDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selEQDecimalDecimalConstOp) Next() coldata.Batch {
+func (p *selEQDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -1788,7 +1829,7 @@ func (p *selEQDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -1797,11 +1838,14 @@ type selEQDecimalDecimalOp struct {
 	selOpBase
 }
 
-func (p *selEQDecimalDecimalOp) Next() coldata.Batch {
+func (p *selEQDecimalDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -1907,7 +1951,7 @@ func (p *selEQDecimalDecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -1917,11 +1961,14 @@ type selEQInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selEQInt16Int16ConstOp) Next() coldata.Batch {
+func (p *selEQInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -2060,7 +2107,7 @@ func (p *selEQInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -2069,11 +2116,14 @@ type selEQInt16Int16Op struct {
 	selOpBase
 }
 
-func (p *selEQInt16Int16Op) Next() coldata.Batch {
+func (p *selEQInt16Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -2223,7 +2273,7 @@ func (p *selEQInt16Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -2233,11 +2283,14 @@ type selEQInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selEQInt16Int32ConstOp) Next() coldata.Batch {
+func (p *selEQInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -2376,7 +2429,7 @@ func (p *selEQInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -2385,11 +2438,14 @@ type selEQInt16Int32Op struct {
 	selOpBase
 }
 
-func (p *selEQInt16Int32Op) Next() coldata.Batch {
+func (p *selEQInt16Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -2539,7 +2595,7 @@ func (p *selEQInt16Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -2549,11 +2605,14 @@ type selEQInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selEQInt16Int64ConstOp) Next() coldata.Batch {
+func (p *selEQInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -2692,7 +2751,7 @@ func (p *selEQInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -2701,11 +2760,14 @@ type selEQInt16Int64Op struct {
 	selOpBase
 }
 
-func (p *selEQInt16Int64Op) Next() coldata.Batch {
+func (p *selEQInt16Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -2855,7 +2917,7 @@ func (p *selEQInt16Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -2865,11 +2927,14 @@ type selEQInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selEQInt16Float64ConstOp) Next() coldata.Batch {
+func (p *selEQInt16Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -3040,7 +3105,7 @@ func (p *selEQInt16Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -3049,11 +3114,14 @@ type selEQInt16Float64Op struct {
 	selOpBase
 }
 
-func (p *selEQInt16Float64Op) Next() coldata.Batch {
+func (p *selEQInt16Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -3235,7 +3303,7 @@ func (p *selEQInt16Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -3245,11 +3313,14 @@ type selEQInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selEQInt16DecimalConstOp) Next() coldata.Batch {
+func (p *selEQInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -3368,7 +3439,7 @@ func (p *selEQInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -3377,11 +3448,14 @@ type selEQInt16DecimalOp struct {
 	selOpBase
 }
 
-func (p *selEQInt16DecimalOp) Next() coldata.Batch {
+func (p *selEQInt16DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -3511,7 +3585,7 @@ func (p *selEQInt16DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -3521,11 +3595,14 @@ type selEQInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selEQInt32Int16ConstOp) Next() coldata.Batch {
+func (p *selEQInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -3664,7 +3741,7 @@ func (p *selEQInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -3673,11 +3750,14 @@ type selEQInt32Int16Op struct {
 	selOpBase
 }
 
-func (p *selEQInt32Int16Op) Next() coldata.Batch {
+func (p *selEQInt32Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -3827,7 +3907,7 @@ func (p *selEQInt32Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -3837,11 +3917,14 @@ type selEQInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selEQInt32Int32ConstOp) Next() coldata.Batch {
+func (p *selEQInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -3980,7 +4063,7 @@ func (p *selEQInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -3989,11 +4072,14 @@ type selEQInt32Int32Op struct {
 	selOpBase
 }
 
-func (p *selEQInt32Int32Op) Next() coldata.Batch {
+func (p *selEQInt32Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -4143,7 +4229,7 @@ func (p *selEQInt32Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -4153,11 +4239,14 @@ type selEQInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selEQInt32Int64ConstOp) Next() coldata.Batch {
+func (p *selEQInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -4296,7 +4385,7 @@ func (p *selEQInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -4305,11 +4394,14 @@ type selEQInt32Int64Op struct {
 	selOpBase
 }
 
-func (p *selEQInt32Int64Op) Next() coldata.Batch {
+func (p *selEQInt32Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -4459,7 +4551,7 @@ func (p *selEQInt32Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -4469,11 +4561,14 @@ type selEQInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selEQInt32Float64ConstOp) Next() coldata.Batch {
+func (p *selEQInt32Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -4644,7 +4739,7 @@ func (p *selEQInt32Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -4653,11 +4748,14 @@ type selEQInt32Float64Op struct {
 	selOpBase
 }
 
-func (p *selEQInt32Float64Op) Next() coldata.Batch {
+func (p *selEQInt32Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -4839,7 +4937,7 @@ func (p *selEQInt32Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -4849,11 +4947,14 @@ type selEQInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selEQInt32DecimalConstOp) Next() coldata.Batch {
+func (p *selEQInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -4972,7 +5073,7 @@ func (p *selEQInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -4981,11 +5082,14 @@ type selEQInt32DecimalOp struct {
 	selOpBase
 }
 
-func (p *selEQInt32DecimalOp) Next() coldata.Batch {
+func (p *selEQInt32DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -5115,7 +5219,7 @@ func (p *selEQInt32DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -5125,11 +5229,14 @@ type selEQInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selEQInt64Int16ConstOp) Next() coldata.Batch {
+func (p *selEQInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -5268,7 +5375,7 @@ func (p *selEQInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -5277,11 +5384,14 @@ type selEQInt64Int16Op struct {
 	selOpBase
 }
 
-func (p *selEQInt64Int16Op) Next() coldata.Batch {
+func (p *selEQInt64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -5431,7 +5541,7 @@ func (p *selEQInt64Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -5441,11 +5551,14 @@ type selEQInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selEQInt64Int32ConstOp) Next() coldata.Batch {
+func (p *selEQInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -5584,7 +5697,7 @@ func (p *selEQInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -5593,11 +5706,14 @@ type selEQInt64Int32Op struct {
 	selOpBase
 }
 
-func (p *selEQInt64Int32Op) Next() coldata.Batch {
+func (p *selEQInt64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -5747,7 +5863,7 @@ func (p *selEQInt64Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -5757,11 +5873,14 @@ type selEQInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selEQInt64Int64ConstOp) Next() coldata.Batch {
+func (p *selEQInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -5900,7 +6019,7 @@ func (p *selEQInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -5909,11 +6028,14 @@ type selEQInt64Int64Op struct {
 	selOpBase
 }
 
-func (p *selEQInt64Int64Op) Next() coldata.Batch {
+func (p *selEQInt64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -6063,7 +6185,7 @@ func (p *selEQInt64Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -6073,11 +6195,14 @@ type selEQInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selEQInt64Float64ConstOp) Next() coldata.Batch {
+func (p *selEQInt64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -6248,7 +6373,7 @@ func (p *selEQInt64Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -6257,11 +6382,14 @@ type selEQInt64Float64Op struct {
 	selOpBase
 }
 
-func (p *selEQInt64Float64Op) Next() coldata.Batch {
+func (p *selEQInt64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -6443,7 +6571,7 @@ func (p *selEQInt64Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -6453,11 +6581,14 @@ type selEQInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selEQInt64DecimalConstOp) Next() coldata.Batch {
+func (p *selEQInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -6576,7 +6707,7 @@ func (p *selEQInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -6585,11 +6716,14 @@ type selEQInt64DecimalOp struct {
 	selOpBase
 }
 
-func (p *selEQInt64DecimalOp) Next() coldata.Batch {
+func (p *selEQInt64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -6719,7 +6853,7 @@ func (p *selEQInt64DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -6729,11 +6863,14 @@ type selEQFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selEQFloat64Int16ConstOp) Next() coldata.Batch {
+func (p *selEQFloat64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -6904,7 +7041,7 @@ func (p *selEQFloat64Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -6913,11 +7050,14 @@ type selEQFloat64Int16Op struct {
 	selOpBase
 }
 
-func (p *selEQFloat64Int16Op) Next() coldata.Batch {
+func (p *selEQFloat64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -7099,7 +7239,7 @@ func (p *selEQFloat64Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -7109,11 +7249,14 @@ type selEQFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selEQFloat64Int32ConstOp) Next() coldata.Batch {
+func (p *selEQFloat64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -7284,7 +7427,7 @@ func (p *selEQFloat64Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -7293,11 +7436,14 @@ type selEQFloat64Int32Op struct {
 	selOpBase
 }
 
-func (p *selEQFloat64Int32Op) Next() coldata.Batch {
+func (p *selEQFloat64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -7479,7 +7625,7 @@ func (p *selEQFloat64Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -7489,11 +7635,14 @@ type selEQFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selEQFloat64Int64ConstOp) Next() coldata.Batch {
+func (p *selEQFloat64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -7664,7 +7813,7 @@ func (p *selEQFloat64Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -7673,11 +7822,14 @@ type selEQFloat64Int64Op struct {
 	selOpBase
 }
 
-func (p *selEQFloat64Int64Op) Next() coldata.Batch {
+func (p *selEQFloat64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -7859,7 +8011,7 @@ func (p *selEQFloat64Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -7869,11 +8021,14 @@ type selEQFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selEQFloat64Float64ConstOp) Next() coldata.Batch {
+func (p *selEQFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -8044,7 +8199,7 @@ func (p *selEQFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -8053,11 +8208,14 @@ type selEQFloat64Float64Op struct {
 	selOpBase
 }
 
-func (p *selEQFloat64Float64Op) Next() coldata.Batch {
+func (p *selEQFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -8239,7 +8397,7 @@ func (p *selEQFloat64Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -8249,11 +8407,14 @@ type selEQFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selEQFloat64DecimalConstOp) Next() coldata.Batch {
+func (p *selEQFloat64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -8380,7 +8541,7 @@ func (p *selEQFloat64DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -8389,11 +8550,14 @@ type selEQFloat64DecimalOp struct {
 	selOpBase
 }
 
-func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
+func (p *selEQFloat64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -8531,7 +8695,7 @@ func (p *selEQFloat64DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -8541,11 +8705,14 @@ type selEQTimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p *selEQTimestampTimestampConstOp) Next() coldata.Batch {
+func (p *selEQTimestampTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -8668,7 +8835,7 @@ func (p *selEQTimestampTimestampConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -8677,11 +8844,14 @@ type selEQTimestampTimestampOp struct {
 	selOpBase
 }
 
-func (p *selEQTimestampTimestampOp) Next() coldata.Batch {
+func (p *selEQTimestampTimestampOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -8815,7 +8985,7 @@ func (p *selEQTimestampTimestampOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -8825,11 +8995,14 @@ type selEQIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p *selEQIntervalIntervalConstOp) Next() coldata.Batch {
+func (p *selEQIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -8924,7 +9097,7 @@ func (p *selEQIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -8933,11 +9106,14 @@ type selEQIntervalIntervalOp struct {
 	selOpBase
 }
 
-func (p *selEQIntervalIntervalOp) Next() coldata.Batch {
+func (p *selEQIntervalIntervalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -9043,7 +9219,7 @@ func (p *selEQIntervalIntervalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -9053,11 +9229,14 @@ type selEQJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p *selEQJSONJSONConstOp) Next() coldata.Batch {
+func (p *selEQJSONJSONConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -9174,7 +9353,7 @@ func (p *selEQJSONJSONConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -9183,11 +9362,14 @@ type selEQJSONJSONOp struct {
 	selOpBase
 }
 
-func (p *selEQJSONJSONOp) Next() coldata.Batch {
+func (p *selEQJSONJSONOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -9313,7 +9495,7 @@ func (p *selEQJSONJSONOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -9323,11 +9505,14 @@ type selEQDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p *selEQDatumDatumConstOp) Next() coldata.Batch {
+func (p *selEQDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -9428,7 +9613,7 @@ func (p *selEQDatumDatumConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -9437,11 +9622,14 @@ type selEQDatumDatumOp struct {
 	selOpBase
 }
 
-func (p *selEQDatumDatumOp) Next() coldata.Batch {
+func (p *selEQDatumDatumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -9551,7 +9739,7 @@ func (p *selEQDatumDatumOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -9561,11 +9749,14 @@ type selNEBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p *selNEBoolBoolConstOp) Next() coldata.Batch {
+func (p *selNEBoolBoolConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -9692,7 +9883,7 @@ func (p *selNEBoolBoolConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -9701,11 +9892,14 @@ type selNEBoolBoolOp struct {
 	selOpBase
 }
 
-func (p *selNEBoolBoolOp) Next() coldata.Batch {
+func (p *selNEBoolBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -9843,7 +10037,7 @@ func (p *selNEBoolBoolOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -9853,11 +10047,14 @@ type selNEBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p *selNEBytesBytesConstOp) Next() coldata.Batch {
+func (p *selNEBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -9950,7 +10147,7 @@ func (p *selNEBytesBytesConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -9959,11 +10156,14 @@ type selNEBytesBytesOp struct {
 	selOpBase
 }
 
-func (p *selNEBytesBytesOp) Next() coldata.Batch {
+func (p *selNEBytesBytesOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -10065,7 +10265,7 @@ func (p *selNEBytesBytesOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -10075,11 +10275,14 @@ type selNEDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p *selNEDecimalInt16ConstOp) Next() coldata.Batch {
+func (p *selNEDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -10198,7 +10401,7 @@ func (p *selNEDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -10207,11 +10410,14 @@ type selNEDecimalInt16Op struct {
 	selOpBase
 }
 
-func (p *selNEDecimalInt16Op) Next() coldata.Batch {
+func (p *selNEDecimalInt16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -10341,7 +10547,7 @@ func (p *selNEDecimalInt16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -10351,11 +10557,14 @@ type selNEDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p *selNEDecimalInt32ConstOp) Next() coldata.Batch {
+func (p *selNEDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -10474,7 +10683,7 @@ func (p *selNEDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -10483,11 +10692,14 @@ type selNEDecimalInt32Op struct {
 	selOpBase
 }
 
-func (p *selNEDecimalInt32Op) Next() coldata.Batch {
+func (p *selNEDecimalInt32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -10617,7 +10829,7 @@ func (p *selNEDecimalInt32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -10627,11 +10839,14 @@ type selNEDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p *selNEDecimalInt64ConstOp) Next() coldata.Batch {
+func (p *selNEDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -10750,7 +10965,7 @@ func (p *selNEDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -10759,11 +10974,14 @@ type selNEDecimalInt64Op struct {
 	selOpBase
 }
 
-func (p *selNEDecimalInt64Op) Next() coldata.Batch {
+func (p *selNEDecimalInt64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -10893,7 +11111,7 @@ func (p *selNEDecimalInt64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -10903,11 +11121,14 @@ type selNEDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p *selNEDecimalFloat64ConstOp) Next() coldata.Batch {
+func (p *selNEDecimalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -11034,7 +11255,7 @@ func (p *selNEDecimalFloat64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -11043,11 +11264,14 @@ type selNEDecimalFloat64Op struct {
 	selOpBase
 }
 
-func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
+func (p *selNEDecimalFloat64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -11185,7 +11409,7 @@ func (p *selNEDecimalFloat64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -11195,11 +11419,14 @@ type selNEDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selNEDecimalDecimalConstOp) Next() coldata.Batch {
+func (p *selNEDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -11294,7 +11521,7 @@ func (p *selNEDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -11303,11 +11530,14 @@ type selNEDecimalDecimalOp struct {
 	selOpBase
 }
 
-func (p *selNEDecimalDecimalOp) Next() coldata.Batch {
+func (p *selNEDecimalDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -11413,7 +11643,7 @@ func (p *selNEDecimalDecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -11423,11 +11653,14 @@ type selNEInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selNEInt16Int16ConstOp) Next() coldata.Batch {
+func (p *selNEInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -11566,7 +11799,7 @@ func (p *selNEInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -11575,11 +11808,14 @@ type selNEInt16Int16Op struct {
 	selOpBase
 }
 
-func (p *selNEInt16Int16Op) Next() coldata.Batch {
+func (p *selNEInt16Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -11729,7 +11965,7 @@ func (p *selNEInt16Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -11739,11 +11975,14 @@ type selNEInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selNEInt16Int32ConstOp) Next() coldata.Batch {
+func (p *selNEInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -11882,7 +12121,7 @@ func (p *selNEInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -11891,11 +12130,14 @@ type selNEInt16Int32Op struct {
 	selOpBase
 }
 
-func (p *selNEInt16Int32Op) Next() coldata.Batch {
+func (p *selNEInt16Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -12045,7 +12287,7 @@ func (p *selNEInt16Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -12055,11 +12297,14 @@ type selNEInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selNEInt16Int64ConstOp) Next() coldata.Batch {
+func (p *selNEInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -12198,7 +12443,7 @@ func (p *selNEInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -12207,11 +12452,14 @@ type selNEInt16Int64Op struct {
 	selOpBase
 }
 
-func (p *selNEInt16Int64Op) Next() coldata.Batch {
+func (p *selNEInt16Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -12361,7 +12609,7 @@ func (p *selNEInt16Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -12371,11 +12619,14 @@ type selNEInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selNEInt16Float64ConstOp) Next() coldata.Batch {
+func (p *selNEInt16Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -12546,7 +12797,7 @@ func (p *selNEInt16Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -12555,11 +12806,14 @@ type selNEInt16Float64Op struct {
 	selOpBase
 }
 
-func (p *selNEInt16Float64Op) Next() coldata.Batch {
+func (p *selNEInt16Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -12741,7 +12995,7 @@ func (p *selNEInt16Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -12751,11 +13005,14 @@ type selNEInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selNEInt16DecimalConstOp) Next() coldata.Batch {
+func (p *selNEInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -12874,7 +13131,7 @@ func (p *selNEInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -12883,11 +13140,14 @@ type selNEInt16DecimalOp struct {
 	selOpBase
 }
 
-func (p *selNEInt16DecimalOp) Next() coldata.Batch {
+func (p *selNEInt16DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -13017,7 +13277,7 @@ func (p *selNEInt16DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -13027,11 +13287,14 @@ type selNEInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selNEInt32Int16ConstOp) Next() coldata.Batch {
+func (p *selNEInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -13170,7 +13433,7 @@ func (p *selNEInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -13179,11 +13442,14 @@ type selNEInt32Int16Op struct {
 	selOpBase
 }
 
-func (p *selNEInt32Int16Op) Next() coldata.Batch {
+func (p *selNEInt32Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -13333,7 +13599,7 @@ func (p *selNEInt32Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -13343,11 +13609,14 @@ type selNEInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selNEInt32Int32ConstOp) Next() coldata.Batch {
+func (p *selNEInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -13486,7 +13755,7 @@ func (p *selNEInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -13495,11 +13764,14 @@ type selNEInt32Int32Op struct {
 	selOpBase
 }
 
-func (p *selNEInt32Int32Op) Next() coldata.Batch {
+func (p *selNEInt32Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -13649,7 +13921,7 @@ func (p *selNEInt32Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -13659,11 +13931,14 @@ type selNEInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selNEInt32Int64ConstOp) Next() coldata.Batch {
+func (p *selNEInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -13802,7 +14077,7 @@ func (p *selNEInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -13811,11 +14086,14 @@ type selNEInt32Int64Op struct {
 	selOpBase
 }
 
-func (p *selNEInt32Int64Op) Next() coldata.Batch {
+func (p *selNEInt32Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -13965,7 +14243,7 @@ func (p *selNEInt32Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -13975,11 +14253,14 @@ type selNEInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selNEInt32Float64ConstOp) Next() coldata.Batch {
+func (p *selNEInt32Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -14150,7 +14431,7 @@ func (p *selNEInt32Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -14159,11 +14440,14 @@ type selNEInt32Float64Op struct {
 	selOpBase
 }
 
-func (p *selNEInt32Float64Op) Next() coldata.Batch {
+func (p *selNEInt32Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -14345,7 +14629,7 @@ func (p *selNEInt32Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -14355,11 +14639,14 @@ type selNEInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selNEInt32DecimalConstOp) Next() coldata.Batch {
+func (p *selNEInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -14478,7 +14765,7 @@ func (p *selNEInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -14487,11 +14774,14 @@ type selNEInt32DecimalOp struct {
 	selOpBase
 }
 
-func (p *selNEInt32DecimalOp) Next() coldata.Batch {
+func (p *selNEInt32DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -14621,7 +14911,7 @@ func (p *selNEInt32DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -14631,11 +14921,14 @@ type selNEInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selNEInt64Int16ConstOp) Next() coldata.Batch {
+func (p *selNEInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -14774,7 +15067,7 @@ func (p *selNEInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -14783,11 +15076,14 @@ type selNEInt64Int16Op struct {
 	selOpBase
 }
 
-func (p *selNEInt64Int16Op) Next() coldata.Batch {
+func (p *selNEInt64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -14937,7 +15233,7 @@ func (p *selNEInt64Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -14947,11 +15243,14 @@ type selNEInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selNEInt64Int32ConstOp) Next() coldata.Batch {
+func (p *selNEInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -15090,7 +15389,7 @@ func (p *selNEInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -15099,11 +15398,14 @@ type selNEInt64Int32Op struct {
 	selOpBase
 }
 
-func (p *selNEInt64Int32Op) Next() coldata.Batch {
+func (p *selNEInt64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -15253,7 +15555,7 @@ func (p *selNEInt64Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -15263,11 +15565,14 @@ type selNEInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selNEInt64Int64ConstOp) Next() coldata.Batch {
+func (p *selNEInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -15406,7 +15711,7 @@ func (p *selNEInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -15415,11 +15720,14 @@ type selNEInt64Int64Op struct {
 	selOpBase
 }
 
-func (p *selNEInt64Int64Op) Next() coldata.Batch {
+func (p *selNEInt64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -15569,7 +15877,7 @@ func (p *selNEInt64Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -15579,11 +15887,14 @@ type selNEInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selNEInt64Float64ConstOp) Next() coldata.Batch {
+func (p *selNEInt64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -15754,7 +16065,7 @@ func (p *selNEInt64Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -15763,11 +16074,14 @@ type selNEInt64Float64Op struct {
 	selOpBase
 }
 
-func (p *selNEInt64Float64Op) Next() coldata.Batch {
+func (p *selNEInt64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -15949,7 +16263,7 @@ func (p *selNEInt64Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -15959,11 +16273,14 @@ type selNEInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selNEInt64DecimalConstOp) Next() coldata.Batch {
+func (p *selNEInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -16082,7 +16399,7 @@ func (p *selNEInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -16091,11 +16408,14 @@ type selNEInt64DecimalOp struct {
 	selOpBase
 }
 
-func (p *selNEInt64DecimalOp) Next() coldata.Batch {
+func (p *selNEInt64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -16225,7 +16545,7 @@ func (p *selNEInt64DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -16235,11 +16555,14 @@ type selNEFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selNEFloat64Int16ConstOp) Next() coldata.Batch {
+func (p *selNEFloat64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -16410,7 +16733,7 @@ func (p *selNEFloat64Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -16419,11 +16742,14 @@ type selNEFloat64Int16Op struct {
 	selOpBase
 }
 
-func (p *selNEFloat64Int16Op) Next() coldata.Batch {
+func (p *selNEFloat64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -16605,7 +16931,7 @@ func (p *selNEFloat64Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -16615,11 +16941,14 @@ type selNEFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selNEFloat64Int32ConstOp) Next() coldata.Batch {
+func (p *selNEFloat64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -16790,7 +17119,7 @@ func (p *selNEFloat64Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -16799,11 +17128,14 @@ type selNEFloat64Int32Op struct {
 	selOpBase
 }
 
-func (p *selNEFloat64Int32Op) Next() coldata.Batch {
+func (p *selNEFloat64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -16985,7 +17317,7 @@ func (p *selNEFloat64Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -16995,11 +17327,14 @@ type selNEFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selNEFloat64Int64ConstOp) Next() coldata.Batch {
+func (p *selNEFloat64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -17170,7 +17505,7 @@ func (p *selNEFloat64Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -17179,11 +17514,14 @@ type selNEFloat64Int64Op struct {
 	selOpBase
 }
 
-func (p *selNEFloat64Int64Op) Next() coldata.Batch {
+func (p *selNEFloat64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -17365,7 +17703,7 @@ func (p *selNEFloat64Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -17375,11 +17713,14 @@ type selNEFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selNEFloat64Float64ConstOp) Next() coldata.Batch {
+func (p *selNEFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -17550,7 +17891,7 @@ func (p *selNEFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -17559,11 +17900,14 @@ type selNEFloat64Float64Op struct {
 	selOpBase
 }
 
-func (p *selNEFloat64Float64Op) Next() coldata.Batch {
+func (p *selNEFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -17745,7 +18089,7 @@ func (p *selNEFloat64Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -17755,11 +18099,14 @@ type selNEFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selNEFloat64DecimalConstOp) Next() coldata.Batch {
+func (p *selNEFloat64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -17886,7 +18233,7 @@ func (p *selNEFloat64DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -17895,11 +18242,14 @@ type selNEFloat64DecimalOp struct {
 	selOpBase
 }
 
-func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
+func (p *selNEFloat64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -18037,7 +18387,7 @@ func (p *selNEFloat64DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -18047,11 +18397,14 @@ type selNETimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p *selNETimestampTimestampConstOp) Next() coldata.Batch {
+func (p *selNETimestampTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -18174,7 +18527,7 @@ func (p *selNETimestampTimestampConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -18183,11 +18536,14 @@ type selNETimestampTimestampOp struct {
 	selOpBase
 }
 
-func (p *selNETimestampTimestampOp) Next() coldata.Batch {
+func (p *selNETimestampTimestampOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -18321,7 +18677,7 @@ func (p *selNETimestampTimestampOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -18331,11 +18687,14 @@ type selNEIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p *selNEIntervalIntervalConstOp) Next() coldata.Batch {
+func (p *selNEIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -18430,7 +18789,7 @@ func (p *selNEIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -18439,11 +18798,14 @@ type selNEIntervalIntervalOp struct {
 	selOpBase
 }
 
-func (p *selNEIntervalIntervalOp) Next() coldata.Batch {
+func (p *selNEIntervalIntervalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -18549,7 +18911,7 @@ func (p *selNEIntervalIntervalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -18559,11 +18921,14 @@ type selNEJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p *selNEJSONJSONConstOp) Next() coldata.Batch {
+func (p *selNEJSONJSONConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -18680,7 +19045,7 @@ func (p *selNEJSONJSONConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -18689,11 +19054,14 @@ type selNEJSONJSONOp struct {
 	selOpBase
 }
 
-func (p *selNEJSONJSONOp) Next() coldata.Batch {
+func (p *selNEJSONJSONOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -18819,7 +19187,7 @@ func (p *selNEJSONJSONOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -18829,11 +19197,14 @@ type selNEDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p *selNEDatumDatumConstOp) Next() coldata.Batch {
+func (p *selNEDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -18934,7 +19305,7 @@ func (p *selNEDatumDatumConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -18943,11 +19314,14 @@ type selNEDatumDatumOp struct {
 	selOpBase
 }
 
-func (p *selNEDatumDatumOp) Next() coldata.Batch {
+func (p *selNEDatumDatumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -19057,7 +19431,7 @@ func (p *selNEDatumDatumOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -19067,11 +19441,14 @@ type selLTBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p *selLTBoolBoolConstOp) Next() coldata.Batch {
+func (p *selLTBoolBoolConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -19198,7 +19575,7 @@ func (p *selLTBoolBoolConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -19207,11 +19584,14 @@ type selLTBoolBoolOp struct {
 	selOpBase
 }
 
-func (p *selLTBoolBoolOp) Next() coldata.Batch {
+func (p *selLTBoolBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -19349,7 +19729,7 @@ func (p *selLTBoolBoolOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -19359,11 +19739,14 @@ type selLTBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p *selLTBytesBytesConstOp) Next() coldata.Batch {
+func (p *selLTBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -19456,7 +19839,7 @@ func (p *selLTBytesBytesConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -19465,11 +19848,14 @@ type selLTBytesBytesOp struct {
 	selOpBase
 }
 
-func (p *selLTBytesBytesOp) Next() coldata.Batch {
+func (p *selLTBytesBytesOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -19571,7 +19957,7 @@ func (p *selLTBytesBytesOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -19581,11 +19967,14 @@ type selLTDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p *selLTDecimalInt16ConstOp) Next() coldata.Batch {
+func (p *selLTDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -19704,7 +20093,7 @@ func (p *selLTDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -19713,11 +20102,14 @@ type selLTDecimalInt16Op struct {
 	selOpBase
 }
 
-func (p *selLTDecimalInt16Op) Next() coldata.Batch {
+func (p *selLTDecimalInt16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -19847,7 +20239,7 @@ func (p *selLTDecimalInt16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -19857,11 +20249,14 @@ type selLTDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p *selLTDecimalInt32ConstOp) Next() coldata.Batch {
+func (p *selLTDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -19980,7 +20375,7 @@ func (p *selLTDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -19989,11 +20384,14 @@ type selLTDecimalInt32Op struct {
 	selOpBase
 }
 
-func (p *selLTDecimalInt32Op) Next() coldata.Batch {
+func (p *selLTDecimalInt32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -20123,7 +20521,7 @@ func (p *selLTDecimalInt32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -20133,11 +20531,14 @@ type selLTDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p *selLTDecimalInt64ConstOp) Next() coldata.Batch {
+func (p *selLTDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -20256,7 +20657,7 @@ func (p *selLTDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -20265,11 +20666,14 @@ type selLTDecimalInt64Op struct {
 	selOpBase
 }
 
-func (p *selLTDecimalInt64Op) Next() coldata.Batch {
+func (p *selLTDecimalInt64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -20399,7 +20803,7 @@ func (p *selLTDecimalInt64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -20409,11 +20813,14 @@ type selLTDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p *selLTDecimalFloat64ConstOp) Next() coldata.Batch {
+func (p *selLTDecimalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -20540,7 +20947,7 @@ func (p *selLTDecimalFloat64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -20549,11 +20956,14 @@ type selLTDecimalFloat64Op struct {
 	selOpBase
 }
 
-func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
+func (p *selLTDecimalFloat64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -20691,7 +21101,7 @@ func (p *selLTDecimalFloat64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -20701,11 +21111,14 @@ type selLTDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selLTDecimalDecimalConstOp) Next() coldata.Batch {
+func (p *selLTDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -20800,7 +21213,7 @@ func (p *selLTDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -20809,11 +21222,14 @@ type selLTDecimalDecimalOp struct {
 	selOpBase
 }
 
-func (p *selLTDecimalDecimalOp) Next() coldata.Batch {
+func (p *selLTDecimalDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -20919,7 +21335,7 @@ func (p *selLTDecimalDecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -20929,11 +21345,14 @@ type selLTInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selLTInt16Int16ConstOp) Next() coldata.Batch {
+func (p *selLTInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -21072,7 +21491,7 @@ func (p *selLTInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -21081,11 +21500,14 @@ type selLTInt16Int16Op struct {
 	selOpBase
 }
 
-func (p *selLTInt16Int16Op) Next() coldata.Batch {
+func (p *selLTInt16Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -21235,7 +21657,7 @@ func (p *selLTInt16Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -21245,11 +21667,14 @@ type selLTInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selLTInt16Int32ConstOp) Next() coldata.Batch {
+func (p *selLTInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -21388,7 +21813,7 @@ func (p *selLTInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -21397,11 +21822,14 @@ type selLTInt16Int32Op struct {
 	selOpBase
 }
 
-func (p *selLTInt16Int32Op) Next() coldata.Batch {
+func (p *selLTInt16Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -21551,7 +21979,7 @@ func (p *selLTInt16Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -21561,11 +21989,14 @@ type selLTInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selLTInt16Int64ConstOp) Next() coldata.Batch {
+func (p *selLTInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -21704,7 +22135,7 @@ func (p *selLTInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -21713,11 +22144,14 @@ type selLTInt16Int64Op struct {
 	selOpBase
 }
 
-func (p *selLTInt16Int64Op) Next() coldata.Batch {
+func (p *selLTInt16Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -21867,7 +22301,7 @@ func (p *selLTInt16Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -21877,11 +22311,14 @@ type selLTInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selLTInt16Float64ConstOp) Next() coldata.Batch {
+func (p *selLTInt16Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -22052,7 +22489,7 @@ func (p *selLTInt16Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -22061,11 +22498,14 @@ type selLTInt16Float64Op struct {
 	selOpBase
 }
 
-func (p *selLTInt16Float64Op) Next() coldata.Batch {
+func (p *selLTInt16Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -22247,7 +22687,7 @@ func (p *selLTInt16Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -22257,11 +22697,14 @@ type selLTInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selLTInt16DecimalConstOp) Next() coldata.Batch {
+func (p *selLTInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -22380,7 +22823,7 @@ func (p *selLTInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -22389,11 +22832,14 @@ type selLTInt16DecimalOp struct {
 	selOpBase
 }
 
-func (p *selLTInt16DecimalOp) Next() coldata.Batch {
+func (p *selLTInt16DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -22523,7 +22969,7 @@ func (p *selLTInt16DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -22533,11 +22979,14 @@ type selLTInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selLTInt32Int16ConstOp) Next() coldata.Batch {
+func (p *selLTInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -22676,7 +23125,7 @@ func (p *selLTInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -22685,11 +23134,14 @@ type selLTInt32Int16Op struct {
 	selOpBase
 }
 
-func (p *selLTInt32Int16Op) Next() coldata.Batch {
+func (p *selLTInt32Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -22839,7 +23291,7 @@ func (p *selLTInt32Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -22849,11 +23301,14 @@ type selLTInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selLTInt32Int32ConstOp) Next() coldata.Batch {
+func (p *selLTInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -22992,7 +23447,7 @@ func (p *selLTInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -23001,11 +23456,14 @@ type selLTInt32Int32Op struct {
 	selOpBase
 }
 
-func (p *selLTInt32Int32Op) Next() coldata.Batch {
+func (p *selLTInt32Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -23155,7 +23613,7 @@ func (p *selLTInt32Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -23165,11 +23623,14 @@ type selLTInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selLTInt32Int64ConstOp) Next() coldata.Batch {
+func (p *selLTInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -23308,7 +23769,7 @@ func (p *selLTInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -23317,11 +23778,14 @@ type selLTInt32Int64Op struct {
 	selOpBase
 }
 
-func (p *selLTInt32Int64Op) Next() coldata.Batch {
+func (p *selLTInt32Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -23471,7 +23935,7 @@ func (p *selLTInt32Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -23481,11 +23945,14 @@ type selLTInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selLTInt32Float64ConstOp) Next() coldata.Batch {
+func (p *selLTInt32Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -23656,7 +24123,7 @@ func (p *selLTInt32Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -23665,11 +24132,14 @@ type selLTInt32Float64Op struct {
 	selOpBase
 }
 
-func (p *selLTInt32Float64Op) Next() coldata.Batch {
+func (p *selLTInt32Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -23851,7 +24321,7 @@ func (p *selLTInt32Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -23861,11 +24331,14 @@ type selLTInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selLTInt32DecimalConstOp) Next() coldata.Batch {
+func (p *selLTInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -23984,7 +24457,7 @@ func (p *selLTInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -23993,11 +24466,14 @@ type selLTInt32DecimalOp struct {
 	selOpBase
 }
 
-func (p *selLTInt32DecimalOp) Next() coldata.Batch {
+func (p *selLTInt32DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -24127,7 +24603,7 @@ func (p *selLTInt32DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -24137,11 +24613,14 @@ type selLTInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selLTInt64Int16ConstOp) Next() coldata.Batch {
+func (p *selLTInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -24280,7 +24759,7 @@ func (p *selLTInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -24289,11 +24768,14 @@ type selLTInt64Int16Op struct {
 	selOpBase
 }
 
-func (p *selLTInt64Int16Op) Next() coldata.Batch {
+func (p *selLTInt64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -24443,7 +24925,7 @@ func (p *selLTInt64Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -24453,11 +24935,14 @@ type selLTInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selLTInt64Int32ConstOp) Next() coldata.Batch {
+func (p *selLTInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -24596,7 +25081,7 @@ func (p *selLTInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -24605,11 +25090,14 @@ type selLTInt64Int32Op struct {
 	selOpBase
 }
 
-func (p *selLTInt64Int32Op) Next() coldata.Batch {
+func (p *selLTInt64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -24759,7 +25247,7 @@ func (p *selLTInt64Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -24769,11 +25257,14 @@ type selLTInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selLTInt64Int64ConstOp) Next() coldata.Batch {
+func (p *selLTInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -24912,7 +25403,7 @@ func (p *selLTInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -24921,11 +25412,14 @@ type selLTInt64Int64Op struct {
 	selOpBase
 }
 
-func (p *selLTInt64Int64Op) Next() coldata.Batch {
+func (p *selLTInt64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -25075,7 +25569,7 @@ func (p *selLTInt64Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -25085,11 +25579,14 @@ type selLTInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selLTInt64Float64ConstOp) Next() coldata.Batch {
+func (p *selLTInt64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -25260,7 +25757,7 @@ func (p *selLTInt64Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -25269,11 +25766,14 @@ type selLTInt64Float64Op struct {
 	selOpBase
 }
 
-func (p *selLTInt64Float64Op) Next() coldata.Batch {
+func (p *selLTInt64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -25455,7 +25955,7 @@ func (p *selLTInt64Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -25465,11 +25965,14 @@ type selLTInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selLTInt64DecimalConstOp) Next() coldata.Batch {
+func (p *selLTInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -25588,7 +26091,7 @@ func (p *selLTInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -25597,11 +26100,14 @@ type selLTInt64DecimalOp struct {
 	selOpBase
 }
 
-func (p *selLTInt64DecimalOp) Next() coldata.Batch {
+func (p *selLTInt64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -25731,7 +26237,7 @@ func (p *selLTInt64DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -25741,11 +26247,14 @@ type selLTFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selLTFloat64Int16ConstOp) Next() coldata.Batch {
+func (p *selLTFloat64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -25916,7 +26425,7 @@ func (p *selLTFloat64Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -25925,11 +26434,14 @@ type selLTFloat64Int16Op struct {
 	selOpBase
 }
 
-func (p *selLTFloat64Int16Op) Next() coldata.Batch {
+func (p *selLTFloat64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -26111,7 +26623,7 @@ func (p *selLTFloat64Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -26121,11 +26633,14 @@ type selLTFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selLTFloat64Int32ConstOp) Next() coldata.Batch {
+func (p *selLTFloat64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -26296,7 +26811,7 @@ func (p *selLTFloat64Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -26305,11 +26820,14 @@ type selLTFloat64Int32Op struct {
 	selOpBase
 }
 
-func (p *selLTFloat64Int32Op) Next() coldata.Batch {
+func (p *selLTFloat64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -26491,7 +27009,7 @@ func (p *selLTFloat64Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -26501,11 +27019,14 @@ type selLTFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selLTFloat64Int64ConstOp) Next() coldata.Batch {
+func (p *selLTFloat64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -26676,7 +27197,7 @@ func (p *selLTFloat64Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -26685,11 +27206,14 @@ type selLTFloat64Int64Op struct {
 	selOpBase
 }
 
-func (p *selLTFloat64Int64Op) Next() coldata.Batch {
+func (p *selLTFloat64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -26871,7 +27395,7 @@ func (p *selLTFloat64Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -26881,11 +27405,14 @@ type selLTFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selLTFloat64Float64ConstOp) Next() coldata.Batch {
+func (p *selLTFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -27056,7 +27583,7 @@ func (p *selLTFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -27065,11 +27592,14 @@ type selLTFloat64Float64Op struct {
 	selOpBase
 }
 
-func (p *selLTFloat64Float64Op) Next() coldata.Batch {
+func (p *selLTFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -27251,7 +27781,7 @@ func (p *selLTFloat64Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -27261,11 +27791,14 @@ type selLTFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selLTFloat64DecimalConstOp) Next() coldata.Batch {
+func (p *selLTFloat64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -27392,7 +27925,7 @@ func (p *selLTFloat64DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -27401,11 +27934,14 @@ type selLTFloat64DecimalOp struct {
 	selOpBase
 }
 
-func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
+func (p *selLTFloat64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -27543,7 +28079,7 @@ func (p *selLTFloat64DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -27553,11 +28089,14 @@ type selLTTimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p *selLTTimestampTimestampConstOp) Next() coldata.Batch {
+func (p *selLTTimestampTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -27680,7 +28219,7 @@ func (p *selLTTimestampTimestampConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -27689,11 +28228,14 @@ type selLTTimestampTimestampOp struct {
 	selOpBase
 }
 
-func (p *selLTTimestampTimestampOp) Next() coldata.Batch {
+func (p *selLTTimestampTimestampOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -27827,7 +28369,7 @@ func (p *selLTTimestampTimestampOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -27837,11 +28379,14 @@ type selLTIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p *selLTIntervalIntervalConstOp) Next() coldata.Batch {
+func (p *selLTIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -27936,7 +28481,7 @@ func (p *selLTIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -27945,11 +28490,14 @@ type selLTIntervalIntervalOp struct {
 	selOpBase
 }
 
-func (p *selLTIntervalIntervalOp) Next() coldata.Batch {
+func (p *selLTIntervalIntervalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -28055,7 +28603,7 @@ func (p *selLTIntervalIntervalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -28065,11 +28613,14 @@ type selLTJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p *selLTJSONJSONConstOp) Next() coldata.Batch {
+func (p *selLTJSONJSONConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -28186,7 +28737,7 @@ func (p *selLTJSONJSONConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -28195,11 +28746,14 @@ type selLTJSONJSONOp struct {
 	selOpBase
 }
 
-func (p *selLTJSONJSONOp) Next() coldata.Batch {
+func (p *selLTJSONJSONOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -28325,7 +28879,7 @@ func (p *selLTJSONJSONOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -28335,11 +28889,14 @@ type selLTDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p *selLTDatumDatumConstOp) Next() coldata.Batch {
+func (p *selLTDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -28440,7 +28997,7 @@ func (p *selLTDatumDatumConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -28449,11 +29006,14 @@ type selLTDatumDatumOp struct {
 	selOpBase
 }
 
-func (p *selLTDatumDatumOp) Next() coldata.Batch {
+func (p *selLTDatumDatumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -28563,7 +29123,7 @@ func (p *selLTDatumDatumOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -28573,11 +29133,14 @@ type selLEBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p *selLEBoolBoolConstOp) Next() coldata.Batch {
+func (p *selLEBoolBoolConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -28704,7 +29267,7 @@ func (p *selLEBoolBoolConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -28713,11 +29276,14 @@ type selLEBoolBoolOp struct {
 	selOpBase
 }
 
-func (p *selLEBoolBoolOp) Next() coldata.Batch {
+func (p *selLEBoolBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -28855,7 +29421,7 @@ func (p *selLEBoolBoolOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -28865,11 +29431,14 @@ type selLEBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p *selLEBytesBytesConstOp) Next() coldata.Batch {
+func (p *selLEBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -28962,7 +29531,7 @@ func (p *selLEBytesBytesConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -28971,11 +29540,14 @@ type selLEBytesBytesOp struct {
 	selOpBase
 }
 
-func (p *selLEBytesBytesOp) Next() coldata.Batch {
+func (p *selLEBytesBytesOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -29077,7 +29649,7 @@ func (p *selLEBytesBytesOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -29087,11 +29659,14 @@ type selLEDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p *selLEDecimalInt16ConstOp) Next() coldata.Batch {
+func (p *selLEDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -29210,7 +29785,7 @@ func (p *selLEDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -29219,11 +29794,14 @@ type selLEDecimalInt16Op struct {
 	selOpBase
 }
 
-func (p *selLEDecimalInt16Op) Next() coldata.Batch {
+func (p *selLEDecimalInt16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -29353,7 +29931,7 @@ func (p *selLEDecimalInt16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -29363,11 +29941,14 @@ type selLEDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p *selLEDecimalInt32ConstOp) Next() coldata.Batch {
+func (p *selLEDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -29486,7 +30067,7 @@ func (p *selLEDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -29495,11 +30076,14 @@ type selLEDecimalInt32Op struct {
 	selOpBase
 }
 
-func (p *selLEDecimalInt32Op) Next() coldata.Batch {
+func (p *selLEDecimalInt32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -29629,7 +30213,7 @@ func (p *selLEDecimalInt32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -29639,11 +30223,14 @@ type selLEDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p *selLEDecimalInt64ConstOp) Next() coldata.Batch {
+func (p *selLEDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -29762,7 +30349,7 @@ func (p *selLEDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -29771,11 +30358,14 @@ type selLEDecimalInt64Op struct {
 	selOpBase
 }
 
-func (p *selLEDecimalInt64Op) Next() coldata.Batch {
+func (p *selLEDecimalInt64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -29905,7 +30495,7 @@ func (p *selLEDecimalInt64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -29915,11 +30505,14 @@ type selLEDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p *selLEDecimalFloat64ConstOp) Next() coldata.Batch {
+func (p *selLEDecimalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -30046,7 +30639,7 @@ func (p *selLEDecimalFloat64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -30055,11 +30648,14 @@ type selLEDecimalFloat64Op struct {
 	selOpBase
 }
 
-func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
+func (p *selLEDecimalFloat64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -30197,7 +30793,7 @@ func (p *selLEDecimalFloat64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -30207,11 +30803,14 @@ type selLEDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selLEDecimalDecimalConstOp) Next() coldata.Batch {
+func (p *selLEDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -30306,7 +30905,7 @@ func (p *selLEDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -30315,11 +30914,14 @@ type selLEDecimalDecimalOp struct {
 	selOpBase
 }
 
-func (p *selLEDecimalDecimalOp) Next() coldata.Batch {
+func (p *selLEDecimalDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -30425,7 +31027,7 @@ func (p *selLEDecimalDecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -30435,11 +31037,14 @@ type selLEInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selLEInt16Int16ConstOp) Next() coldata.Batch {
+func (p *selLEInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -30578,7 +31183,7 @@ func (p *selLEInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -30587,11 +31192,14 @@ type selLEInt16Int16Op struct {
 	selOpBase
 }
 
-func (p *selLEInt16Int16Op) Next() coldata.Batch {
+func (p *selLEInt16Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -30741,7 +31349,7 @@ func (p *selLEInt16Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -30751,11 +31359,14 @@ type selLEInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selLEInt16Int32ConstOp) Next() coldata.Batch {
+func (p *selLEInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -30894,7 +31505,7 @@ func (p *selLEInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -30903,11 +31514,14 @@ type selLEInt16Int32Op struct {
 	selOpBase
 }
 
-func (p *selLEInt16Int32Op) Next() coldata.Batch {
+func (p *selLEInt16Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -31057,7 +31671,7 @@ func (p *selLEInt16Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -31067,11 +31681,14 @@ type selLEInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selLEInt16Int64ConstOp) Next() coldata.Batch {
+func (p *selLEInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -31210,7 +31827,7 @@ func (p *selLEInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -31219,11 +31836,14 @@ type selLEInt16Int64Op struct {
 	selOpBase
 }
 
-func (p *selLEInt16Int64Op) Next() coldata.Batch {
+func (p *selLEInt16Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -31373,7 +31993,7 @@ func (p *selLEInt16Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -31383,11 +32003,14 @@ type selLEInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selLEInt16Float64ConstOp) Next() coldata.Batch {
+func (p *selLEInt16Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -31558,7 +32181,7 @@ func (p *selLEInt16Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -31567,11 +32190,14 @@ type selLEInt16Float64Op struct {
 	selOpBase
 }
 
-func (p *selLEInt16Float64Op) Next() coldata.Batch {
+func (p *selLEInt16Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -31753,7 +32379,7 @@ func (p *selLEInt16Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -31763,11 +32389,14 @@ type selLEInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selLEInt16DecimalConstOp) Next() coldata.Batch {
+func (p *selLEInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -31886,7 +32515,7 @@ func (p *selLEInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -31895,11 +32524,14 @@ type selLEInt16DecimalOp struct {
 	selOpBase
 }
 
-func (p *selLEInt16DecimalOp) Next() coldata.Batch {
+func (p *selLEInt16DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -32029,7 +32661,7 @@ func (p *selLEInt16DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -32039,11 +32671,14 @@ type selLEInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selLEInt32Int16ConstOp) Next() coldata.Batch {
+func (p *selLEInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -32182,7 +32817,7 @@ func (p *selLEInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -32191,11 +32826,14 @@ type selLEInt32Int16Op struct {
 	selOpBase
 }
 
-func (p *selLEInt32Int16Op) Next() coldata.Batch {
+func (p *selLEInt32Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -32345,7 +32983,7 @@ func (p *selLEInt32Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -32355,11 +32993,14 @@ type selLEInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selLEInt32Int32ConstOp) Next() coldata.Batch {
+func (p *selLEInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -32498,7 +33139,7 @@ func (p *selLEInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -32507,11 +33148,14 @@ type selLEInt32Int32Op struct {
 	selOpBase
 }
 
-func (p *selLEInt32Int32Op) Next() coldata.Batch {
+func (p *selLEInt32Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -32661,7 +33305,7 @@ func (p *selLEInt32Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -32671,11 +33315,14 @@ type selLEInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selLEInt32Int64ConstOp) Next() coldata.Batch {
+func (p *selLEInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -32814,7 +33461,7 @@ func (p *selLEInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -32823,11 +33470,14 @@ type selLEInt32Int64Op struct {
 	selOpBase
 }
 
-func (p *selLEInt32Int64Op) Next() coldata.Batch {
+func (p *selLEInt32Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -32977,7 +33627,7 @@ func (p *selLEInt32Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -32987,11 +33637,14 @@ type selLEInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selLEInt32Float64ConstOp) Next() coldata.Batch {
+func (p *selLEInt32Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -33162,7 +33815,7 @@ func (p *selLEInt32Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -33171,11 +33824,14 @@ type selLEInt32Float64Op struct {
 	selOpBase
 }
 
-func (p *selLEInt32Float64Op) Next() coldata.Batch {
+func (p *selLEInt32Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -33357,7 +34013,7 @@ func (p *selLEInt32Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -33367,11 +34023,14 @@ type selLEInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selLEInt32DecimalConstOp) Next() coldata.Batch {
+func (p *selLEInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -33490,7 +34149,7 @@ func (p *selLEInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -33499,11 +34158,14 @@ type selLEInt32DecimalOp struct {
 	selOpBase
 }
 
-func (p *selLEInt32DecimalOp) Next() coldata.Batch {
+func (p *selLEInt32DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -33633,7 +34295,7 @@ func (p *selLEInt32DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -33643,11 +34305,14 @@ type selLEInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selLEInt64Int16ConstOp) Next() coldata.Batch {
+func (p *selLEInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -33786,7 +34451,7 @@ func (p *selLEInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -33795,11 +34460,14 @@ type selLEInt64Int16Op struct {
 	selOpBase
 }
 
-func (p *selLEInt64Int16Op) Next() coldata.Batch {
+func (p *selLEInt64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -33949,7 +34617,7 @@ func (p *selLEInt64Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -33959,11 +34627,14 @@ type selLEInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selLEInt64Int32ConstOp) Next() coldata.Batch {
+func (p *selLEInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -34102,7 +34773,7 @@ func (p *selLEInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -34111,11 +34782,14 @@ type selLEInt64Int32Op struct {
 	selOpBase
 }
 
-func (p *selLEInt64Int32Op) Next() coldata.Batch {
+func (p *selLEInt64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -34265,7 +34939,7 @@ func (p *selLEInt64Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -34275,11 +34949,14 @@ type selLEInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selLEInt64Int64ConstOp) Next() coldata.Batch {
+func (p *selLEInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -34418,7 +35095,7 @@ func (p *selLEInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -34427,11 +35104,14 @@ type selLEInt64Int64Op struct {
 	selOpBase
 }
 
-func (p *selLEInt64Int64Op) Next() coldata.Batch {
+func (p *selLEInt64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -34581,7 +35261,7 @@ func (p *selLEInt64Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -34591,11 +35271,14 @@ type selLEInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selLEInt64Float64ConstOp) Next() coldata.Batch {
+func (p *selLEInt64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -34766,7 +35449,7 @@ func (p *selLEInt64Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -34775,11 +35458,14 @@ type selLEInt64Float64Op struct {
 	selOpBase
 }
 
-func (p *selLEInt64Float64Op) Next() coldata.Batch {
+func (p *selLEInt64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -34961,7 +35647,7 @@ func (p *selLEInt64Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -34971,11 +35657,14 @@ type selLEInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selLEInt64DecimalConstOp) Next() coldata.Batch {
+func (p *selLEInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -35094,7 +35783,7 @@ func (p *selLEInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -35103,11 +35792,14 @@ type selLEInt64DecimalOp struct {
 	selOpBase
 }
 
-func (p *selLEInt64DecimalOp) Next() coldata.Batch {
+func (p *selLEInt64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -35237,7 +35929,7 @@ func (p *selLEInt64DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -35247,11 +35939,14 @@ type selLEFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selLEFloat64Int16ConstOp) Next() coldata.Batch {
+func (p *selLEFloat64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -35422,7 +36117,7 @@ func (p *selLEFloat64Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -35431,11 +36126,14 @@ type selLEFloat64Int16Op struct {
 	selOpBase
 }
 
-func (p *selLEFloat64Int16Op) Next() coldata.Batch {
+func (p *selLEFloat64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -35617,7 +36315,7 @@ func (p *selLEFloat64Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -35627,11 +36325,14 @@ type selLEFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selLEFloat64Int32ConstOp) Next() coldata.Batch {
+func (p *selLEFloat64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -35802,7 +36503,7 @@ func (p *selLEFloat64Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -35811,11 +36512,14 @@ type selLEFloat64Int32Op struct {
 	selOpBase
 }
 
-func (p *selLEFloat64Int32Op) Next() coldata.Batch {
+func (p *selLEFloat64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -35997,7 +36701,7 @@ func (p *selLEFloat64Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -36007,11 +36711,14 @@ type selLEFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selLEFloat64Int64ConstOp) Next() coldata.Batch {
+func (p *selLEFloat64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -36182,7 +36889,7 @@ func (p *selLEFloat64Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -36191,11 +36898,14 @@ type selLEFloat64Int64Op struct {
 	selOpBase
 }
 
-func (p *selLEFloat64Int64Op) Next() coldata.Batch {
+func (p *selLEFloat64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -36377,7 +37087,7 @@ func (p *selLEFloat64Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -36387,11 +37097,14 @@ type selLEFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selLEFloat64Float64ConstOp) Next() coldata.Batch {
+func (p *selLEFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -36562,7 +37275,7 @@ func (p *selLEFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -36571,11 +37284,14 @@ type selLEFloat64Float64Op struct {
 	selOpBase
 }
 
-func (p *selLEFloat64Float64Op) Next() coldata.Batch {
+func (p *selLEFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -36757,7 +37473,7 @@ func (p *selLEFloat64Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -36767,11 +37483,14 @@ type selLEFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selLEFloat64DecimalConstOp) Next() coldata.Batch {
+func (p *selLEFloat64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -36898,7 +37617,7 @@ func (p *selLEFloat64DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -36907,11 +37626,14 @@ type selLEFloat64DecimalOp struct {
 	selOpBase
 }
 
-func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
+func (p *selLEFloat64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -37049,7 +37771,7 @@ func (p *selLEFloat64DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -37059,11 +37781,14 @@ type selLETimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p *selLETimestampTimestampConstOp) Next() coldata.Batch {
+func (p *selLETimestampTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -37186,7 +37911,7 @@ func (p *selLETimestampTimestampConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -37195,11 +37920,14 @@ type selLETimestampTimestampOp struct {
 	selOpBase
 }
 
-func (p *selLETimestampTimestampOp) Next() coldata.Batch {
+func (p *selLETimestampTimestampOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -37333,7 +38061,7 @@ func (p *selLETimestampTimestampOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -37343,11 +38071,14 @@ type selLEIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p *selLEIntervalIntervalConstOp) Next() coldata.Batch {
+func (p *selLEIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -37442,7 +38173,7 @@ func (p *selLEIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -37451,11 +38182,14 @@ type selLEIntervalIntervalOp struct {
 	selOpBase
 }
 
-func (p *selLEIntervalIntervalOp) Next() coldata.Batch {
+func (p *selLEIntervalIntervalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -37561,7 +38295,7 @@ func (p *selLEIntervalIntervalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -37571,11 +38305,14 @@ type selLEJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p *selLEJSONJSONConstOp) Next() coldata.Batch {
+func (p *selLEJSONJSONConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -37692,7 +38429,7 @@ func (p *selLEJSONJSONConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -37701,11 +38438,14 @@ type selLEJSONJSONOp struct {
 	selOpBase
 }
 
-func (p *selLEJSONJSONOp) Next() coldata.Batch {
+func (p *selLEJSONJSONOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -37831,7 +38571,7 @@ func (p *selLEJSONJSONOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -37841,11 +38581,14 @@ type selLEDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p *selLEDatumDatumConstOp) Next() coldata.Batch {
+func (p *selLEDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -37946,7 +38689,7 @@ func (p *selLEDatumDatumConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -37955,11 +38698,14 @@ type selLEDatumDatumOp struct {
 	selOpBase
 }
 
-func (p *selLEDatumDatumOp) Next() coldata.Batch {
+func (p *selLEDatumDatumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -38069,7 +38815,7 @@ func (p *selLEDatumDatumOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -38079,11 +38825,14 @@ type selGTBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p *selGTBoolBoolConstOp) Next() coldata.Batch {
+func (p *selGTBoolBoolConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -38210,7 +38959,7 @@ func (p *selGTBoolBoolConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -38219,11 +38968,14 @@ type selGTBoolBoolOp struct {
 	selOpBase
 }
 
-func (p *selGTBoolBoolOp) Next() coldata.Batch {
+func (p *selGTBoolBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -38361,7 +39113,7 @@ func (p *selGTBoolBoolOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -38371,11 +39123,14 @@ type selGTBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p *selGTBytesBytesConstOp) Next() coldata.Batch {
+func (p *selGTBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -38468,7 +39223,7 @@ func (p *selGTBytesBytesConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -38477,11 +39232,14 @@ type selGTBytesBytesOp struct {
 	selOpBase
 }
 
-func (p *selGTBytesBytesOp) Next() coldata.Batch {
+func (p *selGTBytesBytesOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -38583,7 +39341,7 @@ func (p *selGTBytesBytesOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -38593,11 +39351,14 @@ type selGTDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p *selGTDecimalInt16ConstOp) Next() coldata.Batch {
+func (p *selGTDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -38716,7 +39477,7 @@ func (p *selGTDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -38725,11 +39486,14 @@ type selGTDecimalInt16Op struct {
 	selOpBase
 }
 
-func (p *selGTDecimalInt16Op) Next() coldata.Batch {
+func (p *selGTDecimalInt16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -38859,7 +39623,7 @@ func (p *selGTDecimalInt16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -38869,11 +39633,14 @@ type selGTDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p *selGTDecimalInt32ConstOp) Next() coldata.Batch {
+func (p *selGTDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -38992,7 +39759,7 @@ func (p *selGTDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -39001,11 +39768,14 @@ type selGTDecimalInt32Op struct {
 	selOpBase
 }
 
-func (p *selGTDecimalInt32Op) Next() coldata.Batch {
+func (p *selGTDecimalInt32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -39135,7 +39905,7 @@ func (p *selGTDecimalInt32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -39145,11 +39915,14 @@ type selGTDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p *selGTDecimalInt64ConstOp) Next() coldata.Batch {
+func (p *selGTDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -39268,7 +40041,7 @@ func (p *selGTDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -39277,11 +40050,14 @@ type selGTDecimalInt64Op struct {
 	selOpBase
 }
 
-func (p *selGTDecimalInt64Op) Next() coldata.Batch {
+func (p *selGTDecimalInt64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -39411,7 +40187,7 @@ func (p *selGTDecimalInt64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -39421,11 +40197,14 @@ type selGTDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p *selGTDecimalFloat64ConstOp) Next() coldata.Batch {
+func (p *selGTDecimalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -39552,7 +40331,7 @@ func (p *selGTDecimalFloat64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -39561,11 +40340,14 @@ type selGTDecimalFloat64Op struct {
 	selOpBase
 }
 
-func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
+func (p *selGTDecimalFloat64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -39703,7 +40485,7 @@ func (p *selGTDecimalFloat64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -39713,11 +40495,14 @@ type selGTDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selGTDecimalDecimalConstOp) Next() coldata.Batch {
+func (p *selGTDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -39812,7 +40597,7 @@ func (p *selGTDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -39821,11 +40606,14 @@ type selGTDecimalDecimalOp struct {
 	selOpBase
 }
 
-func (p *selGTDecimalDecimalOp) Next() coldata.Batch {
+func (p *selGTDecimalDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -39931,7 +40719,7 @@ func (p *selGTDecimalDecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -39941,11 +40729,14 @@ type selGTInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selGTInt16Int16ConstOp) Next() coldata.Batch {
+func (p *selGTInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -40084,7 +40875,7 @@ func (p *selGTInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -40093,11 +40884,14 @@ type selGTInt16Int16Op struct {
 	selOpBase
 }
 
-func (p *selGTInt16Int16Op) Next() coldata.Batch {
+func (p *selGTInt16Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -40247,7 +41041,7 @@ func (p *selGTInt16Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -40257,11 +41051,14 @@ type selGTInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selGTInt16Int32ConstOp) Next() coldata.Batch {
+func (p *selGTInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -40400,7 +41197,7 @@ func (p *selGTInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -40409,11 +41206,14 @@ type selGTInt16Int32Op struct {
 	selOpBase
 }
 
-func (p *selGTInt16Int32Op) Next() coldata.Batch {
+func (p *selGTInt16Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -40563,7 +41363,7 @@ func (p *selGTInt16Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -40573,11 +41373,14 @@ type selGTInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selGTInt16Int64ConstOp) Next() coldata.Batch {
+func (p *selGTInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -40716,7 +41519,7 @@ func (p *selGTInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -40725,11 +41528,14 @@ type selGTInt16Int64Op struct {
 	selOpBase
 }
 
-func (p *selGTInt16Int64Op) Next() coldata.Batch {
+func (p *selGTInt16Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -40879,7 +41685,7 @@ func (p *selGTInt16Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -40889,11 +41695,14 @@ type selGTInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selGTInt16Float64ConstOp) Next() coldata.Batch {
+func (p *selGTInt16Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -41064,7 +41873,7 @@ func (p *selGTInt16Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -41073,11 +41882,14 @@ type selGTInt16Float64Op struct {
 	selOpBase
 }
 
-func (p *selGTInt16Float64Op) Next() coldata.Batch {
+func (p *selGTInt16Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -41259,7 +42071,7 @@ func (p *selGTInt16Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -41269,11 +42081,14 @@ type selGTInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selGTInt16DecimalConstOp) Next() coldata.Batch {
+func (p *selGTInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -41392,7 +42207,7 @@ func (p *selGTInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -41401,11 +42216,14 @@ type selGTInt16DecimalOp struct {
 	selOpBase
 }
 
-func (p *selGTInt16DecimalOp) Next() coldata.Batch {
+func (p *selGTInt16DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -41535,7 +42353,7 @@ func (p *selGTInt16DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -41545,11 +42363,14 @@ type selGTInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selGTInt32Int16ConstOp) Next() coldata.Batch {
+func (p *selGTInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -41688,7 +42509,7 @@ func (p *selGTInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -41697,11 +42518,14 @@ type selGTInt32Int16Op struct {
 	selOpBase
 }
 
-func (p *selGTInt32Int16Op) Next() coldata.Batch {
+func (p *selGTInt32Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -41851,7 +42675,7 @@ func (p *selGTInt32Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -41861,11 +42685,14 @@ type selGTInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selGTInt32Int32ConstOp) Next() coldata.Batch {
+func (p *selGTInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -42004,7 +42831,7 @@ func (p *selGTInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -42013,11 +42840,14 @@ type selGTInt32Int32Op struct {
 	selOpBase
 }
 
-func (p *selGTInt32Int32Op) Next() coldata.Batch {
+func (p *selGTInt32Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -42167,7 +42997,7 @@ func (p *selGTInt32Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -42177,11 +43007,14 @@ type selGTInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selGTInt32Int64ConstOp) Next() coldata.Batch {
+func (p *selGTInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -42320,7 +43153,7 @@ func (p *selGTInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -42329,11 +43162,14 @@ type selGTInt32Int64Op struct {
 	selOpBase
 }
 
-func (p *selGTInt32Int64Op) Next() coldata.Batch {
+func (p *selGTInt32Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -42483,7 +43319,7 @@ func (p *selGTInt32Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -42493,11 +43329,14 @@ type selGTInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selGTInt32Float64ConstOp) Next() coldata.Batch {
+func (p *selGTInt32Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -42668,7 +43507,7 @@ func (p *selGTInt32Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -42677,11 +43516,14 @@ type selGTInt32Float64Op struct {
 	selOpBase
 }
 
-func (p *selGTInt32Float64Op) Next() coldata.Batch {
+func (p *selGTInt32Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -42863,7 +43705,7 @@ func (p *selGTInt32Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -42873,11 +43715,14 @@ type selGTInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selGTInt32DecimalConstOp) Next() coldata.Batch {
+func (p *selGTInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -42996,7 +43841,7 @@ func (p *selGTInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -43005,11 +43850,14 @@ type selGTInt32DecimalOp struct {
 	selOpBase
 }
 
-func (p *selGTInt32DecimalOp) Next() coldata.Batch {
+func (p *selGTInt32DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -43139,7 +43987,7 @@ func (p *selGTInt32DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -43149,11 +43997,14 @@ type selGTInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selGTInt64Int16ConstOp) Next() coldata.Batch {
+func (p *selGTInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -43292,7 +44143,7 @@ func (p *selGTInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -43301,11 +44152,14 @@ type selGTInt64Int16Op struct {
 	selOpBase
 }
 
-func (p *selGTInt64Int16Op) Next() coldata.Batch {
+func (p *selGTInt64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -43455,7 +44309,7 @@ func (p *selGTInt64Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -43465,11 +44319,14 @@ type selGTInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selGTInt64Int32ConstOp) Next() coldata.Batch {
+func (p *selGTInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -43608,7 +44465,7 @@ func (p *selGTInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -43617,11 +44474,14 @@ type selGTInt64Int32Op struct {
 	selOpBase
 }
 
-func (p *selGTInt64Int32Op) Next() coldata.Batch {
+func (p *selGTInt64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -43771,7 +44631,7 @@ func (p *selGTInt64Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -43781,11 +44641,14 @@ type selGTInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selGTInt64Int64ConstOp) Next() coldata.Batch {
+func (p *selGTInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -43924,7 +44787,7 @@ func (p *selGTInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -43933,11 +44796,14 @@ type selGTInt64Int64Op struct {
 	selOpBase
 }
 
-func (p *selGTInt64Int64Op) Next() coldata.Batch {
+func (p *selGTInt64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -44087,7 +44953,7 @@ func (p *selGTInt64Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -44097,11 +44963,14 @@ type selGTInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selGTInt64Float64ConstOp) Next() coldata.Batch {
+func (p *selGTInt64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -44272,7 +45141,7 @@ func (p *selGTInt64Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -44281,11 +45150,14 @@ type selGTInt64Float64Op struct {
 	selOpBase
 }
 
-func (p *selGTInt64Float64Op) Next() coldata.Batch {
+func (p *selGTInt64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -44467,7 +45339,7 @@ func (p *selGTInt64Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -44477,11 +45349,14 @@ type selGTInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selGTInt64DecimalConstOp) Next() coldata.Batch {
+func (p *selGTInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -44600,7 +45475,7 @@ func (p *selGTInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -44609,11 +45484,14 @@ type selGTInt64DecimalOp struct {
 	selOpBase
 }
 
-func (p *selGTInt64DecimalOp) Next() coldata.Batch {
+func (p *selGTInt64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -44743,7 +45621,7 @@ func (p *selGTInt64DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -44753,11 +45631,14 @@ type selGTFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selGTFloat64Int16ConstOp) Next() coldata.Batch {
+func (p *selGTFloat64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -44928,7 +45809,7 @@ func (p *selGTFloat64Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -44937,11 +45818,14 @@ type selGTFloat64Int16Op struct {
 	selOpBase
 }
 
-func (p *selGTFloat64Int16Op) Next() coldata.Batch {
+func (p *selGTFloat64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -45123,7 +46007,7 @@ func (p *selGTFloat64Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -45133,11 +46017,14 @@ type selGTFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selGTFloat64Int32ConstOp) Next() coldata.Batch {
+func (p *selGTFloat64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -45308,7 +46195,7 @@ func (p *selGTFloat64Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -45317,11 +46204,14 @@ type selGTFloat64Int32Op struct {
 	selOpBase
 }
 
-func (p *selGTFloat64Int32Op) Next() coldata.Batch {
+func (p *selGTFloat64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -45503,7 +46393,7 @@ func (p *selGTFloat64Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -45513,11 +46403,14 @@ type selGTFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selGTFloat64Int64ConstOp) Next() coldata.Batch {
+func (p *selGTFloat64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -45688,7 +46581,7 @@ func (p *selGTFloat64Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -45697,11 +46590,14 @@ type selGTFloat64Int64Op struct {
 	selOpBase
 }
 
-func (p *selGTFloat64Int64Op) Next() coldata.Batch {
+func (p *selGTFloat64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -45883,7 +46779,7 @@ func (p *selGTFloat64Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -45893,11 +46789,14 @@ type selGTFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selGTFloat64Float64ConstOp) Next() coldata.Batch {
+func (p *selGTFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -46068,7 +46967,7 @@ func (p *selGTFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -46077,11 +46976,14 @@ type selGTFloat64Float64Op struct {
 	selOpBase
 }
 
-func (p *selGTFloat64Float64Op) Next() coldata.Batch {
+func (p *selGTFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -46263,7 +47165,7 @@ func (p *selGTFloat64Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -46273,11 +47175,14 @@ type selGTFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selGTFloat64DecimalConstOp) Next() coldata.Batch {
+func (p *selGTFloat64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -46404,7 +47309,7 @@ func (p *selGTFloat64DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -46413,11 +47318,14 @@ type selGTFloat64DecimalOp struct {
 	selOpBase
 }
 
-func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
+func (p *selGTFloat64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -46555,7 +47463,7 @@ func (p *selGTFloat64DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -46565,11 +47473,14 @@ type selGTTimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p *selGTTimestampTimestampConstOp) Next() coldata.Batch {
+func (p *selGTTimestampTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -46692,7 +47603,7 @@ func (p *selGTTimestampTimestampConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -46701,11 +47612,14 @@ type selGTTimestampTimestampOp struct {
 	selOpBase
 }
 
-func (p *selGTTimestampTimestampOp) Next() coldata.Batch {
+func (p *selGTTimestampTimestampOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -46839,7 +47753,7 @@ func (p *selGTTimestampTimestampOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -46849,11 +47763,14 @@ type selGTIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p *selGTIntervalIntervalConstOp) Next() coldata.Batch {
+func (p *selGTIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -46948,7 +47865,7 @@ func (p *selGTIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -46957,11 +47874,14 @@ type selGTIntervalIntervalOp struct {
 	selOpBase
 }
 
-func (p *selGTIntervalIntervalOp) Next() coldata.Batch {
+func (p *selGTIntervalIntervalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -47067,7 +47987,7 @@ func (p *selGTIntervalIntervalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -47077,11 +47997,14 @@ type selGTJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p *selGTJSONJSONConstOp) Next() coldata.Batch {
+func (p *selGTJSONJSONConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -47198,7 +48121,7 @@ func (p *selGTJSONJSONConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -47207,11 +48130,14 @@ type selGTJSONJSONOp struct {
 	selOpBase
 }
 
-func (p *selGTJSONJSONOp) Next() coldata.Batch {
+func (p *selGTJSONJSONOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -47337,7 +48263,7 @@ func (p *selGTJSONJSONOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -47347,11 +48273,14 @@ type selGTDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p *selGTDatumDatumConstOp) Next() coldata.Batch {
+func (p *selGTDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -47452,7 +48381,7 @@ func (p *selGTDatumDatumConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -47461,11 +48390,14 @@ type selGTDatumDatumOp struct {
 	selOpBase
 }
 
-func (p *selGTDatumDatumOp) Next() coldata.Batch {
+func (p *selGTDatumDatumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -47575,7 +48507,7 @@ func (p *selGTDatumDatumOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -47585,11 +48517,14 @@ type selGEBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p *selGEBoolBoolConstOp) Next() coldata.Batch {
+func (p *selGEBoolBoolConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -47716,7 +48651,7 @@ func (p *selGEBoolBoolConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -47725,11 +48660,14 @@ type selGEBoolBoolOp struct {
 	selOpBase
 }
 
-func (p *selGEBoolBoolOp) Next() coldata.Batch {
+func (p *selGEBoolBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -47867,7 +48805,7 @@ func (p *selGEBoolBoolOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -47877,11 +48815,14 @@ type selGEBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p *selGEBytesBytesConstOp) Next() coldata.Batch {
+func (p *selGEBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -47974,7 +48915,7 @@ func (p *selGEBytesBytesConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -47983,11 +48924,14 @@ type selGEBytesBytesOp struct {
 	selOpBase
 }
 
-func (p *selGEBytesBytesOp) Next() coldata.Batch {
+func (p *selGEBytesBytesOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -48089,7 +49033,7 @@ func (p *selGEBytesBytesOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -48099,11 +49043,14 @@ type selGEDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p *selGEDecimalInt16ConstOp) Next() coldata.Batch {
+func (p *selGEDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -48222,7 +49169,7 @@ func (p *selGEDecimalInt16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -48231,11 +49178,14 @@ type selGEDecimalInt16Op struct {
 	selOpBase
 }
 
-func (p *selGEDecimalInt16Op) Next() coldata.Batch {
+func (p *selGEDecimalInt16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -48365,7 +49315,7 @@ func (p *selGEDecimalInt16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -48375,11 +49325,14 @@ type selGEDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p *selGEDecimalInt32ConstOp) Next() coldata.Batch {
+func (p *selGEDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -48498,7 +49451,7 @@ func (p *selGEDecimalInt32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -48507,11 +49460,14 @@ type selGEDecimalInt32Op struct {
 	selOpBase
 }
 
-func (p *selGEDecimalInt32Op) Next() coldata.Batch {
+func (p *selGEDecimalInt32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -48641,7 +49597,7 @@ func (p *selGEDecimalInt32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -48651,11 +49607,14 @@ type selGEDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p *selGEDecimalInt64ConstOp) Next() coldata.Batch {
+func (p *selGEDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -48774,7 +49733,7 @@ func (p *selGEDecimalInt64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -48783,11 +49742,14 @@ type selGEDecimalInt64Op struct {
 	selOpBase
 }
 
-func (p *selGEDecimalInt64Op) Next() coldata.Batch {
+func (p *selGEDecimalInt64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -48917,7 +49879,7 @@ func (p *selGEDecimalInt64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -48927,11 +49889,14 @@ type selGEDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p *selGEDecimalFloat64ConstOp) Next() coldata.Batch {
+func (p *selGEDecimalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -49058,7 +50023,7 @@ func (p *selGEDecimalFloat64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -49067,11 +50032,14 @@ type selGEDecimalFloat64Op struct {
 	selOpBase
 }
 
-func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
+func (p *selGEDecimalFloat64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -49209,7 +50177,7 @@ func (p *selGEDecimalFloat64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -49219,11 +50187,14 @@ type selGEDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selGEDecimalDecimalConstOp) Next() coldata.Batch {
+func (p *selGEDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -49318,7 +50289,7 @@ func (p *selGEDecimalDecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -49327,11 +50298,14 @@ type selGEDecimalDecimalOp struct {
 	selOpBase
 }
 
-func (p *selGEDecimalDecimalOp) Next() coldata.Batch {
+func (p *selGEDecimalDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -49437,7 +50411,7 @@ func (p *selGEDecimalDecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -49447,11 +50421,14 @@ type selGEInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selGEInt16Int16ConstOp) Next() coldata.Batch {
+func (p *selGEInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -49590,7 +50567,7 @@ func (p *selGEInt16Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -49599,11 +50576,14 @@ type selGEInt16Int16Op struct {
 	selOpBase
 }
 
-func (p *selGEInt16Int16Op) Next() coldata.Batch {
+func (p *selGEInt16Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -49753,7 +50733,7 @@ func (p *selGEInt16Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -49763,11 +50743,14 @@ type selGEInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selGEInt16Int32ConstOp) Next() coldata.Batch {
+func (p *selGEInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -49906,7 +50889,7 @@ func (p *selGEInt16Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -49915,11 +50898,14 @@ type selGEInt16Int32Op struct {
 	selOpBase
 }
 
-func (p *selGEInt16Int32Op) Next() coldata.Batch {
+func (p *selGEInt16Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -50069,7 +51055,7 @@ func (p *selGEInt16Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -50079,11 +51065,14 @@ type selGEInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selGEInt16Int64ConstOp) Next() coldata.Batch {
+func (p *selGEInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -50222,7 +51211,7 @@ func (p *selGEInt16Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -50231,11 +51220,14 @@ type selGEInt16Int64Op struct {
 	selOpBase
 }
 
-func (p *selGEInt16Int64Op) Next() coldata.Batch {
+func (p *selGEInt16Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -50385,7 +51377,7 @@ func (p *selGEInt16Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -50395,11 +51387,14 @@ type selGEInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selGEInt16Float64ConstOp) Next() coldata.Batch {
+func (p *selGEInt16Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -50570,7 +51565,7 @@ func (p *selGEInt16Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -50579,11 +51574,14 @@ type selGEInt16Float64Op struct {
 	selOpBase
 }
 
-func (p *selGEInt16Float64Op) Next() coldata.Batch {
+func (p *selGEInt16Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -50765,7 +51763,7 @@ func (p *selGEInt16Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -50775,11 +51773,14 @@ type selGEInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selGEInt16DecimalConstOp) Next() coldata.Batch {
+func (p *selGEInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -50898,7 +51899,7 @@ func (p *selGEInt16DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -50907,11 +51908,14 @@ type selGEInt16DecimalOp struct {
 	selOpBase
 }
 
-func (p *selGEInt16DecimalOp) Next() coldata.Batch {
+func (p *selGEInt16DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -51041,7 +52045,7 @@ func (p *selGEInt16DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -51051,11 +52055,14 @@ type selGEInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selGEInt32Int16ConstOp) Next() coldata.Batch {
+func (p *selGEInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -51194,7 +52201,7 @@ func (p *selGEInt32Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -51203,11 +52210,14 @@ type selGEInt32Int16Op struct {
 	selOpBase
 }
 
-func (p *selGEInt32Int16Op) Next() coldata.Batch {
+func (p *selGEInt32Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -51357,7 +52367,7 @@ func (p *selGEInt32Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -51367,11 +52377,14 @@ type selGEInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selGEInt32Int32ConstOp) Next() coldata.Batch {
+func (p *selGEInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -51510,7 +52523,7 @@ func (p *selGEInt32Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -51519,11 +52532,14 @@ type selGEInt32Int32Op struct {
 	selOpBase
 }
 
-func (p *selGEInt32Int32Op) Next() coldata.Batch {
+func (p *selGEInt32Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -51673,7 +52689,7 @@ func (p *selGEInt32Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -51683,11 +52699,14 @@ type selGEInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selGEInt32Int64ConstOp) Next() coldata.Batch {
+func (p *selGEInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -51826,7 +52845,7 @@ func (p *selGEInt32Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -51835,11 +52854,14 @@ type selGEInt32Int64Op struct {
 	selOpBase
 }
 
-func (p *selGEInt32Int64Op) Next() coldata.Batch {
+func (p *selGEInt32Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -51989,7 +53011,7 @@ func (p *selGEInt32Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -51999,11 +53021,14 @@ type selGEInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selGEInt32Float64ConstOp) Next() coldata.Batch {
+func (p *selGEInt32Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -52174,7 +53199,7 @@ func (p *selGEInt32Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -52183,11 +53208,14 @@ type selGEInt32Float64Op struct {
 	selOpBase
 }
 
-func (p *selGEInt32Float64Op) Next() coldata.Batch {
+func (p *selGEInt32Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -52369,7 +53397,7 @@ func (p *selGEInt32Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -52379,11 +53407,14 @@ type selGEInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selGEInt32DecimalConstOp) Next() coldata.Batch {
+func (p *selGEInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -52502,7 +53533,7 @@ func (p *selGEInt32DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -52511,11 +53542,14 @@ type selGEInt32DecimalOp struct {
 	selOpBase
 }
 
-func (p *selGEInt32DecimalOp) Next() coldata.Batch {
+func (p *selGEInt32DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -52645,7 +53679,7 @@ func (p *selGEInt32DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -52655,11 +53689,14 @@ type selGEInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selGEInt64Int16ConstOp) Next() coldata.Batch {
+func (p *selGEInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -52798,7 +53835,7 @@ func (p *selGEInt64Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -52807,11 +53844,14 @@ type selGEInt64Int16Op struct {
 	selOpBase
 }
 
-func (p *selGEInt64Int16Op) Next() coldata.Batch {
+func (p *selGEInt64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -52961,7 +54001,7 @@ func (p *selGEInt64Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -52971,11 +54011,14 @@ type selGEInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selGEInt64Int32ConstOp) Next() coldata.Batch {
+func (p *selGEInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -53114,7 +54157,7 @@ func (p *selGEInt64Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -53123,11 +54166,14 @@ type selGEInt64Int32Op struct {
 	selOpBase
 }
 
-func (p *selGEInt64Int32Op) Next() coldata.Batch {
+func (p *selGEInt64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -53277,7 +54323,7 @@ func (p *selGEInt64Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -53287,11 +54333,14 @@ type selGEInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selGEInt64Int64ConstOp) Next() coldata.Batch {
+func (p *selGEInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -53430,7 +54479,7 @@ func (p *selGEInt64Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -53439,11 +54488,14 @@ type selGEInt64Int64Op struct {
 	selOpBase
 }
 
-func (p *selGEInt64Int64Op) Next() coldata.Batch {
+func (p *selGEInt64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -53593,7 +54645,7 @@ func (p *selGEInt64Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -53603,11 +54655,14 @@ type selGEInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selGEInt64Float64ConstOp) Next() coldata.Batch {
+func (p *selGEInt64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -53778,7 +54833,7 @@ func (p *selGEInt64Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -53787,11 +54842,14 @@ type selGEInt64Float64Op struct {
 	selOpBase
 }
 
-func (p *selGEInt64Float64Op) Next() coldata.Batch {
+func (p *selGEInt64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -53973,7 +55031,7 @@ func (p *selGEInt64Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -53983,11 +55041,14 @@ type selGEInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selGEInt64DecimalConstOp) Next() coldata.Batch {
+func (p *selGEInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -54106,7 +55167,7 @@ func (p *selGEInt64DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -54115,11 +55176,14 @@ type selGEInt64DecimalOp struct {
 	selOpBase
 }
 
-func (p *selGEInt64DecimalOp) Next() coldata.Batch {
+func (p *selGEInt64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -54249,7 +55313,7 @@ func (p *selGEInt64DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -54259,11 +55323,14 @@ type selGEFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p *selGEFloat64Int16ConstOp) Next() coldata.Batch {
+func (p *selGEFloat64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -54434,7 +55501,7 @@ func (p *selGEFloat64Int16ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -54443,11 +55510,14 @@ type selGEFloat64Int16Op struct {
 	selOpBase
 }
 
-func (p *selGEFloat64Int16Op) Next() coldata.Batch {
+func (p *selGEFloat64Int16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -54629,7 +55699,7 @@ func (p *selGEFloat64Int16Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -54639,11 +55709,14 @@ type selGEFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p *selGEFloat64Int32ConstOp) Next() coldata.Batch {
+func (p *selGEFloat64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -54814,7 +55887,7 @@ func (p *selGEFloat64Int32ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -54823,11 +55896,14 @@ type selGEFloat64Int32Op struct {
 	selOpBase
 }
 
-func (p *selGEFloat64Int32Op) Next() coldata.Batch {
+func (p *selGEFloat64Int32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -55009,7 +56085,7 @@ func (p *selGEFloat64Int32Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -55019,11 +56095,14 @@ type selGEFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p *selGEFloat64Int64ConstOp) Next() coldata.Batch {
+func (p *selGEFloat64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -55194,7 +56273,7 @@ func (p *selGEFloat64Int64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -55203,11 +56282,14 @@ type selGEFloat64Int64Op struct {
 	selOpBase
 }
 
-func (p *selGEFloat64Int64Op) Next() coldata.Batch {
+func (p *selGEFloat64Int64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -55389,7 +56471,7 @@ func (p *selGEFloat64Int64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -55399,11 +56481,14 @@ type selGEFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p *selGEFloat64Float64ConstOp) Next() coldata.Batch {
+func (p *selGEFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -55574,7 +56659,7 @@ func (p *selGEFloat64Float64ConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -55583,11 +56668,14 @@ type selGEFloat64Float64Op struct {
 	selOpBase
 }
 
-func (p *selGEFloat64Float64Op) Next() coldata.Batch {
+func (p *selGEFloat64Float64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -55769,7 +56857,7 @@ func (p *selGEFloat64Float64Op) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -55779,11 +56867,14 @@ type selGEFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p *selGEFloat64DecimalConstOp) Next() coldata.Batch {
+func (p *selGEFloat64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -55910,7 +57001,7 @@ func (p *selGEFloat64DecimalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -55919,11 +57010,14 @@ type selGEFloat64DecimalOp struct {
 	selOpBase
 }
 
-func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
+func (p *selGEFloat64DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -56061,7 +57155,7 @@ func (p *selGEFloat64DecimalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -56071,11 +57165,14 @@ type selGETimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p *selGETimestampTimestampConstOp) Next() coldata.Batch {
+func (p *selGETimestampTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -56198,7 +57295,7 @@ func (p *selGETimestampTimestampConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -56207,11 +57304,14 @@ type selGETimestampTimestampOp struct {
 	selOpBase
 }
 
-func (p *selGETimestampTimestampOp) Next() coldata.Batch {
+func (p *selGETimestampTimestampOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -56345,7 +57445,7 @@ func (p *selGETimestampTimestampOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -56355,11 +57455,14 @@ type selGEIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p *selGEIntervalIntervalConstOp) Next() coldata.Batch {
+func (p *selGEIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -56454,7 +57557,7 @@ func (p *selGEIntervalIntervalConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -56463,11 +57566,14 @@ type selGEIntervalIntervalOp struct {
 	selOpBase
 }
 
-func (p *selGEIntervalIntervalOp) Next() coldata.Batch {
+func (p *selGEIntervalIntervalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -56573,7 +57679,7 @@ func (p *selGEIntervalIntervalOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -56583,11 +57689,14 @@ type selGEJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p *selGEJSONJSONConstOp) Next() coldata.Batch {
+func (p *selGEJSONJSONConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -56704,7 +57813,7 @@ func (p *selGEJSONJSONConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -56713,11 +57822,14 @@ type selGEJSONJSONOp struct {
 	selOpBase
 }
 
-func (p *selGEJSONJSONOp) Next() coldata.Batch {
+func (p *selGEJSONJSONOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -56843,7 +57955,7 @@ func (p *selGEJSONJSONOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -56853,11 +57965,14 @@ type selGEDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p *selGEDatumDatumConstOp) Next() coldata.Batch {
+func (p *selGEDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -56958,7 +58073,7 @@ func (p *selGEDatumDatumConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -56967,11 +58082,14 @@ type selGEDatumDatumOp struct {
 	selOpBase
 }
 
-func (p *selGEDatumDatumOp) Next() coldata.Batch {
+func (p *selGEDatumDatumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -57081,7 +58199,7 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }

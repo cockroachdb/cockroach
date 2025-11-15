@@ -610,7 +610,7 @@ func runDistinctBenchmarks(
 									b.Fatal(err)
 								}
 								distinct.Init(ctx)
-								for b := distinct.Next(); b.Length() > 0; b = distinct.Next() {
+								for b, _ := distinct.Next(); b.Length() > 0; b, _ = distinct.Next() {
 								}
 								afterEachRun()
 							}

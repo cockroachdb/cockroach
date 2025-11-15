@@ -144,7 +144,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 		expectedBatchesReturned := numInputs * numBatches
 		for {
 			var b coldata.Batch
-			if err := colexecerror.CatchVectorizedRuntimeError(func() { b = s.Next() }); err != nil {
+			if err := colexecerror.CatchVectorizedRuntimeError(func() { b, _ = s.Next() }); err != nil {
 				if terminationScenario == synchronizerContextCanceled {
 					require.True(t, testutils.IsError(err, "context canceled"), err)
 					break
@@ -228,7 +228,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
 	s.Init(ctx)
 	for {
-		if err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next() }); err != nil {
+		if err := colexecerror.CatchVectorizedRuntimeError(func() { _, _ = s.Next() }); err != nil {
 			require.True(t, testutils.IsError(err, expectedErr), err)
 			break
 		}

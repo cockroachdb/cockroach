@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -60,11 +61,14 @@ type isNullProjOp struct {
 
 var _ colexecop.Operator = &isNullProjOp{}
 
-func (o *isNullProjOp) Next() coldata.Batch {
-	batch := o.Input.Next()
+func (o *isNullProjOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := o.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(o.colIdx)
 	nulls := vec.Nulls()
@@ -101,7 +105,7 @@ func (o *isNullProjOp) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 // isTupleNullProjOp is an Operator that projects into outputIdx Vec whether
@@ -115,11 +119,14 @@ type isTupleNullProjOp struct {
 
 var _ colexecop.Operator = &isTupleNullProjOp{}
 
-func (o *isTupleNullProjOp) Next() coldata.Batch {
-	batch := o.Input.Next()
+func (o *isTupleNullProjOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := o.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(o.colIdx)
 	nulls := vec.Nulls()
@@ -171,7 +178,7 @@ func (o *isTupleNullProjOp) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type isNullSelBase struct {
@@ -208,12 +215,15 @@ type isNullSelOp struct {
 
 var _ colexecop.Operator = &isNullSelOp{}
 
-func (o *isNullSelOp) Next() coldata.Batch {
+func (o *isNullSelOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := o.Input.Next()
+		batch, meta := o.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		n := batch.Length()
 		if n == 0 {
-			return batch
+			return batch, nil
 		}
 		var idx int
 		vec := batch.ColVec(o.colIdx)
@@ -243,14 +253,14 @@ func (o *isNullSelOp) Next() coldata.Batch {
 			}
 			if idx > 0 {
 				batch.SetLength(idx)
-				return batch
+				return batch, nil
 			}
 		} else {
 			// There are no NULLs, so we don't need to check each index for nullity.
 			if o.negate {
 				// o.negate is true, so we select all tuples, i.e. we don't need to
 				// modify the batch and can just return it.
-				return batch
+				return batch, nil
 			}
 			// o.negate is false, so we omit all tuples from this batch and move onto
 			// the next one.
@@ -267,12 +277,15 @@ type isTupleNullSelOp struct {
 
 var _ colexecop.Operator = &isTupleNullSelOp{}
 
-func (o *isTupleNullSelOp) Next() coldata.Batch {
+func (o *isTupleNullSelOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := o.Input.Next()
+		batch, meta := o.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		n := batch.Length()
 		if n == 0 {
-			return batch
+			return batch, nil
 		}
 		var idx int
 		vec := batch.ColVec(o.colIdx)
@@ -314,7 +327,7 @@ func (o *isTupleNullSelOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -91,7 +92,7 @@ type _OP_NAME struct {
 	projOpBase
 }
 
-func (p _OP_NAME) Next() coldata.Batch {
+func (p _OP_NAME) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	// {{if .NeedsBinaryOverloadHelper}}
 	// {{/*
 	//     In order to inline the templated code of the binary overloads
@@ -101,10 +102,13 @@ func (p _OP_NAME) Next() coldata.Batch {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
 	// {{end}}
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	projVec := batch.ColVec(p.outputIdx)
 	p.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
@@ -126,7 +130,7 @@ func (p _OP_NAME) Next() coldata.Batch {
 			_SET_PROJECTION(false)
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 // {{end}}

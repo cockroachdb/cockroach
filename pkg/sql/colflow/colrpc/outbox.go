@@ -249,7 +249,7 @@ func (o *Outbox) moveToDraining(ctx context.Context, reason redact.RedactableStr
 //     outboxCtxCancel will be called.
 func (o *Outbox) sendBatches(
 	ctx context.Context, stream flowStreamClient, flowCtxCancel, outboxCtxCancel context.CancelFunc,
-) (terminatedGracefully bool, errToSend error) {
+) (terminatedGracefully bool, bufferedMeta []execinfrapb.ProducerMetadata, errToSend error) {
 	if o.runnerCtx == nil {
 		// In the non-testing path, runnerCtx has been set in Run() method;
 		// however, the tests might use runWithStream() directly in which case
@@ -265,7 +265,12 @@ func (o *Outbox) sendBatches(
 				return
 			}
 
-			batch := o.Input.Next()
+			batch, meta := o.Input.Next()
+			if meta != nil {
+				// TODO: figure out how to propagate immediately.
+				bufferedMeta = append(bufferedMeta, *meta)
+				continue
+			}
 			n := batch.Length()
 			if n == 0 {
 				terminatedGracefully = true
@@ -304,18 +309,28 @@ func (o *Outbox) sendBatches(
 			}
 		}
 	})
-	return terminatedGracefully, errToSend
+	return terminatedGracefully, bufferedMeta, errToSend
 }
 
 // sendMetadata drains the Outbox.metadataSources and sends the metadata over
 // the given stream, returning the Send error, if any. sendMetadata also sends
 // errToSend as metadata if non-nil.
-func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errToSend error) error {
+func (o *Outbox) sendMetadata(
+	ctx context.Context,
+	stream flowStreamClient,
+	bufferedMeta []execinfrapb.ProducerMetadata,
+	errToSend error,
+) error {
 	msg := &execinfrapb.ProducerMessage{}
 	if errToSend != nil {
 		log.VEventf(ctx, 1, "Outbox sending an error as metadata: %v", errToSend)
 		msg.Data.Metadata = append(
 			msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, execinfrapb.ProducerMetadata{Err: errToSend}),
+		)
+	}
+	for _, meta := range bufferedMeta {
+		msg.Data.Metadata = append(
+			msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, meta),
 		)
 	}
 	if o.inputInitialized {
@@ -394,7 +409,7 @@ func (o *Outbox) runWithStream(
 		close(waitCh)
 	}()
 
-	terminatedGracefully, errToSend := o.sendBatches(ctx, stream, flowCtxCancel, outboxCtxCancel)
+	terminatedGracefully, bufferedMeta, errToSend := o.sendBatches(ctx, stream, flowCtxCancel, outboxCtxCancel)
 	if terminatedGracefully || errToSend != nil {
 		var reason redact.RedactableString
 		if errToSend != nil {
@@ -403,7 +418,7 @@ func (o *Outbox) runWithStream(
 			reason = redact.Sprint(redact.SafeString("terminated gracefully"))
 		}
 		o.moveToDraining(ctx, reason)
-		if err := o.sendMetadata(ctx, stream, errToSend); err != nil {
+		if err := o.sendMetadata(ctx, stream, bufferedMeta, errToSend); err != nil {
 			flowinfra.HandleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel, outboxCtxCancel)
 		} else {
 			// Close the stream. Note that if this block isn't reached, the stream

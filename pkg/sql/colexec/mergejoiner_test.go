@@ -1759,7 +1759,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	)
 	a.Init(ctx)
 	i, count, expVal := 0, 0, int64(0)
-	for b := a.Next(); b.Length() != 0; b = a.Next() {
+	for b, _ := a.Next(); b.Length() != 0; b, _ = a.Next() {
 		count += b.Length()
 		leftOutCol := b.ColVec(0).Int64()
 		leftNulls := b.ColVec(0).Nulls()
@@ -1834,7 +1834,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 				count := 0
 				// Keep track of the last comparison value.
 				expVal := int64(0)
-				for b := a.Next(); b.Length() != 0; b = a.Next() {
+				for b, _ := a.Next(); b.Length() != 0; b, _ = a.Next() {
 					count += b.Length()
 					outCol := b.ColVec(0).Int64()
 					for j := int64(0); j < int64(b.Length()); j++ {
@@ -1911,7 +1911,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					count := 0
 					// Keep track of the last comparison value.
 					lastVal := int64(0)
-					for b := a.Next(); b.Length() != 0; b = a.Next() {
+					for b, _ := a.Next(); b.Length() != 0; b, _ = a.Next() {
 						count += b.Length()
 						outCol := b.ColVec(0).Int64()
 						for j := int64(0); j < int64(b.Length()); j++ {
@@ -2035,7 +2035,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 					i := 0
 					count := 0
 					cpIdx := 0
-					for b := a.Next(); b.Length() != 0; b = a.Next() {
+					for b, _ := a.Next(); b.Length() != 0; b, _ = a.Next() {
 						count += b.Length()
 						outCol := b.ColVec(0).Int64()
 						for j := 0; j < b.Length(); j++ {

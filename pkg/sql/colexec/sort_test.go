@@ -322,7 +322,7 @@ func BenchmarkSort(b *testing.B) {
 							sorter = NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
 						}
 						sorter.Init(ctx)
-						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
+						for out, _ := sorter.Next(); out.Length() != 0; out, _ = sorter.Next() {
 						}
 					}
 				})
@@ -381,7 +381,7 @@ func BenchmarkSortUUID(b *testing.B) {
 						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
 						sorter := NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
 						sorter.Init(ctx)
-						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
+						for out, _ := sorter.Next(); out.Length() != 0; out, _ = sorter.Next() {
 						}
 					}
 				})

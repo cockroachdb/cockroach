@@ -120,12 +120,20 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	hj.Init(ctx)
 
 	var mjOutputTuples, hjOutputTuples colexectestutils.Tuples
-	for b := mj.Next(); b.Length() != 0; b = mj.Next() {
+	for {
+		b, _ := mj.Next()
+		if b.Length() == 0 {
+			break
+		}
 		for i := 0; i < b.Length(); i++ {
 			mjOutputTuples = append(mjOutputTuples, colexectestutils.GetTupleFromBatch(b, i))
 		}
 	}
-	for b := hj.Next(); b.Length() != 0; b = hj.Next() {
+	for {
+		b, _ := hj.Next()
+		if b.Length() == 0 {
+			break
+		}
 		for i := 0; i < b.Length(); i++ {
 			hjOutputTuples = append(hjOutputTuples, colexectestutils.GetTupleFromBatch(b, i))
 		}
@@ -264,7 +272,11 @@ func BenchmarkMergeJoiner(b *testing.B) {
 					s.Init(ctx)
 
 					b.StartTimer()
-					for b := s.Next(); b.Length() != 0; b = s.Next() {
+					for {
+						batch, _ := s.Next()
+						if batch.Length() == 0 {
+							break
+						}
 					}
 					b.StopTimer()
 				}

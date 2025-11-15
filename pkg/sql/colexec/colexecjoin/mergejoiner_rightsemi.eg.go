@@ -10819,7 +10819,8 @@ func (o *mergeJoinRightSemiOp) buildFromBufferedGroup() (bufferedGroupComplete b
 	}
 }
 
-func (o *mergeJoinRightSemiOp) Next() coldata.Batch {
+func (o *mergeJoinRightSemiOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	var meta *execinfrapb.ProducerMetadata
 	o.output, _ = o.helper.ResetMaybeReallocate(o.outputTypes, o.output, 0 /* tuplesToBeSet */)
 	o.outputCapacity = o.output.Capacity()
 	o.bufferedGroup.helper.output = o.output
@@ -10831,12 +10832,20 @@ func (o *mergeJoinRightSemiOp) Next() coldata.Batch {
 			// get the next batch.
 			if o.proberState.lBatch == nil || (o.proberState.lLength != 0 && o.proberState.lIdx == o.proberState.lLength) {
 				o.cancelChecker.CheckEveryCall()
-				o.proberState.lIdx, o.proberState.lBatch = 0, o.InputOne.Next()
+				o.proberState.lBatch, meta = o.InputOne.Next()
+				if meta != nil {
+					return nil, meta
+				}
+				o.proberState.lIdx = 0
 				o.proberState.lLength = o.proberState.lBatch.Length()
 			}
 			if o.proberState.rBatch == nil || (o.proberState.rLength != 0 && o.proberState.rIdx == o.proberState.rLength) {
 				o.cancelChecker.CheckEveryCall()
-				o.proberState.rIdx, o.proberState.rBatch = 0, o.InputTwo.Next()
+				o.proberState.rBatch, meta = o.InputTwo.Next()
+				if meta != nil {
+					return nil, meta
+				}
+				o.proberState.rIdx = 0
 				o.proberState.rLength = o.proberState.rBatch.Length()
 			}
 			if o.sourceFinished() {
@@ -10851,7 +10860,7 @@ func (o *mergeJoinRightSemiOp) Next() coldata.Batch {
 			if len(o.builderState.lGroups) == 0 && len(o.builderState.rGroups) == 0 {
 				o.state = mjDone
 				o.output.SetLength(o.builderState.outCount)
-				return o.output
+				return o.output, nil
 			}
 			o.state = mjBuildFromBatch
 
@@ -10870,7 +10879,7 @@ func (o *mergeJoinRightSemiOp) Next() coldata.Batch {
 			o.buildFromBatch()
 			if o.builderState.outCount == o.outputCapacity {
 				o.output.SetLength(o.builderState.outCount)
-				return o.output
+				return o.output, nil
 			}
 			if o.bufferedGroup.helper.numRightTuples != 0 {
 				o.transitionIntoBuildingFromBufferedGroup()
@@ -10886,11 +10895,11 @@ func (o *mergeJoinRightSemiOp) Next() coldata.Batch {
 			}
 			if o.builderState.outCount == o.outputCapacity {
 				o.output.SetLength(o.builderState.outCount)
-				return o.output
+				return o.output, nil
 			}
 
 		case mjDone:
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unexpected merge joiner state in Next: %v", o.state))

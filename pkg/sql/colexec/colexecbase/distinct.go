@@ -12,9 +12,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -125,19 +127,27 @@ func (d *orderedDistinct) Init(ctx context.Context) {
 }
 
 // Next implements the colexecop.Operator interface.
-func (d *orderedDistinct) Next() coldata.Batch {
+func (d *orderedDistinct) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		b := d.Input.Next()
+		b, meta := d.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		origLen := b.Length()
 		if origLen == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 		d.distinctChainInput.SetBatch(b)
-		b = d.distinctChain.Next()
+		b, meta = d.distinctChain.Next()
+		// The distinct chain is a "closed loop" system that cannot produce any
+		// metadata.
+		if buildutil.CrdbTestBuild && meta != nil {
+			colexecerror.InternalError(errors.AssertionFailedf("non-nil meta from distinctChain: %v", meta))
+		}
 		updatedLength := b.Length()
 		d.MaybeEmitErrorOnDup(origLen, updatedLength)
 		if updatedLength > 0 {
-			return b
+			return b, nil
 		}
 	}
 }

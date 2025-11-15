@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -236,14 +237,16 @@ func (d *diskSpillerBase) Init(ctx context.Context) {
 	d.inMemoryOp.Init(d.Ctx)
 }
 
-func (d *diskSpillerBase) Next() coldata.Batch {
+func (d *diskSpillerBase) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if d.spilled {
 		return d.diskBackedOp.Next()
 	}
 	var batch coldata.Batch
+	var meta *execinfrapb.ProducerMetadata
+	// TODO: rethink error propagation.
 	if err := colexecerror.CatchVectorizedRuntimeError(
 		func() {
-			batch = d.inMemoryOp.Next()
+			batch, meta = d.inMemoryOp.Next()
 		},
 	); err != nil {
 		if sqlerrors.IsOutOfMemoryError(err) {
@@ -276,7 +279,7 @@ func (d *diskSpillerBase) Next() coldata.Batch {
 		// different operator, so we propagate it further.
 		colexecerror.InternalError(err)
 	}
-	return batch
+	return batch, meta
 }
 
 func (d *diskSpillerBase) Reset(ctx context.Context) {
@@ -396,7 +399,7 @@ func (b *bufferExportingOperator) Init(context.Context) {
 	// already been initialized.
 }
 
-func (b *bufferExportingOperator) Next() coldata.Batch {
+func (b *bufferExportingOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if b.firstSourceDone {
 		if !b.firstSourceReleasedAfter && b.firstSourceReuseMode == colexecop.BufferingOpNoReuse {
 			b.firstSourceReleasedAfter = true
@@ -413,7 +416,7 @@ func (b *bufferExportingOperator) Next() coldata.Batch {
 		b.firstSourceDone = true
 		return b.secondSource.Next()
 	}
-	return batch
+	return batch, nil
 }
 
 func (b *bufferExportingOperator) Reset(ctx context.Context) {

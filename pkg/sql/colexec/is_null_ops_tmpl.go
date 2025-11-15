@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -71,11 +72,14 @@ type is_KINDNullProjOp struct {
 
 var _ colexecop.Operator = &is_KINDNullProjOp{}
 
-func (o *is_KINDNullProjOp) Next() coldata.Batch {
-	batch := o.Input.Next()
+func (o *is_KINDNullProjOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := o.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(o.colIdx)
 	nulls := vec.Nulls()
@@ -109,7 +113,7 @@ func (o *is_KINDNullProjOp) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 // {{end}}
@@ -178,12 +182,15 @@ type is_KINDNullSelOp struct {
 
 var _ colexecop.Operator = &is_KINDNullSelOp{}
 
-func (o *is_KINDNullSelOp) Next() coldata.Batch {
+func (o *is_KINDNullSelOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := o.Input.Next()
+		batch, meta := o.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		n := batch.Length()
 		if n == 0 {
-			return batch
+			return batch, nil
 		}
 		var idx int
 		vec := batch.ColVec(o.colIdx)
@@ -209,7 +216,7 @@ func (o *is_KINDNullSelOp) Next() coldata.Batch {
 			}
 			if idx > 0 {
 				batch.SetLength(idx)
-				return batch
+				return batch, nil
 			}
 			// {{if not .IsTuple}}
 		} else {
@@ -217,7 +224,7 @@ func (o *is_KINDNullSelOp) Next() coldata.Batch {
 			if o.negate {
 				// o.negate is true, so we select all tuples, i.e. we don't need to
 				// modify the batch and can just return it.
-				return batch
+				return batch, nil
 			}
 			// o.negate is false, so we omit all tuples from this batch and move onto
 			// the next one.
