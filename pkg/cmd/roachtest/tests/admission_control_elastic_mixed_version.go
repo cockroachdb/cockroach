@@ -56,9 +56,9 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 				),
 				mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 				mixedversion.AlwaysUseLatestPredecessors,
-				// Don't go back too far. We are mostly interested in upgrading to v24.3
-				// where RACv2 was introduced.
-				mixedversion.MinimumBootstrapVersion("v24.1.0"),
+				// The test requires the cluster to start at or above MinSupported.
+				// Updated to v25.3.0 after bumping MinSupported from v25.2 to v25.3.
+				mixedversion.MinimumBootstrapVersion("v25.3.0"),
 			)
 
 			// Limit the disk throughput to 128 MiB/s, to more easily stress the

@@ -320,12 +320,9 @@ func runHTTPRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c,
 		c.CRDBNodes(),
 		mixedversion.AlwaysUseLatestPredecessors,
-		// We set the min bootstrap version to v24.2, as the fix for the
-		// race condition was only backported to v24.2+ but exists as early
-		// as v23.2. We use this over setting min supported version as this
-		// test is concerned about testing cluster startup. We don't want the
-		// framework to bootstrap the cluster before we can start running hooks.
-		mixedversion.MinimumBootstrapVersion("v24.2.0"),
+		// The test requires the cluster to start at or above MinSupported.
+		// Updated to v25.3.0 after bumping MinSupported from v25.2 to v25.3.
+		mixedversion.MinimumBootstrapVersion("v25.3.0"),
 	)
 
 	// Any http request requiring auth will do.
