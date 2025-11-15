@@ -1419,6 +1419,7 @@ GO_TARGETS = [
     "//pkg/internal/rsg/yacc:yacc_test",
     "//pkg/internal/rsg:rsg",
     "//pkg/internal/rsg:rsg_test",
+    "//pkg/internal/sqlnemesis:sqlnemesis",
     "//pkg/internal/sqlsmith:sqlsmith",
     "//pkg/internal/sqlsmith:sqlsmith_test",
     "//pkg/internal/team:team",
