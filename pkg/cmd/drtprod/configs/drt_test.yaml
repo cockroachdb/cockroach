@@ -12,9 +12,11 @@ environment:
 
 targets:
   # crdb cluster specs
-  - target_name: $CLUSTER
+  - target_name: $CLUSTER initialisation
+    notify_progress: true
     steps:
       - command: create
+        notify_progress: true
         args:
           - $CLUSTER
         flags:
@@ -49,6 +51,7 @@ targets:
           restart: false
           sql-port: 26257
       - command: run
+        notify_progress: true
         args:
           - $CLUSTER
           - --
@@ -83,8 +86,9 @@ targets:
           - workload
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
   - target_name: post_tasks
+    notify_progress: true
     dependent_targets:
-      - $CLUSTER
+      - $CLUSTER initialisation
       - $WORKLOAD_CLUSTER
     steps:
       - script: rm
@@ -119,6 +123,7 @@ targets:
           - artifacts/roachtest
           - roachtest-operations
       - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
+        notify_progress: true
         args:
           - cct_tpcc_1k # suffix added to script name tpcc_init_cct_tpcc_400k.sh
           - true # determines whether to execute the script immediately on workload node
@@ -126,6 +131,7 @@ targets:
           warehouses: 1000
           db: cct_tpcc
       - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
+        notify_progress: true
         args:
           - cct_tpcc_1k # suffix added to script name tpcc_run_400k.sh
           - false # determines whether to execute the script immediately on workload node
