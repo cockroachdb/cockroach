@@ -147,6 +147,8 @@ enum TimeSeriesResolution {
   // RESOLUTION_30M stores roll-up data from a higher resolution at a sample
   // resolution of 30 minutes.
   RESOLUTION_30M = 1;
+  // RESOLUTION_1M stores data with a sample resolution of 1 minute.
+  RESOLUTION_1M = 2;
 }
 
 // DumpRequest is the standard time series data dump request accepted from

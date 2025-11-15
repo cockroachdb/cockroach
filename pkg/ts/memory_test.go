@@ -146,6 +146,94 @@ func TestGetMaxTimespan(t *testing.T) {
 			math.MaxInt64,
 			"",
 		},
+		// Resolution1m - room for exactly one hour of query
+		{
+			Resolution1m,
+			QueryMemoryOptions{
+				BudgetBytes:             2 * (sizeOfTimeSeriesData + sizeOfSample*60),
+				EstimatedSources:        1,
+				InterpolationLimitNanos: 0,
+			},
+			(1 * time.Hour).Nanoseconds(),
+			"",
+		},
+		// Resolution1m - insufficient memory
+		{
+			Resolution1m,
+			QueryMemoryOptions{
+				BudgetBytes:             sizeOfTimeSeriesData + sizeOfSample*60,
+				EstimatedSources:        1,
+				InterpolationLimitNanos: 0,
+			},
+			0,
+			"insufficient",
+		},
+		// Resolution1m - 3 sources, room for 1 hour.
+		{
+			Resolution1m,
+			QueryMemoryOptions{
+				BudgetBytes:             6 * (sizeOfTimeSeriesData + sizeOfSample*60),
+				EstimatedSources:        3,
+				InterpolationLimitNanos: 0,
+			},
+			(1 * time.Hour).Nanoseconds(),
+			"",
+		},
+		// Resolution1m - 3 sources, room for 2 hours.
+		{
+			Resolution1m,
+			QueryMemoryOptions{
+				BudgetBytes:             9 * (sizeOfTimeSeriesData + sizeOfSample*60),
+				EstimatedSources:        3,
+				InterpolationLimitNanos: 0,
+			},
+			(2 * time.Hour).Nanoseconds(),
+			"",
+		},
+		// Not enough room due to interpolation buffer.
+		{
+			Resolution1m,
+			QueryMemoryOptions{
+				BudgetBytes:             6 * (sizeOfTimeSeriesData + sizeOfSample*60),
+				EstimatedSources:        3,
+				InterpolationLimitNanos: 1,
+			},
+			0,
+			"insufficient",
+		},
+		// Sufficient room even with interpolation buffer.
+		{
+			Resolution1m,
+			QueryMemoryOptions{
+				BudgetBytes:             9 * (sizeOfTimeSeriesData + sizeOfSample*60),
+				EstimatedSources:        3,
+				InterpolationLimitNanos: 1,
+			},
+			(1 * time.Hour).Nanoseconds(),
+			"",
+		},
+		// Insufficient room for interpolation buffer (due to straddling)
+		{
+			Resolution1m,
+			QueryMemoryOptions{
+				BudgetBytes:             9 * (sizeOfTimeSeriesData + sizeOfSample*60),
+				EstimatedSources:        3,
+				InterpolationLimitNanos: int64(float64(Resolution1m.SlabDuration()) * 0.75),
+			},
+			0,
+			"insufficient",
+		},
+		// Sufficient room even with interpolation buffer.
+		{
+			Resolution1m,
+			QueryMemoryOptions{
+				BudgetBytes:             12 * (sizeOfTimeSeriesData + sizeOfSample*60),
+				EstimatedSources:        3,
+				InterpolationLimitNanos: int64(float64(Resolution1m.SlabDuration()) * 0.75),
+			},
+			(1 * time.Hour).Nanoseconds(),
+			"",
+		},
 	} {
 		t.Run("", func(t *testing.T) {
 			mem := QueryMemoryContext{
