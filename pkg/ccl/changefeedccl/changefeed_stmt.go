@@ -230,9 +230,18 @@ func changefeedPlanHook(
 		return nil, nil, false, err
 	}
 
-	// Treat all tables inside a database as if "split_column_families" is set.
 	if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
+		// Treat all tables inside a database-level changefeed as if
+		// "split_column_families" is set.
 		rawOpts[changefeedbase.OptSplitColumnFamilies] = `yes`
+
+		// Do not allow initial scans on database-level changefeeds.
+		if initialScan, ok := rawOpts[changefeedbase.OptInitialScan]; ok {
+			if initialScan != `no` && initialScan != `` {
+				return nil, nil, false, errors.Errorf("cannot perform initial scan on a database level changefeed")
+			}
+		}
+		rawOpts[changefeedbase.OptInitialScan] = `no`
 	}
 	opts := changefeedbase.MakeStatementOptions(rawOpts)
 
