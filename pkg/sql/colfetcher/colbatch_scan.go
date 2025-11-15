@@ -53,7 +53,8 @@ type colBatchScanBase struct {
 		syncutil.Mutex
 		// rowsRead contains the number of total rows this ColBatchScan has
 		// returned so far.
-		rowsRead int64
+		rowsRead              int64
+		rowsReadSinceLastMeta int64
 	}
 }
 
@@ -84,6 +85,12 @@ func (s *colBatchScanBase) GetRowsRead() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mu.rowsRead
+}
+
+func (s *colBatchScanBase) getRowsReadSinceLastMeta() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.rowsReadSinceLastMeta
 }
 
 // UsedStreamer is part of the colexecop.KVReader interface.
@@ -235,8 +242,28 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	}
 }
 
+var scanProgressFrequency int64 = 0
+
+func TestingSetScanProgressFrequency(val int64) func() {
+	oldVal := scanProgressFrequency
+	scanProgressFrequency = val
+	return func() { scanProgressFrequency = oldVal }
+}
+
 // Next is part of the colexecop.Operator interface.
 func (s *ColBatchScan) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	// Check if it is time to emit a progress update.
+	if s.getRowsReadSinceLastMeta() >= scanProgressFrequency && scanProgressFrequency > 0 {
+		meta := execinfrapb.GetProducerMeta()
+		meta.Metrics = execinfrapb.GetMetricsMeta()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		meta.Metrics.RowsRead = s.mu.rowsReadSinceLastMeta
+		meta.Metrics.StageID = s.stageID
+		s.mu.rowsReadSinceLastMeta = 0
+		return nil, meta
+	}
+
 	bat, err := s.cf.NextBatch(s.Ctx)
 	if err != nil {
 		colexecerror.InternalError(err)
@@ -246,6 +273,7 @@ func (s *ColBatchScan) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	}
 	s.mu.Lock()
 	s.mu.rowsRead += int64(bat.Length())
+	s.mu.rowsReadSinceLastMeta += int64(bat.Length())
 	s.mu.Unlock()
 	return bat, nil
 }
@@ -256,7 +284,7 @@ func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta := execinfrapb.GetProducerMeta()
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = s.GetBytesRead()
-	meta.Metrics.RowsRead = s.GetRowsRead()
+	meta.Metrics.RowsRead = s.getRowsReadSinceLastMeta()
 	meta.Metrics.StageID = s.stageID
 	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
