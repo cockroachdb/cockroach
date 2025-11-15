@@ -89,7 +89,7 @@ func (r *importRollbackResumer) rollbackTable(
 			ctx,
 			cfg.DB,
 			cfg.Codec,
-			&cfg.Settings.SV,
+			cfg.Settings,
 			cfg.DistSender,
 			tableID,
 			kvpb.DeleteRangePredicates{
