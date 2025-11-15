@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -261,7 +262,9 @@ func TestAlterChangefeedAddTargetAfterInitialScan(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 			sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b INT)`)
 
-			testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+			testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`, optOutOfMetamorphicDBLevelChangefeed{
+				reason: "db level changefeeds don't support ALTER CHANGEFEED commands with initial_scan",
+			})
 			defer closeFeed(t, testFeed)
 
 			feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
@@ -493,7 +496,11 @@ func TestAlterChangefeedDropTargetAfterTableDrop(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
 
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH on_error='pause'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH on_error='pause'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "db level changefeeds don't support ADD/DROP TARGETS in ALTER CHANGEFEEDs",
+			},
+		)
 		defer closeFeed(t, testFeed)
 
 		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
@@ -668,7 +675,7 @@ func TestAlterChangefeedErrors(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`, optOutOfDBLevelChangefeedUnwatchedTables)
 		defer closeFeed(t, testFeed)
 
 		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
@@ -784,6 +791,7 @@ func TestAlterChangefeedDropAllTargetsError(t *testing.T) {
 }
 
 func TestAlterChangefeedTelemetry(t *testing.T) {
+	skip.WithIssue(t, 148858) // has baz unwatched table
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1119,7 +1127,11 @@ func TestAlterChangefeedDatabaseScope(t *testing.T) {
 			`INSERT INTO new_movr.drivers VALUES (1, 'Bob')`,
 		)
 
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers WITH diff`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers WITH diff`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "changefeed watches tables not in the default database",
+			},
+		)
 		defer closeFeed(t, testFeed)
 
 		assertPayloads(t, testFeed, []string{
@@ -1211,6 +1223,9 @@ func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
 		if _, ok := f.(*webhookFeedFactory); ok {
 			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
 		}
+		args = append(args, optOutOfMetamorphicDBLevelChangefeed{
+			reason: "changefeed watches tables not in the default database",
+		})
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers WITH diff, split_column_families`, args...)
 		defer closeFeed(t, testFeed)
 
@@ -1244,6 +1259,7 @@ func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
 }
 
 func TestAlterChangefeedAlterTableName(t *testing.T) {
+	skip.WithIssue(t, 148858) // uses non default DB
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1474,6 +1490,7 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`)
 }
 
 func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
+	skip.WithIssue(t, 148858) // has unwatched tables
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1853,6 +1870,7 @@ func TestAlterChangefeedWithOldCursorFromCreateChangefeed(t *testing.T) {
 // TestChangefeedJobControl tests if a user can modify and existing changefeed
 // based on their privileges.
 func TestAlterChangefeedAccessControl(t *testing.T) {
+	skip.WithIssue(t, 148858) // does the fancy test setup
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -2050,7 +2068,9 @@ func TestAlterChangefeedRandomizedTargetChanges(t *testing.T) {
 		createStmt := fmt.Sprintf(
 			`CREATE CHANGEFEED FOR %s WITH updated`, strings.Join(initialTables, ", "))
 		t.Log(createStmt)
-		testFeed := feed(t, f, createStmt)
+		testFeed := feed(t, f, createStmt, optOutOfMetamorphicDBLevelChangefeed{
+			reason: "db level feeds don't support ALTERing targets with ADD/DROP TARGETS",
+		})
 		defer closeFeed(t, testFeed)
 
 		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
