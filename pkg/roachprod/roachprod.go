@@ -34,7 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/fluentbit"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/opentelemetry"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/parca"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/centralizedapi"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
@@ -261,7 +263,7 @@ func CachedClusters(fn func(clusterName string, numVMs int)) {
 }
 
 // CachedCluster returns the cached information about a given cluster.
-func CachedCluster(name string) (*cloud.Cluster, bool) {
+func CachedCluster(name string) (*cloudcluster.Cluster, bool) {
 	return readSyncedClusters(name)
 }
 
@@ -303,52 +305,56 @@ func Sync(l *logger.Logger, options vm.ListOptions) (*cloud.Cloud, error) {
 		vms = append(vms, c.VMs...)
 	}
 
-	// Figure out if we're going to overwrite the DNS entries. We don't want to
-	// overwrite if we don't have all the VMs of interest, so we only do it if we
-	// have a list of all VMs from both AWS and GCE (so if both providers have
-	// been used to get the VMs and for GCP also if we listed the VMs in the
-	// default project).
-	refreshDNS := true
-
-	if p := vm.Providers[gce.ProviderName]; !p.Active() {
-		refreshDNS = false
-	} else {
-		var defaultProjectFound bool
-		for _, prj := range p.(*gce.Provider).GetProjects() {
-			if prj == gce.DefaultProject() {
-				defaultProjectFound = true
-				break
-			}
-		}
-		if !defaultProjectFound {
+	// If centralized API is not enabled, DNS entries are maintained by the centralized
+	// service, so we don't do anything here.
+	if !centralizedapi.GetCentralizedAPIClient().IsEnabled() {
+		// Figure out if we're going to overwrite the DNS entries. We don't want to
+		// overwrite if we don't have all the VMs of interest, so we only do it if we
+		// have a list of all VMs from both AWS and GCE (so if both providers have
+		// been used to get the VMs and for GCP also if we listed the VMs in the
+		// default project).
+		refreshDNS := true
+		if p := vm.Providers[gce.ProviderName]; !p.Active() {
 			refreshDNS = false
-		}
-	}
-	// If there are no DNS required providers, we shouldn't refresh DNS,
-	// it's probably a misconfiguration.
-	if len(config.DNSRequiredProviders) == 0 {
-		refreshDNS = false
-	} else {
-		// If any of the required providers is not active, we shouldn't refresh DNS.
-		for _, p := range config.DNSRequiredProviders {
-			if !vm.Providers[p].Active() {
+		} else {
+			var defaultProjectFound bool
+			for _, prj := range p.(*gce.Provider).GetProjects() {
+				if prj == gce.DefaultProject() {
+					defaultProjectFound = true
+					break
+				}
+			}
+			if !defaultProjectFound {
 				refreshDNS = false
-				break
 			}
 		}
-	}
-	// DNS entries are maintained in the GCE DNS registry for all vms, from all
-	// clouds.
-	if refreshDNS {
-		if !config.Quiet {
-			l.Printf("Refreshing DNS entries...")
+		// If there are no DNS required providers, we shouldn't refresh DNS,
+		// it's probably a misconfiguration.
+		if len(config.DNSRequiredProviders) == 0 {
+			refreshDNS = false
+		} else {
+			// If any of the required providers is not active, we shouldn't refresh DNS.
+			for _, p := range config.DNSRequiredProviders {
+				if !vm.Providers[p].Active() {
+					refreshDNS = false
+					break
+				}
+			}
 		}
-		if err := gce.Infrastructure.SyncDNS(l, vms); err != nil {
-			l.Errorf("failed to update DNS: %v", err)
-		}
-	} else {
-		if !config.Quiet {
-			l.Printf("Not refreshing DNS entries. We did not have all the VMs.")
+
+		// DNS entries are maintained in the GCE DNS registry for all vms, from all
+		// clouds.
+		if refreshDNS {
+			if !config.Quiet {
+				l.Printf("Refreshing DNS entries...")
+			}
+			if err := gce.Infrastructure.SyncDNS(l, vms); err != nil {
+				l.Errorf("failed to update DNS: %v", err)
+			}
+		} else {
+			if !config.Quiet {
+				l.Printf("Not refreshing DNS entries. We did not have all the VMs.")
+			}
 		}
 	}
 
@@ -642,7 +648,7 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string, sync bo
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	var cloudCluster *cloud.Cluster
+	var cloudCluster *cloudcluster.Cluster
 	if sync {
 		cld, err := Sync(l, vm.ListOptions{})
 		if err != nil {
@@ -1654,6 +1660,14 @@ func AddLabels(l *logger.Logger, clusterName string, labels map[string]string) e
 		}
 	}
 
+	apiClient := centralizedapi.GetCentralizedAPIClient()
+	if apiClient.IsEnabled() {
+		err = apiClient.RegisterClusterUpdate(context.Background(), l, &c.Cluster)
+		if err != nil {
+			l.Errorf("failed to update cluster in centralized api: %v", err)
+		}
+	}
+
 	return saveCluster(l, &c.Cluster)
 }
 
@@ -1676,6 +1690,15 @@ func RemoveLabels(l *logger.Logger, clusterName string, labels []string) error {
 			delete(m.Labels, label)
 		}
 	}
+
+	apiClient := centralizedapi.GetCentralizedAPIClient()
+	if apiClient.IsEnabled() {
+		err = apiClient.RegisterClusterUpdate(context.Background(), l, &c.Cluster)
+		if err != nil {
+			l.Errorf("failed to update cluster in centralized api: %v", err)
+		}
+	}
+
 	return saveCluster(l, &c.Cluster)
 }
 
@@ -1775,8 +1798,10 @@ func Create(
 		return LoadClusters()
 	}
 
-	if err := CreatePublicDNS(ctx, l, clusterName); err != nil {
-		l.Printf("Failed to create DNS for cluster %s: %v", clusterName, err)
+	if !centralizedapi.GetCentralizedAPIClient().IsEnabled() {
+		if err := CreatePublicDNS(ctx, l, clusterName); err != nil {
+			l.Printf("Failed to create DNS for cluster %s: %v", clusterName, err)
+		}
 	}
 
 	l.Printf("Created cluster %s; setting up SSH...", clusterName)
@@ -2332,7 +2357,7 @@ func ApplySnapshots(
 		return err
 	}
 
-	return c.Parallel(ctx, l, install.WithNodes(c.Nodes),
+	if err := c.Parallel(ctx, l, install.WithNodes(c.Nodes),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			res := &install.RunResultDetails{Node: node}
 
@@ -2399,7 +2424,19 @@ func ApplySnapshots(
 				res.Err = err
 			}
 			return res, nil
-		})
+		}); err != nil {
+		return err
+	}
+
+	apiClient := centralizedapi.GetCentralizedAPIClient()
+	if apiClient.IsEnabled() {
+		err = apiClient.RegisterClusterUpdate(context.Background(), l, &c.Cluster)
+		if err != nil {
+			l.Errorf("failed to update cluster in centralized api: %v", err)
+		}
+	}
+
+	return nil
 }
 
 func genMountCommands(devicePath, mountDir string) string {
@@ -2644,9 +2681,15 @@ func DestroyDNS(ctx context.Context, l *logger.Logger, clusterName string) error
 	}
 
 	return vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
+
+		var err error
+		if !centralizedapi.GetCentralizedAPIClient().IsEnabled() {
+			err = p.DeletePublicRecordsByName(ctx, publicRecords...)
+		}
+
 		return errors.CombineErrors(
 			p.DeleteSRVRecordsBySubdomain(ctx, c.Name),
-			p.DeletePublicRecordsByName(ctx, publicRecords...),
+			err,
 		)
 	})
 }
@@ -2852,6 +2895,15 @@ func createAttachMountVolumes(
 		}
 		l.Printf("Successfully mounted volume to %s", cVM.ProviderID)
 	}
+
+	apiClient := centralizedapi.GetCentralizedAPIClient()
+	if apiClient.IsEnabled() {
+		err := apiClient.RegisterClusterUpdate(context.Background(), l, &c.Cluster)
+		if err != nil {
+			l.Errorf("failed to update cluster in centralized api: %v", err)
+		}
+	}
+
 	return nil
 }
 
@@ -3075,7 +3127,7 @@ func GetClusterFromCache(
 
 // getClusterFromCloud finds and returns a specified cluster by querying
 // provider APIs. This also syncs the local cluster cache through ListCloud.
-func getClusterFromCloud(l *logger.Logger, clusterName string) (*cloud.Cluster, error) {
+func getClusterFromCloud(l *logger.Logger, clusterName string) (*cloudcluster.Cluster, error) {
 	// ListCloud may fail due to a transient provider error, but
 	// we may have still found the cluster we care about. It will
 	// fail below if it can't find the cluster.
@@ -3083,9 +3135,9 @@ func getClusterFromCloud(l *logger.Logger, clusterName string) (*cloud.Cluster, 
 	c, ok := cld.Clusters[clusterName]
 	if !ok {
 		if err != nil {
-			return &cloud.Cluster{}, errors.Wrapf(err, "cluster %s not found", clusterName)
+			return &cloudcluster.Cluster{}, errors.Wrapf(err, "cluster %s not found", clusterName)
 		}
-		return &cloud.Cluster{}, fmt.Errorf("cluster %s does not exist", clusterName)
+		return &cloudcluster.Cluster{}, fmt.Errorf("cluster %s does not exist", clusterName)
 	}
 
 	return c, nil
