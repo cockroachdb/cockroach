@@ -317,3 +317,16 @@ func (l *Logger) ErrorfCtxDepth(ctx context.Context, depth int, f string, args .
 func (l *Logger) Errorf(f string, args ...interface{}) {
 	l.ErrorfCtxDepth(context.Background(), 2 /* depth */, f, args...)
 }
+
+// VDepth reports whether verbosity at the call site is at least the requested level.
+func (l *Logger) VDepth(level int) bool {
+	return crdblog.VDepth(crdblog.Level(level), 2)
+}
+
+// VPrintf is like Printf, but only logs if logging has been enabled for the source file
+// where the call is performed at the provided verbosity level, via the vmodule setting.
+func (l *Logger) VPrintf(level int, f string, args ...interface{}) {
+	if l.VDepth(level) {
+		l.PrintfCtxDepth(context.Background(), 2 /* depth */, f, args...)
+	}
+}
