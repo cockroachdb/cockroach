@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	yaml "gopkg.in/yaml.v2"
+	yaml "go.yaml.in/yaml/v4"
 )
 
 // These must match crdb_internal.zones.
@@ -341,10 +341,16 @@ func generateZoneConfigIntrospectionValues(
 }
 
 func yamlMarshalFlow(v interface{}) (string, error) {
+	var n yaml.Node
+	if err := n.Encode(v); err != nil {
+		return "", err
+	}
+	n.Style = yaml.FlowStyle
+
 	var buf bytes.Buffer
 	e := yaml.NewEncoder(&buf)
-	e.UseStyle(yaml.FlowStyle)
-	if err := e.Encode(v); err != nil {
+	if err := e.Encode(&n); err != nil {
+		_ = e.Close()
 		return "", err
 	}
 	if err := e.Close(); err != nil {

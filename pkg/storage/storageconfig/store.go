@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/crlib/crhumanize"
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // Store contains the configuration for a store.

@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
 )
 
 func TestSafeMessage(t *testing.T) {
@@ -286,7 +286,7 @@ func TestSafeMessage(t *testing.T) {
 			require.NoError(t, validate.Self(clusterversion.TestingClusterVersion, desc))
 			require.Equal(t, tc.exp, redacted)
 			var m map[string]interface{}
-			require.NoError(t, yaml.UnmarshalStrict([]byte(redacted), &m), redacted)
+			require.NoError(t, yamlutil.UnmarshalStrict([]byte(redacted), &m), redacted)
 		})
 	}
 }

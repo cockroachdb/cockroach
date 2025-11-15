@@ -10,7 +10,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 type queryBuilder struct {

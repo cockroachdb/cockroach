@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
-	"gopkg.in/yaml.v2"
 )
 
 // TestDataDriven tests the tenant-side cost controller in an isolated setting.
@@ -67,7 +67,7 @@ func (ts *testState) reconfigure(t *testing.T, d *datadriven.TestData) string {
 		Rate    float64
 		Current float64
 	}
-	if err := yaml.UnmarshalStrict([]byte(d.Input), &vals); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(d.Input), &vals); err != nil {
 		d.Fatalf(t, "failed to unmarshal reconfigure values: %v", err)
 	}
 	ts.State.Reconfigure(
@@ -95,7 +95,7 @@ func (ts *testState) request(t *testing.T, d *datadriven.TestData) string {
 		Period string
 	}
 	vals.Period = "10s"
-	if err := yaml.UnmarshalStrict([]byte(d.Input), &vals); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(d.Input), &vals); err != nil {
 		d.Fatalf(t, "failed to unmarshal init values: %v", err)
 	}
 	req := kvpb.TokenBucketRequest{

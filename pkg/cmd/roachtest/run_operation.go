@@ -27,9 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
-	"gopkg.in/yaml.v2"
 )
 
 const baseSleepTime = 15
@@ -247,7 +247,7 @@ func (r *opsRunner) runOperation(
 		if err != nil {
 			return errors.Wrap(err, "failed to read config")
 		}
-		if err = yaml.UnmarshalStrict(configFileData, &config); err != nil {
+		if err = yamlutil.UnmarshalStrict(configFileData, &config); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal config: %s", roachtestflags.ConfigPath)
 		}
 	}

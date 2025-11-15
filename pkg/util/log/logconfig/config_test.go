@@ -10,15 +10,16 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/kr/pretty"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 func TestConfig(t *testing.T) {
 	datadriven.RunTest(t, "testdata/yaml", func(t *testing.T, d *datadriven.TestData) string {
 		var c Config
-		if err := yaml.UnmarshalStrict([]byte(d.Input), &c); err != nil {
+		if err := yamlutil.UnmarshalStrict([]byte(d.Input), &c); err != nil {
 			return fmt.Sprintf("ERROR: %v\n", err)
 		}
 		t.Logf("%# v", pretty.Formatter(c))
