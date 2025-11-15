@@ -3226,6 +3226,12 @@ func (ex *connExecutor) makeExecPlan(
 		return ctx, err
 	}
 
+	// For each non-internal query, we roll the dice to decide to use
+	// canary stats or stable stats for planning.
+	if !planner.SessionData().Internal {
+		planner.EvalContext().UseCanaryStats = canaryRollDice(planner.EvalContext(), ex.rng.internal)
+	}
+
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
 		return ctx, err

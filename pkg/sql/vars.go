@@ -4474,6 +4474,57 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	`canary_stats_mode`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`canary_stats_mode`),
+		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			mode, ok := sessiondatapb.CanaryStatsModeFromString(s)
+			if !ok {
+				return newVarValueError(`canary_stats_mode`, s, "auto", "off", "on")
+			}
+			m.SetCanaryStatsMode(mode)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return evalCtx.SessionData().CanaryStatsMode.String(), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return sessiondatapb.CanaryStatsModeAuto.String()
+		},
+	},
+
+	`stats_as_of`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`stats_as_of`),
+		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
+			ts := hlc.Timestamp{}
+			if s != "" {
+				asOfTimestamp, err := p.EvalAsOfTimestamp(ctx, tree.AsOfClause{Expr: tree.NewStrVal(s)})
+				if err != nil {
+					return errors.Wrap(err, "could not parse stats_as_of")
+				}
+				ts = asOfTimestamp.Timestamp
+			}
+
+			return p.applyOnSessionDataMutators(
+				ctx,
+				local,
+				func(m sessionmutator.SessionDataMutator) error {
+					m.SetStatsAsOf(ts)
+					return nil
+				},
+			)
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			asOfTs := evalCtx.SessionData().StatsAsOf
+			if asOfTs.IsEmpty() {
+				return "", nil
+			}
+			return asOfTs.AsOfSystemTime(), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return ""
+		},
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

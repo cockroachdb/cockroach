@@ -1,0 +1,135 @@
+exec-ddl
+CREATE TABLE sel (a INT PRIMARY KEY) WITH (canary_window = '30s')
+----
+
+# Single stats case: both canary and stable path should use the same stats.
+exec-ddl
+ALTER TABLE sel INJECT STATISTICS '[
+    {
+    	"columns": ["a"],
+      "created_at": "2018-01-01 11:00:00.00000+00:00",
+      "row_count": 20,
+      "distinct_count": 20
+    }
+	]'
+----
+
+opt stats-as-of=(2018-01-01 11:00:10.00000+00:00) canary-fraction=1.0
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=20]
+ ├── key: (1)
+ └── ordering: +1
+
+opt stats-as-of=(2018-01-01 11:00:10.00000+00:00) canary-fraction=0.0
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=20]
+ ├── key: (1)
+ └── ordering: +1
+
+
+# More than 2 stats available: should only consider the latest 2 stats as possible candidates.
+exec-ddl
+ALTER TABLE sel INJECT STATISTICS '[
+    {
+    	"columns": ["a"],
+      "created_at": "2018-01-01 11:00:40.00000+00:00",
+      "row_count": 30,
+      "distinct_count": 30
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 11:00:00.00000+00:00",
+      "row_count": 20,
+      "distinct_count": 20
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 10:59:40.00000+00:00",
+      "row_count": 10,
+      "distinct_count": 10
+    }
+	]'
+----
+
+opt stats-as-of=(2018-01-01 11:00:50.00000+00:00) canary-fraction=1.0
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=20]
+ ├── key: (1)
+ └── ordering: +1
+
+opt stats-as-of=(2018-01-01 11:00:50.00000+00:00) canary-fraction=0.0
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=20]
+ ├── key: (1)
+ └── ordering: +1
+
+# Optimize as of a later timestamp, so that latest stats is out of the
+# canary window, and canary stats has been promoted to stable stats.
+opt stats-as-of=(2018-01-01 11:01:30.00000+00:00) canary-fraction=1.0
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=30]
+ ├── key: (1)
+ └── ordering: +1
+
+opt stats-as-of=(2018-01-01 11:01:30.00000+00:00) canary-fraction=0.0
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=30]
+ ├── key: (1)
+ └── ordering: +1
+
+# Test time traveling of stats_as_of.
+opt stats-as-of=(2018-01-01 11:00:20.00000+00:00) canary-fraction=1.0
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=10]
+ ├── key: (1)
+ └── ordering: +1
+
+opt stats-as-of=(2018-01-01 11:00:20.00000+00:00) canary-fraction=0.0
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=10]
+ ├── key: (1)
+ └── ordering: +1
+
+# If travelling way too back in the past so that no stats are valid,
+# both paths should use the fake stats (with rows = 1000).
+opt stats-as-of=(2018-01-01 10:00:00.00000+00:00) canary-fraction=1.0
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ └── ordering: +1
+
+opt stats-as-of=(2018-01-01 10:00:00.00000+00:00) canary-fraction=0.0
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ └── ordering: +1

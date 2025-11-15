@@ -51,6 +51,10 @@ type TestingKnobs struct {
 	// If the value were nil, should the system set the override to true, or leave it nil?
 	// To fix the ambiguity, a function which returns nil can be used to indicate no override.
 	UnsafeOverride func() *bool
+	// CanaryFraction determines the fraction of queries that will have use
+	// canary stats rather than the stable stats. Having this field makes test
+	// easier to optimize queries with deterministic stats.
+	CanaryFraction *float64
 }
 
 var _ base.ModuleTestingKnobs = &TestingKnobs{}

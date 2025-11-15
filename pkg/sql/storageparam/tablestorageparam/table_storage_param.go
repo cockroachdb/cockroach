@@ -431,7 +431,7 @@ var tableParams = map[string]tableParam{
 			if err != nil {
 				return err
 			}
-			if err := tabledesc.ValidateTTLRowStatsPollInterval(key, d); err != nil {
+			if err := tabledesc.ValidateNotNegativeInterval(key, d); err != nil {
 				return err
 			}
 			rowLevelTTL := po.getOrCreateRowLevelTTL()
@@ -626,6 +626,23 @@ var tableParams = map[string]tableParam{
 		},
 		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			po.TableDesc.RBRUsingConstraint = descpb.ConstraintID(0)
+			return nil
+		},
+	},
+	catpb.CanaryStatsWindowSettingName: {
+		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			d, err := paramparse.DatumAsDuration(ctx, evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateNotNegativeInterval(key, d); err != nil {
+				return err
+			}
+			po.TableDesc.StatsCanaryWindow = d
+			return nil
+		},
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+			po.TableDesc.StatsCanaryWindow = 0
 			return nil
 		},
 	},
