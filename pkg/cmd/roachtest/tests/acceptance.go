@@ -72,8 +72,10 @@ func registerAcceptance(r registry.Registry) {
 		},
 		registry.OwnerTestEng: {
 			{
-				name:          "version-upgrade",
-				fn:            runVersionUpgrade,
+				name: "version-upgrade",
+				fn: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runVersionUpgrade(ctx, t, c, versionUpgradeChaosOpts{})
+				},
 				timeout:       2 * time.Hour, // actually lower in local runs; see `runVersionUpgrade`
 				defaultLeases: true,
 				monitor:       true,

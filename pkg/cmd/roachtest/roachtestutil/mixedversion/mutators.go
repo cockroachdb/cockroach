@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -39,6 +38,10 @@ type preserveDowngradeOptionRandomizerMutator struct{}
 
 func (m preserveDowngradeOptionRandomizerMutator) Name() string {
 	return PreserveDowngradeOptionRandomizer
+}
+
+func (m preserveDowngradeOptionRandomizerMutator) IsCompatible(_ *testPlanner) bool {
+	return true
 }
 
 // Most runs will have this mutator disabled, as the base upgrade
@@ -133,6 +136,26 @@ func randomUpgrades(rng *rand.Rand, plan *TestPlan) []stepSelector {
 	return selectors
 }
 
+// allUpgrades returns selectors for the steps of all upgrades in the plan.
+func allUpgrades(plan *TestPlan) []stepSelector {
+	allUpgrades := plan.allUpgrades()
+
+	byUpgrade := func(upgrade *upgradePlan) func(*singleStep) bool {
+		return func(s *singleStep) bool {
+			// N.B. we need to filter by both from and to versions in order to
+			// exclude setup steps which have undefined ToVersions.
+			return s.context.System.FromVersion.Equal(upgrade.from) && s.context.System.ToVersion.Equal(upgrade.to)
+		}
+	}
+
+	var selectors []stepSelector
+	for _, upgrade := range allUpgrades {
+		selectors = append(selectors, plan.newStepSelector().Filter(byUpgrade(upgrade)))
+	}
+
+	return selectors
+}
+
 // ClusterSettingMutator returns the name of the mutator associated
 // with the given cluster setting name. Callers can disable a specific
 // cluster setting mutator with:
@@ -213,6 +236,10 @@ func newClusterSettingMutator[T any](
 
 func (m clusterSettingMutator) Name() string {
 	return ClusterSettingMutator(m.name)
+}
+
+func (m clusterSettingMutator) IsCompatible(_ *testPlanner) bool {
+	return true
 }
 
 func (m clusterSettingMutator) Probability() float64 {
@@ -387,14 +414,31 @@ func (m clusterSettingMutator) changeSteps(
 const (
 	// PanicNode is a mutator that will randomly cause a node to crash during
 	// the test, before safely restarting the node a random number of steps later.
-	PanicNode = "panic_node"
+	PanicNode                     = "panic_node"
+	SingleNetworkPartition        = "single_network_partition"
+	ProtectedNodeNetworkPartition = "protected_node_network_partition"
 )
+
+func shouldEnableFailureInjection(p *testPlanner) bool {
+	// We disable any failure injections that would occur on clusters with
+	// less than three nodes as this can lead to uninteresting failures
+	// (e.g. a single node panic failure).
+	//
+	// We disable failure injections for local runs as some failure
+	// injections are not supported in that mode and can
+	// cause unintended behaviors (partitions using iptables).
+	return len(p.currentContext.System.Descriptor.Nodes) >= 3 && !p.isLocal
+}
 
 type panicNodeMutator struct {
 }
 
 func (m panicNodeMutator) Name() string {
 	return PanicNode
+}
+
+func (m panicNodeMutator) IsCompatible(p *testPlanner) bool {
+	return shouldEnableFailureInjection(p)
 }
 
 func (m panicNodeMutator) Probability() float64 {
@@ -536,170 +580,4 @@ func GetFailer(planner *testPlanner, name string) (*failures.Failer, error) {
 	}
 
 	return planner.cluster.GetFailer(planner.logger, planner.cluster.CRDBNodes(), name, false)
-}
-
-type networkPartitionMutator struct{}
-
-func (m networkPartitionMutator) Name() string { return failures.IPTablesNetworkPartitionName }
-
-func (m networkPartitionMutator) Probability() float64 {
-	// TODO(#154547)
-	return 0.0
-}
-
-func (m networkPartitionMutator) Generate(
-	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) ([]mutation, error) {
-	var mutations []mutation
-	upgrades := randomUpgrades(rng, plan)
-	idx := newStepIndex(plan)
-	nodeList := planner.currentContext.System.Descriptor.Nodes
-
-	f, err := GetFailer(planner, failures.IPTablesNetworkPartitionName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get failer for %s: %w", failures.IPTablesNetworkPartitionName, err)
-	}
-
-	for _, upgrade := range upgrades {
-		possiblePointsInTime := upgrade.
-			Filter(func(s *singleStep) bool {
-				// We don't want to set up a partition concurrently with other steps, and inserting
-				// before a concurrent step causes the step to run concurrently with that step, so
-				// we filter out any concurrent steps. We don't want to set up a partition while
-				// nodes are unavailable, as that could cause the cluster to lose quorum,
-				//	so we filter out steps with unavailable nodes.
-				var unavailableNodes bool
-				if planner.isMultitenant() {
-					unavailableNodes = s.context.Tenant.hasUnavailableNodes || s.context.System.hasUnavailableNodes
-				} else {
-					unavailableNodes = s.context.System.hasUnavailableNodes
-				}
-				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !unavailableNodes
-			})
-
-		stepToPartition := possiblePointsInTime.RandomStep(rng)
-		hasInvalidConcurrentStep := false
-		var firstStepInConcurrentBlock *singleStep
-
-		isInvalidRecoverStep := func(s *singleStep) bool {
-			// Restarting a node in the middle of a network partition has a chance of
-			// loss of quorum, so we do should recover the network partition before this
-			// if the restarted node is not the node being partitioned.
-			// e.g. In a 4-node cluster, if node 1 is partitioned from nodes 2, 3, and
-			// 4, then restarting node 2 would cause a loss of quorum since 3 and 4
-			// cannot talk to 1.
-
-			// TODO: The partitioned node should be able to restart safely, provided
-			// the necessary steps are altered to allow it.
-
-			_, restartSystem := s.impl.(restartWithNewBinaryStep)
-			_, restartTenant := s.impl.(restartVirtualClusterStep)
-			// Many hook steps require communication between specific nodes, so we
-			// should recover the network partition before running any incompatible
-			// hook steps.
-			_, runHook := s.impl.(runHookStep)
-			// Waiting for stable cluster version requires communication between
-			// all nodes in the cluster, so we should recover the network partition
-			// before running it.
-			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
-
-			if idx.IsConcurrent(s) {
-				if firstStepInConcurrentBlock == nil {
-					firstStepInConcurrentBlock = s
-				}
-				hasInvalidConcurrentStep = true
-			} else {
-				hasInvalidConcurrentStep = false
-				firstStepInConcurrentBlock = nil
-			}
-
-			var unavailableNodes bool
-			if planner.isMultitenant() {
-				unavailableNodes = s.context.Tenant.hasUnavailableNodes || s.context.System.hasUnavailableNodes
-			} else {
-				unavailableNodes = s.context.System.hasUnavailableNodes
-			}
-			return unavailableNodes || restartTenant || restartSystem || (runHook && !planner.options.hooksSupportFailureInjection) || waitForStable
-		}
-
-		_, validStartStep := upgrade.CutAfter(func(s *singleStep) bool {
-			return s == stepToPartition[0]
-		})
-
-		validEndStep, _, cutStep := validStartStep.Cut(func(s *singleStep) bool {
-			return isInvalidRecoverStep(s)
-		})
-
-		// Inserting before a concurrent step will cause the step to run concurrently with that step,
-		// so we remove the concurrent steps from the list of possible insertions if they contain
-		// any invalid steps.
-		if hasInvalidConcurrentStep {
-			validEndStep, _ = validEndStep.CutAfter(func(s *singleStep) bool {
-				return s == firstStepInConcurrentBlock
-			})
-		}
-
-		partitionedNode, leftPartition, rightPartition := selectPartitions(rng, nodeList)
-		partitionType := failures.AllPartitionTypes[rng.Intn(len(failures.AllPartitionTypes))]
-
-		partition := failures.NetworkPartition{Source: leftPartition, Destination: rightPartition, Type: partitionType}
-
-		addPartition := stepToPartition.
-			InsertBefore(networkPartitionInjectStep{f, partition, partitionedNode})
-		var addRecoveryStep []mutation
-		var recoveryStep stepSelector
-		// If validEndStep is nil, it means that there are no steps after the partition step that are
-		// compatible with a network partition, so we immediately restart the node after the partition.
-		if validEndStep == nil {
-			recoveryStep = cutStep
-			addRecoveryStep = cutStep.InsertBefore(networkPartitionRecoveryStep{f, partition, partitionedNode})
-		} else {
-			recoveryStep = validEndStep.RandomStep(rng)
-			addRecoveryStep = recoveryStep.
-				Insert(rng, networkPartitionRecoveryStep{f, partition, partitionedNode})
-		}
-
-		failureContextSteps, _ := validStartStep.CutBefore(func(s *singleStep) bool {
-			return s == recoveryStep[0]
-		})
-
-		failureContextSteps.MarkNodesUnavailable(true, true)
-		addPartition[0].hasUnavailableSystemNodes = true
-		addPartition[0].hasUnavailableTenantNodes = true
-		addRecoveryStep[0].hasUnavailableSystemNodes = true
-		addRecoveryStep[0].hasUnavailableTenantNodes = true
-
-		mutations = append(mutations, addPartition...)
-		mutations = append(mutations, addRecoveryStep...)
-	}
-
-	return mutations, nil
-}
-func selectPartitions(
-	rng *rand.Rand, nodeList option.NodeListOption,
-) (option.NodeListOption, []install.Node, []install.Node) {
-	rand.Shuffle(len(nodeList), func(i, j int) {
-		nodeList[i], nodeList[j] = nodeList[j], nodeList[i]
-	})
-	partitionedNode := nodeList[0]
-
-	leftPartition := []install.Node{install.Node(partitionedNode)}
-	var rightPartition []install.Node
-	// To make an even distribution of partial vs total partitions, 50% of the
-	// time we will default to a total partition, and the other 50% we will
-	// randomly choose which nodes to partition.
-	isTotalPartition := rng.Float64() < 0.5
-	if isTotalPartition {
-		for _, n := range nodeList[1:] {
-			rightPartition = append(rightPartition, install.Node(n))
-		}
-	} else {
-		rightPartition = append(rightPartition, install.Node(nodeList[1]))
-		for _, n := range nodeList[2:] {
-			if rng.Float64() < 0.5 {
-				rightPartition = append(rightPartition, install.Node(n))
-			}
-		}
-	}
-	return option.NodeListOption{partitionedNode}, leftPartition, rightPartition
 }
