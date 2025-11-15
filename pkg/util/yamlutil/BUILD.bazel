@@ -5,7 +5,7 @@ go_library(
     srcs = ["yaml_util.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/yamlutil",
     visibility = ["//visibility:public"],
-    deps = ["@in_gopkg_yaml_v3//:yaml_v3"],
+    deps = ["@in_yaml_go_yaml_v4//:yaml"],
 )
 
 go_test(
