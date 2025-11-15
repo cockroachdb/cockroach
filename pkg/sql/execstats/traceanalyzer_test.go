@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatstypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -221,7 +222,7 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 		},
 	)
 
-	expected := execstats.QueryLevelStats{
+	expected := execstatstypes.QueryLevelStats{
 		KVTime:         cumulativeKVTime,
 		ContentionTime: cumulativeContentionTime,
 	}
@@ -232,7 +233,7 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 
 func TestQueryLevelStatsAccumulate(t *testing.T) {
 	aEvent := kvpb.ContentionEvent{Duration: 7 * time.Second}
-	a := execstats.QueryLevelStats{
+	a := execstatstypes.QueryLevelStats{
 		DistSQLNetworkBytesSent:            1,
 		MaxMemUsage:                        2,
 		KVBytesRead:                        3,
@@ -268,7 +269,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		ClientTime:                         time.Second,
 	}
 	bEvent := kvpb.ContentionEvent{Duration: 14 * time.Second}
-	b := execstats.QueryLevelStats{
+	b := execstatstypes.QueryLevelStats{
 		DistSQLNetworkBytesSent:            8,
 		MaxMemUsage:                        9,
 		KVBytesRead:                        10,
@@ -303,7 +304,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		UsedFollowerRead:                   true,
 		ClientTime:                         2 * time.Second,
 	}
-	expected := execstats.QueryLevelStats{
+	expected := execstatstypes.QueryLevelStats{
 		DistSQLNetworkBytesSent:            9,
 		MaxMemUsage:                        9,
 		KVBytesRead:                        13,

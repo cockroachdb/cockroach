@@ -12,7 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatstypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -314,7 +314,7 @@ func (p *planner) maybeLogStatementInternal(
 			return
 		}
 
-		var queryLevelStats execstats.QueryLevelStats
+		var queryLevelStats execstatstypes.QueryLevelStats
 		if stats, ok := p.instrumentation.GetQueryLevelStats(); ok {
 			queryLevelStats = *stats
 		}

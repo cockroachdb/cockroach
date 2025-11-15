@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatstypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -125,7 +125,7 @@ func TestTelemetryLogging(t *testing.T) {
 		expectedWrite           bool
 		expectedIndexes         bool
 		expectedErr             string // Empty string means no error is expected.
-		queryLevelStats         execstats.QueryLevelStats
+		queryLevelStats         execstatstypes.QueryLevelStats
 		enableTracing           bool
 		enableInjectTxErrors    bool
 		expectedStatsCollector  *sslocal.StatsCollector
@@ -149,7 +149,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            false,
 			expectedWrite:           false,
 			expectedIndexes:         false,
-			queryLevelStats: execstats.QueryLevelStats{
+			queryLevelStats: execstatstypes.QueryLevelStats{
 				ContentionTime:                     0 * time.Nanosecond,
 				DistSQLNetworkBytesSent:            1,
 				MaxMemUsage:                        2,
@@ -194,7 +194,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            false,
 			expectedWrite:           false,
 			expectedIndexes:         true,
-			queryLevelStats: execstats.QueryLevelStats{
+			queryLevelStats: execstatstypes.QueryLevelStats{
 				ContentionTime: 1 * time.Nanosecond,
 			},
 			enableTracing: false,
@@ -217,7 +217,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            true,
 			expectedWrite:           false,
 			expectedIndexes:         true,
-			queryLevelStats: execstats.QueryLevelStats{
+			queryLevelStats: execstatstypes.QueryLevelStats{
 				ContentionTime:          2 * time.Nanosecond,
 				DistSQLNetworkBytesSent: 1,
 				MaxMemUsage:             2,
@@ -242,7 +242,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            true,
 			expectedWrite:           false,
 			expectedIndexes:         true,
-			queryLevelStats: execstats.QueryLevelStats{
+			queryLevelStats: execstatstypes.QueryLevelStats{
 				ContentionTime:          3 * time.Nanosecond,
 				DistSQLNetworkBytesSent: 1124,
 				MaxMemUsage:             132,
@@ -270,7 +270,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            true,
 			expectedWrite:           false,
 			expectedIndexes:         true,
-			queryLevelStats: execstats.QueryLevelStats{
+			queryLevelStats: execstatstypes.QueryLevelStats{
 				ContentionTime:          0 * time.Nanosecond,
 				DistSQLNetworkBytesSent: 124235,
 				MaxMemUsage:             12412,
@@ -297,7 +297,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            true,
 			expectedWrite:           true,
 			expectedIndexes:         true,
-			queryLevelStats: execstats.QueryLevelStats{
+			queryLevelStats: execstatstypes.QueryLevelStats{
 				ContentionTime:          0 * time.Nanosecond,
 				DistSQLNetworkBytesSent: 1,
 				KVBytesRead:             4,
@@ -343,7 +343,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            true,
 			expectedWrite:           false,
 			expectedIndexes:         true,
-			queryLevelStats: execstats.QueryLevelStats{
+			queryLevelStats: execstatstypes.QueryLevelStats{
 				ContentionTime:          2 * time.Nanosecond,
 				DistSQLNetworkBytesSent: 10,
 				MaxMemUsage:             20,
@@ -389,7 +389,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            true,
 			expectedWrite:           false,
 			expectedIndexes:         true,
-			queryLevelStats: execstats.QueryLevelStats{
+			queryLevelStats: execstatstypes.QueryLevelStats{
 				ContentionTime:                     9223372036854775807 * time.Nanosecond,
 				DistSQLNetworkBytesSent:            9223372036854775807,
 				MaxMemUsage:                        9223372036854775807,

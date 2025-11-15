@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatstypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -245,7 +246,10 @@ const (
 
 // GetQueryLevelStats gets the QueryLevelStats if they are available.
 // The query level stats are only available if tracing is enabled.
-func (ih *instrumentationHelper) GetQueryLevelStats() (stats *execstats.QueryLevelStats, ok bool) {
+func (ih *instrumentationHelper) GetQueryLevelStats() (
+	stats *execstatstypes.QueryLevelStats,
+	ok bool,
+) {
 	statsWithErr := ih.queryLevelStatsWithErr
 
 	if statsWithErr == nil || statsWithErr.Err != nil {
@@ -849,7 +853,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	ctx context.Context,
 	flags explain.Flags,
 	phaseTimes *sessionphase.Times,
-	queryStats *execstats.QueryLevelStats,
+	queryStats *execstatstypes.QueryLevelStats,
 ) *explain.OutputBuilder {
 	ob := explain.NewOutputBuilder(flags)
 	if ih.explainPlan == nil {
@@ -954,7 +958,7 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 	ctx context.Context,
 	res RestrictedCommandResult,
 	phaseTimes *sessionphase.Times,
-	queryLevelStats *execstats.QueryLevelStats,
+	queryLevelStats *execstatstypes.QueryLevelStats,
 	distSQLFlowInfos []flowInfo,
 	trace tracingpb.Recording,
 ) (commErr error) {

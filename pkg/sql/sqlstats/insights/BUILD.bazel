@@ -49,7 +49,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/appstatspb",
         "//pkg/sql/clusterunique",
-        "//pkg/sql/execstats",
+        "//pkg/sql/execstats/execstatstypes",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sqlstats",

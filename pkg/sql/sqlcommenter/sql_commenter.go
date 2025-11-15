@@ -9,19 +9,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/redact"
 )
-
-var sqlCommenterEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.sqlcommenter.enabled",
-	"enables support for sqlcommenter. Key value parsed from sqlcommenter "+
-		"comments will be included in sql insights and sql logs. "+
-		"See https://google.github.io/sqlcommenter/ for more details.",
-	false,
-	settings.WithPublic)
 
 type QueryTag struct {
 	Key   string
@@ -72,13 +61,6 @@ func ExtractQueryTags(comment string) []QueryTag {
 	}
 
 	return tags
-}
-
-func MaybeRetainComments(sv *settings.Values) parser.ParseOptions {
-	if sqlCommenterEnabled.Get(sv) {
-		return parser.DefaultParseOptions.RetainComments()
-	}
-	return parser.DefaultParseOptions
 }
 
 func normalize(s string) string {

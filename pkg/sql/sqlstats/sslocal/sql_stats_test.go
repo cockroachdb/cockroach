@@ -471,7 +471,6 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		ingester,
 		sessionphase.NewTimes(),
 		sqlStats.GetCounters(),
-		nil, /* knobs */
 	)
 
 	recordStats := func(testCase *tc) {
@@ -595,7 +594,6 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			ingester,
 			sessionphase.NewTimes(),
 			sqlStats.GetCounters(),
-			nil, /* knobs */
 		)
 
 		ingester.Start(ctx, stopper)

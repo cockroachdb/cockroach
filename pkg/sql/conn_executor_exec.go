@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatstypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -4179,7 +4180,7 @@ func (ex *connExecutor) onTxnRestart(ctx context.Context) {
 		ex.extraTxnState.numRows = 0
 		// accumulatedStats are cleared, but shouldCollectTxnExecutionStats is
 		// unchanged.
-		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
+		ex.extraTxnState.accumulatedStats = execstatstypes.QueryLevelStats{}
 		ex.extraTxnState.idleLatency = 0
 		ex.extraTxnState.rowsRead = 0
 		ex.extraTxnState.bytesRead = 0
@@ -4212,7 +4213,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 	ex.extraTxnState.transactionStatementFingerprintIDs = nil
 	ex.extraTxnState.numRows = 0
-	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
+	ex.extraTxnState.accumulatedStats = execstatstypes.QueryLevelStats{}
 	ex.extraTxnState.idleLatency = 0
 	ex.extraTxnState.rowsRead = 0
 	ex.extraTxnState.bytesRead = 0

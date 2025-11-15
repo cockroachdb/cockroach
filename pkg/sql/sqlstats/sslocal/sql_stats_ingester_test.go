@@ -412,7 +412,6 @@ func TestStatsCollectorIngester(t *testing.T) {
 		ingester,
 		phaseTimes,
 		uniqueServerCounts,
-		nil, // knobs
 	)
 
 	sessionID := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
