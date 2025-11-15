@@ -42,7 +42,7 @@ func TestStatsWithLowTTL(t *testing.T) {
 	var blockTableReader atomic.Bool
 	blockCh := make(chan struct{})
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				// Set the batch size small to avoid having to use a large
@@ -59,12 +59,11 @@ func TestStatsWithLowTTL(t *testing.T) {
 				},
 			},
 		},
-		// In external-process mode the tenant doesn't have kvpb.GCRequest
-		// capability (and this capability can't be granted at the time of
-		// writing either), so we skip the external mode only.
-		DefaultTestTenant: base.TestSkipForExternalProcessMode(),
+		// ForceTableGC is only available for the system tenant.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 	})
-	defer s.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;`)
@@ -141,7 +140,7 @@ func TestStatsWithLowTTL(t *testing.T) {
 				nextPK++
 			}
 			// Force a table GC of values older than 2 seconds.
-			if err := s.ForceTableGC(
+			if err := srv.ForceTableGC(
 				context.Background(), "defaultdb", "t", s.Clock().Now().Add(-int64(2*time.Second), 0),
 			); err != nil {
 				goroutineErr = err
