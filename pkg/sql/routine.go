@@ -460,12 +460,19 @@ func (g *routineGenerator) handleException(ctx context.Context, err error) error
 			g.reset(ctx, g.p, branch, args)
 
 			// Configure stepping for volatile routines so that mutations made by the
-			// invoking statement are visible to the routine.
+			// invoking statement are visible to the routine. Make sure to also step
+			// before caching the read sequence number, since the read sequence number
+			// may be part of "ignored" list set when restoring the savepoint above.
 			var prevSteppingMode kv.SteppingMode
 			var prevSeqNum enginepb.TxnSeq
 			txn := g.p.Txn()
 			if g.expr.EnableStepping {
 				prevSteppingMode = txn.ConfigureStepping(ctx, kv.SteppingEnabled)
+				stepErr := txn.Step(ctx, false /* allowReadTimestampStep */)
+				if stepErr != nil {
+					// This error is unexpected, so return immediately.
+					return errors.CombineErrors(err, errors.WithAssertionFailure(stepErr))
+				}
 				prevSeqNum = txn.GetReadSeqNum()
 			}
 
