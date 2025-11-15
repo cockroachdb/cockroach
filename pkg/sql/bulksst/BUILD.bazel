@@ -22,6 +22,7 @@ go_proto_library(
 go_library(
     name = "bulksst",
     srcs = [
+        "combine_file_info.go",
         "sst_file_allocator.go",
         "sst_writer.go",
     ],
@@ -35,11 +36,13 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/execinfrapb",
         "//pkg/storage",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//objstorage",
         "@com_github_cockroachdb_pebble//objstorage/objstorageprovider",
     ],
@@ -48,6 +51,7 @@ go_library(
 go_test(
     name = "bulksst_test",
     srcs = [
+        "combine_file_info_test.go",
         "main_test.go",
         "sst_file_allocator_test.go",
         "sst_writer_test.go",
@@ -64,6 +68,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
+        "//pkg/sql/execinfrapb",
         "//pkg/storage",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
