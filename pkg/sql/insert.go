@@ -390,3 +390,7 @@ func (n *insertNode) indexBytesWritten() int64 {
 func (n *insertNode) returnsRowsAffected() bool {
 	return !n.run.rowsNeeded
 }
+
+func (n *insertNode) kvCpuTime() int64 {
+	return n.run.ti.kvCpuTime
+}

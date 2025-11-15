@@ -892,6 +892,14 @@ func (z *zigzagJoiner) getKVPairsRead() int64 {
 	return kvPairsRead
 }
 
+func (z *zigzagJoiner) getKVCpuTime() int64 {
+	var kvCpuTime int64
+	for i := range z.infos {
+		kvCpuTime += z.infos[i].fetcher.GetKVCpuTime()
+	}
+	return kvCpuTime
+}
+
 func (z *zigzagJoiner) getRowsRead() int64 {
 	var rowsRead int64
 	for i := range z.infos {
@@ -914,6 +922,7 @@ func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = z.getBytesRead()
 	meta.Metrics.RowsRead = z.getRowsRead()
+	meta.Metrics.KvCpuTime = z.getKVCpuTime()
 	if tfs := execinfra.GetLeafTxnFinalState(z.Ctx(), z.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}

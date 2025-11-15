@@ -72,6 +72,9 @@ type tableWriterBase struct {
 	// indexBytesWritten tracks the number of primary and secondary index bytes
 	// written by this tableWriterBase so far.
 	indexBytesWritten int64
+	// kvCpuTime tracks the cumulative CPU time (in nanoseconds) that KV
+	// reported in BatchResponse headers during the execution of this table writer.
+	kvCpuTime int64
 	// rowsWrittenLimit if positive indicates that
 	// `transaction_rows_written_err` is enabled. The limit will be checked in
 	// finalize() before deciding whether it is safe to auto commit (if auto
@@ -188,6 +191,9 @@ func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 	}
 	if err != nil {
 		return row.ConvertBatchError(ctx, tb.desc, tb.b, false /* alwaysConvertCondFailed */)
+	}
+	if br := tb.b.RawResponse(); br != nil && br.CpuTime > 0 {
+		tb.kvCpuTime += br.CpuTime
 	}
 	return tb.tryDoResponseAdmission(ctx)
 }
