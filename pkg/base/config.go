@@ -88,6 +88,10 @@ const (
 	// contributes meaningfully to the average, while earlier measurements have
 	// diminishing impact.
 	DefaultCPUUsageMovingAverageAge = 20
+
+	// DefaultHighCardinalityMetricsSampleInterval is the default interval for
+	// sampling low-frequency high-cardinality metrics.
+	DefaultHighCardinalityMetricsSampleInterval = time.Minute
 )
 
 // DefaultCertsDirectory is the default value for the cert directory flag.
