@@ -55,7 +55,7 @@ func DialDRPC(
 			_ struct{}) (drpcpool.Conn, error) {
 
 			netConn, err := func(ctx context.Context) (net.Conn, error) {
-				if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+				if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
 					return rpcCtx.loopbackDRPCDialFn(ctx)
 				}
 				return drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
