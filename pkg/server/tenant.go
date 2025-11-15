@@ -829,7 +829,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		// Pass our own instance ID to connect to local RPC servers
 		apiInternalServer, err = apiinternal.NewAPIInternalServer(ctx,
 			s.sqlServer.sqlInstanceDialer,
-			roachpb.NodeID(s.sqlServer.SQLInstanceID()), s.cfg.Settings)
+			roachpb.NodeID(s.sqlServer.SQLInstanceID()), s.rpcContext.UseDRPC)
 		if err != nil {
 			return err
 		}

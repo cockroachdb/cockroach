@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -134,7 +133,8 @@ type TenantCluster struct {
 	InstanceReader  *instancestorage.Reader
 	instancesAtBump []sqlinstance.InstanceInfo
 	DB              *kv.DB
-	Settings        *cluster.Settings
+	// Use DRPC for internal node-to-node communication when true.
+	UseDRPC bool
 }
 
 // TenantClusterConfig configures a TenantCluster.
@@ -149,8 +149,8 @@ type TenantClusterConfig struct {
 	// instances.
 	DB *kv.DB
 
-	// Cluster settings allow access to version and other settings.
-	Settings *cluster.Settings
+	// Use DRPC for internal node-to-node communication when true.
+	UseDRPC bool
 }
 
 // NewTenantCluster returns a new TenantCluster.
@@ -160,7 +160,7 @@ func NewTenantCluster(cfg TenantClusterConfig) *TenantCluster {
 		InstanceReader:  cfg.InstanceReader,
 		instancesAtBump: make([]sqlinstance.InstanceInfo, 0),
 		DB:              cfg.DB,
-		Settings:        cfg.Settings,
+		UseDRPC:         cfg.UseDRPC,
 	}
 }
 
@@ -240,7 +240,7 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 			// test flakes due to network issues.
 			if err := retry.WithMaxAttempts(ctx, retryOpts, retryOpts.MaxRetries+1, func() error {
 				var err error
-				client, err = serverpb.DialMigrationClient(t.Dialer, ctx, roachpb.NodeID(instance.InstanceID), rpcbase.DefaultClass, t.Settings)
+				client, err = serverpb.DialMigrationClient(t.Dialer, ctx, roachpb.NodeID(instance.InstanceID), rpcbase.DefaultClass, t.UseDRPC)
 				return err
 			}); err != nil {
 				return annotateDialError(err)
