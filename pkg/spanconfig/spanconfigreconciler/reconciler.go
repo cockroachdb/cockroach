@@ -12,6 +12,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -231,6 +233,12 @@ func (f *fullReconciler) reconcile(
 		return nil, hlc.Timestamp{}, err
 	}
 
+	tenantPrefix := f.codec.TenantPrefix()
+	_, sourceTenantID, err := keys.DecodeTenantPrefix(tenantPrefix)
+	if err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+
 	// Translate the entire SQL state to ensure KV reflects the most up-to-date
 	// view of things.
 	var records []spanconfig.Record
@@ -240,6 +248,11 @@ func (f *fullReconciler) reconcile(
 		ctx context.Context, txn descs.Txn,
 	) error {
 		kvTxn = txn.KV()
+		if err := dropInvalidPTSRecords(
+			ctx, f.execCfg.ProtectedTimestampProvider.WithTxn(txn), sourceTenantID,
+		); err != nil {
+			return err
+		}
 		translator := f.sqlTranslatorFactory.NewSQLTranslator(txn)
 		records, err = spanconfig.FullTranslate(ctx, translator)
 		return err
@@ -435,6 +448,45 @@ func (f *fullReconciler) deleteExtraneousSpanConfigs(
 	return extraneousTargets, nil
 }
 
+// dropInvalidPTS records inspects the PTS system table and drops any invalid
+// PTS records.
+func dropInvalidPTSRecords(
+	ctx context.Context, ptsStore protectedts.Storage, sourceTenant roachpb.TenantID,
+) error {
+	ptsState, err := ptsStore.GetState(ctx)
+	if err != nil {
+		return err
+	}
+	// Cluster level PTS are always valid, the behavior simply changes depending
+	// on if the system tenant or secondary tenant is applying the PTS. Tenant
+	// PTS's, however, can be invalid if a secondary tenant attempts to lay a PTS
+	// on another tenant. This can happen, for example, in PCR, where a system
+	// tenant, containing tenant PTS records, may be streamed into a secondary
+	// tenant.
+	for _, record := range ptsState.Records {
+		if record.Target == nil {
+			continue
+		}
+		tenantPTS, ok := record.Target.GetUnion().(*ptpb.Target_Tenants)
+		if !ok {
+			continue
+		}
+		for _, tenantID := range tenantPTS.Tenants.IDs {
+			_, err := spanconfig.MakeTenantKeyspaceTarget(sourceTenant, tenantID)
+			if err != nil {
+				recordID := record.ID.GetUUID()
+				log.Dev.Warningf(ctx, "dropping invalid PTS record %s: %v", recordID, err)
+				if err := ptsStore.Release(ctx, recordID); err != nil {
+					return errors.Wrapf(err, "failed to drop invalid PTS record %s", recordID)
+				}
+				break
+			}
+		}
+	}
+
+	return nil
+}
+
 // updateSpanConfigRecords calls the given KVAccessor's UpdateSpanConfigRecords
 // method with the provided upsert/delete args. The call is wrapped inside a
 // retry loop to account for any retryable errors that may occur.
@@ -529,11 +581,25 @@ func (r *incrementalReconciler) reconcile(
 			var missingProtectedTimestampTargets []spanconfig.SystemTarget
 			var records []spanconfig.Record
 
+			tenantPrefix := r.codec.TenantPrefix()
+			_, sourceTenantID, err := keys.DecodeTenantPrefix(tenantPrefix)
+			if err != nil {
+				return err
+			}
+			if err := r.execCfg.InternalDB.DescsTxn(ctx, func(
+				ctx context.Context, txn descs.Txn,
+			) error {
+				return dropInvalidPTSRecords(
+					ctx, r.execCfg.ProtectedTimestampProvider.WithTxn(txn), sourceTenantID,
+				)
+			}); err != nil {
+				return err
+			}
+
 			if err := r.execCfg.InternalDB.DescsTxn(ctx, func(
 				ctx context.Context, txn descs.Txn,
 			) error {
 				var err error
-
 				// Using a fixed timestamp prevents this background job from contending
 				// with foreground schema change traffic. Schema changes modify system
 				// objects like system.descriptor, system.descriptor_id_seq, and
@@ -560,7 +626,13 @@ func (r *incrementalReconciler) reconcile(
 					return err
 				}
 
-				translator := r.sqlTranslatorFactory.NewSQLTranslator(txn)
+				// Due to the fact that we are reading descriptors at a fixed historical
+				// timestamp, the dropping of invalid PTS records in the previous step
+				// will not be visible. Therefore, we ignore invalid PTS targets during
+				// translation here.
+				translator := r.sqlTranslatorFactory.NewSQLTranslator(
+					txn, spanconfigsqltranslator.WithIgnoreInvalidPTSTargets(),
+				)
 				records, err = translator.Translate(ctx, allIDs, generateSystemSpanConfigurations)
 				return err
 			}); err != nil {
