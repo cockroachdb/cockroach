@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand/v2"
 	"net"
 	"os"
 	"reflect"
@@ -85,6 +86,11 @@ type TestCluster struct {
 }
 
 var _ serverutils.TestClusterInterface = &TestCluster{}
+
+// ClusterName returns the configured or auto-generated cluster name.
+func (tc *TestCluster) ClusterName() string {
+	return tc.clusterArgs.ServerArgs.ClusterName
+}
 
 // NumServers is part of TestClusterInterface.
 func (tc *TestCluster) NumServers() int {
@@ -316,6 +322,11 @@ func NewTestCluster(
 	}
 	if clusterArgs.StartSingleNode && nodes > 1 {
 		t.Fatal("StartSingleNode implies 1 node only, but asked to create", nodes)
+	}
+	if clusterArgs.ServerArgs.ClusterName == "" {
+		// Use a cluster name that is sufficiently unique (within the CI env) but is
+		// concise and recognizable.
+		clusterArgs.ServerArgs.ClusterName = fmt.Sprintf("TestCluster-%d", rand.Uint32())
 	}
 
 	if err := checkServerArgsForCluster(
@@ -633,6 +644,9 @@ func (tc *TestCluster) AddServer(
 	serverArgs.PartOfCluster = !tc.clusterArgs.StartSingleNode
 	if serverArgs.JoinAddr != "" {
 		serverArgs.NoAutoInitializeCluster = true
+	}
+	if serverArgs.ClusterName == "" {
+		serverArgs.ClusterName = tc.clusterArgs.ServerArgs.ClusterName
 	}
 
 	// Check args even though we have called checkServerArgsForCluster()
