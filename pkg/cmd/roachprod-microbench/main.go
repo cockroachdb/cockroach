@@ -173,6 +173,12 @@ func makeCompareCommand() *cobra.Command {
 					return err
 				}
 			}
+			if c.postIssues {
+				err = c.postRegressionIssues(links, comparisonResult)
+				if err != nil {
+					return err
+				}
+			}
 		}
 
 		if c.influxConfig.token != "" {
@@ -207,6 +213,7 @@ func makeCompareCommand() *cobra.Command {
 	cmd.Flags().StringVar(&config.influxConfig.token, "influx-token", config.influxConfig.token, "pass an InfluxDB auth token to push the results to InfluxDB")
 	cmd.Flags().StringToStringVar(&config.influxConfig.metadata, "influx-metadata", config.influxConfig.metadata, "pass metadata to add to the InfluxDB measurement")
 	cmd.Flags().Float64Var(&config.threshold, "threshold", config.threshold, "threshold in percentage value for detecting perf regression ")
+	cmd.Flags().BoolVar(&config.postIssues, "post-issues", config.postIssues, "post GitHub issues for performance regressions (requires env vars for github issues to be set)")
 	return cmd
 }
 
