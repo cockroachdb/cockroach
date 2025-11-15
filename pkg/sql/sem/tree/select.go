@@ -16,6 +16,7 @@ package tree
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -480,6 +481,28 @@ func (ih *IndexFlags) Check() error {
 	return nil
 }
 
+// Equal returns true if these IndexFlags equal the other IndexFlags.
+func (ih *IndexFlags) Equal(other *IndexFlags) bool {
+	if ih == nil || other == nil {
+		return ih == other
+	}
+	return ih.Index == other.Index &&
+		ih.IndexID == other.IndexID &&
+		ih.Direction == other.Direction &&
+		ih.NoIndexJoin == other.NoIndexJoin &&
+		ih.NoZigzagJoin == other.NoZigzagJoin &&
+		ih.NoFullScan == other.NoFullScan &&
+		ih.AvoidFullScan == other.AvoidFullScan &&
+		ih.IgnoreForeignKeys == other.IgnoreForeignKeys &&
+		ih.IgnoreUniqueWithoutIndexKeys == other.IgnoreUniqueWithoutIndexKeys &&
+		ih.ForceInvertedIndex == other.ForceInvertedIndex &&
+		ih.ForceZigzag == other.ForceZigzag &&
+		slices.Equal(ih.ZigzagIndexes, other.ZigzagIndexes) &&
+		slices.Equal(ih.ZigzagIndexIDs, other.ZigzagIndexIDs) &&
+		((ih.FamilyID == nil && other.FamilyID == nil) ||
+			(ih.FamilyID != nil && other.FamilyID != nil && *ih.FamilyID == *other.FamilyID))
+}
+
 var enableFamilyIDIndexHintForTests = false
 
 // TestingEnableFamilyIndexHint enables the use of Family index hint
@@ -679,8 +702,10 @@ func (node *JoinTableExpr) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Cond)
 		ctx.WriteByte(' ')
 		if node.JoinType != "" {
-			ctx.WriteString(node.JoinType)
-			ctx.WriteByte(' ')
+			if node.JoinType != AstInner || !ctx.HasFlags(FmtHideHints) {
+				ctx.WriteString(node.JoinType)
+				ctx.WriteByte(' ')
+			}
 			if node.Hint != "" && !ctx.HasFlags(FmtHideHints) {
 				ctx.WriteString(node.Hint)
 				ctx.WriteByte(' ')
@@ -691,8 +716,10 @@ func (node *JoinTableExpr) Format(ctx *FmtCtx) {
 	} else {
 		// General syntax: "<a> <join_type> [<join_hint>] JOIN <b> <condition>"
 		if node.JoinType != "" {
-			ctx.WriteString(node.JoinType)
-			ctx.WriteByte(' ')
+			if node.JoinType != AstInner || !ctx.HasFlags(FmtHideHints) {
+				ctx.WriteString(node.JoinType)
+				ctx.WriteByte(' ')
+			}
 			if node.Hint != "" && !ctx.HasFlags(FmtHideHints) {
 				ctx.WriteString(node.Hint)
 				ctx.WriteByte(' ')
