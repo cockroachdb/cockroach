@@ -19,14 +19,16 @@ type ProviderOpts struct {
 	// N.B. Azure splits up the region (location) and availability zone, but
 	// to keep things consistent with other providers, we treat zone to mean
 	// both and split it up later.
-	Zones           []string
-	MachineType     string
-	VnetName        string
-	NetworkDiskType string
-	NetworkDiskSize int32
-	UltraDiskIOPS   int64
-	DiskCaching     string
-	BootDiskOnly    bool
+	Zones            []string
+	MachineType      string
+	VnetName         string
+	NetworkDiskType  string
+	NetworkDiskSize  int32
+	NetworkDiskCount int
+	UltraDiskIOPS    int64
+	DiskCaching      string
+	UseMultipleDisks bool
+	BootDiskOnly     bool
 }
 
 // These default locations support availability zones. At the time of
@@ -41,13 +43,15 @@ var defaultZones = []string{
 // DefaultProviderOpts returns a new azure.ProviderOpts with default values set.
 func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
-		Zones:           nil,
-		MachineType:     string(armcompute.VirtualMachineSizeTypesStandardD4V3),
-		VnetName:        "common",
-		NetworkDiskType: "premium-disk",
-		NetworkDiskSize: 500,
-		UltraDiskIOPS:   5000,
-		DiskCaching:     "none",
+		Zones:            nil,
+		MachineType:      string(armcompute.VirtualMachineSizeTypesStandardD4V3),
+		VnetName:         "common",
+		NetworkDiskType:  "premium-ssd",
+		NetworkDiskSize:  500,
+		NetworkDiskCount: 1,
+		UltraDiskIOPS:    5000,
+		DiskCaching:      "none",
+		UseMultipleDisks: false,
 	}
 }
 
@@ -83,14 +87,19 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			strings.Join(DefaultZones(true), ",")))
 	flags.StringVar(&o.VnetName, ProviderName+"-vnet-name", "common",
 		"The name of the VNet to use")
-	flags.StringVar(&o.NetworkDiskType, ProviderName+"-network-disk-type", "premium-disk",
-		"type of network disk [premium-disk, ultra-disk]. only used if local-ssd is false")
+	flags.StringVar(&o.NetworkDiskType, ProviderName+"-network-disk-type", "premium-ssd",
+		"type of network disk [standard-ssd, premium-ssd, premium-ssd-v2, ultra-disk]. only used if local-ssd is false")
 	flags.Int32Var(&o.NetworkDiskSize, ProviderName+"-volume-size", 500,
 		"Size in GB of network disk volume, only used if local-ssd=false")
+	flags.IntVar(&o.NetworkDiskCount, ProviderName+"-network-disk-count", 1,
+		"Number of network disks to attach, only used if local-ssd=false")
 	flags.Int64Var(&o.UltraDiskIOPS, ProviderName+"-ultra-disk-iops", 5000,
 		"Number of IOPS provisioned for ultra disk, only used if network-disk-type=ultra-disk")
 	flags.StringVar(&o.DiskCaching, ProviderName+"-disk-caching", "none",
 		"Disk caching behavior for attached storage.  Valid values are: none, read-only, read-write.  Not applicable to Ultra disks.")
+	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
+		false, "Enable the use of multiple stores by creating one store directory per disk. "+
+			"Default is to raid0 stripe all disks or use ZFS (if --file-system=zfs).")
 	flags.BoolVar(&o.BootDiskOnly, ProviderName+"-boot-disk-only", o.BootDiskOnly,
 		"Only attach the boot disk. No additional volumes will be provisioned even if specified.")
 }

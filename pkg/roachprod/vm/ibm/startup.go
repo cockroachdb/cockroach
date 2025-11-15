@@ -16,42 +16,30 @@ import (
 // created from /mnt/data<disknum> to the mount point.
 
 // startupArgs specifies template arguments for the setup template.
+// We define a local type in case we need to add more provider-specific params in
+// the future.
 type startupArgs struct {
 	vm.StartupArgs
-	ExtraMountOpts   string
-	UseMultipleDisks bool
-	BootDiskOnly     bool
 }
 
 const startupTemplate = `#!/usr/bin/env bash
 
 # Script for setting up an IBM machine for roachprod use.
 
-function setup_disks() {
-{{ if .BootDiskOnly }}
-	mkdir -p /mnt/data1 && chmod 777 /mnt/data1
-	echo "VM has no disk attached other than the boot disk."
-	return 0
-{{ end }}
+{{ template "head_utils" . }}
+{{ template "apt_packages" . }}
 
-	mount_prefix="/mnt/data"
-	use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
-
-{{ if not .Zfs }}
-	mount_opts="defaults,nofail"
-	{{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
-{{ else }}
- 	apt-get update -q
-	apt-get install -yq zfsutils-linux
-{{ end }}
+# Provider specific disk logic
+function detect_disks() {
+	# IBM-specific disk detection - returns list of available disks
+	local disks=()
 
 	# List the attached data disks
-	disks=()
 	for d in $(find /dev/disk/by-id/ -type l -not -name *cloud-init* -not -name *part* -exec readlink -f {} \;); do
 		mounted="no"
 
 		# Check if the disk is already mounted; skip if so.
-{{ if .Zfs }}
+{{ if eq .Filesystem "zfs" }}
 		if (zpool list -v -P | grep -q ${d}) || (mount | grep -q ${d}); then
 			mounted="yes"
 		fi
@@ -63,68 +51,20 @@ function setup_disks() {
 
 		if [ "$mounted" = "no" ]; then
 			disks+=("${d}")
-			echo "Disk ${d} is not mounted, mounting it"
+			echo "Disk ${d} is not mounted, need to mount..." >&2
 		else
-			echo "Disk ${d} is already mounted, skipping"
+			echo "Disk ${d} is already mounted, skipping..." >&2
 		fi
 	done
 
-	if [ "${#disks[@]}" -eq "0" ]; then
-		mountpoint="${mount_prefix}1"
-		echo "No disks mounted, creating ${mountpoint}"
-		mkdir -p ${mountpoint}
-		chmod 777 ${mountpoint}
-	elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
-		disknum=1
-		for disk in "${disks[@]}"
-		do
-			mountpoint="${mount_prefix}${disknum}"
-			disknum=$(( disknum + 1 ))
-			echo "Mounting ${disk} at ${mountpoint}"
-			mkdir -p ${mountpoint}
-{{ if .Zfs }}
-			zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disk}
-			# NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
-{{ else }}
-			mkfs.ext4 -F ${disk}
-			mount -o ${mount_opts} ${disk} ${mountpoint}
-			echo "${disk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
-			tune2fs -m 0 ${disk}
-{{ end }}
-			chmod 777 ${mountpoint}
-		done
-	else
-		mountpoint="${mount_prefix}1"
-		echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
-		mkdir -p ${mountpoint}
-{{ if .Zfs }}
-		zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disks[@]}
-		# NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
-{{ else }}
-		raiddisk="/dev/md0"
-		mdadm --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
-		mkfs.ext4 -F ${raiddisk}
-		mount -o ${mount_opts} ${raiddisk} ${mountpoint}
-		echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
-		tune2fs -m 0 ${raiddisk}
-{{ end }}
-		chmod 777 ${mountpoint}
+	# Return disks array by printing each element (only if non-empty)
+	if [ "${#disks[@]}" -gt 0 ]; then
+		printf '%s\n' "${disks[@]}"
 	fi
-
-	# Print the block device and FS usage output. This is useful for debugging.
-	lsblk
-	df -h
-{{ if .Zfs }}
-	zpool list
-{{ end }}
-	sudo touch {{ .DisksInitializedFile }}
 }
 
-{{ template "head_utils" . }}
-{{ template "apt_packages" . }}
-
-# Initialize disks.
-setup_disks
+# Common disk setup logic that calls the above detect_disks function
+{{ template "setup_disks_utils" . }}
 
 {{ template "ulimits" . }}
 {{ template "tcpdump" . }}
