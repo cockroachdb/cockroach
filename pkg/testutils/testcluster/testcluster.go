@@ -317,6 +317,9 @@ func NewTestCluster(
 	if clusterArgs.StartSingleNode && nodes > 1 {
 		t.Fatal("StartSingleNode implies 1 node only, but asked to create", nodes)
 	}
+	if clusterArgs.ServerArgs.ClusterName == "" {
+		clusterArgs.ServerArgs.ClusterName = fmt.Sprintf("TestCluster-%d", timeutil.Now().UnixNano())
+	}
 
 	if err := checkServerArgsForCluster(
 		clusterArgs.ServerArgs, clusterArgs.ReplicationMode, disallowJoinAddr,
@@ -633,6 +636,9 @@ func (tc *TestCluster) AddServer(
 	serverArgs.PartOfCluster = !tc.clusterArgs.StartSingleNode
 	if serverArgs.JoinAddr != "" {
 		serverArgs.NoAutoInitializeCluster = true
+	}
+	if serverArgs.ClusterName == "" {
+		serverArgs.ClusterName = tc.clusterArgs.ServerArgs.ClusterName
 	}
 
 	// Check args even though we have called checkServerArgsForCluster()

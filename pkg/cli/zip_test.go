@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -403,10 +404,12 @@ func TestConcurrentZip(t *testing.T) {
 
 	ctx := context.Background()
 
+	clusterName := fmt.Sprintf("TestConcurrentZip-%d", timeutil.Now().UnixNano())
 	// Three nodes. We want to see what `zip` thinks when one of the nodes is down.
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			ClusterName:       clusterName,
 			Insecure:          true,
 		},
 	})
@@ -421,10 +424,11 @@ func TestConcurrentZip(t *testing.T) {
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
 
-	out, err := c.RunWithCapture("debug zip --timeout=30s --cpu-profile-duration=0s --validate-zip-file=false " + os.DevNull)
-	if err != nil {
-		t.Fatal(err)
-	}
+	out, err := c.RunWithCapture(fmt.Sprintf(
+		"debug zip --timeout=30s --cpu-profile-duration=0s --validate-zip-file=false --cluster-name=%s %s",
+		clusterName, os.DevNull,
+	))
+	require.NoError(t, err)
 
 	// Strip any non-deterministic messages.
 	out = eraseNonDeterministicZipOutput(out)
@@ -437,6 +441,8 @@ func TestConcurrentZip(t *testing.T) {
 	// which the original messages interleve with other messages mean the number
 	// of them after each series is collapsed is also non-derministic.
 	out = regexp.MustCompile(`<dumping SQL tables>\n`).ReplaceAllString(out, "")
+	// Replace the non-deterministic cluster name with a placeholder.
+	out = regexp.MustCompile(`TestConcurrentZip-[0-9]+`).ReplaceAllString(out, "<cluster-name>")
 
 	// We use datadriven simply to read the golden output file; we don't actually
 	// run any commands. Using datadriven allows TESTFLAGS=-rewrite.
