@@ -138,7 +138,7 @@ func (t *descriptorState) findForTimestampImpl(
 
 	// If we have the initial version of the descriptor, and it satisfies the read
 	// timestamp, then the object was just created. We can confirm it satisfies
-	// the request, by executing findForTimestampImpl with the readTimestamp instead.
+	// the request by executing findForTimestampImpl with the readTimestamp instead.
 	if oldest := t.mu.active.findOldest(); hasDifferentReadTimeStamp &&
 		oldest != nil &&
 		oldest.GetVersion() == 1 &&
