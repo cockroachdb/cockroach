@@ -30,6 +30,9 @@ tier1  3        2
 
 resetInterval
 ----
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2
 
 # No more tokens added due to burst budget.
 allocate remaining=5
@@ -53,8 +56,27 @@ cpuTTG canBurst noBurst
 tier0  4        3
 tier1  2        1
 
-resetInterval
+# Test that no tokens are added to bucket, since call to fit, etc.
+# is skipped.
+resetInterval delta=1 skipfit
 ----
+cpuTTG canBurst noBurst
+tier0  4        3
+tier1  2        1
+
+# Test that tokens are added to bucket, in case of a refill rate change.
+resetInterval delta=1
+----
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2
+
+# Test that burst budget will be respected, in case of refill rate change.
+resetInterval delta=1
+----
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2
 
 clear
 ----
@@ -72,6 +94,9 @@ tier1  3        2
 
 resetInterval
 ----
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2
 
 clear
 ----

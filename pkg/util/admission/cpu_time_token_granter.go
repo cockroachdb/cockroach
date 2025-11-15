@@ -117,7 +117,8 @@ type cpuTimeTokenGranter struct {
 		// Since admission deducts from all buckets, these invariants are true, so long as token bucket
 		// replenishing respects it also. Token bucket replenishing is not yet implemented. See
 		// tryGrantLocked for a situation where invariant #1 is relied on.
-		buckets [numResourceTiers][numBurstQualifications]tokenBucket
+		buckets    [numResourceTiers][numBurstQualifications]tokenBucket
+		tokensUsed int64
 	}
 }
 
@@ -190,6 +191,7 @@ func (stg *cpuTimeTokenGranter) tookWithoutPermission(count int64) {
 }
 
 func (stg *cpuTimeTokenGranter) tookWithoutPermissionLocked(count int64) {
+	stg.mu.tokensUsed += count
 	for tier := range stg.mu.buckets {
 		for qual := range stg.mu.buckets[tier] {
 			stg.mu.buckets[tier][qual].tokens -= count
@@ -243,6 +245,16 @@ func (stg *cpuTimeTokenGranter) tryGrantLocked() bool {
 		return true
 	}
 	return false
+}
+
+// getTokensUsedInInterval returns the net number of tokens deducted from the
+// buckets, since the last call to getTokensUsedInInterval.
+func (stg *cpuTimeTokenGranter) getTokensUsedInInterval() int64 {
+	stg.mu.Lock()
+	defer stg.mu.Unlock()
+	tokensUsed := stg.mu.tokensUsed
+	stg.mu.tokensUsed = 0
+	return tokensUsed
 }
 
 // refill adds delta tokens to the corresponding buckets, while respecting
