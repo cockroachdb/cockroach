@@ -207,6 +207,8 @@ type saramaConfig struct {
 	RequiredAcks string `json:",omitempty"`
 
 	Version string `json:",omitempty"`
+
+	ProducerLinger jsonDuration `json:",omitempty"`
 }
 
 func (c saramaConfig) Validate() error {
@@ -257,6 +259,12 @@ func defaultSaramaConfig() *saramaConfig {
 	// to test this one more before changing it.
 	config.Flush.MaxMessages = 1000
 	config.ClientID = "CockroachDB"
+
+	// The default for ProducerLinger is 0ms. This means 0 latency when messages come in,
+	// but for clients with high througput, it could be beneficial to have some latency to
+	// reduce number of batches and increase performance.
+	config.ProducerLinger = jsonDuration(0)
+
 	return config
 }
 
