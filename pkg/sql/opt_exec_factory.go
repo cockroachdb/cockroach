@@ -729,6 +729,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	remoteOnlyLookups bool,
 	reverseScans bool,
 	parallelize bool,
+	perLookupLimit int64,
 ) (exec.Node, error) {
 	if table.IsVirtualTable() {
 		return constructVirtualTableLookupJoin(
@@ -773,6 +774,7 @@ func (ef *execFactory) ConstructLookupJoin(
 			remoteOnlyLookups:          remoteOnlyLookups,
 			reverseScans:               reverseScans,
 			parallelize:                parallelize,
+			perLookupLimit:             perLookupLimit,
 		},
 	}
 	if onCond != tree.DBoolTrue {

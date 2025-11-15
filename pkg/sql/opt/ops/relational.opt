@@ -523,6 +523,25 @@ define LookupJoinPrivate {
     # that read into remote regions, though the lookups are defined in
     # LookupExpr, not RemoteLookupExpr.
     RemoteOnlyLookups bool
+
+    # Direction, if non-default, indicates that the lookup join must perform
+    # either forward or reverse scans of the index. The default value indicates
+    # that the scan direction is not fixed, and can be chosen based on the
+    # required ordering. Note that an ascending scan direction cannot be used
+    # when the lookup expression has an open lower bound (e.g. inequality),
+    # and vice-versa for a descending scan direction.
+    #
+    # This is useful in conjunction with PerLookupLimit to select either the
+    # first or the last row of each lookup range.
+    Direction ScanDirection
+
+    # PerLookupLimit, if nonzero, represents an enforced limit on the number of
+    # rows returned by each lookup. This is useful when only a subset of
+    # matching rows is needed, for example by a foreign-key check. Note that
+    # PerLookupLimit can be combined with a default Direction to indicate that
+    # "PerLookupLimit" rows are required for each input row in no particular
+    # order.
+    PerLookupLimit int64
     _ JoinPrivate
 }
 
