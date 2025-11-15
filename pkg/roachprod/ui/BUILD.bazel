@@ -3,9 +3,21 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "ui",
     srcs = [
+        "broadcast_writer.go",
         "collate_errors.go",
+        "handlers.go",
+        "interface.go",
+        "log_broadcaster.go",
+        "server.go",
         "spinner.go",
+        "types.go",
+        "websocket.go",
         "writer.go",
+    ],
+    embedsrcs = [
+        "dist/index.html",
+        "dist/bundle.6d7032159d04c274b245.js",
+        "dist/bundle.6d7032159d04c274b245.js.LICENSE.txt",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/ui",
     visibility = ["//visibility:public"],
@@ -13,6 +25,8 @@ go_library(
         "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gorilla_websocket//:websocket",
         "@org_golang_x_sync//errgroup",
     ],
 )
