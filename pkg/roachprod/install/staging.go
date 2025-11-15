@@ -247,7 +247,7 @@ func StageApplication(
 			archSuffix = archInfo.DebugArchitecture
 		}
 		err := stageRemoteBinary(
-			ctx, l, c, applicationName, "cockroach/workload", version, archSuffix, destDir,
+			ctx, l, c, applicationName, "workload/workload", version, archSuffix, destDir,
 		)
 		return err
 	case "release":
