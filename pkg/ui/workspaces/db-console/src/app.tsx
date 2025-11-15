@@ -90,6 +90,7 @@ import InsightsOverviewPage from "./views/insights/insightsOverview";
 import StatementInsightDetailsPage from "./views/insights/statementInsightDetailsPage";
 import TransactionInsightDetailsPage from "./views/insights/transactionInsightDetailsPage";
 import { JwtAuthTokenPage } from "./views/jwt/jwtAuthToken";
+import MetricsWorkspace from "./views/reports/containers/metricsWorkspace/metricsWorkspace";
 import ActiveStatementDetails from "./views/statements/activeStatementDetailsConnected";
 import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
 
@@ -371,6 +372,11 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                           exact
                           path="/debug/chart"
                           component={CustomChart}
+                        />
+                        <Route
+                          exact
+                          path="/debug/metrics_workspace"
+                          component={MetricsWorkspace}
                         />
                         <Route
                           exact

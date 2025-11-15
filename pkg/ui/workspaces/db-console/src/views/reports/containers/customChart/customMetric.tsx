@@ -168,6 +168,8 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
               onChange={this.changeMetric}
               placeholder="Select a metric..."
               optionComponent={MetricOption}
+              matchProp="label"
+              ignoreCase={true}
             />
           </div>
         </td>

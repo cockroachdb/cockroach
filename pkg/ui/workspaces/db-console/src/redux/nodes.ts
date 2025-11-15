@@ -28,6 +28,8 @@ import { Pick } from "src/util/pick";
 import { nullOfReturnType } from "src/util/types";
 import { NoConnection } from "src/views/reports/containers/network";
 
+import { DropdownOption } from "../views/shared/components/dropdown";
+
 import { AdminUIState } from "./state";
 
 /**
@@ -636,4 +638,26 @@ export const partitionedStatuses = createSelector(
 export const isSingleNodeCluster = createSelector(
   nodeStatusesSelector,
   nodeStatuses => nodeStatuses && nodeStatuses.length === 1,
+);
+
+export const nodeOptionsSelector = createSelector(
+  nodesSummarySelector,
+  (summary: NodesSummary): DropdownOption[] => {
+    const nodeDisplayNameByID = summary.nodeDisplayNameByID;
+    const base: DropdownOption[] = [{ value: "", label: "Cluster" }];
+    const options: DropdownOption[] = summary.nodeStatuses
+      .map(ns => ({
+        value: ns.desc.node_id.toString(),
+        label: nodeDisplayNameByID[ns.desc.node_id] as string,
+      }))
+      .sort((a: DropdownOption, b: DropdownOption) => {
+        // Move decommissioned nodes to the end of the list.
+        const aDecommissioned = a.label.startsWith("[decommissioned]");
+        const bDecommissioned = b.label.startsWith("[decommissioned]");
+        if (aDecommissioned && !bDecommissioned) return 1;
+        if (!aDecommissioned && bDecommissioned) return -1;
+        return 0;
+      });
+    return base.concat(options);
+  },
 );
