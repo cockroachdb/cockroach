@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "crdb_internal.go",
         "information_schema.go",
+        "information_schema_crdb.go",
         "pg_catalog.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vtable",
