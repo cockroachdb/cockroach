@@ -11,15 +11,16 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cloud/amazon",
+        "//pkg/roachprod/cloud/types",
         "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
-        "//pkg/roachprod/promhelperclient",
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/azure",
         "//pkg/roachprod/vm/gce",
         "//pkg/roachprod/vm/ibm",
+        "//pkg/util/ctxgroup",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_aws_aws_sdk_go//aws",
@@ -35,7 +36,6 @@ go_library(
         "@com_github_ibm_go_sdk_core_v5//core",
         "@com_github_slack_go_slack//:slack",
         "@org_golang_x_exp//maps",
-        "@org_golang_x_sync//errgroup",
     ],
 )
 
