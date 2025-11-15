@@ -1106,3 +1106,7 @@ func (m *SessionDataMutator) SetOptimizerUseMaxFrequencySelectivity(val bool) {
 func (m *SessionDataMutator) SetDisableWaitForJobsNotice(val bool) {
 	m.Data.DisableWaitForJobsNotice = val
 }
+
+func (m *SessionDataMutator) SetCanaryStatsMode(val sessiondatapb.CanaryStatsMode) {
+	m.Data.CanaryStatsMode = val
+}

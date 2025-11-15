@@ -361,6 +361,7 @@ sql.stats.automatic_full_collection.enabled	boolean	true	automatic full statisti
 sql.stats.automatic_partial_collection.enabled	boolean	true	automatic partial statistics collection mode	application
 sql.stats.automatic_partial_collection.fraction_stale_rows	float	0.05	target fraction of stale rows per table that will trigger a partial statistics refresh	application
 sql.stats.automatic_partial_collection.min_stale_rows	integer	100	target minimum number of stale rows per table that will trigger a partial statistics refresh	application
+sql.stats.canary_fraction	float	0	probability that table statistics will use canary mode instead of stable mode for query planning [0.0-1.0]	application
 sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cleanup job	application
 sql.stats.detailed_latency_metrics.enabled	boolean	false	label latency metrics with the statement fingerprint. Workloads with tens of thousands of distinct query fingerprints should leave this setting false. (experimental, affects performance for workloads with high fingerprint cardinality)	application
 sql.stats.error_on_concurrent_create_stats.enabled	boolean	false	set to true to error on concurrent CREATE STATISTICS jobs, instead of skipping them	application

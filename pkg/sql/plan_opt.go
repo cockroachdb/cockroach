@@ -171,12 +171,12 @@ func (p *planner) prepareUsingOptimizer(
 		} else if ok {
 			opc.log(ctx, "query cache hit but there is no prepare metadata")
 		} else {
-			opc.log(ctx, "query cache miss")
+			opc.log(ctx, "query cache miss (prepare)")
 		}
 		opc.flags.Set(planFlagOptCacheMiss)
 	}
 
-	// Build the memo. Do not attempt to build a generic plan at PREPARE-time.
+	// Build the memo. Do not attempt to build a non-ideal generic plan at PREPARE-time.
 	memo, _, err := opc.buildReusableMemo(ctx, false /* allowNonIdealGeneric */)
 	if err != nil {
 		return 0, err
@@ -425,7 +425,8 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 		// are multiple DDL operations; and transactions can be aborted leading to
 		// potential reuse of versions. To avoid these issues, we prevent saving a
 		// memo (for prepare) or reusing a saved memo (for execute).
-		opc.allowMemoReuse = !p.Descriptors().HasUncommittedTables()
+		// We only allow reusing memo if this plan is not going to use canary stats.
+		opc.allowMemoReuse = !p.Descriptors().HasUncommittedTables() && !p.EvalContext().UseCanaryStats
 		opc.useCache = opc.allowMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
 
 		if _, isCanned := p.stmt.AST.(*tree.CannedOptPlan); isCanned {
