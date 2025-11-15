@@ -78,12 +78,14 @@ func TestBufferedSenderOnOverflow(t *testing.T) {
 		require.NoError(t, bs.sendBuffered(muxEv, nil))
 	}
 	require.Equal(t, queueCap, int64(bs.len()))
-	e, success := bs.popFront()
+	dest := bs.popEvents(nil, 1)
+	require.Equal(t, 1, len(dest))
+	e := dest[0]
 	require.Equal(t, sharedMuxEvent{
 		ev:    muxEv,
 		alloc: nil,
 	}, e)
-	require.True(t, success)
+
 	require.Equal(t, queueCap-1, int64(bs.len()))
 	require.NoError(t, bs.sendBuffered(muxEv, nil))
 	require.Equal(t, queueCap, int64(bs.len()))
@@ -212,6 +214,7 @@ func TestBufferedSenderOnOverflowMultiStream(t *testing.T) {
 	queueCap := int64(24)
 	RangefeedSingleBufferedSenderQueueMaxPerReg.Override(ctx, &st.SV, queueCap)
 	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
+	bs.sendBufSize = 1 // Test requires knowing exactly when the queue will fill.
 	require.Equal(t, queueCap, bs.queueMu.perStreamCapacity)
 
 	sm := NewStreamManager(bs, smMetrics)
