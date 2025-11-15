@@ -1,4 +1,5 @@
 # LogicTest: !local-mixed-25.2 !local-mixed-25.3 !local-prepared
+# cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
 
 statement ok
 CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX (y));

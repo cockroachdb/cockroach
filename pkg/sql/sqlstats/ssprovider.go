@@ -71,6 +71,7 @@ type RecordedStmtStats struct {
 	AutoRetryCount           int
 	Failed                   bool
 	Generic                  bool
+	AppliedStmtHints         bool
 	AutoRetryReason          error
 	RowsAffected             int
 	IdleLatencySec           float64

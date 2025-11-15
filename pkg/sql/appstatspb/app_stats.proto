@@ -138,6 +138,10 @@ message StatementStatistics {
   // generic_count is the count of executions that used a generic query plan.
   optional int64 generic_count = 36 [(gogoproto.nullable) = false];
 
+  // stmt_hints_count is the count of executions that applied a hint from the
+  // system.statement_hints table.
+  optional int64 stmt_hints_count = 37 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;

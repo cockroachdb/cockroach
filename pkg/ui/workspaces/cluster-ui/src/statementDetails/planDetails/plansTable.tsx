@@ -33,6 +33,7 @@ const planDetailsColumnLabels = {
   avgExecTime: "Average Execution Time",
   avgRowsRead: "Average Rows Read",
   generic: "Generic Query Plan",
+  stmtHints: "Statement Hints",
   distSQL: "Distributed",
   execCount: "Execution Count",
   fullScan: "Full Scan",
@@ -160,6 +161,17 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
         content={"If the Explain Plan was generic."}
       >
         {planDetailsColumnLabels.generic}
+      </Tooltip>
+    );
+  },
+  stmtHints: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"If hints from statement_hints were applied."}
+      >
+        {planDetailsColumnLabels.stmtHints}
       </Tooltip>
     );
   },
@@ -379,6 +391,14 @@ export function makeExplainPlanColumns(
         RenderCount(item.stats.generic_count, item.stats.count),
       sort: (item: PlanHashStats) =>
         RenderCount(item.stats.generic_count, item.stats.count),
+    },
+    {
+      name: "stmtHints",
+      title: planDetailsTableTitles.stmtHints(),
+      cell: (item: PlanHashStats) =>
+        RenderCount(item.stats.stmt_hints_count, item.stats.count),
+      sort: (item: PlanHashStats) =>
+        RenderCount(item.stats.stmt_hints_count, item.stats.count),
     },
     {
       name: "distSQL",

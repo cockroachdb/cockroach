@@ -225,6 +225,7 @@ func (ex *connExecutor) recordStatementSummary(
 			FingerprintID:        stmtFingerprintID,
 			QuerySummary:         stmt.StmtSummary,
 			Generic:              flags.IsSet(planFlagGeneric),
+			AppliedStmtHints:     len(stmt.Hints) > 0,
 			DistSQL:              flags.ShouldBeDistributed(),
 			Vec:                  flags.IsSet(planFlagVectorized),
 			ImplicitTxn:          implicitTxn,

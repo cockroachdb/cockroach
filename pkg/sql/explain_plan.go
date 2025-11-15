@@ -120,6 +120,10 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			}
 		}
 
+		if len(params.p.stmt.Hints) > 0 {
+			ob.AddStmtHintCount(uint64(len(params.p.stmt.Hints)))
+		}
+
 		if e.options.Flags[tree.ExplainFlagJSON] {
 			// For the JSON flag, we only want to emit the diagram JSON.
 			rows = []string{diagramJSON}

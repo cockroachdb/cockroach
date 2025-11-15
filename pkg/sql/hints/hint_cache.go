@@ -17,8 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -381,22 +379,18 @@ var _ rangefeedbuffer.Event = &bufferEvent{}
 // with the present. After Await returns, MaybeGetStatementHints should
 // accurately reflect all hints that were modified before the call to Await
 // (assuming the ctx was not canceled).
-func (c *StatementHintsCache) Await(ctx context.Context, st *cluster.Settings) {
-	// The frontier timestamp comes from the rangefeed, and could be up to
-	// kv.closed_timestamp.target_duration +
-	// kv.rangefeed.closed_timestamp_refresh_interval behind the present.
-	targetDuration := closedts.TargetDuration.Get(&st.SV)
-	refreshInterval := kvserver.RangeFeedRefreshInterval.Get(&st.SV)
-	const fudge = 10 * time.Millisecond
-	waitUntil := c.clock.Now().AddDuration(targetDuration + refreshInterval + fudge).WallTime
+func (c *StatementHintsCache) Await(ctx context.Context) {
+	// Wait in intervals of at least 100 milliseconds to avoid busy-waiting.
+	const minWait = time.Millisecond * 100
+	waitUntil := c.clock.Now().WallTime
 
 	// Await is only used for testing, so we don't need to wake up immediately. We
 	// can get away with polling the frontier time.
-	for frontier := c.frontier.Load(); frontier < waitUntil; frontier = c.frontier.Load() {
+	for frontier := c.frontier.Load(); frontier <= waitUntil; frontier = c.frontier.Load() {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(time.Duration(waitUntil-frontier) * time.Nanosecond):
+		case <-time.After(max(time.Duration(waitUntil-frontier), minWait)):
 		}
 	}
 }

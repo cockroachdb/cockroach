@@ -1,7 +1,7 @@
 # LogicTest: local
 
 statement ok
-CREATE TABLE kv (k INT PRIMARY KEY, v INT, FAMILY (k, v))
+CREATE TABLE kv (k INT PRIMARY KEY, v INT, FAMILY (k, v), INDEX (v))
 
 query T
 EXPLAIN ANALYZE (PLAN) SELECT k FROM kv WHERE k >= 2
@@ -176,7 +176,7 @@ quality of service: regular
         │       │               └── • virtual table
         │       │                     sql nodes: <hidden>
         │       │                     regions: <hidden>
-        │       │                     actual row count: 361
+        │       │                     actual row count: 362
         │       │                     execution time: 0µs
         │       │                     table: pg_class@primary
         │       │
@@ -276,3 +276,43 @@ quality of service: regular
           actual row count: 1
           execution time: 0µs
           size: 2 columns, 1 row
+
+# Verify that the number of applied statement hints is displayed.
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT k FROM kv WHERE k >= _',
+  'SELECT k FROM kv@kv_v_idx WHERE k >= _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+query T
+EXPLAIN ANALYZE SELECT k FROM kv WHERE k >= 100
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+statement hints count: 1
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• scan
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  actual row count: 0
+  KV time: 0µs
+  KV rows decoded: 0
+  KV bytes read: 0 B
+  KV gRPC calls: 0
+  estimated max memory allocated: 0 B
+  missing stats
+  table: kv@kv_pkey
+  spans: [/100 - ]

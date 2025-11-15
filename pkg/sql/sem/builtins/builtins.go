@@ -9741,7 +9741,7 @@ WHERE object_id = table_descriptor_id
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Void),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				evalCtx.Planner.AwaitStatementHintsCache(ctx, evalCtx.Settings)
+				evalCtx.Planner.AwaitStatementHintsCache(ctx)
 				return tree.DVoidDatum, nil
 			},
 			Info:       `This function is used to await the statement hints cache on the gateway node`,

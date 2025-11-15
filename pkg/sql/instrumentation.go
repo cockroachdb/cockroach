@@ -207,6 +207,10 @@ type instrumentationHelper struct {
 	// stats scanned by this query.
 	nanosSinceStatsForecasted time.Duration
 
+	// stmtHintsCount is the number of hints from system.statement_hints applied
+	// to the statement.
+	stmtHintsCount uint64
+
 	// retryCount is the number of times the transaction was retried.
 	retryCount uint64
 
@@ -429,6 +433,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
 	ih.txnBufferedWritesEnabled = p.txn.BufferedWritesEnabled()
+	ih.stmtHintsCount = uint64(len(stmt.Hints))
 	ih.retryCount = uint64(retryCount)
 	ih.codec = cfg.Codec
 	ih.origCtx = ctx
@@ -861,6 +866,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
 	ob.AddPlanType(ih.generic, ih.optimized)
+	ob.AddStmtHintCount(ih.stmtHintsCount)
 	ob.AddRetryCount("transaction", ih.retryCount)
 	ob.AddRetryTime("transaction", phaseTimes.GetTransactionRetryLatency())
 	ob.AddRetryCount("statement", ih.retryStmtCount)
