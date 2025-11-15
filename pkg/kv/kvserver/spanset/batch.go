@@ -888,6 +888,64 @@ func DisableReadWriterAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	}
 }
 
+// DisableLatchAssertions returns a new batch wrapper with latch assertions
+// disabled. It does not modify the original batch. The returned batch shares
+// the same underlying storage.Batch but has its own SpanSet copies with
+// assertions disabled.
+func DisableLatchAssertions(rw storage.ReadWriter) storage.ReadWriter {
+	switch v := rw.(type) {
+	case *spanSetBatch:
+		// Clone the span sets and disable assertions on the copies
+		readSpans := v.ReadWriter.spanSetReader.spans.Copy()
+		writeSpans := v.ReadWriter.spanSetWriter.spans.Copy()
+		readSpans.DisableUndeclaredAccessAssertions()
+		writeSpans.DisableUndeclaredAccessAssertions()
+
+		// Create a new spanSetBatch with the modified span sets.
+		return &spanSetBatch{
+			ReadWriter: ReadWriter{
+				spanSetReader: spanSetReader{r: v.b, spans: readSpans, spansOnly: v.spansOnly, ts: v.ts},
+				spanSetWriter: spanSetWriter{w: v.b, spans: writeSpans, spansOnly: v.spansOnly, ts: v.ts},
+			},
+			b:         v.b,
+			spans:     readSpans, // Use the read spans as the main spans
+			spansOnly: v.spansOnly,
+			ts:        v.ts,
+		}
+	default:
+		return rw
+	}
+}
+
+// DisableForbiddenSpanAssertionsOnBatch returns a new batch wrapper with
+// forbidden span assertions disabled. It does not modify the original batch.
+// The returned batch shares the same underlying storage.Batch but has its own
+// SpanSet copies with assertions disabled.
+func DisableForbiddenSpanAssertionsOnBatch(rw storage.ReadWriter) storage.ReadWriter {
+	switch v := rw.(type) {
+	case *spanSetBatch:
+		// Clone the span sets and disable assertions on the copies
+		readSpans := v.ReadWriter.spanSetReader.spans.Copy()
+		writeSpans := v.ReadWriter.spanSetWriter.spans.Copy()
+		readSpans.DisableForbiddenSpansAssertions()
+		writeSpans.DisableForbiddenSpansAssertions()
+
+		// Create a new spanSetBatch with the modified span sets.
+		return &spanSetBatch{
+			ReadWriter: ReadWriter{
+				spanSetReader: spanSetReader{r: v.b, spans: readSpans, spansOnly: v.spansOnly, ts: v.ts},
+				spanSetWriter: spanSetWriter{w: v.b, spans: writeSpans, spansOnly: v.spansOnly, ts: v.ts},
+			},
+			b:         v.b,
+			spans:     readSpans, // Use the read spans as the main spans
+			spansOnly: v.spansOnly,
+			ts:        v.ts,
+		}
+	default:
+		return rw
+	}
+}
+
 // addLockTableSpans adds corresponding lock table spans for the declared
 // spans. This is to implicitly allow raw access to separated intents in the
 // lock table for any declared keys. Explicitly declaring lock table spans is
