@@ -338,7 +338,7 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 # Make sure that each index can index join against the new primary key;
 
 query T nosort
-SELECT * FROM [EXPLAIN SELECT * FROM t@i1] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM t@i1] WHERE info !~ '(distribution|vectorized):.*'
 ----
 ·
 • index join
@@ -355,7 +355,7 @@ SELECT * FROM t@i1
 1 2 3 4 {}
 
 query T nosort
-SELECT * FROM [EXPLAIN SELECT * FROM t@i2] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM t@i2] WHERE info !~ '(distribution|vectorized):.*'
 ----
 ·
 • index join
@@ -372,7 +372,7 @@ SELECT * FROM t@i2
 1 2 3 4 {}
 
 query T nosort
-SELECT * FROM [EXPLAIN SELECT * FROM t@i3] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM t@i3] WHERE info !~ '(distribution|vectorized):.*'
 ----
 ·
 • index join
@@ -389,7 +389,7 @@ SELECT * FROM t@i3
 1 2 3 4 {}
 
 query T nosort
-SELECT * FROM [EXPLAIN SELECT * FROM t@i4] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM t@i4] WHERE info !~ '(distribution|vectorized):.*'
 ----
 ·
 • index join
@@ -406,7 +406,7 @@ SELECT * FROM t@i4
 1 2 3 4 {}
 
 query T nosort
-SELECT * FROM [EXPLAIN SELECT * FROM t@i5] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM t@i5] WHERE info !~ '(distribution|vectorized):.*'
 ----
 ·
 • index join
@@ -423,7 +423,7 @@ SELECT * FROM t@i5
 1 2 3 4 {}
 
 query T nosort
-SELECT * FROM [EXPLAIN SELECT * FROM t@i7] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM t@i7] WHERE info !~ '(distribution|vectorized):.*'
 ----
 ·
 • index join
@@ -495,7 +495,7 @@ t  CREATE TABLE public.t (
    );
 
 query T nosort
-SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] OFFSET 2
+SELECT * FROM [EXPLAIN INSERT INTO t VALUES (4, 5, 6)] WHERE info !~ '(distribution|vectorized):.*'
 ----
 ·
 • insert fast path

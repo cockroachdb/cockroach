@@ -48,7 +48,6 @@ FROM child
 INNER LOOKUP JOIN parent ON c_p_id = p_id
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: parent@parent_pkey
@@ -67,7 +66,6 @@ FROM child
 INNER LOOKUP JOIN parent ON p_data = c_data
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -126,7 +124,6 @@ FROM child_rbr
 INNER LOOKUP JOIN parent_rbr ON c_p_id = p_id
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: parent_rbr@parent_rbr_pkey
@@ -154,7 +151,6 @@ FROM child_rbr
 INNER JOIN parent_rbr ON c_p_id = p_id WHERE c_int = 1
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: parent_rbr@parent_rbr_pkey
@@ -184,7 +180,6 @@ FROM child_rbr
 INNER LOOKUP JOIN parent_rbr ON c_p_id = p_id AND c_int + c_int2 = p_int WHERE c_int2 > -1
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: parent_rbr@parent_rbr_pkey
@@ -219,7 +214,6 @@ FROM child_rbr
 INNER LOOKUP JOIN parent_rbr ON c_p_id = p_id WHERE child_rbr.crdb_region = 'ap-southeast-2'
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: parent_rbr@parent_rbr_pkey
