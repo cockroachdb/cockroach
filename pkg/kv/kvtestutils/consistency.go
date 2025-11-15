@@ -64,7 +64,7 @@ func CheckConsistency(ctx context.Context, db querier, span roachpb.Span) []erro
 				delta = regexp.MustCompile(`LastUpdateNanos:\d+`).ReplaceAllString(delta, "")
 				delta = regexp.MustCompile(`\S+:0\b`).ReplaceAllString(delta, "")
 				// The two cases below correspond to the two linked issues above.
-				if regexp.MustCompile(`^\s*SysBytes:-?10|12|20|22|24\s*$`).MatchString(delta) {
+				if regexp.MustCompile(`^\s*SysBytes:-?(10|12|20|22|24)\s*$`).MatchString(delta) {
 					continue
 				}
 				// The SysCount and SysBytes should be either both positive or negative.
