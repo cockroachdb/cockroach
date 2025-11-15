@@ -44,7 +44,8 @@ type hypotheticalIndex struct {
 	storedCols []cat.IndexColumn
 
 	// typ indicates the type of the index - forward, inverted, or vector.
-	typ idxtype.T
+	typ       idxtype.T
+	predicate string
 }
 
 var _ cat.Index = &hypotheticalIndex{}
@@ -56,6 +57,7 @@ func (hi *hypotheticalIndex) init(
 	indexOrd int,
 	typ idxtype.T,
 	zone cat.Zone,
+	predicate string,
 ) {
 	hi.tab = tab
 	hi.name = name
@@ -63,6 +65,7 @@ func (hi *hypotheticalIndex) init(
 	hi.indexOrdinal = indexOrd
 	hi.typ = typ
 	hi.zone = zone
+	hi.predicate = predicate
 
 	// Build an index column ordinal set.
 	var colsOrdSet intsets.Fast
@@ -183,7 +186,7 @@ func (hi *hypotheticalIndex) VectorColumn() cat.IndexColumn {
 
 // Predicate is part of the cat.Index interface.
 func (hi *hypotheticalIndex) Predicate() (string, bool) {
-	return "", false
+	return hi.predicate, hi.predicate != ""
 }
 
 // Zone is part of the cat.Index interface.
