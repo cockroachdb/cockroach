@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -563,7 +562,6 @@ func TestCollatedString(t *testing.T) {
 
 func TestAvroEnum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // has the soft deletes table
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -603,7 +601,9 @@ func TestAvroEnum(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO soft_deletes values (0, 'active')`)
 
 		sd := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR soft_deletes `+
-			`WITH format=%s`, changefeedbase.OptFormatAvro))
+			`WITH format=%s`, changefeedbase.OptFormatAvro),
+			optOutOfMetamorphicDBLevelChangefeed{reason: "has unwatched foo table"},
+		)
 		defer closeFeed(t, sd)
 		assertPayloads(t, sd, []string{
 			`soft_deletes: {"a":{"long":0},"b":{"string":"active"}}->{"after":{"soft_deletes":{"a":{"long":0},"b":{"string":"active"},"c":{"long":0}}}}`,
@@ -788,7 +788,6 @@ func TestAvroSchemaNamespace(t *testing.T) {
 func TestAvroSchemaHasExpectedTopLevelFields(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 148858) // Uses non default DB
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -799,7 +798,8 @@ func TestAvroSchemaHasExpectedTopLevelFields(t *testing.T) {
 		)
 
 		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s`, changefeedbase.OptFormatAvro))
+			`WITH format=%s`, changefeedbase.OptFormatAvro),
+			optOutOfMetamorphicDBLevelChangefeed{reason: "uses non default DB"})
 		defer closeFeed(t, foo)
 
 		assertPayloads(t, foo, []string{

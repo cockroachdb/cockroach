@@ -8431,7 +8431,6 @@ func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
 // Fails: this could be something real
 func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // Doesn't use the default DB
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "Takes too long with race enabled")
@@ -8496,7 +8495,9 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	defer closeSink()
 
 	atomic.StoreInt32(&shouldDrain, 1)
-	feed := feed(t, f, "CREATE CHANGEFEED FOR foo")
+	feed := feed(t, f, "CREATE CHANGEFEED FOR foo", optOutOfMetamorphicDBLevelChangefeed{
+		reason: "doesn't use the default DB",
+	})
 	defer closeFeed(t, feed)
 
 	jobID := feed.(cdctest.EnterpriseTestFeed).JobID()
@@ -8521,7 +8522,6 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 // restart.
 func TestChangefeedHandlesRollingRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // Doesn't use the default DB
 	defer log.Scope(t).Close(t)
 	defer testingUseFastRetry()()
 
@@ -8662,7 +8662,8 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 	defer closeSink()
 
 	proceed <- struct{}{} // Allow changefeed to start.
-	feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH initial_scan='no', min_checkpoint_frequency='100ms'")
+	feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH initial_scan='no', min_checkpoint_frequency='100ms'",
+		optOutOfMetamorphicDBLevelChangefeed{reason: "doesn't use the default DB"})
 	defer closeFeed(t, feed)
 
 	jf := feed.(cdctest.EnterpriseTestFeed)
@@ -9741,7 +9742,6 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 
 func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // Unwatched tables
 	defer log.Scope(t).Close(t)
 
 	scanner := keysutil.MakePrettyScanner(nil, nil)
@@ -9783,7 +9783,7 @@ func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
 
 		var cf cdctest.TestFeed
 		asUser(t, f, `feedCreator`, func(userDB *sqlutils.SQLRunner) {
-			cf = feed(t, f, `CREATE CHANGEFEED FOR table_a;`)
+			cf = feed(t, f, `CREATE CHANGEFEED FOR table_a;`, optOutOfDBLevelChangefeedUnwatchedTables)
 		})
 		defer closeFeed(t, cf)
 
@@ -10021,7 +10021,6 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 
 func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // Unwatched tables for first two cases
 	defer log.Scope(t).Close(t)
 
 	tests := map[string]struct {
@@ -10070,7 +10069,7 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 
 				sqlDB.CheckQueryResultsRetry(t, `SELECT count(*) FROM foo,bar`, [][]string{{`9`}})
 
-				feed := feed(t, f, testData.changefeedStmt)
+				feed := feed(t, f, testData.changefeedStmt, optOutOfDBLevelChangefeedUnwatchedTables)
 
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (4, 'Doug'), (5, 'Elaine'), (6, 'Fred')")
 				sqlDB.Exec(t, "INSERT INTO bar VALUES (4, 'd'), (5, 'e'), (6, 'f')")
@@ -10854,7 +10853,6 @@ func TestCreateChangefeedTelemetryLogs(t *testing.T) {
 
 func TestAlterChangefeedTelemetryLogs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // alter and stuff
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -10872,7 +10870,9 @@ func TestAlterChangefeedTelemetryLogs(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
 
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar`, optOutOfMetamorphicDBLevelChangefeed{
+			reason: "db-level changefeed doesn't support ALTER CHANGEFEED ADD/DROP",
+		})
 		defer closeFeed(t, testFeed)
 		feed := testFeed.(cdctest.EnterpriseTestFeed)
 
@@ -11103,7 +11103,6 @@ func TestSchemachangeDoesNotBreakSinklessFeed(t *testing.T) {
 
 func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // Unwatched tables for some
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDuress(t, "prone to overload")
@@ -11161,7 +11160,8 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE large (a INT PRIMARY KEY)`)
 			sqlDB.Exec(t, `INSERT INTO large (a) SELECT * FROM generate_series(1, 2000);`)
 
-			foo := feed(t, f, `CREATE CHANGEFEED FOR large WITH kafka_sink_config='{"Flush": {"MaxMessages": 1000}}'`)
+			foo := feed(t, f, `CREATE CHANGEFEED FOR large WITH kafka_sink_config='{"Flush": {"MaxMessages": 1000}}'`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, foo)
 
 			rnd, _ := randutil.NewPseudoRand()
@@ -11232,7 +11232,8 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 		} {
 			t.Run(fmt.Sprintf(`eventually surface error for retry: %s`, failTest.errMsg), func(t *testing.T) {
 				knobs.kafkaInterceptor = failTest.failInterceptor
-				foo := feed(t, f, `CREATE CHANGEFEED FOR errors WITH kafka_sink_config='{"Flush": {"MaxMessages": 0}}'`)
+				foo := feed(t, f, `CREATE CHANGEFEED FOR errors WITH kafka_sink_config='{"Flush": {"MaxMessages": 0}}'`,
+					optOutOfDBLevelChangefeedUnwatchedTables)
 				defer closeFeed(t, foo)
 
 				feedJob := foo.(cdctest.EnterpriseTestFeed)

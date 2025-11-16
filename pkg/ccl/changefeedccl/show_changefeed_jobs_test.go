@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -658,7 +657,6 @@ func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
 
 func TestShowChangefeedJobsAuthorization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858)
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -666,7 +664,8 @@ func TestShowChangefeedJobsAuthorization(t *testing.T) {
 
 		var jobID jobspb.JobID
 		createFeed := func(stmt string) {
-			successfulFeed := feed(t, f, stmt)
+			successfulFeed := feed(t, f, stmt, optOutOfMetamorphicDBLevelChangefeed{
+				reason: "tests table level changefeed permissions"})
 			defer closeFeed(t, successfulFeed)
 			_, err := successfulFeed.Next()
 			require.NoError(t, err)

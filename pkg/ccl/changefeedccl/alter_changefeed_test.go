@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -792,7 +791,6 @@ func TestAlterChangefeedDropAllTargetsError(t *testing.T) {
 
 func TestAlterChangefeedTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // has baz unwatched table
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -807,7 +805,8 @@ func TestAlterChangefeedTelemetry(t *testing.T) {
 		// Reset the counts.
 		_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH diff`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH diff`,
+			optOutOfDBLevelChangefeedUnwatchedTables)
 		defer closeFeed(t, testFeed)
 		feed := testFeed.(cdctest.EnterpriseTestFeed)
 
@@ -1069,7 +1068,6 @@ func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 func TestAlterChangefeedDatabaseQualifiedNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 148858) // has unwatched tables
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1077,7 +1075,8 @@ func TestAlterChangefeedDatabaseQualifiedNames(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE d.users (id INT PRIMARY KEY, name STRING)`)
 		sqlDB.Exec(t, `INSERT INTO d.drivers VALUES (1, 'Alice')`)
 		sqlDB.Exec(t, `INSERT INTO d.users VALUES (1, 'Bob')`)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR d.drivers WITH resolved = '100ms', diff`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR d.drivers WITH resolved = '100ms', diff`,
+			optOutOfDBLevelChangefeedUnwatchedTables)
 		defer closeFeed(t, testFeed)
 
 		assertPayloads(t, testFeed, []string{
@@ -1262,7 +1261,6 @@ func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
 
 func TestAlterChangefeedAlterTableName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // uses non default DB
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -1281,6 +1279,7 @@ func TestAlterChangefeedAlterTableName(t *testing.T) {
 		if _, ok := f.(*webhookFeedFactory); ok {
 			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "see comment"})
 		}
+		args = append(args, optOutOfMetamorphicDBLevelChangefeed{reason: "uses non default DB"})
 
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.users WITH diff, resolved = '100ms'`, args...)
 		defer closeFeed(t, testFeed)
@@ -1493,7 +1492,6 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`)
 
 func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // has unwatched tables
 	defer log.Scope(t).Close(t)
 
 	var rndMu struct {
@@ -1570,7 +1568,8 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo
-WITH resolved = '100ms', min_checkpoint_frequency='1ns'`)
+WITH resolved = '100ms', min_checkpoint_frequency='1ns'`,
+			optOutOfDBLevelChangefeedUnwatchedTables)
 
 		g := ctxgroup.WithContext(context.Background())
 		g.Go(func() error {
@@ -1873,7 +1872,6 @@ func TestAlterChangefeedWithOldCursorFromCreateChangefeed(t *testing.T) {
 // based on their privileges.
 func TestAlterChangefeedAccessControl(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // does the fancy test setup
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -1881,7 +1879,7 @@ func TestAlterChangefeedAccessControl(t *testing.T) {
 		rootDB := sqlutils.MakeSQLRunner(s.DB)
 
 		createFeed := func(stmt string) (cdctest.EnterpriseTestFeed, func()) {
-			successfulFeed := feed(t, f, stmt)
+			successfulFeed := feed(t, f, stmt, optOutOfDBLevelChangefeedUnwatchedTables)
 			closeCf := func() {
 				closeFeed(t, successfulFeed)
 			}
