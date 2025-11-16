@@ -591,6 +591,14 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if t.IsSecondJoinInPairedJoiner {
 			tp.Childf("second join in paired joiner")
 		}
+		if t.Direction == opt.ScanForwardDirection {
+			tp.Childf("forward scans")
+		} else if t.Direction == opt.ScanReverseDirection {
+			tp.Childf("reverse scans")
+		}
+		if t.PerLookupLimit > 0 {
+			tp.Childf("per-lookup-limit: %d", t.PerLookupLimit)
+		}
 		f.formatLocking(tp, t.Locking)
 
 	case *InvertedJoinExpr:

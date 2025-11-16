@@ -541,6 +541,62 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 	}
 }
 
+// TestMultiRangeBatchScanWithPerScanLimit runs batches of scan requests with a
+// per-scan key limit. It shows how any or all scans in such a batch can have
+// partial responses, and that
+func TestMultiRangeBatchScanWithPerScanLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, db := startNoSplitMergeServer(t)
+	defer s.Stopper().Stop(ctx)
+
+	require.NoError(t, setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f"))
+	keys := []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"}
+	for _, key := range keys {
+		require.NoError(t, db.Put(ctx, key, "value"))
+	}
+
+	scans := [][]string{{"a", "c"}, {"b", "d"}, {"c", "f"}}
+	expResults := [][]string{
+		{"a1", "a2", "a3", "b1", "b2"},
+		{"b1", "b2", "c1", "c2", "d1"},
+		{"c1", "c2", "d1", "f1", "f2"},
+	}
+
+	for limit := 1; limit <= 5; limit++ {
+		t.Run(fmt.Sprintf("MaxPerScanRequestKeys=%d", limit), func(t *testing.T) {
+			b := &kv.Batch{}
+			b.Header.MaxPerScanRequestKeys = int64(limit)
+
+			for _, span := range scans {
+				b.Scan(span[0], span[1])
+			}
+
+			require.NoError(t, db.Run(ctx, b))
+
+			expSatisfied := make(map[int]struct{})
+			expResultsWithLimit := make([][]string, len(expResults))
+			var count int
+			for i, expRes := range expResults {
+				for _, key := range expRes {
+					if count == limit {
+						break
+					}
+					expResultsWithLimit[i] = append(expResultsWithLimit[i], key)
+					count++
+				}
+				expSatisfied[i] = struct{}{}
+			}
+
+			checkScanResults(
+				t, scans, b.Results, expResultsWithLimit, expSatisfied,
+				kvpb.RESUME_KEY_LIMIT, checkOptions{mode: AcceptPrefix, expCount: count},
+			)
+		})
+	}
+}
+
 // TestMultiRangeBoundedBatchScanPartialResponses runs multiple scan requests
 // either out-of-order or over overlapping key spans and shows how the batch
 // responses can contain partial responses.

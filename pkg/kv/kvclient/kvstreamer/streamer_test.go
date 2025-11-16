@@ -95,14 +95,18 @@ func TestStreamerLimitations(t *testing.T) {
 	t.Run("non-unique requests unsupported", func(t *testing.T) {
 		require.Panics(t, func() {
 			streamer := getStreamer()
-			streamer.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: false}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
+			streamer.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: false},
+				1 /* maxKeysPerRow */, 0 /* perScanRequestKeyLimit */, nil, /* diskBuffer */
+			)
 		})
 	})
 
 	t.Run("pipelining unsupported", func(t *testing.T) {
 		streamer := getStreamer()
 		defer streamer.Close(ctx)
-		streamer.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
+		streamer.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true},
+			1 /* maxKeysPerRow */, 0 /* perScanRequestKeyLimit */, nil, /* diskBuffer */
+		)
 		k := append(s.Codec().TenantPrefix(), roachpb.Key("key")...)
 		get := kvpb.NewGet(k)
 		reqs := []kvpb.RequestUnion{{
@@ -209,7 +213,9 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	getStreamer := func() *kvstreamer.Streamer {
 		acc.Clear(ctx)
 		s := getStreamer(ctx, s, limitBytes, &acc, false /* reverse */)
-		s.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
+		s.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true},
+			1 /* maxKeysPerRow */, 0 /* perScanRequestKeyLimit */, nil, /* diskBuffer */
+		)
 		return s
 	}
 
@@ -393,13 +399,11 @@ func TestStreamerWideRows(t *testing.T) {
 	}
 }
 
-func makeScanRequest(
-	codec keys.SQLCodec, tableID uint32, start, end int, reverse bool,
-) kvpb.RequestUnion {
+func makeScanRequest(codec keys.SQLCodec, tableID, start, end int, reverse bool) kvpb.RequestUnion {
 	var res kvpb.RequestUnion
 	makeKey := func(pk int) []byte {
 		// These numbers essentially make a key like '/t/primary/pk'.
-		return append(codec.IndexPrefix(tableID, 1), byte(136+pk))
+		return append(codec.IndexPrefix(uint32(tableID), 1), byte(136+pk))
 	}
 	if reverse {
 		var scan kvpb.ReverseScanRequest
@@ -417,23 +421,16 @@ func makeScanRequest(
 	return res
 }
 
-// TestStreamerEmptyScans verifies that the Streamer behaves correctly when
-// Scan requests return empty responses.
-func TestStreamerEmptyScans(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+func setupScanTest(t *testing.T) (srv serverutils.TestServerInterface, tableID int) {
+	t.Helper()
 
 	// Start a cluster with large --max-sql-memory parameter so that the
 	// Streamer isn't hitting the root budget exceeded error.
 	const rootPoolSize = 1 << 30 /* 1GiB */
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	var db *gosql.DB
+	srv, db, _ = serverutils.StartServer(t, base.TestServerArgs{
 		SQLMemoryPoolSize: rootPoolSize,
 	})
-	ctx := context.Background()
-	defer srv.Stopper().Stop(ctx)
-
-	ts := srv.ApplicationLayer()
-	codec := ts.Codec()
 
 	// Create a dummy table for which we know the encoding of valid keys.
 	// Although not strictly necessary, we set up two column families since with
@@ -441,7 +438,7 @@ func TestStreamerEmptyScans(t *testing.T) {
 	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob STRING, INDEX (k), FAMILY (pk, k), FAMILY (blob))")
 	require.NoError(t, err)
 
-	const tableID = 104
+	tableID = 104
 	// Sanity check that the table 't' has the expected TableID.
 	assertTableID(t, db, "t" /* tableName */, tableID)
 
@@ -453,10 +450,28 @@ func TestStreamerEmptyScans(t *testing.T) {
 	_, err = db.Exec("SELECT count(*) from t")
 	require.NoError(t, err)
 
+	return srv, tableID
+}
+
+// TestStreamerEmptyScans verifies that the Streamer behaves correctly when
+// Scan requests return empty responses.
+func TestStreamerEmptyScans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, tableID := setupScanTest(t)
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+	codec := ts.Codec()
+
 	getStreamer := func(reverse bool) *kvstreamer.Streamer {
 		s := getStreamer(ctx, ts, math.MaxInt64, mon.NewStandaloneUnlimitedAccount(), reverse)
 		// There are two column families in the table.
-		s.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 2 /* maxKeysPerRow */, nil /* diskBuffer */)
+		s.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true},
+			2 /* maxKeysPerRow */, 0 /* perScanRequestKeyLimit */, nil, /* diskBuffer */
+		)
 		return s
 	}
 
@@ -502,6 +517,27 @@ func TestStreamerEmptyScans(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestStreamerPerScanLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, tableID := setupScanTest(t)
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+	codec := ts.Codec()
+
+	getStreamer := func(reverse bool) *kvstreamer.Streamer {
+		s := getStreamer(ctx, ts, math.MaxInt64, mon.NewStandaloneUnlimitedAccount(), reverse)
+		// There are two column families in the table.
+		s.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true},
+			2 /* maxKeysPerRow */, 6 /* perScanRequestKeyLimit */, nil, /* diskBuffer */
+		)
+		return s
+	}
 }
 
 // TestStreamerMultiRangeScan verifies that the Streamer correctly handles scan

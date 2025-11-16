@@ -198,6 +198,7 @@ func NewStreamingKVFetcher(
 	maintainOrdering bool,
 	singleRowLookup bool,
 	maxKeysPerRow int,
+	perScanRequestKeyLimit int,
 	reverse bool,
 	diskBuffer kvstreamer.ResultDiskBuffer,
 	kvFetcherMemAcc *mon.BoundAccount,
@@ -234,6 +235,7 @@ func NewStreamingKVFetcher(
 			SingleRowLookup: singleRowLookup,
 		},
 		maxKeysPerRow,
+		perScanRequestKeyLimit,
 		diskBuffer,
 	)
 	return newKVFetcher(newTxnKVStreamer(
@@ -403,6 +405,11 @@ func (f *KVProvider) NextBatch(context.Context) (KVBatchFetcherResponse, error) 
 func (f *KVProvider) SetupNextFetch(
 	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit, bool,
 ) error {
+	return nil
+}
+
+// DropSpan implements the KVBatchFetcher interface.
+func (f *KVProvider) DropSpan(spanID int) error {
 	return nil
 }
 

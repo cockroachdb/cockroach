@@ -416,3 +416,108 @@
     $limitExpr
     $ordering
 )
+
+# GenerateDistinctLookupJoin transforms a DistinctOn grouping by columns from
+# the input of a LookupJoin into a LookupJoin that applies a limit of one
+# looked-up row per input row.
+#
+# The condition that the DistinctOn groups by only columns from the left input
+# of the LookupJoin is crucial for the correctness of this rule. It guarantees
+# that the set of all rows that *could* be looked up for a given input row are
+# part of the same DistinctOn group. DistinctOn selects the first row from each
+# group, so a lookup with the correct ordering can return the first encountered
+# row for each input row.
+[GenerateDistinctLookupJoin, Explore]
+(DistinctOn
+    $join:(LookupJoin
+        $input:*
+        # There must be no filters beyond those used for the lookup, or else
+        # applying the limit could cause qualifying rows to be discarded.
+        []
+        $lookupPrivate:* &
+            (IsCanonicalLookupJoin $lookupPrivate) &
+
+            # Prevent matching when the lookup columns are a key on the lookup
+            # table, as the lookup join will already return at most one row per
+            # input row in that case.
+            ^(LookupColsAreTableKey $lookupPrivate)
+    )
+    $aggs:*
+    $groupingPrivate:* &
+        (IsCanonicalGroupBy $groupingPrivate) &
+        (ColsAreSubset
+            $groupingCols:(GroupingCols $groupingPrivate)
+            (OutputCols $input)
+        ) &
+
+        # Let GenerateDistinctLookupJoinWithKey handle the case where the
+        # grouping columns are a key on the input.
+        ^(ColsAreStrictKey $groupingCols $input) &
+        (Let
+            ($ok $direction):(LookupJoinCanProvideOrdering
+                $join
+                (ExtractGroupingOrdering $groupingPrivate)
+            )
+            $ok
+        )
+)
+=>
+(DistinctOn
+    (LookupJoin
+        $input
+        []
+        (MakeLookupJoinPrivateDistinct $lookupPrivate $direction)
+    )
+    $aggs
+    $groupingPrivate
+)
+
+# GenerateDistinctLookupJoinWithKey is a variant of GenerateDistinctLookupJoin
+# that applies when the grouping columns are a key on the input of the
+# LookupJoin. In this case, applying a per-lookup limit to the LookupJoin will
+# fully capture the de-duplication effect of the DistinctOn, so the DistinctOn
+# can be removed.
+[GenerateDistinctLookupJoinWithKey, Explore]
+(DistinctOn
+    $join:(LookupJoin
+        $input:*
+        # There must be no filters beyond those used for the lookup, or else
+        # applying the limit could cause qualifying rows to be discarded.
+        []
+        $lookupPrivate:* &
+            (IsCanonicalLookupJoin $lookupPrivate) &
+
+            # Prevent matching when the lookup columns are a key on the lookup
+            # table, as the lookup join will already return at most one row per
+            # input row in that case.
+            ^(LookupColsAreTableKey $lookupPrivate)
+    )
+    $aggs:*
+    $groupingPrivate:* &
+        (IsCanonicalGroupBy $groupingPrivate) &
+        (ColsAreSubset
+            $groupingCols:(GroupingCols $groupingPrivate)
+            (OutputCols $input)
+        ) &
+        (ColsAreStrictKey $groupingCols $input) &
+        (Let
+            ($ok $direction):(LookupJoinCanProvideOrdering
+                $join
+                (ExtractGroupingOrdering $groupingPrivate)
+            )
+            $ok
+        )
+)
+=>
+(Project
+    (LookupJoin
+        $input
+        []
+        (MakeLookupJoinPrivateDistinct $lookupPrivate $direction)
+    )
+    (ConvertDistinctOnAggsToProjections $aggs)
+    (IntersectionCols
+        (GroupingOutputCols $groupingPrivate $aggs)
+        (OutputCols $join)
+    )
+)

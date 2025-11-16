@@ -2767,6 +2767,14 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 			panic(errors.AssertionFailedf("unhandled join type %s", h.joinType))
 		}
 
+		// Lookup joins can have per-lookup limits. If the limit is 1, keys from
+		// the left input are preserved by the join.
+		if lookup, ok := h.join.(*LookupJoinExpr); ok && lookup.PerLookupLimit == 1 {
+			if leftKey, hasKey := h.leftProps.FuncDeps.StrictKey(); hasKey {
+				rel.FuncDeps.AddStrictKey(leftKey, rel.OutputCols)
+			}
+		}
+
 		rel.FuncDeps.MakeNotNull(rel.NotNullCols)
 
 		// Call ProjectCols to trigger simplification, since outer joins may have
@@ -2879,6 +2887,14 @@ func (h *joinPropsHelper) cardinality() props.Cardinality {
 		} else {
 			innerJoinCard = innerJoinCard.AsLowAs(0)
 		}
+	}
+
+	// Lookup joins can have per-lookup limits.
+	if lookup, ok := h.join.(*LookupJoinExpr); ok && lookup.PerLookupLimit > 0 {
+		// The PerLookupLimit is the maximum number of rows that can be generated
+		// per input row.
+		maxCard := left.Max * uint32(lookup.PerLookupLimit)
+		innerJoinCard = innerJoinCard.Limit(maxCard)
 	}
 
 	// Adjust cardinality to account for outer joins as well as join multiplicity.

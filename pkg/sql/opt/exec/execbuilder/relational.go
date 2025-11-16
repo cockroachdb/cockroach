@@ -3028,7 +3028,6 @@ func (b *Builder) buildLookupJoin(
 	if !ok {
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("lookup join can't provide required ordering")
 	}
-	reverse := requiredDirection == ordering.ReverseDirection
 	parallelize := b.shouldParallelizeLookupJoin(join, lookupOrdinals)
 	for _, c := range reqOrdering {
 		if c.ColIdx >= numInputCols {
@@ -3038,6 +3037,17 @@ func (b *Builder) buildLookupJoin(
 			break
 		}
 	}
+	// TODO(drewk): think about parallelization.
+	if join.Direction != opt.ScanEitherDirection && requiredDirection != opt.ScanEitherDirection {
+		// If both the join and the required ordering specify a particular scan
+		// direction, the directions must match.
+		if join.Direction != requiredDirection {
+			return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
+				"lookup join can't provide required ordering")
+		}
+	}
+	reverse := requiredDirection == opt.ScanReverseDirection ||
+		join.Direction == opt.ScanReverseDirection
 	var res execPlan
 	res.root, err = b.factory.ConstructLookupJoin(
 		joinType,
@@ -3058,6 +3068,7 @@ func (b *Builder) buildLookupJoin(
 		join.RemoteOnlyLookups,
 		reverse,
 		parallelize,
+		join.PerLookupLimit,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err

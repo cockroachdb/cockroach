@@ -373,6 +373,17 @@ message JoinReaderSpec {
   // Note that this field has no effect when the Streamer API is used.
   optional bool parallelize = 26 [(gogoproto.nullable) = false];
 
+  // If nonzero, limits the number of rows returned by each individual lookup.
+  // This is useful for cases where there are many matches for each input row,
+  // but only a subset of those is needed.
+  //
+  // The limit will respect the index ordering if maintain_lookup_ordering is
+  // also set, although the ascending column limitation still applies. If the
+  // ordering is not maintained, the first 'limit' matching rows that are found
+  // will be returned. This may cause nondeterministic results in the unordered
+  // case.
+  optional int64 per_lookup_limit = 27 [(gogoproto.nullable) = false];
+
   reserved 5, 7, 12, 13, 18;
 }
 

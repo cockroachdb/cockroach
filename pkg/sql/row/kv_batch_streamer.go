@@ -16,12 +16,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
-// txnKVStreamer handles retrieval of key/values.
+// txnKVStreamer handles retrieval of key/values. It is not thread-safe.
 type txnKVStreamer struct {
 	kvBatchMetrics
 	streamer       *kvstreamer.Streamer
@@ -36,6 +37,8 @@ type txnKVStreamer struct {
 	// both Key and EndKey set).
 	spans       identifiableSpans
 	reqsScratch []kvpb.RequestUnion
+
+	droppedRequests *intsets.Sparse
 
 	acc *mon.BoundAccount
 
@@ -88,6 +91,9 @@ func (f *txnKVStreamer) SetupNextFetch(
 		return errors.AssertionFailedf("unexpected non-zero bytes limit for txnKVStreamer")
 	}
 	f.reset(ctx)
+	if f.droppedRequests != nil {
+		f.droppedRequests.Clear()
+	}
 
 	// Since the streamer takes ownership of the spans slice, we don't need to
 	// perform the deep copy. Notably, the spans might be modified (when the
@@ -206,6 +212,11 @@ func (f *txnKVStreamer) proceedWithLastResult(
 func (f *txnKVStreamer) releaseLastResult(ctx context.Context) {
 	f.lastResultState.Release(ctx)
 	f.lastResultState.Result = kvstreamer.Result{}
+}
+
+// DropSpan implements the KVBatchFetcher interface.
+func (f *txnKVStreamer) DropSpan(spanID int) error {
+	return f.keyLimitHelper.dropSpan(&f.spans, spanID)
 }
 
 // NextBatch implements the KVBatchFetcher interface.

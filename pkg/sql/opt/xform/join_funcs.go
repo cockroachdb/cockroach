@@ -1267,17 +1267,6 @@ func (c *CustomFuncs) MakeProjectionsForOuterJoin(
 	return result
 }
 
-// IsAntiJoin returns true if the given lookup join is an anti join.
-func (c *CustomFuncs) IsAntiJoin(private *memo.LookupJoinPrivate) bool {
-	return private.JoinType == opt.AntiJoinOp
-}
-
-// IsLocalityOptimizedJoin returns true if the given lookup join is a locality
-// optimized join
-func (c *CustomFuncs) IsLocalityOptimizedJoin(private *memo.LookupJoinPrivate) bool {
-	return private.LocalityOptimized
-}
-
 // EmptyFiltersExpr returns an empty FiltersExpr.
 func (c *CustomFuncs) EmptyFiltersExpr() memo.FiltersExpr {
 	return memo.EmptyFiltersExpr
@@ -1849,14 +1838,6 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedSearchOfLookupJoins(
 	if !c.e.evalCtx.SessionData().LocalityOptimizedSearch {
 		return nil, memo.FiltersExpr{}, false
 	}
-	if lookupJoinExpr.LocalityOptimized || lookupJoinExpr.ChildOfLocalityOptimizedSearch {
-		// Already locality optimized. Bail out.
-		return nil, memo.FiltersExpr{}, false
-	}
-	// Don't try to handle paired joins for now.
-	if lookupJoinExpr.IsFirstJoinInPairedJoiner || lookupJoinExpr.IsSecondJoinInPairedJoiner {
-		return nil, memo.FiltersExpr{}, false
-	}
 	// This rewrite is only designed for inner join, left join and semijoin.
 	if lookupJoinExpr.JoinType != opt.InnerJoinOp &&
 		lookupJoinExpr.JoinType != opt.SemiJoinOp &&
@@ -2164,4 +2145,45 @@ func (c *CustomFuncs) mapInputSideOfLookupJoin(
 	mappedLookupJoinExpr.Locking = lookupJoinExpr.Locking
 	mappedLookupJoinExpr.RemoteOnlyLookups = lookupJoinExpr.RemoteOnlyLookups
 	return mappedLookupJoinExpr
+}
+
+// IsAntiJoin returns true if the given lookup join is an anti join.
+func (c *CustomFuncs) IsAntiJoin(private *memo.LookupJoinPrivate) bool {
+	return private.JoinType == opt.AntiJoinOp
+}
+
+// IsCanonicalLookupJoin returns true if the given lookup join private is for
+// the canonical version of the operator, e.g. not locality-optimized, not a
+// paired join, and no per-lookup limit or required scan direction.
+func (c *CustomFuncs) IsCanonicalLookupJoin(private *memo.LookupJoinPrivate) bool {
+	return !private.LocalityOptimized && !private.ChildOfLocalityOptimizedSearch &&
+		!private.IsFirstJoinInPairedJoiner && !private.IsSecondJoinInPairedJoiner &&
+		private.PerLookupLimit == 0 && private.Direction == opt.ScanEitherDirection
+}
+
+// LookupColsAreTableKey returns true if the lookup columns for the given lookup
+// join form a key in the table (and thus each input row matches with at most
+// one table row).
+func (c *CustomFuncs) LookupColsAreTableKey(private *memo.LookupJoinPrivate) bool {
+	return private.LookupColsAreTableKey
+}
+
+// LookupJoinCanProvideOrdering determines whether the given LookupJoin
+// expression can provide the given ordering, as well as whether its lookups
+// must be conducted using reverse scans to do so.
+func (c *CustomFuncs) LookupJoinCanProvideOrdering(
+	join *memo.LookupJoinExpr, ordChoice props.OrderingChoice,
+) (ok bool, direction opt.ScanDirection) {
+	return ordering.LookupJoinCanProvideOrdering(c.e.ctx, c.e.evalCtx, c.e.mem, join, &ordChoice)
+}
+
+// MakeLookupJoinPrivateDistinct makes a copy of the given private, but sets the
+// given lookup direction and the PerLookupLimit to 1.
+func (c *CustomFuncs) MakeLookupJoinPrivateDistinct(
+	private *memo.LookupJoinPrivate, direction opt.ScanDirection,
+) *memo.LookupJoinPrivate {
+	newPrivate := *private
+	newPrivate.Direction = direction
+	newPrivate.PerLookupLimit = 1
+	return &newPrivate
 }

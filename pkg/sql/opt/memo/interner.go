@@ -484,6 +484,10 @@ func (h *hasher) HashOrderingChoice(val props.OrderingChoice) {
 	}
 }
 
+func (h *hasher) HashScanDirection(val opt.ScanDirection) {
+	h.HashInt(int(val))
+}
+
 func (h *hasher) HashSchemaID(val opt.SchemaID) {
 	h.HashUint64(uint64(val))
 }
@@ -977,6 +981,10 @@ func (h *hasher) IsOrderingEqual(l, r opt.Ordering) bool {
 
 func (h *hasher) IsOrderingChoiceEqual(l, r props.OrderingChoice) bool {
 	return l.Equals(&r)
+}
+
+func (h *hasher) IsScanDirectionEqual(l, r opt.ScanDirection) bool {
+	return l == r
 }
 
 func (h *hasher) IsSchemaIDEqual(l, r opt.SchemaID) bool {
