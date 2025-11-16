@@ -195,7 +195,7 @@ layers:
       essential: true
     - name: rpc.connection.avg_round_trip_latency
       exported_name: rpc_connection_avg_round_trip_latency
-      description: |
+      description: |-
         Sum of exponentially weighted moving average of round-trip latencies, as measured through a gRPC RPC.
 
         Since this metric is based on gRPC RPCs, it is affected by application-level
@@ -219,7 +219,7 @@ layers:
       essential: true
     - name: rpc.connection.failures
       exported_name: rpc_connection_failures
-      description: |
+      description: |-
         Counter of failed connections.
 
         This includes both the event in which a healthy connection terminates as well as
@@ -271,7 +271,7 @@ layers:
       essential: true
     - name: rpc.connection.tcp_rtt
       exported_name: rpc_connection_tcp_rtt
-      description: |
+      description: |-
         Kernel-level TCP round-trip time as measured by the Linux TCP stack.
 
         This metric reports the smoothed round-trip time (SRTT) as maintained by the
@@ -288,7 +288,7 @@ layers:
       essential: true
     - name: rpc.connection.tcp_rtt_var
       exported_name: rpc_connection_tcp_rtt_var
-      description: |
+      description: |-
         Kernel-level TCP round-trip time variance as measured by the Linux TCP stack.
 
         This metric reports the smoothed round-trip time variance (RTTVAR) as maintained
@@ -2233,7 +2233,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rangefeed.catchup_ranges
       exported_name: distsender_rangefeed_catchup_ranges
-      description: |
+      description: |-
         Number of ranges in catchup mode
 
         This counts the number of ranges with an active rangefeed that are performing catchup scan.
@@ -2396,7 +2396,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rangefeed.total_ranges
       exported_name: distsender_rangefeed_total_ranges
-      description: |
+      description: |-
         Number of ranges executing rangefeed
 
         This counts the number of ranges with an active rangefeed.
@@ -2607,7 +2607,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.ambiguousresulterrtype
       exported_name: distsender_rpc_err_ambiguousresulterrtype
-      description: |
+      description: |-
         Number of AmbiguousResultErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2621,7 +2621,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.batchtimestampbeforegcerrtype
       exported_name: distsender_rpc_err_batchtimestampbeforegcerrtype
-      description: |
+      description: |-
         Number of BatchTimestampBeforeGCErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2635,7 +2635,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.communicationerrtype
       exported_name: distsender_rpc_err_communicationerrtype
-      description: |
+      description: |-
         Number of CommunicationErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2649,7 +2649,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.conditionfailederrtype
       exported_name: distsender_rpc_err_conditionfailederrtype
-      description: |
+      description: |-
         Number of ConditionFailedErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2663,7 +2663,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.exclusionviolationerrtype
       exported_name: distsender_rpc_err_exclusionviolationerrtype
-      description: |
+      description: |-
         Number of ExclusionViolationErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2677,7 +2677,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.indeterminatecommiterrtype
       exported_name: distsender_rpc_err_indeterminatecommiterrtype
-      description: |
+      description: |-
         Number of IndeterminateCommitErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2691,7 +2691,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.integeroverflowerrtype
       exported_name: distsender_rpc_err_integeroverflowerrtype
-      description: |
+      description: |-
         Number of IntegerOverflowErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2705,7 +2705,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.intentmissingerrtype
       exported_name: distsender_rpc_err_intentmissingerrtype
-      description: |
+      description: |-
         Number of IntentMissingErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2719,7 +2719,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.internalerrtype
       exported_name: distsender_rpc_err_internalerrtype
-      description: |
+      description: |-
         Number of InternalErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2733,7 +2733,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.invalidleaseerrtype
       exported_name: distsender_rpc_err_invalidleaseerrtype
-      description: |
+      description: |-
         Number of InvalidLeaseErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2747,7 +2747,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.leaserejectederrtype
       exported_name: distsender_rpc_err_leaserejectederrtype
-      description: |
+      description: |-
         Number of LeaseRejectedErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2761,7 +2761,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.lockconflicterrtype
       exported_name: distsender_rpc_err_lockconflicterrtype
-      description: |
+      description: |-
         Number of LockConflictErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2775,7 +2775,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.mergeinprogresserrtype
       exported_name: distsender_rpc_err_mergeinprogresserrtype
-      description: |
+      description: |-
         Number of MergeInProgressErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2789,7 +2789,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.mintimestampboundunsatisfiableerrtype
       exported_name: distsender_rpc_err_mintimestampboundunsatisfiableerrtype
-      description: |
+      description: |-
         Number of MinTimestampBoundUnsatisfiableErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2803,7 +2803,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.mvcchistorymutationerrtype
       exported_name: distsender_rpc_err_mvcchistorymutationerrtype
-      description: |
+      description: |-
         Number of MVCCHistoryMutationErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2817,7 +2817,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.nodeunavailableerrtype
       exported_name: distsender_rpc_err_nodeunavailableerrtype
-      description: |
+      description: |-
         Number of NodeUnavailableErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2831,7 +2831,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.notleaseholdererrtype
       exported_name: distsender_rpc_err_notleaseholdererrtype
-      description: |
+      description: |-
         Number of NotLeaseHolderErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2845,7 +2845,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.oprequirestxnerrtype
       exported_name: distsender_rpc_err_oprequirestxnerrtype
-      description: |
+      description: |-
         Number of OpRequiresTxnErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2859,7 +2859,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.optimisticevalconflictserrtype
       exported_name: distsender_rpc_err_optimisticevalconflictserrtype
-      description: |
+      description: |-
         Number of OptimisticEvalConflictsErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2873,7 +2873,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.proxyfailederrtype
       exported_name: distsender_rpc_err_proxyfailederrtype
-      description: |
+      description: |-
         Number of ProxyFailedErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2887,7 +2887,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.raftgroupdeletederrtype
       exported_name: distsender_rpc_err_raftgroupdeletederrtype
-      description: |
+      description: |-
         Number of RaftGroupDeletedErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2901,7 +2901,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.rangefeedretryerrtype
       exported_name: distsender_rpc_err_rangefeedretryerrtype
-      description: |
+      description: |-
         Number of RangeFeedRetryErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2915,7 +2915,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.rangekeymismatcherrtype
       exported_name: distsender_rpc_err_rangekeymismatcherrtype
-      description: |
+      description: |-
         Number of RangeKeyMismatchErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2929,7 +2929,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.rangenotfounderrtype
       exported_name: distsender_rpc_err_rangenotfounderrtype
-      description: |
+      description: |-
         Number of RangeNotFoundErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2943,7 +2943,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.readwithinuncertaintyintervalerrtype
       exported_name: distsender_rpc_err_readwithinuncertaintyintervalerrtype
-      description: |
+      description: |-
         Number of ReadWithinUncertaintyIntervalErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2957,7 +2957,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.refreshfailederrtype
       exported_name: distsender_rpc_err_refreshfailederrtype
-      description: |
+      description: |-
         Number of RefreshFailedErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2971,7 +2971,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.replicacorruptionerrtype
       exported_name: distsender_rpc_err_replicacorruptionerrtype
-      description: |
+      description: |-
         Number of ReplicaCorruptionErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2985,7 +2985,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.replicatooolderrtype
       exported_name: distsender_rpc_err_replicatooolderrtype
-      description: |
+      description: |-
         Number of ReplicaTooOldErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -2999,7 +2999,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.replicaunavailableerrtype
       exported_name: distsender_rpc_err_replicaunavailableerrtype
-      description: |
+      description: |-
         Number of ReplicaUnavailableErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -3013,7 +3013,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.storenotfounderrtype
       exported_name: distsender_rpc_err_storenotfounderrtype
-      description: |
+      description: |-
         Number of StoreNotFoundErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -3027,7 +3027,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.transactionabortederrtype
       exported_name: distsender_rpc_err_transactionabortederrtype
-      description: |
+      description: |-
         Number of TransactionAbortedErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -3041,7 +3041,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.transactionpusherrtype
       exported_name: distsender_rpc_err_transactionpusherrtype
-      description: |
+      description: |-
         Number of TransactionPushErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -3055,7 +3055,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.transactionretryerrtype
       exported_name: distsender_rpc_err_transactionretryerrtype
-      description: |
+      description: |-
         Number of TransactionRetryErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -3069,7 +3069,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.transactionretrywithprotorefresherrtype
       exported_name: distsender_rpc_err_transactionretrywithprotorefresherrtype
-      description: |
+      description: |-
         Number of TransactionRetryWithProtoRefreshErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -3083,7 +3083,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.transactionstatuserrtype
       exported_name: distsender_rpc_err_transactionstatuserrtype
-      description: |
+      description: |-
         Number of TransactionStatusErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -3097,7 +3097,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.txnalreadyencounterederrtype
       exported_name: distsender_rpc_err_txnalreadyencounterederrtype
-      description: |
+      description: |-
         Number of TxnAlreadyEncounteredErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -3111,7 +3111,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.unsupportedrequesterrtype
       exported_name: distsender_rpc_err_unsupportedrequesterrtype
-      description: |
+      description: |-
         Number of UnsupportedRequestErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -3125,7 +3125,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.writeintenterrtype
       exported_name: distsender_rpc_err_writeintenterrtype
-      description: |
+      description: |-
         Number of WriteIntentErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -3139,7 +3139,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.writetooolderrtype
       exported_name: distsender_rpc_err_writetooolderrtype
-      description: |
+      description: |-
         Number of WriteTooOldErrType errors received replica-bound RPCs
 
         This counts how often error of the specified type was received back from replicas
@@ -7100,7 +7100,7 @@ layers:
       derivative: NONE
     - name: round-trip-default-class-latency
       exported_name: round_trip_default_class_latency
-      description: |
+      description: |-
         Distribution of round-trip latencies with other nodes.
 
         Similar to round-trip-latency, but only for default class connections.
@@ -7111,7 +7111,7 @@ layers:
       derivative: NONE
     - name: round-trip-latency
       exported_name: round_trip_latency
-      description: |
+      description: |-
         Distribution of round-trip latencies with other nodes.
 
         This only reflects successful heartbeats and measures gRPC overhead as well as
@@ -7128,7 +7128,7 @@ layers:
       derivative: NONE
     - name: round-trip-raft-class-latency
       exported_name: round_trip_raft_class_latency
-      description: |
+      description: |-
         Distribution of round-trip latencies with other nodes.
 
         Similar to round-trip-latency, but only for raft class connections.
@@ -7139,7 +7139,7 @@ layers:
       derivative: NONE
     - name: round-trip-rangefeed-class-latency
       exported_name: round_trip_rangefeed_class_latency
-      description: |
+      description: |-
         Distribution of round-trip latencies with other nodes.
 
         Similar to round-trip-latency, but only for rangefeed class connections.
@@ -7150,7 +7150,7 @@ layers:
       derivative: NONE
     - name: round-trip-system-class-latency
       exported_name: round_trip_system_class_latency
-      description: |
+      description: |-
         Distribution of round-trip latencies with other nodes.
 
         Similar to round-trip-latency, but only for system class connections.
@@ -7177,7 +7177,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: rpc.connection.connected
       exported_name: rpc_connection_connected
-      description: |
+      description: |-
         Counter of TCP level connected connections.
 
         This metric is the number of gRPC connections from the TCP level. Unlike rpc.connection.healthy
@@ -9817,8 +9817,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sys.host.net.send.tcp.loss_probes
       exported_name: sys_host_net_send_tcp_loss_probes
-      description: |2-
-
+      description: |-
         Number of TCP tail loss probes sent. Loss probes are an optimization to detect
         loss of the last packet earlier than the retransmission timer, and can indicate
         network issues. Tail loss probes are aggressive, so the base rate is often nonzero
@@ -9830,8 +9829,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sys.host.net.send.tcp.retrans_segs
       exported_name: sys_host_net_send_tcp_retrans_segs
-      description: |2
-
+      description: |-
         The number of TCP segments retransmitted across all network interfaces.
         This can indicate packet loss occurring in the network. However, it can
         also be caused by recipient nodes not consuming packets in a timely manner,
@@ -9848,8 +9846,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      how_to_use: |2
-
+      how_to_use: |-
         Phase changes, especially when occurring on groups of nodes, can indicate packet
         loss in the network or a slow consumer of packets. On slow consumers, the
         'sys.host.net.rcvd.drop' metric may be elevated; on overloaded senders, it
@@ -9859,8 +9856,7 @@ layers:
       essential: true
     - name: sys.host.net.send.tcp.slow_start_retrans
       exported_name: sys_host_net_send_tcp_slow_start_retrans
-      description: |2
-
+      description: |-
         Number of TCP retransmissions in slow start. This can indicate that the network
         is unable to support the initial fast ramp-up in window size, and can be a sign
         of packet loss or congestion.
@@ -9871,8 +9867,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sys.host.net.send.tcp_timeouts
       exported_name: sys_host_net_send_tcp_timeouts
-      description: |2
-
+      description: |-
         Number of TCP retransmission timeouts. These typically imply that a packet has
         not been acknowledged within at least 200ms.  Modern TCP stacks use
         optimizations such as fast retransmissions and loss probes to avoid hitting
@@ -10583,7 +10578,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: addsstable.aswrites
       exported_name: addsstable_aswrites
-      description: |
+      description: |-
         Number of SSTables ingested as normal writes.
 
         These AddSSTable requests do not count towards the addsstable metrics
@@ -11764,7 +11759,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: exec.latency
       exported_name: exec_latency
-      description: |
+      description: |-
         Latency of batch KV requests (including errors) executed on this node.
 
         This measures requests already addressed to a single replica, from the moment
@@ -11782,7 +11777,7 @@ layers:
       derivative: NONE
     - name: exec.success
       exported_name: exec_success
-      description: |
+      description: |-
         Number of batch KV requests executed successfully on this node.
 
         A request is considered to have executed 'successfully' if it either returns a result
@@ -12626,7 +12621,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: kv.replica_circuit_breaker.num_tripped_replicas
       exported_name: kv_replica_circuit_breaker_num_tripped_replicas
-      description: |
+      description: |-
         Number of Replicas for which the per-Replica circuit breaker is currently tripped.
 
         A nonzero value indicates range or replica unavailability, and should be investigated.
@@ -14373,7 +14368,7 @@ layers:
       derivative: NONE
     - name: raft.process.commandcommit.latency
       exported_name: raft_process_commandcommit_latency
-      description: |
+      description: |-
         Latency histogram for applying a batch of Raft commands to the state machine.
 
         This metric is misnamed: it measures the latency for *applying* a batch of
@@ -14392,7 +14387,7 @@ layers:
       derivative: NONE
     - name: raft.process.handleready.latency
       exported_name: raft_process_handleready_latency
-      description: |
+      description: |-
         Latency histogram for handling a Raft ready.
 
         This measures the end-to-end-latency of the Raft state advancement loop, including:
@@ -14418,7 +14413,7 @@ layers:
       derivative: NONE
     - name: raft.process.logcommit.latency
       exported_name: raft_process_logcommit_latency
-      description: |
+      description: |-
         Latency histogram for committing Raft log entries to stable storage
 
         This measures the latency of durably committing a group of newly received Raft
@@ -14443,7 +14438,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.process.workingnanos
       exported_name: raft_process_workingnanos
-      description: |
+      description: |-
         Nanoseconds spent in store.processRaft() working.
 
         This is the sum of the measurements passed to the raft.process.handleready.latency
@@ -14599,7 +14594,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.rcvd.stepped_bytes
       exported_name: raft_rcvd_stepped_bytes
-      description: |
+      description: |-
         Number of bytes in messages processed by Raft.
 
         Messages reflected here have been handed to Raft (via RawNode.Step). This does not imply that the
@@ -14676,7 +14671,7 @@ layers:
       derivative: NONE
     - name: raft.scheduler.latency
       exported_name: raft_scheduler_latency
-      description: |
+      description: |-
         Queueing durations for ranges waiting to be processed by the Raft scheduler.
 
         This histogram measures the delay from when a range is registered with the scheduler
@@ -14721,7 +14716,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.storage.read_bytes
       exported_name: raft_storage_read_bytes
-      description: |
+      description: |-
         Counter of raftpb.Entry.Size() read from pebble for raft log entries.
 
         These are the bytes returned from the (raft.Storage).Entries method that were not
@@ -14992,7 +14987,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: range.snapshots.delegate.failures
       exported_name: range_snapshots_delegate_failures
-      description: |
+      description: |-
         Number of snapshots that were delegated to a different node and
         resulted in failure on that delegate. There are numerous reasons a failure can
         occur on a delegate such as timeout, the delegate Raft log being too far behind
@@ -15012,7 +15007,7 @@ layers:
       derivative: NONE
     - name: range.snapshots.delegate.sent-bytes
       exported_name: range_snapshots_delegate_sent_bytes
-      description: |
+      description: |-
         Bytes sent using a delegate.
 
         The number of bytes sent as a result of a delegate snapshot request
@@ -15025,7 +15020,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: range.snapshots.delegate.successes
       exported_name: range_snapshots_delegate_successes
-      description: |
+      description: |-
         Number of snapshots that were delegated to a different node and
         resulted in success on that delegate. This does not count self delegated snapshots.
       y_axis_label: Snapshots
@@ -15425,7 +15420,7 @@ layers:
       derivative: NONE
     - name: requests.backpressure.split
       exported_name: requests_backpressure_split
-      description: |
+      description: |-
         Number of backpressured writes waiting on a Range split.
 
         A Range will backpressure (roughly) non-system traffic when the range is above
@@ -15439,7 +15434,7 @@ layers:
       derivative: NONE
     - name: requests.slow.latch
       exported_name: requests_slow_latch
-      description: |
+      description: |-
         Number of requests that have been stuck for a long time acquiring latches.
 
         Latches moderate access to the KV keyspace for the purpose of evaluating and
@@ -15457,7 +15452,7 @@ layers:
       derivative: NONE
     - name: requests.slow.lease
       exported_name: requests_slow_lease
-      description: |
+      description: |-
         Number of requests that have been stuck for a long time acquiring a lease.
 
         This gauge registering a nonzero value usually indicates range or replica
@@ -15472,7 +15467,7 @@ layers:
       derivative: NONE
     - name: requests.slow.raft
       exported_name: requests_slow_raft
-      description: |
+      description: |-
         Number of requests that have been stuck for a long time in the replication layer.
 
         An (evaluated) request has to pass through the replication layer, notably the
@@ -16249,7 +16244,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: storage.compactions.keys.pinned.bytes
       exported_name: storage_compactions_keys_pinned_bytes
-      description: |
+      description: |-
         Cumulative size of storage engine KVs written to sstables during flushes and compactions due to open LSM snapshots.
 
         Various subsystems of CockroachDB take LSM snapshots to maintain a consistent view
@@ -16265,7 +16260,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: storage.compactions.keys.pinned.count
       exported_name: storage_compactions_keys_pinned_count
-      description: |
+      description: |-
         Cumulative count of storage engine KVs written to sstables during flushes and compactions due to open LSM snapshots.
 
         Various subsystems of CockroachDB take LSM snapshots to maintain a consistent view
@@ -17175,7 +17170,7 @@ layers:
       derivative: NONE
     - name: storage.point_deletions.bytes
       exported_name: storage_point_deletions_bytes
-      description: |
+      description: |-
         Estimated file bytes that will be saved by compacting all point deletions.
 
         This is dependent on table stats collection, so can be very incomplete until
@@ -17187,7 +17182,7 @@ layers:
       derivative: NONE
     - name: storage.range_deletions.bytes
       exported_name: storage_range_deletions_bytes
-      description: |
+      description: |-
         Estimated file bytes that will be saved by compacting all range deletions.
 
         This is dependent on table stats collection, so can be very incomplete until

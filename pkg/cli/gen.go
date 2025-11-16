@@ -481,13 +481,13 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 				Name:         chart.Metrics[0].Name,
 				ExportedName: chart.Metrics[0].ExportedName,
 				LabeledName:  chart.Metrics[0].LabeledName,
-				Description:  chart.Metrics[0].Help,
+				Description:  strings.TrimSpace(chart.Metrics[0].Help),
 				YAxisLabel:   chart.AxisLabel,
 				Type:         chart.Metrics[0].MetricType.String(),
 				Unit:         chart.Units.String(),
 				Aggregation:  chart.Aggregator.String(),
 				Derivative:   chart.Derivative.String(),
-				HowToUse:     chart.Metrics[0].HowToUse,
+				HowToUse:     strings.TrimSpace(chart.Metrics[0].HowToUse),
 				Essential:    chart.Metrics[0].Essential,
 			}
 			category.Metrics = append(category.Metrics, metric)
