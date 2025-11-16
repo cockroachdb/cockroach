@@ -562,8 +562,8 @@ func TestCollatedString(t *testing.T) {
 }
 
 func TestAvroEnum(t *testing.T) {
-	skip.WithIssue(t, 148858) // has the soft deletes table
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // has the soft deletes table
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -788,6 +788,7 @@ func TestAvroSchemaNamespace(t *testing.T) {
 func TestAvroSchemaHasExpectedTopLevelFields(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 148858) // Uses non default DB
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)

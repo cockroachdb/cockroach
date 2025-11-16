@@ -791,8 +791,8 @@ func TestAlterChangefeedDropAllTargetsError(t *testing.T) {
 }
 
 func TestAlterChangefeedTelemetry(t *testing.T) {
-	skip.WithIssue(t, 148858) // has baz unwatched table
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // has baz unwatched table
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -1069,6 +1069,7 @@ func TestAlterChangefeedAddTargetErrors(t *testing.T) {
 func TestAlterChangefeedDatabaseQualifiedNames(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 148858) // has unwatched tables
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1174,7 +1175,8 @@ func TestAlterChangefeedDatabaseScopeUnqualifiedName(t *testing.T) {
 		)
 
 		sqlDB.Exec(t, `USE movr`)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR drivers WITH diff, resolved = '100ms'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR drivers WITH diff, resolved = '100ms'`,
+			optOutOfDBLevelChangefeedUnwatchedTables)
 		defer closeFeed(t, testFeed)
 
 		assertPayloads(t, testFeed, []string{
@@ -1259,8 +1261,8 @@ func TestAlterChangefeedColumnFamilyDatabaseScope(t *testing.T) {
 }
 
 func TestAlterChangefeedAlterTableName(t *testing.T) {
-	skip.WithIssue(t, 148858) // uses non default DB
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // uses non default DB
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -1490,8 +1492,8 @@ WITH resolved = '1s', no_initial_scan, min_checkpoint_frequency='1ns'`)
 }
 
 func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
-	skip.WithIssue(t, 148858) // has unwatched tables
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // has unwatched tables
 	defer log.Scope(t).Close(t)
 
 	var rndMu struct {
@@ -1870,8 +1872,8 @@ func TestAlterChangefeedWithOldCursorFromCreateChangefeed(t *testing.T) {
 // TestChangefeedJobControl tests if a user can modify and existing changefeed
 // based on their privileges.
 func TestAlterChangefeedAccessControl(t *testing.T) {
-	skip.WithIssue(t, 148858) // does the fancy test setup
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // does the fancy test setup
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {

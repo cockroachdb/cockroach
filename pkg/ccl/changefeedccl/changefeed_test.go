@@ -3349,8 +3349,8 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns', no_initial_scan`)
 //
 // TODO: remove this test when the legacy schema changer is  deprecated.
 func TestChangefeedSchemaChangeAllowBackfill_Legacy(t *testing.T) {
-	skip.WithIssue(t, 148858) // Also uses initial scan.
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // Also uses initial scan.
 	defer log.Scope(t).Close(t)
 
 	testutils.SetVModule(t, "kv_feed=2,changefeed_processors=2")
@@ -5667,8 +5667,8 @@ func TestChangefeedResolvedNotice(t *testing.T) {
 }
 
 func TestChangefeedLowFrequencyNotices(t *testing.T) {
-	skip.WithIssue(t, 148858) // I think these notices have an issue
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // I think these notices have an issue
 	defer log.Scope(t).Close(t)
 
 	cluster, _, cleanup := startTestCluster(t)
@@ -5732,8 +5732,8 @@ func TestChangefeedLowFrequencyNotices(t *testing.T) {
 //	--- FAIL: TestChangefeedOutputTopics/pubsub_v2 (0.22s)
 //	--- PASS: TestChangefeedOutputTopics/webhooks_does_not_emit_anything (0.24s)
 func TestChangefeedOutputTopics(t *testing.T) {
-	skip.WithIssue(t, 148858) // I don't know exactly what this is, could be real.
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // I don't know exactly what this is, could be real.
 	defer log.Scope(t).Close(t)
 
 	cluster, _, cleanup := startTestCluster(t)
@@ -8430,8 +8430,8 @@ func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
 
 // Fails: this could be something real
 func TestChangefeedHandlesDrainingNodes(t *testing.T) {
-	skip.WithIssue(t, 148858) // Doesn't use the default DB
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // Doesn't use the default DB
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "Takes too long with race enabled")
@@ -8520,8 +8520,8 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 // Verifies changefeed updates checkpoint when cluster undergoes rolling
 // restart.
 func TestChangefeedHandlesRollingRestart(t *testing.T) {
-	skip.WithIssue(t, 148858) // Doesn't use the default DB
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // Doesn't use the default DB
 	defer log.Scope(t).Close(t)
 	defer testingUseFastRetry()()
 
@@ -9740,8 +9740,8 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 }
 
 func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
-	skip.WithIssue(t, 148858) // Unwatched tables
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // Unwatched tables
 	defer log.Scope(t).Close(t)
 
 	scanner := keysutil.MakePrettyScanner(nil, nil)
@@ -10020,8 +10020,8 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 }
 
 func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
-	skip.WithIssue(t, 148858) // Unwatched tables for first two cases
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // Unwatched tables for first two cases
 	defer log.Scope(t).Close(t)
 
 	tests := map[string]struct {
@@ -10853,8 +10853,8 @@ func TestCreateChangefeedTelemetryLogs(t *testing.T) {
 }
 
 func TestAlterChangefeedTelemetryLogs(t *testing.T) {
-	skip.WithIssue(t, 148858) // alter and stuff
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // alter and stuff
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -11102,8 +11102,8 @@ func TestSchemachangeDoesNotBreakSinklessFeed(t *testing.T) {
 }
 
 func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
-	skip.WithIssue(t, 148858) // Unwatched tables for some
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // Unwatched tables for some
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDuress(t, "prone to overload")
@@ -12324,8 +12324,8 @@ WITH resolved='10ms', min_checkpoint_frequency='10ms', no_initial_scan`
 // errors while managing its protected timestamp records will increment the
 // manage PTS error counter.
 func TestChangefeedProtectedTimestampUpdateError(t *testing.T) {
-	skip.WithIssue(t, 148858) // ?
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858) // ?
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {

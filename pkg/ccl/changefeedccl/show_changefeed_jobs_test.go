@@ -657,8 +657,8 @@ func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
 }
 
 func TestShowChangefeedJobsAuthorization(t *testing.T) {
-	skip.WithIssue(t, 148858)
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 148858)
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
