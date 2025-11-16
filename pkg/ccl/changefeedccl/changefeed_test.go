@@ -122,8 +122,6 @@ func TestChangefeedBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 148858) // initial scan?
-
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -138,7 +136,7 @@ func TestChangefeedBasics(t *testing.T) {
 			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
 		})
 
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`) //, (2, 'b')`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
 		assertPayloads(t, foo, []string{
 			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
 			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
@@ -901,7 +899,6 @@ func TestChangefeedIdleness(t *testing.T) {
 
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (b INT PRIMARY KEY)`)
-		// TODO(#148858): Add coverage for DB-level changefeed testing.
 		cf1 := feed(t, f, "CREATE CHANGEFEED FOR TABLE foo WITH resolved='10ms'", // higher resolved frequency for faster test
 			optOutOfDBLevelChangefeedUnwatchedTables)
 		cf2 := feed(t, f, "CREATE CHANGEFEED FOR TABLE bar WITH resolved='10ms'",
@@ -2458,7 +2455,6 @@ func TestChangefeedColumnDropsOnMultipleFamiliesWithTheSameName(t *testing.T) {
 		if _, ok := f.(*webhookFeedFactory); ok {
 			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
 		}
-		// TODO(#148858): Add coverage for DB-level changefeed testing.
 		args = append(args, optOutOfDBLevelChangefeedUnwatchedTables)
 
 		// Open up the changefeed.
@@ -3350,7 +3346,6 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns', no_initial_scan`)
 // TODO: remove this test when the legacy schema changer is  deprecated.
 func TestChangefeedSchemaChangeAllowBackfill_Legacy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // Also uses initial scan.
 	defer log.Scope(t).Close(t)
 
 	testutils.SetVModule(t, "kv_feed=2,changefeed_processors=2")
@@ -3414,7 +3409,8 @@ func TestChangefeedSchemaChangeAllowBackfill_Legacy(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_col_comp (a INT PRIMARY KEY, b INT AS (a + 5) STORED)`)
 			sqlDB.Exec(t, `INSERT INTO add_col_comp VALUES (1)`)
 			sqlDB.Exec(t, `INSERT INTO add_col_comp (a) VALUES (2)`)
-			addColComp := feed(t, f, `CREATE CHANGEFEED FOR add_col_comp WITH updated`)
+			addColComp := feed(t, f, `CREATE CHANGEFEED FOR add_col_comp WITH updated`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, addColComp)
 			assertPayloadsStripTs(t, addColComp, []string{
 				`add_col_comp: [1]->{"after": {"a": 1, "b": 6}}`,
@@ -3440,7 +3436,8 @@ func TestChangefeedSchemaChangeAllowBackfill_Legacy(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE drop_column (a INT PRIMARY KEY, b STRING)`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (1, '1')`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (2, '2')`)
-			dropColumn := feed(t, f, `CREATE CHANGEFEED FOR drop_column WITH updated`)
+			dropColumn := feed(t, f, `CREATE CHANGEFEED FOR drop_column WITH updated`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, dropColumn)
 			assertPayloadsStripTs(t, dropColumn, []string{
 				`drop_column: [1]->{"after": {"a": 1, "b": "1"}}`,
@@ -3482,7 +3479,8 @@ func TestChangefeedSchemaChangeAllowBackfill_Legacy(t *testing.T) {
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = waitSinkHook
 
-			multipleAlters := feed(t, f, `CREATE CHANGEFEED FOR multiple_alters WITH updated`)
+			multipleAlters := feed(t, f, `CREATE CHANGEFEED FOR multiple_alters WITH updated`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, multipleAlters)
 			assertPayloadsStripTs(t, multipleAlters, []string{
 				`multiple_alters: [1]->{"after": {"a": 1, "b": "1"}}`,
@@ -3551,7 +3549,6 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 148858) // Also uses initial scan.
 	testutils.SetVModule(t, "kv_feed=2,changefeed_processors=2")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -3598,7 +3595,8 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_col_comp (a INT PRIMARY KEY, b INT AS (a + 5) STORED)`)
 			sqlDB.Exec(t, `INSERT INTO add_col_comp VALUES (1)`)
 			sqlDB.Exec(t, `INSERT INTO add_col_comp (a) VALUES (2)`)
-			addColComp := feed(t, f, `CREATE CHANGEFEED FOR add_col_comp WITH updated`)
+			addColComp := feed(t, f, `CREATE CHANGEFEED FOR add_col_comp WITH updated`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, addColComp)
 			assertPayloadsStripTs(t, addColComp, []string{
 				`add_col_comp: [1]->{"after": {"a": 1, "b": 6}}`,
@@ -3618,7 +3616,8 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE drop_column (a INT PRIMARY KEY, b STRING)`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (1, '1')`)
 			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (2, '2')`)
-			dropColumn := feed(t, f, `CREATE CHANGEFEED FOR drop_column WITH updated`)
+			dropColumn := feed(t, f, `CREATE CHANGEFEED FOR drop_column WITH updated`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, dropColumn)
 			assertPayloadsStripTs(t, dropColumn, []string{
 				`drop_column: [1]->{"after": {"a": 1, "b": "1"}}`,
@@ -3658,7 +3657,8 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = waitSinkHook
 
-			multipleAlters := feed(t, f, `CREATE CHANGEFEED FOR multiple_alters WITH updated`)
+			multipleAlters := feed(t, f, `CREATE CHANGEFEED FOR multiple_alters WITH updated`,
+				optOutOfDBLevelChangefeedUnwatchedTables)
 			defer closeFeed(t, multipleAlters)
 			assertPayloadsStripTs(t, multipleAlters, []string{
 				`multiple_alters: [1]->{"after": {"a": 1, "b": "1"}}`,
@@ -4252,13 +4252,12 @@ func TestChangefeedJobControl(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 148858) // ?
-
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		ChangefeedJobPermissionsTestSetup(t, s)
 
 		createFeed := func(stmt string) (cdctest.EnterpriseTestFeed, func()) {
-			successfulFeed := feed(t, f, stmt)
+			successfulFeed := feed(t, f, stmt, optOutOfMetamorphicDBLevelChangefeed{
+				reason: "tests table level changefeed permissions"})
 			closeCf := func() {
 				closeFeed(t, successfulFeed)
 			}
@@ -5668,7 +5667,6 @@ func TestChangefeedResolvedNotice(t *testing.T) {
 
 func TestChangefeedLowFrequencyNotices(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // I think these notices have an issue
 	defer log.Scope(t).Close(t)
 
 	cluster, _, cleanup := startTestCluster(t)
@@ -5697,43 +5695,47 @@ func TestChangefeedLowFrequencyNotices(t *testing.T) {
 	t.Run("no options specified", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test requires split_column_families NOT to be set",
+			})
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
 	})
 	t.Run("normal resolved and min_checkpoint_frequency", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='10s', min_checkpoint_frequency='10s'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='10s', min_checkpoint_frequency='10s'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test requires split_column_families NOT to be set",
+			})
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
 	})
 	t.Run("low resolved timestamp", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='200ms'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='200ms'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test requires split_column_families NOT to be set",
+			})
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `the 'resolved' timestamp interval (200ms) is very low; consider increasing it to at least 500ms`, actual)
 	})
 	t.Run("low min_checkpoint_frequency timestamp", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH min_checkpoint_frequency='200ms'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH min_checkpoint_frequency='200ms'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test requires split_column_families NOT to be set",
+			})
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `the 'min_checkpoint_frequency' timestamp interval (200ms) is very low; consider increasing it to at least 500ms`, actual)
 	})
 }
 
-// Fails: this could be something real
-// test logs left over in: /tmp/cockroach/_tmp/f5cb02fa45891c8256821a187ced6fe9/logTestChangefeedOutputTopics3499146109
-// --- FAIL: TestChangefeedOutputTopics (7.67s)
-//
-//	--- FAIL: TestChangefeedOutputTopics/kafka (0.25s)
-//	--- FAIL: TestChangefeedOutputTopics/pubsub_v2 (0.22s)
-//	--- PASS: TestChangefeedOutputTopics/webhooks_does_not_emit_anything (0.24s)
 func TestChangefeedOutputTopics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // I don't know exactly what this is, could be real.
 	defer log.Scope(t).Close(t)
 
 	cluster, _, cleanup := startTestCluster(t)
@@ -5762,7 +5764,10 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	t.Run("kafka", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test requires split_column_families NOT to be set",
+			})
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
 	})
@@ -5770,7 +5775,10 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	t.Run("pubsub v2", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makePubsubFeedFactory(s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'gcpubsub://does.not.matter/'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'gcpubsub://does.not.matter/'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test requires split_column_families NOT to be set",
+			})
 		defer closeFeed(t, testFeed)
 		// Pubsub doesn't sanitize the topic name.
 		require.Equal(t, `changefeed will emit to topic ☃`, actual)
@@ -6557,7 +6565,6 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE truncate_cascade (b INT PRIMARY KEY REFERENCES truncate (a)) WITH (schema_locked=false)`)
 		sqlDB.Exec(t,
 			`BEGIN; INSERT INTO truncate VALUES (1); INSERT INTO truncate_cascade VALUES (1); COMMIT`)
-		// TODO(#148858): Add coverage for DB-level changefeed testing.
 		truncate := feed(t, f, `CREATE CHANGEFEED FOR truncate`,
 			optOutOfDBLevelChangefeedUnwatchedTables)
 		defer closeFeed(t, truncate)
@@ -8207,8 +8214,7 @@ func TestChangefeedTelemetry(t *testing.T) {
 		// Reset the counts.
 		_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
-		// Start some feeds (and read from them to make sure they've started.
-		// TODO(#148858): Add coverage for DB-level changefeed testing.
+		// Start some feeds (and read from them to make sure they've started).
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`,
 			optOutOfDBLevelChangefeedUnwatchedTables)
 		defer closeFeed(t, foo)
@@ -9125,7 +9131,6 @@ func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t)
-	skip.WithIssue(t, 148858) // has unwatched tables? complicated, look
 	skip.UnderShort(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -12187,7 +12192,6 @@ func TestChangefeedAvroDecimalColumnWithDiff(t *testing.T) {
 func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 148858) // ?
 
 	verifyFunc := func() {}
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -12320,13 +12324,11 @@ WITH resolved='10ms', min_checkpoint_frequency='10ms', no_initial_scan`
 	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
 }
 
-// Fails: this could be something real
 // TestChangefeedProtectedTimestampUpdateError tests that a changefeed that
 // errors while managing its protected timestamp records will increment the
 // manage PTS error counter.
 func TestChangefeedProtectedTimestampUpdateError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 148858) // ?
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
