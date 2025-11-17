@@ -89,8 +89,8 @@ func UnsetNodeSubject() {
 	nodeSubjectMu.unsetDN()
 }
 
-// EnableDisallowRootLogin enables or disables root login blocking.
-func EnableDisallowRootLogin(disallow bool) {
+// SetDisallowRootLogin sets whether root login should be disallowed.
+func SetDisallowRootLogin(disallow bool) {
 	disallowRootLoginMu.Lock()
 	defer disallowRootLoginMu.Unlock()
 	disallowRootLoginMu.disallowed = disallow

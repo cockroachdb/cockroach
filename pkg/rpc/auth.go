@@ -503,7 +503,7 @@ func checkRootOrNodeInScope(clientCert *x509.Certificate, serverTenantID roachpb
 		}
 
 		// If we get a scope that matches the Node user, immediately return.
-		if scope.Username == username.NodeUser || scope.Username == username.RootUser {
+		if scope.Username == username.NodeUser || scope.Username == username.RootUser || scope.Username == username.DebugUser {
 			return true
 		}
 
@@ -512,7 +512,7 @@ func checkRootOrNodeInScope(clientCert *x509.Certificate, serverTenantID roachpb
 	ok, err := security.CertificateUserScopeContainsFunc(clientCert, containsFn)
 	if ok || err != nil {
 		if rootLoginDisabledValidate {
-			return authErrorf("failed to perform RPC, as root login has been disallowed")
+			return authError("failed to perform RPC, as root login has been disallowed")
 		}
 
 		return err
