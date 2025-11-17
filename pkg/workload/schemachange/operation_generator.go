@@ -3508,6 +3508,17 @@ func (og *operationGenerator) inspect(ctx context.Context, tx pgx.Tx) (*opStmt, 
 	sb.WriteString(" WITH OPTIONS DETACHED")
 	stmt.sql = sb.String()
 
+	// If INSPECT is not supported yet, so we expect a syntax error or feature
+	// not supported.
+	isInspectUnsupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_4.Version())
+	if err != nil {
+		return nil, err
+	}
+	if isInspectUnsupported {
+		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
+		stmt.expectedExecErrors.add(pgcode.Syntax)
+	}
+
 	return stmt, nil
 }
 
