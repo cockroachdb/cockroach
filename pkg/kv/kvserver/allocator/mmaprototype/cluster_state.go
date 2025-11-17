@@ -75,13 +75,12 @@ func (rit ReplicaIDAndType) String() string {
 	return redact.StringWithoutMarkers(rit)
 }
 
-// subsumesChange returns true if rit subsumes prev and next. prev is the state
-// before the proposed change and next is the state after the proposed change.
-// rit is the current observed state.
+// subsumesChange returns true if rit subsumes next, where next is the state
+// after the proposed change, and rit is the current observed state.
 //
 // NB: this method uses a value receiver since it mutates the value as part of
 // its computation.
-func (rit ReplicaIDAndType) subsumesChange(prev, next ReplicaIDAndType) bool {
+func (rit ReplicaIDAndType) subsumesChange(next ReplicaIDAndType) bool {
 	if rit.ReplicaID == noReplicaID && next.ReplicaID == noReplicaID {
 		// Removal has happened.
 		return true
@@ -98,26 +97,18 @@ func (rit ReplicaIDAndType) subsumesChange(prev, next ReplicaIDAndType) bool {
 	// been subsumed.
 	switch rit.ReplicaType.ReplicaType {
 	case roachpb.VOTER_INCOMING:
-		// Already seeing the load, so consider the change done.
+		// Already a voter, so consider the change done.
 		rit.ReplicaType.ReplicaType = roachpb.VOTER_FULL
 	}
-	// rit.replicaType.ReplicaType equal to LEARNER, VOTER_DEMOTING* are left
-	// as-is. If next is trying to remove a replica, this change has not
+	// NB: rit.replicaType.ReplicaType equal to LEARNER, VOTER_DEMOTING* are
+	// left as-is. If next is trying to remove a replica, this change has not
 	// finished yet, and the store is still seeing the load corresponding to the
-	// state it is exiting.
+	// state it is exiting. If next is trying to demote to a NON_VOTER, but
+	// rit.ReplicaType.ReplicaType is equal to VOTER_DEMOTING_NON_VOTER, then it
+	// is still a voter, so the change is not yet done.
 
-	// TODO: the prev.IsLeaseholder == next.IsLeaseholder check originates in
-	// the notion that if we were changing some aspect of ReplicaType, but not
-	// whether it was the leaseholder, we could leave IsLeaseholder false in
-	// both prev and next (signifying no change in this replica's leaseholder
-	// bit). I think this is not actually true, and if it is, we should make it
-	// not true. That is, we should populate all fields in prev and next,
-	// regardless of whether they are changing or not. Additionally, it is hard
-	// to fathom a change in the ReplicaType when it was a leaseholder and is
-	// staying a leaseholder.
 	if rit.ReplicaType.ReplicaType == next.ReplicaType.ReplicaType &&
-		(prev.IsLeaseholder == next.IsLeaseholder ||
-			rit.IsLeaseholder == next.IsLeaseholder) {
+		rit.IsLeaseholder == next.IsLeaseholder {
 		return true
 	}
 	return false
@@ -1544,7 +1535,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			if !ok {
 				adjustedReplica.ReplicaID = noReplicaID
 			}
-			if adjustedReplica.subsumesChange(change.prev.ReplicaIDAndType, change.next) {
+			if adjustedReplica.subsumesChange(change.next) {
 				// The change has been enacted according to the leaseholder.
 				enactedChanges = append(enactedChanges, change)
 			} else {
@@ -2173,6 +2164,7 @@ func (cs *clusterState) preCheckOnUndoReplicaChanges(changes []*pendingReplicaCh
 	return nil
 }
 
+// REQUIRES: the range and store are known to the allocator.
 func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange bool) {
 	storeState, ok := cs.stores[change.target.StoreID]
 	if !ok {
@@ -2180,12 +2172,6 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange
 	}
 	rangeState, ok := cs.ranges[change.rangeID]
 	if !ok {
-		// This is the first time encountering this range, we add it to the cluster
-		// state.
-		//
-		// TODO(kvoli): Pass in the range descriptor to construct the range state
-		// here. Currently, when the replica change is a removal this won't work
-		// because the range state will not contain the replica being removed.
 		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
 	}
 
