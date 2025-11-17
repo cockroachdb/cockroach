@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/datadog"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -1620,6 +1621,17 @@ func (r *testRunner) runTest(
 	if err := r.inspectArtifacts(ctx, t, c, l); err != nil {
 		// inspect artifacts and potentially add helpful triage information for failed tests
 		l.PrintfCtx(ctx, "error during artifact inspection: %v", err)
+	}
+
+	// Upload test logs to Datadog if running in TeamCity on release branches
+	if datadog.ShouldUploadLogs() {
+		logPath := filepath.Join(t.artifactsDir, "test.log")
+		// TODO get hostname from env var
+		cfg := datadog.BuildUploadConfig(t.spec.Name, c.cloud, c.os, c.arch, "hostName", c.name)
+		if err := datadog.UploadTestLog(ctx, t.L(), logPath, cfg); err != nil {
+			// Log error but don't fail the test - upload is best effort
+			t.L().Printf("error uploading logs to Datadog: %v", err)
+		}
 	}
 }
 
