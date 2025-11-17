@@ -280,7 +280,7 @@ func BenchmarkExternalSort(b *testing.B) {
 							)
 							require.NoError(b, err)
 							sorter.Init(ctx)
-							for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
+							for out := colexecop.NextNoMeta(sorter); out.Length() != 0; out = colexecop.NextNoMeta(sorter) {
 							}
 							afterEachRun()
 							require.Equal(b, spillForced, spilled, fmt.Sprintf(

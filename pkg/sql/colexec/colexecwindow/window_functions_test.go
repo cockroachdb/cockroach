@@ -1293,7 +1293,7 @@ func BenchmarkWindowFunctions(b *testing.B) {
 										s := getWindowFn(fun, source, partitionInput, orderInput)
 										s.Init(ctx)
 										b.StartTimer()
-										for b := s.Next(); b.Length() != 0; b = s.Next() {
+										for b := colexecop.NextNoMeta(s); b.Length() != 0; b = colexecop.NextNoMeta(s) {
 										}
 										b.StopTimer()
 									}
