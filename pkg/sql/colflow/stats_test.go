@@ -42,7 +42,7 @@ func TestNumBatches(t *testing.T) {
 	)
 	vsc.Init(ctx)
 	for {
-		b := vsc.Next()
+		b := colexecop.NextNoMeta(vsc)
 		if b.Length() == 0 {
 			break
 		}
@@ -68,7 +68,7 @@ func TestNumTuples(t *testing.T) {
 		)
 		vsc.Init(ctx)
 		for {
-			b := vsc.Next()
+			b := colexecop.NextNoMeta(vsc)
 			if b.Length() == 0 {
 				break
 			}
@@ -111,7 +111,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			timeutil.NewTestStopWatch(timeSource.NowMono), nil /* memMonitors */, nil, /* diskMonitors */
 			nil, /* inputStatsCollectors */
 		)
-		mergeJoiner := colexecjoin.NewMergeJoinOp(
+		mergeJoiner, _ := colexecjoin.NewMergeJoinOp(
 			ctx, tu.testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
 			colexecop.NewTestingSemaphore(4), descpb.InnerJoin, leftInput, rightInput,
 			[]*types.T{types.Int}, []*types.T{types.Int},
@@ -135,7 +135,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		mjStatsCollector.Init(ctx)
 		batchCount, tupleCount := 0, 0
 		for {
-			b := mjStatsCollector.Next()
+			b := colexecop.NextNoMeta(mjStatsCollector)
 			if b.Length() == 0 {
 				break
 			}
@@ -176,10 +176,10 @@ type timeAdvancingOperator struct {
 
 var _ colexecop.Operator = &timeAdvancingOperator{}
 
-func (o *timeAdvancingOperator) Next() coldata.Batch {
-	b := o.Input.Next()
+func (o *timeAdvancingOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	b := colexecop.NextNoMeta(o.Input)
 	if b.Length() > 0 {
 		o.timeSource.Advance()
 	}
-	return b
+	return b, nil
 }

@@ -137,7 +137,7 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 	b.SetBytes(int64(8 * coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		inOp.Next()
+		colexecop.NextNoMeta(inOp)
 	}
 }
 

@@ -124,7 +124,7 @@ func BenchmarkCastOp(b *testing.B) {
 						b.ResetTimer()
 						op.Init(ctx)
 						for i := 0; i < b.N; i++ {
-							op.Next()
+							colexecop.NextNoMeta(op)
 						}
 					})
 			}

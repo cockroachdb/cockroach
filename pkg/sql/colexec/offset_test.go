@@ -74,6 +74,6 @@ func BenchmarkOffset(b *testing.B) {
 	b.SetBytes(int64(2 * coldata.BatchSize()))
 	for i := 0; i < b.N; i++ {
 		o.(*offsetOp).seen = 0
-		o.Next()
+		colexecop.NextNoMeta(o)
 	}
 }

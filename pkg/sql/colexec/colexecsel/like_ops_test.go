@@ -252,7 +252,7 @@ func BenchmarkLikeOps(b *testing.B) {
 			tc.op.Init(ctx)
 			b.SetBytes(int64(width * coldata.BatchSize()))
 			for i := 0; i < b.N; i++ {
-				tc.op.Next()
+				colexecop.NextNoMeta(tc.op)
 			}
 		})
 	}

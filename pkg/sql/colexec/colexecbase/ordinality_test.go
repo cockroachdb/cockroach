@@ -95,7 +95,7 @@ func BenchmarkOrdinality(b *testing.B) {
 
 	b.SetBytes(int64(8 * coldata.BatchSize()))
 	for i := 0; i < b.N; i++ {
-		ordinality.Next()
+		colexecop.NextNoMeta(ordinality)
 	}
 }
 

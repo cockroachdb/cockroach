@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -193,7 +194,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 				b.StartTimer()
 				tr.Init(ctx)
 				for {
-					bat := tr.Next()
+					bat := colexecop.NextNoMeta(tr)
 					if bat.Length() == 0 {
 						break
 					}

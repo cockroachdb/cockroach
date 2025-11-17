@@ -177,7 +177,7 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	// squared in the output.
 	expectedTuplesCount := nBatches * nBatches * coldata.BatchSize() * coldata.BatchSize()
 	actualTuplesCount := 0
-	for b := hj.Next(); b.Length() > 0; b = hj.Next() {
+	for b := colexecop.NextNoMeta(hj); b.Length() > 0; b = colexecop.NextNoMeta(hj) {
 		actualTuplesCount += b.Length()
 	}
 	require.True(t, spilled)
@@ -289,7 +289,7 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 							)
 							require.NoError(b, err)
 							hj.Init(ctx)
-							for b := hj.Next(); b.Length() > 0; b = hj.Next() {
+							for b := colexecop.NextNoMeta(hj); b.Length() > 0; b = colexecop.NextNoMeta(hj) {
 							}
 							afterEachRun()
 						}
