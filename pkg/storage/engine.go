@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/metrics"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
@@ -926,6 +927,9 @@ type Engine interface {
 	Capacity() (roachpb.StoreCapacity, error)
 	// Properties returns the low-level properties for the engine's underlying storage.
 	Properties() roachpb.StoreProperties
+	// ProfileSeparatedValueRetrievals collects a profile of the engine's
+	// separated value retrievals. It stops when the context is done.
+	ProfileSeparatedValueRetrievals(ctx context.Context) (*metrics.ValueRetrievalProfile, error)
 	// Compact forces compaction over the entire database.
 	Compact(ctx context.Context) error
 	// Env returns the filesystem environment used by the Engine.
