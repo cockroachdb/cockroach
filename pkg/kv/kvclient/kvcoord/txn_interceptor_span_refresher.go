@@ -259,6 +259,21 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	if !ok {
 		return nil, pErr
 	}
+
+	// If we are in a weak isolation transaction and we had an EndTxn in our
+	// batch, then this retry faces another hazard: The STAGING record written in
+	// the first attempt may possibly be satisfied by our future writes.
+	//
+	// TODO(ssd): If we were guaranteed to have a BatchResponse if a request was
+	// evaluated, then we could narrow this further and only bump the refresh
+	// timestamp if the StagingTimestamp == RefreshTS.
+	endTxnArg, hasET := ba.GetArg(kvpb.EndTxn)
+	bumpedRefreshTimestampRequired := hasET && txn.Status == roachpb.STAGING && txn.IsoLevel.ToleratesWriteSkew()
+	if bumpedRefreshTimestampRequired {
+		refreshTS = refreshTS.Next()
+		log.Eventf(ctx, "bumping refresh timestamp to avoid unexpected parallel commit: %s", refreshTS)
+	}
+
 	refreshFrom := txn.ReadTimestamp
 	refreshToTxn := txn.Clone()
 	refreshToTxn.BumpReadTimestamp(refreshTS)
@@ -266,9 +281,9 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 	case roachpb.PENDING:
 	case roachpb.STAGING:
 		// If the batch resulted in an error but the EndTxn request succeeded,
-		// staging the transaction record in the process, downgrade the status
-		// back to PENDING. Even though the transaction record may have a status
-		// of STAGING, we know that the transaction failed to implicitly commit.
+		// staging the transaction record in the process, downgrade the status back
+		// to PENDING. Even though the transaction record may have a status of
+		// STAGING, we know that the transaction failed to implicitly commit.
 		refreshToTxn.Status = roachpb.PENDING
 	default:
 		return nil, kvpb.NewError(errors.AssertionFailedf(
@@ -293,8 +308,7 @@ func (sr *txnSpanRefresher) maybeRefreshAndRetrySend(
 
 	// To prevent starvation of batches and to ensure the correctness of parallel
 	// commits, split off the EndTxn request into its own batch on auto-retries.
-	args, hasET := ba.GetArg(kvpb.EndTxn)
-	if len(ba.Requests) > 1 && hasET && !args.(*kvpb.EndTxnRequest).Require1PC {
+	if len(ba.Requests) > 1 && hasET && !endTxnArg.(*kvpb.EndTxnRequest).Require1PC {
 		log.Eventf(ctx, "sending EndTxn separately from rest of batch on retry")
 		return sr.splitEndTxnAndRetrySend(ctx, ba)
 	}
