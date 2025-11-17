@@ -291,7 +291,10 @@ func (a *allocatorState) AdjustPendingChangeDisposition(change PendingRangeChang
 	}
 	if !success {
 		// Check that we can undo these changes.
-		if err := a.cs.preCheckOnUndoReplicaChanges(changes); err != nil {
+		if err := a.cs.preCheckOnUndoReplicaChanges(PendingRangeChange{
+			RangeID:               change.RangeID,
+			pendingReplicaChanges: changes,
+		}); err != nil {
 			panic(err)
 		}
 	}
@@ -308,7 +311,7 @@ func (a *allocatorState) AdjustPendingChangeDisposition(change PendingRangeChang
 func (a *allocatorState) RegisterExternalChange(change PendingRangeChange) (ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if err := a.cs.preCheckOnApplyReplicaChanges(change.pendingReplicaChanges); err != nil {
+	if err := a.cs.preCheckOnApplyReplicaChanges(change); err != nil {
 		a.mmaMetrics.ExternalFailedToRegister.Inc(1)
 		log.KvDistribution.Infof(context.Background(),
 			"did not register external changes: due to %v", err)

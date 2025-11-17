@@ -169,7 +169,10 @@ type ReplicaChange struct {
 
 	// target is the target {store,node} for the change.
 	target roachpb.ReplicationTarget
-	// TODO(sumeer): remove rangeID.
+	// rangeID is the same as that in the PendingRangeChange.RangeID this change
+	// is part of. It is duplicated here since the individual
+	// pendingReplicaChanges are kept in various maps keyed by the changeID, and
+	// having the RangeID field on each change is convenient.
 	rangeID roachpb.RangeID
 
 	// NB: 0 is not a valid ReplicaID, but this component does not care about
@@ -1200,8 +1203,6 @@ type rangeState struct {
 	// Life-cycle matches clusterState.pendingChanges. The consolidated
 	// rangeState.pendingChanges across all ranges in clusterState.ranges will
 	// be identical to clusterState.pendingChanges.
-	//
-	// TODO(sumeer): replace by PendingRangeChange.
 	pendingChanges []*pendingReplicaChange
 	// When set, the pendingChanges can not be rolled back anymore. They have
 	// to be enacted, or discarded wholesale in favor of the latest RangeMsg
@@ -1607,7 +1608,10 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				// remainingChanges, but they are not the same slice.
 				rc := rs.pendingChanges
 				rs.pendingChanges = nil
-				err := cs.preCheckOnApplyReplicaChanges(remainingChanges)
+				err := cs.preCheckOnApplyReplicaChanges(PendingRangeChange{
+					RangeID:               rangeMsg.RangeID,
+					pendingReplicaChanges: remainingChanges,
+				})
 				valid = err == nil
 				if err != nil {
 					reason = redact.Sprint(err)
@@ -1907,7 +1911,10 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 		if !startTime.Add(pendingChangeGCDuration).Before(now) {
 			continue
 		}
-		if err := cs.preCheckOnUndoReplicaChanges(rs.pendingChanges); err != nil {
+		if err := cs.preCheckOnUndoReplicaChanges(PendingRangeChange{
+			RangeID:               rangeID,
+			pendingReplicaChanges: rs.pendingChanges,
+		}); err != nil {
 			panic(err)
 		}
 		// Gather the changeIDs, since calls to undoPendingChange modify the
@@ -1980,24 +1987,6 @@ func printMapPendingChanges(changes map[changeID]*pendingReplicaChange) string {
 	return buf.String()
 }
 
-//lint:ignore U1000 used in tests
-func printPendingChanges(changes []*pendingReplicaChange) string {
-	var buf strings.Builder
-	fmt.Fprintf(&buf, "pending(%d)", len(changes))
-	for _, change := range changes {
-		fmt.Fprintf(&buf, "\nchange-id=%d store-id=%v node-id=%v range-id=%v load-delta=%v start=%v",
-			change.changeID, change.target.StoreID, change.target.NodeID, change.rangeID,
-			change.loadDelta, change.startTime,
-		)
-		if !(change.enactedAtTime == time.Time{}) {
-			fmt.Fprintf(&buf, " enacted=%v",
-				change.enactedAtTime)
-		}
-		fmt.Fprintf(&buf, "\n  prev=(%v)\n  next=(%v)", change.prev, change.next)
-	}
-	return buf.String()
-}
-
 // addPendingRangeChange takes a range change containing a set of replica
 // changes, and applies the changes as pending. The application updates the
 // adjusted load, tracked pending changes and changeIDs to reflect the pending
@@ -2062,16 +2051,11 @@ func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
 // been added at a store, but it has not yet received the lease. Finally, it
 // checks that after the changes are applied there is exactly one leaseholder.
 // It returns a non-nil error if any of these checks fail.
-//
-// REQUIRES: all the changes are to the same range, and there is at most one
-// change per store.
-//
-// TODO(sumeer): change to take PendingRangeChange as parameter
-func (cs *clusterState) preCheckOnApplyReplicaChanges(changes []*pendingReplicaChange) error {
-	if len(changes) == 0 {
+func (cs *clusterState) preCheckOnApplyReplicaChanges(rangeChange PendingRangeChange) error {
+	if len(rangeChange.pendingReplicaChanges) == 0 {
 		return nil
 	}
-	rangeID := changes[0].rangeID
+	rangeID := rangeChange.RangeID
 	curr, ok := cs.ranges[rangeID]
 	// Return early if range already has some pending changes or the range does not exist.
 	if !ok {
@@ -2086,7 +2070,7 @@ func (cs *clusterState) preCheckOnApplyReplicaChanges(changes []*pendingReplicaC
 	copiedCurr := rangeState{
 		replicas: append([]StoreIDAndReplicaState{}, curr.replicas...),
 	}
-	for _, change := range changes {
+	for _, change := range rangeChange.pendingReplicaChanges {
 		// Check that all changes correspond to the same range. Panic otherwise.
 		if change.rangeID != rangeID {
 			panic(errors.AssertionFailedf("unexpected change rangeID %d != %d", change.rangeID, rangeID))
@@ -2115,20 +2099,17 @@ func (cs *clusterState) preCheckOnApplyReplicaChanges(changes []*pendingReplicaC
 // preCheckOnUndoReplicaChanges does some validation of the changes being
 // proposed for undo.
 //
-// REQUIRES: changes is non-empty; all changes are to the same range; the
-// rangeState.pendingChangeNoRollback is false.
+// REQUIRES: the rangeState.pendingChangeNoRollback is false.
 //
 // This method is defensive since if we always check against the current state
 // before allowing a change to be added (including re-addition after a
 // StoreLeaseholderMsg), we should never have invalidity during an undo, if
 // all the changes are being undone.
-//
-// TODO(sumeer): change to take PendingRangeChange as parameter
-func (cs *clusterState) preCheckOnUndoReplicaChanges(changes []*pendingReplicaChange) error {
-	if len(changes) == 0 {
-		panic(errors.AssertionFailedf("no changes to undo"))
+func (cs *clusterState) preCheckOnUndoReplicaChanges(rangeChange PendingRangeChange) error {
+	if len(rangeChange.pendingReplicaChanges) == 0 {
+		return nil
 	}
-	rangeID := changes[0].rangeID
+	rangeID := rangeChange.RangeID
 	curr, ok := cs.ranges[rangeID]
 	if !ok {
 		return errors.Errorf("range %v does not exist in cluster state", rangeID)
@@ -2137,7 +2118,7 @@ func (cs *clusterState) preCheckOnUndoReplicaChanges(changes []*pendingReplicaCh
 	copiedCurr := &rangeState{
 		replicas: append([]StoreIDAndReplicaState{}, curr.replicas...),
 	}
-	for _, change := range changes {
+	for _, change := range rangeChange.pendingReplicaChanges {
 		if change.rangeID != rangeID {
 			panic(errors.AssertionFailedf("unexpected change rangeID %d != %d", change.rangeID, rangeID))
 		}
