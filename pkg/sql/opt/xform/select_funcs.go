@@ -1941,7 +1941,7 @@ func (c *CustomFuncs) SplitDisjunction(
 // An "interesting" pair of expressions is one where:
 //
 //  1. The column sets of both expressions in the pair are not
-//     equal.
+//     equal, and
 //  2. Two index scans can potentially be constrained by both expressions in
 //     the pair.
 //
@@ -1959,6 +1959,13 @@ func (c *CustomFuncs) SplitDisjunction(
 //
 // There is no possible "interesting" pair here because the left and right sides
 // of the disjunction share the same columns.
+//
+// There is one exceptional case when a pair could be interesting even with
+// equal column sets for both expressions: when the table itself contains
+// multiple partial indexes with different predicates referencing the same
+// column. In this case we might be able to use different partial indexes for
+// both expressions, and so consider a pair interesting even with equal column
+// sets.
 //
 // findInterestingDisjunctionPair groups all sub-expressions adjacent to the
 // input's top-level OrExpr into left and right expression groups. These two
@@ -1997,11 +2004,14 @@ func (c *CustomFuncs) findInterestingDisjunctionPair(
 		// not match) on.
 		if leftColSet.Empty() {
 			leftColSet = cols
+			leftExprs = append(leftExprs, expr)
+			return
 		}
 
-		// If the current expression ColSet matches leftColSet, add the expr to
-		// the left group. Otherwise, add it to the right group.
-		if leftColSet.Equals(cols) {
+		// If the current expression ColSet matches leftColSet (and we're not using
+		// the exception for multiple referencing partial index predicates) add the
+		// expr to the left group. Otherwise, add it to the right group.
+		if leftColSet.Equals(cols) && !c.multiplePartialIndexesReferencing(sp, leftColSet) {
 			leftExprs = append(leftExprs, expr)
 		} else {
 			rightColSet.UnionWith(cols)
@@ -2090,6 +2100,56 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(
 			if pred.OuterCols().Intersects(cols) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// multiplePartialIndexesReferencing returns true if at least one of the columns
+// is referenced by the predicates of multiple partial indexes. For example,
+// given this table:
+//
+//	CREATE TABLE abc (
+//	  a INT NOT NULL,
+//	  b INT NOT NULL,
+//	  c INT NOT NULL,
+//	  INDEX (a) WHERE b > 10,
+//	  INDEX (a) WHERE b != 100 AND c < 1000,
+//	  INDEX (c) WHERE a > 5 AND a % 2 = 0
+//	)
+//
+// Then multiplePartialIndexesReferencing will return true if called with (b) or
+// (a, b) or (b, c) or (a, b, c) but will return false if called with (a) or (c)
+// or (a, c).
+func (c *CustomFuncs) multiplePartialIndexesReferencing(
+	scanPrivate *memo.ScanPrivate, cols opt.ColSet,
+) bool {
+	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(scanPrivate.Table)
+
+	var prevPartialIndexPredCols opt.ColSet
+
+	// Iterate through all partial indexes of the table and return true if one of
+	// the columns is referenced again after being referenced by a previous
+	// partial index.
+	for i := 0; i < tabMeta.Table.IndexCount(); i++ {
+		index := tabMeta.Table.Index(i)
+		if _, isPartialIndex := index.Predicate(); isPartialIndex {
+			p, ok := tabMeta.PartialIndexPredicate(i)
+			if !ok {
+				// A partial index predicate expression was not built for the
+				// partial index. See Builder.buildScan for details on when this
+				// can occur.
+				continue
+			}
+			pred := *p.(*memo.FiltersExpr)
+			partialIndexPredCols := pred.OuterCols().Intersection(cols)
+			// If one of the columns has now been referenced a second time, return
+			// true.
+			if partialIndexPredCols.Intersects(prevPartialIndexPredCols) {
+				return true
+			}
+			prevPartialIndexPredCols.UnionWith(partialIndexPredCols)
 		}
 	}
 	return false
