@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed/queuebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -117,6 +118,9 @@ type extendedEvalContext struct {
 
 	// validateDbZoneConfig should the DB zone config on commit.
 	validateDbZoneConfig *bool
+
+	// QueueReaderProvider provides access to queuefeed readers for this session.
+	QueueReaderProvider queuebase.ReaderProvider
 }
 
 // copyFromExecCfg copies relevant fields from an ExecutorConfig.
@@ -611,6 +615,11 @@ func (p *planner) Descriptors() *descs.Collection {
 // Mon is part of the eval.Planner interface.
 func (p *planner) Mon() *mon.BytesMonitor {
 	return p.monitor
+}
+
+// GetQueueReaderProvider is part of the eval.Planner interface.
+func (p *planner) GetQueueReaderProvider() queuebase.ReaderProvider {
+	return p.extendedEvalCtx.QueueReaderProvider
 }
 
 // ExecCfg implements the PlanHookState interface.

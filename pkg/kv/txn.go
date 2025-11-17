@@ -88,6 +88,9 @@ type Txn struct {
 	// commitTriggers are run upon successful commit.
 	commitTriggers []func(ctx context.Context)
 
+	// rollbackTriggers are run upon rollback/abort.
+	rollbackTriggers []func(ctx context.Context)
+
 	// mu holds fields that need to be synchronized for concurrent request execution.
 	mu struct {
 		syncutil.Mutex
@@ -1091,6 +1094,16 @@ func (txn *Txn) AddCommitTrigger(trigger func(ctx context.Context)) {
 	txn.commitTriggers = append(txn.commitTriggers, trigger)
 }
 
+// AddRollbackTrigger adds a closure to be executed on rollback/abort
+// of the transaction.
+func (txn *Txn) AddRollbackTrigger(trigger func(ctx context.Context)) {
+	if txn.typ != RootTxn {
+		panic(errors.AssertionFailedf("AddRollbackTrigger() called on leaf txn"))
+	}
+
+	txn.rollbackTriggers = append(txn.rollbackTriggers, trigger)
+}
+
 // endTxnReqAlloc is used to batch the heap allocations of an EndTxn request.
 type endTxnReqAlloc struct {
 	req      kvpb.EndTxnRequest
@@ -1236,6 +1249,9 @@ func (txn *Txn) PrepareForRetry(ctx context.Context) error {
 	// Reset commit triggers. These must be reconfigured by the client during the
 	// next retry.
 	txn.commitTriggers = nil
+	// Reset rollback triggers. These must be reconfigured by the client during the
+	// next retry.
+	txn.rollbackTriggers = nil
 
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
@@ -1376,9 +1392,17 @@ func (txn *Txn) Send(
 	if pErr == nil {
 		// Invoking the commit triggers here ensures they run even in the case when a
 		// commit request is issued manually (not via Commit).
-		if et, ok := ba.GetArg(kvpb.EndTxn); ok && et.(*kvpb.EndTxnRequest).Commit {
-			for _, t := range txn.commitTriggers {
-				t(ctx)
+		if et, ok := ba.GetArg(kvpb.EndTxn); ok {
+			if et.(*kvpb.EndTxnRequest).Commit {
+				for _, t := range txn.commitTriggers {
+					t(ctx)
+				}
+			} else {
+				// Invoking the rollback triggers here ensures they run even in the case when a
+				// rollback request is issued manually (not via Rollback).
+				for _, t := range txn.rollbackTriggers {
+					t(ctx)
+				}
 			}
 		}
 		return br, nil

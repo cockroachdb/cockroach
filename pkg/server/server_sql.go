@@ -89,6 +89,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/rangeprober"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rolemembershipcache"
@@ -1062,6 +1063,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TenantReadOnly:             cfg.SQLConfig.TenantReadOnly,
 		CidrLookup:                 cfg.BaseConfig.CidrLookup,
 		LicenseEnforcer:            cfg.SQLConfig.LicenseEnforcer,
+		QueueManager:               queuefeed.NewManager(ctx, cfg.internalDB, cfg.rangeFeedFactory, cfg.rangeDescIteratorFactory, codec, leaseMgr, cfg.sqlLivenessProvider.CachedReader()),
 	}
 
 	if codec.ForSystemTenant() {
@@ -1788,6 +1790,11 @@ func (s *SQLServer) preStart(
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
 
 	s.startLicenseEnforcer(ctx, knobs)
+
+	// Close queue manager when the stopper stops.
+	stopper.AddCloser(stop.CloserFn(func() {
+		s.execCfg.QueueManager.Close()
+	}))
 
 	// Report a warning if the server is being shut down via the stopper
 	// before it was gracefully drained. This warning may be innocuous

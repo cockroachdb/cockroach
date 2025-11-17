@@ -67,6 +67,13 @@ var ErrNilTxnInClusterContext = errors.New("nil txn in cluster context")
 // more fields from the sql package. Through that extendedEvalContext, this
 // struct now generally used by planNodes.
 type Context struct {
+	// SessionCtx is the session-lifetime context for the current SQL connection.
+	// It reflects the session's context (or the session tracing context if
+	// tracing is enabled) and is not cancelled at statement end. Prefer the
+	// statement/transaction-scoped ctx passed to functions when work must obey
+	// statement/txn cancellation; use SessionCtx only for work that must outlive
+	// the statement/txn but remain tied to the SQL session.
+	SessionCtx context.Context
 	// SessionDataStack stores the session variables accessible by the correct
 	// context. Each element on the stack represents the beginning of a new
 	// transaction or nested transaction (savepoints).
@@ -320,6 +327,8 @@ type Context struct {
 	// ExecutedStatementCounters contains metrics for successfully executed
 	// statements defined within the body of a UDF/SP.
 	ExecutedRoutineStatementCounters RoutineStatementCounters
+
+	QueueSessionMgr any
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution
