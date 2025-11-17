@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/datadog"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -245,6 +246,9 @@ var inspectBlocklistRegex = regexp.MustCompile(
 		`^ycsb|` +
 		`^zfs`,
 )
+
+// testLogFilename contains logs for a specific test execution.
+const testLogFilename = "test.log"
 
 // isInspectSkipped returns true if the test name matches the blocklist
 // and should skip INSPECT validation. Tests NOT matching any pattern will
@@ -951,7 +955,7 @@ func (r *testRunner) runWorker(
 		runSuffix := "run_" + strconv.Itoa(testToRun.runNum)
 
 		testArtifactsDir := filepath.Join(filepath.Join(artifactsRootDir, escapedTestName), runSuffix)
-		logPath := filepath.Join(testArtifactsDir, "test.log")
+		logPath := filepath.Join(testArtifactsDir, testLogFilename)
 
 		// Map artifacts/TestFoo/run_?/** => TestFoo/run_?/**, i.e. collect the artifacts
 		// for this test exactly as they are laid out on disk (when the time
@@ -1620,6 +1624,19 @@ func (r *testRunner) runTest(
 	if err := r.inspectArtifacts(ctx, t, c, l); err != nil {
 		// inspect artifacts and potentially add helpful triage information for failed tests
 		l.PrintfCtx(ctx, "error during artifact inspection: %v", err)
+	}
+
+	//Upload test logs to Datadog if running on TeamCity on a release branch
+	if datadog.ShouldUploadLogs() {
+		t.L().Printf("uploading %s to Datadog", testLogFilename)
+		logPath := filepath.Join(t.artifactsDir, testLogFilename)
+		m := datadog.NewLogMetadata(
+			t.L(), t.spec, !t.Failed(), fmt.Sprintf("%.2fs", t.duration().Seconds()), c.cloud, c.os, c.arch, c.name,
+			testLogFilename)
+		if err := datadog.MaybeUploadTestLog(ctx, t.L(), logPath, m); err != nil {
+			// Best effort
+			t.L().Printf("error uploading logs to Datadog: %v", err)
+		}
 	}
 }
 
