@@ -182,7 +182,7 @@ func (a *orderedAggregator) Init(ctx context.Context) {
 	a.cancelChecker.Init(ctx)
 }
 
-func (a *orderedAggregator) Next() coldata.Batch {
+func (a *orderedAggregator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	stateAfterOutputting := orderedAggregatorUnknown
 	for {
 		a.cancelChecker.CheckEveryCall()
@@ -201,7 +201,11 @@ func (a *orderedAggregator) Next() coldata.Batch {
 			batch := a.lastReadBatch
 			a.lastReadBatch = nil
 			if batch == nil {
-				batch = a.Input.Next()
+				var meta *execinfrapb.ProducerMetadata
+				batch, meta = a.Input.Next()
+				if meta != nil {
+					return nil, meta
+				}
 			}
 			batchLength := batch.Length()
 
@@ -384,10 +388,10 @@ func (a *orderedAggregator) Next() coldata.Batch {
 			}
 			a.state = stateAfterOutputting
 			stateAfterOutputting = orderedAggregatorUnknown
-			return batchToReturn
+			return batchToReturn, nil
 
 		case orderedAggregatorDone:
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unexpected orderedAggregatorState %d", a.state))

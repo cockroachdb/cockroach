@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
@@ -51,7 +52,7 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 	c.Init(ctx)
 	foundRows := 0
 	for {
-		batch := c.Next()
+		batch := colexecop.NextNoMeta(c)
 		require.Nil(t, batch.Selection(), "Columnarizer didn't reset the internal batch")
 		if batch.Length() == 0 {
 			break
@@ -99,9 +100,7 @@ func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 
 			c.Init(ctx)
 
-			// If the metadata is obtained through this Next call, the Columnarizer still
-			// returns it in DrainMeta.
-			err := colexecerror.CatchVectorizedRuntimeError(func() { c.Next() })
+			err := colexecerror.CatchVectorizedRuntimeError(func() { colexecop.NextNoMeta(c) })
 			require.True(t, testutils.IsError(err, errMsg), "unexpected error %v", err)
 
 			if tc.consumerClosed {
@@ -146,7 +145,7 @@ func BenchmarkColumnarize(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		foundRows := 0
 		for {
-			batch := c.Next()
+			batch := colexecop.NextNoMeta(c)
 			if batch.Length() == 0 {
 				break
 			}

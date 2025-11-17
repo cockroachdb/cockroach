@@ -131,15 +131,18 @@ type unorderedDistinctFilterer struct {
 
 var _ colexecop.Operator = &unorderedDistinctFilterer{}
 
-func (f *unorderedDistinctFilterer) Next() coldata.Batch {
+func (f *unorderedDistinctFilterer) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if f.ud.Ht.Vals.Length() == 0 {
 		// The hash table is empty, so there is nothing to filter against.
 		return f.Input.Next()
 	}
 	for {
-		batch := f.Input.Next()
+		batch, meta := f.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 		if !f.seenBatch {
 			// This is the first batch we received from bufferExportingOperator
@@ -158,7 +161,7 @@ func (f *unorderedDistinctFilterer) Next() coldata.Batch {
 			f.ud.Ht.RepairAfterDistinctBuild()
 			f.ud.MaybeEmitErrorOnDup(f.ud.LastInputBatchOrigLen, batch.Length())
 			f.seenBatch = true
-			return batch
+			return batch, nil
 		}
 		origLen := batch.Length()
 		// The unordered distinct has emitted some tuples, so we need to check
@@ -176,7 +179,7 @@ func (f *unorderedDistinctFilterer) Next() coldata.Batch {
 		)
 		f.ud.MaybeEmitErrorOnDup(origLen, batch.Length())
 		if batch.Length() > 0 {
-			return batch
+			return batch, nil
 		}
 	}
 }

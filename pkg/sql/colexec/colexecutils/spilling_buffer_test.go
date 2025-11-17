@@ -156,7 +156,7 @@ func TestSpillingBuffer(t *testing.T) {
 			// Append input tuples.
 			var b coldata.Batch
 			for {
-				b = op.Next()
+				b = colexecop.NextNoMeta(op)
 				if b.Length() == 0 {
 					break
 				}

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -80,7 +81,7 @@ func TestInboxCancellation(t *testing.T) {
 		// Setup reader and stream.
 		go func() {
 			inbox.Init(ctx)
-			inbox.Next()
+			colexecop.NextNoMeta(inbox)
 		}()
 		recvCalled := make(chan struct{})
 		streamHandlerErrCh := handleStream(context.Background(), inbox, callbackFlowStreamServer{
@@ -144,7 +145,7 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	// data.
 	require.Panics(t, func() {
 		inbox.Init(context.Background())
-		inbox.Next()
+		colexecop.NextNoMeta(inbox)
 	})
 
 	// Upon catching the panic and converting it into an error, the caller
@@ -171,7 +172,7 @@ func TestInboxTimeout(t *testing.T) {
 	go func() {
 		readerErrCh <- colexecerror.CatchVectorizedRuntimeError(func() {
 			inbox.Init(ctx)
-			inbox.Next()
+			colexecop.NextNoMeta(inbox)
 		})
 	}()
 
@@ -389,7 +390,7 @@ func TestInboxShutdown(t *testing.T) {
 									}
 									var done bool
 									for !done && err == nil {
-										err = colexecerror.CatchVectorizedRuntimeError(func() { b := inbox.Next(); done = b.Length() == 0 })
+										err = colexecerror.CatchVectorizedRuntimeError(func() { b := colexecop.NextNoMeta(inbox); done = b.Length() == 0 })
 										if drainScenario == drainMetaPrematurely {
 											_ = inbox.DrainMeta()
 											return

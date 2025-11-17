@@ -67,7 +67,7 @@ type spooler interface {
 	// init initializes this spooler and will be called once at the setup time.
 	init(context.Context)
 	// spool performs the actual spooling.
-	spool()
+	spool() *execinfrapb.ProducerMetadata
 	// getValues returns ith Vec of the already spooled data.
 	getValues(i int) *coldata.Vec
 	// getNumTuples returns the number of spooled tuples.
@@ -124,14 +124,22 @@ func (p *allSpooler) init(ctx context.Context) {
 	p.bufferedTuples = colexecutils.NewAppendOnlyBufferedBatch(p.allocator, p.inputTypes, nil /* colsToStore */)
 }
 
-func (p *allSpooler) spool() {
+func (p *allSpooler) spool() *execinfrapb.ProducerMetadata {
 	if p.spooled {
 		colexecerror.InternalError(errors.AssertionFailedf("spool() is called for the second time"))
 	}
-	p.spooled = true
-	for batch := p.Input.Next(); batch.Length() != 0; batch = p.Input.Next() {
+	for {
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return meta
+		}
+		if batch.Length() == 0 {
+			break
+		}
 		p.bufferedTuples.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 	}
+	p.spooled = true
+	return nil
 }
 
 func (p *allSpooler) getValues(i int) *coldata.Vec {
@@ -278,11 +286,14 @@ const (
 	sortDone
 )
 
-func (p *sortOp) Next() coldata.Batch {
+func (p *sortOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
 		switch p.state {
 		case sortSpooling:
-			p.input.spool()
+			meta := p.input.spool()
+			if meta != nil {
+				return nil, meta
+			}
 			p.state = sortSorting
 		case sortSorting:
 			p.sort()
@@ -315,13 +326,13 @@ func (p *sortOp) Next() coldata.Batch {
 			}
 			p.output.SetLength(toEmit)
 			p.emitted = newEmitted
-			return p.output
+			return p.output, nil
 		case sortDone:
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("invalid sort state %v", p.state))
 			// This code is unreachable, but the compiler cannot infer that.
-			return nil
+			return nil, nil
 		}
 	}
 }
