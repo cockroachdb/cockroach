@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -687,6 +688,12 @@ func TestJitterCalculation(t *testing.T) {
 	outputRange := func(input time.Duration) (time.Duration, time.Duration) {
 		return time.Duration(float64(input) * minFactor), time.Duration(float64(input) * maxFactor)
 	}
+
+	// Chosen by a fair dice roll. We use a determinstic seed to avoid the case
+	// where the test flakes because the random value rounds to 1/2. This is more
+	// common than you would expect because its probability is based on the width
+	// of the duration, not the width of the random float.
+	rand.Seed(4)
 
 	for _, test := range []struct {
 		name  string
