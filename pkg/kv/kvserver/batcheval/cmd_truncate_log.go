@@ -110,6 +110,16 @@ func TruncateLog(
 	start := keys.RaftLogKey(rangeID, firstIndex)
 	end := keys.RaftLogKey(rangeID, args.Index)
 
+	// TODO(pav-kv): GetCompactedIndex, GetTerm, and NewReader calls can disagree
+	// on the state of the log since we don't hold any Replica locks here. Move
+	// the computation inside Replica where locking can be controlled precisely.
+	//
+	// Use the log engine to compute stats for the raft log.
+	// TODO(#136358): After we precisely maintain the Raft Log size, we could stop
+	// needing the Log Engine to compute the stats.
+	logReader := cArgs.EvalCtx.LogEngine().NewReader(storage.StandardDurability)
+	defer logReader.Close()
+
 	// Compute the stats delta that were to occur should the log entries be
 	// purged. We do this as a side effect of seeing a new TruncatedState,
 	// downstream of Raft.
@@ -118,7 +128,7 @@ func TruncateLog(
 	// are not tracked in the raft log delta. The delta will be adjusted below
 	// raft.
 	// We can pass zero as nowNanos because we're only interested in SysBytes.
-	ms, err := storage.ComputeStats(ctx, readWriter, start, end, 0 /* nowNanos */)
+	ms, err := storage.ComputeStats(ctx, logReader, start, end, 0 /* nowNanos */)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "while computing stats of Raft log freed by truncation")
 	}
