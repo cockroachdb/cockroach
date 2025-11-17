@@ -253,6 +253,7 @@ func runVectorIndex(ctx context.Context, t test.Test, c cluster.Cluster, opts ve
 	t.L().Printf("Loading dataset %s", opts.dataset)
 	loader := vecann.DatasetLoader{
 		DatasetName: opts.dataset,
+		ResetCache:  true,
 		OnProgress: func(ctx context.Context, format string, args ...any) {
 			t.L().Printf(format, args...)
 		},
