@@ -43,9 +43,11 @@ type Operator interface {
 	// Implementations should strive for reusing the same Batch across calls to
 	// Next which should be possible if the capacity of the Batch didn't change.
 	//
+	// Exactly one of the return arguments will be non-nil.
+	//
 	// It might panic with an expected error, so there must be a "root"
 	// component that will catch that panic.
-	Next() coldata.Batch
+	Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 
 	execopnode.OpNode
 }
@@ -477,13 +479,19 @@ func (n *noopOperator) Reset(ctx context.Context) {
 // TODO(yuzefovich): remove this interface in favor of DrainableOperator and
 // clarify that calling DrainMeta on an uninitialized operator is illegal.
 type MetadataSource interface {
-	// DrainMeta returns all the metadata produced by the processor or operator.
+	// DrainMeta returns all the "trailing" metadata produced by the processor
+	// or operator (i.e. such metadata that is created when the component is
+	// being drained).
+	//
 	// It will be called exactly once, usually, when the processor or operator
 	// has finished doing its computations. This is a signal that the output
 	// requires no more rows to be returned.
+	//
 	// Implementers can choose what to do on subsequent calls (if such occur).
 	// TODO(yuzefovich): modify the contract to require returning nil on all
 	// calls after the first one.
+	// TODO(yuzefovich): it probably makes sense to modify the return parameter
+	// to be []*execinfrapb.ProducerMetadata.
 	DrainMeta() []execinfrapb.ProducerMetadata
 }
 
@@ -516,4 +524,17 @@ type VectorizedStatsCollector interface {
 	// GetStats returns the execution statistics of a single Operator. It will
 	// always return non-nil (but possibly empty) object.
 	GetStats() *execinfrapb.ComponentStats
+}
+
+// NextNoMeta simplifies Next signature to avoid the metadata argument. If
+// non-nil metadata is returned, it'll panic with it.
+//
+// This function can be used whenever the whole Operator chain cannot ever emit
+// any metadata.
+func NextNoMeta(op Operator) coldata.Batch {
+	b, meta := op.Next()
+	if meta != nil {
+		colexecerror.InternalError(errors.AssertionFailedf("non-nil metadata from %T: %v", op, meta))
+	}
+	return b
 }
