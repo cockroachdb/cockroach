@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1049,4 +1050,52 @@ func checkRangeCheckResult(
 			checkResult.RangeID, checkResult.Error)
 	}
 	passed = true
+}
+
+// TestDecommissionPreCheckRetryThrottledStores tests that the decommission
+// pre-check retries when it encounters transient throttled errors. Regression
+// test for #156849.
+func TestDecommissionPreCheckRetryThrottledStores(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	var returnedError atomic.Bool
+	returnError := func() error {
+		if returnedError.CompareAndSwap(false, true) {
+			return errors.New("injected error")
+		}
+		return nil
+	}
+
+	tc := serverutils.StartCluster(t, 4, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					AllocatorCheckRangeInterceptor: returnError,
+				},
+			},
+		},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+
+	// Add replicas to the scratch range on nodes 2 and 3.
+	scratchDesc := tc.AddVotersOrFatal(t, scratchKey, tc.Target(1), tc.Target(2))
+	require.Len(t, scratchDesc.InternalReplicas, 3)
+
+	// Perform decommission pre-check on node 3. AllocatorCheckRange will fail
+	// once due to the injected error, then succeed after retries.
+	decommissioningNodeIDs := []roachpb.NodeID{tc.Server(2).NodeID()}
+	result, err := tc.Server(0).DecommissionPreCheck(ctx, decommissioningNodeIDs,
+		true /* strictReadiness */, false /* collectTraces */, 0 /* maxErrors */)
+
+	require.NoError(t, err)
+	require.Greater(t, result.RangesChecked, 0)
+	require.Empty(t, result.RangesNotReady)
+	require.True(t, returnedError.Load())
 }
