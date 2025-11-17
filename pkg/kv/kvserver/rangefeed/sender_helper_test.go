@@ -97,22 +97,7 @@ func (s *testServerStream) String() string {
 	for streamID, eventList := range s.streamEvents {
 		fmt.Fprintf(&str, "\tStreamID:%d, Len:%d", streamID, len(eventList))
 		for _, ev := range eventList {
-			switch {
-			case ev.Val != nil:
-				fmt.Fprintf(&str, "\t\tvalue")
-			case ev.Checkpoint != nil:
-				fmt.Fprintf(&str, "\t\tcheckpoint")
-			case ev.SST != nil:
-				fmt.Fprintf(&str, "\t\tsst")
-			case ev.DeleteRange != nil:
-				fmt.Fprintf(&str, "\t\tdelete")
-			case ev.Metadata != nil:
-				fmt.Fprintf(&str, "\t\tmetadata")
-			case ev.Error != nil:
-				fmt.Fprintf(&str, "\t\terror")
-			default:
-				panic("unknown event type")
-			}
+			fmt.Fprintf(&str, "\t\t%s", ev.EventType())
 		}
 		fmt.Fprintf(&str, "\n")
 	}
