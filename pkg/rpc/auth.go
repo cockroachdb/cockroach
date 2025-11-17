@@ -503,7 +503,7 @@ func checkRootOrNodeInScope(clientCert *x509.Certificate, serverTenantID roachpb
 		}
 
 		// If we get a scope that matches the Node user, immediately return.
-		if scope.Username == username.NodeUser || scope.Username == username.RootUser {
+		if scope.Username == username.NodeUser || scope.Username == username.RootUser || scope.Username == username.DebugUser {
 			return true
 		}
 
