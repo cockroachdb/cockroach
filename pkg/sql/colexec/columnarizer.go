@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,15 +51,11 @@ type Columnarizer struct {
 	execinfra.ProcessorBaseNoHelper
 	colexecop.NonExplainable
 
-	mode            columnarizerMode
-	initialized     bool
-	helper          colmem.SetAccountingHelper
-	streamingMemAcc *mon.BoundAccount
-	// metadataAccountedFor tracks how much memory has been reserved in the
-	// streamingMemAcc for the metadata.
-	metadataAccountedFor int64
-	input                execinfra.RowSource
-	da                   tree.DatumAlloc
+	mode        columnarizerMode
+	initialized bool
+	helper      colmem.SetAccountingHelper
+	input       execinfra.RowSource
+	da          tree.DatumAlloc
 	// getWrappedExecStats, if non-nil, is the function to get the execution
 	// statistics of the wrapped row-by-row processor. We store it separately
 	// from execinfra.ProcessorBaseNoHelper.ExecStatsForTrace so that the
@@ -69,10 +63,14 @@ type Columnarizer struct {
 	// after the vectorized stats are processed).
 	getWrappedExecStats func() *execinfrapb.ComponentStats
 
-	batch           coldata.Batch
-	vecs            coldata.TypedVecs
-	accumulatedMeta []execinfrapb.ProducerMetadata
-	typs            []*types.T
+	batch coldata.Batch
+	// nRows tracks the number of output rows accumulated in the batch.
+	nRows int
+	// continueBatch, if set, indicates that the current output batch should be
+	// continued.
+	continueBatch bool
+	vecs          coldata.TypedVecs
+	typs          []*types.T
 
 	// removedFromFlow marks this Columnarizer as having been removed from the
 	// flow. This renders all future calls to Init, Next, Close, and DrainMeta
@@ -90,12 +88,11 @@ var _ execreleasable.Releasable = &Columnarizer{}
 // other user.
 func NewBufferingColumnarizer(
 	batchAllocator *colmem.Allocator,
-	streamingMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
 ) *Columnarizer {
-	return newColumnarizer(batchAllocator, streamingMemAcc, flowCtx, processorID, input, columnarizerBufferingMode)
+	return newColumnarizer(batchAllocator, flowCtx, processorID, input, columnarizerBufferingMode)
 }
 
 // NewBufferingColumnarizerForTests is a convenience wrapper around
@@ -107,7 +104,7 @@ func NewBufferingColumnarizerForTests(
 	processorID int32,
 	input execinfra.RowSource,
 ) *Columnarizer {
-	return NewBufferingColumnarizer(allocator, allocator.Acc(), flowCtx, processorID, input)
+	return NewBufferingColumnarizer(allocator, flowCtx, processorID, input)
 }
 
 // NewStreamingColumnarizer returns a new Columnarizer that emits every input
@@ -116,12 +113,11 @@ func NewBufferingColumnarizerForTests(
 // other user.
 func NewStreamingColumnarizer(
 	batchAllocator *colmem.Allocator,
-	streamingMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
 ) *Columnarizer {
-	return newColumnarizer(batchAllocator, streamingMemAcc, flowCtx, processorID, input, columnarizerStreamingMode)
+	return newColumnarizer(batchAllocator, flowCtx, processorID, input, columnarizerStreamingMode)
 }
 
 var columnarizerPool = sync.Pool{
@@ -133,7 +129,6 @@ var columnarizerPool = sync.Pool{
 // newColumnarizer returns a new Columnarizer.
 func newColumnarizer(
 	batchAllocator *colmem.Allocator,
-	streamingMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
@@ -147,7 +142,6 @@ func newColumnarizer(
 	c := columnarizerPool.Get().(*Columnarizer)
 	*c = Columnarizer{
 		ProcessorBaseNoHelper: c.ProcessorBaseNoHelper,
-		streamingMemAcc:       streamingMemAcc,
 		input:                 input,
 		mode:                  mode,
 	}
@@ -173,7 +167,6 @@ func (c *Columnarizer) Init(ctx context.Context) {
 		return
 	}
 	c.initialized = true
-	c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
 	ctx = c.StartInternal(ctx, "columnarizer" /* name */)
 	c.input.Start(ctx)
 	if execStatsHijacker, ok := c.input.(execinfra.ExecStatsForTraceHijacker); ok {
@@ -226,9 +219,9 @@ func IsColumnarizerAroundRowsAffectedNode(o colexecop.Operator) bool {
 }
 
 // Next is part of the colexecop.Operator interface.
-func (c *Columnarizer) Next() coldata.Batch {
+func (c *Columnarizer) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if c.removedFromFlow {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	var reallocated bool
 	var tuplesToBeSet int
@@ -239,32 +232,37 @@ func (c *Columnarizer) Next() coldata.Batch {
 		// the helper).
 		tuplesToBeSet = 1
 	}
-	c.batch, reallocated = c.helper.ResetMaybeReallocate(c.typs, c.batch, tuplesToBeSet)
-	if reallocated {
-		c.vecs.SetBatch(c.batch)
+	if !c.continueBatch {
+		c.batch, reallocated = c.helper.ResetMaybeReallocate(c.typs, c.batch, tuplesToBeSet)
+		if reallocated {
+			c.vecs.SetBatch(c.batch)
+		}
+		c.nRows = 0
 	}
-	nRows := 0
+	c.continueBatch = false
 	for batchDone := false; !batchDone; {
 		row, meta := c.input.Next()
 		if meta != nil {
 			if meta.Err != nil {
 				// If an error occurs, return it immediately.
+				// TODO(yuzefovich): now that we have streaming metadata
+				// propagation, we could consider modifying our panic-catch
+				// mechanism.
 				colexecerror.ExpectedError(meta.Err)
 			}
-			c.accumulatedMeta = append(c.accumulatedMeta, *meta)
-			c.metadataAccountedFor += colexecutils.AccountForMetadata(c.Ctx(), c.streamingMemAcc, c.accumulatedMeta[len(c.accumulatedMeta)-1:])
-			continue
+			c.continueBatch = true
+			return nil, meta
 		}
 		if row == nil {
 			break
 		}
-		EncDatumRowToColVecs(row, nRows, c.vecs, c.typs, &c.da)
-		batchDone = c.helper.AccountForSet(nRows)
-		nRows++
+		EncDatumRowToColVecs(row, c.nRows, c.vecs, c.typs, &c.da)
+		batchDone = c.helper.AccountForSet(c.nRows)
+		c.nRows++
 	}
 
-	c.batch.SetLength(nRows)
-	return c.batch
+	c.batch.SetLength(c.nRows)
+	return c.batch, nil
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
@@ -275,30 +273,23 @@ func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	// We no longer need the batch.
 	c.batch = nil
 	c.helper.ReleaseMemory()
-	bufferedMeta := c.accumulatedMeta
-	// Eagerly lose the reference to the metadata since it might be of
-	// non-trivial footprint.
-	c.accumulatedMeta = nil
-	defer func() {
-		c.streamingMemAcc.Shrink(c.Ctx(), c.metadataAccountedFor)
-		c.metadataAccountedFor = 0
-	}()
 	if !c.initialized {
 		// The columnarizer wasn't initialized, so the wrapped processors might
 		// not have been started leaving them in an unsafe to drain state, so
 		// we skip the draining. Mostly likely this happened because a panic was
 		// encountered in Init.
-		return bufferedMeta
+		return nil
 	}
+	var drainedMeta []execinfrapb.ProducerMetadata
 	c.MoveToDraining(nil /* err */)
 	for {
 		meta := c.DrainHelper()
 		if meta == nil {
 			break
 		}
-		bufferedMeta = append(bufferedMeta, *meta)
+		drainedMeta = append(drainedMeta, *meta)
 	}
-	return bufferedMeta
+	return drainedMeta
 }
 
 // Close is part of the colexecop.ClosableOperator interface.
