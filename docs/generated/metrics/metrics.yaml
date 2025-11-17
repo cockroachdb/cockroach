@@ -1817,6 +1817,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.stage.checkpoint_job_progress.latency
       exported_name: changefeed_stage_checkpoint_job_progress_latency
+      labeled_name: 'changefeed.stage.latency{name: checkpoint_job_progress}'
       description: 'Latency of the changefeed stage: checkpointing job progress'
       y_axis_label: Latency
       type: HISTOGRAM
@@ -1825,6 +1826,7 @@ layers:
       derivative: NONE
     - name: changefeed.stage.downstream_client_send.latency
       exported_name: changefeed_stage_downstream_client_send_latency
+      labeled_name: 'changefeed.stage.latency{name: downstream_client_send}'
       description: 'Latency of the changefeed stage: flushing messages from the sink''s client to its downstream. This includes sends that failed for most but not all sinks.'
       y_axis_label: Latency
       type: HISTOGRAM
@@ -1833,6 +1835,7 @@ layers:
       derivative: NONE
     - name: changefeed.stage.emit_row.latency
       exported_name: changefeed_stage_emit_row_latency
+      labeled_name: 'changefeed.stage.latency{name: emit_row}'
       description: 'Latency of the changefeed stage: emitting row to sink'
       y_axis_label: Latency
       type: HISTOGRAM
@@ -1841,6 +1844,7 @@ layers:
       derivative: NONE
     - name: changefeed.stage.encode.latency
       exported_name: changefeed_stage_encode_latency
+      labeled_name: 'changefeed.stage.latency{name: encode}'
       description: 'Latency of the changefeed stage: encoding data'
       y_axis_label: Latency
       type: HISTOGRAM
@@ -1849,6 +1853,7 @@ layers:
       derivative: NONE
     - name: changefeed.stage.frontier_persistence.latency
       exported_name: changefeed_stage_frontier_persistence_latency
+      labeled_name: 'changefeed.stage.latency{name: frontier_persistence}'
       description: 'Latency of the changefeed stage: persisting frontier to job info'
       y_axis_label: Latency
       type: HISTOGRAM
@@ -1857,6 +1862,7 @@ layers:
       derivative: NONE
     - name: changefeed.stage.kv_feed_buffer.latency
       exported_name: changefeed_stage_kv_feed_buffer_latency
+      labeled_name: 'changefeed.stage.latency{name: kv_feed_buffer}'
       description: 'Latency of the changefeed stage: waiting to buffer kv events'
       y_axis_label: Latency
       type: HISTOGRAM
@@ -1865,6 +1871,7 @@ layers:
       derivative: NONE
     - name: changefeed.stage.kv_feed_wait_for_table_event.latency
       exported_name: changefeed_stage_kv_feed_wait_for_table_event_latency
+      labeled_name: 'changefeed.stage.latency{name: kv_feed_wait_for_table_event}'
       description: 'Latency of the changefeed stage: waiting for a table schema event to join to the kv event'
       y_axis_label: Latency
       type: HISTOGRAM
@@ -1873,6 +1880,7 @@ layers:
       derivative: NONE
     - name: changefeed.stage.pts.create.latency
       exported_name: changefeed_stage_pts_create_latency
+      labeled_name: 'changefeed.stage.pts.latency{name: create}'
       description: 'Latency of the changefeed stage: Time spent creating protected timestamp records on changefeed creation'
       y_axis_label: Latency
       type: HISTOGRAM
@@ -1881,6 +1889,7 @@ layers:
       derivative: NONE
     - name: changefeed.stage.pts.manage.latency
       exported_name: changefeed_stage_pts_manage_latency
+      labeled_name: 'changefeed.stage.pts.latency{name: manage}'
       description: 'Latency of the changefeed stage: Time spent successfully managing protected timestamp records on highwater advance, including time spent creating new protected timestamps when needed'
       y_axis_label: Latency
       type: HISTOGRAM
@@ -1889,6 +1898,7 @@ layers:
       derivative: NONE
     - name: changefeed.stage.pts.manage_error.latency
       exported_name: changefeed_stage_pts_manage_error_latency
+      labeled_name: 'changefeed.stage.pts.latency{name: manage_error}'
       description: 'Latency of the changefeed stage: Time spent managing protected timestamp when we eventually error'
       y_axis_label: Latency
       type: HISTOGRAM
@@ -1897,6 +1907,7 @@ layers:
       derivative: NONE
     - name: changefeed.stage.rangefeed_buffer_checkpoint.latency
       exported_name: changefeed_stage_rangefeed_buffer_checkpoint_latency
+      labeled_name: 'changefeed.stage.latency{name: rangefeed_buffer_checkpoint}'
       description: 'Latency of the changefeed stage: buffering rangefeed checkpoint events'
       y_axis_label: Latency
       type: HISTOGRAM
@@ -1905,6 +1916,7 @@ layers:
       derivative: NONE
     - name: changefeed.stage.rangefeed_buffer_value.latency
       exported_name: changefeed_stage_rangefeed_buffer_value_latency
+      labeled_name: 'changefeed.stage.latency{name: rangefeed_buffer_value}'
       description: 'Latency of the changefeed stage: buffering rangefeed value events'
       y_axis_label: Latency
       type: HISTOGRAM
