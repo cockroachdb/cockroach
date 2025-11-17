@@ -116,9 +116,9 @@ func wrapRowSources(
 	batchAllocator := colmem.NewAllocator(ctx, args.MonitorRegistry.NewStreamingMemAccount(flowCtx), factory)
 	var c *colexec.Columnarizer
 	if proc.MustBeStreaming() {
-		c = colexec.NewStreamingColumnarizer(batchAllocator, getStreamingMemAccount(args, flowCtx), flowCtx, processorID, toWrap)
+		c = colexec.NewStreamingColumnarizer(batchAllocator, flowCtx, processorID, toWrap)
 	} else {
-		c = colexec.NewBufferingColumnarizer(batchAllocator, getStreamingMemAccount(args, flowCtx), flowCtx, processorID, toWrap)
+		c = colexec.NewBufferingColumnarizer(batchAllocator, flowCtx, processorID, toWrap)
 	}
 	return c, nil
 }
@@ -1261,6 +1261,7 @@ func NewColOperator(
 					accounts[1],
 				)
 				args.CloserRegistry.AddCloser(result.Root.(colexecop.Closer))
+				result.MetadataSources = append(result.MetadataSources, result.Root.(colexecop.MetadataSource))
 			} else {
 				opName := redact.SafeString("hash-joiner")
 				hjArgs, hashJoinerMemMonitorName := makeNewHashJoinerArgs(
@@ -1287,7 +1288,7 @@ func NewColOperator(
 								ctx, flowCtx, opName, spec.ProcessorID, 2, /* numAccounts */
 							)
 							unlimitedAllocator := colmem.NewAllocator(ctx, accounts[0], factory)
-							ehj := colexecdisk.NewExternalHashJoiner(
+							ehj, ms := colexecdisk.NewExternalHashJoiner(
 								ctx,
 								unlimitedAllocator,
 								flowCtx,
@@ -1299,6 +1300,7 @@ func NewColOperator(
 								accounts[1],
 							)
 							args.CloserRegistry.AddCloser(ehj)
+							result.MetadataSources = append(result.MetadataSources, ms)
 							return ehj
 						},
 						args.TestingKnobs.SpillingCallbackFn,
@@ -1342,7 +1344,7 @@ func NewColOperator(
 			accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(ctx, flowCtx, opName, spec.ProcessorID, 2 /* numAccounts */)
 			unlimitedAllocator := colmem.NewAllocator(ctx, accounts[0], factory)
 			diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
-			mj := colexecjoin.NewMergeJoinOp(
+			mj, ms := colexecjoin.NewMergeJoinOp(
 				ctx, unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx),
 				args.DiskQueueCfg, args.FDSemaphore,
 				joinType, inputs[0].Root, inputs[1].Root,
@@ -1353,6 +1355,7 @@ func NewColOperator(
 
 			result.Root = mj
 			args.CloserRegistry.AddCloser(mj.(colexecop.Closer))
+			result.MetadataSources = append(result.MetadataSources, ms)
 			result.ColumnTypes = core.MergeJoiner.Type.MakeOutputTypes(spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes)
 
 			if onExpr != nil {
@@ -1451,7 +1454,7 @@ func NewColOperator(
 				func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
 					// When we spill to disk, we just use a combo of an external
 					// hash join followed by an external hash aggregation.
-					ehj := colexecdisk.NewExternalHashJoiner(
+					ehj, ms := colexecdisk.NewExternalHashJoiner(
 						ctx,
 						colmem.NewAllocator(ctx, ehjMemAccount, factory),
 						flowCtx,
@@ -1463,6 +1466,7 @@ func NewColOperator(
 						ehgjAccounts[2],
 					)
 					args.CloserRegistry.AddCloser(ehj)
+					result.MetadataSources = append(result.MetadataSources, ms)
 
 					aggInput := ehj.(colexecop.Operator)
 					if len(hgjSpec.JoinOutputColumns) > 0 {

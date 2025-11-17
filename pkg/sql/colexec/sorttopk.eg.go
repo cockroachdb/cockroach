@@ -18,6 +18,7 @@ import (
 	"container/heap"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/errors"
 )
@@ -26,7 +27,7 @@ import (
 const _ = "template_nextBatch"
 
 // processGroupsInBatch associates a row in the top K heap with its distinct
-// partially ordered column group. It returns the most recently found groupId.
+// partially ordered column group.
 // execgen:inline
 const _ = "template_processGroupsInBatch"
 
@@ -61,12 +62,11 @@ const _ = "template_compareRow"
 // After all the input has been read, we pop everything off the heap to
 // determine the final output ordering. This is used in emit() to output the rows
 // in sorted order.
-func (t *topKSorter) spool() {
+func (t *topKSorter) spool() *execinfrapb.ProducerMetadata {
 	if t.hasPartialOrder {
-		spool_true(t)
-	} else {
-		spool_false(t)
+		return spool_true(t)
 	}
+	return spool_false(t)
 }
 
 // topKHeaper implements part of the heap.Interface for non-ordered input.
@@ -106,96 +106,123 @@ func (t *topKPartialOrderHeaper) Less(i, j int) bool {
 // on the partially ordered input, and stop adding to the max heap after K rows
 // and the group of the Kth row have been processed. If it's false, we assume
 // that the input is unordered, and process all rows.
-func spool_true(t *topKSorter) {
-	// Fill up t.topK by spooling up to K rows from the input.
-	// We don't need to check for distinct groups until after we have filled
-	// t.topK.
-	// TODO(harding): We could emit the first N < K rows if the N rows are in one
-	// or more distinct and complete groups, and then use a K-N size heap to find
-	// the remaining top K-N rows.
-	{
-		t.cancelChecker.CheckEveryCall()
-		t.inputBatch = t.Input.Next()
-		t.orderState.distincterInput.SetBatch(t.inputBatch)
-		t.orderState.distincter.Next()
-		t.firstUnprocessedTupleIdx = 0
-	}
-	remainingRows := t.k
-	groupId := 0
-	for remainingRows > 0 && t.inputBatch.Length() > 0 {
-		fromLength := t.inputBatch.Length()
-		if remainingRows < uint64(t.inputBatch.Length()) {
-			// t.topK will be full after this batch.
-			fromLength = int(remainingRows)
-		}
-		// Find the group id for each tuple just added to topK.
-		sel := t.inputBatch.Selection()
-		if sel != nil {
+func spool_true(t *topKSorter) *execinfrapb.ProducerMetadata {
+	if !t.heapInitialized {
+		var meta *execinfrapb.ProducerMetadata
+		// Fill up t.topK by spooling up to K rows from the input.
+		// We don't need to check for distinct groups until after we have filled
+		// t.topK.
+		// TODO(harding): We could emit the first N < K rows if the N rows are in one
+		// or more distinct and complete groups, and then use a K-N size heap to find
+		// the remaining top K-N rows.
+		{
+			var __retval_0 *execinfrapb.ProducerMetadata
 			{
-				var __retval_groupId int
+				t.cancelChecker.CheckEveryCall()
+				batch, meta := t.Input.Next()
+				if meta != nil {
+					{
+						__retval_0 = meta
+					}
+					goto nextBatch_true_return_0
+				}
+				t.inputBatch = batch
+				t.orderState.distincterInput.SetBatch(t.inputBatch)
+				colexecop.NextNoMeta(t.orderState.distincter)
+				t.firstUnprocessedTupleIdx = 0
 				{
-					var groupIdStart int = groupId
-					groupId = groupIdStart
+					__retval_0 = nil
+				}
+			nextBatch_true_return_0:
+			}
+			// Fill up t.topK by spooling up to K rows from the input.
+			// We don't need to check for distinct groups until after we have filled
+			// t.topK.
+			// TODO(harding): We could emit the first N < K rows if the N rows are in one
+			// or more distinct and complete groups, and then use a K-N size heap to find
+			// the remaining top K-N rows.
+			meta = __retval_0
+		}
+		if meta != nil {
+			return meta
+		}
+		remainingRows := t.k - uint64(t.topK.Length())
+		for remainingRows > 0 && t.inputBatch.Length() > 0 {
+			fromLength := t.inputBatch.Length()
+			if remainingRows < uint64(t.inputBatch.Length()) {
+				// t.topK will be full after this batch.
+				fromLength = int(remainingRows)
+			}
+			// Find the group id for each tuple just added to topK.
+			sel := t.inputBatch.Selection()
+			if sel != nil {
+				{
 					for i, k := 0, t.topK.Length(); i < fromLength; i, k = i+1, k+1 {
 						idx := sel[i]
 						if t.orderState.distinctOutput[idx] {
-							groupId++
+							t.orderState.groupId++
 						}
-						t.orderState.group[k] = groupId
-					}
-					{
-						__retval_groupId = groupId
+						t.orderState.group[k] = t.orderState.groupId
 					}
 				}
-				groupId = __retval_groupId
-			}
-		} else {
-			{
-				var __retval_groupId int
+			} else {
 				{
-					var groupIdStart int = groupId
-					groupId = groupIdStart
 					for i, k := 0, t.topK.Length(); i < fromLength; i, k = i+1, k+1 {
 						idx := i
 						if t.orderState.distinctOutput[idx] {
-							groupId++
+							t.orderState.groupId++
 						}
-						t.orderState.group[k] = groupId
-					}
-					{
-						__retval_groupId = groupId
+						t.orderState.group[k] = t.orderState.groupId
 					}
 				}
-				groupId = __retval_groupId
+			}
+			// Importantly, the memory limit can only be reached _after_ the tuples
+			// are appended to topK, so all fromLength tuples are considered
+			// "processed".
+			t.firstUnprocessedTupleIdx = fromLength
+			t.topK.AppendTuples(t.inputBatch, 0 /* startIdx */, fromLength)
+			remainingRows -= uint64(fromLength)
+			if fromLength == t.inputBatch.Length() {
+				{
+					var __retval_0 *execinfrapb.ProducerMetadata
+					{
+						t.cancelChecker.CheckEveryCall()
+						batch, meta := t.Input.Next()
+						if meta != nil {
+							{
+								__retval_0 = meta
+							}
+							goto nextBatch_true_return_3
+						}
+						t.inputBatch = batch
+						t.orderState.distincterInput.SetBatch(t.inputBatch)
+						colexecop.NextNoMeta(t.orderState.distincter)
+						t.firstUnprocessedTupleIdx = 0
+						{
+							__retval_0 = nil
+						}
+					nextBatch_true_return_3:
+					}
+					meta = __retval_0
+				}
+				if meta != nil {
+					return meta
+				}
 			}
 		}
-		// Importantly, the memory limit can only be reached _after_ the tuples
-		// are appended to topK, so all fromLength tuples are considered
-		// "processed".
-		t.firstUnprocessedTupleIdx = fromLength
-		t.topK.AppendTuples(t.inputBatch, 0 /* startIdx */, fromLength)
-		remainingRows -= uint64(fromLength)
-		if fromLength == t.inputBatch.Length() {
-			{
-				t.cancelChecker.CheckEveryCall()
-				t.inputBatch = t.Input.Next()
-				t.orderState.distincterInput.SetBatch(t.inputBatch)
-				t.orderState.distincter.Next()
-				t.firstUnprocessedTupleIdx = 0
-			}
+		t.updateComparators(topKVecIdx, t.topK)
+		// Initialize the heap.
+		if cap(t.heap) < t.topK.Length() {
+			t.heap = make([]int, t.topK.Length())
+		} else {
+			t.heap = t.heap[:t.topK.Length()]
 		}
+		for i := range t.heap {
+			t.heap[i] = i
+		}
+		heap.Init(t.heaper)
+		t.heapInitialized = true
 	}
-	t.updateComparators(topKVecIdx, t.topK)
-	// Initialize the heap.
-	if cap(t.heap) < t.topK.Length() {
-		t.heap = make([]int, t.topK.Length())
-	} else {
-		t.heap = t.heap[:t.topK.Length()]
-	}
-	for i := range t.heap {
-		t.heap[i] = i
-	}
-	heap.Init(t.heaper)
 	// Read the remainder of the input. Whenever a row is less than the heap max,
 	// swap it in. When we find the end of the group, we can finish reading the
 	// input.
@@ -224,11 +251,11 @@ func spool_true(t *topKSorter) {
 								maxIdx := t.heap[0]
 								groupMaxIdx := 0
 								groupMaxIdx = t.orderState.group[maxIdx]
-								if compareRow_true(t, inputVecIdx, topKVecIdx, idx, maxIdx, groupId, groupMaxIdx) < 0 {
+								if compareRow_true(t, inputVecIdx, topKVecIdx, idx, maxIdx, t.orderState.groupId, groupMaxIdx) < 0 {
 									for j := range t.inputTypes {
 										t.comparators[j].set(inputVecIdx, topKVecIdx, idx, maxIdx)
 									}
-									t.orderState.group[maxIdx] = groupId
+									t.orderState.group[maxIdx] = t.orderState.groupId
 									heap.Fix(t.heaper, 0)
 								}
 							}
@@ -256,11 +283,11 @@ func spool_true(t *topKSorter) {
 								maxIdx := t.heap[0]
 								groupMaxIdx := 0
 								groupMaxIdx = t.orderState.group[maxIdx]
-								if compareRow_true(t, inputVecIdx, topKVecIdx, idx, maxIdx, groupId, groupMaxIdx) < 0 {
+								if compareRow_true(t, inputVecIdx, topKVecIdx, idx, maxIdx, t.orderState.groupId, groupMaxIdx) < 0 {
 									for j := range t.inputTypes {
 										t.comparators[j].set(inputVecIdx, topKVecIdx, idx, maxIdx)
 									}
-									t.orderState.group[maxIdx] = groupId
+									t.orderState.group[maxIdx] = t.orderState.groupId
 									heap.Fix(t.heaper, 0)
 								}
 							}
@@ -277,12 +304,31 @@ func spool_true(t *topKSorter) {
 		if groupDone {
 			break
 		}
+		var meta *execinfrapb.ProducerMetadata
 		{
-			t.cancelChecker.CheckEveryCall()
-			t.inputBatch = t.Input.Next()
-			t.orderState.distincterInput.SetBatch(t.inputBatch)
-			t.orderState.distincter.Next()
-			t.firstUnprocessedTupleIdx = 0
+			var __retval_0 *execinfrapb.ProducerMetadata
+			{
+				t.cancelChecker.CheckEveryCall()
+				batch, meta := t.Input.Next()
+				if meta != nil {
+					{
+						__retval_0 = meta
+					}
+					goto nextBatch_true_return_6
+				}
+				t.inputBatch = batch
+				t.orderState.distincterInput.SetBatch(t.inputBatch)
+				colexecop.NextNoMeta(t.orderState.distincter)
+				t.firstUnprocessedTupleIdx = 0
+				{
+					__retval_0 = nil
+				}
+			nextBatch_true_return_6:
+			}
+			meta = __retval_0
+		}
+		if meta != nil {
+			return meta
 		}
 	}
 	// t.topK now contains the top K rows unsorted. Create a selection vector
@@ -293,6 +339,7 @@ func spool_true(t *topKSorter) {
 	for i := 0; i < t.topK.Length(); i++ {
 		t.sel[len(t.sel)-i-1] = heap.Pop(t.heaper).(int)
 	}
+	return nil
 }
 
 // spool reads in the entire input, always storing the top K rows it has seen so
@@ -308,51 +355,96 @@ func spool_true(t *topKSorter) {
 // on the partially ordered input, and stop adding to the max heap after K rows
 // and the group of the Kth row have been processed. If it's false, we assume
 // that the input is unordered, and process all rows.
-func spool_false(t *topKSorter) {
-	// Fill up t.topK by spooling up to K rows from the input.
-	// We don't need to check for distinct groups until after we have filled
-	// t.topK.
-	// TODO(harding): We could emit the first N < K rows if the N rows are in one
-	// or more distinct and complete groups, and then use a K-N size heap to find
-	// the remaining top K-N rows.
-	{
-		t.cancelChecker.CheckEveryCall()
-		t.inputBatch = t.Input.Next()
-		t.firstUnprocessedTupleIdx = 0
-	}
-	remainingRows := t.k
-	groupId := 0
-	for remainingRows > 0 && t.inputBatch.Length() > 0 {
-		fromLength := t.inputBatch.Length()
-		if remainingRows < uint64(t.inputBatch.Length()) {
-			// t.topK will be full after this batch.
-			fromLength = int(remainingRows)
-		}
-		// Importantly, the memory limit can only be reached _after_ the tuples
-		// are appended to topK, so all fromLength tuples are considered
-		// "processed".
-		t.firstUnprocessedTupleIdx = fromLength
-		t.topK.AppendTuples(t.inputBatch, 0 /* startIdx */, fromLength)
-		remainingRows -= uint64(fromLength)
-		if fromLength == t.inputBatch.Length() {
+func spool_false(t *topKSorter) *execinfrapb.ProducerMetadata {
+	if !t.heapInitialized {
+		var meta *execinfrapb.ProducerMetadata
+		// Fill up t.topK by spooling up to K rows from the input.
+		// We don't need to check for distinct groups until after we have filled
+		// t.topK.
+		// TODO(harding): We could emit the first N < K rows if the N rows are in one
+		// or more distinct and complete groups, and then use a K-N size heap to find
+		// the remaining top K-N rows.
+		{
+			var __retval_0 *execinfrapb.ProducerMetadata
 			{
 				t.cancelChecker.CheckEveryCall()
-				t.inputBatch = t.Input.Next()
+				batch, meta := t.Input.Next()
+				if meta != nil {
+					{
+						__retval_0 = meta
+					}
+					goto nextBatch_false_return_7
+				}
+				t.inputBatch = batch
 				t.firstUnprocessedTupleIdx = 0
+				{
+					__retval_0 = nil
+				}
+			nextBatch_false_return_7:
+			}
+			// Fill up t.topK by spooling up to K rows from the input.
+			// We don't need to check for distinct groups until after we have filled
+			// t.topK.
+			// TODO(harding): We could emit the first N < K rows if the N rows are in one
+			// or more distinct and complete groups, and then use a K-N size heap to find
+			// the remaining top K-N rows.
+			meta = __retval_0
+		}
+		if meta != nil {
+			return meta
+		}
+		remainingRows := t.k - uint64(t.topK.Length())
+		for remainingRows > 0 && t.inputBatch.Length() > 0 {
+			fromLength := t.inputBatch.Length()
+			if remainingRows < uint64(t.inputBatch.Length()) {
+				// t.topK will be full after this batch.
+				fromLength = int(remainingRows)
+			}
+			// Importantly, the memory limit can only be reached _after_ the tuples
+			// are appended to topK, so all fromLength tuples are considered
+			// "processed".
+			t.firstUnprocessedTupleIdx = fromLength
+			t.topK.AppendTuples(t.inputBatch, 0 /* startIdx */, fromLength)
+			remainingRows -= uint64(fromLength)
+			if fromLength == t.inputBatch.Length() {
+				{
+					var __retval_0 *execinfrapb.ProducerMetadata
+					{
+						t.cancelChecker.CheckEveryCall()
+						batch, meta := t.Input.Next()
+						if meta != nil {
+							{
+								__retval_0 = meta
+							}
+							goto nextBatch_false_return_8
+						}
+						t.inputBatch = batch
+						t.firstUnprocessedTupleIdx = 0
+						{
+							__retval_0 = nil
+						}
+					nextBatch_false_return_8:
+					}
+					meta = __retval_0
+				}
+				if meta != nil {
+					return meta
+				}
 			}
 		}
+		t.updateComparators(topKVecIdx, t.topK)
+		// Initialize the heap.
+		if cap(t.heap) < t.topK.Length() {
+			t.heap = make([]int, t.topK.Length())
+		} else {
+			t.heap = t.heap[:t.topK.Length()]
+		}
+		for i := range t.heap {
+			t.heap[i] = i
+		}
+		heap.Init(t.heaper)
+		t.heapInitialized = true
 	}
-	t.updateComparators(topKVecIdx, t.topK)
-	// Initialize the heap.
-	if cap(t.heap) < t.topK.Length() {
-		t.heap = make([]int, t.topK.Length())
-	} else {
-		t.heap = t.heap[:t.topK.Length()]
-	}
-	for i := range t.heap {
-		t.heap[i] = i
-	}
-	heap.Init(t.heaper)
 	// Read the remainder of the input. Whenever a row is less than the heap max,
 	// swap it in. When we find the end of the group, we can finish reading the
 	// input.
@@ -369,7 +461,7 @@ func spool_false(t *topKSorter) {
 							idx := sel[t.firstUnprocessedTupleIdx]
 							maxIdx := t.heap[0]
 							groupMaxIdx := 0
-							if compareRow_false(t, inputVecIdx, topKVecIdx, idx, maxIdx, groupId, groupMaxIdx) < 0 {
+							if compareRow_false(t, inputVecIdx, topKVecIdx, idx, maxIdx, t.orderState.groupId, groupMaxIdx) < 0 {
 								for j := range t.inputTypes {
 									t.comparators[j].set(inputVecIdx, topKVecIdx, idx, maxIdx)
 								}
@@ -383,7 +475,7 @@ func spool_false(t *topKSorter) {
 							idx := t.firstUnprocessedTupleIdx
 							maxIdx := t.heap[0]
 							groupMaxIdx := 0
-							if compareRow_false(t, inputVecIdx, topKVecIdx, idx, maxIdx, groupId, groupMaxIdx) < 0 {
+							if compareRow_false(t, inputVecIdx, topKVecIdx, idx, maxIdx, t.orderState.groupId, groupMaxIdx) < 0 {
 								for j := range t.inputTypes {
 									t.comparators[j].set(inputVecIdx, topKVecIdx, idx, maxIdx)
 								}
@@ -394,10 +486,29 @@ func spool_false(t *topKSorter) {
 				}
 			},
 		)
+		var meta *execinfrapb.ProducerMetadata
 		{
-			t.cancelChecker.CheckEveryCall()
-			t.inputBatch = t.Input.Next()
-			t.firstUnprocessedTupleIdx = 0
+			var __retval_0 *execinfrapb.ProducerMetadata
+			{
+				t.cancelChecker.CheckEveryCall()
+				batch, meta := t.Input.Next()
+				if meta != nil {
+					{
+						__retval_0 = meta
+					}
+					goto nextBatch_false_return_11
+				}
+				t.inputBatch = batch
+				t.firstUnprocessedTupleIdx = 0
+				{
+					__retval_0 = nil
+				}
+			nextBatch_false_return_11:
+			}
+			meta = __retval_0
+		}
+		if meta != nil {
+			return meta
 		}
 	}
 	// t.topK now contains the top K rows unsorted. Create a selection vector
@@ -408,6 +519,7 @@ func spool_false(t *topKSorter) {
 	for i := 0; i < t.topK.Length(); i++ {
 		t.sel[len(t.sel)-i-1] = heap.Pop(t.heaper).(int)
 	}
+	return nil
 }
 
 func compareRow_false(
@@ -473,12 +585,12 @@ func compareRow_true(
 const _ = "inlined_nextBatch_true"
 
 // processGroupsInBatch associates a row in the top K heap with its distinct
-// partially ordered column group. It returns the most recently found groupId.
+// partially ordered column group.
 // execgen:inline
 const _ = "inlined_processGroupsInBatch_true"
 
 // processGroupsInBatch associates a row in the top K heap with its distinct
-// partially ordered column group. It returns the most recently found groupId.
+// partially ordered column group.
 // execgen:inline
 const _ = "inlined_processGroupsInBatch_false"
 
