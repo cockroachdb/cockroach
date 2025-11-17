@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -62,6 +63,8 @@ type EvalContext interface {
 	GetCompactedIndex() kvpb.RaftIndex
 	GetTerm(index kvpb.RaftIndex) (kvpb.RaftTerm, error)
 	GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex
+	// LogEngine returns the engine that stores the raft log.
+	LogEngine() storage.Engine
 
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
@@ -175,6 +178,7 @@ type MockEvalCtx struct {
 	GCThreshold            hlc.Timestamp
 	Term                   kvpb.RaftTerm
 	CompactedIndex         kvpb.RaftIndex
+	LogEngine              storage.Engine
 	CanCreateTxnRecordFn   func() (bool, kvpb.TransactionAbortedReason)
 	MinTxnCommitTSFn       func() hlc.Timestamp
 	LastReplicaGCTimestamp hlc.Timestamp
@@ -223,6 +227,14 @@ func (m *mockEvalCtxImpl) GetConcurrencyManager() concurrency.Manager {
 		panic("ConcurrencyManager not configured")
 	}
 }
+
+func (m *mockEvalCtxImpl) LogEngine() storage.Engine {
+	if m.MockEvalCtx.LogEngine != nil {
+		return m.MockEvalCtx.LogEngine
+	}
+	panic("LogEngine not configured")
+}
+
 func (m *mockEvalCtxImpl) NodeID() roachpb.NodeID {
 	return m.MockEvalCtx.NodeID
 }
