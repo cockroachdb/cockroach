@@ -245,7 +245,7 @@ func newKVEventToRowConsumer(
 ) (_ *kvEventToRowConsumer, err error) {
 	includeVirtual := details.Opts.IncludeVirtual()
 	keyOnly := details.Opts.KeyOnly()
-	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details.Targets, includeVirtual, keyOnly)
+	decoder, err := cdcevent.NewEventDecoderWithOptions(ctx, cfg, details.Targets, includeVirtual, keyOnly, cdcevent.DecoderOptions{SkipOffline: true})
 	if err != nil {
 		return nil, err
 	}
@@ -367,6 +367,12 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 			a.Release(ctx)
 			return nil
 		}
+		if errors.Is(err, cdcevent.ErrTableOffline) {
+			// Release the event's allocation since we're not processing it.
+			a := ev.DetachAlloc()
+			a.Release(ctx)
+			return nil
+		}
 		return err
 	}
 
@@ -386,7 +392,11 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 			a.Release(ctx)
 			return nil
 		}
-		return err
+		if errors.Is(err, cdcevent.ErrTableOffline) {
+			prevRow = cdcevent.Row{}
+		} else {
+			return err
+		}
 	}
 
 	if c.evaluator != nil {

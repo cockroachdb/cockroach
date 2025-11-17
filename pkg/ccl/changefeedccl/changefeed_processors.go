@@ -544,6 +544,10 @@ func (ca *changeAggregator) checkKVFeedErr() error {
 	}
 }
 
+func targetDBLevelChangefeed(targetSpecs []jobspb.ChangefeedTargetSpecification) bool {
+	return len(targetSpecs) == 1 && targetSpecs[0].Type == jobspb.ChangefeedTargetSpecification_DATABASE
+}
+
 func (ca *changeAggregator) makeKVFeedCfg(
 	ctx context.Context,
 	config ChangefeedConfig,
@@ -568,7 +572,8 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		sf = schemafeed.DoNothingSchemaFeed
 	} else {
 		sf = schemafeed.New(ctx, cfg, schemaChange.EventClass, ca.targets,
-			initialHighWater, &ca.metrics.SchemaFeedMetrics, config.Opts.GetCanHandle())
+			initialHighWater, &ca.metrics.SchemaFeedMetrics, config.Opts.GetCanHandle(),
+			targetDBLevelChangefeed(ca.spec.Feed.TargetSpecifications))
 	}
 
 	monitoringCfg, err := makeKVFeedMonitoringCfg(ctx, ca.sliMetrics, opts, ca.FlowCtx.Cfg.Settings)
