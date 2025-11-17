@@ -16,7 +16,6 @@ query T
 EXPLAIN INSERT INTO child VALUES (1,1), (2,2)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -55,7 +54,6 @@ query T
 EXPLAIN INSERT INTO child VALUES (1,1), (2,2)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -116,7 +114,6 @@ query T
 EXPLAIN INSERT INTO child SELECT x,y FROM xy
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -151,7 +148,6 @@ query T
 EXPLAIN INSERT INTO child SELECT x,y FROM xy
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -191,7 +187,6 @@ query T
 EXPLAIN INSERT INTO child_nullable VALUES (100, 1), (200, NULL)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -229,7 +224,6 @@ query T
 EXPLAIN INSERT INTO child_nullable VALUES (100, 1), (200, NULL)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -279,7 +273,6 @@ query T
 EXPLAIN INSERT INTO multi_col_child VALUES (2, NULL, 20, 20), (3, 20, NULL, 20)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -329,7 +322,6 @@ query T
 EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL), (2, 3, 4, 5)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -381,7 +373,6 @@ query T
 EXPLAIN INSERT INTO multi_ref_child VALUES (1, NULL, NULL, NULL)
 ----
 distribution: local
-vectorized: true
 ·
 • insert
 │ into: multi_ref_child(k, a, b, c)
@@ -396,7 +387,6 @@ query T
 EXPLAIN DELETE FROM parent WHERE p = 3
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -443,7 +433,6 @@ query T
 EXPLAIN DELETE FROM parent WHERE p = 3
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -491,7 +480,6 @@ query T
 EXPLAIN DELETE FROM parent WHERE p = 3
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -556,7 +544,6 @@ query T
 EXPLAIN DELETE FROM doubleparent WHERE p1 = 10
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -589,7 +576,6 @@ query T
 EXPLAIN UPDATE child SET p = 4
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -628,7 +614,6 @@ query T
 EXPLAIN UPDATE child SET p = 4
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -692,7 +677,6 @@ query T
 EXPLAIN UPDATE child SET p = 4 WHERE c = 10
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -731,7 +715,6 @@ query T
 EXPLAIN UPDATE child SET p = 4 WHERE c = 10
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -770,7 +753,6 @@ query T
 EXPLAIN UPDATE parent SET p = p+1
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -825,7 +807,6 @@ query T
 EXPLAIN UPDATE parent SET p = p+1 WHERE other = 10
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -883,7 +864,6 @@ query T
 EXPLAIN UPDATE child SET c = 4
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -937,7 +917,6 @@ query T
 EXPLAIN UPDATE child SET c = 4
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -989,7 +968,6 @@ query T
 EXPLAIN UPDATE child SET p = 4
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1028,7 +1006,6 @@ query T
 EXPLAIN UPDATE child SET p = 4
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1067,7 +1044,6 @@ query T
 EXPLAIN UPDATE child SET p = p
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1100,7 +1076,6 @@ query T
 EXPLAIN UPDATE child SET p = p+1, c = c+1
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1164,7 +1139,6 @@ query T
 EXPLAIN UPDATE child SET p = p+1, c = c+1
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1232,7 +1206,6 @@ query T
 EXPLAIN UPDATE child SET p = 4
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1270,7 +1243,6 @@ query T
 EXPLAIN UPDATE self SET y = 3
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1309,7 +1281,6 @@ query T
 EXPLAIN UPDATE self SET y = 3
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1348,7 +1319,6 @@ query T
 EXPLAIN UPDATE self SET x = 3
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1401,7 +1371,6 @@ query T
 EXPLAIN UPDATE self SET x = 3
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1564,7 +1533,6 @@ query T
 EXPLAIN INSERT INTO nonunique_idx_child VALUES (0, 1, 10)
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: nonunique_idx_child(k, ref1, ref2)
@@ -1740,7 +1708,6 @@ WHERE
   t.z IS NULL
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: z IS NULL
@@ -1776,7 +1743,6 @@ WHERE
   t.z IS NULL
 ----
 distribution: local
-vectorized: true
 ·
 • norows
 
@@ -1810,7 +1776,6 @@ query T
 EXPLAIN INSERT INTO c VALUES (1,1), (2,2)
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: c(c, p)
@@ -1824,7 +1789,6 @@ query T
 EXPLAIN INSERT INTO c VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: c(c, p)
@@ -1836,7 +1800,6 @@ query T
 EXPLAIN UPDATE c SET p=p+c WHERE c > 0
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1878,7 +1841,6 @@ query T
 EXPLAIN DELETE FROM p WHERE p > 0
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1915,7 +1877,6 @@ query T
 EXPLAIN INSERT INTO c VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10)
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: c(c, p)
@@ -1927,7 +1888,6 @@ query T
 EXPLAIN UPDATE c SET p=p+c WHERE c > 0
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1968,7 +1928,6 @@ query T
 EXPLAIN DELETE FROM p WHERE p > 0
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -2023,7 +1982,6 @@ query T
 EXPLAIN INSERT INTO large_child SELECT i, i % 10 + 1 FROM generate_series(1, 10000) AS i
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -2075,7 +2033,6 @@ query T
 EXPLAIN DELETE FROM partial_parent WHERE id = 1
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -2106,7 +2063,6 @@ query T
 EXPLAIN UPDATE partial_parent SET id = 2 WHERE id = 1
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │

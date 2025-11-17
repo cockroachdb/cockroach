@@ -55,7 +55,6 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM kv
 ----
 distribution: full
-vectorized: true
 ·
 • scan
   missing stats

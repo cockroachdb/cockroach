@@ -110,7 +110,6 @@ query T
 EXPLAIN CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 ----
 distribution: local
-vectorized: true
 ·
 • create function
 

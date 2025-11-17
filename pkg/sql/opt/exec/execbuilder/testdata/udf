@@ -15,7 +15,6 @@ query T
 EXPLAIN SELECT one()
 ----
 distribution: local
-vectorized: true
 ·
 • values
   size: 1 column, 1 row
@@ -24,7 +23,6 @@ query T
 EXPLAIN SELECT * FROM t WHERE a = one()
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: a = 1

@@ -1467,7 +1467,6 @@ query T
 EXPLAIN SELECT * FROM t65343 WHERE s COLLATE en_US = 'foo' COLLATE en_US
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -1483,7 +1482,6 @@ query T
 EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_US" = 'foo' COLLATE en_US
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -1499,7 +1497,6 @@ query T
 EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en_us" = 'foo' COLLATE en_US
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -1515,7 +1512,6 @@ query T
 EXPLAIN SELECT * FROM t65343 WHERE s COLLATE "en-US" = 'foo' COLLATE en_US
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │

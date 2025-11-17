@@ -15,7 +15,6 @@ query T
 EXPLAIN SELECT * FROM system.information_schema.tables WHERE table_name='foo'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: table_name = 'foo'
