@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // simpleProjectOp is an operator that implements "simple projection" - removal of
@@ -109,10 +110,13 @@ func NewSimpleProjectOp(
 	return s
 }
 
-func (d *simpleProjectOp) Next() coldata.Batch {
-	batch := d.Input.Next()
+func (d *simpleProjectOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := d.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	if d.batch == nil || d.batch.Batch != batch {
 		// Create a fresh projection batch if we haven't created one already or
@@ -128,7 +132,7 @@ func (d *simpleProjectOp) Next() coldata.Batch {
 		d.batch = newProjectionBatch(d.projection)
 	}
 	d.batch.Batch = batch
-	return d.batch
+	return d.batch, nil
 }
 
 func (d *simpleProjectOp) Reset(ctx context.Context) {

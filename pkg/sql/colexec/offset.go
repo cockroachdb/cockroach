@@ -8,6 +8,7 @@ package colexec
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // offsetOp is an operator that implements offset, returning everything
@@ -31,12 +32,15 @@ func NewOffsetOp(input colexecop.Operator, offset uint64) colexecop.Operator {
 	}
 }
 
-func (c *offsetOp) Next() coldata.Batch {
+func (c *offsetOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		bat := c.Input.Next()
+		bat, meta := c.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		length := bat.Length()
 		if length == 0 {
-			return bat
+			return bat, nil
 		}
 
 		c.seen += uint64(length)
@@ -61,7 +65,7 @@ func (c *offsetOp) Next() coldata.Batch {
 		}
 
 		if c.seen > c.offset {
-			return bat
+			return bat, nil
 		}
 	}
 }

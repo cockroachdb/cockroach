@@ -12,6 +12,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 type projPrefixBytesBytesConstOp struct {
@@ -21,13 +22,16 @@ type projPrefixBytesBytesConstOp struct {
 	caseInsensitive bool
 }
 
-func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
+func (p projPrefixBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_negate := p.negate
 	_caseInsensitive := p.caseInsensitive
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.Bytes
@@ -91,7 +95,7 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projSuffixBytesBytesConstOp struct {
@@ -101,13 +105,16 @@ type projSuffixBytesBytesConstOp struct {
 	caseInsensitive bool
 }
 
-func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
+func (p projSuffixBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_negate := p.negate
 	_caseInsensitive := p.caseInsensitive
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.Bytes
@@ -171,7 +178,7 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projContainsBytesBytesConstOp struct {
@@ -181,13 +188,16 @@ type projContainsBytesBytesConstOp struct {
 	caseInsensitive bool
 }
 
-func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
+func (p projContainsBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_negate := p.negate
 	_caseInsensitive := p.caseInsensitive
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.Bytes
@@ -251,7 +261,7 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projSkeletonBytesBytesConstOp struct {
@@ -261,13 +271,16 @@ type projSkeletonBytesBytesConstOp struct {
 	caseInsensitive bool
 }
 
-func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
+func (p projSkeletonBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_negate := p.negate
 	_caseInsensitive := p.caseInsensitive
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.Bytes
@@ -379,7 +392,7 @@ func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projRegexpBytesBytesConstOp struct {
@@ -388,12 +401,15 @@ type projRegexpBytesBytesConstOp struct {
 	negate   bool
 }
 
-func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
+func (p projRegexpBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_negate := p.negate
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.Bytes
@@ -445,5 +461,5 @@ func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }

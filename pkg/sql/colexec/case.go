@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -24,6 +25,9 @@ type caseOp struct {
 	allocator *colmem.Allocator
 	buffer    *bufferOp
 
+	// Note that caseOps and elseOp contain chains of operators that don't emit
+	// metadata (since metadata coming from buffer.advance is handled
+	// separately).
 	caseOps []colexecop.Operator
 	elseOp  colexecop.Operator
 
@@ -185,11 +189,14 @@ func (c *caseOp) copyIntoScratch(batch coldata.Batch, inputColIdx int, numAlread
 	}
 }
 
-func (c *caseOp) Next() coldata.Batch {
-	c.buffer.advance()
+func (c *caseOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	meta := c.buffer.advance()
+	if meta != nil {
+		return nil, meta
+	}
 	origLen := c.buffer.batch.Length()
 	if origLen == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	var origHasSel bool
 	if sel := c.buffer.batch.Selection(); sel != nil {
@@ -224,7 +231,7 @@ func (c *caseOp) Next() coldata.Batch {
 			// Run the next case operator chain. It will project its THEN expression
 			// for all tuples that matched its WHEN expression and that were not
 			// already matched.
-			batch := c.caseOps[i].Next()
+			batch := colexecop.NextNoMeta(c.caseOps[i])
 			// The batch's projection column now additionally contains results for all
 			// of the tuples that passed the ith WHEN clause. The batch's selection
 			// vector is set to the same selection of tuples.
@@ -314,7 +321,7 @@ func (c *caseOp) Next() coldata.Batch {
 		// didn't have a selection vector, we can copy the result of the ELSE
 		// projection straight into the output batch because the result will be
 		// in the correct order.
-		batch := c.elseOp.Next()
+		batch := colexecop.NextNoMeta(c.elseOp)
 		c.allocator.PerformOperation([]*coldata.Vec{outputCol}, func() {
 			outputCol.Copy(
 				coldata.SliceArgs{
@@ -324,7 +331,7 @@ func (c *caseOp) Next() coldata.Batch {
 		})
 		outputReady = true
 	} else if numAlreadyMatched < origLen {
-		batch := c.elseOp.Next()
+		batch := colexecop.NextNoMeta(c.elseOp)
 		c.allocator.PerformOperation([]*coldata.Vec{c.scratch.output}, func() {
 			c.copyIntoScratch(batch, c.thenIdxs[len(c.thenIdxs)-1], numAlreadyMatched)
 		})
@@ -353,5 +360,5 @@ func (c *caseOp) Next() coldata.Batch {
 
 	// Restore the original state of the buffered batch.
 	colexecutils.UpdateBatchState(c.buffer.batch, origLen, origHasSel, c.origSel)
-	return c.buffer.batch
+	return c.buffer.batch, nil
 }

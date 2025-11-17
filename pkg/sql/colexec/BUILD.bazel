@@ -87,6 +87,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metamorphic",
         "//pkg/util/mon",
+        "//pkg/util/randutil",
         "//pkg/util/stringarena",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_apd_v3//:apd",  # keep
