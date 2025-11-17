@@ -138,6 +138,7 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		{systemID: stid, ous: append([]string{"foo"}, correctOU...), commonName: "other", expErr: `could not parse tenant ID from Common Name`},
 		{systemID: stid, ous: nil, commonName: "root"},
 		{systemID: stid, ous: nil, commonName: "node"},
+		{systemID: stid, ous: nil, commonName: "debug_user"},
 		{systemID: stid, ous: nil, commonName: "root", tenantScope: 10,
 			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "root" on tenantID 10\)`},
 		{systemID: tenTen, ous: correctOU, commonName: "10", expTenID: roachpb.TenantID{}},
@@ -145,6 +146,7 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		{systemID: tenTen, ous: correctOU, commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
 		{systemID: tenTen, ous: nil, commonName: "root"},
 		{systemID: tenTen, ous: nil, commonName: "node"},
+		{systemID: tenTen, ous: nil, commonName: "debug_user"},
 
 		// Passing a client ID in metadata instead of relying only on the TLS cert.
 		{clientTenantInMD: "invalid", expErr: `could not parse tenant ID from (gRPC|drpc) metadata`},
@@ -169,6 +171,8 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		// Server is KV node: expect tenant authorization.
 		{clientTenantInMD: "10",
 			systemID: stid, ous: nil, commonName: "node", expTenID: tenTen},
+		{clientTenantInMD: "10",
+			systemID: stid, ous: nil, commonName: "debug_user", expTenID: tenTen},
 		// tenant ID present in MD, but not in client cert. However,
 		// client cert is valid. Use MD tenant ID.
 		// Server is secondary tenant: do not do additional tenant authorization.
@@ -176,6 +180,8 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 			systemID: tenTen, ous: nil, commonName: "root", expTenID: roachpb.TenantID{}},
 		{clientTenantInMD: "10",
 			systemID: tenTen, ous: nil, commonName: "node", expTenID: roachpb.TenantID{}},
+		{clientTenantInMD: "10",
+			systemID: tenTen, ous: nil, commonName: "debug_user", expTenID: roachpb.TenantID{}},
 		// tenant ID present in MD, but not in client cert. Use MD tenant ID.
 		// Server tenant ID does not match client tenant ID.
 		{clientTenantInMD: "123",
@@ -209,12 +215,13 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 			rootDNString: "CN=foo", nodeDNString: "CN=bar"},
 		// Test case for disallow root login functionality
 		{systemID: stid, ous: nil, commonName: "root", expErr: "root login has been disallowed"},
+		{systemID: stid, ous: nil, commonName: "foo", certDNSName: "root", expErr: "root login has been disallowed"},
 	} {
 		t.Run(fmt.Sprintf("from %v to %v (md %q)", tc.commonName, tc.systemID, tc.clientTenantInMD), func(t *testing.T) {
 			// Enable root login blocking for the specific test case
 			if tc.expErr == "root login has been disallowed" {
-				security.EnableDisallowRootLogin(true)
-				defer security.EnableDisallowRootLogin(false)
+				security.SetDisallowRootLogin(true)
+				defer security.SetDisallowRootLogin(false)
 			}
 
 			err := security.SetCertPrincipalMap(strings.Split(tc.certPrincipalMap, ","))
@@ -1326,8 +1333,8 @@ func TestServerpbEndpointAccess(t *testing.T) {
 
 			t.Run(testName, func(t *testing.T) {
 				if disallowRoot {
-					security.EnableDisallowRootLogin(true)
-					defer security.EnableDisallowRootLogin(false)
+					security.SetDisallowRootLogin(true)
+					defer security.SetDisallowRootLogin(false)
 				}
 
 				cert := createCert(t, "root")
@@ -1348,10 +1355,23 @@ func TestServerpbEndpointAccess(t *testing.T) {
 				}
 			})
 		}
+
+		// Test debug_user authentication - should always succeed
+		t.Run("debug_user_authentication", func(t *testing.T) {
+			cert := createCert(t, "debug_user")
+			ctx := createContextWithCert(cert)
+
+			sv := &settings.Values{}
+			sv.Init(ctx, settings.TestOpaque)
+
+			// Perform authentication - debug_user should always be allowed
+			_, err := rpc.TestingAuthenticateTenant(ctx, systemTenantID, sv, false /* enableDRPC */)
+			require.NoError(t, err)
+		})
 	})
 
 	t.Run("authorization", func(t *testing.T) {
-		// Test root user authorization to access serverpb endpoints
+		// Test root and debug_user authorization to access serverpb endpoints
 		endpoints := map[string]interface{}{
 			"/cockroach.server.serverpb.Admin/Liveness":      &serverpb.LivenessRequest{},
 			"/cockroach.server.serverpb.Status/Nodes":        &serverpb.NodesRequest{},
@@ -1363,24 +1383,29 @@ func TestServerpbEndpointAccess(t *testing.T) {
 
 		for method, req := range endpoints {
 			t.Run(strings.ReplaceAll(method, "/", "_"), func(t *testing.T) {
-				cert := createCert(t, "root")
-				ctx := createContextWithCert(cert)
+				// Test both root and debug_user
+				for _, user := range []string{"root", "debug_user"} {
+					t.Run(user, func(t *testing.T) {
+						cert := createCert(t, user)
+						ctx := createContextWithCert(cert)
 
-				sv := &settings.Values{}
-				sv.Init(ctx, settings.TestOpaque)
+						sv := &settings.Values{}
+						sv.Init(ctx, settings.TestOpaque)
 
-				// Test authorization with mock authorizer
-				err := rpc.TestingAuthorizeTenantRequest(ctx, sv, systemTenantID, method, req, mockAuthorizer{
-					hasCrossTenantRead:                 true,
-					hasCapabilityForBatch:              true,
-					hasNodestatusCapability:            true,
-					hasTSDBQueryCapability:             true,
-					hasNodelocalStorageCapability:      true,
-					hasExemptFromRateLimiterCapability: true,
-					hasTSDBAllCapability:               true,
-				})
+						// Test authorization with mock authorizer
+						err := rpc.TestingAuthorizeTenantRequest(ctx, sv, systemTenantID, method, req, mockAuthorizer{
+							hasCrossTenantRead:                 true,
+							hasCapabilityForBatch:              true,
+							hasNodestatusCapability:            true,
+							hasTSDBQueryCapability:             true,
+							hasNodelocalStorageCapability:      true,
+							hasExemptFromRateLimiterCapability: true,
+							hasTSDBAllCapability:               true,
+						})
 
-				require.NoError(t, err)
+						require.NoError(t, err)
+					})
+				}
 			})
 		}
 	})

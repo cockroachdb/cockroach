@@ -490,7 +490,7 @@ func TestAuthenticationHook(t *testing.T) {
 			defer func() {
 				security.UnsetRootSubject()
 				security.UnsetNodeSubject()
-				security.EnableDisallowRootLogin(false)
+				security.SetDisallowRootLogin(false)
 			}()
 			err := security.SetCertPrincipalMap(strings.Split(tc.principalMap, ","))
 			if err != nil {
@@ -498,7 +498,7 @@ func TestAuthenticationHook(t *testing.T) {
 			}
 
 			// Set the global flag for disallowing root login
-			security.EnableDisallowRootLogin(tc.disallowRootLogin)
+			security.SetDisallowRootLogin(tc.disallowRootLogin)
 
 			var roleSubject *ldap.DN
 			if tc.isSubjectRoleOptionOrDNSet {
