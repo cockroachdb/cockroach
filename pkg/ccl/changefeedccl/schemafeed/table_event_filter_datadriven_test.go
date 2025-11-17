@@ -118,7 +118,7 @@ func TestDataDriven(t *testing.T) {
 				f := schemafeed.New(ctx, cfg, schemafeed.TestingAllEventFilter, targets, now, nil, changefeedbase.CanHandle{
 					MultipleColumnFamilies: true,
 					VirtualColumns:         true,
-				})
+				}, false)
 				schemaFeeds[i] = f
 
 				go func() {

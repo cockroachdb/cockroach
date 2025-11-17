@@ -260,7 +260,7 @@ func makeSQLProcessorFromQuerier(
 
 	return &sqlRowProcessor{
 		querier:  querier,
-		decoder:  cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false),
+		decoder:  cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false, cdcevent.DecoderOptions{}),
 		settings: settings,
 		db:       db,
 		ie:       ie,

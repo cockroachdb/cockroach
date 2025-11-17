@@ -560,7 +560,7 @@ $$`)
 			defer e.Close()
 
 			ctx := context.Background()
-			decoder, err := cdcevent.NewEventDecoder(ctx, &execCfg, targets, false, false)
+			decoder, err := cdcevent.NewEventDecoder(ctx, &execCfg, targets, false, false, cdcevent.DecoderOptions{})
 			require.NoError(t, err)
 
 			for _, action := range tc.setupActions {
