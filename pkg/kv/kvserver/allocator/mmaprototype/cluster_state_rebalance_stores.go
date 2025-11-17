@@ -413,7 +413,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		replicaChanges := makeRebalanceReplicaChanges(
 			rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
 		rangeChange := MakePendingRangeChange(rangeID, replicaChanges[:])
-		if err = re.preCheckOnApplyReplicaChanges(rangeChange.pendingReplicaChanges); err != nil {
+		if err = re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
 			panic(errors.Wrapf(err, "pre-check failed for replica changes: %v for %v",
 				replicaChanges, rangeID))
 		}
@@ -591,7 +591,7 @@ func (re *rebalanceEnv) rebalanceLeases(
 		replicaChanges := MakeLeaseTransferChanges(
 			rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
 		leaseChange := MakePendingRangeChange(rangeID, replicaChanges[:])
-		if err := re.preCheckOnApplyReplicaChanges(leaseChange.pendingReplicaChanges); err != nil {
+		if err := re.preCheckOnApplyReplicaChanges(leaseChange); err != nil {
 			panic(errors.Wrapf(err, "pre-check failed for lease transfer %v", leaseChange))
 		}
 		re.addPendingRangeChange(leaseChange)
