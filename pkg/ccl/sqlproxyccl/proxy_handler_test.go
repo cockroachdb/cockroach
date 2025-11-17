@@ -162,7 +162,7 @@ func TestProxyProtocol(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER bob WITH PASSWORD 'builder'`)
 
 	var validateFn func(h *proxyproto.Header) error
-	withProxyProtocol := func(p bool) (server *Server, addrs *serverAddresses) {
+	withProxyProtocol := func(p bool, stopper *stop.Stopper) (server *Server, addrs *serverAddresses) {
 		options := &ProxyOptions{
 			RoutingRule:          ts.AdvSQLAddr(),
 			SkipVerify:           true,
@@ -171,7 +171,7 @@ func TestProxyProtocol(t *testing.T) {
 		options.testingKnobs.validateProxyHeader = func(h *proxyproto.Header) error {
 			return validateFn(h)
 		}
-		return newSecureProxyServer(ctx, t, sql.Stopper(), options)
+		return newSecureProxyServer(ctx, t, stopper, options)
 	}
 
 	timeout := 3 * time.Second
@@ -228,11 +228,10 @@ func TestProxyProtocol(t *testing.T) {
 	})()
 
 	testSQLNoRequiredProxyProtocol := func(s *Server, addr string) {
-		url := fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-42.defaultdb?sslmode=require", addr)
+		url := fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-42.defaultdb?sslmode=require&sslrootcert=%s", addr, datapathutils.TestDataPath(t, "testserver.crt"))
 		// No proxy protocol.
 		te.TestConnect(ctx, t, url,
 			func(conn *pgx.Conn) {
-				t.Log("B")
 				require.NotZero(t, s.metrics.CurConnCount.Value())
 				require.NoError(t, runTestQuery(ctx, conn))
 			},
@@ -247,7 +246,7 @@ func TestProxyProtocol(t *testing.T) {
 	}
 
 	testSQLRequiredProxyProtocol := func(s *Server, addr string) {
-		url := fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-42.defaultdb?sslmode=require", addr)
+		url := fmt.Sprintf("postgres://bob:builder@%s/tenant-cluster-42.defaultdb?sslmode=require&sslrootcert=%s", addr, datapathutils.TestDataPath(t, "testserver.crt"))
 		// No proxy protocol.
 		_ = te.TestConnectErr(ctx, t, url, codeClientReadFailed, "tls error")
 		// Proxy protocol.
@@ -264,7 +263,10 @@ func TestProxyProtocol(t *testing.T) {
 	}
 
 	t.Run("server doesn't require proxy protocol", func(t *testing.T) {
-		s, addrs := withProxyProtocol(false)
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		s, addrs := withProxyProtocol(false, stopper)
 		// Test SQL on the default listener. Both should go through.
 		testSQLNoRequiredProxyProtocol(s, addrs.listenAddr)
 		// Test SQL on the proxy protocol listener. Only request with PROXY should go
@@ -279,7 +281,10 @@ func TestProxyProtocol(t *testing.T) {
 	})
 
 	t.Run("server requires proxy protocol", func(t *testing.T) {
-		s, addrs := withProxyProtocol(true)
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		s, addrs := withProxyProtocol(true, stopper)
 		// Test SQL on the default listener. Both should go through.
 		testSQLRequiredProxyProtocol(s, addrs.listenAddr)
 		// Test SQL on the proxy protocol listener. Only request with PROXY should go
