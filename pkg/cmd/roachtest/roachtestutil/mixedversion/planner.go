@@ -130,6 +130,8 @@ type (
 		// to opt-out of mutators that are incompatible with a test, if
 		// necessary.
 		Name() string
+		// IsCompatible returns whether the mutator is compatible with the current test.
+		IsCompatible(*testPlanner) bool
 		// Probability returns the probability that this mutator will run
 		// in any given test run. Every mutator should run under some
 		// probability. Making this an explicit part of the interface
@@ -233,7 +235,8 @@ const (
 // failure injection mutators.
 var failureInjectionMutators = []mutator{
 	panicNodeMutator{},
-	networkPartitionMutator{},
+	singleNetworkPartitionMutator,
+	protectedNetworkPartitionMutator,
 }
 
 // clusterSettingMutators includes a list of all
@@ -445,29 +448,10 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 		isLocal:        p.isLocal,
 	}
 
-	failureInjections := make(map[string]struct{})
-	for _, m := range failureInjectionMutators {
-		failureInjections[m.Name()] = struct{}{}
-	}
-
 	// Probabilistically enable some of the mutators on the base test
 	// plan generated above.
 	for _, mut := range planMutators {
 		if p.mutatorEnabled(mut) {
-			if _, found := failureInjections[mut.Name()]; found {
-				// We disable any failure injections that would occur on clusters with
-				// less than three nodes as this can lead to uninteresting failures
-				// (e.g. a single node panic failure).
-				if len(p.currentContext.Nodes()) < 3 {
-					continue
-				}
-				// We disable failure injections for local runs as some failure
-				// injections are not supported in that mode and can
-				// cause unintended behaviors (partitions using iptables).
-				if p.isLocal {
-					continue
-				}
-			}
 			mutations, err := mut.Generate(p.prng, testPlan, p)
 			if err != nil {
 				return nil, err
@@ -1195,6 +1179,10 @@ func (p *testPlanner) newRNG() *rand.Rand {
 }
 
 func (p *testPlanner) mutatorEnabled(mut mutator) bool {
+	if !mut.IsCompatible(p) {
+		return false
+	}
+
 	probability := mut.Probability()
 	if p, ok := p.options.overriddenMutatorProbabilities[mut.Name()]; ok {
 		probability = p

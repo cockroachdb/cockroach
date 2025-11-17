@@ -789,7 +789,7 @@ func startOpts(opts ...option.StartStopOption) option.StartOpts {
 		startStopOpts(opts...)...,
 	)
 	// Enable verbose logging for auto_upgrade to help debug upgrade-related issues.
-	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=auto_upgrade=2")
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=auto_upgrade=2,allocator*=3")
 	return startOpts
 }
 
@@ -893,36 +893,40 @@ func (s restartNodeStep) ConcurrencyDisabled() bool {
 }
 
 type networkPartitionInjectStep struct {
-	f          *failures.Failer
-	partition  failures.NetworkPartition
-	targetNode option.NodeListOption
+	f                *failures.Failer
+	partitions       []failures.NetworkPartition
+	unavailableNodes option.NodeListOption
+	protectedNodes   option.NodeListOption
 }
 
 func (s networkPartitionInjectStep) Background() shouldStop { return nil }
 
 func (s networkPartitionInjectStep) Description(debug bool) string {
-	var desc string
-	switch s.partition.Type {
-	case failures.Bidirectional:
-		desc = fmt.Sprintf("setting up bidirectional network partition: dropping connections between nodes %d and %v", s.partition.Source, s.partition.Destination)
-	case failures.Incoming:
-		desc = fmt.Sprintf("setting up incoming network partition: dropping connections from nodes %v to %d", s.partition.Destination, s.partition.Source)
-	case failures.Outgoing:
-		desc = fmt.Sprintf("setting up outgoing network partition: dropping connections from nodes %d to %v", s.partition.Source, s.partition.Destination)
-	}
-	return desc
+	return fmt.Sprintf("creating network partition(s): %v", s.partitions)
 }
 
 func (s networkPartitionInjectStep) Run(
-	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
-	h.runner.monitor.ExpectProcessDead(s.targetNode)
-	if h.DeploymentMode() == SeparateProcessDeployment {
-		opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
-		h.runner.monitor.ExpectProcessDead(s.targetNode, opt)
+	// Wait for all ranges to have voter replicas on protected nodes before injecting partition.
+	// We already waited when creating the initial zone configs, but we may have run operations
+	// that caused ranges to be placed outside our config, e.g. importing from a fixture.
+	retryOpts := retry.Options{
+		MaxDuration:    30 * time.Minute,
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     5 * time.Second,
+	}
+	if err := waitForVoterReplicasOnNodes(ctx, l, rng, h, s.protectedNodes, retryOpts); err != nil {
+		return errors.Wrap(err, "ranges not ready for partition")
 	}
 
-	args := failures.NetworkPartitionArgs{Partitions: []failures.NetworkPartition{s.partition}}
+	h.runner.monitor.ExpectProcessDead(s.unavailableNodes)
+	if h.DeploymentMode() == SeparateProcessDeployment {
+		opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
+		h.runner.monitor.ExpectProcessDead(s.unavailableNodes, opt)
+	}
+
+	args := failures.NetworkPartitionArgs{Partitions: s.partitions}
 
 	if err := s.f.Setup(ctx, l, args); err != nil {
 		return errors.Wrapf(err, "failed to setup failure %s", failures.IPTablesNetworkPartitionName)
@@ -935,29 +939,75 @@ func (s networkPartitionInjectStep) Run(
 	return s.f.WaitForFailureToPropagate(ctx, l)
 }
 
+// waitForVoterReplicasOnNodes blocks until all ranges have voter replicas on the specified nodes.
+// If the retry loop fails, it logs non-compliant ranges before returning an error.
+func waitForVoterReplicasOnNodes(
+	ctx context.Context,
+	l *logger.Logger,
+	rng *rand.Rand,
+	h *Helper,
+	protectedNodes option.NodeListOption,
+	retryOpts retry.Options,
+) error {
+	// Only wait/check if we have protected nodes
+	if len(protectedNodes) == 0 {
+		return nil
+	}
+
+	// Build the WHERE clause to check for ranges with voters on protected nodes
+	var nodeConditions []string
+	for _, node := range protectedNodes {
+		nodeConditions = append(nodeConditions, fmt.Sprintf("array_position(voting_replicas, %d) IS NOT NULL", node))
+	}
+	nodeFilter := strings.Join(nodeConditions, " AND ")
+
+	// Block until all ranges have voter replicas on our protected nodes.
+	// Make sure we exclude dropped tables which will show when querying
+	// ranges, but may not respect our zone configs.
+	return retryOpts.Do(ctx, func(ctx context.Context) error {
+		query := fmt.Sprintf(`
+		WITH undropped AS (
+			SELECT table_id
+			FROM crdb_internal.tables
+			WHERE state != 'DROP'
+		)
+		SELECT
+			count(*) AS total_ranges,
+			count(*) FILTER (WHERE %s) AS ranges_with_all_voters
+		FROM [SHOW CLUSTER RANGES WITH TABLES, DETAILS] AS r
+		JOIN undropped AS t
+			ON r.table_id = t.table_id;
+		`, nodeFilter)
+
+		var totalRanges, rangesWithAllVoters int
+		row := h.System.QueryRow(rng, query)
+		if err := row.Scan(&totalRanges, &rangesWithAllVoters); err != nil {
+			return errors.Wrap(err, "failed to query voter replicas")
+		}
+
+		if rangesWithAllVoters != totalRanges {
+			l.Printf("protected nodes %v have voter replicas on %d/%d ranges", protectedNodes, rangesWithAllVoters, totalRanges)
+			return errors.Errorf("protected nodes %v have voter replicas on %d/%d ranges", protectedNodes, rangesWithAllVoters, totalRanges)
+		}
+		l.Printf("all protected nodes %v have voter replicas on all %d ranges", protectedNodes, totalRanges)
+		return nil
+	})
+}
+
 func (s networkPartitionInjectStep) ConcurrencyDisabled() bool {
 	return true
 }
 
 type networkPartitionRecoveryStep struct {
-	f          *failures.Failer
-	partition  failures.NetworkPartition
-	targetNode option.NodeListOption
+	f                *failures.Failer
+	partitions       []failures.NetworkPartition
+	unavailableNodes option.NodeListOption
 }
 
 func (s networkPartitionRecoveryStep) Background() shouldStop { return nil }
 
 func (s networkPartitionRecoveryStep) Description(debug bool) string {
-	var desc string
-	switch s.partition.Type {
-	case failures.Bidirectional:
-		desc = fmt.Sprintf("recovering from bidirectional network partition: allowing connections between nodes %d and %v", s.partition.Source, s.partition.Destination)
-	case failures.Incoming:
-		desc = fmt.Sprintf("recovering from incoming network partition: allowing connections from nodes %v to %d", s.partition.Destination, s.partition.Source)
-	case failures.Outgoing:
-		desc = fmt.Sprintf("recovering from outgoing network partition: allowing connections from nodes %d to %v", s.partition.Source, s.partition.Destination)
-	}
-	return desc
+	return fmt.Sprintf("recovering network partition(s): %v", s.partitions)
 }
 
 func (s networkPartitionRecoveryStep) Run(
@@ -966,18 +1016,16 @@ func (s networkPartitionRecoveryStep) Run(
 	if err := s.f.Recover(ctx, l); err != nil {
 		return errors.Wrapf(err, "failed to recover failure %s", failures.IPTablesNetworkPartitionName)
 	}
-
 	if err := s.f.WaitForFailureToRecover(ctx, l); err != nil {
 		return errors.Wrapf(err, "failed to wait for recovery of failure %s", failures.IPTablesNetworkPartitionName)
 	}
 
-	h.runner.monitor.ExpectProcessAlive(s.targetNode)
+	h.runner.monitor.ExpectProcessAlive(s.unavailableNodes)
 	if h.DeploymentMode() == SeparateProcessDeployment {
 		opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
-		h.runner.monitor.ExpectProcessAlive(s.targetNode, opt)
+		h.runner.monitor.ExpectProcessAlive(s.unavailableNodes, opt)
 	}
 	return s.f.Cleanup(ctx, l)
-
 }
 
 func (s networkPartitionRecoveryStep) ConcurrencyDisabled() bool {
@@ -1059,4 +1107,61 @@ func (s stageAllWorkloadBinariesStep) Run(
 }
 func (s stageAllWorkloadBinariesStep) ConcurrencyDisabled() bool {
 	return true
+}
+
+type pinVoterReplicasStep struct {
+	protectedNodes option.NodeListOption
+}
+
+func (s pinVoterReplicasStep) Background() shouldStop { return nil }
+
+func (s pinVoterReplicasStep) Description(debug bool) string {
+	return fmt.Sprintf("pin voter replicas to nodes %v", s.protectedNodes)
+}
+
+func (s pinVoterReplicasStep) Run(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
+) error {
+	// We build a zone constraint that requires every node in `protectedNodes`
+	// to have a voter replica of every range.
+	var constraintParts []string
+	for _, node := range s.protectedNodes {
+		constraintParts = append(constraintParts, fmt.Sprintf(`"+node%d": 1`, node))
+	}
+	constraintsStr := fmt.Sprintf(`'{%s}'`, strings.Join(constraintParts, ", "))
+	// Setting voter constraints forces us to also set the replication factor.
+	replicationFactor := 2*len(s.protectedNodes) - 1
+	zoneConfig := fmt.Sprintf("constraints = %s, voter_constraints = %s, num_replicas = %d, num_voters = %d",
+		constraintsStr, constraintsStr, replicationFactor, replicationFactor)
+
+	// Apply the zone config for the default+system ranges and databases.
+	//
+	// N.B. If we start the cluster using fixtures, it will have additional databases such as
+	// `lotsatables` and `persistent_db`. However, these are small enough that they should be
+	// reallocated quickly.
+	for _, rangeName := range []string{"default", "system", "timeseries", "liveness", "meta", "tenants"} {
+		stmt := fmt.Sprintf("ALTER RANGE %s CONFIGURE ZONE USING %s", rangeName, zoneConfig)
+		if err := h.System.Exec(rng, stmt); err != nil {
+			return errors.Wrapf(err, "failed to set replica constraints for %s range", rangeName)
+		}
+	}
+
+	for _, databaseName := range []string{"defaultdb", "system"} {
+		stmt := fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING %s", databaseName, zoneConfig)
+		if err := h.System.Exec(rng, stmt); err != nil {
+			return errors.Wrapf(err, "failed to set replica constraints for system database")
+		}
+	}
+
+	retryOpts := retry.Options{
+		MaxDuration:    5 * time.Minute,
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     5 * time.Second,
+	}
+
+	return waitForVoterReplicasOnNodes(ctx, l, rng, h, s.protectedNodes, retryOpts)
+}
+
+func (s pinVoterReplicasStep) ConcurrencyDisabled() bool {
+	return false
 }
