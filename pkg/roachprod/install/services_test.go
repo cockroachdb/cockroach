@@ -138,7 +138,7 @@ func (t *serviceRegistryTest) makeVM(clusterName string, i int) vm.VM {
 }
 
 func (t *serviceRegistryTest) newCluster(nodeCount int) *SyncedCluster {
-	clusterName := fmt.Sprintf("cluster-%d", t.rng.Uint32())
+	clusterName := fmt.Sprintf("cluster-%s", randutil.RandString(t.rng, 10, randutil.PrintableKeyAlphabet))
 	c := &SyncedCluster{
 		Cluster: cloud.Cluster{
 			Name: clusterName,
