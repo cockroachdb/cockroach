@@ -28,32 +28,39 @@ type HintInjectionDonor struct {
 	// in the same order. Some nodes are ignored, such as ParenExpr and nodes
 	// after collapse of a Tuple or Array or ValuesClause.
 	walk []any
-
-	// collapsed is a stack indicating whether we've collapsed the rest of the
-	// current ValuesClause, Tuple, or Array list in the donor AST. Collapsed is
-	// only used during AST walks.
-	collapsed []bool
 }
 
 // NewHintInjectionDonor creates a HintInjectionDonor from a parsed AST. The
 // parsed donor statement could be a regular SQL statement or a statement
 // fingerprint.
+//
+// After NewHintInjectionDonor returns a HintInjectionDonor, the donor becomes
+// read-only to allow concurrent use from multiple goroutines.
 func NewHintInjectionDonor(ast Statement, fingerprintFlags FmtFlags) (*HintInjectionDonor, error) {
 	hd := &HintInjectionDonor{
 		ast:           ast,
 		validationSQL: FormatStatementHideConstants(ast, fingerprintFlags, FmtHideHints),
-		collapsed:     []bool{false},
 	}
-	WalkStmt(hd, ast)
+	v := newDonorVisitor{hd: hd, collapsed: []bool{false}}
+	WalkStmt(&v, ast)
 	return hd, nil
 }
 
-// The ExtendedVisitor methods of HintInjectionDonor are used to walk the donor
-// AST and build the ahead-of-time pre-order traversal.
-var _ ExtendedVisitor = &HintInjectionDonor{}
+// newDonorVisitor is an ExtendedVisitor used to walk the donor AST and build
+// the ahead-of-time pre-order traversal at donor creation time.
+type newDonorVisitor struct {
+	// hd is the hint donor being initialized.
+	hd *HintInjectionDonor
 
-func (hd *HintInjectionDonor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	if hd.collapsed[len(hd.collapsed)-1] {
+	// collapsed is a stack indicating whether we've collapsed the rest of the
+	// current ValuesClause, Tuple, or Array list in the donor AST.
+	collapsed []bool
+}
+
+var _ ExtendedVisitor = &newDonorVisitor{}
+
+func (v *newDonorVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+	if v.collapsed[len(v.collapsed)-1] {
 		return false, expr
 	}
 	switch expr.(type) {
@@ -65,44 +72,44 @@ func (hd *HintInjectionDonor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 		// If the donor was a statement fingerprint, we might have collapse a Tuple
 		// or Array into __more__. Push on a boolean tracking whether we have
 		// collapsed it.
-		hd.collapsed = append(hd.collapsed, false)
+		v.collapsed = append(v.collapsed, false)
 	case *UnresolvedName:
 		if isArityIndicatorString(expr.String()) {
 			// If we find __more__ or another arity indicator, treat the rest of the
 			// current Tuple or Array or ValuesClause as collapsed, and skip forward
 			// until we VisitPost it.
-			hd.collapsed[len(hd.collapsed)-1] = true
-			hd.walk = append(hd.walk, expr)
+			v.collapsed[len(v.collapsed)-1] = true
+			v.hd.walk = append(v.hd.walk, expr)
 			return false, expr
 		}
 	}
-	hd.walk = append(hd.walk, expr)
+	v.hd.walk = append(v.hd.walk, expr)
 	return true, expr
 }
 
-func (hd *HintInjectionDonor) VisitPost(expr Expr) (newNode Expr) {
+func (v *newDonorVisitor) VisitPost(expr Expr) (newNode Expr) {
 	switch expr.(type) {
 	case *Tuple, *Array:
 		// Pop off the boolean tracking whether we collapsed the Tuple or Array.
-		hd.collapsed = hd.collapsed[:len(hd.collapsed)-1]
+		v.collapsed = v.collapsed[:len(v.collapsed)-1]
 	}
 	return expr
 }
 
-func (hd *HintInjectionDonor) VisitTablePre(expr TableExpr) (recurse bool, newExpr TableExpr) {
-	if hd.collapsed[len(hd.collapsed)-1] {
+func (v *newDonorVisitor) VisitTablePre(expr TableExpr) (recurse bool, newExpr TableExpr) {
+	if v.collapsed[len(v.collapsed)-1] {
 		return false, expr
 	}
-	hd.walk = append(hd.walk, expr)
+	v.hd.walk = append(v.hd.walk, expr)
 	return true, expr
 }
 
-func (hd *HintInjectionDonor) VisitTablePost(expr TableExpr) (newNode TableExpr) {
+func (v *newDonorVisitor) VisitTablePost(expr TableExpr) (newNode TableExpr) {
 	return expr
 }
 
-func (hd *HintInjectionDonor) VisitStatementPre(expr Statement) (recurse bool, newNode Statement) {
-	if hd.collapsed[len(hd.collapsed)-1] {
+func (v *newDonorVisitor) VisitStatementPre(expr Statement) (recurse bool, newNode Statement) {
+	if v.collapsed[len(v.collapsed)-1] {
 		return false, expr
 	}
 	switch expr.(type) {
@@ -110,17 +117,17 @@ func (hd *HintInjectionDonor) VisitStatementPre(expr Statement) (recurse bool, n
 		// If the donor was a statement fingerprint, we might have collapse a
 		// ValuesClause into __more__. Push on a boolean tracking whether we have
 		// collapsed it.
-		hd.collapsed = append(hd.collapsed, false)
+		v.collapsed = append(v.collapsed, false)
 	}
-	hd.walk = append(hd.walk, expr)
+	v.hd.walk = append(v.hd.walk, expr)
 	return true, expr
 }
 
-func (hd *HintInjectionDonor) VisitStatementPost(expr Statement) (newNode Statement) {
+func (v *newDonorVisitor) VisitStatementPost(expr Statement) (newNode Statement) {
 	switch expr.(type) {
 	case *ValuesClause:
 		// Pop off the boolean tracking whether we collapsed the ValuesClause.
-		hd.collapsed = hd.collapsed[:len(hd.collapsed)-1]
+		v.collapsed = v.collapsed[:len(v.collapsed)-1]
 	}
 	return expr
 }
@@ -128,15 +135,25 @@ func (hd *HintInjectionDonor) VisitStatementPost(expr Statement) (newNode Statem
 // hintInjectionVisitor is an ExtendedVisitor used to walk the target AST at
 // injection time. It performs the rewrite of the target AST.
 type hintInjectionVisitor struct {
-	hd      *HintInjectionDonor
+	// hd is the hint donor. Note that multiple hintInjectionVisitors could share
+	// the same donor concurrently from different sessions, so this is read-only.
+	hd *HintInjectionDonor
+
+	// walkIdx is the current position within the donor AST walk.
 	walkIdx int
-	err     error
+
+	// collapsed is a stack indicating whether we've collapsed the rest of the
+	// current ValuesClause, Tuple, or Array list in the donor AST.
+	collapsed []bool
+
+	// err is set if we detect a mismatch while walking the target AST.
+	err error
 }
 
 var _ ExtendedVisitor = &hintInjectionVisitor{}
 
 func (v *hintInjectionVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	if v.err != nil || v.hd.collapsed[len(v.hd.collapsed)-1] {
+	if v.err != nil || v.collapsed[len(v.collapsed)-1] {
 		return false, expr
 	}
 
@@ -161,7 +178,7 @@ func (v *hintInjectionVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) 
 		// If the donor was a statement fingerprint, we might have collapse a Tuple
 		// or Array into __more__. Push on a boolean tracking whether we have
 		// collapsed it.
-		v.hd.collapsed = append(v.hd.collapsed, false)
+		v.collapsed = append(v.collapsed, false)
 	case *UnresolvedName:
 		// If the donor was a fingerprint, then we might not exactly match _ or
 		// __more__ or __more10_100__ etc in the donor. Treat these as wildcards
@@ -172,7 +189,7 @@ func (v *hintInjectionVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) 
 		if isArityIndicatorString(donor.String()) {
 			// And skip the rest of the current Tuple or Array or ValuesClause if it
 			// has been collapsed to __more__ or one of the other arity indicators.
-			v.hd.collapsed[len(v.hd.collapsed)-1] = true
+			v.collapsed[len(v.collapsed)-1] = true
 			return false, expr
 		}
 	}
@@ -191,13 +208,13 @@ func (v *hintInjectionVisitor) VisitPost(expr Expr) Expr {
 	switch expr.(type) {
 	case *Tuple, *Array:
 		// Pop off the boolean tracking whether we collapsed the Tuple or Array.
-		v.hd.collapsed = v.hd.collapsed[:len(v.hd.collapsed)-1]
+		v.collapsed = v.collapsed[:len(v.collapsed)-1]
 	}
 	return expr
 }
 
 func (v *hintInjectionVisitor) VisitTablePre(expr TableExpr) (recurse bool, newExpr TableExpr) {
-	if v.err != nil || v.hd.collapsed[len(v.hd.collapsed)-1] {
+	if v.err != nil || v.collapsed[len(v.collapsed)-1] {
 		return false, expr
 	}
 
@@ -266,7 +283,7 @@ func (v *hintInjectionVisitor) VisitTablePost(expr TableExpr) TableExpr {
 }
 
 func (v *hintInjectionVisitor) VisitStatementPre(expr Statement) (recurse bool, newExpr Statement) {
-	if v.err != nil || v.hd.collapsed[len(v.hd.collapsed)-1] {
+	if v.err != nil || v.collapsed[len(v.collapsed)-1] {
 		return false, expr
 	}
 
@@ -285,7 +302,7 @@ func (v *hintInjectionVisitor) VisitStatementPre(expr Statement) (recurse bool, 
 		// If the donor was a statement fingerprint, we might have collapse a
 		// ValuesClause into __more__. Push on a boolean tracking whether we have
 		// collapsed it.
-		v.hd.collapsed = append(v.hd.collapsed, false)
+		v.collapsed = append(v.collapsed, false)
 	}
 
 	// Check that the corresponding donor Expr matches this node.
@@ -302,13 +319,15 @@ func (v *hintInjectionVisitor) VisitStatementPost(expr Statement) Statement {
 	switch expr.(type) {
 	case *ValuesClause:
 		// Pop off the boolean tracking whether we collapsed the ValuesClause.
-		v.hd.collapsed = v.hd.collapsed[:len(v.hd.collapsed)-1]
+		v.collapsed = v.collapsed[:len(v.collapsed)-1]
 	}
 	return expr
 }
 
 // Validate checks that the target statement exactly matches the donor (except
 // for hints).
+//
+// It is safe to call Validate concurrently from multiple goroutines.
 func (hd *HintInjectionDonor) Validate(stmt Statement, fingerprintFlags FmtFlags) error {
 	sql := FormatStatementHideConstants(stmt, fingerprintFlags, FmtHideHints)
 	if sql != hd.validationSQL {
@@ -332,9 +351,11 @@ func (hd *HintInjectionDonor) Validate(stmt Statement, fingerprintFlags FmtFlags
 //
 // No semantic checks of the donor hints are performed. It is assumed that
 // semantic checks happen elsewhere.
+//
+// It is safe to call InjectHints concurrently from multiple goroutines.
 func (hd *HintInjectionDonor) InjectHints(stmt Statement) (Statement, bool, error) {
 	// Walk the given statement, copying hints from the hints donor.
-	v := hintInjectionVisitor{hd: hd}
+	v := hintInjectionVisitor{hd: hd, collapsed: []bool{false}}
 	newStmt, changed := WalkStmt(&v, stmt)
 	if v.err != nil {
 		return stmt, false, v.err
