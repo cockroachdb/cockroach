@@ -245,9 +245,9 @@ func printPendingChangesTest(changes []*pendingReplicaChange) string {
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "pending(%d)", len(changes))
 	for _, change := range changes {
-		fmt.Fprintf(&buf, "\nchange-id=%d store-id=%v node-id=%v range-id=%v load-delta=%v start=%v",
+		fmt.Fprintf(&buf, "\nchange-id=%d store-id=%v node-id=%v range-id=%v load-delta=%v start=%v gc=%v",
 			change.changeID, change.target.StoreID, change.target.NodeID, change.rangeID,
-			change.loadDelta, change.startTime.Sub(testingBaseTime),
+			change.loadDelta, change.startTime.Sub(testingBaseTime), change.gcTime.Sub(testingBaseTime),
 		)
 		if !(change.enactedAtTime == time.Time{}) {
 			fmt.Fprintf(&buf, " enacted=%v",

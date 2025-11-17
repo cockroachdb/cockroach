@@ -470,8 +470,8 @@ func mapReplicaTypeToVoterOrNonVoter(rType roachpb.ReplicaType) roachpb.ReplicaT
 //
 // Some the state inside each *pendingReplicaChange is mutable at arbitrary
 // points in time by the code inside this package (with the relevant locking,
-// of course). Currently, this state is revisedGCTime, enactedAtTime. Neither
-// of it is read by the public methods on PendingRangeChange.
+// of course). Currently, this state is gcTime, enactedAtTime. Neither of it
+// is read by the public methods on PendingRangeChange.
 //
 // TODO(sumeer): when we expand the set of mutable fields, make a deep copy.
 type PendingRangeChange struct {
@@ -714,29 +714,23 @@ func (prc PendingRangeChange) LeaseTransferFrom() roachpb.StoreID {
 // change. It may not be enacted if it will cause some invariant (like the
 // number of replicas, or having a leaseholder) to be violated. If not
 // enacted, the allocator will either be told about the lack of enactment, or
-// will eventually expire from the allocator's state after
-// pendingChangeGCDuration or revisedGCTime. Such expiration without enactment
-// should be rare. pendingReplicaChanges can be paired, when a range is being
-// moved from one store to another -- that pairing is not captured here, and
-// captured in the changes suggested by the allocator to the external entity.
+// will eventually expire from the allocator's state at gcTime. Such
+// expiration without enactment should be rare. pendingReplicaChanges can be
+// paired, when a range is being moved from one store to another -- that
+// pairing is not captured here, and captured in the changes suggested by the
+// allocator to the external entity.
 type pendingReplicaChange struct {
 	changeID
 	ReplicaChange
 
 	// The wall time at which this pending change was initiated. Used for
-	// expiry.
+	// expiry. All replica changes in a PendingRangeChange have the same
+	// startTime.
 	startTime time.Time
-	// revisedGCTime is optionally populated (the zero value represents no
-	// revision). When populated, it represents a time, which, if earlier than
-	// the GC time decided by startTime + pendingChangeGCDuration, will cause an
-	// earlier GC. It is used to hasten GC (for the remaining changes) when some
-	// subset of changes corresponding to the same complex change have been
-	// observed to be enacted.
-	//
-	// The GC of these changes happens on a different path than the usual GC,
-	// which can undo the changes -- this GC happens only when processing a
-	// RangeMsg from the leaseholder.
-	revisedGCTime time.Time
+	// gcTime represents a time when the unenacted change should be GC'd, either
+	// using the normal GC undo path, or if rangeState.pendingChangeNoRollback
+	// is true, when processing a RangeMsg from the leaseholder.
+	gcTime time.Time
 
 	// TODO(kvoli,sumeerbhola): Consider adopting an explicit expiration time,
 	// after which the change is considered to have been rejected. This would
@@ -1100,7 +1094,7 @@ type rangeState struct {
 	// - The pending change failed to apply via
 	// AdjustPendingChangesDisposition(failed)).
 	// - The pending change is garbage collected after this pending change has
-	// been created for pendingChangeGCDuration.
+	// been created for pending{Replica,Lease}ChangeGCDuration.
 	//
 	// 3. Dropped due to incompatibility: mma creates these pending changes while
 	// working with an earlier authoritative leaseholder message. These changes
@@ -1550,20 +1544,25 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			// Note that normal GC will not GC these, since normal GC needs to undo,
 			// and we are not allowed to undo these.
 			if len(remainingChanges) > 0 {
-				startTime := remainingChanges[0].startTime
-				revisedGCTime := remainingChanges[0].revisedGCTime
-				if startTime.Add(pendingChangeGCDuration).Before(now) || revisedGCTime.Before(now) {
+				gcTime := remainingChanges[0].gcTime
+				if gcTime.Before(now) {
 					gcRemainingChanges = true
 				}
 			}
-		} else if len(enactedChanges) > 0 {
-			// First time this set of changes is seeing something enacted.
+		} else if len(enactedChanges) > 0 && len(remainingChanges) > 0 {
+			// First time this set of changes is seeing something enacted, and there
+			// are remaining changes.
 			//
 			// No longer permitted to rollback.
 			rs.pendingChangeNoRollback = true
-			for _, change := range remainingChanges {
-				// Potentially shorten when the GC happens.
-				change.revisedGCTime = now.Add(partiallyEnactedGCDuration)
+			// All remaining changes have the same gcTime.
+			curGCTime := remainingChanges[0].gcTime
+			revisedGCTime := now.Add(partiallyEnactedGCDuration)
+			if revisedGCTime.Before(curGCTime) {
+				// Shorten when the GC happens.
+				for _, change := range remainingChanges {
+					change.gcTime = revisedGCTime
+				}
 			}
 		}
 		// rs.pendingChanges is the union of remainingChanges and enactedChanges.
@@ -1865,17 +1864,21 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 
 }
 
-// If the pending change does not happen within this GC duration, we
+// If the pending replica change does not happen within this GC duration, we
 // forget it in the data-structure.
-const pendingChangeGCDuration = 5 * time.Minute
+const pendingReplicaChangeGCDuration = 5 * time.Minute
+
+// If the pending lease transfer does not happen within this GC duration, we
+// forget it in the data-structure.
+const pendingLeaseTransferGCDuration = 1 * time.Minute
 
 // partiallyEnactedGCDuration is the duration after which a pending change is
 // GC'd if some other change that was part of the same decision has been
 // enacted, and this duration has elapsed since that enactment. This is
-// shorter than the normal pendingChangeGCDuration, since we want to clean up
-// such partially enacted changes faster. Long-running decisions are those
-// that involve a new range snapshot being sent, and that is the first change
-// that is seen as enacted. Subsequent ones should be fast.
+// shorter than the normal pendingReplicaChangeGCDuration, since we want to
+// clean up such partially enacted changes faster. Long-running decisions are
+// those that involve a new range snapshot being sent, and that is the first
+// change that is seen as enacted. Subsequent ones should be fast.
 const partiallyEnactedGCDuration = 30 * time.Second
 
 // Called periodically by allocator.
@@ -1904,11 +1907,8 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 		if len(rs.pendingChanges) == 0 {
 			panic(errors.AssertionFailedf("no pending changes in range %v", rangeID))
 		}
-		startTime := rs.pendingChanges[0].startTime
-		// NB: we don't bother looking at revisedGCTime, since in that case
-		// rangeState.pendingChangeNoRollback is set to true, so we can't do GC
-		// here (since it requires undo).
-		if !startTime.Add(pendingChangeGCDuration).Before(now) {
+		gcTime := rs.pendingChanges[0].gcTime
+		if !gcTime.Before(now) {
 			continue
 		}
 		if err := cs.preCheckOnUndoReplicaChanges(PendingRangeChange{
@@ -2013,6 +2013,11 @@ func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
 	// NB: rs != nil is also required, but we also check that in a method called
 	// below.
 
+	gcDuration := pendingReplicaChangeGCDuration
+	if change.IsTransferLease() {
+		// Only the lease is being transferred.
+		gcDuration = pendingLeaseTransferGCDuration
+	}
 	pendingChanges := change.pendingReplicaChanges
 	now := cs.ts.Now()
 	for _, pendingChange := range pendingChanges {
@@ -2021,6 +2026,7 @@ func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
 		cid := cs.changeSeqGen
 		pendingChange.changeID = cid
 		pendingChange.startTime = now
+		pendingChange.gcTime = now.Add(gcDuration)
 		pendingChange.enactedAtTime = time.Time{}
 		storeState := cs.stores[pendingChange.target.StoreID]
 		rangeState := cs.ranges[rangeID]

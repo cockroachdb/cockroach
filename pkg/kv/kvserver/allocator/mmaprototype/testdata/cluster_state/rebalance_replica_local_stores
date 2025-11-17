@@ -65,10 +65,10 @@ make-pending-changes range-id=1
   rebalance-replica: remove-store-id=1 add-store-id=2
 ----
 pending(2)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s gc=5m0s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=5m0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -103,10 +103,10 @@ store-id=1
 get-pending-changes
 ----
 pending(2)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s gc=5m0s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=5m0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -125,14 +125,15 @@ range-id=1 local-store=2 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cp
   store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
 
 # The addition of replica and lease on s2 is considered enacted. The removal
-# of replica and lease from s1 is not yet enacted.
+# of replica and lease from s1 is not yet enacted. The gc time is changes to
+# be 30s after the enactment.
 get-pending-changes
 ----
 pending(2)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s enacted=5s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s gc=5m0s enacted=5s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=35s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -144,10 +145,10 @@ t=10s
 reject-pending-changes change-ids=(1) expect-panic
 ----
 pending(2)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s enacted=5s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s gc=5m0s enacted=5s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=35s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -155,10 +156,10 @@ change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth
 reject-pending-changes change-ids=(2) expect-panic
 ----
 pending(2)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s enacted=5s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s gc=5m0s enacted=5s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=35s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -186,7 +187,7 @@ store-load-msg
 get-pending-changes
 ----
 pending(1)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=35s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -199,17 +200,17 @@ store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:8
 store-id=2 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=160 node-adjusted-cpu=80 seq=4
   top-k-ranges (local-store-id=2) dim=ByteSize: r1
 
-# Advance time enough for change 2 to be eligible for GC.
+# Advance time enough for change 2 to be eligible for undo GC.
 tick seconds=300
 ----
 t=5m10s
 
-# Even after the GC time has elapsed change 2 cannot be undone since it is
-# no-rollback.
+# Even after the undo based GC time has elapsed change 2 cannot be undone
+# since it is no-rollback.
 gc-pending-changes
 ----
 pending(1)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=35s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -224,7 +225,7 @@ store-id=2
 get-pending-changes
 ----
 pending(1)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s enacted=5m10s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=35s enacted=5m10s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -274,10 +275,10 @@ make-pending-changes range-id=1
   rebalance-replica: remove-store-id=2 add-store-id=1
 ----
 pending(2)
-change-id=3 store-id=1 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=5m30s
+change-id=3 store-id=1 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=5m30s gc=10m30s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=4 store-id=2 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=5m30s
+change-id=4 store-id=2 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=5m30s gc=10m30s
   prev=(replica-id=2 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
