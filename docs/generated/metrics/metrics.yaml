@@ -547,6 +547,24 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is incremented whenever there is a non-trivial amount of contention experienced by a statement whether read-write or write-write conflicts. Monitor this metric to correlate possible workload performance issues to contention conflicts.
       essential: true
+    - name: sql.distsql.cpu_sql_statements.count
+      exported_name: sql_distsql_cpu_sql_statements_count
+      description: Number of SQL statements for which CPU time was recorded
+      y_axis_label: Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.distsql.cumulative_sql_cpu_nanos
+      exported_name: sql_distsql_cumulative_sql_cpu_nanos
+      description: Cumulative CPU time spent executing SQL operations across all queries (in nanoseconds)
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: Monitor this metric to track overall SQL CPU consumption across the cluster.
+      essential: true
     - name: sql.failure.count
       exported_name: sql_failure_count
       description: Number of statements resulting in a planning or runtime error
