@@ -79,7 +79,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -94,7 +93,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/version"
 )
 
 const (
@@ -612,14 +610,6 @@ func WithWorkloadNodes(nodes option.NodeListOption) CustomOption {
 func (t *Test) supportsSkipUpgradeTo(pred, v *clusterupgrade.Version) bool {
 	if t.options.minimumSupportedVersion.Series() == pred.Series() {
 		return false
-	}
-	// Special case for the current release series. This is useful to keep the
-	// test correct when we bump the minimum supported version separately from
-	// the current version.
-	r := clusterversion.Latest.ReleaseSeries()
-	currentMajor := version.MajorVersion{Year: int(r.Major), Ordinal: int(r.Minor)}
-	if currentMajor.Equals(v.Version.Major()) {
-		return len(clusterversion.SupportedPreviousReleases()) > 1
 	}
 
 	series := v.Version.Major()

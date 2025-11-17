@@ -14,7 +14,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/cmd/roachprod/grafana",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
@@ -39,7 +38,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_version//:version",
         "@org_golang_x_exp//maps",
     ],
 )
@@ -59,7 +57,6 @@ go_test(
     embed = [":mixedversion"],
     embedsrcs = ["testdata/test_releases.yaml"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/roachtestutil",
