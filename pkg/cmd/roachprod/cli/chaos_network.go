@@ -15,162 +15,59 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// buildChaosNetworkCmd creates the network chaos command
-func (cr *commandRegistry) buildChaosNetworkCmd() *cobra.Command {
-	networkCmd := &cobra.Command{
-		Use:   "network [command]",
-		Short: "Network failure-related commands",
-		Long:  `Network failure-related commands for testing cluster behavior under network issues.`,
-	}
-
-	// Add subcommands
-	networkCmd.AddCommand(cr.buildNetworkPartitionCmd())
-	networkCmd.AddCommand(cr.buildNetworkLatencyCmd())
-
-	return networkCmd
-}
-
-// buildNetworkPartitionCmd creates the network partition command
-func (cr *commandRegistry) buildNetworkPartitionCmd() *cobra.Command {
-	partitionCmd := &cobra.Command{
-		Use:   "partition [command]",
-		Short: "Network partition-related commands",
-		Long: `Network partition-related commands for creating network partitions between nodes.
-
-Network partitions use iptables to drop packets between specified nodes, simulating
-network failures. Partitions can be bidirectional (both directions) or asymmetric
-(one direction only).
-`,
-	}
-
-	// Add subcommands
-	partitionCmd.AddCommand(cr.buildNetworkPartitionBidirectionalCmd())
-	partitionCmd.AddCommand(cr.buildNetworkPartitionAsymmetricCmd())
-
-	return partitionCmd
-}
-
-// buildNetworkPartitionBidirectionalCmd creates the bidirectional partition command
-func (cr *commandRegistry) buildNetworkPartitionBidirectionalCmd() *cobra.Command {
+// buildChaosNetworkPartitionCmd creates the network-partition chaos command
+func (cr *commandRegistry) buildChaosNetworkPartitionCmd() *cobra.Command {
 	var srcNodes, destNodes []int32
-
-	cmd := &cobra.Command{
-		Use:   "bidirectional <cluster>",
-		Short: "Drops traffic in both directions between source and destination nodes",
-		Long: `Drops traffic in both directions between source and destination nodes using iptables.
-
-Creates a complete network partition where nodes in the source set cannot communicate
-with nodes in the destination set in either direction. This simulates a complete
-network split.
-
-Examples:
-  # Partition node 1 from nodes 2 and 3
-  roachprod chaos network partition bidirectional mycluster --src 1 --dest 2,3
-
-  # Partition nodes 1-2 from nodes 3-4
-  roachprod chaos network partition bidirectional mycluster --src 1,2 --dest 3,4
-
-  # Run partition for 10 minutes before cleanup
-  roachprod chaos network partition bidirectional mycluster \
-    --src 1 --dest 2 --wait-before-cleanup 10m
-`,
-		Args: cobra.ExactArgs(1),
-		Run: Wrap(func(cmd *cobra.Command, args []string) error {
-			clusterName := args[0]
-			src := parseInt32SliceToNodes(srcNodes)
-			dest := parseInt32SliceToNodes(destNodes)
-			if err := validateClusterAndNodes(clusterName, src, dest); err != nil {
-				return err
-			}
-
-			// Build failure args
-			failureArgs := failures.NetworkPartitionArgs{
-				Partitions: []failures.NetworkPartition{{
-					Source:      src,
-					Destination: dest,
-					Type:        failures.Bidirectional,
-				}},
-			}
-
-			config.Logger.Printf("Creating bidirectional partition: %s <-> %s",
-				formatNodeList(src), formatNodeList(dest))
-
-			opts, err := getGlobalChaosOpts()
-			if err != nil {
-				return err
-			}
-
-			// Create failer from registry
-			failer, err := createFailer(
-				clusterName,
-				failures.IPTablesNetworkPartitionName,
-				opts.Stage,
-				getClusterOptions()...,
-			)
-			if err != nil {
-				return err
-			}
-
-			return runFailureLifecycle(
-				context.Background(),
-				config.Logger,
-				failer,
-				failureArgs,
-				opts,
-			)
-		}),
-	}
-
-	cmd.Flags().Int32SliceVarP(&srcNodes, "src", "s", nil,
-		"source nodes that will have the network partition created")
-	cmd.Flags().Int32SliceVarP(&destNodes, "dest", "d", nil,
-		"destination nodes that will have the network partition created")
-	_ = cmd.MarkFlagRequired("src")
-	_ = cmd.MarkFlagRequired("dest")
-
-	return cmd
-}
-
-// buildNetworkPartitionAsymmetricCmd creates the asymmetric partition command
-func (cr *commandRegistry) buildNetworkPartitionAsymmetricCmd() *cobra.Command {
-	var srcNodes, destNodes []int32
+	var partitionType string
 	var direction string
 
 	cmd := &cobra.Command{
-		Use:   "asymmetric <cluster>",
-		Short: "Creates an asymmetric network partition with directional traffic dropping",
-		Long: `Creates an asymmetric network partition with directional traffic dropping using iptables.
+		Use:   "network-partition <cluster>",
+		Short: "Creates network partitions between nodes using iptables",
+		Long: `Creates network partitions between nodes using iptables.
 
-An asymmetric partition drops traffic in only one direction, which can simulate
-firewall misconfigurations or one-way network failures seen in production.
+Network partitions drop packets between specified nodes, simulating network failures.
+Partitions can be bidirectional (both directions) or asymmetric (one direction only).
 
-Direction options:
+Partition types:
+  bidirectional: drops traffic in both directions between source and destination
+  asymmetric: drops traffic in one direction only (use --direction to specify)
+
+Direction options (for asymmetric partitions):
   incoming: drops incoming traffic on the source from the destination
-  outgoing: drops outgoing traffic from the source to the destination
+  outgoing: drops outgoing traffic from the source to the destination (default)
 
 Examples:
-  # Drop incoming traffic on node 1 from nodes 2,3
-  roachprod chaos network partition asymmetric mycluster \
-    --src 1 --dest 2,3 --direction incoming
+  # Create bidirectional partition between node 1 and nodes 2,3
+  roachprod chaos network-partition mycluster --src 1 --dest 2,3 --type bidirectional
 
-  # Drop outgoing traffic from nodes 1,2 to nodes 3,4
-  roachprod chaos network partition asymmetric mycluster \
-    --src 1,2 --dest 3,4 --direction outgoing
+  # Create asymmetric partition dropping outgoing traffic from node 1 to nodes 2,3
+  roachprod chaos network-partition mycluster --src 1 --dest 2,3 --type asymmetric
 
-  # Run partition until interrupted (Ctrl+C)
-  roachprod chaos network partition asymmetric mycluster \
-    --src 1 --dest 2 --direction incoming --run-forever
+  # Create asymmetric partition dropping incoming traffic on node 1 from nodes 2,3
+  roachprod chaos network-partition mycluster --src 1 --dest 2,3 --type asymmetric --direction incoming
+
+  # Run partition for 10 minutes before cleanup
+  roachprod chaos network-partition mycluster --src 1 --dest 2 --type bidirectional --wait-before-cleanup 10m
 `,
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
-			var partitionType failures.PartitionType
-			switch direction {
-			case "incoming":
-				partitionType = failures.Incoming
-			case "outgoing":
-				partitionType = failures.Outgoing
+			// Validate partition type
+			var failurePartitionType failures.PartitionType
+			switch partitionType {
+			case "bidirectional":
+				failurePartitionType = failures.Bidirectional
+			case "asymmetric":
+				switch direction {
+				case "incoming":
+					failurePartitionType = failures.Incoming
+				case "outgoing":
+					failurePartitionType = failures.Outgoing
+				default:
+					return errors.Newf("--direction must be 'incoming' or 'outgoing', got: %s", direction)
+				}
 			default:
-				return errors.Newf("--direction must be 'incoming' or 'outgoing', got: %s", direction)
+				return errors.Newf("--type must be 'bidirectional' or 'asymmetric', got: %s", partitionType)
 			}
 
 			clusterName := args[0]
@@ -185,11 +82,15 @@ Examples:
 				Partitions: []failures.NetworkPartition{{
 					Source:      src,
 					Destination: dest,
-					Type:        partitionType,
+					Type:        failurePartitionType,
 				}},
 			}
 
-			if partitionType == failures.Incoming {
+			// Log the partition being created
+			if failurePartitionType == failures.Bidirectional {
+				config.Logger.Printf("Creating bidirectional partition: %s <-> %s",
+					formatNodeList(src), formatNodeList(dest))
+			} else if failurePartitionType == failures.Incoming {
 				config.Logger.Printf("Creating asymmetric partition: %s <-X- %s (dropping incoming)",
 					formatNodeList(src), formatNodeList(dest))
 			} else {
@@ -206,17 +107,15 @@ Examples:
 			failer, err := createFailer(
 				clusterName,
 				failures.IPTablesNetworkPartitionName,
-				opts.Stage,
+				opts,
 				getClusterOptions()...,
 			)
 			if err != nil {
 				return err
 			}
 
-			// Execute lifecycle
 			return runFailureLifecycle(
 				context.Background(),
-				config.Logger,
 				failer,
 				failureArgs,
 				opts,
@@ -228,22 +127,24 @@ Examples:
 		"source nodes that will have the network partition created")
 	cmd.Flags().Int32SliceVarP(&destNodes, "dest", "d", nil,
 		"destination nodes that will have the network partition created")
-	cmd.Flags().StringVar(&direction, "direction", "",
-		"direction from which to drop traffic (incoming|outgoing)")
+	cmd.Flags().StringVar(&partitionType, "type", "",
+		"partition type: bidirectional (both directions) or asymmetric (one direction)")
+	cmd.Flags().StringVar(&direction, "direction", "outgoing",
+		"direction for asymmetric partitions: incoming or outgoing (default: outgoing)")
 	_ = cmd.MarkFlagRequired("src")
 	_ = cmd.MarkFlagRequired("dest")
-	_ = cmd.MarkFlagRequired("direction")
+	_ = cmd.MarkFlagRequired("type")
 
 	return cmd
 }
 
-// buildNetworkLatencyCmd creates the network latency command
-func (cr *commandRegistry) buildNetworkLatencyCmd() *cobra.Command {
+// buildChaosNetworkLatencyCmd creates the network-latency chaos command
+func (cr *commandRegistry) buildChaosNetworkLatencyCmd() *cobra.Command {
 	var srcNodes, destNodes []int32
 	var delay time.Duration
 
 	cmd := &cobra.Command{
-		Use:   "latency <cluster>",
+		Use:   "network-latency <cluster>",
 		Short: "Injects artificial network latency between nodes using tc and iptables",
 		Long: `Injects artificial network latency between nodes using tc (traffic control) and iptables.
 
@@ -256,13 +157,13 @@ emulation) qdisc, which provides realistic network delay simulation.
 
 Examples:
   # Add 100ms latency from node 1 to nodes 2,3
-  roachprod chaos network latency mycluster --src 1 --dest 2,3 --delay 100ms
+  roachprod chaos network-latency mycluster --src 1 --dest 2,3 --delay 100ms
 
   # Add 1 second latency between node groups
-  roachprod chaos network latency mycluster --src 1,2 --dest 3,4 --delay 1s
+  roachprod chaos network-latency mycluster --src 1,2 --dest 3,4 --delay 1s
 
   # Run with custom cleanup time
-  roachprod chaos network latency mycluster \
+  roachprod chaos network-latency mycluster \
     --src 1 --dest 2 --delay 500ms --wait-before-cleanup 15m
 `,
 		Args: cobra.ExactArgs(1),
@@ -299,7 +200,7 @@ Examples:
 			failer, err := createFailer(
 				clusterName,
 				failures.NetworkLatencyName,
-				opts.Stage,
+				opts,
 				getClusterOptions()...,
 			)
 			if err != nil {
@@ -309,7 +210,6 @@ Examples:
 			// Execute lifecycle
 			return runFailureLifecycle(
 				context.Background(),
-				config.Logger,
 				failer,
 				failureArgs,
 				opts,
@@ -321,11 +221,10 @@ Examples:
 		"source nodes that will experience the injected latency")
 	cmd.Flags().Int32SliceVarP(&destNodes, "dest", "d", nil,
 		"destination nodes that will experience the injected latency")
-	cmd.Flags().DurationVar(&delay, "delay", 0,
-		"delay to inject between source and destination nodes (e.g. 100ms, 1s)")
+	cmd.Flags().DurationVar(&delay, "delay", time.Millisecond*100,
+		"delay to inject between source and destination nodes (e.g. 100ms, 1s), default 100ms")
 	_ = cmd.MarkFlagRequired("src")
 	_ = cmd.MarkFlagRequired("dest")
-	_ = cmd.MarkFlagRequired("delay")
 
 	return cmd
 }

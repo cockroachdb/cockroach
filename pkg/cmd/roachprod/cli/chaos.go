@@ -8,6 +8,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -57,6 +58,11 @@ var (
 	chaosCertsDir          string
 	chaosReplicationFactor int
 	chaosStage             string
+	verbose                bool
+
+	// chaosLogger is the logger used by failure-injection library.
+	// It is initialized in the chaos command's PersistentPreRunE based on the verbose flag.
+	chaosLogger *logger.Logger
 )
 
 // GlobalChaosOpts captures global chaos flags
@@ -64,6 +70,7 @@ type GlobalChaosOpts struct {
 	WaitBeforeCleanup time.Duration
 	RunForever        bool
 	Stage             FailureStage
+	Verbose           bool
 }
 
 // buildChaosCmd creates the root chaos command
@@ -79,6 +86,10 @@ own lifecycle: Setup → Inject → Wait → Recover → Cleanup.
 
 Global flags control the duration and cleanup behavior of all chaos commands.
 `,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Initialize the chaos logger based on verbose flag
+			return initChaosLogger()
+		},
 	}
 
 	// Add global flags
@@ -103,9 +114,13 @@ Global flags control the duration and cleanup behavior of all chaos commands.
   - recover: runs only the recover phase (removes the failure)
   - cleanup: runs only the cleanup phase (removes failure dependencies)
 Default: all`)
+	chaosCmd.PersistentFlags().BoolVar(&verbose,
+		"verbose", false,
+		"if set, prints verbose logs from failure-injection library")
 
 	// Add subcommands
-	chaosCmd.AddCommand(cr.buildChaosNetworkCmd())
+	chaosCmd.AddCommand(cr.buildChaosNetworkPartitionCmd())
+	chaosCmd.AddCommand(cr.buildChaosNetworkLatencyCmd())
 
 	return chaosCmd
 }
@@ -148,11 +163,28 @@ func getClusterOptions() []failures.ClusterOptionFunc {
 	return opts
 }
 
+// initChaosLogger initializes the global chaos logger based on the verbose flag.
+// This should be called once before any chaos command executes.
+func initChaosLogger() error {
+	cfg := logger.Config{
+		Stdout: io.Discard,
+		Stderr: os.Stderr,
+	}
+	if verbose {
+		cfg.Stdout = os.Stdout
+	}
+
+	l, err := cfg.NewLogger("")
+	if err != nil {
+		return errors.Wrap(err, "failed to create chaos logger")
+	}
+
+	chaosLogger = l
+	return nil
+}
+
 // parseInt32SliceToNodes converts a uint32 slice to install.Nodes
 func parseInt32SliceToNodes(nodes []int32) install.Nodes {
-	if len(nodes) == 0 {
-		return nil
-	}
 	result := make(install.Nodes, len(nodes))
 	for i, n := range nodes {
 		result[i] = install.Node(n)
@@ -165,14 +197,18 @@ func parseInt32SliceToNodes(nodes []int32) install.Nodes {
 // For individual stages, state validation is disabled (disableStateValidation=true) to allow
 // running stages independently without enforcing the complete lifecycle order.
 func createFailer(
-	clusterName string, failureName string, stage FailureStage, opts ...failures.ClusterOptionFunc,
+	clusterName string,
+	failureName string,
+	chaosOpts GlobalChaosOpts,
+	opts ...failures.ClusterOptionFunc,
 ) (*failures.Failer, error) {
 	registry := failures.GetFailureRegistry()
-	disableStateValidation := stage != StageAll
+	disableStateValidation := chaosOpts.Stage != StageAll
+
 	return registry.GetFailer(
 		clusterName,
 		failureName,
-		config.Logger,
+		chaosLogger,
 		disableStateValidation,
 		opts...,
 	)
@@ -182,50 +218,46 @@ func createFailer(
 // If stage is StageAll, runs the complete lifecycle: Setup → Inject → Wait → Recover → Cleanup.
 // Otherwise, runs only the specified individual stage.
 func runFailureLifecycle(
-	ctx context.Context,
-	l *logger.Logger,
-	failer *failures.Failer,
-	args failures.FailureArgs,
-	opts GlobalChaosOpts,
+	ctx context.Context, failer *failures.Failer, args failures.FailureArgs, opts GlobalChaosOpts,
 ) error {
 	switch opts.Stage {
 	case StageSetup:
-		return runSetupStage(ctx, l, failer, args)
+		return runSetupStage(ctx, failer, args)
 	case StageInject:
-		return runInjectStage(ctx, l, failer, args)
+		return runInjectStage(ctx, failer, args)
 	case StageRecover:
-		return runRecoverStage(ctx, l, failer, args)
+		return runRecoverStage(ctx, failer, args)
 	case StageCleanup:
-		return runCleanupStage(ctx, l, failer, args)
+		return runCleanupStage(ctx, failer, args)
 	case StageAll:
-		return runFullLifecycle(ctx, l, failer, args, opts)
+		return runFullLifecycle(ctx, failer, args, opts)
 	default:
 		return errors.Newf("unknown stage: %s", opts.Stage)
 	}
 }
 
 // runSetupStage runs only the setup phase
-func runSetupStage(
-	ctx context.Context, l *logger.Logger, failer *failures.Failer, args failures.FailureArgs,
-) error {
-	l.Printf("Running setup stage...")
-	if err := failer.Setup(ctx, l, args); err != nil {
+func runSetupStage(ctx context.Context, failer *failures.Failer, args failures.FailureArgs) error {
+	config.Logger.Printf("Running setup stage...")
+	if err := failer.Setup(ctx, chaosLogger, args); err != nil {
 		return errors.Wrap(err, "failed to setup failure")
 	}
 
-	l.Printf("Setup stage completed successfully")
+	config.Logger.Printf("Setup stage completed successfully")
 	return nil
 }
 
 // runInjectStage runs only the inject phase
-func runInjectStage(
-	ctx context.Context, l *logger.Logger, failer *failures.Failer, args failures.FailureArgs,
-) error {
-	l.Printf("Running inject stage...")
-	if err := failer.Inject(ctx, l, args); err != nil {
+func runInjectStage(ctx context.Context, failer *failures.Failer, args failures.FailureArgs) error {
+	config.Logger.Printf("Running inject stage...")
+	if err := failer.Inject(ctx, chaosLogger, args); err != nil {
 		return errors.Wrap(err, "failed to inject failure")
 	}
-	l.Printf("Inject stage completed successfully")
+	config.Logger.Printf("waiting for failure to propagate")
+	if err := failer.WaitForFailureToPropagate(ctx, chaosLogger); err != nil {
+		return errors.Wrap(err, "failed to propagate failure")
+	}
+	config.Logger.Printf("Inject stage completed successfully")
 	return nil
 }
 
@@ -233,20 +265,20 @@ func runInjectStage(
 // When running recover individually with state validation disabled, we use SetInjectArgs
 // to provide the necessary context for recovery without actually running the inject phase.
 func runRecoverStage(
-	ctx context.Context, l *logger.Logger, failer *failures.Failer, args failures.FailureArgs,
+	ctx context.Context, failer *failures.Failer, args failures.FailureArgs,
 ) error {
-	l.Printf("Running recover stage...")
+	config.Logger.Printf("Running recover stage...")
 	// Set the inject args directly so Recover() has the necessary context
 	failer.SetInjectArgs(args)
-	if err := failer.Recover(ctx, l); err != nil {
+	if err := failer.Recover(ctx, chaosLogger); err != nil {
 		return errors.Wrap(err, "failed to recover from failure")
 	}
 
-	if err := failer.WaitForFailureToRecover(ctx, l); err != nil {
+	if err := failer.WaitForFailureToRecover(ctx, chaosLogger); err != nil {
 		return errors.Wrap(err, "failed to wait for failure to recover")
 	}
 
-	l.Printf("Recover stage completed successfully")
+	config.Logger.Printf("Recover stage completed successfully")
 	return nil
 }
 
@@ -254,76 +286,72 @@ func runRecoverStage(
 // When running cleanup individually with state validation disabled, we use SetSetupArgs
 // to provide the necessary context for cleanup without actually running the setup phase.
 func runCleanupStage(
-	ctx context.Context, l *logger.Logger, failer *failures.Failer, args failures.FailureArgs,
+	ctx context.Context, failer *failures.Failer, args failures.FailureArgs,
 ) error {
-	l.Printf("Running cleanup stage...")
+	config.Logger.Printf("Running cleanup stage...")
 
 	// Set the setup args directly so Cleanup() has the necessary context
 	failer.SetSetupArgs(args)
-	if err := failer.Cleanup(ctx, l); err != nil {
+	if err := failer.Cleanup(ctx, chaosLogger); err != nil {
 		return errors.Wrap(err, "failed to cleanup failure")
 	}
-	l.Printf("Cleanup stage completed successfully")
+	config.Logger.Printf("Cleanup stage completed successfully")
 	return nil
 }
 
 // runFullLifecycle executes the complete failure lifecycle:
 // Setup → Inject → Wait → Recover → Cleanup
 func runFullLifecycle(
-	ctx context.Context,
-	l *logger.Logger,
-	failer *failures.Failer,
-	args failures.FailureArgs,
-	opts GlobalChaosOpts,
+	ctx context.Context, failer *failures.Failer, args failures.FailureArgs, opts GlobalChaosOpts,
 ) error {
 	// Ensure cleanup always runs, even if we panic or get interrupted
 	cleanupDone := false
 	defer func() {
 		if !cleanupDone {
-			l.Printf("Running cleanup due to early exit...")
-			if err := failer.Cleanup(ctx, l); err != nil {
-				l.Errorf("Cleanup failed: %v", err)
+			config.Logger.Printf("Running cleanup due to early exit...")
+			if err := failer.Cleanup(ctx, chaosLogger); err != nil {
+				config.Logger.Errorf("Cleanup failed: %v", err)
 			}
 		}
 	}()
 
 	// Setup phase
-	if err := runSetupStage(ctx, l, failer, args); err != nil {
+	if err := runSetupStage(ctx, failer, args); err != nil {
 		return err
 	}
 
 	// Inject phase
-	if err := runInjectStage(ctx, l, failer, args); err != nil {
+	if err := runInjectStage(ctx, failer, args); err != nil {
 		return err
 	}
 
 	// Wait phase
 	if opts.RunForever {
-		l.Printf("Failure injected. Waiting for interrupt (Ctrl+C)...")
+		config.Logger.Printf("Failure injected. Waiting for interrupt (Ctrl+C)...")
 		<-waitForInterrupt()
-		l.Printf("Interrupt received. Beginning recovery...")
+		config.Logger.Printf("Interrupt received. Beginning recovery...")
 	} else {
-		l.Printf("Failure injected. Waiting %s before recovery...", opts.WaitBeforeCleanup)
+		config.Logger.Printf("Failure injected. Waiting %s before recovery...", opts.WaitBeforeCleanup)
 		select {
 		case <-time.After(opts.WaitBeforeCleanup):
-			l.Printf("Wait period complete. Beginning recovery...")
+			config.Logger.Printf("Wait period complete. Beginning recovery...")
 		case <-waitForInterrupt():
-			l.Printf("Interrupt received. Beginning recovery...")
+			config.Logger.Printf("Interrupt received. Beginning recovery...")
 		}
 	}
 
 	// Recover phase
-	if err := runRecoverStage(ctx, l, failer, args); err != nil {
+	if err := runRecoverStage(ctx, failer, args); err != nil {
 		return err
 	}
 
 	// Cleanup phase
-	if err := runCleanupStage(ctx, l, failer, args); err != nil {
+	if err := runCleanupStage(ctx, failer, args); err != nil {
 		return err
 	}
 
 	cleanupDone = true
-	l.Printf("Failure lifecycle completed successfully")
+	config.Logger.Printf("Failure lifecycle completed successfully")
 	return nil
 }
 
