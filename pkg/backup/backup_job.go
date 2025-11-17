@@ -170,7 +170,7 @@ func backup(
 	// We don't return the compatible nodes here since PartitionSpans will
 	// filter out incompatible nodes.
 	planCtx, _, err := dsp.SetupAllNodesPlanningWithOracle(
-		ctx, evalCtx, execCtx.ExecCfg(), oracle, details.ExecutionLocality,
+		ctx, evalCtx, execCtx.ExecCfg(), oracle, details.ExecutionLocality.NonEmptySlice(), sql.NoStrictLocalityFiltering,
 	)
 	if err != nil {
 		return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to determine nodes on which to run")
