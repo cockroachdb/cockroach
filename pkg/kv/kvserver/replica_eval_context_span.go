@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -93,6 +94,11 @@ func (rec *SpanSetReplicaEvalContext) GetTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, 
 // GetLeaseAppliedIndex returns the lease index of the last applied command.
 func (rec *SpanSetReplicaEvalContext) GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex {
 	return rec.i.GetLeaseAppliedIndex()
+}
+
+// LogEngine returns the log engine.
+func (rec *SpanSetReplicaEvalContext) LogEngine() storage.Engine {
+	return rec.i.LogEngine()
 }
 
 // IsFirstRange returns true iff the replica belongs to the first range.

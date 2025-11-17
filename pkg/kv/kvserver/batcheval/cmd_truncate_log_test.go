@@ -64,22 +64,35 @@ func TestTruncateLog(t *testing.T) {
 	)
 
 	st := cluster.MakeTestingClusterSettings()
+
+	// The truncate command takes the stateEng as any other command. However, it
+	// also accepts the log engine via EvalCtx for the stats computation.
+	stateEng := storage.NewDefaultInMemForTesting()
+	logEng := storage.NewDefaultInMemForTesting()
+	defer stateEng.Close()
+	defer logEng.Close()
+
 	evalCtx := &MockEvalCtx{
 		ClusterSettings: st,
 		Desc:            &roachpb.RangeDescriptor{RangeID: rangeID},
 		Term:            term,
 		CompactedIndex:  compactedIndex,
+		LogEngine:       logEng,
 	}
-
-	eng := storage.NewDefaultInMemForTesting()
-	defer eng.Close()
 
 	truncState := kvserverpb.RaftTruncatedState{
 		Index: compactedIndex + 2,
 		Term:  term,
 	}
 
-	putTruncatedState(t, eng, rangeID, truncState)
+	putTruncatedState(t, stateEng, rangeID, truncState)
+
+	// Write some raft log entries to the log engine to create non-zero stats.
+	// These entries will be "truncated" by our request.
+	for i := compactedIndex + 1; i < compactedIndex+8; i++ {
+		key := keys.RaftLogKey(rangeID, kvpb.RaftIndex(i))
+		require.NoError(t, logEng.PutUnversioned(key, []byte("some-data")))
+	}
 
 	// Send a truncation request.
 	req := kvpb.TruncateLogRequest{
@@ -91,10 +104,8 @@ func TestTruncateLog(t *testing.T) {
 		Args:    &req,
 	}
 	resp := &kvpb.TruncateLogResponse{}
-	res, err := TruncateLog(ctx, eng, cArgs, resp)
-	if err != nil {
-		t.Fatal(err)
-	}
+	res, err := TruncateLog(ctx, stateEng, cArgs, resp)
+	require.NoError(t, err)
 
 	expTruncState := kvserverpb.RaftTruncatedState{
 		Index: req.Index - 1,
@@ -103,9 +114,22 @@ func TestTruncateLog(t *testing.T) {
 
 	// The unreplicated key that we see should be the initial truncated
 	// state (it's only updated below Raft).
-	gotTruncatedState := readTruncStates(t, eng, rangeID)
+	gotTruncatedState := readTruncStates(t, stateEng, rangeID)
 	assert.Equal(t, truncState, gotTruncatedState)
 
 	assert.NotNil(t, res.Replicated.RaftTruncatedState)
 	assert.Equal(t, expTruncState, *res.Replicated.RaftTruncatedState)
+
+	// Verify the stats match what's actually in the log engine.
+	start := keys.RaftLogKey(rangeID, compactedIndex+1)
+	end := keys.RaftLogKey(rangeID, compactedIndex+8)
+	expectedStats, err := storage.ComputeStats(ctx, logEng, start, end, 0)
+	require.NoError(t, err)
+	assert.Equal(t, -expectedStats.SysBytes, res.Replicated.RaftLogDelta,
+		"RaftLogDelta should match stats computed from log engine")
+
+	// The state machine engine's stats should be zero.
+	zeroStats, err := storage.ComputeStats(ctx, stateEng, start, end, 0)
+	require.NoError(t, err)
+	require.Zero(t, zeroStats.SysBytes)
 }
