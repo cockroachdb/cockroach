@@ -108,6 +108,17 @@ var bugfix149481Enabled = settings.RegisterBoolSetting(
 	true,
 	settings.WithVisibility(settings.Reserved))
 
+// ChildMetricsTimeSeriesEnabled controls whether to collect high-cardinality child metrics
+// into the time series database. This is separate from ChildMetricsEnabled which controls
+// Prometheus exports, allowing independent control of child metrics collection vs export.
+// This setting enables debugging of changefeeds and should not be considered functionality
+// to expand support for.
+var ChildMetricsTimeSeriesEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel, "timeseries.child_metrics.enabled",
+	"enables the collection of high-cardinality child metrics into the time series database",
+	false,
+	settings.WithVisibility(settings.Reserved))
+
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
 //
@@ -501,6 +512,17 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	}
 	atomic.CompareAndSwapInt64(&mr.lastDataCount, lastDataCount, int64(len(data)))
 	return data
+}
+
+// GetChildMetricsData serializes only child metrics for consumption by
+// CockroachDB's time series system. This implements a specialized DataSource
+// interface for high-cardinality child metrics collection.
+func (mr *MetricsRecorder) GetChildMetricsData() []tspb.TimeSeriesData {
+	if !ChildMetricsTimeSeriesEnabled.Get(&mr.settings.SV) {
+		return nil
+	}
+
+	return nil // TODO(jasonlmfong): to be implemented
 }
 
 // GetMetricsMetadata returns the metadata from all metrics tracked in the node's
