@@ -238,6 +238,9 @@ func (c *rowFetcherCache) tableDescForKey(
 // is not being watched and does not need to be decoded.
 var ErrUnwatchedFamily = errors.New("watched table but unwatched family")
 
+// ErrTableOffline is a sentinel error that indicates the watched table is offline.
+var ErrTableOffline = errors.New("watched table is offline")
+
 // RowFetcherForColumnFamily returns row.Fetcher for the specified column family.
 // Returns ErrUnwatchedFamily error if family is not watched.
 func (c *rowFetcherCache) RowFetcherForColumnFamily(

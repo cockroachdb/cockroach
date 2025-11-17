@@ -781,7 +781,7 @@ func createChangefeedJobRecord(
 		_, tableToDatabaseLookup := buildTableToDatabaseAndSchemaLookup(tableAndParentDescs)
 		for _, desc := range tableNameToDescriptor {
 			if table, isTable := desc.(catalog.TableDescriptor); isTable {
-				if err := changefeedvalidators.ValidateTable(targets, table, tolerances); err != nil {
+				if err := changefeedvalidators.ValidateTable(targets, table, tolerances, false /* allowOfflineTables */); err != nil {
 					return nil, changefeedbase.Targets{}, err
 				}
 				for _, warning := range changefeedvalidators.WarningsForTable(table, tolerances) {

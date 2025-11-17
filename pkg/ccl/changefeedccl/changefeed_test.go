@@ -13084,3 +13084,124 @@ func TestDatabaseLevelChangefeedWithInitialScanOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestDatabaseLevelChangefeedSkipOfflineTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dataSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			if _, err := w.Write([]byte("42,42\n")); err != nil {
+				t.Logf("failed to write: %s", err.Error())
+			}
+		}
+	}))
+	defer dataSrv.Close()
+
+	testSkipsOnOfflineTable := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE for_import (a INT PRIMARY KEY, b INT)`)
+		feed := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
+		defer closeFeed(t, feed)
+		sqlDB.Exec(t, `INSERT INTO for_import VALUES (0, NULL)`)
+		assertPayloads(t, feed, []string{
+			`for_import: [0]->{"after": {"a": 0, "b": null}}`,
+		})
+		sqlDB.Exec(t, `IMPORT INTO for_import CSV DATA ($1)`, dataSrv.URL)
+		sqlDB.Exec(t, `INSERT INTO for_import VALUES (1, NULL)`)
+		assertPayloads(t, feed, []string{
+			`for_import: [1]->{"after": {"a": 1, "b": null}}`,
+		})
+	}
+	t.Run("skips on offline table", func(t *testing.T) {
+		cdcTest(t, testSkipsOnOfflineTable, feedTestEnterpriseSinks)
+	})
+
+	testSkipsOnOfflineTableWithDiff := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE for_import (a INT PRIMARY KEY, b INT)`)
+		feed := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d WITH diff`)
+		defer closeFeed(t, feed)
+		sqlDB.Exec(t, `IMPORT INTO for_import CSV DATA ($1)`, dataSrv.URL)
+		sqlDB.Exec(t, `UPDATE for_import set b = 2 WHERE a = 42`)
+		// The imported value is skipped, but shows up in the next diff.
+		assertPayloads(t, feed, []string{
+			`for_import: [42]->{"after": {"a": 42, "b": 2}, "before": {"a": 42, "b": 42}}`,
+		})
+		sqlDB.Exec(t, `UPDATE for_import set b = 3 WHERE a = 42`)
+		assertPayloads(t, feed, []string{
+			`for_import: [42]->{"after": {"a": 42, "b": 3}, "before": {"a": 42, "b": 2}}`,
+		})
+	}
+	t.Run("skips on offline table with diff", func(t *testing.T) {
+		cdcTest(t, testSkipsOnOfflineTableWithDiff, feedTestEnterpriseSinks)
+	})
+
+	testSkipsOnOfflineTableWithDiffBackfill := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE for_import (a INT PRIMARY KEY, b INT)`)
+		feed := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d WITH diff, schema_change_policy='backfill'`)
+		defer closeFeed(t, feed)
+		sqlDB.Exec(t, `IMPORT INTO for_import CSV DATA ($1)`, dataSrv.URL)
+		sqlDB.Exec(t, `ALTER TABLE for_import ADD COLUMN c INT DEFAULT 0`)
+		assertPayloads(t, feed, []string{
+			`for_import: [42]->{"after": {"a": 42, "b": 42, "c": 0}, "before": {"a": 42, "b": 42}}`,
+		})
+	}
+	t.Run("skips on offline table with diff backfill", func(t *testing.T) {
+		cdcTest(t, testSkipsOnOfflineTableWithDiffBackfill, feedTestEnterpriseSinks)
+	})
+
+	testAdvancesHWMOnOfflineTable := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest'`)
+
+		sqlDB.Exec(t, `CREATE TABLE for_import (a INT PRIMARY KEY, b INT)`)
+		feed := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d WITH resolved='100ms'`)
+		defer closeFeed(t, feed)
+		eFeed, ok := feed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok, "expected enterprise feed")
+		var tsStr string
+		sqlDB.QueryRow(t, `INSERT INTO for_import VALUES (0, NULL) RETURNING cluster_logical_timestamp()`).Scan(&tsStr)
+		ts := parseTimeToHLC(t, tsStr)
+		assertPayloads(t, feed, []string{
+			`for_import: [0]->{"after": {"a": 0, "b": null}}`,
+		})
+		require.NoError(t, eFeed.WaitForHighWaterMark(ts))
+
+		hwm, err := eFeed.HighWaterMark()
+		require.NoError(t, err)
+		require.True(t, ts.Less(hwm), "expected high-water > insert ts; got hwm=%s ts=%s", hwm, ts)
+
+		hwmBeforeImport := hwm
+
+		go func() {
+			sqlDB.ExpectErrWithRetry(t, `pause point`, `IMPORT INTO for_import CSV DATA ($1)`, `result is ambiguous`, dataSrv.URL)
+		}()
+		sqlDB.CheckQueryResultsRetry(t,
+			`SELECT count(*) FROM [SHOW JOBS] WHERE job_type='IMPORT' AND status='paused'`,
+			[][]string{{"1"}},
+		)
+
+		time.Sleep(2 * time.Second)
+		require.NoError(t, eFeed.WaitForHighWaterMark(hwmBeforeImport))
+		hwmDuringImport, err := eFeed.HighWaterMark()
+		require.NoError(t, err)
+		require.True(t, hwmBeforeImport.Less(hwmDuringImport), "expected high-water to advance during import; got hwm=%s hwmBeforeImport=%s", hwmDuringImport, hwmBeforeImport)
+
+		var state string
+		sqlDB.QueryRow(t, `
+			SELECT state
+			FROM crdb_internal.tables
+			WHERE database_name = 'd' AND schema_name = 'public' AND name = 'for_import'
+		`).Scan(&state)
+		require.Equal(t, "OFFLINE", state)
+	}
+	t.Run("advances HWM while table is offline", func(t *testing.T) {
+		cdcTest(t, testAdvancesHWMOnOfflineTable, feedTestForceSink("webhook"))
+	})
+
+	// Note: No RESTORE subtest here. DB-level changefeeds do not yet add newly
+	// created tables to the changefeed when they are restored, and dropping an
+	// included table to restore it will fail the feed.
+}

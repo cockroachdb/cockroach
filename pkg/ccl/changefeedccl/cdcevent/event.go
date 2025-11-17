@@ -490,6 +490,12 @@ type eventDescriptorFactory func(
 	schemaTS hlc.Timestamp,
 ) (*EventDescriptor, error)
 
+// DecoderOptions are options for the event decoder.
+type DecoderOptions struct {
+	// SkipOffline is true if the decoder should skip events from offline tables.
+	SkipOffline bool
+}
+
 type eventDecoder struct {
 	// Cached allocations for *row.Fetcher
 	rfCache *rowFetcherCache
@@ -508,6 +514,9 @@ type eventDecoder struct {
 	desc     catalog.TableDescriptor        // Current descriptor
 	family   *descpb.ColumnFamilyDescriptor // Current family
 	schemaTS hlc.Timestamp                  // Schema timestamp.
+
+	// skipOffline is true if the decoder should skip events from offline tables.
+	skipOffline bool
 }
 
 func getEventDescriptorCached(
@@ -540,13 +549,27 @@ func getEventDescriptorCached(
 	return ed, nil
 }
 
-// NewEventDecoder returns key value decoder.
+// NewEventDecoder returns key value decoder. It is equivalent to calling
+// NewEventDecoderWithOptions with the SkipOffline option set to false.
 func NewEventDecoder(
 	ctx context.Context,
 	cfg *sql.ExecutorConfig,
 	targets changefeedbase.Targets,
 	includeVirtual bool,
 	keyOnly bool,
+) (Decoder, error) {
+	return NewEventDecoderWithOptions(ctx, cfg, targets, includeVirtual, keyOnly, DecoderOptions{SkipOffline: false})
+}
+
+// NewEventDecoderWithOptions returns a new EventDecoder with the given option
+// setting for whether to allow decoding events from offline tables.
+func NewEventDecoderWithOptions(
+	ctx context.Context,
+	cfg *sql.ExecutorConfig,
+	targets changefeedbase.Targets,
+	includeVirtual bool,
+	keyOnly bool,
+	opts DecoderOptions,
 ) (Decoder, error) {
 	rfCache, err := newRowFetcherCache(
 		ctx,
@@ -560,13 +583,17 @@ func NewEventDecoder(
 	if err != nil {
 		return nil, err
 	}
+	return NewEventDecoderWithCache(ctx, rfCache, includeVirtual, keyOnly, opts), nil
 
-	return NewEventDecoderWithCache(ctx, rfCache, includeVirtual, keyOnly), nil
 }
 
 // NewEventDecoderWithCache returns key value decoder.
 func NewEventDecoderWithCache(
-	ctx context.Context, rfCache *rowFetcherCache, includeVirtual bool, keyOnly bool,
+	ctx context.Context,
+	rfCache *rowFetcherCache,
+	includeVirtual bool,
+	keyOnly bool,
+	opts DecoderOptions,
 ) Decoder {
 	eventDescriptorCache := cache.NewUnorderedCache(DefaultCacheConfig)
 	getEventDescriptor := func(
@@ -580,6 +607,7 @@ func NewEventDecoderWithCache(
 	return &eventDecoder{
 		getEventDescriptor: getEventDescriptor,
 		rfCache:            rfCache,
+		skipOffline:        opts.SkipOffline,
 	}
 }
 
@@ -673,6 +701,10 @@ func (d *eventDecoder) initForKey(
 	d.desc = desc
 	d.family = family
 	d.fetcher.Fetcher = fetcher
+
+	if d.skipOffline && desc.Offline() {
+		return ErrTableOffline
+	}
 	return nil
 }
 
