@@ -93,7 +93,7 @@ func distRestore(
 
 		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
 			ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg(),
-			physicalplan.DefaultReplicaChooser, md.execLocality,
+			physicalplan.DefaultReplicaChooser, sql.SingleLocalityFilter(md.execLocality), sql.NoStrictLocalityFiltering,
 		)
 		if err != nil {
 			return nil, nil, err
