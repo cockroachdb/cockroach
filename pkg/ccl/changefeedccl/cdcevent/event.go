@@ -490,6 +490,12 @@ type eventDescriptorFactory func(
 	schemaTS hlc.Timestamp,
 ) (*EventDescriptor, error)
 
+// DecoderOptions are options for the event decoder.
+type DecoderOptions struct {
+	// SkipOffline is true if the decoder should skip events from offline tables.
+	SkipOffline bool
+}
+
 type eventDecoder struct {
 	// Cached allocations for *row.Fetcher
 	rfCache *rowFetcherCache
@@ -508,6 +514,9 @@ type eventDecoder struct {
 	desc     catalog.TableDescriptor        // Current descriptor
 	family   *descpb.ColumnFamilyDescriptor // Current family
 	schemaTS hlc.Timestamp                  // Schema timestamp.
+
+	// skipOfflineEvents is true if the decoder should skip events from offline tables.
+	skipOfflineEvents bool
 }
 
 func getEventDescriptorCached(
@@ -547,6 +556,7 @@ func NewEventDecoder(
 	targets changefeedbase.Targets,
 	includeVirtual bool,
 	keyOnly bool,
+	opts DecoderOptions,
 ) (Decoder, error) {
 	rfCache, err := newRowFetcherCache(
 		ctx,
@@ -560,13 +570,17 @@ func NewEventDecoder(
 	if err != nil {
 		return nil, err
 	}
+	return NewEventDecoderWithCache(ctx, rfCache, includeVirtual, keyOnly, opts), nil
 
-	return NewEventDecoderWithCache(ctx, rfCache, includeVirtual, keyOnly), nil
 }
 
 // NewEventDecoderWithCache returns key value decoder.
 func NewEventDecoderWithCache(
-	ctx context.Context, rfCache *rowFetcherCache, includeVirtual bool, keyOnly bool,
+	ctx context.Context,
+	rfCache *rowFetcherCache,
+	includeVirtual bool,
+	keyOnly bool,
+	opts DecoderOptions,
 ) Decoder {
 	eventDescriptorCache := cache.NewUnorderedCache(DefaultCacheConfig)
 	getEventDescriptor := func(
@@ -580,6 +594,7 @@ func NewEventDecoderWithCache(
 	return &eventDecoder{
 		getEventDescriptor: getEventDescriptor,
 		rfCache:            rfCache,
+		skipOfflineEvents:  opts.SkipOffline,
 	}
 }
 
@@ -602,6 +617,12 @@ func (d *eventDecoder) DecodeKV(
 	// Unwatched family errors aren't terminal so return early and let caller
 	// decide what to do with it.
 	if errors.Is(err, ErrUnwatchedFamily) {
+		return Row{}, err
+	}
+
+	// Table offline errors aren't terminal so return early and let caller
+	// decide what to do with it.
+	if errors.Is(err, ErrTableOffline) {
 		return Row{}, err
 	}
 
@@ -673,6 +694,10 @@ func (d *eventDecoder) initForKey(
 	d.desc = desc
 	d.family = family
 	d.fetcher.Fetcher = fetcher
+
+	if d.skipOfflineEvents && desc.Offline() {
+		return ErrTableOffline
+	}
 	return nil
 }
 

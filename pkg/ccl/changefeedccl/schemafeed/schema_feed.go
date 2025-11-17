@@ -93,17 +93,19 @@ func New(
 	initialFrontier hlc.Timestamp,
 	metrics *Metrics,
 	tolerances changefeedbase.CanHandle,
+	allowOfflineDescriptor bool,
 ) SchemaFeed {
 	m := &schemaFeed{
-		filter:          schemaChangeEventFilters[events],
-		db:              cfg.DB,
-		clock:           cfg.DB.KV().Clock(),
-		settings:        cfg.Settings,
-		targets:         targets,
-		leaseMgr:        cfg.LeaseManager.(*lease.Manager),
-		metrics:         metrics,
-		tolerances:      tolerances,
-		initialFrontier: initialFrontier,
+		filter:                  schemaChangeEventFilters[events],
+		db:                      cfg.DB,
+		clock:                   cfg.DB.KV().Clock(),
+		settings:                cfg.Settings,
+		targets:                 targets,
+		leaseMgr:                cfg.LeaseManager.(*lease.Manager),
+		metrics:                 metrics,
+		tolerances:              tolerances,
+		allowOfflineDescriptors: allowOfflineDescriptor,
+		initialFrontier:         initialFrontier,
 	}
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.typeDeps = typeDependencyTracker{deps: make(map[descpb.ID][]descpb.ID)}
@@ -121,14 +123,15 @@ func New(
 // invariant (via `validateFn`). An error timestamp is also kept, which is the
 // earliest timestamp where at least one table doesn't meet the invariant.
 type schemaFeed struct {
-	filter          tableEventFilter
-	db              descs.DB
-	clock           *hlc.Clock
-	settings        *cluster.Settings
-	targets         changefeedbase.Targets
-	metrics         *Metrics
-	tolerances      changefeedbase.CanHandle
-	initialFrontier hlc.Timestamp
+	filter                  tableEventFilter
+	db                      descs.DB
+	clock                   *hlc.Clock
+	settings                *cluster.Settings
+	targets                 changefeedbase.Targets
+	metrics                 *Metrics
+	tolerances              changefeedbase.CanHandle
+	allowOfflineDescriptors bool
+	initialFrontier         hlc.Timestamp
 
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
 	// Should there be another function to decide whether to update the
@@ -701,7 +704,7 @@ func (tf *schemaFeed) validateDescriptor(
 		}
 		return nil
 	case catalog.TableDescriptor:
-		if err := changefeedvalidators.ValidateTable(tf.targets, desc, tf.tolerances); err != nil {
+		if err := changefeedvalidators.ValidateTable(tf.targets, desc, tf.tolerances, tf.allowOfflineDescriptors); err != nil {
 			return err
 		}
 		log.VEventf(ctx, 1, "validate %v", formatDesc(desc))
