@@ -6,6 +6,7 @@
 package debug
 
 import (
+	"context"
 	"expvar"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"net/http/pprof"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -276,6 +278,29 @@ func (ds *Server) RegisterEngines(engines []storage.Engine) error {
 				if err := analyzeLSM(dir, w); err != nil {
 					fmt.Fprintf(w, "error analyzing LSM at %s: %v", dir, err)
 				}
+			})
+		ds.mux.HandleFunc(fmt.Sprintf("/debug/storage/%d/profiles/separated-value-retrievals", storeID),
+			func(w http.ResponseWriter, req *http.Request) {
+				dur := 30 * time.Second
+				if secsStr := req.Header.Get("seconds"); secsStr != "" {
+					secs, err := strconv.ParseInt(secsStr, 10, 64)
+					if err != nil {
+						http.Error(w, "error parsing seconds", http.StatusBadRequest)
+						return
+					}
+					dur = time.Duration(secs) * time.Second
+				}
+				ctx := req.Context()
+				ctx, cancel := context.WithTimeout(ctx, dur)
+				defer cancel()
+				profile, err := eng.ProfileSeparatedValueRetrievals(ctx)
+				if err != nil {
+					http.Error(w, "error profiling separated value retrievals", http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set("Content-Type", "text/plain")
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprint(w, profile.String())
 			})
 	}
 	return nil

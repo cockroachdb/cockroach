@@ -2136,6 +2136,19 @@ func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 	return stats, nil
 }
 
+// ProfileSeparatedValueRetrievals collects a profile of the engine's
+// separated value retrievals. It stops when the context is done.
+func (p *Pebble) ProfileSeparatedValueRetrievals(
+	ctx context.Context,
+) (*metrics.ValueRetrievalProfile, error) {
+	stop, err := p.db.RecordSeparatedValueRetrievals()
+	if err != nil {
+		return nil, err
+	}
+	<-ctx.Done()
+	return stop(), nil
+}
+
 // GetAuxiliaryDir implements the Engine interface.
 func (p *Pebble) GetAuxiliaryDir() string {
 	return p.auxDir
