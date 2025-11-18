@@ -210,6 +210,7 @@ func setCliContextDefaults() {
 	cliCtx.ambiguousLogDir = false
 	cliCtx.logOverrides.reset()
 	cliCtx.showVersionUsingOnlyBuildTag = false
+	cliCtx.UseDRPC = true
 }
 
 // sqlConnContext captures the connection configuration for all SQL

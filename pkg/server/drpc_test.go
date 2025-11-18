@@ -237,20 +237,12 @@ func TestDialDRPC_InterceptorsAreSet(t *testing.T) {
 	rpcContextOptions.Settings = c.Server(0).ClusterSettings()
 	rpcCtx := rpc.NewContext(ctx, rpcContextOptions)
 
-	// Adding test interceptors
-	rpcCtx.Knobs = rpc.ContextTestingKnobs{
-		NoLoopbackDialer: true,
-		UnaryClientInterceptorDRPC: func(target string, class rpcbase.ConnectionClass) drpcclient.UnaryClientInterceptor {
-			return mockUnaryInterceptor
-		},
-		StreamClientInterceptorDRPC: func(target string, class rpcbase.ConnectionClass) drpcclient.StreamClientInterceptor {
-			return mockStreamInterceptor
-		},
-	}
-	getConn := rpc.DialDRPC(rpcCtx)
-	conn, err := getConn(ctx, rpcAddr, rpcbase.DefaultClass)
+	conn, err := rpc.DialDRPC(rpcCtx)(ctx, rpcAddr, rpcbase.DefaultClass,
+		drpcclient.WithChainStreamInterceptor(mockStreamInterceptor),
+		drpcclient.WithChainUnaryInterceptor(mockUnaryInterceptor))
 	require.NoError(t, err)
 	defer func() { require.NoError(t, conn.Close()) }()
+
 	desc := c.LookupRangeOrFatal(t, c.ScratchRange(t))
 
 	// reset flag values
@@ -267,7 +259,7 @@ func TestDialDRPC_InterceptorsAreSet(t *testing.T) {
 	req.Key = desc.StartKey.AsRawKey()
 	ba.Add(req)
 	_, err = client.Batch(ctx, ba)
-	require.NoError(t, err)
+	require.NoError(t, err, "unary Batch call failed: %v", err)
 	s, err := client.BatchStream(ctx)
 	require.NoError(t, err)
 	err = s.Send(ba)

@@ -7,9 +7,9 @@ package rpc
 
 import (
 	"context"
-	"crypto/tls"
 	"math"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -21,13 +21,11 @@ import (
 	"github.com/cockroachdb/errors"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
-	"storj.io/drpc/drpcconn"
 	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmigrate"
 	"storj.io/drpc/drpcmux"
 	"storj.io/drpc/drpcpool"
 	"storj.io/drpc/drpcserver"
-	"storj.io/drpc/drpcstream"
 	"storj.io/drpc/drpcwire"
 )
 
@@ -42,104 +40,19 @@ func (d *drpcCloseNotifier) CloseNotify(ctx context.Context) <-chan struct{} {
 	return d.conn.Closed()
 }
 
-// TODO(server): unexport this once dial methods are added in rpccontext.
-func DialDRPC(
-	rpcCtx *Context,
-) func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
-	return func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
-		// TODO(server): could use connection class instead of empty key here.
-		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
-			Expiration: defaultDRPCConnIdleTimeout,
-		})
-		pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
-			_ struct{}) (drpcpool.Conn, error) {
-
-			netConn, err := func(ctx context.Context) (net.Conn, error) {
-				if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
-					return rpcCtx.loopbackDRPCDialFn(ctx)
-				}
-				return drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
-			}(ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			opts := drpcconn.Options{
-				Manager: drpcmanager.Options{
-					Reader: drpcwire.ReaderOptions{
-						MaximumBufferSize: math.MaxInt,
-					},
-					Stream: drpcstream.Options{
-						MaximumBufferSize: 0, // unlimited
-					},
-					SoftCancel: true, // don't close the transport when stream context is canceled
-				},
-			}
-			var conn *drpcconn.Conn
-			if rpcCtx.ContextOptions.Insecure {
-				conn = drpcconn.NewWithOptions(netConn, opts)
-			} else {
-				tlsConfig, err := rpcCtx.GetClientTLSConfig()
-				if err != nil {
-					return nil, err
-				}
-				// Clone TLS config to avoid modifying a cached TLS config.
-				tlsConfig = tlsConfig.Clone()
-				sn, _, err := net.SplitHostPort(target)
-				if err != nil {
-					return nil, err
-				}
-				tlsConfig.ServerName = sn
-				tlsConn := tls.Client(netConn, tlsConfig)
-				conn = drpcconn.NewWithOptions(tlsConn, opts)
-			}
-
-			return conn, nil
-		})
-
-		unaryInterceptors := rpcCtx.clientUnaryInterceptorsDRPC
-		if rpcCtx.Knobs.UnaryClientInterceptorDRPC != nil {
-			interceptor := rpcCtx.Knobs.UnaryClientInterceptorDRPC(target, rpcbase.DefaultClass)
-			if interceptor != nil {
-				unaryInterceptors = append(unaryInterceptors, interceptor)
-			}
-		}
-		streamInterceptors := rpcCtx.clientStreamInterceptorsDRPC
-		if rpcCtx.Knobs.StreamClientInterceptorDRPC != nil {
-			interceptor := rpcCtx.Knobs.StreamClientInterceptorDRPC(target, rpcbase.DefaultClass)
-			if interceptor != nil {
-				streamInterceptors = append(streamInterceptors, interceptor)
-			}
-		}
-
-		opts := []drpcclient.DialOption{
-			drpcclient.WithChainUnaryInterceptor(unaryInterceptors...),
-			drpcclient.WithChainStreamInterceptor(streamInterceptors...),
-		}
-
-		if !rpcCtx.TenantID.IsSystem() {
-			key, value := newPerRPCTIDMetdata(rpcCtx.TenantID)
-			opts = append(opts, drpcclient.WithPerRPCMetadata(map[string]string{key: value}))
-		}
-
-		clientConn, _ := drpcclient.NewClientConnWithOptions(ctx, pooledConn, opts...)
-
-		// Wrap the clientConn to ensure the entire pool is closed when this connection handle is closed.
-		return &closeEntirePoolConn{
-			Conn: clientConn,
-			pool: pool,
-		}, nil
-	}
-}
-
 type closeEntirePoolConn struct {
+	closed atomic.Bool
 	drpc.Conn
 	pool *drpcpool.Pool[struct{}, drpcpool.Conn]
 }
 
 func (c *closeEntirePoolConn) Close() error {
-	_ = c.Conn.Close()
-	return c.pool.Close()
+	if c.closed.CompareAndSwap(false, true) {
+		_ = c.Conn.Close()
+		return c.pool.Close()
+	}
+
+	return nil
 }
 
 type DRPCConnection = Connection[drpc.Conn]
@@ -282,34 +195,6 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 	return d, nil
 }
 
-// NewDummyDRPCServer returns a DRPCServer that is disabled and always returns
-// ErrDRPCDisabled.
-func NewDummyDRPCServer() DRPCServer {
-	return &drpcOffServer{}
-}
-
-// drpcOffServer is a disabled DRPC server implementation. It immediately closes
-// accepted connections and returns ErrDRPCDisabled for all Serve calls.
-// Register is a no-op.
-type drpcOffServer struct{}
-
-// Serve implements the DRPCServer interface for drpcOffServer. It closes any
-// accepted connection and returns ErrDRPCDisabled.
-func (srv *drpcOffServer) Serve(_ context.Context, lis net.Listener) error {
-	conn, err := lis.Accept()
-	if err != nil {
-		return err
-	}
-	_ = conn.Close()
-	return ErrDRPCDisabled
-}
-
-// Register implements the drpc.Mux interface for drpcOffServer. It is a no-op
-// when DRPC is disabled.
-func (srv *drpcOffServer) Register(interface{}, drpc.Description) error {
-	return nil
-}
-
 // newDRPDCPeerOptions creates peerOptions for DRPC peers.
 func newDRPCPeerOptions(
 	rpcCtx *Context, k peerKey, locality roachpb.Locality,
@@ -319,7 +204,10 @@ func newDRPCPeerOptions(
 		locality: locality,
 		peers:    &rpcCtx.drpcPeers,
 		connOptions: &ConnectionOptions[drpc.Conn]{
-			dial: DialDRPC(rpcCtx),
+			dial: func(ctx context.Context, target string, class rpcbase.ConnectionClass) (drpc.Conn, error) {
+				// TODO(server): add support for dialer test knobs
+				return rpcCtx.drpcDialRaw(ctx, target, class)
+			},
 			connEquals: func(a, b drpc.Conn) bool {
 				return a == b
 			},
@@ -335,4 +223,174 @@ func newDRPCPeerOptions(
 		},
 		pm: pm,
 	}
+}
+
+// drpcDialRaw is similar to grpcDialRaw but for drpc connections.
+func (rpcCtx *Context) drpcDialRaw(
+	ctx context.Context,
+	target string,
+	class rpcbase.ConnectionClass,
+	additionalOpts ...drpcclient.DialOption,
+) (drpc.Conn, error) {
+	transport := tcpTransport
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
+		transport = loopbackTransport
+	}
+	drpcDialOpts, err := rpcCtx.drpcDialOptionsInternal(ctx, target, class, transport)
+	if err != nil {
+		return nil, err
+	}
+	drpcDialOpts = append(drpcDialOpts, additionalOpts...)
+
+	// TODO(server): could use connection class instead of empty key here.
+	pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
+		Expiration: defaultDRPCConnIdleTimeout,
+	})
+	pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
+		_ struct{}) (drpcpool.Conn, error) {
+		return drpcclient.DialContext(ctx, target, drpcDialOpts...)
+	})
+
+	// TODO(server): the passed in drpc connection can be either a concrete
+	// connection or a pooled connection.
+	clientConn, _ := drpcclient.NewClientConnWithOptions(ctx, pooledConn, drpcDialOpts...)
+
+	// Wrap the clientConn to ensure the entire pool is closed when this connection handle is closed.
+	return &closeEntirePoolConn{
+		Conn: clientConn,
+		pool: pool,
+	}, nil
+}
+
+// drpcDialOptionsInternal is similar to grpcDialOptionsInternal but for
+// drpc connections.
+func (rpcCtx *Context) drpcDialOptionsInternal(
+	ctx context.Context,
+	target string,
+	class rpcbase.ConnectionClass,
+	transport transportType,
+) ([]drpcclient.DialOption, error) {
+	drpcDialOpts, err := rpcCtx.drpcDialOptsCommon(ctx, target, class)
+	if err != nil {
+		return nil, err
+	}
+
+	switch transport {
+	case tcpTransport:
+		netOpts, err := rpcCtx.drpcDialOptsNetwork(ctx, target, class)
+		if err != nil {
+			return nil, err
+		}
+		drpcDialOpts = append(drpcDialOpts, netOpts...)
+	case loopbackTransport:
+		localOpts, err := rpcCtx.drpcDialOptsLocal()
+		if err != nil {
+			return nil, err
+		}
+		drpcDialOpts = append(drpcDialOpts, localOpts...)
+	default:
+		// This panic in case the type is ever changed to include more values.
+		panic(errors.AssertionFailedf("unhandled: %v", transport))
+	}
+	return drpcDialOpts, nil
+}
+
+// drpcDialOptsCommon is same as dialOptsCommon but for drpc connections.
+func (rpcCtx *Context) drpcDialOptsCommon(
+	_ context.Context, target string, _ rpcbase.ConnectionClass,
+) ([]drpcclient.DialOption, error) {
+	drpcDialOpts := []drpcclient.DialOption{}
+	if !rpcCtx.TenantID.IsSystem() {
+		key, value := newPerRPCTIDMetdata(rpcCtx.TenantID)
+		drpcDialOpts = append(drpcDialOpts, drpcclient.WithPerRPCMetadata(map[string]string{key: value}))
+	}
+
+	unaryInterceptors := rpcCtx.clientUnaryInterceptorsDRPC
+	if rpcCtx.Knobs.UnaryClientInterceptorDRPC != nil {
+		interceptor := rpcCtx.Knobs.UnaryClientInterceptorDRPC(target, rpcbase.DefaultClass)
+		if interceptor != nil {
+			unaryInterceptors = append(unaryInterceptors, interceptor)
+		}
+	}
+	drpcDialOpts = append(drpcDialOpts, drpcclient.WithChainUnaryInterceptor(unaryInterceptors...))
+
+	streamInterceptors := rpcCtx.clientStreamInterceptorsDRPC
+	if rpcCtx.Knobs.StreamClientInterceptorDRPC != nil {
+		interceptor := rpcCtx.Knobs.StreamClientInterceptorDRPC(target, rpcbase.DefaultClass)
+		if interceptor != nil {
+			streamInterceptors = append(streamInterceptors, interceptor)
+		}
+	}
+	drpcDialOpts = append(drpcDialOpts, drpcclient.WithChainStreamInterceptor(streamInterceptors...))
+
+	return drpcDialOpts, nil
+}
+
+// drpcDialOptsLocal is simialar to dialOptsLocal but for drpc connections.
+func (rpcCtx *Context) drpcDialOptsLocal() ([]drpcclient.DialOption, error) {
+	drpcDialOpts, err := rpcCtx.drpcDialOptsNetworkCredentials()
+	if err != nil {
+		return nil, err
+	}
+
+	drpcDialOpts = append(drpcDialOpts, drpcclient.WithContextDialer(
+		func(ctx context.Context, target string) (net.Conn, error) {
+			return rpcCtx.loopbackDRPCDialFn(ctx)
+		},
+	))
+
+	return drpcDialOpts, err
+}
+
+// drpcDialOptsNetwork is same as dialOptsNetwork but for drpc connections.
+func (rpcCtx *Context) drpcDialOptsNetwork(
+	ctx context.Context, target string, _ rpcbase.ConnectionClass,
+) ([]drpcclient.DialOption, error) {
+	// TODO(server): add compression support to drpc.
+	// TODO(server): add support for dial timeout.
+	// TODO(server): check if onlyOnceDialer is needed for drpc.
+
+	drpcDialOpts, err := rpcCtx.drpcDialOptsNetworkCredentials()
+	if err != nil {
+		return nil, err
+	}
+
+	dialerFunc := func(ctx context.Context, target string) (net.Conn, error) {
+		return drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
+	}
+	if rpcCtx.Knobs.InjectedLatencyOracle != nil {
+		latency := rpcCtx.Knobs.InjectedLatencyOracle.GetLatency(target)
+		log.VEventf(ctx, 1, "connecting with simulated latency %dms",
+			latency)
+		dialer := artificialLatencyDialer{
+			dialerFunc: dialerFunc,
+			latency:    latency,
+			enabled:    rpcCtx.Knobs.InjectedLatencyEnabled,
+		}
+		dialerFunc = dialer.dial
+	}
+	drpcDialOpts = append(drpcDialOpts, drpcclient.WithContextDialer(dialerFunc))
+
+	return drpcDialOpts, nil
+}
+
+// drpcDialOptsNetworkCredentials is same as dialOptsNetworkCredentials but for drpc connections.
+func (rpcCtx *Context) drpcDialOptsNetworkCredentials() ([]drpcclient.DialOption, error) {
+	drpcDialOpts := []drpcclient.DialOption{}
+	if !rpcCtx.ContextOptions.Insecure {
+		tlsConfig, err := rpcCtx.GetClientTLSConfig()
+		if err != nil {
+			return nil, err
+		}
+		drpcDialOpts = append(drpcDialOpts, drpcclient.WithTLSConfig(tlsConfig))
+	}
+
+	return drpcDialOpts, nil
+}
+
+// TODO(server): unexport this once dial methods are added in rpccontext.
+func DialDRPC(
+	rpcCtx *Context,
+) func(ctx context.Context, target string, _ rpcbase.ConnectionClass, additionalOpts ...drpcclient.DialOption) (drpc.Conn, error) {
+	return rpcCtx.drpcDialRaw
 }
