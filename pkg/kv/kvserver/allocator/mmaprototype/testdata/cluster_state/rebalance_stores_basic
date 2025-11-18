@@ -56,7 +56,7 @@ store-id=3 node-id=3 status=ok accepting all reported=[cpu:10, write-bandwidth:0
   top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
 
 # s1 is overloaded and local, so rebalanceStores should try and succeed to shed
-# a lease from it.
+# a lease from it. The gc duration for lease shedding is 1min.
 rebalance-stores store-id=1
 ----
 [mmaid=1] cluster means: (stores-load [cpu:33, write-bandwidth:0, byte-size:0]) (stores-capacity [cpu:100, write-bandwidth:100, byte-size:100]) (nodes-cpu-load 33) (nodes-cpu-capacity 100)
@@ -65,9 +65,9 @@ rebalance-stores store-id=1
 [mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r1:[cpu:60, write-bandwidth:0, byte-size:0]
 [mmaid=1] result(success): shedding r1 lease from s1 to s2 [change:r1=[transfer_to=2 cids=1,2]] with resulting loads source:[cpu:40, write-bandwidth:0, byte-size:0] target:[cpu:54, write-bandwidth:0, byte-size:0] (means: [cpu:33, write-bandwidth:0, byte-size:0]) (frac_pending: (src:0.00,target:0.50) (src:4.40,target:0.00))
 pending(2)
-change-id=1 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-40, write-bandwidth:0, byte-size:0] start=0s
+change-id=1 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-40, write-bandwidth:0, byte-size:0] start=0s gc=1m0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=1 type=VOTER_FULL)
-change-id=2 store-id=2 node-id=2 range-id=1 load-delta=[cpu:44, write-bandwidth:0, byte-size:0] start=0s
+change-id=2 store-id=2 node-id=2 range-id=1 load-delta=[cpu:44, write-bandwidth:0, byte-size:0] start=0s gc=1m0s
   prev=(replica-id=2 type=VOTER_FULL)
   next=(replica-id=2 type=VOTER_FULL leaseholder=true)
