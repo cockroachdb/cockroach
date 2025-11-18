@@ -1,0 +1,84 @@
+# Tests rebalancing a replica from one local store to another local store
+# (note, the test happens to use a second local store, but it can also be a
+# remote store and will have the same behavior). The lease transfer fails due
+# to GC.
+set-store
+  store-id=1 node-id=1 attrs=purple locality-tiers=region=us-west-1
+  store-id=2 node-id=1 attrs=yellow locality-tiers=region=us-west-1
+----
+node-id=1 locality-tiers=region=us-west-1,node=1
+  store-id=1 attrs=purple
+  store-id=2 attrs=yellow
+
+# Store s1 is the leaseholder and only replica for range r1.
+store-leaseholder-msg
+store-id=1
+  range-id=1 load=[2,2,2] raft-cpu=1
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+----
+
+ranges
+----
+range-id=1 local-store=1 load=[cpu:2, write-bandwidth:2, byte-size:2] raft-cpu=1
+  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+
+# Transfer the replica from s1 to s2. The lease will also be transferred.
+make-pending-changes range-id=1
+  rebalance-replica: remove-store-id=1 add-store-id=2
+----
+pending(2)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s gc=5m0s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2, write-bandwidth:-2, byte-size:-2] start=0s gc=5m0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+# Store leaseholder msg from s1, showing that s1 still has the replica and
+# lease, and s2 also has a replica.
+store-leaseholder-msg
+store-id=1
+  range-id=1 load=[3,3,3] raft-cpu=2
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+----
+
+# Both pending changes are still not enacted. The prev state for change-id=1
+# reflects that s2 has a voter replica.
+get-pending-changes
+----
+pending(2)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s gc=5m0s
+  prev=(replica-id=2 type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2, write-bandwidth:-2, byte-size:-2] start=0s gc=5m0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:-2, write-bandwidth:-2, byte-size:-2] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:2, byte-size:2] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
+
+# Advance time enough that the pending changes are GC'd.
+tick seconds=330
+----
+t=5m30s
+
+gc-pending-changes
+----
+pending(0)
+
+get-pending-changes
+----
+pending(0)
+
+# The GC rolls back to the last source-of-truth from the leaseholder,
+# indicating that s2 has a replica.
+ranges
+----
+range-id=1 local-store=1 load=[cpu:3, write-bandwidth:3, byte-size:3] raft-cpu=2
+  store-id=2 replica-id=2 type=VOTER_FULL
+  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
