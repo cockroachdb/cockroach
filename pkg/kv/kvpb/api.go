@@ -2185,6 +2185,28 @@ func (e *RangeFeedEvent) ShallowCopy() *RangeFeedEvent {
 	return &cpy
 }
 
+// EventType returns a string description of the type of event..
+func (e *RangeFeedEvent) EventType() string {
+	switch {
+	case e.Val != nil:
+		return "Value"
+	case e.Checkpoint != nil:
+		return "Checkpoint"
+	case e.SST != nil:
+		return "SST"
+	case e.DeleteRange != nil:
+		return "DeleteRange"
+	case e.Metadata != nil:
+		return "Metadata"
+	case e.Error != nil:
+		return "Error"
+	case e.BulkEvents != nil:
+		return "BulkEvents"
+	default:
+		return "Unknown"
+	}
+}
+
 // Timestamp is part of rangefeedbuffer.Event.
 func (e *RangeFeedValue) Timestamp() hlc.Timestamp {
 	return e.Value.Timestamp

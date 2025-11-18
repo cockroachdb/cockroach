@@ -730,8 +730,7 @@ statement ok
 CREATE TABLE t108901 AS SELECT g::FLOAT8 AS _float8 FROM generate_series(1, 5) AS g;
 ALTER TABLE t108901 SPLIT AT VALUES (1), (2), (3);
 ALTER TABLE t108901 RELOCATE VOTERS VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3);
-SET testing_optimizer_random_seed = 1613845022891698972;
-SET testing_optimizer_disable_rule_probability = 0.500000;
+SET disable_optimizer_rules = PruneWindowOutputCols;
 
 statement error integer out of range
 SELECT 1 FROM t108901 WHERE
