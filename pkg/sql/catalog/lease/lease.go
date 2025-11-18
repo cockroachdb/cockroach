@@ -425,7 +425,11 @@ func (m *Manager) WaitForInitialVersion(
 						sessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, schemaID, region)
 					}
 					if err != nil {
-						return handleRegionLivenessErrors(ctx, prober, region, err)
+						skipRegion, handledErr := handleRegionLivenessErrors(ctx, prober, region, err)
+						if skipRegion {
+							return nil
+						}
+						return handledErr
 					}
 					sessionsPerRegion[region] = sessionIDs
 					expectedSessions += len(sessionIDs)
@@ -469,8 +473,12 @@ func (m *Manager) WaitForInitialVersion(
 						} else {
 							regionCount, err = countDescriptorsHeldBySessionIDs(ctx, txn, descIDsForSchema, region, sessionIDs)
 						}
-						if err := handleRegionLivenessErrors(ctx, prober, region, err); err != nil {
+						skipRegion, err := handleRegionLivenessErrors(ctx, prober, region, err)
+						if err != nil {
 							return err
+						}
+						if skipRegion {
+							return nil
 						}
 						count += regionCount
 						return nil
@@ -620,7 +628,13 @@ func (m *Manager) WaitForNewVersion(
 					regionStaleSessionCount, err = countSessionsHoldingStaleDescriptor(ctx, txn, desc, region)
 				}
 				if err != nil {
-					return handleRegionLivenessErrors(ctx, prober, region, err)
+					skipRegion, handledErr := handleRegionLivenessErrors(ctx, prober, region, err)
+					if handledErr != nil {
+						return handledErr
+					}
+					if skipRegion {
+						continue
+					}
 				}
 
 				staleSessionCount += regionStaleSessionCount
