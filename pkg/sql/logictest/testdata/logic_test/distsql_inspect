@@ -1,5 +1,7 @@
 # LogicTest: 5node-default-configs
 
+skip under race
+
 subtest setup
 
 statement ok
