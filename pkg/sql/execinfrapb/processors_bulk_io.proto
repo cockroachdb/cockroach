@@ -583,3 +583,27 @@ message CompactBackupsSpec {
 	optional int64 max_files = 12 [(gogoproto.nullable) = false];
 	// NEXT ID: 13.
 }
+
+message BulkMergeSpec {
+	// SST represents metadata about a single SST file to be merged.
+	message SST {
+		optional string uri = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "URI"];
+		// start_key is the first key in the SST.
+		optional string start_key = 2 [(gogoproto.nullable) = false];
+		// end_key is the last key in the SST.
+		optional string end_key = 3 [(gogoproto.nullable) = false];
+	}
+
+	// ssts is the list of input SSTs to merge.
+	repeated SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
+
+	// spans are the key ranges that should be merged. Each merge processor
+	// will be assigned one or more spans to merge.
+	repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+
+	// output_uri is a URI prefix like 'nodelocal://1/<job_id>/merger'. The processor
+	// should use this as the base for all output files.
+	optional string output_uri = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "OutputURI"];
+
+	// NEXT ID: 4.
+}
