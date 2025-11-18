@@ -1319,7 +1319,6 @@ func (s *Server) newConnExecutor(
 		s.sqlStatsIngester,
 		ex.phaseTimes,
 		s.localSqlStats.GetCounters(),
-		s.cfg.SQLStatsTestingKnobs,
 	)
 	ex.dataMutatorIterator.OnApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)

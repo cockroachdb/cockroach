@@ -56,6 +56,10 @@ const (
 	// runnerLogsDir is the dir under the artifacts root where the test runner log
 	// and other runner-related logs (i.e. cluster creation logs) will be written.
 	runnerLogsDir = "_runner-logs"
+
+	// clusterCreateDir is the dir under runnerLogsDir where cluster creation
+	// related logs will be written
+	clusterCreateDir = "cluster-create"
 )
 
 func main() {

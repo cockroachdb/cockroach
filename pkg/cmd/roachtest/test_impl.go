@@ -141,9 +141,13 @@ type testImpl struct {
 		// in case github issue posting is disabled.
 		extraParams map[string]string
 
-		// githubMessage contains additional message information that will be
-		// passed to github.MaybePost
-		githubMessage string
+		// githubFatalLogs contains node fatal logs that will be passed to
+		// github.MaybePost
+		githubFatalLogs string
+
+		// githubIpToNodeMapping contains the ip to node map that will be passed to
+		// github.MaybePost
+		githubIpToNodeMapping string
 	}
 	// Map from version to path to the cockroach binary to be used when
 	// mixed-version test wants a binary for that binary. If a particular version
@@ -562,16 +566,45 @@ func (t *testImpl) failureMsg() string {
 	return b.String()
 }
 
-func (t *testImpl) getGithubMessage() string {
+func (t *testImpl) getGithubFatalLogs() string {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return t.mu.githubMessage
+	return t.mu.githubFatalLogs
 }
 
-func (t *testImpl) appendGithubMessage(msg string) {
+func (t *testImpl) appendGithubFatalLogs(msg string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.mu.githubMessage += msg
+	t.mu.githubFatalLogs += msg
+}
+
+func (t *testImpl) getGithubIpToNodeMapping() string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.mu.githubIpToNodeMapping
+}
+
+func (t *testImpl) appendGithubIpToNodeMapping(msg string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.githubIpToNodeMapping += msg
+}
+
+// getGithubMessage abstracts details on how the Github message is constructed
+// TODO(wchoe): Currently, all information we want to include in the Github
+// message must be passed in as a single string. This is not ideal, especially
+// as we add more information or want to format based on the failure or what
+// information is available. #157021 aims to address this.
+func (t *testImpl) getGithubMessage(failureMsg string) string {
+	githubMsg := failureMsg
+	if githubFatalLogs := t.getGithubFatalLogs(); githubFatalLogs != "" {
+		githubMsg = fmt.Sprintf("%s\n%s", githubMsg, githubFatalLogs)
+	}
+	if githubIpToNodeMapping := t.getGithubIpToNodeMapping(); githubIpToNodeMapping != "" {
+		githubMsg = fmt.Sprintf("%s\n%s", githubMsg, githubIpToNodeMapping)
+	}
+	t.L().Printf("github message: %s", githubMsg)
+	return githubMsg
 }
 
 // failuresMatchingError checks whether the first error in trees of

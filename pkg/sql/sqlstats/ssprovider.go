@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -143,4 +144,245 @@ type SSDrainer interface {
 	// Reset will reset all the stats in the drainer. Once reset, the stats will
 	// be lost.
 	Reset(ctx context.Context) error
+}
+
+type StatementLatencyRecorder interface {
+	RunLatency() time.Duration
+	IdleLatency() time.Duration
+	ServiceLatency() time.Duration
+	ParsingLatency() time.Duration
+	PlanningLatency() time.Duration
+	ExecOverheadLatency() time.Duration
+	StartTime() time.Time
+	EndTime() time.Time
+}
+
+// RecordedStatementStatsBuilder is a builder for RecordedStmtStats that
+// provides a constructor and chained methods for setting optional fields or
+// fields that may not be accessible at the time of construction. To build,
+// PlanMetadata and LatencyRecorder must have been set.
+type RecordedStatementStatsBuilder struct {
+	stmtStats         *RecordedStmtStats
+	planMetadataSet   bool
+	latenciesRecorded bool
+}
+
+func NewRecordedStatementStatsBuilder(
+	fingerprintId appstatspb.StmtFingerprintID,
+	database string,
+	fingerprint string,
+	summary string,
+	stmtType tree.StatementType,
+	appName string,
+) *RecordedStatementStatsBuilder {
+	return &RecordedStatementStatsBuilder{
+		stmtStats: &RecordedStmtStats{
+			FingerprintID: fingerprintId,
+			QuerySummary:  summary,
+			StatementType: stmtType,
+			Query:         fingerprint,
+			Database:      database,
+			App:           appName,
+		},
+	}
+}
+
+func (b *RecordedStatementStatsBuilder) PlanMetadata(
+	generic bool, distSQL bool, vectorized bool, implicitTxn bool, fullScan bool,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.Generic = generic
+	b.stmtStats.DistSQL = distSQL
+	b.stmtStats.Vec = vectorized
+	b.stmtStats.ImplicitTxn = implicitTxn
+	b.stmtStats.FullScan = fullScan
+	b.planMetadataSet = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) PlanGist(
+	gist string, hash uint64,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.PlanGist = gist
+	b.stmtStats.PlanHash = hash
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) LatencyRecorder(
+	recorder StatementLatencyRecorder,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.RunLatencySec = recorder.RunLatency().Seconds()
+	b.stmtStats.IdleLatencySec = recorder.IdleLatency().Seconds()
+	b.stmtStats.ServiceLatencySec = recorder.ServiceLatency().Seconds()
+	b.stmtStats.ParseLatencySec = recorder.ParsingLatency().Seconds()
+	b.stmtStats.PlanLatencySec = recorder.PlanningLatency().Seconds()
+	b.stmtStats.OverheadLatencySec = recorder.ExecOverheadLatency().Seconds()
+	b.stmtStats.StartTime = recorder.StartTime()
+	b.stmtStats.EndTime = recorder.EndTime()
+	b.latenciesRecorded = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) QueryLevelStats(
+	bytesRead int64, rowsRead int64, rowsWritten int64,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.BytesRead = bytesRead
+	b.stmtStats.RowsRead = rowsRead
+	b.stmtStats.RowsWritten = rowsWritten
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) ExecStats(
+	execStats *execstats.QueryLevelStats,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	if execStats == nil {
+		return b
+	}
+
+	var sqlInstanceIDs []int64
+	var kvNodeIDs []int32
+	sqlInstanceIDs = make([]int64, 0, len(execStats.SQLInstanceIDs))
+	for _, sqlInstanceID := range execStats.SQLInstanceIDs {
+		sqlInstanceIDs = append(sqlInstanceIDs, int64(sqlInstanceID))
+	}
+	kvNodeIDs = execStats.KVNodeIDs
+	b.stmtStats.KVNodeIDs = kvNodeIDs
+	b.stmtStats.Nodes = sqlInstanceIDs
+	b.stmtStats.ExecStats = execStats
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) Indexes(indexes []string) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.Indexes = indexes
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) StatementError(
+	stmtErr error,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	if stmtErr == nil {
+		return b
+	}
+	b.stmtStats.StatementError = stmtErr
+	b.stmtStats.Failed = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) AutoRetry(
+	autoRetryCount int, autoRetryReason error,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.AutoRetryCount = autoRetryCount
+	b.stmtStats.AutoRetryReason = autoRetryReason
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) RowsAffected(
+	rowsAffected int,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.RowsAffected = rowsAffected
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) IndexRecommendations(
+	idxRecommendations []string,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.IndexRecommendations = idxRecommendations
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) UnderOuterTxn() *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.UnderOuterTxn = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) QueryTags(
+	queryTags []sqlcommenter.QueryTag,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.QueryTags = queryTags
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) QueryID(
+	queryID clusterunique.ID,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.StatementID = queryID
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) SessionID(
+	sessionID clusterunique.ID,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.SessionID = sessionID
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) AppliedStatementHints() *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.AppliedStmtHints = true
+	return b
+}
+
+// Build returns the final RecordedStmtStats struct. It returns nil if not all
+// required fields have been set or if the builder itself is nil. In test
+// builds, it panics if not all required fields have been set.
+func (b *RecordedStatementStatsBuilder) Build() *RecordedStmtStats {
+	if !b.validate() {
+		if buildutil.CrdbTestBuild {
+			panic("RecordedStatementStatsBuilder: not all required fields set. " +
+				"plan metadata and latencies are required.")
+		}
+		return nil
+	}
+	return b.stmtStats
+}
+
+func (b *RecordedStatementStatsBuilder) validate() bool {
+	if b == nil {
+		return false
+	}
+
+	return b.planMetadataSet && b.latenciesRecorded
 }
