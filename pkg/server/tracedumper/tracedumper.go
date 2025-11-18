@@ -33,7 +33,7 @@ type TraceDumper struct {
 
 // PreFilter is part of the dumpstore.Dumper interface.
 func (t *TraceDumper) PreFilter(
-	ctx context.Context, files []os.FileInfo, _ func(fileName string) error,
+	ctx context.Context, files []os.DirEntry, _ func(fileName string) error,
 ) (preserved map[int]bool, err error) {
 	preserved = make(map[int]bool)
 	for i := len(files) - 1; i >= 0; i-- {
@@ -47,7 +47,7 @@ func (t *TraceDumper) PreFilter(
 }
 
 // CheckOwnsFile is part of the dumpstore.Dumper interface.
-func (t *TraceDumper) CheckOwnsFile(ctx context.Context, fi os.FileInfo) bool {
+func (t *TraceDumper) CheckOwnsFile(ctx context.Context, fi os.DirEntry) bool {
 	return strings.HasPrefix(fi.Name(), jobTraceDumpPrefix)
 }
 
