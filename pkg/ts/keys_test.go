@@ -48,6 +48,30 @@ func TestDataKeys(t *testing.T) {
 			12,
 			"/System/tsd//10s/1924-09-18T08:00:00Z/",
 		},
+		{
+			"test.metric",
+			"testsource",
+			0,
+			Resolution1m,
+			30,
+			"/System/tsd/test.metric/1m/1970-01-01T00:00:00Z/testsource",
+		},
+		{
+			"test.no.source",
+			"",
+			1429114700000000000,
+			Resolution1m,
+			26,
+			"/System/tsd/test.no.source/1m/2015-04-15T16:00:00Z/",
+		},
+		{
+			"",
+			"",
+			-1429114700000000000,
+			Resolution1m,
+			12,
+			"/System/tsd//1m/1924-09-18T08:00:00Z/",
+		},
 	}
 
 	for i, tc := range testCases {

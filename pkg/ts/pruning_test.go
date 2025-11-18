@@ -73,10 +73,10 @@ func TestFindTimeSeries(t *testing.T) {
 	tm.Start()
 	defer tm.Stop()
 
-	// Populate data: two metrics, two sources, two resolutions, two keys.
+	// Populate data: two metrics, two sources, three resolutions, two keys.
 	metrics := []string{"metric.a", "metric.z"}
 	sources := []string{"source1", "source2"}
-	resolutions := []Resolution{Resolution10s, resolution1ns}
+	resolutions := []Resolution{Resolution10s, resolution1ns, Resolution1m}
 	for _, metric := range metrics {
 		for _, source := range sources {
 			for _, resolution := range resolutions {
@@ -119,11 +119,19 @@ func TestFindTimeSeries(t *testing.T) {
 				},
 				{
 					Name:       metrics[0],
+					Resolution: Resolution1m,
+				},
+				{
+					Name:       metrics[0],
 					Resolution: resolution1ns,
 				},
 				{
 					Name:       metrics[1],
 					Resolution: Resolution10s,
+				},
+				{
+					Name:       metrics[1],
+					Resolution: Resolution1m,
 				},
 				{
 					Name:       metrics[1],
@@ -161,7 +169,7 @@ func TestFindTimeSeries(t *testing.T) {
 				},
 			},
 		},
-		// Timestamp at the Resolution10s threshold doesn't prune the 10s resolutions.
+		// Timestamp at the Resolution10s threshold doesn't prune the 10s resolutions or the 1m resolutions.
 		{
 			start:     roachpb.RKeyMin,
 			end:       roachpb.RKeyMax,
@@ -178,6 +186,7 @@ func TestFindTimeSeries(t *testing.T) {
 			},
 		},
 		// Timestamp at the Resolution10s threshold + 1ns prunes all time series.
+		// This is because threshold for 10s is the same as the threshold for 1m.
 		{
 			start:     roachpb.RKeyMin,
 			end:       roachpb.RKeyMax,
@@ -189,11 +198,19 @@ func TestFindTimeSeries(t *testing.T) {
 				},
 				{
 					Name:       metrics[0],
+					Resolution: Resolution1m,
+				},
+				{
+					Name:       metrics[0],
 					Resolution: resolution1ns,
 				},
 				{
 					Name:       metrics[1],
 					Resolution: Resolution10s,
+				},
+				{
+					Name:       metrics[1],
+					Resolution: Resolution1m,
 				},
 				{
 					Name:       metrics[1],
@@ -220,6 +237,10 @@ func TestFindTimeSeries(t *testing.T) {
 				},
 				{
 					Name:       metrics[0],
+					Resolution: Resolution1m,
+				},
+				{
+					Name:       metrics[0],
 					Resolution: resolution1ns,
 				},
 			},
@@ -232,6 +253,10 @@ func TestFindTimeSeries(t *testing.T) {
 				{
 					Name:       metrics[1],
 					Resolution: Resolution10s,
+				},
+				{
+					Name:       metrics[1],
+					Resolution: Resolution1m,
 				},
 				{
 					Name:       metrics[1],
@@ -249,6 +274,10 @@ func TestFindTimeSeries(t *testing.T) {
 					Name:       metrics[0],
 					Resolution: Resolution10s,
 				},
+				{
+					Name:       metrics[0],
+					Resolution: Resolution1m,
+				},
 			},
 		},
 		{
@@ -263,6 +292,10 @@ func TestFindTimeSeries(t *testing.T) {
 				{
 					Name:       metrics[1],
 					Resolution: Resolution10s,
+				},
+				{
+					Name:       metrics[1],
+					Resolution: Resolution1m,
 				},
 				{
 					Name:       metrics[1],
@@ -294,10 +327,10 @@ func TestPruneTimeSeries(t *testing.T) {
 		// Arbitrary timestamp
 		var now int64 = 1475700000 * 1e9
 
-		// Populate data: two metrics, two sources, two resolutions, two keys.
+		// Populate data: two metrics, two sources, three resolutions, two keys.
 		metrics := []string{"metric.a", "metric.z"}
 		sources := []string{"source1", "source2"}
-		resolutions := []Resolution{Resolution10s, resolution1ns}
+		resolutions := []Resolution{Resolution10s, resolution1ns, Resolution1m}
 		for _, metric := range metrics {
 			for _, source := range sources {
 				for _, resolution := range resolutions {
@@ -322,7 +355,7 @@ func TestPruneTimeSeries(t *testing.T) {
 		}
 
 		tm.assertModelCorrect()
-		tm.assertKeyCount(16)
+		tm.assertKeyCount(24)
 
 		tm.prune(
 			now,
@@ -332,7 +365,7 @@ func TestPruneTimeSeries(t *testing.T) {
 			},
 		)
 		tm.assertModelCorrect()
-		tm.assertKeyCount(16)
+		tm.assertKeyCount(24)
 
 		tm.prune(
 			now,
@@ -342,13 +375,18 @@ func TestPruneTimeSeries(t *testing.T) {
 			},
 		)
 		tm.assertModelCorrect()
-		tm.assertKeyCount(14)
+		tm.assertKeyCount(22)
 
 		tm.prune(
 			now,
 			timeSeriesResolutionInfo{
 				Name:       metrics[0],
 				Resolution: resolutions[1],
+			},
+
+			timeSeriesResolutionInfo{
+				Name:       metrics[0],
+				Resolution: resolutions[2],
 			},
 			timeSeriesResolutionInfo{
 				Name:       metrics[1],
@@ -358,9 +396,13 @@ func TestPruneTimeSeries(t *testing.T) {
 				Name:       metrics[1],
 				Resolution: resolutions[1],
 			},
+			timeSeriesResolutionInfo{
+				Name:       metrics[1],
+				Resolution: resolutions[2],
+			},
 		)
 		tm.assertModelCorrect()
-		tm.assertKeyCount(8)
+		tm.assertKeyCount(12)
 
 		tm.prune(
 			now+int64(365*24*time.Hour),
@@ -373,12 +415,20 @@ func TestPruneTimeSeries(t *testing.T) {
 				Resolution: resolutions[1],
 			},
 			timeSeriesResolutionInfo{
+				Name:       metrics[0],
+				Resolution: resolutions[2],
+			},
+			timeSeriesResolutionInfo{
 				Name:       metrics[1],
 				Resolution: resolutions[0],
 			},
 			timeSeriesResolutionInfo{
 				Name:       metrics[1],
 				Resolution: resolutions[1],
+			},
+			timeSeriesResolutionInfo{
+				Name:       metrics[1],
+				Resolution: resolutions[2],
 			},
 		)
 		tm.assertModelCorrect()
@@ -397,10 +447,10 @@ func TestMaintainTimeSeriesWithRollups(t *testing.T) {
 	// Arbitrary timestamp
 	var now int64 = 1475700000 * 1e9
 
-	// Populate data: two metrics, two sources, two resolutions, two keys.
+	// Populate data: two metrics, two sources, three resolutions, two keys.
 	metrics := []string{"metric.a", "metric.z"}
 	sources := []string{"source1", "source2"}
-	resolutions := []Resolution{Resolution10s, resolution1ns}
+	resolutions := []Resolution{Resolution10s, resolution1ns, Resolution1m}
 	for _, metric := range metrics {
 		for _, source := range sources {
 			for _, resolution := range resolutions {
@@ -425,12 +475,16 @@ func TestMaintainTimeSeriesWithRollups(t *testing.T) {
 	}
 
 	tm.assertModelCorrect()
-	tm.assertKeyCount(16)
+	// 2 metrics * 2 sources * 3 resolutions * 2 keys = 24
+	tm.assertKeyCount(24)
 
 	// First call to maintain will actually create rollups.
 	tm.maintain(now)
 	tm.assertModelCorrect()
-	tm.assertKeyCount(16)
+	// 2 metrics * 2 sources * 3 resolutions * 1 key = 12
+	// 2 metrics * 2 sources * 2 resolutions * 1 key = 8
+	// note that the 10s data and 1m data rolls into the same 30m rollup resolution.
+	tm.assertKeyCount(20)
 
 	{
 		query := tm.makeQuery("metric.a", Resolution30m, 0, now)
@@ -441,7 +495,8 @@ func TestMaintainTimeSeriesWithRollups(t *testing.T) {
 	// in the past.
 	tm.maintain(now)
 	tm.assertModelCorrect()
-	tm.assertKeyCount(8)
+	// 2 metrics * 2 sources * 3 resolutions * 1 key = 12
+	tm.assertKeyCount(12)
 }
 
 func TestMaintainTimeSeriesNoRollups(t *testing.T) {
@@ -456,10 +511,10 @@ func TestMaintainTimeSeriesNoRollups(t *testing.T) {
 	// Arbitrary timestamp
 	var now int64 = 1475700000 * 1e9
 
-	// Populate data: two metrics, two sources, two resolutions, two keys.
+	// Populate data: two metrics, two sources, three resolutions, two keys.
 	metrics := []string{"metric.a", "metric.z"}
 	sources := []string{"source1", "source2"}
-	resolutions := []Resolution{Resolution10s, resolution1ns}
+	resolutions := []Resolution{Resolution10s, resolution1ns, Resolution1m}
 	for _, metric := range metrics {
 		for _, source := range sources {
 			for _, resolution := range resolutions {
@@ -484,10 +539,10 @@ func TestMaintainTimeSeriesNoRollups(t *testing.T) {
 	}
 
 	tm.assertModelCorrect()
-	tm.assertKeyCount(16)
+	tm.assertKeyCount(24)
 
 	// First call to maintain will prune time series.
 	tm.maintain(now)
 	tm.assertModelCorrect()
-	tm.assertKeyCount(8)
+	tm.assertKeyCount(12)
 }
