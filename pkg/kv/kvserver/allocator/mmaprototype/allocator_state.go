@@ -723,7 +723,6 @@ func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
 		// are no pending changes) is not known.
 		releaseRangeAnalyzedConstraints(rac)
 		panic(errors.AssertionFailedf("no leaseholders found in %v", rstate.replicas))
-		return
 	}
 	rac.finishInit(rstate.conf, cs.constraintMatcher, leaseholder)
 	rstate.constraints = rac
