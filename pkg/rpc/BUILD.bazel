@@ -91,6 +91,7 @@ go_library(
         "@io_storj_drpc//drpcserver",
         "@io_storj_drpc//drpcstream",
         "@io_storj_drpc//drpcwire",
+        "@io_storj_drpc//drpcyamux",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//backoff",
         "@org_golang_google_grpc//codes",

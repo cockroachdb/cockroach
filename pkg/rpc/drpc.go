@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/drpcinterceptor"
@@ -29,7 +30,10 @@ import (
 	"storj.io/drpc/drpcserver"
 	"storj.io/drpc/drpcstream"
 	"storj.io/drpc/drpcwire"
+	"storj.io/drpc/drpcyamux"
 )
+
+var envExperimentalDRPCMuxEnabled = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_DRPC_MUX_ENABLED", true)
 
 // Default idle connection timeout for DRPC connections in the pool.
 var defaultDRPCConnIdleTimeout = 5 * time.Minute
@@ -47,38 +51,18 @@ func DialDRPC(
 	rpcCtx *Context,
 ) func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
 	return func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
-		// TODO(server): could use connection class instead of empty key here.
-		pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
-			Expiration: defaultDRPCConnIdleTimeout,
-		})
-		pooledConn := pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context,
-			_ struct{}) (drpcpool.Conn, error) {
-
-			netConn, err := func(ctx context.Context) (net.Conn, error) {
-				if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
-					return rpcCtx.loopbackDRPCDialFn(ctx)
-				}
-				return drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
-			}(ctx)
+		getConn := func(ctx context.Context) (net.Conn, error) {
+			var netConn net.Conn
+			var err error
+			if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
+				netConn, err = rpcCtx.loopbackDRPCDialFn(ctx)
+			} else {
+				netConn, err = drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
+			}
 			if err != nil {
 				return nil, err
 			}
-
-			opts := drpcconn.Options{
-				Manager: drpcmanager.Options{
-					Reader: drpcwire.ReaderOptions{
-						MaximumBufferSize: math.MaxInt,
-					},
-					Stream: drpcstream.Options{
-						MaximumBufferSize: 0, // unlimited
-					},
-					SoftCancel: true, // don't close the transport when stream context is canceled
-				},
-			}
-			var conn *drpcconn.Conn
-			if rpcCtx.ContextOptions.Insecure {
-				conn = drpcconn.NewWithOptions(netConn, opts)
-			} else {
+			if !rpcCtx.ContextOptions.Insecure {
 				tlsConfig, err := rpcCtx.GetClientTLSConfig()
 				if err != nil {
 					return nil, err
@@ -90,12 +74,52 @@ func DialDRPC(
 					return nil, err
 				}
 				tlsConfig.ServerName = sn
-				tlsConn := tls.Client(netConn, tlsConfig)
-				conn = drpcconn.NewWithOptions(tlsConn, opts)
+				netConn = tls.Client(netConn, tlsConfig)
 			}
 
-			return conn, nil
-		})
+			return netConn, nil
+		}
+
+		drpcConnOptions := drpcconn.Options{
+			Manager: drpcmanager.Options{
+				Reader: drpcwire.ReaderOptions{
+					MaximumBufferSize: math.MaxInt,
+				},
+				Stream: drpcstream.Options{
+					MaximumBufferSize: 0, // unlimited
+				},
+				SoftCancel: true, // don't close the transport when stream context is canceled
+			},
+		}
+		var conn drpc.Conn
+		if envExperimentalDRPCMuxEnabled {
+			c, err := getConn(ctx)
+			if err != nil {
+				return nil, err
+			}
+			// TODO: pass the drpconnOpts here
+			conn, err = drpcyamux.NewConn(c)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// TODO(server): could use connection class instead of empty key here.
+			pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{
+				Expiration: defaultDRPCConnIdleTimeout,
+			})
+			conn = pool.Get(ctx /* unused */, struct{}{}, func(ctx context.Context, _ struct{}) (drpcpool.Conn, error) {
+				c, err := getConn(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return drpcconn.NewWithOptions(c, drpcConnOptions), nil
+			})
+			// Wrap the clientConn to ensure the entire pool is closed when this connection handle is closed.
+			conn = &closeEntirePoolConn{
+				Conn: conn,
+				pool: pool,
+			}
+		}
 
 		unaryInterceptors := rpcCtx.clientUnaryInterceptorsDRPC
 		if rpcCtx.Knobs.UnaryClientInterceptorDRPC != nil {
@@ -122,13 +146,7 @@ func DialDRPC(
 			opts = append(opts, drpcclient.WithPerRPCMetadata(map[string]string{key: value}))
 		}
 
-		clientConn, _ := drpcclient.NewClientConnWithOptions(ctx, pooledConn, opts...)
-
-		// Wrap the clientConn to ensure the entire pool is closed when this connection handle is closed.
-		return &closeEntirePoolConn{
-			Conn: clientConn,
-			pool: pool,
-		}, nil
+		return drpcclient.NewClientConnWithOptions(ctx, conn, opts...)
 	}
 }
 
@@ -148,17 +166,21 @@ type DRPCConnection = Connection[drpc.Conn]
 // have the DRPC server enabled.
 var ErrDRPCDisabled = errors.New("DRPC is not enabled")
 
+type rpcServer interface {
+	Serve(ctx context.Context, lis net.Listener) error
+}
+
 // DRPCServer defines the interface for a DRPC server, which can serve
 // connections and provides a drpc.Mux for registering handlers.
 type DRPCServer interface {
 	// Serve starts serving DRPC requests on the provided listener.
-	Serve(ctx context.Context, lis net.Listener) error
+	rpcServer
 	drpc.Mux
 }
 
 // drpcServer implements the DRPCServer interface.
 type drpcServer struct {
-	*drpcserver.Server
+	rpcServer
 	drpc.Mux
 }
 
@@ -268,15 +290,19 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 	}
 
 	mux := drpcmux.NewWithInterceptors(unaryInterceptors, streamInterceptors)
-
-	d.Server = drpcserver.NewWithOptions(mux, drpcserver.Options{
+	serverOptions := drpcserver.Options{
 		Log: func(err error) {
 			log.Dev.Warningf(context.Background(), "drpc server error %v", err)
 		},
 		// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
 		// as happens with AddSSTable) the RPCs fail.
 		Manager: drpcmanager.Options{Reader: drpcwire.ReaderOptions{MaximumBufferSize: math.MaxInt}},
-	})
+	}
+	if envExperimentalDRPCMuxEnabled {
+		d.rpcServer = drpcyamux.NewServerWithOptions(mux, serverOptions)
+	} else {
+		d.rpcServer = drpcserver.NewWithOptions(mux, serverOptions)
+	}
 	d.Mux = mux
 
 	return d, nil
