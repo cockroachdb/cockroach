@@ -573,12 +573,15 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	}
 	expiration := lease.Expiration(context.Background())
 	// Acquire another lease.
-	if _, err := leaseManager.acquireNodeLease(
-		context.Background(), tableDesc.GetID(), AcquireBlock,
-	); err != nil {
-		t.Fatal(err)
-	}
-
+	func() {
+		lease.t.markAcquisitionStart(context.Background())
+		defer lease.t.markAcquisitionDone(context.Background())
+		if _, err := leaseManager.acquireNodeLease(
+			context.Background(), tableDesc.GetID(), AcquireBlock,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}()
 	// Check the name resolves to the new lease.
 	newLease, _ := leaseManager.names.get(context.Background(), tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableName, s.Clock().Now())
 	if newLease == nil {

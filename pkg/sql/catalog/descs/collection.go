@@ -416,6 +416,13 @@ var allowLeasedDescriptorsInCatalogViews = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+var prefetchLeasedDescriptorsInCatalogViews = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.catalog.allow_leased_descriptors.prefetch.enabled",
+	"if true, catalog views (crdb_internal, information_schema, pg_catalog) can prefetch leased descriptors for improved performance",
+	true,
+)
+
 // GetCatalogGetAllOptions returns the functional options for GetAll* methods
 // based on the cluster setting for allowing leased descriptors in catalog views.
 func GetCatalogGetAllOptions(sv *settings.Values) []GetAllOption {
@@ -1058,6 +1065,11 @@ func (tc *Collection) GetAllObjectsInSchema(
 		if err != nil {
 			return nstree.Catalog{}, err
 		}
+		if options.allowLeased && prefetchLeasedDescriptorsInCatalogViews.Get(&tc.settings.SV) {
+			if err := tc.leased.ensureLeasesExist(ctx, stored.OrderedDescriptorIDs()); err != nil {
+				return nstree.Catalog{}, err
+			}
+		}
 		ret, err = tc.aggregateAllLayers(ctx, txn, options, stored, sc)
 		if err != nil {
 			return nstree.Catalog{}, err
@@ -1083,6 +1095,11 @@ func (tc *Collection) GetAllInDatabase(
 	stored, err := tc.cr.ScanNamespaceForDatabaseSchemasAndObjects(ctx, txn, db)
 	if err != nil {
 		return nstree.Catalog{}, err
+	}
+	if options.allowLeased && prefetchLeasedDescriptorsInCatalogViews.Get(&tc.settings.SV) {
+		if err := tc.leased.ensureLeasesExist(ctx, stored.OrderedDescriptorIDs()); err != nil {
+			return nstree.Catalog{}, err
+		}
 	}
 	schemas, err := tc.GetAllSchemasInDatabase(ctx, txn, db, opts...)
 	if err != nil {
@@ -1130,6 +1147,11 @@ func (tc *Collection) GetAllTablesInDatabase(
 	stored, err := tc.cr.ScanNamespaceForDatabaseSchemasAndObjects(ctx, txn, db)
 	if err != nil {
 		return nstree.Catalog{}, err
+	}
+	if options.allowLeased && prefetchLeasedDescriptorsInCatalogViews.Get(&tc.settings.SV) {
+		if err := tc.leased.ensureLeasesExist(ctx, stored.OrderedDescriptorIDs()); err != nil {
+			return nstree.Catalog{}, err
+		}
 	}
 	var ret nstree.MutableCatalog
 	if db.HasPublicSchemaWithDescriptor() {

@@ -58,6 +58,9 @@ type descriptorState struct {
 		// acquisition finishes but indicate that that new lease is expired are not
 		// ignored.
 		acquisitionsInProgress int
+
+		// acquisitionChannel indicates that a bulk acquisition is in progress.
+		acquisitionChannel chan struct{}
 	}
 }
 
