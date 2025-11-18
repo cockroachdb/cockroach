@@ -121,7 +121,7 @@ for CONFIG in $CONFIGS; do
         mv go/bin/${GOOS}_$GOARCH/* go/bin
         rm -r go/bin/${GOOS}_$GOARCH
     fi
-    tar cf - go | gzip -9 > /artifacts/go$GOVERS.$GOOS-$GOARCH.tar.gz
+    tar cf - go --exclude='.git' | gzip -9 > /artifacts/go$GOVERS.$GOOS-$GOARCH.tar.gz
     rm -rf go/bin
 done
 
