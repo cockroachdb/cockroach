@@ -184,7 +184,7 @@ func (h *filteringSingleFunctionHashHelper) applyFilter(
 	// Note that it is ok that we call Init on every iteration - it is a noop
 	// every time except for the first one.
 	h.filter.Init(ctx)
-	newBatch := h.filter.Next()
+	newBatch := colexecop.NextNoMeta(h.filter)
 	return newBatch.ColVecs(), newBatch.Length(), newBatch.Selection(), true
 }
 
@@ -511,12 +511,12 @@ func newSingleBatchOperator(
 
 func (o *singleBatchOperator) Init(context.Context) {}
 
-func (o *singleBatchOperator) Next() coldata.Batch {
+func (o *singleBatchOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if o.nexted {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	o.nexted = true
-	return o.batch
+	return o.batch, nil
 }
 
 func (o *singleBatchOperator) reset(vecs []*coldata.Vec, inputLen int, sel []int) {

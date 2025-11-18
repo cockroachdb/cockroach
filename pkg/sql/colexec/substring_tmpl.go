@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -90,11 +91,17 @@ type substring_StartType_LengthTypeOperator struct {
 
 var _ colexecop.Operator = &substring_StartType_LengthTypeOperator{}
 
-func (s *substring_StartType_LengthTypeOperator) Next() coldata.Batch {
-	batch := s.Input.Next()
+func (s *substring_StartType_LengthTypeOperator) Next() (
+	coldata.Batch,
+	*execinfrapb.ProducerMetadata,
+) {
+	batch, meta := s.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	sel := batch.Selection()
@@ -182,7 +189,7 @@ func (s *substring_StartType_LengthTypeOperator) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 // {{end}}

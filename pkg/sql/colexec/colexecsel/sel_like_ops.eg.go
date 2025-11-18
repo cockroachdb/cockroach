@@ -12,6 +12,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 type selPrefixBytesBytesConstOp struct {
@@ -21,13 +22,16 @@ type selPrefixBytesBytesConstOp struct {
 	caseInsensitive bool
 }
 
-func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
+func (p *selPrefixBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_negate := p.negate
 	_caseInsensitive := p.caseInsensitive
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -108,7 +112,7 @@ func (p *selPrefixBytesBytesConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -120,13 +124,16 @@ type selSuffixBytesBytesConstOp struct {
 	caseInsensitive bool
 }
 
-func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
+func (p *selSuffixBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_negate := p.negate
 	_caseInsensitive := p.caseInsensitive
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -207,7 +214,7 @@ func (p *selSuffixBytesBytesConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -219,13 +226,16 @@ type selContainsBytesBytesConstOp struct {
 	caseInsensitive bool
 }
 
-func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
+func (p *selContainsBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_negate := p.negate
 	_caseInsensitive := p.caseInsensitive
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -306,7 +316,7 @@ func (p *selContainsBytesBytesConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -318,13 +328,16 @@ type selSkeletonBytesBytesConstOp struct {
 	caseInsensitive bool
 }
 
-func (p *selSkeletonBytesBytesConstOp) Next() coldata.Batch {
+func (p *selSkeletonBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_negate := p.negate
 	_caseInsensitive := p.caseInsensitive
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -453,7 +466,7 @@ func (p *selSkeletonBytesBytesConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -464,12 +477,15 @@ type selRegexpBytesBytesConstOp struct {
 	negate   bool
 }
 
-func (p *selRegexpBytesBytesConstOp) Next() coldata.Batch {
+func (p *selRegexpBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_negate := p.negate
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -538,7 +554,7 @@ func (p *selRegexpBytesBytesConstOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
