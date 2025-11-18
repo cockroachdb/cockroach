@@ -447,13 +447,19 @@ func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
 	}
 }
 
-// AddCPUTime adds a top-level field for the cumulative cpu time spent by SQL
+// AddSQLCPUTime adds a top-level field for the cumulative cpu time spent by SQL
 // execution. If we're redacting, we leave this out to keep test outputs
 // independent of platform because the grunning library isn't currently
 // supported on all platforms.
-func (ob *OutputBuilder) AddCPUTime(cpuTime time.Duration) {
+func (ob *OutputBuilder) AddSQLCPUTime(cpuTime time.Duration) {
 	if !ob.flags.Deflake.HasAny(DeflakeVolatile) {
 		ob.AddTopLevelField("sql cpu time", string(humanizeutil.Duration(cpuTime)))
+	}
+}
+
+func (ob *OutputBuilder) AddKVCPUTime(cpuTime time.Duration) {
+	if !ob.flags.Deflake.HasAny(DeflakeVolatile) {
+		ob.AddTopLevelField("kv cpu time", string(humanizeutil.Duration(cpuTime)))
 	}
 }
 

@@ -95,14 +95,20 @@ func NewFlowsMetadata(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec) *Flows
 // given traces and flow metadata.
 // NOTE: When adding fields to this struct, be sure to update Accumulate.
 type QueryLevelStats struct {
-	DistSQLNetworkBytesSent            int64
-	MaxMemUsage                        int64
-	MaxDiskUsage                       int64
-	KVBytesRead                        int64
-	KVPairsRead                        int64
-	KVRowsRead                         int64
-	KVBatchRequestsIssued              int64
-	KVTime                             time.Duration
+	DistSQLNetworkBytesSent int64
+	MaxMemUsage             int64
+	MaxDiskUsage            int64
+	KVBytesRead             int64
+	KVPairsRead             int64
+	KVRowsRead              int64
+	KVBatchRequestsIssued   int64
+	// KVTime is the cumulative time spent waiting for a KV request. This includes disk IO time
+	// and potentially network time (if any of the keys are not local).
+	KVTime time.Duration
+	// KVCPUTime is the total amount of CPU time spent by nodes doing KV work.
+	KVCPUTime time.Duration
+	// SQLCPUTime is the total amount of CPU time spent by nodes doing SQL work.
+	SQLCPUTime                         time.Duration
 	MvccSteps                          int64
 	MvccStepsInternal                  int64
 	MvccSeeks                          int64
@@ -122,7 +128,6 @@ type QueryLevelStats struct {
 	LatchWaitTime                      time.Duration
 	ContentionEvents                   []kvpb.ContentionEvent
 	RUEstimate                         float64
-	CPUTime                            time.Duration
 	// SQLInstanceIDs is an ordered list of SQL instances that were involved in
 	// query processing.
 	SQLInstanceIDs []int32
@@ -168,6 +173,8 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.KVRowsRead += other.KVRowsRead
 	s.KVBatchRequestsIssued += other.KVBatchRequestsIssued
 	s.KVTime += other.KVTime
+	s.KVCPUTime += other.KVCPUTime
+	s.SQLCPUTime += other.SQLCPUTime
 	s.MvccSteps += other.MvccSteps
 	s.MvccStepsInternal += other.MvccStepsInternal
 	s.MvccSeeks += other.MvccSeeks
@@ -187,7 +194,6 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.LatchWaitTime += other.LatchWaitTime
 	s.ContentionEvents = append(s.ContentionEvents, other.ContentionEvents...)
 	s.RUEstimate += other.RUEstimate
-	s.CPUTime += other.CPUTime
 	s.SQLInstanceIDs = util.CombineUnique(s.SQLInstanceIDs, other.SQLInstanceIDs)
 	s.KVNodeIDs = util.CombineUnique(s.KVNodeIDs, other.KVNodeIDs)
 	s.Regions = util.CombineUnique(s.Regions, other.Regions)
@@ -287,7 +293,7 @@ func (a *TraceAnalyzer) ProcessStats() {
 		s.LockWaitTime += stats.KV.LockWaitTime.Value()
 		s.LatchWaitTime += stats.KV.LatchWaitTime.Value()
 		s.RUEstimate += float64(stats.Exec.ConsumedRU.Value())
-		s.CPUTime += stats.Exec.CPUTime.Value()
+		s.SQLCPUTime += stats.Exec.CPUTime.Value()
 	}
 
 	// Process streamStats.
@@ -397,6 +403,25 @@ func getAllContentionEvents(trace []tracingpb.RecordedSpan) []kvpb.ContentionEve
 	return contentionEvents
 }
 
+// getKVCPUTime returns the sum of CPUTimes from all AdmittedWorkDoneEvents
+// found in the given trace.
+func getKVCPUTime(trace []tracingpb.RecordedSpan) time.Duration {
+	var totalCPUTimeNanos int64
+	var ev kvpb.AdmittedWorkDoneEvent
+	for i := range trace {
+		trace[i].Structured(func(any *pbtypes.Any, _ time.Time) {
+			if !pbtypes.Is(any, &ev) {
+				return
+			}
+			if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
+				return
+			}
+			totalCPUTimeNanos += int64(ev.CPUTime)
+		})
+	}
+	return time.Duration(totalCPUTimeNanos)
+}
+
 // GetQueryLevelStats returns all the top-level stats in a QueryLevelStats
 // struct. GetQueryLevelStats tries to process as many stats as possible. If
 // errors occur while processing stats, GetQueryLevelStats returns the combined
@@ -417,5 +442,6 @@ func GetQueryLevelStats(
 		queryLevelStats.Accumulate(analyzer.GetQueryLevelStats())
 	}
 	queryLevelStats.ContentionEvents = getAllContentionEvents(trace)
+	queryLevelStats.KVCPUTime = getKVCPUTime(trace)
 	return queryLevelStats, errs
 }

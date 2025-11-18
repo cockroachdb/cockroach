@@ -1637,7 +1637,7 @@ func (n *Node) batchInternal(
 
 	var writeBytes *kvadmission.StoreWriteBytes
 	defer func() {
-		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
+		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(ctx, handle, writeBytes)
 		writeBytes.Release()
 	}()
 
