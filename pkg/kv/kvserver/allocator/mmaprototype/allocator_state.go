@@ -262,7 +262,7 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 func (a *allocatorState) AdjustPendingChangeDisposition(change PendingRangeChange, success bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	rs, ok := a.cs.ranges[change.RangeID]
+	_, ok := a.cs.ranges[change.RangeID]
 	if !ok {
 		// Range no longer exists. This can happen if the StoreLeaseholderMsg
 		// which included the effect of the change that transferred the lease away
@@ -270,14 +270,14 @@ func (a *allocatorState) AdjustPendingChangeDisposition(change PendingRangeChang
 		// allocator.
 		return
 	}
-	if !success && rs.pendingChangeNoRollback {
-		// Not allowed to undo.
-		return
-	}
 	// NB: It is possible that some of the changes have already been enacted via
 	// StoreLeaseholderMsg, and even been garbage collected. So no assumption
 	// can be made about whether these changes will be found in the allocator's
 	// state. We gather the found changes.
+	//
+	// NB: the pointers in change.pendingReplicaChanges are not the same as the
+	// pointers in the internal clusterState. We look the latter up using the
+	// changeID. The changes slice contains the internal pointers.
 	var changes []*pendingReplicaChange
 	for _, c := range change.pendingReplicaChanges {
 		ch, ok := a.cs.pendingChanges[c.changeID]
