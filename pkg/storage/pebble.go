@@ -1137,9 +1137,10 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.CompactionConcurrencyRange = p.cco.Wrap(cfg.opts.CompactionConcurrencyRange)
 
 	p.diskUnhealthyTracker = diskUnhealthyTracker{
-		st:          cfg.settings,
-		asyncRunner: p,
-		ts:          timeutil.DefaultTimeSource{},
+		st:       cfg.settings,
+		isClosed: p.Closed,
+		runAsync: p.asyncDone.Go,
+		ts:       timeutil.DefaultTimeSource{},
 	}
 	// NB: The ordering of the event listeners passed to TeeEventListener is
 	// deliberate. The listener returned by makeMetricEtcEventListener is
@@ -1163,7 +1164,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	// confusing.
 	cfg.env.RegisterOnDiskSlow(func(info pebble.DiskSlowInfo) {
 		el := cfg.opts.EventListener
-		p.async(func() { el.DiskSlow(info) })
+		p.asyncDone.Go(func() { el.DiskSlow(info) })
 	})
 	el := pebble.TeeEventListener(
 		p.makeMetricEtcEventListener(logCtx),
@@ -1289,17 +1290,6 @@ func category(name string, upperBound roachpb.Key) pebble.UserKeyCategory {
 	return pebble.UserKeyCategory{Name: name, UpperBound: ek.Encode()}
 }
 
-// async launches the provided function in a new goroutine. It uses a wait group
-// to synchronize with (*Pebble).Close to ensure all launched goroutines have
-// exited before Close returns.
-func (p *Pebble) async(fn func()) {
-	p.asyncDone.Add(1)
-	go func() {
-		defer p.asyncDone.Done()
-		fn()
-	}()
-}
-
 // writePreventStartupFile creates a file that will prevent nodes from automatically restarting after
 // experiencing sstable corruption.
 func (p *Pebble) writePreventStartupFile(ctx context.Context, corruptionError error) {
@@ -1386,11 +1376,11 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 					}
 				} else {
 					if p.cfg.diskMonitor != nil {
-						p.async(func() {
+						p.asyncDone.Go(func() {
 							log.Dev.Errorf(ctx, "disk stall detected: %s\n%s", info, p.cfg.diskMonitor.LogTrace())
 						})
 					} else {
-						p.async(func() { log.Dev.Errorf(ctx, "disk stall detected: %s", info) })
+						p.asyncDone.Go(func() { log.Dev.Errorf(ctx, "disk stall detected: %s", info) })
 					}
 				}
 				return
@@ -3183,17 +3173,12 @@ func (cco *compactionConcurrencyOverride) Wrap(
 // explicitly.
 const diskUnhealthyResetInterval = 5 * time.Second
 
-// asyncRunner abstracts Pebble.async for testing.
-type asyncRunner interface {
-	async(fn func())
-	Closed() bool
-}
-
 type diskUnhealthyTracker struct {
-	st          *cluster.Settings
-	asyncRunner asyncRunner
-	ts          timeutil.TimeSource
-	mu          struct {
+	st       *cluster.Settings
+	isClosed func() bool
+	runAsync func(fn func())
+	ts       timeutil.TimeSource
+	mu       struct {
 		syncutil.Mutex
 		lastUnhealthyEventTime      time.Time
 		currentlyUnhealthy          bool
@@ -3219,7 +3204,7 @@ func (dut *diskUnhealthyTracker) onDiskSlow(info pebble.DiskSlowInfo) {
 	if !dut.mu.currentlyUnhealthy {
 		dut.mu.currentlyUnhealthy = true
 		dut.mu.lastUnhealthySampleTime = now
-		dut.asyncRunner.async(func() {
+		dut.runAsync(func() {
 			// Reset the unhealthy status after a while.
 			ticker := dut.ts.NewTicker(diskUnhealthyResetInterval)
 			defer ticker.Stop()
@@ -3232,7 +3217,7 @@ func (dut *diskUnhealthyTracker) onDiskSlow(info pebble.DiskSlowInfo) {
 			tickReceivedForTesting(now)
 			for {
 				now := <-ticker.Ch()
-				isClosed := dut.asyncRunner.Closed()
+				isClosed := dut.isClosed()
 				dut.mu.Lock()
 				if !dut.mu.currentlyUnhealthy {
 					panic(errors.AssertionFailedf("unexpected currentlyUnhealthy=false"))

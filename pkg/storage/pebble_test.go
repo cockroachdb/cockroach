@@ -1911,22 +1911,6 @@ func TestPebbleSpanPolicyFunc(t *testing.T) {
 	}
 }
 
-type testAsyncRunner struct {
-	b      *strings.Builder
-	closed atomic.Bool
-}
-
-func (r *testAsyncRunner) async(fn func()) {
-	fmt.Fprintf(r.b, "asyncRunner.async\n")
-	go fn()
-}
-
-func (r *testAsyncRunner) Closed() bool {
-	closed := r.closed.Load()
-	fmt.Fprintf(r.b, "asyncRunner.Closed(): %t\n", closed)
-	return closed
-}
-
 func TestDiskUnhealthyTracker(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1937,14 +1921,22 @@ func TestDiskUnhealthyTracker(t *testing.T) {
 		b.Reset()
 		return str
 	}
-	runner := &testAsyncRunner{b: &b}
+	var isClosed atomic.Bool
 	ts := timeutil.NewManualTime(time.Unix(0, 0))
 	st := cluster.MakeTestingClusterSettings()
-	UnhealthyWriteDuration.Override(context.Background(), &st.SV, 5*time.Second)
+	UnhealthyWriteDuration.Override(t.Context(), &st.SV, 5*time.Second)
 	tickReceivedCh := make(chan time.Time, 1)
 	tracker := &diskUnhealthyTracker{
-		st:                    st,
-		asyncRunner:           runner,
+		st: st,
+		isClosed: func() bool {
+			closed := isClosed.Load()
+			fmt.Fprintf(&b, "asyncRunner.Closed(): %t\n", closed)
+			return closed
+		},
+		runAsync: func(fn func()) {
+			fmt.Fprintf(&b, "asyncRunner.async\n")
+			go fn()
+		},
 		ts:                    ts,
 		testingTickReceivedCh: tickReceivedCh,
 	}
@@ -1974,7 +1966,7 @@ func TestDiskUnhealthyTracker(t *testing.T) {
 				return builderStr()
 
 			case "close":
-				runner.closed.Store(true)
+				isClosed.Store(true)
 				return ""
 
 			default:
