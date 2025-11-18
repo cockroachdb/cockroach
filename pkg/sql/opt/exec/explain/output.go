@@ -457,6 +457,12 @@ func (ob *OutputBuilder) AddCPUTime(cpuTime time.Duration) {
 	}
 }
 
+func (ob *OutputBuilder) AddKVCPUTime(cpuTime time.Duration) {
+	if !ob.flags.Deflake.HasAny(DeflakeVolatile) {
+		ob.AddTopLevelField("kv cpu time", string(humanizeutil.Duration(cpuTime)))
+	}
+}
+
 // AddRUEstimate adds a top-level field for the estimated number of RUs consumed
 // by the query.
 func (ob *OutputBuilder) AddRUEstimate(ru float64) {

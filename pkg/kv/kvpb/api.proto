@@ -3872,6 +3872,12 @@ message ContentionEvent {
   bool is_latch = 4;
 }
 
+// AdmittedWorkDoneEvent is a message that is recorded on traces by the kvadmission
+// controller after admitted KV work is executed.
+message AdmittedWorkDoneEvent {
+ uint64 cpu_time = 1 [(gogoproto.customname) = "CPUTime"];
+}
+
 // ScanStats is a message that tracks miscellaneous statistics of all Gets,
 // Scans, and ReverseScans in a single BatchResponse.
 message ScanStats {
