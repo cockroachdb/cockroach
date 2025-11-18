@@ -55,21 +55,29 @@ export const storeMetrics = (
       />
     );
 
-    // show only the aggregated node-level metric when viewing multiple nodes
+    // Show only the aggregated node-level metric when viewing multiple nodes.
     if (nodeIDs.length > 1) {
       return nodeMetric;
     }
 
-    // otherwise, show the aggregated metric and a per-store breakdown
+    const perStoreMetrics = storeIDs.map(sid => (
+      <Metric
+        key={`${nid}-${sid}`}
+        title={`${prefix} (n${nid},s${sid})`}
+        sources={[sid]}
+        {...props}
+      />
+    ));
+
+    // If there's only one store for the node, don't show both the aggregated
+    // metric and the per-store breakdown which will always be equal.
+    if (storeIDs.length == 1) {
+      return perStoreMetrics;
+    }
+
+    // Otherwise, show the aggregated metric and a per-store breakdown.
     return [
       nodeMetric,
-      ...storeIDs.map(sid => (
-        <Metric
-          key={`${nid}-${sid}`}
-          title={`${prefix} (n${nid},s${sid})`}
-          sources={[sid]}
-          {...props}
-        />
-      )),
+      ...perStoreMetrics,
     ];
   });
