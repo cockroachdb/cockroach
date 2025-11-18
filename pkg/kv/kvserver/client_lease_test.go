@@ -1728,6 +1728,9 @@ func TestLeaseRequestBumpsEpoch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This is to help investigate failures like #157128.
+	testutils.SetVModule(t, "raft=4")
+
 	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
