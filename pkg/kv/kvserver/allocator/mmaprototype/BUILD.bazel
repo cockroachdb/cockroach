@@ -43,6 +43,7 @@ go_test(
         "cluster_state_test.go",
         "constraint_matcher_test.go",
         "constraint_test.go",
+        "constraint_unused_test.go",
         "load_test.go",
         "memo_helper_test.go",
     ],
