@@ -15,7 +15,10 @@ import (
 // ExternalRangeChange is a proposed set of change(s) to a range. It can
 // consist of multiple replica changes, such as adding or removing replicas,
 // or transferring the lease. There is at most one change per store in the
-// set.
+// set. It is immutable after creation.
+//
+// It is a partial external representation of a set of changes that are
+// internally modeled using a slice of *pendingReplicaChanges.
 type ExternalRangeChange struct {
 	roachpb.RangeID
 	Changes []ExternalReplicaChange
@@ -23,6 +26,12 @@ type ExternalRangeChange struct {
 
 // ExternalReplicaChange is a proposed change to a single replica. Some
 // external entity (the leaseholder of the range) may choose to enact this
+// change.
+//
+// It is a partial external representation of a pendingReplicaChange that is
+// internal to MMA. While pendingReplicaChange has fields that are mutable,
+// since partial changes can be observed to a store, the ExternalReplicaChange
+// is immutable and represents the original before and after state of the
 // change.
 type ExternalReplicaChange struct {
 	changeID
