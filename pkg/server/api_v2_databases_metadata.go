@@ -466,7 +466,8 @@ func getTableMetadataBaseQuery(userName string) *safesql.Query {
 		     (SELECT "sql.stats.automatic_collection.enabled" as auto_stats_enabled 
 		  		FROM [SHOW CLUSTER SETTING sql.stats.automatic_collection.enabled]) csc
 		WHERE (
-			EXISTS (
+			$ = 'admin'
+			OR EXISTS (
 				SELECT 1
 				FROM system.role_members rm
 				WHERE rm.member = $
@@ -480,7 +481,7 @@ func getTableMetadataBaseQuery(userName string) *safesql.Query {
 	  		)
 		)
 		AND tbm.table_type = 'TABLE'
-		`, userName, userName)
+		`, userName, userName, userName)
 
 	return query
 }
@@ -873,7 +874,8 @@ func getDatabaseMetadataBaseQuery(userName string) *safesql.Query {
 			GROUP BY db_id
 		) s ON s.db_id = tbm.db_id
 		WHERE (
-			EXISTS (
+			$ = 'admin'
+			OR EXISTS (
 				SELECT 1
 				FROM system.role_members rm
 				WHERE rm.member = $
@@ -888,7 +890,7 @@ func getDatabaseMetadataBaseQuery(userName string) *safesql.Query {
 		)
 		AND n."parentID" = 0
 		AND n."parentSchemaID" = 0
-`, userName, userName)
+`, userName, userName, userName)
 
 	return query
 }
