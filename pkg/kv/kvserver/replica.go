@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
@@ -1239,6 +1240,11 @@ func (r *Replica) isScratchRangeRLocked() bool {
 // IsFirstRange returns true if this is the first range.
 func (r *Replica) IsFirstRange() bool {
 	return r.RangeID == 1
+}
+
+// RaftLogAccessor returns an accessor for raft log.
+func (r *Replica) RaftLogAccessor() raftlog.Accessor {
+	return &replicaRaftLogAccessor{r: r}
 }
 
 // IsDestroyed returns a non-nil error if the replica has been destroyed

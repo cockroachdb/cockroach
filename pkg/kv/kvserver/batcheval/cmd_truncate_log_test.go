@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -75,9 +76,11 @@ func TestTruncateLog(t *testing.T) {
 	evalCtx := &MockEvalCtx{
 		ClusterSettings: st,
 		Desc:            &roachpb.RangeDescriptor{RangeID: rangeID},
-		Term:            term,
-		CompactedIndex:  compactedIndex,
-		LogEngine:       logEng,
+		RaftLogAccessor: raftlog.MockAccessor{
+			Term:           term,
+			CompactedIndex: compactedIndex,
+			Engine:         logEng,
+		},
 	}
 
 	truncState := kvserverpb.RaftTruncatedState{

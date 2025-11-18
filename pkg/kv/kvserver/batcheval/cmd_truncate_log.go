@@ -66,7 +66,8 @@ func TruncateLog(
 	// existing entry's term?
 	// TODO(pav-kv): some day, make args.Index an inclusive compaction index, and
 	// eliminate the remaining +-1 arithmetics.
-	firstIndex := cArgs.EvalCtx.GetCompactedIndex() + 1
+	raftLogAccessor := cArgs.EvalCtx.RaftLogAccessor()
+	firstIndex := raftLogAccessor.GetCompactedIndex() + 1
 	if firstIndex >= args.Index {
 		if log.V(3) {
 			log.KvExec.Infof(ctx, "attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
@@ -76,7 +77,7 @@ func TruncateLog(
 	}
 
 	// args.Index is the first index to keep.
-	term, err := cArgs.EvalCtx.GetTerm(args.Index - 1)
+	term, err := raftLogAccessor.GetTerm(args.Index - 1)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "getting term")
 	}
@@ -121,7 +122,7 @@ func TruncateLog(
 	// Use the log engine to compute stats for the raft log.
 	// TODO(#136358): After we precisely maintain the Raft Log size, we could stop
 	// needing the Log Engine to compute the stats.
-	ms, err := storage.ComputeStats(ctx, cArgs.EvalCtx.LogEngine(), start, end, 0 /* nowNanos */)
+	ms, err := storage.ComputeStats(ctx, raftLogAccessor.LogEngine(), start, end, 0 /* nowNanos */)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "while computing stats of Raft log freed by truncation")
 	}

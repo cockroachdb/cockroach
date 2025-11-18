@@ -16,10 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -60,11 +60,8 @@ type EvalContext interface {
 	GetNodeLocality() roachpb.Locality
 
 	IsFirstRange() bool
-	GetCompactedIndex() kvpb.RaftIndex
-	GetTerm(index kvpb.RaftIndex) (kvpb.RaftTerm, error)
+	RaftLogAccessor() raftlog.Accessor
 	GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex
-	// LogEngine returns the engine that stores the raft log.
-	LogEngine() storage.Engine
 
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
@@ -176,9 +173,7 @@ type MockEvalCtx struct {
 	CPU                    float64
 	AbortSpan              *abortspan.AbortSpan
 	GCThreshold            hlc.Timestamp
-	Term                   kvpb.RaftTerm
-	CompactedIndex         kvpb.RaftIndex
-	LogEngine              storage.Engine
+	RaftLogAccessor        raftlog.MockAccessor
 	CanCreateTxnRecordFn   func() (bool, kvpb.TransactionAbortedReason)
 	MinTxnCommitTSFn       func() hlc.Timestamp
 	LastReplicaGCTimestamp hlc.Timestamp
@@ -228,11 +223,8 @@ func (m *mockEvalCtxImpl) GetConcurrencyManager() concurrency.Manager {
 	}
 }
 
-func (m *mockEvalCtxImpl) LogEngine() storage.Engine {
-	if m.MockEvalCtx.LogEngine != nil {
-		return m.MockEvalCtx.LogEngine
-	}
-	panic("LogEngine not configured")
+func (m *mockEvalCtxImpl) RaftLogAccessor() raftlog.Accessor {
+	return &m.MockEvalCtx.RaftLogAccessor
 }
 
 func (m *mockEvalCtxImpl) NodeID() roachpb.NodeID {
@@ -249,12 +241,6 @@ func (m *mockEvalCtxImpl) GetRangeID() roachpb.RangeID {
 }
 func (m *mockEvalCtxImpl) IsFirstRange() bool {
 	panic("unimplemented")
-}
-func (m *mockEvalCtxImpl) GetCompactedIndex() kvpb.RaftIndex {
-	return m.CompactedIndex
-}
-func (m *mockEvalCtxImpl) GetTerm(kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	return m.Term, nil
 }
 func (m *mockEvalCtxImpl) GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex {
 	panic("unimplemented")
