@@ -60,8 +60,8 @@ import (
 // create-replica range-id=<int> [initialized]
 // ----
 //
-// Creates a replica on n1/s1 for the specified range ID. The created replica
-// may be initialized or uninitialized.
+//	Creates a replica on n1/s1 for the specified range ID. The created replica
+//	may be initialized or uninitialized.
 //
 // update-hard-state range-id=<int> [term=<int>] [vote=<int>]
 // ----
@@ -69,29 +69,36 @@ import (
 //	Updates the specified fields of the existing replica's HardState. Other
 //	fields of the HardState are retained.
 //
-// create-split range-id=<int> split-key=<key>
+// eval-split range-id=<int> split-key=<key> [verbose]
 // ----
 //
-//	Creates a split for the specified range at the given split key, which
-//	entails creating a SplitTrigger with both the LHS and RHS descriptors.
-//	Much like how things work in CRDB, the LHS descriptor is created by
-//	narrowing the original range and a new range descriptor is created for
-//	the RHS with the same replica set.
+//	Evaluates a split for the specified range at the given split key. This
+//	creates a SplitTrigger with both the LHS and RHS descriptors, runs the
+//	split trigger evaluation, and stashes the resulting batch representing the
+//	pending raft log command. The batch is NOT committed until the split is
+//	applied. However, the range state is updated to reflect the split -- the LHS
+//	narrows, and a new range descriptor is created for the RHS with the same
+//	replica set as the LHS. Optionally, we print the evaluated batch if
+//	running with the verbose flag.
 //
 // set-lease range-id=<int> replica=<int> [lease-type=leader-lease|epoch|expiration]
 // ----
 //
 //	Sets the lease for the specified range to the supplied replica. Note that
 //	the replica parameter specifies NodeIDs, not to be confused with
-//	ReplicaIDs. By default, the lease is of the leader-lease variety, but
-//	this may be overriden to an epoch or expiration based lease by using the
+//	ReplicaIDs. By default, the lease is of the leader-lease variety, but this
+//	may be overriden to an epoch or expiration based lease by using the
 //	lease-type parameter. For now, we treat the associated lease metadata as
 //	uninteresting.
 //
-// run-split-trigger range-id=<int>
+// apply-split range-id=<int>
 // ----
 //
-//	Executes the split trigger for the specified range on n1.
+//	Applies the pending split for the specified range using the stashed batch
+//	that was generated during split evaluation. The destroyed status of the
+//	post-split RHS replica is automatically determined based on the test
+//	context's state; if the replica doesn't exist, or a newer (higher ReplicaID)
+//	replica exists, it is considered destroyed.
 //
 // destroy-replica range-id=<int>
 // ----
@@ -106,19 +113,21 @@ import (
 //	the replica on n1/s1. The replica must have already been created via
 //	create-replica.
 //
-// create-range-data range-id=<int> [num-user-keys=<int>] [num-system-keys=<int>] [num-lock-table-keys=<int>]
+// create-range-data range-id=<int> [num-user-keys=<int>] [num-system-keys=<int>] [num-lock-table-keys=<int>] [base-key=<key>]
 // ----
 //
-//	Creates the specified number of user, system, and lock table keys for the
+//	Creates the specified number of user, system, and lock table keys in the
 //	range. At least one parameter should be non-zero to ensure this directive is
-//	not nonsensical.
+//	not nonsensical. If base-key is provided, it must lie within the range's
+//	boundaries and is used as the base key for generating range data; otherwise
+//	the range's start key is used.
 //
 // print-range-state [sort-keys=<bool>]
 // ----
 //
-// Prints the current range state in the test context. By default, ranges are
-// sorted by range ID. If sort-keys is set to true, ranges are sorted by their
-// descriptor's start key instead.
+//	Prints the current range state in the test context. By default, ranges are
+//	sorted by range ID. If sort-keys is set to true, ranges are sorted by their
+//	descriptor's start key instead.
 //
 // restart
 // ----
@@ -129,7 +138,9 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	storage.DisableMetamorphicSimpleValueEncoding(t) // for deterministic output
+	// Disable some metamorphic values for deterministic output.
+	storage.DisableMetamorphicSimpleValueEncoding(t)
+	batcheval.DisableMetamorphicSplitScansRightForStatsFirst(t)
 
 	datadriven.Walk(t, "testdata/replica_lifecycle", func(t *testing.T, path string) {
 		tc := newTestCtx()
@@ -200,30 +211,6 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				))
 				return fmt.Sprintf("HardState %+v", rs.replica.hs)
 
-			case "create-split":
-				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
-				splitKey := dd.ScanArg[string](t, d, "split-key")
-				rs := tc.mustGetRangeState(t, rangeID)
-				desc := rs.desc
-				require.True(
-					t,
-					roachpb.RKey(splitKey).Compare(desc.StartKey) > 0 &&
-						roachpb.RKey(splitKey).Compare(desc.EndKey) < 0,
-					"split key not within range",
-				)
-				leftDesc := desc
-				leftDesc.EndKey = roachpb.RKey(splitKey)
-				rightDesc := desc
-				rightDesc.RangeID = tc.nextRangeID
-				tc.nextRangeID++
-				rightDesc.StartKey = roachpb.RKey(splitKey)
-				split := &roachpb.SplitTrigger{
-					LeftDesc:  leftDesc,
-					RightDesc: rightDesc,
-				}
-				tc.splits[rangeID] = split
-				return "ok"
-
 			case "set-lease":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
 				replicaNodeID := dd.ScanArg[roachpb.NodeID](t, d, "replica")
@@ -257,35 +244,99 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				rs.lease = lease
 				return "ok"
 
-			case "run-split-trigger":
+			case "eval-split":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
-				split, ok := tc.splits[rangeID]
-				require.True(t, ok, "split trigger not found for range-id %d", rangeID)
+				splitKey := dd.ScanArg[string](t, d, "split-key")
+				verbose := d.HasArg("verbose")
 				rs := tc.mustGetRangeState(t, rangeID)
 				desc := rs.desc
+				require.True(
+					t,
+					roachpb.RKey(splitKey).Compare(desc.StartKey) > 0 &&
+						roachpb.RKey(splitKey).Compare(desc.EndKey) < 0,
+					"split key not within range",
+				)
+				leftDesc := desc
+				leftDesc.EndKey = roachpb.RKey(splitKey)
+				rightDesc := desc
+				rightDesc.RangeID = tc.nextRangeID
+				tc.nextRangeID++
+				rightDesc.StartKey = roachpb.RKey(splitKey)
+				split := roachpb.SplitTrigger{
+					LeftDesc:  leftDesc,
+					RightDesc: rightDesc,
+				}
 
-				return tc.mutate(t, func(batch storage.Batch) {
-					rec := (&batcheval.MockEvalCtx{
-						ClusterSettings:        tc.st,
-						Desc:                   &desc,
-						Clock:                  tc.clock,
-						AbortSpan:              rs.abortspan,
-						LastReplicaGCTimestamp: rs.lastGCTimestamp,
-						RangeLeaseDuration:     tc.rangeLeaseDuration,
-					}).EvalContext()
+				// Run the split trigger evaluation and capture the batch that's
+				// generated for replication. Stash it away. This represents the
+				// raft log entry that will be applied as part of split
+				// application.
+				batch := tc.storage.NewBatch()
+				rec := (&batcheval.MockEvalCtx{
+					ClusterSettings:        tc.st,
+					Desc:                   &desc,
+					Clock:                  tc.clock,
+					AbortSpan:              rs.abortspan,
+					LastReplicaGCTimestamp: rs.lastGCTimestamp,
+					RangeLeaseDuration:     tc.rangeLeaseDuration,
+				}).EvalContext()
 
-					in := batcheval.SplitTriggerHelperInput{
-						LeftLease:      rs.lease,
-						GCThreshold:    &rs.gcThreshold,
-						GCHint:         &rs.gcHint,
-						ReplicaVersion: rs.version,
-					}
-					_, _, err := batcheval.TestingSplitTrigger(
-						ctx, rec, batch, enginepb.MVCCStats{}, split, in, hlc.Timestamp{},
-					)
+				in := batcheval.SplitTriggerHelperInput{
+					LeftLease:      rs.lease,
+					GCThreshold:    &rs.gcThreshold,
+					GCHint:         &rs.gcHint,
+					ReplicaVersion: rs.version,
+				}
+				_, _, err := batcheval.TestingSplitTrigger(
+					ctx, rec, batch, enginepb.MVCCStats{}, &split, in, hlc.Timestamp{},
+				)
+				require.NoError(t, err)
+
+				batchRepr := batch.Repr()
+				tc.splits[rangeID] = pendingSplit{
+					trigger:   split,
+					batchRepr: batchRepr,
+				}
+				tc.updatePostSplitRangeState(ctx, t, batch, split)
+				batch.Close()
+
+				if verbose {
+					output, err := print.DecodeWriteBatch(batchRepr)
 					require.NoError(t, err)
+					return strings.ReplaceAll(output, "\n\n", "\n")
+				}
+				return "ok"
 
-					tc.updatePostSplitRangeState(t, ctx, batch, rangeID, split)
+			case "apply-split":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				ps, ok := tc.splits[rangeID]
+				require.True(t, ok, "pending split not found for range-id %d", rangeID)
+				delete(tc.splits, rangeID)
+				split := ps.trigger
+
+				// Determine if the RHS is "destroyed" by checking replica
+				// state. This mirrors the logic in validateAndPrepareSplit:
+				// - if there's no replica for the rhs, it's considered
+				// destroyed.
+				// - if the replica has a higher ReplicaID than in the split
+				// trigger, the original was removed and a new one created (also
+				// destroyed).
+				rhsRangeState := tc.mustGetRangeState(t, split.RightDesc.RangeID)
+				rhsReplDesc := rhsRangeState.mustGetReplicaDescriptor(t, roachpb.NodeID(1))
+				destroyed := rhsRangeState.replica == nil ||
+					rhsRangeState.replica.ReplicaID > rhsReplDesc.ReplicaID
+
+				in := splitPreApplyInput{
+					destroyed:           destroyed,
+					rhsDesc:             split.RightDesc,
+					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
+				}
+				return tc.mutate(t, func(batch storage.Batch) {
+					// First, apply the stashed batch from split trigger
+					// evaluation.
+					require.NoError(t, batch.ApplyBatchRepr(ps.batchRepr, false /* sync */))
+					// Then run splitPreApply which does the apply-time tweaks.
+					splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), in)
 				})
 
 			case "destroy-replica":
@@ -293,14 +344,19 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				rs := tc.mustGetRangeState(t, rangeID)
 				rs.mustGetReplicaDescriptor(t, roachpb.NodeID(1)) // ensure replica exists
 
+				destroyInfo := kvstorage.DestroyReplicaInfo{
+					FullReplicaID: rs.replica.FullReplicaID,
+				}
+				// NB: destriyInfo.Keys is only set for initialized replicas.
+				if rs.replica.initialized() {
+					destroyInfo.Keys = rs.desc.RSpan()
+				}
+
 				output := tc.mutate(t, func(batch storage.Batch) {
 					require.NoError(t, kvstorage.DestroyReplica(
 						ctx,
 						kvstorage.TODOReadWriter(batch),
-						kvstorage.DestroyReplicaInfo{
-							FullReplicaID: rs.replica.FullReplicaID,
-							Keys:          rs.desc.RSpan(),
-						},
+						destroyInfo,
 						rs.desc.NextReplicaID,
 					))
 				})
@@ -339,8 +395,15 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 
 				rs := tc.mustGetRangeState(t, rangeID)
 				ts := hlc.Timestamp{WallTime: 1}
+
+				baseKey := roachpb.Key(dd.ScanArgOr(t, d, "base-key", string(rs.desc.StartKey)))
+				require.True(t,
+					rs.desc.ContainsKey(roachpb.RKey(baseKey)),
+					"base key %q must be within range boundaries [%s, %s)",
+					baseKey, rs.desc.StartKey, rs.desc.EndKey,
+				)
 				getUserKey := func(i int) roachpb.Key {
-					return append(rs.desc.StartKey.AsRawKey(), strconv.Itoa(i)...)
+					return append(baseKey, strconv.Itoa(i)...)
 				}
 
 				return tc.mutate(t, func(batch storage.Batch) {
@@ -426,6 +489,12 @@ func (r *replicaInfo) initialized() bool {
 	return r.hs.Commit > 0 // NB: or r.ts.Index > 0
 }
 
+// pendingSplit represents a split that has been evaluated but not yet applied.
+type pendingSplit struct {
+	trigger   roachpb.SplitTrigger
+	batchRepr []byte
+}
+
 // testCtx is a single test's context. It tracks the state of all ranges and any
 // intermediate steps when performing replica lifecycle events.
 type testCtx struct {
@@ -435,7 +504,7 @@ type testCtx struct {
 
 	nextRangeID roachpb.RangeID // monotonically-increasing rangeID
 	ranges      map[roachpb.RangeID]*rangeState
-	splits      map[roachpb.RangeID]*roachpb.SplitTrigger
+	splits      map[roachpb.RangeID]pendingSplit
 	// The storage engine corresponds to a single store, (n1, s1).
 	storage storage.Engine
 }
@@ -452,7 +521,7 @@ func newTestCtx() *testCtx {
 
 		nextRangeID: 1,
 		ranges:      make(map[roachpb.RangeID]*rangeState),
-		splits:      make(map[roachpb.RangeID]*roachpb.SplitTrigger),
+		splits:      make(map[roachpb.RangeID]pendingSplit),
 		storage:     storage.NewDefaultInMemForTesting(),
 	}
 }
@@ -566,20 +635,12 @@ func (tc *testCtx) updatePostReplicaCreateState(
 
 // updatePostSplitRangeState updates the range state after a split.
 func (tc *testCtx) updatePostSplitRangeState(
-	t *testing.T,
-	ctx context.Context,
-	reader storage.Reader,
-	lhsRangeID roachpb.RangeID,
-	split *roachpb.SplitTrigger,
+	ctx context.Context, t *testing.T, reader storage.Reader, split roachpb.SplitTrigger,
 ) {
-	originalRangeState := tc.mustGetRangeState(t, lhsRangeID)
-	// The range ID should not change for LHS since it's the same range.
-	require.Equal(t, lhsRangeID, split.LeftDesc.RangeID)
-	// Update LHS by just updating the descriptor.
-	originalRangeState.desc = split.LeftDesc
-	tc.ranges[lhsRangeID] = originalRangeState
+	lhsRangeState := tc.mustGetRangeState(t, split.LeftDesc.RangeID)
+	lhsRangeState.desc = split.LeftDesc // narrow the LHS
+	// Create a new range state for the RHS by reading from the batch.
 	rhsRangeState := newRangeState(split.RightDesc)
-	// Create RHS range state by reading from the reader.
 	rhsSl := kvstorage.MakeStateLoader(split.RightDesc.RangeID)
 	rhsState, err := rhsSl.Load(ctx, reader, &split.RightDesc)
 	require.NoError(t, err)
@@ -587,7 +648,6 @@ func (tc *testCtx) updatePostSplitRangeState(
 	rhsRangeState.gcThreshold = *rhsState.GCThreshold
 	rhsRangeState.gcHint = *rhsState.GCHint
 	rhsRangeState.version = *rhsState.Version
-
 	tc.ranges[split.RightDesc.RangeID] = rhsRangeState
 }
 
