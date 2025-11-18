@@ -128,18 +128,87 @@ func (ic internedConstraint) less(b internedConstraint) bool {
 // constraints are in increasing order using internedConstraint.less.
 type constraintsConj []internedConstraint
 
+// conjunctionRelationship describes the binary relationship between sets of
+// stores satisfying two constraint conjunctions. A constraint conjunction
+// (constraintsConj) represents all possible sets of stores that satisfy all
+// constraints in the conjunction. For example, the conjunction [+region=a,
+// +zone=a1] represents all possible sets of stores located in region "a" and
+// zone "a1".
+//
+// This relationship (between two constraintsConj denoted A and B in their
+// enum comments) is computed purely by comparing the conjuncts of A and B,
+// without knowledge of which stores actually exist in the cluster. In some
+// cases, specifically conjEqualSet, conjStrictSubset, conjStrictSuperset,
+// these can be understood to hold for any possible concrete set of stores. In
+// other cases, specifically conjNonIntersecting and conjPossiblyIntersecting,
+// these are a best-effort guess based on the structure of the conjuncts
+// alone.
+//
+// The best-effort relationship computation assumes that if two conjuncts are
+// not equal their sets are non-overlapping. This simplifying assumption is ok
+// since this relationship feeds into a best-effort structural normalization.
 type conjunctionRelationship int
 
-// Relationship between conjunctions used for structural normalization. This
-// relationship is solely defined based on the conjunctions, and not based on
-// what stores actually match. It simply assumes that if two conjuncts are not
-// equal their sets are non-overlapping. This simplifying assumption is made
-// since we are only trying to do a best-effort structural normalization.
 const (
-	conjIntersecting conjunctionRelationship = iota
+	// conjPossiblyIntersecting: This is an indeterminate case: The structural
+	// relationship alone cannot determine how the store sets relate; the actual
+	// set of stores in the cluster would need to be known. The store sets may
+	// be disjoint, overlapping, or even have a subset relationship, depending
+	// on which stores actually exist. In practice, this is the case in which A
+	// and B share some constraints, but differ in others.
+	//
+	// Example: A=[+region=a, +zone=a1], B=[+region=a, -zone=a2].
+	//   - if all stores are in a2, B is empty and thus a subset of A.
+	//   - if all stores are in a1, A and B are equal.
+	//   - if only a1 and a2 have stores, then -zone=a2 is equivalent to +zone=a1,
+	//     so A and B are equal.
+	//   - if only a2 and a3 have stores, then A is empty and thus a strict
+	//     subset of B, which is not empty.
+	//   - if a1, a2, and a3 have stores, then A and B intersect but are not equal:
+	//     - stores in a1 match both A and B.
+	//     - stores in a2 match neither constraint
+	//     - stores in a3 match only B
+	//     and thus B is a strict subset of A.
+	// Note how the relationship between A and B varies based on the actual set of
+	// stores: sometimes B contains A, and sometimes the other way around.
+	conjPossiblyIntersecting conjunctionRelationship = iota
+
+	// conjEqualSet: A and B have identical constraint lists, so they represent
+	// the same set of stores.
+	//
+	// Example: A=[+region=a, +zone=a1], B=A
 	conjEqualSet
+
+	// conjStrictSubset: A has more constraints than B, so A's store set is a
+	// strict subset of B's store set. Every store matching A also matches B,
+	// but some stores matching B do not match A.
+	//
+	// Example: A=[+region=a, +zone=a1], B=[+region=a]
+	//   A matches stores in region=a AND zone=a1.
+	//   B matches all stores in region=a (any zone).
+	//   Therefore, A's store set ⊆ B's store set.
 	conjStrictSubset
+
+	// conjStrictSuperset: A has fewer constraints than B, so A's store set is a
+	// strict superset of B's store set. Every store matching B also matches A,
+	// but some stores matching A do not match B.
+	//
+	// Example: A=[+region=a], B=[+region=a, +zone=a1]
+	//   A matches all stores in region=a.
+	//   B matches only stores in region=a AND zone=a1.
+	//   Therefore, A's store set ⊇ B's store set.
 	conjStrictSuperset
+
+	// conjNonIntersecting: This is another indeterminate case. A and B have
+	// no constraints in common, so we assume their store sets are disjoint
+	// (no store can match both).
+	//
+	// Example: A=[+region=a], B=[+region=b]
+	//   A matches stores in region=a, B matches stores in region=b.
+	//   Since a store cannot be in both regions, the sets are disjoint.
+	// Example: A=[+region=a], B=[+zone=a1]
+	//   If zone=a1 happens to be in region=a, then the disjoint result is
+	//   not correct.
 	conjNonIntersecting
 )
 
@@ -191,7 +260,7 @@ func (cc constraintsConj) relationship(b constraintsConj) conjunctionRelationshi
 	}
 	// (extraInB > 0 && extraInCC > 0)
 	if inBoth > 0 {
-		return conjIntersecting
+		return conjPossiblyIntersecting
 	}
 	return conjNonIntersecting
 }
@@ -220,6 +289,19 @@ type internedLeasePreference struct {
 // SpanConfig for which we don't have a normalized value. The rest of the
 // allocator code works with normalizedSpanConfig. Due to the infrequent
 // nature of this, we don't attempt to reduce memory allocations.
+//
+// It does:
+//
+//   - Basic normalization of the constraints and voterConstraints, to specify
+//     the number of replicas for every constraints conjunction, and ensure that
+//     the sum adds up to the required number of replicas. These are
+//     requirements documented in roachpb.SpanConfig. If this basic
+//     normalization fails, it returns a nil normalizedSpanConfig and an error.
+//
+//   - Structural normalization: see comment in doStructuralNormalization. An
+//     error in this step causes it to return a non-nil normalizedSpanConfig,
+//     with an error, so that the error can be surfaced somehow while keeping
+//     the system running.
 func makeNormalizedSpanConfig(
 	conf *roachpb.SpanConfig, interner *stringInterner,
 ) (*normalizedSpanConfig, error) {
@@ -263,9 +345,16 @@ func makeNormalizedSpanConfig(
 		leasePreferences: lps,
 		interner:         interner,
 	}
-	return doStructuralNormalization(nConf)
+	err = doStructuralNormalization(nConf)
+	return nConf, err
 }
 
+// normalizeConstraints normalizes and interns the given constraints. Every
+// internedConstraintsConjunction has numReplicas > 0, and the sum of these
+// equals the parameter numReplicas.
+//
+// It returns an error if the input constraints don't satisfy the requirements
+// documented in roachpb.SpanConfig related to NumReplicas.
 func normalizeConstraints(
 	constraints []roachpb.ConstraintsConjunction, numReplicas int32, interner *stringInterner,
 ) ([]internedConstraintsConjunction, error) {
@@ -322,13 +411,14 @@ func normalizeConstraints(
 // "strictness" comment in roachpb.SpanConfig which now requires users to
 // repeat the information).
 //
-// This function does some structural normalization even when returning an
-// error. See the under-specified voter constraint examples in the datadriven
-// test -- we sometimes see these in production settings, and we want to fix
-// ones that we can, and raise an error for users to fix their configs.
-func doStructuralNormalization(conf *normalizedSpanConfig) (*normalizedSpanConfig, error) {
+// This function mutates the conf argument. It does some structural
+// normalization even when returning an error. See the under-specified voter
+// constraint examples in the datadriven test -- we sometimes see these in
+// production settings, and we want to fix ones that we can, and raise an
+// error for users to fix their configs.
+func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	if len(conf.constraints) == 0 || len(conf.voterConstraints) == 0 {
-		return conf, nil
+		return nil
 	}
 	// Relationships between each voter constraint and each all replica
 	// constraint.
@@ -359,9 +449,25 @@ func doStructuralNormalization(conf *normalizedSpanConfig) (*normalizedSpanConfi
 	slices.SortFunc(rels, func(a, b relationshipVoterAndAll) int {
 		return cmp.Compare(a.voterAndAllRel, b.voterAndAllRel)
 	})
-	// First are the intersecting constraints, which cause an error.
+	// First are the intersecting constraints, which cause an error (though we
+	// proceed with normalization). This is because when there are both shared
+	// and non shared conjuncts, we cannot be certain that the conjunctions are
+	// non-intersecting. When the conjunctions are intersecting, we cannot
+	// promote from one to the other to fill out the set of conjunctions.
+	//
+	// Example 1: +region=a,+zone=a1 and +region=a,+zone=a2 are classified as
+	// conjPossiblyIntersecting, but we could do better in knowing that the
+	// conjunctions are non-intersecting since zone=a1 and zone=a2 are disjoint.
+	//
+	// TODO(sumeer): improve the case of example 1.
+	//
+	// Example 2: +region=a,+zone=a1 and +region=a,-zone=a2 are classified as
+	// conjPossiblyIntersecting. And if there happens to be a zone=a3 in the
+	// region, they are actually intersecting. We cannot do better since we
+	// don't know the semantics of regions, zones or the universe of possible
+	// values of the zone.
 	index := 0
-	for rels[index].voterAndAllRel == conjIntersecting {
+	for rels[index].voterAndAllRel == conjPossiblyIntersecting {
 		index++
 	}
 	var err error
@@ -583,9 +689,9 @@ func doStructuralNormalization(conf *normalizedSpanConfig) (*normalizedSpanConfi
 		slices.SortFunc(rels, func(a, b relationshipVoterAndAll) int {
 			return cmp.Compare(a.voterAndAllRel, b.voterAndAllRel)
 		})
-		// Ignore conjIntersecting.
+		// Ignore conjPossiblyIntersecting.
 		index = 0
-		for rels[index].voterAndAllRel == conjIntersecting {
+		for rels[index].voterAndAllRel == conjPossiblyIntersecting {
 			index++
 		}
 		voterConstraintHasEqualityWithConstraint := make([]bool, len(conf.voterConstraints))
@@ -647,7 +753,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) (*normalizedSpanConfi
 		}
 	}
 
-	return conf, err
+	return err
 }
 
 type replicaKindIndex int32
