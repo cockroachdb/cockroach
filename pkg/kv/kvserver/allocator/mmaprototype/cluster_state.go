@@ -1654,8 +1654,18 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		if rangeMsg.MaybeSpanConfIsPopulated {
 			normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.MaybeSpanConf, cs.constraintMatcher.interner)
 			if err != nil {
-				// TODO(kvoli): Should we log as a warning here, or return further back out?
-				panic(err)
+				if normSpanConfig == nil {
+					// TODO: the roachpb.SpanConfig violated the basic requirements
+					// documented in the proto. We need to ensure that the checks that
+					// happened here are also done when the user set the ZoneConfig, so
+					// that we can reject such violations up front. At this point in the
+					// code we have no way of continuing, so we panic, but we must ensure
+					// we never get here in production for user specified input.
+					panic(err)
+				} else {
+					log.KvDistribution.Warningf(
+						ctx, "range r%v span config had errors in normalization: %v", rangeMsg.RangeID, err)
+				}
 			}
 			rs.conf = normSpanConfig
 		}

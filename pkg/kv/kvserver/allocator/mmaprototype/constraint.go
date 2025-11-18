@@ -135,6 +135,10 @@ type conjunctionRelationship int
 // what stores actually match. It simply assumes that if two conjuncts are not
 // equal their sets are non-overlapping. This simplifying assumption is made
 // since we are only trying to do a best-effort structural normalization.
+//
+// NB: conjIntersecting does not mean that the sets representing the
+// conjunctions are intersecting. It means that some conjuncts are shared, and
+// some are not. And conjNonIntersecting means that no conjuncts are shared.
 const (
 	conjIntersecting conjunctionRelationship = iota
 	conjEqualSet
@@ -220,6 +224,19 @@ type internedLeasePreference struct {
 // SpanConfig for which we don't have a normalized value. The rest of the
 // allocator code works with normalizedSpanConfig. Due to the infrequent
 // nature of this, we don't attempt to reduce memory allocations.
+//
+// It does:
+//
+//   - Basic normalization of the constraints and voterConstraints, to specify
+//     the number of replicas for every constraints conjunction, and ensure that
+//     the sum adds up to the required number of replicas. These are
+//     requirements documented in roachpb.SpanConfig. If this basic
+//     normalization fails, it returns a nil normalizedSpanConfig and an error.
+//
+//   - Structural normalization: see comment in doStructuralNormalization. An
+//     error in this step causes it to return a non-nil normalizedSpanConfig,
+//     with an error, so that the error can be surfaced somehow while keeping
+//     the system running.
 func makeNormalizedSpanConfig(
 	conf *roachpb.SpanConfig, interner *stringInterner,
 ) (*normalizedSpanConfig, error) {
@@ -263,9 +280,16 @@ func makeNormalizedSpanConfig(
 		leasePreferences: lps,
 		interner:         interner,
 	}
-	return doStructuralNormalization(nConf)
+	err = doStructuralNormalization(nConf)
+	return nConf, err
 }
 
+// normalizeConstraints normalizes and interns the given constraints. Every
+// internedConstraintsConjunction has numReplicas > 0, and the sum of these
+// equals the parameter numReplicas.
+//
+// It returns an error if the input constraints don't satisfy the requirements
+// documented in roachpb.SpanConfig related to NumReplicas.
 func normalizeConstraints(
 	constraints []roachpb.ConstraintsConjunction, numReplicas int32, interner *stringInterner,
 ) ([]internedConstraintsConjunction, error) {
@@ -322,13 +346,14 @@ func normalizeConstraints(
 // "strictness" comment in roachpb.SpanConfig which now requires users to
 // repeat the information).
 //
-// This function does some structural normalization even when returning an
-// error. See the under-specified voter constraint examples in the datadriven
-// test -- we sometimes see these in production settings, and we want to fix
-// ones that we can, and raise an error for users to fix their configs.
-func doStructuralNormalization(conf *normalizedSpanConfig) (*normalizedSpanConfig, error) {
+// This function mutates the conf argument. It does some structural
+// normalization even when returning an error. See the under-specified voter
+// constraint examples in the datadriven test -- we sometimes see these in
+// production settings, and we want to fix ones that we can, and raise an
+// error for users to fix their configs.
+func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	if len(conf.constraints) == 0 || len(conf.voterConstraints) == 0 {
-		return conf, nil
+		return nil
 	}
 	// Relationships between each voter constraint and each all replica
 	// constraint.
@@ -359,7 +384,23 @@ func doStructuralNormalization(conf *normalizedSpanConfig) (*normalizedSpanConfi
 	slices.SortFunc(rels, func(a, b relationshipVoterAndAll) int {
 		return cmp.Compare(a.voterAndAllRel, b.voterAndAllRel)
 	})
-	// First are the intersecting constraints, which cause an error.
+	// First are the intersecting constraints, which cause an error (though we
+	// proceed with normalization). This is because when there are both shared
+	// and non shared conjuncts, we cannot be certain that the conjunctions are
+	// non-intersecting. When the conjunctions are intersecting, we cannot
+	// promote from one to the other to fill out the set of conjunctions.
+	//
+	// Example 1: +region=a,+zone=a1 and +region=a,+zone=a2 are classified as
+	// conjIntersecting, but we could do better in knowing that the conjunctions
+	// are non-intersecting since zone=a1 and zone=a2 are disjoint.
+	//
+	// TODO(sumeer): improve the case of example 1.
+	//
+	// Example 2: +region=a,+zone=a1 and +region=a,-zone=a2 are classified as
+	// conjIntersecting. And if there happens to be a zone=a3 in the region,
+	// they are actually intersecting. We cannot do better since we don't know
+	// the semantics of regions, zones or the universe of possible values of the
+	// zone.
 	index := 0
 	for rels[index].voterAndAllRel == conjIntersecting {
 		index++
@@ -647,7 +688,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) (*normalizedSpanConfi
 		}
 	}
 
-	return conf, err
+	return err
 }
 
 type replicaKindIndex int32
