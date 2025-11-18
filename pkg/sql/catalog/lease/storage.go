@@ -88,6 +88,7 @@ type leaseFields struct {
 type writer interface {
 	deleteLease(context.Context, *kv.Txn, leaseFields) error
 	insertLease(context.Context, *kv.Txn, leaseFields) error
+	insertLeases(context.Context, *kv.Txn, []leaseFields) error
 }
 
 // LeaseRenewalDuration controls the default time before a lease expires when
@@ -122,23 +123,24 @@ func (s storage) crossValidateDuringRenewal() bool {
 	return LeaseRenewalCrossValidate.Get(&s.settings.SV)
 }
 
-// acquire a lease on the most recent version of a descriptor. The lease is tied
-// to the provided sqlliveness.Session. If a newer version (then lastVersion) of
-// the descriptor exists, this function will attempt to acquire a lease on it.
-// If no newer version exists, it returns a nil descriptor. If the lease cannot
-// be obtained because the descriptor is being dropped or is offline (currently
-// only applicable to tables), an inactiveTableError is returned.
-func (s storage) acquire(
+// acquireBatchResult is the result of a batch acquire operation.
+type acquireBatchResult struct {
+	descs []catalog.Descriptor
+	errs  []error
+}
+
+func (s storage) acquireBatch(
 	ctx context.Context,
 	session sqlliveness.Session,
-	id descpb.ID,
-	lastVersion descpb.DescriptorVersion,
-	lastSessionID sqlliveness.SessionID,
-) (desc catalog.Descriptor, prefix []byte, _ error) {
+	ids []descpb.ID,
+	lastVersions []descpb.DescriptorVersion,
+	lastSessionIDs []sqlliveness.SessionID,
+) (result acquireBatchResult, prefix []byte, err error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	prefix = s.getRegionPrefix()
 	var sessionID []byte
 	acquireInTxn := func(ctx context.Context, txn *kv.Txn) (err error) {
+		result.errs = make([]error, len(ids))
 		// Run the descriptor read as high-priority, thereby pushing any intents out
 		// of its way. We don't want schema changes to prevent lease acquisitions;
 		// we'd rather force them to refresh. Also this prevents deadlocks in cases
@@ -158,51 +160,80 @@ func (s storage) acquire(
 		// Note that the expiration is part of the primary key in the table, so we
 		// would not overwrite the old entry if we just were to do another insert.
 		// repeatIteration = desc != nil
-		if sessionID != nil && desc != nil {
-			if err := s.writer.deleteLease(ctx, txn, leaseFields{
-				regionPrefix: prefix,
-				descID:       desc.GetID(),
-				version:      desc.GetVersion(),
-				instanceID:   instanceID,
-				sessionID:    sessionID,
-			}); err != nil {
-				return errors.Wrap(err, "deleting ambiguously created lease")
+		if sessionID != nil && result.descs != nil {
+			for _, desc := range result.descs {
+				// Skip descriptors that had no leases inserted.
+				if desc == nil {
+					continue
+				}
+				if err := s.writer.deleteLease(ctx, txn, leaseFields{
+					regionPrefix: prefix,
+					descID:       desc.GetID(),
+					version:      desc.GetVersion(),
+					instanceID:   instanceID,
+					sessionID:    sessionID,
+				}); err != nil {
+					return errors.Wrap(err, "deleting ambiguously created lease")
+				}
 			}
 		}
 
 		// Read into a temporary variable in case our read runs into
 		// any retryable error. If we run into an error then the delete
 		// above may need to be executed again.
-		latestDesc, err := s.mustGetDescriptorByID(ctx, txn, id)
-
+		const isDescriptorRequired = false
+		latestDescs, err := s.mustGetDescriptorByIDs(ctx, txn, ids, isDescriptorRequired)
 		if err != nil {
 			return err
 		}
+		numDescriptorsToInsert := 0
 		// If the descriptor version hasn't changed, then no new lease to be
 		// inserted unless the session ID has changed on us. No descriptor will
 		// be set indicating to the caller that no new version exists.
-		if latestDesc.GetVersion() == lastVersion &&
-			lastSessionID == session.ID() {
+		for idx, latestDesc := range latestDescs {
+			if latestDesc == nil {
+				// The descriptor was not found.
+				result.errs[idx] = catalog.NewDescriptorNotFoundError(ids[idx])
+				continue
+			}
+			if lastVersions[idx] == latestDesc.GetVersion() &&
+				lastSessionIDs[idx] == session.ID() {
+				latestDescs[idx] = nil
+				continue
+			}
+			if err := catalog.FilterAddingDescriptor(latestDesc); err != nil {
+				result.errs[idx] = err
+				latestDescs[idx] = nil
+				continue
+			}
+			if err := catalog.FilterDroppedDescriptor(latestDesc); err != nil {
+				result.errs[idx] = err
+				latestDescs[idx] = nil
+				continue
+			}
+			numDescriptorsToInsert += 1
+		}
+		result.descs = latestDescs
+		if numDescriptorsToInsert == 0 {
 			return nil
 		}
-		desc = latestDesc
-		if err := catalog.FilterAddingDescriptor(desc); err != nil {
-			return err
-		}
-		if err := catalog.FilterDroppedDescriptor(desc); err != nil {
-			return err
-		}
-		log.VEventf(ctx, 2, "storage attempting to acquire lease %v", desc)
-
 		sessionID = session.ID().UnsafeBytes()
-		lf := leaseFields{
-			regionPrefix: prefix,
-			descID:       desc.GetID(),
-			version:      desc.GetVersion(),
-			instanceID:   s.nodeIDContainer.SQLInstanceID(),
-			sessionID:    sessionID,
+		leasesToInsert := make([]leaseFields, 0, numDescriptorsToInsert)
+		for _, desc := range latestDescs {
+			if desc == nil {
+				continue
+			}
+			lf := leaseFields{
+				regionPrefix: prefix,
+				descID:       desc.GetID(),
+				version:      desc.GetVersion(),
+				instanceID:   s.nodeIDContainer.SQLInstanceID(),
+				sessionID:    sessionID,
+			}
+			leasesToInsert = append(leasesToInsert, lf)
+			log.VEventf(ctx, 2, "storage attempting to acquire lease %v", desc)
 		}
-		return s.writer.insertLease(ctx, txn, lf)
+		return s.writer.insertLeases(ctx, txn, leasesToInsert)
 	}
 
 	// Compute the maximum time we will retry ambiguous replica errors before
@@ -238,28 +269,49 @@ func (s storage) acquire(
 				s.livenessProvider.PauseLivenessHeartbeat(ctx)
 				extensionsBlocked = true
 			}
-			log.Dev.Infof(ctx, "retryable replica error occurred during lease acquisition for %v, retrying: %v", id, err)
+			log.Dev.Infof(ctx, "retryable replica error occurred during lease acquisition for %v, retrying: %v", ids, err)
 			continue
 		case pgerror.GetPGCode(err) == pgcode.UniqueViolation:
 			log.Dev.Infof(ctx, "uniqueness violation occurred due to concurrent lease"+
-				" removal for %v, retrying: %v", id, err)
+				" removal for %v, retrying: %v", ids, err)
 			continue
 		case err != nil:
-			return nil, nil, err
+			return acquireBatchResult{}, nil, err
 		}
-		// If desc is nil then no new descriptor was available to be leased.
-		// i.e. the last version we leased is the latest and still held
-		if desc == nil {
-			return nil, nil, nil
+		for _, desc := range result.descs {
+			// No lease is needed for this descriptor.
+			if desc == nil {
+				continue
+			}
+			log.VEventf(ctx, 2, "storage acquired lease %v", desc)
+			if s.testingKnobs.LeaseAcquiredEvent != nil {
+				s.testingKnobs.LeaseAcquiredEvent(desc, err)
+			}
+			s.outstandingLeases.Inc(1)
 		}
-		log.VEventf(ctx, 2, "storage acquired lease %v", desc)
-		if s.testingKnobs.LeaseAcquiredEvent != nil {
-			s.testingKnobs.LeaseAcquiredEvent(desc, err)
-		}
-		s.outstandingLeases.Inc(1)
-		return desc, prefix, nil
+		return result, prefix, nil
 	}
-	return nil, nil, ctx.Err()
+	return acquireBatchResult{}, nil, ctx.Err()
+}
+
+// acquire a lease on the most recent version of a descriptor. The lease is tied
+// to the provided sqlliveness.Session. If a newer version (then lastVersion) of
+// the descriptor exists, this function will attempt to acquire a lease on it.
+// If no newer version exists, it returns a nil descriptor. If the lease cannot
+// be obtained because the descriptor is being dropped or is offline (currently
+// only applicable to tables), an inactiveTableError is returned.
+func (s storage) acquire(
+	ctx context.Context,
+	session sqlliveness.Session,
+	id descpb.ID,
+	lastVersion descpb.DescriptorVersion,
+	lastSessionID sqlliveness.SessionID,
+) (desc catalog.Descriptor, prefix []byte, _ error) {
+	batchResult, prefix, err := s.acquireBatch(ctx, session, []descpb.ID{id}, []descpb.DescriptorVersion{lastVersion}, []sqlliveness.SessionID{lastSessionID})
+	if err != nil {
+		return nil, nil, err
+	}
+	return batchResult.descs[0], prefix, batchResult.errs[0]
 }
 
 // Release a previously acquired descriptor. Never let this method
@@ -383,13 +435,29 @@ func (s storage) newCatalogReader(ctx context.Context) catkv.CatalogReader {
 func (s storage) mustGetDescriptorByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.Descriptor, error) {
-	cr := s.newCatalogReader(ctx)
 	const isDescriptorRequired = true
-	c, err := cr.GetByIDs(ctx, txn, []descpb.ID{id}, isDescriptorRequired, catalog.Any)
+	descs, err := s.mustGetDescriptorByIDs(ctx, txn, []descpb.ID{id}, isDescriptorRequired)
 	if err != nil {
 		return nil, err
 	}
-	desc := c.LookupDescriptor(id)
+	return descs[0], nil
+}
+
+// mustGetDescriptorByIDs returns the descriptors for the given ids for
+// batch operations.
+func (s storage) mustGetDescriptorByIDs(
+	ctx context.Context, txn *kv.Txn, ids []descpb.ID, isDescriptorRequired bool,
+) ([]catalog.Descriptor, error) {
+	descs := make([]catalog.Descriptor, 0, len(ids))
+	cr := s.newCatalogReader(ctx)
+	c, err := cr.GetByIDs(ctx, txn, ids, isDescriptorRequired, catalog.Any, catkv.WithDescriptor(true))
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range ids {
+		desc := c.LookupDescriptor(id)
+		descs = append(descs, desc)
+	}
 	validationLevel := catalog.ValidationLevelSelfOnly
 	if s.crossValidateDuringRenewal() {
 		validationLevel = validate.ImmutableRead
@@ -401,12 +469,12 @@ func (s storage) mustGetDescriptorByID(
 		vd,
 		catalog.ValidationReadTelemetry,
 		validationLevel,
-		desc,
+		descs...,
 	)
 	if err := ve.CombinedError(); err != nil {
 		return nil, err
 	}
-	return desc, nil
+	return descs, nil
 }
 
 func (s storage) getRegionPrefix() []byte {
