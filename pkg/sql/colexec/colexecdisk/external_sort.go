@@ -462,10 +462,10 @@ func (s *externalSorter) Next() coldata.Batch {
 			// resources to be properly released in CloseInactiveReadPartitions
 			// call below.
 			if err := s.partitioner.CloseAllOpenReadFileDescriptors(); err != nil {
-				colexecerror.InternalError(err)
+				colexecutils.HandleErrorFromDiskQueue(err)
 			}
 			if err := s.partitioner.CloseInactiveReadPartitions(s.Ctx); err != nil {
-				colexecerror.InternalError(err)
+				colexecutils.HandleErrorFromDiskQueue(err)
 			}
 			s.state = externalSorterNewPartition
 
