@@ -905,7 +905,8 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 			// is only collected for vectorized plans since it is gathered by the
 			// vectorizedStatsCollector operator.
 			// TODO(drewk): lift these restrictions.
-			ob.AddCPUTime(queryStats.CPUTime)
+			ob.AddSQLCPUTime(queryStats.SQLCPUTime)
+			ob.AddKVCPUTime(queryStats.KVCPUTime)
 		}
 		if ih.isTenant && ih.vectorized {
 			// Only output RU estimate if this is a tenant. Additionally, RUs aren't
