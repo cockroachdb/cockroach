@@ -1564,15 +1564,7 @@ func init() {
 	var _ = rac.stateForInit
 	var _ = rac.finishInit
 	var _ = rac.notEnoughVoters
-	var _ = rac.candidatesToConvertFromNonVoterToVoter
-	var _ = rac.constraintsForAddingVoter
 	var _ = rac.notEnoughNonVoters
-	var _ = rac.candidatesToConvertFromVoterToNonVoter
-	var _ = rac.constraintsForAddingNonVoter
-	var _ = rac.candidatesForRoleSwapForConstraints
-	var _ = rac.candidatesToRemove
-	var _ = rac.candidatesVoterConstraintsUnsatisfied
-	var _ = rac.candidatesNonVoterConstraintsUnsatisfied
 	var _ = rac.candidatesToReplaceVoterForRebalance
 	var _ = rac.candidatesToReplaceNonVoterForRebalance
 

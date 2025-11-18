@@ -213,9 +213,3 @@ func (cm *constraintMatcher) constrainStoresForExpr(expr constraintsDisj, set *s
 		}
 	}
 }
-
-// Avoid unused lint errors.
-
-var _ = (&constraintMatcher{}).setStore
-var _ = (&constraintMatcher{}).removeStore
-var _ = (&constraintMatcher{}).checkConsistency
