@@ -41,7 +41,7 @@ sign() {
           --code-signature-flags runtime \
           "darwin-$1/go/bin/$bin"
     done
-    tar cf - -C "darwin-$1" go | gzip -9 > "artifacts/$archive"
+    tar --exclude='.git' -cf - -C "darwin-$1" go | gzip -9 > "artifacts/$archive"
     mkdir staging
     cp "darwin-$1/go/bin/gofmt" staging
     cp "darwin-$1/go/bin/go"    staging
