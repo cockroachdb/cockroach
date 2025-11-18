@@ -189,16 +189,27 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="SSTables"
+      title="File Counts"
       sources={storeSources}
       isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The number of SSTables in use ${tooltipSelection}.`}
+      tooltip={`The number of files in use by type ${tooltipSelection}.`}
       showMetricsInTooltip={true}
     >
-      <Axis label="sstables">
-        {storeMetrics(
-          { name: "cr.store.rocksdb.num-sstables" },
+      <Axis label="files">
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "sstables",
+              name: "cr.store.rocksdb.num-sstables",
+              aggregateMax: true,
+            },
+            {
+              prefix: "blob files",
+              name: "cr.store.storage.value_separation.blob_files.count",
+              aggregateMax: true,
+            },
+          ],
           nodeIDs,
           storeIDsByNodeID,
         )}
