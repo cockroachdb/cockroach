@@ -54,8 +54,10 @@ type batchInfoCollector struct {
 	// ctx is used only by the init() adapter.
 	ctx context.Context
 
-	// batch is the last batch returned by the wrapped operator.
+	// batch and meta is the result of the last call to Next of the wrapped
+	// operator.
 	batch coldata.Batch
+	meta  *execinfrapb.ProducerMetadata
 
 	// rowsAffectedMode is set to indicate that the input is expected to produce
 	// a single batch with a single column with the row count value.
@@ -117,11 +119,11 @@ func (bic *batchInfoCollector) Init(ctx context.Context) {
 }
 
 func (bic *batchInfoCollector) next() {
-	bic.batch = bic.Input.Next()
+	bic.batch, bic.meta = bic.Input.Next()
 }
 
 // Next is part of the colexecop.Operator interface.
-func (bic *batchInfoCollector) Next() coldata.Batch {
+func (bic *batchInfoCollector) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	bic.stopwatch.Start()
 	// Wrap the call to Next() with a panic catcher in order to get the correct
 	// execution time (e.g. in the statement bundle).
@@ -129,6 +131,9 @@ func (bic *batchInfoCollector) Next() coldata.Batch {
 	bic.stopwatch.Stop()
 	if err != nil {
 		colexecerror.InternalError(err)
+	}
+	if bic.meta != nil {
+		return nil, bic.meta
 	}
 	if bic.batch.Length() > 0 {
 		bic.mu.Lock()
@@ -158,7 +163,7 @@ func (bic *batchInfoCollector) Next() coldata.Batch {
 			bic.mu.numTuples += uint64(bic.batch.Length())
 		}
 	}
-	return bic.batch
+	return bic.batch, nil
 }
 
 // finishAndGetStats calculates the final execution statistics for the wrapped
@@ -403,8 +408,8 @@ var _ colexecop.MetadataSource = &statsInvariantChecker{}
 
 func (i *statsInvariantChecker) Init(context.Context) {}
 
-func (i *statsInvariantChecker) Next() coldata.Batch {
-	return coldata.ZeroBatch
+func (i *statsInvariantChecker) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	return coldata.ZeroBatch, nil
 }
 
 func (i *statsInvariantChecker) GetStats() *execinfrapb.ComponentStats {

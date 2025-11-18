@@ -81,14 +81,17 @@ func (i *invariantsChecker) assertInitWasCalled() bool {
 }
 
 // Next implements the colexecop.Operator interface.
-func (i *invariantsChecker) Next() coldata.Batch {
+func (i *invariantsChecker) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if shortCircuit := i.assertInitWasCalled(); shortCircuit {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
-	b := i.Input.Next()
+	b, meta := i.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := b.Length()
 	if n == 0 {
-		return b
+		return b, nil
 	}
 	if sel := b.Selection(); sel != nil {
 		for i := 1; i < n; i++ {
@@ -100,7 +103,7 @@ func (i *invariantsChecker) Next() coldata.Batch {
 			}
 		}
 	}
-	return b
+	return b, nil
 }
 
 // DrainMeta implements the colexecop.MetadataSource interface.

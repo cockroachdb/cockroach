@@ -255,8 +255,8 @@ func NewFeedOperator() *FeedOperator {
 func (FeedOperator) Init(context.Context) {}
 
 // Next implements the colexecop.Operator interface.
-func (o *FeedOperator) Next() coldata.Batch {
-	return o.batch
+func (o *FeedOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	return o.batch, nil
 }
 
 // SetBatch sets the next batch to be returned on Next call.
@@ -467,7 +467,7 @@ func NewNoop(input Operator) ResettableOperator {
 	return &noopOperator{OneInputInitCloserHelper: MakeOneInputInitCloserHelper(input)}
 }
 
-func (n *noopOperator) Next() coldata.Batch {
+func (n *noopOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	return n.Input.Next()
 }
 

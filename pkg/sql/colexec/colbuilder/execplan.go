@@ -244,7 +244,9 @@ var (
 	errNonInnerMergeJoinWithOnExpr    = errors.New("can't plan vectorized non-inner merge joins with ON expressions")
 	errWindowFunctionFilterClause     = errors.New("window functions with FILTER clause are not supported")
 	errDefaultAggregateWindowFunction = errors.New("default aggregate window functions not supported")
-	errStreamIngestionWrap            = errors.New("core.StreamIngestion{Data,Frontier} is not supported because of #55758")
+	// TODO(yuzefovich): #55758 has been resolved, re-evaluate whether it's
+	// worth unskipping stream ingestion processors from being wrapped.
+	errStreamIngestionWrap = errors.New("core.StreamIngestion{Data,Frontier} is not supported because of #55758")
 	// errCoreNotWorthWrapping is a generic error indicating that a processor
 	// core is not worth wrapping into a vectorized flow because this processor
 	// can only be a part of a special flow that doesn't benefit from

@@ -11,6 +11,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -166,7 +168,7 @@ func findSplit(
 // If partialOrder is false, there are no guarantees on input ordering and all
 // input tuples are processed before emitting any data.
 // execgen:template<partialOrder>
-func getNext(op *hashAggregator, partialOrder bool) coldata.Batch {
+func getNext(op *hashAggregator, partialOrder bool) (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
 		switch op.state {
 		case hashAggregatorBuffering:
@@ -209,11 +211,15 @@ func getNext(op *hashAggregator, partialOrder bool) coldata.Batch {
 				)
 			}
 
-			op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx = op.Input.Next(), 0
+			var meta *execinfrapb.ProducerMetadata
+			op.bufferingState.pendingBatch, meta = op.Input.Next()
+			if meta != nil {
+				return nil, meta
+			}
 			op.bufferingState.unprocessedIdx = 0
 			if partialOrder {
 				op.distincterInput.SetBatch(op.bufferingState.pendingBatch)
-				op.distincter.Next()
+				colexecop.NextNoMeta(op.distincter)
 			}
 			n := op.bufferingState.pendingBatch.Length()
 			if op.inputTrackingState.tuples != nil {
@@ -378,20 +384,20 @@ func getNext(op *hashAggregator, partialOrder bool) coldata.Batch {
 				}
 			}
 			op.output.SetLength(curOutputIdx)
-			return op.output
+			return op.output, nil
 
 		case hashAggregatorDone:
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("hash aggregator in unhandled state"))
 			// This code is unreachable, but the compiler cannot infer that.
-			return nil
+			return nil, nil
 		}
 	}
 }
 
-func (op *hashAggregator) Next() coldata.Batch {
+func (op *hashAggregator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if len(op.spec.OrderedGroupCols) > 0 {
 		return getNext(op, true)
 	} else {

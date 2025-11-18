@@ -320,7 +320,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Init(ctx context.Context) {
 	// {{end}}
 }
 
-func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
+func (r *_RELATIVE_RANK_STRINGOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	var err error
 	for {
 		switch r.state {
@@ -355,7 +355,10 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 			// This example also shows why we need to use two different queues
 			// (since every partition can have multiple peer groups, the
 			// schedule of "flushing" is different).
-			batch := r.Input.Next()
+			batch, meta := r.Input.Next()
+			if meta != nil {
+				return nil, meta
+			}
 			n := batch.Length()
 			if n == 0 {
 				r.bufferedTuples.Enqueue(r.Ctx, coldata.ZeroBatch)
@@ -572,18 +575,18 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 				// {{end}}
 			}
 			r.output.SetLength(n)
-			return r.output
+			return r.output, nil
 
 		case relativeRankFinished:
 			if err := r.Close(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("percent rank operator in unhandled state"))
 			// This code is unreachable, but the compiler cannot infer that.
-			return nil
+			return nil, nil
 		}
 	}
 }
