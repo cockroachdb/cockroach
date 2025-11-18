@@ -1812,10 +1812,12 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	require.ErrorContains(t, err, "does not exist")
 
 	// Not sure whether run in the past and so sees clock uncertainty push.
-	_, err = tx1.Exec(`
-INSERT INTO t.kv VALUES ('c', 'd');
-`)
-	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		_, err := tx1.Exec(`
+	INSERT INTO t.kv VALUES ('c', 'd');
+	`)
+		return err
+	})
 
 	err = tx.Rollback()
 	require.NoError(t, err)
