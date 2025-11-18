@@ -356,8 +356,10 @@ export default function (props: GraphDashboardProps) {
       <Axis units={AxisUnits.Bytes} label="bytes">
         {[
           "pebble-wal",
+          "pebble-blob-file-rewrite",
           "pebble-compaction",
           "pebble-ingestion",
+          "pebble-manifest",
           "pebble-memtable-flush",
           "raft-snapshot",
           "encryption-registry",
