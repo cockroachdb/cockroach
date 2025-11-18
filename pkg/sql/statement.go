@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
@@ -46,7 +45,7 @@ type Statement struct {
 	// Hints are any external statement hints from the system.statement_hints
 	// table that could apply to this statement, based on the statement
 	// fingerprint.
-	Hints []hintpb.StatementHintUnion
+	Hints []hints.Hint
 
 	// HintIDs are the IDs of any external statement hints, which are used for
 	// invalidation of cached plans.
@@ -133,7 +132,7 @@ func (s Statement) String() string {
 func (s *Statement) ReloadHintsIfStale(
 	ctx context.Context, fmtFlags tree.FmtFlags, statementHintsCache *hints.StatementHintsCache,
 ) bool {
-	var hints []hintpb.StatementHintUnion
+	var hints []hints.Hint
 	var hintIDs []int64
 	var hintsGeneration int64
 	if statementHintsCache != nil {
@@ -154,7 +153,7 @@ func (s *Statement) ReloadHintsIfStale(
 		case *tree.Prepare:
 			hintStmtFingerprint = tree.FormatStatementHideConstants(e.Statement, fmtFlags)
 		}
-		hints, hintIDs = statementHintsCache.MaybeGetStatementHints(ctx, hintStmtFingerprint)
+		hints, hintIDs = statementHintsCache.MaybeGetStatementHints(ctx, hintStmtFingerprint, fmtFlags)
 	}
 	if slices.Equal(hintIDs, s.HintIDs) {
 		return false

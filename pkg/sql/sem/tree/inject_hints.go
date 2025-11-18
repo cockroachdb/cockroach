@@ -7,6 +7,7 @@ package tree
 
 import (
 	"reflect"
+	"unsafe"
 
 	"github.com/cockroachdb/errors"
 )
@@ -364,4 +365,22 @@ func (hd *HintInjectionDonor) InjectHints(stmt Statement) (Statement, bool, erro
 		return stmt, false, nil
 	}
 	return newStmt, true, nil
+}
+
+// Size returns an estimate of the memory usage of the HintInjectionDonor in
+// bytes.
+func (hd *HintInjectionDonor) Size() int64 {
+	res := int64(unsafe.Sizeof(*hd))
+
+	res += int64(len(hd.validationSQL))
+
+	// We don't have a good way of estimating the size of the AST. Just assume
+	// it's a small multiple of the string length.
+	res += 2 * int64(len(hd.validationSQL))
+
+	// The walk should be pointing to AST nodes already accounted for, so just add
+	// the slice elements.
+	res += int64(len(hd.walk)) * int64(unsafe.Sizeof(any(nil)))
+
+	return res
 }
