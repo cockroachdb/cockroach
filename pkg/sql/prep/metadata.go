@@ -9,7 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -44,7 +44,7 @@ type Metadata struct {
 	// Hints are any external statement hints from the system.statement_hints
 	// table that could apply to this statement, based on the statement
 	// fingerprint.
-	Hints []hintpb.StatementHintUnion
+	Hints []hints.Hint
 
 	// HintIDs are the IDs of any external statement hints, which are used for
 	// invalidation of cached plans.
