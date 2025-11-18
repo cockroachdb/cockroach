@@ -703,9 +703,9 @@ func sortTargetCandidateSetAndPick(
 	return cands.candidates[j].StoreID
 }
 
-func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) bool {
+func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
 	if rstate.constraints != nil {
-		return true
+		return
 	}
 	// Populate the constraints.
 	rac := newRangeAnalyzedConstraints()
@@ -721,13 +721,16 @@ func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) bool {
 	if leaseholder < 0 {
 		// Very dubious why the leaseholder (which must be a local store since there
 		// are no pending changes) is not known.
-		// TODO(sumeer): log an error.
 		releaseRangeAnalyzedConstraints(rac)
-		return false
+		// Possible that we are observing stale state where we've transferred the
+		// lease away but have not yet received a StoreLeaseholderMsg indicating
+		// that there is a new leaseholder (and thus should drop this range).
+		// However, even in this case, replica.IsLeaseholder should still be there
+		// based on to the stale state, so this should still be impossible to hit.
+		panic(errors.AssertionFailedf("no leaseholders found in %v", rstate.replicas))
 	}
 	rac.finishInit(rstate.conf, cs.constraintMatcher, leaseholder)
 	rstate.constraints = rac
-	return true
 }
 
 // Consider the core logic for a change, rebalancing or recovery.
