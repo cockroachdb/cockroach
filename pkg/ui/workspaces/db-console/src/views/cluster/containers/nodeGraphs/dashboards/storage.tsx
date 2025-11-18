@@ -19,7 +19,7 @@ import {
   nodeDisplayName,
   storeIDsForNode,
 } from "./dashboardUtils";
-import { storeMetrics } from "./storeUtils";
+import { multipleStoreMetrics, storeMetrics } from "./storeUtils";
 
 export default function (props: GraphDashboardProps) {
   const {
@@ -103,20 +103,34 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Log Commit Latency: 99th Percentile"
+      title="Log Commit Latency"
       sources={storeSources}
       isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The 99th %ile latency for commits to the Raft Log. This measures
-          essentially an fdatasync to the storage engine's write-ahead log.`}
+      tooltip={`The latency for commits to the Raft Log. This is typically
+          dominated by the latency of an fdatasync to the storage engine's
+          write-ahead log.`}
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {storeMetrics(
-          {
-            name: "cr.store.raft.process.logcommit.latency-p99",
-            aggregateMax: true,
-          },
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "p99.9",
+              name: "cr.store.raft.process.logcommit.latency-p99.9",
+              aggregateMax: true,
+            },
+            {
+              prefix: "p99",
+              name: "cr.store.raft.process.logcommit.latency-p99",
+              aggregateMax: true,
+            },
+            {
+              prefix: "p50",
+              name: "cr.store.raft.process.logcommit.latency-p50",
+              aggregateMax: true,
+            },
+          ],
           nodeIDs,
           storeIDsByNodeID,
         )}
@@ -124,64 +138,29 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Log Commit Latency: 50th Percentile"
+      title="Command Commit Latency"
       sources={storeSources}
       isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The 50th %ile latency for commits to the Raft Log. This measures
-          essentially an fdatasync to the storage engine's write-ahead log.`}
-      showMetricsInTooltip={true}
-    >
-      <Axis units={AxisUnits.Duration} label="latency">
-        {storeMetrics(
-          {
-            name: "cr.store.raft.process.logcommit.latency-p50",
-            aggregateMax: true,
-          },
-          nodeIDs,
-          storeIDsByNodeID,
-        )}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Command Commit Latency: 99th Percentile"
-      sources={storeSources}
-      isKvGraph={true}
-      tenantSource={tenantSource}
-      tooltip={`The 99th %ile latency for commits of Raft commands. This measures
+      tooltip={`The latency for commits of Raft commands. This measures
           applying a batch to the storage engine (including writes to the
           write-ahead log), but no fsync.`}
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {storeMetrics(
-          {
-            name: "cr.store.raft.process.commandcommit.latency-p99",
-            aggregateMax: true,
-          },
-          nodeIDs,
-          storeIDsByNodeID,
-        )}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Command Commit Latency: 50th Percentile"
-      sources={storeSources}
-      isKvGraph={true}
-      tenantSource={tenantSource}
-      tooltip={`The 50th %ile latency for commits of Raft commands. This measures
-          applying a batch to the storage engine (including writes to the
-          write-ahead log), but no fsync.`}
-      showMetricsInTooltip={true}
-    >
-      <Axis units={AxisUnits.Duration} label="latency">
-        {storeMetrics(
-          {
-            name: "cr.store.raft.process.commandcommit.latency-p50",
-            aggregateMax: true,
-          },
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "p99",
+              name: "cr.store.raft.process.commandcommit.latency-p99",
+              aggregateMax: true,
+            },
+            {
+              prefix: "p50",
+              name: "cr.store.raft.process.commandcommit.latency-p50",
+              aggregateMax: true,
+            },
+          ],
           nodeIDs,
           storeIDsByNodeID,
         )}
@@ -210,16 +189,27 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="SSTables"
+      title="File Counts"
       sources={storeSources}
       isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The number of SSTables in use ${tooltipSelection}.`}
+      tooltip={`The number of files in use by type ${tooltipSelection}.`}
       showMetricsInTooltip={true}
     >
-      <Axis label="sstables">
-        {storeMetrics(
-          { name: "cr.store.rocksdb.num-sstables" },
+      <Axis label="files">
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "sstables",
+              name: "cr.store.rocksdb.num-sstables",
+              aggregateMax: true,
+            },
+            {
+              prefix: "blob files",
+              name: "cr.store.storage.value_separation.blob_files.count",
+              aggregateMax: true,
+            },
+          ],
           nodeIDs,
           storeIDsByNodeID,
         )}
@@ -257,21 +247,6 @@ export default function (props: GraphDashboardProps) {
           nodeIDs,
           storeIDsByNodeID,
         )}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="File Descriptors"
-      sources={nodeSources}
-      isKvGraph={true}
-      tenantSource={tenantSource}
-      tooltip={`The number of open file descriptors ${tooltipSelection}, compared with
-          the file descriptor limit.`}
-      showMetricsInTooltip={true}
-    >
-      <Axis label="descriptors">
-        <Metric name="cr.node.sys.fd.open" title="Open" />
-        <Metric name="cr.node.sys.fd.softlimit" title="Limit" />
       </Axis>
     </LineGraph>,
 
@@ -375,6 +350,218 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Disk Write Breakdown"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={
+        <div>
+          The number of bytes written to disk per second categorized according
+          to the source {tooltipSelection}.
+          <br />
+          See the "Hardware" dashboard to view an aggregate of all disk writes.
+        </div>
+      }
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {[
+          "pebble-wal",
+          "pebble-blob-file-rewrite",
+          "pebble-compaction",
+          "pebble-ingestion",
+          "pebble-manifest",
+          "pebble-memtable-flush",
+          "raft-snapshot",
+          "encryption-registry",
+          "crdb-log",
+          "sql-row-spill",
+          "sql-col-spill",
+        ].map(category =>
+          map(nodeIDs, nid => (
+            <Metric
+              key={category + "-" + nid}
+              name={`cr.store.storage.category-${category}.bytes-written`}
+              title={category + "-" + getNodeNameById(nid)}
+              sources={storeIDsForNode(storeIDsByNodeID, nid)}
+              nonNegativeRate
+            />
+          )),
+        )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Store Disk Write Bytes/s"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={
+        <div>
+          The number of bytes written to the store's disk per second{" "}
+          {tooltipSelection} (as reported by the OS).
+        </div>
+      }
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {storeMetrics(
+          {
+            name: "cr.store.storage.disk.write.bytes",
+            nonNegativeRate: true,
+          },
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Iterator Block Bytes"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={
+        <div>
+          The number of bytes of blocks loaded by iterators categorized
+          according to the source {tooltipSelection}. These sums include blocks
+          loaded from the block cache, blocks loaded from OS page cache and
+          blocks loaded from disk.
+          <br />
+          See the "Hardware" dashboard to view an aggregate of all disk reads.
+        </div>
+      }
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {multipleStoreMetrics(
+          [
+            "abort-span",
+            "backup",
+            "batch-eval",
+            "crdb-unknown",
+            "intent-resolution",
+            "mvcc-gc",
+            "pebble-compaction",
+            "pebble-get",
+            "pebble-ingest",
+            "range-snap",
+            "rangefeed",
+            "replication",
+            "scan-background",
+            "scan-regular",
+            "unknown",
+          ].map(category => ({
+            prefix: category,
+            name:
+              `cr.store.storage.iterator.category-` +
+              category +
+              `.block-load.bytes`,
+            nonNegativeRate: true,
+          })),
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Store Disk Read Bytes/s"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={
+        <div>
+          The number of bytes read from the store's disk per second{" "}
+          {tooltipSelection} (as reported by the OS).
+        </div>
+      }
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {storeMetrics(
+          {
+            name: "cr.store.storage.disk.read.bytes",
+            nonNegativeRate: true,
+          },
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Value Separated Bytes"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={
+        <div>
+          The volume of bytes stored separated from keys, externally in blob
+          files.
+        </div>
+      }
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "referenced",
+              name: "cr.store.storage.value_separation.value_bytes.referenced",
+              aggregateMax: true,
+            },
+            {
+              prefix: "unreferenced",
+              name: "cr.store.storage.value_separation.value_bytes.unreferenced",
+              aggregateMax: true,
+            },
+          ],
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Blob File Sizes"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={
+        <div>
+          The aggregate physical size of blob files storing separated values.
+        </div>
+      }
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {storeMetrics(
+          {
+            name: "cr.store.storage.value_separation.blob_files.size",
+          },
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="File Descriptors"
+      sources={nodeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={`The number of open file descriptors ${tooltipSelection}, compared with
+          the file descriptor limit.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="descriptors">
+        <Metric name="cr.node.sys.fd.open" title="Open" />
+        <Metric name="cr.node.sys.fd.softlimit" title="Limit" />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Time Series Writes"
       sources={nodeSources}
       isKvGraph={true}
@@ -424,96 +611,6 @@ export default function (props: GraphDashboardProps) {
           title="Bytes Written"
           nonNegativeRate
         />
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Disk Write Breakdown"
-      sources={storeSources}
-      isKvGraph={true}
-      tenantSource={tenantSource}
-      tooltip={
-        <div>
-          The number of bytes written to disk per second categorized according
-          to the source {tooltipSelection}.
-          <br />
-          See the "Hardware" dashboard to view an aggregate of all disk writes.
-        </div>
-      }
-      showMetricsInTooltip={true}
-    >
-      <Axis units={AxisUnits.Bytes} label="bytes">
-        {[
-          "pebble-wal",
-          "pebble-compaction",
-          "pebble-ingestion",
-          "pebble-memtable-flush",
-          "raft-snapshot",
-          "encryption-registry",
-          "crdb-log",
-          "sql-row-spill",
-          "sql-col-spill",
-        ].map(category =>
-          map(nodeIDs, nid => (
-            <Metric
-              key={category + "-" + nid}
-              name={`cr.store.storage.category-${category}.bytes-written`}
-              title={category + "-" + getNodeNameById(nid)}
-              sources={storeIDsForNode(storeIDsByNodeID, nid)}
-              nonNegativeRate
-            />
-          )),
-        )}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Store Disk Write Bytes/s"
-      sources={storeSources}
-      isKvGraph={true}
-      tenantSource={tenantSource}
-      tooltip={
-        <div>
-          The number of bytes written to the store's disk per second{" "}
-          {tooltipSelection} (as reported by the OS).
-        </div>
-      }
-      showMetricsInTooltip={true}
-    >
-      <Axis units={AxisUnits.Bytes} label="bytes">
-        {storeMetrics(
-          {
-            name: "cr.store.storage.disk.write.bytes",
-            nonNegativeRate: true,
-          },
-          nodeIDs,
-          storeIDsByNodeID,
-        )}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Store Disk Read Bytes/s"
-      sources={storeSources}
-      isKvGraph={true}
-      tenantSource={tenantSource}
-      tooltip={
-        <div>
-          The number of bytes read from the store's disk per second{" "}
-          {tooltipSelection} (as reported by the OS).
-        </div>
-      }
-      showMetricsInTooltip={true}
-    >
-      <Axis units={AxisUnits.Bytes} label="bytes">
-        {storeMetrics(
-          {
-            name: "cr.store.storage.disk.read.bytes",
-            nonNegativeRate: true,
-          },
-          nodeIDs,
-          storeIDsByNodeID,
-        )}
       </Axis>
     </LineGraph>,
   ];
