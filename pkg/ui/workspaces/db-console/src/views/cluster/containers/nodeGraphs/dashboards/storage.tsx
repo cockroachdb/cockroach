@@ -19,7 +19,7 @@ import {
   nodeDisplayName,
   storeIDsForNode,
 } from "./dashboardUtils";
-import { storeMetrics } from "./storeUtils";
+import { multipleStoreMetrics, storeMetrics } from "./storeUtils";
 
 export default function (props: GraphDashboardProps) {
   const {
@@ -103,20 +103,34 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Log Commit Latency: 99th Percentile"
+      title="Log Commit Latency"
       sources={storeSources}
       isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The 99th %ile latency for commits to the Raft Log. This measures
-          essentially an fdatasync to the storage engine's write-ahead log.`}
+      tooltip={`The latency for commits to the Raft Log. This is typically
+          dominated by the latency of an fdatasync to the storage engine's
+          write-ahead log.`}
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {storeMetrics(
-          {
-            name: "cr.store.raft.process.logcommit.latency-p99",
-            aggregateMax: true,
-          },
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "p99.9",
+              name: "cr.store.raft.process.logcommit.latency-p99.9",
+              aggregateMax: true,
+            },
+            {
+              prefix: "p99",
+              name: "cr.store.raft.process.logcommit.latency-p99",
+              aggregateMax: true,
+            },
+            {
+              prefix: "p50",
+              name: "cr.store.raft.process.logcommit.latency-p50",
+              aggregateMax: true,
+            },
+          ],
           nodeIDs,
           storeIDsByNodeID,
         )}
@@ -124,64 +138,29 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Log Commit Latency: 50th Percentile"
+      title="Command Commit Latency"
       sources={storeSources}
       isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The 50th %ile latency for commits to the Raft Log. This measures
-          essentially an fdatasync to the storage engine's write-ahead log.`}
-      showMetricsInTooltip={true}
-    >
-      <Axis units={AxisUnits.Duration} label="latency">
-        {storeMetrics(
-          {
-            name: "cr.store.raft.process.logcommit.latency-p50",
-            aggregateMax: true,
-          },
-          nodeIDs,
-          storeIDsByNodeID,
-        )}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Command Commit Latency: 99th Percentile"
-      sources={storeSources}
-      isKvGraph={true}
-      tenantSource={tenantSource}
-      tooltip={`The 99th %ile latency for commits of Raft commands. This measures
+      tooltip={`The latency for commits of Raft commands. This measures
           applying a batch to the storage engine (including writes to the
           write-ahead log), but no fsync.`}
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {storeMetrics(
-          {
-            name: "cr.store.raft.process.commandcommit.latency-p99",
-            aggregateMax: true,
-          },
-          nodeIDs,
-          storeIDsByNodeID,
-        )}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Command Commit Latency: 50th Percentile"
-      sources={storeSources}
-      isKvGraph={true}
-      tenantSource={tenantSource}
-      tooltip={`The 50th %ile latency for commits of Raft commands. This measures
-          applying a batch to the storage engine (including writes to the
-          write-ahead log), but no fsync.`}
-      showMetricsInTooltip={true}
-    >
-      <Axis units={AxisUnits.Duration} label="latency">
-        {storeMetrics(
-          {
-            name: "cr.store.raft.process.commandcommit.latency-p50",
-            aggregateMax: true,
-          },
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "p99",
+              name: "cr.store.raft.process.commandcommit.latency-p99",
+              aggregateMax: true,
+            },
+            {
+              prefix: "p50",
+              name: "cr.store.raft.process.commandcommit.latency-p50",
+              aggregateMax: true,
+            },
+          ],
           nodeIDs,
           storeIDsByNodeID,
         )}

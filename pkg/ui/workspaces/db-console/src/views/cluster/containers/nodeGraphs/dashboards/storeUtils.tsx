@@ -8,6 +8,17 @@ import React from "react";
 import { storeIDsForNode } from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
 import { Metric, MetricProps } from "src/views/shared/components/metricQuery";
 
+type PerStoreMetricProps = MetricProps & {
+  prefix: string;
+};
+
+export const multipleStoreMetrics = (
+  props: PerStoreMetricProps[],
+  nodeIDs: string[],
+  storeIDsByNodeID: { [key: string]: string[] },
+) =>
+  props.flatMap(prop => storeMetrics(prop, nodeIDs, storeIDsByNodeID, prop.prefix));
+
 /**
  * Dynamically shows either the aggregated node-level metric when viewing the
  * cluster-level dashboard, or store-level metrics when viewing a single node.
