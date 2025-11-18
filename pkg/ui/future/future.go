@@ -105,6 +105,7 @@ func init() {
 		"formatNumber":      formatNumberWrapper,
 		"formatPercent":     formatPercentWrapper,
 		"formatElapsedTime": formatElapsedTimeWrapper,
+		"formatTimestamp":   formatTimestampWrapper,
 		"timeNow":           func() time.Time { return timeutil.Now() },
 		"timeSub": func(a, b time.Time) time.Duration {
 			return a.Sub(b)
@@ -172,6 +173,13 @@ func formatElapsedTimeWrapper(val interface{}) string {
 	default:
 		return "unknown"
 	}
+}
+
+func formatTimestampWrapper(val interface{}) string {
+	// Convert nanoseconds to formatted timestamp
+	nanos := toFloat64(val)
+	t := time.Unix(0, int64(nanos))
+	return t.UTC().Format("Jan 2, 2006 at 15:04 MST")
 }
 
 // formatTime formats nanoseconds into human-readable time with appropriate units
@@ -491,6 +499,10 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 	futureRouter.HandleFunc("/ts/query", func(w http.ResponseWriter, r *http.Request) {
 		handleTSQuery(w, r, cfg)
 	}).Methods("POST")
+
+	// Metrics summary and events partials
+	futureRouter.HandleFunc("/metrics/summary", handlerWithCommonData(cfg, handleMetricsSummary)).Methods("GET")
+	futureRouter.HandleFunc("/metrics/events", handlerWithCommonData(cfg, handleMetricsEvents)).Methods("GET")
 
 	// Serve static assets
 	futureRouter.PathPrefix("/assets/").HandlerFunc(handleAssets)
@@ -2564,6 +2576,23 @@ type IndexInfo struct {
 	Recommendation string
 }
 
+// MetricsSummaryData contains data for the metrics summary box
+type MetricsSummaryData struct {
+	TotalNodes        int
+	CapacityUsedStr   string
+	CapacityTotalStr  string
+	CapacityPercent   float64
+	UnavailableRanges int
+	QueriesPerSecond  string
+	P99Latency        float64
+}
+
+// EventData contains information about a cluster event
+type EventData struct {
+	Description string
+	Timestamp   float64 // Nanoseconds since epoch
+}
+
 // fetchJSON makes an HTTP GET request and unmarshals the JSON response
 func fetchJSON(ctx context.Context, url string, target interface{}) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -3043,4 +3072,189 @@ func handleAssets(w http.ResponseWriter, r *http.Request) {
 
 	// Write the file contents
 	_, _ = w.Write(data)
+}
+
+// handleMetricsSummary serves the summary table partial with real-time metrics
+func handleMetricsSummary(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData,
+) {
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Fetch nodes for capacity information
+	nodesResp, err := cfg.Status.NodesUI(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch nodes: %v", err)
+		http.Error(w, "Failed to fetch nodes", http.StatusInternalServerError)
+		return
+	}
+
+	// Calculate capacity totals
+	var capacityUsed, capacityTotal int64
+	var unavailableRanges int
+	totalNodes := len(nodesResp.Nodes)
+
+	for _, node := range nodesResp.Nodes {
+		for _, store := range node.StoreStatuses {
+			capacityUsed += store.Desc.Capacity.Used
+			capacityTotal += store.Desc.Capacity.Capacity
+		}
+	}
+
+	// Fetch problem ranges for unavailable count
+	problemRangesResp, err := cfg.Status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch problem ranges: %v", err)
+	} else {
+		for _, nodeProblems := range problemRangesResp.ProblemsByNodeID {
+			unavailableRanges += len(nodeProblems.UnavailableRangeIDs)
+		}
+	}
+
+	// Query timeseries for queries per second (cr.node.sql.crud_query.count)
+	// and P99 latency (cr.node.sql.service.latency-p99)
+	now := timeutil.Now()
+	endNanos := now.UnixNano()
+	startNanos := now.Add(-10 * time.Second).UnixNano()
+
+	// Build queries for QPS and P99 latency
+	var nodeIDs []string
+	for _, node := range nodesResp.Nodes {
+		nodeIDs = append(nodeIDs, fmt.Sprintf("%d", node.Desc.NodeID))
+	}
+
+	tsReq := &tspb.TimeSeriesQueryRequest{
+		StartNanos: startNanos,
+		EndNanos:   endNanos,
+		Queries: []tspb.Query{
+			{
+				Name:             "cr.node.sql.query.count",
+				Sources:          nodeIDs,
+				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
+				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
+				Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
+			},
+			{
+				Name:             "cr.node.sql.service.latency-p99",
+				Sources:          nodeIDs,
+				Downsampler:      tspb.TimeSeriesQueryAggregator_MAX.Enum(),
+				SourceAggregator: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
+			},
+		},
+	}
+
+	tsResp, err := cfg.TS.Query(ctx, tsReq)
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to query timeseries: %v", err)
+	}
+
+	// Extract QPS and P99 latency from timeseries response
+	var qps, p99Latency float64
+	if tsResp != nil && len(tsResp.Results) >= 2 {
+		// QPS - get the latest datapoint
+		if len(tsResp.Results[0].Datapoints) > 0 {
+			lastDP := tsResp.Results[0].Datapoints[len(tsResp.Results[0].Datapoints)-1]
+			qps = lastDP.Value
+		}
+		// P99 Latency - get the latest datapoint
+		if len(tsResp.Results[1].Datapoints) > 0 {
+			lastDP := tsResp.Results[1].Datapoints[len(tsResp.Results[1].Datapoints)-1]
+			p99Latency = lastDP.Value
+		}
+	}
+
+	// Build summary data
+	summaryData := MetricsSummaryData{
+		TotalNodes:        totalNodes,
+		CapacityUsedStr:   formatBytes(float64(capacityUsed)),
+		CapacityTotalStr:  formatBytes(float64(capacityTotal)),
+		CapacityPercent:   float64(capacityUsed) / float64(capacityTotal),
+		UnavailableRanges: unavailableRanges,
+		QueriesPerSecond:  formatNumber(qps),
+		P99Latency:        p99Latency,
+	}
+
+	// Execute the summary partial template
+	err = templates.ExecuteTemplate(w, "summary_table.html", summaryData)
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleMetricsEvents serves the events list partial with the last 5 events
+func handleMetricsEvents(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData,
+) {
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Fetch events from the Events RPC
+	eventsResp, err := cfg.Admin.Events(ctx, &serverpb.EventsRequest{
+		Limit: 5,
+	})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch events: %v", err)
+		http.Error(w, "Failed to fetch events", http.StatusInternalServerError)
+		return
+	}
+
+	// Convert events to our format
+	var events []EventData
+	for _, event := range eventsResp.Events {
+		// Parse the event info JSON to extract meaningful description
+		var eventInfo map[string]interface{}
+		description := event.EventType
+
+		if err := json.Unmarshal([]byte(event.Info), &eventInfo); err == nil {
+			// Try to build a more readable description based on event type
+			switch event.EventType {
+			case "set_zone_config":
+				if target, ok := eventInfo["Target"].(string); ok {
+					description = "Zone configuration updated for " + target
+				}
+			case "create_index":
+				if indexName, ok := eventInfo["IndexName"].(string); ok {
+					if tableName, ok := eventInfo["TableName"].(string); ok {
+						description = "Created index " + indexName + " on " + tableName
+					}
+				}
+			case "finish_schema_change":
+				description = "Schema change completed"
+			case "drop_index":
+				if indexName, ok := eventInfo["IndexName"].(string); ok {
+					description = "Dropped index " + indexName
+				}
+			case "create_table":
+				if tableName, ok := eventInfo["TableName"].(string); ok {
+					description = "Created table " + tableName
+				}
+			case "drop_table":
+				if tableName, ok := eventInfo["TableName"].(string); ok {
+					description = "Dropped table " + tableName
+				}
+			default:
+				// For unknown event types, just use the event type
+				description = event.EventType
+			}
+		}
+
+		events = append(events, EventData{
+			Description: description,
+			Timestamp:   float64(event.Timestamp.UnixNano()),
+		})
+	}
+
+	// Execute the events partial template
+	err = templates.ExecuteTemplate(w, "events_list.html", struct {
+		Events []EventData
+	}{
+		Events: events,
+	})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
 }

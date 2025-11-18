@@ -57,6 +57,9 @@
   margin-right: var(--gap);
   background-clip: padding-box !important;
 }
+.overflow-wrap\:break-word {
+  overflow-wrap: break-word;
+}
 </style>
 <nav class="breadcrumbs" aria-label="Breadcrumbs">
   <ul>
@@ -64,7 +67,7 @@
     <li class="<h2>">{{.Data.DashboardDisplayName}}</li>
   </ul>
 </nav>
-<div class="box flex-row">
+<div class="box flex-row overflow-x:auto">
   <div>
     <label for="dashboard">Dashboard:</label>
     <select
@@ -136,8 +139,8 @@
     </div>
   </form>
 </div>
-<div class="flex-switch">
-  <div class="flex-grow:2">
+<div class="grid overflow-x:auto">
+  <div data-cols="1 5">
     {{range .Data.Graphs}}
     <figure
       x-data="metricGraph()"
@@ -157,29 +160,19 @@
     </figure>
     {{end}}
   </div>
-  <div class="flex-column padding-block-start crowded">
-    <div class="box info"><strong>New Version Available</strong>
+  <div class="flex-column padding-block-start crowded" data-cols="6">
+    <div class="box info margin-block-start"><strong>New Version Available</strong>
 <p>A new version of CockroachDB is available.</p>
 <a href="https://www.cockroachlabs.com/docs/stable/upgrade-cockroach-version.html">Learn More</a></div>
-    <div class="box">
+    <div class="box" hx-get="/future/metrics/summary" hx-trigger="load, every 10s" hx-swap="innerHTML">
       <h4 class="text-align:center">Summary</h4>
       <dl class="table rows" style="width: auto;">
-        <div><dt>Total Nodes (<a href="/future/overview">View nodes list</a>):</dt><dd>9</dd></div>
-        <div><dt>Capacity Usage: <p><small>You are using 0B of 4.5 GiB usage disk capacity across all nodes.</small></p></dt><dd>0.00%</dd></div>
-        <div><dt>Unavailable Ranges</dt><dd>0</dd></div>
-        <div><dt>Queries per second<p><small>
-Sum of Selects, Updates, Inserts, and Deletes across your entire cluster.</small></p>
-        </dt><dd>31.7</dd></div>
-        <div><dt>P99 latency</dt><dd>14.2 ms</dd></div>
+        <div><dt>Total Nodes (<a href="/future/overview">View nodes list</a>):</dt><dd>Loading...</dd></div>
       </dl>
     </div>
-    <div class="box">
+    <div class="box" hx-get="/future/metrics/events" hx-trigger="load, every 10s" hx-swap="innerHTML">
       <h4 class="text-align:center">Events</h4>
-      <article>
-        Schema Change Completed: Schema change on descriptor 110 was completed.
-<p><small>Nov 18, 2025 at 20:37 UTC</small></p></article><article>
-Schema Change: User root began a schema change to create an index promo_codes_idx_europe_west on table movr.public.promo_codes with ID 1
-<p><small>Nov 18, 2025 at 20:37 UTC</small></p></article>
+      <p><small>Loading...</small></p>
     </div>
   </div>
 </div>
