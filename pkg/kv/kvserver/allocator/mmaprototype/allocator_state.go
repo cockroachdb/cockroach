@@ -262,16 +262,12 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 func (a *allocatorState) AdjustPendingChangeDisposition(change PendingRangeChange, success bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	rs, ok := a.cs.ranges[change.RangeID]
+	_, ok := a.cs.ranges[change.RangeID]
 	if !ok {
 		// Range no longer exists. This can happen if the StoreLeaseholderMsg
 		// which included the effect of the change that transferred the lease away
 		// was already processed, causing the range to no longer be tracked by the
 		// allocator.
-		return
-	}
-	if !success && rs.pendingChangeNoRollback {
-		// Not allowed to undo.
 		return
 	}
 	// NB: It is possible that some of the changes have already been enacted via
@@ -284,6 +280,9 @@ func (a *allocatorState) AdjustPendingChangeDisposition(change PendingRangeChang
 		if !ok {
 			continue
 		}
+		// NB: the ch and c pointers are not identical even though they have the
+		// same changeID. We create two copies in
+		// clusterState.addPendingRangeChange, since the internal copy is mutable.
 		changes = append(changes, ch)
 	}
 	if len(changes) == 0 {
