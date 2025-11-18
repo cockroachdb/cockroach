@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -3839,4 +3841,112 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 	grp.GoCtx(readThreads)
 	grp.GoCtx(modifyThreads)
 	require.NoError(t, grp.Wait())
+}
+
+// BenchmarkLargeDatabaseColdPgClass measures the cold performance for selecting
+// descriptors for the first time in pg_class. When leased descriptors are used,
+// a large number of individual round trips can occur.
+func BenchmarkLargeDatabaseColdPgClass(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	for _, useLeasedDescriptors := range []bool{true, false} {
+		for _, usePrefetch := range []bool{true, false} {
+			// There is no concept of prefetching without leased descriptors.
+			if !useLeasedDescriptors && usePrefetch {
+				continue
+			}
+			const numTables = 8192
+			b.Run(fmt.Sprintf("pg_class/leased_descriptors=%t/use_prefetch=%t/tables=%d", useLeasedDescriptors, usePrefetch, numTables), func(b *testing.B) {
+				ctx := context.Background()
+				s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						DialerKnobs: nodedialer.DialerTestingKnobs{
+							// Disable RPC optimizations for the local case so that there is
+							// more round trip overhead.
+							TestingNoLocalClientOptimization: true,
+						},
+						Server: &server.TestingKnobs{
+							ContextTestingKnobs: rpc.ContextTestingKnobs{
+								// Disable RPC optimizations for the local case so that there is
+								// more round trip overhead.
+								NoLoopbackDialer: true,
+							},
+						},
+					},
+				})
+				sqlConn, err := sqlDB.Conn(ctx)
+				require.NoError(b, err)
+				defer s.Stopper().Stop(ctx)
+				b.ResetTimer()
+				b.StopTimer()
+				tdb := sqlutils.MakeSQLRunner(sqlConn)
+				tdb.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled= %t;", useLeasedDescriptors))
+				tdb.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = %t;", useLeasedDescriptors))
+				tdb.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.prefetch.enabled = %t;", usePrefetch))
+				tdb.Exec(b, fmt.Sprintf(`SELECT crdb_internal.generate_test_objects('{"names":"gen.public.foo","counts":[1,1,%d], "name_gen": {"noise": false}}'::JSONB);`, numTables))
+				tdb.Exec(b, "USE gen_1")
+				// Cold run.
+				b.StartTimer()
+				tdb.Exec(b, "SELECT * FROM pg_class")
+				b.StopTimer()
+			})
+		}
+	}
+}
+
+// BenchmarkLargeDatabaseWarmPgClass measures the warm performance for selecting
+// descriptors for using leased descriptors repeatedly in a bulk fashion.
+func BenchmarkLargeDatabaseWarmPgClass(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	for _, tables := range []int{8192, 16384, 32768} {
+		for _, useLeasedDescriptors := range []bool{true, false} {
+			for _, usePrefetch := range []bool{true, false} {
+				// There is no concept of prefetching without leased descriptors.
+				if !useLeasedDescriptors && usePrefetch {
+					continue
+				}
+				b.Run(fmt.Sprintf("pg_class/leased_descriptors=%t/use_prefetch=%t/tables=%d", useLeasedDescriptors, usePrefetch, tables), func(b *testing.B) {
+					ctx := context.Background()
+					s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{
+						Knobs: base.TestingKnobs{
+							DialerKnobs: nodedialer.DialerTestingKnobs{
+								// Disable RPC optimizations for the local case so that there is
+								// more round trip overhead.
+								TestingNoLocalClientOptimization: true,
+							},
+							Server: &server.TestingKnobs{
+								ContextTestingKnobs: rpc.ContextTestingKnobs{
+									// Disable RPC optimizations for the local case so that there is
+									// more round trip overhead.
+									NoLoopbackDialer: true,
+								},
+							},
+						},
+					})
+					sqlConn, err := sqlDB.Conn(ctx)
+					require.NoError(b, err)
+					defer s.Stopper().Stop(ctx)
+					b.ResetTimer()
+					b.StopTimer()
+					tdb := sqlutils.MakeSQLRunner(sqlConn)
+					tdb.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled= %t;", useLeasedDescriptors))
+					tdb.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = %t;", useLeasedDescriptors))
+					tdb.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.prefetch.enabled = %t;", usePrefetch))
+					tdb.Exec(b, fmt.Sprintf(`SELECT crdb_internal.generate_test_objects('{"names":"gen.public.foo","counts":[1,1,%d], "name_gen": {"noise": false}}'::JSONB);`, tables))
+					tdb.Exec(b, "USE gen_1")
+					// Cold run.
+					tdb.Exec(b, "SELECT * FROM pg_class")
+					b.StartTimer()
+					// Warm iterations.
+					for range b.N {
+						tdb.Exec(b, "SELECT * FROM pg_class")
+					}
+					b.StopTimer()
+				})
+			}
+		}
+	}
 }

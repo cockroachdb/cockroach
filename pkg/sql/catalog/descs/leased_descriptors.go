@@ -33,6 +33,8 @@ type LeaseManager interface {
 		ctx context.Context, timestamp lease.ReadTimestamp, id descpb.ID,
 	) (lease.LeasedDescriptor, error)
 
+	EnsureBatch(ctx context.Context, ids []descpb.ID) error
+
 	IncGaugeAfterLeaseDuration(
 		gaugeType lease.AfterLeaseDurationGauge,
 	) (decrAfterWait func())
@@ -201,6 +203,13 @@ func (ld *leasedDescriptors) maybeInitReadTimestamp(ctx context.Context, txn dea
 	}
 	// Otherwise, get a safe read timestamp from the lease manager.
 	ld.leaseTimestamp = ld.lm.GetReadTimestamp(ctx, readTimestamp)
+}
+
+// ensureLeasesExist requests that the lease manager acquire leases for the
+// given IDs, if one isn't already exists. This is done in a bulk fashion leading
+// to fewer round trips inside the lease manager.
+func (ld *leasedDescriptors) ensureLeasesExist(ctx context.Context, ids []descpb.ID) error {
+	return ld.lm.EnsureBatch(ctx, ids)
 }
 
 // getLeasedDescriptorByName return a leased descriptor valid for the
