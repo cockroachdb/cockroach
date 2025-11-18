@@ -630,3 +630,40 @@ func (t *testWaitGroupSink) exitCode() exit.Code {
 }
 
 var _ logSink = (*testWaitGroupSink)(nil)
+
+// TestBufferedSinkOversizedMessage tests that oversized messages (larger than
+// maxBufferSize) are dropped gracefully without returning an error, rather than
+// causing the process to crash when exit-on-error is enabled.
+func TestBufferedSinkOversizedMessage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer Scope(t).Close(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mock := NewMockLogSink(ctrl)
+
+	// Set up a buffered sink with a small max buffer size.
+	maxBufferSize := uint64(10)
+	sink := newBufferedSink(mock, noMaxStaleness, noSizeTrigger, maxBufferSize, false /* crashOnAsyncFlushErr */, nil)
+	closer := newBufferedSinkCloser()
+	sink.Start(closer)
+	defer func() { require.NoError(t, closer.Close(defaultCloserTimeout)) }()
+
+	// Create a message that exceeds the max buffer size.
+	oversizedMessage := bytes.Repeat([]byte("x"), int(maxBufferSize)+10)
+
+	// The oversized message should NOT be sent to the child sink because it's
+	// dropped before reaching the child. The bufferedSink detects the message
+	// is too large in appendMsg() and returns early without ever calling the
+	// child sink's output() method.
+	mock.EXPECT().
+		output(gomock.Any(), gomock.Any()).
+		Times(0) // No calls should reach the child sink
+
+	// Attempt to output the oversized message. This should succeed (return nil)
+	// and not cause the process to crash. The key behavior being tested is that
+	// errMsgTooLarge is caught and handled gracefully, returning nil instead of
+	// propagating the error.
+	err := sink.output(oversizedMessage, sinkOutputOptions{})
+	require.NoError(t, err, "oversized message should be handled gracefully without returning an error")
+}
