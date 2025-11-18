@@ -108,6 +108,11 @@ var LockedLeaseTimestamp = settings.RegisterBoolSetting(settings.ApplicationLeve
 		"descriptors used can be intentionally older to support this",
 	false)
 
+var MaxBatchLeaseCount = settings.RegisterIntSetting(settings.ApplicationLevel,
+	"sql.catalog.descriptor_lease.max_batch_lease_count",
+	"the maximum number of descriptors to lease in a single batch",
+	1000)
+
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
 func (m *Manager) WaitForNoVersion(
@@ -995,7 +1000,9 @@ func (m *Manager) insertDescriptorVersions(
 // get needs to see some descriptor updates that we know happened recently.
 func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) error {
 	// Create descriptorState if needed.
-	_ = m.findDescriptorState(id, true /* create */)
+	state := m.findDescriptorState(id, true /* create */)
+	state.markAcquisitionStart(ctx)
+	defer state.markAcquisitionDone(ctx)
 	// We need to acquire a lease on a "fresh" descriptor, meaning that joining
 	// a potential in-progress lease acquisition is generally not good enough.
 	// If we are to join an in-progress acquisition, it needs to be an acquisition
@@ -1031,6 +1038,131 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 	return nil
 }
 
+// upsertDescriptorIntoState inserts a descriptor into the descriptor state.
+func (m *Manager) upsertDescriptorIntoState(
+	ctx context.Context, id descpb.ID, session sqlliveness.Session, desc catalog.Descriptor,
+) error {
+	t := m.findDescriptorState(id, false /* create */)
+	if t == nil {
+		return errors.AssertionFailedf("could not find descriptor state for id %d", id)
+	}
+	t.mu.Lock()
+	t.mu.takenOffline = false
+	defer t.mu.Unlock()
+	err := t.upsertLeaseLocked(ctx, desc, session, m.storage.getRegionPrefix())
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// maybePrepareDescriptorForBulkAcquisition sets up the descriptor state for a bulk
+// acquisition. Returns true if the descriptor has been setup for bulk acquistion,
+// and false if an acqusition is already fetching it.
+func (m *Manager) maybePrepareDescriptorForBulkAcquisition(
+	id descpb.ID, acquisitionCh chan struct{},
+) bool {
+	state := m.findDescriptorState(id, true)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	// Only work on descriptors that haven't been acquired or have no
+	// acquisition in progress.
+	if state.mu.maxVersionSeen != 0 ||
+		state.mu.acquisitionsInProgress > 0 {
+		return false
+	}
+	// Mark the descriptor as having an acquisition in progress, any normal
+	// acquisition will wait for the bulk acquisition to finish.
+	state.mu.acquisitionsInProgress++
+	state.mu.acquisitionChannel = acquisitionCh
+	return true
+}
+
+// completeBulkAcquisition clears up the descriptor state after a bulk acquisition.
+func (m *Manager) completeBulkAcquisition(id descpb.ID) {
+	state := m.findDescriptorState(id, false)
+	if state == nil {
+		return
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	state.mu.acquisitionChannel = nil
+	state.mu.acquisitionsInProgress -= 1
+}
+
+// EnsureBatch ensures that a set of IDs are already cached by the lease manager
+// by doing a bulk acquisition.
+func (m *Manager) EnsureBatch(ctx context.Context, ids []descpb.ID) error {
+	maxBatchSize := MaxBatchLeaseCount.Get(&m.storage.settings.SV)
+	idsToFetch := make([]descpb.ID, 0, min(len(ids), int(maxBatchSize)))
+	lastVersion := make([]descpb.DescriptorVersion, cap(idsToFetch))
+	lastSession := make([]sqlliveness.SessionID, cap(idsToFetch))
+	for len(ids) > 0 {
+		processNextBatch := func() error {
+			// Reset for the next batch.
+			idsToFetch = idsToFetch[:0]
+			acquisitionCh := make(chan struct{})
+			defer close(acquisitionCh)
+
+			// Figure out which IDs have no state object allocated.
+			batchCompleted := true
+			for idx, id := range ids {
+				if !m.maybePrepareDescriptorForBulkAcquisition(id, acquisitionCh) {
+					continue
+				}
+				idsToFetch = append(idsToFetch, id)
+				if len(idsToFetch) == int(maxBatchSize) {
+					ids = ids[idx+1:]
+					batchCompleted = false
+					break
+				}
+			}
+			// All of the entries in the slice have been processed.
+			if batchCompleted {
+				ids = nil
+			}
+			// Nothing needs to be fetched everything is cached in memory.
+			if len(idsToFetch) == 0 {
+				return nil
+			}
+			// Clean up the acquisition state after-wards.
+			defer func() {
+				for _, id := range idsToFetch {
+					m.completeBulkAcquisition(id)
+				}
+			}()
+			// Initial acquisition so version and session ID are blank for any
+			// previous version.
+			lastVersion = lastVersion[:len(idsToFetch)]
+			lastSession = lastSession[:len(idsToFetch)]
+			// Execute a batch acquisition at the storage layer.
+			session, err := m.storage.livenessProvider.Session(ctx)
+			if err != nil {
+				return errors.Wrapf(err, "lease acquisition was unable to resolve liveness session")
+			}
+			batch, _, err := m.storage.acquireBatch(ctx, session, idsToFetch, lastVersion, lastSession)
+			if err != nil {
+				return err
+			}
+			// Upsert the descriptors into the descriptor state.
+			for idx, id := range idsToFetch {
+				// Any descriptors with errors can be ignored.
+				if batch.errs[idx] != nil {
+					continue
+				}
+				if err := m.upsertDescriptorIntoState(ctx, id, session, batch.descs[idx]); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		if err := processNextBatch(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // If the lease cannot be obtained because the descriptor is in the process of
 // being dropped or offline, the error will be of type inactiveTableError.
 // The boolean returned is true if this call was actually responsible for the
@@ -1049,6 +1181,21 @@ func (m *Manager) acquireNodeLease(
 		func(ctx context.Context) (interface{}, error) {
 			if m.IsDraining() {
 				return false, errLeaseManagerIsDraining
+			}
+			waitedForBulkAcquire := func() bool {
+				state := m.findDescriptorState(id, false)
+				state.mu.Lock()
+				acquisitionChannel := state.mu.acquisitionChannel
+				state.mu.Unlock()
+				if acquisitionChannel == nil {
+					return false
+				}
+				<-acquisitionChannel
+				return true
+			}()
+			if waitedForBulkAcquire {
+				// We didn't do any acquiring and just waited for a bulk operation.
+				return false, nil
 			}
 			newest := m.findNewest(id)
 			var currentVersion descpb.DescriptorVersion
@@ -1072,22 +1219,6 @@ func (m *Manager) acquireNodeLease(
 				return desc, nil
 			}
 
-			doUpsertion := func(desc catalog.Descriptor) error {
-				t := m.findDescriptorState(id, false /* create */)
-				if t == nil {
-					return errors.AssertionFailedf("could not find descriptor state for id %d", id)
-				}
-				t.mu.Lock()
-				t.mu.takenOffline = false
-				defer t.mu.Unlock()
-				err = t.upsertLeaseLocked(ctx, desc, session, m.storage.getRegionPrefix())
-				if err != nil {
-					return err
-				}
-
-				return nil
-			}
-
 			// These tables are special and can have their versions bumped
 			// without blocking on other nodes converging to that version.
 			if newest != nil && (id == keys.UsersTableID ||
@@ -1103,8 +1234,7 @@ func (m *Manager) acquireNodeLease(
 				if err != nil {
 					return false, err
 				}
-				err = doUpsertion(desc)
-				if err != nil {
+				if err := m.upsertDescriptorIntoState(ctx, id, session, desc); err != nil {
 					return false, err
 				}
 
@@ -1125,8 +1255,7 @@ func (m *Manager) acquireNodeLease(
 				if desc == nil {
 					return true, nil
 				}
-				err = doUpsertion(desc)
-				if err != nil {
+				if err := m.upsertDescriptorIntoState(ctx, id, session, desc); err != nil {
 					return false, err
 				}
 			}
