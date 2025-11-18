@@ -52,23 +52,29 @@ func leaseTableWithID(id descpb.ID, table systemschema.SystemTable) catalog.Tabl
 	return mut.ImmutableCopy().(catalog.TableDescriptor)
 }
 
-func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
-	if err := w.do(ctx, txn, l, func(b *kv.Batch) error {
-		if l.sessionID != nil {
-			err := w.sessionBasedWriter.Insert(ctx, b, false /*kvTrace*/, leaseAsSessionBasedDatum(l)...)
-			if err != nil {
-				return err
+func (w *kvWriter) insertLeases(ctx context.Context, txn *kv.Txn, leases []leaseFields) error {
+	if err := w.do(ctx, txn, leases, func(b *kv.Batch) error {
+		for _, l := range leases {
+			if l.sessionID != nil {
+				err := w.sessionBasedWriter.Insert(ctx, b, false /*kvTrace*/, leaseAsSessionBasedDatum(l)...)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		return nil
 	}); err != nil {
-		return errors.Wrapf(err, "failed to insert lease %v", l)
+		return errors.Wrapf(err, "failed to insert lease %v", leases)
 	}
 	return nil
 }
 
+func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
+	return w.insertLeases(ctx, txn, []leaseFields{l})
+}
+
 func (w *kvWriter) deleteLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
-	if err := w.do(ctx, txn, l, func(b *kv.Batch) error {
+	if err := w.do(ctx, txn, []leaseFields{l}, func(b *kv.Batch) error {
 		if l.sessionID != nil {
 			err := w.sessionBasedWriter.Delete(ctx, b, false /*kvTrace*/, leaseAsSessionBasedDatum(l)...)
 			if err != nil {
@@ -85,7 +91,7 @@ func (w *kvWriter) deleteLease(ctx context.Context, txn *kv.Txn, l leaseFields) 
 type addToBatchFunc = func(*kv.Batch) error
 
 func (w *kvWriter) do(
-	ctx context.Context, txn *kv.Txn, lease leaseFields, addToBatch addToBatchFunc,
+	ctx context.Context, txn *kv.Txn, lease []leaseFields, addToBatch addToBatchFunc,
 ) error {
 	run := (*kv.Txn).Run
 	do := func(ctx context.Context, txn *kv.Txn) error {
