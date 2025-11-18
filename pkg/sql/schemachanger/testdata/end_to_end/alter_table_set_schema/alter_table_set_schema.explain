@@ -1,0 +1,46 @@
+/* setup */
+CREATE TABLE t (i int, j int);
+CREATE SCHEMA sc;
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE t SET SCHEMA sc;
+----
+Schema change plan for ALTER TABLE ‹t› SET SCHEMA ‹sc›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 2 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (t-t+), Name: "t", ReferencedDescID: 105 (sc)}
+ │         │    └── ABSENT → PUBLIC SchemaChild:{DescID: 104 (t-t+), ReferencedDescID: 105 (sc)}
+ │         ├── 2 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (t-t+), Name: "t", ReferencedDescID: 101 (public)}
+ │         │    └── PUBLIC → ABSENT SchemaChild:{DescID: 104 (t-t+), ReferencedDescID: 101 (public)}
+ │         └── 5 Mutation operations
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"t","SchemaID":101}}
+ │              ├── RemoveObjectParent {"ObjectID":104,"ParentSchemaID":101}
+ │              ├── SetNameInDescriptor {"DescriptorID":104,"Name":"t"}
+ │              ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"t","SchemaID":105}}
+ │              └── SetObjectParentID {"ObjParent":{"ChildObjectID":104,"SchemaID":105}}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 2 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (t-t+), Name: "t", ReferencedDescID: 105 (sc)}
+      │    │    └── PUBLIC → ABSENT SchemaChild:{DescID: 104 (t-t+), ReferencedDescID: 105 (sc)}
+      │    ├── 2 elements transitioning toward ABSENT
+      │    │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (t-t+), Name: "t", ReferencedDescID: 101 (public)}
+      │    │    └── ABSENT → PUBLIC SchemaChild:{DescID: 104 (t-t+), ReferencedDescID: 101 (public)}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 2 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (t-t+), Name: "t", ReferencedDescID: 105 (sc)}
+           │    └── ABSENT → PUBLIC SchemaChild:{DescID: 104 (t-t+), ReferencedDescID: 105 (sc)}
+           ├── 2 elements transitioning toward ABSENT
+           │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (t-t+), Name: "t", ReferencedDescID: 101 (public)}
+           │    └── PUBLIC → ABSENT SchemaChild:{DescID: 104 (t-t+), ReferencedDescID: 101 (public)}
+           └── 6 Mutation operations
+                ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"t","SchemaID":101}}
+                ├── RemoveObjectParent {"ObjectID":104,"ParentSchemaID":101}
+                ├── SetNameInDescriptor {"DescriptorID":104,"Name":"t"}
+                ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"t","SchemaID":105}}
+                ├── UpdateTTLScheduleMetadata {"NewName":"t","TableID":104}
+                └── SetObjectParentID {"ObjParent":{"ChildObjectID":104,"SchemaID":105}}
