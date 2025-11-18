@@ -406,6 +406,51 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Iterator Block Bytes"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={
+        <div>
+          The number of bytes of blocks loaded by iterators categorized according
+          to the source {tooltipSelection}. These sums include blocks loaded
+          from the block cache, blocks loaded from OS page cache and blocks loaded
+          from disk.
+          <br />
+          See the "Hardware" dashboard to view an aggregate of all disk reads.
+        </div>
+      }
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {multipleStoreMetrics([
+          "abort-span",
+          "backup",
+          "batch-eval",
+          "crdb-unknown",
+          "intent-resolution",
+          "mvcc-gc",
+          "pebble-compaction",
+          "pebble-get",
+          "pebble-ingest",
+          "range-snap",
+          "rangefeed",
+          "replication",
+          "scan-background",
+          "scan-regular",
+          "unknown",
+        ].map(category => ({
+              prefix: category,
+              name: `cr.store.storage.iterator.category-`+category+`.block-load.bytes`,
+              nonNegativeRate: true,
+            })),
+            nodeIDs,
+            storeIDsByNodeID,
+        )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Store Disk Read Bytes/s"
       sources={storeSources}
       isKvGraph={true}
