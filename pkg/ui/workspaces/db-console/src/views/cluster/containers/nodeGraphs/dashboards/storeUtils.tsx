@@ -17,7 +17,9 @@ export const multipleStoreMetrics = (
   nodeIDs: string[],
   storeIDsByNodeID: { [key: string]: string[] },
 ) =>
-  props.flatMap(prop => storeMetrics(prop, nodeIDs, storeIDsByNodeID, prop.prefix));
+  props.flatMap(prop =>
+    storeMetrics(prop, nodeIDs, storeIDsByNodeID, prop.prefix),
+  );
 
 /**
  * Dynamically shows either the aggregated node-level metric when viewing the
@@ -71,13 +73,10 @@ export const storeMetrics = (
 
     // If there's only one store for the node, don't show both the aggregated
     // metric and the per-store breakdown which will always be equal.
-    if (storeIDs.length == 1) {
+    if (storeIDs.length === 1) {
       return perStoreMetrics;
     }
 
     // Otherwise, show the aggregated metric and a per-store breakdown.
-    return [
-      nodeMetric,
-      ...perStoreMetrics,
-    ];
+    return [nodeMetric, ...perStoreMetrics];
   });

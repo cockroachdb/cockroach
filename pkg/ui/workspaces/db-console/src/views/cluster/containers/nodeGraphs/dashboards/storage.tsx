@@ -189,16 +189,27 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="SSTables"
+      title="File Counts"
       sources={storeSources}
       isKvGraph={true}
       tenantSource={tenantSource}
-      tooltip={`The number of SSTables in use ${tooltipSelection}.`}
+      tooltip={`The number of files in use by type ${tooltipSelection}.`}
       showMetricsInTooltip={true}
     >
-      <Axis label="sstables">
-        {storeMetrics(
-          { name: "cr.store.rocksdb.num-sstables" },
+      <Axis label="files">
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "sstables",
+              name: "cr.store.rocksdb.num-sstables",
+              aggregateMax: true,
+            },
+            {
+              prefix: "blob files",
+              name: "cr.store.storage.value_separation.blob_files.count",
+              aggregateMax: true,
+            },
+          ],
           nodeIDs,
           storeIDsByNodeID,
         )}
@@ -412,10 +423,10 @@ export default function (props: GraphDashboardProps) {
       tenantSource={tenantSource}
       tooltip={
         <div>
-          The number of bytes of blocks loaded by iterators categorized according
-          to the source {tooltipSelection}. These sums include blocks loaded
-          from the block cache, blocks loaded from OS page cache and blocks loaded
-          from disk.
+          The number of bytes of blocks loaded by iterators categorized
+          according to the source {tooltipSelection}. These sums include blocks
+          loaded from the block cache, blocks loaded from OS page cache and
+          blocks loaded from disk.
           <br />
           See the "Hardware" dashboard to view an aggregate of all disk reads.
         </div>
@@ -423,29 +434,33 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
-        {multipleStoreMetrics([
-          "abort-span",
-          "backup",
-          "batch-eval",
-          "crdb-unknown",
-          "intent-resolution",
-          "mvcc-gc",
-          "pebble-compaction",
-          "pebble-get",
-          "pebble-ingest",
-          "range-snap",
-          "rangefeed",
-          "replication",
-          "scan-background",
-          "scan-regular",
-          "unknown",
-        ].map(category => ({
-              prefix: category,
-              name: `cr.store.storage.iterator.category-`+category+`.block-load.bytes`,
-              nonNegativeRate: true,
-            })),
-            nodeIDs,
-            storeIDsByNodeID,
+        {multipleStoreMetrics(
+          [
+            "abort-span",
+            "backup",
+            "batch-eval",
+            "crdb-unknown",
+            "intent-resolution",
+            "mvcc-gc",
+            "pebble-compaction",
+            "pebble-get",
+            "pebble-ingest",
+            "range-snap",
+            "rangefeed",
+            "replication",
+            "scan-background",
+            "scan-regular",
+            "unknown",
+          ].map(category => ({
+            prefix: category,
+            name:
+              `cr.store.storage.iterator.category-` +
+              category +
+              `.block-load.bytes`,
+            nonNegativeRate: true,
+          })),
+          nodeIDs,
+          storeIDsByNodeID,
         )}
       </Axis>
     </LineGraph>,
@@ -482,7 +497,8 @@ export default function (props: GraphDashboardProps) {
       tenantSource={tenantSource}
       tooltip={
         <div>
-          The volume of bytes stored separated from keys, externally in blob files.
+          The volume of bytes stored separated from keys, externally in blob
+          files.
         </div>
       }
       showMetricsInTooltip={true}
@@ -597,6 +613,5 @@ export default function (props: GraphDashboardProps) {
         />
       </Axis>
     </LineGraph>,
-
   ];
 }
