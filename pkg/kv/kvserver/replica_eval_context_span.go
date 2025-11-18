@@ -29,8 +29,8 @@ import (
 // ReplicaEvalContext which verifies that access to state is registered in the
 // SpanSet if one is given.
 type SpanSetReplicaEvalContext struct {
-	i  batcheval.EvalContext
-	ss spanset.SpanSet
+	i       batcheval.EvalContext
+	checker spanset.SpanChecker
 }
 
 var _ batcheval.EvalContext = &SpanSetReplicaEvalContext{}
@@ -103,7 +103,7 @@ func (rec *SpanSetReplicaEvalContext) IsFirstRange() bool {
 // Desc returns the Replica's RangeDescriptor.
 func (rec SpanSetReplicaEvalContext) Desc() *roachpb.RangeDescriptor {
 	desc := rec.i.Desc()
-	rec.ss.AssertAllowed(spanset.SpanReadOnly,
+	rec.checker.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)},
 	)
 	return desc
@@ -144,7 +144,7 @@ func (rec SpanSetReplicaEvalContext) GetMaxSplitCPU(ctx context.Context) (float6
 func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
 	ctx context.Context, txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
 ) (bool, kvpb.TransactionAbortedReason) {
-	rec.ss.AssertAllowed(spanset.SpanReadOnly,
+	rec.checker.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.TransactionKey(txnKey, txnID)},
 	)
 	return rec.i.CanCreateTxnRecord(ctx, txnID, txnKey, txnMinTS)
@@ -156,7 +156,7 @@ func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
 func (rec SpanSetReplicaEvalContext) MinTxnCommitTS(
 	ctx context.Context, txnID uuid.UUID, txnKey []byte,
 ) hlc.Timestamp {
-	rec.ss.AssertAllowed(spanset.SpanReadOnly,
+	rec.checker.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.TransactionKey(txnKey, txnID)},
 	)
 	return rec.i.MinTxnCommitTS(ctx, txnID, txnKey)
@@ -166,7 +166,7 @@ func (rec SpanSetReplicaEvalContext) MinTxnCommitTS(
 // keys are garbage collected. Reads and writes at timestamps <= this time will
 // not be served.
 func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
-	rec.ss.AssertAllowed(spanset.SpanReadOnly,
+	rec.checker.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeGCThresholdKey(rec.GetRangeID())},
 	)
 	return rec.i.GetGCThreshold()
@@ -190,7 +190,7 @@ func (rec SpanSetReplicaEvalContext) String() string {
 func (rec SpanSetReplicaEvalContext) GetLastReplicaGCTimestamp(
 	ctx context.Context,
 ) (hlc.Timestamp, error) {
-	if err := rec.ss.CheckAllowed(spanset.SpanReadOnly,
+	if err := rec.checker.CheckAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeLastReplicaGCTimestampKey(rec.GetRangeID())},
 	); err != nil {
 		return hlc.Timestamp{}, err
@@ -222,11 +222,11 @@ func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary(ctx context.Context)
 	// To capture a read summary over the range, all keys must be latched for
 	// writing to prevent any concurrent reads or writes.
 	desc := rec.i.Desc()
-	rec.ss.AssertAllowed(spanset.SpanReadWrite, roachpb.Span{
+	rec.checker.AssertAllowed(spanset.SpanReadWrite, roachpb.Span{
 		Key:    keys.MakeRangeKeyPrefix(desc.StartKey),
 		EndKey: keys.MakeRangeKeyPrefix(desc.EndKey),
 	})
-	rec.ss.AssertAllowed(spanset.SpanReadWrite, roachpb.Span{
+	rec.checker.AssertAllowed(spanset.SpanReadWrite, roachpb.Span{
 		Key:    desc.StartKey.AsRawKey(),
 		EndKey: desc.EndKey.AsRawKey(),
 	})
