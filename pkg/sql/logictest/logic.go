@@ -1849,6 +1849,10 @@ func (t *logicTest) newCluster(
 			); err != nil {
 				t.Fatal(err)
 			}
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.prefetch.enabled = true"); err != nil {
+				t.Fatal(err)
+			}
 		}
 		// We disable the automatic stats collection in order to have
 		// deterministic tests.
