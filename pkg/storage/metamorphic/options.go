@@ -114,7 +114,7 @@ func randomOptions() *pebble.Options {
 	opts.Levels[0].BlockSize = 1 << rngIntRange(rng, 1, 20)
 	opts.Levels[0].BlockSizeThreshold = int(rngIntRange(rng, 50, 100))
 	opts.Levels[0].IndexBlockSize = opts.Levels[0].BlockSize
-	opts.TargetFileSizes[0] = 1 << rngIntRange(rng, 1, 20)
+	opts.TargetFileSizes[0] = int64(max(1<<rngIntRange(rng, 9, 20), 570))
 	for i := 1; i < len(opts.Levels); i++ {
 		opts.Levels[i] = opts.Levels[i-1]
 		opts.TargetFileSizes[i] = opts.TargetFileSizes[i-1] * 2
