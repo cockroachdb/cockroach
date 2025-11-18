@@ -61,4 +61,13 @@ func (w *ieWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) 
 	return nil
 }
 
+func (w *ieWriter) insertLeases(ctx context.Context, txn *kv.Txn, leases []leaseFields) error {
+	for _, l := range leases {
+		if err := w.insertLease(ctx, txn, l); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 var _ writer = (*ieWriter)(nil)
