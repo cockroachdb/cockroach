@@ -45,10 +45,7 @@ type Stores struct {
 		biLatestTS hlc.Timestamp         // Timestamp of gossip bootstrap info
 		latestBI   *gossip.BootstrapInfo // Latest cached bootstrap info
 	}
-	sendQueueLoggerMu struct {
-		syncutil.Mutex
-		logger *rac2.SendQueueLogger
-	}
+	sendQueueLogger *rac2.SendQueueLogger
 }
 
 var _ kv.Sender = &Stores{}      // Stores implements the client.Sender interface
@@ -57,13 +54,12 @@ var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interfa
 // NewStores returns a local-only sender which directly accesses
 // a collection of stores.
 func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
-	stores := &Stores{
-		AmbientContext: ambient,
-		clock:          clock,
-	}
 	const numStreamsToLog = 20
-	stores.sendQueueLoggerMu.logger = rac2.NewSendQueueLogger(numStreamsToLog)
-	return stores
+	return &Stores{
+		AmbientContext:  ambient,
+		clock:           clock,
+		sendQueueLogger: rac2.NewSendQueueLogger(numStreamsToLog),
+	}
 }
 
 // IsMeta1Leaseholder returns whether the specified stores owns
@@ -364,9 +360,8 @@ func (ls *Stores) GetAggregatedStoreStats(
 }
 
 func (ls *Stores) TryLogFlowControlSendQueues(ctx context.Context) {
-	ls.sendQueueLoggerMu.Lock()
-	defer ls.sendQueueLoggerMu.Unlock()
-	if !ls.sendQueueLoggerMu.logger.TryStartLog() {
+	coll, ok := ls.sendQueueLogger.TryStartLog()
+	if !ok {
 		return
 	}
 	rangeSendStats := rac2.RangeSendStreamStats{}
@@ -374,10 +369,10 @@ func (ls *Stores) TryLogFlowControlSendQueues(ctx context.Context) {
 		newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 			rangeSendStats.Clear()
 			rep.SendStreamStats(&rangeSendStats)
-			ls.sendQueueLoggerMu.logger.ObserveRangeStats(&rangeSendStats)
+			coll.ObserveRangeStats(&rangeSendStats)
 			return true
 		})
 		return nil
 	})
-	ls.sendQueueLoggerMu.logger.FinishLog(ctx)
+	ls.sendQueueLogger.FinishLog(ctx, coll)
 }

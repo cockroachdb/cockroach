@@ -7,24 +7,23 @@ package rac2
 
 import (
 	"context"
-	"math"
-	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSendQueueLoggerTest(t *testing.T) {
+func TestSendQueueLogger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := log.ScopeWithoutShowLogs(t)
 	defer s.Close(t)
 
-	testStartTs := timeutil.Now()
 	rss11_100 := ReplicaSendStreamStats{
 		Stream: kvflowcontrol.Stream{
 			TenantID: roachpb.MustMakeTenantID(1),
@@ -62,41 +61,43 @@ func TestSendQueueLoggerTest(t *testing.T) {
 		},
 	}
 	sql := NewSendQueueLogger(2)
+	var output redact.RedactableString
+	sql.testingLog = func(ctx context.Context, buf *redact.StringBuilder) {
+		if len(output) > 0 {
+			output += "\n"
+		}
+		output += redact.Sprintf(sendQueueLogFormat, buf)
+	}
+	ctx := context.Background()
+	coll, ok := sql.TryStartLog()
 
-	require.True(t, sql.TryStartLog())
+	require.True(t, ok)
 	// Empty stats are ok.
 	stats := RangeSendStreamStats{}
-	sql.ObserveRangeStats(&stats)
+	coll.ObserveRangeStats(&stats)
 	stats = RangeSendStreamStats{
 		internal: []ReplicaSendStreamStats{rss22_200, rss33_50},
 	}
-	sql.ObserveRangeStats(&stats)
+	coll.ObserveRangeStats(&stats)
 	stats = RangeSendStreamStats{
 		internal: []ReplicaSendStreamStats{rss11_100, rss22_200},
 	}
-	sql.ObserveRangeStats(&stats)
+	coll.ObserveRangeStats(&stats)
 	stats = RangeSendStreamStats{
 		internal: []ReplicaSendStreamStats{rss11_100},
 	}
-	sql.ObserveRangeStats(&stats)
+	coll.ObserveRangeStats(&stats)
 	stats = RangeSendStreamStats{
 		internal: []ReplicaSendStreamStats{rss33_50, rss44_25},
 	}
-	sql.ObserveRangeStats(&stats)
-	sql.FinishLog(context.Background())
+	coll.ObserveRangeStats(&stats)
+	sql.FinishLog(ctx, coll)
 
 	// Cannot log again immediately.
-	require.False(t, sql.TryStartLog())
+	_, ok = sql.TryStartLog()
+	require.False(t, ok)
 	// Call FinishLog again to ensure no logging happens.
-	sql.FinishLog(context.Background())
+	sql.FinishLog(ctx, SendQueueLoggerCollector{})
 
-	log.FlushFiles()
-	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
-		math.MaxInt64, 10,
-		regexp.MustCompile(`send_queue_logger\.go`),
-		log.WithMarkedSensitiveData)
-	require.NoError(t, err)
-	require.Equal(t, 1, len(entries))
-	require.Contains(t, entries[0].Message,
-		"send queues: t2/s2: 400 B, t1/s1: 200 B, + 125 B more bytes across 2 streams")
+	echotest.Require(t, string(output), datapathutils.TestDataPath(t, t.Name()+".txt"))
 }
