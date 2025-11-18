@@ -218,7 +218,7 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 		// can be ingested to the state machine locally, when being applied.
 		store.StateEngine().GetAuxiliaryDir(),
 		store.limiters.BulkIOWriteRate,
-		store.StateEngine(),
+		store.StateEngine().Env(),
 	)
 	r.logStorage = &replicaLogStorage{
 		ctx:                r.raftCtx,
