@@ -107,6 +107,13 @@ import (
 //	range. At least one parameter should be non-zero to ensure this directive is
 //	not nonsensical.
 //
+// split-pre-apply range-id=<int> [destroyed]
+// ----
+//
+// Runs the splitPreApply function, with the given rangeID referencing the RHS
+// range in its input. Optionally, the replica may be considered destroyed
+// during split application if supplied as such.
+//
 // print-range-state [sort-keys=<bool>]
 // ----
 //
@@ -360,6 +367,22 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 						}.ToEngineKey(nil)
 						require.NoError(t, batch.PutEngineKey(ek, nil))
 					}
+				})
+
+			case "split-pre-apply":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				destroyed := d.HasArg("destroyed")
+
+				rs := tc.mustGetRangeState(t, rangeID)
+
+				in := splitPreApplyInput{
+					destroyed:           destroyed,
+					rhsDesc:             rs.desc,
+					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
+				}
+
+				return tc.mutate(t, func(batch storage.Batch) {
+					splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), in)
 				})
 
 			case "print-range-state":
