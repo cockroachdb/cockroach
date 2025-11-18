@@ -3915,6 +3915,7 @@ CREATE TABLE crdb_internal.table_indexes (
   is_inverted         BOOL NOT NULL,
   is_sharded          BOOL NOT NULL,
   is_visible          BOOL NOT NULL,
+  is_vector           BOOL NOT NULL,
   visibility          FLOAT NOT NULL,
   shard_bucket_count  INT,
   created_at          TIMESTAMP,
@@ -3924,7 +3925,7 @@ CREATE TABLE crdb_internal.table_indexes (
 	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, _ int64, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		primary := tree.NewDString("primary")
 		secondary := tree.NewDString("secondary")
-		const numDatums = 13
+		const numDatums = 14
 		row := make([]tree.Datum, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			alloc := &tree.DatumAlloc{}
@@ -3998,6 +3999,7 @@ CREATE TABLE crdb_internal.table_indexes (
 							tree.MakeDBool(idx.GetType() == idxtype.INVERTED),
 							tree.MakeDBool(tree.DBool(idx.IsSharded())),
 							tree.MakeDBool(idxInvisibility == 0.0),
+							tree.MakeDBool(idx.GetType() == idxtype.VECTOR),
 							tree.NewDFloat(tree.DFloat(1-idxInvisibility)),
 							shardBucketCnt,
 							createdAt,
