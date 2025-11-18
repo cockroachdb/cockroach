@@ -208,8 +208,12 @@ func countLeasesByRegion(
 		} else {
 			err = queryRegionRows(ctx)
 		}
-		if err := handleRegionLivenessErrors(ctx, prober, region, err); err != nil {
+		skipRegion, err := handleRegionLivenessErrors(ctx, prober, region, err)
+		if err != nil {
 			return err
+		}
+		if skipRegion {
+			return nil
 		}
 		if values == nil {
 			return errors.New("failed to count leases")
@@ -231,27 +235,27 @@ func getCountLeaseColumns() string {
 }
 
 // handleRegionLivenessErrors handles errors that are linked to region liveness
-// timeouts.
+// timeouts. Return true if the region should be skipped.
 func handleRegionLivenessErrors(
 	ctx context.Context, prober regionliveness.Prober, region string, err error,
-) error {
+) (bool, error) {
 	if err != nil {
 		if regionliveness.IsQueryTimeoutErr(err) {
 			// Probe and mark the region potentially.
 			probeErr := prober.ProbeLiveness(ctx, region)
 			if probeErr != nil {
 				err = errors.WithSecondaryError(err, probeErr)
-				return err
+				return false, err
 			}
-			return errors.Wrapf(err, "count-lease timed out reading from a region")
+			return false, errors.Wrapf(err, "count-lease timed out reading from a region")
 		} else if regionliveness.IsMissingRegionEnumErr(err) {
 			// Skip this region because we were unable to find region in
 			// type descriptor. Since the database regions are cached, they
 			// may be stale and have dropped regions.
 			log.Dev.Infof(ctx, "count-lease skipping region %s due to error: %v", region, err)
-			return nil
+			return true, nil
 		}
-		return err
+		return false, err
 	}
-	return err
+	return false, err
 }
