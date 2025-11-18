@@ -52,7 +52,8 @@ func BackupSuccess(t *testing.T, path string, factory TestServerFactory) {
 		backupArgs = backupSuccessPrepare(t, factory, spec, dbName)
 	}, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		backupSuccess(t, backupArgs, cs)
-	})
+	},
+		nil /*samplingFn */)
 }
 
 // BackupRollbacks tests that the schema changer can handle being backed up
@@ -70,7 +71,8 @@ func BackupRollbacks(t *testing.T, path string, factory TestServerFactory) {
 	factory = factory.WithSchemaLockDisabled()
 	cumulativeTestForEachPostCommitStage(t, path, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		backupRollbacks(t, factory, cs)
-	})
+	},
+		nil /* samplingFn */)
 }
 
 // BackupSuccessMixedVersion is like BackupSuccess but in a mixed-version
@@ -96,7 +98,8 @@ func BackupSuccessMixedVersion(t *testing.T, path string, factory TestServerFact
 		backupArgs = backupSuccessPrepare(t, factory, spec, dbName)
 	}, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		backupSuccess(t, backupArgs, cs)
-	})
+	},
+		nil /* samplingFn */)
 }
 
 // BackupRollbacksMixedVersion is like BackupRollbacks but in a mixed-version
@@ -116,7 +119,7 @@ func BackupRollbacksMixedVersion(t *testing.T, path string, factory TestServerFa
 	factory = factory.WithSchemaLockDisabled()
 	cumulativeTestForEachPostCommitStage(t, path, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		backupRollbacks(t, factory, cs)
-	})
+	}, nil /* samplingFn */)
 }
 
 // runAllBackups runs all the backup tests, disabling the random skipping.
