@@ -476,6 +476,61 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Value Separated Bytes"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={
+        <div>
+          The volume of bytes stored separated from keys, externally in blob files.
+        </div>
+      }
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "referenced",
+              name: "cr.store.storage.value_separation.value_bytes.referenced",
+              aggregateMax: true,
+            },
+            {
+              prefix: "unreferenced",
+              name: "cr.store.storage.value_separation.value_bytes.unreferenced",
+              aggregateMax: true,
+            },
+          ],
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Blob File Sizes"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={
+        <div>
+          The aggregate physical size of blob files storing separated values.
+        </div>
+      }
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {storeMetrics(
+          {
+            name: "cr.store.storage.value_separation.blob_files.size",
+          },
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="File Descriptors"
       sources={nodeSources}
       isKvGraph={true}
