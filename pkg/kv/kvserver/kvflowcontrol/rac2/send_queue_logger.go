@@ -8,15 +8,14 @@ package rac2
 import (
 	"cmp"
 	"context"
-	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
-	"github.com/dustin/go-humanize"
 )
 
 const sendQueueLoggingInterval = 30 * time.Second
@@ -25,25 +24,35 @@ const sendQueueLoggingInterval = 30 * time.Second
 //
 // Usage:
 //
-//	sql := NewSendQueueLogger(numStreamsToLog)
-//	// Periodically do:
-//	if sql.TryStartLog() {
-//	    for each range:
-//	        sql.ObserveRangeStats(rangeStats)
-//	    sql.FinishLog(ctx)
-//	}
+//		sql := NewSendQueueLogger(numStreamsToLog)
+//		// Periodically do:
+//	 if coll, ok := sql.TryStartLog(); ok {
+//		    for each range:
+//		        coll.ObserveRangeStats(rangeStats)
+//		    sql.FinishLog(ctx, coll)
+//		}
 //
-// It is not thread-safe.
+// It is thread-safe.
 type SendQueueLogger struct {
 	numStreamsToLog int
 	limiter         log.EveryN
-	scratchMap      map[kvflowcontrol.Stream]int64
-	scratchSlice    []streamAndBytes
+
+	mu struct {
+		syncutil.Mutex
+		scratch SendQueueLoggerCollector
+	}
+
+	testingLog func(context.Context, string, ...interface{})
 }
 
 type streamAndBytes struct {
 	stream kvflowcontrol.Stream
 	bytes  int64
+}
+
+type SendQueueLoggerCollector struct {
+	m  map[kvflowcontrol.Stream]int64
+	sl []streamAndBytes
 }
 
 // NewSendQueueLogger creates a new SendQueueLogger that will log up to
@@ -53,56 +62,77 @@ func NewSendQueueLogger(numStreamsToLog int) *SendQueueLogger {
 	return &SendQueueLogger{
 		numStreamsToLog: numStreamsToLog,
 		limiter:         log.Every(sendQueueLoggingInterval),
-		scratchMap:      make(map[kvflowcontrol.Stream]int64),
 	}
 }
 
-func (s *SendQueueLogger) TryStartLog() bool {
-	return s.limiter.ShouldLog()
+func (s *SendQueueLogger) TryStartLog() (SendQueueLoggerCollector, bool) {
+	if !s.limiter.ShouldLog() {
+		return SendQueueLoggerCollector{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	collector := s.mu.scratch
+	s.mu.scratch = SendQueueLoggerCollector{}
+	if collector.m == nil {
+		collector.m = make(map[kvflowcontrol.Stream]int64)
+	}
+	return collector, true
 }
 
-func (s *SendQueueLogger) ObserveRangeStats(stats *RangeSendStreamStats) {
+func (s *SendQueueLoggerCollector) ObserveRangeStats(stats *RangeSendStreamStats) {
 	for _, ss := range stats.internal {
 		if ss.SendQueueBytes > 0 {
-			s.scratchMap[ss.Stream] = s.scratchMap[ss.Stream] + ss.SendQueueBytes
+			s.m[ss.Stream] = s.m[ss.Stream] + ss.SendQueueBytes
 		}
 	}
 }
 
-func (s *SendQueueLogger) FinishLog(ctx context.Context) {
-	if len(s.scratchMap) == 0 {
+func (s *SendQueueLogger) FinishLog(ctx context.Context, c SendQueueLoggerCollector) {
+	if len(c.m) == 0 {
 		return
 	}
 	defer func() {
-		clear(s.scratchMap)
-		s.scratchSlice = s.scratchSlice[:0]
+		clear(c.m)
+		c.sl = c.sl[:0]
+		s.mu.Lock()
+		s.mu.scratch = c
+		s.mu.Unlock()
 	}()
-	for stream, bytes := range s.scratchMap {
-		s.scratchSlice = append(s.scratchSlice, streamAndBytes{
+	var buf redact.StringBuilder
+	c.finishLog(s.numStreamsToLog, &buf)
+	const format = "send queues: %s"
+	if fn := s.testingLog; fn != nil {
+		fn(ctx, format, &buf)
+	} else {
+		log.KvDistribution.Infof(ctx, format, &buf)
+	}
+}
+
+func (c *SendQueueLoggerCollector) finishLog(maxNumStreams int, buf *redact.StringBuilder) {
+	for stream, bytes := range c.m {
+		c.sl = append(c.sl, streamAndBytes{
 			stream: stream,
 			bytes:  bytes,
 		})
 	}
 	// Sort by descending send queue bytes.
-	slices.SortFunc(s.scratchSlice, func(a, b streamAndBytes) int {
+	slices.SortFunc(c.sl, func(a, b streamAndBytes) int {
 		return -cmp.Compare(a.bytes, b.bytes)
 	})
-	var b strings.Builder
-	n := min(s.numStreamsToLog, len(s.scratchSlice))
+	n := min(maxNumStreams, len(c.sl))
 	for i := 0; i < n; i++ {
 		if i > 0 {
-			b.WriteString(", ")
+			buf.SafeString(", ")
 		}
-		fmt.Fprintf(&b, "%s: %s", s.scratchSlice[i].stream,
-			humanize.IBytes(uint64(s.scratchSlice[i].bytes)))
+		buf.Printf("%s: %s", c.sl[i].stream,
+			humanizeutil.IBytes(c.sl[i].bytes))
 	}
 	remainingBytes := int64(0)
-	for i := n; i < len(s.scratchSlice); i++ {
-		remainingBytes += s.scratchSlice[i].bytes
+	for i := n; i < len(c.sl); i++ {
+		remainingBytes += c.sl[i].bytes
 	}
 	if remainingBytes > 0 {
-		fmt.Fprintf(&b, ", + %s more bytes across %d streams",
-			humanize.IBytes(uint64(remainingBytes)), len(s.scratchSlice)-n)
+		buf.Printf(", + %s more bytes across %d streams",
+			humanizeutil.IBytes(remainingBytes), len(c.sl)-n)
 	}
-	log.KvExec.Infof(ctx, "send queues: %s", redact.SafeString(b.String()))
 }
