@@ -158,7 +158,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 
 	// Query the range log to see if anything unexpected happened. Concretely,
 	// we'll make sure that our tracked ranges never had >3 replicas.
-	infos, err := queryRangeLog(tc.Conns[0], `SELECT info FROM system.rangelog ORDER BY timestamp DESC`)
+	infos, err := queryRangeLog(ctx, tc.Conns[0], `SELECT info FROM system.rangelog ORDER BY timestamp DESC`)
 	require.NoError(t, err)
 	for _, info := range infos {
 		if _, ok := trackedRanges[info.UpdatedDesc.RangeID]; !ok || len(info.UpdatedDesc.Replicas().VoterDescriptors()) <= 3 {
@@ -366,7 +366,13 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 
 			// Query the range log to see if anything unexpected happened. Concretely,
 			// we'll make sure that our tracked ranges never had >3 replicas.
-			infos, err := queryRangeLog(tc.Conns[0], `SELECT info FROM system.rangelog ORDER BY timestamp DESC`)
+			//
+			// TODO(pav-kv): we have seen this query take a long time and cause the
+			// test timeout. Use an explicit timeout to fail faster, and remove once
+			// we get to the bottom of it.
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+			defer cancel()
+			infos, err := queryRangeLog(ctx, tc.Conns[0], `SELECT info FROM system.rangelog ORDER BY timestamp DESC`)
 			require.NoError(t, err)
 			for _, info := range infos {
 				if _, ok := trackedRanges[info.UpdatedDesc.RangeID]; !ok || len(info.UpdatedDesc.Replicas().VoterDescriptors()) <= 3 {
@@ -1732,13 +1738,13 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 // queryRangeLog queries the range log. The query must be of type:
 // `SELECT info from system.rangelog ...`.
 func queryRangeLog(
-	conn *gosql.DB, query string, args ...interface{},
+	ctx context.Context, conn *gosql.DB, query string, args ...interface{},
 ) ([]kvserverpb.RangeLogEvent_Info, error) {
 
 	// The range log can get large and sees unpredictable writes, so run this in a
 	// proper txn to avoid spurious retries.
 	var events []kvserverpb.RangeLogEvent_Info
-	err := crdb.ExecuteTx(context.Background(), conn, nil, func(conn *gosql.Tx) error {
+	err := crdb.ExecuteTx(ctx, conn, nil, func(conn *gosql.Tx) error {
 		events = nil // reset in case of a retry
 
 		rows, err := conn.Query(query, args...)
@@ -1775,7 +1781,10 @@ func filterRangeLog(
 	eventType kvserverpb.RangeLogEventType,
 	reason kvserverpb.RangeLogEventReason,
 ) ([]kvserverpb.RangeLogEvent_Info, error) {
-	return queryRangeLog(conn, `SELECT info FROM system.rangelog WHERE "rangeID" = $1 AND "eventType" = $2 AND info LIKE concat('%', $3::STRING, '%') ORDER BY timestamp ASC;`, rangeID, eventType.String(), reason)
+	return queryRangeLog(context.Background(), conn,
+		`SELECT info FROM system.rangelog WHERE "rangeID" = $1 AND "eventType" = $2 AND info LIKE concat('%', $3::STRING, '%') ORDER BY timestamp ASC;`,
+		rangeID, eventType.String(), reason,
+	)
 }
 
 func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
