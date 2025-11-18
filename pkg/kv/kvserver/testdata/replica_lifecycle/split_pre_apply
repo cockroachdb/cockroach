@@ -1,0 +1,46 @@
+create-descriptor start=a end=e replicas=(1,2,3)
+----
+created descriptor: r1:{a-e} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+
+# Create a replica for range r1 and add some dummy data to it. We're not treating
+# this as "destroyed", so it shouldn't be cleared during split application.
+create-replica range-id=1
+----
+created replica: (n1,s1):1
+Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
+
+create-range-data range-id=1 num-user-keys=1 num-system-keys=1 num-lock-table-keys=1
+----
+Put: 0.000000001,0 "a0" (0x613000000000000000000109): ""
+Put: 0.000000001,0 /Local/Range"a0"/Transaction/"6ba7b810-9dad-11d1-80b4-00c04fd430c8" (0x016b126130000174786e2d6ba7b8109dad11d180b400c04fd430c800000000000000000109): ""
+Put: "a0"/Intent/00000000-0000-0000-0000-000000000000: 
+
+# We'll consider the replica for range r2 "destroyed". Add some dummy data to
+# the range to ensure it's correctly cleared during split application.
+create-descriptor start=e end=z replicas=(1,2,3)
+----
+created descriptor: r2:{e-z} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+
+create-replica range-id=2
+----
+created replica: (n1,s1):1
+Put: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): replica_id:1 
+
+create-range-data range-id=2 num-user-keys=1 num-system-keys=1 num-lock-table-keys=1
+----
+Put: 0.000000001,0 "e0" (0x653000000000000000000109): ""
+Put: 0.000000001,0 /Local/Range"e0"/Transaction/"6ba7b810-9dad-11d1-80b4-00c04fd430c8" (0x016b126530000174786e2d6ba7b8109dad11d180b400c04fd430c800000000000000000109): ""
+Put: "e0"/Intent/00000000-0000-0000-0000-000000000000: 
+
+
+split-pre-apply range-id=1
+----
+Put: 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): term:0 vote:0 commit:0 lead:0 lead_epoch:0 
+Put: 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): index:10 term:5 
+Put: 0,0 /Local/RangeID/1/r/RangeAppliedState (0x016989727261736b00): range_stats:<> raft_closed_timestamp:<wall_time:100 > 
+
+split-pre-apply range-id=2 destroyed
+----
+Delete (Sized at 37): 0.000000001,0 /Local/Range"e0"/Transaction/"6ba7b810-9dad-11d1-80b4-00c04fd430c8" (0x016b126530000174786e2d6ba7b8109dad11d180b400c04fd430c800000000000000000109): 
+Delete (Sized at 27): /Local/Lock"e0" 0300000000000000000000000000000000 (0x017a6b126530000100030000000000000000000000000000000012): 
+Delete (Sized at 12): 0.000000001,0 "e0" (0x653000000000000000000109): 

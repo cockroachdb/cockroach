@@ -63,15 +63,6 @@ import (
 // Creates a replica on n1/s1 for the specified range ID. The created replica
 // may be initialized or uninitialized.
 //
-// create-split range-id=<int> split-key=<key>
-// ----
-//
-//	Creates a split for the specified range at the given split key, which
-//	entails creating a SplitTrigger with both the LHS and RHS descriptors.
-//	Much like how things work in CRDB, the LHS descriptor is created by
-//	narrowing the original range and a new range descriptor is created for
-//	the RHS with the same replica set.
-//
 // set-lease range-id=<int> replica=<int> [lease-type=leader-lease|epoch|expiration]
 // ----
 //
@@ -82,10 +73,26 @@ import (
 //	lease-type parameter. For now, we treat the associated lease metadata as
 //	uninteresting.
 //
+// create-split range-id=<int> split-key=<key>
+// ----
+//
+//	Creates a split for the specified range at the given split key, which
+//	entails creating a SplitTrigger with both the LHS and RHS descriptors.
+//	Much like how things work in CRDB, the LHS descriptor is created by
+//	narrowing the original range and a new range descriptor is created for
+//	the RHS with the same replica set.
+//
 // run-split-trigger range-id=<int>
 // ----
 //
 //	Executes the split trigger for the specified range on n1.
+//
+// split-pre-apply range-id=<int> [destroyed]
+// ----
+//
+// Runs the splitPreApply function, with the given rangeID referencing the RHS
+// range in its input. Optionally, the replica may be considered destroyed
+// during split application if supplied as such.
 //
 // destroy-replica range-id=<int>
 // ----
@@ -196,30 +203,6 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 
 				return fmt.Sprintf("created replica: %v\n%s", repl, output)
 
-			case "create-split":
-				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
-				splitKey := dd.ScanArg[string](t, d, "split-key")
-				rs := tc.mustGetRangeState(t, rangeID)
-				desc := rs.desc
-				require.True(
-					t,
-					roachpb.RKey(splitKey).Compare(desc.StartKey) > 0 &&
-						roachpb.RKey(splitKey).Compare(desc.EndKey) < 0,
-					"split key not within range",
-				)
-				leftDesc := desc
-				leftDesc.EndKey = roachpb.RKey(splitKey)
-				rightDesc := desc
-				rightDesc.RangeID = tc.nextRangeID
-				tc.nextRangeID++
-				rightDesc.StartKey = roachpb.RKey(splitKey)
-				split := &roachpb.SplitTrigger{
-					LeftDesc:  leftDesc,
-					RightDesc: rightDesc,
-				}
-				tc.splits[rangeID] = split
-				return "ok"
-
 			case "set-lease":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
 				replicaNodeID := dd.ScanArg[roachpb.NodeID](t, d, "replica")
@@ -253,6 +236,30 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				rs.lease = lease
 				return "ok"
 
+			case "create-split":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				splitKey := dd.ScanArg[string](t, d, "split-key")
+				rs := tc.mustGetRangeState(t, rangeID)
+				desc := rs.desc
+				require.True(
+					t,
+					roachpb.RKey(splitKey).Compare(desc.StartKey) > 0 &&
+						roachpb.RKey(splitKey).Compare(desc.EndKey) < 0,
+					"split key not within range",
+				)
+				leftDesc := desc
+				leftDesc.EndKey = roachpb.RKey(splitKey)
+				rightDesc := desc
+				rightDesc.RangeID = tc.nextRangeID
+				tc.nextRangeID++
+				rightDesc.StartKey = roachpb.RKey(splitKey)
+				split := &roachpb.SplitTrigger{
+					LeftDesc:  leftDesc,
+					RightDesc: rightDesc,
+				}
+				tc.splits[rangeID] = split
+				return "ok"
+
 			case "run-split-trigger":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
 				split, ok := tc.splits[rangeID]
@@ -282,6 +289,22 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					require.NoError(t, err)
 
 					tc.updatePostSplitRangeState(t, ctx, batch, rangeID, split)
+				})
+
+			case "split-pre-apply":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				destroyed := d.HasArg("destroyed")
+
+				rs := tc.mustGetRangeState(t, rangeID)
+
+				in := splitPreApplyInput{
+					destroyed:           destroyed,
+					rhsDesc:             rs.desc,
+					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
+				}
+
+				return tc.mutate(t, func(batch storage.Batch) {
+					splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), in)
 				})
 
 			case "destroy-replica":
