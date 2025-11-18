@@ -57,6 +57,8 @@ go_test(
     embed = [":mixedversion"],
     embedsrcs = ["testdata/test_releases.yaml"],
     deps = [
+        "//pkg/build",
+        "//pkg/clusterversion",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/roachtestutil",
