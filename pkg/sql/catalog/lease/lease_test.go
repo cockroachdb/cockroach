@@ -1769,7 +1769,7 @@ func TestTableCreationPushesTxnsInRecentPast(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					MaxOffset: time.Second,
+					MaxOffset: 2 * time.Second,
 				},
 			},
 		},
