@@ -210,9 +210,9 @@ func discoverUserDatabases(ctx context.Context, db *gosql.DB) ([]string, error) 
 	return databases, rows.Err()
 }
 
-// isFeatureNotSupportedError returns true if the error is a feature not supported error.
+// IsFeatureNotSupportedError returns true if the error is a feature not supported error.
 // This can occur when the cluster version is not yet upgraded to support INSPECT.
-func isFeatureNotSupportedError(err error) bool {
+func IsFeatureNotSupportedError(err error) bool {
 	var pqErr *pq.Error
 	if errors.As(err, &pqErr) {
 		return pgcode.MakeCode(string(pqErr.Code)) == pgcode.FeatureNotSupported
