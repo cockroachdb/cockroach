@@ -9,7 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -44,7 +44,7 @@ type Metadata struct {
 	// Hints are any external statement hints from the system.statement_hints
 	// table that could apply to this statement, based on the statement
 	// fingerprint.
-	Hints []hintpb.StatementHintUnion
+	Hints []hints.Hint
 
 	// HintIDs are the IDs of any external statement hints, which are used for
 	// invalidation of cached plans.
@@ -73,7 +73,7 @@ func (pm *Metadata) MemoryEstimate() int64 {
 	res += int64(len(pm.InferredTypes)) * int64(unsafe.Sizeof(oid.Oid(0)))
 
 	for i := range pm.Hints {
-		res += int64(pm.Hints[i].Size())
+		res += pm.Hints[i].Size()
 	}
 	res += int64(len(pm.HintIDs)) * int64(unsafe.Sizeof(int64(0)))
 
