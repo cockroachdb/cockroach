@@ -410,6 +410,30 @@ func insertVectors(t *testing.T, runner *sqlutils.SQLRunner, startId int, vector
 	runner.Exec(t, query, args...)
 }
 
+func TestVecIndexMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	defer srv.Stopper().Stop(ctx)
+
+	// Construct the table.
+	runner.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v VECTOR(512), VECTOR INDEX (v))")
+
+	// Get the table descriptor to find the vector index ID.
+	var tableID uint32
+	runner.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 't'").Scan(&tableID)
+
+	// Get the index ID from crdb_internal.table_indexes
+	var isVector bool
+	runner.QueryRow(t, "SELECT is_vector FROM crdb_internal.table_indexes WHERE descriptor_id = $1 AND index_name = 't_v_idx'", tableID).Scan(&isVector)
+	if isVector == false {
+		t.Errorf("Expected is_vector=true for index t_v_idx on table t (id=%d), got false", tableID)
+	}
+}
+
 // TestVecIndexDeletion tests that rows can be properly deleted from a vector index.
 func TestVecIndexDeletion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
