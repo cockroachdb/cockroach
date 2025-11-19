@@ -103,7 +103,8 @@
 {{ if ne .Data.Params.ResultCount 0}}
 <p>Showing aggregated stats from {{.Data.Params.StartTime}} to {{.Data.Params.EndTime}} ({{.Data.Params.Timezone}})</p>
 
-<div x-data="tableSort()" style="overflow-x: auto;">
+<div x-data="tableSort()" >
+  <div class="box overflow-x:scroll">
   <table id="table-data">
     <thead>
       <tr>
@@ -225,6 +226,7 @@
       {{end}}
     </tbody>
   </table>
+  </div>
   <div class="flex-row" style="justify-content: space-between; align-items: center; margin-top: 1rem;">
     <div>
       <span x-text="paginationInfo"></span>
