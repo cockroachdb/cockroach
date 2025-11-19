@@ -119,7 +119,8 @@ func TestCmdRevertRange(t *testing.T) {
 		Stats:           stats,
 	}
 	cArgs.EvalCtx = evalCtx.EvalContext()
-	afterStats, err := storage.ComputeStats(ctx, eng, keys.LocalMax, keys.MaxKey, 0)
+	afterStats, err := storage.ComputeStats(ctx, eng, fs.BatchEvalReadCategory,
+		keys.LocalMax, keys.MaxKey, 0)
 	require.NoError(t, err)
 	for _, tc := range []struct {
 		name     string
@@ -174,7 +175,8 @@ func TestCmdRevertRange(t *testing.T) {
 			}
 			evalStats := afterStats
 			evalStats.Add(*cArgs.Stats)
-			realStats, err := storage.ComputeStats(ctx, batch, keys.LocalMax, keys.MaxKey, evalStats.LastUpdateNanos)
+			realStats, err := storage.ComputeStats(ctx, batch, fs.BatchEvalReadCategory,
+				keys.LocalMax, keys.MaxKey, evalStats.LastUpdateNanos)
 			require.NoError(t, err)
 			require.Equal(t, realStats, evalStats)
 		})
