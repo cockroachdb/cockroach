@@ -1148,3 +1148,13 @@ func (p *planner) InsertStatementHint(
 ) (int64, error) {
 	return hints.InsertHintIntoDB(ctx, p.InternalSQLTxn(), statementFingerprint, hint)
 }
+
+// UsingHintInjection is part of the eval.Planner interface.
+func (p *planner) UsingHintInjection() bool {
+	return p.usingHintInjection
+}
+
+// GetHintIDs is part of the eval.Planner interface.
+func (p *planner) GetHintIDs() []int64 {
+	return p.stmt.HintIDs
+}

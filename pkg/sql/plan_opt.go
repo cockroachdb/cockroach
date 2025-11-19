@@ -574,6 +574,7 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	if opc.p.usingHintInjection {
 		ast = opc.p.stmt.ASTWithInjectedHints
 	}
+	f.Metadata().SetHintIDs(opc.p.GetHintIDs())
 	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, ast)
 	bld.KeepPlaceholders = true
 	if opc.flags.IsSet(planFlagSessionMigration) {
@@ -938,6 +939,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	if opc.p.usingHintInjection {
 		ast = opc.p.stmt.ASTWithInjectedHints
 	}
+	f.Metadata().SetHintIDs(opc.p.GetHintIDs())
 	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, ast)
 	if err := bld.Build(); err != nil {
 		return nil, err
