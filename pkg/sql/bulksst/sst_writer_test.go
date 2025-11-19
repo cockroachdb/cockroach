@@ -6,6 +6,7 @@
 package bulksst_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -16,14 +17,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/pebble/objstorage"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
@@ -112,6 +119,64 @@ func verifyRowSamplesFromKeys(
 	}
 }
 
+type fakeWriteCloser struct {
+	bytes.Buffer
+}
+
+func (f *fakeWriteCloser) Close() error {
+	return nil
+}
+
+type fakeFileAllocator struct {
+	spans []roachpb.Span
+}
+
+var _ bulksst.FileAllocator = (*fakeFileAllocator)(nil)
+
+func (f *fakeFileAllocator) AddFile(ctx context.Context) (objstorage.Writable, string, error) {
+	return objstorageprovider.NewRemoteWritable(&fakeWriteCloser{}), "", nil
+}
+
+func (f *fakeFileAllocator) CommitFile(
+	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64,
+) {
+	f.spans = append(f.spans, span)
+}
+
+func (f *fakeFileAllocator) GetFileList() *bulksst.SSTFiles {
+	return nil
+}
+
+func TestFlushBufferRecordsRowBoundarySpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	allocator := &fakeFileAllocator{}
+	writer := bulksst.NewUnsortedSSTBatcher(settings, allocator)
+
+	ts := hlc.Timestamp{WallTime: 1}
+	rowPrefix := keys.SystemSQLCodec.IndexPrefix(7, 1)
+	rowKey := encoding.EncodeUvarintAscending(rowPrefix, 42)
+	cf1 := roachpb.Key(keys.MakeFamilyKey(append([]byte(nil), rowKey...), 1))
+	cf2 := roachpb.Key(keys.MakeFamilyKey(append([]byte(nil), rowKey...), 2))
+
+	require.NoError(t, writer.AddMVCCKey(ctx, storage.MVCCKey{Key: cf1, Timestamp: ts}, []byte("v1")))
+	require.NoError(t, writer.AddMVCCKey(ctx, storage.MVCCKey{Key: cf2, Timestamp: ts}, []byte("v2")))
+	require.NoError(t, writer.Flush(ctx))
+
+	require.Len(t, allocator.spans, 1)
+	require.True(t, allocator.spans[0].Valid())
+	rowStart, err := keys.EnsureSafeSplitKey(cf1)
+	require.NoError(t, err)
+	require.Equal(t, rowStart, allocator.spans[0].Key)
+
+	expectedEnd := rowStart.PrefixEnd()
+	require.Equal(t, expectedEnd, allocator.spans[0].EndKey,
+		"expected flushBuffer to advance span end to the next row boundary")
+}
+
 func TestBulkSSTWriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -143,8 +208,13 @@ func TestBulkSSTWriter(t *testing.T) {
 		currFileMin := -1
 		currFileMax := -1
 		values := readKeyValuesFromSST(t, filepath.Join(tempDir, sstInfo.URI))
-		require.Equal(t, sstInfo.StartKey, values[0].Key.Key)
-		require.Equal(t, sstInfo.EndKey, values[len(values)-1].Key.Key)
+		firstSafe, err := keys.EnsureSafeSplitKey(values[0].Key.Key.Clone())
+		require.NoError(t, err)
+		require.Equal(t, firstSafe, sstInfo.StartKey)
+
+		lastSafe, err := keys.EnsureSafeSplitKey(values[len(values)-1].Key.Key.Clone())
+		require.NoError(t, err)
+		require.Equal(t, lastSafe.PrefixEnd(), sstInfo.EndKey)
 		for _, value := range values {
 			keyString := string(value.Key.Key)
 			var num int
@@ -162,7 +232,7 @@ func TestBulkSSTWriter(t *testing.T) {
 		// Validate the row sample is within the span of the SST file.
 		fileSpan := roachpb.Span{
 			Key:    sstInfo.StartKey,
-			EndKey: sstInfo.EndKey.Next(),
+			EndKey: sstInfo.EndKey,
 		}
 		spans[idx] = fileSpan
 		// Ensure continuity between SSTs, where the minimum on the previous file
@@ -297,7 +367,7 @@ func TestExternalFileAllocator(t *testing.T) {
 		require.True(t, strings.HasPrefix(fileList.SST[0].URI, baseURI))
 		require.True(t, strings.HasSuffix(fileList.SST[0].URI, ".sst"))
 		require.Equal(t, roachpb.Key("key1"), fileList.SST[0].StartKey)
-		require.Equal(t, roachpb.Key("key2"), fileList.SST[0].EndKey)
+		require.Equal(t, roachpb.Key("key2").PrefixEnd(), fileList.SST[0].EndKey)
 		require.Greater(t, fileList.SST[0].FileSize, uint64(0))
 		require.Equal(t, fileList.SST[0].FileSize, fileList.TotalSize)
 		require.Len(t, fileList.RowSamples, 1)

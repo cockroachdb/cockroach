@@ -677,8 +677,14 @@ func (db *DB) AdminSplit(
 func (db *DB) AdminScatter(
 	ctx context.Context, key roachpb.Key, maxSize int64,
 ) (*kvpb.AdminScatterResponse, error) {
+	return db.sendAdminScatterRequest(ctx, roachpb.Span{Key: key, EndKey: key.Next()}, maxSize)
+}
+
+func (db *DB) sendAdminScatterRequest(
+	ctx context.Context, span roachpb.Span, maxSize int64,
+) (*kvpb.AdminScatterResponse, error) {
 	scatterReq := &kvpb.AdminScatterRequest{
-		RequestHeader:   kvpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: key.Next()}),
+		RequestHeader:   kvpb.RequestHeaderFromSpan(span),
 		RandomizeLeases: true,
 		MaxSize:         maxSize,
 	}
@@ -691,6 +697,13 @@ func (db *DB) AdminScatter(
 		return nil, errors.Errorf("unexpected response of type %T for AdminScatter", raw)
 	}
 	return resp, nil
+}
+
+// AdminScatterSpan scatters the ranges that overlap the specified span.
+func (db *DB) AdminScatterSpan(
+	ctx context.Context, span roachpb.Span,
+) (*kvpb.AdminScatterResponse, error) {
+	return db.sendAdminScatterRequest(ctx, span, 0 /* maxSize */)
 }
 
 // AdminUnsplit removes the sticky bit of the range specified by splitKey.
