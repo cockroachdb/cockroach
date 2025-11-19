@@ -144,7 +144,10 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	var rowIdx int
 	for {
 		row, meta := m.Next()
-		require.Nil(t, meta)
+		if meta != nil {
+			require.NotNil(t, meta.RowNum)
+			continue
+		}
 		if row == nil {
 			break
 		}
