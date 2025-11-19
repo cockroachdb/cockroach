@@ -108,6 +108,13 @@ func TestLogic_alter_default_privileges_for_all_roles(
 	runLogicTest(t, "alter_default_privileges_for_all_roles")
 }
 
+func TestLogic_alter_default_privileges_for_database(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_default_privileges_for_database")
+}
+
 func TestLogic_alter_default_privileges_for_schema(
 	t *testing.T,
 ) {

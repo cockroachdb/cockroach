@@ -1,0 +1,324 @@
+# Should error when a role that does not exist is provided.
+statement error pq: role/user "who" does not exist
+ALTER DEFAULT PRIVILEGES FOR ROLE who GRANT CONNECT ON DATABASES to testuser
+
+statement error pq: role/user "who" does not exist
+ALTER DEFAULT PRIVILEGES GRANT CONNECT ON DATABASES to who
+
+statement error pq: role/user "who" does not exist
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT CONNECT ON DATABASES to who
+
+statement error pq: role/user "who" does not exist
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT CONNECT ON DATABASES to testuser, who
+
+# Should not be able to use invalid privileges.
+statement error pq: invalid privilege type SELECT for database
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON DATABASES to testuser
+
+# Should not be able to alter system database.
+statement ok
+USE system
+
+statement error cannot alter system database
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON DATABASES FROM testuser
+
+statement ok
+RESET database
+
+# For Databases.
+statement ok
+CREATE USER testuser;
+
+# By default, testuser should have ALL privileges on a database it creates.
+user testuser
+
+statement ok
+CREATE DATABASE testuser_db;
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE testuser_db
+----
+database_name  grantee   privilege_type  is_grantable
+testuser_db    admin     ALL             true
+testuser_db    root      ALL             true
+testuser_db    testuser  ALL             true
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE ALL ON DATABASES FROM testuser;
+
+statement ok
+CREATE DATABASE testuser_db2;
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE testuser_db2
+----
+database_name   grantee   privilege_type  is_grantable
+testuser_db2    admin     ALL             true
+testuser_db2    root      ALL             true
+testuser_db2    testuser  ALL             true
+
+user root
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT CONNECT ON DATABASES to testuser
+
+statement ok
+CREATE DATABASE test_db
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE test_db
+----
+database_name  grantee   privilege_type  is_grantable
+test_db        admin     ALL             true
+test_db        root      ALL             true
+test_db        testuser  CONNECT         false
+
+statement ok
+CREATE DATABASE test_db2
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE test_db2
+----
+database_name  grantee  privilege_type  is_grantable
+test_db2       admin    ALL             true
+test_db2       root     ALL             true
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE CONNECT ON DATABASES FROM testuser
+
+statement ok
+CREATE DATABASE test_db3
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE test_db3
+----
+database_name  grantee  privilege_type  is_grantable
+test_db3       admin    ALL             true
+test_db3       root     ALL             true
+
+
+# Multiple users.
+statement ok
+CREATE USER testuser2;
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT CONNECT ON DATABASES TO testuser, testuser2
+
+statement ok
+CREATE DATABASE test_db4
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE test_db4
+----
+database_name  grantee    privilege_type  is_grantable
+test_db4       admin      ALL             true
+test_db4       root       ALL             true
+test_db4       testuser   CONNECT         false
+test_db4       testuser2  CONNECT         false
+
+statement ok
+CREATE DATABASE test_db5
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE test_db5
+----
+database_name  grantee  privilege_type  is_grantable
+test_db5       admin    ALL             true
+test_db5       root     ALL             true
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE CONNECT ON DATABASES FROM testuser, testuser2
+
+statement ok
+CREATE DATABASE test_db6
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE test_db6
+----
+database_name  grantee  privilege_type  is_grantable
+test_db6       admin    ALL             true
+test_db6       root     ALL             true
+
+# ALTER DEFAULT PRIVILEGES FOR ROLE.
+user root
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT CONNECT ON DATABASES to testuser, testuser2
+
+user testuser
+
+statement ok
+CREATE DATABASE testuser_db3
+
+# testuser has ALL privileges since by default, ALL is defined as a default
+# privilege for the creator role of an object..
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE testuser_db3
+----
+database_name   grantee    privilege_type  is_grantable
+testuser_db3    admin      ALL             true
+testuser_db3    root       ALL             true
+testuser_db3    testuser   ALL             true
+testuser_db3    testuser2  CONNECT         false
+
+user root
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE CONNECT ON DATABASES FROM testuser, testuser2
+
+user testuser
+
+statement ok
+CREATE DATABASE testuser_db4
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE testuser_db4
+----
+database_name   grantee   privilege_type  is_grantable
+testuser_db4    admin     ALL             true
+testuser_db4    root      ALL             true
+testuser_db4    testuser  ALL             true
+
+user root
+
+statement ok
+ALTER DEFAULT PRIVILEGES GRANT ALL ON DATABASES TO testuser, testuser2
+
+statement ok
+CREATE DATABASE test_db7
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE test_db7
+----
+database_name  grantee    privilege_type  is_grantable
+test_db7       admin      ALL             true
+test_db7       root       ALL             true
+test_db7       testuser   ALL             false
+test_db7       testuser2  ALL             false
+
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE CONNECT ON DATABASES FROM testuser, testuser2
+
+statement ok
+CREATE DATABASE test_db8
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE test_db8
+----
+database_name  grantee    privilege_type     is_grantable
+test_db8       admin      ALL                true
+test_db8       root       ALL                true
+test_db8       testuser   BACKUP             false
+test_db8       testuser   CHANGEFEED         false
+test_db8       testuser   CREATE             false
+test_db8       testuser   DROP               false
+test_db8       testuser   INSPECT            false
+test_db8       testuser   RESTORE            false
+test_db8       testuser   ZONECONFIG         false
+test_db8       testuser2  BACKUP             false
+test_db8       testuser2  CHANGEFEED         false
+test_db8       testuser2  CREATE             false
+test_db8       testuser2  DROP               false
+test_db8       testuser2  INSPECT            false
+test_db8       testuser2  RESTORE            false
+test_db8       testuser2  ZONECONFIG         false
+
+# Ensure you can only ALTER DEFAULT PRIVILEGES for a role you're a part of.
+user testuser2
+
+statement error pq: must be an admin or member of root
+ALTER DEFAULT PRIVILEGES FOR ROLE root GRANT CONNECT ON DATABASES TO testuser
+
+# Ensure you can ALTER DEFAULT PRIVILEGES for multiple roles.
+user root
+
+statement ok
+CREATE USER testuser3
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE root, testuser REVOKE ALL ON DATABASES FROM testuser, testuser2, testuser3
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE root, testuser GRANT CONNECT ON DATABASES TO testuser2, testuser3
+
+statement ok
+CREATE DATABASE test_db9
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE test_db9
+----
+database_name  grantee    privilege_type  is_grantable
+test_db9       admin      ALL             true
+test_db9       root       ALL             true
+test_db9       testuser2  CONNECT         false
+test_db9       testuser3  CONNECT         false
+
+user testuser
+
+statement ok
+CREATE DATABASE testuser_db5
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE testuser_db5
+----
+database_name   grantee    privilege_type  is_grantable
+testuser_db5    admin      ALL             true
+testuser_db5    root       ALL             true
+testuser_db5    testuser   ALL             true
+testuser_db5    testuser2  CONNECT         false
+testuser_db5    testuser3  CONNECT         false
+
+user root
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE root, testuser REVOKE CONNECT ON DATABASES FROM testuser2, testuser3
+
+statement ok
+CREATE DATABASE test_db10
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE test_db10
+----
+database_name  grantee  privilege_type  is_grantable
+test_db10      admin    ALL             true
+test_db10      root     ALL             true
+
+user testuser
+
+statement ok
+CREATE DATABASE testuser_db6
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON DATABASE testuser_db6
+----
+database_name   grantee   privilege_type  is_grantable
+testuser_db6    admin     ALL             true
+testuser_db6    root      ALL             true
+testuser_db6    testuser  ALL             true
+
+# Cannot specify PUBLIC as the target role.
+statement error pq: role/user "public" does not exist
+ALTER DEFAULT PRIVILEGES FOR ROLE public REVOKE CONNECT ON DATABASES FROM testuser2, testuser3
+
+# Can specify PUBLIC as a grantee.
+statement ok
+ALTER DEFAULT PRIVILEGES REVOKE CONNECT ON DATABASES FROM public
+
+# Admins can ALTER DEFAULT PRIVILEGES for any role.
+user root
+
+# Confirm that root is not a member of testuser. We avoid using pg_has_role
+# to check, since that has a special case for all admin users.
+query TTB
+SELECT role, inheriting_member, member_is_explicit
+FROM crdb_internal.kv_inherited_role_members
+WHERE inheriting_member = 'root'
+ORDER BY role
+----
+admin  root  true
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT ALL ON DATABASES TO testuser2
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON DATABASES FROM testuser2

@@ -45,6 +45,7 @@ message PrivilegeDescriptor {
 //   2: Sequences
 //   3: Types
 //   4: Schemas
+//   5: Databases
 // DefaultPrivilegesPerObject are keyed on AlterDefaultPrivilegesTargetObject
 // and it's value is a PrivilegeDescriptor that is only used for
 // the list of UserPrivileges for that object.
@@ -71,6 +72,7 @@ message DefaultPrivilegesForRole {
     optional bool role_has_all_privileges_on_types = 8 [(gogoproto.nullable) = false];
     optional bool role_has_all_privileges_on_functions = 9 [(gogoproto.nullable) = false];
     optional bool public_has_execute_on_functions = 10 [(gogoproto.nullable) = false];
+    optional bool role_has_all_privileges_on_databases = 11 [(gogoproto.nullable) = false];
   }
   // ForAllRoles represents when default privileges are defined
   // using FOR ALL ROLES.
