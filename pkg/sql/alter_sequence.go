@@ -148,7 +148,7 @@ func alterSequenceImpl(
 	//
 	// The code below handles the second case.
 
-	if opts.Increment < 0 && (oldIncrement != seqDesc.SequenceOpts.Increment || oldMinValue != seqDesc.SequenceOpts.MinValue) {
+	if opts.Increment < 0 && (oldIncrement != seqDesc.SequenceOpts.Increment || seqDesc.SequenceOpts.MinValue < oldMinValue) {
 		// Only get the sequence value from KV if it's needed.
 		sequenceVal, err := getSequenceValue()
 		if err != nil {
@@ -209,13 +209,13 @@ func alterSequenceImpl(
 		}
 	}
 	if restartVal != nil {
-		// Using RESTART on a sequence should always cause the operation to run
-		// in the current transaction. This is achieved by treating the sequence
-		// as if it were just created.
-		if err := params.p.createdSequences.addCreatedSequence(seqDesc.ID); err != nil {
-			return err
+		var err error
+		if opts.Increment != 0 {
+			err = setSequenceVal(*restartVal - opts.Increment)
+		} else {
+			err = setSequenceVal(*restartVal - oldIncrement)
 		}
-		if err := params.p.SetSequenceValueByID(params.ctx, uint32(seqDesc.ID), *restartVal, false); err != nil {
+		if err != nil {
 			return err
 		}
 	}
