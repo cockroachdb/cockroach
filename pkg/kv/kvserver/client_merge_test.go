@@ -3913,7 +3913,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				}
 			}
 
-			require.NoError(t, rditer.IterateReplicaKeySpans(ctx, inSnap.Desc, snapReader, rditer.SelectOpts{
+			require.NoError(t, rditer.IterateReplicaKeySpans(ctx, inSnap.Desc, snapReader, fs.ReplicationReadCategory, rditer.SelectOpts{
 				Ranged: rditer.SelectRangedOptions{
 					SystemKeys: true,
 					LockTable:  true,
