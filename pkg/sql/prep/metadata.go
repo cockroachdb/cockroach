@@ -53,6 +53,9 @@ type Metadata struct {
 	// HintsGeneration is the generation of the hints cache at the time the
 	// hints were retrieved, used for invalidation of cached plans.
 	HintsGeneration int64
+
+	// ASTWithInjectedHints is the AST rewritten with injected hints.
+	ASTWithInjectedHints tree.Statement
 }
 
 // MemoryEstimate returns an estimation (in bytes) of how much memory is used by
@@ -63,6 +66,9 @@ func (pm *Metadata) MemoryEstimate() int64 {
 	// We don't have a good way of estimating the size of the AST. Just assume
 	// it's a small multiple of the string length.
 	res += 2 * int64(len(pm.SQL))
+	if pm.ASTWithInjectedHints != nil {
+		res += 2 * int64(len(pm.SQL))
+	}
 
 	res += int64(len(pm.StatementNoConstants))
 

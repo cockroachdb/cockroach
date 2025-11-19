@@ -323,6 +323,10 @@ type planner struct {
 	// skipUnsafeInternalsCheck is used to skip the check that the
 	// planner is not used for unsafe internal statements.
 	skipUnsafeInternalsCheck bool
+
+	// usingHintInjection is true if we're passing the rewritten AST with injected
+	// hints into optbuild. It is only set during planning.
+	usingHintInjection bool
 }
 
 // hasFlowForPausablePortal returns true if the planner is for re-executing a
@@ -1004,6 +1008,8 @@ func (p *planner) resetPlanner(
 	p.autoRetryCounter = 0
 	p.autoRetryStmtReason = nil
 	p.autoRetryStmtCounter = 0
+
+	p.usingHintInjection = false
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager.

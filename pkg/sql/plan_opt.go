@@ -56,10 +56,34 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 func (p *planner) prepareUsingOptimizer(
 	ctx context.Context, origin prep.StatementOrigin,
 ) (planFlags, error) {
-	stmt := &p.stmt
-
 	opc := &p.optPlanningCtx
+
+	// If there are externally-injected hints, first try preparing with the
+	// injected hints.
+	if p.stmt.ASTWithInjectedHints != nil {
+		opc.log(ctx, "trying preparing with injected hints")
+		p.usingHintInjection = true
+		opc.reset(ctx)
+		flags, err := p.prepareUsingOptimizerInternal(ctx, origin)
+		p.usingHintInjection = false
+		if !errorDueToInjectedHint(err) {
+			return flags, err
+		}
+		// Do not return the error. If semantic analysis failed, try preparing again
+		// without injected hints.
+		log.Eventf(ctx, "preparing with injected hints failed with: %v", err)
+		opc.log(ctx, "falling back to preparing without injected hints")
+	}
 	opc.reset(ctx)
+	return p.prepareUsingOptimizerInternal(ctx, origin)
+}
+
+func (p *planner) prepareUsingOptimizerInternal(
+	ctx context.Context, origin prep.StatementOrigin,
+) (planFlags, error) {
+	stmt := &p.stmt
+	opc := &p.optPlanningCtx
+
 	if origin == prep.StatementOriginSessionMigration {
 		opc.flags.Set(planFlagSessionMigration)
 	}
@@ -156,8 +180,9 @@ func (p *planner) prepareUsingOptimizer(
 					stmt.Hints = pm.Hints
 					stmt.HintIDs = pm.HintIDs
 					stmt.HintsGeneration = pm.HintsGeneration
+					stmt.ASTWithInjectedHints = pm.ASTWithInjectedHints
 					if cachedData.Memo.IsOptimized() {
-						// A cache, fully optimized memo is an "ideal generic
+						// A cached, fully optimized memo is an "ideal generic
 						// memo".
 						stmt.Prepared.GenericMemo = cachedData.Memo
 						stmt.Prepared.IdealGenericPlan = true
@@ -262,7 +287,43 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	p.curPlan.init(&p.stmt, &p.instrumentation)
 
 	opc := &p.optPlanningCtx
+
+	// If there are externally-injected hints, first try planning with the
+	// injected hints.
+	if p.stmt.ASTWithInjectedHints != nil {
+		opc.log(ctx, "trying planning with injected hints")
+		p.usingHintInjection = true
+		opc.reset(ctx)
+		err := p.makeOptimizerPlanInternal(ctx)
+		p.usingHintInjection = false
+		if !errorDueToInjectedHint(err) {
+			return err
+		}
+		// Do not return the error. If semantic analysis or optimization failed, try
+		// planning again without injected hints.
+		log.Eventf(ctx, "planning with injected hints failed with: %v", err)
+		opc.log(ctx, "falling back to planning without injected hints")
+	}
 	opc.reset(ctx)
+	return p.makeOptimizerPlanInternal(ctx)
+}
+
+// errorDueToInjectedHint returns true if the error could have been caused by an
+// injected hint. False positives are allowed, but false negatives are not.
+func errorDueToInjectedHint(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
+	// TODO(michae2): Make this tighter, so that we don't retry if we fail
+	// semantic checks for an unrelated reason while trying hint injection.
+	return true
+}
+
+func (p *planner) makeOptimizerPlanInternal(ctx context.Context) error {
+	opc := &p.optPlanningCtx
 
 	execMemo, err := opc.buildExecMemo(ctx)
 	if err != nil {
@@ -510,7 +571,11 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	// that there's even less to do during the EXECUTE phase.
 	//
 	f := opc.optimizer.Factory()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, opc.p.stmt.AST)
+	ast := opc.p.stmt.AST
+	if opc.p.usingHintInjection {
+		ast = opc.p.stmt.ASTWithInjectedHints
+	}
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, ast)
 	bld.KeepPlaceholders = true
 	if opc.flags.IsSet(planFlagSessionMigration) {
 		bld.SkipAOST = true
@@ -870,7 +935,11 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	// available.
 	f := opc.optimizer.Factory()
 	f.FoldingControl().AllowStableFolds()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, opc.p.stmt.AST)
+	ast := opc.p.stmt.AST
+	if opc.p.usingHintInjection {
+		ast = opc.p.stmt.ASTWithInjectedHints
+	}
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, ast)
 	if err := bld.Build(); err != nil {
 		return nil, err
 	}
