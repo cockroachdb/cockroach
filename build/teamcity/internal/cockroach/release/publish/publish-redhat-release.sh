@@ -80,7 +80,7 @@ docker run \
   --env PFLT_LOGLEVEL=error \
   --env PFLT_ARTIFACTS=/artifacts \
   --env PFLT_LOGFILE=/artifacts/preflight.log \
-  --env PFLT_CERTIFICATION_PROJECT_ID="$rhel_project_id" \
+  --env PFLT_CERTIFICATION_COMPONENT_ID="$rhel_project_id" \
   --env PFLT_PYXIS_API_TOKEN="$REDHAT_API_TOKEN" \
   --env PFLT_DOCKERCONFIG=/temp-authfile.json \
   --env DOCKER_CONFIG=/tmp/docker \
