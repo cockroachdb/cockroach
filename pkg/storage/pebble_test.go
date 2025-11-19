@@ -1903,7 +1903,7 @@ func TestPebbleSpanPolicyFunc(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("%x", tc.startKey), func(t *testing.T) {
 			ek := EngineKey{Key: tc.startKey}.Encode()
-			policy, endKey, err := spanPolicyFunc(ek)
+			policy, endKey, err := spanPolicyFuncFactory(nil /* sv */)(ek)
 			require.NoError(t, err)
 			require.Equal(t, tc.wantPolicy, policy)
 			require.Equal(t, tc.wantEndKey, endKey)
