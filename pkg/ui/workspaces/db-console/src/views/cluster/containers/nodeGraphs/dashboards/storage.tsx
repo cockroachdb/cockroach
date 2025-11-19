@@ -524,6 +524,45 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Unreclaimed Disk Space"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={
+        <div>
+          The estimated volume of physical bytes that are obsolete and should
+          eventually be reclaimed by compactions or other asynchronous
+          processes.
+        </div>
+      }
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "zombie sstables",
+              name: "cr.store.storage.sstable.zombie.bytes",
+              aggregateMax: true,
+            },
+            {
+              prefix: "range deletions",
+              name: "cr.store.storage.range_deletions.bytes",
+              aggregateMax: true,
+            },
+            {
+              prefix: "point deletions",
+              name: "cr.store.storage.point_deletions.bytes",
+              aggregateMax: true,
+            },
+          ],
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Blob File Sizes"
       sources={storeSources}
       isKvGraph={true}
