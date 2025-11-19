@@ -282,9 +282,10 @@ func (ri *ReplicaMVCCDataIterator) tryCloseAndCreateIter() {
 		}
 		var err error
 		ri.it, err = ri.reader.NewMVCCIterator(ri.ctx, ri.IterKind, storage.IterOptions{
-			LowerBound: ri.spans[ri.curIndex].Key,
-			UpperBound: ri.spans[ri.curIndex].EndKey,
-			KeyTypes:   ri.KeyTypes,
+			LowerBound:   ri.spans[ri.curIndex].Key,
+			UpperBound:   ri.spans[ri.curIndex].EndKey,
+			KeyTypes:     ri.KeyTypes,
+			ReadCategory: ri.ReadCategory,
 		})
 		if err != nil {
 			ri.err = err
