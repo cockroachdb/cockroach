@@ -530,6 +530,14 @@ func (b ByIDGetterBuilder) WithoutSynthetic() ByIDGetterBuilder {
 	return b
 }
 
+// WithMetaData configures the byIDGetterBuilder to read zone configs and comments
+// for lease descriptors. This is always acquired for descriptors from storage,
+// and may need an extra round trip.
+func (b ByIDGetterBuilder) WithMetaData() ByIDGetterBuilder {
+	b.flags.layerFilters.withMetadata = true
+	return b
+}
+
 // WithoutDropped configures the ByIDGetterBuilder to error on descriptors
 // which are in a dropped state.
 func (b ByIDGetterBuilder) WithoutDropped() ByIDGetterBuilder {

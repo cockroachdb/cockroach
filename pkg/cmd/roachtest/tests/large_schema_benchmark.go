@@ -160,6 +160,9 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						// pg_catalog and information_schema.
 						_, err = conn.Exec("SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = 'true'")
 						require.NoError(t, err)
+						// Enabled locked descriptor leasing for correctness.
+						_, err = conn.Exec("SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled = 'true'")
+						require.NoError(t, err)
 						// Since we will be making a large number of databases / tables
 						// quickly,on MR the job retention can slow things down. Let's
 						// minimize how long jobs are kept, so that the creation / ingest

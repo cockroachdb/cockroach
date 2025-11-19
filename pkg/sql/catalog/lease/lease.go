@@ -2204,7 +2204,7 @@ func (m *Manager) processDescriptorUpdate(
 			}
 			// Remove one element from the end after.
 			entry.mu.DescriptorIDs = entry.mu.DescriptorIDs[:len(entry.mu.DescriptorIDs)-1]
-			entry.mu.DescriptorVersions = entry.mu.DescriptorVersions[:len(entry.mu.DescriptorIDs)-1]
+			entry.mu.DescriptorVersions = entry.mu.DescriptorVersions[:len(entry.mu.DescriptorVersions)-1]
 			break
 		}
 		return len(entry.mu.DescriptorIDs) == 0
