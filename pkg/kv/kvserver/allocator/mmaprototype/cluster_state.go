@@ -1313,6 +1313,14 @@ func (rs *rangeState) removePendingChangeTracking(changeID changeID) {
 	}
 }
 
+func (rs *rangeState) clearAnalyzedConstraints() {
+	if rs.constraints == nil {
+		return
+	}
+	releaseRangeAnalyzedConstraints(rs.constraints)
+	rs.constraints = nil
+}
+
 // clusterState is the state of the cluster known to the allocator, including
 // adjustments based on pending changes. It does not include additional
 // indexing needed for constraint matching, or for tracking ranges that may
@@ -1662,8 +1670,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// assuming the leaseholder wouldn't have sent the message if there was no
 		// change, or we noticed a divergence in membership above and fell through
 		// here.
-		releaseRangeAnalyzedConstraints(rs.constraints)
-		rs.constraints = nil
+		rs.clearAnalyzedConstraints()
 	}
 	// Remove ranges for which this is the localRangeOwner, but for which it is
 	// no longer the leaseholder.
@@ -1704,7 +1711,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			}
 			delete(cs.stores[replica.StoreID].adjusted.replicas, r)
 		}
-		releaseRangeAnalyzedConstraints(rs.constraints)
+		rs.clearAnalyzedConstraints()
 		delete(cs.ranges, r)
 	}
 	localss := cs.stores[msg.StoreID]
@@ -1963,8 +1970,7 @@ func (cs *clusterState) undoPendingChange(cid changeID) {
 		panic(errors.AssertionFailedf("pending change is marked as no-rollback"))
 	}
 	// Wipe the analyzed constraints, as the range has changed.
-	releaseRangeAnalyzedConstraints(rs.constraints)
-	rs.constraints = nil
+	rs.clearAnalyzedConstraints()
 	rs.lastFailedChange = cs.ts.Now()
 	// Undo the change delta as well as the replica change and remove the pending
 	// change from all tracking (range, store, cluster).
