@@ -3200,75 +3200,58 @@ Part of #147634 (reference PR for this quarterly task).
 Release note: None"
 ```
 
-#### Commit 6: Clean Up Mixed Version Tests
+#### Commit 6: Update Mixed Version Tests
 
-Clean up tests that use the cockroach-go-testserver configuration for the old MinSupported version.
+Update tests that use the cockroach-go-testserver configuration to reference the new MinSupported version.
 
-**Find affected files:**
+**Files to update:**
 ```bash
-# Find all mixed_version test files
+# Find mixed_version test files
 ls pkg/sql/logictest/testdata/logic_test/mixed_version_*
-
-# Search for files with cockroach-go-testserver-25.2
-grep -l "cockroach-go-testserver-25.2" pkg/sql/logictest/testdata/logic_test/*
 ```
 
-**Guidance for handling test files:**
+Common files:
+- `pkg/sql/logictest/testdata/logic_test/mixed_version_char`
+- `pkg/sql/logictest/testdata/logic_test/mixed_version_citext`
+- `pkg/sql/logictest/testdata/logic_test/mixed_version_ltree`
+- `pkg/sql/logictest/testdata/logic_test/mixed_version_partial_stats`
 
-**Guidance 1**: When you see `onlyif config local-mixed-25.2` in test files:
-- Remove the `onlyif config local-mixed-25.2` line
-- Remove the logic test directive it applies to (3 lines total typically)
-- If this results in empty subtests or empty `user {root|testuser}` switches, remove those as well
-- Example: A whole `subtest user_provisioning_gating_mixed_version` may need to be removed if it's specific to the mixed version state
+**Update LogicTest headers:**
 
-**Guidance 2**: When you see `# LogicTest: cockroach-go-testserver-25.2` headers:
-- **If the file has ONLY** `cockroach-go-testserver-25.2`: Remove the entire file (it's testing version-gating specific to a version below MinSupported)
-- **If the file has BOTH** `cockroach-go-testserver-25.2 cockroach-go-testserver-25.3`: Keep the file but remove just the 25.2 reference
+For files with single config (char, citext):
+```diff
+-# LogicTest: cockroach-go-testserver-25.2
++# LogicTest: cockroach-go-testserver-25.3
+```
 
-**Files to remove entirely** (have ONLY cockroach-go-testserver-25.2):
-- `pkg/sql/logictest/testdata/logic_test/mixed_version_char` - Tests CHAR type version gating
-- `pkg/sql/logictest/testdata/logic_test/mixed_version_citext` - Tests CITEXT type version gating
-- `pkg/sql/logictest/testdata/logic_test/vector_index_mixed` - Tests vector index version gating
-- (Check for others with: `grep -l "^# LogicTest: cockroach-go-testserver-25.2$" pkg/sql/logictest/testdata/logic_test/*`)
-
-**Files to update** (have BOTH 25.2 and 25.3):
-- `pkg/sql/logictest/testdata/logic_test/mixed_version_ltree` - Tests ltree type availability after upgrade
-- `pkg/sql/logictest/testdata/logic_test/mixed_version_partial_stats` - Tests partial statistics with WHERE clause
-
-For files with multiple configs:
+For files with multiple configs (ltree, partial_stats):
 ```diff
 -# LogicTest: cockroach-go-testserver-25.2 cockroach-go-testserver-25.3
 +# LogicTest: cockroach-go-testserver-25.3
 ```
 
-**After making changes, regenerate test files:**
-```bash
-./dev generate bazel
-```
-
 **Create commit:**
 ```bash
 git add pkg/sql/logictest/testdata/logic_test/mixed_version_*
-git add pkg/sql/logictest/testdata/logic_test/vector_index_mixed
-git add pkg/sql/logictest/tests/cockroach-go-testserver-25.*/
-git commit -m "logictest: clean up mixed-version tests for MinSupported bump
+git commit -m "logictest: update mixed_version tests to use 25.3 testserver
 
 Part of the quarterly M.4 \"Bump MinSupported\" task as outlined in
 \`pkg/clusterversion/README.md\`.
 
 After bumping MinSupported from v25.2 to v25.3, tests that use the
-cockroach-go-testserver predecessor binary configuration need cleanup:
+cockroach-go-testserver predecessor binary configuration need to be
+updated to test against v25.3 instead of v25.2.
 
-Files with ONLY cockroach-go-testserver-25.2 are removed as they test
-version-gating specific to a version below MinSupported:
-- mixed_version_char: CHAR type version gating
-- mixed_version_citext: CITEXT type version gating
-- vector_index_mixed: Vector index version gating
-
-Files with BOTH 25.2 and 25.3 testservers are updated to remove the
-25.2 reference since it's below MinSupported:
+This commit updates the LogicTest headers for mixed-version tests that
+validate feature compatibility across version boundaries:
+- mixed_version_char: Tests CHAR type upgrades
+- mixed_version_citext: Tests case-insensitive text type upgrades
 - mixed_version_ltree: Tests ltree type availability after upgrade
 - mixed_version_partial_stats: Tests partial statistics with WHERE clause
+
+For ltree and partial_stats, which previously tested with both 25.2 and
+25.3 testservers, the headers now only reference 25.3 since 25.2 is
+below MinSupported.
 
 Part of #147634 (reference PR for this quarterly task).
 
