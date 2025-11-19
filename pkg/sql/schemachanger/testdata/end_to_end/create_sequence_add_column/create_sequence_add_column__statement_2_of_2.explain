@@ -39,7 +39,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 23 elements transitioning toward PUBLIC
- │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+ │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 101 (public)}
  │    │    │    ├── PUBLIC        → ABSENT Owner:{DescID: 105 (sq1+)}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (sq1+), Name: "admin"}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (sq1+), Name: "root"}
@@ -72,7 +72,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 23 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 101 (public)}
  │         │    ├── ABSENT → PUBLIC        Owner:{DescID: 105 (sq1+)}
  │         │    ├── ABSENT → PUBLIC        UserPrivileges:{DescID: 105 (sq1+), Name: "admin"}
  │         │    ├── ABSENT → PUBLIC        UserPrivileges:{DescID: 105 (sq1+), Name: "root"}

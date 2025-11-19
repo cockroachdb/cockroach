@@ -19,7 +19,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → DROPPED Database:{DescID: 104 (multi_region_test_db-)}
  │         │    ├── PUBLIC → ABSENT  DatabaseRoleSetting:{DescID: 104 (multi_region_test_db-), Name: "__placeholder_role_name__"}
  │         │    ├── PUBLIC → ABSENT  DatabaseRegionConfig:{DescID: 104 (multi_region_test_db-), ReferencedDescID: 106 (crdb_internal_region-)}
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 105 (public-)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 106 (crdb_internal_region-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "public"}
@@ -29,21 +29,21 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID: 106 (crdb_internal_region-), Name: "us-east2"}
  │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID: 106 (crdb_internal_region-), Name: "us-east3"}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 106 (crdb_internal_region-), ReferencedDescID: 105 (public-)}
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (public-), Name: "public", ReferencedDescID: 104 (multi_region_test_db-)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (public-), Name: "public"}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 105 (public-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (public-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (public-), Name: "public"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (public-), Name: "root"}
  │         │    ├── PUBLIC → DROPPED Schema:{DescID: 105 (public-)}
  │         │    ├── PUBLIC → ABSENT  SchemaParent:{DescID: 105 (public-), ReferencedDescID: 104 (multi_region_test_db-)}
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107 (_crdb_internal_region-), Name: "_crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107 (_crdb_internal_region-), Name: "_crdb_internal_region", ReferencedDescID: 105 (public-)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 107 (_crdb_internal_region-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "public"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "root"}
  │         │    ├── PUBLIC → DROPPED AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 107 (_crdb_internal_region-), ReferencedDescID: 105 (public-)}
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table", ReferencedDescID: 104 (multi_region_test_db-)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table", ReferencedDescID: 105 (public-)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108 (table_regional_by_table-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "root"}
@@ -108,10 +108,12 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":105}}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"_crdb_internal_r...","SchemaID":105}}
  │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"root"}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
@@ -127,8 +129,6 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
- │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"_crdb_internal_r...","SchemaID":105}}
- │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
@@ -157,7 +157,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │    │    │    ├── DROPPED → PUBLIC Database:{DescID: 104 (multi_region_test_db-)}
  │    │    │    ├── ABSENT  → PUBLIC DatabaseRoleSetting:{DescID: 104 (multi_region_test_db-), Name: "__placeholder_role_name__"}
  │    │    │    ├── ABSENT  → PUBLIC DatabaseRegionConfig:{DescID: 104 (multi_region_test_db-), ReferencedDescID: 106 (crdb_internal_region-)}
- │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 105 (public-)}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 106 (crdb_internal_region-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "admin"}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "public"}
@@ -167,21 +167,21 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │    │    │    ├── ABSENT  → PUBLIC EnumTypeValue:{DescID: 106 (crdb_internal_region-), Name: "us-east2"}
  │    │    │    ├── ABSENT  → PUBLIC EnumTypeValue:{DescID: 106 (crdb_internal_region-), Name: "us-east3"}
  │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 106 (crdb_internal_region-), ReferencedDescID: 105 (public-)}
- │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 105 (public-), Name: "public", ReferencedDescID: 104 (multi_region_test_db-)}
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 105 (public-), Name: "public"}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 105 (public-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 105 (public-), Name: "admin"}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 105 (public-), Name: "public"}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 105 (public-), Name: "root"}
  │    │    │    ├── DROPPED → PUBLIC Schema:{DescID: 105 (public-)}
  │    │    │    ├── ABSENT  → PUBLIC SchemaParent:{DescID: 105 (public-), ReferencedDescID: 104 (multi_region_test_db-)}
- │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 107 (_crdb_internal_region-), Name: "_crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 107 (_crdb_internal_region-), Name: "_crdb_internal_region", ReferencedDescID: 105 (public-)}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 107 (_crdb_internal_region-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "admin"}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "public"}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "root"}
  │    │    │    ├── DROPPED → PUBLIC AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
  │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 107 (_crdb_internal_region-), ReferencedDescID: 105 (public-)}
- │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table", ReferencedDescID: 104 (multi_region_test_db-)}
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table", ReferencedDescID: 105 (public-)}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 108 (table_regional_by_table-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "admin"}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "root"}
@@ -225,7 +225,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → DROPPED Database:{DescID: 104 (multi_region_test_db-)}
  │         │    ├── PUBLIC → ABSENT  DatabaseRoleSetting:{DescID: 104 (multi_region_test_db-), Name: "__placeholder_role_name__"}
  │         │    ├── PUBLIC → ABSENT  DatabaseRegionConfig:{DescID: 104 (multi_region_test_db-), ReferencedDescID: 106 (crdb_internal_region-)}
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (crdb_internal_region-), Name: "crdb_internal_region", ReferencedDescID: 105 (public-)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 106 (crdb_internal_region-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (crdb_internal_region-), Name: "public"}
@@ -235,21 +235,21 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID: 106 (crdb_internal_region-), Name: "us-east2"}
  │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID: 106 (crdb_internal_region-), Name: "us-east3"}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 106 (crdb_internal_region-), ReferencedDescID: 105 (public-)}
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (public-), Name: "public", ReferencedDescID: 104 (multi_region_test_db-)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (public-), Name: "public"}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 105 (public-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (public-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (public-), Name: "public"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (public-), Name: "root"}
  │         │    ├── PUBLIC → DROPPED Schema:{DescID: 105 (public-)}
  │         │    ├── PUBLIC → ABSENT  SchemaParent:{DescID: 105 (public-), ReferencedDescID: 104 (multi_region_test_db-)}
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107 (_crdb_internal_region-), Name: "_crdb_internal_region", ReferencedDescID: 104 (multi_region_test_db-)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107 (_crdb_internal_region-), Name: "_crdb_internal_region", ReferencedDescID: 105 (public-)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 107 (_crdb_internal_region-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "public"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (_crdb_internal_region-), Name: "root"}
  │         │    ├── PUBLIC → DROPPED AliasType:{DescID: 107 (_crdb_internal_region-), ReferencedTypeIDs: [106 (crdb_internal_region-), 107 (_crdb_internal_region-)]}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 107 (_crdb_internal_region-), ReferencedDescID: 105 (public-)}
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table", ReferencedDescID: 104 (multi_region_test_db-)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table", ReferencedDescID: 105 (public-)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108 (table_regional_by_table-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "root"}
@@ -314,10 +314,12 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":105}}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"_crdb_internal_r...","SchemaID":105}}
  │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"root"}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
@@ -334,8 +336,6 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
- │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"_crdb_internal_r...","SchemaID":105}}
- │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}

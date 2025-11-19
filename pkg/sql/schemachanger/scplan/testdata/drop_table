@@ -44,7 +44,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 ----
 StatementPhase stage 1 of 1 with 150 MutationType ops
   transitions:
-    [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -122,13 +122,13 @@ StatementPhase stage 1 of 1 with 150 MutationType ops
     [[TriggerEvents:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerFunctionCall:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerDeps:{DescID: 109, ReferencedTypeIDs: [107 108], TriggerID: 1, ReferencedFunctionIDs: [113]}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 110}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 110, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -682,7 +682,7 @@ StatementPhase stage 1 of 1 with 150 MutationType ops
       TableID: 109
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -760,13 +760,13 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[TriggerEvents:{DescID: 109, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[TriggerFunctionCall:{DescID: 109, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[TriggerDeps:{DescID: 109, ReferencedTypeIDs: [107 108], TriggerID: 1, ReferencedFunctionIDs: [113]}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 110}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Sequence:{DescID: 110}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaChild:{DescID: 110, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 111}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -799,7 +799,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
       {}
 PreCommitPhase stage 2 of 2 with 161 MutationType ops
   transitions:
-    [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -877,13 +877,13 @@ PreCommitPhase stage 2 of 2 with 161 MutationType ops
     [[TriggerEvents:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerFunctionCall:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerDeps:{DescID: 109, ReferencedTypeIDs: [107 108], TriggerID: 1, ReferencedFunctionIDs: [113]}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 110}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 110, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -2487,15 +2487,15 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT]
+- from: [Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 101}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT]
+- from: [Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 101}, ABSENT]
   to:   [Sequence:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT]
+- from: [Namespace:{DescID: 111, Name: v1, ReferencedDescID: 101}, ABSENT]
   to:   [View:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -2596,7 +2596,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: SameStagePrecedence
   rule: table removed right before garbage collection
 - from: [Sequence:{DescID: 110}, DROPPED]
-  to:   [Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT]
+  to:   [Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Sequence:{DescID: 110}, DROPPED]
@@ -2852,7 +2852,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
-  to:   [Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT]
+  to:   [Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
@@ -3096,7 +3096,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
-  to:   [Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT]
+  to:   [Namespace:{DescID: 111, Name: v1, ReferencedDescID: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
@@ -3187,7 +3187,7 @@ PreCommitPhase stage 2 of 2 with 7 MutationType ops
         statementtag: DROP TABLE
 PostCommitNonRevertiblePhase stage 1 of 2 with 59 MutationType ops
   transitions:
-    [[Namespace:{DescID: 104, Name: customers, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: customers, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -3839,7 +3839,7 @@ DROP TABLE defaultdb.customers CASCADE;
   to:   [Table:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 104, Name: customers, ReferencedDescID: 100}, ABSENT]
+- from: [Namespace:{DescID: 104, Name: customers, ReferencedDescID: 101}, ABSENT]
   to:   [Table:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -4020,7 +4020,7 @@ DROP TABLE defaultdb.customers CASCADE;
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 104, Name: customers, ReferencedDescID: 100}, ABSENT]
+  to:   [Namespace:{DescID: 104, Name: customers, ReferencedDescID: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 104}, DROPPED]
@@ -4083,7 +4083,7 @@ DROP TABLE defaultdb.greeter
 ----
 StatementPhase stage 1 of 1 with 68 MutationType ops
   transitions:
-    [[Namespace:{DescID: 116, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 116, Name: greeter, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 116}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -4366,7 +4366,7 @@ StatementPhase stage 1 of 1 with 68 MutationType ops
       TableID: 116
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 116, Name: greeter, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 116, Name: greeter, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 116}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 116, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 116, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -4419,7 +4419,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
       {}
 PreCommitPhase stage 2 of 2 with 72 MutationType ops
   transitions:
-    [[Namespace:{DescID: 116, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 116, Name: greeter, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 116}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: root}, ABSENT], PUBLIC] -> ABSENT

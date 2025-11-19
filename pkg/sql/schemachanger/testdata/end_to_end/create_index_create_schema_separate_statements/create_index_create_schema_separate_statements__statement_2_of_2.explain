@@ -11,7 +11,7 @@ Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE 
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 6 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Schema:{DescID: 105 (sc+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sc+), Name: "sc"}
  │         │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 105 (sc+), ReferencedDescID: 100 (defaultdb)}
  │         │    ├── ABSENT → PUBLIC Owner:{DescID: 105 (sc+)}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (sc+), Name: "admin"}
@@ -34,7 +34,7 @@ Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE 
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (idx+)}
  │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    │    ├── PUBLIC        → ABSENT Schema:{DescID: 105 (sc+)}
- │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 105 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
+ │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 105 (sc+), Name: "sc"}
  │    │    │    ├── PUBLIC        → ABSENT SchemaParent:{DescID: 105 (sc+), ReferencedDescID: 100 (defaultdb)}
  │    │    │    ├── PUBLIC        → ABSENT Owner:{DescID: 105 (sc+)}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (sc+), Name: "admin"}
@@ -55,7 +55,7 @@ Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE 
  │         │    ├── ABSENT → PUBLIC           IndexData:{DescID: 104 (t), IndexID: 2 (idx+)}
  │         │    ├── ABSENT → BACKFILL_ONLY    SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         │    ├── ABSENT → DESCRIPTOR_ADDED Schema:{DescID: 105 (sc+)}
- │         │    ├── ABSENT → PUBLIC           Namespace:{DescID: 105 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC           Namespace:{DescID: 105 (sc+), Name: "sc"}
  │         │    ├── ABSENT → PUBLIC           SchemaParent:{DescID: 105 (sc+), ReferencedDescID: 100 (defaultdb)}
  │         │    ├── ABSENT → PUBLIC           Owner:{DescID: 105 (sc+)}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (sc+), Name: "admin"}

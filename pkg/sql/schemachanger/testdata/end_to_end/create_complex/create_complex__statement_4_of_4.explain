@@ -15,7 +15,7 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 15 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Sequence:{DescID: 108 (sq1+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 108 (sq1+), Name: "sq1", ReferencedDescID: 104 (db+)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 108 (sq1+), Name: "sq1", ReferencedDescID: 106 (sc+)}
  │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 108 (sq1+), ReferencedDescID: 106 (sc+)}
  │         │    ├── ABSENT → PUBLIC TableData:{DescID: 108 (sq1+), ReferencedDescID: 104 (db+)}
  │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 108 (sq1+), Name: "START"}
@@ -64,14 +64,14 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 104 (db+), Name: "root"}
       │    │    ├── PUBLIC → ABSENT Database:{DescID: 104 (db+)}
       │    │    ├── PUBLIC → ABSENT DatabaseData:{DescID: 104 (db+)}
-      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 105 (public+), Name: "public", ReferencedDescID: 104 (db+)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 105 (public+), Name: "public"}
       │    │    ├── PUBLIC → ABSENT Owner:{DescID: 105 (public+)}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 105 (public+), Name: "admin"}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 105 (public+), Name: "public"}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 105 (public+), Name: "root"}
       │    │    ├── PUBLIC → ABSENT Schema:{DescID: 105 (public+)}
       │    │    ├── PUBLIC → ABSENT SchemaParent:{DescID: 105 (public+), ReferencedDescID: 104 (db+)}
-      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 106 (sc+), Name: "sc", ReferencedDescID: 104 (db+)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 106 (sc+), Name: "sc"}
       │    │    ├── PUBLIC → ABSENT Owner:{DescID: 106 (sc+)}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 106 (sc+), Name: "admin"}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 106 (sc+), Name: "root"}
@@ -86,7 +86,7 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
       │    │    ├── PUBLIC → ABSENT FunctionName:{DescID: 107 (t+)}
       │    │    ├── PUBLIC → ABSENT FunctionBody:{DescID: 107 (t+)}
       │    │    ├── PUBLIC → ABSENT Sequence:{DescID: 108 (sq1+)}
-      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 108 (sq1+), Name: "sq1", ReferencedDescID: 104 (db+)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 108 (sq1+), Name: "sq1", ReferencedDescID: 106 (sc+)}
       │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 108 (sq1+), ReferencedDescID: 106 (sc+)}
       │    │    ├── PUBLIC → ABSENT TableData:{DescID: 108 (sq1+), ReferencedDescID: 104 (db+)}
       │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 108 (sq1+), Name: "START"}
@@ -111,14 +111,14 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (db+), Name: "root"}
            │    ├── ABSENT → PUBLIC Database:{DescID: 104 (db+)}
            │    ├── ABSENT → PUBLIC DatabaseData:{DescID: 104 (db+)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (public+), Name: "public", ReferencedDescID: 104 (db+)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (public+), Name: "public"}
            │    ├── ABSENT → PUBLIC Owner:{DescID: 105 (public+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (public+), Name: "admin"}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (public+), Name: "public"}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (public+), Name: "root"}
            │    ├── ABSENT → PUBLIC Schema:{DescID: 105 (public+)}
            │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 105 (public+), ReferencedDescID: 104 (db+)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (sc+), Name: "sc", ReferencedDescID: 104 (db+)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (sc+), Name: "sc"}
            │    ├── ABSENT → PUBLIC Owner:{DescID: 106 (sc+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (sc+), Name: "admin"}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (sc+), Name: "root"}
@@ -133,7 +133,7 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
            │    ├── ABSENT → PUBLIC FunctionName:{DescID: 107 (t+)}
            │    ├── ABSENT → PUBLIC FunctionBody:{DescID: 107 (t+)}
            │    ├── ABSENT → PUBLIC Sequence:{DescID: 108 (sq1+)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 108 (sq1+), Name: "sq1", ReferencedDescID: 104 (db+)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 108 (sq1+), Name: "sq1", ReferencedDescID: 106 (sc+)}
            │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 108 (sq1+), ReferencedDescID: 106 (sc+)}
            │    ├── ABSENT → PUBLIC TableData:{DescID: 108 (sq1+), ReferencedDescID: 104 (db+)}
            │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 108 (sq1+), Name: "START"}

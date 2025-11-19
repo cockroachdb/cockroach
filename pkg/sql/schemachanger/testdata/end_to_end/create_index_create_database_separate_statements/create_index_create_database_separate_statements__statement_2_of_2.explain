@@ -18,7 +18,7 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (db+), Name: "public"}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (db+), Name: "root"}
  │         │    ├── ABSENT → PUBLIC Schema:{DescID: 106 (public+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (public+), Name: "public"}
  │         │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 106 (public+), ReferencedDescID: 105 (db+)}
  │         │    ├── ABSENT → PUBLIC Owner:{DescID: 106 (public+)}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (public+), Name: "admin"}
@@ -58,7 +58,7 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (db+), Name: "public"}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (db+), Name: "root"}
  │    │    │    ├── PUBLIC        → ABSENT Schema:{DescID: 106 (public+)}
- │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+)}
+ │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 106 (public+), Name: "public"}
  │    │    │    ├── PUBLIC        → ABSENT SchemaParent:{DescID: 106 (public+), ReferencedDescID: 105 (db+)}
  │    │    │    ├── PUBLIC        → ABSENT Owner:{DescID: 106 (public+)}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 106 (public+), Name: "admin"}
@@ -86,7 +86,7 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (db+), Name: "public"}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (db+), Name: "root"}
  │         │    ├── ABSENT → DESCRIPTOR_ADDED Schema:{DescID: 106 (public+)}
- │         │    ├── ABSENT → PUBLIC           Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+)}
+ │         │    ├── ABSENT → PUBLIC           Namespace:{DescID: 106 (public+), Name: "public"}
  │         │    ├── ABSENT → PUBLIC           SchemaParent:{DescID: 106 (public+), ReferencedDescID: 105 (db+)}
  │         │    ├── ABSENT → PUBLIC           Owner:{DescID: 106 (public+)}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 106 (public+), Name: "admin"}

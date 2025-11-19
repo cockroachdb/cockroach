@@ -8,7 +8,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 15 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Sequence:{DescID: 104 (sq1+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 101 (public)}
  │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 104 (sq1+), ReferencedDescID: 101 (public)}
  │         │    ├── ABSENT → PUBLIC TableData:{DescID: 104 (sq1+), ReferencedDescID: 100 (defaultdb)}
  │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "START"}
@@ -51,7 +51,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 15 elements transitioning toward PUBLIC
       │    │    ├── PUBLIC → ABSENT Sequence:{DescID: 104 (sq1+)}
-      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 101 (public)}
       │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 104 (sq1+), ReferencedDescID: 101 (public)}
       │    │    ├── PUBLIC → ABSENT TableData:{DescID: 104 (sq1+), ReferencedDescID: 100 (defaultdb)}
       │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 104 (sq1+), Name: "START"}
@@ -70,7 +70,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
       └── Stage 2 of 2 in PreCommitPhase
            ├── 15 elements transitioning toward PUBLIC
            │    ├── ABSENT → PUBLIC Sequence:{DescID: 104 (sq1+)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 101 (public)}
            │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 104 (sq1+), ReferencedDescID: 101 (public)}
            │    ├── ABSENT → PUBLIC TableData:{DescID: 104 (sq1+), ReferencedDescID: 100 (defaultdb)}
            │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "START"}

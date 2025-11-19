@@ -29,7 +29,7 @@ COMMENT ON CONSTRAINT fk_customers ON defaultdb.shipments IS 'customer is import
 build
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-- [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 109, name: shipments, schemaId: 101}
 - [[Owner:{DescID: 109}, ABSENT], PUBLIC]
   {descriptorId: 109, owner: root}
@@ -157,7 +157,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   {constraintId: 3, name: fk_orders, tableId: 109}
 - [[TableData:{DescID: 109, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 109}
-- [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 110, name: sq1, schemaId: 101}
 - [[Owner:{DescID: 110}, ABSENT], PUBLIC]
   {descriptorId: 110, owner: root}
@@ -171,7 +171,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   {childObjectId: 110, schemaId: 101}
 - [[TableData:{DescID: 110, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 110}
-- [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 111, name: v1, schemaId: 101}
 - [[Owner:{DescID: 111}, ABSENT], PUBLIC]
   {descriptorId: 111, owner: root}

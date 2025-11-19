@@ -8,7 +8,7 @@ Schema change plan for DROP SEQUENCE ‹defaultdb›.‹public›.‹sq1›; fol
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 14 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (sq1-), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (sq1-), Name: "sq1", ReferencedDescID: 101 (public)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (sq1-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (sq1-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (sq1-), Name: "root"}

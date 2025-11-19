@@ -21,7 +21,7 @@ CREATE DATABASE db OWNER roacher;
   {descriptorId: 104, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Schema:{DescID: 105}, PUBLIC], ABSENT]
   {isPublic: true, schemaId: 105}
-- [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, PUBLIC], ABSENT]
+- [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 0}, PUBLIC], ABSENT]
   {databaseId: 104, descriptorId: 105, name: public}
 - [[SchemaParent:{DescID: 105, ReferencedDescID: 104}, PUBLIC], ABSENT]
   {parentDatabaseId: 104, schemaId: 105}

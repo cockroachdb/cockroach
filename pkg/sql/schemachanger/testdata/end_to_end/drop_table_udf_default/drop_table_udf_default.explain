@@ -9,7 +9,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 36 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 101 (public)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 105 (t-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (t-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (t-), Name: "root"}
@@ -95,7 +95,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 36 elements transitioning toward ABSENT
- │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 101 (public)}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 105 (t-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 105 (t-), Name: "admin"}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 105 (t-), Name: "root"}
@@ -135,7 +135,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 36 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (t-), Name: "t", ReferencedDescID: 101 (public)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 105 (t-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (t-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (t-), Name: "root"}

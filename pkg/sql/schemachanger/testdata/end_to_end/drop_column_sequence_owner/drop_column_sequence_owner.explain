@@ -190,7 +190,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC      → ABSENT           SequenceOwner:{DescID: 104 (t), ColumnID: 2 (j-), ReferencedDescID: 105 (sq1-)}
       │    │    ├── DELETE_ONLY → ABSENT           PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
       │    │    ├── PUBLIC      → ABSENT           IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
-      │    │    ├── PUBLIC      → ABSENT           Namespace:{DescID: 105 (sq1-), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC      → ABSENT           Namespace:{DescID: 105 (sq1-), Name: "sq1", ReferencedDescID: 101 (public)}
       │    │    ├── PUBLIC      → ABSENT           Owner:{DescID: 105 (sq1-)}
       │    │    ├── PUBLIC      → ABSENT           UserPrivileges:{DescID: 105 (sq1-), Name: "admin"}
       │    │    ├── PUBLIC      → ABSENT           UserPrivileges:{DescID: 105 (sq1-), Name: "root"}

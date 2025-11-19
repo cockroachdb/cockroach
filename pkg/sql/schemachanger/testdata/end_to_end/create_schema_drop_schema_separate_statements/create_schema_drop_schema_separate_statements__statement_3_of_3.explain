@@ -10,7 +10,7 @@ Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE 
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 6 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Schema:{DescID: 105 (sc+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sc+), Name: "sc"}
  │         │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 105 (sc+), ReferencedDescID: 100 (defaultdb)}
  │         │    ├── ABSENT → PUBLIC Owner:{DescID: 105 (sc+)}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (sc+), Name: "admin"}
@@ -28,7 +28,7 @@ Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE 
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 6 elements transitioning toward PUBLIC
       │    │    ├── PUBLIC  → ABSENT Schema:{DescID: 105 (sc+)}
-      │    │    ├── PUBLIC  → ABSENT Namespace:{DescID: 105 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC  → ABSENT Namespace:{DescID: 105 (sc+), Name: "sc"}
       │    │    ├── PUBLIC  → ABSENT SchemaParent:{DescID: 105 (sc+), ReferencedDescID: 100 (defaultdb)}
       │    │    ├── PUBLIC  → ABSENT Owner:{DescID: 105 (sc+)}
       │    │    ├── PUBLIC  → ABSENT UserPrivileges:{DescID: 105 (sc+), Name: "admin"}
@@ -40,7 +40,7 @@ Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE 
       └── Stage 2 of 2 in PreCommitPhase
            ├── 6 elements transitioning toward PUBLIC
            │    ├── ABSENT → PUBLIC Schema:{DescID: 105 (sc+)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sc+), Name: "sc", ReferencedDescID: 100 (defaultdb)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sc+), Name: "sc"}
            │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 105 (sc+), ReferencedDescID: 100 (defaultdb)}
            │    ├── ABSENT → PUBLIC Owner:{DescID: 105 (sc+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (sc+), Name: "admin"}
