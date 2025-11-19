@@ -986,6 +986,7 @@ func CGoMemMaybePurge(
 }
 
 var netstatEvery = log.Every(time.Minute)
+var vcpuCgroupEvery = log.Every(time.Hour)
 
 // SampleEnvironment queries the runtime system for various interesting metrics,
 // storing the resulting values in the set of metric gauges maintained by
@@ -1563,6 +1564,29 @@ func GetCPUCapacity() float64 {
 	// the process could use is the lesser of the two.
 	if cpuShare > numProcs {
 		return numProcs
+	}
+	return cpuShare
+}
+
+// GetVCPUs returns the number of vCPUs allocated to the process as
+// reported by cgroups. This falls back to the number of CPUs reported
+// by the OS in case of error. Setting of GOMAXPROCS does not affect this
+// value (as opposed to GetCPUCapacity above which is used for internal
+// rebalancing decisions).
+func GetVCPUs(ctx context.Context) float64 {
+	cgroupCPU, err := cgroups.GetCgroupCPU()
+	if err != nil {
+		if vcpuCgroupEvery.ShouldLog() {
+			log.Ops.Warningf(ctx, "unable to read cgroup CPU settings: %v; falling back to OS-reported CPU count", err)
+		}
+		// No cgroup limits configured. Fall back to the number of CPUs reported
+		// by the operating system.
+		return float64(runtime.NumCPU())
+	}
+	cpuShare := cgroupCPU.CPUShares()
+	if cpuShare == 0 {
+		// No CPU quota set in cgroup. Fall back to OS-reported CPU count.
+		return float64(runtime.NumCPU())
 	}
 	return cpuShare
 }

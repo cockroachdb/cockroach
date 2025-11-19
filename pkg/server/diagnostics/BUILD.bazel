@@ -20,6 +20,7 @@ go_library(
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/server/diagnostics/diagnosticspb",
+        "//pkg/server/status",
         "//pkg/server/status/statuspb",
         "//pkg/server/telemetry",
         "//pkg/settings",
