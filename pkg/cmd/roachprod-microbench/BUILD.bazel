@@ -9,6 +9,7 @@ go_library(
         "executor.go",
         "export.go",
         "github.go",
+        "list.go",
         "main.go",
         "metadata.go",
         "report.go",
@@ -26,6 +27,7 @@ go_library(
         "//pkg/cmd/roachprod-microbench/model",
         "//pkg/cmd/roachprod-microbench/parser",
         "//pkg/cmd/roachprod-microbench/util",
+        "//pkg/internal/codeowners",
         "//pkg/roachprod",
         "//pkg/roachprod/config",
         "//pkg/roachprod/install",
@@ -42,6 +44,7 @@ go_library(
         "@org_golang_x_exp//maps",
         "@org_golang_x_perf//benchfmt",
         "@org_golang_x_perf//benchseries",
+        "@org_golang_x_tools//go/packages",
     ],
 )
 
@@ -58,8 +61,9 @@ go_test(
         "executor_test.go",
         "export_test.go",
         "github_test.go",
+        "list_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + ["//.github:CODEOWNERS"],
     embed = [":roachprod-microbench_lib"],
     deps = [
         "//pkg/cmd/bazci/githubpost/issues",
