@@ -381,42 +381,38 @@ func (a *TraceAnalyzer) GetQueryLevelStats() QueryLevelStats {
 	return a.queryLevelStats
 }
 
-// getAllContentionEvents returns all contention events that are found in the
-// given trace.
-func getAllContentionEvents(trace []tracingpb.RecordedSpan) []kvpb.ContentionEvent {
-	var contentionEvents []kvpb.ContentionEvent
-	var ev kvpb.ContentionEvent
+func getKVAndACStats(
+	trace []tracingpb.RecordedSpan,
+) (contentionEvents []kvpb.ContentionEvent, acWaitTime time.Duration) {
+	var contentionEvent kvpb.ContentionEvent
+	var admissionStats admissionpb.AdmissionWorkQueueStats
+	var quorumEvent kvpb.QuorumReplicationFlowAdmissionEvent
 	for i := range trace {
 		trace[i].Structured(func(any *pbtypes.Any, _ time.Time) {
-			if !pbtypes.Is(any, &ev) {
+			// Collect contention events.
+			if pbtypes.Is(any, &contentionEvent) {
+				if err := pbtypes.UnmarshalAny(any, &contentionEvent); err == nil {
+					contentionEvents = append(contentionEvents, contentionEvent)
+				}
 				return
 			}
-			if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
+			// Accumulate wait duration from AdmissionWorkQueueStats.
+			if pbtypes.Is(any, &admissionStats) {
+				if err := pbtypes.UnmarshalAny(any, &admissionStats); err == nil {
+					acWaitTime += admissionStats.WaitDurationNanos
+				}
 				return
 			}
-			contentionEvents = append(contentionEvents, ev)
+			// Accumulate wait duration from QuorumReplicationFlowAdmissionEvent.
+			if pbtypes.Is(any, &quorumEvent) {
+				if err := pbtypes.UnmarshalAny(any, &quorumEvent); err == nil {
+					acWaitTime += quorumEvent.WaitDurationNanos
+				}
+				return
+			}
 		})
 	}
-	return contentionEvents
-}
-
-// getAdmissionWaitTime returns the total admission wait time accumulated
-// from all AdmissionWorkQueueStats events found in the given trace.
-func getAdmissionWaitTime(trace []tracingpb.RecordedSpan) time.Duration {
-	var totalWaitTime time.Duration
-	var ev admissionpb.AdmissionWorkQueueStats
-	for i := range trace {
-		trace[i].Structured(func(any *pbtypes.Any, _ time.Time) {
-			if !pbtypes.Is(any, &ev) {
-				return
-			}
-			if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
-				return
-			}
-			totalWaitTime += ev.WaitDurationNanos
-		})
-	}
-	return totalWaitTime
+	return contentionEvents, acWaitTime
 }
 
 // GetQueryLevelStats returns all the top-level stats in a QueryLevelStats
@@ -438,7 +434,8 @@ func GetQueryLevelStats(
 		analyzer.ProcessStats()
 		queryLevelStats.Accumulate(analyzer.GetQueryLevelStats())
 	}
-	queryLevelStats.ContentionEvents = getAllContentionEvents(trace)
-	queryLevelStats.AdmissionWaitTime = getAdmissionWaitTime(trace)
+	contentionEvents, acWaitTime := getKVAndACStats(trace)
+	queryLevelStats.AdmissionWaitTime = acWaitTime
+	queryLevelStats.ContentionEvents = contentionEvents
 	return queryLevelStats, errs
 }
