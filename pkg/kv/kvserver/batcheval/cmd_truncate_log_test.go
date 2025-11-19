@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -123,13 +124,13 @@ func TestTruncateLog(t *testing.T) {
 	// Verify the stats match what's actually in the log engine.
 	start := keys.RaftLogKey(rangeID, compactedIndex+1)
 	end := keys.RaftLogKey(rangeID, compactedIndex+8)
-	expectedStats, err := storage.ComputeStats(ctx, logEng, start, end, 0)
+	expectedStats, err := storage.ComputeStats(ctx, logEng, fs.ReplicationReadCategory, start, end, 0)
 	require.NoError(t, err)
 	assert.Equal(t, -expectedStats.SysBytes, res.Replicated.RaftLogDelta,
 		"RaftLogDelta should match stats computed from log engine")
 
 	// The state machine engine's stats should be zero.
-	zeroStats, err := storage.ComputeStats(ctx, stateEng, start, end, 0)
+	zeroStats, err := storage.ComputeStats(ctx, stateEng, fs.UnknownReadCategory, start, end, 0)
 	require.NoError(t, err)
 	require.Zero(t, zeroStats.SysBytes)
 }
