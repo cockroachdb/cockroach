@@ -108,6 +108,17 @@ var bugfix149481Enabled = settings.RegisterBoolSetting(
 	true,
 	settings.WithVisibility(settings.Reserved))
 
+// ChildMetricsStorageEnabled controls whether to record high-cardinality child metrics
+// into the time series database. This is separate from ChildMetricsEnabled which controls
+// Prometheus exports, allowing independent control of child metrics recording vs export.
+// This setting enables debugging of changefeeds and should not be considered functionality
+// to expand support for.
+var ChildMetricsStorageEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel, "timeseries.child_metrics.enabled",
+	"enables the collection of high-cardinality child metrics into the time series database",
+	false,
+	settings.WithVisibility(settings.Reserved))
+
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
 //
@@ -428,7 +439,7 @@ func (mr *MetricsRecorder) ExportToGraphite(
 // GetTimeSeriesData serializes registered metrics for consumption by
 // CockroachDB's time series system. GetTimeSeriesData implements the DataSource
 // interface of the ts package.
-func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
+func (mr *MetricsRecorder) GetTimeSeriesData(childMetrics bool) []tspb.TimeSeriesData {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
 
@@ -438,6 +449,13 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 			log.Dev.Warning(context.TODO(), "MetricsRecorder.GetTimeSeriesData() called before NodeID allocation")
 		}
 		return nil
+	}
+
+	if childMetrics {
+		if !ChildMetricsStorageEnabled.Get(&mr.settings.SV) {
+			return nil
+		}
+		return nil // TODO(jasonlmfong): to be implemented
 	}
 
 	lastDataCount := atomic.LoadInt64(&mr.lastDataCount)

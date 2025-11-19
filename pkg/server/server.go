@@ -2013,7 +2013,12 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// The writes will be async; we'll wait for the first one to go through
 	// later in this method, using the returned channel.
 	firstTSDBPollDone := s.tsDB.PollSource(
-		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
+		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper, false,
+	)
+
+	// high cardinality child metrics collector, we don't need to wait for the first one
+	s.tsDB.PollSource(
+		s.cfg.AmbientCtx, s.recorder, base.DefaultHighCardinalityMetricsSampleInterval, ts.Resolution1m, s.stopper, true,
 	)
 
 	// Export statistics to graphite, if enabled by configuration.
