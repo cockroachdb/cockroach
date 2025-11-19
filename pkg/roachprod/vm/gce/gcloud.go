@@ -2452,7 +2452,7 @@ func (p *Provider) ListLoadBalancers(_ *logger.Logger, vms vm.List) ([]vm.Servic
 }
 
 // Given a machine type, return the allowed number (> 0) of local SSDs, sorted in ascending order.
-// N.B. Only n1, n2, n2d and c2 instances are supported since we don't typically use other instance types.
+// N.B. Only n1, n2, n2d, n4, and c2 instances are supported since we don't typically use other instance types.
 // Consult https://cloud.google.com/compute/docs/disks/#local_ssd_machine_type_restrictions for other types of instances.
 func AllowedLocalSSDCount(machineType string) ([]int, error) {
 	// E.g., n2-standard-4, n2-custom-8-16384.
@@ -2484,6 +2484,20 @@ func AllowedLocalSSDCount(machineType string) ([]int, error) {
 			}
 			if numCpus <= 128 {
 				return []int{16, 24}, nil
+			}
+		case "n4":
+			// N4 machines support similar local SSD configurations as N2
+			if numCpus <= 10 {
+				return []int{1, 2, 4, 8, 16, 24}, nil
+			}
+			if numCpus <= 20 {
+				return []int{2, 4, 8, 16, 24}, nil
+			}
+			if numCpus <= 40 {
+				return []int{4, 8, 16, 24}, nil
+			}
+			if numCpus <= 80 {
+				return []int{8, 16, 24}, nil
 			}
 		case "c2":
 			if numCpus <= 8 {

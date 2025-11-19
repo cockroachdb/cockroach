@@ -13,6 +13,7 @@ MISC_SRCS = [
     "//pkg/kv/kvserver/spanlatch:latch_interval_btree_test.go",
     "//pkg/roachprod/agents/opentelemetry:cockroachdb_metrics.go",
     "//pkg/roachprod/install:types_generated.go",
+    "//pkg/roachprod/ui:assets.tar.zst",
     "//pkg/roachprod/vm/aws:terraform/main.tf",
     "//pkg/spanconfig/spanconfigstore:entry_interval_btree.go",
     "//pkg/spanconfig/spanconfigstore:entry_interval_btree_test.go",

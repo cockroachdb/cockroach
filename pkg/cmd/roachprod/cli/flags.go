@@ -98,6 +98,8 @@ var (
 
 	grafanaTags         []string
 	grafanaDashboardUID string
+
+	uiPort int
 	grafanaTimeRange    []int64
 
 	sshKeyUser string
