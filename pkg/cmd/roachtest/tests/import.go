@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -209,7 +210,7 @@ type importTestSpec struct {
 	datasetNames stringSource
 
 	// preTestHook is run after tables are created, but before the import starts.
-	preTestHook func(context.Context, test.Test, cluster.Cluster)
+	preTestHook func(context.Context, test.Test, cluster.Cluster, *rand.Rand)
 	// importRunner is an alternate import runner.
 	importRunner func(context.Context, test.Test, cluster.Cluster, *logger.Logger, *rand.Rand, dataset) error
 }
@@ -229,6 +230,13 @@ var tests = []importTestSpec{
 		manualOnly:   true,
 		calibrate:    true,
 		datasetNames: FromFunc(allDatasets),
+	},
+	// Small dataset for quickly iterating while developing this test.
+	{
+		subtestName:  "smoke",
+		nodes:        []int{4},
+		manualOnly:   true,
+		datasetNames: One("tpch/supplier"),
 	},
 	// Basic test w/o injected failures.
 	{
@@ -254,7 +262,7 @@ var tests = []importTestSpec{
 		subtestName:  "decommissioned",
 		nodes:        []int{4},
 		datasetNames: FromFunc(anyDataset),
-		preTestHook: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+		preTestHook: func(ctx context.Context, t test.Test, c cluster.Cluster, _ *rand.Rand) {
 			nodeToDecommission := 2
 			t.Status(fmt.Sprintf("decommissioning node %d", nodeToDecommission))
 			c.Run(ctx, option.WithNodes(c.Node(nodeToDecommission)),
@@ -299,6 +307,13 @@ var tests = []importTestSpec{
 		nodes:        []int{4},
 		datasetNames: FromFunc(anyThreeDatasets),
 		importRunner: importCancellationRunner,
+	},
+	// Test column families.
+	{
+		subtestName:  "colfam",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyDataset),
+		preTestHook:  makeColumnFamilies,
 	},
 }
 
@@ -357,9 +372,9 @@ func runImportTest(
 	// Create and use a test database
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
-	_, err := conn.Exec(`CREATE DATABASE import_test`)
+	_, err := conn.ExecContext(ctx, `CREATE DATABASE import_test`)
 	require.NoError(t, err)
-	_, err = conn.Exec(`USE import_test`)
+	_, err = conn.ExecContext(ctx, `USE import_test`)
 	require.NoError(t, err)
 
 	// Initialize datasets and create tables.
@@ -372,14 +387,14 @@ func runImportTest(
 			require.NotNilf(t, ds.getFingerprint(),
 				"dataset '%s' has no fingerprint. Run calibrate manually.", name)
 		}
-		_, err = conn.Exec(ds.getCreateTableStmt())
+		_, err = conn.ExecContext(ctx, ds.getCreateTableStmt())
 		require.NoError(t, err)
 	}
 
 	// If there's a pre-test hook, run it now.
 	if testSpec.preTestHook != nil {
 		t.Status("Running pre-test hook")
-		testSpec.preTestHook(ctx, t, c)
+		testSpec.preTestHook(ctx, t, c, rng)
 	}
 
 	// For calibration runs, filter out datasets that have fingerprint files.
@@ -475,6 +490,11 @@ func runImportTest(
 			t.WorkerStatus("validating ", datasetName)
 			defer t.WorkerStatus()
 
+			err = validateNoRowFragmentation(ctx, l, conn, ds.getTableName())
+			if err != nil {
+				return err
+			}
+
 			var rows *gosql.Rows
 			rows, err = conn.Query(fmt.Sprintf(`SHOW FINGERPRINTS FROM TABLE import_test.%s`, ds.getTableName()))
 			if err != nil {
@@ -508,6 +528,94 @@ func runImportTest(
 		})
 	}
 	m.Wait()
+}
+
+// validateNoRowFragmentation verifies that IMPORT did not split rows with multiple
+// column families across range boundaries. It queries the table schema and range
+// boundaries to ensure that no range starts with a key that includes a column family suffix.
+func validateNoRowFragmentation(
+	ctx context.Context, l *logger.Logger, conn *gosql.DB, tableName string,
+) (err error) {
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "%s", tableName)
+		}
+	}()
+
+	var rows *gosql.Rows
+	rows, err = conn.QueryContext(ctx,
+		fmt.Sprintf(`SELECT index_name,
+							count(*)
+					   FROM [SHOW INDEXES FROM import_test.%s]
+					  WHERE NOT storing
+				   GROUP BY index_name`, tableName))
+	if err != nil {
+		return err
+	}
+
+	keyLens := make(map[string]int)
+	for rows.Next() {
+		var keyName string
+		var keyLen int
+		err = rows.Scan(&keyName, &keyLen)
+		if err != nil {
+			return err
+		}
+		keyLens[keyName] = keyLen
+	}
+	if err = rows.Err(); err != nil {
+		return err
+	}
+
+	for keyName, keyLen := range keyLens {
+		l.Printf("Checking key %s with %d key columns for split rows", keyName, keyLen)
+
+		rows, err = conn.QueryContext(ctx, fmt.Sprintf(
+			`SELECT start_key, end_key, range_id FROM [SHOW RANGES FROM INDEX import_test.%s@%s]`,
+			tableName, keyName))
+		if err != nil {
+			return err
+		}
+
+		for rows.Next() {
+			var startKey, endKey string
+			var rangeID int64
+			err = rows.Scan(&startKey, &endKey, &rangeID)
+			if err != nil {
+				return errors.Wrapf(err, "%s", keyName)
+			}
+
+			if err = checkKeyForFamilySuffix(startKey, keyLen); err != nil {
+				return errors.Wrapf(err, "%s start key", keyName)
+			}
+			if err = checkKeyForFamilySuffix(endKey, keyLen); err != nil {
+				return errors.Wrapf(err, "%s end key", keyName)
+			}
+		}
+		if err = rows.Err(); err != nil {
+			return errors.Wrapf(err, "%s", keyName)
+		}
+	}
+
+	return nil
+}
+
+// checkKeyForFamilySuffix checks if a pretty-printed key from SHOW RANGES contains
+// a column family suffix, which would indicate a mid-row split. maxAllowed is the
+// maximum number of key segments expected for this index (before family suffix).
+func checkKeyForFamilySuffix(prettyKey string, maxAllowed int) error {
+	// Skip special boundary markers
+	if strings.HasPrefix(prettyKey, "<before:") || strings.HasPrefix(prettyKey, "<after:") ||
+		strings.Contains(prettyKey, "Min>") || strings.Contains(prettyKey, "Max>") {
+		return nil
+	}
+
+	numKeyParts := len(strings.Split(strings.TrimPrefix(prettyKey, "…/"), "/"))
+
+	if numKeyParts > maxAllowed {
+		return errors.Newf("%s shows a mid-row split", prettyKey)
+	}
+	return nil
 }
 
 // importCancellationRunner() is the test runner for the import cancellation
@@ -619,6 +727,51 @@ func importCancellationRunner(
 	// Restore GC TTLs so we don't interfere with post-import table validation.
 	_, err = conn.ExecContext(ctx, ttl_stmt, 60*60*4 /* 4 hours */)
 	return err
+}
+
+// makeColumnFamilies() is a pre-test hook that changes the tables
+// in import_test to use column families. To do this, we iterate the
+// tables in the database, reading the schema for each table, modifying
+// the schema and then re-creating the table. Because CRDB does not
+// allow altering a column's family, we simply drop and re-create the
+// entire table.
+func makeColumnFamilies(ctx context.Context, t test.Test, c cluster.Cluster, rng *rand.Rand) {
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+
+	// Read table names
+	rows, err := conn.QueryContext(ctx, `SELECT table_name FROM [SHOW TABLES FROM import_test]`)
+	require.NoError(t, err)
+	var tableNames []string
+	for rows.Next() {
+		var name string
+		require.NoError(t, rows.Scan(&name))
+		tableNames = append(tableNames, name)
+	}
+	require.NoError(t, rows.Err())
+
+	for _, tableName := range tableNames {
+		var createStmt string
+		err = conn.QueryRowContext(ctx,
+			fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE import_test.%s]`,
+				tableName)).Scan(&createStmt)
+		require.NoError(t, err)
+
+		createStmt, changed := randgen.ApplyString(rng, createStmt, randgen.ColumnFamilyMutator)
+		if !changed {
+			continue
+		}
+
+		oldFullyQualifiedTableName := fmt.Sprintf("public.%s", tableName)
+		newFullyQualifiedTableName := fmt.Sprintf("import_test.%s", tableName)
+		createStmt = strings.Replace(createStmt, oldFullyQualifiedTableName, newFullyQualifiedTableName, 1)
+
+		t.L().Printf("Using: %s", createStmt)
+		_, err = conn.ExecContext(ctx, fmt.Sprintf(`DROP TABLE import_test.%s`, tableName))
+		require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, createStmt)
+		require.NoError(t, err)
+	}
 }
 
 // runSyncImportJob() runs an import job and waits for it to complete.
