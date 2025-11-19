@@ -247,6 +247,7 @@ func (ex *connExecutor) prepare(
 		prepared.Hints = stmt.Hints
 		prepared.HintIDs = stmt.HintIDs
 		prepared.HintsGeneration = stmt.HintsGeneration
+		prepared.ASTWithInjectedHints = stmt.ASTWithInjectedHints
 
 		// Point to the prepared state, which can be further populated during query
 		// preparation.
