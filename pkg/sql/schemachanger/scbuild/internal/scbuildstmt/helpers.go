@@ -1435,7 +1435,7 @@ func getNonDropResultColumns(b BuildCtx, tableID catid.DescID) (ret colinfo.Resu
 		ret = append(ret, colinfo.ResultColumn{
 			Name:           mustRetrieveColumnNameElem(b, tableID, col.ColumnID).Name,
 			Typ:            mustRetrieveColumnTypeElem(b, tableID, col.ColumnID).Type,
-			Hidden:         col.IsHidden,
+			Hidden:         col.IsHidden || retrieveColumnHidden(b, tableID, col.ColumnID) != nil,
 			TableID:        tableID,
 			PGAttributeNum: uint32(col.PgAttributeNum),
 		})
@@ -2119,6 +2119,14 @@ func retrieveColumnNotNull(
 ) *scpb.ColumnNotNull {
 	return b.QueryByID(tableID).FilterColumnNotNull().
 		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnNotNull) bool { return e.ColumnID == columnID }).
+		MustGetZeroOrOneElement()
+}
+
+func retrieveColumnHidden(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) *scpb.ColumnHidden {
+	return b.QueryByID(tableID).FilterColumnHidden().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnHidden) bool { return e.ColumnID == columnID }).
 		MustGetZeroOrOneElement()
 }
 

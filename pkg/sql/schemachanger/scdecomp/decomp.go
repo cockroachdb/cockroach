@@ -541,11 +541,12 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			col.GetName(), tbl.GetName(), tbl.GetID()))
 	}
 	column := &scpb.Column{
-		TableID:        tbl.GetID(),
-		ColumnID:       col.GetID(),
-		IsHidden:       col.IsHidden(),
-		IsInaccessible: col.IsInaccessible(),
-		IsSystemColumn: col.IsSystemColumn(),
+		TableID:                           tbl.GetID(),
+		ColumnID:                          col.GetID(),
+		IsInaccessible:                    col.IsInaccessible(),
+		GeneratedAsIdentityType:           col.GetGeneratedAsIdentityType(),
+		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOptionStr(),
+		IsSystemColumn:                    col.IsSystemColumn(),
 	}
 	// Only set PgAttributeNum if it differs from ColumnID.
 	if pgAttNum := col.GetPGAttributeNum(); pgAttNum != catid.PGAttributeNum(col.GetID()) {
@@ -606,6 +607,19 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			column.GeneratedAsIdentitySequenceOption = col.GetGeneratedAsIdentitySequenceOptionStr()
 		}
 		w.ev(scpb.Status_PUBLIC, columnType)
+
+		if col.IsHidden() {
+			if columnType.ElementCreationMetadata.In_26_1OrLater {
+				columnHidden := scpb.ColumnHidden{
+					TableID:  tbl.GetID(),
+					ColumnID: col.GetID(),
+				}
+				w.ev(scpb.Status_PUBLIC, &columnHidden)
+			} else {
+				column.IsHidden = true
+			}
+		}
+
 	}
 	if !col.IsNullable() {
 		w.ev(scpb.Status_PUBLIC, &scpb.ColumnNotNull{
@@ -648,6 +662,7 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			ColumnID:   col.GetID(),
 		})
 	})
+
 }
 
 func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
