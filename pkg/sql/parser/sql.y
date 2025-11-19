@@ -3212,7 +3212,7 @@ identity_option_elem:
   | SET INCREMENT signed_iconst64    { x := $3.int64()
                                   $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
   | SET INCREMENT BY signed_iconst64 { x := $4.int64()
-                                  $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x, OptionalWord: true} }
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
   | SET MINVALUE signed_iconst64     { x := $3.int64()
                                   $$.val = tree.SequenceOption{Name: tree.SeqOptMinValue, IntVal: &x} }
   | SET NO MINVALUE                  { $$.val = tree.SequenceOption{Name: tree.SeqOptMinValue} }
@@ -3222,12 +3222,12 @@ identity_option_elem:
   | SET START signed_iconst64        { x := $3.int64()
                                   $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
   | SET START WITH signed_iconst64   { x := $4.int64()
-                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x, OptionalWord: true} }
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
   | RESTART                      { $$.val = tree.SequenceOption{Name: tree.SeqOptRestart} }
   | RESTART signed_iconst64      { x := $2.int64()
                                   $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x} }
   | RESTART WITH signed_iconst64 { x := $3.int64()
-                                  $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x, OptionalWord: true} }
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x} }
   | SET sequence_option_elem error                      { return setErr(sqllex, errors.Newf("sequence option \"%s\" not supported here", $2.seqOpt().Name)) }
 
 identity_option_list:
@@ -12104,7 +12104,7 @@ sequence_option_elem:
 | INCREMENT signed_iconst64    { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
 | INCREMENT BY signed_iconst64 { x := $3.int64()
-                                 $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x, OptionalWord: true} }
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
 | MINVALUE signed_iconst64     { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptMinValue, IntVal: &x} }
 | NO MINVALUE                  { $$.val = tree.SequenceOption{Name: tree.SeqOptMinValue} }
@@ -12114,12 +12114,12 @@ sequence_option_elem:
 | START signed_iconst64        { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
 | START WITH signed_iconst64   { x := $3.int64()
-                                 $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x, OptionalWord: true} }
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
 | RESTART                      { $$.val = tree.SequenceOption{Name: tree.SeqOptRestart} }
 | RESTART signed_iconst64      { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x} }
 | RESTART WITH signed_iconst64 { x := $3.int64()
-                                 $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x, OptionalWord: true} }
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x} }
 
 | VIRTUAL                      { $$.val = tree.SequenceOption{Name: tree.SeqOptVirtual} }
 
