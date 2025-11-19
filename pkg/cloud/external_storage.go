@@ -27,6 +27,34 @@ import (
 // This file is for interfaces only and should not contain any implementation
 // code. All concrete implementations should be added to pkg/cloud/impl.
 
+// RandomAccessFile is the interface for readers that support random access
+// operations (ReadAt, Seek) in addition to sequential reads. This is required
+// by formats like Parquet that need random access to cloud storage files.
+//
+// Not all ExternalStorage implementations support random access. Use
+// SupportsRandomAccess to check if a reader supports random access:
+//
+//	reader, size, err := storage.ReadFile(ctx, "file.parquet", cloud.ReadOptions{})
+//	if err != nil { return err }
+//	if rf, ok := cloud.SupportsRandomAccess(reader); ok {
+//	    // Can use ReadAt and Seek
+//	} else {
+//	    // Only sequential reads supported
+//	}
+type RandomAccessFile interface {
+	ioctx.ReadCloserCtx
+	ioctx.ReaderAtCtx
+	ioctx.SeekerCtx
+}
+
+// SupportsRandomAccess checks if the given reader supports random access
+// operations (ReadAt and Seek). Returns the reader cast to RandomAccessFile
+// if supported, or (nil, false) if not.
+func SupportsRandomAccess(r ioctx.ReadCloserCtx) (RandomAccessFile, bool) {
+	rf, ok := r.(RandomAccessFile)
+	return rf, ok
+}
+
 // ExternalStorage provides an API to read and write files in some storage,
 // namely various cloud storage providers, for example to store backups.
 // Generally an implementation is instantiated pointing to some base path or
