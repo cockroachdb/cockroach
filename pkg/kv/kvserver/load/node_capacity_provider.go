@@ -73,6 +73,10 @@ func NewNodeCapacityProvider(
 
 // Run starts the background monitoring of cpu metrics.
 func (n *NodeCapacityProvider) Run(ctx context.Context) {
+	// Record CPU usage and capacity prior to starting the async job to verify
+	// that we're able to read CPU utilization metrics at all.
+	n.runtimeLoadMonitor.recordCPUUsage(ctx)
+
 	_ = n.runtimeLoadMonitor.stopper.RunAsyncTask(ctx, "runtime-load-monitor", func(ctx context.Context) {
 		n.runtimeLoadMonitor.run(ctx)
 	})
