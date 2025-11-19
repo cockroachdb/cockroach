@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -221,8 +222,10 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 		})
 	}
 	for _, testCase := range testCases {
-
 		t.Run(testCase.name, func(t *testing.T) {
+			// TODO(pav-kv): remove this when we know why the test is too slow in CI.
+			t.Logf("GOMAXPROCS: %d", runtime.GOMAXPROCS(0))
+
 			if testCase.storesPerNode > 1 {
 				// 8 stores with active rebalancing can lead to failed heartbeats due
 				// to overload. Skip under stress when running the multi-store variant.
