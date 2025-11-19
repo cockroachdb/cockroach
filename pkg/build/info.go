@@ -41,6 +41,7 @@ var Distribution = "OSS"
 
 var (
 	cgoCompiler       = cgoVersion()
+	dink              = "donk"
 	platform          = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	envChannel        = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
 	enabledAssertions = buildutil.CrdbTestBuild
