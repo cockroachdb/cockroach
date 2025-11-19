@@ -1780,6 +1780,151 @@ func TestImportCSVStmt(t *testing.T) {
 	}
 }
 
+func TestImportParquetStmt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	skip.UnderRace(t)
+
+	const nodes = 3
+	ctx := context.Background()
+	baseDir := datapathutils.TestDataPath(t, "parquet")
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+		ExternalIODir: baseDir,
+	}})
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
+
+	allTypesPlain := "nodelocal://1/alltypes_plain.parquet"
+	allTypesSnappy := "nodelocal://1/alltypes_plain.snappy.parquet"
+
+	// alltypes_plain.parquet has columns: id (INT32), bool_col (BOOLEAN),
+	// tinyint_col (INT32), smallint_col (INT32), int_col (INT32),
+	// bigint_col (INT64), float_col (FLOAT), double_col (DOUBLE),
+	// date_string_col (BYTE_ARRAY), string_col (BYTE_ARRAY),
+	// timestamp_col (INT96). All plain primitive types with no LogicalType
+	// annotations. 8 rows.
+	createAllTypes := `CREATE TABLE t (
+		id INT PRIMARY KEY,
+		bool_col BOOL,
+		tinyint_col INT,
+		smallint_col INT,
+		int_col INT,
+		bigint_col INT,
+		float_col FLOAT,
+		double_col FLOAT,
+		date_string_col STRING,
+		string_col STRING,
+		timestamp_col TIMESTAMPTZ
+	)`
+
+	tests := []struct {
+		name   string
+		create string
+		sql    string
+		args   []interface{}
+		errStr string
+	}{
+		{
+			name:   "basic",
+			create: createAllTypes,
+			sql:    "IMPORT INTO t PARQUET DATA ($1)",
+			args:   []interface{}{allTypesPlain},
+		},
+		{
+			name:   "snappy-compressed",
+			create: createAllTypes,
+			sql:    "IMPORT INTO t PARQUET DATA ($1)",
+			args:   []interface{}{allTypesSnappy},
+		},
+		{
+			name:   "auto-decompress",
+			create: createAllTypes,
+			sql:    "IMPORT INTO t PARQUET DATA ($1) WITH decompress = 'auto'",
+			args:   []interface{}{allTypesPlain},
+		},
+		{
+			name:   "no-decompress",
+			create: createAllTypes,
+			sql:    "IMPORT INTO t PARQUET DATA ($1) WITH decompress = 'none'",
+			args:   []interface{}{allTypesPlain},
+		},
+		{
+			// strict_validation should succeed when all Parquet columns are in the table.
+			name:   "strict-validation",
+			create: createAllTypes,
+			sql:    "IMPORT INTO t PARQUET DATA ($1) WITH strict_validation",
+			args:   []interface{}{allTypesPlain},
+		},
+		{
+			// strict_validation should fail when the table is missing columns
+			// present in the Parquet file.
+			name:   "strict-validation-errors-extra-columns",
+			create: `CREATE TABLE t (id INT PRIMARY KEY, bool_col BOOL)`,
+			sql:    "IMPORT INTO t PARQUET DATA ($1) WITH strict_validation",
+			args:   []interface{}{allTypesPlain},
+			errStr: `not in the target table`,
+		},
+		{
+			// Without strict_validation, extra columns in the Parquet file are
+			// silently skipped.
+			name:   "relaxed-import-skips-extra-columns",
+			create: `CREATE TABLE t (id INT PRIMARY KEY, bool_col BOOL)`,
+			sql:    "IMPORT INTO t PARQUET DATA ($1)",
+			args:   []interface{}{allTypesPlain},
+		},
+		// Error cases.
+		{
+			name:   "bad-opt-name",
+			create: createAllTypes,
+			sql:    "IMPORT INTO t PARQUET DATA ($1) WITH foo = 'bar'",
+			args:   []interface{}{allTypesPlain},
+			errStr: `invalid option "foo"`,
+		},
+		{
+			name:   "no-database",
+			create: createAllTypes,
+			sql:    "IMPORT INTO nonexistent.t PARQUET DATA ($1)",
+			args:   []interface{}{allTypesPlain},
+			errStr: `database does not exist: "nonexistent.t"`,
+		},
+		{
+			name:   "into-db-fails",
+			create: createAllTypes,
+			sql:    "IMPORT INTO t PARQUET DATA ($1) WITH into_db = 'test'",
+			args:   []interface{}{allTypesPlain},
+			errStr: `invalid option "into_db"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			sqlDB.Exec(t, `DROP TABLE IF EXISTS t CASCADE`)
+			if test.create != "" {
+				sqlDB.Exec(t, test.create)
+			}
+
+			_, err := sqlDB.DB.ExecContext(ctx, test.sql, test.args...)
+			if test.errStr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), test.errStr)
+				return
+			}
+			require.NoError(t, err)
+
+			var numRows int
+			sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&numRows)
+			require.Greater(t, numRows, 0, "expected some rows after import")
+		})
+	}
+}
+
 func TestImportCSVStmtCheckpointLeftover(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
