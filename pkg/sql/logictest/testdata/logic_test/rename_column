@@ -305,3 +305,56 @@ CREATE TABLE public.rename_add_alter_pk_tbl (
   UNIQUE INDEX rename_add_alter_pk_tbl_b_orig_key (b_orig ASC),
   FAMILY f (b_orig, b, a, b_old)
 ) WITH (schema_locked = true);
+
+subtest rename_multipl_shard_col
+
+statement ok
+DROP TABLE IF EXISTS tab1
+
+# Create a table that has more than 1 shard column.
+statement ok
+CREATE TABLE tab1 (
+    a INT NOT NULL,
+    b DATE NOT NULL,
+    c INT NOT NULL,
+    d INT NOT NULL,
+    PRIMARY KEY (d, b, a) USING HASH WITH BUCKET_COUNT = 16,
+    UNIQUE INDEX (d, b, a, c) USING HASH WITH BUCKET_COUNT = 16,
+    FAMILY f1 (a,b,c,d)
+) WITH (schema_locked = false);
+
+query TT
+SHOW CREATE TABLE tab1;
+----
+tab1  CREATE TABLE public.tab1 (
+        a INT8 NOT NULL,
+        b DATE NOT NULL,
+        c INT8 NOT NULL,
+        d INT8 NOT NULL,
+        crdb_internal_a_b_d_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, d))), 16:::INT8)) VIRTUAL,
+        crdb_internal_a_b_c_d_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, c, d))), 16:::INT8)) VIRTUAL,
+        CONSTRAINT tab1_pkey PRIMARY KEY (d ASC, b ASC, a ASC) USING HASH WITH (bucket_count=16),
+        UNIQUE INDEX tab1_d_b_a_c_key (d ASC, b ASC, a ASC, c ASC) USING HASH WITH (bucket_count=16),
+        FAMILY f1 (a, b, c, d)
+      );
+
+statement ok
+ALTER TABLE tab1 RENAME COLUMN d TO rename_d
+
+# Ensure rename handled both shard columns.
+query TT
+SHOW CREATE TABLE tab1;
+----
+tab1  CREATE TABLE public.tab1 (
+        a INT8 NOT NULL,
+        b DATE NOT NULL,
+        c INT8 NOT NULL,
+        rename_d INT8 NOT NULL,
+        crdb_internal_a_b_rename_d_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, rename_d))), 16:::INT8)) VIRTUAL,
+        crdb_internal_a_b_c_rename_d_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, c, rename_d))), 16:::INT8)) VIRTUAL,
+        CONSTRAINT tab1_pkey PRIMARY KEY (rename_d ASC, b ASC, a ASC) USING HASH WITH (bucket_count=16),
+        UNIQUE INDEX tab1_d_b_a_c_key (rename_d ASC, b ASC, a ASC, c ASC) USING HASH WITH (bucket_count=16),
+        FAMILY f1 (a, b, c, rename_d)
+      );
+
+subtest end
