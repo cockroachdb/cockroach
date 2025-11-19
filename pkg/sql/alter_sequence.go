@@ -127,6 +127,13 @@ func alterSequenceImpl(
 	}
 
 	setSequenceVal := func(val int64) error {
+		// Setting the sequence value should always cause the operation to run
+		// in the current transaction. This is achieved by treating the sequence
+		// as if it were just created.
+		if err := params.p.createdSequences.addCreatedSequence(seqDesc.ID); err != nil {
+			return err
+		}
+
 		err := params.p.txn.Put(params.ctx, seqValueKey, val)
 		if err != nil {
 			return err
@@ -148,7 +155,7 @@ func alterSequenceImpl(
 	//
 	// The code below handles the second case.
 
-	if opts.Increment < 0 && (oldIncrement != seqDesc.SequenceOpts.Increment || oldMinValue != seqDesc.SequenceOpts.MinValue) {
+	if opts.Increment < 0 && (oldIncrement != opts.Increment || opts.MinValue < oldMinValue) {
 		// Only get the sequence value from KV if it's needed.
 		sequenceVal, err := getSequenceValue()
 		if err != nil {
@@ -157,7 +164,7 @@ func alterSequenceImpl(
 
 		// If the sequence were never advanced, its current value is offset by the increment.
 		if sequenceVal > oldStart {
-			err := setSequenceVal(oldStart - seqDesc.SequenceOpts.Increment)
+			err := setSequenceVal(oldStart - opts.Increment)
 			if err != nil {
 				return err
 			}
@@ -174,14 +181,14 @@ func alterSequenceImpl(
 				return err
 			}
 		}
-	} else if opts.Increment > 0 && (oldIncrement != seqDesc.SequenceOpts.Increment || seqDesc.SequenceOpts.MaxValue > oldMaxValue) {
+	} else if opts.Increment > 0 && (oldIncrement != opts.Increment || opts.MaxValue > oldMaxValue) {
 		sequenceVal, err := getSequenceValue()
 		if err != nil {
 			return err
 		}
 
 		if sequenceVal < oldStart {
-			err := setSequenceVal(oldStart - seqDesc.SequenceOpts.Increment)
+			err := setSequenceVal(oldStart - opts.Increment)
 			if err != nil {
 				return err
 			}
@@ -209,13 +216,8 @@ func alterSequenceImpl(
 		}
 	}
 	if restartVal != nil {
-		// Using RESTART on a sequence should always cause the operation to run
-		// in the current transaction. This is achieved by treating the sequence
-		// as if it were just created.
-		if err := params.p.createdSequences.addCreatedSequence(seqDesc.ID); err != nil {
-			return err
-		}
-		if err := params.p.SetSequenceValueByID(params.ctx, uint32(seqDesc.ID), *restartVal, false); err != nil {
+		err := setSequenceVal(*restartVal - opts.Increment)
+		if err != nil {
 			return err
 		}
 	}
