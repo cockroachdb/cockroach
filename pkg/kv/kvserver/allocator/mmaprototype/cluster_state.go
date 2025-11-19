@@ -1662,6 +1662,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// assuming the leaseholder wouldn't have sent the message if there was no
 		// change, or we noticed a divergence in membership above and fell through
 		// here.
+		releaseRangeAnalyzedConstraints(rs.constraints)
 		rs.constraints = nil
 	}
 	// Remove ranges for which this is the localRangeOwner, but for which it is
@@ -1703,6 +1704,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			}
 			delete(cs.stores[replica.StoreID].adjusted.replicas, r)
 		}
+		releaseRangeAnalyzedConstraints(rs.constraints)
 		delete(cs.ranges, r)
 	}
 	localss := cs.stores[msg.StoreID]
@@ -1961,6 +1963,7 @@ func (cs *clusterState) undoPendingChange(cid changeID) {
 		panic(errors.AssertionFailedf("pending change is marked as no-rollback"))
 	}
 	// Wipe the analyzed constraints, as the range has changed.
+	releaseRangeAnalyzedConstraints(rs.constraints)
 	rs.constraints = nil
 	rs.lastFailedChange = cs.ts.Now()
 	// Undo the change delta as well as the replica change and remove the pending
