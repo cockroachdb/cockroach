@@ -554,7 +554,7 @@ func BenchmarkReplicaEngineDataIterator(b *testing.B) {
 }
 
 func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, valueSize int) {
-	ctx := b.Context()
+	ctx := context.Background()
 
 	// Set up ranges.
 	var descs []roachpb.RangeDescriptor
@@ -602,9 +602,11 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 	snapshot := eng.NewSnapshot()
 	defer snapshot.Close()
 
-	for b.Loop() {
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
 		for _, desc := range descs {
-			err := IterateReplicaKeySpans(b.Context(), &desc, snapshot, fs.UnknownReadCategory,
+			err := IterateReplicaKeySpans(context.Background(), &desc, snapshot, fs.UnknownReadCategory,
 				SelectOpts{
 					Ranged: SelectRangedOptions{
 						RSpan:      desc.RSpan(),

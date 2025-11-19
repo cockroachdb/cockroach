@@ -189,7 +189,7 @@ func computeStatsDelta(
 	// If we can't use the fast stats path, or race test is enabled, compute stats
 	// across the key span to be cleared.
 	if !entireRange || util.RaceEnabled {
-		computed, err := storage.ComputeStats(ctx, readWriter, from, to, delta.LastUpdateNanos)
+		computed, err := storage.ComputeStats(ctx, readWriter, fs.BatchEvalReadCategory, from, to, delta.LastUpdateNanos)
 		if err != nil {
 			return enginepb.MVCCStats{}, err
 		}
