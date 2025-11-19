@@ -565,6 +565,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.Hints = ps.Hints
 		stmt.HintIDs = ps.HintIDs
 		stmt.HintsGeneration = ps.HintsGeneration
+		stmt.ASTWithInjectedHints = ps.ASTWithInjectedHints
 		stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache)
 		res.ResetStmtType(ps.AST)
 
@@ -1465,6 +1466,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		vars.stmt.Hints = ps.Hints
 		vars.stmt.HintIDs = ps.HintIDs
 		vars.stmt.HintsGeneration = ps.HintsGeneration
+		vars.stmt.ASTWithInjectedHints = ps.ASTWithInjectedHints
 		vars.stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache)
 		res.ResetStmtType(ps.AST)
 

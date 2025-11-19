@@ -179,3 +179,267 @@ FROM crdb_internal.feature_usage
 WHERE feature_name = 'sql.session.statement-hints'
 ----
 6
+
+statement ok
+DEALLOCATE ALL
+
+# Testcases for hint injection.
+
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX (b))
+
+# Temporary, until next commit.
+statement ok
+SET CLUSTER SETTING sql.query_cache.enabled = off
+
+# Try some simple hint injections. First, an index hint.
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT a FROM abc WHERE a = _',
+  'SELECT a FROM abc@abc_b_idx WHERE a = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SET tracing = on
+
+statement ok
+SELECT a FROM abc WHERE a = 5
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(message, E'\\d+', 'x') FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%injected hints%'
+----
+injected hints from external statement hint x
+trying planning with injected hints
+
+query T
+EXPLAIN SELECT a FROM abc WHERE a = 10
+----
+distribution: local
+vectorized: true
+statement hints count: 1
+·
+• filter
+│ filter: a = 10
+│
+└── • scan
+      missing stats
+      table: abc@abc_b_idx
+      spans: FULL SCAN
+
+# Try injecting a join hint.
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT a, x FROM abc JOIN xy ON y = b WHERE a = _',
+  'SELECT a, x FROM abc INNER HASH JOIN xy ON y = b WHERE a = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SET tracing = on
+
+statement ok
+SELECT a, x FROM abc JOIN xy ON y = b WHERE a = 5
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(message, E'\\d+', 'x') FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%injected hints%'
+----
+injected hints from external statement hint x
+trying planning with injected hints
+
+query T
+EXPLAIN SELECT a, x FROM abc JOIN xy ON y = b WHERE a = 10
+----
+distribution: local
+vectorized: true
+statement hints count: 1
+·
+• hash join
+│ equality: (b) = (y)
+│ left cols are key
+│
+├── • scan
+│     missing stats
+│     table: abc@abc_pkey
+│     spans: [/10 - /10]
+│
+└── • scan
+      missing stats
+      table: xy@xy_pkey
+      spans: FULL SCAN
+
+# Try removing a hint.
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT a FROM abc@abc_pkey WHERE b = _',
+  'SELECT a FROM abc WHERE b = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SET tracing = on
+
+statement ok
+SELECT a FROM abc@abc_pkey WHERE b = 5
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(message, E'\\d+', 'x') FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%injected hints%'
+----
+injected hints from external statement hint x
+trying planning with injected hints
+
+query T
+EXPLAIN SELECT a FROM abc@abc_pkey WHERE b = 10
+----
+distribution: local
+vectorized: true
+statement hints count: 1
+·
+• scan
+  missing stats
+  table: abc@abc_b_idx
+  spans: [/10 - /10]
+
+# Check that we do not use an invalid injected index hint.
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT a + _ FROM abc WHERE a = _',
+  'SELECT a + _ FROM abc@foo WHERE a = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SET tracing = on
+
+statement ok
+SELECT a + 1 FROM abc WHERE a = 5
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(message, E'\\d+', 'x') FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%injected hints%'
+----
+injected hints from external statement hint x
+trying planning with injected hints
+planning with injected hints failed with: index "foo" not found
+falling back to planning without injected hints
+
+query T
+EXPLAIN SELECT a + 1 FROM abc WHERE a = 10
+----
+distribution: local
+vectorized: true
+statement hints count: 1
+·
+• render
+│
+└── • scan
+      missing stats
+      table: abc@abc_pkey
+      spans: [/10 - /10]
+
+# Check that we do not use an unsatisfiable injected hint.
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT c FROM xy JOIN abc ON c = y WHERE x = _',
+  'SELECT c FROM xy INNER LOOKUP JOIN abc ON c = y WHERE x = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SET tracing = on
+
+statement ok
+SELECT c FROM xy JOIN abc ON c = y WHERE x = 5
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(message, E'\\d+', 'x') FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%injected hints%'
+----
+injected hints from external statement hint x
+trying planning with injected hints
+planning with injected hints failed with: could not produce a query plan conforming to the LOOKUP JOIN hint
+falling back to planning without injected hints
+
+query T
+EXPLAIN SELECT c FROM xy JOIN abc ON c = y WHERE x = 10
+----
+distribution: local
+vectorized: true
+statement hints count: 1
+·
+• hash join
+│ equality: (c) = (y)
+│ right cols are key
+│
+├── • scan
+│     missing stats
+│     table: abc@abc_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      missing stats
+      table: xy@xy_pkey
+      spans: [/10 - /10]
+
+# Try a prepared statement with an injected hint.
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT c FROM abc WHERE b > _',
+  'SELECT c FROM abc@{NO_INDEX_JOIN} WHERE b > _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SET tracing = on
+
+statement ok
+PREPARE p AS SELECT c FROM abc WHERE b > $1
+
+statement ok
+EXECUTE p (5)
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(message, E'\\d+', 'x') FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%injected hints%'
+----
+injected hints from external statement hint x
+injected hints from external statement hint x
+trying preparing with injected hints
+trying planning with injected hints
+
+# Temporary, until next commit.
+statement ok
+RESET CLUSTER SETTING sql.query_cache.enabled
