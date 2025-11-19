@@ -253,3 +253,191 @@ func (p *nErrorsProducer) maybeProduceErr() error {
 	}
 	return nil
 }
+
+// TestResumingReaderReadAt tests the ReadAt functionality for random access
+func TestResumingReaderReadAt(t *testing.T) {
+	ctx := context.Background()
+	rf := &fakeReaderFactory{
+		data: "hello world",
+	}
+
+	t.Run("basic-read-at", func(t *testing.T) {
+		reader := NewResumingReader(ctx, rf.newReaderAt, nil, 0, int64(len(rf.data)), "", nil, nil)
+
+		// Read at various offsets
+		buf := make([]byte, 5)
+
+		// Read "hello" at offset 0
+		n, err := reader.ReadAt(ctx, buf, 0)
+		require.NoError(t, err)
+		require.Equal(t, 5, n)
+		require.Equal(t, "hello", string(buf))
+
+		// Read "world" at offset 6
+		n, err = reader.ReadAt(ctx, buf, 6)
+		require.NoError(t, err)
+		require.Equal(t, 5, n)
+		require.Equal(t, "world", string(buf))
+
+		// Read "o wor" at offset 4
+		n, err = reader.ReadAt(ctx, buf, 4)
+		require.NoError(t, err)
+		require.Equal(t, 5, n)
+		require.Equal(t, "o wor", string(buf))
+	})
+
+	t.Run("read-at-eof", func(t *testing.T) {
+		reader := NewResumingReader(ctx, rf.newReaderAt, nil, 0, int64(len(rf.data)), "", nil, nil)
+
+		// Try to read at the end of the data
+		buf := make([]byte, 5)
+		n, err := reader.ReadAt(ctx, buf, int64(len(rf.data)))
+		require.Error(t, err)
+		require.Equal(t, 0, n)
+	})
+
+	t.Run("read-at-partial", func(t *testing.T) {
+		reader := NewResumingReader(ctx, rf.newReaderAt, nil, 0, int64(len(rf.data)), "", nil, nil)
+
+		// Try to read more bytes than available
+		buf := make([]byte, 10)
+		n, err := reader.ReadAt(ctx, buf, 7)
+		require.Equal(t, io.ErrUnexpectedEOF, err)
+		require.Equal(t, 4, n) // Should read "orld"
+		require.Equal(t, "orld", string(buf[:n]))
+	})
+
+	t.Run("read-at-no-opener", func(t *testing.T) {
+		// Create reader without opener
+		reader := &ResumingReader{
+			Opener: nil,
+		}
+
+		buf := make([]byte, 5)
+		_, err := reader.ReadAt(ctx, buf, 0)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "ReadAt not supported: no Opener available")
+	})
+
+	t.Run("read-at-with-error", func(t *testing.T) {
+		injectedErr := errors.New("injected read error")
+		rfWithErr := &fakeReaderFactory{
+			data: "hello world",
+			newReaderAtKnob: func() error {
+				return injectedErr
+			},
+		}
+
+		reader := NewResumingReader(ctx, rfWithErr.newReaderAt, nil, 0, int64(len(rfWithErr.data)), "", nil, nil)
+
+		buf := make([]byte, 5)
+		_, err := reader.ReadAt(ctx, buf, 0)
+		require.Error(t, err)
+		require.ErrorIs(t, err, injectedErr)
+	})
+}
+
+// TestResumingReaderSeek tests the Seek functionality for repositioning
+func TestResumingReaderSeek(t *testing.T) {
+	ctx := context.Background()
+	rf := &fakeReaderFactory{
+		data: "hello world",
+	}
+
+	t.Run("seek-from-start", func(t *testing.T) {
+		reader := NewResumingReader(ctx, rf.newReaderAt, nil, 0, int64(len(rf.data)), "", nil, nil)
+
+		pos, err := reader.Seek(ctx, 6, io.SeekStart)
+		require.NoError(t, err)
+		require.Equal(t, int64(6), pos)
+		require.Equal(t, int64(6), reader.Pos)
+	})
+
+	t.Run("seek-from-current", func(t *testing.T) {
+		reader := NewResumingReader(ctx, rf.newReaderAt, nil, 5, int64(len(rf.data)), "", nil, nil)
+
+		pos, err := reader.Seek(ctx, 3, io.SeekCurrent)
+		require.NoError(t, err)
+		require.Equal(t, int64(8), pos)
+		require.Equal(t, int64(8), reader.Pos)
+	})
+
+	t.Run("seek-from-end", func(t *testing.T) {
+		reader := NewResumingReader(ctx, rf.newReaderAt, nil, 0, int64(len(rf.data)), "", nil, nil)
+
+		pos, err := reader.Seek(ctx, -5, io.SeekEnd)
+		require.NoError(t, err)
+		require.Equal(t, int64(len(rf.data)-5), pos)
+		require.Equal(t, int64(len(rf.data)-5), reader.Pos)
+	})
+
+	t.Run("seek-from-end-no-size", func(t *testing.T) {
+		reader := NewResumingReader(ctx, rf.newReaderAt, nil, 0, 0, "", nil, nil)
+
+		_, err := reader.Seek(ctx, -5, io.SeekEnd)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "Seek from end not supported: size unknown")
+	})
+
+	t.Run("seek-negative-position", func(t *testing.T) {
+		reader := NewResumingReader(ctx, rf.newReaderAt, nil, 5, int64(len(rf.data)), "", nil, nil)
+
+		_, err := reader.Seek(ctx, -10, io.SeekCurrent)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "negative position")
+	})
+
+	t.Run("seek-invalid-whence", func(t *testing.T) {
+		reader := NewResumingReader(ctx, rf.newReaderAt, nil, 0, int64(len(rf.data)), "", nil, nil)
+
+		_, err := reader.Seek(ctx, 0, 99)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid whence")
+	})
+
+	t.Run("seek-closes-reader", func(t *testing.T) {
+		// Open a reader first
+		reader := NewResumingReader(ctx, rf.newReaderAt, nil, 0, int64(len(rf.data)), "", nil, nil)
+		require.NoError(t, reader.Open(ctx))
+		require.NotNil(t, reader.Reader)
+
+		// Seek to a different position
+		_, err := reader.Seek(ctx, 5, io.SeekStart)
+		require.NoError(t, err)
+
+		// Reader should be closed and nil
+		require.Nil(t, reader.Reader)
+		require.Equal(t, int64(5), reader.Pos)
+	})
+
+	t.Run("seek-same-position-no-close", func(t *testing.T) {
+		// Open a reader first
+		reader := NewResumingReader(ctx, rf.newReaderAt, nil, 0, int64(len(rf.data)), "", nil, nil)
+		require.NoError(t, reader.Open(ctx))
+		originalReader := reader.Reader
+		require.NotNil(t, originalReader)
+
+		// Seek to the same position
+		_, err := reader.Seek(ctx, 0, io.SeekStart)
+		require.NoError(t, err)
+
+		// Reader should NOT be closed (same position)
+		require.Equal(t, originalReader, reader.Reader)
+		require.Equal(t, int64(0), reader.Pos)
+	})
+
+	t.Run("seek-then-read", func(t *testing.T) {
+		reader := NewResumingReader(ctx, rf.newReaderAt, nil, 0, int64(len(rf.data)), "", nil, nil)
+
+		// Seek to position 6
+		_, err := reader.Seek(ctx, 6, io.SeekStart)
+		require.NoError(t, err)
+
+		// Read from new position
+		buf := make([]byte, 5)
+		n, err := reader.Read(ctx, buf)
+		require.NoError(t, err)
+		require.Equal(t, 5, n)
+		require.Equal(t, "world", string(buf))
+	})
+}

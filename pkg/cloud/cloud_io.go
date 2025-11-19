@@ -252,6 +252,8 @@ type ResumingReader struct {
 }
 
 var _ ioctx.ReadCloserCtx = &ResumingReader{}
+var _ ioctx.ReaderAtCtx = &ResumingReader{}
+var _ ioctx.SeekerCtx = &ResumingReader{}
 
 // NewResumingReader returns a ResumingReader instance. Reader does not have to
 // be provided, and will be created with the opener if it's not provided. Size
@@ -376,6 +378,57 @@ func (r *ResumingReader) Close(ctx context.Context) error {
 	r.ReaderSpan.Finish()
 	r.Reader = nil
 	return err
+}
+
+// ReadAt implements ioctx.ReaderAtCtx using the Opener to create a reader at the specified offset.
+// This allows formats like Parquet that require random access to work efficiently with cloud storage.
+func (r *ResumingReader) ReadAt(ctx context.Context, p []byte, off int64) (n int, err error) {
+	if r.Opener == nil {
+		return 0, errors.New("ReadAt not supported: no Opener available")
+	}
+
+	reader, _, err := r.Opener(ctx, off)
+	if err != nil {
+		return 0, err
+	}
+	defer reader.Close()
+
+	return io.ReadFull(reader, p)
+}
+
+// Seek implements ioctx.SeekerCtx by tracking position without actually seeking the underlying reader.
+// Actual repositioning happens via the Opener when Read is called.
+func (r *ResumingReader) Seek(ctx context.Context, offset int64, whence int) (int64, error) {
+	var newPos int64
+	switch whence {
+	case io.SeekStart:
+		newPos = offset
+	case io.SeekCurrent:
+		newPos = r.Pos + offset
+	case io.SeekEnd:
+		if r.Size == 0 {
+			return 0, errors.New("Seek from end not supported: size unknown")
+		}
+		newPos = r.Size + offset
+	default:
+		return 0, errors.Newf("invalid whence: %d", whence)
+	}
+
+	if newPos < 0 {
+		return 0, errors.New("negative position")
+	}
+
+	// Close current reader if position changed
+	if r.Reader != nil && newPos != r.Pos {
+		r.Reader.Close()
+		if r.ReaderSpan != nil {
+			r.ReaderSpan.Finish()
+		}
+		r.Reader = nil
+	}
+
+	r.Pos = newPos
+	return newPos, nil
 }
 
 // CheckHTTPContentRangeHeader parses Content-Range header and ensures that

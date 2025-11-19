@@ -463,6 +463,32 @@ func (l *limitedReader) Close(ctx context.Context) error {
 	return l.r.Close(ctx)
 }
 
+// ReadAt implements ioctx.ReaderAtCtx by delegating to the underlying reader if it supports it.
+// This is needed for Parquet and other formats that require random access.
+func (l *limitedReader) ReadAt(ctx context.Context, p []byte, off int64) (n int, err error) {
+	if readerAt, ok := l.r.(ioctx.ReaderAtCtx); ok {
+		n, err = readerAt.ReadAt(ctx, p, off)
+		// ReadAt can be called concurrently, so apply rate limiting immediately
+		// without batching (unlike Read which batches via l.pool).
+		if n > 0 {
+			if err := l.lim.WaitN(ctx, int64(n)); err != nil {
+				log.Dev.Warningf(ctx, "failed to throttle read: %+v", err)
+			}
+		}
+		return n, err
+	}
+	return 0, errors.New("ReadAt not supported by underlying reader")
+}
+
+// Seek implements ioctx.SeekerCtx by delegating to the underlying reader if it supports it.
+// This is needed for Parquet and other formats that require random access.
+func (l *limitedReader) Seek(ctx context.Context, offset int64, whence int) (int64, error) {
+	if seeker, ok := l.r.(ioctx.SeekerCtx); ok {
+		return seeker.Seek(ctx, offset, whence)
+	}
+	return 0, errors.New("Seek not supported by underlying reader")
+}
+
 type limitedWriter struct {
 	w    io.WriteCloser
 	ctx  context.Context
