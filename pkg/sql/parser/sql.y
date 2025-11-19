@@ -6278,6 +6278,7 @@ create_changefeed_stmt:
   }
 | CREATE_CHANGEFEED_FOR_DATABASE CHANGEFEED FOR DATABASE database_name db_level_changefeed_filter_option opt_changefeed_sink opt_with_options
   {
+    /* SKIP DOC */
     $$.val = &tree.CreateChangefeed{
       DatabaseTarget: tree.ChangefeedDatabaseTarget($5),
       FilterOption: $6.changefeedFilterOption(),
