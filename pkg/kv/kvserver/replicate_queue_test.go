@@ -221,6 +221,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 			_ = os.RemoveAll(td)
 		})
 	}
+	t.Logf("GOMAXPROCS: %d", runtime.GOMAXPROCS(0))
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			// TODO(pav-kv): remove this when we know why the test is too slow in CI.
