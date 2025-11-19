@@ -771,7 +771,7 @@ func TestDatadogInit(t *testing.T) {
 	// So, we can instead check for one representative metric from each namespace.
 	expectedMetrics := map[string]struct{}{
 		"cockroachdb.sql.txns.open":                               {},
-		"cockroachdb.storage.disk-slow":                           {},
+		"cockroachdb.storage.disk_slow":                           {},
 		"cockroachdb.storeliveness.callbacks.processing_duration": {},
 		"cockroachdb.sys.cgo.allocbytes":                          {},
 		"cockroachdb.timeseries.write.bytes":                      {},

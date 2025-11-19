@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
+	"gopkg.in/yaml.v2"
 )
 
 //go:embed files/opentelemetry-config.yaml.tmpl
@@ -24,6 +25,23 @@ var opentelemetryConfigTemplate string
 
 //go:embed files/opentelemetry-env.conf.tmpl
 var opentelemetryEnvTemplate string
+
+//go:embed files/cockroachdb_metrics.yaml
+var cockroachdbMetricsYAML string
+
+// cockroachdbMetrics is a mapping of CockroachDB metric names to cockroachdb
+// Datadog integration metric names. This allows CockroachDB metrics to comply
+// with the naming requirements for the cockroachdb Datadog integration listed
+// in its metadata.csv.
+// - https://github.com/DataDog/integrations-core/blob/master/cockroachdb/metadata.csv
+var cockroachdbMetrics map[string]string
+
+func init() {
+	// Parse the embedded YAML file
+	if err := yaml.Unmarshal([]byte(cockroachdbMetricsYAML), &cockroachdbMetrics); err != nil {
+		panic(fmt.Sprintf("failed to parse cockroachdb_metrics.yaml: %v", err))
+	}
+}
 
 // Config represents the information needed to configure and run the
 // OpenTelemetry Collector on a CockroachDB cluster.

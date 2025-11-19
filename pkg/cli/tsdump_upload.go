@@ -13,9 +13,11 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"go.yaml.in/yaml/v4"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -40,6 +42,7 @@ const (
 	UploadStatusPartialSuccess = "Partial Success"
 	UploadStatusFailure        = "Failed"
 	nodeKey                    = "node_id"
+	metricsFilePath            = "files/cockroachdb_metrics.yaml"
 )
 
 var (
@@ -71,7 +74,31 @@ var (
 		"GAUGE":   datadogV2.METRICINTAKETYPE_GAUGE.Ptr(),
 		"COUNTER": datadogV2.METRICINTAKETYPE_COUNT.Ptr(),
 	}
+
+	// cockroachdbMetrics is a mapping of CockroachDB metric names in Prometheus format
+	// to Datadog-compatible metric names. This allows CockroachDB metrics to comply
+	// with the naming requirements for the cockroachdb Datadog integration.
+	// - https://github.com/DataDog/integrations-core/blob/master/cockroachdb/metadata.csv
+	cockroachdbMetrics map[string]string
+
+	// prometheusNameRegex converts CockroachDB metric names to Prometheus format
+	// by replacing non-alphanumeric characters with underscores
+	prometheusNameRegex = regexp.MustCompile(`[^a-zA-Z0-9]`)
 )
+
+func init() {
+	// Load cockroachdb_metrics.yaml from file using relative path
+	data, err := os.ReadFile(metricsFilePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to read cockroachdb_metrics.yaml from %s: %v\n", metricsFilePath, err)
+		return
+	}
+
+	if err := yamlutil.UnmarshalStrict(data, &cockroachdbMetrics); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to parse cockroachdb_metrics.yaml: %v\n", err)
+		return
+	}
+}
 
 // FailedRequest represents a failed metric upload request that can be retried
 type FailedRequest struct {
@@ -274,6 +301,23 @@ func appendTag(series *datadogV2.MetricSeries, tagKey, tagValue string) {
 	series.Tags = append(series.Tags, fmt.Sprintf("%s:%s", tagKey, tagValue))
 }
 
+// convertToDatadogMetricName converts a CockroachDB metric name to a Datadog-compatible name
+// using the cockroachdb_metrics mapping. It first converts the metric name to Prometheus format
+// (replacing non-alphanumeric characters with underscores) and then looks up the corresponding
+// Datadog name in the mapping. If no mapping exists, it returns the original metric name.
+func convertToDatadogMetricName(metricName string) string {
+	// Convert to Prometheus format (replace non-alphanumeric with underscores)
+	promName := prometheusNameRegex.ReplaceAllString(metricName, "_")
+
+	if datadogName, exists := cockroachdbMetrics[promName]; exists {
+		// Use the Datadog-compatible name from the mapping
+		return datadogName
+	}
+
+	// Fall back to original metric name format
+	return metricName
+}
+
 func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, error) {
 	name, source, res, _, err := ts.DecodeDataKey(kv.Key)
 	if err != nil {
@@ -316,6 +360,9 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 		// add default node_id as 0 as there is no metric match for the regex.
 		appendTag(series, nodeKey, "0")
 	}
+
+	// Convert metric name to Datadog-compatible format
+	series.Metric = convertToDatadogMetricName(series.Metric)
 
 	isSorted := true
 	var previousTimestamp int64
@@ -1029,8 +1076,11 @@ func (d *datadogWriter) uploadInitMetrics() error {
 	for _, layer := range metricLayers {
 		for _, category := range layer.Categories {
 			for _, metric := range category.Metrics {
+				// Convert metric name to Datadog-compatible format
+				datadogMetricName := convertToDatadogMetricName(metric.Name)
+
 				series := datadogV2.MetricSeries{
-					Metric: metric.Name,
+					Metric: datadogMetricName,
 					Tags:   []string{},
 					Type:   d.resolveMetricType(metric.Name),
 					Points: []datadogV2.MetricPoint{{
