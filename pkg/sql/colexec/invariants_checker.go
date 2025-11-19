@@ -7,12 +7,14 @@ package colexec
 
 import (
 	"context"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -24,6 +26,7 @@ type invariantsChecker struct {
 	colexecop.InitHelper
 	colexecop.NonExplainable
 
+	rng            *rand.Rand
 	metadataSource colexecop.MetadataSource
 }
 
@@ -36,8 +39,10 @@ func NewInvariantsChecker(input colexecop.Operator) colexecop.DrainableClosableO
 			"an invariantsChecker is attempted to be created in non-test build",
 		))
 	}
+	rng, _ := randutil.NewTestRand()
 	c := &invariantsChecker{
 		OneInputNode: colexecop.OneInputNode{Input: input},
+		rng:          rng,
 	}
 	if ms, ok := input.(colexecop.MetadataSource); ok {
 		c.metadataSource = ms
@@ -84,6 +89,12 @@ func (i *invariantsChecker) assertInitWasCalled() bool {
 func (i *invariantsChecker) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if shortCircuit := i.assertInitWasCalled(); shortCircuit {
 		return coldata.ZeroBatch, nil
+	}
+	// Inject test-only metadata with 5% probability.
+	if i.rng.Float64() < 0.05 {
+		return nil, &execinfrapb.ProducerMetadata{
+			RowNum: &execinfrapb.RemoteProducerMetadata_RowNum{},
+		}
 	}
 	b, meta := i.Input.Next()
 	if meta != nil {

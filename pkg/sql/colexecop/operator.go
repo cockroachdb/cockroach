@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -537,6 +538,11 @@ type VectorizedStatsCollector interface {
 func NextNoMeta(op Operator) coldata.Batch {
 	b, meta := op.Next()
 	if meta != nil {
+		if buildutil.CrdbTestBuild && meta.RowNum != nil {
+			// In test builds, the invariantsChecker can inject RowNum metadata
+			// in arbitrary Operator chains, so we'll just silently swallow it.
+			return NextNoMeta(op)
+		}
 		colexecerror.InternalError(errors.AssertionFailedf("non-nil metadata from %T: %v", op, meta))
 	}
 	return b
