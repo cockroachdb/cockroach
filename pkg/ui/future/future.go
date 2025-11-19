@@ -445,6 +445,14 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 	// Serve the overview page
 	futureRouter.HandleFunc("/overview", handlerWithCommonData(cfg, handleOverview)).Methods("GET")
 
+	// Serve the dual-cluster magic overview page
+	futureRouter.HandleFunc("/overview/magic", handlerWithCommonData(cfg, handleOverviewMagic)).Methods("GET")
+
+	// Serve the summary table partials for magic overview (cluster 1 or 2)
+	futureRouter.HandleFunc("/overview/magic/summary", func(w http.ResponseWriter, r *http.Request) {
+		handleOverviewMagicSummary(w, r, cfg)
+	}).Methods("GET")
+
 	// Serve the login page
 	futureRouter.HandleFunc("/login", handleLogin).Methods("GET")
 
@@ -3257,4 +3265,263 @@ func handleMetricsEvents(
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
 		return
 	}
+}
+
+// DualClusterOverviewData contains data for the dual-cluster magic overview page
+type DualClusterOverviewData struct {
+	// Empty for now - the actual data is loaded via HTMX
+}
+
+// handleOverviewMagic serves the dual-cluster overview page
+func handleOverviewMagic(
+	w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs, commonData CommonData,
+) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	data := DualClusterOverviewData{}
+
+	// Execute the template
+	err := templates.ExecuteTemplate(w, "overview_magic.html", PageData{
+		IndexHTMLArgs: cfg,
+		Common:        commonData,
+		Data:          data,
+	})
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleOverviewMagicSummary serves the summary table partial for either cluster 1 or 2
+func handleOverviewMagicSummary(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Determine which cluster to fetch data for
+	clusterParam := r.URL.Query().Get("cluster")
+
+	var summaryData MetricsSummaryData
+	var err error
+
+	if clusterParam == "2" {
+		// Fetch data from the second cluster (localhost:36257 for gRPC)
+		summaryData, err = fetchCluster2Summary(ctx)
+		if err != nil {
+			log.Dev.Warningf(ctx, "Failed to fetch cluster 2 summary: %v", err)
+			// Render error message
+			_, _ = w.Write([]byte(`<div class="box bad"><p>Failed to fetch cluster 2 data: ` + err.Error() + `</p></div>`))
+			return
+		}
+	} else {
+		// Fetch data from the primary cluster (cluster 1) using the existing config
+		summaryData, err = fetchCluster1Summary(ctx, cfg)
+		if err != nil {
+			log.Dev.Warningf(ctx, "Failed to fetch cluster 1 summary: %v", err)
+			// Render error message
+			_, _ = w.Write([]byte(`<div class="box bad"><p>Failed to fetch cluster 1 data: ` + err.Error() + `</p></div>`))
+			return
+		}
+	}
+
+	// Execute the summary table template
+	err = templates.ExecuteTemplate(w, "summary_table.html", summaryData)
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
+}
+
+// fetchCluster1Summary fetches summary metrics from the primary cluster
+func fetchCluster1Summary(ctx context.Context, cfg IndexHTMLArgs) (MetricsSummaryData, error) {
+	// Fetch nodes for capacity information
+	nodesResp, err := cfg.Status.NodesUI(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return MetricsSummaryData{}, fmt.Errorf("failed to fetch nodes: %w", err)
+	}
+
+	// Calculate capacity totals
+	var capacityUsed, capacityTotal int64
+	var unavailableRanges int
+	totalNodes := len(nodesResp.Nodes)
+
+	for _, node := range nodesResp.Nodes {
+		for _, store := range node.StoreStatuses {
+			capacityUsed += store.Desc.Capacity.Used
+			capacityTotal += store.Desc.Capacity.Capacity
+		}
+	}
+
+	// Fetch problem ranges for unavailable count
+	problemRangesResp, err := cfg.Status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch problem ranges: %v", err)
+	} else {
+		for _, nodeProblems := range problemRangesResp.ProblemsByNodeID {
+			unavailableRanges += len(nodeProblems.UnavailableRangeIDs)
+		}
+	}
+
+	// Query timeseries for queries per second and P99 latency
+	now := timeutil.Now()
+	endNanos := now.UnixNano()
+	startNanos := now.Add(-10 * time.Second).UnixNano()
+
+	// Build queries for QPS and P99 latency
+	var nodeIDs []string
+	for _, node := range nodesResp.Nodes {
+		nodeIDs = append(nodeIDs, fmt.Sprintf("%d", node.Desc.NodeID))
+	}
+
+	tsReq := &tspb.TimeSeriesQueryRequest{
+		StartNanos: startNanos,
+		EndNanos:   endNanos,
+		Queries: []tspb.Query{
+			{
+				Name:             "cr.node.sql.query.count",
+				Sources:          nodeIDs,
+				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
+				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
+				Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
+			},
+			{
+				Name:             "cr.node.sql.service.latency-p99",
+				Sources:          nodeIDs,
+				Downsampler:      tspb.TimeSeriesQueryAggregator_MAX.Enum(),
+				SourceAggregator: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
+			},
+		},
+	}
+
+	tsResp, err := cfg.TS.Query(ctx, tsReq)
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to query timeseries: %v", err)
+	}
+
+	// Extract QPS and P99 latency from timeseries response
+	var qps, p99Latency float64
+	if tsResp != nil && len(tsResp.Results) >= 2 {
+		// QPS - get the latest datapoint
+		if len(tsResp.Results[0].Datapoints) > 0 {
+			lastDP := tsResp.Results[0].Datapoints[len(tsResp.Results[0].Datapoints)-1]
+			qps = lastDP.Value
+		}
+		// P99 Latency - get the latest datapoint
+		if len(tsResp.Results[1].Datapoints) > 0 {
+			lastDP := tsResp.Results[1].Datapoints[len(tsResp.Results[1].Datapoints)-1]
+			p99Latency = lastDP.Value
+		}
+	}
+
+	return MetricsSummaryData{
+		TotalNodes:        totalNodes,
+		CapacityUsedStr:   formatBytes(float64(capacityUsed)),
+		CapacityTotalStr:  formatBytes(float64(capacityTotal)),
+		CapacityPercent:   float64(capacityUsed) / float64(capacityTotal),
+		UnavailableRanges: unavailableRanges,
+		QueriesPerSecond:  formatNumber(qps),
+		P99Latency:        p99Latency,
+	}, nil
+}
+
+// fetchCluster2Summary fetches summary metrics from the second cluster
+func fetchCluster2Summary(ctx context.Context) (MetricsSummaryData, error) {
+	// Connect to the second cluster at localhost:36257
+	adminClient, statusClient, tsClient, err := DialRemoteClients(ctx, "localhost:36257")
+	if err != nil {
+		return MetricsSummaryData{}, fmt.Errorf("failed to dial cluster 2: %w", err)
+	}
+
+	// Fetch nodes for capacity information
+	nodesResp, err := statusClient.NodesUI(ctx, &serverpb.NodesRequest{})
+	if err != nil {
+		return MetricsSummaryData{}, fmt.Errorf("failed to fetch nodes: %w", err)
+	}
+
+	// Calculate capacity totals
+	var capacityUsed, capacityTotal int64
+	var unavailableRanges int
+	totalNodes := len(nodesResp.Nodes)
+
+	for _, node := range nodesResp.Nodes {
+		for _, store := range node.StoreStatuses {
+			capacityUsed += store.Desc.Capacity.Used
+			capacityTotal += store.Desc.Capacity.Capacity
+		}
+	}
+
+	// Fetch problem ranges for unavailable count
+	problemRangesResp, err := statusClient.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{})
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to fetch problem ranges: %v", err)
+	} else {
+		for _, nodeProblems := range problemRangesResp.ProblemsByNodeID {
+			unavailableRanges += len(nodeProblems.UnavailableRangeIDs)
+		}
+	}
+
+	// Query timeseries for queries per second and P99 latency
+	now := timeutil.Now()
+	endNanos := now.UnixNano()
+	startNanos := now.Add(-10 * time.Second).UnixNano()
+
+	// Build queries for QPS and P99 latency
+	var nodeIDs []string
+	for _, node := range nodesResp.Nodes {
+		nodeIDs = append(nodeIDs, fmt.Sprintf("%d", node.Desc.NodeID))
+	}
+
+	tsReq := &tspb.TimeSeriesQueryRequest{
+		StartNanos: startNanos,
+		EndNanos:   endNanos,
+		Queries: []tspb.Query{
+			{
+				Name:             "cr.node.sql.query.count",
+				Sources:          nodeIDs,
+				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
+				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
+				Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
+			},
+			{
+				Name:             "cr.node.sql.service.latency-p99",
+				Sources:          nodeIDs,
+				Downsampler:      tspb.TimeSeriesQueryAggregator_MAX.Enum(),
+				SourceAggregator: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
+			},
+		},
+	}
+
+	tsResp, err := tsClient.Query(ctx, tsReq)
+	if err != nil {
+		log.Dev.Warningf(ctx, "Failed to query timeseries: %v", err)
+	}
+
+	// Extract QPS and P99 latency from timeseries response
+	var qps, p99Latency float64
+	if tsResp != nil && len(tsResp.Results) >= 2 {
+		// QPS - get the latest datapoint
+		if len(tsResp.Results[0].Datapoints) > 0 {
+			lastDP := tsResp.Results[0].Datapoints[len(tsResp.Results[0].Datapoints)-1]
+			qps = lastDP.Value
+		}
+		// P99 Latency - get the latest datapoint
+		if len(tsResp.Results[1].Datapoints) > 0 {
+			lastDP := tsResp.Results[1].Datapoints[len(tsResp.Results[1].Datapoints)-1]
+			p99Latency = lastDP.Value
+		}
+	}
+
+	// Suppress unused variable warning
+	_ = adminClient
+
+	return MetricsSummaryData{
+		TotalNodes:        totalNodes,
+		CapacityUsedStr:   formatBytes(float64(capacityUsed)),
+		CapacityTotalStr:  formatBytes(float64(capacityTotal)),
+		CapacityPercent:   float64(capacityUsed) / float64(capacityTotal),
+		UnavailableRanges: unavailableRanges,
+		QueriesPerSecond:  formatNumber(qps),
+		P99Latency:        p99Latency,
+	}, nil
 }
