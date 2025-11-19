@@ -4,6 +4,13 @@
     Alpine.store('diagnosticsTarget', '')
     Alpine.store('diagnosticsFingerprint', '')
   })
+  </script>
+  <script type="module">
+  import { menu, menuButton } from "/future/assets/menu.js"
+  document.addEventListener('htmx:afterSwap', () => {
+    menu(document)
+    menuButton(document)
+  })
 </script>
 <style>
   section.grid {

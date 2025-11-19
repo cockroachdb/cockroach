@@ -38,6 +38,7 @@
       z-index: 10000;
       transition: all 0.3s ease;
       box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      pointer-events: none;
     `;
     indicator.textContent = '✅ Auto-refresh active';
     document.body.appendChild(indicator);

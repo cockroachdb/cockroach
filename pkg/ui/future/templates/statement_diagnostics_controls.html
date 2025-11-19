@@ -66,7 +66,13 @@
     hx-include="#diag-controls-query-{{.Data.ID}}, #diag-controls-tableMode">
     {{if .Data.HasPendingRequest}}
       {{/* State 2: Pending request - show Waiting + Cancel */}}
-      <div class="flex-row crowded" id="diag-btn-{{.Data.ID}}">
+      <div class="flex-row crowded" id="diag-btn-{{.Data.ID}}"
+        hx-target="#diag-controls-{{ .Data.ID }}"
+        hx-select="#diag-controls-{{ .Data.ID }}"
+        hx-get="/future/sqlactivity/statements/{{.Data.ID}}/diagnostics"
+        hx-swap="outerHTML"
+        hx-trigger="every 10s"
+        >
         <button disabled class="warn">Waiting</button>
         <button class="bad"
                 hx-delete="/future/sqlactivity/statements/{{.Data.ID}}/diagnostics/{{ .Data.PendingRequestID }}"
@@ -84,9 +90,9 @@
           Activate
         </button>
         <div style="position:relative;">
-          <button id=menubutton aria-haspopup=menu aria-controls=my-menu aria-expanded=false
+          <button id=menubutton aria-haspopup=menu aria-controls=my-menu-{{.Data.ID}} aria-expanded=false
             >Download</button>
-          <div role=menu hidden id=my-menu aria-labelledby=menubutton>
+          <div role=menu hidden id=my-menu-{{.Data.ID}} aria-labelledby=menubutton>
             {{range .Data.CompletedBundles}}
               <a role=menuitem href="{{.DownloadURL}}">Bundle #{{.ID}} ({{formatTime .CollectedAt}})</a>
             {{end}}
