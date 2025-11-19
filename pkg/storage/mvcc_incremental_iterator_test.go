@@ -1543,13 +1543,13 @@ func collectMatchingWithMVCCIterator(
 }
 
 func runIncrementalBenchmark(b *testing.B, ts hlc.Timestamp, opts mvccBenchData) {
-	eng := getInitialStateEngine(context.Background(), b, opts, false /* inMemory */)
+	eng := getInitialStateEngine(b.Context(), b, opts, false /* inMemory */)
 	defer eng.Close()
 	{
 		// Pull all of the sstables into the cache.  This
 		// probably defeats a lot of the benefits of the
 		// time-based optimization.
-		_, err := ComputeStats(context.Background(), eng, keys.LocalMax, roachpb.KeyMax, 0)
+		_, err := ComputeStats(b.Context(), eng, fs.UnknownReadCategory, keys.LocalMax, roachpb.KeyMax, 0)
 		if err != nil {
 			b.Fatalf("stats failed: %s", err)
 		}
