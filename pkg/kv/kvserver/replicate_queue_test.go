@@ -388,6 +388,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 			}
 		})
 	}
+	t.FailNow()
 }
 
 // TestReplicateQueueUpReplicateOddVoters tests that up-replication only
