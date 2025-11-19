@@ -421,6 +421,7 @@ func IterateReplicaKeySpans(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	reader storage.Reader,
+	readCategory fs.ReadCategory,
 	opts SelectOpts,
 	visitor func(storage.EngineIterator, roachpb.Span) error,
 ) error {
@@ -433,9 +434,10 @@ func IterateReplicaKeySpans(
 	for _, span := range spans {
 		err := func() error {
 			iter, err := reader.NewEngineIterator(ctx, storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypePointsAndRanges,
-				LowerBound: span.Key,
-				UpperBound: span.EndKey,
+				KeyTypes:     storage.IterKeyTypePointsAndRanges,
+				LowerBound:   span.Key,
+				UpperBound:   span.EndKey,
+				ReadCategory: readCategory,
 			})
 			if err != nil {
 				return err
