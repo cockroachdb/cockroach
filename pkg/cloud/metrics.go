@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/errors"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
@@ -184,6 +185,24 @@ func (mr *metricsReader) Close(ctx context.Context) error {
 	}
 
 	return mr.ReadCloserCtx.Close(ctx)
+}
+
+// ReadAt implements ioctx.ReaderAtCtx by delegating to the underlying reader if it supports it.
+// This allows Parquet and other formats that require random access to work with
+// cloud storage backends without buffering the entire file to disk.
+func (mr *metricsReader) ReadAt(ctx context.Context, p []byte, off int64) (n int, err error) {
+	if rf, ok := SupportsRandomAccess(mr.ReadCloserCtx); ok {
+		return rf.ReadAt(ctx, p, off)
+	}
+	return 0, errors.New("ReadAt not supported by underlying reader")
+}
+
+// Seek implements ioctx.SeekerCtx by delegating to the underlying reader if it supports it.
+func (mr *metricsReader) Seek(ctx context.Context, offset int64, whence int) (int64, error) {
+	if rf, ok := SupportsRandomAccess(mr.ReadCloserCtx); ok {
+		return rf.Seek(ctx, offset, whence)
+	}
+	return 0, errors.New("Seek not supported by underlying reader")
 }
 
 type metricsWriter struct {
