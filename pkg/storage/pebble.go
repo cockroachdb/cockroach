@@ -538,6 +538,24 @@ var (
 			1 /* min */, 80 /* max */)),
 		settings.IntInRange(1, 100),
 	)
+	valueSeparationLatencyTolerantMinimumSize = settings.RegisterIntSetting(
+		settings.SystemVisible,
+		"storage.value_separation.latency_tolerant_minimum_size",
+		"the minimum size of a value that will be separated into a blob file given the value is "+
+			"latency tolerant (in the range local keyspace)",
+		int64(metamorphic.ConstantWithTestRange("storage.value_separation.latency_tolerant_minimum_size",
+			32 /* 32 bytes (default) */, 25 /* 25 bytes (minimum) */, 512 /* 512 bytes (maximum) */)),
+		settings.IntWithMinimum(1),
+	)
+	valueSeparationMVCCGarbageMinimumSize = settings.RegisterIntSetting(
+		settings.SystemVisible,
+		"storage.value_separation.mvcc_history_minimum_size",
+		"the minimum size of a value that will be separated into a blob file given the value is "+
+			"likely not the latest version of a key",
+		int64(metamorphic.ConstantWithTestRange("storage.value_separation.mvcc_history_minimum_size",
+			32 /* 32 bytes (default) */, 25 /* 25 bytes (minimum) */, 512 /* 512 bytes (maximum) */)),
+		settings.IntWithMinimum(1),
+	)
 )
 
 // This setting controls deletion pacing. This helps prevent disk slowness
@@ -614,8 +632,7 @@ const DefaultMemtableSize = 64 << 20 // 64 MB
 
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
 
-// DefaultPebbleOptions returns the default pebble options.
-func DefaultPebbleOptions() *pebble.Options {
+func defaultPebbleOptions(sv *settings.Values) *pebble.Options {
 	opts := &pebble.Options{
 		Comparer:   &EngineComparer,
 		FS:         vfs.Default,
@@ -642,7 +659,7 @@ func DefaultPebbleOptions() *pebble.Options {
 	opts.FlushDelayRangeKey = 10 * time.Second
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
 
-	opts.Experimental.SpanPolicyFunc = spanPolicyFunc
+	opts.Experimental.SpanPolicyFunc = spanPolicyFuncFactory(sv)
 	opts.Experimental.UserKeyCategories = userKeyCategories
 
 	// Every 5 minutes, log iterators that have been open for more than 1 minute.
@@ -683,6 +700,20 @@ func DefaultPebbleOptions() *pebble.Options {
 	return opts
 }
 
+// DefaultPebbleOptions returns the default pebble options for general use
+// (e.g., SST writers, external iterators, tests). This does not use cluster
+// settings and should not be used when opening a production Pebble engine.
+func DefaultPebbleOptions() *pebble.Options {
+	return defaultPebbleOptions(nil /* sv */)
+}
+
+// DefaultPebbleOptionsForOpen returns the default pebble options for opening
+// a production Pebble engine. It uses cluster settings to configure value
+// storage policies.
+func DefaultPebbleOptionsForOpen(sv *settings.Values) *pebble.Options {
+	return defaultPebbleOptions(sv)
+}
+
 var (
 	spanPolicyLocalRangeIDEndKey = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd()})
 	spanPolicyLockTableStartKey  = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix})
@@ -690,45 +721,53 @@ var (
 	spanPolicyLocalEndKey        = EncodeMVCCKey(MVCCKey{Key: keys.LocalPrefix.PrefixEnd()})
 )
 
-// spanPolicyFunc is a pebble.SpanPolicyFunc that applies special policies for
+// spanPolicyFuncFactory returns a pebble.SpanPolicyFunc that applies special policies for
 // the CockroachDB keyspace.
-func spanPolicyFunc(startKey []byte) (policy pebble.SpanPolicy, endKey []byte, _ error) {
-	// There's no special policy for non-local keys.
-	if !bytes.HasPrefix(startKey, keys.LocalPrefix) {
-		return pebble.SpanPolicy{}, nil, nil
-	}
-	// Prefer fast compression for all local keys, since they shouldn't take up
-	// a significant part of the space.
-	policy.PreferFastCompression = true
-
-	// The first section of the local keyspace is the Range-ID keyspace. It
-	// extends from the beginning of the keyspace to the Range Local keys. The
-	// Range-ID keyspace includes the raft log, which is rarely read and
-	// receives ~half the writes.
-	if cockroachkvs.Compare(startKey, spanPolicyLocalRangeIDEndKey) < 0 {
-		if !bytes.HasPrefix(startKey, keys.LocalRangeIDPrefix) {
-			return pebble.SpanPolicy{}, nil, errors.AssertionFailedf("startKey %s is not a Range-ID key", startKey)
+func spanPolicyFuncFactory(sv *settings.Values) func([]byte) (pebble.SpanPolicy, []byte, error) {
+	return func(startKey []byte) (policy pebble.SpanPolicy, endKey []byte, _ error) {
+		// There's no special policy for non-local keys.
+		if !bytes.HasPrefix(startKey, keys.LocalPrefix) {
+			return pebble.SpanPolicy{}, nil, nil
 		}
-		policy.ValueStoragePolicy = pebble.ValueStorageLatencyTolerant
-		return policy, spanPolicyLocalRangeIDEndKey, nil
-	}
+		// Prefer fast compression for all local keys, since they shouldn't take up
+		// a significant part of the space.
+		policy.PreferFastCompression = true
 
-	// We also disable value separation for lock keys.
-	if cockroachkvs.Compare(startKey, spanPolicyLockTableEndKey) >= 0 {
-		// Not a lock key, so use default value separation within sstable (by
-		// suffix) and into blob files.
-		// NB: there won't actually be a suffix in these local keys.
-		return policy, spanPolicyLocalEndKey, nil
+		// The first section of the local keyspace is the Range-ID keyspace. It
+		// extends from the beginning of the keyspace to the Range Local keys. The
+		// Range-ID keyspace includes the raft log, which is rarely read and
+		// receives ~half the writes.
+		if cockroachkvs.Compare(startKey, spanPolicyLocalRangeIDEndKey) < 0 {
+			if !bytes.HasPrefix(startKey, keys.LocalRangeIDPrefix) {
+				return pebble.SpanPolicy{}, nil, errors.AssertionFailedf("startKey %s is not a Range-ID key", startKey)
+			}
+			if sv != nil {
+				policy.ValueStoragePolicy = pebble.ValueStoragePolicyAdjustment{
+					OverrideBlobSeparationMinimumSize: int(valueSeparationLatencyTolerantMinimumSize.Get(sv)),
+				}
+			} else {
+				policy.ValueStoragePolicy = pebble.ValueStorageLatencyTolerant
+			}
+			return policy, spanPolicyLocalRangeIDEndKey, nil
+		}
+
+		// We also disable value separation for lock keys.
+		if cockroachkvs.Compare(startKey, spanPolicyLockTableEndKey) >= 0 {
+			// Not a lock key, so use default value separation within sstable (by
+			// suffix) and into blob files.
+			// NB: there won't actually be a suffix in these local keys.
+			return policy, spanPolicyLocalEndKey, nil
+		}
+		if cockroachkvs.Compare(startKey, spanPolicyLockTableStartKey) < 0 {
+			// Not a lock key, so use default value separation within sstable (by
+			// suffix) and into blob files.
+			// NB: there won't actually be a suffix in these local keys.
+			return policy, spanPolicyLockTableStartKey, nil
+		}
+		// Lock key. Disable value separation.
+		policy.ValueStoragePolicy = pebble.ValueStorageLowReadLatency
+		return policy, spanPolicyLockTableEndKey, nil
 	}
-	if cockroachkvs.Compare(startKey, spanPolicyLockTableStartKey) < 0 {
-		// Not a lock key, so use default value separation within sstable (by
-		// suffix) and into blob files.
-		// NB: there won't actually be a suffix in these local keys.
-		return policy, spanPolicyLockTableStartKey, nil
-	}
-	// Lock key. Disable value separation.
-	policy.ValueStoragePolicy = pebble.ValueStorageLowReadLatency
-	return policy, spanPolicyLockTableEndKey, nil
 }
 
 func shortAttributeExtractorForValues(
@@ -1058,6 +1097,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		return pebble.ValueSeparationPolicy{
 			Enabled:                  true,
 			MinimumSize:              int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
+			MinimumMVCCGarbageSize:   int(valueSeparationMVCCGarbageMinimumSize.Get(&cfg.settings.SV)),
 			MaxBlobReferenceDepth:    int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
 			RewriteMinimumAge:        valueSeparationRewriteMinimumAge.Get(&cfg.settings.SV),
 			GarbageRatioLowPriority:  lowPri,
