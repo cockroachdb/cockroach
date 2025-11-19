@@ -64,7 +64,7 @@ SET TRACING = "off";
 
 # The first execution should miss the query cache.
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
 query cache miss
 query cache add
@@ -80,7 +80,7 @@ SET TRACING = "off";
 
 # The second execution should hit the query cache.
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
 query cache hit
 
@@ -99,7 +99,7 @@ statement ok
 SET TRACING = "off";
 
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
 not using query cache
 
@@ -113,7 +113,7 @@ statement ok
 SET TRACING = "off";
 
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
 not using query cache
 
@@ -133,7 +133,7 @@ SET TRACING = "off";
 
 # We should see the original cache is still there.
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
 query cache hit
 
@@ -188,7 +188,7 @@ statement ok
 SET TRACING = "off";
 
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
 ----
 query cache miss (prepare)
 query cache hit (prepare)
@@ -210,7 +210,7 @@ statement ok
 SET TRACING = "off";
 
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
 ----
 reusing cached memo
 reusing cached memo
@@ -243,7 +243,7 @@ statement ok
 SET TRACING = "off";
 
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
 ----
 query cache hit (prepare)
 query cache hit (prepare)
@@ -272,7 +272,7 @@ statement ok
 SET TRACING = "off";
 
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
 ----
 not using query cache
 not using query cache
@@ -304,7 +304,7 @@ statement ok
 SET TRACING = "off";
 
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
 ----
 reusing cached memo
 reusing cached memo
