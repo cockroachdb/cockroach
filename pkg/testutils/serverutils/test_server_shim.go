@@ -368,20 +368,8 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 		params.DefaultTenantName = defaultTestTenantName
 	}
 
-	var evalTestingKnobs *eval.TestingKnobs
-	if params.Knobs.SQLEvalContext != nil {
-		evalTestingKnobs = params.Knobs.SQLEvalContext.(*eval.TestingKnobs)
-	} else {
-		evalTestingKnobs = &eval.TestingKnobs{}
-		params.Knobs.SQLEvalContext = evalTestingKnobs
-	}
-
-	if evalTestingKnobs.UnsafeOverride == nil {
-		v := true
-		evalTestingKnobs.UnsafeOverride = func() *bool {
-			return &v
-		}
-	}
+	// Allow access to unsafe internals for this server.
+	SetUnsafeOverride(&params.Knobs)
 
 	srv, err := srvFactoryImpl.New(params)
 	if err != nil {
@@ -441,6 +429,7 @@ func OpenDBConn(
 func StartTenant(
 	t TestFataler, ts TestServerInterface, params base.TestTenantArgs,
 ) (ApplicationLayerInterface, *gosql.DB) {
+	SetUnsafeOverride(&params.TestingKnobs)
 	tenant, err := ts.TenantController().StartTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)
@@ -453,6 +442,7 @@ func StartTenant(
 func StartSharedProcessTenant(
 	t TestFataler, ts TestServerInterface, params base.TestSharedProcessTenantArgs,
 ) (ApplicationLayerInterface, *gosql.DB) {
+	SetUnsafeOverride(&params.Knobs)
 	tenant, goDB, err := ts.TenantController().StartSharedProcessTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)
@@ -612,4 +602,23 @@ func ShouldEnableDRPC(
 	}
 
 	return base.TestDRPCDisabled
+}
+
+// SetUnsafeOverride sets an unsafe override for eval.TestingKnobs.UnsafeOverride on
+// the given TestingKnobs.
+func SetUnsafeOverride(knobs *base.TestingKnobs) {
+	var evalTestingKnobs *eval.TestingKnobs
+	if knobs.SQLEvalContext != nil {
+		evalTestingKnobs = knobs.SQLEvalContext.(*eval.TestingKnobs)
+	} else {
+		evalTestingKnobs = &eval.TestingKnobs{}
+		knobs.SQLEvalContext = evalTestingKnobs
+	}
+
+	if evalTestingKnobs.UnsafeOverride == nil {
+		v := true
+		evalTestingKnobs.UnsafeOverride = func() *bool {
+			return &v
+		}
+	}
 }

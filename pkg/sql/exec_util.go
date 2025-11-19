@@ -110,6 +110,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -793,6 +794,15 @@ var CreateTableWithSchemaLocked = settings.RegisterBoolSetting(
 		"default value for the create_table_with_schema_locked session setting; controls "+
 		"if new created tables will have schema_locked set",
 	true)
+
+var defaultAllowUnsafeInternals = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.override.allow_unsafe_internals.enabled",
+	"overrides the allow_unsafe_internals session variable default settings"+
+		" as a failsafe in case of emergencies. This setting should not be"+
+		" externally visible.",
+	envutil.EnvOrDefaultBool("COCKROACH_OVERRIDE_ALLOW_UNSAFE_INTERNALS", false),
+	settings.WithUnsafe)
 
 // createTableWithSchemaLockedDefault override for the schema_locked
 var createTableWithSchemaLockedDefault = true

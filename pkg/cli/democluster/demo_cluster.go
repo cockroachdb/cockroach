@@ -964,6 +964,11 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		args.SSLCertsDir = demoDir
 	}
 
+	// Allow access to system and crdb_internal tables in demo mode.
+	// Demo mode is for development/testing, so we want to allow access
+	// to these tables for debugging and introspection.
+	serverutils.SetUnsafeOverride(&args.Knobs)
+
 	return args
 }
 

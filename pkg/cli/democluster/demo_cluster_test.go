@@ -140,6 +140,10 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			actual.StoreSpecs = nil
 			actual.Knobs.JobsTestingKnobs = nil
 
+			// Copy the SQLEvalContext from actual to expected since it's set by SetUnsafeOverride
+			// and contains function pointers that we can't predict
+			tc.expected.Knobs.SQLEvalContext = actual.Knobs.SQLEvalContext
+
 			assert.Equal(t, tc.expected, actual)
 		})
 	}

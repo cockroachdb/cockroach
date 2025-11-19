@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -4395,12 +4394,11 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowUnsafeInternals), nil
 		},
-		GlobalDefault: func(_ *settings.Values) string {
-			if envutil.EnvOrDefaultBool("COCKROACH_ACCEPTANCE_ALLOW_UNSAFE", false) {
+		GlobalDefault: func(sv *settings.Values) string {
+			if defaultAllowUnsafeInternals.Get(sv) {
 				return "on"
 			}
-			// In 26.1 we will change the default to false/off.
-			return "on"
+			return "off"
 		},
 	},
 
