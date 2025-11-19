@@ -14,6 +14,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/sql/execinfrapb",
         "//pkg/util",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/optional",
         "//pkg/util/protoutil",

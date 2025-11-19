@@ -418,6 +418,16 @@ func (ob *OutputBuilder) AddLatchWaitTime(latchWaitTime time.Duration) {
 	)
 }
 
+// AddAdmissionWaitTime adds a top-level field for the cumulative time spent waiting
+// in admission control.
+func (ob *OutputBuilder) AddAdmissionWaitTime(admissionWaitTime time.Duration) {
+	ob.AddFlakyTopLevelField(
+		DeflakeVolatile,
+		"cumulative time spent waiting in admission control",
+		string(humanizeutil.Duration(admissionWaitTime)),
+	)
+}
+
 // AddMaxMemUsage adds a top-level field for the memory used by the query.
 func (ob *OutputBuilder) AddMaxMemUsage(bytes int64) {
 	ob.AddFlakyTopLevelField(
