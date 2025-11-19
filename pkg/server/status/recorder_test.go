@@ -686,6 +686,7 @@ func TestMetricsRecorder(t *testing.T) {
 		},
 		TotalSystemMemory: totalMemory,
 		NumCpus:           int32(system.NumCPU()),
+		NumVcpus:          GetVCPUs(context.Background()),
 	}
 
 	// Make sure there is at least one environment variable that will be
