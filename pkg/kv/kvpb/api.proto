@@ -3872,6 +3872,12 @@ message ContentionEvent {
   bool is_latch = 4;
 }
 
+// ReplicationWaitEvent is a message that is recorded on traces by a
+// range controller when waiting for quorom flow control.
+message ReplicationWaitEvent {
+  uint64 duration = 1;
+}
+
 // ScanStats is a message that tracks miscellaneous statistics of all Gets,
 // Scans, and ReverseScans in a single BatchResponse.
 message ScanStats {

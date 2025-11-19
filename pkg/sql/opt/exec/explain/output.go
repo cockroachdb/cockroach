@@ -418,6 +418,16 @@ func (ob *OutputBuilder) AddLatchWaitTime(latchWaitTime time.Duration) {
 	)
 }
 
+// AddReplicationWaitTime adds a top-level field for the cumulative time spent waiting
+// for replication.
+func (ob *OutputBuilder) AddReplicationWaitTime(replicationWaitTime time.Duration) {
+	ob.AddFlakyTopLevelField(
+		DeflakeVolatile,
+		"cumulative time spent waiting for replication",
+		string(humanizeutil.Duration(replicationWaitTime)),
+	)
+}
+
 // AddMaxMemUsage adds a top-level field for the memory used by the query.
 func (ob *OutputBuilder) AddMaxMemUsage(bytes int64) {
 	ob.AddFlakyTopLevelField(
