@@ -6,7 +6,6 @@ load("@rules_nodejs//nodejs/private:toolchains_repo.bzl", "toolchains_repo")
 
 _NODE_VERSION = "16.14.2"
 _NODE_VERSIONS = {
-    "darwin_amd64": ("node-v16.14.2-darwin-x64.tar.gz", "node-v16.14.2-darwin-x64", "d3076ca7fcc7269c8ff9b03fe7d1c277d913a7e84a46a14eff4af7791ff9d055"),
     "darwin_arm64": ("node-v16.14.2-darwin-arm64.tar.gz", "node-v16.14.2-darwin-arm64", "a66d9217d2003bd416d3dd06dfd2c7a044c4c9ff2e43a27865790bd0d59c682d"),
     "linux_amd64": ("node-v16.14.2-linux-x64.tar.xz", "node-v16.14.2-linux-x64", "e40c6f81bfd078976d85296b5e657be19e06862497741ad82902d0704b34bb1b"),
     "linux_arm64": ("node-v16.14.2-linux-arm64.tar.xz", "node-v16.14.2-linux-arm64", "f7c5a573c06a520d6c2318f6ae204141b8420386553a692fc359f8ae3d88df96"),
@@ -21,7 +20,6 @@ _URL_PREFIX = "https://storage.googleapis.com/public-bazel-artifacts/js/aspect-b
 _COPY_DIRECTORY_URL_PREFIX = _URL_PREFIX + "/copy_directory-"
 
 _COPY_DIRECTORY_VERSIONS = {
-    "darwin_amd64": "2f4befad49d25f867221f9beb7d03b174c03af5395fc860c24447c85fbdd2d7d",
     "darwin_arm64": "e8ca2ab1655cc71fab3106d433dd4274389bdf9f143f586ab83a6f8ab7aeabad",
     "linux_amd64": "fae863215e3acc6e5e50ac2979e6d9d29c95b57fa1eb719de801926db57e5941",
     "linux_arm64": "7dff652aa2b1e4d5ab163cf2be841038da1cc3530e9875d5fb2cef0ef4e9efb8",
@@ -32,7 +30,6 @@ _COPY_DIRECTORY_VERSIONS = {
 _COPY_TO_DIRECTORY_URL_PREFIX = _URL_PREFIX + "/copy_to_directory-"
 
 _COPY_TO_DIRECTORY_VERSIONS = {
-    "darwin_amd64": "6132ce07141ed17d658acb72a777bf619b17a18b6f3950b3689ac057f81ebdb0",
     "darwin_arm64": "fe8ba630878178adcebe52097dde407b1554c6118c3a17b67c0f47f461c7b3d5",
     "linux_amd64": "6ce36555a198a42fa1642b19fcd685d9584fb71e0da9b9fec15dc14f43527171",
     "linux_arm64": "17015a948a3d106222c157925a4b5edc832d336beb5fc7f8d34a7ee0c827809d",
