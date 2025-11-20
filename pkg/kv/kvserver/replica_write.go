@@ -746,7 +746,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	ui uncertainty.Interval,
 	omitInRangefeeds bool,
 ) (storage.Batch, *kvpb.BatchResponse, result.Result, *kvpb.Error) {
-	batch, opLogger := r.newBatchedEngine(g)
+	batch, opLogger := r.newBatchedEngine(ba, g)
 	now := timeutil.Now()
 	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, st, ui, readWrite, omitInRangefeeds)
 	r.store.metrics.ReplicaWriteBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
@@ -764,7 +764,9 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // are enabled, it also returns an engine.OpLoggerBatch. If non-nil, then this
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
-func (r *Replica) newBatchedEngine(g *concurrency.Guard) (storage.Batch, *storage.OpLoggerBatch) {
+func (r *Replica) newBatchedEngine(
+	ba *kvpb.BatchRequest, g *concurrency.Guard,
+) (storage.Batch, *storage.OpLoggerBatch) {
 	batch := r.store.TODOEngine().NewBatch()
 	if !batch.ConsistentIterators() {
 		// This is not currently needed for correctness, but future optimizations
@@ -814,7 +816,8 @@ func (r *Replica) newBatchedEngine(g *concurrency.Guard) (storage.Batch, *storag
 		// safe as we're only ever writing at timestamps higher than the timestamp
 		// any write latch would be declared at. But because of this, we don't
 		// assert on access timestamps using spanset.NewBatchAt.
-		batch = spanset.NewBatch(batch, g.LatchSpans())
+		// FIXME: we now do, update the comment.
+		batch = spanset.NewBatchAt(batch, g.LatchSpans(), ba.Header.Timestamp)
 	}
 	return batch, opLogger
 }
