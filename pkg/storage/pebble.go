@@ -2255,11 +2255,6 @@ func (p *Pebble) IngestExternalFiles(
 	return p.db.IngestExternalFiles(ctx, external)
 }
 
-// PreIngestDelay implements the Engine interface.
-func (p *Pebble) PreIngestDelay(ctx context.Context) {
-	preIngestDelay(ctx, p, p.cfg.settings)
-}
-
 // GetTableMetrics implements the Engine interface.
 func (p *Pebble) GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetricsInfo, error) {
 	filterOpt := pebble.WithKeyRangeFilter(

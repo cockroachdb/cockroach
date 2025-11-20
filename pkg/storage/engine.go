@@ -13,8 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
@@ -1053,10 +1051,6 @@ type Engine interface {
 	// modified or deleted by the Engine doing the ingestion.
 	IngestExternalFiles(ctx context.Context, external []pebble.ExternalFile) (pebble.IngestOperationStats, error)
 
-	// PreIngestDelay offers an engine the chance to backpressure ingestions.
-	// When called, it may choose to block if the engine determines that it is in
-	// or approaching a state where further ingestions may risk its health.
-	PreIngestDelay(ctx context.Context)
 	// ApproximateDiskBytes returns an approximation of the on-disk size and file
 	// counts for the given key span, along with how many of those bytes are on
 	// remote, as well as specifically external remote, storage.
@@ -1716,79 +1710,6 @@ func ClearRangeWithHeuristic(
 	}
 
 	return nil
-}
-
-var ingestDelayL0Threshold = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"rocksdb.ingest_backpressure.l0_file_count_threshold",
-	"number of L0 files after which to backpressure SST ingestions",
-	20,
-)
-
-var ingestDelayTime = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"rocksdb.ingest_backpressure.max_delay",
-	"maximum amount of time to backpressure a single SST ingestion",
-	time.Second*5,
-)
-
-var preIngestDelayEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"pebble.pre_ingest_delay.enabled",
-	"controls whether the pre-ingest delay mechanism is active",
-	false,
-)
-
-// PreIngestDelay may choose to block for some duration if L0 has an excessive
-// number of files in it or if PendingCompactionBytesEstimate is elevated. This
-// it is intended to be called before ingesting a new SST, since we'd rather
-// backpressure the bulk operation adding SSTs than slow down the whole RocksDB
-// instance and impact all foreground traffic by adding too many files to it.
-// After the number of L0 files exceeds the configured limit, it gradually
-// begins delaying more for each additional file in L0 over the limit until
-// hitting its configured (via settings) maximum delay. If the pending
-// compaction limit is exceeded, it waits for the maximum delay.
-func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings) {
-	if settings == nil {
-		return
-	}
-	if !preIngestDelayEnabled.Get(&settings.SV) {
-		return
-	}
-	metrics := eng.GetMetrics()
-	targetDelay := calculatePreIngestDelay(settings, metrics.Metrics)
-
-	if targetDelay == 0 {
-		return
-	}
-	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels",
-		targetDelay, metrics.Levels[0].Tables.Count, metrics.Levels[0].Sublevels)
-
-	select {
-	case <-time.After(targetDelay):
-	case <-ctx.Done():
-	}
-}
-
-func calculatePreIngestDelay(settings *cluster.Settings, metrics *pebble.Metrics) time.Duration {
-	maxDelay := ingestDelayTime.Get(&settings.SV)
-	l0ReadAmpLimit := ingestDelayL0Threshold.Get(&settings.SV)
-
-	const ramp = 10
-	l0ReadAmp := int64(metrics.Levels[0].Tables.Count)
-	if metrics.Levels[0].Sublevels >= 0 {
-		l0ReadAmp = int64(metrics.Levels[0].Sublevels)
-	}
-
-	if l0ReadAmp > l0ReadAmpLimit {
-		delayPerFile := maxDelay / time.Duration(ramp)
-		targetDelay := time.Duration(l0ReadAmp-l0ReadAmpLimit) * delayPerFile
-		if targetDelay > maxDelay {
-			return maxDelay
-		}
-		return targetDelay
-	}
-	return 0
 }
 
 // Helper function to implement Reader.MVCCIterate().

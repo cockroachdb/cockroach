@@ -34,7 +34,6 @@ var cockroachdbMetrics = map[string]string{
     "addsstable_applications": "addsstable.applications",
     "addsstable_aswrites": "addsstable.aswrites",
     "addsstable_copies": "addsstable.copies",
-    "addsstable_delay_enginebackpressure": "addsstable.delay.enginebackpressure",
     "addsstable_delay_total": "addsstable.delay.total",
     "addsstable_proposals": "addsstable.proposals",
     "admission_admitted_elastic_cpu": "admission.admitted.elastic_cpu",

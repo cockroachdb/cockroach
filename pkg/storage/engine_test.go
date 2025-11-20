@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -1183,34 +1182,6 @@ func TestCreateCheckpoint_SpanConstrained(t *testing.T) {
 		span := roachpb.Span{Key: key(start), EndKey: key(end)}
 		dir := checkpointSpan(span)
 		verifyCheckpoint(dir, start, end)
-	}
-}
-
-func TestIngestDelayLimit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s := cluster.MakeTestingClusterSettings()
-
-	max, ramp := time.Second*5, time.Second*5/10
-
-	for _, tc := range []struct {
-		exp           time.Duration
-		fileCount     uint64
-		sublevelCount int32
-	}{
-		{0, 0, 0},
-		{0, 19, -1},
-		{0, 20, -1},
-		{ramp, 21, -1},
-		{ramp * 2, 22, -1},
-		{ramp * 2, 22, 22},
-		{ramp * 2, 55, 22},
-		{max, 55, -1},
-	} {
-		var m pebble.Metrics
-		m.Levels[0].Tables.Count = tc.fileCount
-		m.Levels[0].Sublevels = tc.sublevelCount
-		require.Equal(t, tc.exp, calculatePreIngestDelay(s, &m))
 	}
 }
 
