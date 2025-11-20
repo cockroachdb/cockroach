@@ -17,7 +17,7 @@ store-load-msg
 ----
 
 # Range 4 has the highest cpu on the leaseholder, and range 3 the highest cpu on a follower.
-store-leaseholder-msg
+store-leaseholder-msg num-top-k-replicas=2
 store-id=1
   range-id=1 load=[10,10,20] raft-cpu=5 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
