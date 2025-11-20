@@ -698,6 +698,10 @@ func eraseNonDeterministicZipOutput(out string) string {
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ execution traces found$`)
 	out = re.ReplaceAllString(out, `[node ?] ? execution traces found`)
 
+	// Remove license-related NOTICE messages that may appear intermittently.
+	re = regexp.MustCompile(`(?m)^NOTICE: No license is installed.*\n?`)
+	out = re.ReplaceAllString(out, ``)
+
 	return out
 }
 
