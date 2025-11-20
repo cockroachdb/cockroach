@@ -1193,7 +1193,9 @@ func maybeForceDBLevelChangefeed(
 	}
 
 	switch f := f.(type) {
-	case *sinklessFeedFactory, *externalConnectionFeedFactory:
+	case *externalConnectionFeedFactory:
+		return maybeForceDBLevelChangefeed(t, create, f.TestFeedFactory, args)
+	case *sinklessFeedFactory:
 		t.Logf("did not force DB level changefeed for %s because %T is not supported", create, f)
 		return create, args, nil
 	}
@@ -1214,10 +1216,17 @@ func maybeForceDBLevelChangefeed(
 	}
 
 	opts := createAST.Options
+	// Read the initial scan type from the options so that we can force it to "yes"
+	// for DB level changefeeds in the default case.
+	initialScanType := ``
+	hasCursor := false
 	for _, opt := range opts {
 		key := opt.Key.String()
 		if strings.EqualFold(key, "initial_scan") {
-			if opt.Value != nil && opt.Value.String() == "only" {
+			if opt.Value != nil {
+				initialScanType = opt.Value.String()
+			}
+			if strings.EqualFold(initialScanType, "'only'") {
 				t.Logf("did not force DB level changefeed for %s because it set initial scan only", create)
 				return create, args, nil
 			}
@@ -1225,6 +1234,12 @@ func maybeForceDBLevelChangefeed(
 		if strings.EqualFold(key, "initial_scan_only") {
 			t.Logf("did not force DB level changefeed for %s because it set initial scan only", create)
 			return create, args, nil
+		}
+		if strings.EqualFold(key, "no_initial_scan") {
+			initialScanType = "no"
+		}
+		if strings.EqualFold(key, "cursor") {
+			hasCursor = true
 		}
 		// Since DB level feeds set split column families, and split column families is incompatible
 		// with resolved for kafka and pubsub sinks, we skip DB level feeds metamorphic testing in
@@ -1249,6 +1264,16 @@ func maybeForceDBLevelChangefeed(
 	createStmt.AST.(*tree.CreateChangefeed).Level = tree.ChangefeedLevelDatabase
 	createStmt.AST.(*tree.CreateChangefeed).TableTargets = nil
 	createStmt.AST.(*tree.CreateChangefeed).DatabaseTarget = tree.ChangefeedDatabaseTarget("d")
+
+	// Unlike table-level changefeeds, database-level changefeeds do not perform
+	// an initial scan by default. To convert a default table level feed into an
+	// equivalent DB level feed, we need to explicitly set the initial scan type.
+	if initialScanType == "" && !hasCursor {
+		createStmt.AST.(*tree.CreateChangefeed).Options = append(createStmt.AST.(*tree.CreateChangefeed).Options, tree.KVOption{
+			Key:   "initial_scan",
+			Value: tree.NewDString("yes"),
+		})
+	}
 	t.Logf("forcing DB level changefeed for %s", create)
 	create = tree.AsStringWithFlags(createStmt.AST, tree.FmtShowPasswords)
 
