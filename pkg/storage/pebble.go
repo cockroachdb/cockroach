@@ -1055,9 +1055,12 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		lowPri := float64(valueSeparationCompactionGarbageThreshold.Get(&cfg.settings.SV)) / 100.0
 		highPri := float64(valueSeparationCompactionGarbageThresholdHighPriority.Get(&cfg.settings.SV)) / 100.0
 		highPri = max(highPri, lowPri)
+		// TODO(annie): Make MinimumMVCCGarbageSize tunable via a cluster
+		// setting.
 		return pebble.ValueSeparationPolicy{
 			Enabled:                  true,
 			MinimumSize:              int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
+			MinimumMVCCGarbageSize:   32,
 			MaxBlobReferenceDepth:    int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
 			RewriteMinimumAge:        valueSeparationRewriteMinimumAge.Get(&cfg.settings.SV),
 			GarbageRatioLowPriority:  lowPri,
