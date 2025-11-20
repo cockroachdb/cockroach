@@ -592,14 +592,15 @@ func sortTargetCandidateSetAndPick(
 			(cand.nls == loadThreshold && ignoreLevel < ignoreHigherThanLoadThreshold)
 		candDiscardedByOverloadDim := overloadedDim != NumLoadDimensions &&
 			cand.dimSummary[overloadedDim] >= loadNoChange
-		if candDiscardedByNLS || candDiscardedByOverloadDim ||
-			cand.maxFractionPendingIncrease >= maxFractionPendingThreshold {
+		candDiscardedByPendingThreshold := cand.maxFractionPendingIncrease >= maxFractionPendingThreshold
+		if candDiscardedByNLS || candDiscardedByOverloadDim || candDiscardedByPendingThreshold {
 			// Discard this candidate.
 			if cand.maxFractionPendingIncrease > epsilon && discardedCandsHadNoPendingChanges {
 				discardedCandsHadNoPendingChanges = false
 			}
 			log.KvDistribution.VEventf(ctx, 2,
-				"candiate store %v was discarded: sls=%v", cand.StoreID, cand.storeLoadSummary)
+				"candiate store %v was discarded due to (nls=%t overloadDim=%t pending_thresh=%t): sls=%v", cand.StoreID,
+				candDiscardedByNLS, candDiscardedByOverloadDim, candDiscardedByPendingThreshold, cand.storeLoadSummary)
 			continue
 		}
 		cands.candidates[j] = cand
