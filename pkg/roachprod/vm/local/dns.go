@@ -15,6 +15,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -37,6 +38,28 @@ func NewDNSProvider(configDir, zone string) vm.DNSProvider {
 // Domain is part of the vm.DNSProvider interface.
 func (n *dnsProvider) Domain() string {
 	return n.zone
+}
+
+// PublicDomain returns the public domain name (zone) of the DNS provider.
+// The local provider assumes only one zone, so this is the same as Domain().
+func (n *dnsProvider) PublicDomain() string {
+	return n.Domain()
+}
+
+// Name returns the name of the DNS provider.
+func (n *dnsProvider) ProviderName() string {
+	return "local"
+}
+
+// SyncDNS is unimplemented for the local DNS provider.
+func (n *dnsProvider) SyncDNS(l *logger.Logger, vms vm.List) error {
+	return n.SyncDNSWithContext(context.Background(), l, vms)
+}
+
+// SyncDNSWithContext is unimplemented for the local DNS provider.
+func (n *dnsProvider) SyncDNSWithContext(ctx context.Context, l *logger.Logger, vms vm.List) error {
+	// No-op for local DNS provider.
+	return nil
 }
 
 // CreateRecords is part of the vm.DNSProvider interface.
