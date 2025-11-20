@@ -309,6 +309,8 @@ func (re *rebalanceEnv) rebalanceReplicas(
 	loadDim := topKRanges.dim
 	for i := 0; i < n; i++ {
 		if re.rangeMoveCount >= re.maxRangeMoveCount {
+			log.KvDistribution.VEventf(ctx, 2,
+				"reached max range move count %d; done shedding", re.maxRangeMoveCount)
 			return
 		}
 		if ss.maxFractionPendingDecrease >= re.fractionPendingDecreaseThreshold {
