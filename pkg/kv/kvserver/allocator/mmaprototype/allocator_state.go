@@ -213,6 +213,8 @@ type allocatorState struct {
 var _ Allocator = &allocatorState{}
 
 // TODO(sumeer): temporary constants.
+// TODO(tbg): avoid direct access to this constant so that it can be configured
+// in tests. As is, it can be overridden in some places but not others.
 const (
 	maxFractionPendingThreshold = 0.1
 )

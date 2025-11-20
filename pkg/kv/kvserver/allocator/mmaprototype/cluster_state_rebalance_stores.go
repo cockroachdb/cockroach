@@ -67,6 +67,23 @@ type rebalanceEnv struct {
 	}
 }
 
+func newRebalanceEnv(
+	cs *clusterState, rng *rand.Rand, dsm *diversityScoringMemo, now time.Time,
+) *rebalanceEnv {
+	re := &rebalanceEnv{
+		clusterState:                  cs,
+		rng:                           rng,
+		dsm:                           dsm,
+		maxRangeMoveCount:             maxRangeMoveCount,
+		maxLeaseTransferCount:         maxLeaseTransferCount,
+		lastFailedChangeDelayDuration: lastFailedChangeDelayDuration,
+		now:                           now,
+	}
+	re.scratch.nodes = map[roachpb.NodeID]*NodeLoad{}
+	re.scratch.stores = map[roachpb.StoreID]struct{}{}
+	return re
+}
+
 type sheddingStore struct {
 	roachpb.StoreID
 	storeLoadSummary
@@ -95,8 +112,11 @@ const lastFailedChangeDelayDuration time.Duration = 60 * time.Second
 func (cs *clusterState) rebalanceStores(
 	ctx context.Context, localStoreID roachpb.StoreID, rng *rand.Rand, dsm *diversityScoringMemo,
 ) []PendingRangeChange {
-	now := cs.ts.Now()
 	ctx = logtags.AddTag(ctx, "mmaid", mmaid.Add(1))
+	now := cs.ts.Now()
+
+	re := newRebalanceEnv(cs, rng, dsm, now)
+
 	log.KvDistribution.VInfof(ctx, 2, "rebalanceStores begins")
 	// To select which stores are overloaded, we use a notion of overload that
 	// is based on cluster means (and of course individual store/node
@@ -187,17 +207,6 @@ func (cs *clusterState) rebalanceStores(
 		}
 	}
 
-	re := &rebalanceEnv{
-		clusterState:                  cs,
-		rng:                           rng,
-		dsm:                           dsm,
-		maxRangeMoveCount:             maxRangeMoveCount,
-		maxLeaseTransferCount:         maxLeaseTransferCount,
-		lastFailedChangeDelayDuration: lastFailedChangeDelayDuration,
-		now:                           now,
-	}
-	re.scratch.nodes = map[roachpb.NodeID]*NodeLoad{}
-	re.scratch.stores = map[roachpb.StoreID]struct{}{}
 	for _, store := range sheddingStores {
 		if re.rangeMoveCount >= re.maxRangeMoveCount {
 			log.KvDistribution.VInfof(ctx, 2, "reached max range move count %d, stopping further rebalancing", re.maxRangeMoveCount)
