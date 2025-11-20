@@ -500,6 +500,7 @@ func sortTargetCandidateSetAndPick(
 	ignoreLevel ignoreLevel,
 	overloadedDim LoadDimension,
 	rng *rand.Rand,
+	maxFractionPendingThreshold float64,
 ) roachpb.StoreID {
 	var b strings.Builder
 	for i := range cands.candidates {

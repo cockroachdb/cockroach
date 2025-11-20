@@ -56,7 +56,7 @@ type rebalanceEnv struct {
 	// further changes should be made at this time. This is because the inflight
 	// operation's changes to the load are estimated, and we don't want to pile up
 	// too many possibly inaccurate estimates.
-	fractionPendingDecreaseThreshold float64
+	fractionPendingIncreaseOrDecreaseThreshold float64
 	// lastFailedChangeDelayDuration is the delay after a failed change before retrying.
 	lastFailedChangeDelayDuration time.Duration
 	// now is the timestamp representing the start time of the current
@@ -76,14 +76,14 @@ func newRebalanceEnv(
 	cs *clusterState, rng *rand.Rand, dsm *diversityScoringMemo, now time.Time,
 ) *rebalanceEnv {
 	re := &rebalanceEnv{
-		clusterState:                     cs,
-		rng:                              rng,
-		dsm:                              dsm,
-		maxRangeMoveCount:                maxRangeMoveCount,
-		maxLeaseTransferCount:            maxLeaseTransferCount,
-		fractionPendingDecreaseThreshold: maxFractionPendingThreshold,
-		lastFailedChangeDelayDuration:    lastFailedChangeDelayDuration,
-		now:                              now,
+		clusterState:          cs,
+		rng:                   rng,
+		dsm:                   dsm,
+		maxRangeMoveCount:     maxRangeMoveCount,
+		maxLeaseTransferCount: maxLeaseTransferCount,
+		fractionPendingIncreaseOrDecreaseThreshold: maxFractionPendingThreshold,
+		lastFailedChangeDelayDuration:              lastFailedChangeDelayDuration,
+		now:                                        now,
 	}
 	re.scratch.nodes = map[roachpb.NodeID]*NodeLoad{}
 	re.scratch.stores = map[roachpb.StoreID]struct{}{}
@@ -166,7 +166,7 @@ func (re *rebalanceEnv) rebalanceStores(
 				ss.overloadEndTime = time.Time{}
 			}
 			// The pending decrease must be small enough to continue shedding
-			if ss.maxFractionPendingDecrease < re.fractionPendingDecreaseThreshold &&
+			if ss.maxFractionPendingDecrease < re.fractionPendingIncreaseOrDecreaseThreshold &&
 				// There should be no pending increase, since that can be an overestimate.
 				ss.maxFractionPendingIncrease < epsilon {
 				log.KvDistribution.VEventf(ctx, 2, "store s%v was added to shedding store list", storeID)
@@ -174,7 +174,7 @@ func (re *rebalanceEnv) rebalanceStores(
 			} else {
 				log.KvDistribution.VEventf(ctx, 2,
 					"skipping overloaded store s%d (worst dim: %s): pending decrease %.2f >= threshold %.2f or pending increase %.2f >= epsilon",
-					storeID, sls.worstDim, ss.maxFractionPendingDecrease, re.fractionPendingDecreaseThreshold, ss.maxFractionPendingIncrease)
+					storeID, sls.worstDim, ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold, ss.maxFractionPendingIncrease)
 			}
 		} else if sls.sls < loadNoChange && ss.overloadEndTime == (time.Time{}) {
 			// NB: we don't stop the overloaded interval if the store is at
@@ -313,10 +313,10 @@ func (re *rebalanceEnv) rebalanceReplicas(
 				"reached max range move count %d; done shedding", re.maxRangeMoveCount)
 			return
 		}
-		if ss.maxFractionPendingDecrease >= re.fractionPendingDecreaseThreshold {
+		if ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold {
 			log.KvDistribution.VEventf(ctx, 2,
 				"s%d has reached pending decrease threshold(%.2f>=%.2f) after rebalancing; done shedding",
-				store.StoreID, ss.maxFractionPendingDecrease, re.fractionPendingDecreaseThreshold)
+				store.StoreID, ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold)
 			// TODO(sumeer): For regular rebalancing, we will wait until those top-K
 			// move and then continue with the rest. There is a risk that the top-K
 			// have some constraint that prevents rebalancing, while the rest can be
@@ -431,7 +431,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 				ignoreLevel, ssSLS.sls, rangeID, overloadDur)
 		}
 		targetStoreID := sortTargetCandidateSetAndPick(
-			ctx, cands, ssSLS.sls, ignoreLevel, loadDim, re.rng)
+			ctx, cands, ssSLS.sls, ignoreLevel, loadDim, re.rng, re.fractionPendingIncreaseOrDecreaseThreshold)
 		if targetStoreID == 0 {
 			log.KvDistribution.VEventf(ctx, 2, "result(failed): no suitable target found among candidates for r%d "+
 				"(threshold %s; %s)", rangeID, ssSLS.sls, ignoreLevel)
@@ -503,9 +503,9 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			log.KvDistribution.VEventf(ctx, 2, "reached max lease transfer count %d, returning", re.maxLeaseTransferCount)
 			return true // we ran into a limit that prevented us from transferring more leases
 		}
-		if ss.maxFractionPendingDecrease >= re.fractionPendingDecreaseThreshold {
+		if ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold {
 			log.KvDistribution.VEventf(ctx, 2, "s%d has reached pending decrease threshold(%.2f>=%.2f) after %d lease transfers",
-				store.StoreID, ss.maxFractionPendingDecrease, re.fractionPendingDecreaseThreshold, leaseTransferCount)
+				store.StoreID, ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold, leaseTransferCount)
 			return true // we ran into a limit that prevented us from transferring more leases
 		}
 
@@ -604,7 +604,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		// will only add CPU to the target store (so it is ok to ignore other
 		// dimensions on the target).
 		targetStoreID := sortTargetCandidateSetAndPick(
-			ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, re.rng)
+			ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, re.rng, re.fractionPendingIncreaseOrDecreaseThreshold)
 		if targetStoreID == 0 {
 			log.KvDistribution.Infof(
 				ctx,
