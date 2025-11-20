@@ -76,11 +76,6 @@ func declareKeysExport(
 		return err
 	}
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeGCThresholdKey(header.RangeID)})
-	// Export requests will usually not hold latches during their evaluation.
-	//
-	// See call to `AssertAllowed()` in GetGCThreshold() to understand why we need
-	// to disable these assertions for export requests.
-	latchSpans.DisableUndeclaredAccessAssertions()
 	return nil
 }
 
@@ -95,6 +90,12 @@ func evalExport(
 
 	ctx, evalExportSpan := tracing.ChildSpan(ctx, "evalExport")
 	defer evalExportSpan.Finish()
+
+	// Export requests will usually not hold latches during their evaluation.
+	//
+	// See call to `AssertAllowed()` in GetGCThreshold() to understand why we need
+	// to disable these assertions for export requests.
+	reader = spanset.DisableReaderAssertions(reader)
 
 	// Table's marked to be excluded from backup are expected to be configured
 	// with a short GC TTL. Additionally, backup excludes such table's from being

@@ -51,8 +51,6 @@ func declareKeysRecomputeStats(
 	rdKey := keys.RangeDescriptorKey(rs.GetStartKey())
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: rdKey})
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(rdKey, uuid.Nil)})
-	// Disable the assertions which check that all reads were previously declared.
-	latchSpans.DisableUndeclaredAccessAssertions()
 	return nil
 }
 
@@ -72,8 +70,11 @@ func RecomputeStats(
 		return result.Result{}, RecomputeStatsMismatchError
 	}
 	dryRun := args.DryRun
-
 	args = nil // avoid accidental use below
+
+	// Disable the assertions which check that all reads were previously declared.
+	// TODO(pav-kv): find out why we can do that.
+	reader = spanset.DisableReaderAssertions(reader)
 
 	actualMS, err := rditer.ComputeStatsForRange(ctx, desc, reader, cArgs.Header.Timestamp.WallTime)
 	if err != nil {
