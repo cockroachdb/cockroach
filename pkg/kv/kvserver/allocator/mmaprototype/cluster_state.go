@@ -1385,6 +1385,8 @@ type clusterState struct {
 	*constraintMatcher
 	*localityTierInterner
 	meansMemo *meansMemo
+
+	mmaid int // a counter for rebalanceStores calls, for logging
 }
 
 func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterState {
