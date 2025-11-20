@@ -41,17 +41,17 @@ write_bytes_per_second#1: last:  [s1=25989, s2=25993, s3=29967, s4=31991, s5=359
 write_bytes_per_second#1: thrash_pct: [s1=161%, s2=82%, s3=144%, s4=176%, s5=158%]  (sum=722%)
 artifacts[mma-only]: 9a1122b07e8a1e71
 ==========================
-cpu#1: last:  [s1=3200015723, s2=2799409624, s3=3199923468, s4=2800455801, s5=2999667444] (stddev=178902277.04, mean=2999894412.00, sum=14999472060)
-cpu#1: thrash_pct: [s1=109%, s2=62%, s3=49%, s4=108%, s5=79%]  (sum=408%)
-cpu_util#1: last:  [s1=0.36, s2=0.31, s3=0.36, s4=0.31, s5=0.33] (stddev=0.02, mean=0.33, sum=2)
-cpu_util#1: thrash_pct: [s1=109%, s2=62%, s3=49%, s4=108%, s5=79%]  (sum=408%)
+cpu#1: last:  [s1=3200218723, s2=2799088459, s3=3199877308, s4=2600136473, s5=3200012618] (stddev=253100660.36, mean=2999866716.20, sum=14999333581)
+cpu#1: thrash_pct: [s1=109%, s2=77%, s3=49%, s4=106%, s5=66%]  (sum=408%)
+cpu_util#1: last:  [s1=0.36, s2=0.31, s3=0.36, s4=0.29, s5=0.36] (stddev=0.03, mean=0.33, sum=2)
+cpu_util#1: thrash_pct: [s1=109%, s2=77%, s3=49%, s4=106%, s5=66%]  (sum=408%)
 leases#1: first: [s1=25, s2=0, s3=0, s4=0, s5=0] (stddev=10.00, mean=5.00, sum=25)
-leases#1: last:  [s1=7, s2=3, s3=3, s4=5, s5=7] (stddev=1.79, mean=5.00, sum=25)
+leases#1: last:  [s1=7, s2=3, s3=3, s4=4, s5=8] (stddev=2.10, mean=5.00, sum=25)
 leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
 replicas#1: first: [s1=25, s2=13, s3=13, s4=12, s5=12] (stddev=5.02, mean=15.00, sum=75)
-replicas#1: last:  [s1=16, s2=14, s3=16, s4=14, s5=15] (stddev=0.89, mean=15.00, sum=75)
+replicas#1: last:  [s1=16, s2=14, s3=16, s4=13, s5=16] (stddev=1.26, mean=15.00, sum=75)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
-write_bytes_per_second#1: last:  [s1=32000, s2=27994, s3=31999, s4=28004, s5=29996] (stddev=1789.08, mean=29998.60, sum=149993)
-write_bytes_per_second#1: thrash_pct: [s1=109%, s2=62%, s3=49%, s4=107%, s5=79%]  (sum=408%)
-artifacts[mma-count]: afcb108e54d06e3c
+write_bytes_per_second#1: last:  [s1=32002, s2=27990, s3=31998, s4=26001, s5=32000] (stddev=2531.09, mean=29998.20, sum=149991)
+write_bytes_per_second#1: thrash_pct: [s1=109%, s2=77%, s3=49%, s4=107%, s5=66%]  (sum=408%)
+artifacts[mma-count]: 9ac18d481b725c57
 ==========================
