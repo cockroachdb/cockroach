@@ -14,7 +14,9 @@ import (
 	"math"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+
 	// Import the logmetrics package to trigger its own init function, which inits and injects
 	// metrics functionality into pkg/util/log.
 	_ "github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
@@ -455,7 +458,42 @@ func (mr *MetricsRecorder) GetTimeSeriesData(childMetrics bool) []tspb.TimeSerie
 		if !ChildMetricsStorageEnabled.Get(&mr.settings.SV) {
 			return nil
 		}
-		return nil // TODO(jasonlmfong): to be implemented
+
+		mr.mu.RLock()
+		defer mr.mu.RUnlock()
+
+		if mr.mu.nodeRegistry == nil {
+			// We haven't yet processed initialization information; do nothing.
+			if log.V(1) {
+				log.Dev.Warning(context.TODO(), "MetricsRecorder.GetChildMetricsData() called before NodeID allocation")
+			}
+			return nil
+		}
+
+		data := make([]tspb.TimeSeriesData, 0)
+
+		// Record child metrics from app registry for system tenant only.
+		now := mr.clock.Now()
+		recorder := registryRecorder{
+			registry:       mr.mu.appRegistry,
+			format:         nodeTimeSeriesPrefix,
+			source:         mr.mu.desc.NodeID.String(),
+			timestampNanos: now.UnixNano(),
+		}
+		recorder.recordChangefeedChildMetrics(&data)
+
+		// Record child metrics from app-level registries for secondary tenants
+		for tenantID, r := range mr.mu.tenantRegistries {
+			tenantRecorder := registryRecorder{
+				registry:       r,
+				format:         nodeTimeSeriesPrefix,
+				source:         tsutil.MakeTenantSource(mr.mu.desc.NodeID.String(), tenantID.String()),
+				timestampNanos: now.UnixNano(),
+			}
+			tenantRecorder.recordChangefeedChildMetrics(&data)
+		}
+
+		return data
 	}
 
 	lastDataCount := atomic.LoadInt64(&mr.lastDataCount)
@@ -901,6 +939,95 @@ func (rr registryRecorder) recordChild(
 					},
 				},
 			})
+		}
+		promIter.Each(m.Label, processChildMetric)
+	})
+}
+
+// recordChangefeedChildMetrics iterates through changefeed metrics in the registry and processes child metrics
+// for those that have EnableLowFreqChildCollection set to true in their metadata.
+// Records up to 1024 child metrics to prevent unbounded memory usage and performance issues.
+//
+// NB: Only available for Counter and Gauge metrics.
+func (rr registryRecorder) recordChangefeedChildMetrics(
+	dest *[]tspb.TimeSeriesData,
+) {
+	maxChildMetrics := 1024
+
+	var childMetricsCount int
+	labels := rr.registry.GetLabels()
+	rr.registry.Each(func(name string, v interface{}) {
+		// Filter for changefeed metrics only
+		if !strings.HasPrefix(name, "changefeed.") {
+			return
+		}
+
+		prom, ok := v.(metric.PrometheusExportable)
+		if !ok {
+			return
+		}
+		promIter, ok := v.(metric.PrometheusIterable)
+		if !ok {
+			return
+		}
+
+		// Check if the metric has child collection enabled in its metadata
+		if iterable, ok := v.(metric.Iterable); ok {
+			metadata := iterable.GetMetadata()
+			if !metadata.GetEnableLowFreqChildCollection() {
+				return // Skip this metric if child collection is not enabled
+			}
+		} else {
+			// If we can't get metadata, skip child collection for safety
+			return
+		}
+		m := prom.ToPrometheusMetric()
+		m.Label = append(labels, prom.GetLabels(false /* useStaticLabels */)...)
+
+		processChildMetric := func(childMetric *prometheusgo.Metric) {
+			if childMetricsCount >= maxChildMetrics {
+				return // Stop processing once we hit the limit
+			}
+
+			// Sanitize and sort labels using the same sanitization as Prometheus export
+			sanitizedLabels := make([]struct{ key, value string }, len(childMetric.Label))
+			for i, label := range childMetric.Label {
+				sanitizedLabels[i].key = metric.ExportedLabel(label.GetName())
+				sanitizedLabels[i].value = label.GetValue()
+			}
+			sort.Slice(sanitizedLabels, func(i, j int) bool {
+				return sanitizedLabels[i].key < sanitizedLabels[j].key
+			})
+
+			// Build labels suffix using sanitized and sorted key-value pairs
+			var labelsSuffix string
+			for _, label := range sanitizedLabels {
+				labelsSuffix += fmt.Sprintf("%s=\"%s\",", label.key, label.value)
+			}
+			// Remove trailing comma and wrap with curly braces
+			if len(labelsSuffix) > 0 {
+				labelsSuffix = "{" + labelsSuffix[:len(labelsSuffix)-1] + "}"
+			}
+
+			var value float64
+			if childMetric.Gauge != nil {
+				value = *childMetric.Gauge.Value
+			} else if childMetric.Counter != nil {
+				value = *childMetric.Counter.Value
+			} else {
+				return
+			}
+			*dest = append(*dest, tspb.TimeSeriesData{
+				Name:   fmt.Sprintf(rr.format, prom.GetName(false /* useStaticLabels */)+labelsSuffix),
+				Source: rr.source,
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: rr.timestampNanos,
+						Value:          value,
+					},
+				},
+			})
+			childMetricsCount++
 		}
 		promIter.Each(m.Label, processChildMetric)
 	})

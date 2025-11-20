@@ -230,11 +230,20 @@ func (m *Metadata) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
 	return lps
 }
 
+// Returns the value for EnableLowFreqChildCollection,
+// defaults to True when it is not supplied.
+func (m *Metadata) GetEnableLowFreqChildCollection() bool {
+	if m.EnableLowFreqChildCollection == nil {
+		return true
+	}
+	return *m.EnableLowFreqChildCollection
+}
+
 // AddLabel adds a label/value pair for this metric.
 func (m *Metadata) AddLabel(name, value string) {
 	m.Labels = append(m.Labels,
 		&LabelPair{
-			Name:  proto.String(exportedLabel(name)),
+			Name:  proto.String(ExportedLabel(name)),
 			Value: proto.String(value),
 		})
 }
