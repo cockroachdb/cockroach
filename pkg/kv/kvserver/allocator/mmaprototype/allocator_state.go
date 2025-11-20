@@ -212,13 +212,6 @@ type allocatorState struct {
 
 var _ Allocator = &allocatorState{}
 
-// TODO(sumeer): temporary constants.
-// TODO(tbg): avoid direct access to this constant so that it can be configured
-// in tests. As is, it can be overridden in some places but not others.
-const (
-	maxFractionPendingThreshold = 0.1
-)
-
 func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState {
 	interner := newStringInterner()
 	cs := newClusterState(ts, interner)
@@ -500,6 +493,7 @@ func sortTargetCandidateSetAndPick(
 	ignoreLevel ignoreLevel,
 	overloadedDim LoadDimension,
 	rng *rand.Rand,
+	maxFractionPendingThreshold float64,
 ) roachpb.StoreID {
 	var b strings.Builder
 	for i := range cands.candidates {
