@@ -61,11 +61,11 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     cpu_per_access=0 raft_cpu_per_write=0
 //
 //   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
-//     [store_byte_capacity_gib=<int>] [node_cpu_rate_capacity=<int>]
+//     [store_byte_capacity_gib=<int>] [node_cpu_cores=<float>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
 //     simulation. The default values are: nodes=3 stores_per_node=1
-//     store_byte_capacity_gib=256, node_cpu_rate_capacity=0.
+//     store_byte_capacity_gib=256, node_cpu_cores=8.0.
 //
 //   - "load_cluster": config=<name>
 //     Load a defined cluster configuration to be the generated cluster in the
@@ -342,7 +342,7 @@ func TestDataDriven(t *testing.T) {
 				case "gen_cluster":
 					var nodes = 3
 					var storesPerNode = 1
-					var nodeCPURateCapacity = []uint64{config.DefaultNodeCPURateCapacityNanos}
+					var nodeCPUCores = []float64{config.DefaultNodeCPUCores}
 					var region []string
 					var nodesPerRegion []int
 					var storeByteCapacityGiB int64 = 256
@@ -351,16 +351,16 @@ func TestDataDriven(t *testing.T) {
 					scanIfExists(t, d, "store_byte_capacity_gib", &storeByteCapacityGiB)
 					scanIfExists(t, d, "region", &region)
 					scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
-					scanIfExists(t, d, "node_cpu_rate_capacity", &nodeCPURateCapacity)
+					scanIfExists(t, d, "node_cpu_cores", &nodeCPUCores)
 
 					var buf strings.Builder
-					require.NotEmpty(t, nodeCPURateCapacity)
+					require.NotEmpty(t, nodeCPUCores)
 					{
-						n := len(nodeCPURateCapacity)
-						require.True(t, n == 1 || n == nodes, "need to specify node_cpu_rate_capacity for each node")
+						n := len(nodeCPUCores)
+						require.True(t, n == 1 || n == nodes, "need to specify node_cpu_cores for each node")
 
-						for _, cpct := range nodeCPURateCapacity {
-							if cores := float64(cpct) / 1e9; cores < 1 {
+						for _, cores := range nodeCPUCores {
+							if cores < 1.0 {
 								// TODO(mma): fix up the tests that trigger this warning.
 								// TODO(mma): print a warning whenever the measured CPU utilization
 								// on a node exceeds this capacity, as that's likely not what the test
@@ -377,7 +377,7 @@ func TestDataDriven(t *testing.T) {
 						StoreByteCapacity:   storeByteCapacityGiB << 30,
 						Region:              region,
 						NodesPerRegion:      nodesPerRegion,
-						NodeCPURateCapacity: nodeCPURateCapacity,
+						NodeCPURateCapacity: state.NodeCPUCores(nodeCPUCores).ToRateCapacityNanos(),
 					}
 					return buf.String()
 				case "load_cluster":
