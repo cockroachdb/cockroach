@@ -1626,10 +1626,10 @@ func (r *testRunner) runTest(
 	// Upload test logs to Datadog if running in TeamCity on release branches
 	if datadog.ShouldUploadLogs() {
 		logPath := filepath.Join(t.artifactsDir, "test.log")
-		// TODO get hostname from env var
-		cfg := datadog.BuildUploadConfig(t.spec.Name, c.cloud, c.os, c.arch, "hostName", c.name)
-		if err := datadog.UploadTestLog(ctx, t.L(), logPath, cfg); err != nil {
-			// Log error but don't fail the test - upload is best effort
+		// TODO get hostname TC config param teamcity.agent.hostname or teamcity.agent.name
+		cfg := datadog.BuildUploadConfig(t.spec.Name, t.spec.Owner, c.cloud, c.os, c.arch, c.name, "hostname")
+		if err := datadog.MaybeUploadTestLog(ctx, t.L(), logPath, cfg); err != nil {
+			// Best effort
 			t.L().Printf("error uploading logs to Datadog: %v", err)
 		}
 	}
