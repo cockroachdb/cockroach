@@ -151,7 +151,7 @@ num locks: 1, bytes returned: 91, resume reason: RESUME_BYTE_LIMIT, resume span:
  locks:
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=200ms
    waiters:
-    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:Exclusive wait_duration:200ms
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:Intent wait_duration:200ms
 
 query span=b max-bytes=100
 ----
@@ -159,7 +159,7 @@ num locks: 1, bytes returned: 91, resume reason: RESUME_UNKNOWN, resume span: <n
  locks:
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=200ms
    waiters:
-    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:Exclusive wait_duration:200ms
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:Intent wait_duration:200ms
 
 query span=e,/Max max-bytes=100
 ----
@@ -167,7 +167,7 @@ num locks: 1, bytes returned: 91, resume reason: RESUME_UNKNOWN, resume span: <n
  locks:
   range_id=3 key="e" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=200ms
    waiters:
-    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Exclusive wait_duration:200ms
+    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Intent wait_duration:200ms
 
 clear
 ----
