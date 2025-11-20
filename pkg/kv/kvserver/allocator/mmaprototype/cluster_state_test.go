@@ -445,8 +445,10 @@ func TestClusterState(t *testing.T) {
 					// be in the past, indicating gossip delay. However, having it be
 					// some arbitrary value can be confusing for the test reader.
 					// Consider making it relative to ts.
-					msg := parseStoreLoadMsg(t, d.Input)
-					cs.processStoreLoadMsg(context.Background(), &msg)
+					for line := range strings.Lines(d.Input) {
+						msg := parseStoreLoadMsg(t, line)
+						cs.processStoreLoadMsg(context.Background(), &msg)
+					}
 					return ""
 
 				case "store-leaseholder-msg":
