@@ -159,6 +159,10 @@ func (s ReplicaChangeType) String() string {
 	}
 }
 
+func replicaExists(replicaID roachpb.ReplicaID) bool {
+	return replicaID >= 0 || replicaID == unknownReplicaID
+}
+
 // ReplicaChange describes a change to a replica.
 type ReplicaChange struct {
 	// The load this change adds to a store. The values will be negative if the
@@ -219,9 +223,6 @@ type ReplicaChange struct {
 	// So the above comment is incorrect. We should clean this up.
 	prev ReplicaState
 	next ReplicaIDAndType
-
-	// replicaChangeType is a function of (prev, next) as described above.
-	replicaChangeType ReplicaChangeType
 }
 
 func (rc ReplicaChange) String() string {
@@ -230,30 +231,50 @@ func (rc ReplicaChange) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (rc ReplicaChange) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("r%v type: %v target store %v (%v)->(%v)", rc.rangeID, rc.replicaChangeType, rc.target, rc.prev, rc.next)
+	w.Printf("r%v type: %v target store %v (%v)->(%v)", rc.rangeID, rc.replicaChangeType(), rc.target, rc.prev, rc.next)
 }
 
 // isRemoval returns true if the change is a removal of a replica.
 func (rc ReplicaChange) isRemoval() bool {
-	return rc.replicaChangeType == RemoveReplica
+	return rc.replicaChangeType() == RemoveReplica
 }
 
 // isAddition returns true if the change is an addition of a replica.
 func (rc ReplicaChange) isAddition() bool {
-	return rc.replicaChangeType == AddReplica
+	return rc.replicaChangeType() == AddReplica
 }
 
 // isUpdate returns true if the change is an update to the replica type or
 // leaseholder status. This includes promotion/demotion changes.
 func (rc ReplicaChange) isUpdate() bool {
-	return rc.replicaChangeType == AddLease || rc.replicaChangeType == RemoveLease ||
-		rc.replicaChangeType == ChangeReplica
+	changeType := rc.replicaChangeType()
+	return changeType == AddLease || changeType == RemoveLease || changeType == ChangeReplica
 }
 
-// isPromoDemo returns true if the change is a promotion or demotion of a
-// replica (potentially with a lease change).
-func (rc ReplicaChange) isPromoDemo() bool {
-	return rc.replicaChangeType == ChangeReplica
+func (rc ReplicaChange) replicaChangeType() ReplicaChangeType {
+	prevExists := replicaExists(rc.prev.ReplicaID)
+	nextExists := replicaExists(rc.next.ReplicaID)
+	if !prevExists && !nextExists {
+		return Unknown
+	}
+	if prevExists && !nextExists {
+		return RemoveReplica
+	}
+	// INVARIANT: nextExists.
+
+	if !prevExists {
+		return AddReplica
+	}
+	if rc.prev.ReplicaType.ReplicaType == rc.next.ReplicaType.ReplicaType {
+		if rc.prev.ReplicaType.IsLeaseholder == rc.next.ReplicaType.IsLeaseholder {
+			return Unknown
+		}
+		if rc.next.IsLeaseholder {
+			return AddLease
+		}
+		return RemoveLease
+	}
+	return ChangeReplica
 }
 
 func MakeLeaseTransferChanges(
@@ -297,18 +318,16 @@ func MakeLeaseTransferChanges(
 	}
 
 	removeLease := ReplicaChange{
-		target:            removeTarget,
-		rangeID:           rangeID,
-		prev:              remove.ReplicaState,
-		next:              remove.ReplicaIDAndType,
-		replicaChangeType: RemoveLease,
+		target:  removeTarget,
+		rangeID: rangeID,
+		prev:    remove.ReplicaState,
+		next:    remove.ReplicaIDAndType,
 	}
 	addLease := ReplicaChange{
-		target:            addTarget,
-		rangeID:           rangeID,
-		prev:              add.ReplicaState,
-		next:              add.ReplicaIDAndType,
-		replicaChangeType: AddLease,
+		target:  addTarget,
+		rangeID: rangeID,
+		prev:    add.ReplicaState,
+		next:    add.ReplicaIDAndType,
 	}
 	removeLease.next.IsLeaseholder = false
 	addLease.next.IsLeaseholder = true
@@ -343,8 +362,7 @@ func MakeAddReplicaChange(
 				ReplicaID: noReplicaID,
 			},
 		},
-		next:              replicaIDAndType,
-		replicaChangeType: AddReplica,
+		next: replicaIDAndType,
 	}
 	addReplica.next.ReplicaID = unknownReplicaID
 	addReplica.loadDelta.add(loadVectorToAdd(rLoad.Load))
@@ -373,7 +391,6 @@ func MakeRemoveReplicaChange(
 		next: ReplicaIDAndType{
 			ReplicaID: noReplicaID,
 		},
-		replicaChangeType: RemoveReplica,
 	}
 	removeReplica.loadDelta.subtract(rLoad.Load)
 	if replicaState.IsLeaseholder {
@@ -398,11 +415,10 @@ func MakeReplicaTypeChange(
 	next.ReplicaID = unknownReplicaID
 	next.ReplicaType.ReplicaType = mapReplicaTypeToVoterOrNonVoter(next.ReplicaType.ReplicaType)
 	change := ReplicaChange{
-		target:            target,
-		rangeID:           rangeID,
-		prev:              prev,
-		next:              next,
-		replicaChangeType: ChangeReplica,
+		target:  target,
+		rangeID: rangeID,
+		prev:    prev,
+		next:    next,
 	}
 	if next.IsLeaseholder {
 		change.secondaryLoadDelta[LeaseCount] = 1
@@ -453,26 +469,25 @@ func mapReplicaTypeToVoterOrNonVoter(rType roachpb.ReplicaType) roachpb.ReplicaT
 	}
 }
 
-// PendingRangeChange is a proposed set of change(s) to a range. It can
-// consist of multiple pending replica changes, such as adding or removing
-// replicas, or transferring the lease. There is at most one change per store
-// in the set.
+// TODO(sumeer): place PendingRangeChange in a different file after
+// https://github.com/cockroachdb/cockroach/pull/158024 merges.
 //
-// NB: pendingReplicaChanges is not visible outside the package, so we can be
-// certain that callers outside this package that hold a PendingRangeChange
-// cannot mutate the internals other than clearing the state.
+// TODO(sumeer): PendingRangeChange is exported only because external callers
+// need to be able to represent load changes when calling
+// RegisterExternalChange. The ExternalRangeChange type does not represent
+// load. There is possibly a better way to structure this, by including the
+// LoadVector and SecondaryLoadVector in the ExternalRangeChange type, and
+// unexporting PendingRangeChange.
+
+// PendingRangeChange is a container for a proposed set of change(s) to a
+// range. It can consist of multiple pending replica changes, such as adding
+// or removing replicas, or transferring the lease. There is at most one
+// change per store in the set.
 //
-// Additionally, for a PendingRangeChange returned outside the package, we
-// ensure that the pendingReplicaChanges slice itself is not shared with the
-// rangeState.pendingChanges slice since the rangeState.pendingChanges slice
-// can have entries removed from it (and swapped around as part of removal).
-//
-// Some the state inside each *pendingReplicaChange is mutable at arbitrary
-// points in time by the code inside this package (with the relevant locking,
-// of course). Currently, this state is gcTime, enactedAtTime. Neither of it
-// is read by the public methods on PendingRangeChange.
-//
-// TODO(sumeer): when we expand the set of mutable fields, make a deep copy.
+// The clusterState or anything contained in it, does not contain
+// PendingRangeChange, and instead individual *pendingReplicaChange are stored
+// in various maps and slices. Note that *pendingReplicaChanges contain
+// mutable fields.
 type PendingRangeChange struct {
 	RangeID               roachpb.RangeID
 	pendingReplicaChanges []*pendingReplicaChange
@@ -504,6 +519,49 @@ func MakePendingRangeChange(rangeID roachpb.RangeID, changes []ReplicaChange) Pe
 	}
 }
 
+func (prc PendingRangeChange) String() string {
+	return redact.StringWithoutMarkers(prc)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+//
+// This is adhoc for debugging. A nicer string format would include the
+// previous state and next state.
+func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("r%v=[", prc.RangeID)
+	nextAddOrChangeReplicaStr := func(next ReplicaType) string {
+		if next.ReplicaType == roachpb.NON_VOTER {
+			return "non-voter"
+		}
+		if next.IsLeaseholder {
+			return "voter-leaseholder"
+		}
+		return "voter"
+	}
+	for i, c := range prc.pendingReplicaChanges {
+		if i > 0 {
+			w.Print(" ")
+		}
+		w.Printf("id:%d", c.changeID)
+		switch c.replicaChangeType() {
+		case Unknown:
+			w.Printf("unknown-change:s%v", c.target.StoreID)
+		case AddLease:
+			w.Printf("add-lease:s%v", c.target.StoreID)
+		case RemoveLease:
+			w.Printf("remove-lease:s%v", c.target.StoreID)
+		case AddReplica:
+			w.Printf("add-%s:s%v", nextAddOrChangeReplicaStr(c.next.ReplicaType), c.target.StoreID)
+		case RemoveReplica:
+			w.Printf("remove-replica:s%v", c.target.StoreID)
+		case ChangeReplica:
+			w.Printf("change-to-%s:s%v", nextAddOrChangeReplicaStr(c.next.ReplicaType),
+				c.target.StoreID)
+		}
+	}
+	w.Print("]")
+}
+
 // StringForTesting prints the untransformed internal state for testing.
 func (prc PendingRangeChange) StringForTesting() string {
 	var b strings.Builder
@@ -522,6 +580,36 @@ func (prc PendingRangeChange) SortForTesting() {
 	slices.SortFunc(prc.pendingReplicaChanges, func(a, b *pendingReplicaChange) int {
 		return cmp.Compare(a.target.StoreID, b.target.StoreID)
 	})
+}
+
+// isPureTransferLease returns true if the pending range change is purely a
+// transfer lease operation (i.e., it is not a combined replication change and
+// lease transfer).
+//
+// TODO(sumeer): this is a duplicate of
+// ExternalRangeChange.IsPureTransferLease. Consider unifying.
+func (prc PendingRangeChange) isPureTransferLease() bool {
+	if len(prc.pendingReplicaChanges) != 2 {
+		return false
+	}
+	var addLease, removeLease int
+	for _, c := range prc.pendingReplicaChanges {
+		switch c.replicaChangeType() {
+		case AddLease:
+			addLease++
+		case RemoveLease:
+			removeLease++
+		default:
+			// Any other change type is not a pure lease transfer (e.g. they
+			// require a replication change).
+			return false
+		}
+	}
+	if addLease != 1 || removeLease != 1 {
+		panic(errors.AssertionFailedf("unexpected add (%d) or remove lease (%d) in lease transfer",
+			addLease, removeLease))
+	}
+	return true
 }
 
 // pendingReplicaChange is a proposed change to a single replica. Some
@@ -1852,7 +1940,7 @@ func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
 	// below.
 
 	gcDuration := pendingReplicaChangeGCDuration
-	if change.IsTransferLease() {
+	if change.isPureTransferLease() {
 		// Only the lease is being transferred.
 		gcDuration = pendingLeaseTransferGCDuration
 	}

@@ -56,16 +56,16 @@ type Allocator interface {
 	// Calls to AdjustPendingChangeDisposition must be correctly sequenced with
 	// full state updates from the local node provided in
 	// ProcessNodeLoadResponse.
-	AdjustPendingChangeDisposition(change PendingRangeChange, success bool)
+	AdjustPendingChangeDisposition(change ExternalRangeChange, success bool)
 
 	// RegisterExternalChange informs this allocator about yet to complete
 	// changes to the cluster which were not initiated by this allocator. The
 	// ownership of all state inside change is handed off to the callee. If ok
-	// is true, the change was registered, and the caller should subsequently
-	// use the same change in a subsequent call to
+	// is true, the change was registered, and the caller is returned an
+	// ExternalRangeChange that it should subsequently use in a call to
 	// AdjustPendingChangeDisposition when the changes are completed, either
 	// successfully or not. If ok is false, the change was not registered.
-	RegisterExternalChange(change PendingRangeChange) (ok bool)
+	RegisterExternalChange(change PendingRangeChange) (_ ExternalRangeChange, ok bool)
 
 	// ComputeChanges is called periodically and frequently, say every 10s.
 	//
@@ -82,7 +82,7 @@ type Allocator interface {
 	// the allocator, to avoid re-proposing the same change and to make
 	// adjustments to the load.
 	ComputeChanges(
-		ctx context.Context, msg *StoreLeaseholderMsg, opts ChangeOptions) []PendingRangeChange
+		ctx context.Context, msg *StoreLeaseholderMsg, opts ChangeOptions) []ExternalRangeChange
 
 	// AdminRelocateOne is a helper for AdminRelocateRange.
 	//

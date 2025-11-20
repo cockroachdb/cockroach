@@ -56,7 +56,7 @@ type MMAStoreRebalancer struct {
 }
 
 type pendingChangeAndRangeUsageInfo struct {
-	change       mmaprototype.PendingRangeChange
+	change       mmaprototype.ExternalRangeChange
 	usage        allocator.RangeUsageInfo
 	syncChangeID mmaintegration.SyncChangeID
 }
@@ -174,7 +174,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 
 			// Record the last time a lease transfer was requested.
 			for _, change := range msr.pendingChanges {
-				if change.change.IsTransferLease() {
+				if change.change.IsPureTransferLease() {
 					msr.lastLeaseTransfer = tick
 				}
 			}
@@ -187,7 +187,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		}
 
 		var curOp op.ControlledOperation
-		if msr.pendingChanges[msr.pendingChangeIdx].change.IsTransferLease() {
+		if msr.pendingChanges[msr.pendingChangeIdx].change.IsPureTransferLease() {
 			curOp = op.NewTransferLeaseOp(
 				tick,
 				curChange.change.RangeID,
