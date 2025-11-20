@@ -213,6 +213,8 @@ type allocatorState struct {
 var _ Allocator = &allocatorState{}
 
 // TODO(sumeer): temporary constants.
+// TODO(tbg): avoid direct access to this constant so that it can be configured
+// in tests. As is, it can be overridden in some places but not others.
 const (
 	maxFractionPendingThreshold = 0.1
 )
@@ -333,7 +335,8 @@ func (a *allocatorState) ComputeChanges(
 		panic(fmt.Sprintf("ComputeChanges: expected StoreID %d, got %d", opts.LocalStoreID, msg.StoreID))
 	}
 	a.cs.processStoreLeaseholderMsg(ctx, msg, a.mmaMetrics)
-	return a.cs.rebalanceStores(ctx, opts.LocalStoreID, a.rand, a.diversityScoringMemo)
+	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now())
+	return re.rebalanceStores(ctx, opts.LocalStoreID)
 }
 
 // AdminRelocateOne implements the Allocator interface.
