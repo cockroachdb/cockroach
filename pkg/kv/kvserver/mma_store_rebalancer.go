@@ -150,7 +150,7 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 // applyChange safely applies a single change to the store. It handles the case
 // where the replica might not exist and provides proper error handling.
 func (m *mmaStoreRebalancer) applyChange(
-	ctx context.Context, change mmaprototype.PendingRangeChange,
+	ctx context.Context, change mmaprototype.ExternalRangeChange,
 ) error {
 	repl := m.store.GetReplicaIfExists(change.RangeID)
 	if repl == nil {
@@ -160,7 +160,7 @@ func (m *mmaStoreRebalancer) applyChange(
 	changeID := m.as.MMAPreApply(ctx, repl.RangeUsageInfo(), change)
 	var err error
 	switch {
-	case change.IsTransferLease():
+	case change.IsPureTransferLease():
 		err = m.applyLeaseTransfer(ctx, repl, change)
 	case change.IsChangeReplicas():
 		err = m.applyReplicaChanges(ctx, repl, change)
@@ -175,7 +175,7 @@ func (m *mmaStoreRebalancer) applyChange(
 
 // applyLeaseTransfer applies a lease transfer change.
 func (m *mmaStoreRebalancer) applyLeaseTransfer(
-	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.PendingRangeChange,
+	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.ExternalRangeChange,
 ) error {
 	return repl.AdminTransferLease(
 		ctx,
@@ -186,7 +186,7 @@ func (m *mmaStoreRebalancer) applyLeaseTransfer(
 
 // applyReplicaChanges applies replica membership changes.
 func (m *mmaStoreRebalancer) applyReplicaChanges(
-	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.PendingRangeChange,
+	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.ExternalRangeChange,
 ) error {
 	// TODO(mma): We should be setting a timeout on the ctx here, in the case
 	// where rebalancing takes a long time (stuck behind other snapshots).
