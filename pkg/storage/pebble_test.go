@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1635,6 +1636,10 @@ func TestMinimumSupportedFormatVersion(t *testing.T) {
 
 func TestPebbleFormatVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	if len(pebbleFormatVersionMap) == 1 {
+		skip.IgnoreLint(t, "test requires multiple entries in pebbleFormatVersionMap")
+	}
 
 	latestKey := pebbleFormatVersionKeys[0]
 	latestVersion := latestKey.Version()
