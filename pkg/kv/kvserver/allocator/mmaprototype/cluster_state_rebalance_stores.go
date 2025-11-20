@@ -31,7 +31,7 @@ type rebalanceEnv struct {
 	// dsm is the diversity scoring memo for computing diversity scores.
 	dsm *diversityScoringMemo
 	// changes accumulates the pending range changes made during rebalancing.
-	changes []PendingRangeChange
+	changes []ExternalRangeChange
 	// rangeMoveCount tracks the number of range moves made.
 	rangeMoveCount int
 	// leaseTransferCount tracks the number of lease transfers made.
@@ -65,7 +65,7 @@ type sheddingStore struct {
 // chance to shed leases.
 func (cs *clusterState) rebalanceStores(
 	ctx context.Context, localStoreID roachpb.StoreID, rng *rand.Rand, dsm *diversityScoringMemo,
-) []PendingRangeChange {
+) []ExternalRangeChange {
 	now := cs.ts.Now()
 	ctx = logtags.AddTag(ctx, "mmaid", mmaid.Add(1))
 	log.KvDistribution.VInfof(ctx, 2, "rebalanceStores begins")
@@ -174,7 +174,7 @@ func (cs *clusterState) rebalanceStores(
 		clusterState:                  cs,
 		rng:                           rng,
 		dsm:                           dsm,
-		changes:                       []PendingRangeChange{},
+		changes:                       []ExternalRangeChange{},
 		rangeMoveCount:                0,
 		leaseTransferCount:            0,
 		maxRangeMoveCount:             maxRangeMoveCount,
@@ -415,7 +415,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 				replicaChanges, rangeID))
 		}
 		re.addPendingRangeChange(rangeChange)
-		re.changes = append(re.changes, rangeChange)
+		re.changes = append(re.changes, MakeExternalRangeChange(rangeChange))
 		re.rangeMoveCount++
 		log.KvDistribution.VInfof(ctx, 2,
 			"result(success): rebalancing r%v from s%v to s%v [change: %v] with resulting loads source: %v target: %v",
@@ -589,16 +589,13 @@ func (re *rebalanceEnv) rebalanceLeases(
 			panic(errors.Wrapf(err, "pre-check failed for lease transfer %v", leaseChange))
 		}
 		re.addPendingRangeChange(leaseChange)
-		re.changes = append(re.changes, leaseChange)
+		re.changes = append(re.changes, MakeExternalRangeChange(leaseChange))
 		re.leaseTransferCount++
 		localLeaseTransferCount++
-		if re.changes[len(re.changes)-1].IsChangeReplicas() || !re.changes[len(re.changes)-1].IsTransferLease() {
-			panic(fmt.Sprintf("lease transfer is invalid: %v", re.changes[len(re.changes)-1]))
-		}
 		log.KvDistribution.Infof(ctx,
 			"result(success): shedding r%v lease from s%v to s%v [change:%v] with "+
 				"resulting loads source:%v target:%v (means: %v) (frac_pending: (src:%.2f,target:%.2f) (src:%.2f,target:%.2f))",
-			rangeID, removeTarget.StoreID, addTarget.StoreID, re.changes[len(re.changes)-1],
+			rangeID, removeTarget.StoreID, addTarget.StoreID, &re.changes[len(re.changes)-1],
 			ss.adjusted.load, targetSS.adjusted.load, means.storeLoad.load,
 			ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease,
 			targetSS.maxFractionPendingIncrease, targetSS.maxFractionPendingDecrease)

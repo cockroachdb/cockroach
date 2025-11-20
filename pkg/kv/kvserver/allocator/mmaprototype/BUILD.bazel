@@ -13,6 +13,7 @@ go_library(
         "load.go",
         "memo_helper.go",
         "messages.go",
+        "range_change.go",
         "rebalance_advisor.go",
         "store_load_summary.go",
         "store_set.go",

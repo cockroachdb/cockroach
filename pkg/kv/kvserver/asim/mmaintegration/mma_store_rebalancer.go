@@ -56,7 +56,7 @@ type MMAStoreRebalancer struct {
 }
 
 type pendingChangeAndRangeUsageInfo struct {
-	change       mmaprototype.PendingRangeChange
+	change       mmaprototype.ExternalRangeChange
 	usage        allocator.RangeUsageInfo
 	syncChangeID mmaintegration.SyncChangeID
 }
