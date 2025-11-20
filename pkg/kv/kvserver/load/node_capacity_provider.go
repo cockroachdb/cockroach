@@ -73,6 +73,14 @@ func NewNodeCapacityProvider(
 
 // Run starts the background monitoring of cpu metrics.
 func (n *NodeCapacityProvider) Run(ctx context.Context) {
+	// Record CPU usage and capacity prior to starting the async job to verify
+	// that we're able to read CPU utilization metrics at all.
+	err := n.runtimeLoadMonitor.recordCPUUsage(ctx)
+	if err != nil {
+		log.KvDistribution.Fatalf(ctx, "failed to record cpu usage: %v", err)
+		return
+	}
+
 	_ = n.runtimeLoadMonitor.stopper.RunAsyncTask(ctx, "runtime-load-monitor", func(ctx context.Context) {
 		n.runtimeLoadMonitor.run(ctx)
 	})
@@ -137,25 +145,23 @@ func (m *runtimeLoadMonitor) GetCPUStats() (cpuUsageNanoPerSec int64, cpuCapacit
 }
 
 // recordCPUUsage samples and records the current cpu usage of the node.
-func (m *runtimeLoadMonitor) recordCPUUsage(ctx context.Context) {
+func (m *runtimeLoadMonitor) recordCPUUsage(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	userTimeMillis, sysTimeMillis, err := status.GetProcCPUTime(ctx)
 	if err != nil {
-		if buildutil.CrdbTestBuild {
-			panic(err)
-		}
-		// TODO(wenyihu6): we should revisit error handling here for production.
-		log.KvDistribution.Warningf(ctx, "failed to get cpu usage: %v", err)
+		return errors.NewAssertionErrorWithWrappedErrf(err, "failed to get cpu usage")
 	}
 	// Convert milliseconds to nanoseconds.
 	totalUsageNanos := float64(userTimeMillis*1e6 + sysTimeMillis*1e6)
-	if buildutil.CrdbTestBuild && m.mu.lastTotalUsageNanos > totalUsageNanos {
-		panic(errors.Newf("programming error: last cpu usage is larger than current: %v > %v",
-			m.mu.lastTotalUsageNanos, totalUsageNanos))
+	if totalUsageNanos < m.mu.lastTotalUsageNanos {
+		log.KvDistribution.Warningf(ctx, "last cpu usage is larger than current: %v > %v",
+			m.mu.lastTotalUsageNanos, totalUsageNanos)
+		totalUsageNanos = m.mu.lastTotalUsageNanos
 	}
 	m.mu.usageEWMA.Add(totalUsageNanos - m.mu.lastTotalUsageNanos)
 	m.mu.lastTotalUsageNanos = totalUsageNanos
+	return nil
 }
 
 // recordCPUCapacity samples and records the current cpu capacity of the node.
@@ -189,7 +195,10 @@ func (m *runtimeLoadMonitor) run(ctx context.Context) {
 			return
 		case <-usageTimer.C:
 			usageTimer.Reset(m.usageRefreshInterval)
-			m.recordCPUUsage(ctx)
+			err := m.recordCPUUsage(ctx)
+			if err != nil {
+				log.KvDistribution.Warningf(ctx, "failed to record cpu usage: %v", err)
+			}
 		case <-capacityTimer.C:
 			capacityTimer.Reset(m.capacityRefreshInterval)
 			m.recordCPUCapacity(ctx)
