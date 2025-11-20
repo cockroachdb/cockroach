@@ -422,6 +422,8 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 
 	skip.UnderRace(t) // too slow under stressrace
 
+	testutils.SetVModule(t, "raft=4") // helps #157246 if it comes up again
+
 	testCases := []struct {
 		name                     string
 		deletedExternalSpanStart roachpb.Key
@@ -858,6 +860,7 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 
 			externalStorage, err := etc.createExternalStorage(ctx, etc.externURI)
 			require.NoError(t, err)
+			t.Log("created external storage")
 
 			firstStartChar := testCase.deletedExternalSpanStart[0]
 			firstEndChar := testCase.deletedExternalSpanEnd[0]
@@ -865,12 +868,14 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 				etc.sstFile, firstStartChar, firstEndChar))
 			require.NoError(t, etc.linkExternalSSTableToFile(ctx, testCase.deletedExternalSpanStart,
 				testCase.deletedExternalSpanEnd, etc.externURI, etc.sstFile))
+			t.Log("linked external SST")
 
 			// Before deleting the file, run some data operations that will be
 			// on top of the SSTable pointing to the soon-to-be deleted file.
 			pendingTxn1, pendingTxn2, err := etc.writeIntents(ctx, etc.db)
 			require.NoError(t, err)
 			require.NoError(t, externalStorage.Delete(ctx, etc.sstFile))
+			t.Log("deleted external SST")
 
 			// We should be able to commit the transactions since they just have
 			// point writes, and they wouldn't need the deleted file.
@@ -879,7 +884,9 @@ func TestGeneralOperationsWorkAsExpectedOnDeletedExternalSST(t *testing.T) {
 
 			// Run the test function, and make sure that the store is consistent
 			// afterward.
+			t.Log("running custom func")
 			testCase.testFunc(t, ctx, etc)
+			t.Log("checking consistency")
 			require.NoError(t, etc.checkConsistency(ctx, roachpb.Key("a"), roachpb.Key("z")))
 		})
 	}
