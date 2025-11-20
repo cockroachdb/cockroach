@@ -1374,6 +1374,30 @@ func TestChangefeedFullTableName(t *testing.T) {
 	})
 }
 
+func TestDatabaseLevelChangefeedWithFullTableName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		normal := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d WITH full_table_name`)
+		defer closeFeed(t, normal)
+		include := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo WITH full_table_name`)
+		defer closeFeed(t, include)
+		exclude := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES bar WITH full_table_name`)
+		defer closeFeed(t, exclude)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
+		assertPayloads(t, normal, []string{`d.public.foo: [1]->{"after": {"a": 1, "b": "a"}}`})
+		assertPayloads(t, include, []string{`d.public.foo: [1]->{"after": {"a": 1, "b": "a"}}`})
+		assertPayloads(t, exclude, []string{`d.public.foo: [1]->{"after": {"a": 1, "b": "a"}}`})
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
 func TestChangefeedMultiTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -79,7 +79,10 @@ func AllTargets(
 					if len(cd.TargetSpecifications) > 1 {
 						return changefeedbase.Targets{}, errors.AssertionFailedf("database-level changefeed is not supported with multiple targets")
 					}
-					targets, err = getTargetsFromDatabaseSpec(ctx, ts, execCfg, timestamp)
+					_, useFullTableName := cd.Opts[changefeedbase.OptFullTableName]
+					targets, err = getTargetsFromDatabaseSpec(
+						ctx, ts, execCfg, timestamp, useFullTableName,
+					)
 					if err != nil {
 						return changefeedbase.Targets{}, err
 					}
@@ -117,6 +120,7 @@ func getTargetsFromDatabaseSpec(
 	ts jobspb.ChangefeedTargetSpecification,
 	execCfg *sql.ExecutorConfig,
 	timestamp hlc.Timestamp,
+	useFullTableName bool,
 ) (targets changefeedbase.Targets, err error) {
 	err = sql.DescsTxn(ctx, execCfg, func(
 		ctx context.Context, txn isql.Txn, descs *descs.Collection,
@@ -172,15 +176,21 @@ func getTargetsFromDatabaseSpec(
 					tableType = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
 				}
 
+				tableName := func() string {
+					if useFullTableName {
+						return fullyQualifiedTableName
+					}
+					return desc.GetName()
+				}()
 				targets.Add(changefeedbase.Target{
 					Type:              tableType,
 					DescID:            desc.GetID(),
-					StatementTimeName: changefeedbase.StatementTimeName(desc.GetName()),
+					StatementTimeName: changefeedbase.StatementTimeName(tableName),
 				})
 			}
 		case tree.IncludeFilter:
-			for name := range ts.FilterList.Tables {
-				tn, err := parser.ParseTableName(name)
+			for fullyQualifiedTableName := range ts.FilterList.Tables {
+				tn, err := parser.ParseTableName(fullyQualifiedTableName)
 				if err != nil {
 					return err
 				}
@@ -215,10 +225,16 @@ func getTargetsFromDatabaseSpec(
 					tableType = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
 				}
 
+				tableName := func() string {
+					if useFullTableName {
+						return fullyQualifiedTableName
+					}
+					return desc.GetName()
+				}()
 				targets.Add(changefeedbase.Target{
 					Type:              tableType,
 					DescID:            tableID,
-					StatementTimeName: changefeedbase.StatementTimeName(desc.GetName()),
+					StatementTimeName: changefeedbase.StatementTimeName(tableName),
 				})
 			}
 		default:
