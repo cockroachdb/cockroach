@@ -22,7 +22,7 @@ type trackedAllocatorChange struct {
 	// change could not be registered with mma, in which case PostApply must not
 	// inform mma.
 	isMMARegistered bool
-	mmaChange       mmaprototype.PendingRangeChange
+	mmaChange       mmaprototype.ExternalRangeChange
 	// Usage is range load usage.
 	usage allocator.RangeUsageInfo
 	// Exactly one of the following two fields will be set.
