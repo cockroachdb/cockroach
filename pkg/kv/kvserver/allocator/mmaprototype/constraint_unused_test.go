@@ -347,9 +347,9 @@ func (rac *rangeAnalyzedConstraints) candidatesToRemove() ([]roachpb.StoreID, er
 		}
 		// No constraints. Can remove any voter.
 		for i := range rac.replicas[voterIndex] {
-			cands = append(cands, rac.replicas[nonVoterIndex][i].StoreID)
+			cands = append(cands, rac.replicas[voterIndex][i].StoreID)
 		}
-		return cands, nil
+		panic("impossible to be here")
 	}
 	return nil, nil
 }
