@@ -803,10 +803,15 @@ type engineConfig struct {
 
 // Pebble is a wrapper around a Pebble database instance.
 type Pebble struct {
-	cfg         engineConfig
-	db          *pebble.DB
-	closed      atomic.Bool
-	auxDir      string
+	cfg           engineConfig
+	db            *pebble.DB
+	closed        atomic.Bool
+	auxDir        string
+	auxiliarySize struct {
+		mu         syncutil.Mutex
+		computedAt time.Time
+		size       int64
+	}
 	ballastPath string
 	properties  roachpb.StoreProperties
 
@@ -1919,37 +1924,11 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	m := p.db.Metrics()
 	totalUsedBytes := int64(m.DiskSpaceUsage())
 
-	// We don't have incremental accounting of the disk space usage of files
-	// in the auxiliary directory. Walk the auxiliary directory and all its
-	// subdirectories, adding to the total used bytes.
-	if errOuter := filepath.Walk(p.auxDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			// This can happen if CockroachDB removes files out from under us -
-			// just keep going to get the best estimate we can.
-			if oserror.IsNotExist(err) {
-				return nil
-			}
-			// Special-case: if the store-dir is configured using the root of some fs,
-			// e.g. "/mnt/db", we might have special fs-created files like lost+found
-			// that we can't read, so just ignore them rather than crashing.
-			if oserror.IsPermission(err) && filepath.Base(path) == "lost+found" {
-				return nil
-			}
-			return err
-		}
-		if path == p.ballastPath {
-			// Skip the ballast. Counting it as used is likely to confuse
-			// users, and it's more akin to space that is just unavailable
-			// like disk space often restricted to a root user.
-			return nil
-		}
-		if info.Mode().IsRegular() {
-			totalUsedBytes += info.Size()
-		}
-		return nil
-	}); errOuter != nil {
-		return roachpb.StoreCapacity{}, errOuter
+	auxiliarySize, err := p.auxiliaryDirSize()
+	if err != nil {
+		return roachpb.StoreCapacity{}, err
 	}
+	totalUsedBytes += auxiliarySize
 
 	// If no size limitation have been placed on the store size or if the
 	// limitation is greater than what's available, just return the actual
@@ -1980,6 +1959,57 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 		Available: available,
 		Used:      totalUsedBytes,
 	}, nil
+}
+
+// auxiliaryDirSize computes the size of the auxiliary directory. There are
+// multiple Cockroach subsystems that write into the auxiliary directory, and
+// they don't incrementally account for their disk space usage. This function
+// walks the auxiliary directory and all its subdirectories, summing the file
+// sizes. This walk can be expensive, so we cache the result and only recompute
+// if it's over 1 minute stale.
+//
+// TODO(jackson): Eventually we should update the various subsystems writing
+// into the auxiliary directory to incrementally account for their disk space
+// usage.  See #96344.
+func (p *Pebble) auxiliaryDirSize() (int64, error) {
+	p.auxiliarySize.mu.Lock()
+	defer p.auxiliarySize.mu.Unlock()
+	if timeutil.Since(p.auxiliarySize.computedAt) < time.Minute {
+		return p.auxiliarySize.size, nil
+	}
+
+	p.auxiliarySize.size = 0
+	err := filepath.Walk(p.auxDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			// This can happen if CockroachDB removes files out from under us -
+			// just keep going to get the best estimate we can.
+			if oserror.IsNotExist(err) {
+				return nil
+			}
+			// Special-case: if the store-dir is configured using the root of some fs,
+			// e.g. "/mnt/db", we might have special fs-created files like lost+found
+			// that we can't read, so just ignore them rather than crashing.
+			if oserror.IsPermission(err) && filepath.Base(path) == "lost+found" {
+				return nil
+			}
+			return err
+		}
+		if path == p.ballastPath {
+			// Skip the ballast. Counting it as used is likely to confuse
+			// users, and it's more akin to space that is just unavailable
+			// like disk space often restricted to a root user.
+			return nil
+		}
+		if info.Mode().IsRegular() {
+			p.auxiliarySize.size += info.Size()
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	p.auxiliarySize.computedAt = timeutil.Now()
+	return p.auxiliarySize.size, err
 }
 
 // Flush implements the Engine interface.
