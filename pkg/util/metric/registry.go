@@ -79,7 +79,7 @@ func NewRegistry() *Registry {
 func (r *Registry) AddLabel(name string, value interface{}) {
 	r.Lock()
 	defer r.Unlock()
-	r.labels = append(r.labels, labelPair{name: exportedLabel(name), value: value})
+	r.labels = append(r.labels, labelPair{name: ExportedLabel(name), value: value})
 	r.computedLabels = append(r.computedLabels, &prometheusgo.LabelPair{})
 }
 
@@ -288,8 +288,8 @@ func ExportedName(name string) string {
 	return prometheusNameReplaceRE.ReplaceAllString(name, "_")
 }
 
-// exportedLabel takes a metric name and generates a valid prometheus name.
-func exportedLabel(name string) string {
+// ExportedLabel takes a metric label and generates a valid prometheus label name.
+func ExportedLabel(name string) string {
 	return prometheusLabelReplaceRE.ReplaceAllString(name, "_")
 }
 

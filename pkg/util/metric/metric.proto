@@ -117,6 +117,10 @@ message Metadata {
   // field is only output to metrics.yaml for documentation purposes,
   // with plans for future use in automated dashboard generation.
   required string how_to_use = 12 [(gogoproto.nullable) = false];
+  // enable_low_freq_child_collection enables child metrics to be collected
+  // in the low-frequency child metrics poller. When true, child metrics with
+  // labels will be recorded in the time series database.
+  optional bool enable_low_freq_child_collection = 13;
 
-  // Next ID: 10 (then 13).
+  // Next ID: 10 (then 14).
 }
