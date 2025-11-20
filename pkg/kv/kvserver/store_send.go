@@ -330,18 +330,11 @@ func (s *Store) maybeThrottleBatch(
 		if err != nil {
 			return nil, err
 		}
+		waited := timeutil.Since(before)
 
-		beforeEngineDelay := timeutil.Now()
-		// TODO(sep-raft-log): can we get rid of this?
-		s.TODOEngine().PreIngestDelay(ctx)
-		after := timeutil.Now()
-
-		waited, waitedEngine := after.Sub(before), after.Sub(beforeEngineDelay)
 		s.metrics.AddSSTableProposalTotalDelay.Inc(waited.Nanoseconds())
-		s.metrics.AddSSTableProposalEngineDelay.Inc(waitedEngine.Nanoseconds())
 		if waited > time.Second {
-			log.KvExec.Infof(ctx, "SST ingestion was delayed by %v (%v for storage engine back-pressure)",
-				waited, waitedEngine)
+			log.KvExec.Infof(ctx, "SST ingestion was delayed by %v", waited)
 		}
 		return res, nil
 

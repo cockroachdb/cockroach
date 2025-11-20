@@ -10598,14 +10598,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: addsstable.delay.enginebackpressure
-      exported_name: addsstable_delay_enginebackpressure
-      description: Amount by which evaluation of AddSSTable requests was delayed by storage-engine backpressure
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: addsstable.delay.total
       exported_name: addsstable_delay_total
       description: Amount by which evaluation of AddSSTable requests was delayed

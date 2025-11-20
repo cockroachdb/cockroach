@@ -2621,12 +2621,6 @@ throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	metaAddSSTableEvalEngineDelay = metric.Metadata{
-		Name:        "addsstable.delay.enginebackpressure",
-		Help:        "Amount by which evaluation of AddSSTable requests was delayed by storage-engine backpressure",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
 
 	// Export request counter.
 	metaExportEvalTotalDelay = metric.Metadata{
@@ -3402,12 +3396,11 @@ type StoreMetrics struct {
 
 	// AddSSTable stats: how many AddSSTable commands were proposed and how many
 	// were applied? How many applications required writing a copy?
-	AddSSTableProposals           *metric.Counter
-	AddSSTableApplications        *metric.Counter
-	AddSSTableApplicationCopies   *metric.Counter
-	AddSSTableAsWrites            *metric.Counter
-	AddSSTableProposalTotalDelay  *metric.Counter
-	AddSSTableProposalEngineDelay *metric.Counter
+	AddSSTableProposals          *metric.Counter
+	AddSSTableApplications       *metric.Counter
+	AddSSTableApplicationCopies  *metric.Counter
+	AddSSTableAsWrites           *metric.Counter
+	AddSSTableProposalTotalDelay *metric.Counter
 
 	// Export request stats.
 	ExportRequestProposalTotalDelay *metric.Counter
@@ -4214,12 +4207,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		BackpressuredOnSplitRequests: metric.NewGauge(metaBackpressuredOnSplitRequests),
 
 		// AddSSTable proposal + applications counters.
-		AddSSTableProposals:           metric.NewCounter(metaAddSSTableProposals),
-		AddSSTableApplications:        metric.NewCounter(metaAddSSTableApplications),
-		AddSSTableAsWrites:            metric.NewCounter(metaAddSSTableAsWrites),
-		AddSSTableApplicationCopies:   metric.NewCounter(metaAddSSTableApplicationCopies),
-		AddSSTableProposalTotalDelay:  metric.NewCounter(metaAddSSTableEvalTotalDelay),
-		AddSSTableProposalEngineDelay: metric.NewCounter(metaAddSSTableEvalEngineDelay),
+		AddSSTableProposals:          metric.NewCounter(metaAddSSTableProposals),
+		AddSSTableApplications:       metric.NewCounter(metaAddSSTableApplications),
+		AddSSTableAsWrites:           metric.NewCounter(metaAddSSTableAsWrites),
+		AddSSTableApplicationCopies:  metric.NewCounter(metaAddSSTableApplicationCopies),
+		AddSSTableProposalTotalDelay: metric.NewCounter(metaAddSSTableEvalTotalDelay),
 
 		// ExportRequest proposal.
 		ExportRequestProposalTotalDelay: metric.NewCounter(metaExportEvalTotalDelay),

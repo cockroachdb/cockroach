@@ -276,7 +276,10 @@ var retiredSettings = map[InternalKey]struct{}{
 	"storage.columnar_blocks.enabled": {},
 
 	// removed as of 26.1
-	"sql.distsql_planning.use_gossip.enabled": {},
+	"sql.distsql_planning.use_gossip.enabled":             {},
+	"rocksdb.ingest_backpressure.l0_file_count_threshold": {},
+	"rocksdb.ingest_backpressure.max_delay":               {},
+	"pebble.pre_ingest_delay.enabled":                     {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults
