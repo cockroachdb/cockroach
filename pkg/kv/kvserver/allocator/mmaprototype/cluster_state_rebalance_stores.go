@@ -503,9 +503,9 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			log.KvDistribution.VEventf(ctx, 2, "reached max lease transfer count %d, returning", re.maxLeaseTransferCount)
 			return true // we ran into a limit that prevented us from transferring more leases
 		}
-		if ss.maxFractionPendingDecrease >= maxFractionPendingThreshold {
+		if ss.maxFractionPendingDecrease >= re.fractionPendingDecreaseThreshold {
 			log.KvDistribution.VEventf(ctx, 2, "s%d has reached pending decrease threshold(%.2f>=%.2f) after %d lease transfers",
-				store.StoreID, ss.maxFractionPendingDecrease, maxFractionPendingThreshold, leaseTransferCount)
+				store.StoreID, ss.maxFractionPendingDecrease, re.fractionPendingDecreaseThreshold, leaseTransferCount)
 			return true // we ran into a limit that prevented us from transferring more leases
 		}
 
