@@ -840,7 +840,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 	rac.numNeededReplicas[nonVoterIndex] = spanConfig.numReplicas - spanConfig.numVoters
 	rac.replicas = rac.buf.replicas
 
-	analyzeFunc := func(ac *analyzedConstraints) {
+	analyzeFunc := func(ac *analyzedConstraints, isVoterConstraints bool) {
 		if len(ac.constraints) == 0 {
 			// Nothing to do.
 			return
@@ -880,6 +880,11 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 		// oversatisfying.
 		for j := range ac.constraints {
 			doneFunc := func() bool {
+				if isVoterConstraints {
+					// For voter constraints, only voters can satisfy them.
+					return len(ac.satisfiedByReplica[voterIndex][j]) >= int(ac.constraints[j].numReplicas)
+				}
+				// For all-replica constraints, both voters and non-voters count.
 				return len(ac.satisfiedByReplica[voterIndex][j])+
 					len(ac.satisfiedByReplica[nonVoterIndex][j]) >= int(ac.constraints[j].numReplicas)
 			}
@@ -930,11 +935,11 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 	}
 	if spanConfig.constraints != nil {
 		rac.constraints.constraints = spanConfig.constraints
-		analyzeFunc(&rac.constraints)
+		analyzeFunc(&rac.constraints, false /* isVoterConstraints */)
 	}
 	if spanConfig.voterConstraints != nil {
 		rac.voterConstraints.constraints = spanConfig.voterConstraints
-		analyzeFunc(&rac.voterConstraints)
+		analyzeFunc(&rac.voterConstraints, true /* isVoterConstraints */)
 	}
 
 	rac.leaseholderID = leaseholder
