@@ -12,7 +12,6 @@ import (
 	"math/rand"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -20,8 +19,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
-
-var mmaid = atomic.Int64{}
 
 // rebalanceEnv tracks the state and outcomes of a rebalanceStores invocation.
 // Recall that such an invocation is on behalf of a local store, but will
@@ -117,7 +114,9 @@ type sheddingStore struct {
 func (re *rebalanceEnv) rebalanceStores(
 	ctx context.Context, localStoreID roachpb.StoreID,
 ) []PendingRangeChange {
-	ctx = logtags.AddTag(ctx, "mmaid", mmaid.Add(1))
+	re.mmaid++
+	id := re.mmaid
+	ctx = logtags.AddTag(ctx, "mmaid", id)
 
 	log.KvDistribution.VEventf(ctx, 2, "rebalanceStores begins")
 	// To select which stores are overloaded, we use a notion of overload that
