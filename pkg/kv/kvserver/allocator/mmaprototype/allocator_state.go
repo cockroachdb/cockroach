@@ -335,7 +335,8 @@ func (a *allocatorState) ComputeChanges(
 		panic(fmt.Sprintf("ComputeChanges: expected StoreID %d, got %d", opts.LocalStoreID, msg.StoreID))
 	}
 	a.cs.processStoreLeaseholderMsg(ctx, msg, a.mmaMetrics)
-	return a.cs.rebalanceStores(ctx, opts.LocalStoreID, a.rand, a.diversityScoringMemo)
+	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now())
+	return re.rebalanceStores(ctx, opts.LocalStoreID)
 }
 
 // AdminRelocateOne implements the Allocator interface.

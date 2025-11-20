@@ -109,13 +109,10 @@ const lastFailedChangeDelayDuration time.Duration = 60 * time.Second
 //
 // We do not want to shed replicas for CPU from a remote store until its had a
 // chance to shed leases.
-func (cs *clusterState) rebalanceStores(
-	ctx context.Context, localStoreID roachpb.StoreID, rng *rand.Rand, dsm *diversityScoringMemo,
+func (re *rebalanceEnv) rebalanceStores(
+	ctx context.Context, localStoreID roachpb.StoreID,
 ) []PendingRangeChange {
 	ctx = logtags.AddTag(ctx, "mmaid", mmaid.Add(1))
-	now := cs.ts.Now()
-
-	re := newRebalanceEnv(cs, rng, dsm, now)
 
 	log.KvDistribution.VInfof(ctx, 2, "rebalanceStores begins")
 	// To select which stores are overloaded, we use a notion of overload that
@@ -136,7 +133,7 @@ func (cs *clusterState) rebalanceStores(
 	// responsible for equalizing load across two nodes that have 30% and 50%
 	// cpu utilization while the cluster mean is 70% utilization (as an
 	// example).
-	clusterMeans := cs.meansMemo.getMeans(nil)
+	clusterMeans := re.meansMemo.getMeans(nil)
 	var sheddingStores []sheddingStore
 	log.KvDistribution.Infof(ctx,
 		"cluster means: (stores-load %s) (stores-capacity %s) (nodes-cpu-load %d) (nodes-cpu-capacity %d)",
@@ -146,15 +143,15 @@ func (cs *clusterState) rebalanceStores(
 	// fdDrain or fdDead, nor do we attempt to shed replicas from a store which
 	// is storeMembershipRemoving (decommissioning). These are currently handled
 	// via replicate_queue.go.
-	for storeID, ss := range cs.stores {
-		sls := cs.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
+	for storeID, ss := range re.stores {
+		sls := re.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
 		log.KvDistribution.VInfof(ctx, 2, "evaluating s%d: node load %s, store load %s, worst dim %s",
 			storeID, sls.nls, sls.sls, sls.worstDim)
 
 		if sls.sls >= overloadSlow {
 			if ss.overloadEndTime != (time.Time{}) {
-				if now.Sub(ss.overloadEndTime) > overloadGracePeriod {
-					ss.overloadStartTime = now
+				if re.now.Sub(ss.overloadEndTime) > overloadGracePeriod {
+					ss.overloadStartTime = re.now
 					log.KvDistribution.Infof(ctx, "overload-start s%v (%v) - grace period expired", storeID, sls)
 				} else {
 					// Else, extend the previous overload interval.
@@ -177,7 +174,7 @@ func (cs *clusterState) rebalanceStores(
 			// NB: we don't stop the overloaded interval if the store is at
 			// loadNoChange, since a store can hover at the border of the two.
 			log.KvDistribution.Infof(ctx, "overload-end s%v (%v) - load dropped below no-change threshold", storeID, sls)
-			ss.overloadEndTime = now
+			ss.overloadEndTime = re.now
 		}
 	}
 
