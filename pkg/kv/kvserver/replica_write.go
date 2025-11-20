@@ -817,6 +817,7 @@ func (r *Replica) newBatchedEngine(
 		// any write latch would be declared at. But because of this, we don't
 		// assert on access timestamps using spanset.NewBatchAt.
 		// FIXME: we now do, update the comment.
+		g.LatchSpans().Panic = true
 		batch = spanset.NewBatchAt(batch, g.LatchSpans(), ba.Header.Timestamp)
 	}
 	return batch, opLogger
