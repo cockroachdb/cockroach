@@ -147,7 +147,18 @@ func (re *rebalanceEnv) rebalanceStores(
 	// fdDrain or fdDead, nor do we attempt to shed replicas from a store which
 	// is storeMembershipRemoving (decommissioning). These are currently handled
 	// via replicate_queue.go.
-	for storeID, ss := range re.stores {
+
+	// Need deterministic order for datadriven testing.
+	storeStateSlice := make([]*storeState, 0, len(re.stores))
+	for _, ss := range re.stores {
+		storeStateSlice = append(storeStateSlice, ss)
+	}
+	slices.SortFunc(storeStateSlice, func(a, b *storeState) int {
+		return cmp.Compare(a.StoreID, b.StoreID)
+	})
+
+	for _, ss := range storeStateSlice {
+		storeID := ss.StoreID
 		sls := re.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
 		log.KvDistribution.VEventf(ctx, 2, "evaluating s%d: node load %s, store load %s, worst dim %s",
 			storeID, sls.nls, sls.sls, sls.worstDim)
