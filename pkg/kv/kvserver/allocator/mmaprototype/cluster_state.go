@@ -2357,11 +2357,11 @@ func (cs *clusterState) canShedAndAddLoad(
 	var reason strings.Builder
 	defer func() {
 		if canAddLoad {
-			log.KvDistribution.VInfof(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
+			log.KvDistribution.VEventf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
 		} else {
-			log.KvDistribution.VInfof(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason.String())
-			log.KvDistribution.VInfof(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
+			log.KvDistribution.VEventf(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason.String())
+			log.KvDistribution.VEventf(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
 		}
 	}()
 	if targetSLS.highDiskSpaceUtilization {
