@@ -4,7 +4,7 @@
 #
 # Expected outcome: mma should rebalance replicas and leases to distribute the
 # cpu load and write load more evenly across all stores.
-gen_cluster nodes=10 node_cpu_rate_capacity=3000000000  stores_per_node=2
+gen_cluster nodes=10 node_cpu_cores=3  stores_per_node=2
 ----
 
 # Read only workload, which generates 1000 request cpu nanos/s evenly over

@@ -2,7 +2,7 @@
 # there is high CPU load imbalance across a large cluster. The test set-up is
 # similar to high_cpu.txt but is on 25 nodes and with 3x the load for two
 # gen_load commands.
-gen_cluster nodes=25 node_cpu_rate_capacity=8000000000
+gen_cluster nodes=25 node_cpu_cores=8
 ----
 
 setting split_queue_enabled=false

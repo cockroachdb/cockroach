@@ -6,7 +6,7 @@
 #
 # Expected outcome: The allocator should rebalance both leases and replicas to
 # achieve more even cpu and write distribution across all nodes.
-gen_cluster nodes=9 node_cpu_rate_capacity=5000000000
+gen_cluster nodes=9 node_cpu_cores=5
 ----
 
 # The placement will be skewed, s.t. n1/s1, n2/s2 and n3/s3 will have all the
