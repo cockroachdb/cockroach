@@ -2507,6 +2507,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
 	clusterversion.V25_4_PebbleFormatV2BlobFiles: pebble.FormatV2BlobFiles,
+	clusterversion.V25_4:                         pebble.FormatMarkForCompactionInVersionEdit,
 	clusterversion.V25_3:                         pebble.FormatValueSeparation,
 }
 
@@ -2514,7 +2515,7 @@ var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
 // Cockroach code relies on unconditionally (like range keys). New stores are by
 // default created with this version. It should correspond to the minimum
 // supported binary version.
-const MinimumSupportedFormatVersion = pebble.FormatValueSeparation
+const MinimumSupportedFormatVersion = pebble.FormatMarkForCompactionInVersionEdit
 
 // pebbleFormatVersionKeys contains the keys in the map above, in descending order.
 var pebbleFormatVersionKeys = slices.SortedFunc(maps.Keys(pebbleFormatVersionMap), func(a, b clusterversion.Key) int {
