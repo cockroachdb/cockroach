@@ -10,17 +10,17 @@ go 1.25.3
 // merge of any upgrades we should communicate to all teams to be on the lookout
 // for behavior changes, just like we would after a go upgrade.
 require (
-	golang.org/x/crypto v0.43.0
-	golang.org/x/exp v0.0.0-20251009144603-d2f985daa21b
+	golang.org/x/crypto v0.44.0
+	golang.org/x/exp v0.0.0-20251113190631-e25ba8c21ef6
 	golang.org/x/exp/typeparams v0.0.0-20231108232855-2478ac86f678 // indirect
-	golang.org/x/mod v0.29.0 // indirect
-	golang.org/x/net v0.46.0
-	golang.org/x/oauth2 v0.32.0
-	golang.org/x/sync v0.17.0
-	golang.org/x/sys v0.37.0
-	golang.org/x/text v0.30.0
+	golang.org/x/mod v0.30.0 // indirect
+	golang.org/x/net v0.47.0
+	golang.org/x/oauth2 v0.33.0
+	golang.org/x/sync v0.18.0
+	golang.org/x/sys v0.38.0
+	golang.org/x/text v0.31.0
 	golang.org/x/time v0.14.0
-	golang.org/x/tools v0.38.0
+	golang.org/x/tools v0.39.0
 )
 
 // The following dependencies are key infrastructure dependencies and
@@ -137,7 +137,7 @@ require (
 	github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20251112202735-fc0be3c8a612
+	github.com/cockroachdb/pebble v0.0.0-20251119182253-219f3fc13027
 	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb
@@ -244,8 +244,8 @@ require (
 	go.opentelemetry.io/otel/sdk v1.17.0
 	go.opentelemetry.io/otel/trace v1.17.0
 	go.opentelemetry.io/proto/otlp v0.11.0
-	golang.org/x/perf v0.0.0-20251008221758-42ba72fec400
-	golang.org/x/term v0.36.0
+	golang.org/x/perf v0.0.0-20251112180420-cfbd823f7301
+	golang.org/x/term v0.37.0
 	gonum.org/v1/gonum v0.15.1
 	google.golang.org/genproto/googleapis/api v0.0.0-20230530153820-e85fd2cbaebc
 	gopkg.in/yaml.v2 v2.4.0
@@ -459,8 +459,8 @@ require (
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.19.0 // indirect
-	golang.org/x/image v0.32.0 // indirect
-	golang.org/x/telemetry v0.0.0-20251008203120-078029d740a8 // indirect
+	golang.org/x/image v0.33.0 // indirect
+	golang.org/x/telemetry v0.0.0-20251111182119-bc8e575c7b54 // indirect
 	golang.org/x/tools/go/vcs v0.1.0-deprecated // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gonum.org/v1/plot v0.14.0 // indirect
