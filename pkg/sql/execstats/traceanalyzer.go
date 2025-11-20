@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -123,6 +124,7 @@ type QueryLevelStats struct {
 	ContentionEvents                   []kvpb.ContentionEvent
 	RUEstimate                         float64
 	CPUTime                            time.Duration
+	AdmissionWaitTime                  time.Duration
 	// SQLInstanceIDs is an ordered list of SQL instances that were involved in
 	// query processing.
 	SQLInstanceIDs []int32
@@ -188,6 +190,7 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.ContentionEvents = append(s.ContentionEvents, other.ContentionEvents...)
 	s.RUEstimate += other.RUEstimate
 	s.CPUTime += other.CPUTime
+	s.AdmissionWaitTime += other.AdmissionWaitTime
 	s.SQLInstanceIDs = util.CombineUnique(s.SQLInstanceIDs, other.SQLInstanceIDs)
 	s.KVNodeIDs = util.CombineUnique(s.KVNodeIDs, other.KVNodeIDs)
 	s.Regions = util.CombineUnique(s.Regions, other.Regions)
@@ -397,6 +400,25 @@ func getAllContentionEvents(trace []tracingpb.RecordedSpan) []kvpb.ContentionEve
 	return contentionEvents
 }
 
+// getAdmissionWaitTime returns the total admission wait time accumulated
+// from all AdmissionWorkQueueStats events found in the given trace.
+func getAdmissionWaitTime(trace []tracingpb.RecordedSpan) time.Duration {
+	var totalWaitTime time.Duration
+	var ev admissionpb.AdmissionWorkQueueStats
+	for i := range trace {
+		trace[i].Structured(func(any *pbtypes.Any, _ time.Time) {
+			if !pbtypes.Is(any, &ev) {
+				return
+			}
+			if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
+				return
+			}
+			totalWaitTime += ev.WaitDurationNanos
+		})
+	}
+	return totalWaitTime
+}
+
 // GetQueryLevelStats returns all the top-level stats in a QueryLevelStats
 // struct. GetQueryLevelStats tries to process as many stats as possible. If
 // errors occur while processing stats, GetQueryLevelStats returns the combined
@@ -417,5 +439,6 @@ func GetQueryLevelStats(
 		queryLevelStats.Accumulate(analyzer.GetQueryLevelStats())
 	}
 	queryLevelStats.ContentionEvents = getAllContentionEvents(trace)
+	queryLevelStats.AdmissionWaitTime = getAdmissionWaitTime(trace)
 	return queryLevelStats, errs
 }

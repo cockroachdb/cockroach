@@ -888,6 +888,9 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		if queryStats.LatchWaitTime != 0 {
 			ob.AddLatchWaitTime(queryStats.LatchWaitTime)
 		}
+		if queryStats.AdmissionWaitTime != 0 {
+			ob.AddAdmissionWaitTime(queryStats.AdmissionWaitTime)
+		}
 
 		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 		ob.AddDistSQLNetworkStats(queryStats.DistSQLNetworkMessages, queryStats.DistSQLNetworkBytesSent)
