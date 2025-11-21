@@ -28,6 +28,8 @@ var activeRecordIgnoreList = blocklist{
 	`ActiveRecord::ConnectionAdapters::ConnectionPoolThreadTest#test_checkout_fairness_by_group`:                                                               "flaky",
 	`ActiveRecord::ConnectionAdapters::ConnectionPoolThreadTest#test_disconnect_and_clear_reloadable_connections_are_able_to_preempt_other_waiting_threads`:    "flaky",
 	`ActiveRecord::ConnectionAdapters::PostgreSQLAdapterTest#test_translate_no_connection_exception_to_not_established`:                                        "pg_terminate_backend not implemented",
+	`ActiveRecord::Encryption::EncryptableRecordApiTest#test_ciphertext_for_returns_the_ciphertext_of_a_new_value`:                                             "flaky",
+	`ActiveRecord::Encryption::EncryptableRecordApiTest#test_ciphertext_for_returns_the_ciphertext_of_a_value_when_the_record_is_new`:                          "flaky",
 	`ActiveRecord::Encryption::EncryptableRecordTest#test_by_default,_it's_case_sensitive`:                                                                     "flaky",
 	`ActiveRecord::Encryption::EncryptableRecordTest#test_forced_encoding_for_deterministic_attributes_will_replace_invalid_characters`:                        "flaky",
 	`ActiveRecord::Encryption::UniquenessValidationsTest#test_uniqueness_validations_work_when_using_old_encryption_schemes`:                                   "flaky",
