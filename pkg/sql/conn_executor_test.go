@@ -1408,8 +1408,15 @@ func TestShowLastQueryStatistics(t *testing.T) {
 	skip.UnderRace(t, "measure planning latency which is slower than usual under race")
 
 	ctx := context.Background()
-	params := base.TestServerArgs{}
-	s, sqlConn, _ := serverutils.StartServer(t, params)
+	var testTenant base.DefaultTestTenantOptions
+	if syncutil.DeadlockEnabled {
+		// Under deadlock, the planning latency in the external process mode can
+		// sometimes exceed 1s allowed limit.
+		testTenant = base.TestSkipForExternalProcessMode()
+	}
+	s, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: testTenant,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	testCases := []struct {
