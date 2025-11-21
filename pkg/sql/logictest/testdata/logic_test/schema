@@ -1555,7 +1555,6 @@ skipif config local-legacy-schema-changer
 statement ok
 CREATE TRIGGER trigger_w4_521 BEFORE UPDATE OR DELETE ON drop_schema_with_triggers.t1 FOR EACH ROW EXECUTE FUNCTION drop_schema_with_triggers.trigger_function_w4_520();
 
-skipif config local-mixed-25.3
 skipif config local-legacy-schema-changer
 statement ok
 DROP SCHEMA drop_schema_with_triggers CASCADE;
