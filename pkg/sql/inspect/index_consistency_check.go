@@ -447,8 +447,19 @@ func (c *indexConsistencyCheck) Close(context.Context) error {
 // descriptor and index metadata in the indexConsistencyCheck struct.
 func (c *indexConsistencyCheck) loadCatalogInfo(ctx context.Context) error {
 	return c.flowCtx.Cfg.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		if !c.asOf.IsEmpty() {
+			if err := txn.KV().SetFixedTimestamp(ctx, c.asOf); err != nil {
+				return err
+			}
+		}
+
+		byIDGetter := txn.Descriptors().ByIDWithLeased(txn.KV())
+		if !c.asOf.IsEmpty() {
+			byIDGetter = txn.Descriptors().ByIDWithoutLeased(txn.KV())
+		}
+
 		var err error
-		c.tableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, c.tableID)
+		c.tableDesc, err = byIDGetter.WithoutNonPublic().Get().Table(ctx, c.tableID)
 		if err != nil {
 			return err
 		}

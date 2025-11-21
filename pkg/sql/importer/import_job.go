@@ -351,7 +351,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				ctx,
 				fmt.Sprintf("import-validation-%s", tableName),
 				p.ExecCfg(),
-				nil, /* txn */
 				checks,
 				setPublicTimestamp,
 			)
