@@ -539,6 +539,17 @@ func TestClusterState(t *testing.T) {
 					defer tr.Close()
 					ctx, finishAndGet := tracing.ContextWithRecordingSpan(context.Background(), tr, "rebalance-stores")
 					re := newRebalanceEnv(cs, rng, dsm, cs.ts.Now())
+
+					if n, ok := dd.ScanArgOpt[int](t, d, "max-lease-transfer-count"); ok {
+						re.maxLeaseTransferCount = n
+					}
+					if n, ok := dd.ScanArgOpt[int](t, d, "max-range-move-count"); ok {
+						re.maxRangeMoveCount = n
+					}
+					if f, ok := dd.ScanArgOpt[float64](t, d, "fraction-pending-decrease-threshold"); ok {
+						re.fractionPendingIncreaseOrDecreaseThreshold = f
+					}
+
 					re.rebalanceStores(ctx, storeID)
 					rec := finishAndGet()
 					var sb redact.StringBuilder
