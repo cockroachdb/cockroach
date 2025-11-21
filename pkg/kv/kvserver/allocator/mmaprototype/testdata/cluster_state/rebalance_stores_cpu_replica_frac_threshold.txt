@@ -1,0 +1,31 @@
+# Set up the base scenario - four stores, replicas on first three, leases on s1, s3 overloaded.
+include path=rebalance_stores_cpu_replica_include.txt
+----
+ok
+
+# One replica moves to s4, then we hit the pending fraction limit.
+rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=0.01
+----
+[mmaid=2] rebalanceStores begins
+[mmaid=2] cluster means: (stores-load [cpu:525, write-bandwidth:0, byte-size:0]) (stores-capacity [cpu:1000, write-bandwidth:1000, byte-size:1000]) (nodes-cpu-load 525) (nodes-cpu-capacity 1000)
+[mmaid=2] evaluating s1: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=2] evaluating s2: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=2] evaluating s3: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=2] store s3 was added to shedding store list
+[mmaid=2] evaluating s4: node load loadLow, store load loadNormal, worst dim WriteBandwidth
+[mmaid=2] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=2] top-K[CPURate] ranges for s3 with lease on local s1: r3:[cpu:100, write-bandwidth:0, byte-size:0] r2:[cpu:100, write-bandwidth:0, byte-size:0] r1:[cpu:100, write-bandwidth:0, byte-size:0]
+[mmaid=2] attempting to shed replicas next
+[mmaid=2] excluding all stores on n3 due to overload/fd status
+[mmaid=2] considering replica-transfer r3 from s3: store load [cpu:1000, write-bandwidth:0, byte-size:0]
+[mmaid=2] sortTargetCandidateSetAndPick: candidates: s4(loadNormal), picked s4
+[mmaid=2] can add load to n4s4: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))]
+[mmaid=2] result(success): rebalancing r3 from s3 to s4 [change: r3=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}] cids=1,2]] with resulting loads source: [cpu:900, write-bandwidth:0, byte-size:0] target: [cpu:210, write-bandwidth:0, byte-size:0]
+[mmaid=2] s3 has reached pending decrease threshold(0.10>=0.01) after rebalancing; done shedding
+pending(2)
+change-id=1 store-id=4 node-id=4 range-id=3 load-delta=[cpu:110, write-bandwidth:0, byte-size:0] start=5m0s gc=10m0s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL)
+change-id=2 store-id=3 node-id=3 range-id=3 load-delta=[cpu:-100, write-bandwidth:0, byte-size:0] start=5m0s gc=10m0s
+  prev=(replica-id=3 type=VOTER_FULL)
+  next=(replica-id=none type=VOTER_FULL)

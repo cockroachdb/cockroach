@@ -1,0 +1,86 @@
+# This sets up a CPU overloaded store for which lease transfers aren't an option
+# to reduce CPU load because the overloaded store is not the local store.
+
+set-store
+  store-id=1 node-id=1
+  store-id=2 node-id=2
+  store-id=3 node-id=3
+  store-id=4 node-id=4
+----
+node-id=1 locality-tiers=node=1
+  store-id=1 attrs= locality-code=1:
+node-id=2 locality-tiers=node=2
+  store-id=2 attrs= locality-code=2:
+node-id=3 locality-tiers=node=3
+  store-id=3 attrs= locality-code=3:
+node-id=4 locality-tiers=node=4
+  store-id=4 attrs= locality-code=4:
+
+store-load-msg
+  store-id=1 node-id=1 load=[500,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+  store-id=2 node-id=2 load=[500,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+  store-id=3 node-id=3 load=[1000,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+  store-id=4 node-id=4 load=[100,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+----
+
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:500, write-bandwidth:0, byte-size:0] adjusted=[cpu:500, write-bandwidth:0, byte-size:0] node-reported-cpu=500 node-adjusted-cpu=500 seq=1
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:500, write-bandwidth:0, byte-size:0] adjusted=[cpu:500, write-bandwidth:0, byte-size:0] node-reported-cpu=500 node-adjusted-cpu=500 seq=1
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:1000, write-bandwidth:0, byte-size:0] adjusted=[cpu:1000, write-bandwidth:0, byte-size:0] node-reported-cpu=1000 node-adjusted-cpu=1000 seq=1
+store-id=4 node-id=4 status=ok accepting all reported=[cpu:100, write-bandwidth:0, byte-size:0] adjusted=[cpu:100, write-bandwidth:0, byte-size:0] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+
+store-leaseholder-msg
+store-id=1
+  range-id=1 load=[1,0,0] raft-cpu=100
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+    store-id=3 replica-id=3 type=VOTER_FULL
+    config=num_replicas=3 constraints={} voter_constraints={}
+  range-id=2 load=[1,0,0] raft-cpu=100
+  config=num_replicas=3 constraints={} voter_constraints={}
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+    store-id=3 replica-id=3 type=VOTER_FULL
+    config=num_replicas=3 constraints={} voter_constraints={}
+  range-id=3 load=[1,0,0] raft-cpu=100
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+    store-id=3 replica-id=3 type=VOTER_FULL
+    config=num_replicas=3 constraints={} voter_constraints={}
+----
+
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:500, write-bandwidth:0, byte-size:0] adjusted=[cpu:500, write-bandwidth:0, byte-size:0] node-reported-cpu=500 node-adjusted-cpu=500 seq=1
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:500, write-bandwidth:0, byte-size:0] adjusted=[cpu:500, write-bandwidth:0, byte-size:0] node-reported-cpu=500 node-adjusted-cpu=500 seq=1
+  top-k-ranges (local-store-id=1) dim=WriteBandwidth: r3 r2 r1
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:1000, write-bandwidth:0, byte-size:0] adjusted=[cpu:1000, write-bandwidth:0, byte-size:0] node-reported-cpu=1000 node-adjusted-cpu=1000 seq=1
+  top-k-ranges (local-store-id=1) dim=CPURate: r3 r2 r1
+store-id=4 node-id=4 status=ok accepting all reported=[cpu:100, write-bandwidth:0, byte-size:0] adjusted=[cpu:100, write-bandwidth:0, byte-size:0] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+
+# On the first rebalance-stores invocation the lease shedding grace
+# period is active, and we don't move replicas.
+
+rebalance-stores store-id=1
+----
+[mmaid=1] rebalanceStores begins
+[mmaid=1] cluster means: (stores-load [cpu:525, write-bandwidth:0, byte-size:0]) (stores-capacity [cpu:1000, write-bandwidth:1000, byte-size:1000]) (nodes-cpu-load 525) (nodes-cpu-capacity 1000)
+[mmaid=1] evaluating s1: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=1] evaluating s2: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=1] evaluating s3: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=1] overload-continued s3 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))) - within grace period
+[mmaid=1] store s3 was added to shedding store list
+[mmaid=1] evaluating s4: node load loadLow, store load loadNormal, worst dim WriteBandwidth
+[mmaid=1] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=1] top-K[CPURate] ranges for s3 with lease on local s1: r3:[cpu:100, write-bandwidth:0, byte-size:0] r2:[cpu:100, write-bandwidth:0, byte-size:0] r1:[cpu:100, write-bandwidth:0, byte-size:0]
+[mmaid=1] attempting to shed replicas next
+[mmaid=1] skipping remote store s3: in lease shedding grace period
+pending(0)
+
+# Advance time beyond the lease shedding grace period.
+tick seconds=300
+----
+t=5m0s
+
+# Next rebalance-stores invocation will do actual work.
