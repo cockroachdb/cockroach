@@ -5,7 +5,7 @@
 #
 # Expected outcome: two stores should roughly equalize their cpu load and write
 # load via range rebalancing.
-gen_cluster nodes=2 node_cpu_rate_capacity=1000000000
+gen_cluster nodes=2 node_cpu_cores=1
 ----
 
 gen_ranges ranges=100 repl_factor=1 min_key=1 max_key=10000 placement_type=replica_placement bytes_mib=26

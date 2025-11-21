@@ -9,7 +9,7 @@
 # balance on absolute cpu-nanos. n3 should handle more load due to its higher
 # capacity, but the current implementation doesn't account for this. This is
 # tracked in issue: https://github.com/cockroachdb/cockroach/issues/153777.
-gen_cluster nodes=3 node_cpu_rate_capacity=(8000000000,8000000000,16000000000)
+gen_cluster nodes=3 node_cpu_cores=(8,8,16)
 ----
 
 gen_ranges ranges=200 min_key=1 max_key=10000 placement_type=even

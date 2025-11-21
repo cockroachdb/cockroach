@@ -31,10 +31,13 @@ const (
 	defaultLBRebalancingInterval   = time.Minute
 )
 
-const DefaultNodeCPURateCapacityNanos = 8 * 1e9        // 8 vcpus
-const DefaultStoreDiskCapacityBytes = 1024 << 30       // 1024 GiB
-const DoubleDefaultNodeCPURateCapacityNanos = 16 * 1e9 // 16 vcpus
-const DoubleDefaultStoreDiskCapacityBytes = 2048 << 30 // 2048 GiB
+const (
+	DefaultNodeCPUCores                   = 8.0                                 // 8 vcpus
+	DefaultNodeCPURateCapacityNanos       = DefaultNodeCPUCores * 1e9           // 8 vcpus
+	DefaultStoreDiskCapacityBytes         = 1024 << 30                          // 1024 GiB
+	DoubleDefaultNodeCPURateCapacityNanos = DefaultNodeCPURateCapacityNanos * 2 // 16 vcpus
+	DoubleDefaultStoreDiskCapacityBytes   = 2048 << 30                          // 2048 GiB
+)
 
 var (
 	// DefaultStartTime is used as the default beginning time for simulation
