@@ -93,7 +93,10 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, g, nil, kvpb.NewError(err)
 	}
 	if util.RaceEnabled {
-		rw = spanset.NewReadWriterAt(rw, g.LatchSpans(), ba.Timestamp)
+		spans := g.LatchSpans()
+		spans.AddForbiddenMatcher(overlapsUnreplicatedRangeIDLocalKeys)
+		spans.AddForbiddenMatcher(overlapsStoreLocalKeys)
+		rw = spanset.NewReadWriterAt(rw, spans, ba.Timestamp)
 	}
 	defer rw.Close()
 
