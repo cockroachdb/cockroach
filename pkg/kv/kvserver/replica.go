@@ -1409,6 +1409,11 @@ func (r *Replica) StoreID() roachpb.StoreID {
 	return r.store.StoreID()
 }
 
+// LogEngine returns the log engine.
+func (r *Replica) LogEngine() storage.Engine {
+	return r.store.LogEngine()
+}
+
 // EvalKnobs returns the EvalContext's Knobs.
 func (r *Replica) EvalKnobs() kvserverbase.BatchEvalTestingKnobs {
 	return r.store.cfg.TestingKnobs.EvalKnobs
