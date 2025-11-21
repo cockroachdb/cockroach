@@ -23,8 +23,8 @@ import (
 // MVCCIterator wraps an storage.MVCCIterator and ensures that it can
 // only be used to access spans in a SpanSet.
 type MVCCIterator struct {
-	i     storage.MVCCIterator
-	spans *SpanSet
+	i       storage.MVCCIterator
+	checker *SpanChecker
 
 	// spansOnly controls whether or not timestamps associated with the
 	// spans are considered when ensuring access. If set to true,
@@ -48,13 +48,13 @@ var _ storage.MVCCIterator = &MVCCIterator{}
 // iterator against the given SpanSet. Timestamps associated with the spans
 // in the spanset are not considered, only the span boundaries are checked.
 func NewIterator(iter storage.MVCCIterator, spans *SpanSet) *MVCCIterator {
-	return &MVCCIterator{i: iter, spans: spans, spansOnly: true}
+	return &MVCCIterator{i: iter, checker: NewSpanChecker(spans), spansOnly: true}
 }
 
 // NewIteratorAt constructs an iterator that verifies access of the underlying
 // iterator against the given SpanSet at the given timestamp.
 func NewIteratorAt(iter storage.MVCCIterator, spans *SpanSet, ts hlc.Timestamp) *MVCCIterator {
-	return &MVCCIterator{i: iter, spans: spans, ts: ts}
+	return &MVCCIterator{i: iter, checker: NewSpanChecker(spans), ts: ts}
 }
 
 // Close is part of the storage.MVCCIterator interface.
@@ -137,9 +137,9 @@ func (i *MVCCIterator) checkAllowed(span roachpb.Span, errIfDisallowed bool) {
 func (i *MVCCIterator) checkAllowedValidPos(span roachpb.Span, errIfDisallowed bool) {
 	var err error
 	if i.spansOnly {
-		err = i.spans.CheckAllowed(SpanReadOnly, span)
+		err = i.checker.CheckAllowed(SpanReadOnly, span)
 	} else {
-		err = i.spans.CheckAllowedAt(SpanReadOnly, span, i.ts)
+		err = i.checker.CheckAllowedAt(SpanReadOnly, span, i.ts)
 	}
 	if errIfDisallowed {
 		i.err = err
@@ -213,11 +213,11 @@ func (i *MVCCIterator) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (storage.MVCCKey, error) {
 	if i.spansOnly {
-		if err := i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
+		if err := i.checker.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
 			return storage.MVCCKey{}, err
 		}
 	} else {
-		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}, i.ts); err != nil {
+		if err := i.checker.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}, i.ts); err != nil {
 			return storage.MVCCKey{}, err
 		}
 	}
@@ -242,8 +242,9 @@ func (i *MVCCIterator) UnsafeLazyValue() pebble.LazyValue {
 // EngineIterator wraps a storage.EngineIterator and ensures that it can
 // only be used to access spans in a SpanSet.
 type EngineIterator struct {
-	i         storage.EngineIterator
-	spans     *SpanSet
+	i storage.EngineIterator
+	//spans     *SpanSet
+	checker   *SpanChecker
 	spansOnly bool
 	ts        hlc.Timestamp
 }
@@ -261,10 +262,10 @@ func (i *EngineIterator) SeekEngineKeyGE(key storage.EngineKey) (valid bool, err
 	}
 	if key.IsMVCCKey() && !i.spansOnly {
 		mvccKey, _ := key.ToMVCCKey()
-		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: mvccKey.Key}, i.ts); err != nil {
+		if err := i.checker.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: mvccKey.Key}, i.ts); err != nil {
 			return false, err
 		}
-	} else if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
+	} else if err = i.checker.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 		return false, err
 	}
 	return valid, err
@@ -278,10 +279,10 @@ func (i *EngineIterator) SeekEngineKeyLT(key storage.EngineKey) (valid bool, err
 	}
 	if key.IsMVCCKey() && !i.spansOnly {
 		mvccKey, _ := key.ToMVCCKey()
-		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: mvccKey.Key}, i.ts); err != nil {
+		if err := i.checker.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: mvccKey.Key}, i.ts); err != nil {
 			return false, err
 		}
-	} else if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{EndKey: key.Key}); err != nil {
+	} else if err = i.checker.CheckAllowed(SpanReadOnly, roachpb.Span{EndKey: key.Key}); err != nil {
 		return false, err
 	}
 	return valid, err
@@ -313,7 +314,7 @@ func (i *EngineIterator) SeekEngineKeyGEWithLimit(
 	if state != pebble.IterValid {
 		return state, err
 	}
-	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
+	if err = i.checker.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 		return pebble.IterExhausted, err
 	}
 	return state, err
@@ -327,7 +328,7 @@ func (i *EngineIterator) SeekEngineKeyLTWithLimit(
 	if state != pebble.IterValid {
 		return state, err
 	}
-	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{EndKey: key.Key}); err != nil {
+	if err = i.checker.CheckAllowed(SpanReadOnly, roachpb.Span{EndKey: key.Key}); err != nil {
 		return pebble.IterExhausted, err
 	}
 	return state, err
@@ -354,11 +355,11 @@ func (i *EngineIterator) checkKeyAllowed() (valid bool, err error) {
 	}
 	if key.IsMVCCKey() && !i.spansOnly {
 		mvccKey, _ := key.ToMVCCKey()
-		if err := i.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: mvccKey.Key}, i.ts); err != nil {
+		if err := i.checker.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: mvccKey.Key}, i.ts); err != nil {
 			// Invalid, but no error.
 			return false, nil // nolint:returnerrcheck
 		}
-	} else if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
+	} else if err = i.checker.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 		// Invalid, but no error.
 		return false, nil // nolint:returnerrcheck
 	}
@@ -431,8 +432,8 @@ func (i *EngineIterator) Stats() storage.IteratorStats {
 }
 
 type spanSetReader struct {
-	r     storage.Reader
-	spans *SpanSet
+	r       storage.Reader
+	checker *SpanChecker
 
 	spansOnly bool
 	ts        hlc.Timestamp
@@ -469,11 +470,11 @@ func (s spanSetReader) MVCCIterate(
 	f func(storage.MVCCKeyValue, storage.MVCCRangeKeyStack) error,
 ) error {
 	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
+		if err := s.checker.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}); err != nil {
 			return err
 		}
 	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}, s.ts); err != nil {
+		if err := s.checker.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: start, EndKey: end}, s.ts); err != nil {
 			return err
 		}
 	}
@@ -488,9 +489,9 @@ func (s spanSetReader) NewMVCCIterator(
 		return nil, err
 	}
 	if s.spansOnly {
-		return NewIterator(mvccIter, s.spans), nil
+		return NewIterator(mvccIter, s.checker.spans), nil
 	}
-	return NewIteratorAt(mvccIter, s.spans, s.ts), nil
+	return NewIteratorAt(mvccIter, s.checker.spans, s.ts), nil
 }
 
 func (s spanSetReader) NewEngineIterator(
@@ -501,8 +502,9 @@ func (s spanSetReader) NewEngineIterator(
 		return nil, err
 	}
 	return &EngineIterator{
-		i:         engineIter,
-		spans:     s.spans,
+		i: engineIter,
+		//spans:     s.checker.spans,
+		checker:   s.checker,
 		spansOnly: s.spansOnly,
 		ts:        s.ts,
 	}, nil
@@ -519,8 +521,8 @@ func (s spanSetReader) PinEngineStateForIterators(readCategory fs.ReadCategory) 
 }
 
 type spanSetWriter struct {
-	w     storage.Writer
-	spans *SpanSet
+	w       storage.Writer
+	checker *SpanChecker
 
 	spansOnly bool
 	ts        hlc.Timestamp
@@ -535,11 +537,11 @@ func (s spanSetWriter) ApplyBatchRepr(repr []byte, sync bool) error {
 
 func (s spanSetWriter) checkAllowed(key roachpb.Key) error {
 	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key}); err != nil {
+		if err := s.checker.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key}); err != nil {
 			return err
 		}
 	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: key}, s.ts); err != nil {
+		if err := s.checker.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: key}, s.ts); err != nil {
 			return err
 		}
 	}
@@ -561,7 +563,7 @@ func (s spanSetWriter) ClearUnversioned(key roachpb.Key, opts storage.ClearOptio
 }
 
 func (s spanSetWriter) ClearEngineKey(key storage.EngineKey, opts storage.ClearOptions) error {
-	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
+	if err := s.checker.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
 		return err
 	}
 	return s.w.ClearEngineKey(key, opts)
@@ -575,11 +577,11 @@ func (s spanSetWriter) SingleClearEngineKey(key storage.EngineKey) error {
 
 func (s spanSetWriter) checkAllowedRange(start, end roachpb.Key) error {
 	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start, EndKey: end}); err != nil {
+		if err := s.checker.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start, EndKey: end}); err != nil {
 			return err
 		}
 	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: start, EndKey: end}, s.ts); err != nil {
+		if err := s.checker.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: start, EndKey: end}, s.ts); err != nil {
 			return err
 		}
 	}
@@ -661,11 +663,11 @@ func (s spanSetWriter) ClearMVCCRangeKey(rangeKey storage.MVCCRangeKey) error {
 
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
 	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
+		if err := s.checker.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
 			return err
 		}
 	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: key.Key}, s.ts); err != nil {
+		if err := s.checker.CheckAllowedAt(SpanReadWrite, roachpb.Span{Key: key.Key}, s.ts); err != nil {
 			return err
 		}
 	}
@@ -697,7 +699,7 @@ func (s spanSetWriter) PutEngineKey(key storage.EngineKey, value []byte) error {
 	if !s.spansOnly {
 		panic("cannot do timestamp checking for putting EngineKey")
 	}
-	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
+	if err := s.checker.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
 		return err
 	}
 	return s.w.PutEngineKey(key, value)
@@ -731,17 +733,19 @@ var _ storage.ReadWriter = ReadWriter{}
 
 func makeSpanSetReadWriter(rw storage.ReadWriter, spans *SpanSet) ReadWriter {
 	spans = addLockTableSpans(spans)
+	checker := NewSpanChecker(spans)
 	return ReadWriter{
-		spanSetReader: spanSetReader{r: rw, spans: spans, spansOnly: true},
-		spanSetWriter: spanSetWriter{w: rw, spans: spans, spansOnly: true},
+		spanSetReader: spanSetReader{r: rw, checker: checker, spansOnly: true},
+		spanSetWriter: spanSetWriter{w: rw, checker: checker, spansOnly: true},
 	}
 }
 
 func makeSpanSetReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Timestamp) ReadWriter {
 	spans = addLockTableSpans(spans)
+	checker := NewSpanChecker(spans)
 	return ReadWriter{
-		spanSetReader: spanSetReader{r: rw, spans: spans, ts: ts},
-		spanSetWriter: spanSetWriter{w: rw, spans: spans, ts: ts},
+		spanSetReader: spanSetReader{r: rw, checker: checker, ts: ts},
+		spanSetWriter: spanSetWriter{w: rw, checker: checker, ts: ts},
 	}
 }
 
@@ -752,7 +756,7 @@ func makeSpanSetReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Times
 // NewReader clones and does not retain the provided span set.
 func NewReader(r storage.Reader, spans *SpanSet, ts hlc.Timestamp) storage.Reader {
 	spans = addLockTableSpans(spans)
-	return spanSetReader{r: r, spans: spans, ts: ts}
+	return spanSetReader{r: r, checker: NewSpanChecker(spans), ts: ts}
 }
 
 // NewReadWriterAt returns a storage.ReadWriter that asserts access of the

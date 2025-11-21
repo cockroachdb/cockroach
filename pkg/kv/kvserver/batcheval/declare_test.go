@@ -85,7 +85,8 @@ func TestRequestsSerializeWithAllKeys(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			if !allLatchSpans.Intersects(&otherLatchSpans) {
+			checker := spanset.NewSpanChecker(&allLatchSpans)
+			if !checker.Intersects(&otherLatchSpans) {
 				t.Errorf("%s does not serialize with declareAllKeys", method)
 			}
 		})

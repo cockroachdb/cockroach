@@ -208,7 +208,6 @@ func (s *SpanSet) Merge(s2 *SpanSet) {
 			s.spans[sa][ss] = append(s.spans[sa][ss], s2.spans[sa][ss]...)
 		}
 	}
-	s.allowUndeclared = s2.allowUndeclared
 	s.SortAndDedup()
 }
 
@@ -232,17 +231,76 @@ func (s *SpanSet) GetSpans(access SpanAccess, scope SpanScope) []Span {
 	return s.spans[access][scope]
 }
 
+// Validate returns an error if any spans that have been added to the set
+// are invalid.
+func (s *SpanSet) Validate() error {
+	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
+		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
+			for _, cur := range s.GetSpans(sa, ss) {
+				if len(cur.EndKey) > 0 && cur.Key.Compare(cur.EndKey) >= 0 {
+					return errors.Errorf("inverted span %s %s", cur.Key, cur.EndKey)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// DisableUndeclaredAccessAssertions disables the assertions that prevent
+// undeclared access to spans. This is generally set by requests that rely on
+// other forms of synchronization for correctness (e.g. GCRequest).
+func (s *SpanSet) DisableUndeclaredAccessAssertions() {
+	s.allowUndeclared = true
+}
+
+// contains returns whether s1 contains s2. Unlike Span.Contains, this function
+// supports spans with a nil start key and a non-nil end key (e.g. "[nil, c)").
+// In this form, s2.Key (inclusive) is considered to be the previous key to
+// s2.EndKey (exclusive).
+func contains(s1, s2 roachpb.Span) bool {
+	if s2.Key != nil {
+		// The common case.
+		return s1.Contains(s2)
+	}
+
+	// The following is equivalent to:
+	//   s1.Contains(roachpb.Span{Key: s2.EndKey.Prev()})
+
+	if s1.EndKey == nil {
+		return s1.Key.IsPrev(s2.EndKey)
+	}
+
+	return s1.Key.Compare(s2.EndKey) < 0 && s1.EndKey.Compare(s2.EndKey) >= 0
+}
+
+// SpanChecker wraps a SpanSet and provides verification methods for checking
+// whether access to spans is allowed. This separates the responsibility of
+// representing a set of spans (SpanSet) from verifying access to them
+// (SpanChecker).
+type SpanChecker struct {
+	spans *SpanSet
+}
+
+// NewSpanChecker creates a new SpanChecker that verifies access against the
+// given SpanSet.
+func NewSpanChecker(spans *SpanSet) *SpanChecker {
+	return &SpanChecker{
+		spans: spans,
+	}
+}
+
 // Intersects returns true iff the span set denoted by `other` has any
-// overlapping spans with `s`, and that those spans overlap in access type. Note
-// that timestamps associated with the spans in the spanset are not considered,
-// only the span boundaries are checked.
-func (s *SpanSet) Intersects(other *SpanSet) bool {
+// overlapping spans with the wrapped spanset, and that those spans overlap in
+// access type. Note that timestamps associated with the spans in the spanset
+// are not considered, only the span boundaries are checked.
+func (c *SpanChecker) Intersects(other *SpanSet) bool {
 	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
 		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
 			otherSpans := other.GetSpans(sa, ss)
 			for _, span := range otherSpans {
 				// If access is allowed, we must have an overlap.
-				if err := s.CheckAllowed(sa, span.Span); err == nil {
+				if err := c.CheckAllowed(sa, span.Span); err == nil {
 					return true
 				}
 			}
@@ -254,8 +312,8 @@ func (s *SpanSet) Intersects(other *SpanSet) bool {
 // AssertAllowed calls CheckAllowed and fatals if the access is not allowed.
 // Timestamps associated with the spans in the spanset are not considered,
 // only the span boundaries are checked.
-func (s *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
-	if err := s.CheckAllowed(access, span); err != nil {
+func (c *SpanChecker) AssertAllowed(access SpanAccess, span roachpb.Span) {
+	if err := c.CheckAllowed(access, span); err != nil {
 		log.KvExec.Fatalf(context.TODO(), "%v", err)
 	}
 }
@@ -275,19 +333,19 @@ func (s *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
 // fail at checking if read only access over the span [a-d) was requested. This
 // is also a problem if the added spans were read only and the spanset wasn't
 // already SortAndDedup-ed.
-func (s *SpanSet) CheckAllowed(access SpanAccess, span roachpb.Span) error {
-	return s.checkAllowed(access, span, func(_ SpanAccess, _ Span) bool {
+func (c *SpanChecker) CheckAllowed(access SpanAccess, span roachpb.Span) error {
+	return c.checkAllowed(access, span, func(_ SpanAccess, _ Span) bool {
 		return true
 	})
 }
 
 // CheckAllowedAt is like CheckAllowed, except it returns an error if the access
 // is not allowed over the given keyspan at the given timestamp.
-func (s *SpanSet) CheckAllowedAt(
+func (c *SpanChecker) CheckAllowedAt(
 	access SpanAccess, span roachpb.Span, timestamp hlc.Timestamp,
 ) error {
 	mvcc := !timestamp.IsEmpty()
-	return s.checkAllowed(access, span, func(declAccess SpanAccess, declSpan Span) bool {
+	return c.checkAllowed(access, span, func(declAccess SpanAccess, declSpan Span) bool {
 		declTimestamp := declSpan.Timestamp
 		if declTimestamp.IsEmpty() {
 			// When the span is declared as non-MVCC (i.e. with an empty
@@ -328,10 +386,10 @@ func (s *SpanSet) CheckAllowedAt(
 	})
 }
 
-func (s *SpanSet) checkAllowed(
+func (c *SpanChecker) checkAllowed(
 	access SpanAccess, span roachpb.Span, check func(SpanAccess, Span) bool,
 ) error {
-	if s.allowUndeclared {
+	if c.spans.allowUndeclared {
 		// If the request has specified that undeclared spans are allowed, do
 		// nothing.
 		return nil
@@ -344,55 +402,12 @@ func (s *SpanSet) checkAllowed(
 	}
 
 	for ac := access; ac < NumSpanAccess; ac++ {
-		for _, cur := range s.spans[ac][scope] {
+		for _, cur := range c.spans.spans[ac][scope] {
 			if contains(cur.Span, span) && check(ac, cur) {
 				return nil
 			}
 		}
 	}
 
-	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s\nstack:\n%s", access, span, s, debugutil.Stack())
-}
-
-// contains returns whether s1 contains s2. Unlike Span.Contains, this function
-// supports spans with a nil start key and a non-nil end key (e.g. "[nil, c)").
-// In this form, s2.Key (inclusive) is considered to be the previous key to
-// s2.EndKey (exclusive).
-func contains(s1, s2 roachpb.Span) bool {
-	if s2.Key != nil {
-		// The common case.
-		return s1.Contains(s2)
-	}
-
-	// The following is equivalent to:
-	//   s1.Contains(roachpb.Span{Key: s2.EndKey.Prev()})
-
-	if s1.EndKey == nil {
-		return s1.Key.IsPrev(s2.EndKey)
-	}
-
-	return s1.Key.Compare(s2.EndKey) < 0 && s1.EndKey.Compare(s2.EndKey) >= 0
-}
-
-// Validate returns an error if any spans that have been added to the set
-// are invalid.
-func (s *SpanSet) Validate() error {
-	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
-		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
-			for _, cur := range s.GetSpans(sa, ss) {
-				if len(cur.EndKey) > 0 && cur.Key.Compare(cur.EndKey) >= 0 {
-					return errors.Errorf("inverted span %s %s", cur.Key, cur.EndKey)
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-// DisableUndeclaredAccessAssertions disables the assertions that prevent
-// undeclared access to spans. This is generally set by requests that rely on
-// other forms of synchronization for correctness (e.g. GCRequest).
-func (s *SpanSet) DisableUndeclaredAccessAssertions() {
-	s.allowUndeclared = true
+	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s\nstack:\n%s", access, span, c.spans, debugutil.Stack())
 }

@@ -109,8 +109,8 @@ func NewReplicaEvalContext(
 	rec = newEvalContextImpl(ctx, r, requiresClosedTSOlderThanStorageSnap, ah)
 	if util.RaceEnabled {
 		return &SpanSetReplicaEvalContext{
-			i:  rec,
-			ss: *ss,
+			i:       rec,
+			checker: *spanset.NewSpanChecker(ss),
 		}
 	}
 	return rec

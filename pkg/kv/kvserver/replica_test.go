@@ -2722,6 +2722,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 		0,
 	)
 	require.NoError(t, err)
+	checker := spanset.NewSpanChecker(&spans)
 	for _, tc := range []struct {
 		access       spanset.SpanAccess
 		key          roachpb.Key
@@ -2732,7 +2733,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 		{spanset.SpanReadWrite, roachpb.Key("b"), false},
 		{spanset.SpanReadWrite, roachpb.Key("d"), true},
 	} {
-		err := spans.CheckAllowed(tc.access, roachpb.Span{Key: tc.key})
+		err := checker.CheckAllowed(tc.access, roachpb.Span{Key: tc.key})
 		if tc.expectAccess {
 			require.NoError(t, err)
 		} else {
@@ -5344,7 +5345,11 @@ func TestAbortSpanError(t *testing.T) {
 	}
 
 	ec := newEvalContextImpl(ctx, tc.repl, false /* requireClosedTS */, kvpb.AdmissionHeader{})
-	rec := &SpanSetReplicaEvalContext{ec, *allSpans()}
+	ss := allSpans()
+	rec := &SpanSetReplicaEvalContext{
+		i:       ec,
+		checker: *spanset.NewSpanChecker(ss),
+	}
 	pErr := checkIfTxnAborted(ctx, rec, tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*kvpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
