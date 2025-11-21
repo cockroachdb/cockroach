@@ -1123,11 +1123,16 @@ func (ac *analyzedConstraints) initialize(
 	}
 }
 
-// diversityOfTwoStoreSets computes the diversity score between two sets of
-// stores.
+// diversityOfTwoStoreSets performs a pairwise diversity score computation between
+// the two sets of localities and returns their sum as well as the number of samples.
 //
-// When sameStores is false, intersection between this and other is empty and no
-// de-duplication is needed. For example, given two sets of stores [1, 2, 3] and
+// To simplify the implementation, `this` and `other` must either be disjoint or
+// the same set. If they are the same set (sameStores is true), de-duplication
+// is performed (to avoid double counting). Otherwise, double-counting will
+// occur if there are elements present in both sets, so the sets should be
+// disjoint.
+//
+// For example, when sameStores is false, given two sets of stores [1, 2, 3] and
 // [4, 5, 6], diversity score is computed among all pairs (1, 4), (1, 5), (1,
 // 6), (2, 4), (2, 5), (2, 6), (3, 4), (3, 5), (3, 6).
 //
@@ -1154,10 +1159,16 @@ func diversityOfTwoStoreSets(
 }
 
 // diversityScore measures how geographically spread out replicas are across the
-// cluster. Higher scores indicate better fault tolerance because replicas are
-// placed further apart in the locality hierarchy. Returns voterDiversityScore
-// and replicaDiversityScore which are the average pairwise distance across all
-// voter-voter pairs and replica pairs respectively.
+// cluster for a range. Higher scores indicate better fault tolerance because
+// replicas are placed further apart in the locality hierarchy.
+//
+// Returns the average pairwise diversity score between all distinct voter-voter
+// pairs and all distinct replica-replica pairs, respectively.
+//
+// For example, for a range consisting of one voter and one non-voter only,
+// voterDiversityScore is zero (there are no distinct voter pairs), but the
+// replicaDiversityScore equals the diversity score between the voter and the
+// non-voter (there are no distinct non-voter pairs either).
 func diversityScore(
 	replicas [numReplicaKinds][]storeAndLocality,
 ) (voterDiversityScore, replicaDiversityScore float64) {
@@ -1777,20 +1788,38 @@ type localityTiers struct {
 	str string
 }
 
+// diversityScore returns a score comparing the two localities which ranges from
+// 1, meaning completely diverse, to 0 which means not diverse at all (that
+// their localities match). This function ignores the locality tier key names
+// and only considers differences in their values.
+//
+// All localities are sorted from most global to most local so any localities
+// after any differing values are irrelevant.
+//
+// While we recommend that all nodes have the same locality keys and same
+// total number of keys, there's nothing wrong with having different locality
+// keys as long as the immediately next keys are all the same for each value.
+// For example:
+// region:USA -> state:NY -> ...
+// region:USA -> state:WA -> ...
+// region:EUR -> country:UK -> ...
+// region:EUR -> country:France -> ...
+// is perfectly fine. This holds true at each level lower as well.
+//
+// There is also a need to consider the cases where the localities have
+// different lengths. For these cases, we pessimistically treat the missing keys
+// on one side as being identical.
 func (l localityTiers) diversityScore(other localityTiers) float64 {
-	length := len(l.tiers)
-	lengthOther := len(other.tiers)
-	if lengthOther < length {
-		length = lengthOther
-	}
-	for i := 0; i < length; i++ {
+	minLen := min(len(l.tiers), len(other.tiers))
+
+	for i := 0; i < minLen; i++ {
 		if l.tiers[i] != other.tiers[i] {
-			return float64(length-i) / float64(length)
+			return float64(minLen-i) / float64(minLen)
 		}
 	}
-	if length != lengthOther {
-		return roachpb.MaxDiversityScore / float64(length+1)
-	}
+
+	// The localities are the same up to the min length; pessimistically treat
+	// the missing keys on one side as being identical.
 	return 0
 }
 
