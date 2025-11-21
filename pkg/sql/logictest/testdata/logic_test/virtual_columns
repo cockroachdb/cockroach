@@ -1120,12 +1120,12 @@ subtest referencing_mutations
 statement ok
 CREATE TABLE t_ref (i INT PRIMARY KEY) WITH (schema_locked = false);
 
-onlyif config local-legacy-schema-changer local-mixed-25.3
+onlyif config local-legacy-schema-changer
 statement error pgcode 0A000 virtual computed column "k" referencing columns \("j"\) added in the current transaction
 ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42,
    ADD COLUMN k INT AS (i+j) VIRTUAL;
 
-onlyif config local-legacy-schema-changer local-mixed-25.3
+onlyif config local-legacy-schema-changer
 statement error pgcode 0A000 virtual computed column "l" referencing columns \("j", "k"\) added in the current transaction
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
     SET LOCAL autocommit_before_ddl = false;
@@ -1138,7 +1138,7 @@ statement ok
 ROLLBACK;
 
 # The declarative schema changer allows this.
-skipif config local-legacy-schema-changer local-mixed-25.3 local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.4
 statement ok
 ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42,
    ADD COLUMN k INT AS (i+j) VIRTUAL;
