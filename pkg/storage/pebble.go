@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/crlib/fifo"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -538,6 +539,24 @@ var (
 			1 /* min */, 80 /* max */)),
 		settings.IntInRange(1, 100),
 	)
+	valueSeparationLatencyTolerantMinimumSize = settings.RegisterIntSetting(
+		settings.SystemVisible,
+		"storage.value_separation.latency_tolerant_minimum_size",
+		"the minimum size of a value that will be separated into a blob file given the value is "+
+			"latency tolerant (in the range local keyspace)",
+		int64(metamorphic.ConstantWithTestRange("storage.value_separation.latency_tolerant_minimum_size",
+			32 /* 32 bytes (default) */, 25 /* 25 bytes (minimum) */, 512 /* 512 bytes (maximum) */)),
+		settings.IntWithMinimum(1),
+	)
+	valueSeparationMVCCGarbageMinimumSize = settings.RegisterIntSetting(
+		settings.SystemVisible,
+		"storage.value_separation.mvcc_history_minimum_size",
+		"the minimum size of a value that will be separated into a blob file given the value is "+
+			"likely not the latest version of a key",
+		int64(metamorphic.ConstantWithTestRange("storage.value_separation.mvcc_history_minimum_size",
+			32 /* 32 bytes (default) */, 25 /* 25 bytes (minimum) */, 512 /* 512 bytes (maximum) */)),
+		settings.IntWithMinimum(1),
+	)
 )
 
 // This setting controls deletion pacing. This helps prevent disk slowness
@@ -614,8 +633,7 @@ const DefaultMemtableSize = 64 << 20 // 64 MB
 
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
 
-// DefaultPebbleOptions returns the default pebble options.
-func DefaultPebbleOptions() *pebble.Options {
+func defaultPebbleOptions(sv *settings.Values) *pebble.Options {
 	opts := &pebble.Options{
 		Comparer:   &EngineComparer,
 		FS:         vfs.Default,
@@ -642,7 +660,7 @@ func DefaultPebbleOptions() *pebble.Options {
 	opts.FlushDelayRangeKey = 10 * time.Second
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
 
-	opts.Experimental.SpanPolicyFunc = spanPolicyFunc
+	opts.Experimental.SpanPolicyFunc = spanPolicyFuncFactory(sv)
 	opts.Experimental.UserKeyCategories = userKeyCategories
 
 	// Every 5 minutes, log iterators that have been open for more than 1 minute.
@@ -683,6 +701,20 @@ func DefaultPebbleOptions() *pebble.Options {
 	return opts
 }
 
+// DefaultPebbleOptions returns the default pebble options for general use
+// (e.g., SST writers, external iterators, tests). This does not use cluster
+// settings and should not be used when opening a production Pebble engine.
+func DefaultPebbleOptions() *pebble.Options {
+	return defaultPebbleOptions(nil /* sv */)
+}
+
+// DefaultPebbleOptionsForOpen returns the default pebble options for opening
+// a production Pebble engine. It uses cluster settings to configure value
+// storage policies.
+func DefaultPebbleOptionsForOpen(sv *settings.Values) *pebble.Options {
+	return defaultPebbleOptions(sv)
+}
+
 var (
 	spanPolicyLocalRangeIDEndKey = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd()})
 	spanPolicyLockTableStartKey  = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix})
@@ -690,45 +722,53 @@ var (
 	spanPolicyLocalEndKey        = EncodeMVCCKey(MVCCKey{Key: keys.LocalPrefix.PrefixEnd()})
 )
 
-// spanPolicyFunc is a pebble.SpanPolicyFunc that applies special policies for
+// spanPolicyFuncFactory returns a pebble.SpanPolicyFunc that applies special policies for
 // the CockroachDB keyspace.
-func spanPolicyFunc(startKey []byte) (policy pebble.SpanPolicy, endKey []byte, _ error) {
-	// There's no special policy for non-local keys.
-	if !bytes.HasPrefix(startKey, keys.LocalPrefix) {
-		return pebble.SpanPolicy{}, nil, nil
-	}
-	// Prefer fast compression for all local keys, since they shouldn't take up
-	// a significant part of the space.
-	policy.PreferFastCompression = true
-
-	// The first section of the local keyspace is the Range-ID keyspace. It
-	// extends from the beginning of the keyspace to the Range Local keys. The
-	// Range-ID keyspace includes the raft log, which is rarely read and
-	// receives ~half the writes.
-	if cockroachkvs.Compare(startKey, spanPolicyLocalRangeIDEndKey) < 0 {
-		if !bytes.HasPrefix(startKey, keys.LocalRangeIDPrefix) {
-			return pebble.SpanPolicy{}, nil, errors.AssertionFailedf("startKey %s is not a Range-ID key", startKey)
+func spanPolicyFuncFactory(sv *settings.Values) func([]byte) (pebble.SpanPolicy, []byte, error) {
+	return func(startKey []byte) (policy pebble.SpanPolicy, endKey []byte, _ error) {
+		// There's no special policy for non-local keys.
+		if !bytes.HasPrefix(startKey, keys.LocalPrefix) {
+			return pebble.SpanPolicy{}, nil, nil
 		}
-		policy.ValueStoragePolicy = pebble.ValueStorageLatencyTolerant
-		return policy, spanPolicyLocalRangeIDEndKey, nil
-	}
+		// Prefer fast compression for all local keys, since they shouldn't take up
+		// a significant part of the space.
+		policy.PreferFastCompression = true
 
-	// We also disable value separation for lock keys.
-	if cockroachkvs.Compare(startKey, spanPolicyLockTableEndKey) >= 0 {
-		// Not a lock key, so use default value separation within sstable (by
-		// suffix) and into blob files.
-		// NB: there won't actually be a suffix in these local keys.
-		return policy, spanPolicyLocalEndKey, nil
+		// The first section of the local keyspace is the Range-ID keyspace. It
+		// extends from the beginning of the keyspace to the Range Local keys. The
+		// Range-ID keyspace includes the raft log, which is rarely read and
+		// receives ~half the writes.
+		if cockroachkvs.Compare(startKey, spanPolicyLocalRangeIDEndKey) < 0 {
+			if !bytes.HasPrefix(startKey, keys.LocalRangeIDPrefix) {
+				return pebble.SpanPolicy{}, nil, errors.AssertionFailedf("startKey %s is not a Range-ID key", startKey)
+			}
+			if sv != nil {
+				policy.ValueStoragePolicy = pebble.ValueStoragePolicyAdjustment{
+					OverrideBlobSeparationMinimumSize: int(valueSeparationLatencyTolerantMinimumSize.Get(sv)),
+				}
+			} else {
+				policy.ValueStoragePolicy = pebble.ValueStorageLatencyTolerant
+			}
+			return policy, spanPolicyLocalRangeIDEndKey, nil
+		}
+
+		// We also disable value separation for lock keys.
+		if cockroachkvs.Compare(startKey, spanPolicyLockTableEndKey) >= 0 {
+			// Not a lock key, so use default value separation within sstable (by
+			// suffix) and into blob files.
+			// NB: there won't actually be a suffix in these local keys.
+			return policy, spanPolicyLocalEndKey, nil
+		}
+		if cockroachkvs.Compare(startKey, spanPolicyLockTableStartKey) < 0 {
+			// Not a lock key, so use default value separation within sstable (by
+			// suffix) and into blob files.
+			// NB: there won't actually be a suffix in these local keys.
+			return policy, spanPolicyLockTableStartKey, nil
+		}
+		// Lock key. Disable value separation.
+		policy.ValueStoragePolicy = pebble.ValueStorageLowReadLatency
+		return policy, spanPolicyLockTableEndKey, nil
 	}
-	if cockroachkvs.Compare(startKey, spanPolicyLockTableStartKey) < 0 {
-		// Not a lock key, so use default value separation within sstable (by
-		// suffix) and into blob files.
-		// NB: there won't actually be a suffix in these local keys.
-		return policy, spanPolicyLockTableStartKey, nil
-	}
-	// Lock key. Disable value separation.
-	policy.ValueStoragePolicy = pebble.ValueStorageLowReadLatency
-	return policy, spanPolicyLockTableEndKey, nil
 }
 
 func shortAttributeExtractorForValues(
@@ -803,10 +843,15 @@ type engineConfig struct {
 
 // Pebble is a wrapper around a Pebble database instance.
 type Pebble struct {
-	cfg         engineConfig
-	db          *pebble.DB
-	closed      atomic.Bool
-	auxDir      string
+	cfg           engineConfig
+	db            *pebble.DB
+	closed        atomic.Bool
+	auxDir        string
+	auxiliarySize struct {
+		mu         syncutil.Mutex
+		computedAt crtime.Mono
+		size       int64
+	}
 	ballastPath string
 	properties  roachpb.StoreProperties
 
@@ -1060,7 +1105,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		return pebble.ValueSeparationPolicy{
 			Enabled:                  true,
 			MinimumSize:              int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
-			MinimumMVCCGarbageSize:   32,
+			MinimumMVCCGarbageSize:   int(valueSeparationMVCCGarbageMinimumSize.Get(&cfg.settings.SV)),
 			MaxBlobReferenceDepth:    int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
 			RewriteMinimumAge:        valueSeparationRewriteMinimumAge.Get(&cfg.settings.SV),
 			GarbageRatioLowPriority:  lowPri,
@@ -1922,37 +1967,11 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	m := p.db.Metrics()
 	totalUsedBytes := int64(m.DiskSpaceUsage())
 
-	// We don't have incremental accounting of the disk space usage of files
-	// in the auxiliary directory. Walk the auxiliary directory and all its
-	// subdirectories, adding to the total used bytes.
-	if errOuter := filepath.Walk(p.auxDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			// This can happen if CockroachDB removes files out from under us -
-			// just keep going to get the best estimate we can.
-			if oserror.IsNotExist(err) {
-				return nil
-			}
-			// Special-case: if the store-dir is configured using the root of some fs,
-			// e.g. "/mnt/db", we might have special fs-created files like lost+found
-			// that we can't read, so just ignore them rather than crashing.
-			if oserror.IsPermission(err) && filepath.Base(path) == "lost+found" {
-				return nil
-			}
-			return err
-		}
-		if path == p.ballastPath {
-			// Skip the ballast. Counting it as used is likely to confuse
-			// users, and it's more akin to space that is just unavailable
-			// like disk space often restricted to a root user.
-			return nil
-		}
-		if info.Mode().IsRegular() {
-			totalUsedBytes += info.Size()
-		}
-		return nil
-	}); errOuter != nil {
-		return roachpb.StoreCapacity{}, errOuter
+	auxiliarySize, err := p.auxiliaryDirSize()
+	if err != nil {
+		return roachpb.StoreCapacity{}, err
 	}
+	totalUsedBytes += auxiliarySize
 
 	// If no size limitation have been placed on the store size or if the
 	// limitation is greater than what's available, just return the actual
@@ -1983,6 +2002,57 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 		Available: available,
 		Used:      totalUsedBytes,
 	}, nil
+}
+
+// auxiliaryDirSize computes the size of the auxiliary directory. There are
+// multiple Cockroach subsystems that write into the auxiliary directory, and
+// they don't incrementally account for their disk space usage. This function
+// walks the auxiliary directory and all its subdirectories, summing the file
+// sizes. This walk can be expensive, so we cache the result and only recompute
+// if it's over 1 minute stale.
+//
+// TODO(jackson): Eventually we should update the various subsystems writing
+// into the auxiliary directory to incrementally account for their disk space
+// usage.  See #96344.
+func (p *Pebble) auxiliaryDirSize() (int64, error) {
+	p.auxiliarySize.mu.Lock()
+	defer p.auxiliarySize.mu.Unlock()
+	if crtime.NowMono().Sub(p.auxiliarySize.computedAt) < time.Minute {
+		return p.auxiliarySize.size, nil
+	}
+
+	p.auxiliarySize.size = 0
+	err := filepath.Walk(p.auxDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			// This can happen if CockroachDB removes files out from under us -
+			// just keep going to get the best estimate we can.
+			if oserror.IsNotExist(err) {
+				return nil
+			}
+			// Special-case: if the store-dir is configured using the root of some fs,
+			// e.g. "/mnt/db", we might have special fs-created files like lost+found
+			// that we can't read, so just ignore them rather than erroring out.
+			if oserror.IsPermission(err) && filepath.Base(path) == "lost+found" {
+				return nil
+			}
+			return err
+		}
+		if path == p.ballastPath {
+			// Skip the ballast. Counting it as used is likely to confuse
+			// users, and it's more akin to space that is just unavailable
+			// like disk space often restricted to a root user.
+			return nil
+		}
+		if info.Mode().IsRegular() {
+			p.auxiliarySize.size += info.Size()
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	p.auxiliarySize.computedAt = crtime.NowMono()
+	return p.auxiliarySize.size, err
 }
 
 // Flush implements the Engine interface.

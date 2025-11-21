@@ -21,9 +21,9 @@ upsert descriptor #104
   ...
          width: 64
      - defaultExpr: nextval(105:::REGCLASS)
-  -    generatedAsIdentitySequenceOption: ' START WITH 2 INCREMENT 3'
+  -    generatedAsIdentitySequenceOption: ' START 2 INCREMENT 3'
   -    generatedAsIdentityType: GENERATED_ALWAYS
-  +    generatedAsIdentitySequenceOption: START WITH 2 INCREMENT 3
+  +    generatedAsIdentitySequenceOption: START 2 INCREMENT 3
   +    generatedAsIdentityType: GENERATED_BY_DEFAULT
        id: 2
        name: j
@@ -44,9 +44,9 @@ upsert descriptor #104
   ...
          width: 64
      - defaultExpr: nextval(105:::REGCLASS)
-  -    generatedAsIdentitySequenceOption: ' START WITH 2 INCREMENT 3'
+  -    generatedAsIdentitySequenceOption: ' START 2 INCREMENT 3'
   -    generatedAsIdentityType: GENERATED_ALWAYS
-  +    generatedAsIdentitySequenceOption: START WITH 2 INCREMENT 3
+  +    generatedAsIdentitySequenceOption: START 2 INCREMENT 3
   +    generatedAsIdentityType: GENERATED_BY_DEFAULT
        id: 2
        name: j
