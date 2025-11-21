@@ -32,13 +32,13 @@ func RenameTable(b BuildCtx, n *tree.RenameTable) {
 	}
 
 	// Validate the object type matches what was requested.
-	validateObjectType(elts, n.Name.ToTableName().ObjectName, n.IsSequence, n.IsView, n.IsMaterialized)
-
-	// Get the fully qualified object name.
-	objectName := getAlterTableQualifiedObjectName(n.Name, b)
+	currName := n.Name.ToTableName().ObjectName
+	validateObjectType(elts, currName, n.IsSequence, n.IsView, n.IsMaterialized)
 
 	// Get the descriptor ID for further processing.
-	targetDescriptorID, targetElement, _ := getAlterTableTargetElement(elts)
+	targetDescriptorID, targetElement, _ := getRelationElement(elts)
+	// Get the fully qualified object name.
+	objectName := tree.MakeTableNameFromPrefix(b.NamePrefix(targetElement), currName)
 
 	// Check for name-based dependencies that would prevent renaming.
 	checkNameBasedDependencies(b, targetDescriptorID, targetElement, objectName, "rename")
@@ -103,18 +103,6 @@ func RenameTable(b BuildCtx, n *tree.RenameTable) {
 	b.LogEventForExistingPayload(newNS, renameEvent)
 }
 
-func getAlterTableQualifiedObjectName(name *tree.UnresolvedObjectName, b BuildCtx) tree.TableName {
-	objectName := name.ToTableName()
-	dbElts, scElts := b.ResolveTargetObject(name, privilege.CREATE /* this should be 0 */)
-	_, _, scName := scpb.FindNamespace(scElts)
-	_, _, dbname := scpb.FindNamespace(dbElts)
-	objectName.SchemaName = tree.Name(scName.Name)
-	objectName.CatalogName = tree.Name(dbname.Name)
-	objectName.ExplicitCatalog = true
-	objectName.ExplicitSchema = true
-	return objectName
-}
-
 // validateTableRename performs validation checks before renaming a table.
 func validateTableRename(b BuildCtx, currentName tree.TableName, newName tree.TableName) {
 	// The legacy schema changer used to check the CREATE privilege on the
@@ -175,7 +163,7 @@ func checkTableNameConflicts(
 	}
 }
 
-func getAlterTableTargetElement(
+func getRelationElement(
 	elts ElementResultSet,
 ) (descID catid.DescID, element scpb.Element, isTemp bool) {
 	if tbl := elts.FilterTable().MustGetZeroOrOneElement(); tbl != nil {

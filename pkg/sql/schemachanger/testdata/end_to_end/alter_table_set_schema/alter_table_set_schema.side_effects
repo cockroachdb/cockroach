@@ -13,6 +13,15 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table.set_schema
+write *eventpb.SetSchema to event log:
+  descriptorName: defaultdb.public.t
+  descriptorType: table
+  newDescriptorName: defaultdb.sc.t
+  sql:
+    descriptorId: 104
+    statement: ALTER TABLE ‹t› SET SCHEMA ‹sc›
+    tag: ALTER TABLE
+    user: root
 ## StatementPhase stage 1 of 1 with 5 MutationType ops
 delete object namespace entry {100 101 t} -> 104
 add object namespace entry {100 105 t} -> 104

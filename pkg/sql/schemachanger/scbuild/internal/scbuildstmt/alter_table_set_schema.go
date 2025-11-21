@@ -29,17 +29,18 @@ func AlterTableSetSchema(b BuildCtx, n *tree.AlterTableSetSchema) {
 		return
 	}
 	// Validate the object type matches what was requested.
-	validateObjectType(elts, n.Name.ToTableName().ObjectName, n.IsSequence, n.IsView, n.IsMaterialized)
+	objName := n.Name.ToTableName().ObjectName
+	validateObjectType(elts, objName, n.IsSequence, n.IsView, n.IsMaterialized)
 
 	// get descId based on type to retrieve the namespace
-	descID, element, isTemp := getAlterTableTargetElement(elts)
+	descID, element, isTemp := getRelationElement(elts)
 	// Ensure that table is not temporary
 	if isTemp {
 		panic(pgerror.Newf(pgcode.FeatureNotSupported,
 			"cannot move objects into or out of temporary schemas"))
 	}
 	// Get the fully qualified object name.
-	currName := getAlterTableQualifiedObjectName(n.Name, b)
+	currName := tree.MakeTableNameFromPrefix(b.NamePrefix(element), objName)
 	newName := currName
 	newName.SchemaName = n.Schema
 	// Check for name-based dependencies

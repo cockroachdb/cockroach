@@ -4508,24 +4508,6 @@ RESET create_table_with_schema_locked
 
 subtest end
 
-subtest alter_table_set_schema
-
-statement ok
-CREATE TABLE non_public (c int);
-CREATE SCHEMA sc1;
-SELECT * FROM non_public;
-ALTER TABLE non_public SET SCHEMA sc1;
-
-statement error pgcode 42P01 relation "non_public" does not exist
-SELECT * FROM non_public
-
-statement ok
-SELECT * from sc1.non_public;
-DROP TABLE sc1.non_public;
-DROP SCHEMA sc1;
-
-subtest end
-
 subtest alter_primary_key_using_dropped_column
 
 statement ok
