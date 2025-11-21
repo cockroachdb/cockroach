@@ -6,13 +6,16 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	roachprodConfig "github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -48,6 +51,7 @@ Typical usage:
 	command.AddCommand(makeCleanCommand())
 	command.AddCommand(makeCompressCommand())
 	command.AddCommand(makeStageCommand())
+	command.AddCommand(makeListCommand())
 
 	return command
 }
@@ -241,6 +245,36 @@ func makeCompressCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(0),
 		RunE:  runCmdFunc,
 	}
+	return cmd
+}
+
+func makeListCommand() *cobra.Command {
+	repoDir := ""
+	runCmdFunc := func(cmd *cobra.Command, args []string) error {
+		pkgPath := filepath.Join(repoDir, "pkg")
+		info, statErr := os.Stat(pkgPath)
+		if statErr != nil {
+			return errors.Wrapf(statErr, "inavlid pkg path %q", pkgPath)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("pkg path is not a directory: %s", pkgPath)
+		}
+		benchmarkInfoList, err := listBenchmarks(pkgPath)
+		if err != nil {
+			return err
+		}
+		for _, benchmarkInfo := range benchmarkInfoList {
+			fmt.Printf("%s/%s [%s]\n", benchmarkInfo.Package, benchmarkInfo.Name, benchmarkInfo.Team)
+		}
+		return nil
+	}
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all microbenchmarks",
+		Args:  cobra.NoArgs,
+		RunE:  runCmdFunc,
+	}
+	cmd.Flags().StringVar(&repoDir, "repo-dir", repoDir, "path to the CockroachDB repository root directory")
 	return cmd
 }
 
