@@ -106,7 +106,6 @@ func declareKeysGC(
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
 	// Needed for updating optional GC hint.
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeGCHintKey(rs.GetRangeID())})
-	latchSpans.DisableUndeclaredAccessAssertions()
 	return nil
 }
 
@@ -138,6 +137,9 @@ func GC(
 ) (result.Result, error) {
 	args := cArgs.Args.(*kvpb.GCRequest)
 	h := cArgs.Header
+
+	// TODO(pav-kv): find out why and comment.
+	readWriter = spanset.DisableReadWriterAssertions(readWriter)
 
 	// We do not allow GC requests to bump the GC threshold at the same time that
 	// they GC individual keys. This is because performing both of these actions

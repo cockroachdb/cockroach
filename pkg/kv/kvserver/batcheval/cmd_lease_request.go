@@ -23,10 +23,10 @@ func init() {
 }
 
 func declareKeysRequestLease(
-	rs ImmutableRangeState,
+	_ ImmutableRangeState,
 	_ *kvpb.Header,
 	_ kvpb.Request,
-	latchSpans *spanset.SpanSet,
+	_ *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
 ) error {
@@ -34,7 +34,6 @@ func declareKeysRequestLease(
 	// acquiring latches would not help synchronize with other requests. As
 	// such, the request does not declare latches. See also
 	// concurrency.shouldIgnoreLatches().
-	latchSpans.DisableUndeclaredAccessAssertions()
 	return nil
 }
 
@@ -53,6 +52,9 @@ func RequestLease(
 	args := cArgs.Args.(*kvpb.RequestLeaseRequest)
 	prevLease := args.PrevLease
 	newLease := args.Lease
+
+	// RequestLease does not hold latches by design.
+	readWriter = spanset.DisableReadWriterAssertions(readWriter)
 
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.
