@@ -830,80 +830,65 @@ type storeMatchesConstraintInterface interface {
 	storeMatches(storeID roachpb.StoreID, constraintConj constraintsConj) bool
 }
 
-func (rac *rangeAnalyzedConstraints) finishInit(
-	spanConfig *normalizedSpanConfig,
-	constraintMatcher storeMatchesConstraintInterface,
-	leaseholder roachpb.StoreID,
+func (ac *analyzedConstraints) analyzeFunc(
+	buf *analyzeConstraintsBuf, constraintMatcher storeMatchesConstraintInterface,
 ) {
-	rac.spanConfig = spanConfig
-	rac.numNeededReplicas[voterIndex] = spanConfig.numVoters
-	rac.numNeededReplicas[nonVoterIndex] = spanConfig.numReplicas - spanConfig.numVoters
-	rac.replicas = rac.buf.replicas
-
-	analyzeFunc := func(ac *analyzedConstraints) {
-		if len(ac.constraints) == 0 {
-			// Nothing to do.
-			return
+	if len(ac.constraints) == 0 {
+		// Nothing to do.
+		return
+	}
+	for i := 0; i < len(ac.constraints); i++ {
+		ac.satisfiedByReplica[voterIndex] = extend2DSlice(ac.satisfiedByReplica[voterIndex])
+		ac.satisfiedByReplica[nonVoterIndex] = extend2DSlice(ac.satisfiedByReplica[nonVoterIndex])
+	}
+	// Compute the list of all constraints satisfied by each store.
+	for kind := voterIndex; kind < numReplicaKinds; kind++ {
+		for i, store := range buf.replicas[kind] {
+			buf.replicaConstraintIndices[kind] =
+				extend2DSlice(buf.replicaConstraintIndices[kind])
+			for j, c := range ac.constraints {
+				if len(c.constraints) == 0 || constraintMatcher.storeMatches(store.StoreID, c.constraints) {
+					buf.replicaConstraintIndices[kind][i] =
+						append(buf.replicaConstraintIndices[kind][i], int32(j))
+				}
+			}
+			n := len(buf.replicaConstraintIndices[kind][i])
+			if n == 0 {
+				ac.satisfiedNoConstraintReplica[kind] =
+					append(ac.satisfiedNoConstraintReplica[kind], store.StoreID)
+			} else if n == 1 {
+				// Satisfies exactly one constraint, so place it there.
+				constraintIndex := buf.replicaConstraintIndices[kind][i][0]
+				ac.satisfiedByReplica[kind][constraintIndex] =
+					append(ac.satisfiedByReplica[kind][constraintIndex], store.StoreID)
+				buf.replicaConstraintIndices[kind][i] = buf.replicaConstraintIndices[kind][i][:0]
+			}
+			// Else, satisfied multiple constraints. Don't choose yet.
 		}
-		for i := 0; i < len(ac.constraints); i++ {
-			ac.satisfiedByReplica[voterIndex] = extend2DSlice(ac.satisfiedByReplica[voterIndex])
-			ac.satisfiedByReplica[nonVoterIndex] = extend2DSlice(ac.satisfiedByReplica[nonVoterIndex])
+	}
+	// The only stores not yet in ac are the ones that satisfy multiple
+	// constraints. For each store, the constraint indices it satisfies are in
+	// increasing order. Satisfy constraints in order, while not
+	// oversatisfying.
+	for j := range ac.constraints {
+		doneFunc := func() bool {
+			return len(ac.satisfiedByReplica[voterIndex][j])+
+				len(ac.satisfiedByReplica[nonVoterIndex][j]) >= int(ac.constraints[j].numReplicas)
 		}
-		// Compute the list of all constraints satisfied by each store.
+		done := doneFunc()
+		if done {
+			continue
+		}
 		for kind := voterIndex; kind < numReplicaKinds; kind++ {
-			for i, store := range rac.buf.replicas[kind] {
-				rac.buf.replicaConstraintIndices[kind] =
-					extend2DSlice(rac.buf.replicaConstraintIndices[kind])
-				for j, c := range ac.constraints {
-					if len(c.constraints) == 0 || constraintMatcher.storeMatches(store.StoreID, c.constraints) {
-						rac.buf.replicaConstraintIndices[kind][i] =
-							append(rac.buf.replicaConstraintIndices[kind][i], int32(j))
-					}
-				}
-				n := len(rac.buf.replicaConstraintIndices[kind][i])
-				if n == 0 {
-					ac.satisfiedNoConstraintReplica[kind] =
-						append(ac.satisfiedNoConstraintReplica[kind], store.StoreID)
-				} else if n == 1 {
-					// Satisfies exactly one constraint, so place it there.
-					constraintIndex := rac.buf.replicaConstraintIndices[kind][i][0]
-					ac.satisfiedByReplica[kind][constraintIndex] =
-						append(ac.satisfiedByReplica[kind][constraintIndex], store.StoreID)
-					rac.buf.replicaConstraintIndices[kind][i] = rac.buf.replicaConstraintIndices[kind][i][:0]
-				}
-				// Else, satisfied multiple constraints. Don't choose yet.
-			}
-		}
-		// The only stores not yet in ac are the ones that satisfy multiple
-		// constraints. For each store, the constraint indices it satisfies are in
-		// increasing order. Satisfy constraints in order, while not
-		// oversatisfying.
-		for j := range ac.constraints {
-			doneFunc := func() bool {
-				return len(ac.satisfiedByReplica[voterIndex][j])+
-					len(ac.satisfiedByReplica[nonVoterIndex][j]) >= int(ac.constraints[j].numReplicas)
-			}
-			done := doneFunc()
-			if done {
-				continue
-			}
-			for kind := voterIndex; kind < numReplicaKinds; kind++ {
-				for i := range rac.buf.replicaConstraintIndices[kind] {
-					constraintIndices := rac.buf.replicaConstraintIndices[kind][i]
-					for _, index := range constraintIndices {
-						if index == int32(j) {
-							ac.satisfiedByReplica[kind][j] =
-								append(ac.satisfiedByReplica[kind][j], rac.replicas[kind][i].StoreID)
-							rac.buf.replicaConstraintIndices[kind][i] = constraintIndices[:0]
-							done = doneFunc()
-							// This store is finished.
-							break
-						}
-					}
-					// done can be true if some store was appended to
-					// ac.satisfiedByReplica[kind][j] and made it fully satisfied. Don't
-					// need to look at other stores for this constraint.
-					if done {
+			for i := range buf.replicaConstraintIndices[kind] {
+				constraintIndices := buf.replicaConstraintIndices[kind][i]
+				for _, index := range constraintIndices {
+					if index == int32(j) {
+						ac.satisfiedByReplica[kind][j] =
+							append(ac.satisfiedByReplica[kind][j], buf.replicas[kind][i].StoreID)
+						buf.replicaConstraintIndices[kind][i] = constraintIndices[:0]
+						done = doneFunc()
+						// This store is finished.
 						break
 					}
 				}
@@ -914,27 +899,45 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 					break
 				}
 			}
-		}
-		// Nothing over-satisfied. Go and greedily assign.
-		for kind := voterIndex; kind < numReplicaKinds; kind++ {
-			for i := range rac.buf.replicaConstraintIndices[kind] {
-				constraintIndices := rac.buf.replicaConstraintIndices[kind][i]
-				for _, index := range constraintIndices {
-					ac.satisfiedByReplica[kind][index] =
-						append(ac.satisfiedByReplica[kind][index], rac.replicas[kind][i].StoreID)
-					rac.buf.replicaConstraintIndices[kind][i] = constraintIndices[:0]
-					break
-				}
+			// done can be true if some store was appended to
+			// ac.satisfiedByReplica[kind][j] and made it fully satisfied. Don't
+			// need to look at other stores for this constraint.
+			if done {
+				break
 			}
 		}
 	}
+	// Nothing over-satisfied. Go and greedily assign.
+	for kind := voterIndex; kind < numReplicaKinds; kind++ {
+		for i := range buf.replicaConstraintIndices[kind] {
+			constraintIndices := buf.replicaConstraintIndices[kind][i]
+			for _, index := range constraintIndices {
+				ac.satisfiedByReplica[kind][index] =
+					append(ac.satisfiedByReplica[kind][index], buf.replicas[kind][i].StoreID)
+				buf.replicaConstraintIndices[kind][i] = constraintIndices[:0]
+				break
+			}
+		}
+	}
+}
+
+func (rac *rangeAnalyzedConstraints) finishInit(
+	spanConfig *normalizedSpanConfig,
+	constraintMatcher storeMatchesConstraintInterface,
+	leaseholder roachpb.StoreID,
+) {
+	rac.spanConfig = spanConfig
+	rac.numNeededReplicas[voterIndex] = spanConfig.numVoters
+	rac.numNeededReplicas[nonVoterIndex] = spanConfig.numReplicas - spanConfig.numVoters
+	rac.replicas = rac.buf.replicas
+
 	if spanConfig.constraints != nil {
 		rac.constraints.constraints = spanConfig.constraints
-		analyzeFunc(&rac.constraints)
+		rac.constraints.analyzeFunc(&rac.buf, constraintMatcher)
 	}
 	if spanConfig.voterConstraints != nil {
 		rac.voterConstraints.constraints = spanConfig.voterConstraints
-		analyzeFunc(&rac.voterConstraints)
+		rac.voterConstraints.analyzeFunc(&rac.buf, constraintMatcher)
 	}
 
 	rac.leaseholderID = leaseholder
