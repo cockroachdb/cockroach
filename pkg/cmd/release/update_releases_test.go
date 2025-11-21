@@ -11,7 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 func Test_processReleaseData(t *testing.T) {

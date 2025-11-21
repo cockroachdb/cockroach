@@ -12,9 +12,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
-	"gopkg.in/yaml.v2"
 )
 
 func TestNewPromClient(t *testing.T) {
@@ -134,7 +134,7 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 
 		// Unmarshal the yaml
 		var ccParams []*CCParams
-		err = yaml.UnmarshalStrict([]byte(instanceConfig.Config), &ccParams)
+		err = yamlutil.UnmarshalStrict([]byte(instanceConfig.Config), &ccParams)
 		require.NoError(t, err)
 
 		require.Len(t, ccParams, 2)

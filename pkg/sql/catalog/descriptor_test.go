@@ -13,9 +13,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
 )
 
 func TestFormatSafeDescriptorProperties(t *testing.T) {
@@ -57,7 +57,7 @@ func TestFormatSafeDescriptorProperties(t *testing.T) {
 			redacted := string(buf.RedactableString().Redact())
 			require.Equal(t, tc.exp, redacted)
 			var m map[string]interface{}
-			require.NoError(t, yaml.UnmarshalStrict([]byte("{"+redacted+"}"), &m))
+			require.NoError(t, yamlutil.UnmarshalStrict([]byte("{"+redacted+"}"), &m))
 		})
 	}
 }

@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/kylelemons/godebug/diff"
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v2"
+	yaml "go.yaml.in/yaml/v4"
 )
 
 // TestDataDriven exercises the methods of a catkv.CatalogReader in a

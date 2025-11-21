@@ -249,7 +249,6 @@ require (
 	golang.org/x/term v0.37.0
 	gonum.org/v1/gonum v0.15.1
 	google.golang.org/genproto/googleapis/api v0.0.0-20230530153820-e85fd2cbaebc
-	gopkg.in/yaml.v2 v2.4.0
 	honnef.co/go/tools v0.6.1
 )
 
@@ -467,6 +466,7 @@ require (
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto/googleapis/bytestream v0.0.0-20230530153820-e85fd2cbaebc // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230530153820-e85fd2cbaebc // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

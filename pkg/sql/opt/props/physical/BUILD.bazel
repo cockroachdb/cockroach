@@ -38,6 +38,6 @@ go_test(
         "//pkg/sql/opt/props",
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "@in_gopkg_yaml_v2//:yaml_v2",
+        "//pkg/util/yamlutil",
     ],
 )

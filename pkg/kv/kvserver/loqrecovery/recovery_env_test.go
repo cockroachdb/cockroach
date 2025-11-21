@@ -35,10 +35,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/strutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 /*
@@ -308,7 +309,7 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 
 	// Load yaml from data into local range info.
 	var replicaData []testReplicaInfo
-	err := yaml.UnmarshalStrict([]byte(d.Input), &replicaData)
+	err := yamlutil.UnmarshalStrict([]byte(d.Input), &replicaData)
 	if err != nil {
 		t.Fatalf("failed to unmarshal test replica data: %v", err)
 	}
@@ -514,7 +515,7 @@ func parsePrettyKey(t *testing.T, pretty string) roachpb.RKey {
 
 func (e *quorumRecoveryEnv) handleDescriptorData(t *testing.T, d datadriven.TestData) string {
 	var descriptors []testDescriptorData
-	err := yaml.UnmarshalStrict([]byte(d.Input), &descriptors)
+	err := yamlutil.UnmarshalStrict([]byte(d.Input), &descriptors)
 	if err != nil {
 		t.Fatalf("failed to unmarshal test range descriptor data: %v", err)
 	}

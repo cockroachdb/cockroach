@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v2"
+	yaml "go.yaml.in/yaml/v4"
 )
 
 func TestOutputBuilder(t *testing.T) {

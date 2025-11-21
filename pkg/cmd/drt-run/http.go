@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 type httpHandler struct {
