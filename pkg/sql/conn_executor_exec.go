@@ -3034,6 +3034,12 @@ func populateQueryLevelStats(
 			}
 		}
 		ih.queryLevelStatsWithErr.Stats.ClientTime = topLevelStats.clientTime
+		if cfg.TestingKnobs.DeterministicExplain {
+			// We only show AdmissionWaitTime when it's non-zero, yet its value
+			// is non-deterministic, so if we need deterministic EXPLAIN, then
+			// we need to zero it out.
+			ih.queryLevelStatsWithErr.Stats.AdmissionWaitTime = 0
+		}
 	}
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
 		ih.traceMetadata.annotateExplain(
