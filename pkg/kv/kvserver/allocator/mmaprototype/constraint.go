@@ -999,6 +999,75 @@ func (ac *analyzedConstraints) analyzeFunc(
 	}
 }
 
+// diversityFunc computes the diversity score between two sets of stores.
+//
+// When sameStores is false, intersection between this and other is empty and no
+// de-duplication is needed. For example, given two sets of stores [1, 2, 3] and
+// [4, 5, 6], diversity score is computed among all pairs (1, 4), (1, 5), (1,
+// 6), (2, 4), (2, 5), (2, 6), (3, 4), (3, 5), (3, 6).
+//
+// When sameStores is true, this and other are the same set and de-duplication
+// is needed. For example, given two sets of stores [1, 2, 3] and [1, 2, 3],
+// diversity score should be computed among pairs (1, 2), (1, 3), (2, 3) only.
+func diversityFunc(
+	this []storeAndLocality, other []storeAndLocality, sameStores bool,
+) (sumScore float64, numSamples int) {
+	for i := range this {
+		s1 := this[i]
+		for j := range other {
+			s2 := other[j]
+			// Only compare pairs of replicas where s2.StoreID > s1.StoreID to avoid
+			// computing the diversity score between each pair of stores twice.
+			if sameStores && s2.StoreID <= s1.StoreID {
+				continue
+			}
+			sumScore += s1.localityTiers.diversityScore(s2.localityTiers)
+			numSamples++
+		}
+	}
+	return sumScore, numSamples
+}
+
+// diversityScore returns the voter and replica diversity scores of the given replicas sets.
+//
+// voterDiversityScore: sum of diversity scores over all pairs from V×V(voter-voter pairs).
+// replicaDiversityScore: sum of diversity scores over all pairs from:
+// V×V(voter–voter pairs), N×N(non-voter–non-voter pairs), V×N(voter–non-voter
+// pairs).
+//
+// diversity score of a single pair is computed using
+// localityTiers.diversityScore which finds the longest common prefix of two
+// localities.
+func diversityScore(
+	replicas [numReplicaKinds][]storeAndLocality,
+) (voterDiversityScore, replicaDiversityScore float64) {
+	// Helper to calculate average, or a max-value if no samples (represents lowest possible diversity)
+	scoreFromSumAndSamples := func(sumScore float64, numSamples int) float64 {
+		if numSamples == 0 {
+			return roachpb.MaxDiversityScore
+		}
+		return sumScore / float64(numSamples)
+	}
+
+	// Calculate voter diversity (V × V, no self-pairs)
+	voterSum, voterSamples := diversityFunc(replicas[voterIndex], replicas[voterIndex], true)
+	// Calculate replica diversity over all pairs:
+	// (voter, voter), (nonvoter, nonvoter), (voter, nonvoter)
+	totalSum, totalSamples := 0.0, 0
+	vs, ns := diversityFunc(replicas[voterIndex], replicas[voterIndex], true)
+	totalSum += vs
+	totalSamples += ns
+
+	vs, ns = diversityFunc(replicas[nonVoterIndex], replicas[nonVoterIndex], true)
+	totalSum += vs
+	totalSamples += ns
+
+	vs, ns = diversityFunc(replicas[voterIndex], replicas[nonVoterIndex], false)
+	totalSum += vs
+	totalSamples += ns
+	return scoreFromSumAndSamples(voterSum, voterSamples), scoreFromSumAndSamples(totalSum, totalSamples)
+}
+
 // finishInit analyzes the span config and the range’s current replica set. It
 // prepares the MMA to compute lease-transfer and rebalancing candidates while
 // satisfying both constraint requirements and leaseholder preferences.
@@ -1058,42 +1127,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 	rac.replicaLocalityTiers = makeReplicasLocalityTiers(replicaLocalityTiers)
 	rac.voterLocalityTiers = makeReplicasLocalityTiers(voterLocalityTiers)
 
-	diversityFunc := func(
-		stores1 []storeAndLocality, stores2 []storeAndLocality, sameStores bool,
-	) (sumScore float64, numSamples int) {
-		for i := range stores1 {
-			s1 := stores1[i]
-			for j := range stores2 {
-				s2 := stores2[j]
-				// Only compare pairs of replicas where s2.StoreID > s1.StoreID to avoid
-				// computing the diversity score between each pair of stores twice.
-				if sameStores && s2.StoreID <= s1.StoreID {
-					continue
-				}
-				sumScore += s1.localityTiers.diversityScore(s2.localityTiers)
-				numSamples++
-			}
-		}
-		return sumScore, numSamples
-	}
-	scoreFromSumAndSamples := func(sumScore float64, numSamples int) float64 {
-		if numSamples == 0 {
-			return roachpb.MaxDiversityScore
-		}
-		return sumScore / float64(numSamples)
-	}
-	sumVoterScore, numVoterSamples := diversityFunc(
-		rac.replicas[voterIndex], rac.replicas[voterIndex], true)
-	rac.votersDiversityScore = scoreFromSumAndSamples(sumVoterScore, numVoterSamples)
-
-	sumReplicaScore, numReplicaSamples := sumVoterScore, numVoterSamples
-	srs, nrs := diversityFunc(rac.replicas[nonVoterIndex], rac.replicas[nonVoterIndex], true)
-	sumReplicaScore += srs
-	numReplicaSamples += nrs
-	srs, nrs = diversityFunc(rac.replicas[voterIndex], rac.replicas[nonVoterIndex], false)
-	sumReplicaScore += srs
-	numReplicaSamples += nrs
-	rac.replicasDiversityScore = scoreFromSumAndSamples(sumReplicaScore, numReplicaSamples)
+	rac.votersDiversityScore, rac.replicasDiversityScore = diversityScore(rac.replicas)
 }
 
 // Disjunction of conjunctions.
