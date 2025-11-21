@@ -690,7 +690,19 @@ type analyzedConstraints struct {
 	// we omit considering it for a later conjunction. That is, we satisfy in a
 	// greedy manner instead of considering all possibilities. So all the
 	// satisfiedBy slices represent sets that are non-intersecting.
-
+	//
+	// satisfiedByReplica[kind][i] contains the set of storeIDs that satisfy
+	// constraints[i]. Populated by analyzeFunc and used later by mmma to
+	// determine candidates to satisfy constraints such as
+	// candidatesToReplaceVoterForRebalance.
+	// For example, satisfiedByReplica[voterIndex][0] = [1, 2, 3], means that
+	// the first constraint (constraints[0]) is satisfied by storeIDs 1, 2, and
+	// 3.
+	//
+	// NB: this does not mean the current replica set satisfies constraints[i]
+	// since we may populate satisfiedByReplica[nonVoterIndex][i] for voter
+	// constraints as well. This just means that the store can satisfy
+	// constraints[i] regardless of the replica type.
 	satisfiedByReplica [numReplicaKinds][][]roachpb.StoreID
 
 	// These are stores that satisfy no constraint. Even though we are strict
@@ -838,6 +850,68 @@ func (ac *analyzedConstraints) isConstraintSatisfied(constraintIndex int) bool {
 		len(ac.satisfiedByReplica[nonVoterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
 }
 
+// analyzeFunc analyzes the current replica set and determines which constraints
+// replicas satisfy, populating ac.satisfiedByReplica and
+// ac.satisfiedNoConstraintReplica (both empty at the beginning). They are later
+// used by mma to compute lease-transfer and rebalancing candidates by functions
+// like candidatesToReplaceVoterForRebalance. The given buf.replicas is already
+// populated with the current replica set from buf.tryAddingStore.
+//
+// For stores that satisfy no constraint,
+// ac.satisfiedNoConstraintReplica[kind][i] will be populated with the replica
+// storeIDs that satisfy no constraint.
+//
+// For stores that satisfy at least one constraint,
+// ac.satisfiedByReplica[kind][i] is filled with the storeIDs of replicas that
+// satisfy ac.constraints[i]. Each store should appear exactly once in the 2D
+// slice ac.satisfiedByReplica[kind].  Phase 2 below attempts to be optimal by
+// prioritizing under-satisfied constraints and assigning stores to those first.
+// A constraint may end up being over-satisfied
+// (len(ac.satisfiedByReplica[kind][i]) > ac.constraints[i].numReplicas) in
+// phase 3. A constraint may remain under-satisfied. If a store is
+// under-satisfied in phase 2, it cannot be corrected in phase 3 and will
+// continue to be under-satisfied. (TODO: Is this right during review)
+//
+// NB: the given ac.constraints can represent either replica or voter
+// constraints, but we still populate both voter and non-voter indices
+// regardless because we need to know which constraints are satisfied by all
+// replicas to determine when promotions or demotions should occur.
+//
+// It has three phases: 1. For each replica (voter and non-voter), determine
+// which constraint indices in ac.constraints its store satisfies. We record
+// these matches in buf.replicaConstraintIndices by iterating over all replicas,
+// all constraint conjunctions, and checking store satisfaction for each using
+// constraintMatcher.storeMatches.
+//
+// buf.replicaConstraintIndices[kind][i] will be populated with the constraint
+// indices that the i+1-th voter/non-voter satisfies. This serves as a scratch
+// space. Note that as we assign constraint to stores that satisfy it, we will
+// be clearing the constraint indices for that store in
+// buf.replicaConstraintIndices[kind][i] to indicate that we cannot reuse the
+// store to satisfy a different constraint.
+//
+// During this phase, it also populates ac.satisfiedByReplica[kind][i] for
+// stores that satisfy exactly one constraint and populates
+// ac.satisfiedNoConstraintReplica[kind][i] for stores that satisfy no
+// constraint. Since we will be assigning at least one constraint to each store,
+// these stores are unambiguous.
+//
+// 2. For each constraint, iterate over all replicas that satisfy it and assign
+// replicas to the constraint in a round-robin manner, skipping once the
+// constraint is satisfied. This phase does not allow over-satisfaction.
+// TODO(wenyihu6): Add an example for phase 2 - if s1 satisfies c1(num=1) and s2
+// satisfies both c1(num=1) and c2(num=1), we should prefer assigning s2 to c2
+// rather than consuming it again for c1. TODO(wenyihu6): Verify behavior in
+// cases like: s1 satisfies c1(num=1) and c2(num=1), s2 satisfies only c1, and
+// s1 is used for c1 and c2 cannot be satisfied although we could have.
+//
+// 3. For any remaining stores that satisfy multiple constraints, assign each to
+// the first constraint it satisfies. This phase allows over-satisfaction, and
+// some constraints may still end up under- or over-filled.
+
+// TODO(wenyihu6): document the lifecycle of scratch space
+// replicaConstraintIndices once understood. TODO(wenyihu6): add more tests +
+// examples here
 func (ac *analyzedConstraints) analyzeFunc(
 	buf *analyzeConstraintsBuf, constraintMatcher storeMatchesConstraintInterface,
 ) {
@@ -928,6 +1002,9 @@ func (ac *analyzedConstraints) analyzeFunc(
 	}
 }
 
+// finishInit analyzes the span config and the range’s current replica set. It
+// prepares the MMA to compute lease-transfer and rebalancing candidates while
+// satisfying both constraint requirements and leaseholder preferences.
 func (rac *rangeAnalyzedConstraints) finishInit(
 	spanConfig *normalizedSpanConfig,
 	constraintMatcher storeMatchesConstraintInterface,
@@ -1359,8 +1436,17 @@ func isNonVoter(typ roachpb.ReplicaType) bool {
 type analyzeConstraintsBuf struct {
 	replicas [numReplicaKinds][]storeAndLocality
 
-	// Scratch space. replicaConstraintIndices[k][i] is the constraint matching
-	// state for replicas[k][i].
+	// Scratch space. buf.replicaConstraintIndices[kind][i] contains the
+	// constraints indices that the buf.replicas[kind][i] replica satisfies.
+	//
+	// For example, buf.replicaConstraintIndices[voterIndex][0] = [0, 1, 2],
+	// means that the first voter replica (buf.replicas[voterIndex][0])
+	// satisfies the 0th, 1st, and 2nd constraint conjunction in ac.constraints.
+	//
+	// NB: given ac.constraints can represent both replica and voter
+	// constraints. We still populate both voter and non-voter indexes because
+	// we need to know which constraints are satisfied by all replicas to
+	// determine when promotions or demotions should occur.
 	replicaConstraintIndices [numReplicaKinds][][]int32
 }
 
