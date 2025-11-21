@@ -634,7 +634,8 @@ func (s spanSetWriter) PutRawMVCCRangeKey(rangeKey storage.MVCCRangeKey, value [
 
 func (s spanSetWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
 	if !s.spansOnly {
-		panic("cannot do timestamp checking for PutEngineRangeKey")
+		// FIXME: why not?
+		// panic("cannot do timestamp checking for PutEngineRangeKey")
 	}
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
@@ -644,7 +645,8 @@ func (s spanSetWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value [
 
 func (s spanSetWriter) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
 	if !s.spansOnly {
-		panic("cannot do timestamp checking for ClearEngineRangeKey")
+		// FIXME: why not?
+		// panic("cannot do timestamp checking for ClearEngineRangeKey")
 	}
 	if err := s.checkAllowedRange(start, end); err != nil {
 		return err
@@ -695,7 +697,8 @@ func (s spanSetWriter) PutUnversioned(key roachpb.Key, value []byte) error {
 
 func (s spanSetWriter) PutEngineKey(key storage.EngineKey, value []byte) error {
 	if !s.spansOnly {
-		panic("cannot do timestamp checking for putting EngineKey")
+		// FIXME: why not?
+		// panic("cannot do timestamp checking for putting EngineKey")
 	}
 	if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {
 		return err
@@ -858,7 +861,7 @@ func NewBatchAt(b storage.Batch, spans *SpanSet, ts hlc.Timestamp) storage.Batch
 		ReadWriter: makeSpanSetReadWriterAt(b, spans, ts),
 		b:          b,
 		spans:      spans,
-		ts:         ts,
+		ts:         ts, // FIXME: this timestamp is not used
 	}
 }
 

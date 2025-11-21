@@ -85,6 +85,7 @@ type Span struct {
 type SpanSet struct {
 	spans           [NumSpanAccess][NumSpanScope][]Span
 	allowUndeclared bool
+	Panic           bool
 }
 
 var spanSetPool = sync.Pool{
@@ -114,6 +115,7 @@ func (s *SpanSet) Release() {
 		}
 	}
 	s.allowUndeclared = false
+	s.Panic = false
 	spanSetPool.Put(s)
 }
 
@@ -156,6 +158,7 @@ func (s *SpanSet) Copy() *SpanSet {
 		}
 	}
 	n.allowUndeclared = s.allowUndeclared
+	n.Panic = s.Panic
 	return n
 }
 
@@ -209,6 +212,7 @@ func (s *SpanSet) Merge(s2 *SpanSet) {
 		}
 	}
 	s.allowUndeclared = s2.allowUndeclared
+	s.Panic = s2.Panic
 	s.SortAndDedup()
 }
 
@@ -300,6 +304,22 @@ func (s *SpanSet) CheckAllowedAt(
 		case SpanReadOnly:
 			switch access {
 			case SpanReadOnly:
+				if s.Panic {
+					// Was here, good.
+					/*
+					 *   | github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset.(*MVCCIterator).checkAllowed
+					 *   |   pkg/kv/kvserver/spanset/batch.go:134
+					 *   | github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset.(*MVCCIterator).SeekGE
+					 *   |   pkg/kv/kvserver/spanset/batch.go:80
+					 *   | github.com/cockroachdb/cockroach/pkg/storage.MVCCDeleteRangeUsingTombstone
+					 *   |   pkg/storage/mvcc.go:4226
+					 *   | github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval.deleteRangeUsingTombstone
+					 *   |   pkg/kv/kvserver/batcheval/cmd_delete_range.go:181
+					 *   | github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval.DeleteRange
+					 *   |   pkg/kv/kvserver/batcheval/cmd_delete_range.go:123
+					 */
+					// panic("was here")
+				}
 				// Read spans acquired at a specific timestamp only allow reads
 				// at that timestamp and below. Non-MVCC access is not allowed.
 				return mvcc && timestamp.LessEq(declTimestamp)
@@ -312,10 +332,44 @@ func (s *SpanSet) CheckAllowedAt(
 		case SpanReadWrite:
 			switch access {
 			case SpanReadOnly:
+				if s.Panic {
+					// And here too, good.
+					/*
+					 *   | github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset.(*MVCCIterator).checkAllowed
+					 *   |   pkg/kv/kvserver/spanset/batch.go:134
+					 *   | github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset.(*MVCCIterator).SeekGE
+					 *   |   pkg/kv/kvserver/spanset/batch.go:80
+					 *   | github.com/cockroachdb/cockroach/pkg/storage.mvccGetMetadata
+					 *   |   pkg/storage/mvcc.go:1686
+					 *   | github.com/cockroachdb/cockroach/pkg/storage.mvccPutInternal
+					 *   |   pkg/storage/mvcc.go:2310
+					 *   | github.com/cockroachdb/cockroach/pkg/storage.MVCCDelete
+					 *   |   pkg/storage/mvcc.go:2036
+					 *   | github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval.Delete
+					 *   |   pkg/kv/kvserver/batcheval/cmd_delete.go:51
+					 */
+					// panic("and here too")
+				}
 				// Write spans acquired at a specific timestamp allow reads at
 				// any timestamp. Non-MVCC access is not allowed.
 				return mvcc
 			case SpanReadWrite:
+				if s.Panic {
+					// And here, good.
+					/*
+					 *   | github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset.spanSetWriter.checkAllowed
+					 *   |   pkg/kv/kvserver/spanset/batch.go:542
+					 *   | github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset.spanSetWriter.PutMVCC
+					 *   |   pkg/kv/kvserver/spanset/batch.go:678
+					 *   | github.com/cockroachdb/cockroach/pkg/storage.mvccPutInternal
+					 *   |   pkg/storage/mvcc.go:2782
+					 *   | github.com/cockroachdb/cockroach/pkg/storage.MVCCDelete
+					 *   |   pkg/storage/mvcc.go:2036
+					 *   | github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval.Delete
+					 *   |   pkg/kv/kvserver/batcheval/cmd_delete.go:51
+					 */
+					// panic("and here")
+				}
 				// Write spans acquired at a specific timestamp allow writes at
 				// that timestamp of above. Non-MVCC access is not allowed.
 				return mvcc && declTimestamp.LessEq(timestamp)
