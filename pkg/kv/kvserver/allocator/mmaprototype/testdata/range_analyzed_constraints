@@ -253,7 +253,7 @@ voter-constraints:
     non-voters: 5 6 8
 leaseholder pref-index s10:1
 lease pref-indices: s2:0 s3:0 s9:none s10:1
-diversity: voter 0.833333, all 0.857143
+diversity: voter 0.833333, all 0.873016
 
 # There are too many voters (4/3) and non-voters (3/2). +region=d,+zone=d2d is
 # oversatisfied (2/1) by s5 and s8, s6 satisfies no non-voter constraints.

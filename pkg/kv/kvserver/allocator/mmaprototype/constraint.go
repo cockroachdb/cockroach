@@ -1629,20 +1629,39 @@ type localityTiers struct {
 	str string
 }
 
+// diversityScore returns a score comparing the two localities which ranges from
+// 1, meaning completely diverse, to 0 which means not diverse at all (that
+// their localities match). This function ignores the locality tier key names
+// and only considers differences in their values.
+//
+// All localities are sorted from most global to most local so any localities
+// after any differing values are irrelevant.
+//
+// While we recommend that all nodes have the same locality keys and same
+// total number of keys, there's nothing wrong with having different locality
+// keys as long as the immediately next keys are all the same for each value.
+// For example:
+// region:USA -> state:NY -> ...
+// region:USA -> state:WA -> ...
+// region:EUR -> country:UK -> ...
+// region:EUR -> country:France -> ...
+// is perfectly fine. This holds true at each level lower as well.
+//
+// There is also a need to consider the cases where the localities have
+// different lengths. For these cases, we pessimistically treat the missing keys
+// on one side as being identical.
 func (l localityTiers) diversityScore(other localityTiers) float64 {
-	length := len(l.tiers)
-	lengthOther := len(other.tiers)
-	if lengthOther < length {
-		length = lengthOther
-	}
-	for i := 0; i < length; i++ {
+	minLen := min(len(l.tiers), len(other.tiers))
+	maxLen := max(len(l.tiers), len(other.tiers))
+
+	for i := 0; i < minLen; i++ {
 		if l.tiers[i] != other.tiers[i] {
-			return float64(length-i) / float64(length)
+			return float64(maxLen-i) / float64(maxLen)
 		}
 	}
-	if length != lengthOther {
-		return roachpb.MaxDiversityScore / float64(length+1)
-	}
+
+	// The localities are the same up to the min length; pessimistically treat
+	// the missing keys on one side as being identical.
 	return 0
 }
 
