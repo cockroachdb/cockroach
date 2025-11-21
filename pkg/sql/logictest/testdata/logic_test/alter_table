@@ -5272,7 +5272,6 @@ CREATE TABLE tbl_with_unique_without_index (i INT DEFAULT 11, j INT);
 statement ok
 ALTER TABLE tbl_with_unique_without_index ADD CONSTRAINT c UNIQUE WITHOUT INDEX (i, j) WHERE i IS NOT NULL;
 
-skipif config local-mixed-25.3
 skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE tbl_with_unique_without_index DROP CONSTRAINT c, DROP COLUMN i;

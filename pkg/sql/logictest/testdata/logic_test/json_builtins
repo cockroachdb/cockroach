@@ -220,7 +220,6 @@ SELECT to_json(('$'::JSONPATH, '$.foo'::JSONPATH))
 ----
 {"f1": "$", "f2": "$.\"foo\""}
 
-skipif config local-mixed-25.3
 query T
 SELECT to_json(('foo'::LTREE, 'bar'::LTREE))
 ----
@@ -629,7 +628,6 @@ SELECT json_build_object('$'::JSONPATH, 1)
 ----
 {"$": 1}
 
-skipif config local-mixed-25.3
 query T
 SELECT json_build_object('foo'::LTREE, 2)
 ----
