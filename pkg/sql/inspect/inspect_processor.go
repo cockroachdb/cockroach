@@ -452,6 +452,7 @@ func buildInspectCheckFactories(
 	for _, specCheck := range spec.InspectDetails.Checks {
 		tableID := specCheck.TableID
 		indexID := specCheck.IndexID
+		tableVersion := specCheck.TableVersion
 		switch specCheck.Type {
 		case jobspb.InspectCheckIndexConsistency:
 			checkFactories = append(checkFactories, func(asOf hlc.Timestamp) inspectCheck {
@@ -459,9 +460,10 @@ func buildInspectCheckFactories(
 					indexConsistencyCheckApplicability: indexConsistencyCheckApplicability{
 						tableID: tableID,
 					},
-					flowCtx: flowCtx,
-					indexID: indexID,
-					asOf:    asOf,
+					flowCtx:      flowCtx,
+					indexID:      indexID,
+					tableVersion: tableVersion,
+					asOf:         asOf,
 				}
 			})
 

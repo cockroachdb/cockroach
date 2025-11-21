@@ -148,7 +148,12 @@ func ChecksForTable(
 			}
 			continue
 		}
-		check := jobspb.InspectDetails_Check{Type: jobspb.InspectCheckIndexConsistency, TableID: table.GetID(), IndexID: index.GetID()}
+		check := jobspb.InspectDetails_Check{
+			Type:         jobspb.InspectCheckIndexConsistency,
+			TableID:      table.GetID(),
+			IndexID:      index.GetID(),
+			TableVersion: table.GetVersion(),
+		}
 		checks = append(checks, &check)
 	}
 
@@ -184,7 +189,12 @@ func checksByIndexNames(
 			return nil, pgerror.Newf(pgcode.InvalidName, "index %q on table %q is not supported for index consistency checking", index.GetName(), table.GetName())
 		}
 
-		checks = append(checks, &jobspb.InspectDetails_Check{Type: jobspb.InspectCheckIndexConsistency, TableID: table.GetID(), IndexID: index.GetID()})
+		checks = append(checks, &jobspb.InspectDetails_Check{
+			Type:         jobspb.InspectCheckIndexConsistency,
+			TableID:      table.GetID(),
+			IndexID:      index.GetID(),
+			TableVersion: table.GetVersion(),
+		})
 	}
 
 	return checks, nil

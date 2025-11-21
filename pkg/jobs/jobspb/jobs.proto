@@ -1474,6 +1474,14 @@ message InspectDetails {
       (gogoproto.customname) = "IndexID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
     ];
+
+    // TableVersion records the descriptor version observed when the check was
+    // planned. It is used at execution time to detect concurrent schema changes
+    // and abort the job before running inconsistent checks.
+    uint64 table_version = 4 [
+      (gogoproto.customname) = "TableVersion",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.DescriptorVersion"
+    ];
   }
 
   // Checks is the list of individual checks this job will perform.
