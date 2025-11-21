@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -329,8 +330,9 @@ func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaC
 }
 
 func TestClusterState(t *testing.T) {
+	tdPath := datapathutils.TestDataPath(t, "cluster_state")
 	datadriven.Walk(t,
-		datapathutils.TestDataPath(t, "cluster_state"),
+		tdPath,
 		func(t *testing.T, path string) {
 			ts := timeutil.NewManualTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 			cs := newClusterState(ts, newStringInterner())
@@ -355,8 +357,15 @@ func TestClusterState(t *testing.T) {
 				return buf.String()
 			}
 
-			datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			// Recursively invoked in `include` directive.
+			var invokeFn func(t *testing.T, d *datadriven.TestData) string
+			invokeFn = func(t *testing.T, d *datadriven.TestData) string {
 				switch d.Cmd {
+				case "include":
+					loc := dd.ScanArg[string](t, d, "path")
+					datadriven.RunTest(t, filepath.Join(tdPath, loc), invokeFn)
+					return "ok"
+
 				case "ranges":
 					var rangeIDs []int
 					for rangeID := range cs.ranges {
@@ -544,7 +553,8 @@ func TestClusterState(t *testing.T) {
 				default:
 					panic(fmt.Sprintf("unknown command: %v", d.Cmd))
 				}
-			},
-			)
+			}
+
+			datadriven.RunTest(t, path, invokeFn)
 		})
 }
