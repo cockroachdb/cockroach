@@ -339,6 +339,46 @@ func runAllocationBenchEvent(
 	return load.run.run(ctx, c, t)
 }
 
+// runAllocationBench runs multiple samples of the allocation benchmark and
+// exports performance metrics. The test creates three primary metrics:
+//
+// Intervals refer to regular time sampling points (every 10 seconds by default)
+// during the test duration. Recording starts after a warmup period (default 10
+// minutes) to allow the allocator time to balance load, so intervals only
+// capture the steady-state period. At each interval, metrics are collected from
+// all nodes simultaneously, and the (max-min) difference is calculated. The
+// final metric is the average of these (max-min) values across all intervals.
+//
+//   - cpu(%): average of (max-min) node CPU utilization across intervals, in
+//     percentage points. For example, if at an interval the max node is at 80%
+//     CPU and the min node is at 30% CPU, that interval contributes 50
+//     percentage points. This measures how well load is balanced across nodes -
+//     lower values indicate better balance.
+//   - write(%): average of (max-min) write disk utilization across intervals,
+//     in percentage points. Write bandwidth (MB/s) is normalized by 400 MB/s
+//     before calculating the difference. For example, if at an interval the max
+//     node is writing at 320 MB/s (80% of 400 MB/s) and the min node is writing
+//     at 120 MB/s (30% of 400 MB/s), that interval contributes 50 percentage
+//     points. This measures how well write I/O is balanced across nodes - lower
+//     values indicate better balance.
+//   - cost(gb): total GBs sent for rebalancing operations between initial and
+//     end state. Unlike the other metrics, this is an absolute value (not
+//     normalized). It measures the total amount of data transferred during
+//     rebalancing - lower values indicate more efficient rebalancing that
+//     achieves balance with less data movement.
+//
+// The test runs multiple samples (default 5) and selects the "middle run" to
+// export - the sample with minimum sum of pairwise distances to all other
+// samples across all metric dimensions. This approach is used because the test
+// has high variation due to compounding effects of random decisions earlier on.
+// Standard deviation metrics (std_<metric>) are also calculated and exported
+// to help gauge variance across runs, which is indicative of worst/best case
+// outcomes.
+//
+// Implementation notes: Metric calculations are in runAllocationBenchSample.
+// Aggregation queries (resourceMinMaxSummary, rebalanceCostSummary) and
+// normalization logic (minMaxAggQuery, divQuery) are defined in rebalance_stats.go.
+// Middle run selection is implemented in findMinDistanceClusterStatRun.
 func runAllocationBench(
 	ctx context.Context, t test.Test, c cluster.Cluster, spec allocationBenchSpec,
 ) {
@@ -349,10 +389,6 @@ func runAllocationBench(
 		spec.samples = defaultBenchSamples
 	}
 	samples := make([]*clusterstats.ClusterStatRun, spec.samples)
-
-	t.L().Printf("%s", "cpu(%) means: average of (max-min) node cpu utilization across intervals")
-	t.L().Printf("%s", "write(%) means: average of (max-min) write disk utilization across intervals")
-	t.L().Printf("%s", "cost(gb) means: GBs sent for rebalancing operations between initial and end")
 
 	for i := 0; i < spec.samples; i++ {
 		statCollector, cleanupFunc := setupAllocationBench(ctx, t, c, spec)
@@ -368,12 +404,6 @@ func runAllocationBench(
 		// results of future runs.
 		cleanupFunc(ctx)
 	}
-	// Find the middle run to export. The test has high variation due to
-	// generally compounding effects of bad decisions earlier on that are
-	// random. We also add an additional summary, the stddev of a stat over
-	// the sampled runs. This helps gauge whether there is a large variance in
-	// results and whilst being susecptible to outliers is indicative of
-	// worst/best case outcomes.
 	result, sampleStddev := findMinDistanceClusterStatRun(t, samples)
 	for tag, value := range sampleStddev {
 		metricName := fmt.Sprintf("std_%s", tag)
