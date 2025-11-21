@@ -830,6 +830,14 @@ type storeMatchesConstraintInterface interface {
 	storeMatches(storeID roachpb.StoreID, constraintConj constraintsConj) bool
 }
 
+// isConstraintSatisfied checks if the given constraint index has been fully
+// satisfied by the stores currently assigned to it.
+// TODO(wenyihu6): voter constraint should only count voters here (#158109)
+func (ac *analyzedConstraints) isConstraintSatisfied(constraintIndex int) bool {
+	return len(ac.satisfiedByReplica[voterIndex][constraintIndex])+
+		len(ac.satisfiedByReplica[nonVoterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
+}
+
 func (ac *analyzedConstraints) analyzeFunc(
 	buf *analyzeConstraintsBuf, constraintMatcher storeMatchesConstraintInterface,
 ) {
@@ -871,12 +879,8 @@ func (ac *analyzedConstraints) analyzeFunc(
 	// increasing order. Satisfy constraints in order, while not
 	// oversatisfying.
 	for j := range ac.constraints {
-		doneFunc := func() bool {
-			return len(ac.satisfiedByReplica[voterIndex][j])+
-				len(ac.satisfiedByReplica[nonVoterIndex][j]) >= int(ac.constraints[j].numReplicas)
-		}
-		done := doneFunc()
-		if done {
+		satisfied := ac.isConstraintSatisfied(j)
+		if satisfied {
 			continue
 		}
 		for kind := voterIndex; kind < numReplicaKinds; kind++ {
@@ -887,22 +891,25 @@ func (ac *analyzedConstraints) analyzeFunc(
 						ac.satisfiedByReplica[kind][j] =
 							append(ac.satisfiedByReplica[kind][j], buf.replicas[kind][i].StoreID)
 						buf.replicaConstraintIndices[kind][i] = constraintIndices[:0]
-						done = doneFunc()
+						satisfied = ac.isConstraintSatisfied(j)
 						// This store is finished.
 						break
 					}
 				}
-				// done can be true if some store was appended to
-				// ac.satisfiedByReplica[kind][j] and made it fully satisfied. Don't
-				// need to look at other stores for this constraint.
-				if done {
+
+				// NB: We check the `satisfied` flag directly instead of calling
+				// `isConstraintSatisfied` again, since this value should be set
+				// in the previous loop correctly when the constraint becomes
+				// satisfied.
+				//
+				// Check if constraint is now satisfied to avoid
+				// over-satisfaction.
+				if satisfied {
 					break
 				}
 			}
-			// done can be true if some store was appended to
-			// ac.satisfiedByReplica[kind][j] and made it fully satisfied. Don't
-			// need to look at other stores for this constraint.
-			if done {
+			// Check if constraint is now satisfied to avoid over-satisfaction.
+			if satisfied {
 				break
 			}
 		}
