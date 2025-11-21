@@ -212,11 +212,6 @@ type allocatorState struct {
 
 var _ Allocator = &allocatorState{}
 
-// TODO(sumeer): temporary constants.
-const (
-	maxFractionPendingThreshold = 0.1
-)
-
 func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState {
 	interner := newStringInterner()
 	cs := newClusterState(ts, interner)
@@ -333,7 +328,8 @@ func (a *allocatorState) ComputeChanges(
 		panic(fmt.Sprintf("ComputeChanges: expected StoreID %d, got %d", opts.LocalStoreID, msg.StoreID))
 	}
 	a.cs.processStoreLeaseholderMsg(ctx, msg, a.mmaMetrics)
-	return a.cs.rebalanceStores(ctx, opts.LocalStoreID, a.rand, a.diversityScoringMemo)
+	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now())
+	return re.rebalanceStores(ctx, opts.LocalStoreID)
 }
 
 // AdminRelocateOne implements the Allocator interface.
@@ -497,6 +493,7 @@ func sortTargetCandidateSetAndPick(
 	ignoreLevel ignoreLevel,
 	overloadedDim LoadDimension,
 	rng *rand.Rand,
+	maxFractionPendingThreshold float64,
 ) roachpb.StoreID {
 	var b strings.Builder
 	for i := range cands.candidates {

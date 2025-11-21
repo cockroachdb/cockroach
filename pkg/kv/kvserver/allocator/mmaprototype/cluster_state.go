@@ -880,7 +880,7 @@ type storeState struct {
 	localityTiers
 
 	// Time when this store started to be observed as overloaded. Set by
-	// clusterState.rebalanceStores.
+	// rebalanceStores.
 	overloadStartTime time.Time
 	// When overloaded this is equal to time.Time{}.
 	overloadEndTime time.Time
@@ -1385,6 +1385,8 @@ type clusterState struct {
 	*constraintMatcher
 	*localityTierInterner
 	meansMemo *meansMemo
+
+	mmaid int // a counter for rebalanceStores calls, for logging
 }
 
 func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterState {

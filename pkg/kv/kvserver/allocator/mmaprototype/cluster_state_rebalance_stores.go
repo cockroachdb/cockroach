@@ -12,7 +12,6 @@ import (
 	"math/rand"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,9 +20,14 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-var mmaid = atomic.Int64{}
-
 // rebalanceEnv tracks the state and outcomes of a rebalanceStores invocation.
+// Recall that such an invocation is on behalf of a local store, but will
+// iterate over a slice of shedding stores - these are not necessarily local
+// but are instead stores which are overloaded and need to shed load. Typically,
+// the particular calling local store has at least some leases (i.e. is
+// capable of making decisions), though in edge cases this may not be true,
+// in which case the rebalanceStores invocation will simply not be able to
+// do anything.
 type rebalanceEnv struct {
 	*clusterState
 	// rng is the random number generator for non-deterministic decisions.
@@ -36,13 +40,25 @@ type rebalanceEnv struct {
 	rangeMoveCount int
 	// leaseTransferCount tracks the number of lease transfers made.
 	leaseTransferCount int
-	// maxRangeMoveCount is the maximum number of range moves allowed.
+	// maxRangeMoveCount is the maximum number of range moves allowed in the
+	// context of the current rebalanceStores invocation (across multiple
+	// shedding stores).
 	maxRangeMoveCount int
-	// maxLeaseTransferCount is the maximum number of lease transfers allowed.
+	// maxLeaseTransferCount is the maximum number of lease transfers allowed in
+	// the context of the current rebalanceStores invocation. Note that because
+	// leases can only be shed from the particular local store on whose behalf
+	// rebalanceStores was called, this limit applies to this particular one
+	// store.
 	maxLeaseTransferCount int
+	// If a store's maxFractionPendingDecrease is at least this threshold, no
+	// further changes should be made at this time. This is because the inflight
+	// operation's changes to the load are estimated, and we don't want to pile up
+	// too many possibly inaccurate estimates.
+	fractionPendingIncreaseOrDecreaseThreshold float64
 	// lastFailedChangeDelayDuration is the delay after a failed change before retrying.
 	lastFailedChangeDelayDuration time.Duration
-	// now is the timestamp when rebalancing started.
+	// now is the timestamp representing the start time of the current
+	// rebalanceStores invocation.
 	now time.Time
 	// Scratch variables reused across iterations.
 	scratch struct {
@@ -54,6 +70,47 @@ type rebalanceEnv struct {
 	}
 }
 
+func newRebalanceEnv(
+	cs *clusterState, rng *rand.Rand, dsm *diversityScoringMemo, now time.Time,
+) *rebalanceEnv {
+
+	// NB: these consts are intentionally local to the constructor, proving
+	// that they're not accessed anywhere else.
+	const (
+		// The current usage of the multi-metric allocator has rebalanceStores called
+		// in a loop while it emits work, and on a timer otherwise. This means that
+		// we don't need to emit many changes per invocation. Especially for range
+		// moves, which require moving significant amounts of data, emitting them one
+		// by one is fine and by doing so we operate on more recent information at each
+		// turn. Even if the caller carried out multiple changes concurrently, we'd
+		// want to be careful not to emit too many range moves at once, since they are
+		// expensive.
+		// Lease transfers are cheap and fast, so we emit a few more to avoid frequent
+		// trips through rebalanceStores which could cause some logging noise.
+		maxRangeMoveCount     = 1
+		maxLeaseTransferCount = 8
+		// TODO(sumeer): revisit this value.
+		fractionPendingIncreaseOrDecreaseThreshold = 0.1
+
+		// See the long comment where rangeState.lastFailedChange is declared.
+		lastFailedChangeDelayDuration time.Duration = 60 * time.Second
+	)
+
+	re := &rebalanceEnv{
+		clusterState:          cs,
+		rng:                   rng,
+		dsm:                   dsm,
+		now:                   now,
+		maxRangeMoveCount:     maxRangeMoveCount,
+		maxLeaseTransferCount: maxLeaseTransferCount,
+		fractionPendingIncreaseOrDecreaseThreshold: fractionPendingIncreaseOrDecreaseThreshold,
+		lastFailedChangeDelayDuration:              lastFailedChangeDelayDuration,
+	}
+	re.scratch.nodes = map[roachpb.NodeID]*NodeLoad{}
+	re.scratch.stores = map[roachpb.StoreID]struct{}{}
+	return re
+}
+
 type sheddingStore struct {
 	roachpb.StoreID
 	storeLoadSummary
@@ -63,11 +120,13 @@ type sheddingStore struct {
 //
 // We do not want to shed replicas for CPU from a remote store until its had a
 // chance to shed leases.
-func (cs *clusterState) rebalanceStores(
-	ctx context.Context, localStoreID roachpb.StoreID, rng *rand.Rand, dsm *diversityScoringMemo,
+func (re *rebalanceEnv) rebalanceStores(
+	ctx context.Context, localStoreID roachpb.StoreID,
 ) []PendingRangeChange {
-	now := cs.ts.Now()
-	ctx = logtags.AddTag(ctx, "mmaid", mmaid.Add(1))
+	re.mmaid++
+	id := re.mmaid
+	ctx = logtags.AddTag(ctx, "mmaid", id)
+
 	log.KvDistribution.VEventf(ctx, 2, "rebalanceStores begins")
 	// To select which stores are overloaded, we use a notion of overload that
 	// is based on cluster means (and of course individual store/node
@@ -87,7 +146,7 @@ func (cs *clusterState) rebalanceStores(
 	// responsible for equalizing load across two nodes that have 30% and 50%
 	// cpu utilization while the cluster mean is 70% utilization (as an
 	// example).
-	clusterMeans := cs.meansMemo.getMeans(nil)
+	clusterMeans := re.meansMemo.getMeans(nil)
 	var sheddingStores []sheddingStore
 	log.KvDistribution.Infof(ctx,
 		"cluster means: (stores-load %s) (stores-capacity %s) (nodes-cpu-load %d) (nodes-cpu-capacity %d)",
@@ -97,15 +156,26 @@ func (cs *clusterState) rebalanceStores(
 	// fdDrain or fdDead, nor do we attempt to shed replicas from a store which
 	// is storeMembershipRemoving (decommissioning). These are currently handled
 	// via replicate_queue.go.
-	for storeID, ss := range cs.stores {
-		sls := cs.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
+
+	// Need deterministic order for datadriven testing.
+	storeStateSlice := make([]*storeState, 0, len(re.stores))
+	for _, ss := range re.stores {
+		storeStateSlice = append(storeStateSlice, ss)
+	}
+	slices.SortFunc(storeStateSlice, func(a, b *storeState) int {
+		return cmp.Compare(a.StoreID, b.StoreID)
+	})
+
+	for _, ss := range storeStateSlice {
+		storeID := ss.StoreID
+		sls := re.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
 		log.KvDistribution.VEventf(ctx, 2, "evaluating s%d: node load %s, store load %s, worst dim %s",
 			storeID, sls.nls, sls.sls, sls.worstDim)
 
 		if sls.sls >= overloadSlow {
 			if ss.overloadEndTime != (time.Time{}) {
-				if now.Sub(ss.overloadEndTime) > overloadGracePeriod {
-					ss.overloadStartTime = now
+				if re.now.Sub(ss.overloadEndTime) > overloadGracePeriod {
+					ss.overloadStartTime = re.now
 					log.KvDistribution.Infof(ctx, "overload-start s%v (%v) - grace period expired", storeID, sls)
 				} else {
 					// Else, extend the previous overload interval.
@@ -114,7 +184,7 @@ func (cs *clusterState) rebalanceStores(
 				ss.overloadEndTime = time.Time{}
 			}
 			// The pending decrease must be small enough to continue shedding
-			if ss.maxFractionPendingDecrease < maxFractionPendingThreshold &&
+			if ss.maxFractionPendingDecrease < re.fractionPendingIncreaseOrDecreaseThreshold &&
 				// There should be no pending increase, since that can be an overestimate.
 				ss.maxFractionPendingIncrease < epsilon {
 				log.KvDistribution.VEventf(ctx, 2, "store s%v was added to shedding store list", storeID)
@@ -122,13 +192,13 @@ func (cs *clusterState) rebalanceStores(
 			} else {
 				log.KvDistribution.VEventf(ctx, 2,
 					"skipping overloaded store s%d (worst dim: %s): pending decrease %.2f >= threshold %.2f or pending increase %.2f >= epsilon",
-					storeID, sls.worstDim, ss.maxFractionPendingDecrease, maxFractionPendingThreshold, ss.maxFractionPendingIncrease)
+					storeID, sls.worstDim, ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold, ss.maxFractionPendingIncrease)
 			}
 		} else if sls.sls < loadNoChange && ss.overloadEndTime == (time.Time{}) {
 			// NB: we don't stop the overloaded interval if the store is at
 			// loadNoChange, since a store can hover at the border of the two.
 			log.KvDistribution.Infof(ctx, "overload-end s%v (%v) - load dropped below no-change threshold", storeID, sls)
-			ss.overloadEndTime = now
+			ss.overloadEndTime = re.now
 		}
 	}
 
@@ -158,32 +228,6 @@ func (cs *clusterState) rebalanceStores(
 		}
 	}
 
-	// The caller has a fixed concurrency limit it can move ranges at, when it
-	// is the sender of the snapshot. So we don't want to create too many
-	// changes, since then the allocator gets too far ahead of what has been
-	// enacted, and its decision-making is no longer based on recent
-	// information. We don't have this issue with lease transfers since they are
-	// very fast, so we set a much higher limit.
-	//
-	// TODO: revisit these constants.
-	const maxRangeMoveCount = 1
-	const maxLeaseTransferCount = 8
-	// See the long comment where rangeState.lastFailedChange is declared.
-	const lastFailedChangeDelayDuration time.Duration = 60 * time.Second
-	re := &rebalanceEnv{
-		clusterState:                  cs,
-		rng:                           rng,
-		dsm:                           dsm,
-		changes:                       []PendingRangeChange{},
-		rangeMoveCount:                0,
-		leaseTransferCount:            0,
-		maxRangeMoveCount:             maxRangeMoveCount,
-		maxLeaseTransferCount:         maxLeaseTransferCount,
-		lastFailedChangeDelayDuration: lastFailedChangeDelayDuration,
-		now:                           now,
-	}
-	re.scratch.nodes = map[roachpb.NodeID]*NodeLoad{}
-	re.scratch.stores = map[roachpb.StoreID]struct{}{}
 	for _, store := range sheddingStores {
 		if re.rangeMoveCount >= re.maxRangeMoveCount || re.leaseTransferCount >= re.maxLeaseTransferCount {
 			break
@@ -378,7 +422,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 				ignoreLevel, ssSLS.sls, rangeID, overloadDur)
 		}
 		targetStoreID := sortTargetCandidateSetAndPick(
-			ctx, cands, ssSLS.sls, ignoreLevel, loadDim, re.rng)
+			ctx, cands, ssSLS.sls, ignoreLevel, loadDim, re.rng, re.fractionPendingIncreaseOrDecreaseThreshold)
 		if targetStoreID == 0 {
 			log.KvDistribution.VEventf(ctx, 2, "result(failed): no suitable target found among candidates for r%d "+
 				"(threshold %s; %s)", rangeID, ssSLS.sls, ignoreLevel)
@@ -424,10 +468,10 @@ func (re *rebalanceEnv) rebalanceReplicas(
 			log.KvDistribution.VEventf(ctx, 2, "s%d has reached max range move count %d: mma returning", store.StoreID, re.maxRangeMoveCount)
 			return
 		}
-		doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
+		doneShedding = ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold
 		if doneShedding {
 			log.KvDistribution.VEventf(ctx, 2, "s%d has reached pending decrease threshold(%.2f>=%.2f) after rebalancing: done shedding with %d left in topk",
-				store.StoreID, ss.maxFractionPendingDecrease, maxFractionPendingThreshold, n-(i+1))
+				store.StoreID, ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold, n-(i+1))
 			break
 		}
 	}
@@ -551,7 +595,7 @@ func (re *rebalanceEnv) rebalanceLeases(
 		// will only add CPU to the target store (so it is ok to ignore other
 		// dimensions on the target).
 		targetStoreID := sortTargetCandidateSetAndPick(
-			ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, re.rng)
+			ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, re.rng, re.fractionPendingIncreaseOrDecreaseThreshold)
 		if targetStoreID == 0 {
 			log.KvDistribution.Infof(
 				ctx,
@@ -606,10 +650,10 @@ func (re *rebalanceEnv) rebalanceLeases(
 			log.KvDistribution.VEventf(ctx, 2, "reached max lease transfer count %d, returning", re.maxLeaseTransferCount)
 			break
 		}
-		doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
+		doneShedding = ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold
 		if doneShedding {
 			log.KvDistribution.VEventf(ctx, 2, "s%d has reached pending decrease threshold(%.2f>=%.2f) after lease transfers: done shedding with %d left in topK",
-				store.StoreID, ss.maxFractionPendingDecrease, maxFractionPendingThreshold, n-(i+1))
+				store.StoreID, ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold, n-(i+1))
 			break
 		}
 	}
