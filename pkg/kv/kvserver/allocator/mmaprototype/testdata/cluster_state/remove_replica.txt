@@ -18,7 +18,8 @@ store-id=2 node-id=2 status=ok accepting all reported=[cpu:20, write-bandwidth:8
 
 store-leaseholder-msg 
 store-id=1
-  range-id=1 load=[80,80,80] raft-cpu=20 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+  range-id=1 load=[80,80,80] raft-cpu=20
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
     store-id=2 replica-id=2 type=VOTER_FULL
 ----
@@ -62,7 +63,8 @@ store-id=2 node-id=2 status=ok accepting all reported=[cpu:20, write-bandwidth:8
 
 store-leaseholder-msg
 store-id=1
-  range-id=1 load=[80,80,80] raft-cpu=20 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+  range-id=1 load=[80,80,80] raft-cpu=20
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
 ----
 
