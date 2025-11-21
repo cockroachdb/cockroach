@@ -703,6 +703,14 @@ func sortTargetCandidateSetAndPick(
 	return cands.candidates[j].StoreID
 }
 
+// ensureAnalyzedConstraints populates the constraints for the given range.
+// It should be called when computing lease-transfers / rebalancing candidates
+// for a range.
+//
+// NB: given rstate.conf should already be normalized using
+// makeNormalizedSpanConfig. The caller is responsible for calling
+// clearAnalyzedConstraints when rstate or the rstate.constraints is no longer
+// needed.
 func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
 	if rstate.constraints != nil {
 		return
