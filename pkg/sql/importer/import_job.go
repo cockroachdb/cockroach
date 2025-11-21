@@ -327,32 +327,45 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		if err != nil {
 			return err
 		}
-		tblDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
-		if len(tblDesc.PublicNonPrimaryIndexes()) > 0 {
-			checks, err := inspect.ChecksForTable(ctx, nil /* p */, tblDesc)
+
+		var checks []*jobspb.InspectDetails_Check
+		var tableName string
+		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
+			ctx context.Context, txn descs.Txn,
+		) error {
+			// INSPECT requires the latest descriptor. The one cached in the job is
+			// out of date as it has an old table version.
+			tblDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, table.Desc.ID)
 			if err != nil {
 				return err
 			}
+			tableName = tblDesc.GetName()
+			checks, err = inspect.ChecksForTable(ctx, nil /* p */, tblDesc)
+			return err
+		}); err != nil {
+			return err
+		}
 
+		if len(checks) > 0 {
 			job, err := inspect.TriggerJob(
 				ctx,
-				fmt.Sprintf("import-validation-%s", tblDesc.GetName()),
+				fmt.Sprintf("import-validation-%s", tableName),
 				p.ExecCfg(),
 				nil, /* txn */
 				checks,
 				setPublicTimestamp,
 			)
 			if err != nil {
-				return errors.Wrapf(err, "failed to trigger inspect for import validation for table %s", tblDesc.GetName())
+				return errors.Wrapf(err, "failed to trigger inspect for import validation for table %s", tableName)
 			}
-			log.Eventf(ctx, "triggered inspect job %d for import validation for table %s with AOST %s", job.ID(), tblDesc.GetName(), setPublicTimestamp)
+			log.Eventf(ctx, "triggered inspect job %d for import validation for table %s with AOST %s", job.ID(), tableName, setPublicTimestamp)
 
 			// For sync mode, wait for the inspect job to complete.
 			if validationMode == ImportRowCountValidationSync {
 				if err := p.ExecCfg().JobRegistry.WaitForJobs(ctx, []jobspb.JobID{job.ID()}); err != nil {
-					return errors.Wrapf(err, "failed to wait for inspect job %d for table %s", job.ID(), tblDesc.GetName())
+					return errors.Wrapf(err, "failed to wait for inspect job %d for table %s", job.ID(), tableName)
 				}
-				log.Eventf(ctx, "inspect job %d completed for table %s", job.ID(), tblDesc.GetName())
+				log.Eventf(ctx, "inspect job %d completed for table %s", job.ID(), tableName)
 			}
 		}
 	}
