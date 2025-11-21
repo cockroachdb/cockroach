@@ -864,10 +864,13 @@ func (ac *analyzedConstraints) isConstraintSatisfied(constraintIndex int) bool {
 // For stores that satisfy at least one constraint,
 // ac.satisfiedByReplica[kind][i] is filled with the storeIDs of replicas that
 // satisfy ac.constraints[i]. Each store should appear exactly once in the 2D
-// slice ac.satisfiedByReplica[kind]. A constraint can end up over-satisfied
+// slice ac.satisfiedByReplica[kind].  Phase 2 below attempts to be optimal by
+// prioritizing under-satisfied constraints and assigning stores to those first.
+// A constraint may end up being over-satisfied
 // (len(ac.satisfiedByReplica[kind][i]) > ac.constraints[i].numReplicas) in
-// phase 3. Phase 2 below attempts to correct this by prioritizing
-// under-satisfied constraints and assigning stores to those first.
+// phase 3. A constraint may remain under-satisfied. If a store is
+// under-satisfied in phase 2, it cannot be corrected in phase 3 and will
+// continue to be under-satisfied. (TODO: Is this right during review)
 //
 // NB: the given ac.constraints can represent either replica or voter
 // constraints, but we still populate both voter and non-voter indices
