@@ -47,6 +47,12 @@ func stripBrackets(t *testing.T, in string) string {
 	return lrTrim
 }
 
+func stripParentheses(in string) string {
+	rTrim := strings.TrimSuffix(in, ")")
+	lrTrim := strings.TrimPrefix(rTrim, "(")
+	return lrTrim
+}
+
 func parseLoadVector(t *testing.T, in string) LoadVector {
 	var vec LoadVector
 	parts := strings.Split(stripBrackets(t, in), ",")
@@ -182,10 +188,13 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 					rMsg.MaybeSpanConfIsPopulated = true
 				case "not-populated":
 					notPopulatedOverride = true
+				default:
+					t.Fatalf("unknown argument: %s", parts[0])
 				}
 			}
 		} else if strings.HasPrefix(line, "config=") {
-			rMsg.MaybeSpanConf = spanconfigtestutils.ParseZoneConfig(t, strings.TrimPrefix(line, "config=")).AsSpanConfig()
+			trimmedConfig := stripParentheses(strings.TrimPrefix(line, "config="))
+			rMsg.MaybeSpanConf = spanconfigtestutils.ParseZoneConfig(t, trimmedConfig).AsSpanConfig()
 			rMsg.MaybeSpanConfIsPopulated = true
 		} else {
 			var repl StoreIDAndReplicaState
@@ -206,7 +215,7 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 					require.NoError(t, err)
 					repl.ReplicaType.ReplicaType = replType
 				default:
-					panic(fmt.Sprintf("unknown argument: %s", parts[0]))
+					t.Fatalf("unknown argument: %s", parts[0])
 				}
 			}
 			rMsg.Replicas = append(rMsg.Replicas, repl)
@@ -235,7 +244,7 @@ func parseChangeAddRemove(
 			replType, err = parseReplicaType(parts[1])
 			require.NoError(t, err)
 		default:
-			panic(fmt.Sprintf("unknown argument: %s", parts[1]))
+			t.Fatalf("unknown argument: %s", parts[0])
 		}
 	}
 	return add, remove, replType

@@ -44,7 +44,8 @@ store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0,
 # Store s1 has the single replica and lease for r1.
 store-leaseholder-msg 
 store-id=1
-  range-id=1 load=[80,80,80] raft-cpu=20 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+  range-id=1 load=[80,80,80] raft-cpu=20
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
 ----
 
@@ -94,7 +95,8 @@ t=5s
 # lease.
 store-leaseholder-msg
 store-id=1
-  range-id=1 load=[80,80,80] raft-cpu=20 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+  range-id=1 load=[80,80,80] raft-cpu=20
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=1 replica-id=2 type=VOTER_FULL leaseholder=true
     store-id=2 replica-id=2 type=VOTER_FULL
 ----
@@ -113,7 +115,8 @@ change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth
 # Store leaseholder msg from s2, showing that s2 is now the leaseholder.
 store-leaseholder-msg
 store-id=2
-  range-id=1 load=[80,80,80] raft-cpu=20 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+  range-id=1 load=[80,80,80] raft-cpu=20
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=1 replica-id=2 type=VOTER_FULL
     store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
 ----
@@ -217,7 +220,8 @@ change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth
 # Store leaseholder msg from s2, showing that s1 is no longer a replica.
 store-leaseholder-msg
 store-id=2
-  range-id=1 load=[80,80,80] raft-cpu=20 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+  range-id=1 load=[80,80,80] raft-cpu=20
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
 ----
 

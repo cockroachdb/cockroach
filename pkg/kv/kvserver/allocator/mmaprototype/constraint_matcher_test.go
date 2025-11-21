@@ -34,6 +34,8 @@ func parseStoreAttributedAndLocality(t *testing.T, in string) StoreAttributesAnd
 			)
 		case "locality-tiers":
 			sal.NodeLocality = parseLocalityTiers(t, parts[1])
+		default:
+			t.Fatalf("unknown argument: %s", parts[0])
 		}
 	}
 	return sal

@@ -33,7 +33,8 @@ store-id=3 node-id=3 status=ok accepting all reported=[cpu:10, write-bandwidth:0
 
 store-leaseholder-msg
 store-id=1
-  range-id=1 load=[60,0,0] raft-cpu=20 config=(num_replicas=3 constraints={} voter_constraints={})
+  range-id=1 load=[60,0,0] raft-cpu=20
+  config=(num_replicas=3 constraints={} voter_constraints={})
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
     store-id=2 replica-id=2 type=VOTER_FULL
     store-id=3 replica-id=3 type=VOTER_FULL
