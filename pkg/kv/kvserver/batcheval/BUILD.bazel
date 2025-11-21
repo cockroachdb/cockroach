@@ -78,6 +78,7 @@ go_library(
         "//pkg/kv/kvserver/spanset",
         "//pkg/kv/kvserver/txnwait",
         "//pkg/kv/kvserver/uncertainty",
+        "//pkg/raft",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",

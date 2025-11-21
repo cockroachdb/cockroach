@@ -81,24 +81,15 @@ func (rec *SpanSetReplicaEvalContext) GetNodeLocality() roachpb.Locality {
 	return rec.i.GetNodeLocality()
 }
 
-// GetCompactedIndex returns the compacted index of the raft log.
-func (rec *SpanSetReplicaEvalContext) GetCompactedIndex() kvpb.RaftIndex {
-	return rec.i.GetCompactedIndex()
-}
-
-// GetTerm returns the term for the given index in the Raft log.
-func (rec *SpanSetReplicaEvalContext) GetTerm(i kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	return rec.i.GetTerm(i)
-}
-
 // GetLeaseAppliedIndex returns the lease index of the last applied command.
 func (rec *SpanSetReplicaEvalContext) GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex {
 	return rec.i.GetLeaseAppliedIndex()
 }
 
-// LogEngine returns the log engine.
-func (rec *SpanSetReplicaEvalContext) LogEngine() storage.Engine {
-	return rec.i.LogEngine()
+func (rec *SpanSetReplicaEvalContext) PrepareLogEngineTruncation(
+	firstIndexToKeep kvpb.RaftIndex,
+) (kvpb.RaftIndex, kvpb.RaftTerm, storage.Reader, error) {
+	return rec.i.PrepareLogEngineTruncation(firstIndexToKeep)
 }
 
 // IsFirstRange returns true iff the replica belongs to the first range.

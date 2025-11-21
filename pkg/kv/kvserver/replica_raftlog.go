@@ -15,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -287,6 +289,48 @@ func (r *Replica) GetCompactedIndex() kvpb.RaftIndex {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.raftCompactedIndexRLocked()
+}
+
+// PrepareLogEngineTruncation prepares for truncating the Raft log up to
+// firstIndexToKeep by returning the following fields atomically:
+//   - compactedIndex: The current compacted index of the Raft log.
+//   - term: The term of the last entry to truncate.
+//   - logReader: A reader over the log engine with a snapshot consistent with
+//     compactedIndex and term.
+//   - error: If the operation is a no-op (log is already compacted), it returns
+//     `ErrCompacted`. Otherwise, it returns an error if grabbing the
+//     term failed.
+//
+// The caller must close the returned reader error is nil.
+func (r *Replica) PrepareLogEngineTruncation(
+	firstIndexToKeep kvpb.RaftIndex,
+) (kvpb.RaftIndex, kvpb.RaftTerm, storage.Reader, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Check if the truncation is a no-op.
+	compactedIndex := r.raftCompactedIndexRLocked()
+	firstIndex := compactedIndex + 1
+	if firstIndex >= firstIndexToKeep {
+		// The log truncation is a no-op, return early.
+		return compactedIndex, 0, nil, raft.ErrCompacted
+	}
+
+	// Grab the raft term of the last index to truncate.
+	term, err := r.raftTermShMuLocked(firstIndexToKeep - 1)
+	if err != nil {
+		return compactedIndex, 0, nil, err
+	}
+
+	// Before releasing the read mutex, grab a consistent snapshot of the log
+	// engine reader. This ensures that the compactedIndex, and term are
+	// consistent with the log engine reader's snapshot.
+	logReader := r.store.LogEngine().NewReader(storage.StandardDurability)
+	if err := logReader.PinEngineStateForIterators(fs.BatchEvalReadCategory); err != nil {
+		logReader.Close()
+		return compactedIndex, term, logReader, err
+	}
+	return compactedIndex, term, logReader, nil
 }
 
 // LogSnapshot returns an immutable point-in-time snapshot of the log storage.
