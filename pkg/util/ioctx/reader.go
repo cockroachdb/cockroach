@@ -138,3 +138,93 @@ type nopCloser struct {
 
 // Close is part of the ReadClosedCtx interface.
 func (nopCloser) Close(ctx context.Context) error { return nil }
+
+// ReaderAtCtx is like io.ReaderAt, but the ReadAt() method takes a context.
+type ReaderAtCtx interface {
+	ReadAt(ctx context.Context, p []byte, off int64) (n int, err error)
+}
+
+// SeekerCtx is like io.Seeker, but the Seek() method takes a context.
+type SeekerCtx interface {
+	Seek(ctx context.Context, offset int64, whence int) (n int64, err error)
+}
+
+// ReaderAtSeekerCloser combines io.Reader, io.ReaderAt, io.Seeker, and io.Closer.
+// This is useful for formats like Parquet that require random access to files.
+type ReaderAtSeekerCloser interface {
+	io.Reader
+	io.ReaderAt
+	io.Seeker
+	io.Closer
+}
+
+// ReaderAtSeekerAdapter adapts a ReadCloserCtx that implements ReaderAtCtx
+// and SeekerCtx into a ReaderAtSeekerCloser. The context is captured at construction
+// time and used for all operations (Read, ReadAt, Seek, and Close).
+//
+// Returns an error if the underlying reader does not implement both ReaderAtCtx and
+// SeekerCtx, or if a test seek operation fails (indicating the reader claims to support
+// seeking but doesn't actually work).
+//
+// This is useful for integrating context-aware cloud storage readers with libraries
+// that require the standard io.ReaderAt and io.Seeker interfaces (e.g., Parquet).
+//
+// IMPORTANT: The returned adapter's lifetime is tied to the provided context. If the
+// context is canceled, all subsequent Read/ReadAt/Seek operations will fail. The caller
+// must ensure the context remains valid for the entire duration the adapter is in use.
+func ReaderAtSeekerAdapter(
+	ctx context.Context, readCloser ReadCloserCtx,
+) (ReaderAtSeekerCloser, error) {
+	readerAt, okReaderAt := readCloser.(ReaderAtCtx)
+	if !okReaderAt {
+		return nil, errors.Newf("reader does not implement ioctx.ReaderAtCtx (type %T)", readCloser)
+	}
+	seeker, okSeeker := readCloser.(SeekerCtx)
+	if !okSeeker {
+		return nil, errors.Newf("reader does not implement ioctx.SeekerCtx (type %T)", readCloser)
+	}
+
+	// Test if seeking actually works by attempting a no-op seek
+	// This catches cases where the reader implements the interface but fails at runtime
+	if _, err := seeker.Seek(ctx, 0, io.SeekCurrent); err != nil {
+		return nil, errors.Wrapf(err, "reader type %T claims to support seeking but test seek failed", readCloser)
+	}
+
+	return &readerAtSeekerAdapter{
+		ctx:        ctx,
+		readCloser: readCloser,
+		readerAt:   readerAt,
+		seeker:     seeker,
+	}, nil
+}
+
+type readerAtSeekerAdapter struct {
+	ctx        context.Context
+	readCloser ReadCloserCtx
+	readerAt   ReaderAtCtx
+	seeker     SeekerCtx
+}
+
+var _ ReaderAtSeekerCloser = &readerAtSeekerAdapter{}
+
+// Read implements io.Reader using the captured context.
+func (r *readerAtSeekerAdapter) Read(p []byte) (int, error) {
+	return r.readCloser.Read(r.ctx, p)
+}
+
+// ReadAt implements io.ReaderAt by delegating to the underlying ReaderAtCtx
+// using the captured context.
+func (r *readerAtSeekerAdapter) ReadAt(p []byte, off int64) (int, error) {
+	return r.readerAt.ReadAt(r.ctx, p, off)
+}
+
+// Seek implements io.Seeker by delegating to the underlying SeekerCtx
+// using the captured context.
+func (r *readerAtSeekerAdapter) Seek(offset int64, whence int) (int64, error) {
+	return r.seeker.Seek(r.ctx, offset, whence)
+}
+
+// Close implements io.Closer using the captured context.
+func (r *readerAtSeekerAdapter) Close() error {
+	return r.readCloser.Close(r.ctx)
+}

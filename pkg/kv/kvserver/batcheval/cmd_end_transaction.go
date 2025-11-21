@@ -719,7 +719,7 @@ func resolveLocalLocksWithPagination(
 				// If requested, replace point tombstones with range tombstones.
 				if ok && evalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes {
 					if err := storage.ReplacePointTombstonesWithRangeTombstones(
-						ctx, spanset.DisableReadWriterAssertions(readWriter),
+						ctx, spanset.DisableUndeclaredSpanAssertions(readWriter),
 						ms, update.Key, update.EndKey); err != nil {
 						return 0, 0, 0, errors.Wrapf(err,
 							"replacing point tombstones with range tombstones for write intent at %s on end transaction [%s]",
@@ -757,7 +757,7 @@ func resolveLocalLocksWithPagination(
 			// If requested, replace point tombstones with range tombstones.
 			if evalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes {
 				if err := storage.ReplacePointTombstonesWithRangeTombstones(
-					ctx, spanset.DisableReadWriterAssertions(readWriter),
+					ctx, spanset.DisableUndeclaredSpanAssertions(readWriter),
 					ms, update.Key, update.EndKey); err != nil {
 					return 0, 0, 0, errors.Wrapf(err,
 						"replacing point tombstones with range tombstones for write intent range at %s on end transaction [%s]",
@@ -1340,8 +1340,10 @@ func splitTriggerHelper(
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
+
 	if err := storage.MVCCPutProto(
-		ctx, batch, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{},
+		ctx, spanset.DisableForbiddenSpanAssertions(batch),
+		keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{},
 		&replicaGCTS, storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory}); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
@@ -1541,7 +1543,8 @@ func splitTriggerHelper(
 		// as all replicas will be responsible for writing it locally before
 		// applying the split.
 		if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_4_WriteInitialTruncStateBeforeSplitApplication) {
-			if err := kvstorage.WriteInitialTruncState(ctx, batch, split.RightDesc.RangeID); err != nil {
+			if err := kvstorage.WriteInitialTruncState(ctx,
+				spanset.DisableForbiddenSpanAssertions(batch), split.RightDesc.RangeID); err != nil {
 				return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
 			}
 		}
