@@ -2473,6 +2473,9 @@ func (cs *clusterState) canShedAndAddLoad(
 		// that case.
 	}
 	canAddLoad = overloadedDimPermitsChange && !otherDimensionsBecameWorseInTarget &&
+		// NB: the target here is quite loaded, so we are stricter than in other
+		// places and require that there are *no* pending changes (rather than
+		// a threshold fraction).
 		targetSLS.maxFractionPendingIncrease < epsilon &&
 		targetSLS.maxFractionPendingDecrease < epsilon &&
 		// NB: targetSLS.nls <= targetSLS.sls is not a typo, in that we are

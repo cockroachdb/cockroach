@@ -38,8 +38,6 @@ type rebalanceEnv struct {
 	changes []PendingRangeChange
 	// rangeMoveCount tracks the number of range moves made.
 	rangeMoveCount int
-	// leaseTransferCount tracks the number of lease transfers made.
-	leaseTransferCount int
 	// maxRangeMoveCount is the maximum number of range moves allowed in the
 	// context of the current rebalanceStores invocation (across multiple
 	// shedding stores).
@@ -48,7 +46,8 @@ type rebalanceEnv struct {
 	// the context of the current rebalanceStores invocation. Note that because
 	// leases can only be shed from the particular local store on whose behalf
 	// rebalanceStores was called, this limit applies to this particular one
-	// store.
+	// store, and thus needs to be checked against only in that single
+	// rebalanceLeasesFromLocalStoreID invocation.
 	maxLeaseTransferCount int
 	// If a store's maxFractionPendingDecrease is at least this threshold, no
 	// further changes should be made at this time. This is because the inflight
@@ -229,7 +228,13 @@ func (re *rebalanceEnv) rebalanceStores(
 	}
 
 	for _, store := range sheddingStores {
-		if re.rangeMoveCount >= re.maxRangeMoveCount || re.leaseTransferCount >= re.maxLeaseTransferCount {
+		// NB: we don't have to check the maxLeaseTransferCount here since only one
+		// store can transfer leases - the local store. So the limit is only checked
+		// inside of the corresponding rebalanceLeasesFromLocalStoreID call, but
+		// not in this outer loop.
+		if re.rangeMoveCount >= re.maxRangeMoveCount {
+			log.KvDistribution.VEventf(ctx, 2, "reached max range move count %d, stopping further rebalancing",
+				re.maxRangeMoveCount)
 			break
 		}
 		re.rebalanceStore(ctx, store, localStoreID)
@@ -257,7 +262,7 @@ func (re *rebalanceEnv) rebalanceStore(
 				if !ss.adjusted.replicas[rangeID].IsLeaseholder {
 					load[CPURate] = rstate.load.RaftCPU
 				}
-				fmt.Fprintf(&b, " r%d:%v", rangeID, load)
+				_, _ = fmt.Fprintf(&b, " r%d:%v", rangeID, load)
 			}
 			log.KvDistribution.Infof(ctx, "top-K[%s] ranges for s%d with lease on local s%d:%s",
 				topKRanges.dim, store.StoreID, localStoreID, b.String())
@@ -267,19 +272,40 @@ func (re *rebalanceEnv) rebalanceStore(
 		}
 	}
 
-	// TODO(tbg): it's somewhat akward that we only enter this branch for
-	// ss.StoreID == localStoreID and not for *any* calling local store.
-	// More generally, does it make sense that rebalanceStores is called on
-	// behalf of a particular store (vs. being called on behalf of the set
-	// of local store IDs)?
-	if ss.StoreID == localStoreID && store.dimSummary[CPURate] >= overloadSlow {
-		shouldSkipReplicaMoves := re.rebalanceLeases(ctx, ss, store, localStoreID)
-		if shouldSkipReplicaMoves {
-			return
+	if ss.StoreID == localStoreID {
+		if store.dimSummary[CPURate] >= overloadSlow {
+			// The store which called into rebalanceStore is overloaded. Try to shed
+			// load from it via lease transfers first. Note that if we have multiple
+			// stores, this rebalanceStore invocation is on behalf of exactly one of
+			// them, and that's the one we're going to shed from here - other stores
+			// will do it when they call into rebalanceStore.
+			if numTransferred := re.rebalanceLeasesFromLocalStoreID(ctx, ss, store, localStoreID); numTransferred > 0 {
+				// If any leases were transferred, wait for these changes to be done
+				// before shedding replicas from this store (which is more costly).
+				// Otherwise, we may needlessly start moving replicas when we could
+				// instead have moved more leases in the next invocation. Note that the
+				// store rebalancer will call the rebalance method again after the lease
+				// transfer is done, and we may still be considering those transfers as
+				// pending from a load perspective, so we *may* not be able to do more
+				// lease transfers -- so be it.
+				//
+				// TODO(tbg): rather than skipping replica transfers when there were ANY
+				// lease transfers, we could instead skip them only if we hit a limit in
+				// transferring leases. If we didn't hit a limit, this indicates that we
+				// did consider all of the possible replicas to transfer a lease for,
+				// and came up short - it then makes sense to consider replica transfers.
+				// The current heuristic instead bails early, and an immediate call to
+				// rebalanceStores would likely be made, so that the results could
+				// ultimately be the same (mod potentially some logging noise as we
+				// iterate through rebalanceStores more frequently).
+				log.KvDistribution.VEventf(ctx, 2, "skipping replica transfers for s%d to try more leases next time",
+					ss.StoreID)
+				return
+			}
+		} else {
+			log.KvDistribution.VEventf(ctx, 2, "skipping lease shedding for calling store s%s: not cpu overloaded: %v",
+				localStoreID, store.dimSummary[CPURate])
 		}
-	} else {
-		log.KvDistribution.VEventf(ctx, 2, "skipping lease shedding: s%v != local store s%s or cpu is not overloaded: %v",
-			ss.StoreID, localStoreID, store.dimSummary[CPURate])
 	}
 
 	log.KvDistribution.VEventf(ctx, 2, "attempting to shed replicas next")
@@ -289,7 +315,6 @@ func (re *rebalanceEnv) rebalanceStore(
 func (re *rebalanceEnv) rebalanceReplicas(
 	ctx context.Context, store sheddingStore, ss *storeState, localStoreID roachpb.StoreID,
 ) {
-	doneShedding := false
 	if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
 		re.now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
 		log.KvDistribution.VEventf(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
@@ -316,6 +341,23 @@ func (re *rebalanceEnv) rebalanceReplicas(
 	n := topKRanges.len()
 	loadDim := topKRanges.dim
 	for i := 0; i < n; i++ {
+		if re.rangeMoveCount >= re.maxRangeMoveCount {
+			log.KvDistribution.VEventf(ctx, 2,
+				"reached max range move count %d; done shedding", re.maxRangeMoveCount)
+			return
+		}
+		if ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold {
+			log.KvDistribution.VEventf(ctx, 2,
+				"s%d has reached pending decrease threshold(%.2f>=%.2f) after rebalancing; done shedding",
+				store.StoreID, ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold)
+			// TODO(sumeer): For regular rebalancing, we will wait until those top-K
+			// move and then continue with the rest. There is a risk that the top-K
+			// have some constraint that prevents rebalancing, while the rest can be
+			// moved. Running with underprovisioned clusters and expecting load-based
+			// rebalancing to work well is not in scope.
+			return
+		}
+
 		rangeID := topKRanges.index(i)
 		// TODO(sumeer): the following code belongs in a closure, since we will
 		// repeat it for some random selection of non topKRanges.
@@ -464,42 +506,41 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		log.KvDistribution.VEventf(ctx, 2,
 			"result(success): rebalancing r%v from s%v to s%v [change: %v] with resulting loads source: %v target: %v",
 			rangeID, removeTarget.StoreID, addTarget.StoreID, re.changes[len(re.changes)-1], ss.adjusted.load, targetSS.adjusted.load)
-		if re.rangeMoveCount >= re.maxRangeMoveCount {
-			log.KvDistribution.VEventf(ctx, 2, "s%d has reached max range move count %d: mma returning", store.StoreID, re.maxRangeMoveCount)
-			return
-		}
-		doneShedding = ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold
-		if doneShedding {
-			log.KvDistribution.VEventf(ctx, 2, "s%d has reached pending decrease threshold(%.2f>=%.2f) after rebalancing: done shedding with %d left in topk",
-				store.StoreID, ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold, n-(i+1))
-			break
-		}
-	}
-	// TODO(sumeer): For regular rebalancing, we will wait until those top-K
-	// move and then continue with the rest. There is a risk that the top-K
-	// have some constraint that prevents rebalancing, while the rest can be
-	// moved. Running with underprovisioned clusters and expecting load-based
-	// rebalancing to work well is not in scope.
-	if doneShedding {
-		log.KvDistribution.VEventf(ctx, 2, "store s%d is done shedding, moving to next store", store.StoreID)
-		return
 	}
 }
 
-func (re *rebalanceEnv) rebalanceLeases(
+// rebalanceLeasesFromLocalStoreID attempts to move leases away from the
+// provided store, which must be the local store which called into
+// rebalanceStores, and must be overloaded on CPU.
+//
+// Transfers are attempted until we run out of leases to try, hit the max lease
+// transfer count limit, or the maximum fractional pending decrease threshold.
+//
+// Returns the number of lease transfers made.
+func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 	ctx context.Context, ss *storeState, store sheddingStore, localStoreID roachpb.StoreID,
-) bool {
+) int /* leaseTransferCount */ {
 	log.KvDistribution.VEventf(ctx, 2, "local store s%d is CPU overloaded (%v >= %v), attempting lease transfers first",
 		store.StoreID, store.dimSummary[CPURate], overloadSlow)
 	// This store is local, and cpu overloaded. Shed leases first.
 	//
 	// NB: any ranges at this store that don't have pending changes must
 	// have this local store as the leaseholder.
-	localLeaseTransferCount := 0
 	topKRanges := ss.adjusted.topKRanges[localStoreID]
+	var leaseTransferCount int
 	n := topKRanges.len()
-	doneShedding := false
 	for i := 0; i < n; i++ {
+		if leaseTransferCount >= re.maxLeaseTransferCount {
+			log.KvDistribution.VEventf(ctx, 2, "reached max lease transfer count %d, returning", re.maxLeaseTransferCount)
+			return leaseTransferCount
+		}
+		if ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold {
+			log.KvDistribution.VEventf(ctx, 2, "s%d has reached pending decrease threshold(%.2f>=%."+
+				"2f) after %d lease transfers",
+				store.StoreID, ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold, leaseTransferCount)
+			return leaseTransferCount
+		}
+
 		rangeID := topKRanges.index(i)
 		rstate := re.ranges[rangeID]
 		if len(rstate.pendingChanges) > 0 {
@@ -634,8 +675,6 @@ func (re *rebalanceEnv) rebalanceLeases(
 		}
 		re.addPendingRangeChange(leaseChange)
 		re.changes = append(re.changes, leaseChange)
-		re.leaseTransferCount++
-		localLeaseTransferCount++
 		if re.changes[len(re.changes)-1].IsChangeReplicas() || !re.changes[len(re.changes)-1].IsTransferLease() {
 			panic(fmt.Sprintf("lease transfer is invalid: %v", re.changes[len(re.changes)-1]))
 		}
@@ -646,28 +685,8 @@ func (re *rebalanceEnv) rebalanceLeases(
 			ss.adjusted.load, targetSS.adjusted.load, means.storeLoad.load,
 			ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease,
 			targetSS.maxFractionPendingIncrease, targetSS.maxFractionPendingDecrease)
-		if re.leaseTransferCount >= re.maxLeaseTransferCount {
-			log.KvDistribution.VEventf(ctx, 2, "reached max lease transfer count %d, returning", re.maxLeaseTransferCount)
-			break
-		}
-		doneShedding = ss.maxFractionPendingDecrease >= re.fractionPendingIncreaseOrDecreaseThreshold
-		if doneShedding {
-			log.KvDistribution.VEventf(ctx, 2, "s%d has reached pending decrease threshold(%.2f>=%.2f) after lease transfers: done shedding with %d left in topK",
-				store.StoreID, ss.maxFractionPendingDecrease, re.fractionPendingIncreaseOrDecreaseThreshold, n-(i+1))
-			break
-		}
+		leaseTransferCount++
 	}
-	if doneShedding || localLeaseTransferCount > 0 {
-		// If managed to transfer a lease, wait for it to be done, before
-		// shedding replicas from this store (which is more costly). Otherwise
-		// we may needlessly start moving replicas. Note that the store
-		// rebalancer will call the rebalance method again after the lease
-		// transfer is done and we may still be considering those transfers as
-		// pending from a load perspective, so we *may* not be able to do more
-		// lease transfers -- so be it.
-		log.KvDistribution.VEventf(ctx, 2, "skipping replica transfers for s%d: done shedding=%v, lease_transfers=%d",
-			store.StoreID, doneShedding, localLeaseTransferCount)
-		return true
-	}
-	return false
+	// We iterated through all top-K ranges without running into any limits.
+	return leaseTransferCount
 }

@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -329,8 +330,9 @@ func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaC
 }
 
 func TestClusterState(t *testing.T) {
+	tdPath := datapathutils.TestDataPath(t, "cluster_state")
 	datadriven.Walk(t,
-		datapathutils.TestDataPath(t, "cluster_state"),
+		tdPath,
 		func(t *testing.T, path string) {
 			ts := timeutil.NewManualTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 			cs := newClusterState(ts, newStringInterner())
@@ -355,8 +357,15 @@ func TestClusterState(t *testing.T) {
 				return buf.String()
 			}
 
-			datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			// Recursively invoked in `include` directive.
+			var invokeFn func(t *testing.T, d *datadriven.TestData) string
+			invokeFn = func(t *testing.T, d *datadriven.TestData) string {
 				switch d.Cmd {
+				case "include":
+					loc := dd.ScanArg[string](t, d, "path")
+					datadriven.RunTest(t, filepath.Join(tdPath, loc), invokeFn)
+					return "ok"
+
 				case "ranges":
 					var rangeIDs []int
 					for rangeID := range cs.ranges {
@@ -436,13 +445,19 @@ func TestClusterState(t *testing.T) {
 					// be in the past, indicating gossip delay. However, having it be
 					// some arbitrary value can be confusing for the test reader.
 					// Consider making it relative to ts.
-					msg := parseStoreLoadMsg(t, d.Input)
-					cs.processStoreLoadMsg(context.Background(), &msg)
+					for line := range strings.Lines(d.Input) {
+						msg := parseStoreLoadMsg(t, line)
+						cs.processStoreLoadMsg(context.Background(), &msg)
+					}
 					return ""
 
 				case "store-leaseholder-msg":
 					msg := parseStoreLeaseholderMsg(t, d.Input)
-					cs.processStoreLeaseholderMsgInternal(context.Background(), &msg, 2, nil)
+					n := numTopKReplicas
+					if o, ok := dd.ScanArgOpt[int](t, d, "num-top-k-replicas"); ok {
+						n = o
+					}
+					cs.processStoreLeaseholderMsgInternal(context.Background(), &msg, n, nil)
 					return ""
 
 				case "make-pending-changes":
@@ -524,6 +539,17 @@ func TestClusterState(t *testing.T) {
 					defer tr.Close()
 					ctx, finishAndGet := tracing.ContextWithRecordingSpan(context.Background(), tr, "rebalance-stores")
 					re := newRebalanceEnv(cs, rng, dsm, cs.ts.Now())
+
+					if n, ok := dd.ScanArgOpt[int](t, d, "max-lease-transfer-count"); ok {
+						re.maxLeaseTransferCount = n
+					}
+					if n, ok := dd.ScanArgOpt[int](t, d, "max-range-move-count"); ok {
+						re.maxRangeMoveCount = n
+					}
+					if f, ok := dd.ScanArgOpt[float64](t, d, "fraction-pending-decrease-threshold"); ok {
+						re.fractionPendingIncreaseOrDecreaseThreshold = f
+					}
+
 					re.rebalanceStores(ctx, storeID)
 					rec := finishAndGet()
 					var sb redact.StringBuilder
@@ -538,7 +564,8 @@ func TestClusterState(t *testing.T) {
 				default:
 					panic(fmt.Sprintf("unknown command: %v", d.Cmd))
 				}
-			},
-			)
+			}
+
+			datadriven.RunTest(t, path, invokeFn)
 		})
 }

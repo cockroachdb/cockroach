@@ -1,0 +1,43 @@
+include path=rebalance_stores_cpu_lease_include.txt
+----
+ok
+
+# s1 is overloaded and local, so rebalanceStores should try and succeed to shed
+# leases from it. We set things up so that this runs into the lease transfer count
+# limit and stops after reaching it.
+rebalance-stores store-id=1 fraction-pending-decrease-threshold=1.0 max-lease-transfer-count=2
+----
+[mmaid=1] rebalanceStores begins
+[mmaid=1] cluster means: (stores-load [cpu:400, write-bandwidth:0, byte-size:0]) (stores-capacity [cpu:1000, write-bandwidth:1000, byte-size:1000]) (nodes-cpu-load 400) (nodes-cpu-capacity 1000)
+[mmaid=1] evaluating s1: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=1] overload-continued s1 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))) - within grace period
+[mmaid=1] store s1 was added to shedding store list
+[mmaid=1] evaluating s2: node load loadLow, store load loadNormal, worst dim WriteBandwidth
+[mmaid=1] evaluating s3: node load loadLow, store load loadNormal, worst dim WriteBandwidth
+[mmaid=1] start processing shedding store s1: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r4:[cpu:250, write-bandwidth:0, byte-size:0] r3:[cpu:250, write-bandwidth:0, byte-size:0] r2:[cpu:250, write-bandwidth:0, byte-size:0] r1:[cpu:250, write-bandwidth:0, byte-size:0]
+[mmaid=1] local store s1 is CPU overloaded (overloadUrgent >= overloadSlow), attempting lease transfers first
+[mmaid=1] considering lease-transfer r4 from s1: candidates are [1 2 3]
+[mmaid=1] sortTargetCandidateSetAndPick: candidates: s2(loadNormal) s3(loadNormal), picked s2
+[mmaid=1] can add load to n2s2: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))]
+[mmaid=1] result(success): shedding r4 lease from s1 to s2 [change:r4=[transfer_to=2 cids=1,2]] with resulting loads source:[cpu:770, write-bandwidth:0, byte-size:0] target:[cpu:353, write-bandwidth:0, byte-size:0] (means: [cpu:400, write-bandwidth:0, byte-size:0]) (frac_pending: (src:0.00,target:0.23) (src:2.53,target:0.00))
+[mmaid=1] considering lease-transfer r3 from s1: candidates are [1 2 3]
+[mmaid=1] candiate store 2 was discarded due to (nls=false overloadDim=false pending_thresh=true): sls=(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=2.53,0.00(false))
+[mmaid=1] sortTargetCandidateSetAndPick: candidates: s3(loadNormal), picked s3
+[mmaid=1] can add load to n3s3: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow high_disk=false frac_pending=0.00,0.23(false))]
+[mmaid=1] result(success): shedding r3 lease from s1 to s3 [change:r3=[transfer_to=3 cids=3,4]] with resulting loads source:[cpu:540, write-bandwidth:0, byte-size:0] target:[cpu:353, write-bandwidth:0, byte-size:0] (means: [cpu:400, write-bandwidth:0, byte-size:0]) (frac_pending: (src:0.00,target:0.46) (src:2.53,target:0.00))
+[mmaid=1] reached max lease transfer count 2, returning
+[mmaid=1] skipping replica transfers for s1 to try more leases next time
+pending(4)
+change-id=1 store-id=1 node-id=1 range-id=4 load-delta=[cpu:-230, write-bandwidth:0, byte-size:0] start=0s gc=1m0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=1 type=VOTER_FULL)
+change-id=2 store-id=2 node-id=2 range-id=4 load-delta=[cpu:253, write-bandwidth:0, byte-size:0] start=0s gc=1m0s
+  prev=(replica-id=2 type=VOTER_FULL)
+  next=(replica-id=2 type=VOTER_FULL leaseholder=true)
+change-id=3 store-id=1 node-id=1 range-id=3 load-delta=[cpu:-230, write-bandwidth:0, byte-size:0] start=0s gc=1m0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=1 type=VOTER_FULL)
+change-id=4 store-id=3 node-id=3 range-id=3 load-delta=[cpu:253, write-bandwidth:0, byte-size:0] start=0s gc=1m0s
+  prev=(replica-id=3 type=VOTER_FULL)
+  next=(replica-id=3 type=VOTER_FULL leaseholder=true)

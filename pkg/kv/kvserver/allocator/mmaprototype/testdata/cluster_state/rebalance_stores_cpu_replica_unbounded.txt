@@ -1,0 +1,62 @@
+# Set up the base scenario - four stores, replicas on first three, leases on s1, s3 overloaded.
+include path=rebalance_stores_cpu_replica_include.txt
+----
+ok
+
+# Rebalance while setting high limits until it runs out of steam
+# for a lack of options. Note that this is is far from what could happen in production,
+# since the first moved replica already pushes the pending fraction to above 1.0, and we'd
+# never set it that high outside of tests (this test specifies 10 just to side step the limit).
+rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-threshold=10.0
+----
+[mmaid=2] rebalanceStores begins
+[mmaid=2] cluster means: (stores-load [cpu:525, write-bandwidth:0, byte-size:0]) (stores-capacity [cpu:1000, write-bandwidth:1000, byte-size:1000]) (nodes-cpu-load 525) (nodes-cpu-capacity 1000)
+[mmaid=2] evaluating s1: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=2] evaluating s2: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=2] evaluating s3: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=2] store s3 was added to shedding store list
+[mmaid=2] evaluating s4: node load loadLow, store load loadNormal, worst dim WriteBandwidth
+[mmaid=2] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=2] top-K[CPURate] ranges for s3 with lease on local s1: r3:[cpu:100, write-bandwidth:0, byte-size:0] r2:[cpu:100, write-bandwidth:0, byte-size:0] r1:[cpu:100, write-bandwidth:0, byte-size:0]
+[mmaid=2] attempting to shed replicas next
+[mmaid=2] excluding all stores on n3 due to overload/fd status
+[mmaid=2] considering replica-transfer r3 from s3: store load [cpu:1000, write-bandwidth:0, byte-size:0]
+[mmaid=2] sortTargetCandidateSetAndPick: candidates: s4(loadNormal), picked s4
+[mmaid=2] can add load to n4s4: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))]
+[mmaid=2] result(success): rebalancing r3 from s3 to s4 [change: r3=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}] cids=1,2]] with resulting loads source: [cpu:900, write-bandwidth:0, byte-size:0] target: [cpu:210, write-bandwidth:0, byte-size:0]
+[mmaid=2] considering replica-transfer r2 from s3: store load [cpu:900, write-bandwidth:0, byte-size:0]
+[mmaid=2] sortTargetCandidateSetAndPick: candidates: s4(loadNormal), picked s4
+[mmaid=2] can add load to n4s4: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=1.10,0.00(false))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.10(false))]
+[mmaid=2] result(success): rebalancing r2 from s3 to s4 [change: r2=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}] cids=3,4]] with resulting loads source: [cpu:800, write-bandwidth:0, byte-size:0] target: [cpu:320, write-bandwidth:0, byte-size:0]
+[mmaid=2] considering replica-transfer r1 from s3: store load [cpu:800, write-bandwidth:0, byte-size:0]
+[mmaid=2] sortTargetCandidateSetAndPick: candidates: s4(loadNormal), picked s4
+[mmaid=2] can add load to n4s4: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=2.20,0.00(false))] srcSLS[(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow high_disk=false frac_pending=0.00,0.20(false))]
+[mmaid=2] result(success): rebalancing r1 from s3 to s4 [change: r1=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}] cids=5,6]] with resulting loads source: [cpu:700, write-bandwidth:0, byte-size:0] target: [cpu:430, write-bandwidth:0, byte-size:0]
+pending(6)
+change-id=1 store-id=4 node-id=4 range-id=3 load-delta=[cpu:110, write-bandwidth:0, byte-size:0] start=5m0s gc=10m0s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL)
+change-id=2 store-id=3 node-id=3 range-id=3 load-delta=[cpu:-100, write-bandwidth:0, byte-size:0] start=5m0s gc=10m0s
+  prev=(replica-id=3 type=VOTER_FULL)
+  next=(replica-id=none type=VOTER_FULL)
+change-id=3 store-id=4 node-id=4 range-id=2 load-delta=[cpu:110, write-bandwidth:0, byte-size:0] start=5m0s gc=10m0s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL)
+change-id=4 store-id=3 node-id=3 range-id=2 load-delta=[cpu:-100, write-bandwidth:0, byte-size:0] start=5m0s gc=10m0s
+  prev=(replica-id=3 type=VOTER_FULL)
+  next=(replica-id=none type=VOTER_FULL)
+change-id=5 store-id=4 node-id=4 range-id=1 load-delta=[cpu:110, write-bandwidth:0, byte-size:0] start=5m0s gc=10m0s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL)
+change-id=6 store-id=3 node-id=3 range-id=1 load-delta=[cpu:-100, write-bandwidth:0, byte-size:0] start=5m0s gc=10m0s
+  prev=(replica-id=3 type=VOTER_FULL)
+  next=(replica-id=none type=VOTER_FULL)
+
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:500, write-bandwidth:0, byte-size:0] adjusted=[cpu:500, write-bandwidth:0, byte-size:0] node-reported-cpu=500 node-adjusted-cpu=500 seq=1
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:500, write-bandwidth:0, byte-size:0] adjusted=[cpu:500, write-bandwidth:0, byte-size:0] node-reported-cpu=500 node-adjusted-cpu=500 seq=1
+  top-k-ranges (local-store-id=1) dim=WriteBandwidth: r3 r2 r1
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:1000, write-bandwidth:0, byte-size:0] adjusted=[cpu:700, write-bandwidth:0, byte-size:0] node-reported-cpu=1000 node-adjusted-cpu=700 seq=4
+  top-k-ranges (local-store-id=1) dim=CPURate: r3 r2 r1
+store-id=4 node-id=4 status=ok accepting all reported=[cpu:100, write-bandwidth:0, byte-size:0] adjusted=[cpu:430, write-bandwidth:0, byte-size:0] node-reported-cpu=100 node-adjusted-cpu=430 seq=4
