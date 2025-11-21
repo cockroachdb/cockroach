@@ -284,10 +284,9 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	tdb.CheckQueryResults(t, "SELECT test.public.f()", [][]string{{"1"}})
 
 	// The corruption should interfere with DDL statements.
-	const errRE = "relation \"foo\" \\(106\\): invalid foreign key backreference: missing table=123456789: referenced table ID 123456789: referenced descriptor not found"
+	const errRE = "referenced descriptor ID 123456789: looking up ID 123456789: descriptor not found"
 	tdb.ExpectErr(t, errRE, "ALTER TABLE test.public.foo RENAME TO bar")
-	const errReForFunction = " function \"f\" \\(107\\): referenced descriptor ID 123456789: referenced descriptor not found"
-	tdb.ExpectErr(t, errReForFunction, "ALTER FUNCTION test.public.f RENAME TO g")
+	tdb.ExpectErr(t, `function "f" \(\d+\): referenced descriptor ID 123456789: referenced descriptor not found`, "ALTER FUNCTION test.public.f RENAME TO g")
 
 	// Check that the corruption is detected by invalid_objects.
 	const qDetectCorruption = `SELECT count(*) FROM "".crdb_internal.invalid_objects`
