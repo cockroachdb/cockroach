@@ -444,7 +444,11 @@ func TestClusterState(t *testing.T) {
 
 				case "store-leaseholder-msg":
 					msg := parseStoreLeaseholderMsg(t, d.Input)
-					cs.processStoreLeaseholderMsgInternal(context.Background(), &msg, 2, nil)
+					n := numTopKReplicas
+					if o, ok := dd.ScanArgOpt[int](t, d, "num-top-k-replicas"); ok {
+						n = o
+					}
+					cs.processStoreLeaseholderMsgInternal(context.Background(), &msg, n, nil)
 					return ""
 
 				case "make-pending-changes":
