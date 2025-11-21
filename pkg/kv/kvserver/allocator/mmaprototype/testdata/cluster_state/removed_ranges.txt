@@ -12,7 +12,8 @@ node-id=2 locality-tiers=region=us-east-1,zone=us-east-1a,node=2
 
 store-leaseholder-msg 
 store-id=1
-  range-id=1 load=[80,80,80] raft-cpu=20 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+  range-id=1 load=[80,80,80] raft-cpu=20
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
 ----
 

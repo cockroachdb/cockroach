@@ -36,7 +36,8 @@ node-id=4 locality-tiers=region=us-east-1,zone=us-east-1a,node=4
 # Store s1 is the leaseholder for range r1.
 store-leaseholder-msg 
 store-id=1
-  range-id=1 load=[2,2,2] raft-cpu=1 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+  range-id=1 load=[2,2,2] raft-cpu=1
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
     store-id=3 replica-id=3 type=VOTER_FULL
 ----
@@ -85,7 +86,8 @@ t=5s
 # and s1 still has a replica.
 store-leaseholder-msg
 store-id=2
-  range-id=1 load=[3,3,3] raft-cpu=2 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+  range-id=1 load=[3,3,3] raft-cpu=2
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=1 replica-id=1 type=VOTER_FULL
     store-id=3 replica-id=3 type=VOTER_FULL
     store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
@@ -127,7 +129,8 @@ change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2, write-bandwidth:
 # that the message originates from s2 and not s1.
 store-leaseholder-msg
 store-id=2
-  range-id=1 load=[3,3,3] raft-cpu=2 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+  range-id=1 load=[3,3,3] raft-cpu=2
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=1 replica-id=1 type=VOTER_FULL
     store-id=3 replica-id=3 type=VOTER_FULL
     store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
@@ -194,7 +197,8 @@ store-id=4 node-id=4 status=ok accepting all reported=[cpu:0, write-bandwidth:0,
 # replica has not been removed.
 store-leaseholder-msg
 store-id=2
-  range-id=1 load=[3,3,3] raft-cpu=2 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+  range-id=1 load=[3,3,3] raft-cpu=2
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=1 replica-id=1 type=VOTER_FULL
     store-id=3 replica-id=3 type=VOTER_FULL
     store-id=4 replica-id=4 type=VOTER_FULL
@@ -234,7 +238,8 @@ change-id=4 store-id=3 node-id=3 range-id=1 load-delta=[cpu:-2, write-bandwidth:
 # Same store leaseholder msg from s2. The pending change for s3 is gc'd.
 store-leaseholder-msg
 store-id=2
-  range-id=1 load=[3,3,3] raft-cpu=2 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+  range-id=1 load=[3,3,3] raft-cpu=2
+  config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
     store-id=1 replica-id=1 type=VOTER_FULL
     store-id=3 replica-id=3 type=VOTER_FULL
     store-id=4 replica-id=4 type=VOTER_FULL
