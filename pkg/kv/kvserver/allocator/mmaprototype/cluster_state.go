@@ -1441,7 +1441,7 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 	// corresponding delta adjustment as the reported load already contains the
 	// effect.
 	for _, change := range ss.computePendingChangesReflectedInLatestLoad(storeMsg.LoadTime) {
-		log.KvDistribution.VInfof(ctx, 2, "s%d not-pending %v", storeMsg.StoreID, change)
+		log.KvDistribution.VEventf(ctx, 2, "s%d not-pending %v", storeMsg.StoreID, change)
 		delete(ss.adjusted.loadPendingChanges, change.changeID)
 	}
 
@@ -1451,7 +1451,7 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 		// replicas.
 		cs.applyChangeLoadDelta(change.ReplicaChange)
 	}
-	log.KvDistribution.VInfof(ctx, 2, "processStoreLoadMsg for store s%v: %v",
+	log.KvDistribution.VEventf(ctx, 2, "processStoreLoadMsg for store s%v: %v",
 		storeMsg.StoreID, ss.adjusted.load)
 }
 
@@ -2055,7 +2055,7 @@ func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
 		storeState.adjusted.loadPendingChanges[cid] = pendingChange
 		rangeState.pendingChanges = append(rangeState.pendingChanges, pendingChange)
 		rangeState.pendingChangeNoRollback = false
-		log.KvDistribution.VInfof(context.Background(), 3,
+		log.KvDistribution.VEventf(context.Background(), 3,
 			"addPendingRangeChange: change_id=%v, range_id=%v, change=%v",
 			cid, rangeID, pendingChange.ReplicaChange)
 		pendingChanges = append(pendingChanges, pendingChange)
@@ -2183,7 +2183,7 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange
 		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
 	}
 
-	log.KvDistribution.VInfof(context.Background(), 2, "applying replica change %v to range %d on store %d",
+	log.KvDistribution.VEventf(context.Background(), 2, "applying replica change %v to range %d on store %d",
 		change, change.rangeID, change.target.StoreID)
 	if change.isRemoval() {
 		delete(storeState.adjusted.replicas, change.rangeID)
@@ -2367,11 +2367,11 @@ func (cs *clusterState) canShedAndAddLoad(
 	var reason strings.Builder
 	defer func() {
 		if canAddLoad {
-			log.KvDistribution.VInfof(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
+			log.KvDistribution.VEventf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
 		} else {
-			log.KvDistribution.VInfof(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason.String())
-			log.KvDistribution.VInfof(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
+			log.KvDistribution.VEventf(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason.String())
+			log.KvDistribution.VEventf(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
 		}
 	}()
 	if targetSLS.highDiskSpaceUtilization {
