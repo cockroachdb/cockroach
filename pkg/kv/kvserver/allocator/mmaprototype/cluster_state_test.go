@@ -523,7 +523,8 @@ func TestClusterState(t *testing.T) {
 					tr.SetRedactable(true)
 					defer tr.Close()
 					ctx, finishAndGet := tracing.ContextWithRecordingSpan(context.Background(), tr, "rebalance-stores")
-					cs.rebalanceStores(ctx, storeID, rng, dsm)
+					re := newRebalanceEnv(cs, rng, dsm, cs.ts.Now())
+					re.rebalanceStores(ctx, storeID)
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
