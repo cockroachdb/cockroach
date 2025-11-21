@@ -1,0 +1,24 @@
+exec-sql db=udf_test app-name=plpgsql
+CREATE TABLE IF NOT EXISTS test(a int);
+  CREATE OR REPLACE PROCEDURE insert_incremental(n INT)
+  LANGUAGE plpgsql
+  AS $$
+  DECLARE
+    i INT := 0;
+    next_val INT;
+  BEGIN
+    WHILE i < n LOOP
+      SELECT coalesce(max(a), 0) + 1 INTO next_val FROM test;
+      INSERT INTO test(a) VALUES (next_val);
+      i := i + 1;
+    END LOOP;
+  END;
+  $$;
+CALL insert_incremental(5);
+----
+
+show-stats db=udf_test app-name=plpgsql
+----
+{"count": "1", "fingerprint_id": "11c4e5400aa05722", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "CREATE OR REPLACE PROCEDURE insert_incremental(n INT8)\n\tLANGUAGE plpgsql\n\tAS $$_$$", "run_lat_not_zero": true, "sql_type": "TypeDDL", "summary": "CREATE OR REPLACE PROCEDURE insert_incremental(n INT8)\n\tLANGUAGE plpgsql\n\tAS $$_$$", "svc_lat_not_zero": true, "transaction_fingerprint_id": "3013cc07fc915da5"}
+{"count": "1", "fingerprint_id": "a82856550b801042", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "CALL insert_incremental(_)", "run_lat_not_zero": true, "sql_type": "TypeTCL", "summary": "CALL insert_incremental(_)", "svc_lat_not_zero": true, "transaction_fingerprint_id": "3013cc07fc915da5"}
+{"count": "1", "fingerprint_id": "f592c1a0850da0bf", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "CREATE TABLE IF NOT EXISTS test (a INT8)", "run_lat_not_zero": true, "sql_type": "TypeDDL", "summary": "CREATE TABLE IF NOT EXISTS test (a INT8)", "svc_lat_not_zero": true, "transaction_fingerprint_id": "5af17cec030c1760"}
