@@ -1,0 +1,39 @@
+exec-sql db=udf_test app-name=udf
+CREATE TABLE IF NOT EXISTS test(a int);
+CREATE FUNCTION random_int()
+RETURNS INT
+LANGUAGE SQL
+AS $$
+    SELECT floor(random() * 100)::INT
+$$
+VOLATILE;
+CREATE FUNCTION do_something()
+RETURNS INT
+LANGUAGE SQL
+AS $$
+    INSERT INTO test(select random_int());
+    SELECT max(a) FROM test;
+$$
+VOLATILE;
+SELECT random_int();
+select do_something();
+----
+
+show-stats db=udf_test app-name=udf
+----
+{"count": "1", "fingerprint_id": "8be77c892ac9ad38", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "CREATE FUNCTION do_something()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tVOLATILE\n\tAS $$_$$", "run_lat_not_zero": true, "sql_type": "TypeDDL", "summary": "CREATE FUNCTION do_something()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tVOLATILE\n\tAS $$_$$", "svc_lat_not_zero": true, "transaction_fingerprint_id": "1fe047693ba00214"}
+{"count": "1", "fingerprint_id": "af9bcc145f0d85f3", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT do_something()", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT do_something()", "svc_lat_not_zero": true, "transaction_fingerprint_id": "1fe047693ba00214"}
+{"count": "1", "fingerprint_id": "bf1896e478760878", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT random_int()", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT random_int()", "svc_lat_not_zero": true, "transaction_fingerprint_id": "1fe047693ba00214"}
+{"count": "1", "fingerprint_id": "f56262fdc29506d7", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "CREATE FUNCTION random_int()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tVOLATILE\n\tAS $$_$$", "run_lat_not_zero": true, "sql_type": "TypeDDL", "summary": "CREATE FUNCTION random_int()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tVOLATILE\n\tAS $$_$$", "svc_lat_not_zero": true, "transaction_fingerprint_id": "5a01dfb14494b108"}
+{"count": "1", "fingerprint_id": "f592c1a0850da0bf", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "CREATE TABLE IF NOT EXISTS test (a INT8)", "run_lat_not_zero": true, "sql_type": "TypeDDL", "summary": "CREATE TABLE IF NOT EXISTS test (a INT8)", "svc_lat_not_zero": true, "transaction_fingerprint_id": "5af17cec030c1760"}
+
+exec-sql db=udf_test app-name=udf_transactions
+BEGIN;
+select do_something();
+select do_something();
+COMMIT;
+----
+
+show-stats db=udf_test app-name=udf_transactions
+----
+{"count": "2", "fingerprint_id": "af9bcc145f0d85ff", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT do_something()", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT do_something()", "svc_lat_not_zero": true, "transaction_fingerprint_id": "1dc175ec90b4a99f"}
