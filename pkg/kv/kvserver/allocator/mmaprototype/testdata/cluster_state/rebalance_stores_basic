@@ -59,11 +59,22 @@ store-id=3 node-id=3 status=ok accepting all reported=[cpu:10, write-bandwidth:0
 # a lease from it. The gc duration for lease shedding is 1min.
 rebalance-stores store-id=1
 ----
+[mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:33, write-bandwidth:0, byte-size:0]) (stores-capacity [cpu:100, write-bandwidth:100, byte-size:100]) (nodes-cpu-load 33) (nodes-cpu-capacity 100)
+[mmaid=1] evaluating s1: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-continued s1 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))) - within grace period
+[mmaid=1] store s1 was added to shedding store list
+[mmaid=1] evaluating s2: node load loadLow, store load loadNormal, worst dim WriteBandwidth
+[mmaid=1] evaluating s3: node load loadLow, store load loadNormal, worst dim WriteBandwidth
 [mmaid=1] start processing shedding store s1: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r1:[cpu:60, write-bandwidth:0, byte-size:0]
+[mmaid=1] local store s1 is CPU overloaded (overloadUrgent >= overloadSlow), attempting lease transfers first
+[mmaid=1] considering lease-transfer r1 from s1: candidates are [1 2 3]
+[mmaid=1] sortTargetCandidateSetAndPick: candidates: s2(loadNormal) s3(loadNormal), picked s2
+[mmaid=1] can add load to n2s2: true targetSLS[(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow high_disk=false frac_pending=0.00,0.00(true))]
 [mmaid=1] result(success): shedding r1 lease from s1 to s2 [change:r1=[transfer_to=2 cids=1,2]] with resulting loads source:[cpu:40, write-bandwidth:0, byte-size:0] target:[cpu:54, write-bandwidth:0, byte-size:0] (means: [cpu:33, write-bandwidth:0, byte-size:0]) (frac_pending: (src:0.00,target:0.50) (src:4.40,target:0.00))
+[mmaid=1] s1 has reached pending decrease threshold(0.50>=0.10) after lease transfers: done shedding with 0 left in topK
+[mmaid=1] skipping replica transfers for s1: done shedding=true, lease_transfers=1
 pending(2)
 change-id=1 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-40, write-bandwidth:0, byte-size:0] start=0s gc=1m0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
