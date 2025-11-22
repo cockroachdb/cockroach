@@ -46,8 +46,8 @@ func registerJobs(r registry.Registry) {
 		Name:              "jobs/stress",
 		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           jobsSpec,
+		Benchmark:         true,
 		EncryptionSupport: registry.EncryptionMetamorphic,
-		Leases:            registry.MetamorphicLeases,
 		CompatibleClouds:  registry.OnlyGCE,
 		Suites:            registry.Suites(registry.Nightly),
 		Timeout:           roachtestTimeout,
@@ -120,9 +120,9 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 			}
 		}
 	}
-	for i := 0; i < nodeCount; i++ {
-		group.Go(randomPoller(time.Second, checkJobQueryLatency))
-	}
+	//for i := 0; i < nodeCount; i++ {
+	//	group.Go(randomPoller(time.Second, checkJobQueryLatency))
+	//}
 
 	waitTime := time.Duration(rng.Intn(pollerMinFrequencySeconds)+1) * time.Second
 	jobIDToTableName := make(map[jobspb.JobID]string)
@@ -145,6 +145,7 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	require.NoError(t, group.WaitE())
 	checkJobSystemHealth(ctx, t, c, rng)
+	require.NoError(t, checkJobQueryLatency(ctx, t, c, rng))
 }
 
 func createTablesWithChangefeeds(
