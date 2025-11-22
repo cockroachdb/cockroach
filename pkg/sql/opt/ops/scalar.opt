@@ -1311,6 +1311,13 @@ define UDFCallPrivate {
     Def UDFDefinition
 }
 
+# RoutineParam is a reference to a routine parameter.
+[Scalar]
+define RoutineParamRef {
+    # Value is always a *tree.RoutineParamRef.
+    Param RoutineParamRef
+}
+
 # TxnControl allows PL/pgSQL stored procedures to pause their execution, commit
 # or rollback the current transaction, and then continue execution in the new
 # transaction.

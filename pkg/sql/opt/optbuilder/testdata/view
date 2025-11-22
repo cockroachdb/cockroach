@@ -175,11 +175,11 @@ build
 SELECT * FROM v2
 ----
 project
- ├── columns: bar:4
+ ├── columns: bar:2
  ├── values
  │    └── ()
  └── projections
-      └── bar(1, 2) [as=bar:4]
+      └── bar(1, 2) [as=bar:2]
 
 exec-ddl
 CREATE VIEW v3 AS SELECT baz();
@@ -203,13 +203,13 @@ build
 SELECT * FROM v4
 ----
 project
- ├── columns: x:2 y:6 z:17
+ ├── columns: x:2 y:4 z:15
  ├── values
  │    └── ()
  └── projections
       ├── foo() [as=x:2]
-      ├── bar(1, 2) [as=y:6]
-      └── baz() [as=z:17]
+      ├── bar(1, 2) [as=y:4]
+      └── baz() [as=z:15]
 
 exec-ddl
 CREATE VIEW v5 AS SELECT bar(k, i) FROM a
@@ -219,11 +219,11 @@ build
 SELECT * FROM v5
 ----
 project
- ├── columns: bar:11
+ ├── columns: bar:9
  ├── scan a
  │    └── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6 tableoid:7
  └── projections
-      └── bar(k:1, i:2) [as=bar:11]
+      └── bar(k:1, i:2) [as=bar:9]
 
 exec-ddl
 CREATE VIEW v6 AS SELECT * FROM a INNER JOIN cd ON bar(k, i) = c

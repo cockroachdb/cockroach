@@ -731,7 +731,9 @@ type UDFDefinition struct {
 	// i-th column in the list corresponds to the i-th parameter of the function.
 	// During execution of the UDF, these columns are replaced with the arguments
 	// of the function invocation.
-	Params opt.ColList
+	Params    opt.ColList
+	NumParams int
+	// Params2 []*tree.RoutineParamRef
 
 	// Body contains a relational expression for each statement in the function
 	// body. It is unset during construction of a recursive UDF.

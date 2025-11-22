@@ -108,34 +108,33 @@ CALL p(10, 20, 30.3)
 call
  └── procedure: p
       ├── args
-      │    ├── const: 10
-      │    ├── const: 20
-      │    └── const: 30.3
-      ├── params: a:1 b:2 c:3
+      │    ├── $1: const: 10
+      │    ├── $2: const: 20
+      │    └── $3: const: 30.3
       └── body
            ├── insert abc
            │    ├── columns: <none>
            │    ├── insert-mapping:
-           │    │    ├── column1:9 => abc.a:4
-           │    │    ├── column2:10 => abc.b:5
-           │    │    └── c_cast:12 => abc.c:6
+           │    │    ├── column1:6 => a:1
+           │    │    ├── column2:7 => b:2
+           │    │    └── c_cast:9 => c:3
            │    └── project
-           │         ├── columns: c_cast:12 column1:9 column2:10
+           │         ├── columns: c_cast:9 column1:6 column2:7
            │         ├── values
-           │         │    ├── columns: column1:9 column2:10 column3:11
+           │         │    ├── columns: column1:6 column2:7 column3:8
            │         │    └── tuple
            │         │         ├── plus
-           │         │         │    ├── variable: a:1
+           │         │         │    ├── p.a:$1
            │         │         │    └── const: 10
-           │         │         ├── variable: b:2
-           │         │         └── variable: c:3
+           │         │         ├── p.b:$2
+           │         │         └── p.c:$3
            │         └── projections
-           │              └── assignment-cast: INT8 [as=c_cast:12]
-           │                   └── variable: column3:11
+           │              └── assignment-cast: INT8 [as=c_cast:9]
+           │                   └── variable: column3:8
            └── limit
-                ├── columns: column1:13
+                ├── columns: column1:10
                 ├── values
-                │    ├── columns: column1:13
+                │    ├── columns: column1:10
                 │    └── tuple
                 │         └── null
                 └── const: 1

@@ -430,7 +430,7 @@ CREATE VIEW v28 AS SELECT bar(1, 2);
 ----
 create-view t.public.v28
  ├── SELECT public.bar(1:::INT8, 2:::INT8)
- ├── columns: bar:4
+ ├── columns: bar:2
  └── dependencies
       └── [FUNCTION 100060]
 
@@ -449,7 +449,7 @@ CREATE VIEW v30 AS SELECT foo() AS x, bar(1, 2) AS y, baz() AS z
 ----
 create-view t.public.v30
  ├── SELECT public.foo() AS x, public.bar(1:::INT8, 2:::INT8) AS y, public.baz() AS z
- ├── columns: x:2 y:6 z:24
+ ├── columns: x:2 y:4 z:22
  └── dependencies
       ├── [FUNCTION 100059]
       ├── [FUNCTION 100060]
@@ -460,7 +460,7 @@ CREATE VIEW v31 AS SELECT bar(a, b) FROM ab
 ----
 create-view t.public.v31
  ├── SELECT public.bar(a, b) FROM t.public.ab
- ├── columns: bar:8
+ ├── columns: bar:6
  └── dependencies
       ├── ab [columns: a b]
       └── [FUNCTION 100060]

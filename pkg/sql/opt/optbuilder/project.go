@@ -215,16 +215,36 @@ func (b *Builder) resolveColRef(e tree.Expr, inScope *scope) tree.TypedExpr {
 	if ok && !unresolved.Star && unresolved.NumParts == 1 {
 		colName := unresolved.Parts[0]
 		_, srcMeta, _, resolveErr := inScope.FindSourceProvidingColumn(b.ctx, tree.Name(colName))
-		if resolveErr != nil {
-			// It may be a reference to a table, e.g. SELECT tbl FROM tbl.
-			// Attempt to resolve as a TupleStar.
-			if sqlerrors.IsUndefinedColumnError(resolveErr) {
-				return func() tree.TypedExpr {
-					defer wrapColTupleStarPanic(resolveErr)
-					return inScope.resolveType(columnNameAsTupleStar(colName), types.AnyElement)
-				}()
+		if resolveErr != nil && sqlerrors.IsUndefinedColumnError(resolveErr) {
+			// TODO: Do I need this?
+			//  e = inScope.walkExprTree(e)
+			texpr, err := tree.TypeCheck(b.ctx, e, b.semaCtx, types.AnyElement)
+			if err == nil {
+				return texpr
 			}
-			panic(resolveErr)
+			if param := inScope.findFuncParamByName(colName); param != nil {
+				return param
+			}
+			if sqlerrors.IsUndefinedRelationError(err) {
+				panic(resolveErr)
+			}
+			panic(err)
+			// if err != nil {
+			// 	panic(err)
+			// }
+			// wrapColTupleStarPanic(resolveErr)
+			// return s.ensureNullType(texpr, desired)
+			// // It may be a reference to a table, e.g. SELECT tbl FROM tbl.
+			// // Attempt to resolve as a TupleStar.
+			// if sqlerrors.IsUndefinedColumnError(resolveErr) {
+			// 	return func() tree.TypedExpr {
+			// 		defer wrapColTupleStarPanic(resolveErr)
+			// 		return inScope.resolveType(columnNameAsTupleStar(colName), types.AnyElement)
+			// 	}()
+			// }
+			// // It may be a reference to a routine parameter.
+			// if param
+			// panic(resolveErr)
 		}
 		return srcMeta.(tree.TypedExpr)
 	}
@@ -317,6 +337,10 @@ func (b *Builder) finishBuildScalarRef(
 	if isOuterColumn && b.subquery != nil {
 		b.subquery.outerCols.Add(col.id)
 	}
+
+	// if col.paramOrd != 0 {
+	// 	return b.factory.ConstructParam(int8(col.paramOrd), col.typ)
+	// }
 
 	// If this is not a projection context, then wrap the column reference with
 	// a Variable expression that can be embedded in outer expression(s).

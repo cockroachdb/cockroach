@@ -986,55 +986,7 @@ $$ LANGUAGE SQL
 build format=show-scalars
 SELECT insert_zero_into_t1(10)
 ----
-project
- ├── columns: insert_zero_into_t1:14
- ├── values
- │    └── tuple
- └── projections
-      └── udf: insert_zero_into_t1 [as=insert_zero_into_t1:14]
-           ├── args
-           │    └── const: 10
-           ├── params: n:1
-           └── body
-                └── limit
-                     ├── columns: n:12
-                     ├── project
-                     │    ├── columns: n:12
-                     │    ├── insert t1
-                     │    │    ├── columns: c1:2!null c2:3 c3:4 rowid:5!null
-                     │    │    ├── insert-mapping:
-                     │    │    │    ├── column1:8 => c1:2
-                     │    │    │    ├── c2_default:9 => c2:3
-                     │    │    │    ├── c3_default:10 => c3:4
-                     │    │    │    └── rowid_default:11 => rowid:5
-                     │    │    ├── return-mapping:
-                     │    │    │    ├── column1:8 => c1:2
-                     │    │    │    ├── c2_default:9 => c2:3
-                     │    │    │    ├── c3_default:10 => c3:4
-                     │    │    │    └── rowid_default:11 => rowid:5
-                     │    │    ├── check columns: rls:13
-                     │    │    └── project
-                     │    │         ├── columns: rls:13 column1:8!null c2_default:9 c3_default:10 rowid_default:11
-                     │    │         ├── project
-                     │    │         │    ├── columns: c2_default:9 c3_default:10 rowid_default:11 column1:8!null
-                     │    │         │    ├── values
-                     │    │         │    │    ├── columns: column1:8!null
-                     │    │         │    │    └── tuple
-                     │    │         │    │         └── const: 0
-                     │    │         │    └── projections
-                     │    │         │         ├── cast: STRING [as=c2_default:9]
-                     │    │         │         │    └── null
-                     │    │         │         ├── cast: DATE [as=c3_default:10]
-                     │    │         │         │    └── null
-                     │    │         │         └── function: unique_rowid [as=rowid_default:11]
-                     │    │         └── projections
-                     │    │              └── lt [as=rls:13]
-                     │    │                   ├── function: char_length
-                     │    │                   │    └── variable: c2_default:9
-                     │    │                   └── const: 10
-                     │    └── projections
-                     │         └── variable: n:1 [as=n:12]
-                     └── const: 1
+error (42703): column "n" does not exist
 
 exec-ddl
 DROP POLICY p_select on t1;

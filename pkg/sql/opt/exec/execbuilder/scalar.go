@@ -7,6 +7,7 @@ package execbuilder
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -50,24 +51,25 @@ func init() {
 	// the functions depend on scalarBuildFuncMap which in turn depends on the
 	// functions).
 	scalarBuildFuncMap = [opt.NumOperators]buildFunc{
-		opt.VariableOp:       (*Builder).buildVariable,
-		opt.ConstOp:          (*Builder).buildTypedExpr,
-		opt.NullOp:           (*Builder).buildNull,
-		opt.PlaceholderOp:    (*Builder).buildPlaceholder,
-		opt.TupleOp:          (*Builder).buildTuple,
-		opt.FunctionOp:       (*Builder).buildFunction,
-		opt.CaseOp:           (*Builder).buildCase,
-		opt.CastOp:           (*Builder).buildCast,
-		opt.AssignmentCastOp: (*Builder).buildAssignmentCast,
-		opt.CoalesceOp:       (*Builder).buildCoalesce,
-		opt.ColumnAccessOp:   (*Builder).buildColumnAccess,
-		opt.ArrayOp:          (*Builder).buildArray,
-		opt.AnyOp:            (*Builder).buildAny,
-		opt.AnyScalarOp:      (*Builder).buildAnyScalar,
-		opt.IndirectionOp:    (*Builder).buildIndirection,
-		opt.CollateOp:        (*Builder).buildCollate,
-		opt.ArrayFlattenOp:   (*Builder).buildArrayFlatten,
-		opt.IfErrOp:          (*Builder).buildIfErr,
+		opt.VariableOp:        (*Builder).buildVariable,
+		opt.ConstOp:           (*Builder).buildTypedExpr,
+		opt.NullOp:            (*Builder).buildNull,
+		opt.PlaceholderOp:     (*Builder).buildPlaceholder,
+		opt.RoutineParamRefOp: (*Builder).buildTypedExpr,
+		opt.TupleOp:           (*Builder).buildTuple,
+		opt.FunctionOp:        (*Builder).buildFunction,
+		opt.CaseOp:            (*Builder).buildCase,
+		opt.CastOp:            (*Builder).buildCast,
+		opt.AssignmentCastOp:  (*Builder).buildAssignmentCast,
+		opt.CoalesceOp:        (*Builder).buildCoalesce,
+		opt.ColumnAccessOp:    (*Builder).buildColumnAccess,
+		opt.ArrayOp:           (*Builder).buildArray,
+		opt.AnyOp:             (*Builder).buildAny,
+		opt.AnyScalarOp:       (*Builder).buildAnyScalar,
+		opt.IndirectionOp:     (*Builder).buildIndirection,
+		opt.CollateOp:         (*Builder).buildCollate,
+		opt.ArrayFlattenOp:    (*Builder).buildArrayFlatten,
+		opt.IfErrOp:           (*Builder).buildIfErr,
 
 		// Item operators.
 		opt.ProjectionsItemOp:  (*Builder).buildItem,
@@ -989,7 +991,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 
 	blockState := udf.Def.BlockState
 	if blockState != nil {
-		blockState.VariableCount = len(udf.Def.Params)
+		blockState.VariableCount = max(len(udf.Def.Params), udf.Def.NumParams)
 		b.initRoutineExceptionHandler(blockState, udf.Def.ExceptionBlock)
 	}
 
@@ -1224,6 +1226,17 @@ func (b *Builder) buildRoutinePlanGenerator(
 			var replaceFn norm.ReplaceFunc
 			replaceFn = func(e opt.Expr) opt.Expr {
 				switch t := e.(type) {
+				case *memo.UDFCallExpr:
+					fmt.Println("here")
+
+				case *memo.RoutineParamRefExpr:
+					if t.Param.Ord < len(args) {
+						return f.ConstructConstVal(args[t.Param.Ord], t.Typ)
+					} else {
+						panic(errors.AssertionFailedf("parameter %s.%s with ordinal %d out of range",
+							t.Param.RoutineName, t.Param.Name, t.Param.Ord))
+					}
+
 				case *memo.VariableExpr:
 					if ord, ok := argOrd(t.Col); ok {
 						return f.ConstructConstVal(args[ord], t.Typ)

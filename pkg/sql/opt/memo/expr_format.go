@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -1070,9 +1071,10 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			// Ensure that the definition of the UDF is not printed out again if it
 			// is recursively called.
 			f.seenUDFs[def] = struct{}{}
-			if len(def.Params) > 0 {
-				f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
-			}
+			// TODO: Behind session setting.
+			// if len(def.Params) > 0 {
+			// 	f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
+			// }
 			n := tp.Child("body")
 			for i := range def.Body {
 				stmtNode := n
@@ -1107,12 +1109,19 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			for i := range def.ExceptionBlock.Codes {
 				code := def.ExceptionBlock.Codes[i]
 				body := def.ExceptionBlock.Actions[i].Body
+				n.Childf("num-args: %d", def.ExceptionBlock.Actions[i].NumParams)
 				var branch treeprinter.Node
 				if code.String() == "OTHERS" {
 					branch = n.Child("OTHERS")
 				} else {
 					branch = n.Childf("SQLSTATE '%s'", code)
 				}
+				// if lendef.ExceptionBlock.Actions[i].NumParams > 0 {
+				// 	n := tp.Child("args")
+				// 	for i := range args {
+				// 		f.formatScalarWithLabel("$"+strconv.Itoa(i+1), args[i], n)
+				// 	}
+				// }
 				for j := range body {
 					f.formatExpr(body[j], branch)
 				}
@@ -1123,7 +1132,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		if len(args) > 0 {
 			n := tp.Child("args")
 			for i := range args {
-				f.formatExpr(args[i], n)
+				f.formatScalarWithLabel("$"+strconv.Itoa(i+1), args[i], n)
 			}
 		}
 	}
@@ -1203,6 +1212,12 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		formatUDFInputAndBody(udf, tp)
 		return
 
+	case opt.RoutineParamRefOp:
+		p := scalar.(*RoutineParamRefExpr).Param
+		fmt.Fprintf(f.Buffer, "%s.%s:$%d", p.RoutineName, p.Name, p.Ord)
+		tp = tp.Child(f.Buffer.String())
+		return
+
 	case opt.TxnControlOp:
 		controlExpr := scalar.(*TxnControlExpr)
 		fmt.Fprintf(f.Buffer, "%s; CALL %s", controlExpr.TxnOp, controlExpr.Def.Name)
@@ -1267,6 +1282,10 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			// pre-emptively set intercepted=true to avoid the default
 			// formatScalarPrivate formatting below.
 			fmt.Fprintf(f.Buffer, "udf: %s", t.Def.Name)
+			intercepted = true
+		case *RoutineParamRefExpr:
+			p := t.Param
+			fmt.Fprintf(f.Buffer, "%s.%s:$%d", p.RoutineName, p.Name, p.Ord)
 			intercepted = true
 		case *TxnControlExpr:
 			// As for UDFCallExpr, the arguments and body will be printed below.
@@ -1487,6 +1506,9 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 
 	case *UDFCallExpr:
 		private = nil
+
+	case *RoutineParamRefExpr:
+		f.Buffer.WriteString("FOO")
 
 	default:
 		private = scalar.Private()

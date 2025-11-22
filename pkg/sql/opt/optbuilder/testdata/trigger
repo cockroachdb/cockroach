@@ -693,19 +693,19 @@ INSERT INTO ab VALUES (1, 2);
 insert ab
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── a_new:49 => a:1
- │    ├── b_new:50 => b:2
+ │    ├── a_new:37 => a:1
+ │    ├── b_new:38 => b:2
  │    └── rowid_default:8 => rowid:3
  ├── before-triggers
  │    └── tr
  └── project
-      ├── columns: a_new:49 b_new:50 column1:6 column2:7 rowid_default:8 new:9 insert_ab:48
+      ├── columns: a_new:37 b_new:38 column1:6 column2:7 rowid_default:8 new:9 insert_ab:36
       ├── barrier
-      │    ├── columns: column1:6 column2:7 rowid_default:8 new:9 insert_ab:48
+      │    ├── columns: column1:6 column2:7 rowid_default:8 new:9 insert_ab:36
       │    └── select
-      │         ├── columns: column1:6 column2:7 rowid_default:8 new:9 insert_ab:48
+      │         ├── columns: column1:6 column2:7 rowid_default:8 new:9 insert_ab:36
       │         ├── project
-      │         │    ├── columns: insert_ab:48 column1:6 column2:7 rowid_default:8 new:9
+      │         │    ├── columns: insert_ab:36 column1:6 column2:7 rowid_default:8 new:9
       │         │    ├── barrier
       │         │    │    ├── columns: column1:6 column2:7 rowid_default:8 new:9
       │         │    │    └── values
@@ -718,112 +718,110 @@ insert ab
       │         │    │                   ├── const: 1
       │         │    │                   └── const: 2
       │         │    └── projections
-      │         │         └── udf: insert_ab [as=insert_ab:48]
+      │         │         └── udf: insert_ab [as=insert_ab:36]
       │         │              ├── args
-      │         │              │    ├── variable: new:9
-      │         │              │    ├── null
-      │         │              │    ├── const: 'tr'
-      │         │              │    ├── const: 'BEFORE'
-      │         │              │    ├── const: 'ROW'
-      │         │              │    ├── const: 'INSERT'
-      │         │              │    ├── const: 56
-      │         │              │    ├── const: 'ab'
-      │         │              │    ├── const: 'ab'
-      │         │              │    ├── const: 'public'
-      │         │              │    ├── const: 0
-      │         │              │    └── const: ARRAY[]
-      │         │              ├── params: new:10 old:11 tg_name:12 tg_when:13 tg_level:14 tg_op:15 tg_relid:16 tg_relname:17 tg_table_name:18 tg_table_schema:19 tg_nargs:20 tg_argv:21
+      │         │              │    ├── $1: variable: new:9
+      │         │              │    ├── $2: null
+      │         │              │    ├── $3: const: 'tr'
+      │         │              │    ├── $4: const: 'BEFORE'
+      │         │              │    ├── $5: const: 'ROW'
+      │         │              │    ├── $6: const: 'INSERT'
+      │         │              │    ├── $7: const: 56
+      │         │              │    ├── $8: const: 'ab'
+      │         │              │    ├── $9: const: 'ab'
+      │         │              │    ├── $10: const: 'public'
+      │         │              │    ├── $11: const: 0
+      │         │              │    └── $12: const: ARRAY[]
       │         │              └── body
       │         │                   └── values
-      │         │                        ├── columns: "_stmt_exec_1":47
+      │         │                        ├── columns: "_stmt_exec_1":35
       │         │                        └── tuple
       │         │                             └── udf: _stmt_exec_1
       │         │                                  ├── tail-call
       │         │                                  ├── args
-      │         │                                  │    ├── variable: new:10
-      │         │                                  │    ├── variable: old:11
-      │         │                                  │    ├── variable: tg_name:12
-      │         │                                  │    ├── variable: tg_when:13
-      │         │                                  │    ├── variable: tg_level:14
-      │         │                                  │    ├── variable: tg_op:15
-      │         │                                  │    ├── variable: tg_relid:16
-      │         │                                  │    ├── variable: tg_relname:17
-      │         │                                  │    ├── variable: tg_table_name:18
-      │         │                                  │    ├── variable: tg_table_schema:19
-      │         │                                  │    ├── variable: tg_nargs:20
-      │         │                                  │    └── variable: tg_argv:21
-      │         │                                  ├── params: new:22 old:23 tg_name:24 tg_when:25 tg_level:26 tg_op:27 tg_relid:28 tg_relname:29 tg_table_name:30 tg_table_schema:31 tg_nargs:32 tg_argv:33
+      │         │                                  │    ├── $1: variable: new:10
+      │         │                                  │    ├── $2: variable: old:11
+      │         │                                  │    ├── $3: variable: tg_name:12
+      │         │                                  │    ├── $4: variable: tg_when:13
+      │         │                                  │    ├── $5: variable: tg_level:14
+      │         │                                  │    ├── $6: variable: tg_op:15
+      │         │                                  │    ├── $7: variable: tg_relid:16
+      │         │                                  │    ├── $8: variable: tg_relname:17
+      │         │                                  │    ├── $9: variable: tg_table_name:18
+      │         │                                  │    ├── $10: variable: tg_table_schema:19
+      │         │                                  │    ├── $11: variable: tg_nargs:20
+      │         │                                  │    └── $12: variable: tg_argv:21
       │         │                                  └── body
       │         │                                       ├── insert ab
       │         │                                       │    ├── columns: <none>
       │         │                                       │    ├── insert-mapping:
-      │         │                                       │    │    ├── a_new:44 => a:34
-      │         │                                       │    │    ├── b_new:45 => b:35
-      │         │                                       │    │    └── rowid_default:41 => rowid:36
+      │         │                                       │    │    ├── a_new:32 => a:22
+      │         │                                       │    │    ├── b_new:33 => b:23
+      │         │                                       │    │    └── rowid_default:29 => rowid:24
       │         │                                       │    ├── before-triggers
       │         │                                       │    │    └── tr
       │         │                                       │    └── project
-      │         │                                       │         ├── columns: a_new:44 b_new:45 column1:39 column2:40 rowid_default:41 new:42 insert_ab:43
+      │         │                                       │         ├── columns: a_new:32 b_new:33 column1:27 column2:28 rowid_default:29 new:30 insert_ab:31
       │         │                                       │         ├── barrier
-      │         │                                       │         │    ├── columns: column1:39 column2:40 rowid_default:41 new:42 insert_ab:43
+      │         │                                       │         │    ├── columns: column1:27 column2:28 rowid_default:29 new:30 insert_ab:31
       │         │                                       │         │    └── select
-      │         │                                       │         │         ├── columns: column1:39 column2:40 rowid_default:41 new:42 insert_ab:43
+      │         │                                       │         │         ├── columns: column1:27 column2:28 rowid_default:29 new:30 insert_ab:31
       │         │                                       │         │         ├── project
-      │         │                                       │         │         │    ├── columns: insert_ab:43 column1:39 column2:40 rowid_default:41 new:42
+      │         │                                       │         │         │    ├── columns: insert_ab:31 column1:27 column2:28 rowid_default:29 new:30
       │         │                                       │         │         │    ├── barrier
-      │         │                                       │         │         │    │    ├── columns: column1:39 column2:40 rowid_default:41 new:42
+      │         │                                       │         │         │    │    ├── columns: column1:27 column2:28 rowid_default:29 new:30
       │         │                                       │         │         │    │    └── project
-      │         │                                       │         │         │    │         ├── columns: new:42 column1:39 column2:40 rowid_default:41
+      │         │                                       │         │         │    │         ├── columns: new:30 column1:27 column2:28 rowid_default:29
       │         │                                       │         │         │    │         ├── values
-      │         │                                       │         │         │    │         │    ├── columns: column1:39 column2:40 rowid_default:41
+      │         │                                       │         │         │    │         │    ├── columns: column1:27 column2:28 rowid_default:29
       │         │                                       │         │         │    │         │    └── tuple
       │         │                                       │         │         │    │         │         ├── column-access: 0
-      │         │                                       │         │         │    │         │         │    └── variable: new:22
+      │         │                                       │         │         │    │         │         │    └── _stmt_exec.new:$0
       │         │                                       │         │         │    │         │         ├── column-access: 1
-      │         │                                       │         │         │    │         │         │    └── variable: new:22
+      │         │                                       │         │         │    │         │         │    └── _stmt_exec.new:$0
       │         │                                       │         │         │    │         │         └── function: unique_rowid
       │         │                                       │         │         │    │         └── projections
-      │         │                                       │         │         │    │              └── tuple [as=new:42]
-      │         │                                       │         │         │    │                   ├── variable: column1:39
-      │         │                                       │         │         │    │                   └── variable: column2:40
+      │         │                                       │         │         │    │              └── tuple [as=new:30]
+      │         │                                       │         │         │    │                   ├── variable: column1:27
+      │         │                                       │         │         │    │                   └── variable: column2:28
       │         │                                       │         │         │    └── projections
-      │         │                                       │         │         │         └── udf: insert_ab [as=insert_ab:43]
+      │         │                                       │         │         │         └── udf: insert_ab [as=insert_ab:31]
       │         │                                       │         │         │              ├── args
-      │         │                                       │         │         │              │    ├── variable: new:42
-      │         │                                       │         │         │              │    ├── null
-      │         │                                       │         │         │              │    ├── const: 'tr'
-      │         │                                       │         │         │              │    ├── const: 'BEFORE'
-      │         │                                       │         │         │              │    ├── const: 'ROW'
-      │         │                                       │         │         │              │    ├── const: 'INSERT'
-      │         │                                       │         │         │              │    ├── const: 56
-      │         │                                       │         │         │              │    ├── const: 'ab'
-      │         │                                       │         │         │              │    ├── const: 'ab'
-      │         │                                       │         │         │              │    ├── const: 'public'
-      │         │                                       │         │         │              │    ├── const: 0
-      │         │                                       │         │         │              │    └── const: ARRAY[]
+      │         │                                       │         │         │              │    ├── $1: variable: new:30
+      │         │                                       │         │         │              │    ├── $2: null
+      │         │                                       │         │         │              │    ├── $3: const: 'tr'
+      │         │                                       │         │         │              │    ├── $4: const: 'BEFORE'
+      │         │                                       │         │         │              │    ├── $5: const: 'ROW'
+      │         │                                       │         │         │              │    ├── $6: const: 'INSERT'
+      │         │                                       │         │         │              │    ├── $7: const: 56
+      │         │                                       │         │         │              │    ├── $8: const: 'ab'
+      │         │                                       │         │         │              │    ├── $9: const: 'ab'
+      │         │                                       │         │         │              │    ├── $10: const: 'public'
+      │         │                                       │         │         │              │    ├── $11: const: 0
+      │         │                                       │         │         │              │    └── $12: const: ARRAY[]
       │         │                                       │         │         │              └── recursive-call
       │         │                                       │         │         └── filters
       │         │                                       │         │              └── is-not
-      │         │                                       │         │                   ├── variable: insert_ab:43
+      │         │                                       │         │                   ├── variable: insert_ab:31
       │         │                                       │         │                   └── null
       │         │                                       │         └── projections
-      │         │                                       │              ├── column-access: 0 [as=a_new:44]
-      │         │                                       │              │    └── variable: insert_ab:43
-      │         │                                       │              └── column-access: 1 [as=b_new:45]
-      │         │                                       │                   └── variable: insert_ab:43
+      │         │                                       │              ├── column-access: 0 [as=a_new:32]
+      │         │                                       │              │    └── variable: insert_ab:31
+      │         │                                       │              └── column-access: 1 [as=b_new:33]
+      │         │                                       │                   └── variable: insert_ab:31
       │         │                                       └── values
-      │         │                                            ├── columns: stmt_return_2:46
+      │         │                                            ├── columns: stmt_return_2:34
       │         │                                            └── tuple
-      │         │                                                 └── variable: new:22
+      │         │                                                 └── _stmt_exec.new:$0
       │         └── filters
       │              └── is-not
-      │                   ├── variable: insert_ab:48
+      │                   ├── variable: insert_ab:36
       │                   └── null
       └── projections
-           ├── column-access: 0 [as=a_new:49]
-           │    └── variable: insert_ab:48
-           └── column-access: 1 [as=b_new:50]
-                └── variable: insert_ab:48
+           ├── column-access: 0 [as=a_new:37]
+           │    └── variable: insert_ab:36
+           └── column-access: 1 [as=b_new:38]
+                └── variable: insert_ab:36
 
 # ------------------------------------------------------------------------------
 # Row-level AFTER triggers.

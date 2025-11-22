@@ -318,7 +318,12 @@ func (b *Builder) buildRoutine(
 
 		// Add any needed casts from argument type to parameter type, and add a
 		// correctly typed column to the bodyScope for each parameter.
-		params = make(opt.ColList, len(paramTypes))
+		// TODO: Behind session setting.
+		if true {
+			bodyScope.routineParamRefs = make([]*tree.RoutineParamRef, len(paramTypes))
+		} else {
+			params = make(opt.ColList, len(paramTypes))
+		}
 		for i := range paramTypes {
 			argTyp := argTypes[i]
 			desiredTyp := maybeReplacePolymorphicType(paramTypes[i].Typ, polyArgTyp)
@@ -337,10 +342,19 @@ func (b *Builder) buildRoutine(
 				}
 				args[i] = b.factory.ConstructCast(args[i], desiredTyp)
 			}
-			argColName := funcParamColName(tree.Name(paramTypes[i].Name), i)
-			col := b.synthesizeColumn(bodyScope, argColName, desiredTyp, nil /* expr */, nil /* scalar */)
-			col.setParamOrd(i)
-			params[i] = col.id
+			if true {
+				bodyScope.routineParamRefs[i] = &tree.RoutineParamRef{
+					RoutineName: def.Name,
+					Name:        paramTypes[i].Name,
+					Ord:         i,
+					Typ:         desiredTyp,
+				}
+			} else {
+				argColName := funcParamColName(tree.Name(paramTypes[i].Name), i)
+				col := b.synthesizeColumn(bodyScope, argColName, desiredTyp, nil /* expr */, nil /* scalar */)
+				col.setParamOrd(i)
+				params[i] = col.id
+			}
 		}
 	}
 

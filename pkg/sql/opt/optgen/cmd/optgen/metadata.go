@@ -229,6 +229,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"Presentation":         {fullName: "physical.Presentation", passByVal: true},
 		"RelProps":             {fullName: "props.Relational"},
 		"RelPropsPtr":          {fullName: "props.Relational", isPointer: true, usePointerIntern: true},
+		"RoutineParamRef":      {fullName: "tree.RoutineParamRef", isPointer: true, usePointerIntern: true},
 		"ScalarProps":          {fullName: "props.Scalar"},
 		"FuncDepSet":           {fullName: "props.FuncDepSet"},
 		"JoinMultiplicity":     {fullName: "props.JoinMultiplicity"},

@@ -230,6 +230,9 @@ func (c *scopeColumn) TypeCheck(
 
 // ResolvedType is part of the tree.TypedExpr interface.
 func (c *scopeColumn) ResolvedType() *types.T {
+	if c == nil {
+		_ = "hello"
+	}
 	return c.typ
 }
 

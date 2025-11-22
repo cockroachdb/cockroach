@@ -153,7 +153,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	// named parameters to the scope so that references to them in the body can
 	// be resolved.
 	bodyScope := b.allocScope()
-	// routineParams are all parameters of PLpgSQL routines.
+	// TODO
+	bodyScope.routineParamRefs = make([]*tree.RoutineParamRef, len(cf.Params))
+	// routineParamRefs are all parameters of PLpgSQL routines.
 	var routineParams []routineParam
 	var outParamTypes []*types.T
 	// When multiple OUT parameters are present, parameter names become the
@@ -260,9 +262,16 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 		// Add all input parameters to the base scope of the body.
 		if tree.IsInParamClass(param.Class) {
-			paramColName := funcParamColName(param.Name, i)
-			col := b.synthesizeColumn(bodyScope, paramColName, typ, nil /* expr */, nil /* scalar */)
-			col.setParamOrd(i)
+			// TODO
+			// paramColName := funcParamColName(param.Name, i)
+			// col := b.synthesizeColumn(bodyScope, paramColName, typ, nil /* expr */, nil /* scalar */)
+			// col.setParamOrd(i)
+			bodyScope.routineParamRefs[i] = &tree.RoutineParamRef{
+				RoutineName: cf.Name.Object(),
+				Name:        string(param.Name),
+				Ord:         i,
+				Typ:         typ,
+			}
 		}
 
 		// Collect the user defined type dependencies.

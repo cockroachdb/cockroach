@@ -107,6 +107,9 @@ func (b *Builder) buildScalar(
 
 		return b.finishBuildScalarRef(t, inScope, outScope, outCol, colRefs)
 
+	case *tree.RoutineParamRef:
+		out = b.factory.ConstructRoutineParamRef(t)
+
 	case *aggregateInfo:
 		var aggOutScope *scope
 		if inScope.groupby != nil {

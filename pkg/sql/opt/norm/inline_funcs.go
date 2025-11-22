@@ -479,6 +479,12 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 				return arg
 			}
 		}
+		if t, ok := nd.(*memo.RoutineParamRefExpr); ok {
+			return args[t.Param.Ord]
+			// if arg, ok := argForParam(t.Col); ok {
+			// 	return arg
+			// }
+		}
 		return c.f.Replace(nd, replace)
 	}
 

@@ -283,6 +283,7 @@ func (opts plOptions) SetSkipSQL(skipSQL bool) plOptions {
 }
 
 // routineParam is similar to tree.RoutineParam but stores the resolved type.
+// TODO
 type routineParam struct {
 	name  ast.Variable
 	typ   *types.T
@@ -1041,14 +1042,17 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			}
 			openCon := b.makeContinuation("_stmt_open")
 			openCon.def.Volatility = volatility.Volatile
-			_, source, _, err := openCon.s.FindSourceProvidingColumn(b.ob.ctx, t.CurVar)
-			if err != nil {
-				if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
-					panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", t.CurVar))
-				}
-				panic(err)
-			}
-			if !source.(*scopeColumn).typ.Identical(types.RefCursor) {
+			// TODO: We don't need to build it here.
+			_, ord, typ := b.buildVariableRef(openCon.s, t.CurVar)
+			// _, source, _, err := openCon.s.FindSourceProvidingColumn(b.ob.ctx, t.CurVar)
+			// TODO: Figure this out.
+			// if err != nil {
+			// 	if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+			// 		panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", t.CurVar))
+			// 	}
+			// 	panic(err)
+			// }
+			if !typ.Identical(types.RefCursor) {
 				panic(pgerror.Newf(pgcode.DatatypeMismatch,
 					"variable \"%s\" must be of type cursor or refcursor", t.CurVar,
 				))
@@ -1059,7 +1063,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			fmtCtx := b.ob.evalCtx.FmtCtx(tree.FmtSimple)
 			fmtCtx.FormatNode(query)
 			openCon.def.FirstStmtOutput.CursorDeclaration = &tree.RoutineOpenCursor{
-				NameArgIdx: source.(*scopeColumn).getParamOrd(),
+				NameArgIdx: int(ord),
 				Scroll:     t.Scroll,
 				CursorSQL:  fmtCtx.CloseAndGetString(),
 			}
@@ -1093,20 +1097,22 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			if len(overloads) != 1 {
 				panic(errors.AssertionFailedf("expected one overload for %s", closeFnName))
 			}
-			_, source, _, err := closeCon.s.FindSourceProvidingColumn(b.ob.ctx, t.CurVar)
-			if err != nil {
-				if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
-					panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", t.CurVar))
-				}
-				panic(err)
-			}
-			if !source.(*scopeColumn).typ.Identical(types.RefCursor) {
+			expr, _, typ := b.buildVariableRef(closeCon.s, t.CurVar)
+			// _, source, _, err := closeCon.s.FindSourceProvidingColumn(b.ob.ctx, t.CurVar)
+			// TODO: Figure this out.
+			// if err != nil {
+			// 	if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+			// 		panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", t.CurVar))
+			// 	}
+			// 	panic(err)
+			// }
+			if !typ.Identical(types.RefCursor) {
 				panic(pgerror.Newf(pgcode.DatatypeMismatch,
 					"variable \"%s\" must be of type cursor or refcursor", t.CurVar,
 				))
 			}
 			closeCall := b.ob.factory.ConstructFunction(
-				memo.ScalarListExpr{b.ob.factory.ConstructVariable(source.(*scopeColumn).id)},
+				memo.ScalarListExpr{expr},
 				&memo.FunctionPrivate{
 					Name:       closeFnName,
 					Typ:        types.Int,
@@ -1259,10 +1265,18 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					if j < len(proc.Exprs) {
 						// j can be greater or equal to number of arguments when
 						// the default argument is used.
-						if arg, ok := proc.Exprs[j].(*scopeColumn); ok {
-							target = append(target, arg.name.refName)
+						switch t := proc.Exprs[j].(type) {
+						case *scopeColumn:
+							target = append(target, t.name.refName)
+							continue
+						case *tree.RoutineParamRef:
+							target = append(target, ast.Variable(t.Name))
 							continue
 						}
+						// if arg, ok := proc.Exprs[j].(*scopeColumn); ok {
+						// 	target = append(target, arg.name.refName)
+						// 	continue
+						// }
 					}
 					panic(pgerror.Newf(pgcode.Syntax,
 						"procedure parameter \"%s\" is an output parameter "+
@@ -1425,10 +1439,18 @@ func (b *plpgsqlBuilder) handleIntForLoop(
 	if control.Reverse {
 		cmpOp = treecmp.MakeComparisonOperator(treecmp.GE)
 	}
+	var left, right tree.Expr
+	if true {
+		left = loopCon.s.findFuncParamByOrdinal(counterOrd)
+		right = loopCon.s.findFuncParamByOrdinal(upperOrd)
+	} else {
+		left = loopCon.s.findFuncArgCol(counterOrd)
+		right = loopCon.s.findFuncArgCol(upperOrd)
+	}
 	cond := &tree.ComparisonExpr{
 		Operator: cmpOp,
-		Left:     loopCon.s.findFuncArgCol(counterOrd),
-		Right:    loopCon.s.findFuncArgCol(upperOrd),
+		Left:     left,
+		Right:    right,
 	}
 	ifStmt := &ast.If{Condition: cond, ThenBody: forLoop.Body, ElseBody: []ast.Statement{&ast.Exit{}}}
 	b.appendPlpgSQLStmts(&loopCon, []ast.Statement{ifStmt})
@@ -1445,10 +1467,19 @@ func (b *plpgsqlBuilder) handleIntForLoop(
 	if control.Reverse {
 		binOp = treebin.MakeBinaryOperator(treebin.Minus)
 	}
+	// TODO
+	// var left, right tree.Expr
+	if true {
+		left = loopCon.s.findFuncParamByOrdinal(counterOrd)
+		right = loopCon.s.findFuncParamByOrdinal(stepOrd)
+	} else {
+		left = loopCon.s.findFuncArgCol(counterOrd)
+		right = loopCon.s.findFuncArgCol(stepOrd)
+	}
 	inc := &tree.BinaryExpr{
 		Operator: binOp,
-		Left:     incScope.findFuncArgCol(counterOrd),
-		Right:    incScope.findFuncArgCol(stepOrd),
+		Left:     left,
+		Right:    right,
 	}
 	incScope = b.assignToHiddenVariable(incScope, counterOrd, inc)
 	incScope = b.addPLpgSQLAssign(
@@ -1512,14 +1543,15 @@ func (b *plpgsqlBuilder) resolveOpenQuery(open *ast.Open) tree.Statement {
 // generation is implemented by the crdb_internal.plpgsql_gen_cursor_name
 // builtin function.
 func (b *plpgsqlBuilder) buildCursorNameGen(nameCon *continuation, nameVar ast.Variable) *scope {
-	_, source, _, _ := nameCon.s.FindSourceProvidingColumn(b.ob.ctx, nameVar)
+	// _, source, _, _ := nameCon.s.FindSourceProvidingColumn(b.ob.ctx, nameVar)
+	expr, _, _ := b.buildVariableRef(nameCon.s, nameVar)
 	const nameFnName = "crdb_internal.plpgsql_gen_cursor_name"
 	props, overloads := builtinsregistry.GetBuiltinProperties(nameFnName)
 	if len(overloads) != 1 {
 		panic(errors.AssertionFailedf("expected one overload for %s", nameFnName))
 	}
 	nameCall := b.ob.factory.ConstructFunction(
-		memo.ScalarListExpr{b.ob.factory.ConstructVariable(source.(*scopeColumn).id)},
+		memo.ScalarListExpr{expr},
 		&memo.FunctionPrivate{
 			Name:       nameFnName,
 			Typ:        types.RefCursor,
@@ -1546,6 +1578,18 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(
 ) *scope {
 	typ, ord := b.resolveVariableForAssign(ident)
 	assignScope := inScope.push()
+	// TODO: I might not want to do any of this...
+	// assignScope.routineParamRefs = make([]*memo.RoutineParam, 0, len(inScope.routineParamRefs))
+	// for _, param := range inScope.routineParamRefs {
+	// 	if param.Name == string(ident) {
+	// 		// Allow the assignment to shadow previous values for this
+	// 		// parameter.
+	// 		continue
+	// 	}
+	// 	assignScope.routineParamRefs = append(assignScope.routineParamRefs, param)
+	// }
+	// // TODO: I think we still want to project the variable, but not as a
+	// // column, just a param ref.
 	for i := range inScope.cols {
 		col := &inScope.cols[i]
 		if col.name.ReferenceName() == ident {
@@ -1635,21 +1679,50 @@ func (b *plpgsqlBuilder) handleIndirectionForAssign(
 			"record \"%s\" has no field \"%s\"", ident, elemName,
 		))
 	}
-	_, source, _, err := inScope.FindSourceProvidingColumn(b.ob.ctx, ident)
-	if err != nil {
-		panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to find variable %s", ident))
-	}
-	if !source.(*scopeColumn).typ.Identical(typ) {
+	// TODO:
+	varExpr, _, varType := b.buildVariableRef(inScope, ident)
+
+	// var varExpr opt.ScalarExpr
+	// var varType *types.T
+	// _, source, _, err := inScope.FindSourceProvidingColumn(b.ob.ctx, ident)
+	// if err == nil {
+	// 	sc := source.(*scopeColumn)
+	// 	varExpr = b.ob.factory.ConstructVariable(sc.id)
+	// 	varType = sc.typ
+	// } else {
+	// 	param := inScope.findFuncParamByName(string(ident))
+	// 	if param == nil {
+	// 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to find variable %s", ident))
+	// 	}
+	// 	varExpr = b.ob.factory.ConstructRoutineParamRef(param)
+	// 	varType = param.Typ
+	// }
+
+	// param := inScope.findFuncParamByName(string(ident))
+	// var typ *types.T
+	// if param == nil {
+	// 	panic(errors.AssertionFailedf("unknown parameter %q", ident))
+	// }
+	// TODO
+	// if err != nil {
+	// 	panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to find variable %s", ident))
+	// }
+	// if !source.(*scopeColumn).typ.Identical(typ) {
+	// 	panic(errors.AssertionFailedf("unexpected type for variable %s", ident))
+	// }
+	if !varType.Identical(typ) {
 		panic(errors.AssertionFailedf("unexpected type for variable %s", ident))
 	}
-	varCol := b.ob.factory.ConstructVariable(source.(*scopeColumn).id)
+	// TODO
+	// varCol := b.ob.factory.ConstructVariable(source.(*scopeColumn).id)
+	// varRef := b.ob.factory.ConstructRoutineParamRef(param)
 	scalar := b.buildSQLExpr(val, typ.TupleContents()[elemIdx], inScope)
 	newElems := make([]opt.ScalarExpr, len(typ.TupleContents()))
 	for i := range typ.TupleContents() {
 		if i == elemIdx {
 			newElems[i] = scalar
 		} else {
-			newElems[i] = b.ob.factory.ConstructColumnAccess(varCol, memo.TupleOrdinal(i))
+			newElems[i] = b.ob.factory.ConstructColumnAccess(varExpr, memo.TupleOrdinal(i))
 		}
 	}
 	return b.ob.factory.ConstructTuple(newElems, typ)
@@ -2114,14 +2187,16 @@ func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
 	if len(overloads) != 1 {
 		panic(errors.AssertionFailedf("expected one overload for %s", fetchFnName))
 	}
-	_, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, fetch.Cursor.Name)
-	if err != nil {
-		if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
-			panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", fetch.Cursor.Name))
-		}
-		panic(err)
-	}
-	if !source.(*scopeColumn).typ.Identical(types.RefCursor) {
+	expr, _, typ := b.buildVariableRef(s, fetch.Cursor.Name)
+	// _, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, fetch.Cursor.Name)
+	// TODO: Figure this out.
+	// if err != nil {
+	// 	if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+	// 		panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", fetch.Cursor.Name))
+	// 	}
+	// 	panic(err)
+	// }
+	if !typ.Identical(types.RefCursor) {
 		panic(pgerror.Newf(pgcode.DatatypeMismatch,
 			"variable \"%s\" must be of type cursor or refcursor", fetch.Cursor.Name,
 		))
@@ -2160,7 +2235,7 @@ func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
 	// The result of the fetch will be cast to strings and returned as an array.
 	fetchCall := b.ob.factory.ConstructFunction(
 		memo.ScalarListExpr{
-			b.ob.factory.ConstructVariable(source.(*scopeColumn).id),
+			expr,
 			makeConst(tree.NewDInt(tree.DInt(fetch.Cursor.FetchType)), types.Int),
 			makeConst(tree.NewDInt(tree.DInt(fetch.Cursor.Count)), types.Int),
 			b.ob.factory.ConstructTuple(elems, returnType),
@@ -2214,20 +2289,33 @@ func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
 // continuations will have more parameters than those of its parent.
 func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 	s := b.ob.allocScope()
-	params := make(opt.ColList, 0, b.variableCount(len(b.blocks)))
+	vars := b.variableCount(len(b.blocks))
+	params := make(opt.ColList, 0, vars)
+	if true {
+		s.routineParamRefs = make([]*tree.RoutineParamRef, 0, vars)
+	}
 	addParam := func(name scopeColumnName, typ *types.T) {
-		col := b.ob.synthesizeColumn(s, name, typ, nil /* expr */, nil /* scalar */)
-		// TODO(mgartner): Lift the 100 parameter restriction for synthesized
-		// continuation UDFs.
-		paramOrd := len(params)
-		col.setParamOrd(paramOrd)
-		if b.ob.insideFuncDef && b.options.isTriggerFn && paramOrd == triggerArgvColIdx {
-			// Due to #135311, we disallow references to the TG_ARGV param for now.
-			if !b.ob.evalCtx.SessionData().AllowCreateTriggerFunctionWithArgvReferences {
-				col.resolveErr = unimplementedArgvErr
-			}
-		}
-		params = append(params, col.id)
+		// if true {
+		s.routineParamRefs = append(s.routineParamRefs, &tree.RoutineParamRef{
+			RoutineName: conName,
+			Name:        string(name.ReferenceName()),
+			Ord:         len(s.routineParamRefs),
+			Typ:         typ,
+		})
+		// } else {
+		// 	col := b.ob.synthesizeColumn(s, name, typ, nil /* expr */, nil /* scalar */)
+		// 	// TODO(mgartner): Lift the 100 parameter restriction for synthesized
+		// 	// continuation UDFs.
+		// 	paramOrd := len(params)
+		// 	col.setParamOrd(paramOrd)
+		// 	if b.ob.insideFuncDef && b.options.isTriggerFn && paramOrd == triggerArgvColIdx {
+		// 		// Due to #135311, we disallow references to the TG_ARGV param for now.
+		// 		if !b.ob.evalCtx.SessionData().AllowCreateTriggerFunctionWithArgvReferences {
+		// 			col.resolveErr = unimplementedArgvErr
+		// 		}
+		// 	}
+		// 	params = append(params, col.id)
+		// }
 	}
 	// Invariant: the variables of a child block always follow those of a parent
 	// block in a continuation's parameters. This ensures that a continuation
@@ -2248,6 +2336,7 @@ func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 	return continuation{
 		def: &memo.UDFDefinition{
 			Params:            params,
+			NumParams:         len(s.routineParamRefs),
 			Name:              b.makeIdentifier(conName),
 			Typ:               b.returnType,
 			CalledOnNullInput: true,
@@ -2354,39 +2443,111 @@ func (b *plpgsqlBuilder) callContinuationWithTxnOp(
 }
 
 func (b *plpgsqlBuilder) makeContinuationArgs(con *continuation, s *scope) memo.ScalarListExpr {
-	args := make(memo.ScalarListExpr, 0, len(con.def.Params))
-	for i := range b.blocks {
-		if len(args) == len(con.def.Params) {
-			// A continuation has parameters for every variable that is in scope for
-			// the block in which it was created. If we reach the end of those
-			// parameters early, the continuation must be from an ancestor block. Any
-			// remaining variables are out of scope because control has passed back to
-			// the ancestor block.
-			//
-			// NOTE: makeContinuation maintains an invariant that variables from a
-			// parent block precede those of a child block in a continuation's
-			// parameters.
-			break
-		}
-		block := &b.blocks[i]
-		for _, name := range block.vars {
-			_, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, name)
-			if err != nil && !errors.Is(err, unimplementedArgvErr) {
-				// Swallow unimplementedArgvErr, since it's ok to reference the TG_ARGV
-				// parameter when calling a continuation.
-				panic(err)
+	if false {
+		args := make(memo.ScalarListExpr, 0, con.def.NumParams)
+		for i := range b.blocks {
+			if len(args) == con.def.NumParams {
+				// A continuation has parameters for every variable that is in scope for
+				// the block in which it was created. If we reach the end of those
+				// parameters early, the continuation must be from an ancestor block. Any
+				// remaining variables are out of scope because control has passed back to
+				// the ancestor block.
+				//
+				// NOTE: makeContinuation maintains an invariant that variables from a
+				// parent block precede those of a child block in a continuation's
+				// parameters.
+				break
 			}
-			args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
-		}
-		for _, name := range block.hiddenVars {
-			col := s.findFuncArgCol(len(args))
-			if col == nil {
-				panic(errors.AssertionFailedf("hidden variable %s not found", name))
+			block := &b.blocks[i]
+			for _, name := range block.vars {
+				param := s.findFuncParamByName(string(name))
+				if param == nil {
+					panic(errors.AssertionFailedf("unknown variable %q", name))
+				}
+				args = append(args, b.ob.factory.ConstructRoutineParamRef(param))
 			}
-			args = append(args, b.ob.factory.ConstructVariable(col.id))
+			for _, name := range block.hiddenVars {
+				param := s.findFuncParamByOrdinal(len(args))
+				if param == nil {
+					panic(errors.AssertionFailedf("hidden variable %s not found", name))
+				}
+				args = append(args, b.ob.factory.ConstructRoutineParamRef(param))
+			}
 		}
+		return args
+	} else {
+		numArgs := len(con.def.Params)
+		if numArgs == 0 {
+			numArgs = con.def.NumParams
+		}
+		args := make(memo.ScalarListExpr, 0, numArgs)
+		for i := range b.blocks {
+			if len(args) == numArgs {
+				// A continuation has parameters for every variable that is in scope for
+				// the block in which it was created. If we reach the end of those
+				// parameters early, the continuation must be from an ancestor block. Any
+				// remaining variables are out of scope because control has passed back to
+				// the ancestor block.
+				//
+				// NOTE: makeContinuation maintains an invariant that variables from a
+				// parent block precede those of a child block in a continuation's
+				// parameters.
+				break
+			}
+			block := &b.blocks[i]
+			for _, name := range block.vars {
+				expr, _, _ := b.buildVariableRef(s, name)
+				args = append(args, expr)
+				// _, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, name)
+				// if err != nil {
+				// 	if param := s.findFuncParamByName(string(name)); param != nil {
+				// 		args = append(args, b.ob.factory.ConstructRoutineParamRef(param))
+				// 		break
+				// 	}
+				// }
+				// TODO: Figure this out.
+				// if err != nil && !errors.Is(err, unimplementedArgvErr) {
+				// 	// Swallow unimplementedArgvErr, since it's ok to reference the TG_ARGV
+				// 	// parameter when calling a continuation.
+				// 	panic(err)
+				// }
+				// args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
+
+				//
+				//
+				// if err != nil || errors.Is(err, unimplementedArgvErr) {
+				// 	// Swallow unimplementedArgvErr, since it's ok to reference the TG_ARGV
+				// 	// parameter when calling a continuation.
+				// 	args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
+				// 	break
+				// } else {
+				// 	if param := s.findFuncParamByName(string(name)); param != nil {
+				// 		args = append(args, b.ob.factory.ConstructRoutineParamRef(param))
+				// 		break
+				// 	}
+				// }
+				// panic(err)
+			}
+			for i := 0; i < len(block.hiddenVars); i++ {
+				args = append(args, b.buildVariableRefByOrd(s, len(args)))
+				// if col := s.findFuncArgCol(len(args)); col != nil {
+				// 	args = append(args, b.ob.factory.ConstructVariable(col.id))
+				// 	break
+				// }
+				// if param := s.findFuncParamByOrdinal(len(args)); param != nil {
+				// 	args = append(args, b.ob.factory.ConstructRoutineParamRef(param))
+				// 	break
+				// }
+				// panic(errors.AssertionFailedf("hidden variable %s not found", name))
+
+				// if col == nil {
+				// 	panic(errors.AssertionFailedf("hidden variable %s not found", name))
+				// }
+				// args = append(args, b.ob.factory.ConstructVariable(col.id))
+			}
+		}
+		return args
 	}
-	return args
 }
 
 // addBarrierIfVolatile checks if the given expression is volatile, and adds an
@@ -2556,6 +2717,36 @@ func (b *plpgsqlBuilder) resolveVariableForAssignByOrd(ord int) (typ *types.T, n
 	// Increment the ordinal for the error message, since the placeholder syntax
 	// is 1-based.
 	panic(pgerror.Newf(pgcode.Syntax, "\"$%d\" is not a known variable", originalOrd+1))
+}
+
+func (b *plpgsqlBuilder) buildVariableRef(
+	s *scope, name tree.Name,
+) (opt.ScalarExpr, funcParamOrd, *types.T) {
+	_, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, name)
+	if err == nil {
+		sc := source.(*scopeColumn)
+		return b.ob.factory.ConstructVariable(sc.id), sc.paramOrd, sc.typ
+	}
+	if param := s.findFuncParamByName(string(name)); param != nil {
+		return b.ob.factory.ConstructRoutineParamRef(param), funcParamOrd(param.Ord), param.Typ
+	}
+	// TODO
+	// if err != nil && !errors.Is(err, unimplementedArgvErr) {
+	// 	// Swallow unimplementedArgvErr, since it's ok to reference the TG_ARGV
+	// 	// parameter when calling a continuation.
+	// 	panic(err)
+	// }
+	panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to build variable %s", name))
+}
+
+func (b *plpgsqlBuilder) buildVariableRefByOrd(s *scope, ord int) opt.ScalarExpr {
+	if col := s.findFuncArgCol(ord); col != nil {
+		return b.ob.factory.ConstructVariable(col.id)
+	}
+	if param := s.findFuncParamByOrdinal(ord); param != nil {
+		return b.ob.factory.ConstructRoutineParamRef(param)
+	}
+	panic(errors.AssertionFailedf("hidden variable with ordinal %d not found", ord))
 }
 
 // projectTupleAsIntoTarget maps from the elements of a tuple column to the

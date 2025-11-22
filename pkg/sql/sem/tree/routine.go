@@ -229,6 +229,50 @@ func (node *RoutineExpr) Walk(v Visitor) Expr {
 	return node
 }
 
+// RoutineParam is a reference to a parameter of a routine.
+type RoutineParamRef struct {
+	// RoutineName is the name of the routine to which this parameter belongs.
+	RoutineName string
+	// Name is the name of the routine parameter, if one was specified.
+	Name string
+	// Ord is the 0-based ordinal position of the parameter within the routine's
+	// parameter list.
+	Ord int
+	Typ *types.T
+}
+
+var _ Expr = &RoutineParamRef{}
+
+func (p *RoutineParam) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	panic(errors.AssertionFailedf("RoutineParam must be replaced before evaluation"))
+}
+
+// TypeCheck is part of the Expr interface.
+func (p *RoutineParamRef) TypeCheck(
+	_ context.Context, _ *SemaContext, desired *types.T,
+) (TypedExpr, error) {
+	return p, nil
+}
+
+// ResolvedType is part of the TypedExpr interface.
+func (p *RoutineParamRef) ResolvedType() *types.T {
+	return p.Typ
+}
+
+// Format is part of the Expr interface.
+func (c *RoutineParamRef) Format(ctx *FmtCtx) {
+	ctx.WriteString(c.Name)
+}
+
+// Walk is part of the Expr interface.
+func (p *RoutineParamRef) Walk(v Visitor) Expr {
+	return p
+}
+
+// Variable is part of the VariableExpr interface. This prevents the
+// column from being evaluated during normalization.
+// func (*RoutineParamRef) Variable() {}
+
 // RoutineExceptionHandler encapsulates the information needed to match and
 // handle errors for the exception block of a routine defined with PLpgSQL.
 type RoutineExceptionHandler struct {

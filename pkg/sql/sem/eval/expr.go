@@ -666,6 +666,12 @@ func (e *evaluator) evalRoutineArgs(
 	return args, nil
 }
 
+func (e *evaluator) EvalRoutineParamRef(
+	ctx context.Context, param *tree.RoutineParamRef,
+) (tree.Datum, error) {
+	panic("WHAT")
+}
+
 func (e *evaluator) EvalTxnControlExpr(
 	ctx context.Context, expr *tree.TxnControlExpr,
 ) (tree.Datum, error) {
