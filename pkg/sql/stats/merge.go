@@ -259,7 +259,7 @@ func mergePartialStatistic(
 	mergedTableStatistic := &TableStatistic{
 		TableStatisticProto: TableStatisticProto{
 			TableID:         fullStat.TableID,
-			StatisticID:     0, // TODO (faizaanmadhani): Add support for SHOW HISTOGRAM.
+			StatisticID:     0, // TODO(#86358): add support for SHOW HISTOGRAM.
 			Name:            jobspb.MergedStatsName,
 			ColumnIDs:       fullStat.ColumnIDs,
 			CreatedAt:       partialStat.CreatedAt,

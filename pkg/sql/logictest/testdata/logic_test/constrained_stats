@@ -3,9 +3,6 @@
 # Tests for creating partial table statistics with a WHERE clause.
 
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
-
-statement ok
 CREATE TABLE products (
     id INT PRIMARY KEY,
     category_id INT,

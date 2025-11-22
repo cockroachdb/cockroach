@@ -294,7 +294,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		virtColEnabled := statsOnVirtualCols.Get(n.p.ExecCfg().SV())
 		// Disable multi-column stats and deleting stats if partial statistics at
 		// the extremes are requested.
-		// TODO(faizaanmadhani): Add support for multi-column stats.
+		// TODO(#94076): add support for creating multi-column stats.
 		var multiColEnabled bool
 		if !n.Options.UsingExtremes {
 			multiColEnabled = stats.MultiColumnStatisticsClusterMode.Get(n.p.ExecCfg().SV())
