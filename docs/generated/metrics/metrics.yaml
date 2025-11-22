@@ -448,7 +448,20 @@ layers:
       unit: TIMESTAMP_SEC
       aggregation: AVG
       derivative: NONE
-      how_to_use: "Monitor this metric to ensure that backups are\n\t\t\t\t\t\tmeeting the recovery point objective (RPO). Each node\n\t\t\t\t\t\texports the time that it last completed a backup on behalf\n\t\t\t\t\t\tof the schedule. If a node is restarted, it will report 0\n\t\t\t\t\t\tuntil it completes a backup. If all nodes are restarted,\n\t\t\t\t\t\tmax() is 0 until a node completes a backup.\n\n\t\t\t\t\t\tTo make use of this metric, first, from each node, take the maximum\n\t\t\t\t\t\tover a rolling window equal to or greater than the backup frequency,\n\t\t\t\t\t\tand then take the maximum of those values across nodes. For example\n\t\t\t\t\t\twith a backup frequency of 60 minutes, monitor time() -\n\t\t\t\t\t\tmax_across_nodes(max_over_time(schedules_BACKUP_last_completed_time,\n\t\t\t\t\t\t60min))."
+      how_to_use: |-
+        Monitor this metric to ensure that backups are
+        						meeting the recovery point objective (RPO). Each node
+        						exports the time that it last completed a backup on behalf
+        						of the schedule. If a node is restarted, it will report 0
+        						until it completes a backup. If all nodes are restarted,
+        						max() is 0 until a node completes a backup.
+
+        						To make use of this metric, first, from each node, take the maximum
+        						over a rolling window equal to or greater than the backup frequency,
+        						and then take the maximum of those values across nodes. For example
+        						with a backup frequency of 60 minutes, monitor time() -
+        						max_across_nodes(max_over_time(schedules_BACKUP_last_completed_time,
+        						60min)).
       essential: true
     - name: sql.conn.failures
       exported_name: sql_conn_failures
@@ -2065,7 +2078,9 @@ layers:
       derivative: NONE
     - name: distsender.batch_requests.cross_region.bytes
       exported_name: distsender_batch_requests_cross_region_bytes
-      description: "Total byte count of replica-addressed batch requests processed cross\n\t\tregion when region tiers are configured"
+      description: |-
+        Total byte count of replica-addressed batch requests processed cross
+        		region when region tiers are configured
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -2073,7 +2088,12 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.batch_requests.cross_zone.bytes
       exported_name: distsender_batch_requests_cross_zone_bytes
-      description: "Total byte count of replica-addressed batch requests processed cross\n\t\tzone within the same region when zone tiers are configured. If region tiers\n\t\tare not set, it is assumed to be within the same region. To ensure accurate\n\t\tmonitoring of cross-zone data transfer, region and zone tiers should be\n\t\tconsistently configured across all nodes."
+      description: |-
+        Total byte count of replica-addressed batch requests processed cross
+        		zone within the same region when zone tiers are configured. If region tiers
+        		are not set, it is assumed to be within the same region. To ensure accurate
+        		monitoring of cross-zone data transfer, region and zone tiers should be
+        		consistently configured across all nodes.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -2089,7 +2109,9 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.batch_responses.cross_region.bytes
       exported_name: distsender_batch_responses_cross_region_bytes
-      description: "Total byte count of replica-addressed batch responses received cross\n\t\tregion when region tiers are configured"
+      description: |-
+        Total byte count of replica-addressed batch responses received cross
+        		region when region tiers are configured
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -2097,7 +2119,12 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.batch_responses.cross_zone.bytes
       exported_name: distsender_batch_responses_cross_zone_bytes
-      description: "Total byte count of replica-addressed batch responses received cross\n\t\tzone within the same region when zone tiers are configured. If region tiers\n\t\tare not set, it is assumed to be within the same region. To ensure accurate\n\t\tmonitoring of cross-zone data transfer, region and zone tiers should be\n\t\tconsistently configured across all nodes."
+      description: |-
+        Total byte count of replica-addressed batch responses received cross
+        		zone within the same region when zone tiers are configured. If region tiers
+        		are not set, it is assumed to be within the same region. To ensure accurate
+        		monitoring of cross-zone data transfer, region and zone tiers should be
+        		consistently configured across all nodes.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -9681,7 +9708,19 @@ layers:
       unit: PERCENT
       aggregation: AVG
       derivative: NONE
-      how_to_use: "This metric gives the CPU utilization percentage of the\n\t\tunderlying server, virtual machine, or container hosting the\n\t\tCockroachDB process. It includes CPU usage from both CockroachDB\n\t\tand non-CockroachDB processes. It also accounts for time spent\n\t\tprocessing hardware (irq) and software (softirq) interrupts, as\n\t\twell as nice time, which represents low-priority user-mode\n\t\tactivity.\n\n    A value of 1 (or 100%) indicates that the CPU is overloaded. Avoid\n    running the CockroachDB process in an environment where the CPU\n    remains overloaded for extended periods (e.g. multiple hours). This\n    metric appears in the DB Console on the Host CPU Percent graph."
+      how_to_use: |-
+        This metric gives the CPU utilization percentage of the
+        		underlying server, virtual machine, or container hosting the
+        		CockroachDB process. It includes CPU usage from both CockroachDB
+        		and non-CockroachDB processes. It also accounts for time spent
+        		processing hardware (irq) and software (softirq) interrupts, as
+        		well as nice time, which represents low-priority user-mode
+        		activity.
+
+            A value of 1 (or 100%) indicates that the CPU is overloaded. Avoid
+            running the CockroachDB process in an environment where the CPU
+            remains overloaded for extended periods (e.g. multiple hours). This
+            metric appears in the DB Console on the Host CPU Percent graph.
       essential: true
     - name: sys.cpu.sys.percent
       exported_name: sys_cpu_sys_percent
@@ -9691,7 +9730,12 @@ layers:
       unit: PERCENT
       aggregation: AVG
       derivative: NONE
-      how_to_use: "This metric gives the CPU usage percentage at the system\n\t\t(Linux kernel) level by the CockroachDB process only. This is\n\t\tsimilar to the Linux top command output. The metric value can be\n\t\tmore than 1 (or 100%) on multi-core systems. It is best to combine\n\t\tuser and system metrics."
+      how_to_use: |-
+        This metric gives the CPU usage percentage at the system
+        		(Linux kernel) level by the CockroachDB process only. This is
+        		similar to the Linux top command output. The metric value can be
+        		more than 1 (or 100%) on multi-core systems. It is best to combine
+        		user and system metrics.
       essential: true
     - name: sys.cpu.user.percent
       exported_name: sys_cpu_user_percent
@@ -9701,7 +9745,12 @@ layers:
       unit: PERCENT
       aggregation: AVG
       derivative: NONE
-      how_to_use: "This metric gives the CPU usage percentage at the user\n\t\tlevel by the CockroachDB process only. This is similar to the Linux\n\t\ttop command output. The metric value can be more than 1 (or 100%)\n\t\ton multi-core systems. It is best to combine user and system\n\t\tmetrics."
+      how_to_use: |-
+        This metric gives the CPU usage percentage at the user
+        		level by the CockroachDB process only. This is similar to the Linux
+        		top command output. The metric value can be more than 1 (or 100%)
+        		on multi-core systems. It is best to combine user and system
+        		metrics.
       essential: true
     - name: sys.host.disk.iopsinprogress
       exported_name: sys_host_disk_iopsinprogress
@@ -9781,7 +9830,14 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
-      how_to_use: "This metric gives the amount of RAM used by the\n\t\tCockroachDB process. Persistently low values over an extended\n\t\tperiod of time suggest there is underutilized memory that can be\n\t\tput to work with adjusted settings for --cache or --max_sql_memory\n\t\tor both. Conversely, a high utilization, even if a temporary spike,\n\t\tindicates an increased risk of Out-of-memory (OOM) crash\n\t\t(particularly since the swap is generally disabled)."
+      how_to_use: |-
+        This metric gives the amount of RAM used by the
+        		CockroachDB process. Persistently low values over an extended
+        		period of time suggest there is underutilized memory that can be
+        		put to work with adjusted settings for --cache or --max_sql_memory
+        		or both. Conversely, a high utilization, even if a temporary spike,
+        		indicates an increased risk of Out-of-memory (OOM) crash
+        		(particularly since the swap is generally disabled).
       essential: true
     - name: sys.runnable.goroutines.per.cpu
       exported_name: sys_runnable_goroutines_per_cpu
@@ -11690,7 +11746,9 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: batch_requests.cross_region.bytes
       exported_name: batch_requests_cross_region_bytes
-      description: "Total byte count of batch requests processed cross region when region\n\t\ttiers are configured"
+      description: |-
+        Total byte count of batch requests processed cross region when region
+        		tiers are configured
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -11698,7 +11756,12 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: batch_requests.cross_zone.bytes
       exported_name: batch_requests_cross_zone_bytes
-      description: "Total bytes of batch requests processed cross zones within the same\n\t\tregion when zone tiers are configured. If region tiers are not set, it is\n\t\tassumed to be within the same region. To ensure accurate monitoring of\n\t\tcross-zone data transfer, region and zone tiers should be consistently\n\t\tconfigured across all nodes."
+      description: |-
+        Total bytes of batch requests processed cross zones within the same
+        		region when zone tiers are configured. If region tiers are not set, it is
+        		assumed to be within the same region. To ensure accurate monitoring of
+        		cross-zone data transfer, region and zone tiers should be consistently
+        		configured across all nodes.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -11714,7 +11777,9 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: batch_responses.cross_region.bytes
       exported_name: batch_responses_cross_region_bytes
-      description: "Total byte count of batch responses received cross region when region\n\t\ttiers are configured"
+      description: |-
+        Total byte count of batch responses received cross region when region
+        		tiers are configured
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -11722,7 +11787,12 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: batch_responses.cross_zone.bytes
       exported_name: batch_responses_cross_zone_bytes
-      description: "Total bytes of batch responses received cross zones within the same\n\t\tregion when zone tiers are configured. If region tiers are not set, it is\n\t\tassumed to be within the same region. To ensure accurate monitoring of\n\t\tcross-zone data transfer, region and zone tiers should be consistently\n\t\tconfigured across all nodes."
+      description: |-
+        Total bytes of batch responses received cross zones within the same
+        		region when zone tiers are configured. If region tiers are not set, it is
+        		assumed to be within the same region. To ensure accurate monitoring of
+        		cross-zone data transfer, region and zone tiers should be consistently
+        		configured across all nodes.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14466,7 +14536,9 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.rcvd.bytes
       exported_name: raft_rcvd_bytes
-      description: "Number of bytes in Raft messages received by this store. Note\n\t\tthat this does not include raft snapshot received."
+      description: |-
+        Number of bytes in Raft messages received by this store. Note
+        		that this does not include raft snapshot received.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14474,7 +14546,10 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.rcvd.cross_region.bytes
       exported_name: raft_rcvd_cross_region_bytes
-      description: "Number of bytes received by this store for cross region Raft messages\n\t\twhen region tiers are configured. Note that this does not include raft\n\t\tsnapshot received."
+      description: |-
+        Number of bytes received by this store for cross region Raft messages
+        		when region tiers are configured. Note that this does not include raft
+        		snapshot received.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14482,7 +14557,13 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.rcvd.cross_zone.bytes
       exported_name: raft_rcvd_cross_zone_bytes
-      description: "Number of bytes received by this store for cross zone, same region\n\t\tRaft messages when zone tiers are configured. If region tiers are not set,\n\t\tit is assumed to be within the same region. To ensure accurate monitoring of\n\t\tcross-zone data transfer, region and zone tiers should be consistently\n\t\tconfigured across all nodes. Note that this does not include raft snapshot\n\t\treceived."
+      description: |-
+        Number of bytes received by this store for cross zone, same region
+        		Raft messages when zone tiers are configured. If region tiers are not set,
+        		it is assumed to be within the same region. To ensure accurate monitoring of
+        		cross-zone data transfer, region and zone tiers should be consistently
+        		configured across all nodes. Note that this does not include raft snapshot
+        		received.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14676,7 +14757,9 @@ layers:
       derivative: NONE
     - name: raft.sent.bytes
       exported_name: raft_sent_bytes
-      description: "Number of bytes in Raft messages sent by this store. Note that\n\t\tthis does not include raft snapshot sent."
+      description: |-
+        Number of bytes in Raft messages sent by this store. Note that
+        		this does not include raft snapshot sent.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14684,7 +14767,10 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.sent.cross_region.bytes
       exported_name: raft_sent_cross_region_bytes
-      description: "Number of bytes sent by this store for cross region Raft messages\n\t\twhen region\ttiers are configured. Note that this does not include raft\n\t\tsnapshot sent."
+      description: |-
+        Number of bytes sent by this store for cross region Raft messages
+        		when region	tiers are configured. Note that this does not include raft
+        		snapshot sent.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14692,7 +14778,13 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.sent.cross_zone.bytes
       exported_name: raft_sent_cross_zone_bytes
-      description: "Number of bytes sent by this store for cross zone, same region Raft\n\t\tmessages when zone tiers are configured. If region tiers are not set, it is\n\t\tassumed to be within the same region. To ensure accurate monitoring of\n\t\tcross-zone data transfer, region and zone tiers should be consistently\n\t\tconfigured across all nodes. Note that this does not include raft snapshot\n\t\tsent."
+      description: |-
+        Number of bytes sent by this store for cross zone, same region Raft
+        		messages when zone tiers are configured. If region tiers are not set, it is
+        		assumed to be within the same region. To ensure accurate monitoring of
+        		cross-zone data transfer, region and zone tiers should be consistently
+        		configured across all nodes. Note that this does not include raft snapshot
+        		sent.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14963,7 +15055,12 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: range.snapshots.cross-zone.rcvd-bytes
       exported_name: range_snapshots_cross_zone_rcvd_bytes
-      description: "Number of snapshot bytes received cross zone within the same region\n\t\tby this store when zone tiers are configured. If region tiers are not set,\n\t\tit is assumed to be within the same region. To ensure accurate monitoring of\n\t\tcross-zone data transfer, region and zone tiers should be consistently\n\t\tconfigured across all nodes."
+      description: |-
+        Number of snapshot bytes received cross zone within the same region
+        		by this store when zone tiers are configured. If region tiers are not set,
+        		it is assumed to be within the same region. To ensure accurate monitoring of
+        		cross-zone data transfer, region and zone tiers should be consistently
+        		configured across all nodes.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14971,7 +15068,12 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: range.snapshots.cross-zone.sent-bytes
       exported_name: range_snapshots_cross_zone_sent_bytes
-      description: "Number of snapshot bytes sent cross zone within the same region by\n\t\tthis store when zone tiers are configured. If region tiers are not set, it\n\t\tis assumed to be within the same region. To ensure accurate monitoring of\n\t\tcross-zone data transfer, region and zone tiers should be consistently\n\t\tconfigured across all nodes."
+      description: |-
+        Number of snapshot bytes sent cross zone within the same region by
+        		this store when zone tiers are configured. If region tiers are not set, it
+        		is assumed to be within the same region. To ensure accurate monitoring of
+        		cross-zone data transfer, region and zone tiers should be consistently
+        		configured across all nodes.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
