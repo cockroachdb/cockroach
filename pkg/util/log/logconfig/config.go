@@ -1140,7 +1140,7 @@ func (x *FilePermissions) UnmarshalYAML(value *yaml.Node) (err error) {
 
 // String implements the fmt.Stringer interface.
 func (c *Config) String() string {
-	b, err := yaml.Marshal(c)
+	b, err := yamlutil.Marshal(c)
 	if err != nil {
 		return fmt.Sprintf("<INVALID CONFIG: %v>", err)
 	}
@@ -1156,7 +1156,7 @@ type Holder struct {
 
 // String implements the pflag.Value interface.
 func (h *Holder) String() string {
-	b, err := yaml.Marshal(h)
+	b, err := yamlutil.Marshal(h)
 	if err != nil {
 		return fmt.Sprintf("<INVALID CONFIG: %v>", err)
 	}

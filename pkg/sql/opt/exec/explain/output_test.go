@@ -30,10 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	yaml "go.yaml.in/yaml/v4"
 )
 
 func TestOutputBuilder(t *testing.T) {
@@ -94,7 +94,7 @@ func TestOutputBuilder(t *testing.T) {
 			return ob.BuildString()
 
 		case "tree":
-			treeYaml, err := yaml.Marshal(ob.BuildProtoTree())
+			treeYaml, err := yamlutil.Marshal(ob.BuildProtoTree())
 			if err != nil {
 				panic(err)
 			}

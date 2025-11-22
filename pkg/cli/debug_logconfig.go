@@ -10,9 +10,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
-	"go.yaml.in/yaml/v4"
 )
 
 var debugCheckLogConfigCmd = &cobra.Command{
@@ -33,7 +33,7 @@ func runDebugCheckLogConfig(cmd *cobra.Command, args []string) error {
 	}
 
 	c := cliCtx.logConfig
-	r, err := yaml.Marshal(&c)
+	r, err := yamlutil.Marshal(&c)
 	if err != nil {
 		return errors.Wrap(err, "printing configuration")
 	}

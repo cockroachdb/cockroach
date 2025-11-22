@@ -231,6 +231,7 @@ go_library(
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/tracing/zipper",
         "//pkg/util/uuid",
+        "//pkg/util/yamlutil",
         "//pkg/workload",
         "//pkg/workload/bank",
         "//pkg/workload/bulkingest",

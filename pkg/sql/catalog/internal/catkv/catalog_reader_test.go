@@ -33,10 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/kylelemons/godebug/diff"
 	"github.com/stretchr/testify/require"
-	yaml "go.yaml.in/yaml/v4"
 )
 
 // TestDataDriven exercises the methods of a catkv.CatalogReader in a
@@ -376,7 +376,7 @@ func (h testHelper) marshalResult(
 	if queryErr != nil {
 		m["error"] = queryErr.Error()
 	}
-	bytes, err := yaml.Marshal(m)
+	bytes, err := yamlutil.Marshal(m)
 	require.NoError(h.t, err)
 	return string(bytes)
 }

@@ -52,6 +52,5 @@ go_test(
         "@com_github_pires_go_proxyproto//:go-proxyproto",
         "@com_github_pires_go_proxyproto//tlvparse",
         "@com_github_stretchr_testify//require",
-        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )

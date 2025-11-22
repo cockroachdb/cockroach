@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
-	"go.yaml.in/yaml/v4"
 )
 
 /*
@@ -583,7 +582,7 @@ func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) 
 		return "", nil
 	}
 	// We only marshal actual data without container to reduce clutter.
-	out, err := yaml.Marshal(e.plan.Updates)
+	out, err := yamlutil.Marshal(e.plan.Updates)
 	if err != nil {
 		t.Fatalf("failed to marshal plan into yaml for verification: %v", err)
 	}
@@ -760,7 +759,7 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 			LocalData:   localDataViews,
 		})
 	}
-	out, err := yaml.Marshal(storesView)
+	out, err := yamlutil.Marshal(storesView)
 	if err != nil {
 		t.Fatalf("failed to serialize range descriptors from store: %v", err)
 	}

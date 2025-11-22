@@ -16,10 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
-	"go.yaml.in/yaml/v4"
 )
 
 const (
@@ -631,6 +631,6 @@ func makeYAMLConfig(scrapeConfigs []ScrapeConfig, nodeIPs map[install.Node]strin
 			},
 		)
 	}
-	ret, err := yaml.Marshal(&cfg)
+	ret, err := yamlutil.Marshal(&cfg)
 	return string(ret), err
 }

@@ -28,12 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	slugify "github.com/mozillazg/go-slugify"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
-	"go.yaml.in/yaml/v4"
 )
 
 type MetricInfo struct {
@@ -315,7 +315,7 @@ Output the list of metrics typical for a node.
 		}
 
 		// Output YAML
-		yamlData, err := yaml.Marshal(output)
+		yamlData, err := yamlutil.Marshal(output)
 		if err != nil {
 			return err
 		}
