@@ -132,7 +132,7 @@ require (
 	github.com/cockroachdb/changefeedpb v0.0.0-20250818184245-aab9e65dff20
 	github.com/cockroachdb/cmux v0.0.0-20250514152509-914d3bf9ec58
 	github.com/cockroachdb/cockroach-go/v2 v2.4.1
-	github.com/cockroachdb/crlib v0.0.0-20251024155502-a2e0a212ef05
+	github.com/cockroachdb/crlib v0.0.0-20251122031428-fe658a2dbda1
 	github.com/cockroachdb/datadriven v1.0.3-0.20251006155849-f84f9e519edd
 	github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f
 	github.com/cockroachdb/gostdlib v1.19.0
