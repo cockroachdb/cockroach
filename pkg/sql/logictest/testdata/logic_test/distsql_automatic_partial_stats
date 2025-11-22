@@ -2,10 +2,6 @@
 
 # Test a simple update and insert case for partial statistics
 
-# Disable automatic stats
-statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
-
 statement ok
 SET CLUSTER SETTING sql.stats.automatic_partial_collection.min_stale_rows = 5
 
