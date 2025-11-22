@@ -410,34 +410,24 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 		}
 		if scan, ok := e.(*memo.ScanExpr); ok {
 			tab := b.mem.Metadata().Table(scan.Table)
-			if tab.StatisticCount() > 0 {
-				// The first stat is the most recent full one.
-				var first int
-				for first < tab.StatisticCount() &&
-					(tab.Statistic(first).IsPartial() ||
-						(tab.Statistic(first).IsMerged() && !b.evalCtx.SessionData().OptimizerUseMergedPartialStatistics) ||
-						(tab.Statistic(first).IsForecast() && !b.evalCtx.SessionData().OptimizerUseForecasts)) {
-					first++
+			first := cat.FindLatestFullStat(tab, b.evalCtx.SessionData())
+			if first < tab.StatisticCount() {
+				stat := tab.Statistic(first)
+				val.TableStatsRowCount = stat.RowCount()
+				if val.TableStatsRowCount == 0 {
+					val.TableStatsRowCount = 1
 				}
-
-				if first < tab.StatisticCount() {
-					stat := tab.Statistic(first)
-					val.TableStatsRowCount = stat.RowCount()
-					if val.TableStatsRowCount == 0 {
-						val.TableStatsRowCount = 1
-					}
-					val.TableStatsCreatedAt = stat.CreatedAt()
-					val.LimitHint = scan.RequiredPhysical().LimitHint
-					val.Forecast = stat.IsForecast()
-					if val.Forecast {
-						val.ForecastAt = stat.CreatedAt()
-						// Find the first non-forecast full stat.
-						for i := first + 1; i < tab.StatisticCount(); i++ {
-							nextStat := tab.Statistic(i)
-							if !nextStat.IsPartial() && !nextStat.IsForecast() {
-								val.TableStatsCreatedAt = nextStat.CreatedAt()
-								break
-							}
+				val.TableStatsCreatedAt = stat.CreatedAt()
+				val.LimitHint = scan.RequiredPhysical().LimitHint
+				val.Forecast = stat.IsForecast()
+				if val.Forecast {
+					val.ForecastAt = stat.CreatedAt()
+					// Find the first non-forecast full stat.
+					for i := first + 1; i < tab.StatisticCount(); i++ {
+						nextStat := tab.Statistic(i)
+						if !nextStat.IsPartial() && !nextStat.IsForecast() {
+							val.TableStatsCreatedAt = nextStat.CreatedAt()
+							break
 						}
 					}
 				}
@@ -898,26 +888,23 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 		b.TotalScanRows += stats.RowCount
 		b.ScanCounts[exec.ScanWithStatsCount]++
 
-		// The first stat is the most recent full one. Check if it was a forecast.
-		var first int
-		for first < tab.StatisticCount() && tab.Statistic(first).IsPartial() {
-			first++
-		}
+		sd := b.evalCtx.SessionData()
+		first := cat.FindLatestFullStat(tab, sd)
 		if first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
-			if b.evalCtx.SessionData().OptimizerUseForecasts {
-				b.ScanCounts[exec.ScanWithStatsForecastCount]++
+			b.ScanCounts[exec.ScanWithStatsForecastCount]++
 
-				// Calculate time since the forecast (or negative time until the forecast).
-				nanosSinceStatsForecasted := timeutil.Since(tab.Statistic(first).CreatedAt())
-				if nanosSinceStatsForecasted.Abs() > b.NanosSinceStatsForecasted.Abs() {
-					b.NanosSinceStatsForecasted = nanosSinceStatsForecasted
-				}
+			// Calculate time since the forecast (or negative time until the forecast).
+			nanosSinceStatsForecasted := timeutil.Since(tab.Statistic(first).CreatedAt())
+			if nanosSinceStatsForecasted.Abs() > b.NanosSinceStatsForecasted.Abs() {
+				b.NanosSinceStatsForecasted = nanosSinceStatsForecasted
 			}
-			// Find the first non-forecast full stat.
-			for first < tab.StatisticCount() &&
-				(tab.Statistic(first).IsPartial() || tab.Statistic(first).IsForecast()) {
-				first++
-			}
+
+			// Since currently 'first' points at the forecast, then usage of the
+			// forecasts must be enabled, so in order to find the first full
+			// non-forecast stat, we'll temporarily disable their usage.
+			sd.OptimizerUseForecasts = false
+			first = cat.FindLatestFullStat(tab, sd)
+			sd.OptimizerUseForecasts = true
 		}
 
 		if first < tab.StatisticCount() {
@@ -945,8 +932,9 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 	}
 
 	var params exec.ScanParams
-	params, outputCols, err = b.scanParams(tab, &scan.ScanPrivate,
-		scan.Relational(), scan.RequiredPhysical(), statsCreatedAt)
+	params, outputCols, err = b.scanParams(
+		tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical(), statsCreatedAt,
+	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
