@@ -5,7 +5,7 @@ layers:
     metrics:
     - name: changefeed.commit_latency
       exported_name: changefeed_commit_latency
-      description: 'Event commit latency: a difference between event MVCC timestamp and the time it was acknowledged by the downstream sink.  If the sink batches events,  then the difference between the oldest event in the batch and acknowledgement is recorded; Excludes latency during backfill'
+      description: 'Event commit latency: a difference between event MVCC timestamp and the time it was acknowledged by the downstream sink. If the sink batches events, then the difference between the oldest event in the batch and acknowledgement is recorded. Excludes latency during backfill.'
       y_axis_label: Nanoseconds
       type: HISTOGRAM
       unit: NANOSECONDS
@@ -448,7 +448,10 @@ layers:
       unit: TIMESTAMP_SEC
       aggregation: AVG
       derivative: NONE
-      how_to_use: "Monitor this metric to ensure that backups are\n\t\t\t\t\t\tmeeting the recovery point objective (RPO). Each node\n\t\t\t\t\t\texports the time that it last completed a backup on behalf\n\t\t\t\t\t\tof the schedule. If a node is restarted, it will report 0\n\t\t\t\t\t\tuntil it completes a backup. If all nodes are restarted,\n\t\t\t\t\t\tmax() is 0 until a node completes a backup.\n\n\t\t\t\t\t\tTo make use of this metric, first, from each node, take the maximum\n\t\t\t\t\t\tover a rolling window equal to or greater than the backup frequency,\n\t\t\t\t\t\tand then take the maximum of those values across nodes. For example\n\t\t\t\t\t\twith a backup frequency of 60 minutes, monitor time() -\n\t\t\t\t\t\tmax_across_nodes(max_over_time(schedules_BACKUP_last_completed_time,\n\t\t\t\t\t\t60min))."
+      how_to_use: |-
+        Monitor this metric to ensure that backups are meeting the recovery point objective (RPO). Each node exports the time that it last completed a backup on behalf of the schedule. If a node is restarted, it will report 0 until it completes a backup. If all nodes are restarted, max() is 0 until a node completes a backup.
+
+        To make use of this metric, first, from each node, take the maximum over a rolling window equal to or greater than the backup frequency, and then take the maximum of those values across nodes. For example with a backup frequency of 60 minutes, monitor time() - max_across_nodes(max_over_time(schedules_BACKUP_last_completed_time, 60min)).
       essential: true
     - name: sql.conn.failures
       exported_name: sql_conn_failures
@@ -1569,7 +1572,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.flushes
       exported_name: changefeed_flushes
-      description: Total flushes across all feeds
+      description: Total flushes across all feeds.
       y_axis_label: Flushes
       type: COUNTER
       unit: COUNT
@@ -1593,7 +1596,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.internal_retry_message_count
       exported_name: changefeed_internal_retry_message_count
-      description: Number of messages for which an attempt to retry them within an aggregator node was made
+      description: Number of messages for which an attempt to retry them within an aggregator node was made.
       y_axis_label: Messages
       type: GAUGE
       unit: COUNT
@@ -1689,7 +1692,7 @@ layers:
       derivative: NONE
     - name: changefeed.parallel_io_pending_rows
       exported_name: changefeed_parallel_io_pending_rows
-      description: Number of rows which are blocked from being sent due to conflicting in-flight keys
+      description: Number of rows which are blocked from being sent due to conflicting in-flight keys.
       y_axis_label: Messages
       type: GAUGE
       unit: COUNT
@@ -1697,7 +1700,7 @@ layers:
       derivative: NONE
     - name: changefeed.parallel_io_queue_nanos
       exported_name: changefeed_parallel_io_queue_nanos
-      description: Time that outgoing requests to the sink spend waiting in a queue due to in-flight requests with conflicting keys
+      description: Time that outgoing requests to the sink spend waiting in a queue due to in-flight requests with conflicting keys.
       y_axis_label: Nanoseconds
       type: HISTOGRAM
       unit: NANOSECONDS
@@ -1745,7 +1748,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.schema_registry.registrations
       exported_name: changefeed_schema_registry_registrations
-      description: Number of registration attempts with the schema registry
+      description: Number of registration attempts with the schema registry.
       y_axis_label: Registrations
       type: COUNTER
       unit: COUNT
@@ -1753,7 +1756,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.schema_registry.retry_count
       exported_name: changefeed_schema_registry_retry_count
-      description: Number of retries encountered when sending requests to the schema registry
+      description: Number of retries encountered when sending requests to the schema registry.
       y_axis_label: Retries
       type: COUNTER
       unit: COUNT
@@ -1785,7 +1788,7 @@ layers:
       derivative: NONE
     - name: changefeed.sink_batch_hist_nanos
       exported_name: changefeed_sink_batch_hist_nanos
-      description: Time spent batched in the sink buffer before being flushed and acknowledged
+      description: Time spent batched in the sink buffer before being flushed and acknowledged.
       y_axis_label: Changefeeds
       type: HISTOGRAM
       unit: NANOSECONDS
@@ -1809,7 +1812,7 @@ layers:
       derivative: NONE
     - name: changefeed.size_based_flushes
       exported_name: changefeed_size_based_flushes
-      description: Total size based flushes across all feeds
+      description: Total size based flushes across all feeds.
       y_axis_label: Flushes
       type: COUNTER
       unit: COUNT
@@ -2065,7 +2068,7 @@ layers:
       derivative: NONE
     - name: distsender.batch_requests.cross_region.bytes
       exported_name: distsender_batch_requests_cross_region_bytes
-      description: "Total byte count of replica-addressed batch requests processed cross\n\t\tregion when region tiers are configured"
+      description: Total byte count of replica-addressed batch requests processed cross region when region tiers are configured
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -2073,7 +2076,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.batch_requests.cross_zone.bytes
       exported_name: distsender_batch_requests_cross_zone_bytes
-      description: "Total byte count of replica-addressed batch requests processed cross\n\t\tzone within the same region when zone tiers are configured. If region tiers\n\t\tare not set, it is assumed to be within the same region. To ensure accurate\n\t\tmonitoring of cross-zone data transfer, region and zone tiers should be\n\t\tconsistently configured across all nodes."
+      description: Total byte count of replica-addressed batch requests processed cross zone within the same region when zone tiers are configured. If region tiers are not set, it is assumed to be within the same region. To ensure accurate monitoring of cross-zone data transfer, region and zone tiers should be consistently configured across all nodes.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -2089,7 +2092,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.batch_responses.cross_region.bytes
       exported_name: distsender_batch_responses_cross_region_bytes
-      description: "Total byte count of replica-addressed batch responses received cross\n\t\tregion when region tiers are configured"
+      description: Total byte count of replica-addressed batch responses received cross region when region tiers are configured
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -2097,7 +2100,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.batch_responses.cross_zone.bytes
       exported_name: distsender_batch_responses_cross_zone_bytes
-      description: "Total byte count of replica-addressed batch responses received cross\n\t\tzone within the same region when zone tiers are configured. If region tiers\n\t\tare not set, it is assumed to be within the same region. To ensure accurate\n\t\tmonitoring of cross-zone data transfer, region and zone tiers should be\n\t\tconsistently configured across all nodes."
+      description: Total byte count of replica-addressed batch responses received cross zone within the same region when zone tiers are configured. If region tiers are not set, it is assumed to be within the same region. To ensure accurate monitoring of cross-zone data transfer, region and zone tiers should be consistently configured across all nodes.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -2233,10 +2236,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rangefeed.catchup_ranges
       exported_name: distsender_rangefeed_catchup_ranges
-      description: |-
-        Number of ranges in catchup mode
-
-        This counts the number of ranges with an active rangefeed that are performing catchup scan.
+      description: Number of ranges with an active rangefeed that are performing a catchup scan.
       y_axis_label: Ranges
       type: GAUGE
       unit: COUNT
@@ -2396,10 +2396,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rangefeed.total_ranges
       exported_name: distsender_rangefeed_total_ranges
-      description: |-
-        Number of ranges executing rangefeed
-
-        This counts the number of ranges with an active rangefeed.
+      description: Number of ranges with an active rangefeed.
       y_axis_label: Ranges
       type: GAUGE
       unit: COUNT
@@ -2418,8 +2415,7 @@ layers:
       description: |-
         Number of AddSSTable requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2430,8 +2426,7 @@ layers:
       description: |-
         Number of AdminChangeReplicas requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2442,8 +2437,7 @@ layers:
       description: |-
         Number of AdminMerge requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2454,8 +2448,7 @@ layers:
       description: |-
         Number of AdminRelocateRange requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2466,8 +2459,7 @@ layers:
       description: |-
         Number of AdminScatter requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2478,8 +2470,7 @@ layers:
       description: |-
         Number of AdminSplit requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2490,8 +2481,7 @@ layers:
       description: |-
         Number of AdminTransferLease requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2502,8 +2492,7 @@ layers:
       description: |-
         Number of AdminUnsplit requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2514,8 +2503,7 @@ layers:
       description: |-
         Number of Barrier requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2526,8 +2514,7 @@ layers:
       description: |-
         Number of CheckConsistency requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2538,8 +2525,7 @@ layers:
       description: |-
         Number of ClearRange requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2550,8 +2536,7 @@ layers:
       description: |-
         Number of ComputeChecksum requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2562,8 +2547,7 @@ layers:
       description: |-
         Number of ConditionalPut requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2574,8 +2558,7 @@ layers:
       description: |-
         Number of Delete requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2586,8 +2569,7 @@ layers:
       description: |-
         Number of DeleteRange requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2598,8 +2580,7 @@ layers:
       description: |-
         Number of EndTxn requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -2607,557 +2588,361 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: distsender.rpc.err.ambiguousresulterrtype
       exported_name: distsender_rpc_err_ambiguousresulterrtype
-      description: |-
-        Number of AmbiguousResultErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of AmbiguousResultErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.batchtimestampbeforegcerrtype
       exported_name: distsender_rpc_err_batchtimestampbeforegcerrtype
-      description: |-
-        Number of BatchTimestampBeforeGCErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of BatchTimestampBeforeGCErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.communicationerrtype
       exported_name: distsender_rpc_err_communicationerrtype
-      description: |-
-        Number of CommunicationErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of CommunicationErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.conditionfailederrtype
       exported_name: distsender_rpc_err_conditionfailederrtype
-      description: |-
-        Number of ConditionFailedErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of ConditionFailedErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.exclusionviolationerrtype
       exported_name: distsender_rpc_err_exclusionviolationerrtype
-      description: |-
-        Number of ExclusionViolationErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of ExclusionViolationErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.indeterminatecommiterrtype
       exported_name: distsender_rpc_err_indeterminatecommiterrtype
-      description: |-
-        Number of IndeterminateCommitErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of IndeterminateCommitErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.integeroverflowerrtype
       exported_name: distsender_rpc_err_integeroverflowerrtype
-      description: |-
-        Number of IntegerOverflowErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of IntegerOverflowErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.intentmissingerrtype
       exported_name: distsender_rpc_err_intentmissingerrtype
-      description: |-
-        Number of IntentMissingErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of IntentMissingErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.internalerrtype
       exported_name: distsender_rpc_err_internalerrtype
-      description: |-
-        Number of InternalErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of InternalErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.invalidleaseerrtype
       exported_name: distsender_rpc_err_invalidleaseerrtype
-      description: |-
-        Number of InvalidLeaseErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of InvalidLeaseErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.leaserejectederrtype
       exported_name: distsender_rpc_err_leaserejectederrtype
-      description: |-
-        Number of LeaseRejectedErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of LeaseRejectedErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.lockconflicterrtype
       exported_name: distsender_rpc_err_lockconflicterrtype
-      description: |-
-        Number of LockConflictErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of LockConflictErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.mergeinprogresserrtype
       exported_name: distsender_rpc_err_mergeinprogresserrtype
-      description: |-
-        Number of MergeInProgressErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of MergeInProgressErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.mintimestampboundunsatisfiableerrtype
       exported_name: distsender_rpc_err_mintimestampboundunsatisfiableerrtype
-      description: |-
-        Number of MinTimestampBoundUnsatisfiableErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of MinTimestampBoundUnsatisfiableErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.mvcchistorymutationerrtype
       exported_name: distsender_rpc_err_mvcchistorymutationerrtype
-      description: |-
-        Number of MVCCHistoryMutationErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of MVCCHistoryMutationErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.nodeunavailableerrtype
       exported_name: distsender_rpc_err_nodeunavailableerrtype
-      description: |-
-        Number of NodeUnavailableErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of NodeUnavailableErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.notleaseholdererrtype
       exported_name: distsender_rpc_err_notleaseholdererrtype
-      description: |-
-        Number of NotLeaseHolderErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of NotLeaseHolderErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.oprequirestxnerrtype
       exported_name: distsender_rpc_err_oprequirestxnerrtype
-      description: |-
-        Number of OpRequiresTxnErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of OpRequiresTxnErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.optimisticevalconflictserrtype
       exported_name: distsender_rpc_err_optimisticevalconflictserrtype
-      description: |-
-        Number of OptimisticEvalConflictsErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of OptimisticEvalConflictsErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.proxyfailederrtype
       exported_name: distsender_rpc_err_proxyfailederrtype
-      description: |-
-        Number of ProxyFailedErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of ProxyFailedErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.raftgroupdeletederrtype
       exported_name: distsender_rpc_err_raftgroupdeletederrtype
-      description: |-
-        Number of RaftGroupDeletedErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of RaftGroupDeletedErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.rangefeedretryerrtype
       exported_name: distsender_rpc_err_rangefeedretryerrtype
-      description: |-
-        Number of RangeFeedRetryErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of RangeFeedRetryErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.rangekeymismatcherrtype
       exported_name: distsender_rpc_err_rangekeymismatcherrtype
-      description: |-
-        Number of RangeKeyMismatchErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of RangeKeyMismatchErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.rangenotfounderrtype
       exported_name: distsender_rpc_err_rangenotfounderrtype
-      description: |-
-        Number of RangeNotFoundErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of RangeNotFoundErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.readwithinuncertaintyintervalerrtype
       exported_name: distsender_rpc_err_readwithinuncertaintyintervalerrtype
-      description: |-
-        Number of ReadWithinUncertaintyIntervalErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of ReadWithinUncertaintyIntervalErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.refreshfailederrtype
       exported_name: distsender_rpc_err_refreshfailederrtype
-      description: |-
-        Number of RefreshFailedErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of RefreshFailedErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.replicacorruptionerrtype
       exported_name: distsender_rpc_err_replicacorruptionerrtype
-      description: |-
-        Number of ReplicaCorruptionErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of ReplicaCorruptionErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.replicatooolderrtype
       exported_name: distsender_rpc_err_replicatooolderrtype
-      description: |-
-        Number of ReplicaTooOldErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of ReplicaTooOldErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.replicaunavailableerrtype
       exported_name: distsender_rpc_err_replicaunavailableerrtype
-      description: |-
-        Number of ReplicaUnavailableErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of ReplicaUnavailableErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.storenotfounderrtype
       exported_name: distsender_rpc_err_storenotfounderrtype
-      description: |-
-        Number of StoreNotFoundErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of StoreNotFoundErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.transactionabortederrtype
       exported_name: distsender_rpc_err_transactionabortederrtype
-      description: |-
-        Number of TransactionAbortedErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of TransactionAbortedErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.transactionpusherrtype
       exported_name: distsender_rpc_err_transactionpusherrtype
-      description: |-
-        Number of TransactionPushErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of TransactionPushErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.transactionretryerrtype
       exported_name: distsender_rpc_err_transactionretryerrtype
-      description: |-
-        Number of TransactionRetryErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of TransactionRetryErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.transactionretrywithprotorefresherrtype
       exported_name: distsender_rpc_err_transactionretrywithprotorefresherrtype
-      description: |-
-        Number of TransactionRetryWithProtoRefreshErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of TransactionRetryWithProtoRefreshErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.transactionstatuserrtype
       exported_name: distsender_rpc_err_transactionstatuserrtype
-      description: |-
-        Number of TransactionStatusErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of TransactionStatusErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.txnalreadyencounterederrtype
       exported_name: distsender_rpc_err_txnalreadyencounterederrtype
-      description: |-
-        Number of TxnAlreadyEncounteredErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of TxnAlreadyEncounteredErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.unsupportedrequesterrtype
       exported_name: distsender_rpc_err_unsupportedrequesterrtype
-      description: |-
-        Number of UnsupportedRequestErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of UnsupportedRequestErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.writeintenterrtype
       exported_name: distsender_rpc_err_writeintenterrtype
-      description: |-
-        Number of WriteIntentErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of WriteIntentErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.err.writetooolderrtype
       exported_name: distsender_rpc_err_writetooolderrtype
-      description: |-
-        Number of WriteTooOldErrType errors received replica-bound RPCs
-
-        This counts how often error of the specified type was received back from replicas
-        as part of executing possibly range-spanning requests. Failures to reach the target
-        replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-        errors as 'roachpb.InternalErrType'.
+      description: Number of WriteTooOldErrType errors received replica-bound RPCs.
       y_axis_label: Errors
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This counts how often an error of the specified type was received back from replicas as part of executing possibly range-spanning requests. Failures to reach the target replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified errors as 'roachpb.InternalErrType'.
     - name: distsender.rpc.excise.sent
       exported_name: distsender_rpc_excise_sent
       description: |-
         Number of Excise requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3168,8 +2953,7 @@ layers:
       description: |-
         Number of Export requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3180,8 +2964,7 @@ layers:
       description: |-
         Number of FlushLockTable requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3192,8 +2975,7 @@ layers:
       description: |-
         Number of GC requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3204,8 +2986,7 @@ layers:
       description: |-
         Number of Get requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3216,8 +2997,7 @@ layers:
       description: |-
         Number of HeartbeatTxn requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3228,8 +3008,7 @@ layers:
       description: |-
         Number of Increment requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3240,8 +3019,7 @@ layers:
       description: |-
         Number of IsSpanEmpty requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3252,8 +3030,7 @@ layers:
       description: |-
         Number of LeaseInfo requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3264,8 +3041,7 @@ layers:
       description: |-
         Number of LinkExternalSSTable requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3276,8 +3052,7 @@ layers:
       description: |-
         Number of Merge requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3288,8 +3063,7 @@ layers:
       description: |-
         Number of Migrate requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3300,8 +3074,7 @@ layers:
       description: |-
         Number of Probe requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3344,8 +3117,7 @@ layers:
       description: |-
         Number of PushTxn requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3356,8 +3128,7 @@ layers:
       description: |-
         Number of Put requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3368,8 +3139,7 @@ layers:
       description: |-
         Number of QueryIntent requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3380,8 +3150,7 @@ layers:
       description: |-
         Number of QueryLocks requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3392,8 +3161,7 @@ layers:
       description: |-
         Number of QueryResolvedTimestamp requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3404,8 +3172,7 @@ layers:
       description: |-
         Number of QueryTxn requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3416,8 +3183,7 @@ layers:
       description: |-
         Number of RangeStats requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3428,8 +3194,7 @@ layers:
       description: |-
         Number of RecomputeStats requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3440,8 +3205,7 @@ layers:
       description: |-
         Number of RecoverTxn requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3452,8 +3216,7 @@ layers:
       description: |-
         Number of Refresh requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3464,8 +3227,7 @@ layers:
       description: |-
         Number of RefreshRange requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3476,8 +3238,7 @@ layers:
       description: |-
         Number of RequestLease requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3488,8 +3249,7 @@ layers:
       description: |-
         Number of ResolveIntent requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3500,8 +3260,7 @@ layers:
       description: |-
         Number of ResolveIntentRange requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3512,8 +3271,7 @@ layers:
       description: |-
         Number of ReverseScan requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3524,8 +3282,7 @@ layers:
       description: |-
         Number of RevertRange requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3536,8 +3293,7 @@ layers:
       description: |-
         Number of Scan requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3564,8 +3320,7 @@ layers:
       description: |-
         Number of Subsume requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3576,8 +3331,7 @@ layers:
       description: |-
         Number of TransferLease requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3588,8 +3342,7 @@ layers:
       description: |-
         Number of TruncateLog requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3600,8 +3353,7 @@ layers:
       description: |-
         Number of WriteBatch requests processed.
 
-        This counts the requests in batches handed to DistSender, not the RPCs
-        sent to individual Ranges as a result.
+        This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -3612,10 +3364,7 @@ layers:
       description: |-
         Number of slow replica-bound RPCs.
 
-        Note that this is not a good signal for KV health. The remote side of the
-        RPCs tracked here may experience contention, so an end user can easily
-        cause values for this metric to be emitted by leaving a transaction open
-        for a long time and contending with it using a second transaction.
+        Note that this is not a good signal for KV health. The remote side of the RPCs tracked here may experience contention, so an end user can easily cause values for this metric to be emitted by leaving a transaction open for a long time and contending with it using a second transaction.
       y_axis_label: Requests
       type: COUNTER
       unit: COUNT
@@ -7089,10 +6838,7 @@ layers:
       description: |-
         Number of range-bound RPCs currently stuck or retrying for a long time.
 
-        Note that this is not a good signal for KV health. The remote side of the
-        RPCs tracked here may experience contention, so an end user can easily
-        cause values for this metric to be emitted by leaving a transaction open
-        for a long time and contending with it using a second transaction.
+        Note that this is not a good signal for KV health. The remote side of the RPCs tracked here may experience contention, so an end user can easily cause values for this metric to be emitted by leaving a transaction open for a long time and contending with it using a second transaction.
       y_axis_label: Requests
       type: GAUGE
       unit: COUNT
@@ -10466,7 +10212,7 @@ layers:
       unit: PERCENT
       aggregation: AVG
       derivative: NONE
-      how_to_use: If the value of this metric exceeds 1, then it indicates overload. You can also look at the metrics `storage.l0-num-files`, `storage.l0-sublevels` or `rocksdb.read-amplification` directly. A healthy LSM shape is defined as "read-amp < 20" and "L0-files < 1000", looking at cluster settings `admission.l0_sub_level_count_overload_threshold` and `admission.l0_file_count_overload_threshold` respectively.
+      how_to_use: If the value of this metric exceeds 1, then it indicates overload. You can also look at the metrics 'storage.l0-num-files', 'storage.l0-sublevels' or 'rocksdb.read-amplification' directly. A healthy LSM shape is defined as "read-amp < 20" and "L0-files < 1000", looking at cluster settings 'admission.l0_sub_level_count_overload_threshold' and 'admission.l0_file_count_overload_threshold' respectively.
       essential: true
     - name: capacity
       exported_name: capacity
@@ -10506,7 +10252,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      how_to_use: This metric gives hits to block cache which is reserved memory. It is allocated upon the start of a node process by the `--cache` flag and never shrinks. By observing block cache hits and misses, you can fine-tune memory allocations in the node process for the demands of the workload.
+      how_to_use: This metric gives hits to block cache which is reserved memory. It is allocated upon the start of a node process by the '--cache' flag and never shrinks. By observing block cache hits and misses, you can fine-tune memory allocations in the node process for the demands of the workload.
       essential: true
     - name: rocksdb.block.cache.misses
       exported_name: rocksdb_block_cache_misses
@@ -10516,7 +10262,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-      how_to_use: This metric gives misses to block cache which is reserved memory. It is allocated upon the start of a node process by the `--cache` flag and never shrinks. By observing block cache hits and misses, you can fine-tune memory allocations in the node process for the demands of the workload.
+      how_to_use: This metric gives misses to block cache which is reserved memory. It is allocated upon the start of a node process by the '--cache' flag and never shrinks. By observing block cache hits and misses, you can fine-tune memory allocations in the node process for the demands of the workload.
       essential: true
     - name: rocksdb.compactions
       exported_name: rocksdb_compactions
@@ -10581,10 +10327,7 @@ layers:
       description: |-
         Number of SSTables ingested as normal writes.
 
-        These AddSSTable requests do not count towards the addsstable metrics
-        'proposals', 'applications', or 'copies', as they are not ingested as AddSSTable
-        Raft commands, but rather normal write commands. However, if these requests get
-        throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
+        These AddSSTable requests do not count towards the addsstable metrics 'proposals', 'applications', or 'copies', as they are not ingested as AddSSTable Raft commands, but rather normal write commands. However, if these requests get throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
       y_axis_label: Ingestions
       type: COUNTER
       unit: COUNT
@@ -11155,9 +10898,7 @@ layers:
       description: |-
         Number of followers (i.e. Replicas) to which replication is currently paused to help them recover from I/O overload.
 
-        Such Replicas will be ignored for the purposes of proposal quota, and will not
-        receive replication traffic. They are essentially treated as offline for the
-        purpose of replication. This serves as a crude form of admission control.
+        Such Replicas will be ignored for the purposes of proposal quota, and will not receive replication traffic. They are essentially treated as offline for the purpose of replication. This serves as a crude form of admission control.
 
         The count is emitted by the leaseholder of each range.
       y_axis_label: Followers
@@ -12616,8 +12357,7 @@ layers:
       description: |-
         Number of Replicas for which the per-Replica circuit breaker is currently tripped.
 
-        A nonzero value indicates range or replica unavailability, and should be investigated.
-        Replicas in this state will fail-fast all inbound requests.
+        A nonzero value indicates range or replica unavailability, and should be investigated. Replicas in this state will fail-fast all inbound requests.
       y_axis_label: Replicas
       type: GAUGE
       unit: COUNT
@@ -12655,8 +12395,7 @@ layers:
       description: |-
         Execution duration for evaluating a BatchRequest on the read-write path after latches have been acquired.
 
-        A measurement is recorded regardless of outcome (i.e. also in case of an error). If internal retries occur, each instance is recorded separately.
-        Note that the measurement does not include the duration for replicating the evaluated command.
+        A measurement is recorded regardless of outcome (i.e. also in case of an error). If internal retries occur, each instance is recorded separately. Note that the measurement does not include the duration for replicating the evaluated command.
       y_axis_label: Nanoseconds
       type: HISTOGRAM
       unit: NANOSECONDS
@@ -14131,9 +13870,7 @@ layers:
       description: |-
         Number of Raft commands proposed and pending.
 
-        The number of Raft commands that the leaseholders are tracking as in-flight.
-        These commands will be periodically reproposed until they are applied or until
-        they fail, either unequivocally or ambiguously.
+        The number of Raft commands that the leaseholders are tracking as in-flight. These commands will be periodically reproposed until they are applied or until they fail, either unequivocally or ambiguously.
       y_axis_label: Commands
       type: GAUGE
       unit: COUNT
@@ -14144,8 +13881,7 @@ layers:
       description: |-
         Number of Raft commands proposed.
 
-        The number of proposals and all kinds of reproposals made by leaseholders. This
-        metric approximates the number of commands submitted through Raft.
+        The number of proposals and all kinds of reproposals made by leaseholders. This metric approximates the number of commands submitted through Raft.
       y_axis_label: Commands
       type: COUNTER
       unit: COUNT
@@ -14156,9 +13892,7 @@ layers:
       description: |-
         Number of Raft commands re-proposed with a newer LAI.
 
-        The number of Raft commands that leaseholders re-proposed with a modified LAI.
-        Such re-proposals happen for commands that are committed to Raft out of intended
-        order, and hence can not be applied as is.
+        The number of Raft commands that leaseholders re-proposed with a modified LAI. Such re-proposals happen for commands that are committed to Raft out of intended order, and hence can not be applied as is.
       y_axis_label: Commands
       type: COUNTER
       unit: COUNT
@@ -14169,9 +13903,7 @@ layers:
       description: |-
         Number of Raft commands re-proposed without modification.
 
-        The number of Raft commands that leaseholders re-proposed without modification.
-        Such re-proposals happen for commands that are not committed/applied within a
-        timeout, and have a high chance of being dropped.
+        The number of Raft commands that leaseholders re-proposed without modification. Such re-proposals happen for commands that are not committed/applied within a timeout, and have a high chance of being dropped.
       y_axis_label: Commands
       type: COUNTER
       unit: COUNT
@@ -14182,12 +13914,7 @@ layers:
       description: |-
         Number of Raft commands applied.
 
-        This measurement is taken on the Raft apply loops of all Replicas (leaders and
-        followers alike), meaning that it does not measure the number of Raft commands
-        *proposed* (in the hypothetical extreme case, all Replicas may apply all commands
-        through snapshots, thus not increasing this metric at all).
-        Instead, it is a proxy for how much work is being done advancing the Replica
-        state machines on this node.
+        This measurement is taken on the Raft apply loops of all Replicas (leaders and followers alike), meaning that it does not measure the number of Raft commands *proposed* (in the hypothetical extreme case, all Replicas may apply all commands through snapshots, thus not increasing this metric at all). Instead, it is a proxy for how much work is being done advancing the Replica state machines on this node.
       y_axis_label: Commands
       type: COUNTER
       unit: COUNT
@@ -14203,7 +13930,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.dropped_leader
       exported_name: raft_dropped_leader
-      description: Number of Raft proposals dropped by a Replica that believes itself to be the leader; each update also increments `raft.dropped` (this counts individial raftpb.Entry, not raftpb.MsgProp)
+      description: Number of Raft proposals dropped by a Replica that believes itself to be the leader; each update also increments 'raft.dropped' (this counts individial raftpb.Entry, not raftpb.MsgProp)
       y_axis_label: Proposals
       type: COUNTER
       unit: COUNT
@@ -14350,9 +14077,7 @@ layers:
       description: |-
         Latency histogram for applying all committed Raft commands in a Raft ready.
 
-        This measures the end-to-end latency of applying all commands in a Raft ready. Note that
-        this closes over possibly multiple measurements of the 'raft.process.commandcommit.latency'
-        metric, which receives datapoints for each sub-batch processed in the process.
+        This measures the end-to-end latency of applying all commands in a Raft ready. Note that this closes over possibly multiple measurements of the 'raft.process.commandcommit.latency' metric, which receives datapoints for each sub-batch processed in the process.
       y_axis_label: Latency
       type: HISTOGRAM
       unit: NANOSECONDS
@@ -14363,15 +14088,9 @@ layers:
       description: |-
         Latency histogram for applying a batch of Raft commands to the state machine.
 
-        This metric is misnamed: it measures the latency for *applying* a batch of
-        committed Raft commands to a Replica state machine. This requires only
-        non-durable I/O (except for replication configuration changes).
+        This metric is misnamed: it measures the latency for *applying* a batch of committed Raft commands to a Replica state machine. This requires only non-durable I/O (except for replication configuration changes).
 
-        Note that a "batch" in this context is really a sub-batch of the batch received
-        for application during raft ready handling. The
-        'raft.process.applycommitted.latency' histogram is likely more suitable in most
-        cases, as it measures the total latency across all sub-batches (i.e. the sum of
-        commandcommit.latency for a complete batch).
+        Note that a "batch" in this context is really a sub-batch of the batch received for application during raft ready handling. The 'raft.process.applycommitted.latency' histogram is likely more suitable in most cases, as it measures the total latency across all sub-batches (i.e. the sum of commandcommit.latency for a complete batch).
       y_axis_label: Latency
       type: HISTOGRAM
       unit: NANOSECONDS
@@ -14382,22 +14101,11 @@ layers:
       description: |-
         Latency histogram for handling a Raft ready.
 
-        This measures the end-to-end-latency of the Raft state advancement loop, including:
-        - snapshot application
-        - SST ingestion
-        - durably appending to the Raft log (i.e. includes fsync)
-        - entry application (incl. replicated side effects, notably log truncation)
+        This measures the end-to-end-latency of the Raft state advancement loop, including: - snapshot application - SST ingestion - durably appending to the Raft log (i.e. includes fsync) - entry application (incl. replicated side effects, notably log truncation)
 
-        These include work measured in 'raft.process.commandcommit.latency' and
-        'raft.process.applycommitted.latency'. However, matching percentiles of these
-        metrics may be *higher* than handleready, since not every handleready cycle
-        leads to an update of the others. For example, under tpcc-100 on a single node,
-        the handleready count is approximately twice the logcommit count (and logcommit
-        count tracks closely with applycommitted count).
+        These include work measured in 'raft.process.commandcommit.latency' and 'raft.process.applycommitted.latency'. However, matching percentiles of these metrics may be *higher* than handleready, since not every handleready cycle leads to an update of the others. For example, under tpcc-100 on a single node, the handleready count is approximately twice the logcommit count (and logcommit count tracks closely with applycommitted count).
 
-        High percentile outliers can be caused by individual large Raft commands or
-        storage layer blips. Lower percentile (e.g. 50th) increases are often driven by
-        CPU exhaustion or storage layer slowdowns.
+        High percentile outliers can be caused by individual large Raft commands or storage layer blips. Lower percentile (e.g. 50th) increases are often driven by CPU exhaustion or storage layer slowdowns.
       y_axis_label: Latency
       type: HISTOGRAM
       unit: NANOSECONDS
@@ -14408,13 +14116,7 @@ layers:
       description: |-
         Latency histogram for committing Raft log entries to stable storage
 
-        This measures the latency of durably committing a group of newly received Raft
-        entries as well as the HardState entry to disk. This excludes any data
-        processing, i.e. we measure purely the commit latency of the resulting Engine
-        write. Homogeneous bands of p50-p99 latencies (in the presence of regular Raft
-        traffic), make it likely that the storage layer is healthy. Spikes in the
-        latency bands can either hint at the presence of large sets of Raft entries
-        being received, or at performance issues at the storage layer.
+        This measures the latency of durably committing a group of newly received Raft entries as well as the HardState entry to disk. This excludes any data processing, i.e. we measure purely the commit latency of the resulting Engine write. Homogeneous bands of p50-p99 latencies (in the presence of regular Raft traffic), make it likely that the storage layer is healthy. Spikes in the latency bands can either hint at the presence of large sets of Raft entries being received, or at performance issues at the storage layer.
       y_axis_label: Latency
       type: HISTOGRAM
       unit: NANOSECONDS
@@ -14433,8 +14135,7 @@ layers:
       description: |-
         Nanoseconds spent in store.processRaft() working.
 
-        This is the sum of the measurements passed to the raft.process.handleready.latency
-        histogram.
+        This is the sum of the measurements passed to the raft.process.handleready.latency histogram.
       y_axis_label: Processing Time
       type: COUNTER
       unit: NANOSECONDS
@@ -14466,7 +14167,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.rcvd.bytes
       exported_name: raft_rcvd_bytes
-      description: "Number of bytes in Raft messages received by this store. Note\n\t\tthat this does not include raft snapshot received."
+      description: Number of bytes in Raft messages received by this store. Note that this does not include raft snapshot received.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14474,7 +14175,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.rcvd.cross_region.bytes
       exported_name: raft_rcvd_cross_region_bytes
-      description: "Number of bytes received by this store for cross region Raft messages\n\t\twhen region tiers are configured. Note that this does not include raft\n\t\tsnapshot received."
+      description: Number of bytes received by this store for cross region Raft messages when region tiers are configured. Note that this does not include raft snapshot received.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14482,7 +14183,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.rcvd.cross_zone.bytes
       exported_name: raft_rcvd_cross_zone_bytes
-      description: "Number of bytes received by this store for cross zone, same region\n\t\tRaft messages when zone tiers are configured. If region tiers are not set,\n\t\tit is assumed to be within the same region. To ensure accurate monitoring of\n\t\tcross-zone data transfer, region and zone tiers should be consistently\n\t\tconfigured across all nodes. Note that this does not include raft snapshot\n\t\treceived."
+      description: Number of bytes received by this store for cross zone, same region Raft messages when zone tiers are configured. If region tiers are not set, it is assumed to be within the same region. To ensure accurate monitoring of cross-zone data transfer, region and zone tiers should be consistently configured across all nodes. Note that this does not include raft snapshot received.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14589,12 +14290,7 @@ layers:
       description: |-
         Number of bytes in messages processed by Raft.
 
-        Messages reflected here have been handed to Raft (via RawNode.Step). This does not imply that the
-        messages are no longer held in memory or that IO has been performed. Raft delegates IO activity to
-        Raft ready handling, which occurs asynchronously. Since handing messages to Raft serializes with
-        Raft ready handling and size the size of an entry is dominated by the contained pebble WriteBatch,
-        on average the rate at which this metric increases is a good proxy for the rate at which Raft ready
-        handling consumes writes.
+        Messages reflected here have been handed to Raft (via RawNode.Step). This does not imply that the messages are no longer held in memory or that IO has been performed. Raft delegates IO activity to Raft ready handling, which occurs asynchronously. Since handing messages to Raft serializes with Raft ready handling and size the size of an entry is dominated by the contained pebble WriteBatch, on average the rate at which this metric increases is a good proxy for the rate at which Raft ready handling consumes writes.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14635,27 +14331,17 @@ layers:
     - name: raft.replication.latency
       exported_name: raft_replication_latency
       description: |-
-        The duration elapsed between having evaluated a BatchRequest and it being
-        reflected in the proposer's state machine (i.e. having applied fully).
+        The duration elapsed between having evaluated a BatchRequest and it being reflected in the proposer's state machine (i.e. having applied fully).
 
-        This encompasses time spent in the quota pool, in replication (including
-        reproposals), and application, but notably *not* sequencing latency (i.e.
-        contention and latch acquisition).
+        This encompasses time spent in the quota pool, in replication (including reproposals), and application, but notably *not* sequencing latency (i.e. contention and latch acquisition).
 
-        No measurement is recorded for read-only commands as well as read-write commands
-        which end up not writing (such as a DeleteRange on an empty span). Commands that
-        result in 'above-replication' errors (i.e. txn retries, etc) are similarly
-        excluded. Errors that arise while waiting for the in-flight replication result
-        or result from application of the command are included.
+        No measurement is recorded for read-only commands as well as read-write commands which end up not writing (such as a DeleteRange on an empty span). Commands that result in 'above-replication' errors (i.e. txn retries, etc) are similarly excluded. Errors that arise while waiting for the in-flight replication result or result from application of the command are included.
 
-        Note also that usually, clients are signalled at beginning of application, but
-        the recorded measurement captures the entirety of log application.
+        Note also that usually, clients are signalled at beginning of application, but the recorded measurement captures the entirety of log application.
 
-        The duration is always measured on the proposer, even if the Raft leader and
-        leaseholder are not colocated, or the request is proposed from a follower.
+        The duration is always measured on the proposer, even if the Raft leader and leaseholder are not colocated, or the request is proposed from a follower.
 
-        Commands that use async consensus will still cause a measurement that reflects
-        the actual replication latency, despite returning early to the client.
+        Commands that use async consensus will still cause a measurement that reflects the actual replication latency, despite returning early to the client.
       y_axis_label: Latency
       type: HISTOGRAM
       unit: COUNT
@@ -14666,9 +14352,7 @@ layers:
       description: |-
         Queueing durations for ranges waiting to be processed by the Raft scheduler.
 
-        This histogram measures the delay from when a range is registered with the scheduler
-        for processing to when it is actually processed. This does not include the duration
-        of processing.
+        This histogram measures the delay from when a range is registered with the scheduler for processing to when it is actually processed. This does not include the duration of processing.
       y_axis_label: Latency
       type: HISTOGRAM
       unit: NANOSECONDS
@@ -14676,7 +14360,7 @@ layers:
       derivative: NONE
     - name: raft.sent.bytes
       exported_name: raft_sent_bytes
-      description: "Number of bytes in Raft messages sent by this store. Note that\n\t\tthis does not include raft snapshot sent."
+      description: Number of bytes in Raft messages sent by this store. Note that this does not include raft snapshot sent.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14684,7 +14368,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.sent.cross_region.bytes
       exported_name: raft_sent_cross_region_bytes
-      description: "Number of bytes sent by this store for cross region Raft messages\n\t\twhen region\ttiers are configured. Note that this does not include raft\n\t\tsnapshot sent."
+      description: "Number of bytes sent by this store for cross region Raft messages when region\ttiers are configured. Note that this does not include raft snapshot sent."
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14692,7 +14376,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: raft.sent.cross_zone.bytes
       exported_name: raft_sent_cross_zone_bytes
-      description: "Number of bytes sent by this store for cross zone, same region Raft\n\t\tmessages when zone tiers are configured. If region tiers are not set, it is\n\t\tassumed to be within the same region. To ensure accurate monitoring of\n\t\tcross-zone data transfer, region and zone tiers should be consistently\n\t\tconfigured across all nodes. Note that this does not include raft snapshot\n\t\tsent."
+      description: Number of bytes sent by this store for cross zone, same region Raft messages when zone tiers are configured. If region tiers are not set, it is assumed to be within the same region. To ensure accurate monitoring of cross-zone data transfer, region and zone tiers should be consistently configured across all nodes. Note that this does not include raft snapshot sent.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14711,26 +14395,15 @@ layers:
       description: |-
         Counter of raftpb.Entry.Size() read from pebble for raft log entries.
 
-        These are the bytes returned from the (raft.Storage).Entries method that were not
-        returned via the raft entry cache. This metric plus the raft.entrycache.read_bytes
-        metric represent the total bytes returned from the Entries method.
+        These are the bytes returned from the (raft.Storage).Entries method that were not returned via the raft entry cache. This metric plus the raft.entrycache.read_bytes metric represent the total bytes returned from the Entries method.
 
-        Since pebble might serve these entries from the block cache, only a fraction of this
-        throughput might manifest in disk metrics.
+        Since pebble might serve these entries from the block cache, only a fraction of this throughput might manifest in disk metrics.
 
-        Entries tracked in this metric incur an unmarshalling-related CPU and memory
-        overhead that would not be incurred would the entries be served from the raft
-        entry cache.
+        Entries tracked in this metric incur an unmarshalling-related CPU and memory overhead that would not be incurred would the entries be served from the raft entry cache.
 
-        The bytes returned here do not correspond 1:1 to bytes read from pebble. This
-        metric measures the in-memory size of the raftpb.Entry, whereas we read its
-        encoded representation from pebble. As there is no compression involved, these
-        will generally be comparable.
+        The bytes returned here do not correspond 1:1 to bytes read from pebble. This metric measures the in-memory size of the raftpb.Entry, whereas we read its encoded representation from pebble. As there is no compression involved, these will generally be comparable.
 
-        A common reason for elevated measurements on this metric is that a store is
-        falling behind on raft log application. The raft entry cache generally tracks
-        entries that were recently appended, so if log application falls behind the
-        cache will already have moved on to newer entries.
+        A common reason for elevated measurements on this metric is that a store is falling behind on raft log application. The raft entry cache generally tracks entries that were recently appended, so if log application falls behind the cache will already have moved on to newer entries.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14841,12 +14514,7 @@ layers:
       description: |-
         Number of Raft log entries followers on other stores are behind.
 
-        This gauge provides a view of the aggregate number of log entries the Raft leaders
-        on this node think the followers are behind. Since a raft leader may not always
-        have a good estimate for this information for all of its followers, and since
-        followers are expected to be behind (when they are not required as part of a
-        quorum) *and* the aggregate thus scales like the count of such followers, it is
-        difficult to meaningfully interpret this metric.
+        This gauge provides a view of the aggregate number of log entries the Raft leaders on this node think the followers are behind. Since a raft leader may not always have a good estimate for this information for all of its followers, and since followers are expected to be behind (when they are not required as part of a quorum) *and* the aggregate thus scales like the count of such followers, it is difficult to meaningfully interpret this metric.
       y_axis_label: Log Entries
       type: GAUGE
       unit: COUNT
@@ -14905,9 +14573,7 @@ layers:
       description: |-
         Count of offline loss of quorum recovery operations performed on ranges.
 
-        This count increments for every range recovered in offline loss of quorum
-        recovery operation. Metric is updated when node on which survivor replica
-        is located starts following the recovery.
+        This count increments for every range recovered in offline loss of quorum recovery operation. Metric is updated when node on which survivor replica is located starts following the recovery.
       y_axis_label: Quorum Recoveries
       type: COUNTER
       unit: COUNT
@@ -14963,7 +14629,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: range.snapshots.cross-zone.rcvd-bytes
       exported_name: range_snapshots_cross_zone_rcvd_bytes
-      description: "Number of snapshot bytes received cross zone within the same region\n\t\tby this store when zone tiers are configured. If region tiers are not set,\n\t\tit is assumed to be within the same region. To ensure accurate monitoring of\n\t\tcross-zone data transfer, region and zone tiers should be consistently\n\t\tconfigured across all nodes."
+      description: Number of snapshot bytes received cross zone within the same region by this store when zone tiers are configured. If region tiers are not set, it is assumed to be within the same region. To ensure accurate monitoring of cross-zone data transfer, region and zone tiers should be consistently configured across all nodes.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14971,7 +14637,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: range.snapshots.cross-zone.sent-bytes
       exported_name: range_snapshots_cross_zone_sent_bytes
-      description: "Number of snapshot bytes sent cross zone within the same region by\n\t\tthis store when zone tiers are configured. If region tiers are not set, it\n\t\tis assumed to be within the same region. To ensure accurate monitoring of\n\t\tcross-zone data transfer, region and zone tiers should be consistently\n\t\tconfigured across all nodes."
+      description: Number of snapshot bytes sent cross zone within the same region by this store when zone tiers are configured. If region tiers are not set, it is assumed to be within the same region. To ensure accurate monitoring of cross-zone data transfer, region and zone tiers should be consistently configured across all nodes.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -14979,11 +14645,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: range.snapshots.delegate.failures
       exported_name: range_snapshots_delegate_failures
-      description: |-
-        Number of snapshots that were delegated to a different node and
-        resulted in failure on that delegate. There are numerous reasons a failure can
-        occur on a delegate such as timeout, the delegate Raft log being too far behind
-        or the delegate being too busy to send.
+      description: Number of snapshots that were delegated to a different node and resulted in failure on that delegate. There are numerous reasons a failure can occur on a delegate such as timeout, the delegate Raft log being too far behind or the delegate being too busy to send.
       y_axis_label: Snapshots
       type: COUNTER
       unit: COUNT
@@ -15002,9 +14664,7 @@ layers:
       description: |-
         Bytes sent using a delegate.
 
-        The number of bytes sent as a result of a delegate snapshot request
-        that was originated from a different node. This metric is useful in
-        evaluating the network savings of not sending cross region traffic.
+        The number of bytes sent as a result of a delegate snapshot request that was originated from a different node. This metric is useful in evaluating the network savings of not sending cross region traffic.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -15012,9 +14672,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: range.snapshots.delegate.successes
       exported_name: range_snapshots_delegate_successes
-      description: |-
-        Number of snapshots that were delegated to a different node and
-        resulted in success on that delegate. This does not count self delegated snapshots.
+      description: Number of snapshots that were delegated to a different node and resulted in success on that delegate. This does not count self delegated snapshots.
       y_axis_label: Snapshots
       type: COUNTER
       unit: COUNT
@@ -15415,10 +15073,7 @@ layers:
       description: |-
         Number of backpressured writes waiting on a Range split.
 
-        A Range will backpressure (roughly) non-system traffic when the range is above
-        the configured size until the range splits. When the rate of this metric is
-        nonzero over extended periods of time, it should be investigated why splits are
-        not occurring.
+        A Range will backpressure (roughly) non-system traffic when the range is above the configured size until the range splits. When the rate of this metric is nonzero over extended periods of time, it should be investigated why splits are not occurring.
       y_axis_label: Writes
       type: GAUGE
       unit: COUNT
@@ -15429,14 +15084,9 @@ layers:
       description: |-
         Number of requests that have been stuck for a long time acquiring latches.
 
-        Latches moderate access to the KV keyspace for the purpose of evaluating and
-        replicating commands. A slow latch acquisition attempt is often caused by
-        another request holding and not releasing its latches in a timely manner. This
-        in turn can either be caused by a long delay in evaluation (for example, under
-        severe system overload) or by delays at the replication layer.
+        Latches moderate access to the KV keyspace for the purpose of evaluating and replicating commands. A slow latch acquisition attempt is often caused by another request holding and not releasing its latches in a timely manner. This in turn can either be caused by a long delay in evaluation (for example, under severe system overload) or by delays at the replication layer.
 
-        This gauge registering a nonzero value usually indicates a serious problem and
-        should be investigated.
+        This gauge registering a nonzero value usually indicates a serious problem and should be investigated.
       y_axis_label: Requests
       type: GAUGE
       unit: COUNT
@@ -15447,11 +15097,7 @@ layers:
       description: |-
         Number of requests that have been stuck for a long time acquiring a lease.
 
-        This gauge registering a nonzero value usually indicates range or replica
-        unavailability, and should be investigated. In the common case, we also
-        expect to see 'requests.slow.raft' to register a nonzero value, indicating
-        that the lease requests are not getting a timely response from the replication
-        layer.
+        This gauge registering a nonzero value usually indicates range or replica unavailability, and should be investigated. In the common case, we also expect to see 'requests.slow.raft' to register a nonzero value, indicating that the lease requests are not getting a timely response from the replication layer.
       y_axis_label: Requests
       type: GAUGE
       unit: COUNT
@@ -15462,10 +15108,7 @@ layers:
       description: |-
         Number of requests that have been stuck for a long time in the replication layer.
 
-        An (evaluated) request has to pass through the replication layer, notably the
-        quota pool and raft. If it fails to do so within a highly permissive duration,
-        the gauge is incremented (and decremented again once the request is either
-        applied or returns an error).
+        An (evaluated) request has to pass through the replication layer, notably the quota pool and raft. If it fails to do so within a highly permissive duration, the gauge is incremented (and decremented again once the request is either applied or returns an error).
 
         A nonzero value indicates range or replica unavailability, and should be investigated.
       y_axis_label: Requests
@@ -16107,7 +15750,7 @@ layers:
       derivative: NONE
     - name: storage.block-load.queued
       exported_name: storage_block_load_queued
-      description: 'The cumulative number of SSTable block loads that were delayed because too many loads were active (see also: `storage.block_load.node_max_active`)'
+      description: 'The cumulative number of SSTable block loads that were delayed because too many loads were active (see also: ''storage.block_load.node_max_active'')'
       y_axis_label: Block loads
       type: COUNTER
       unit: COUNT
@@ -16190,16 +15833,9 @@ layers:
       description: |-
         The number of checkpoint directories found in storage.
 
-        This is the number of directories found in the auxiliary/checkpoints directory.
-        Each represents an immutable point-in-time storage engine checkpoint. They are
-        cheap (consisting mostly of hard links), but over time they effectively become a
-        full copy of the old state, which increases their relative cost. Checkpoints
-        must be deleted once acted upon (e.g. copied elsewhere or investigated).
+        This is the number of directories found in the auxiliary/checkpoints directory. Each represents an immutable point-in-time storage engine checkpoint. They are cheap (consisting mostly of hard links), but over time they effectively become a full copy of the old state, which increases their relative cost. Checkpoints must be deleted once acted upon (e.g. copied elsewhere or investigated).
 
-        A likely cause of having a checkpoint is that one of the ranges in this store
-        had inconsistent data among its replicas. Such checkpoint directories are
-        located in auxiliary/checkpoints/rN_at_M, where N is the range ID, and M is the
-        Raft applied index at which this checkpoint was taken.
+        A likely cause of having a checkpoint is that one of the ranges in this store had inconsistent data among its replicas. Such checkpoint directories are located in auxiliary/checkpoints/rN_at_M, where N is the range ID, and M is the Raft applied index at which this checkpoint was taken.
       y_axis_label: Directories
       type: GAUGE
       unit: COUNT
@@ -16226,9 +15862,7 @@ layers:
       description: |-
         Cumulative sum of all compaction durations.
 
-        The rate of this value provides the effective compaction concurrency of a store,
-        which can be useful to determine whether the maximum compaction concurrency is
-        fully utilized.
+        The rate of this value provides the effective compaction concurrency of a store, which can be useful to determine whether the maximum compaction concurrency is fully utilized.
       y_axis_label: Processing Time
       type: COUNTER
       unit: NANOSECONDS
@@ -16239,12 +15873,7 @@ layers:
       description: |-
         Cumulative size of storage engine KVs written to sstables during flushes and compactions due to open LSM snapshots.
 
-        Various subsystems of CockroachDB take LSM snapshots to maintain a consistent view
-        of the database over an extended duration. In order to maintain the consistent view,
-        flushes and compactions within the storage engine must preserve keys that otherwise
-        would have been dropped. This increases write amplification, and introduces keys
-        that must be skipped during iteration. This metric records the cumulative number of
-        bytes preserved during flushes and compactions over the lifetime of the process.
+        Various subsystems of CockroachDB take LSM snapshots to maintain a consistent view of the database over an extended duration. In order to maintain the consistent view, flushes and compactions within the storage engine must preserve keys that otherwise would have been dropped. This increases write amplification, and introduces keys that must be skipped during iteration. This metric records the cumulative number of bytes preserved during flushes and compactions over the lifetime of the process.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -16255,12 +15884,7 @@ layers:
       description: |-
         Cumulative count of storage engine KVs written to sstables during flushes and compactions due to open LSM snapshots.
 
-        Various subsystems of CockroachDB take LSM snapshots to maintain a consistent view
-        of the database over an extended duration. In order to maintain the consistent view,
-        flushes and compactions within the storage engine must preserve keys that otherwise
-        would have been dropped. This increases write amplification, and introduces keys
-        that must be skipped during iteration. This metric records the cumulative count of
-        KVs preserved during flushes and compactions over the lifetime of the process.
+        Various subsystems of CockroachDB take LSM snapshots to maintain a consistent view of the database over an extended duration. In order to maintain the consistent view, flushes and compactions within the storage engine must preserve keys that otherwise would have been dropped. This increases write amplification, and introduces keys that must be skipped during iteration. This metric records the cumulative count of KVs preserved during flushes and compactions over the lifetime of the process.
       y_axis_label: Keys
       type: COUNTER
       unit: COUNT
@@ -16919,9 +16543,7 @@ layers:
       description: |-
         Cumulative count of seeks performed internally within storage engine iterators.
 
-        A value high relative to 'storage.iterator.external.seeks'
-        is a good indication that there's an accumulation of garbage
-        internally within the storage engine.
+        A value high relative to 'storage.iterator.external.seeks' is a good indication that there's an accumulation of garbage internally within the storage engine.
 
         See storage.AggregatedIteratorStats for details.
       y_axis_label: Iterator Ops
@@ -16934,9 +16556,7 @@ layers:
       description: |-
         Cumulative count of steps performed internally within storage engine iterators.
 
-        A value high relative to 'storage.iterator.external.steps'
-        is a good indication that there's an accumulation of garbage
-        internally within the storage engine.
+        A value high relative to 'storage.iterator.external.steps' is a good indication that there's an accumulation of garbage internally within the storage engine.
 
         See storage.AggregatedIteratorStats for more details.
       y_axis_label: Iterator Ops
@@ -17165,8 +16785,7 @@ layers:
       description: |-
         Estimated file bytes that will be saved by compacting all point deletions.
 
-        This is dependent on table stats collection, so can be very incomplete until
-        storage.initial_stats_complete becomes true.
+        This is dependent on table stats collection, so can be very incomplete until storage.initial_stats_complete becomes true.
       y_axis_label: Bytes
       type: GAUGE
       unit: BYTES
@@ -17177,8 +16796,7 @@ layers:
       description: |-
         Estimated file bytes that will be saved by compacting all range deletions.
 
-        This is dependent on table stats collection, so can be very incomplete until
-        storage.initial_stats_complete becomes true.
+        This is dependent on table stats collection, so can be very incomplete until storage.initial_stats_complete becomes true.
       y_axis_label: Bytes
       type: GAUGE
       unit: BYTES
@@ -17408,9 +17026,7 @@ layers:
       description: |-
         Running measure of write-amplification.
 
-        Write amplification is measured as the ratio of bytes written to disk relative to the logical
-        bytes present in sstables, over the life of a store. This metric is a running average
-        of the write amplification as tracked by Pebble.
+        Write amplification is measured as the ratio of bytes written to disk relative to the logical bytes present in sstables, over the life of a store. This metric is a running average of the write amplification as tracked by Pebble.
       y_axis_label: Ratio of bytes written to logical bytes
       type: GAUGE
       unit: COUNT
