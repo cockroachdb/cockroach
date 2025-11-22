@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -113,8 +114,12 @@ func TestConvertReplicaChangeToMMA(t *testing.T) {
 					mmaChanges.SortForTesting()
 					var b strings.Builder
 					fmt.Fprintf(&b, "PendingRangeChange: %s", mmaChanges.StringForTesting())
-					if mmaChanges.IsChangeReplicas() {
-						fmt.Fprintf(&b, "As kvpb.ReplicationChanges:\n %v\n", mmaChanges.ReplicationChanges())
+					externalChange := mmaprototype.MakeExternalRangeChange(mmaChanges)
+					if externalChange.IsChangeReplicas() {
+						fmt.Fprintf(&b, "As kvpb.ReplicationChanges:\n %v\n", externalChange.ReplicationChanges())
+					} else if externalChange.IsPureTransferLease() {
+						fmt.Fprintf(&b, "Lease transfer from s%v to s%v\n",
+							externalChange.LeaseTransferFrom(), externalChange.LeaseTransferTarget())
 					}
 					return b.String()
 				}

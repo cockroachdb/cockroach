@@ -254,7 +254,7 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 }
 
 // AdjustPendingChangeDisposition implements the Allocator interface.
-func (a *allocatorState) AdjustPendingChangeDisposition(change PendingRangeChange, success bool) {
+func (a *allocatorState) AdjustPendingChangeDisposition(change ExternalRangeChange, success bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	rs, ok := a.cs.ranges[change.RangeID]
@@ -274,7 +274,7 @@ func (a *allocatorState) AdjustPendingChangeDisposition(change PendingRangeChang
 	// can be made about whether these changes will be found in the allocator's
 	// state. We gather the found changes.
 	var changes []*pendingReplicaChange
-	for _, c := range change.pendingReplicaChanges {
+	for _, c := range change.Changes {
 		ch, ok := a.cs.pendingChanges[c.changeID]
 		if !ok {
 			continue
@@ -303,25 +303,27 @@ func (a *allocatorState) AdjustPendingChangeDisposition(change PendingRangeChang
 }
 
 // RegisterExternalChange implements the Allocator interface.
-func (a *allocatorState) RegisterExternalChange(change PendingRangeChange) (ok bool) {
+func (a *allocatorState) RegisterExternalChange(
+	change PendingRangeChange,
+) (_ ExternalRangeChange, ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if err := a.cs.preCheckOnApplyReplicaChanges(change); err != nil {
 		a.mmaMetrics.ExternalFailedToRegister.Inc(1)
 		log.KvDistribution.Infof(context.Background(),
 			"did not register external changes: due to %v", err)
-		return false
+		return ExternalRangeChange{}, false
 	} else {
 		a.mmaMetrics.ExternaRegisterSuccess.Inc(1)
 	}
 	a.cs.addPendingRangeChange(change)
-	return true
+	return MakeExternalRangeChange(change), true
 }
 
 // ComputeChanges implements the Allocator interface.
 func (a *allocatorState) ComputeChanges(
 	ctx context.Context, msg *StoreLeaseholderMsg, opts ChangeOptions,
-) []PendingRangeChange {
+) []ExternalRangeChange {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if msg.StoreID != opts.LocalStoreID {
