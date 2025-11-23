@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,6 +26,7 @@ import (
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/metrics_config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
@@ -66,6 +68,7 @@ var (
 
 	datadogLogsURLFormat         = "https://us5.datadoghq.com/logs?query=cluster_label:%s+upload_id:%s"
 	failedRequestsFileNameFormat = "tsdump_failed_requests_%s.json"
+	prometheusNameReplaceRE      = regexp.MustCompile("^[^a-zA-Z_:]|[^a-zA-Z0-9_:]")
 
 	translateMetricType = map[string]*datadogV2.MetricIntakeType{
 		"GAUGE":   datadogV2.METRICINTAKETYPE_GAUGE.Ptr(),
@@ -315,6 +318,11 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 	} else {
 		// add default node_id as 0 as there is no metric match for the regex.
 		appendTag(series, nodeKey, "0")
+	}
+
+	prometheusCompatibleName := prometheusNameReplaceRE.ReplaceAllString(series.Metric, "_")
+	if datadogIntegrationName, ok := metrics_config.CockroachdbMetrics[prometheusCompatibleName]; ok {
+		series.Metric = datadogIntegrationName
 	}
 
 	isSorted := true

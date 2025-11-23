@@ -1105,6 +1105,7 @@ GO_TARGETS = [
     "//pkg/cli/democluster:democluster",
     "//pkg/cli/democluster:democluster_test",
     "//pkg/cli/exit:exit",
+    "//pkg/cli/metrics_config:metrics_config",
     "//pkg/cli/syncbench:syncbench",
     "//pkg/cli:cli",
     "//pkg/cli:cli_test",

@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+genrule(
+    name = "cockroachdb_metrics",
+    srcs = [
+        "files/cockroachdb_metrics_base.yaml",
+        "@datadog_cockroachdb_metrics//:metrics.py",
+    ],
+    outs = ["cockroachdb_metrics.go"],
+    cmd = "$(location //build/tools/gen-cockroachdb-metrics) $@ $(location @datadog_cockroachdb_metrics//:metrics.py) $(location files/cockroachdb_metrics_base.yaml)",
+    tools = ["//build/tools/gen-cockroachdb-metrics"],
+    visibility = ["//pkg/gen:__pkg__"],
+)
+
+go_library(
+    name = "metrics_config",
+    srcs = ["cockroachdb_metrics.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cli/metrics_config",
+    visibility = ["//visibility:public"],
+)

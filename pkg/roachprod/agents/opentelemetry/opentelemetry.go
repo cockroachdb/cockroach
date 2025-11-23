@@ -13,6 +13,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/metrics_config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -63,7 +64,7 @@ func Install(ctx context.Context, l *logger.Logger, c *install.SyncedCluster, co
 			DatadogSite:        config.DatadogSite,
 			DatadogAPIKey:      config.DatadogAPIKey,
 			DatadogTags:        makeDatadogTags(tags),
-			CockroachDBMetrics: cockroachdbMetrics,
+			CockroachDBMetrics: metrics_config.CockroachdbMetrics,
 		}
 
 		opentelemetryConfig, err := executeTemplate(opentelemetryConfigTemplate, data)
