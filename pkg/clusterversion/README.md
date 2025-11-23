@@ -97,7 +97,7 @@ code for more details.
 
 **When**: When we are ready to select the first beta candidate.
 
-**Claude Prompt**: "Please create a PR to prepare the release-25.4 branch for beta.1 following the R.1 checklist in pkg/clusterversion/README.md and the detailed runbook in pkg/clusterversion/CLAUDE.md"
+**Claude Prompt**: "Please create a PR to prepare the release-25.4 branch for beta.1 following the R.1 runbook in pkg/clusterversion/runbooks/R1_prepare_for_beta.md"
 
 **Checklist**:
  - [ ] Set `developmentBranch` constant to `false`
@@ -114,7 +114,7 @@ code for more details.
 **When**: When we are absolutely sure that we no longer need additional version
 gates - right before the final RC at the latest.
 
-**Claude Prompt**: "Please create a PR to mint the 25.4 release following the R.2 checklist in pkg/clusterversion/README.md and the detailed runbook in pkg/clusterversion/CLAUDE.md. We're preparing rc.1."
+**Claude Prompt**: "Please create a PR to mint the 25.4 release following the R.2 runbook in pkg/clusterversion/runbooks/R2_mint_release.md. We're preparing rc.1."
 
 **Checklist**:
 - [ ] Replace temporary constant for current release (e.g. `V24_1`) with a
@@ -143,7 +143,7 @@ Technically this step can happen right after forking, but if there are changes
 to the gates or upgrades in the forked release it might cause issues with
 master-to-master upgrades.
 
-**Claude Prompt**: "Please create a PR to bump master to 26.1 following the M.1 checklist in pkg/clusterversion/README.md and the detailed runbook in pkg/clusterversion/CLAUDE.md"
+**Claude Prompt**: "Please create a PR to bump master to 26.1 following the M.1 runbook in pkg/clusterversion/runbooks/M1_bump_current_version.md"
 
 **Checklist**:
 
@@ -197,7 +197,7 @@ of the forked release is cut. It can happen earlier, but we don't want it to
 happen while there is a high chance of in-progress changes that affect the
 bootstrap data in a meaningful way.
 
-**Claude Prompt**: "Please create a PR to enable mixed-cluster logic tests for 25.4 following the M.2 checklist in pkg/clusterversion/README.md and the detailed runbook in pkg/clusterversion/CLAUDE.md. Base this on top of the M.1 PR."
+**Claude Prompt**: "Please create a PR to enable mixed-cluster logic tests for 25.4 following the M.2 runbook in pkg/clusterversion/runbooks/M2_enable_mixed_cluster_logic_tests.md. Base this on top of the M.1 PR."
 
 **Checklist**:
 
@@ -231,6 +231,8 @@ enables upgrade tests from that version.
 **When**: After the first RC of the forked release is published. It can NOT
 happen any earlier, as we currently need a publicly available RC release to
 generate the necessary fixtures.
+
+**Claude Prompt**: "Please create a PR to enable upgrade tests for 25.4 following the M.3 runbook in pkg/clusterversion/runbooks/M3_enable_upgrade_tests.md. The first RC (v25.4.0-rc.1) has been published."
 
 **Checklist**:
 
@@ -277,6 +279,8 @@ cluster below `MinSupported`.
 once or in two separate PRs. Historically we have seen tests that need
 non-trivial fixing when `MinSupported` is bumped, so it is recommended to do it
 in two PRs.
+
+**Claude Prompt**: "Please create a PR to bump MinSupported from v25.3 to v25.4 following the M.4 runbook in pkg/clusterversion/runbooks/M4_bump_minsupported_version.md"
 
 **Checklist**:
 
