@@ -814,10 +814,10 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 					err = kvFeedErr
 				}
 			}
-			// Shut down the poller if it wasn't already.
-			ca.cancel()
 			log.Changefeed.Warningf(ca.Ctx(), "moving to draining due to error from tick: %v", err)
 			ca.MoveToDraining(err)
+			// Shut down the poller if it wasn't already.
+			ca.cancel()
 			break
 		}
 	}
