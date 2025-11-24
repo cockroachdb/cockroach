@@ -311,7 +311,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 	tc.repl.raftMu.Lock()
 	tc.repl.setDescRaftMuLocked(ctx, &newDesc)
 	tc.repl.mu.RLock()
-	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.engine)
+	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.stateEng, tc.raftEng)
 	tc.repl.mu.RUnlock()
 	tc.repl.raftMu.Unlock()
 	return newReplica, nil
@@ -10267,7 +10267,7 @@ func TestReplicaRecomputeStats(t *testing.T) {
 	disturbMS.ContainsEstimates = 0
 	ms.Add(*disturbMS)
 	err := repl.raftMu.stateLoader.SetMVCCStats(ctx, tc.stateEng, ms)
-	repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.stateEng)
+	repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.stateEng, tc.raftEng)
 	repl.mu.Unlock()
 	repl.raftMu.Unlock()
 

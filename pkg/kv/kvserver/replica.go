@@ -1973,18 +1973,18 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 // to check that the in-memory and on-disk states of the Replica are congruent.
 // Requires that r.raftMu is locked and r.mu is read locked.
 func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
-	ctx context.Context, reader storage.Reader,
+	ctx context.Context, stateRO kvstorage.StateRO, raftRO kvstorage.RaftRO,
 ) {
 	if ts := r.shMu.state.TruncatedState; ts != nil {
 		log.KvExec.Fatalf(ctx, "non-empty RaftTruncatedState in ReplicaState: %+v", ts)
-	} else if loaded, err := r.raftMu.stateLoader.LoadRaftTruncatedState(ctx, reader); err != nil {
+	} else if loaded, err := r.raftMu.stateLoader.LoadRaftTruncatedState(ctx, raftRO); err != nil {
 		log.KvExec.Fatalf(ctx, "%s", err)
 	} else if ts := r.asLogStorage().shMu.trunc; loaded != ts {
 		log.KvExec.Fatalf(ctx, "on-disk and in-memory RaftTruncatedState diverged: %s",
 			redact.Safe(pretty.Diff(loaded, ts)))
 	}
 
-	diskState, err := r.raftMu.stateLoader.Load(ctx, reader, r.shMu.state.Desc)
+	diskState, err := r.raftMu.stateLoader.Load(ctx, stateRO, r.shMu.state.Desc)
 	if err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
@@ -2041,7 +2041,7 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 			log.KvExec.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.replicaID, r.shMu.state.Desc)
 		}
 	}
-	diskReplID, err := r.raftMu.stateLoader.LoadRaftReplicaID(ctx, reader)
+	diskReplID, err := r.raftMu.stateLoader.LoadRaftReplicaID(ctx, stateRO)
 	if err != nil {
 		log.KvExec.Fatalf(ctx, "%s", err)
 	}
