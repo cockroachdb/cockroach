@@ -151,7 +151,9 @@ type testContext struct {
 	repl        *Replica
 	rangeID     roachpb.RangeID
 	gossip      *gossip.Gossip
-	engine      storage.Engine
+	engine      storage.Engine // TODO(sep-raft-log): remove this
+	stateEng    storage.Engine
+	raftEng     storage.Engine
 	manualClock *timeutil.ManualTime
 }
 
@@ -192,6 +194,8 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	require.Nil(t, tc.gossip)
 	require.Nil(t, tc.transport)
 	require.Nil(t, tc.engine)
+	require.Nil(t, tc.stateEng)
+	require.Nil(t, tc.raftEng)
 	require.Nil(t, tc.store)
 	require.Nil(t, tc.repl)
 
@@ -225,6 +229,8 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	// TODO(sep-raft-log): may need to update our various test harnesses to
 	// support two engines, do metamorphic stuff, etc.
 	tc.engine = store.TODOEngine()
+	tc.stateEng = store.StateEngine()
+	tc.raftEng = store.LogEngine()
 	tc.store = store
 }
 
