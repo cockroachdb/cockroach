@@ -353,7 +353,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 	cm := newConstraintMatcher(interner)
 	ltInterner := newLocalityTierInterner(interner)
 	configs := map[string]*normalizedSpanConfig{}
-	stores := map[roachpb.StoreID]StoreAttributesAndLocality{}
+	stores := map[roachpb.StoreID]storeAttributesAndLocalityWithNodeTier{}
 	var lastRangeAnalyzedConstraints *rangeAnalyzedConstraints
 
 	datadriven.RunTest(t, "testdata/range_analyzed_constraints",
@@ -362,8 +362,8 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 			case "store":
 				for _, line := range strings.Split(d.Input, "\n") {
 					sal := parseStoreAttributedAndLocality(t, strings.TrimSpace(line))
-					cm.setStore(sal)
-					stores[sal.StoreID] = sal
+					cm.setStore(sal.withNodeTier())
+					stores[sal.StoreID] = sal.withNodeTier()
 				}
 				return ""
 
@@ -407,7 +407,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 						}
 					}
 					buf.tryAddingStore(roachpb.StoreID(storeID), typ,
-						ltInterner.intern(stores[roachpb.StoreID(storeID)].locality()))
+						ltInterner.intern(stores[roachpb.StoreID(storeID)].NodeLocality))
 				}
 				rac.finishInit(nConf, cm, leaseholder)
 				var b strings.Builder

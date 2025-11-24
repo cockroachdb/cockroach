@@ -358,8 +358,8 @@ func TestClusterState(t *testing.T) {
 					var nodeLine string
 					for _, storeID := range ns.stores {
 						ss := cs.stores[storeID]
-						sal := ss.StoreAttributesAndLocality
-						loc := sal.locality()
+						sal := ss.storeAttributesAndLocalityWithNodeTier
+						loc := sal.NodeLocality
 
 						// Compute the "node" line for each store and print it again
 						// each time it changes. Usually it's printed only once per node,
@@ -464,7 +464,7 @@ func TestClusterState(t *testing.T) {
 					for _, next := range strings.Split(d.Input, "\n") {
 						sal := parseStoreAttributedAndLocality(t, next)
 						t.Logf("set-store: %v from %s", sal, next)
-						cs.setStore(sal)
+						cs.setStore(sal.withNodeTier()) // see allocatorState.SetStore
 						// For convenience, in these tests, stores start out
 						// healthy.
 						cs.stores[sal.StoreID].status = Status{Health: HealthOK}

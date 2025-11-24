@@ -101,7 +101,7 @@ func TestConstraintMatcher(t *testing.T) {
 			switch d.Cmd {
 			case "store":
 				sal := parseStoreAttributedAndLocality(t, d.Input)
-				cm.setStore(sal)
+				cm.setStore(sal.withNodeTier())
 				var b strings.Builder
 				printMatcher(&b)
 				return b.String()
