@@ -1085,3 +1085,114 @@ project
  │    └── columns: b:2
  └── projections
       └── b:2 [as="?column?":5, outer=(2)]
+
+# --------------------------------------------------
+# CollapseRepeatedLikePatternWildcards
+# --------------------------------------------------
+
+norm expect=CollapseRepeatedLikePatternWildcards
+SELECT
+    s LIKE '%%%ab%%%',
+    s LIKE '%%%abc%%%def%%%',
+    s LIKE '%%%abc%%%def%%%ghi',
+    s LIKE '\\%%%abc\\%%%def\\%%%ghi',
+    s LIKE '%%%🐛🐛%%🏠%%%',
+    s NOT LIKE '%%%ab%%%',
+    s ILIKE '%%%ab%%%',
+    s NOT ILIKE '%%%ab%%%'
+FROM a
+----
+project
+ ├── columns: "?column?":12 "?column?":13 "?column?":14 "?column?":15 "?column?":16 "?column?":17 "?column?":18 "?column?":19
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      ├── s:4 LIKE '%ab%' [as="?column?":12, outer=(4)]
+      ├── s:4 LIKE '%abc%def%' [as="?column?":13, outer=(4)]
+      ├── s:4 LIKE '%abc%def%ghi' [as="?column?":14, outer=(4)]
+      ├── s:4 LIKE e'\\\\%abc\\\\%def\\\\%ghi' [as="?column?":15, outer=(4)]
+      ├── s:4 LIKE e'%\U0001F41B\U0001F41B%\U0001F3E0%' [as="?column?":16, outer=(4)]
+      ├── s:4 NOT LIKE '%ab%' [as="?column?":17, outer=(4)]
+      ├── s:4 ILIKE '%ab%' [as="?column?":18, outer=(4)]
+      └── s:4 NOT ILIKE '%ab%' [as="?column?":19, outer=(4)]
+
+# Collated strings can be collapsed.
+norm expect=CollapseRepeatedLikePatternWildcards
+SELECT
+    s COLLATE "en_US" LIKE '%%%ab%%%' COLLATE "en_US",
+    s COLLATE "en_US" LIKE '%%%abc%%%def%%%' COLLATE "en_US",
+    s COLLATE "en_US" LIKE '%%%abc%%%def%%%ghi' COLLATE "en_US",
+    s COLLATE "en_US" LIKE '\\%%%abc\\%%%def\\%%%ghi' COLLATE "en_US",
+    s COLLATE "en_US" LIKE '%%%🐛🐛%%🏠%%%' COLLATE "en_US",
+    s COLLATE "en_US" NOT LIKE '%%%ab%%%' COLLATE "en_US"
+FROM a
+----
+project
+ ├── columns: "?column?":12 "?column?":13 "?column?":14 "?column?":15 "?column?":16 "?column?":17
+ ├── immutable
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      ├── s:4 COLLATE en_US LIKE '%ab%' COLLATE en_US [as="?column?":12, outer=(4), immutable]
+      ├── s:4 COLLATE en_US LIKE '%abc%def%' COLLATE en_US [as="?column?":13, outer=(4), immutable]
+      ├── s:4 COLLATE en_US LIKE '%abc%def%ghi' COLLATE en_US [as="?column?":14, outer=(4), immutable]
+      ├── s:4 COLLATE en_US LIKE e'\\\\%abc\\\\%def\\\\%ghi' COLLATE en_US [as="?column?":15, outer=(4), immutable]
+      ├── s:4 COLLATE en_US LIKE e'%\U0001F41B\U0001F41B%\U0001F3E0%' COLLATE en_US [as="?column?":16, outer=(4), immutable]
+      └── s:4 COLLATE en_US NOT LIKE '%ab%' COLLATE en_US [as="?column?":17, outer=(4), immutable]
+
+# Escaped wildcards should not be collapsed.
+norm expect-not=CollapseRepeatedLikePatternWildcards
+SELECT
+    s LIKE '\%%ab\%%',
+    s LIKE '\%%abc\%%def\%%',
+    s LIKE '%\%abc%\%def%\%',
+    s LIKE '-%%' ESCAPE '-'
+FROM a
+----
+project
+ ├── columns: "?column?":12 "?column?":13 "?column?":14 like_escape:15
+ ├── immutable
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      ├── s:4 LIKE e'\\%%ab\\%%' [as="?column?":12, outer=(4)]
+      ├── s:4 LIKE e'\\%%abc\\%%def\\%%' [as="?column?":13, outer=(4)]
+      ├── s:4 LIKE e'%\\%abc%\\%def%\\%' [as="?column?":14, outer=(4)]
+      └── like_escape(s:4, '-%%', '-') [as=like_escape:15, outer=(4), immutable]
+
+# The rule should not fire when there are no repeated wildcards.
+norm expect-not=CollapseRepeatedLikePatternWildcards
+SELECT
+    s LIKE 'ab',
+    s LIKE '%ab%',
+    s LIKE '%a%b%'
+FROM a
+----
+project
+ ├── columns: "?column?":12 "?column?":13 "?column?":14
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      ├── s:4 LIKE 'ab' [as="?column?":12, outer=(4)]
+      ├── s:4 LIKE '%ab%' [as="?column?":13, outer=(4)]
+      └── s:4 LIKE '%a%b%' [as="?column?":14, outer=(4)]
+
+norm expect-not=CollapseRepeatedLikePatternWildcards
+SELECT s LIKE NULL FROM a
+----
+project
+ ├── columns: "?column?":12
+ ├── fd: ()-->(12)
+ ├── scan a
+ └── projections
+      └── NULL [as="?column?":12]
+
+norm expect-not=CollapseRepeatedLikePatternWildcards
+SELECT s LIKE s FROM a
+----
+project
+ ├── columns: "?column?":12
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      └── s:4 LIKE s:4 [as="?column?":12, outer=(4)]
