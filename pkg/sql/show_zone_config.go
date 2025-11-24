@@ -19,8 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
-	yaml "gopkg.in/yaml.v2"
+	yaml "go.yaml.in/yaml/v4"
 )
 
 // These must match crdb_internal.zones.
@@ -290,7 +291,7 @@ func generateZoneConfigIntrospectionValues(
 	}
 
 	// Populate the YAML column.
-	yamlConfig, err := yaml.Marshal(zone)
+	yamlConfig, err := yamlutil.Marshal(zone)
 	if err != nil {
 		return err
 	}
@@ -321,7 +322,7 @@ func generateZoneConfigIntrospectionValues(
 		inheritedConfig = zone
 	}
 
-	yamlConfig, err = yaml.Marshal(inheritedConfig)
+	yamlConfig, err = yamlutil.Marshal(inheritedConfig)
 	if err != nil {
 		return err
 	}
@@ -341,10 +342,16 @@ func generateZoneConfigIntrospectionValues(
 }
 
 func yamlMarshalFlow(v interface{}) (string, error) {
+	var n yaml.Node
+	if err := n.Encode(v); err != nil {
+		return "", err
+	}
+	n.Style = yaml.FlowStyle
+
 	var buf bytes.Buffer
 	e := yaml.NewEncoder(&buf)
-	e.UseStyle(yaml.FlowStyle)
-	if err := e.Encode(v); err != nil {
+	if err := e.Encode(&n); err != nil {
+		_ = e.Close()
 		return "", err
 	}
 	if err := e.Close(); err != nil {

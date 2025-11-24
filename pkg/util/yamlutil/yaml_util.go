@@ -7,15 +7,22 @@ package yamlutil
 
 import (
 	"bytes"
+	"io"
 
+	"github.com/cockroachdb/errors"
 	"go.yaml.in/yaml/v4"
 )
 
-// Marshal is like yaml.v3.Marshal but indents to 2 spaces.
+// Marshal is like yaml.v4.Marshal but indents to 2 spaces and uses compact
+// sequence indentation.
 func Marshal(in interface{}) ([]byte, error) {
 	var buf bytes.Buffer
 	e := yaml.NewEncoder(&buf)
 	e.SetIndent(2)
+	// TODO(radu): consider removing this since it makes the output the output
+	// less readable. For now, we use it because it matches what the yaml.v2
+	// Marshal produces.
+	e.CompactSeqIndent()
 	if err := e.Encode(in); err != nil {
 		return nil, err
 	}
@@ -25,10 +32,18 @@ func Marshal(in interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// UnmarshalStrict is like yaml.v3.Unmarshal but fails if unknown fields are
+// UnmarshalStrict is like yaml.v4.Unmarshal but fails if unknown fields are
 // encountered.
 func UnmarshalStrict(in []byte, out interface{}) error {
 	d := yaml.NewDecoder(bytes.NewReader(in))
 	d.KnownFields(true)
-	return d.Decode(out)
+	if err := d.Decode(out); err != nil {
+		if errors.Is(err, io.EOF) {
+			// Decode returns io.EOF iff the input is empty; yaml.Unmarshal tolerates
+			// empty inputs, so we ignore the error.
+			return nil
+		}
+		return err
+	}
+	return nil
 }

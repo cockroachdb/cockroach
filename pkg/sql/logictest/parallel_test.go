@@ -37,8 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/gogo/protobuf/proto"
-	yaml "gopkg.in/yaml.v2"
 )
 
 var (
@@ -117,7 +117,7 @@ func (t *parallelTest) run(dir string) {
 		t.Fatalf("%s: %s", mainFile, err)
 	}
 	var spec parTestSpec
-	if err := yaml.UnmarshalStrict(yamlData, &spec); err != nil {
+	if err := yamlutil.UnmarshalStrict(yamlData, &spec); err != nil {
 		t.Fatalf("%s: %s", mainFile, err)
 	}
 

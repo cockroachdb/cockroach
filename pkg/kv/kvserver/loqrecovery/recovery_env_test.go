@@ -35,10 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/strutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
-	"gopkg.in/yaml.v2"
 )
 
 /*
@@ -308,7 +308,7 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 
 	// Load yaml from data into local range info.
 	var replicaData []testReplicaInfo
-	err := yaml.UnmarshalStrict([]byte(d.Input), &replicaData)
+	err := yamlutil.UnmarshalStrict([]byte(d.Input), &replicaData)
 	if err != nil {
 		t.Fatalf("failed to unmarshal test replica data: %v", err)
 	}
@@ -514,7 +514,7 @@ func parsePrettyKey(t *testing.T, pretty string) roachpb.RKey {
 
 func (e *quorumRecoveryEnv) handleDescriptorData(t *testing.T, d datadriven.TestData) string {
 	var descriptors []testDescriptorData
-	err := yaml.UnmarshalStrict([]byte(d.Input), &descriptors)
+	err := yamlutil.UnmarshalStrict([]byte(d.Input), &descriptors)
 	if err != nil {
 		t.Fatalf("failed to unmarshal test range descriptor data: %v", err)
 	}
@@ -582,7 +582,7 @@ func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) 
 		return "", nil
 	}
 	// We only marshal actual data without container to reduce clutter.
-	out, err := yaml.Marshal(e.plan.Updates)
+	out, err := yamlutil.Marshal(e.plan.Updates)
 	if err != nil {
 		t.Fatalf("failed to marshal plan into yaml for verification: %v", err)
 	}
@@ -759,7 +759,7 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 			LocalData:   localDataViews,
 		})
 	}
-	out, err := yaml.Marshal(storesView)
+	out, err := yamlutil.Marshal(storesView)
 	if err != nil {
 		t.Fatalf("failed to serialize range descriptors from store: %v", err)
 	}

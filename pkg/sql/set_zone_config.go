@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
-	yaml "gopkg.in/yaml.v2"
 )
 
 type setZoneConfigNode struct {
@@ -588,12 +588,12 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			// query specified CONFIGURE ZONE USING), the YAML string will be
 			// empty, in which case the unmarshaling will be a no-op. This is
 			// innocuous.
-			if err := yaml.UnmarshalStrict([]byte(yamlConfig), &newZone); err != nil {
+			if err := yamlutil.UnmarshalStrict([]byte(yamlConfig), &newZone); err != nil {
 				return pgerror.Wrap(err, pgcode.CheckViolation, "could not parse zone config")
 			}
 
 			// Load settings from YAML into the partial zone as well.
-			if err := yaml.UnmarshalStrict([]byte(yamlConfig), &finalZone); err != nil {
+			if err := yamlutil.UnmarshalStrict([]byte(yamlConfig), &finalZone); err != nil {
 				return pgerror.Wrap(err, pgcode.CheckViolation, "could not parse zone config")
 			}
 

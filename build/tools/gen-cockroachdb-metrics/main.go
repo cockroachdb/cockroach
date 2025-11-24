@@ -44,7 +44,7 @@ import (
 	"strings"
 	"text/template"
 
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 // MetricInfo represents a metric from the metrics.yaml file
@@ -170,9 +170,9 @@ func parseDatadogMappings(r io.Reader) (map[string]string, error) {
 
 	// CRDB-Datadog mappings are stored as python dictionaries in the following file:
 	// https://github.com/DataDog/integrations-core/blob/master/cockroachdb/datadog_checks/cockroachdb/metrics.py
-	//   - METRIC_MAP: represents the raw CRDB-Datadog metric name mapping. 
+	//   - METRIC_MAP: represents the raw CRDB-Datadog metric name mapping.
 	//   - OMV2_METRIC_MAP: represents the metric in OpenMetrics V2 format.
-	// E.g. 
+	// E.g.
 	// 'admission_errored_sql_kv_response': 'admission.errored.sql_kv.response'
 	// here the key is the CRDB metric name in prometheus format, and the value is the corresponding metric name visible in Datadog.
 	// Both maps are mutually exclusive. Parse both dictionaries to get the complete mapping.
@@ -275,7 +275,9 @@ func loadBaseMappings(path string) (*BaseMappingsYAML, error) {
 
 // collectAllCRDBMetrics collects all CRDB metrics from the YAML output and combines them
 // with any runtime conditional metrics that aren't documented in metrics.yaml
-func collectAllCRDBMetrics(yamlOutput *YAMLOutput, runtimeConditionalMetrics []MetricInfo) []MetricInfo {
+func collectAllCRDBMetrics(
+	yamlOutput *YAMLOutput, runtimeConditionalMetrics []MetricInfo,
+) []MetricInfo {
 	allMetrics := make([]MetricInfo, 0)
 
 	for _, layer := range yamlOutput.Layers {
@@ -299,7 +301,9 @@ func shouldSkipMetric(promName string) bool {
 }
 
 // mapMetricsToDatadog processes the CRDB metrics and maps them to Datadog names
-func mapMetricsToDatadog(metrics []MetricInfo, datadogMappings map[string]string) map[string]string {
+func mapMetricsToDatadog(
+	metrics []MetricInfo, datadogMappings map[string]string,
+) map[string]string {
 	result := make(map[string]string)
 
 	for _, metric := range metrics {
