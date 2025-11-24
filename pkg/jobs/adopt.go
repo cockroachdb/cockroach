@@ -69,9 +69,6 @@ func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, j
 		return
 	}
 
-	// Make a new ctx to use in the trace dumper. This is because the resumerCtx
-	// could have been canceled at this point.
-	dumpCtx, _ := r.makeCtx()
 	sp := tracing.SpanFromContext(resumerCtx)
 	if sp == nil {
 		// Should never be true since TraceableJobs force real tracing spans to be
@@ -82,8 +79,13 @@ func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, j
 	resumerTraceFilename := fmt.Sprintf("%s/resumer-trace/%s",
 		timeutil.Now().Format("20060102_150405.00"), r.ID().String())
 	td := jobspb.TraceData{CollectedSpans: sp.GetConfiguredRecording()}
+
+	// Make a new ctx to use in the trace dumper. This is because the resumerCtx
+	// could have been canceled at this point.
+	dumpCtx, cancel := r.makeCtx()
+	r.stopper.OnQuiesce(cancel)
 	if err := r.db.Txn(dumpCtx, func(ctx context.Context, txn isql.Txn) error {
-		return WriteProtobinExecutionDetailFile(dumpCtx, resumerTraceFilename, &td, txn, jobID)
+		return WriteProtobinExecutionDetailFile(ctx, resumerTraceFilename, &td, txn, jobID)
 	}); err != nil {
 		log.Dev.Warningf(dumpCtx, "failed to write trace on resumer trace file: %v", err)
 	}
