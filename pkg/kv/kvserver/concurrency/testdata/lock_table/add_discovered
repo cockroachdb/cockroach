@@ -79,8 +79,8 @@ num locks: 1, bytes returned: 79, resume reason: RESUME_UNKNOWN, resume span: <n
  locks:
   range_id=3 key="a" holder=<nil> durability=Unreplicated duration=0s
    waiters:
-    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:0s
-    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Exclusive wait_duration:0s
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Intent wait_duration:0s
+    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Intent wait_duration:0s
 
 guard-state r=req2
 ----

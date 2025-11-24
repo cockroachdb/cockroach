@@ -524,8 +524,12 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		store.StoreID, store.dimSummary[CPURate], overloadSlow)
 	// This store is local, and cpu overloaded. Shed leases first.
 	//
-	// NB: any ranges at this store that don't have pending changes must
-	// have this local store as the leaseholder.
+	// NB: due to REQUIREMENT(change-computation), the top-k ranges for ss
+	// reflect the latest adjusted state, including pending changes. Thus,
+	// this store must be a replica and the leaseholder, which is asserted
+	// below. The code below additionally ignores the range if it has pending
+	// changes, which while not necessary for the is-leaseholder assertion,
+	// makes the case where we assert even narrower.
 	topKRanges := ss.adjusted.topKRanges[localStoreID]
 	var leaseTransferCount int
 	n := topKRanges.len()
@@ -548,21 +552,30 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: has pending changes", rangeID)
 			continue
 		}
+		foundLocalReplica := false
 		for _, repl := range rstate.replicas {
 			if repl.StoreID != localStoreID { // NB: localStoreID == ss.StoreID == store.StoreID
 				continue
 			}
 			if !repl.IsLeaseholder {
-				// TODO(tbg): is this true? Can't there be ranges with replicas on
-				// multiple local stores, and wouldn't this assertion fire in that
-				// case once rebalanceStores is invoked on whichever of the two
-				// stores doesn't hold the lease?
-				//
-				// TODO(tbg): see also the other assertion below (leaseholderID !=
-				// store.StoreID) which seems similar to this one.
-				log.KvDistribution.Fatalf(ctx, "internal state inconsistency: replica considered for lease shedding has no pending"+
-					" changes but is not leaseholder: %+v", rstate)
+				// NB: due to REQUIREMENT(change-computation), the top-k
+				// ranges for ss reflect the latest adjusted state, including
+				// pending changes. Thus, this store must be a replica and the
+				// leaseholder, hence this assertion, and other assertions
+				// below. Additionally, the code above ignored the range if it
+				// has pending changes, which while not necessary for the
+				// is-leaseholder assertion, makes the case where we assert
+				// even narrower.
+				log.KvDistribution.Fatalf(ctx,
+					"internal state inconsistency: replica considered for lease shedding has no pending"+
+						" changes but is not leaseholder: %+v", rstate)
 			}
+			foundLocalReplica = true
+			break
+		}
+		if !foundLocalReplica {
+			log.KvDistribution.Fatalf(
+				ctx, "internal state inconsistency: local store is not a replica: %+v", rstate)
 		}
 		if re.now.Sub(rstate.lastFailedChange) < re.lastFailedChangeDelayDuration {
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
@@ -570,15 +583,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 		re.ensureAnalyzedConstraints(rstate)
 		if rstate.constraints.leaseholderID != store.StoreID {
-			// We should not panic here since the leaseQueue may have shed the
-			// lease and informed MMA, since the last time MMA computed the
-			// top-k ranges. This is useful for debugging in the prototype, due
-			// to the lack of unit tests.
-			//
-			// TODO(tbg): can the above scenario currently happen? ComputeChanges
-			// first processes the leaseholder message and then, still under the
-			// lock, immediately calls into rebalanceStores (i.e. this store).
-			// Doesn't this mean that the leaseholder view is up to date?
+			// See the earlier comment about assertions.
 			panic(fmt.Sprintf("internal state inconsistency: "+
 				"store=%v range_id=%v should be leaseholder but isn't",
 				store.StoreID, rangeID))

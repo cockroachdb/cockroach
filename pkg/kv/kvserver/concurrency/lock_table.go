@@ -2069,7 +2069,7 @@ func (kl *keyLocks) lockStateInfo(now time.Time, rangeID roachpb.RangeID) []roac
 		lockWaiters = append(lockWaiters, lock.Waiter{
 			WaitingTxn:   g.txnMeta(),
 			ActiveWaiter: qg.active,
-			Strength:     lock.Exclusive,
+			Strength:     qg.mode.Strength,
 			WaitDuration: now.Sub(g.mu.curLockWaitStart),
 		})
 		g.mu.Unlock()
