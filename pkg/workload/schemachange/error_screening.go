@@ -149,11 +149,13 @@ func (og *operationGenerator) tableHasDependencies(
 	return og.scanBool(ctx, tx, q, tableName.Object(), tableName.Schema(), skipSelfRef)
 }
 
-// columnRemovalWillDropFKBackingIndexes determines if dropping this column
-// will lead to no indexes backing a foreign key. CockroachDB will consider
-// alternative indexes backing a foreign key if they have the same number of
-// key columns as the FK in any order.
-func (og *operationGenerator) columnRemovalWillDropFKBackingIndexes(
+// columnDropViolatesFKIndexRequirements determines if dropping this column
+// will violate foreign key index requirements. This occurs when dropping the
+// column would leave a foreign key without a suitable backing index.
+// CockroachDB requires backing indexes to have the same number of key columns
+// as the FK in any order. Only key columns (not stored columns) count toward
+// FK backing index requirements.
+func (og *operationGenerator) columnDropViolatesFKIndexRequirements(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columName tree.Name,
 ) (bool, error) {
 	return og.scanBool(ctx, tx, fmt.Sprintf(`
@@ -226,6 +228,7 @@ WITH
 							[SHOW INDEXES FROM %s]
 						WHERE
 							column_name = $2
+							AND storing = 'f'
 							AND index_name
 								NOT LIKE '%%_pkey' -- renames would keep the old table name
 					)

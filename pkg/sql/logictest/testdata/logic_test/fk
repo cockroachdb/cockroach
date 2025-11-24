@@ -4839,3 +4839,257 @@ DROP TABLE t2_fk;
 DROP TABLE t1_fk;
 
 subtest end
+
+subtest drop_col_dep_non_self_fk_stored
+
+# The logic in this UDF is equivalent to and originated from
+# columnDropViolatesFKIndexRequirements() in pkg/workload/schemachange/error_screening.go.
+statement ok
+CREATE FUNCTION column_drop_violates_fk_index_requirements(table_name STRING, column_name STRING) RETURNS BOOL LANGUAGE SQL AS $$
+  WITH fk AS (
+    SELECT
+      oid,
+      (SELECT r.relname FROM pg_class AS r WHERE r.oid = c.confrelid) AS base_table,
+      a.attname AS base_col,
+      array_position(c.confkey, a.attnum) AS base_ordinal,
+      (SELECT r.relname FROM pg_class AS r WHERE r.oid = c.conrelid) AS referencing_table,
+      unnest(
+        (SELECT array_agg(attname)
+         FROM pg_attribute
+         WHERE attrelid = c.conrelid
+           AND ARRAY[attnum] <@ c.conkey
+           AND array_position(c.confkey, a.attnum) = array_position(c.conkey, attnum))
+      ) AS referencing_col
+    FROM pg_constraint AS c
+    JOIN pg_attribute AS a ON
+      c.confrelid = a.attrelid
+      AND ARRAY[attnum] <@ c.conkey
+    WHERE c.confrelid = table_name::REGCLASS::OID
+  ),
+  all_index_columns AS (
+    SELECT
+      i.indexrelid::REGCLASS::STRING AS index_name,
+      a.attname AS col_name,
+      NOT i.indisunique AS non_unique,
+      a.attnum > i.indnkeyatts AS storing
+    FROM pg_index i
+    JOIN pg_attribute a ON a.attrelid = i.indexrelid AND a.attnum > 0
+    WHERE i.indrelid = table_name::REGCLASS::OID
+  ),
+  valid_indexes AS (
+    SELECT *
+    FROM all_index_columns
+    WHERE index_name NOT IN (
+      SELECT DISTINCT index_name
+      FROM all_index_columns
+      WHERE col_name = column_name
+        AND storing = false
+        AND index_name NOT LIKE '%_pkey'
+    )
+  ),
+  fk_col_counts AS (
+    SELECT oid, count(*) AS num_cols
+    FROM fk
+    GROUP BY oid
+  ),
+  index_col_counts AS (
+    SELECT index_name, count(*) AS num_cols
+    FROM valid_indexes
+    WHERE storing = false
+    GROUP BY index_name
+  ),
+  matching_fks AS (
+    SELECT fk.oid
+    FROM fk
+    JOIN valid_indexes
+      ON fk.base_col = valid_indexes.col_name
+    JOIN fk_col_counts
+      ON fk.oid = fk_col_counts.oid
+    JOIN index_col_counts
+      ON valid_indexes.index_name = index_col_counts.index_name
+    WHERE valid_indexes.storing = false
+      AND valid_indexes.non_unique = false
+      AND fk_col_counts.num_cols = index_col_counts.num_cols
+    GROUP BY fk.oid, valid_indexes.index_name, fk_col_counts.num_cols
+    HAVING count(*) = fk_col_counts.num_cols
+  )
+SELECT EXISTS (
+  SELECT *
+  FROM fk
+  WHERE oid NOT IN (
+    SELECT DISTINCT oid FROM matching_fks
+  )
+)
+$$;
+
+statement ok
+CREATE TABLE parent_dep_store (
+  id INT PRIMARY KEY,
+  key_col INT UNIQUE,
+  stored STRING,
+  FAMILY f1 (id, key_col, stored)
+) WITH (schema_locked = false);
+
+statement ok
+CREATE UNIQUE INDEX idx_parent_dep_store ON parent_dep_store (key_col) STORING (stored);
+
+statement ok
+CREATE TABLE child_dep_store (
+  id INT PRIMARY KEY,
+  parent_key INT REFERENCES parent_dep_store (key_col),
+  FAMILY f1 (id, parent_key)
+) WITH (schema_locked = false);
+
+query B
+SELECT column_drop_violates_fk_index_requirements('parent_dep_store', 'stored');
+----
+false
+
+statement ok
+ALTER TABLE parent_dep_store DROP COLUMN stored;
+
+query TT
+SHOW CREATE TABLE parent_dep_store
+----
+parent_dep_store  CREATE TABLE public.parent_dep_store (
+                    id INT8 NOT NULL,
+                    key_col INT8 NULL,
+                    CONSTRAINT parent_dep_store_pkey PRIMARY KEY (id ASC),
+                    UNIQUE INDEX parent_dep_store_key_col_key (key_col ASC),
+                    FAMILY f1 (id, key_col)
+                  );
+
+statement ok
+DROP TABLE child_dep_store;
+
+statement ok
+DROP TABLE parent_dep_store;
+
+subtest end
+
+subtest drop_col_dep_non_self_fk_key
+
+statement ok
+CREATE TABLE parent_dep_key (
+  id INT PRIMARY KEY,
+  key_col INT,
+  stored STRING,
+  FAMILY f1 (id, key_col, stored)
+) WITH (schema_locked = false);
+
+statement ok
+CREATE UNIQUE INDEX idx_parent_dep_key ON parent_dep_key (key_col) STORING (stored);
+
+statement ok
+CREATE TABLE child_dep_key (
+  id INT PRIMARY KEY,
+  parent_key INT REFERENCES parent_dep_key (key_col),
+  FAMILY f1 (id, parent_key)
+) WITH (schema_locked = false);
+
+query B
+SELECT column_drop_violates_fk_index_requirements('parent_dep_key', 'key_col');
+----
+true
+
+statement error pq: "idx_parent_dep_key" is referenced by foreign key from table "child_dep_key"
+ALTER TABLE parent_dep_key DROP COLUMN key_col;
+
+query TT
+SHOW CREATE TABLE parent_dep_key
+----
+parent_dep_key  CREATE TABLE public.parent_dep_key (
+                  id INT8 NOT NULL,
+                  key_col INT8 NULL,
+                  stored STRING NULL,
+                  CONSTRAINT parent_dep_key_pkey PRIMARY KEY (id ASC),
+                  UNIQUE INDEX idx_parent_dep_key (key_col ASC) STORING (stored),
+                  FAMILY f1 (id, key_col, stored)
+                );
+
+statement ok
+DROP TABLE child_dep_key;
+
+statement ok
+DROP TABLE parent_dep_key;
+
+subtest end
+
+subtest drop_col_dep_self_ref_stored
+
+statement ok
+CREATE TABLE self_dep_store (
+  id INT PRIMARY KEY,
+  ref INT,
+  stored STRING,
+  FAMILY f1 (id, ref, stored)
+) WITH (schema_locked = false);
+
+statement ok
+CREATE UNIQUE INDEX idx_self_dep_store ON self_dep_store (ref) STORING (stored);
+
+statement ok
+ALTER TABLE self_dep_store ADD CONSTRAINT fk_self_dep_store FOREIGN KEY (ref) REFERENCES self_dep_store (id);
+
+query B
+SELECT column_drop_violates_fk_index_requirements('self_dep_store', 'stored');
+----
+false
+
+statement ok
+ALTER TABLE self_dep_store DROP COLUMN stored;
+
+query TT
+SHOW CREATE TABLE self_dep_store
+----
+self_dep_store  CREATE TABLE public.self_dep_store (
+                  id INT8 NOT NULL,
+                  ref INT8 NULL,
+                  CONSTRAINT self_dep_store_pkey PRIMARY KEY (id ASC),
+                  CONSTRAINT fk_self_dep_store FOREIGN KEY (ref) REFERENCES public.self_dep_store(id),
+                  FAMILY f1 (id, ref)
+                );
+
+statement ok
+DROP TABLE self_dep_store;
+
+subtest end
+
+subtest drop_col_dep_self_ref_key
+
+statement ok
+CREATE TABLE self_dep_key (
+  id INT PRIMARY KEY,
+  ref INT,
+  stored STRING,
+  FAMILY f1 (id, ref, stored)
+) WITH (schema_locked = false);
+
+statement ok
+CREATE UNIQUE INDEX idx_self_dep_key ON self_dep_key (ref) STORING (stored);
+
+statement ok
+ALTER TABLE self_dep_key ADD CONSTRAINT fk_self_dep_key FOREIGN KEY (ref) REFERENCES self_dep_key (id);
+
+query B
+SELECT column_drop_violates_fk_index_requirements('self_dep_key', 'ref');
+----
+false
+
+statement ok
+ALTER TABLE self_dep_key DROP COLUMN ref;
+
+query TT
+SHOW CREATE TABLE self_dep_key
+----
+self_dep_key  CREATE TABLE public.self_dep_key (
+                id INT8 NOT NULL,
+                stored STRING NULL,
+                CONSTRAINT self_dep_key_pkey PRIMARY KEY (id ASC),
+                FAMILY f1 (id, stored)
+              );
+
+statement ok
+DROP TABLE self_dep_key;
+
+subtest end
