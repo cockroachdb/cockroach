@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -140,4 +141,26 @@ func (c *CustomFuncs) MakeIntersectionFunction(args memo.ScalarListExpr) opt.Sca
 			Overload:   overload,
 		},
 	)
+}
+
+// CollapseRepeatedLikePatternWildcards returns a new pattern string datum with
+// repeated "%" wildcards collapsed. It returns ok=false if the pattern is not a
+// constant string or there are no repeated characters to collapse.
+func (c *CustomFuncs) CollapseRepeatedLikePatternWildcards(
+	pattern opt.ScalarExpr,
+) (_ opt.ScalarExpr, ok bool) {
+	patternConst, ok := pattern.(*memo.ConstExpr)
+	if !ok {
+		return nil, false
+	}
+	patternStr, ok := patternConst.Value.(*tree.DString)
+	if !ok {
+		return nil, false
+	}
+	orig := string(*patternStr)
+	collapsed := eval.CollapseWildcards(orig)
+	if orig == collapsed {
+		return nil, false
+	}
+	return c.f.ConstructConstVal(tree.NewDString(collapsed), types.String), true
 }
