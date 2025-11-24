@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"regexp"
-	"runtime/pprof"
 	"slices"
 	"strings"
 	"time"
@@ -45,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -349,12 +349,12 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	})
 	lrw.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(lrw.checkpointCh)
-		pprof.Do(ctx, pprof.Labels("proc", fmt.Sprintf("%d", lrw.ProcessorID)), func(ctx context.Context) {
+		pprofutil.Do(ctx, func(ctx context.Context) {
 			if err := lrw.consumeEvents(ctx); err != nil {
 				log.Dev.Infof(lrw.Ctx(), "consumer completed. Error: %s", err)
 				lrw.sendError(errors.Wrap(err, "consume events"))
 			}
-		})
+		}, "proc", fmt.Sprintf("%d", lrw.ProcessorID))
 		return nil
 	})
 }

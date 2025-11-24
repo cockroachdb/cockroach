@@ -1150,6 +1150,35 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// Forbid direct use of pprof.Do and pprof.SetGoroutineLabels in favor of pprofutil.
+	t.Run("TestPprofDirect", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`\bpprof\.(Do|SetGoroutineLabels)\(`,
+			"--",
+			"*.go",
+			":!util/pprofutil/labels.go",
+		)
+		require.NoError(t, err)
+		require.NoError(t, cmd.Start())
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use 'pprofutil.Do' or 'pprofutil.SetProfilerLabels' instead", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestOsErrorIs", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(

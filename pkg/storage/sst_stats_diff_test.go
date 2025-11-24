@@ -198,7 +198,7 @@ func TestMVCCComputeSSTStatsDiff(t *testing.T) {
 
 				now := int64(timeutil.Now().Nanosecond())
 
-				baseStats, err := storage.ComputeStats(ctx, engine, keys.LocalMax, roachpb.KeyMax, now)
+				baseStats, err := storage.ComputeStats(ctx, engine, fs.UnknownReadCategory, keys.LocalMax, roachpb.KeyMax, now)
 				require.NoError(t, err)
 
 				sstEncoded, startUnversioned, endUnversioned := storageutils.MakeSST(t, st, sst)
@@ -213,7 +213,7 @@ func TestMVCCComputeSSTStatsDiff(t *testing.T) {
 				require.NoError(t, fs.WriteFile(engine.Env(), "sst", sstEncoded, fs.UnspecifiedWriteCategory))
 				require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
 
-				expStats, err := storage.ComputeStats(ctx, engine, keys.LocalMax, roachpb.KeyMax, updateTime)
+				expStats, err := storage.ComputeStats(ctx, engine, fs.UnknownReadCategory, keys.LocalMax, roachpb.KeyMax, updateTime)
 				require.NoError(t, err)
 
 				baseStats.Add(statsDelta)

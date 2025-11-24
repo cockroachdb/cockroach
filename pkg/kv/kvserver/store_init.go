@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -248,7 +249,7 @@ func WriteInitialClusterData(
 			); err != nil {
 				return err
 			}
-			computedStats, err := rditer.ComputeStatsForRange(ctx, desc, batch, now.WallTime)
+			computedStats, err := rditer.ComputeStatsForRange(ctx, desc, batch, fs.UnknownReadCategory, now.WallTime)
 			if err != nil {
 				return err
 			}

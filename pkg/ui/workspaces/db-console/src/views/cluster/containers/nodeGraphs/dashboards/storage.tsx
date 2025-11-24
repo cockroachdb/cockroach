@@ -7,6 +7,7 @@ import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import map from "lodash/map";
 import React from "react";
 
+import { cockroach } from "src/js/protos";
 import LineGraph from "src/views/cluster/components/linegraph";
 import {
   CapacityGraphTooltip,
@@ -20,6 +21,8 @@ import {
   storeIDsForNode,
 } from "./dashboardUtils";
 import { multipleStoreMetrics, storeMetrics } from "./storeUtils";
+
+import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 export default function (props: GraphDashboardProps) {
   const {
@@ -158,6 +161,83 @@ export default function (props: GraphDashboardProps) {
             {
               prefix: "p50",
               name: "cr.store.raft.process.commandcommit.latency-p50",
+              aggregateMax: true,
+            },
+          ],
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Compaction Duration"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={`The cumulative time spent performing compactions.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Duration} label="duration">
+        {storeMetrics(
+          {
+            name: "cr.store.storage.compactions.duration",
+            nonNegativeRate: true,
+            downsampler: TimeSeriesQueryAggregator.MAX,
+            aggregator: TimeSeriesQueryAggregator.SUM,
+          },
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Level Compaction Scores"
+      sources={storeSources}
+      isKvGraph={true}
+      tenantSource={tenantSource}
+      tooltip={`The compaction score for each level of the LSM tree.
+        The storage engine prioritizes compactions out of levels with higher
+        scores.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="score">
+        {multipleStoreMetrics(
+          [
+            {
+              prefix: "L0",
+              name: "cr.store.storage.l0-level-score",
+              aggregateMax: true,
+            },
+            {
+              prefix: "L1",
+              name: "cr.store.storage.l1-level-score",
+              aggregateMax: true,
+            },
+            {
+              prefix: "L2",
+              name: "cr.store.storage.l2-level-score",
+              aggregateMax: true,
+            },
+            {
+              prefix: "L3",
+              name: "cr.store.storage.l3-level-score",
+              aggregateMax: true,
+            },
+            {
+              prefix: "L4",
+              name: "cr.store.storage.l4-level-score",
+              aggregateMax: true,
+            },
+            {
+              prefix: "L5",
+              name: "cr.store.storage.l5-level-score",
+              aggregateMax: true,
+            },
+            {
+              prefix: "L6",
+              name: "cr.store.storage.l6-level-score",
               aggregateMax: true,
             },
           ],
