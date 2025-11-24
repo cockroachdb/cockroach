@@ -609,3 +609,27 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 		)
 	})
 }
+
+// ConvertDistinctOnAggsToProjections builds a projection for each aggregation
+// expression in a DistinctOn which returns a different output column ID than
+// its input column ID.
+func (c *CustomFuncs) ConvertDistinctOnAggsToProjections(
+	aggs memo.AggregationsExpr,
+) memo.ProjectionsExpr {
+	projections := make(memo.ProjectionsExpr, 0, len(aggs))
+	for i := range aggs {
+		// DistinctOn only allows ConstAgg and FirstAgg, both of which always have a
+		// variable as input.
+		switch aggs[i].Agg.Op() {
+		case opt.ConstAggOp, opt.FirstAggOp:
+		default:
+			panic(errors.AssertionFailedf(
+				"expected a ConstAgg or FirstAgg expression, but found %T", aggs[i].Agg))
+		}
+		inputVar := aggs[i].Agg.Child(0).(*memo.VariableExpr)
+		if inputVar.Col != aggs[i].Col {
+			projections = append(projections, c.e.f.ConstructProjectionsItem(inputVar, aggs[i].Col))
+		}
+	}
+	return projections
+}

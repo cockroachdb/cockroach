@@ -195,6 +195,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"TransactionModes":     {fullName: "tree.TransactionModes", passByVal: true},
 		"Ordering":             {fullName: "opt.Ordering", passByVal: true},
 		"OrderingChoice":       {fullName: "props.OrderingChoice", passByVal: true},
+		"ScanDirection":        {fullName: "opt.ScanDirection", passByVal: true},
 		"GroupingOrder":        {fullName: "memo.GroupingOrder", passByVal: true},
 		"TupleOrdinal":         {fullName: "memo.TupleOrdinal", passByVal: true},
 		"ScanLimit":            {fullName: "memo.ScanLimit", passByVal: true},

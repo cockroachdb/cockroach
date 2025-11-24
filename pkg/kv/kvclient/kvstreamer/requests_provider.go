@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitmap"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -193,6 +194,32 @@ func (r singleRangeBatch) subPriority() int32 {
 	return r.subRequestIdx[0]
 }
 
+// removeDroppedRequests removes all requests from the batch that the client has
+// indicated it no longer needs. The requests to be removed are specified by
+// their position in the original Enqueue() call. The droppedRequests set may
+// be nil or empty, in which case no requests are removed.
+// TODO(drewk): unit-test this.
+func (r *singleRangeBatch) removeDroppedRequests(droppedRequests *intsets.Sparse) {
+	if droppedRequests == nil || droppedRequests.Empty() {
+		return
+	}
+	newReqs := r.reqs[:0]
+	newPositions := r.positions[:0]
+	newSubRequestIdx := r.subRequestIdx[:0]
+	for i, pos := range r.positions {
+		if !droppedRequests.Contains(pos) {
+			newReqs = append(newReqs, r.reqs[i])
+			newPositions = append(newPositions, pos)
+			if r.subRequestIdx != nil {
+				newSubRequestIdx = append(newSubRequestIdx, r.subRequestIdx[i])
+			}
+		}
+	}
+	r.reqs = newReqs
+	r.positions = newPositions
+	r.subRequestIdx = newSubRequestIdx
+}
+
 // String implements fmt.Stringer.
 //
 // Note that the implementation of this method doesn't include r.reqsKeys into
@@ -257,7 +284,7 @@ type requestsProvider interface {
 
 	// add adds a single request into the provider. The lock of the provider
 	// must not be already held. If there is a goroutine blocked in
-	// waitLocked(), it is woken up.
+	// waitLocked(), it is woken up. The request is shallow-copied.
 	add(singleRangeBatch)
 
 	///////////////////////////////////////////////////////////////////////////

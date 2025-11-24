@@ -594,3 +594,14 @@ func (c *CustomFuncs) TryGenerateVectorSearch(
 		c.e.mem.AddTopKToGroup(&memo.TopKExpr{Input: vectorSearch, TopKPrivate: topKPrivate}, grp)
 	})
 }
+
+// MakeLimitedLookupJoinPrivate makes a copy of the given private, but sets the
+// given lookup direction and the PerLookupLimit to the given value.
+func (c *CustomFuncs) MakeLimitedLookupJoinPrivate(
+	private *memo.LookupJoinPrivate, direction opt.ScanDirection, limit tree.Datum,
+) *memo.LookupJoinPrivate {
+	newPrivate := *private
+	newPrivate.Direction = direction
+	newPrivate.PerLookupLimit = int64(*limit.(*tree.DInt))
+	return &newPrivate
+}

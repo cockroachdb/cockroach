@@ -329,6 +329,7 @@ define LookupJoin {
     RemoteOnlyLookups bool
     ReverseScans bool
     Parallelize bool
+    PerLookupLimit int64
 }
 
 # InvertedJoin performs a lookup join into an inverted index.

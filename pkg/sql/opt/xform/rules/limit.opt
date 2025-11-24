@@ -338,3 +338,87 @@
     $limit
     $ordering
 )
+
+# GenerateLimitedLookupJoin applies a limit to each lookup performed by a
+# LookupJoin operator when a limit is applied to the output rows. This is
+# useful when the lookups may cover a large number of rows that will be
+# discarded by the Limit operator.
+[GenerateLimitedLookupJoin, Explore]
+(Limit
+    $join:(LookupJoin
+        # Let GenerateLimitOneLookupJoin handle an input with at most one row.
+        $input:* & ^(HasZeroOrOneRow $input)
+        # There must be no filters beyond those used for the lookup, or else
+        # applying the limit could cause qualifying rows to be discarded.
+        []
+        $lookupPrivate:* &
+            (IsCanonicalLookupJoin $lookupPrivate) &
+
+            # Prevent matching when the lookup columns are a key on the lookup
+            # table, as the lookup join will already return at most one row per
+            # input row in that case.
+            ^(LookupColsAreTableKey $lookupPrivate)
+    )
+    $limit:(Const $limitVal:* & (IsPositiveInt $limitVal))
+    $ordering:* &
+        (Let
+            ($ok $direction):(LookupJoinCanProvideOrdering
+                $join
+                $ordering
+            )
+            $ok
+        )
+)
+=>
+(Limit
+    (LookupJoin
+        $input
+        []
+        (MakeLimitedLookupJoinPrivate
+            $lookupPrivate
+            $direction
+            $limitVal
+        )
+    )
+    $limit
+    $ordering
+)
+
+# GenerateLimitOneLookupJoin is a variant of GenerateLimitedLookupJoin that
+# also removes the Limit operator. This is valid when the input has at most
+# one row, since then only a single (limited) lookup is performed.
+[GenerateLimitOneLookupJoin, Explore]
+(Limit
+    $join:(LookupJoin
+        $input:* & (HasZeroOrOneRow $input)
+        # There must be no filters beyond those used for the lookup, or else
+        # applying the limit could cause qualifying rows to be discarded.
+        []
+        $lookupPrivate:* &
+            (IsCanonicalLookupJoin $lookupPrivate) &
+
+            # Prevent matching when the lookup columns are a key on the lookup
+            # table, as the lookup join will already return at most one row per
+            # input row in that case.
+            ^(LookupColsAreTableKey $lookupPrivate)
+    )
+    $limit:(Const $limitVal:* & (IsPositiveInt $limitVal))
+    $ordering:* &
+        (Let
+            ($ok $direction):(LookupJoinCanProvideOrdering
+                $join
+                $ordering
+            )
+            $ok
+        )
+)
+=>
+(LookupJoin
+    $input
+    []
+    (MakeLimitedLookupJoinPrivate
+        $lookupPrivate
+        $direction
+        $limitVal
+    )
+)

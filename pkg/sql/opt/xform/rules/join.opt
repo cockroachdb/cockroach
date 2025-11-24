@@ -623,6 +623,7 @@
     $on:*
     $private:* &
         (IsAntiJoin $private) &
+        (IsCanonicalLookupJoin $private) &
         (Let
             (
                 $localExpr
@@ -735,6 +736,7 @@
     $on:*
     $private:* &
         ^(IsAntiJoin $private) &
+        (IsCanonicalLookupJoin $private) &
         (Let
             (
                 $localExpr
@@ -826,6 +828,7 @@
     $on:*
     $private:* &
         ^(IsAntiJoin $private) &
+        (IsCanonicalLookupJoin $private) &
         (Let
             (
                 $localExpr
@@ -926,7 +929,7 @@
     *
     $private:* &
         ^(IsAntiJoin $private) &
-        ^(IsLocalityOptimizedJoin $private) &
+        (IsCanonicalLookupJoin $private) &
         (Let
             (
                 $inputScan

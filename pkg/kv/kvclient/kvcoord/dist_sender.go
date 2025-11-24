@@ -1157,7 +1157,8 @@ func (ds *DistSender) initAndVerifyBatch(ctx context.Context, ba *kvpb.BatchRequ
 	if foundForward && foundReverse {
 		return kvpb.NewErrorf("batch contains both forward and reverse requests")
 	}
-	if (ba.MaxSpanRequestKeys != 0 || ba.TargetBytes != 0) && disallowedReq != "" {
+	if (ba.MaxSpanRequestKeys != 0 || ba.MaxPerScanRequestKeys != 0 || ba.TargetBytes != 0) &&
+		disallowedReq != "" {
 		return kvpb.NewErrorf("batch with limit contains %s request", disallowedReq)
 	}
 	// Also verify that IsReverse is set accordingly on the batch header.
@@ -2057,10 +2058,14 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 					h := r.GetInner().Header()
 					replyKeys += h.NumKeys
 					replyBytes += h.NumBytes
-					if h.ResumeSpan != nil {
-						couldHaveSkippedResponses = true
-						resumeReason = h.ResumeReason
-						return
+					if h.ResumeSpan == nil {
+						// Do not return early for a per-scan key limit. It is still
+						// possible to return early for a batch-level key limit below.
+						if ba.MaxPerScanRequestKeys == 0 || h.ResumeReason != kvpb.RESUME_KEY_LIMIT {
+							couldHaveSkippedResponses = true
+							resumeReason = h.ResumeReason
+							return
+						}
 					}
 				}
 				// Update MaxSpanRequestKeys and TargetBytes, if applicable, since ba

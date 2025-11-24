@@ -49,12 +49,14 @@ func getScanIntentRows(response kvpb.Response) (intentRows []roachpb.KeyValue) {
 
 // getScanResumeSpan returns the ResumeSpan field from a ScanResponse or
 // ReverseScanResponse.
-func getScanResumeSpan(response kvpb.Response) (resumeSpan *roachpb.Span) {
+func getScanResumeSpan(
+	response kvpb.Response,
+) (resumeSpan *roachpb.Span, resumeReason kvpb.ResumeReason) {
 	switch scan := response.(type) {
 	case *kvpb.ScanResponse:
-		return scan.ResumeSpan
+		return scan.ResumeSpan, scan.ResumeReason
 	case *kvpb.ReverseScanResponse:
-		return scan.ResumeSpan
+		return scan.ResumeSpan, scan.ResumeReason
 	}
 	panic(errors.AssertionFailedf("unexpected response: %v", response))
 }
