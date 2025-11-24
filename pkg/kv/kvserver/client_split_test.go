@@ -235,7 +235,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 
 	collect := func(as *abortspan.AbortSpan) []roachpb.AbortSpanEntry {
 		var results []roachpb.AbortSpanEntry
-		if err := as.Iterate(ctx, store.TODOEngine(), func(_ roachpb.Key, entry roachpb.AbortSpanEntry) error {
+		if err := as.Iterate(ctx, store.StateEngine(), func(_ roachpb.Key, entry roachpb.AbortSpanEntry) error {
 			entry.Priority = 0 // don't care about that
 			results = append(results, entry)
 			return nil
@@ -376,7 +376,7 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 	}
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(roachpb.RKeyMin), keys.RangeDescriptorKey(splitKeyAddr)} {
 		if _, err := storage.MVCCGet(
-			ctx, store.TODOEngine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
+			ctx, store.StateEngine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
 		); err != nil {
 			t.Errorf("failed to read consistent range descriptor for key %s: %+v", key, err)
 		}
@@ -392,7 +392,7 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 	// Verify the transaction record is gone.
 	start := storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMin))
 	end := storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMax))
-	iter, err := store.TODOEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: end.Key})
+	iter, err := store.StateEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: end.Key})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -666,7 +666,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	originalRepl := store.LookupReplica(roachpb.RKey(splitKey))
 	require.NotNil(t, originalRepl)
 	// Get the original stats for key and value bytes.
-	ms, err := kvstorage.MakeStateLoader(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
+	ms, err := kvstorage.MakeStateLoader(originalRepl.RangeID).LoadMVCCStats(ctx, store.StateEngine())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -685,7 +685,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	}
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(roachpb.RKeyMin), keys.RangeDescriptorKey(splitKeyAddr)} {
 		if _, err := storage.MVCCGet(
-			context.Background(), store.TODOEngine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
+			context.Background(), store.StateEngine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -739,12 +739,12 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// Compare stats of split ranges to ensure they are non zero and
 	// exceed the original range when summed.
-	left, err := kvstorage.MakeStateLoader(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
+	left, err := kvstorage.MakeStateLoader(originalRepl.RangeID).LoadMVCCStats(ctx, store.StateEngine())
 	if err != nil {
 		t.Fatal(err)
 	}
 	lKeyBytes, lValBytes := left.KeyBytes, left.ValBytes
-	right, err := kvstorage.MakeStateLoader(newRng.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
+	right, err := kvstorage.MakeStateLoader(newRng.RangeID).LoadMVCCStats(ctx, store.StateEngine())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -797,7 +797,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 
 	// Verify empty range has empty stats.
 	repl := store.LookupReplica(roachpb.RKey(keyPrefix))
-	assertRangeStats(t, "empty stats", store.TODOEngine(), repl.RangeID, enginepb.MVCCStats{})
+	assertRangeStats(t, "empty stats", store.StateEngine(), repl.RangeID, enginepb.MVCCStats{})
 
 	// Write random data.
 	splitKey := kvserver.WriteRandomDataToRange(t, store, repl.RangeID, keyPrefix)
@@ -809,7 +809,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	// See: https://github.com/cockroachdb/cockroach/issues/129601#issuecomment-2309865742
 	repl.RaftLock()
 	replMS := repl.GetMVCCStats()
-	snap := store.TODOEngine().NewSnapshot()
+	snap := store.StateEngine().NewSnapshot()
 	defer snap.Close()
 	repl.RaftUnlock()
 
@@ -825,7 +825,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	_, pErr = repl.AdminSplit(ctx, *adminSplitArgs(splitKey), "test")
 	require.NoError(t, pErr.GoError())
 
-	snap = store.TODOEngine().NewSnapshot()
+	snap = store.StateEngine().NewSnapshot()
 	defer snap.Close()
 	msLeft, err := kvstorage.MakeStateLoader(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -886,7 +886,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	require.NoError(t, pErr.GoError())
 
 	repl = store.LookupReplica(roachpb.RKey(keyPrefix))
-	snap = store.TODOEngine().NewSnapshot()
+	snap = store.StateEngine().NewSnapshot()
 	defer snap.Close()
 
 	msMerged, err := kvstorage.MakeStateLoader(repl.RangeID).LoadMVCCStats(ctx, snap)
@@ -1006,7 +1006,7 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 					// Wait for the split to complete.
 					require.Nil(t, g.Wait())
 
-					snap := store.TODOEngine().NewSnapshot()
+					snap := store.StateEngine().NewSnapshot()
 					defer snap.Close()
 					lhsStats, err := kvstorage.MakeStateLoader(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
 					require.NoError(t, err)
@@ -1042,7 +1042,7 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 					_, pErr = rhsRepl.AdminSplit(ctx, *adminSplitArgs(splitKeyRight), "test")
 					require.NoError(t, pErr.GoError())
 
-					snap = store.TODOEngine().NewSnapshot()
+					snap = store.StateEngine().NewSnapshot()
 					defer snap.Close()
 					lhs1Stats, err := kvstorage.MakeStateLoader(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
 					require.NoError(t, err)
@@ -1416,7 +1416,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
 	empty := enginepb.MVCCStats{LastUpdateNanos: start.WallTime}
-	assertRangeStats(t, "empty stats", store.TODOEngine(), repl.RangeID, empty)
+	assertRangeStats(t, "empty stats", store.StateEngine(), repl.RangeID, empty)
 
 	// Write random TimeSeries data.
 	midKey := writeRandomTimeSeriesDataToRange(t, store, repl.RangeID, keyPrefix)
@@ -1427,7 +1427,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	_, pErr = repl.AdminSplit(ctx, *adminSplitArgs(midKey), "test")
 	require.NoError(t, pErr.GoError())
 
-	snap := store.TODOEngine().NewSnapshot()
+	snap := store.StateEngine().NewSnapshot()
 	defer snap.Close()
 	msLeft, err := kvstorage.MakeStateLoader(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -1463,7 +1463,7 @@ func fillRange(
 	src := rand.New(rand.NewSource(0))
 	var key []byte
 	for {
-		ms, err := kvstorage.MakeStateLoader(rangeID).LoadMVCCStats(context.Background(), store.TODOEngine())
+		ms, err := kvstorage.MakeStateLoader(rangeID).LoadMVCCStats(context.Background(), store.StateEngine())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4506,7 +4506,7 @@ func TestSplitWithExternalFilesFastStats(t *testing.T) {
 
 			originalRepl := store.LookupReplica(roachpb.RKey(splitKey))
 			require.NotNil(t, originalRepl)
-			origStats, err := kvstorage.MakeStateLoader(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
+			origStats, err := kvstorage.MakeStateLoader(originalRepl.RangeID).LoadMVCCStats(ctx, store.StateEngine())
 			require.NoError(t, err)
 			require.Greater(t, origStats.ContainsEstimates, int64(0), "range expected to have estimated stats")
 
