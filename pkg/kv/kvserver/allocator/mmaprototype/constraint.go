@@ -1002,7 +1002,8 @@ func (ac *analyzedConstraints) analyzeFunc(
 	}
 }
 
-// diversityFunc computes the diversity score between two sets of stores.
+// diversityOfTwoStoreSets computes the diversity score between two sets of
+// stores.
 //
 // When sameStores is false, intersection between this and other is empty and no
 // de-duplication is needed. For example, given two sets of stores [1, 2, 3] and
@@ -1012,7 +1013,7 @@ func (ac *analyzedConstraints) analyzeFunc(
 // When sameStores is true, this and other are the same set and de-duplication
 // is needed. For example, given two sets of stores [1, 2, 3] and [1, 2, 3],
 // diversity score should be computed among pairs (1, 2), (1, 3), (2, 3) only.
-func diversityFunc(
+func diversityOfTwoStoreSets(
 	this []storeAndLocality, other []storeAndLocality, sameStores bool,
 ) (sumScore float64, numSamples int) {
 	for i := range this {
@@ -1052,15 +1053,15 @@ func diversityScore(
 		return sumScore / float64(numSamples)
 	}
 
-	voterSum, voterSamples := diversityFunc(replicas[voterIndex], replicas[voterIndex], true)
+	voterSum, voterSamples := diversityOfTwoStoreSets(replicas[voterIndex], replicas[voterIndex], true)
 	totalSum := voterSum
 	totalSamples := voterSamples
 
-	nonVoterSum, nonVoterSamples := diversityFunc(replicas[nonVoterIndex], replicas[nonVoterIndex], true)
+	nonVoterSum, nonVoterSamples := diversityOfTwoStoreSets(replicas[nonVoterIndex], replicas[nonVoterIndex], true)
 	totalSum += nonVoterSum
 	totalSamples += nonVoterSamples
 
-	voterNonVoterSum, voterNonVoterSamples := diversityFunc(replicas[voterIndex], replicas[nonVoterIndex], false)
+	voterNonVoterSum, voterNonVoterSamples := diversityOfTwoStoreSets(replicas[voterIndex], replicas[nonVoterIndex], false)
 	totalSum += voterNonVoterSum
 	totalSamples += voterNonVoterSamples
 	return scoreFromSumAndSamples(voterSum, voterSamples), scoreFromSumAndSamples(totalSum, totalSamples)
