@@ -1052,22 +1052,17 @@ func diversityScore(
 		return sumScore / float64(numSamples)
 	}
 
-	// Calculate voter diversity (V × V, no self-pairs)
 	voterSum, voterSamples := diversityFunc(replicas[voterIndex], replicas[voterIndex], true)
-	// Calculate replica diversity over all pairs:
-	// (voter, voter), (nonvoter, nonvoter), (voter, nonvoter)
-	totalSum, totalSamples := 0.0, 0
-	vs, ns := diversityFunc(replicas[voterIndex], replicas[voterIndex], true)
-	totalSum += vs
-	totalSamples += ns
+	totalSum := voterSum
+	totalSamples := voterSamples
 
-	vs, ns = diversityFunc(replicas[nonVoterIndex], replicas[nonVoterIndex], true)
-	totalSum += vs
-	totalSamples += ns
+	nonVoterSum, nonVoterSamples := diversityFunc(replicas[nonVoterIndex], replicas[nonVoterIndex], true)
+	totalSum += nonVoterSum
+	totalSamples += nonVoterSamples
 
-	vs, ns = diversityFunc(replicas[voterIndex], replicas[nonVoterIndex], false)
-	totalSum += vs
-	totalSamples += ns
+	voterNonVoterSum, voterNonVoterSamples := diversityFunc(replicas[voterIndex], replicas[nonVoterIndex], false)
+	totalSum += voterNonVoterSum
+	totalSamples += voterNonVoterSamples
 	return scoreFromSumAndSamples(voterSum, voterSamples), scoreFromSumAndSamples(totalSum, totalSamples)
 }
 
