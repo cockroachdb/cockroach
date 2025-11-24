@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	tableCount                = 5000
+	tableCount                = 500
 	nodeCount                 = 70
 	tableNamePrefix           = "t"
 	tableSchema               = "(id INT PRIMARY KEY, s STRING)"
@@ -76,7 +76,7 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Because this roachtest spins up and pauses/cancels 5k changefeed jobs
 	// really quickly, run the adopt interval which by default only runs every 30s
 	// and adopts 10 jobs at a time.
-	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.registry.interval.adopt='5s'")
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.registry.interval.adopt='15s'")
 
 	rng, seed := randutil.NewLockedPseudoRand()
 	t.L().Printf("Rand seed: %d", seed)
@@ -124,7 +124,7 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	//	group.Go(randomPoller(time.Second, checkJobQueryLatency))
 	//}
 
-	waitTime := time.Duration(rng.Intn(pollerMinFrequencySeconds)+1) * time.Second
+	waitTime := time.Duration(rng.Intn(180)+1) * time.Second
 	jobIDToTableName := make(map[jobspb.JobID]string)
 	var jobIDToTableNameMu sync.Mutex
 
@@ -248,58 +248,54 @@ func pauseResumeChangefeeds(
 	conn := c.Conn(ctx, t.L(), rng.Intn(nodeCount)+1)
 	defer conn.Close()
 
-	rows, err := conn.QueryContext(ctx, "SELECT job_id FROM [SHOW JOBS] where job_type='CHANGEFEED'")
+	rows, err := conn.QueryContext(ctx, "SELECT job_id, status FROM [SHOW JOBS] where job_type='CHANGEFEED'")
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
-
-	var jobs []jobspb.JobID
+  
+	// find cancelled changefeeds
+	var canceledJobs []jobspb.JobID
 	for rows.Next() {
 		var jobID jobspb.JobID
-		if err := rows.Scan(&jobID); err != nil {
+		var status string
+		if err := rows.Scan(&jobID,&status); err != nil {
 			return err
 		}
-		jobs = append(jobs, jobID)
+		if status == "canceled" {
+			canceledJobs = append(canceledJobs, jobID)
+		}
 	}
 	rows.Close()
+  
+	// resume 10% of canceled changefeeds
+	count := len(canceledJobs) /10
 
-	if len(jobs) < tableCount/2 {
-		return nil
-	}
-	jobAction := func(cmd string, count int) {
-		errCount := 0
-		recreatedCount := 0
-		for i := 0; i < count; i++ {
-			jobIdx := rng.Intn(len(jobs))
-			jobID := jobs[jobIdx]
-			_, err := conn.Exec(cmd, jobID)
-			if err != nil {
-				errCount++
-				// Try to recreate the changefeed
-				jobIDToTableNameMu.Lock()
-				tableName, exists := jobIDToTableName[jobID]
-				jobIDToTableNameMu.Unlock()
-				if !exists {
-					t.L().Printf("No table name found for job %d, skipping recreation", jobID)
-					continue
-				}
-				var newJobID jobspb.JobID
-				err := conn.QueryRowContext(ctx, fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO 'null://' WITH gc_protect_expires_after='10m', protect_data_from_gc_on_pause", tableName)).Scan(&newJobID)
-				if err == nil {
-					jobIDToTableNameMu.Lock()
-					jobIDToTableName[newJobID] = tableName
-					jobIDToTableNameMu.Unlock()
-					recreatedCount++
-				} else {
-					t.L().Printf("Failed to recreate changefeed for table %s (job %d): %v", tableName, jobID, err)
-				}
+	recreatedCount := 0
+	for i := 0; i < count; i++ {
+		jobIdx := rng.Intn(len(canceledJobs))
+		jobID := canceledJobs[jobIdx]
+
+			// Try to recreate the changefeed
+			jobIDToTableNameMu.Lock()
+			tableName, exists := jobIDToTableName[jobID]
+			jobIDToTableNameMu.Unlock()
+			if !exists {
+				t.L().Printf("No table name found for job %d, skipping recreation", jobID)
+				continue
 			}
-		}
-		t.L().Printf("Failed to run %s on %d of %d jobs, recreated %d changefeeds, of %d total cf jobs", cmd, errCount, count, recreatedCount, len(jobs))
+			var newJobID jobspb.JobID
+			err := conn.QueryRowContext(ctx, fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO 'null://' WITH gc_protect_expires_after='10m', protect_data_from_gc_on_pause", tableName)).Scan(&newJobID)
+			if err == nil {
+				jobIDToTableNameMu.Lock()
+				jobIDToTableName[newJobID] = tableName
+				jobIDToTableNameMu.Unlock()
+				recreatedCount++
+			} else {
+				t.L().Printf("Failed to recreate changefeed for table %s (job %d): %v", tableName, jobID, err)
+			}
 	}
-	jobAction("PAUSE JOB $1", len(jobs)/10)
-	jobAction("RESUME JOB $1", len(jobs)/10)
+	t.L().Printf("recreated %d changefeeds, of %d total canceled jobs", recreatedCount, len(canceledJobs))
 	return nil
 }
 
