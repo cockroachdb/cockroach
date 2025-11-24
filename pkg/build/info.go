@@ -38,6 +38,8 @@ var (
 
 // Distribution is changed by the CCL init-time hook in non-APL builds.
 var Distribution = "OSS"
+var doink = "doink"
+var _ = doink
 
 var (
 	cgoCompiler       = cgoVersion()
