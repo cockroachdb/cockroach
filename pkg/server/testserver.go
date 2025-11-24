@@ -1553,6 +1553,11 @@ func (t *testTenant) SetReady(ready bool) {
 // SetAcceptSQLWithoutTLS is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) SetAcceptSQLWithoutTLS(accept bool) {
 	t.Cfg.AcceptSQLWithoutTLS = accept
+	// If we're running in a shared-process mode, the pre-serve handler has its
+	// own copy of base.Config (that is shared with the system tenant), so we
+	// must propagate the updated value there too. (For other deployments this
+	// call is redundant with the update above but otherwise harmless.)
+	t.pgPreServer.TestingSetAcceptSQLWithoutTLS(accept)
 }
 
 // PrivilegeChecker is part of the serverutils.ApplicationLayerInterface.

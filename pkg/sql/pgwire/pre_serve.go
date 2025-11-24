@@ -172,6 +172,12 @@ func (s *PreServeConnHandler) AnnotateCtxForIncomingConn(
 	return logtags.AddTag(ctx, tag, conn.RemoteAddr().String())
 }
 
+// TestingSetAcceptSQLWithoutTLS updates the config to tweak whether SQL clients
+// can authenticate without TLS on a secure cluster, in tests.
+func (s *PreServeConnHandler) TestingSetAcceptSQLWithoutTLS(accept bool) {
+	s.cfg.AcceptSQLWithoutTLS = accept
+}
+
 // tenantIndependentMetrics is the set of metrics for the
 // pre-serve part of connection handling, before the connection
 // is routed to a specific tenant.
