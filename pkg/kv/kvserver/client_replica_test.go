@@ -213,7 +213,7 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	// The clock did not advance and the final command was not executed.
 	ts3 := s.Clock().Now()
 	require.Zero(t, ts3.GoTime().Sub(ts2.GoTime()))
-	valRes, err := storage.MVCCGet(context.Background(), store.TODOEngine(), key, ts3,
+	valRes, err := storage.MVCCGet(context.Background(), store.StateEngine(), key, ts3,
 		storage.MVCCGetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, incArgs.Increment*numCmds, mustGetInt(valRes.Value))
@@ -3199,7 +3199,7 @@ func TestClearRange(t *testing.T) {
 		t.Helper()
 		start := prefix
 		end := prefix.PrefixEnd()
-		kvs, err := storage.Scan(context.Background(), store.TODOEngine(), start, end, 0)
+		kvs, err := storage.Scan(context.Background(), store.StateEngine(), start, end, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
