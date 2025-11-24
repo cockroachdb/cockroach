@@ -710,13 +710,21 @@ func TestJitterCalculation(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			interval := jitter(test.input)
+			interval := test.input
+			testutils.SucceedsSoon(t, func() error {
+				interval = jitter(test.input)
+				// This check will sometimes fail due to a randomly picking a value
+				// that rounds to 1/2. The frequency of this is a bit higher than one
+				// would expect because the rounding behavior depends on the width of
+				// the duration, not the width of a float64.
+				if interval == test.input && test.input != 0 {
+					return errors.New("jitter returned same value as input")
+				}
+				return nil
+			})
 			rangeMin, rangeMax := outputRange(test.input)
 			require.GreaterOrEqual(t, rangeMax, interval)
 			require.LessOrEqual(t, rangeMin, interval)
-			if test.input != 0 {
-				require.NotEqual(t, test.input, interval)
-			}
 		})
 	}
 }
