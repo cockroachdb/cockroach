@@ -7040,6 +7040,10 @@ func TestChangefeedCursorAgeWarning(t *testing.T) {
 	}
 
 	testutils.RunValues(t, "cursor age", cursorAges, func(t *testing.T, cursorAge time.Duration) {
+		spy := &changefeedLogSpy{}
+		cleanup := log.InterceptWith(context.Background(), spy)
+		defer cleanup()
+
 		s, stopServer := makeServer(t, withAllowChangefeedErr("expects batch ts gc error"))
 		defer stopServer()
 		knobs := s.TestingKnobs.
@@ -7080,6 +7084,23 @@ func TestChangefeedCursorAgeWarning(t *testing.T) {
 			fmt.Sprintf(
 				`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='no'`,
 				timeNow), expectedWarning("no"))
+
+		// We also verify that warnings are logged and not just sent as notices.
+		spy.Lock()
+		defer spy.Unlock()
+		warningsLogged := 0
+		for _, logMsg := range spy.logs {
+			if strings.Contains(logMsg, warning) {
+				warningsLogged++
+			}
+		}
+		if cursorAge == time.Hour {
+			require.Equal(t, warningsLogged, 0,
+				"expected no cursor agewarning logs, got %d", warningsLogged)
+		} else {
+			require.Equal(t, warningsLogged, 2,
+				"expected 2 cursor age warning logs, got %d", warningsLogged)
+		}
 	})
 }
 

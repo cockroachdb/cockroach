@@ -170,6 +170,8 @@ func maybeShowCursorAgeWarning(
 	}()
 
 	if cursorAge > warningAge {
+		log.Changefeed.Warningf(ctx, "the provided cursor is %d hours old; "+
+			"older cursors can result in increased changefeed latency", cursorAge/int64(time.Hour))
 		err = p.SendClientNotice(ctx,
 			pgnotice.Newf(
 				`the provided cursor is %d hours old; `+
