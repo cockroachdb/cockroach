@@ -662,4 +662,4 @@ zip
 [node ?] ? log files found
 [node ?] ? log files found
 [node ?] ? log files found
-debug zip --timeout=30s --cpu-profile-duration=0s /dev/null
+debug zip --timeout=30s --cpu-profile-duration=0s --cluster-name=<cluster-name> /dev/null

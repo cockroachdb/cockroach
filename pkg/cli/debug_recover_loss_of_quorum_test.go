@@ -134,8 +134,8 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 		"recover",
 		"collect-info",
 		"--insecure",
-		"--host",
-		tc.Server(2).AdvRPCAddr(),
+		"--host", tc.Server(2).AdvRPCAddr(),
+		"--cluster-name", tc.ClusterName(),
 		replicaInfoFileName,
 	})
 
@@ -543,6 +543,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 			"--confirm=y",
 			"--certs-dir=test_certs",
 			"--host=" + tc.Server(0).AdvRPCAddr(),
+			"--cluster-name=" + tc.ClusterName(),
 			"--plan=" + planFile,
 		})
 	require.NoError(t, err, "failed to run make-plan")
@@ -566,6 +567,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 			"debug", "recover", "apply-plan",
 			"--certs-dir=test_certs",
 			"--host=" + tc.Server(0).AdvRPCAddr(),
+			"--cluster-name=" + tc.ClusterName(),
 			"--confirm=y", planFile,
 		})
 	require.NoError(t, err, "failed to run apply plan")
@@ -581,6 +583,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 			"debug", "recover", "verify",
 			"--certs-dir=test_certs",
 			"--host=" + tc.Server(0).AdvRPCAddr(),
+			"--cluster-name=" + tc.ClusterName(),
 			planFile,
 		})
 	require.NoError(t, err, "failed to run verify plan")
@@ -630,6 +633,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 			"debug", "recover", "verify",
 			"--certs-dir=test_certs",
 			"--host=" + tc.Server(0).AdvRPCAddr(),
+			"--cluster-name=" + tc.ClusterName(),
 			planFile,
 		})
 	require.NoError(t, err, "failed to run verify plan")
