@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"reflect"
@@ -50,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -85,6 +87,11 @@ type TestCluster struct {
 }
 
 var _ serverutils.TestClusterInterface = &TestCluster{}
+
+// ClusterName returns the configured or auto-generated cluster name.
+func (tc *TestCluster) ClusterName() string {
+	return tc.clusterArgs.ServerArgs.ClusterName
+}
 
 // NumServers is part of TestClusterInterface.
 func (tc *TestCluster) NumServers() int {
@@ -316,6 +323,16 @@ func NewTestCluster(
 	}
 	if clusterArgs.StartSingleNode && nodes > 1 {
 		t.Fatal("StartSingleNode implies 1 node only, but asked to create", nodes)
+	}
+	if clusterArgs.ServerArgs.ClusterName == "" {
+		// NB: not using randutil.NewTestRand which deterministically depends on the
+		// testing seed. It would defeat the ClusterName's purpose (prevent messages
+		// across TestClusters), e.g. if a test is stressed with the same seed.
+		rng := rand.New(rand.NewSource(rand.Int63()))
+		// Use a cluster name that is sufficiently unique (within the CI env) but is
+		// concise and recognizable.
+		clusterArgs.ServerArgs.ClusterName = fmt.Sprintf("TestCluster-%s",
+			randutil.RandString(rng, 10, randutil.PrintableKeyAlphabet))
 	}
 
 	if err := checkServerArgsForCluster(
@@ -633,6 +650,9 @@ func (tc *TestCluster) AddServer(
 	serverArgs.PartOfCluster = !tc.clusterArgs.StartSingleNode
 	if serverArgs.JoinAddr != "" {
 		serverArgs.NoAutoInitializeCluster = true
+	}
+	if serverArgs.ClusterName == "" {
+		serverArgs.ClusterName = tc.clusterArgs.ServerArgs.ClusterName
 	}
 
 	// Check args even though we have called checkServerArgsForCluster()
