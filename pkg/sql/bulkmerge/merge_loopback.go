@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -41,8 +42,11 @@ func (m *mergeLoopback) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadat
 		return nil, m.DrainHelper()
 	}
 	m.done = true
+	// Generate a routing key for the current SQL instance (where this processor is running).
+	// This ensures the routing key matches one of the spans in the range router.
+	routingDatum, _ := physicalplan.RoutingDatumsForSQLInstance(m.FlowCtx.NodeID.SQLInstanceID())
 	return rowenc.EncDatumRow{
-		rowenc.EncDatum{Datum: tree.NewDBytes("loopback")},
+		routingDatum,
 		rowenc.EncDatum{Datum: tree.NewDInt(1)},
 	}, nil
 }
