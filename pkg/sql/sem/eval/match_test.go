@@ -10,6 +10,58 @@ import (
 	"testing"
 )
 
+func TestCollapseWildcards(t *testing.T) {
+	for _, tc := range []struct {
+		pattern, expected string
+	}{
+		{"", ""},
+		{"a", "a"},
+		{"abc", "abc"},
+		{"%", "%"},
+		{"%%", "%"},
+		{"%%%%%%%%%", "%"},
+		{"%%a", "%a"},
+		{"%%abc", "%abc"},
+		{"a%%", "a%"},
+		{"abc%%", "abc%"},
+		{"%%%a%%%", "%a%"},
+		{"%%%abc%%%", "%abc%"},
+		{"a%%%b", "a%b"},
+		{"%%a%%%b%%", "%a%b%"},
+		{"%%%🐛🐛%%🏠%%%", "%🐛🐛%🏠%"},
+		{"\\%%", "\\%%"},
+		{"\\%\\%", "\\%\\%"},
+		{"\\%%\\%%", "\\%%\\%%"},
+		{"\\%%%\\%%%", "\\%%\\%%"},
+		{"\\\\%%", "\\\\%"},
+		{"a\\%%%%b", "a\\%%b"},
+		{"a\\%%%\\\\%%%b", "a\\%%\\\\%b"},
+		{"\\%%%abc%%\\%", "\\%%abc%\\%"},
+		{"%%\\%a%\\%%b\\%%%", "%\\%a%\\%%b\\%%"},
+		{"\\\\%%%a%%\\\\%%b\\\\%%%", "\\\\%a%\\\\%b\\\\%"},
+		{"%%\\%🐛🐛\\\\%%🏠\\%\\\\%%", "%\\%🐛🐛\\\\%🏠\\%\\\\%"},
+	} {
+		if res := CollapseWildcards(tc.pattern); res != tc.expected {
+			t.Errorf("expected %q to collapse to %q, got %q", tc.pattern, tc.expected, res)
+		}
+	}
+}
+
+func BenchmarkCollapseWildcards(b *testing.B) {
+	for _, pattern := range []string{
+		"somepatternwithoutwildcards",
+		"%%%%%apatternwithbeginningandtrailingwildcards%%%%%",
+		"%%%%%pattern%%%with%%%morewildcards%%%%%",
+		"%%%%%🐛🐛🐛🐛🐛%%%%%🏠🏠🏠🏠🏠🏠%%%%%",
+	} {
+		b.Run(pattern, func(b *testing.B) {
+			for b.Loop() {
+				_ = CollapseWildcards(pattern)
+			}
+		})
+	}
+}
+
 // TestOptimizedLike checks that for certain patterns we are using optimized
 // evaluation of LIKE and ILIKE rather than regex-powered evaluation.
 func TestOptimizedLike(t *testing.T) {
