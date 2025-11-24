@@ -349,18 +349,34 @@ func makeNormalizedSpanConfig(
 	return nConf, err
 }
 
-// normalizeConstraints normalizes and interns the given constraints. Every
-// internedConstraintsConjunction has numReplicas > 0, and the sum of these
-// equals the parameter numReplicas.
+// normalizeConstraints normalizes and interns the input constraint
+// conjunctions, returning a slice of []internedConstraintsConjunction along
+// with an error if the input violates the requirements documented in
+// roachpb.SpanConfig related to NumReplicas.
 //
-// It returns an error if the input constraints don't satisfy the requirements
-// documented in roachpb.SpanConfig related to NumReplicas.
+// Normalization guarantees that the returned []internedConstraintsConjunction
+// satisfies the following:
+// 1. Every internedConstraintsConjunction has NumReplicas > 0.
+// 2. Sum of NumReplicas of returned internedConstraintsConjunction equals the
+// spanConfig.NumReplicas. If the input includes only zero-replica constraints,
+// it synthesizes a single zero-replica conjunction.
+//
+// It returns an error if the input violates the roachpb.SpanConfig rules for
+// NumReplicas:
+//   - Sum of all input NumReplicas must be ≤ the numReplicas parameter.
+//     Example: +region=a:1 and +region=b:1 with NumReplicas = 1 is invalid.
+//   - If any conjunction has NumReplicas = 0, all conjunctions must have
+//     NumReplicas = 0. Example: +region=a:0 and +region=b,zone=b1:1 is invalid
+//     but +region=a:0 and +region=b,zone=b1:0 is valid.
 func normalizeConstraints(
 	constraints []roachpb.ConstraintsConjunction, numReplicas int32, interner *stringInterner,
 ) ([]internedConstraintsConjunction, error) {
 	var nc []roachpb.ConstraintsConjunction
 	haveZero := false
 	sumReplicas := int32(0)
+
+	// Combine zero-replica constraints into a single conjunction on nc[0] if
+	// there are any.
 	for i := range constraints {
 		if constraints[i].NumReplicas == 0 {
 			haveZero = true
@@ -373,16 +389,27 @@ func normalizeConstraints(
 			sumReplicas += constraints[i].NumReplicas
 		}
 	}
+
+	// Validate that zero-replica constraints appear only if all conjunctions
+	// are zero-replica.
 	if haveZero && sumReplicas > 0 {
 		return nil, errors.Errorf("invalid mix of constraints")
 	}
+
+	// Validate that sum of non-zero numReplicas of constraints ≤
+	// spanConfig.NumReplicas.
 	if sumReplicas > numReplicas {
 		return nil, errors.Errorf("constraint replicas add up to more than configured replicas")
 	}
+
+	// After combining zero-replica constraints, set the constraint replica
+	// count to spanConfig.NumReplicas.
 	if haveZero {
 		nc[0].NumReplicas = numReplicas
 	} else {
 		nc = append(nc, constraints...)
+		// If the sum of non-zero numReplicas of constraints < numReplicas, add
+		// a synthesized zero-replica conjunction.
 		if sumReplicas < numReplicas {
 			cc := roachpb.ConstraintsConjunction{
 				NumReplicas: numReplicas - sumReplicas,
@@ -393,6 +420,8 @@ func normalizeConstraints(
 	}
 	var rv []internedConstraintsConjunction
 	for i := range nc {
+		// Intern the constraints to help mma determine if a store matches the
+		// constraint more efficiently.
 		icc := internedConstraintsConjunction{
 			numReplicas: nc[i].NumReplicas,
 			constraints: interner.internConstraintsConj(nc[i].Constraints),
@@ -1539,6 +1568,10 @@ func (si *stringInterner) toString(code stringCode) string {
 	return si.codeToString[code]
 }
 
+// internConstraintsConj interns an array of roachpb.Constraint into a canonical, sorted and deduplicated
+// constraintsConj (slice of internedConstraint).
+// It interns the constraint Key and Value strings, sorts the resulting constraints, and removes duplicates.
+// Returns nil if the input slice is empty.
 func (si *stringInterner) internConstraintsConj(constraints []roachpb.Constraint) constraintsConj {
 	if len(constraints) == 0 {
 		return nil
