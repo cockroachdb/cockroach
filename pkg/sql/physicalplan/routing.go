@@ -56,10 +56,13 @@ func MakeInstanceRouter(
 	ids []base.SQLInstanceID,
 ) (execinfrapb.OutputRouterSpec_RangeRouterSpec, error) {
 	var zero execinfrapb.OutputRouterSpec_RangeRouterSpec
-	defaultStream := int32(0)
 	rangeRouterSpec := execinfrapb.OutputRouterSpec_RangeRouterSpec{
-		Spans:       nil,
-		DefaultDest: &defaultStream,
+		Spans: nil,
+		// DefaultDest is nil so that any routing key that doesn't match a span
+		// will produce an error. This ensures we catch coordination bugs where
+		// a routing key is generated for an instance not in the router's span list,
+		// rather than silently routing to an arbitrary instance.
+		DefaultDest: nil,
 		Encodings: []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
 			{
 				Column:   0,
