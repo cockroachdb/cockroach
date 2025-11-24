@@ -669,6 +669,20 @@ type analyzedConstraints struct {
 	// slices are also empty.
 	constraints []internedConstraintsConjunction
 
+	// satisfiedByReplica[kind][i] contains the set of storeIDs that satisfy
+	// constraints[i]. These are for stores that satisfy at least one
+	// constraint. Each store should appear exactly once in the 2D slice
+	// ac.satisfiedByReplica[kind]. For example,
+	// satisfiedByReplica[voterIndex][0] = [1, 2, 3], means that the first
+	// constraint (constraints[0]) is satisfied by storeIDs 1, 2, and 3.
+	//
+	// NB: satisfiedByReplica[nonVoterIndex][i] is populated even if this
+	// analyzedConstraints represents a voter constraint. This is done because
+	// satisfiedByReplica[voterIndex][i] may not sufficiently satisfy a
+	// constraint (or even if it does, at a later point one could be
+	// decommissioning one of the voters), and populating the nonVoterIndex
+	// allows MMA to decide to promote a non-voter.
+	//
 	// Overlapping conjunctions: There is nothing preventing overlapping
 	// ConstraintsConjunctions such that the same store can satisfy multiple,
 	// though we expect this to be uncommon. This is algorithmically painful
@@ -691,25 +705,30 @@ type analyzedConstraints struct {
 	// greedy manner instead of considering all possibilities. So all the
 	// satisfiedBy slices represent sets that are non-intersecting.
 	//
-	// satisfiedByReplica[kind][i] contains the set of storeIDs that satisfy
-	// constraints[i]. Populated by initialize and used later by mmma to
-	// determine candidates to satisfy constraints such as
-	// candidatesToReplaceVoterForRebalance.
-	// For example, satisfiedByReplica[voterIndex][0] = [1, 2, 3], means that
-	// the first constraint (constraints[0]) is satisfied by storeIDs 1, 2, and
-	// 3.
-	//
-	// NB: this does not mean the current replica set satisfies constraints[i]
-	// since we may populate satisfiedByReplica[nonVoterIndex][i] for voter
-	// constraints as well. This just means that the store can satisfy
-	// constraints[i] regardless of the replica type.
+	// Example on why ordering from most strict to least strict is important:
+	// If the constraints were [region=a,zone=a1:1],[region=a:1] (which is
+	// sorted in decreasing strictness), a voter store in (region=a,zone=a1)
+	// would satisfy both, but it would be present only in
+	// satisfiedByReplica[voterIndex][i] for i=0, not i=1. If the user specified
+	// the constraints in irregular order, [region=a]:1,[region=a,zone=a1]:1,
+	// the voter would only be present in satisfiedByReplica[voterIndex][0] as
+	// well (which now refers to the relaxed constraint), and as a consequence
+	// we would consider (region=a,zone=a1) unfulfilled by this voter. If the
+	// full constraints conjunction had been [region=a]:1, [region=a,zone=a1]:1,
+	// [region=a,zone=a2]:1, and there were voters in that region in zones a1,
+	// a2, and a3, we could end up satisfying [region=a]:1 with the voter in a1,
+	// but then wouldn't consider it for the stricter constraint
+	// [region=a,zone=a1]:1 which no other voter can satisfy. The constraints
+	// would then appear unsatisfiable to the allocator.
+
 	satisfiedByReplica [numReplicaKinds][][]roachpb.StoreID
 
-	// These are stores that satisfy no constraint. Even though we are strict
-	// about constraint satisfaction, this can happen if the SpanConfig changed
-	// or the attributes of a store changed. Additionally, if these
-	// analyzedConstraints correspond to voterConstraints, there can be
-	// non-voters here (which is harmless).
+	// ac.satisfiedNoConstraintReplica[kind] contains the set of storeIDs that
+	// satisfy no constraint. Even though we are strict about constraint
+	// satisfaction, this can happen if the SpanConfig changed or the attributes
+	// of a store changed. Note that if these analyzedConstraints correspond to
+	// voterConstraints, there can be non-voters here which is never used but
+	// harmless.
 	satisfiedNoConstraintReplica [numReplicaKinds][]roachpb.StoreID
 }
 
@@ -744,8 +763,12 @@ func clear2DSlice[T any](v [][]T) [][]T {
 	return v
 }
 
-// rangeAnalyzedConstraints is a function of the spanConfig and the current
-// stores that have replicas for that range (including the ReplicaType).
+// rangeAnalyzedConstraints represents the analyzed constraint state for a
+// range, derived from the range's span config and current replica placement
+// (including ReplicaType). It contains information used to handle constraint
+// satisfaction as part of allocation decisions (e.g. helping identify candidate
+// stores for range rebalancing, lease transfers, up-replication,
+// down-replication, validating whether constraints are satisfied).
 //
 // LEARNER and VOTER_DEMOTING_LEARNER replicas are ignored.
 type rangeAnalyzedConstraints struct {
@@ -842,68 +865,39 @@ type storeMatchesConstraintInterface interface {
 	storeMatches(storeID roachpb.StoreID, constraintConj constraintsConj) bool
 }
 
-// initialize analyzes the current replica set and determines which constraints
-// replicas satisfy, populating ac.constraints, ac.satisfiedByReplica and
-// ac.satisfiedNoConstraintReplica. They are later used by mma to compute
-// lease-transfer and rebalancing candidates by functions like
-// candidatesToReplaceVoterForRebalance. The given buf.replicas is already
-// populated with the current replica set from buf.tryAddingStore.
+// initialize takes in the constraints, current replica set, and a constraint
+// matcher. It populates ac.constraints, ac.satisfiedByReplica and
+// ac.satisfiedNoConstraintReplica by analyzing the current replica set and the
+// constraints replicas satisfy. The given buf.replicas is already populated
+// with the current replica set from buf.tryAddingStore.
 //
-// For stores that satisfy no constraint,
-// ac.satisfiedNoConstraintReplica[kind][i] will be populated with the replica
-// storeIDs that satisfy no constraint.
+// The algorithm proceeds in 3 phases, with the description of each phase
+// outlined below at the start of each phase.
 //
-// For stores that satisfy at least one constraint,
-// ac.satisfiedByReplica[kind][i] is filled with the storeIDs of replicas that
-// satisfy ac.constraints[i]. Each store should appear exactly once in the 2D
-// slice ac.satisfiedByReplica[kind].  Phase 2 below attempts to be optimal by
-// prioritizing under-satisfied constraints and assigning stores to those first.
-// A constraint may end up being over-satisfied
-// (len(ac.satisfiedByReplica[kind][i]) > ac.constraints[i].numReplicas) in
-// phase 3. A constraint may remain under-satisfied. If a store is
-// under-satisfied in phase 2, it cannot be corrected in phase 3 and will
-// continue to be under-satisfied. (TODO: Is this right during review)
+// NB: ac.initialize guarantees to assign exactly one constraint in
+// ac.satisfiedByReplica to each store that satisfies at least one constraint.
+// But constraints may remain under-satisfied. If a constraint remains
+// under-satisfied after phase 2, it cannot be corrected in phase 3 and remain
+// to be under-satisfied. This is not essential to correctness but just happens
+// to be true of the algorithm.
 //
-// NB: the given ac.constraints can represent either replica or voter
-// constraints, but we still populate both voter and non-voter indices
-// regardless because we need to know which constraints are satisfied by all
-// replicas to determine when promotions or demotions should occur.
-//
-// It has three phases: 1. For each replica (voter and non-voter), determine
-// which constraint indices in ac.constraints its store satisfies. We record
-// these matches in buf.replicaConstraintIndices by iterating over all replicas,
-// all constraint conjunctions, and checking store satisfaction for each using
-// constraintMatcher.storeMatches.
-//
-// buf.replicaConstraintIndices[kind][i] will be populated with the constraint
-// indices that the i+1-th voter/non-voter satisfies. This serves as a scratch
-// space. Note that as we assign constraint to stores that satisfy it, we will
-// be clearing the constraint indices for that store in
-// buf.replicaConstraintIndices[kind][i] to indicate that we cannot reuse the
-// store to satisfy a different constraint.
-//
-// During this phase, it also populates ac.satisfiedByReplica[kind][i] for
-// stores that satisfy exactly one constraint and populates
-// ac.satisfiedNoConstraintReplica[kind][i] for stores that satisfy no
-// constraint. Since we will be assigning at least one constraint to each store,
-// these stores are unambiguous.
-//
-// 2. For each constraint, iterate over all replicas that satisfy it and assign
-// replicas to the constraint in a round-robin manner, skipping once the
-// constraint is satisfied. This phase does not allow over-satisfaction.
 // TODO(wenyihu6): Add an example for phase 2 - if s1 satisfies c1(num=1) and s2
 // satisfies both c1(num=1) and c2(num=1), we should prefer assigning s2 to c2
-// rather than consuming it again for c1. TODO(wenyihu6): Verify behavior in
-// cases like: s1 satisfies c1(num=1) and c2(num=1), s2 satisfies only c1, and
-// s1 is used for c1 and c2 cannot be satisfied although we could have.
+// rather than consuming it again for c1.
 //
-// 3. For any remaining stores that satisfy multiple constraints, assign each to
-// the first constraint it satisfies. This phase allows over-satisfaction, and
-// some constraints may still end up under- or over-filled.
-
-// TODO(wenyihu6): document the lifecycle of scratch space
-// replicaConstraintIndices once understood. TODO(wenyihu6): add more tests +
-// examples here
+// NB: Note that buf.replicaConstraintIndices serves as a scratch space to
+// reduce memory allocation and is expected to be empty at the start of every
+// analyzedConstraints.initialize call and cleared at the end of the call. For
+// every store that satisfies a constraint, we will be clearing the constraint
+// indices for that store in buf.replicaConstraintIndices[kind][i] once we have
+// assigned it to a constraint in ac.satisfiedByReplica[kind][i]. Since we
+// guarantee that each store that satisfies a constraint is assigned to exactly
+// one constraint, buf.replicaConstraintIndices will be an empty 2D slice as
+// part of the algorithm. In addition, clearing the constraint indices for that
+// store in buf.replicaConstraintIndices is also important to help us indicates
+// that the store cannot be reused to satisfy a different constraint.
+//
+// TODO(wenyihu6): add more tests + examples here
 func (ac *analyzedConstraints) initialize(
 	constraints []internedConstraintsConjunction,
 	buf *analyzeConstraintsBuf,
@@ -918,6 +912,16 @@ func (ac *analyzedConstraints) initialize(
 		ac.satisfiedByReplica[voterIndex] = extend2DSlice(ac.satisfiedByReplica[voterIndex])
 		ac.satisfiedByReplica[nonVoterIndex] = extend2DSlice(ac.satisfiedByReplica[nonVoterIndex])
 	}
+	// In phase 1, for each replica (voter and non-voter), determine which
+	// constraint indices in ac.constraints its store satisfies. We record these
+	// matches in buf.replicaConstraintIndices by iterating over all replicas,
+	// all constraint conjunctions, and checking store satisfaction for each
+	// using constraintMatcher.storeMatches. In addition, it also populates
+	// ac.satisfiedNoConstraintReplica[kind][i] for stores that satisfy no
+	// constraint and ac.satisfiedByReplica[kind][i] for stores that satisfy
+	// exactly one constraint. Since we will be assigning at least one
+	// constraint to each store, these stores are unambiguous.
+	//
 	// Compute the list of all constraints satisfied by each store.
 	for kind := voterIndex; kind < numReplicaKinds; kind++ {
 		for i, store := range buf.replicas[kind] {
@@ -952,6 +956,12 @@ func (ac *analyzedConstraints) initialize(
 			len(ac.satisfiedByReplica[nonVoterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
 	}
 
+	// In phase 2, for each under-satisfied constraint, iterate through all replicas
+	// and assign them to the first store that meets the constraint. Continue until
+	// the constraint becomes satisfied, then move on to the next one. Skip further
+	// matching once a constraint is fulfilled. Note that this phase does not allow
+	// over-satisfaction.
+	//
 	// The only stores not yet in ac are the ones that satisfy multiple
 	// constraints. For each store, the constraint indices it satisfies are in
 	// increasing order. Satisfy constraints in order, while not
@@ -975,11 +985,6 @@ func (ac *analyzedConstraints) initialize(
 					}
 				}
 
-				// NB: We check the `satisfied` flag directly instead of calling
-				// `isConstraintSatisfied` again, since this value should be set
-				// in the previous loop correctly when the constraint becomes
-				// satisfied.
-				//
 				// Check if constraint is now satisfied to avoid
 				// over-satisfaction.
 				if satisfied {
@@ -992,6 +997,12 @@ func (ac *analyzedConstraints) initialize(
 			}
 		}
 	}
+	// In phase 3, for each remaining store that satisfies >1 constraints,
+	// assign each to the first constraint it satisfies. This phase allows
+	// over-satisfaction
+	// (len(ac.satisfiedByReplica[voterIndex][i]+len(ac.satisfiedByReplica[nonVoterIndex][i]))
+	// > ac.constraints[i].numReplicas).
+	//
 	// Nothing over-satisfied. Go and greedily assign.
 	for kind := voterIndex; kind < numReplicaKinds; kind++ {
 		for i := range buf.replicaConstraintIndices[kind] {
@@ -1036,20 +1047,16 @@ func diversityOfTwoStoreSets(
 	return sumScore, numSamples
 }
 
-// diversityScore returns the voter and replica diversity scores of the given replicas sets.
-//
-// voterDiversityScore: sum of diversity scores over all pairs from V×V(voter-voter pairs).
-// replicaDiversityScore: sum of diversity scores over all pairs from:
-// V×V(voter–voter pairs), N×N(non-voter–non-voter pairs), V×N(voter–non-voter
-// pairs).
-//
-// diversity score of a single pair is computed using
-// localityTiers.diversityScore which finds the longest common prefix of two
-// localities.
+// diversityScore measures how geographically spread out replicas are across the
+// cluster. Higher scores indicate better fault tolerance because replicas are
+// placed further apart in the locality hierarchy. Returns voterDiversityScore
+// and replicaDiversityScore which are the average pairwise distance across all
+// voter-voter pairs and replica pairs respectively.
 func diversityScore(
 	replicas [numReplicaKinds][]storeAndLocality,
 ) (voterDiversityScore, replicaDiversityScore float64) {
-	// Helper to calculate average, or a max-value if no samples (represents lowest possible diversity)
+	// Helper to calculate average, or a max-value if no samples (represents
+	// lowest possible diversity).
 	scoreFromSumAndSamples := func(sumScore float64, numSamples int) float64 {
 		if numSamples == 0 {
 			return roachpb.MaxDiversityScore
@@ -1071,9 +1078,10 @@ func diversityScore(
 	return scoreFromSumAndSamples(voterSum, voterSamples), scoreFromSumAndSamples(totalSum, totalSamples)
 }
 
-// finishInit analyzes the span config and the range’s current replica set. It
-// prepares the MMA to compute lease-transfer and rebalancing candidates while
-// satisfying both constraint requirements and leaseholder preferences.
+// finishInit completes initialization for the rangeAnalyzedConstraints, It
+// initializes the constraints and voterConstraints, determines the leaseholder
+// preference index for all voter replicas, builds locality tier information,
+// and computes diversity scores.
 func (rac *rangeAnalyzedConstraints) finishInit(
 	spanConfig *normalizedSpanConfig,
 	constraintMatcher storeMatchesConstraintInterface,
@@ -1479,6 +1487,9 @@ type analyzeConstraintsBuf struct {
 	// constraints. We still populate both voter and non-voter indexes because
 	// we need to know which constraints are satisfied by all replicas to
 	// determine when promotions or demotions should occur.
+	//
+	// NB: expected to be empty at the start of every
+	// analyzedConstraints.initialize call.
 	replicaConstraintIndices [numReplicaKinds][][]int32
 }
 
