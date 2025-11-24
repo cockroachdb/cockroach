@@ -103,7 +103,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │         │    └── PUBLIC → ABSENT        TableSchemaLocked:{DescID: 104 (t)}
  │         └── 42 Mutation operations
  │              ├── CreateSequenceDescriptor {"SequenceID":105}
- │              ├── SetSequenceOptions {"Key":"START","SequenceID":105,"Value":"32"}
+ │              ├── SetSequenceOption {"Key":"START","SequenceID":105,"Value":"32"}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":101}}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":105}}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":105}}
