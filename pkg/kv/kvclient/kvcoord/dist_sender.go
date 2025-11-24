@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crstrings"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -72,35 +73,43 @@ var (
 	}
 	metaDistSenderCrossRegionBatchRequestBytes = metric.Metadata{
 		Name: "distsender.batch_requests.cross_region.bytes",
-		Help: `Total byte count of replica-addressed batch requests processed cross
-		region when region tiers are configured`,
+		Help: crstrings.UnwrapText(`
+			Total byte count of replica-addressed batch requests processed cross
+			region when region tiers are configured
+		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaDistSenderCrossRegionBatchResponseBytes = metric.Metadata{
 		Name: "distsender.batch_responses.cross_region.bytes",
-		Help: `Total byte count of replica-addressed batch responses received cross
-		region when region tiers are configured`,
+		Help: crstrings.UnwrapText(`
+			Total byte count of replica-addressed batch responses received cross
+			region when region tiers are configured
+		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaDistSenderCrossZoneBatchRequestBytes = metric.Metadata{
 		Name: "distsender.batch_requests.cross_zone.bytes",
-		Help: `Total byte count of replica-addressed batch requests processed cross
-		zone within the same region when zone tiers are configured. If region tiers
-		are not set, it is assumed to be within the same region. To ensure accurate
-		monitoring of cross-zone data transfer, region and zone tiers should be
-		consistently configured across all nodes.`,
+		Help: crstrings.UnwrapText(`
+			Total byte count of replica-addressed batch requests processed cross zone
+			within the same region when zone tiers are configured. If region tiers are
+			not set, it is assumed to be within the same region. To ensure accurate
+			monitoring of cross-zone data transfer, region and zone tiers should be
+			consistently configured across all nodes.
+		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaDistSenderCrossZoneBatchResponseBytes = metric.Metadata{
 		Name: "distsender.batch_responses.cross_zone.bytes",
-		Help: `Total byte count of replica-addressed batch responses received cross
-		zone within the same region when zone tiers are configured. If region tiers
-		are not set, it is assumed to be within the same region. To ensure accurate
-		monitoring of cross-zone data transfer, region and zone tiers should be
-		consistently configured across all nodes.`,
+		Help: crstrings.UnwrapText(`
+			Total byte count of replica-addressed batch responses received cross zone
+			within the same region when zone tiers are configured. If region tiers are
+			not set, it is assumed to be within the same region. To ensure accurate
+			monitoring of cross-zone data transfer, region and zone tiers should be
+			consistently configured across all nodes.
+		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
@@ -147,7 +156,14 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Essential:   true,
 		Category:    metric.Metadata_DISTRIBUTED,
-		HowToUse:    `RPC errors do not necessarily indicate a problem. This metric tracks remote procedure calls that return a status value other than "success". A non-success status of an RPC should not be misconstrued as a network transport issue. It is database code logic executed on another cluster node. The non-success status is a result of an orderly execution of an RPC that reports a specific logical condition.`,
+		HowToUse: crstrings.UnwrapText(`
+			RPC errors do not necessarily indicate a problem. This metric tracks
+			remote procedure calls that return a status value other than "success". A
+			non-success status of an RPC should not be misconstrued as a network
+			transport issue. It is database code logic executed on another cluster
+			node. The non-success status is a result of an orderly execution of an RPC
+			that reports a specific logical condition.
+		`),
 	}
 	metaDistSenderNotLeaseHolderErrCount = metric.Metadata{
 		Name:        "distsender.errors.notleaseholder",
@@ -156,7 +172,12 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Essential:   true,
 		Category:    metric.Metadata_DISTRIBUTED,
-		HowToUse:    `Errors of this type are normal during elastic cluster topology changes when leaseholders are actively rebalancing. They are automatically retried. However they may create occasional response time spikes. In that case, this metric may provide the explanation of the cause.`,
+		HowToUse: crstrings.UnwrapText(`
+			Errors of this type are normal during elastic cluster topology changes
+			when leaseholders are actively rebalancing. They are automatically
+			retried. However they may create occasional response time spikes. In that
+			case, this metric may provide the explanation of the cause.
+		`),
 	}
 	metaDistSenderInLeaseTransferBackoffsCount = metric.Metadata{
 		Name:        "distsender.errors.inleasetransferbackoffs",
@@ -172,46 +193,53 @@ var (
 	}
 	metaDistSenderSlowRPCs = metric.Metadata{
 		Name: "requests.slow.distsender",
-		Help: `Number of range-bound RPCs currently stuck or retrying for a long time.
+		Help: crstrings.UnwrapText(`
+			Number of range-bound RPCs currently stuck or retrying for a long time.
 
-Note that this is not a good signal for KV health. The remote side of the
-RPCs tracked here may experience contention, so an end user can easily
-cause values for this metric to be emitted by leaving a transaction open
-for a long time and contending with it using a second transaction.`,
+			Note that this is not a good signal for KV health. The remote side of the
+			RPCs tracked here may experience contention, so an end user can easily
+			cause values for this metric to be emitted by leaving a transaction open
+			for a long time and contending with it using a second transaction.
+		`),
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDistSenderSlowReplicaRPCs = metric.Metadata{
 		Name: "distsender.slow.replicarpcs",
-		Help: `Number of slow replica-bound RPCs.
+		Help: crstrings.UnwrapText(`
+			Number of slow replica-bound RPCs.
 
-Note that this is not a good signal for KV health. The remote side of the
-RPCs tracked here may experience contention, so an end user can easily
-cause values for this metric to be emitted by leaving a transaction open
-for a long time and contending with it using a second transaction.`,
+			Note that this is not a good signal for KV health. The remote side of the
+			RPCs tracked here may experience contention, so an end user can easily
+			cause values for this metric to be emitted by leaving a transaction open
+			for a long time and contending with it using a second transaction.
+		`),
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDistSenderMethodCountTmpl = metric.Metadata{
 		Name: "distsender.rpc.%s.sent",
-		Help: `Number of %s requests processed.
+		Help: crstrings.UnwrapText(`
+			Number of %s requests processed.
 
-This counts the requests in batches handed to DistSender, not the RPCs
-sent to individual Ranges as a result.`,
+			This counts the requests in batches handed to DistSender, not the RPCs
+			sent to individual Ranges as a result.
+		`),
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDistSenderErrCountTmpl = metric.Metadata{
-		Name: "distsender.rpc.err.%s",
-		Help: `Number of %s errors received replica-bound RPCs
-
-This counts how often error of the specified type was received back from replicas
-as part of executing possibly range-spanning requests. Failures to reach the target
-replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-errors as 'roachpb.InternalErrType'.
-`,
+		Name:        "distsender.rpc.err.%s",
+		Help:        "Number of %s errors received replica-bound RPCs.",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
+		HowToUse: crstrings.UnwrapText(`
+			This counts how often an error of the specified type was received back
+			from replicas as part of executing possibly range-spanning requests.
+			Failures to reach the target replica will be accounted for as
+			'roachpb.CommunicationErrType' and unclassified errors as
+			'roachpb.InternalErrType'.
+		`),
 	}
 	metaDistSenderProxySentCount = metric.Metadata{
 		Name:        "distsender.rpc.proxy.sent",
@@ -239,19 +267,15 @@ errors as 'roachpb.InternalErrType'.
 	}
 	metaDistSenderRangefeedTotalRanges = metric.Metadata{
 		Name: "distsender.rangefeed.total_ranges",
-		Help: `Number of ranges executing rangefeed
-
-This counts the number of ranges with an active rangefeed.
-`,
+		Help: crstrings.UnwrapText(`
+			Number of ranges with an active rangefeed.
+		`),
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDistSenderRangefeedCatchupRanges = metric.Metadata{
-		Name: "distsender.rangefeed.catchup_ranges",
-		Help: `Number of ranges in catchup mode
-
-This counts the number of ranges with an active rangefeed that are performing catchup scan.
-`,
+		Name:        "distsender.rangefeed.catchup_ranges",
+		Help:        "Number of ranges with an active rangefeed that are performing a catchup scan.",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}

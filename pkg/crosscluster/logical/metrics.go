@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/crlib/crstrings"
 )
 
 var (
@@ -42,9 +43,11 @@ var (
 	}
 	metaCommitToCommitLatency = metric.Metadata{
 		Name: "logical_replication.commit_latency",
-		Help: "Event commit latency: a difference between event MVCC timestamp " +
-			"and the time it was flushed into disk. If we batch events, then the difference " +
-			"between the oldest event in the batch and flush is recorded",
+		Help: crstrings.UnwrapText(`
+			Event commit latency: a difference between event MVCC timestamp
+			and the time it was flushed into disk. If we batch events, then the difference
+			between the oldest event in the batch and flush is recorded
+		`),
 		Measurement: "Nanoseconds",
 		Essential:   true,
 		Category:    metric.Metadata_LOGICAL_DATA_REPLICATION,

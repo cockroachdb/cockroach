@@ -170,6 +170,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_apache_pulsar_client_go//pulsar",
         "@com_github_cockroachdb_changefeedpb//:go_default_library",
+        "@com_github_cockroachdb_crlib//crstrings",
         "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",

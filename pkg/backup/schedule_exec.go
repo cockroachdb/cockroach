@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crstrings"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -596,29 +597,35 @@ func init() {
 					ExecutorMetrics:    &m,
 					ExecutorPTSMetrics: &pm,
 					RpoMetric: metric.NewGauge(metric.Metadata{
-						Name:        "schedules.BACKUP.last-completed-time",
-						Help:        "The unix timestamp of the most recently completed backup by a schedule specified as maintaining this metric",
+						Name: "schedules.BACKUP.last-completed-time",
+						Help: crstrings.UnwrapText(`
+							The unix timestamp of the most recently completed backup by a
+							schedule specified as maintaining this metric
+						`),
 						Measurement: "Jobs",
 						Unit:        metric.Unit_TIMESTAMP_SEC,
 						Essential:   true,
 						Category:    metric.Metadata_SQL,
-						HowToUse: `Monitor this metric to ensure that backups are
-						meeting the recovery point objective (RPO). Each node
-						exports the time that it last completed a backup on behalf
-						of the schedule. If a node is restarted, it will report 0
-						until it completes a backup. If all nodes are restarted,
-						max() is 0 until a node completes a backup.
+						HowToUse: crstrings.UnwrapText(`
+							Monitor this metric to ensure that backups are meeting the
+							recovery point objective (RPO). Each node exports the time that it
+							last completed a backup on behalf of the schedule. If a node is
+							restarted, it will report 0 until it completes a backup. If all
+							nodes are restarted, max() is 0 until a node completes a backup.
 
-						To make use of this metric, first, from each node, take the maximum
-						over a rolling window equal to or greater than the backup frequency,
-						and then take the maximum of those values across nodes. For example
-						with a backup frequency of 60 minutes, monitor time() -
-						max_across_nodes(max_over_time(schedules_BACKUP_last_completed_time,
-						60min)).`,
+							To make use of this metric, first, from each node, take the
+							maximum over a rolling window equal to or greater than the backup
+							frequency, and then take the maximum of those values across nodes.
+							For example with a backup frequency of 60 minutes, monitor
+							time() - max_across_nodes(max_over_time(schedules_BACKUP_last_completed_time, 60min)).
+						`),
 					}),
 					RpoTenantMetric: metric.NewExportedGaugeVec(metric.Metadata{
-						Name:        "schedules.BACKUP.last-completed-time-by-virtual_cluster",
-						Help:        "The unix timestamp of the most recently completed host scheduled backup by virtual cluster specified as maintaining this metric",
+						Name: "schedules.BACKUP.last-completed-time-by-virtual_cluster",
+						Help: crstrings.UnwrapText(`
+							The unix timestamp of the most recently completed host scheduled
+							backup by virtual cluster specified as maintaining this metric
+						`),
 						Measurement: "Jobs",
 						Unit:        metric.Unit_TIMESTAMP_SEC,
 					}, []string{"tenant_id"}),

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crstrings"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/rcrowley/go-metrics"
 )
@@ -766,7 +767,14 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Essential:   true,
 		Category:    metric.Metadata_CHANGEFEEDS,
-		HowToUse:    `This metric tracks transient changefeed errors. Alert on "too many" errors, such as 50 retries in 15 minutes. For example, during a rolling upgrade this counter will increase because the changefeed jobs will restart following node restarts. There is an exponential backoff, up to 10 minutes. But if there is no rolling upgrade in process or other cluster maintenance, and the error rate is high, investigate the changefeed job.`,
+		HowToUse: crstrings.UnwrapText(`
+			This metric tracks transient changefeed errors. Alert on "too many"
+			errors, such as 50 retries in 15 minutes. For example, during a rolling
+			upgrade this counter will increase because the changefeed jobs will
+			restart following node restarts. There is an exponential backoff, up to 10
+			minutes. But if there is no rolling upgrade in process or other cluster
+			maintenance, and the error rate is high, investigate the changefeed job.
+		`),
 	}
 	metaChangefeedFailures = metric.Metadata{
 		Name:        "changefeed.failures",
@@ -775,7 +783,11 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Essential:   true,
 		Category:    metric.Metadata_CHANGEFEEDS,
-		HowToUse:    `This metric tracks the permanent changefeed job failures that the jobs system will not try to restart. Any increase in this counter should be investigated. An alert on this metric is recommended.`,
+		HowToUse: crstrings.UnwrapText(`
+			This metric tracks the permanent changefeed job failures that the jobs
+			system will not try to restart. Any increase in this counter should be
+			investigated. An alert on this metric is recommended.
+		`),
 	}
 
 	metaEventQueueTime = metric.Metadata{
@@ -856,7 +868,11 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Unit:        metric.Unit_COUNT,
 		Essential:   true,
 		Category:    metric.Metadata_CHANGEFEEDS,
-		HowToUse:    `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the rate of changes being streamed from the CockroachDB cluster.`,
+		HowToUse: crstrings.UnwrapText(`
+			This metric provides a useful context when assessing the state of
+			changefeeds. This metric characterizes the rate of changes being streamed
+			from the CockroachDB cluster.
+		`),
 	}
 	metaChangefeedEmittedBatchSizes := metric.Metadata{
 		Name:        "changefeed.emitted_batch_sizes",
@@ -866,9 +882,10 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 	}
 	metaChangefeedFilteredMessages := metric.Metadata{
 		Name: "changefeed.filtered_messages",
-		Help: "Messages filtered out by all feeds. " +
-			"This count does not include the number of messages that may be filtered " +
-			"due to the range constraints.",
+		Help: crstrings.UnwrapText(`
+			Messages filtered out by all feeds. This count does not include the number
+			of messages that may be filtered due to the range constraints.
+		`),
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -879,29 +896,36 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Unit:        metric.Unit_BYTES,
 		Essential:   true,
 		Category:    metric.Metadata_CHANGEFEEDS,
-		HowToUse:    `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the throughput bytes being streamed from the CockroachDB cluster.`,
+		HowToUse: crstrings.UnwrapText(`
+			This metric provides a useful context when assessing the state of
+			changefeeds. This metric characterizes the throughput bytes being streamed
+			from the CockroachDB cluster.
+		`),
 	}
 	metaChangefeedFlushedBytes := metric.Metadata{
-		Name:        "changefeed.flushed_bytes",
-		Help:        "Bytes emitted by all feeds; maybe different from changefeed.emitted_bytes when compression is enabled",
+		Name: "changefeed.flushed_bytes",
+		Help: crstrings.UnwrapText(`
+			Bytes emitted by all feeds; maybe different from changefeed.emitted_bytes
+			when compression is enabled
+		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaChangefeedFlushes := metric.Metadata{
 		Name:        "changefeed.flushes",
-		Help:        "Total flushes across all feeds",
+		Help:        "Total flushes across all feeds.",
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaSizeBasedFlushes := metric.Metadata{
 		Name:        "changefeed.size_based_flushes",
-		Help:        "Total size based flushes across all feeds",
+		Help:        "Total size based flushes across all feeds.",
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaChangefeedBatchHistNanos := metric.Metadata{
 		Name:        "changefeed.sink_batch_hist_nanos",
-		Help:        "Time spent batched in the sink buffer before being flushed and acknowledged",
+		Help:        "Time spent batched in the sink buffer before being flushed and acknowledged.",
 		Measurement: "Changefeeds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -913,23 +937,31 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 	}
 	metaCommitLatency := metric.Metadata{
 		Name: "changefeed.commit_latency",
-		Help: "Event commit latency: a difference between event MVCC timestamp " +
-			"and the time it was acknowledged by the downstream sink.  If the sink batches events, " +
-			" then the difference between the oldest event in the batch and acknowledgement is recorded; " +
-			"Excludes latency during backfill",
+		Help: crstrings.UnwrapText(`
+			Event commit latency: a difference between event MVCC timestamp and the
+			time it was acknowledged by the downstream sink. If the sink batches
+			events, then the difference between the oldest event in the batch and
+			acknowledgement is recorded. Excludes latency during backfill.
+		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 		Essential:   true,
 		Category:    metric.Metadata_CHANGEFEEDS,
-		HowToUse:    `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the end-to-end lag between a committed change and that change applied at the destination.`,
+		HowToUse: crstrings.UnwrapText(`
+			This metric provides a useful context when assessing the state of
+			changefeeds. This metric characterizes the end-to-end lag between a
+			committed change and that change applied at the destination.
+		`),
 	}
 	metaAdmitLatency := metric.Metadata{
 		Name: "changefeed.admit_latency",
-		Help: "Event admission latency: a difference between event MVCC timestamp " +
-			"and the time it was admitted into changefeed pipeline; " +
-			"Note: this metric includes the time spent waiting until event can be processed due " +
-			"to backpressure or time spent resolving schema descriptors. " +
-			"Also note, this metric excludes latency during backfill",
+		Help: crstrings.UnwrapText(`
+			Event admission latency: a difference between event MVCC timestamp
+			and the time it was admitted into changefeed pipeline;
+			Note: this metric includes the time spent waiting until event can be processed due
+			to backpressure or time spent resolving schema descriptors.
+			Also note, this metric excludes latency during backfill
+		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -968,39 +1000,43 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 	}
 	metaInternalRetryMessageCount := metric.Metadata{
 		Name:        "changefeed.internal_retry_message_count",
-		Help:        "Number of messages for which an attempt to retry them within an aggregator node was made",
+		Help:        "Number of messages for which an attempt to retry them within an aggregator node was made.",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaSchemaRegistryRetriesCount := metric.Metadata{
 		Name:        "changefeed.schema_registry.retry_count",
-		Help:        "Number of retries encountered when sending requests to the schema registry",
+		Help:        "Number of retries encountered when sending requests to the schema registry.",
 		Measurement: "Retries",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaSchemaRegistryRegistrations := metric.Metadata{
 		Name:        "changefeed.schema_registry.registrations",
-		Help:        "Number of registration attempts with the schema registry",
+		Help:        "Number of registration attempts with the schema registry.",
 		Measurement: "Registrations",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaChangefeedParallelIOQueueNanos := metric.Metadata{
 		Name: "changefeed.parallel_io_queue_nanos",
-		Help: "Time that outgoing requests to the sink spend waiting in a queue due to" +
-			" in-flight requests with conflicting keys",
+		Help: crstrings.UnwrapText(`
+			Time that outgoing requests to the sink spend waiting in a queue due to
+			in-flight requests with conflicting keys.
+		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaChangefeedParallelIOPendingRows := metric.Metadata{
 		Name:        "changefeed.parallel_io_pending_rows",
-		Help:        "Number of rows which are blocked from being sent due to conflicting in-flight keys",
+		Help:        "Number of rows which are blocked from being sent due to conflicting in-flight keys.",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaChangefeedParallelIOResultQueueNanos := metric.Metadata{
 		Name: "changefeed.parallel_io_result_queue_nanos",
-		Help: "Time that incoming results from the sink spend waiting in parallel io emitter" +
-			" before they are acknowledged by the changefeed",
+		Help: crstrings.UnwrapText(`
+			Time that incoming results from the sink spend waiting in parallel io emitter
+			before they are acknowledged by the changefeed
+		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -1024,9 +1060,11 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 	}
 	metaChangefeedSinkBackpressureNanos := metric.Metadata{
 		Name: "changefeed.sink_backpressure_nanos",
-		Help: "Time spent waiting for quota when emitting to the sink (back-pressure). " +
-			"Only populated for sinks using the batching_sink wrapper. As of writing, " +
-			"this includes Kafka (v2), Pub/Sub (v2), and Webhook (v2).",
+		Help: crstrings.UnwrapText(`
+			Time spent waiting for quota when emitting to the sink (back-pressure).
+			Only populated for sinks using the batching_sink wrapper. As of writing,
+			this includes Kafka (v2), Pub/Sub (v2), and Webhook (v2).
+		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}

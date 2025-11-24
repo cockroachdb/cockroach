@@ -110,12 +110,16 @@ message Metadata {
   // - How to interpret anomalous values
   // - Where to follow up an investigation
   // - Related cluster settings or other metrics
-  // This field is required if `essential` is true. It is NOT exported
-  // to the Prometheus scrape endpoint, so it can be significantly
-  // longer than the help text and may contain multiple paragraphs.
-  // Paragraphs should wrap at 100 chars, same as code. Currently this
-  // field is only output to metrics.yaml for documentation purposes,
-  // with plans for future use in automated dashboard generation.
+  //
+  // This field is required if `essential` is true. It is NOT exported to the
+  // Prometheus scrape endpoint, so it can be significantly longer than the help
+  // text and may contain multiple paragraphs. Each paragraph should be a single
+  // line, and paragraphs should be separated by a blank line. The text cannot
+  // contain tabs or have leading/trailing newlines. See crstrings.UnwrapText()
+  // which can be used for definitions.
+  //
+  // Currently this field is only output to metrics.yaml for documentation
+  // purposes, with plans for future use in automated dashboard generation.
   required string how_to_use = 12 [(gogoproto.nullable) = false];
 
   // Next ID: 10 (then 13).

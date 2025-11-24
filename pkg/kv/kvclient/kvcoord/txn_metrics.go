@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/crlib/crstrings"
 )
 
 // TxnMetrics holds all metrics relating to KV transactions.
@@ -230,7 +231,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
-		HowToUse:    "This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.",
+		HowToUse: crstrings.UnwrapText(`
+			This metric is one measure of the impact of contention conflicts on
+			workload performance. For guidance on contention conflicts, review
+			transaction contention best practices and performance tuning recipes. Tens
+			of restarts per minute may be a high value, a signal of an elevated degree
+			of contention in the workload, which should be investigated.
+		`),
 	}
 	metaRestartsSerializable = metric.Metadata{
 		Name:        "txn.restarts.serializable",
@@ -239,7 +246,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
-		HowToUse:    "This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.",
+		HowToUse: crstrings.UnwrapText(`
+			This metric is one measure of the impact of contention conflicts on
+			workload performance. For guidance on contention conflicts, review
+			transaction contention best practices and performance tuning recipes. Tens
+			of restarts per minute may be a high value, a signal of an elevated degree
+			of contention in the workload, which should be investigated.
+		`),
 	}
 	metaRestartsAsyncWriteFailure = metric.Metadata{
 		Name:        "txn.restarts.asyncwritefailure",
@@ -272,7 +285,12 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
-		HowToUse:    "The errors tracked by this metric are generally due to deadlocks. Deadlocks can often be prevented with a considered transaction design. Identify the conflicting transactions involved in the deadlocks, then, if possible, redesign the business logic implementation prone to deadlocks.",
+		HowToUse: crstrings.UnwrapText(`
+			The errors tracked by this metric are generally due to deadlocks.
+			Deadlocks can often be prevented with a considered transaction design.
+			Identify the conflicting transactions involved in the deadlocks, then, if
+			possible, redesign the business logic implementation prone to deadlocks.
+		`),
 	}
 	// TransactionPushErrors at this level are unusual. They are
 	// normally handled at the Store level with the txnwait and
@@ -287,7 +305,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
-		HowToUse:    "This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.",
+		HowToUse: crstrings.UnwrapText(`
+			This metric is one measure of the impact of contention conflicts on
+			workload performance. For guidance on contention conflicts, review
+			transaction contention best practices and performance tuning recipes. Tens
+			of restarts per minute may be a high value, a signal of an elevated degree
+			of contention in the workload, which should be investigated.
+		`),
 	}
 	metaRestartsUnknown = metric.Metadata{
 		Name:        "txn.restarts.unknown",
@@ -296,7 +320,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Essential:   true,
 		Category:    metric.Metadata_SQL,
-		HowToUse:    "This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.",
+		HowToUse: crstrings.UnwrapText(`
+			This metric is one measure of the impact of contention conflicts on
+			workload performance. For guidance on contention conflicts, review
+			transaction contention best practices and performance tuning recipes. Tens
+			of restarts per minute may be a high value, a signal of an elevated degree
+			of contention in the workload, which should be investigated.
+		`),
 	}
 	metaRollbacksFailed = metric.Metadata{
 		Name:        "txn.rollbacks.failed",

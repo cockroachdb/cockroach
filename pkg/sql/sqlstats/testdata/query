@@ -1,0 +1,38 @@
+exec-sql db=random_db
+CREATE TABLE users (id INT PRIMARY KEY, name STRING);
+INSERT INTO users VALUES (1, 'Alice'), (2, 'Bob');
+SELECT * FROM users;
+----
+
+# Sanity check shouldn't return anything
+show-stats app-name=random db=random_db
+----
+
+show-stats db=random_db
+----
+{"count": "1", "fingerprint_id": "269c5d2c33dec958", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "INSERT INTO users VALUES (_, __more__), (__more__)", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "INSERT INTO users", "svc_lat_not_zero": true, "transaction_fingerprint_id": "205354584637cfcb"}
+{"count": "1", "fingerprint_id": "2cdc86177e8b242b", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SET database = random_db", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SET database = random_db", "svc_lat_not_zero": true, "transaction_fingerprint_id": "83bf3b5bf88a93f4"}
+{"count": "1", "fingerprint_id": "e6733d9c37147d22", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": true, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT * FROM users", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT * FROM users", "svc_lat_not_zero": true, "transaction_fingerprint_id": "205354584637cfcb"}
+{"count": "1", "fingerprint_id": "ec1bc23e5d2925f6", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "CREATE TABLE users (id INT8 PRIMARY KEY, name STRING)", "run_lat_not_zero": true, "sql_type": "TypeDDL", "summary": "CREATE TABLE users (id INT8 PRIMARY KEY, name STRING)", "svc_lat_not_zero": true, "transaction_fingerprint_id": "205354584637cfcb"}
+
+exec-sql db=random_db app-name=transactions
+BEGIN;
+INSERT INTO users VALUES (3, 'Charlie');
+INSERT INTO users VALUES (4, 'Diana');
+COMMIT;
+----
+
+exec-sql db=random_db app-name=transactions
+BEGIN;
+INSERT INTO users VALUES (5, 'Eve');
+INSERT INTO users VALUES (6, 'Frank');
+COMMIT;
+----
+
+show-stats db=random_db app-name=transactions
+----
+{"count": "4", "fingerprint_id": "5fe99858726d3688", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "INSERT INTO users VALUES (_, __more__)", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "INSERT INTO users", "svc_lat_not_zero": true, "transaction_fingerprint_id": "78d7c1c32632f05d"}
+
+show-txn-stats db=random_db app-name=transactions
+----
+{"commit_lat_not_zero": true, "statement_fingerprint_ids": ["5fe99858726d3688", "5fe99858726d3688"], "svc_lat_not_zero": true, "txn_fingerprint_id": "78d7c1c32632f05d"}

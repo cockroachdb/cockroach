@@ -1455,10 +1455,12 @@ func (s *Server) serveImpl(
 			// If we can't read data because of any one of the following conditions,
 			// then we should break:
 			// 1. the connection was closed.
-			// 2. the context was canceled (e.g. during authentication).
-			// 3. we reached an arbitrary threshold of repeated errors.
+			// 2. a returned error maps to context.Canceled (e.g. during authentication).
+			// 3. the context was canceled or exceeded its deadline (checked directly).
+			// 4. we reached an arbitrary threshold of repeated errors.
 			if netutil.IsClosedConnection(err) ||
 				errors.Is(err, context.Canceled) ||
+				ctx.Err() != nil ||
 				repeatedErrorCount > int(maxRepeatedErrorCount.Get(&s.execCfg.Settings.SV)) {
 				break
 			}
