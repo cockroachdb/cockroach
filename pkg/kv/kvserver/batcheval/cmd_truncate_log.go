@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -66,21 +67,25 @@ func TruncateLog(
 	// existing entry's term?
 	// TODO(pav-kv): some day, make args.Index an inclusive compaction index, and
 	// eliminate the remaining +-1 arithmetics.
-	firstIndex := cArgs.EvalCtx.GetCompactedIndex() + 1
-	if firstIndex >= args.Index {
-		if log.V(3) {
-			log.KvExec.Infof(ctx, "attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
-				firstIndex, args.Index)
-		}
-		return result.Result{}, nil
-	}
 
-	// args.Index is the first index to keep.
-	term, err := cArgs.EvalCtx.GetTerm(args.Index - 1)
+	// Use the log engine to compute stats for the raft log.
+	// TODO(#136358): After we precisely maintain the Raft Log size, we could stop
+	// needing the Log Engine to compute the stats.
+	compactedIndex, term, logEngineReader, err := cArgs.EvalCtx.PrepareLogEngineTruncation(args.Index)
 	if err != nil {
-		return result.Result{}, errors.Wrap(err, "getting term")
+		if errors.Is(err, raft.ErrCompacted) {
+			// The log has already been truncated past this point - this is a no-op.
+			if log.V(3) {
+				log.KvExec.Infof(ctx, "attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
+					compactedIndex+1, args.Index)
+			}
+			return result.Result{}, nil
+		}
+		return result.Result{}, errors.Wrap(err, "preparing log truncation")
 	}
+	defer logEngineReader.Close()
 
+	firstIndex := compactedIndex + 1
 	// Compute the number of bytes freed by this truncation. Note that using
 	// firstIndex only make sense for the leaseholder as we base this off its
 	// own first index (other replicas may have other first indexes). In
@@ -92,33 +97,11 @@ func TruncateLog(
 	// flight TruncateLogRequests, and using the firstIndex will result in
 	// duplicate accounting. The ExpectedFirstIndex, populated for clusters at
 	// LooselyCoupledRaftLogTruncation, allows us to avoid this problem.
-	//
-	// We have an additional source of error not mitigated by
-	// ExpectedFirstIndex. There is nothing synchronizing firstIndex with the
-	// state visible in readWriter. The former uses the in-memory state or
-	// fetches directly from the Engine. The latter uses Engine state from some
-	// point in time which can fall anywhere in the time interval starting from
-	// when the readWriter was created up to where we create an MVCCIterator
-	// below.
-	// TODO(sumeer): we can eliminate this error as part of addressing
-	// https://github.com/cockroachdb/cockroach/issues/55461 and
-	// https://github.com/cockroachdb/cockroach/issues/70974 that discuss taking
-	// a consistent snapshot of some Replica state and the engine.
 	if args.ExpectedFirstIndex > firstIndex {
 		firstIndex = args.ExpectedFirstIndex
 	}
 	start := keys.RaftLogKey(rangeID, firstIndex)
 	end := keys.RaftLogKey(rangeID, args.Index)
-
-	// TODO(pav-kv): GetCompactedIndex, GetTerm, and NewReader calls can disagree
-	// on the state of the log since we don't hold any Replica locks here. Move
-	// the computation inside Replica where locking can be controlled precisely.
-	//
-	// Use the log engine to compute stats for the raft log.
-	// TODO(#136358): After we precisely maintain the Raft Log size, we could stop
-	// needing the Log Engine to compute the stats.
-	logReader := cArgs.EvalCtx.LogEngine().NewReader(storage.StandardDurability)
-	defer logReader.Close()
 
 	// Compute the stats delta that were to occur should the log entries be
 	// purged. We do this as a side effect of seeing a new TruncatedState,
@@ -128,7 +111,7 @@ func TruncateLog(
 	// are not tracked in the raft log delta. The delta will be adjusted below
 	// raft.
 	// We can pass zero as nowNanos because we're only interested in SysBytes.
-	ms, err := storage.ComputeStats(ctx, logReader, start, end, 0 /* nowNanos */)
+	ms, err := storage.ComputeStats(ctx, logEngineReader, start, end, 0 /* nowNanos */)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "while computing stats of Raft log freed by truncation")
 	}

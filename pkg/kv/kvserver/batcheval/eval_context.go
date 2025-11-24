@@ -60,11 +60,10 @@ type EvalContext interface {
 	GetNodeLocality() roachpb.Locality
 
 	IsFirstRange() bool
-	GetCompactedIndex() kvpb.RaftIndex
-	GetTerm(index kvpb.RaftIndex) (kvpb.RaftTerm, error)
 	GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex
-	// LogEngine returns the engine that stores the raft log.
-	LogEngine() storage.Engine
+	PrepareLogEngineTruncation(firstIndexToKeep kvpb.RaftIndex) (
+		kvpb.RaftIndex, kvpb.RaftTerm, storage.Reader, error,
+	)
 
 	Desc() *roachpb.RangeDescriptor
 	ContainsKey(key roachpb.Key) bool
@@ -228,13 +227,6 @@ func (m *mockEvalCtxImpl) GetConcurrencyManager() concurrency.Manager {
 	}
 }
 
-func (m *mockEvalCtxImpl) LogEngine() storage.Engine {
-	if m.MockEvalCtx.LogEngine != nil {
-		return m.MockEvalCtx.LogEngine
-	}
-	panic("LogEngine not configured")
-}
-
 func (m *mockEvalCtxImpl) NodeID() roachpb.NodeID {
 	return m.MockEvalCtx.NodeID
 }
@@ -250,12 +242,16 @@ func (m *mockEvalCtxImpl) GetRangeID() roachpb.RangeID {
 func (m *mockEvalCtxImpl) IsFirstRange() bool {
 	panic("unimplemented")
 }
-func (m *mockEvalCtxImpl) GetCompactedIndex() kvpb.RaftIndex {
-	return m.CompactedIndex
+func (m *mockEvalCtxImpl) PrepareLogEngineTruncation(
+	kvpb.RaftIndex,
+) (kvpb.RaftIndex, kvpb.RaftTerm, storage.Reader, error) {
+	if m.MockEvalCtx.LogEngine != nil {
+		return m.CompactedIndex, m.Term, m.MockEvalCtx.LogEngine.NewReader(
+			storage.StandardDurability), nil
+	}
+	panic("LogEngine not configured")
 }
-func (m *mockEvalCtxImpl) GetTerm(kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	return m.Term, nil
-}
+
 func (m *mockEvalCtxImpl) GetLeaseAppliedIndex() kvpb.LeaseAppliedIndex {
 	panic("unimplemented")
 }
