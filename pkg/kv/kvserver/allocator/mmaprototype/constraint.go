@@ -842,14 +842,6 @@ type storeMatchesConstraintInterface interface {
 	storeMatches(storeID roachpb.StoreID, constraintConj constraintsConj) bool
 }
 
-// isConstraintSatisfied checks if the given constraint index has been fully
-// satisfied by the stores currently assigned to it.
-// TODO(wenyihu6): voter constraint should only count voters here (#158109)
-func (ac *analyzedConstraints) isConstraintSatisfied(constraintIndex int) bool {
-	return len(ac.satisfiedByReplica[voterIndex][constraintIndex])+
-		len(ac.satisfiedByReplica[nonVoterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
-}
-
 // initialize analyzes the current replica set and determines which constraints
 // replicas satisfy, populating ac.constraints, ac.satisfiedByReplica and
 // ac.satisfiedNoConstraintReplica. They are later used by mma to compute
@@ -951,12 +943,21 @@ func (ac *analyzedConstraints) initialize(
 			// Else, satisfied multiple constraints. Don't choose yet.
 		}
 	}
+
+	// isConstraintSatisfied checks if the given constraint index has been fully
+	// satisfied by the stores currently assigned to it.
+	// TODO(wenyihu6): voter constraint should only count voters here (#158109)
+	isConstraintSatisfied := func(constraintIndex int) bool {
+		return len(ac.satisfiedByReplica[voterIndex][constraintIndex])+
+			len(ac.satisfiedByReplica[nonVoterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
+	}
+
 	// The only stores not yet in ac are the ones that satisfy multiple
 	// constraints. For each store, the constraint indices it satisfies are in
 	// increasing order. Satisfy constraints in order, while not
 	// oversatisfying.
 	for j := range ac.constraints {
-		satisfied := ac.isConstraintSatisfied(j)
+		satisfied := isConstraintSatisfied(j)
 		if satisfied {
 			continue
 		}
@@ -968,7 +969,7 @@ func (ac *analyzedConstraints) initialize(
 						ac.satisfiedByReplica[kind][j] =
 							append(ac.satisfiedByReplica[kind][j], buf.replicas[kind][i].StoreID)
 						buf.replicaConstraintIndices[kind][i] = constraintIndices[:0]
-						satisfied = ac.isConstraintSatisfied(j)
+						satisfied = isConstraintSatisfied(j)
 						// This store is finished.
 						break
 					}
