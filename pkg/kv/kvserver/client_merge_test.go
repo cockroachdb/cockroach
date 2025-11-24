@@ -360,7 +360,7 @@ func mergeWithData(t *testing.T, retries int64) {
 	// Verify no intents remains on range descriptor keys.
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(lhsDesc.StartKey), keys.RangeDescriptorKey(rhsDesc.StartKey)} {
 		if _, err := storage.MVCCGet(
-			ctx, store.TODOEngine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
+			ctx, store.StateEngine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -1365,7 +1365,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// merge below.
 
 	// Get the range stats for both ranges now that we have data.
-	snap := store.TODOEngine().NewSnapshot()
+	snap := store.StateEngine().NewSnapshot()
 	defer snap.Close()
 	msA, err := kvstorage.MakeStateLoader(lhsDesc.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -1383,7 +1383,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	replMerged := store.LookupReplica(lhsDesc.StartKey)
 
 	// Get the range stats for the merged range and verify.
-	snap = store.TODOEngine().NewSnapshot()
+	snap = store.StateEngine().NewSnapshot()
 	defer snap.Close()
 	msMerged, err := kvstorage.MakeStateLoader(replMerged.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -4043,8 +4043,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			})
 		defer tc.Stopper().Stop(ctx)
 		store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
-		sendingEng = store0.TODOEngine()
-		receivingEng = store2.TODOEngine()
+		sendingEng = store0.StateEngine()
+		receivingEng = store2.StateEngine()
 		distSender := tc.Servers[0].DistSenderI().(kv.Sender)
 
 		// This test works across 5 ranges in total. We start with a scratch
