@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -888,67 +887,4 @@ func newMVCCStats() *enginepb.MVCCStats {
 func releaseMVCCStats(ms *enginepb.MVCCStats) {
 	ms.Reset()
 	mvccStatsPool.Put(ms)
-}
-
-// overlapsUnreplicatedRangeIDLocalKeys checks if the provided span overlaps
-// with any unreplicated rangeID local keys.
-// Note that we could receive the span with a nil startKey, which has a special
-// meaning that the span represents: [endKey.Prev(), endKey).
-func overlapsUnreplicatedRangeIDLocalKeys(span spanset.TrickySpan) error {
-	fullRangeIDLocalSpans := roachpb.Span{
-		Key:    keys.LocalRangeIDPrefix.AsRawKey(),
-		EndKey: keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd(),
-	}
-
-	// If the provided span is completely outside the rangeID local spans for any
-	// rangeID, then there is no overlap with any rangeID local keys.
-	if !spanset.Overlaps(fullRangeIDLocalSpans, span) {
-		return nil
-	}
-
-	// At this point, we know that we overlap with fullRangeIDLocalSpans. If we
-	// are not completely within fullRangeIDLocalSpans, return an error as we
-	// make an assumption that spans should respect the local RangeID tree
-	// structure, and that spans that partially overlaps with
-	// fullRangeIDLocalSpans don't make logical sense.
-	if !spanset.Contains(fullRangeIDLocalSpans, span) {
-		return errors.Errorf("overlapping an unreplicated rangeID key")
-	}
-
-	// If the span in inside fullRangeIDLocalSpans, we expect that both start and
-	// end keys should be in the same rangeID.
-	rangeIDKey := span.Key
-	if rangeIDKey == nil {
-		rangeIDKey = span.EndKey
-	}
-	rangeID, err := keys.DecodeRangeIDPrefix(rangeIDKey)
-	if err != nil {
-		return errors.NewAssertionErrorWithWrappedErrf(err,
-			"could not decode range ID for span: %s", span)
-	}
-	if spanset.Overlaps(roachpb.Span{
-		Key:    keys.MakeRangeIDUnreplicatedPrefix(rangeID),
-		EndKey: keys.MakeRangeIDUnreplicatedPrefix(rangeID).PrefixEnd(),
-	}, span) {
-		return errors.Errorf("overlapping an unreplicated rangeID span")
-	}
-
-	return nil
-}
-
-// overlapsStoreLocalKeys returns an error if the provided span overlaps
-// with any store local keys.
-// Note that we could receive the span with a nil startKey, which has a special
-// meaning that the span represents: [endKey.Prev(), endKey).
-func overlapsStoreLocalKeys(span spanset.TrickySpan) error {
-	localStoreSpan := roachpb.Span{
-		Key:    keys.LocalStorePrefix,
-		EndKey: keys.LocalStoreMax,
-	}
-
-	if spanset.Overlaps(localStoreSpan, span) {
-		return errors.Errorf("overlaps with store local keys")
-	}
-
-	return nil
 }
