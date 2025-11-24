@@ -164,7 +164,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		//   to RocksDB will be asynchronous.
 		var kvs []roachpb.KeyValue
 		testutils.SucceedsSoon(t, func() error {
-			res, err := storage.MVCCScan(ctx, store.TODOEngine(), keys.MetaMin, keys.MetaMax,
+			res, err := storage.MVCCScan(ctx, store.StateEngine(), keys.MetaMin, keys.MetaMax,
 				hlc.MaxTimestamp, storage.MVCCScanOptions{})
 			if err != nil {
 				// Wait for the intent to be resolved.
