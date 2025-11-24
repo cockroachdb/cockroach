@@ -346,7 +346,7 @@ func TestClusterState(t *testing.T) {
 			ts := timeutil.NewManualTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 			cs := newClusterState(ts, newStringInterner())
 
-			printNodeListMeta := func() string {
+			printNodeListMeta := func(t *testing.T) string {
 				nodeList := []int{}
 				for nodeID := range cs.nodes {
 					nodeList = append(nodeList, int(nodeID))
@@ -355,12 +355,44 @@ func TestClusterState(t *testing.T) {
 				var buf strings.Builder
 				for _, nodeID := range nodeList {
 					ns := cs.nodes[roachpb.NodeID(nodeID)]
-					fmt.Fprintf(&buf, "node-id=%s locality-tiers=%s\n",
-						ns.NodeID, cs.stores[ns.stores[0]].StoreAttributesAndLocality.locality())
+					var nodeLine string
 					for _, storeID := range ns.stores {
 						ss := cs.stores[storeID]
-						fmt.Fprintf(&buf, "  store-id=%v attrs=%s locality-code=%s\n",
-							ss.StoreID, ss.StoreAttrs, ss.localityTiers.str)
+						sal := ss.storeAttributesAndLocalityWithNodeTier
+						loc := sal.NodeLocality
+
+						// Compute the "node" line for each store and print it again
+						// each time it changes. Usually it's printed only once per node,
+						// but if there are multiple stores with a different view of node
+						// attributes, it would print multiple times.
+						var nodeLineBuf strings.Builder
+						fmt.Fprintf(&nodeLineBuf, "node-id=%s locality-tiers=%s",
+							ns.NodeID, loc)
+						if len(sal.NodeAttrs.Attrs) > 0 {
+							fmt.Fprintf(&nodeLineBuf, " node-attrs=%s", strings.Join(sal.NodeAttrs.Attrs, ","))
+						}
+						fmt.Fprintln(&nodeLineBuf)
+
+						if nodeLine != nodeLineBuf.String() {
+							nodeLine = nodeLineBuf.String()
+							fmt.Fprint(&buf, nodeLine)
+						}
+
+						fmt.Fprintf(&buf, "  store-id=%v attrs=%s", ss.StoreID, ss.StoreAttrs)
+
+						storeTierVals := cs.localityTierInterner.unintern(ss.localityTiers)
+						{
+							// The interned locality tier values must match the uninterned original.
+							var expVals []string
+							for _, tier := range loc.Tiers {
+								expVals = append(expVals, tier.Value)
+							}
+							require.EqualValues(t, expVals, storeTierVals)
+						}
+						// Make sure that the constraintMatcher reflects the same attrs and
+						// locality as the store.
+						require.Equal(t, sal, cs.constraintMatcher.stores[ss.StoreID].sal)
+						fmt.Fprintln(&buf)
 					}
 				}
 				return buf.String()
@@ -431,12 +463,13 @@ func TestClusterState(t *testing.T) {
 				case "set-store":
 					for _, next := range strings.Split(d.Input, "\n") {
 						sal := parseStoreAttributedAndLocality(t, next)
-						cs.setStore(sal)
+						t.Logf("set-store: %v from %s", sal, next)
+						cs.setStore(sal.withNodeTier()) // see allocatorState.SetStore
 						// For convenience, in these tests, stores start out
 						// healthy.
 						cs.stores[sal.StoreID].status = Status{Health: HealthOK}
 					}
-					return printNodeListMeta()
+					return printNodeListMeta(t)
 
 				case "set-store-status":
 					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")

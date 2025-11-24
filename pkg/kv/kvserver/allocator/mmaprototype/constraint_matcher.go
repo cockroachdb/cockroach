@@ -39,7 +39,7 @@ type constraintMatcher struct {
 
 type matchedConstraints struct {
 	matched map[internedConstraint]struct{}
-	sal     StoreAttributesAndLocality
+	sal     storeAttributesAndLocalityWithNodeTier
 }
 
 type matchedSet struct {
@@ -56,7 +56,7 @@ func newConstraintMatcher(interner *stringInterner) *constraintMatcher {
 }
 
 // setStore is called for a new store, or when the attributes and locality changes.
-func (cm *constraintMatcher) setStore(sal StoreAttributesAndLocality) {
+func (cm *constraintMatcher) setStore(sal storeAttributesAndLocalityWithNodeTier) {
 	mc := cm.stores[sal.StoreID]
 	if mc == nil {
 		mc = &matchedConstraints{
@@ -95,7 +95,7 @@ func (cm *constraintMatcher) setStore(sal StoreAttributesAndLocality) {
 
 // storeMatchesConstraint is an internal helper method.
 func (cm *constraintMatcher) storeMatchesConstraint(
-	sal StoreAttributesAndLocality, c internedConstraint,
+	sal storeAttributesAndLocalityWithNodeTier, c internedConstraint,
 ) bool {
 	matches := false
 	if c.key == emptyStringCode {

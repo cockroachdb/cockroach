@@ -653,7 +653,7 @@ type pendingReplicaChange struct {
 type storeState struct {
 	status Status
 	storeLoad
-	StoreAttributesAndLocality
+	storeAttributesAndLocalityWithNodeTier
 	adjusted struct {
 		// NB: these load values can become negative due to applying pending
 		// changes. We need to let them be negative to retain the ability to undo
@@ -2167,11 +2167,7 @@ func (cs *clusterState) undoChangeLoadDelta(change ReplicaChange) {
 
 // setStore updates the store attributes and locality in the cluster state. If
 // the store hasn't been seen before, it is also added to the cluster state.
-//
-// TODO: We currently assume that the locality and attributes associated with a
-// store/node are fixed. This is a reasonable assumption for the locality,
-// however it is not for the attributes.
-func (cs *clusterState) setStore(sal StoreAttributesAndLocality) {
+func (cs *clusterState) setStore(sal storeAttributesAndLocalityWithNodeTier) {
 	ns, ok := cs.nodes[sal.NodeID]
 	if !ok {
 		// This is the first time seeing the associated node.
@@ -2187,13 +2183,29 @@ func (cs *clusterState) setStore(sal StoreAttributesAndLocality) {
 		// replicas on it (nor will we try to shed any that are already reported to
 		// have replicas on it).
 		ss.status = MakeStatus(HealthUnknown, LeaseDispositionRefusing, ReplicaDispositionRefusing)
-		ss.localityTiers = cs.localityTierInterner.intern(sal.locality())
 		ss.overloadStartTime = cs.ts.Now()
 		ss.overloadEndTime = cs.ts.Now()
-		ss.StoreAttributesAndLocality = sal
-		cs.constraintMatcher.setStore(sal)
 		cs.stores[sal.StoreID] = ss
 		ns.stores = append(ns.stores, sal.StoreID)
+	}
+
+	// If the store is new or the locality/attributes changed, we need to update
+	// the locality and attributes.
+	loc := sal.NodeLocality
+	oldAttrs := cs.stores[sal.StoreID].storeAttributesAndLocalityWithNodeTier
+	locsChanged := cs.localityTierInterner.changed(cs.stores[sal.StoreID].localityTiers, loc)
+	attrsChanged := !slices.Equal(
+		oldAttrs.StoreAttrs.Attrs,
+		sal.StoreAttrs.Attrs,
+	) || !slices.Equal(
+		oldAttrs.NodeAttrs.Attrs,
+		sal.NodeAttrs.Attrs,
+	)
+
+	if !ok || attrsChanged || locsChanged {
+		cs.stores[sal.StoreID].localityTiers = cs.localityTierInterner.intern(loc)
+		cs.stores[sal.StoreID].storeAttributesAndLocalityWithNodeTier = sal
+		cs.constraintMatcher.setStore(sal)
 	}
 }
 
@@ -2501,12 +2513,19 @@ type StoreAttributesAndLocality struct {
 	StoreAttrs   roachpb.Attributes
 }
 
+// storeAttributesAndLocalityWithNodeTier is the mma-internal representation of
+// StoreAttributesAndLocality. It differs in that the Locality has an extra tier
+// `node=<node-id>`.
+type storeAttributesAndLocalityWithNodeTier StoreAttributesAndLocality
+
 // locality returns the locality of the Store, which is the Locality of the
 // node plus an extra tier for the node itself. Copied from
 // StoreDescriptor.Locality.
-func (saal StoreAttributesAndLocality) locality() roachpb.Locality {
-	return saal.NodeLocality.AddTier(
+func (saal StoreAttributesAndLocality) withNodeTier() storeAttributesAndLocalityWithNodeTier {
+	salwt := storeAttributesAndLocalityWithNodeTier(saal)
+	salwt.NodeLocality = saal.NodeLocality.AddTier(
 		roachpb.Tier{Key: "node", Value: saal.NodeID.String()})
+	return salwt
 }
 
 // Avoid unused lint errors.

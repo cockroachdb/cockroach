@@ -243,7 +243,7 @@ func (a *allocatorState) LoadSummaryForAllStores(ctx context.Context) string {
 func (a *allocatorState) SetStore(store StoreAttributesAndLocality) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.cs.setStore(store)
+	a.cs.setStore(store.withNodeTier())
 }
 
 // ProcessStoreLoadMsg implements the Allocator interface.

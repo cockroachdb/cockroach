@@ -3,9 +3,9 @@ set-store
   store-id=2 node-id=2 attrs=yellow locality-tiers=region=us-east-1,zone=us-east-1a
 ----
 node-id=1 locality-tiers=region=us-west-1,zone=us-west-1a,node=1
-  store-id=1 attrs=purple locality-code=1:2:3:
+  store-id=1 attrs=purple
 node-id=2 locality-tiers=region=us-east-1,zone=us-east-1a,node=2
-  store-id=2 attrs=yellow locality-code=4:5:6:
+  store-id=2 attrs=yellow
 
 store-load-msg
   store-id=2 node-id=2 load=[20,80,80] capacity=[100,100,100] secondary-load=0 load-time=0s

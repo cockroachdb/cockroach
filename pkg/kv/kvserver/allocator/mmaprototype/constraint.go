@@ -1514,6 +1514,13 @@ func newStringInterner() *stringInterner {
 	return si
 }
 
+// lookup is like toCode, but is a pure lookup that won't intern the string.
+// Unless it's already interned, returns (0, false), otherwise (*, true).
+func (si *stringInterner) lookup(s string) (stringCode, bool) {
+	code, ok := si.stringToCode[s]
+	return code, ok
+}
+
 func (si *stringInterner) toCode(s string) stringCode {
 	code, ok := si.stringToCode[s]
 	if !ok {
@@ -1569,6 +1576,19 @@ func newLocalityTierInterner(interner *stringInterner) *localityTierInterner {
 	return &localityTierInterner{si: interner}
 }
 
+func (lti *localityTierInterner) changed(existing localityTiers, current roachpb.Locality) bool {
+	if len(existing.tiers) != len(current.Tiers) {
+		return true
+	}
+
+	for i, tier := range current.Tiers {
+		if code, ok := lti.si.lookup(tier.Value); !ok || code != existing.tiers[i] {
+			return true
+		}
+	}
+	return false
+}
+
 // intern is called occasionally, when we have a new store, or the locality of
 // a store changes.
 func (lti *localityTierInterner) intern(locality roachpb.Locality) localityTiers {
@@ -1583,12 +1603,25 @@ func (lti *localityTierInterner) intern(locality roachpb.Locality) localityTiers
 	return lt
 }
 
-func (lti *localityTierInterner) unintern(lt localityTiers) roachpb.Locality {
-	var locality roachpb.Locality
-	for _, t := range lt.tiers {
-		locality.Tiers = append(locality.Tiers, roachpb.Tier{Value: lti.si.toString(t)})
+type localityValues []string
+
+// String formats like =val1,=val2,=val3 or an empty string if the slice
+// contains no elements.
+func (sl localityValues) String() string {
+	if len(sl) == 0 {
+		return ""
 	}
-	return locality
+	return "=" + strings.Join(sl, ",=")
+}
+
+// NB: because the tier keys aren't interned, we return a slice of strings
+// (locality values) only instead of a half-populated roachpb.Locality.
+func (lti *localityTierInterner) unintern(lt localityTiers) localityValues {
+	sl := make([]string, 0, len(lt.tiers))
+	for _, t := range lt.tiers {
+		sl = append(sl, lti.si.toString(t))
+	}
+	return sl
 }
 
 // localityTiers encodes a locality value hierarchy, represented by codes

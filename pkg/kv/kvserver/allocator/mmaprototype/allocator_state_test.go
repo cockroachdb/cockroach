@@ -38,7 +38,7 @@ func TestDiversityScoringMemo(t *testing.T) {
 			printReplicaLocalities := func(b *strings.Builder, rls *existingReplicaLocalities) {
 				b.WriteString("replicas:\n")
 				for _, rl := range rls.replicasLocalityTiers.replicas {
-					fmt.Fprintf(b, "  %s\n", ltInterner.unintern(rl).String())
+					fmt.Fprintf(b, "  %v\n", ltInterner.unintern(rl))
 				}
 				b.WriteString("score-sums:\n")
 				var keys []string
@@ -63,7 +63,7 @@ func TestDiversityScoringMemo(t *testing.T) {
 				locality := parseLocalityTiers(t, lts)
 				lt := ltInterner.intern(locality)
 				storeLocalities[storeID] = lt
-				return fmt.Sprintf("locality: %s str: %s", ltInterner.unintern(lt).String(), lt.str)
+				return fmt.Sprintf("locality: %s str: %v", ltInterner.unintern(lt), lt.str)
 
 			case "existing-replica-localities":
 				storeTiers := scanStores()

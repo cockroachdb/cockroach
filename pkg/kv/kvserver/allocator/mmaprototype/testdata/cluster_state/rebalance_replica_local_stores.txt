@@ -23,14 +23,14 @@
 # 7. Rebalances back from s2 to s1 and verifies changes are GC'd after the
 #    normal GC duration.
 #
-# Two stores on the same node.
+# Two stores on the same node (thus necessarily same locality tiers).
 set-store
-  store-id=1 node-id=1 attrs=purple locality-tiers=region=us-west-1,zone=us-west-1a
-  store-id=2 node-id=1 attrs=yellow locality-tiers=region=us-east-1,zone=us-east-1a
+  store-id=1 node-id=1 attrs=purple locality-tiers=region=anywhere
+  store-id=2 node-id=1 attrs=yellow locality-tiers=region=anywhere
 ----
-node-id=1 locality-tiers=region=us-west-1,zone=us-west-1a,node=1
-  store-id=1 attrs=purple locality-code=1:2:3:
-  store-id=2 attrs=yellow locality-code=4:5:3:
+node-id=1 locality-tiers=region=anywhere,node=1
+  store-id=1 attrs=purple
+  store-id=2 attrs=yellow
 
 store-load-msg
   store-id=1 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=0 load-time=0s
