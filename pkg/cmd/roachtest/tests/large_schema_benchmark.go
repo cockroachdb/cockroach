@@ -151,10 +151,12 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 						conn := c.Conn(ctx, t.L(), 1)
 						defer conn.Close()
+						_, err := conn.Exec("select crdb_internal.set_vmodule('cmd_push_txn=5')")
+						require.NoError(t, err)
 						// Disable autocommit before DDL since we need to batch statements
 						// in a single transaction for them to complete in a reasonable amount
 						// of time. In multi-region this latency can be substantial.
-						_, err := conn.Exec("SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'")
+						_, err = conn.Exec("SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'")
 						require.NoError(t, err)
 						// Allow optimizations to use leased descriptors when querying
 						// pg_catalog and information_schema.
