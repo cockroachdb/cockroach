@@ -692,7 +692,7 @@ type analyzedConstraints struct {
 	// satisfiedBy slices represent sets that are non-intersecting.
 	//
 	// satisfiedByReplica[kind][i] contains the set of storeIDs that satisfy
-	// constraints[i]. Populated by analyzeFunc and used later by mmma to
+	// constraints[i]. Populated by initialize and used later by mmma to
 	// determine candidates to satisfy constraints such as
 	// candidatesToReplaceVoterForRebalance.
 	// For example, satisfiedByReplica[voterIndex][0] = [1, 2, 3], means that
@@ -850,11 +850,11 @@ func (ac *analyzedConstraints) isConstraintSatisfied(constraintIndex int) bool {
 		len(ac.satisfiedByReplica[nonVoterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
 }
 
-// analyzeFunc analyzes the current replica set and determines which constraints
-// replicas satisfy, populating ac.satisfiedByReplica and
-// ac.satisfiedNoConstraintReplica (both empty at the beginning). They are later
-// used by mma to compute lease-transfer and rebalancing candidates by functions
-// like candidatesToReplaceVoterForRebalance. The given buf.replicas is already
+// initialize analyzes the current replica set and determines which constraints
+// replicas satisfy, populating ac.constraints, ac.satisfiedByReplica and
+// ac.satisfiedNoConstraintReplica. They are later used by mma to compute
+// lease-transfer and rebalancing candidates by functions like
+// candidatesToReplaceVoterForRebalance. The given buf.replicas is already
 // populated with the current replica set from buf.tryAddingStore.
 //
 // For stores that satisfy no constraint,
@@ -912,9 +912,12 @@ func (ac *analyzedConstraints) isConstraintSatisfied(constraintIndex int) bool {
 // TODO(wenyihu6): document the lifecycle of scratch space
 // replicaConstraintIndices once understood. TODO(wenyihu6): add more tests +
 // examples here
-func (ac *analyzedConstraints) analyzeFunc(
-	buf *analyzeConstraintsBuf, constraintMatcher storeMatchesConstraintInterface,
+func (ac *analyzedConstraints) initialize(
+	constraints []internedConstraintsConjunction,
+	buf *analyzeConstraintsBuf,
+	constraintMatcher storeMatchesConstraintInterface,
 ) {
+	ac.constraints = constraints
 	if len(ac.constraints) == 0 {
 		// Nothing to do.
 		return
@@ -1081,12 +1084,10 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 	rac.replicas = rac.buf.replicas
 
 	if spanConfig.constraints != nil {
-		rac.constraints.constraints = spanConfig.constraints
-		rac.constraints.analyzeFunc(&rac.buf, constraintMatcher)
+		rac.constraints.initialize(spanConfig.constraints, &rac.buf, constraintMatcher)
 	}
 	if spanConfig.voterConstraints != nil {
-		rac.voterConstraints.constraints = spanConfig.voterConstraints
-		rac.voterConstraints.analyzeFunc(&rac.buf, constraintMatcher)
+		rac.voterConstraints.initialize(spanConfig.voterConstraints, &rac.buf, constraintMatcher)
 	}
 
 	rac.leaseholderID = leaseholder
