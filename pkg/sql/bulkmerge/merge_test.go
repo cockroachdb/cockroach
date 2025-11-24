@@ -72,5 +72,7 @@ func TestMergeProcessors(t *testing.T) {
 	)
 
 	require.NoError(t, rowWriter.Err())
-	require.Equal(t, result, "loopback->merge->coordinator")
+	// The output includes the routing key (e.g., "node1") from the SQL instance
+	// where the merge loopback processor runs.
+	require.Equal(t, result, "node1->merge->coordinator")
 }
