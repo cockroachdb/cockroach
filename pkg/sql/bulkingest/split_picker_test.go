@@ -37,7 +37,7 @@ func TestPickSplits(t *testing.T) {
 		{
 			name:          "empty spans",
 			spans:         nil,
-			ssts:          []execinfrapb.BulkMergeSpec_SST{{StartKey: "a", EndKey: "b"}},
+			ssts:          []execinfrapb.BulkMergeSpec_SST{{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("b")}},
 			expectedError: "no spans provided",
 		},
 		{
@@ -46,7 +46,7 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 			},
-			ssts:          []execinfrapb.BulkMergeSpec_SST{{StartKey: "a", EndKey: "b"}},
+			ssts:          []execinfrapb.BulkMergeSpec_SST{{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("b")}},
 			expectedError: "spans not ordered: \"c\" >= \"a\"",
 		},
 		{
@@ -55,7 +55,7 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 				{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")},
 			},
-			ssts:          []execinfrapb.BulkMergeSpec_SST{{StartKey: "a", EndKey: "b"}},
+			ssts:          []execinfrapb.BulkMergeSpec_SST{{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("b")}},
 			expectedError: "spans are overlapping: \"c\" overlaps with \"b\"",
 		},
 		{
@@ -64,8 +64,8 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "c", EndKey: "d"},
-				{StartKey: "a", EndKey: "b"},
+				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 			},
 			expectedError: "SSTs not in order",
 		},
@@ -75,8 +75,8 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "a", EndKey: "c"},
-				{StartKey: "b", EndKey: "d"},
+				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+				{StartKey: roachpb.Key("b"), EndKey: roachpb.Key("d")},
 			},
 			expectedError: "overlapping SSTs",
 		},
@@ -86,7 +86,7 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 			},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "a", EndKey: "d"},
+				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("d")},
 			},
 			expectedError: "SST ending at \"d\" extends beyond containing span ending at \"c\"",
 		},
@@ -96,7 +96,7 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("b"), EndKey: roachpb.Key("d")},
 			},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "a", EndKey: "c"},
+				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 			},
 			expectedError: "SST starting at \"a\" begins before containing span starting at \"b\"",
 		},
@@ -116,7 +116,7 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "c", EndKey: "d"},
+				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("d")},
 			},
 			expected: []roachpb.Span{
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
@@ -128,9 +128,9 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "c", EndKey: "d"},
-				{StartKey: "f", EndKey: "g"},
-				{StartKey: "i", EndKey: "j"},
+				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				{StartKey: roachpb.Key("f"), EndKey: roachpb.Key("g")},
+				{StartKey: roachpb.Key("i"), EndKey: roachpb.Key("j")},
 			},
 			expected: []roachpb.Span{
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("f")},
@@ -145,10 +145,10 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("m"), EndKey: roachpb.Key("z")},
 			},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "c", EndKey: "d"},
-				{StartKey: "f", EndKey: "g"},
-				{StartKey: "o", EndKey: "p"},
-				{StartKey: "r", EndKey: "s"},
+				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				{StartKey: roachpb.Key("f"), EndKey: roachpb.Key("g")},
+				{StartKey: roachpb.Key("o"), EndKey: roachpb.Key("p")},
+				{StartKey: roachpb.Key("r"), EndKey: roachpb.Key("s")},
 			},
 			expected: []roachpb.Span{
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("f")},
@@ -164,8 +164,8 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("e"), EndKey: roachpb.Key("z")},
 			},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "f", EndKey: "g"},
-				{StartKey: "i", EndKey: "j"},
+				{StartKey: roachpb.Key("f"), EndKey: roachpb.Key("g")},
+				{StartKey: roachpb.Key("i"), EndKey: roachpb.Key("j")},
 			},
 			expected: []roachpb.Span{
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("e")},
@@ -180,8 +180,8 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("k"), EndKey: roachpb.Key("z")},
 			},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "c", EndKey: "d"},
-				{StartKey: "f", EndKey: "g"},
+				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				{StartKey: roachpb.Key("f"), EndKey: roachpb.Key("g")},
 			},
 			expected: []roachpb.Span{
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("f")},
@@ -196,9 +196,9 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("k"), EndKey: roachpb.Key("z")},
 			},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "a", EndKey: "b"},
-				{StartKey: "j", EndKey: "k"},
-				{StartKey: "k", EndKey: "l"},
+				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+				{StartKey: roachpb.Key("j"), EndKey: roachpb.Key("k")},
+				{StartKey: roachpb.Key("k"), EndKey: roachpb.Key("l")},
 			},
 			expected: []roachpb.Span{
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("j")},
@@ -213,11 +213,11 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("c"), EndKey: roachpb.Key("f")},
 			},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "a", EndKey: "b"},
-				{StartKey: "d", EndKey: "e"},
-				{StartKey: "x", EndKey: "z"}, // This SST is completely outside all spans
+				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+				{StartKey: roachpb.Key("d"), EndKey: roachpb.Key("e")},
+				{StartKey: roachpb.Key("x"), EndKey: roachpb.Key("z")}, // This SST is completely outside all spans
 			},
-			expectedError: "SST starting at x not contained in any span",
+			expectedError: "SST starting at \"x\" not contained in any span",
 		},
 		{
 			name: "sst in gap between non-contiguous spans",
@@ -226,8 +226,8 @@ func TestPickSplits(t *testing.T) {
 				{Key: roachpb.Key("e"), EndKey: roachpb.Key("g")}, // Gap from [c, e)
 			},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "a", EndKey: "b"},
-				{StartKey: "c", EndKey: "d"}, // This SST is in the gap [c, e)
+				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("d")}, // This SST is in the gap [c, e)
 			},
 			expectedError: "SST starting at \"c\" begins before containing span starting at \"e\"",
 		},
@@ -269,7 +269,7 @@ func TestPickSplitsForSpan(t *testing.T) {
 			name: "single sst",
 			span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "c", EndKey: "d"},
+				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("d")},
 			},
 			expected: []roachpb.Span{
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
@@ -279,8 +279,8 @@ func TestPickSplitsForSpan(t *testing.T) {
 			name: "two ssts",
 			span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "c", EndKey: "d"},
-				{StartKey: "f", EndKey: "g"},
+				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				{StartKey: roachpb.Key("f"), EndKey: roachpb.Key("g")},
 			},
 			expected: []roachpb.Span{
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("f")},
@@ -291,9 +291,9 @@ func TestPickSplitsForSpan(t *testing.T) {
 			name: "three ssts",
 			span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "c", EndKey: "d"},
-				{StartKey: "f", EndKey: "g"},
-				{StartKey: "i", EndKey: "j"},
+				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				{StartKey: roachpb.Key("f"), EndKey: roachpb.Key("g")},
+				{StartKey: roachpb.Key("i"), EndKey: roachpb.Key("j")},
 			},
 			expected: []roachpb.Span{
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("f")},
@@ -305,8 +305,8 @@ func TestPickSplitsForSpan(t *testing.T) {
 			name: "sst at span boundary",
 			span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "a", EndKey: "b"},
-				{StartKey: "y", EndKey: "z"},
+				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+				{StartKey: roachpb.Key("y"), EndKey: roachpb.Key("z")},
 			},
 			expected: []roachpb.Span{
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("y")},
@@ -317,9 +317,9 @@ func TestPickSplitsForSpan(t *testing.T) {
 			name: "adjacent ssts",
 			span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 			ssts: []execinfrapb.BulkMergeSpec_SST{
-				{StartKey: "c", EndKey: "d"},
-				{StartKey: "d", EndKey: "e"},
-				{StartKey: "e", EndKey: "f"},
+				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("d")},
+				{StartKey: roachpb.Key("d"), EndKey: roachpb.Key("e")},
+				{StartKey: roachpb.Key("e"), EndKey: roachpb.Key("f")},
 			},
 			expected: []roachpb.Span{
 				{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")},
@@ -369,8 +369,8 @@ func TestPickSplitsForSpanErrors(t *testing.T) {
 				sst2End := codec.IndexPrefix(50, 2)
 
 				return []execinfrapb.BulkMergeSpec_SST{
-					{StartKey: string(sst1Start), EndKey: string(sst1End)},
-					{StartKey: string(sst2Start), EndKey: string(sst2End)},
+					{StartKey: sst1Start, EndKey: sst1End},
+					{StartKey: sst2Start, EndKey: sst2End},
 				}
 			}(),
 			expectedError: "SST 1 start key .* is not at a safe split point.*SST writer should have ensured safe boundaries",
@@ -395,8 +395,8 @@ func TestPickSplitsForSpanErrors(t *testing.T) {
 				sst2End := codec.IndexPrefix(50, 2)
 
 				return []execinfrapb.BulkMergeSpec_SST{
-					{StartKey: string(sst1Start), EndKey: string(sst1End)},
-					{StartKey: string(sst2Start), EndKey: string(sst2End)},
+					{StartKey: sst1Start, EndKey: sst1End},
+					{StartKey: sst2Start, EndKey: sst2End},
 				}
 			}(),
 			expectedError: "SST 1 has unsafe start key",

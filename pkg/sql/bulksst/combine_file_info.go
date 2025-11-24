@@ -43,8 +43,8 @@ func CombineFileInfo(
 	for _, file := range files {
 		for _, sst := range file.SST {
 			result = append(result, execinfrapb.BulkMergeSpec_SST{
-				StartKey: string(sst.StartKey),
-				EndKey:   string(sst.EndKey),
+				StartKey: sst.StartKey,
+				EndKey:   sst.EndKey,
 				URI:      sst.URI,
 			})
 		}

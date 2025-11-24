@@ -43,7 +43,7 @@ func pickSplits(
 
 	// Validate SSTs are ordered and non-overlapping.
 	for i := 1; i < len(ssts); i++ {
-		prev, curr := roachpb.Key(ssts[i-1].StartKey), roachpb.Key(ssts[i].StartKey)
+		prev, curr := ssts[i-1].StartKey, ssts[i].StartKey
 		if !less(prev, curr) {
 			return nil, errors.Newf("SSTs not in order: %s >= %s", prev, curr)
 		}
@@ -58,12 +58,12 @@ func pickSplits(
 	for _, span := range spans {
 		spanSSTStartIdx := sstIdx
 		for ; sstIdx < len(ssts); sstIdx++ {
-			sstStart := roachpb.Key(ssts[sstIdx].StartKey)
+			sstStart := ssts[sstIdx].StartKey
 			if !less(sstStart, span.EndKey) {
 				break
 			}
 
-			sstEnd := roachpb.Key(ssts[sstIdx].EndKey)
+			sstEnd := ssts[sstIdx].EndKey
 			if !less(sstEnd, span.EndKey) && !sstEnd.Equal(span.EndKey) {
 				return nil, errors.Newf("SST ending at %s extends beyond containing span ending at %s",
 					sstEnd, span.EndKey)
@@ -112,7 +112,7 @@ func pickSplitsForSpan(
 	spanStart := span.Key
 
 	for i := 1; i < len(ssts); i++ {
-		splitPoint := roachpb.Key(ssts[i].StartKey)
+		splitPoint := ssts[i].StartKey
 
 		// Validate that the split point is already at a safe split point.
 		safeSplitPoint, err := keys.EnsureSafeSplitKey(splitPoint)
@@ -156,7 +156,7 @@ func overlaps(a, b roachpb.Span) bool {
 // spanFromSST returns the span that matches the SST's start and end keys.
 func spanFromSST(sst execinfrapb.BulkMergeSpec_SST) roachpb.Span {
 	return roachpb.Span{
-		Key:    roachpb.Key(sst.StartKey),
-		EndKey: roachpb.Key(sst.EndKey),
+		Key:    sst.StartKey,
+		EndKey: sst.EndKey,
 	}
 }
