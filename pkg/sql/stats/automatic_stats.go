@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -270,9 +269,13 @@ type Refresher struct {
 	st             *cluster.Settings
 	internalDB     descs.DB
 	cache          *TableStatisticsCache
-	randGen        autoStatsRand
 	knobs          *TableStatsTestingKnobs
 	readOnlyTenant bool
+
+	// rng doesn't need any mutex protection since it's only used from the
+	// maybeRefreshStats goroutine, and we can have at most one such goroutine
+	// at any point in time.
+	rng *rand.Rand
 
 	// mutations is the buffered channel used to pass messages containing
 	// metadata about SQL mutations to the background Refresher thread.
@@ -359,16 +362,14 @@ func MakeRefresher(
 	knobs *TableStatsTestingKnobs,
 	readOnlyTenant bool,
 ) *Refresher {
-	randSource := rand.NewSource(rand.Int63())
-
 	return &Refresher{
 		AmbientContext:   ambientCtx,
 		st:               st,
 		internalDB:       internalDB,
 		cache:            cache,
-		randGen:          makeAutoStatsRand(randSource),
 		knobs:            knobs,
 		readOnlyTenant:   readOnlyTenant,
+		rng:              rand.New(rand.NewSource(rand.Int63())),
 		mutations:        make(chan mutation, refreshChanBufferLen),
 		settings:         make(chan settingOverride, refreshChanBufferLen),
 		asOfTime:         asOfTime,
@@ -1018,7 +1019,7 @@ func (r *Refresher) maybeRefreshStats(
 		// randInt will panic if we pass it a value of 0.
 		randomTargetRows := int64(0)
 		if targetRows > 0 {
-			randomTargetRows = r.randGen.randInt(targetRows)
+			randomTargetRows = r.rng.Int63n(targetRows)
 		}
 		doFullRefresh = randomTargetRows < rowsAffected
 	}
@@ -1042,7 +1043,7 @@ func (r *Refresher) maybeRefreshStats(
 		targetRows := int64(rowCount*partialStatsFractionStaleRows) + partialStatsMinStaleRows
 		// randInt will panic if we pass it a value of 0.
 		if targetRows > 0 {
-			randomTargetRows = r.randGen.randInt(targetRows)
+			randomTargetRows = r.rng.Int63n(targetRows)
 		}
 		if randomTargetRows >= rowsAffected {
 			// No refresh is happening this time, full or partial.
@@ -1186,25 +1187,6 @@ func areEqual(a, b []descpb.ColumnID) bool {
 		}
 	}
 	return true
-}
-
-// autoStatsRand pairs a rand.Rand with a mutex.
-type autoStatsRand struct {
-	*syncutil.Mutex
-	*rand.Rand
-}
-
-func makeAutoStatsRand(source rand.Source) autoStatsRand {
-	return autoStatsRand{
-		Mutex: &syncutil.Mutex{},
-		Rand:  rand.New(source),
-	}
-}
-
-func (r autoStatsRand) randInt(n int64) int64 {
-	r.Lock()
-	defer r.Unlock()
-	return r.Int63n(n)
 }
 
 type concurrentCreateStatisticsError struct{}
