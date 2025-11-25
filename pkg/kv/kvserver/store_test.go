@@ -391,9 +391,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{}, &cfg)
 	defer stopper.Stop(ctx)
 
-	if _, err := kvstorage.ReadStoreIdent(ctx, store.TODOEngine()); err != nil {
-		t.Fatalf("unable to read store ident: %+v", err)
-	}
+	_, err := kvstorage.ReadStoreIdent(ctx, store.LogEngine())
+	require.NoError(t, err)
 
 	store.VisitReplicas(func(repl *Replica) (more bool) {
 		// Stats should agree with recomputation. Hold raftMu to avoid
