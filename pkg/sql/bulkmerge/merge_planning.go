@@ -16,7 +16,7 @@ import (
 )
 
 func newBulkMergePlan(
-	ctx context.Context, execCtx sql.JobExecContext,
+	ctx context.Context, execCtx sql.JobExecContext, taskCount int,
 ) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	// NOTE: This implementation is inspired by the physical plan created by
 	// restore in `pkg/backup/restore_processor_planning.go`
@@ -31,6 +31,11 @@ func newBulkMergePlan(
 	plan := planCtx.NewPhysicalPlan()
 	// Use the gateway node as the coordinator, which is where the job was initiated.
 	coordinatorID := plan.GatewaySQLInstanceID
+
+	keys := make([][]byte, 0, len(sqlInstanceIDs))
+	for _, id := range sqlInstanceIDs {
+		keys = append(keys, physicalplan.RoutingKeyForSQLInstance(id))
+	}
 
 	router, err := physicalplan.MakeInstanceRouter(sqlInstanceIDs)
 	if err != nil {
@@ -85,7 +90,8 @@ func newBulkMergePlan(
 
 	plan.AddSingleGroupStage(ctx, coordinatorID, execinfrapb.ProcessorCoreUnion{
 		MergeCoordinator: &execinfrapb.MergeCoordinatorSpec{
-			// TODO fill in the rest of the spec
+			TaskCount:            int64(taskCount),
+			WorkerSqlInstanceIds: keys,
 		},
 	}, execinfrapb.PostProcessSpec{}, mergeCoordinatorOutputTypes, nil /* finalizeLastStageCb */)
 
