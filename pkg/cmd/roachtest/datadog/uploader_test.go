@@ -6,12 +6,14 @@
 package datadog
 
 import (
+	"bufio"
 	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -133,9 +135,7 @@ func TestParseLogFile(t *testing.T) {
 	require.NoError(t, err)
 	defer l.Close()
 
-	testLogPath := filepath.Join("testdata", "test_log_example")
-
-	cfg := UploadConfig{
+	logMetadata := LogMetadata{
 		TestName: "acceptance/event-log",
 		Owner:    "test-eng",
 		Cloud:    "gce",
@@ -146,107 +146,53 @@ func TestParseLogFile(t *testing.T) {
 		Cluster:  "test-cluster",
 	}
 
-	entries, err := parseLogFile(l, testLogPath, cfg)
+	testLogPath := filepath.Join("testdata", "test_log_example")
+	file, err := os.Open(testLogPath)
 	require.NoError(t, err)
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	validEntries := make([]datadogV2.HTTPLogItem, 0)
+	skippedEntries := make([]string, 0)
+	for scanner.Scan() {
+		line := scanner.Text()
+		entry, err := parseLogLine(line, logMetadata.makeTags(), logMetadata)
+		if err != nil {
+			skippedEntries = append(skippedEntries, line)
+		} else {
+			validEntries = append(validEntries, *entry)
+		}
+	}
 
 	// The test log has 56 lines, but only well-formed lines should be parsed
 	// Lines without timestamps: 9-10, 21-24, 28-29, 36, 42, 46
 	// Total Skip Count: 11
-	require.Equal(t, len(entries), 55-11, "should skip non well-formatted lines")
+	require.Equal(t, len(validEntries), 55-11, "should skip non well-formatted lines")
 
 	// Verify the first entry
-	require.Equal(t, "2025/11/12 07:19:40 test_impl.go:197: Runtime assertions enabled", entries[0].Message)
+	require.Equal(t, "2025/11/12 07:19:40 test_impl.go:197: Runtime assertions enabled", validEntries[0].Message)
 
 	// Check that entry fields are set correctly
-	require.Equal(t, defaultDDSource, *entries[0].Ddsource)
-	require.Equal(t, defaultService, *entries[0].Service)
-	require.Equal(t, cfg.Host, *entries[0].Hostname)
+	require.Equal(t, defaultDDSource, *validEntries[0].Ddsource)
+	require.Equal(t, defaultService, *validEntries[0].Service)
+	require.Equal(t, logMetadata.Host, *validEntries[0].Hostname)
 
 	// Verify ddtags contains all expected tags
-	ddtags := *entries[0].Ddtags
-	require.Contains(t, ddtags, "env:"+defaultEnv)
-	require.Contains(t, ddtags, "version:"+cfg.Version)
-	require.Contains(t, ddtags, "platform:"+cfg.Platform)
-	require.Contains(t, ddtags, "cloud:"+cfg.Cloud)
-	require.Contains(t, ddtags, "name:"+cfg.TestName)
-	require.Contains(t, ddtags, "cluster:"+cfg.Cluster)
-	require.Contains(t, ddtags, "build_id:"+cfg.BuildID)
-	require.Contains(t, ddtags, "owner:"+cfg.Owner)
+	ddTags := validEntries[0].Ddtags
+	require.Contains(t, *ddTags, "env:"+defaultEnv)
+	require.Contains(t, *ddTags, "version:"+logMetadata.Version)
+	require.Contains(t, *ddTags, "platform:"+logMetadata.Platform)
+	require.Contains(t, *ddTags, "cloud:"+logMetadata.Cloud)
+	require.Contains(t, *ddTags, "name:"+logMetadata.TestName)
+	require.Contains(t, *ddTags, "cluster:"+logMetadata.Cluster)
+	require.Contains(t, *ddTags, "build_id:"+logMetadata.BuildID)
+	require.Contains(t, *ddTags, "owner:"+logMetadata.Owner)
 
 	// Verify timestamp is set in AdditionalProperties
-	require.NotNil(t, entries[0].AdditionalProperties)
-	timestamp, ok := entries[0].AdditionalProperties["timestamp"]
+	require.NotNil(t, validEntries[0].AdditionalProperties)
+	timestamp, ok := validEntries[0].AdditionalProperties["timestamp"]
 	require.True(t, ok, "timestamp should be in AdditionalProperties")
 	require.Equal(t, "2025-11-12T07:19:40Z", timestamp)
-}
-
-func TestParseLogFileEmptyFile(t *testing.T) {
-	// Dummy logger for parseLogFile
-	l, err := logger.RootLogger(os.DevNull, logger.NoTee)
-	require.NoError(t, err)
-	defer l.Close()
-
-	// Create an empty test file
-	logDir := t.TempDir()
-	emptyFile := filepath.Join(logDir, "empty.log")
-	err = os.WriteFile(emptyFile, []byte(""), 0644)
-	require.NoError(t, err)
-
-	cfg := UploadConfig{
-		TestName: "test",
-		Cloud:    "gce",
-		Platform: "linux-amd64",
-		Host:     "test-host",
-		Version:  "master",
-	}
-
-	_, err = parseLogFile(l, emptyFile, cfg)
-	require.Error(t, err)
-}
-
-func TestParseLogFileNoValidTimestamps(t *testing.T) {
-	// Dummy logger for parseLogFile
-	l, err := logger.RootLogger(os.DevNull, logger.NoTee)
-	require.NoError(t, err)
-	defer l.Close()
-
-	// Create a test file with no valid timestamps
-	logDir := t.TempDir()
-	invalidFile := filepath.Join(logDir, "invalid.log")
-	content := `this is a log line without timestamp
-another line without timestamp
-yet another line`
-	err = os.WriteFile(invalidFile, []byte(content), 0644)
-	require.NoError(t, err)
-
-	cfg := UploadConfig{
-		TestName: "test",
-		Cloud:    "gce",
-		Platform: "linux-amd64",
-		Host:     "test-host",
-		Version:  "master",
-	}
-
-	_, err = parseLogFile(l, invalidFile, cfg)
-	require.Error(t, err)
-}
-
-func TestParseLogFileNonexistent(t *testing.T) {
-	// Dummy logger for parseLogFile
-	l, err := logger.RootLogger(os.DevNull, logger.NoTee)
-	require.NoError(t, err)
-	defer l.Close()
-
-	cfg := UploadConfig{
-		TestName: "test",
-		Cloud:    "gce",
-		Platform: "linux-amd64",
-		Host:     "test-host",
-		Version:  "master",
-	}
-
-	_, err = parseLogFile(l, "/nonexistent/path/test.log", cfg)
-	require.Error(t, err)
 }
 
 func TestNewDatadogContextMissingCredentials(t *testing.T) {
