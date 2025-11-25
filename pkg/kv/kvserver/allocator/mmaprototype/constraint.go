@@ -265,6 +265,27 @@ func (cc constraintsConj) relationship(b constraintsConj) conjunctionRelationshi
 	return conjNonIntersecting
 }
 
+func (rel conjunctionRelationship) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch rel {
+	case conjPossiblyIntersecting:
+		w.Print("possiblyIntersecting")
+	case conjEqualSet:
+		w.Print("equalSet")
+	case conjStrictSubset:
+		w.Print("strictSubset")
+	case conjStrictSuperset:
+		w.Print("strictSuperset")
+	case conjNonIntersecting:
+		w.Print("nonIntersecting")
+	default:
+		w.Printf("unknown(%d)", rel)
+	}
+}
+
+func (rel conjunctionRelationship) String() string {
+	return redact.StringWithoutMarkers(rel)
+}
+
 type internedConstraintsConjunction struct {
 	numReplicas int32
 	constraints constraintsConj
@@ -285,24 +306,7 @@ type internedLeasePreference struct {
 	constraints constraintsConj
 }
 
-// makeNormalizedSpanConfig is called infrequently, when there is a new
-// SpanConfig for which we don't have a normalized value. The rest of the
-// allocator code works with normalizedSpanConfig. Due to the infrequent
-// nature of this, we don't attempt to reduce memory allocations.
-//
-// It does:
-//
-//   - Basic normalization of the constraints and voterConstraints, to specify
-//     the number of replicas for every constraints conjunction, and ensure that
-//     the sum adds up to the required number of replicas. These are
-//     requirements documented in roachpb.SpanConfig. If this basic
-//     normalization fails, it returns a nil normalizedSpanConfig and an error.
-//
-//   - Structural normalization: see comment in doStructuralNormalization. An
-//     error in this step causes it to return a non-nil normalizedSpanConfig,
-//     with an error, so that the error can be surfaced somehow while keeping
-//     the system running.
-func makeNormalizedSpanConfig(
+func makeBasicNormalizedSpanConfig(
 	conf *roachpb.SpanConfig, interner *stringInterner,
 ) (*normalizedSpanConfig, error) {
 	numVoters := conf.GetNumVoters()
@@ -344,6 +348,33 @@ func makeNormalizedSpanConfig(
 		voterConstraints: normalizedVoterConstraints,
 		leasePreferences: lps,
 		interner:         interner,
+	}
+	return nConf, nil
+}
+
+// makeNormalizedSpanConfig is called infrequently, when there is a new
+// SpanConfig for which we don't have a normalized value. The rest of the
+// allocator code works with normalizedSpanConfig. Due to the infrequent
+// nature of this, we don't attempt to reduce memory allocations.
+//
+// It does:
+//
+//   - Basic normalization of the constraints and voterConstraints, to specify
+//     the number of replicas for every constraints conjunction, and ensure that
+//     the sum adds up to the required number of replicas. These are
+//     requirements documented in roachpb.SpanConfig. If this basic
+//     normalization fails, it returns a nil normalizedSpanConfig and an error.
+//
+//   - Structural normalization: see comment in doStructuralNormalization. An
+//     error in this step causes it to return a non-nil normalizedSpanConfig,
+//     with an error, so that the error can be surfaced somehow while keeping
+//     the system running.
+func makeNormalizedSpanConfig(
+	conf *roachpb.SpanConfig, interner *stringInterner,
+) (*normalizedSpanConfig, error) {
+	nConf, err := makeBasicNormalizedSpanConfig(conf, interner)
+	if err != nil {
+		return nil, err
 	}
 	err = doStructuralNormalization(nConf)
 	return nConf, err
@@ -402,6 +433,71 @@ func normalizeConstraints(
 	return rv, nil
 }
 
+// relationshipVoterAndAll represents the relationship between a voter constraint
+// and an all replica constraint. It is only used within doStructuralNormalization
+// as a helper struct.
+type relationshipVoterAndAll struct {
+	voterIndex     int
+	allIndex       int
+	voterAndAllRel conjunctionRelationship
+}
+
+func buildVoterAndAllRelationships(
+	conf *normalizedSpanConfig,
+) (
+	rels []relationshipVoterAndAll,
+	emptyConstraintIndex int,
+	emptyVoterConstraintIndex int,
+	err error,
+) {
+	// emptyConstraintIndex corresponds to the index of the empty constraint in
+	// conf.constraints. We expect only one empty constraint.
+	// Example:
+	// constraints: []: 2, [+region=a]: 2 => emptyConstraintIndex = 0
+	//
+	// TODO(wenyihu6): we should not allow user to specify empty constraints;
+	// there should only be one created by us during normalizeConstraints.
+	// Instead, we can also combine empty constraints into a single one in
+	// normalizeConstraints.
+	emptyConstraintIndex = -1
+	// emptyVoterConstraintIndex corresponds to the index of the empty voter
+	// constraint in conf.voterConstraints. We expect only one empty voter
+	// constraint.
+	// Example:
+	// voterConstraints: [+region=a]: 2, []: 2 => emptyVoterConstraintIndex = 1
+	emptyVoterConstraintIndex = -1
+	for i := range conf.voterConstraints {
+		if len(conf.voterConstraints[i].constraints) == 0 {
+			if emptyVoterConstraintIndex != -1 {
+				return nil /*rels*/, -1 /*emptyConstraintIndex*/, -1, /*emptyVoterConstraintIndex*/
+					errors.Errorf("multiple empty voter constraints: %v and %v",
+						conf.voterConstraints[emptyVoterConstraintIndex], conf.voterConstraints[i])
+			}
+			emptyVoterConstraintIndex = i
+		}
+		for j := range conf.constraints {
+			if len(conf.constraints[j].constraints) == 0 {
+				if emptyConstraintIndex != -1 && emptyConstraintIndex != j {
+					return nil /*rels*/, -1 /*emptyConstraintIndex*/, -1, /*emptyVoterConstraintIndex*/
+						errors.Errorf("multiple empty constraints: %v and %v",
+							conf.constraints[emptyConstraintIndex], conf.constraints[j])
+				}
+				emptyConstraintIndex = j
+			}
+			rels = append(rels, relationshipVoterAndAll{
+				voterIndex:     i,
+				allIndex:       j,
+				voterAndAllRel: conf.voterConstraints[i].constraints.relationship(conf.constraints[j].constraints),
+			})
+		}
+	}
+	// Sort these relationships in the order we want to examine them.
+	slices.SortFunc(rels, func(a, b relationshipVoterAndAll) int {
+		return cmp.Compare(a.voterAndAllRel, b.voterAndAllRel)
+	})
+	return rels, emptyConstraintIndex, emptyVoterConstraintIndex, nil /*err*/
+}
+
 // Structural normalization establishes relationships between every pair of
 // ConstraintsConjunctions in constraints and voterConstraints, and then tries
 // to map conjunctions in voterConstraints to narrower conjunctions in
@@ -422,55 +518,11 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	}
 	// Relationships between each voter constraint and each all replica
 	// constraint.
-	type relationshipVoterAndAll struct {
-		voterIndex     int
-		allIndex       int
-		voterAndAllRel conjunctionRelationship
+	rels, emptyConstraintIndex, emptyVoterConstraintIndex, err := buildVoterAndAllRelationships(conf)
+	if err != nil {
+		return err
 	}
-	// emptyConstraintIndex corresponds to the index of the empty constraint in
-	// conf.constraints. We expect only one empty constraint.
-	// Example:
-	// constraints: []: 2, [+region=a]: 2 => emptyConstraintIndex = 0
-	//
-	// TODO(wenyihu6): we should not allow user to specify empty constraints;
-	// there should only be one created by us during normalizeConstraints.
-	// Instead, we can also combine empty constraints into a single one in
-	// normalizeConstraints.
-	emptyConstraintIndex := -1
-	// emptyVoterConstraintIndex corresponds to the index of the empty voter
-	// constraint in conf.voterConstraints. We expect only one empty voter
-	// constraint.
-	// Example:
-	// voterConstraints: [+region=a]: 2, []: 2 => emptyVoterConstraintIndex = 1
-	emptyVoterConstraintIndex := -1
-	var rels []relationshipVoterAndAll
-	for i := range conf.voterConstraints {
-		if len(conf.voterConstraints[i].constraints) == 0 {
-			if emptyVoterConstraintIndex != -1 {
-				return errors.Errorf("multiple empty voter constraints: %v and %v",
-					conf.voterConstraints[emptyVoterConstraintIndex], conf.voterConstraints[i])
-			}
-			emptyVoterConstraintIndex = i
-		}
-		for j := range conf.constraints {
-			if len(conf.constraints[j].constraints) == 0 {
-				if emptyConstraintIndex != -1 && emptyConstraintIndex != j {
-					return errors.Errorf("multiple empty constraints: %v and %v",
-						conf.constraints[emptyConstraintIndex], conf.constraints[j])
-				}
-				emptyConstraintIndex = j
-			}
-			rels = append(rels, relationshipVoterAndAll{
-				voterIndex:     i,
-				allIndex:       j,
-				voterAndAllRel: conf.voterConstraints[i].constraints.relationship(conf.constraints[j].constraints),
-			})
-		}
-	}
-	// Sort these relationships in the order we want to examine them.
-	slices.SortFunc(rels, func(a, b relationshipVoterAndAll) int {
-		return cmp.Compare(a.voterAndAllRel, b.voterAndAllRel)
-	})
+
 	// First are the intersecting constraints, which cause an error (though we
 	// proceed with normalization). This is because when there are both shared
 	// and non shared conjuncts, we cannot be certain that the conjunctions are
@@ -492,7 +544,6 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	for rels[index].voterAndAllRel == conjPossiblyIntersecting {
 		index++
 	}
-	var err error
 	if index > 0 {
 		err = errors.Errorf("intersecting conjunctions in constraints and voter constraints")
 	}
