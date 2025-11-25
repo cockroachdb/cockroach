@@ -400,7 +400,7 @@ subtest issue-52552
 
 statement ok
 CREATE SEQUENCE test_52552_asc INCREMENT BY 3 MINVALUE 1 MAXVALUE 12;
-ALTER SEQUENCE test_52552_asc INCREMENT BY 8 MINVALUE 1 MAXVALUE 12;
+ALTER SEQUENCE test_52552_asc INCREMENT BY 8;
 
 query II
 SELECT nextval('test_52552_asc'), nextval('test_52552_asc');
@@ -423,7 +423,7 @@ SELECT nextval('test_52552_asc');
 
 statement ok
 CREATE SEQUENCE test_52552_desc INCREMENT BY -5 MINVALUE 1 MAXVALUE 12;
-ALTER SEQUENCE test_52552_desc INCREMENT BY -8 MINVALUE 1 MAXVALUE 12;
+ALTER SEQUENCE test_52552_desc INCREMENT BY -8;
 
 query II
 SELECT nextval('test_52552_desc'), nextval('test_52552_desc');
