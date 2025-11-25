@@ -694,24 +694,24 @@ type analyzedConstraints struct {
 	// satisfiedByReplica[kind][i] contains the set of storeIDs that satisfy
 	// constraints[i]. These are for stores that satisfy at least one
 	// constraint. Each store should appear exactly once in the 2D slice
-	// ac.satisfiedByReplica[kind]. Populated by initialize and used by mmma to
-	// compute lease-transfer and rebalancing candidates by functions like
-	// candidatesToReplaceVoterForRebalance. For example,
+	// ac.satisfiedByReplica[kind]. For example,
 	// satisfiedByReplica[voterIndex][0] = [1, 2, 3], means that the first
 	// constraint (constraints[0]) is satisfied by storeIDs 1, 2, and 3.
 	//
-	// NB: this does not mean the current replica set satisfies constraints[i]
-	// since we may populate satisfiedByReplica[nonVoterIndex][i] for voter
-	// constraints as well. This just means that the store can satisfy
-	// constraints[i] regardless of the replica type.
+	// NB: satisfiedByReplica[nonVoterIndex][i] is populated even if this
+	// analyzedConstraints represents a voter constraint. This is done because
+	// satisfiedByReplica[voterIndex][i] may not sufficiently satisfy a
+	// constraint (or even if it does, at a later point one could be
+	// decommissioning one of the voters), and populating the nonVoterIndex
+	// allows MMA to decide to promote a non-voter. replica type.
 	satisfiedByReplica [numReplicaKinds][][]roachpb.StoreID
 
 	// ac.satisfiedNoConstraintReplica[kind] contains the set of storeIDs that
-	// satisfy no constraint. Populated by initialize and used later by mma.
-	// Even though we are strict about constraint satisfaction, this can happen
-	// if the SpanConfig changed or the attributes of a store changed. Note that
-	// if these analyzedConstraints correspond to voterConstraints, there can be
-	// non-voters here (which is never be used but is harmless).
+	// satisfy no constraint. Even though we are strict about constraint
+	// satisfaction, this can happen if the SpanConfig changed or the attributes
+	// of a store changed. Note that if these analyzedConstraints correspond to
+	// voterConstraints, there can be non-voters here which is never used but
+	// harmless.
 	satisfiedNoConstraintReplica [numReplicaKinds][]roachpb.StoreID
 }
 
@@ -746,10 +746,12 @@ func clear2DSlice[T any](v [][]T) [][]T {
 	return v
 }
 
-// rangeAnalyzedConstraints is a function of the spanConfig and the current
-// stores that have replicas for that range (including the ReplicaType). It
-// contains information necessary for mma to compute lease-transfer and
-// rebalancing candidates.
+// rangeAnalyzedConstraints represents the analyzed constraint state for a
+// range, derived from the range's span config and current replica placement
+// (including ReplicaType). It contains information used to handle constraint
+// satisfaction as part of allocation decisions (e.g. helping identify candidate
+// stores for range rebalancing, lease transfers, up-replication,
+// down-replication, validating whether constraints are satisfied).
 //
 // LEARNER and VOTER_DEMOTING_LEARNER replicas are ignored.
 type rangeAnalyzedConstraints struct {
