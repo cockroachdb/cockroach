@@ -442,7 +442,7 @@ func assertEqualKVs(
 	// Iterate over the store.
 	store, err := srv.StorageLayer().GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 	require.NoError(t, err)
-	it, err := store.TODOEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	it, err := store.StateEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound: targetSpan.Key,
 		UpperBound: targetSpan.EndKey,
 	})
