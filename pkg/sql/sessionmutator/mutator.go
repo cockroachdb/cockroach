@@ -1115,6 +1115,10 @@ func (m *SessionDataMutator) SetUseImprovedRoutineDepsTriggersAndComputedCols(va
 	m.Data.UseImprovedRoutineDepsTriggersAndComputedCols = val
 }
 
+func (m *SessionDataMutator) SetOptimizerBuildRoutineParamsAsPlaceholders(val bool) {
+	m.Data.OptimizerBuildRoutineParamsAsPlaceholders = val
+}
+
 func (m *SessionDataMutator) SetDistSQLPreventPartitioningSoftLimitedScans(val bool) {
 	m.Data.DistSQLPreventPartitioningSoftLimitedScans = val
 }
