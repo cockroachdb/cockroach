@@ -879,3 +879,42 @@ func TestDiversityScore(t *testing.T) {
 		})
 	}
 }
+
+// TestVoterAndAllRelationshipTable tests the buildVoterAndAllRelationships
+// function which builds relationships between voter constraints and all replica
+// constraints.
+func TestVoterAndAllRelationshipTable(t *testing.T) {
+	interner := newStringInterner()
+	datadriven.RunTest(t, "testdata/voter_and_all_relationship_table",
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "voter-and-all-relationship":
+				conf := parseSpanConfig(t, d)
+				var b strings.Builder
+				fmt.Fprintf(&b, "input:\n")
+				printSpanConfig(&b, conf)
+
+				nConf, err := makeBasicNormalizedSpanConfig(&conf, interner)
+				if err != nil {
+					fmt.Fprintf(&b, "normalization error: %s\n", err.Error())
+					return b.String()
+				}
+				rels, emptyConstraintIndex, emptyVoterConstraintIndex, err := buildVoterAndAllRelationships(nConf)
+				fmt.Fprintf(&b, "table:\n")
+				fmt.Fprintf(&b, "\temptyConstraintIndex: %d\n", emptyConstraintIndex)
+				fmt.Fprintf(&b, "\temptyVoterConstraintIndex: %d\n", emptyVoterConstraintIndex)
+				fmt.Fprintf(&b, "\trelationships:\n")
+				if err != nil {
+					fmt.Fprintf(&b, "\terr: %s\n", err.Error())
+					return b.String()
+				}
+				for i, rel := range rels {
+					fmt.Fprintf(&b, "\t[idx=%d][voter=%s] [all=%s] rel=%s\n",
+						i, nConf.voterConstraints[rel.voterIndex].unintern(interner), nConf.constraints[rel.allIndex].unintern(interner), rel.voterAndAllRel)
+				}
+				return b.String()
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+}
