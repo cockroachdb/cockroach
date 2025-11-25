@@ -87,7 +87,7 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		settings, err := loadCachedSettingsKVs(context.Background(), store.TODOEngine())
+		settings, err := loadCachedSettingsKVs(context.Background(), store.LogEngine())
 		if err != nil {
 			return err
 		}
@@ -200,7 +200,7 @@ func TestCachedSettingDeletionIsPersisted(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		store, err := ts.GetStores().(*kvserver.Stores).GetStore(1)
 		require.NoError(t, err)
-		settings, err := loadCachedSettingsKVs(context.Background(), store.TODOEngine())
+		settings, err := loadCachedSettingsKVs(context.Background(), store.LogEngine())
 		require.NoError(t, err)
 		if !hasKey(settings, `ui.display_timezone`) {
 			return errors.New("cached setting not found")
@@ -214,7 +214,7 @@ func TestCachedSettingDeletionIsPersisted(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		store, err := ts.GetStores().(*kvserver.Stores).GetStore(1)
 		require.NoError(t, err)
-		settings, err := loadCachedSettingsKVs(context.Background(), store.TODOEngine())
+		settings, err := loadCachedSettingsKVs(context.Background(), store.LogEngine())
 		require.NoError(t, err)
 		if hasKey(settings, `ui.display_timezone`) {
 			return errors.New("cached setting was still found")
