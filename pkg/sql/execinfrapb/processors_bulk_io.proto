@@ -589,9 +589,9 @@ message BulkMergeSpec {
 	message SST {
 		optional string uri = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "URI"];
 		// start_key is the first key in the SST.
-		optional string start_key = 2 [(gogoproto.nullable) = false];
+		optional bytes start_key = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 		// end_key is the last key in the SST.
-		optional string end_key = 3 [(gogoproto.nullable) = false];
+		optional bytes end_key = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 	}
 
 	// ssts is the list of input SSTs to merge.
