@@ -1810,7 +1810,7 @@ func (r *Replica) getQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
 	var timestamp hlc.Timestamp
 	if r.store != nil {
-		_, err := storage.MVCCGetProto(ctx, r.store.TODOEngine(), key, hlc.Timestamp{}, &timestamp,
+		_, err := storage.MVCCGetProto(ctx, r.store.StateEngine(), key, hlc.Timestamp{}, &timestamp,
 			storage.MVCCGetOptions{})
 		if err != nil {
 			log.VErrEventf(ctx, 2, "last processed timestamp unavailable: %s", err)
@@ -2516,7 +2516,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 	// if one exists, regardless of what timestamp it is written at.
 	desc := r.descRLocked()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	intentRes, err := storage.MVCCGet(ctx, r.store.TODOEngine(), descKey, hlc.MaxTimestamp,
+	intentRes, err := storage.MVCCGet(ctx, r.store.StateEngine(), descKey, hlc.MaxTimestamp,
 		storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return false, err
@@ -2524,7 +2524,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 	valRes, err := storage.MVCCGetAsTxn(
-		ctx, r.store.TODOEngine(), descKey, intentRes.Intent.Txn.WriteTimestamp, intentRes.Intent.Txn)
+		ctx, r.store.StateEngine(), descKey, intentRes.Intent.Txn.WriteTimestamp, intentRes.Intent.Txn)
 	if err != nil {
 		return false, err
 	} else if valRes.Value != nil {
