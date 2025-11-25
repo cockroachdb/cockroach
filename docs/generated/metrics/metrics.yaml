@@ -482,6 +482,7 @@ layers:
       essential: true
     - name: sql.ddl.count
       exported_name: sql_ddl_count
+      labeled_name: 'sql.count{query_type: ddl}'
       description: Number of SQL DDL statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -492,6 +493,7 @@ layers:
       essential: true
     - name: sql.ddl.count.internal
       exported_name: sql_ddl_count_internal
+      labeled_name: 'sql.count{query_type: ddl, query_internal: true}'
       description: Number of SQL DDL statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -644,7 +646,7 @@ layers:
       essential: true
     - name: sql.routine.delete.count
       exported_name: sql_routine_delete_count
-      labeled_name: 'sql.count{query_type: routine-delete}'
+      labeled_name: 'sql.count{query_type: routine_delete}'
       description: Number of SQL DELETE statements successfully executed within routine invocation
       y_axis_label: SQL Statements
       type: COUNTER
@@ -655,7 +657,7 @@ layers:
       essential: true
     - name: sql.routine.delete.count.internal
       exported_name: sql_routine_delete_count_internal
-      labeled_name: 'sql.count{query_type: routine-delete, query_internal: true}'
+      labeled_name: 'sql.count{query_type: routine_delete, query_internal: true}'
       description: Number of SQL DELETE statements successfully executed within routine invocation (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -664,7 +666,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.routine.delete.started.count
       exported_name: sql_routine_delete_started_count
-      labeled_name: 'sql.started.count{query_type: routine-started-delete}'
+      labeled_name: 'sql.started.count{query_type: routine_started_delete}'
       description: Number of SQL DELETE statements started within routine invocation
       y_axis_label: SQL Statements
       type: COUNTER
@@ -674,7 +676,7 @@ layers:
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
     - name: sql.routine.delete.started.count.internal
       exported_name: sql_routine_delete_started_count_internal
-      labeled_name: 'sql.started.count{query_type: routine-started-delete, query_internal: true}'
+      labeled_name: 'sql.started.count{query_type: routine_started_delete, query_internal: true}'
       description: Number of SQL DELETE statements started within routine invocation (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -683,7 +685,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.routine.insert.count
       exported_name: sql_routine_insert_count
-      labeled_name: 'sql.count{query_type: routine-insert}'
+      labeled_name: 'sql.count{query_type: routine_insert}'
       description: Number of SQL INSERT statements successfully executed within routine invocation
       y_axis_label: SQL Statements
       type: COUNTER
@@ -694,7 +696,7 @@ layers:
       essential: true
     - name: sql.routine.insert.count.internal
       exported_name: sql_routine_insert_count_internal
-      labeled_name: 'sql.count{query_type: routine-insert, query_internal: true}'
+      labeled_name: 'sql.count{query_type: routine_insert, query_internal: true}'
       description: Number of SQL INSERT statements successfully executed within routine invocation (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -703,7 +705,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.routine.insert.started.count
       exported_name: sql_routine_insert_started_count
-      labeled_name: 'sql.started.count{query_type: routine-started-insert}'
+      labeled_name: 'sql.started.count{query_type: routine_started_insert}'
       description: Number of SQL INSERT statements started within routine invocation
       y_axis_label: SQL Statements
       type: COUNTER
@@ -713,7 +715,7 @@ layers:
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
     - name: sql.routine.insert.started.count.internal
       exported_name: sql_routine_insert_started_count_internal
-      labeled_name: 'sql.started.count{query_type: routine-started-insert, query_internal: true}'
+      labeled_name: 'sql.started.count{query_type: routine_started_insert, query_internal: true}'
       description: Number of SQL INSERT statements started within routine invocation (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -722,7 +724,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.routine.select.count
       exported_name: sql_routine_select_count
-      labeled_name: 'sql.count{query_type: routine-select}'
+      labeled_name: 'sql.count{query_type: routine_select}'
       description: Number of SQL SELECT statements successfully executed within routine invocation
       y_axis_label: SQL Statements
       type: COUNTER
@@ -733,7 +735,7 @@ layers:
       essential: true
     - name: sql.routine.select.count.internal
       exported_name: sql_routine_select_count_internal
-      labeled_name: 'sql.count{query_type: routine-select, query_internal: true}'
+      labeled_name: 'sql.count{query_type: routine_select, query_internal: true}'
       description: Number of SQL SELECT statements successfully executed within routine invocation (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -742,7 +744,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.routine.select.started.count
       exported_name: sql_routine_select_started_count
-      labeled_name: 'sql.started.count{query_type: routine-started-select}'
+      labeled_name: 'sql.started.count{query_type: routine_started_select}'
       description: Number of SQL SELECT statements started within routine invocation
       y_axis_label: SQL Statements
       type: COUNTER
@@ -752,7 +754,7 @@ layers:
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
     - name: sql.routine.select.started.count.internal
       exported_name: sql_routine_select_started_count_internal
-      labeled_name: 'sql.started.count{query_type: routine-started-select, query_internal: true}'
+      labeled_name: 'sql.started.count{query_type: routine_started_select, query_internal: true}'
       description: Number of SQL SELECT statements started within routine invocation (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -761,7 +763,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.routine.update.count
       exported_name: sql_routine_update_count
-      labeled_name: 'sql.count{query_type: routine-update}'
+      labeled_name: 'sql.count{query_type: routine_update}'
       description: Number of SQL UPDATE statements successfully executed within routine invocation
       y_axis_label: SQL Statements
       type: COUNTER
@@ -772,7 +774,7 @@ layers:
       essential: true
     - name: sql.routine.update.count.internal
       exported_name: sql_routine_update_count_internal
-      labeled_name: 'sql.count{query_type: routine-update, query_internal: true}'
+      labeled_name: 'sql.count{query_type: routine_update, query_internal: true}'
       description: Number of SQL UPDATE statements successfully executed within routine invocation (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -781,7 +783,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.routine.update.started.count
       exported_name: sql_routine_update_started_count
-      labeled_name: 'sql.started.count{query_type: routine-started-update}'
+      labeled_name: 'sql.started.count{query_type: routine_started_update}'
       description: Number of SQL UPDATE statements started within routine invocation
       y_axis_label: SQL Statements
       type: COUNTER
@@ -791,7 +793,7 @@ layers:
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
     - name: sql.routine.update.started.count.internal
       exported_name: sql_routine_update_started_count_internal
-      labeled_name: 'sql.started.count{query_type: routine-started-update, query_internal: true}'
+      labeled_name: 'sql.started.count{query_type: routine_started_update, query_internal: true}'
       description: Number of SQL UPDATE statements started within routine invocation (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -893,6 +895,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.begin.count
       exported_name: sql_txn_begin_count
+      labeled_name: 'sql.count{query_type: begin}'
       description: Number of SQL transaction BEGIN statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -903,6 +906,7 @@ layers:
       essential: true
     - name: sql.txn.begin.count.internal
       exported_name: sql_txn_begin_count_internal
+      labeled_name: 'sql.count{query_type: begin, query_internal: true}'
       description: Number of SQL transaction BEGIN statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -911,6 +915,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.commit.count
       exported_name: sql_txn_commit_count
+      labeled_name: 'sql.count{query_type: commit}'
       description: Number of SQL transaction COMMIT statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -921,6 +926,7 @@ layers:
       essential: true
     - name: sql.txn.commit.count.internal
       exported_name: sql_txn_commit_count_internal
+      labeled_name: 'sql.count{query_type: commit, query_internal: true}'
       description: Number of SQL transaction COMMIT statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -947,6 +953,7 @@ layers:
       derivative: NONE
     - name: sql.txn.rollback.count
       exported_name: sql_txn_rollback_count
+      labeled_name: 'sql.count{query_type: rollback}'
       description: Number of SQL transaction ROLLBACK statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -957,6 +964,7 @@ layers:
       essential: true
     - name: sql.txn.rollback.count.internal
       exported_name: sql_txn_rollback_count_internal
+      labeled_name: 'sql.count{query_type: rollback, query_internal: true}'
       description: Number of SQL transaction ROLLBACK statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -7619,6 +7627,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.call_stored_proc.count
       exported_name: sql_call_stored_proc_count
+      labeled_name: 'sql.count{query_type: call}'
       description: Number of successfully executed stored procedure calls
       y_axis_label: SQL Statements
       type: COUNTER
@@ -7627,6 +7636,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.call_stored_proc.count.internal
       exported_name: sql_call_stored_proc_count_internal
+      labeled_name: 'sql.count{query_type: call, query_internal: true}'
       description: Number of successfully executed stored procedure calls (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -7635,6 +7645,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.call_stored_proc.started.count
       exported_name: sql_call_stored_proc_started_count
+      labeled_name: 'sql.started.count{query_type: call}'
       description: Number of invocation of stored procedures via CALL statements
       y_axis_label: SQL Statements
       type: COUNTER
@@ -7643,6 +7654,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.call_stored_proc.started.count.internal
       exported_name: sql_call_stored_proc_started_count_internal
+      labeled_name: 'sql.started.count{query_type: call, query_internal: true}'
       description: Number of invocation of stored procedures via CALL statements (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -7699,6 +7711,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.copy.count
       exported_name: sql_copy_count
+      labeled_name: 'sql.count{query_type: copy}'
       description: Number of COPY SQL statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -7707,6 +7720,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.copy.count.internal
       exported_name: sql_copy_count_internal
+      labeled_name: 'sql.count{query_type: copy, query_internal: true}'
       description: Number of COPY SQL statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -7747,6 +7761,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.copy.started.count
       exported_name: sql_copy_started_count
+      labeled_name: 'sql.started.count{query_type: copy}'
       description: Number of COPY SQL statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -7755,6 +7770,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.copy.started.count.internal
       exported_name: sql_copy_started_count_internal
+      labeled_name: 'sql.started.count{query_type: copy, query_internal: true}'
       description: Number of COPY SQL statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -7795,6 +7811,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.ddl.started.count
       exported_name: sql_ddl_started_count
+      labeled_name: 'sql.started.count{query_type: ddl}'
       description: Number of SQL DDL statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -7803,6 +7820,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.ddl.started.count.internal
       exported_name: sql_ddl_started_count_internal
+      labeled_name: 'sql.started.count{query_type: ddl, query_internal: true}'
       description: Number of SQL DDL statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8499,6 +8517,7 @@ layers:
       derivative: NONE
     - name: sql.misc.count
       exported_name: sql_misc_count
+      labeled_name: 'sql.count{query_type: misc}'
       description: Number of other SQL statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8507,6 +8526,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.misc.count.internal
       exported_name: sql_misc_count_internal
+      labeled_name: 'sql.count{query_type: misc, query_internal: true}'
       description: Number of other SQL statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8515,6 +8535,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.misc.started.count
       exported_name: sql_misc_started_count
+      labeled_name: 'sql.started.count{query_type: misc}'
       description: Number of other SQL statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8523,6 +8544,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.misc.started.count.internal
       exported_name: sql_misc_started_count_internal
+      labeled_name: 'sql.started.count{query_type: misc, query_internal: true}'
       description: Number of other SQL statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8691,6 +8713,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.restart_savepoint.count
       exported_name: sql_restart_savepoint_count
+      labeled_name: 'sql.count{query_type: restart_savepoint}'
       description: Number of `SAVEPOINT cockroach_restart` statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8699,6 +8722,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.restart_savepoint.count.internal
       exported_name: sql_restart_savepoint_count_internal
+      labeled_name: 'sql.count{query_type: restart_savepoint, query_internal: true}'
       description: Number of `SAVEPOINT cockroach_restart` statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8707,6 +8731,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.restart_savepoint.release.count
       exported_name: sql_restart_savepoint_release_count
+      labeled_name: 'sql.count{query_type: release_restart_savepoint}'
       description: Number of `RELEASE SAVEPOINT cockroach_restart` statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8715,6 +8740,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.restart_savepoint.release.count.internal
       exported_name: sql_restart_savepoint_release_count_internal
+      labeled_name: 'sql.count{query_type: release_restart_savepoint, query_internal: true}'
       description: Number of `RELEASE SAVEPOINT cockroach_restart` statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8723,6 +8749,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.restart_savepoint.release.started.count
       exported_name: sql_restart_savepoint_release_started_count
+      labeled_name: 'sql.started.count{query_type: release_restart_savepoint}'
       description: Number of `RELEASE SAVEPOINT cockroach_restart` statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8731,6 +8758,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.restart_savepoint.release.started.count.internal
       exported_name: sql_restart_savepoint_release_started_count_internal
+      labeled_name: 'sql.started.count{query_type: release_restart_savepoint, query_internal: true}'
       description: Number of `RELEASE SAVEPOINT cockroach_restart` statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8739,6 +8767,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.restart_savepoint.rollback.count
       exported_name: sql_restart_savepoint_rollback_count
+      labeled_name: 'sql.count{query_type: rollback_to_restart_savepoint}'
       description: Number of `ROLLBACK TO SAVEPOINT cockroach_restart` statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8747,6 +8776,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.restart_savepoint.rollback.count.internal
       exported_name: sql_restart_savepoint_rollback_count_internal
+      labeled_name: 'sql.count{query_type: rollback_to_restart_savepoint, query_internal: true}'
       description: Number of `ROLLBACK TO SAVEPOINT cockroach_restart` statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8755,6 +8785,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.restart_savepoint.rollback.started.count
       exported_name: sql_restart_savepoint_rollback_started_count
+      labeled_name: 'sql.started.count{query_type: rollback_to_restart_savepoint}'
       description: Number of `ROLLBACK TO SAVEPOINT cockroach_restart` statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8763,6 +8794,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.restart_savepoint.rollback.started.count.internal
       exported_name: sql_restart_savepoint_rollback_started_count_internal
+      labeled_name: 'sql.started.count{query_type: rollback_to_restart_savepoint, query_internal: true}'
       description: Number of `ROLLBACK TO SAVEPOINT cockroach_restart` statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8771,6 +8803,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.restart_savepoint.started.count
       exported_name: sql_restart_savepoint_started_count
+      labeled_name: 'sql.started.count{query_type: restart_savepoint}'
       description: Number of `SAVEPOINT cockroach_restart` statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8779,6 +8812,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.restart_savepoint.started.count.internal
       exported_name: sql_restart_savepoint_started_count_internal
+      labeled_name: 'sql.started.count{query_type: restart_savepoint, query_internal: true}'
       description: Number of `SAVEPOINT cockroach_restart` statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8787,6 +8821,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.savepoint.count
       exported_name: sql_savepoint_count
+      labeled_name: 'sql.count{query_type: savepoint}'
       description: Number of SQL SAVEPOINT statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8795,6 +8830,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.savepoint.count.internal
       exported_name: sql_savepoint_count_internal
+      labeled_name: 'sql.count{query_type: savepoint, query_internal: true}'
       description: Number of SQL SAVEPOINT statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8803,6 +8839,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.savepoint.release.count
       exported_name: sql_savepoint_release_count
+      labeled_name: 'sql.count{query_type: release_savepoint}'
       description: Number of `RELEASE SAVEPOINT` statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8811,6 +8848,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.savepoint.release.count.internal
       exported_name: sql_savepoint_release_count_internal
+      labeled_name: 'sql.count{query_type: release_savepoint, query_internal: true}'
       description: Number of `RELEASE SAVEPOINT` statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8819,6 +8857,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.savepoint.release.started.count
       exported_name: sql_savepoint_release_started_count
+      labeled_name: 'sql.started.count{query_type: release_savepoint}'
       description: Number of `RELEASE SAVEPOINT` statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8827,6 +8866,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.savepoint.release.started.count.internal
       exported_name: sql_savepoint_release_started_count_internal
+      labeled_name: 'sql.started.count{query_type: release_savepoint, query_internal: true}'
       description: Number of `RELEASE SAVEPOINT` statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8835,6 +8875,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.savepoint.rollback.count
       exported_name: sql_savepoint_rollback_count
+      labeled_name: 'sql.count{query_type: rollback_to_savepoint}'
       description: Number of `ROLLBACK TO SAVEPOINT` statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8843,6 +8884,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.savepoint.rollback.count.internal
       exported_name: sql_savepoint_rollback_count_internal
+      labeled_name: 'sql.count{query_type: rollback_to_savepoint, query_internal: true}'
       description: Number of `ROLLBACK TO SAVEPOINT` statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8851,6 +8893,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.savepoint.rollback.started.count
       exported_name: sql_savepoint_rollback_started_count
+      labeled_name: 'sql.started.count{query_type: rollback_to_savepoint}'
       description: Number of `ROLLBACK TO SAVEPOINT` statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8859,6 +8902,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.savepoint.rollback.started.count.internal
       exported_name: sql_savepoint_rollback_started_count_internal
+      labeled_name: 'sql.started.count{query_type: rollback_to_savepoint, query_internal: true}'
       description: Number of `ROLLBACK TO SAVEPOINT` statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -8867,6 +8911,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.savepoint.started.count
       exported_name: sql_savepoint_started_count
+      labeled_name: 'sql.started.count{query_type: savepoint}'
       description: Number of SQL SAVEPOINT statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -8875,6 +8920,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.savepoint.started.count.internal
       exported_name: sql_savepoint_started_count_internal
+      labeled_name: 'sql.started.count{query_type: savepoint, query_internal: true}'
       description: Number of SQL SAVEPOINT statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -9227,6 +9273,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.begin.started.count
       exported_name: sql_txn_begin_started_count
+      labeled_name: 'sql.started.count{query_type: begin}'
       description: Number of SQL transaction BEGIN statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -9235,6 +9282,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.begin.started.count.internal
       exported_name: sql_txn_begin_started_count_internal
+      labeled_name: 'sql.started.count{query_type: begin, query_internal: true}'
       description: Number of SQL transaction BEGIN statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -9243,6 +9291,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.commit.started.count
       exported_name: sql_txn_commit_started_count
+      labeled_name: 'sql.started.count{query_type: commit}'
       description: Number of SQL transaction COMMIT statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -9251,6 +9300,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.commit.started.count.internal
       exported_name: sql_txn_commit_started_count_internal
+      labeled_name: 'sql.started.count{query_type: commit, query_internal: true}'
       description: Number of SQL transaction COMMIT statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -9259,6 +9309,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.commit_prepared.count
       exported_name: sql_txn_commit_prepared_count
+      labeled_name: 'sql.count{query_type: commit_prepared}'
       description: Number of SQL COMMIT PREPARED statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -9267,6 +9318,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.commit_prepared.count.internal
       exported_name: sql_txn_commit_prepared_count_internal
+      labeled_name: 'sql.count{query_type: commit_prepared, query_internal: true}'
       description: Number of SQL COMMIT PREPARED statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -9275,6 +9327,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.commit_prepared.started.count
       exported_name: sql_txn_commit_prepared_started_count
+      labeled_name: 'sql.started.count{query_type: commit_prepared}'
       description: Number of SQL COMMIT PREPARED statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -9283,6 +9336,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.commit_prepared.started.count.internal
       exported_name: sql_txn_commit_prepared_started_count_internal
+      labeled_name: 'sql.started.count{query_type: commit_prepared, query_internal: true}'
       description: Number of SQL COMMIT PREPARED statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -9307,6 +9361,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.prepare.count
       exported_name: sql_txn_prepare_count
+      labeled_name: 'sql.count{query_type: prepare_transaction}'
       description: Number of SQL PREPARE TRANSACTION statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -9315,6 +9370,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.prepare.count.internal
       exported_name: sql_txn_prepare_count_internal
+      labeled_name: 'sql.count{query_type: prepare_transaction, query_internal: true}'
       description: Number of SQL PREPARE TRANSACTION statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -9323,6 +9379,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.prepare.started.count
       exported_name: sql_txn_prepare_started_count
+      labeled_name: 'sql.started.count{query_type: prepare_transaction}'
       description: Number of SQL PREPARE TRANSACTION statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -9331,6 +9388,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.prepare.started.count.internal
       exported_name: sql_txn_prepare_started_count_internal
+      labeled_name: 'sql.started.count{query_type: prepare_transaction, query_internal: true}'
       description: Number of SQL PREPARE TRANSACTION statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -9339,6 +9397,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.rollback.started.count
       exported_name: sql_txn_rollback_started_count
+      labeled_name: 'sql.started.count{query_type: rollback}'
       description: Number of SQL transaction ROLLBACK statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -9347,6 +9406,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.rollback.started.count.internal
       exported_name: sql_txn_rollback_started_count_internal
+      labeled_name: 'sql.started.count{query_type: rollback, query_internal: true}'
       description: Number of SQL transaction ROLLBACK statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -9355,6 +9415,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.rollback_prepared.count
       exported_name: sql_txn_rollback_prepared_count
+      labeled_name: 'sql.count{query_type: rollback_prepared}'
       description: Number of SQL ROLLBACK PREPARED statements successfully executed
       y_axis_label: SQL Statements
       type: COUNTER
@@ -9363,6 +9424,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.rollback_prepared.count.internal
       exported_name: sql_txn_rollback_prepared_count_internal
+      labeled_name: 'sql.count{query_type: rollback_prepared, query_internal: true}'
       description: Number of SQL ROLLBACK PREPARED statements successfully executed (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
@@ -9371,6 +9433,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.rollback_prepared.started.count
       exported_name: sql_txn_rollback_prepared_started_count
+      labeled_name: 'sql.started.count{query_type: rollback_prepared}'
       description: Number of SQL ROLLBACK PREPARED statements started
       y_axis_label: SQL Statements
       type: COUNTER
@@ -9379,6 +9442,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.txn.rollback_prepared.started.count.internal
       exported_name: sql_txn_rollback_prepared_started_count_internal
+      labeled_name: 'sql.started.count{query_type: rollback_prepared, query_internal: true}'
       description: Number of SQL ROLLBACK PREPARED statements started (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
