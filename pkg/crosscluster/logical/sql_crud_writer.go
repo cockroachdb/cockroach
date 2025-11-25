@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -32,6 +34,7 @@ type sqlCrudWriter struct {
 	handlers map[descpb.ID]*tableHandler
 	settings *cluster.Settings
 	discard  jobspb.LogicalReplicationDetails_Discard
+	pacer    *admission.Pacer
 }
 
 var _ BatchHandler = &sqlCrudWriter{}
@@ -81,6 +84,7 @@ func newCrudSqlWriter(
 		handlers: handlers,
 		settings: evalCtx.Settings,
 		discard:  discard,
+		pacer:    bulk.NewCPUPacer(ctx, cfg.DB.KV(), useLowPriority),
 	}, nil
 }
 
@@ -89,6 +93,10 @@ func (c *sqlCrudWriter) HandleBatch(
 ) (b batchStats, err error) {
 	ctx, sp := tracing.ChildSpan(ctx, "crudBatcher.HandleBatch")
 	defer sp.Finish()
+
+	if _, err := c.pacer.Pace(ctx); err != nil {
+		return batchStats{}, err
+	}
 
 	sortedEvents, err := c.decoder.decodeAndCoalesceEvents(ctx, batch, c.discard)
 	if err != nil {

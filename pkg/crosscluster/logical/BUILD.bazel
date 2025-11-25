@@ -92,6 +92,7 @@ go_library(
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
         "//pkg/storage",
+        "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/bulk",
