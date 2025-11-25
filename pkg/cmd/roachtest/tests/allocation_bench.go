@@ -172,6 +172,18 @@ func (r kvAllocBenchEventRunner) run(ctx context.Context, c cluster.Cluster, t t
 	t.Status("running kv workload", runCmd)
 	return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), runCmd)
 }
+
+// registerAllocationBench registers allocation benchmark tests that measure load
+// balancing quality across the cluster under various workload patterns. The tests
+// run multiple samples (iterations of a scenario) and report metrics for CPU
+// imbalance, write I/O imbalance, and rebalancing cost.
+//
+//   - ops=skew: Mixes different operation types with different rates (e.g., high-rate
+//     small operations vs low-rate large operations). Each workload has different
+//     resource characteristics but similar aggregate resource usage.
+//   - access=skew: Uses the same operation type but with a skewed (power-law) key
+//     access distribution, where certain keys are accessed much more frequently
+//     than others.
 func registerAllocationBench(r registry.Registry) {
 	specTemplates := []allocationBenchSpec{
 		// TODO(kvoli): Add a background event runner and implement events for
@@ -279,6 +291,10 @@ func registerAllocationBenchSpec(r registry.Registry, allocSpec allocationBenchS
 	})
 }
 
+// setupAllocationBench initializes the cluster for an allocation benchmark run.
+// It starts the CockroachDB nodes with the specified load-based rebalancing mode,
+// sets up Prometheus and Grafana for metrics collection, and returns a stat
+// collector and cleanup function.
 func setupAllocationBench(
 	ctx context.Context, t test.Test, c cluster.Cluster, spec allocationBenchSpec,
 ) (clusterstats.StatCollector, func(context.Context)) {
@@ -339,6 +355,45 @@ func runAllocationBenchEvent(
 	return load.run.run(ctx, c, t)
 }
 
+// runAllocationBench runs the allocation benchmark test. The test measures load
+// balancing quality across the cluster by collecting metrics over multiple sample runs.
+//
+// Metrics are computed by querying Prometheus every 10 seconds (clusterstats/collector.go:
+// defaultScrapeInterval), where each data point aggregates over a 5-minute rolling window via
+// [5m] range vector selectors (rebalance_stats.go: cpuStat, ioWriteStat). This means each
+// 10-second data point represents the average over the previous 5 minutes. After a 10-minute
+// warmup, metrics are collected during the workload (default 30 minutes). At each 10-second
+// data point, the (max - min) imbalance across nodes is calculated, then all these values are
+// averaged to produce the final metric.
+//
+// Metrics Reported to Roachperf:
+//
+//  1. cpu(%): Average of (max - min) CPU utilization across nodes per 5-minute interval.
+//     This measures how well CPU load is balanced. Lower values indicate more evenly
+//     distributed CPU load. For example, if at an interval nodes have CPU utilizations of
+//     [30%, 35%, 40%, 25%, 30%], the spread is calculated as 40% - 25% = 15%. This means
+//     the highest CPU node is 15 percentage points above the lowest on average for that interval.
+//
+//  2. write(%): Average of (max - min) write disk I/O across nodes per 5-minute
+//     interval. Write throughput (MB/s) is normalized by 400 MB/s. This measures how
+//     well write load is balanced. Lower values indicate more evenly distributed I/O.
+//     For example, if at an interval nodes have write throughput of [200 MB/s, 250 MB/s,
+//     300 MB/s, 150 MB/s, 200 MB/s], the spread is 300 - 150 = 150 MB/s. Normalized by
+//     400 MB/s, this becomes 150 / 400 = 37.5%.
+//
+//  3. cost(gb): Total GB of data moved during rebalancing, computed as the difference
+//     between cumulative rebalance snapshot bytes at the end vs the start of recording.
+//     Lower values indicate more efficient rebalancing, but some rebalancing is
+//     necessary to achieve good load distribution. For example, if the cumulative
+//     rebalance bytes are 10 GB at the start and 15 GB at the end, cost(gb) = 5.
+//
+// The test runs multiple samples (default: 5) and selects the "middle run" to
+// export - the sample with minimum sum of pairwise distances to all other
+// samples across all metrics, see findMinDistanceClusterStatRun. Standard
+// deviation metrics (std_*) are computed over the values of each metric across
+// all sample runs (e.g., std_cpu(%) is the standard deviation of cpu(%) values
+// from all 5 runs). These indicate consistency across runs and are indicative
+// of worst/best case outcomes.
 func runAllocationBench(
 	ctx context.Context, t test.Test, c cluster.Cluster, spec allocationBenchSpec,
 ) {
@@ -400,6 +455,10 @@ func runAllocationBench(
 	}
 }
 
+// runAllocationBenchSample runs a single sample of the allocation benchmark.
+// It executes the workload events, then collects and aggregates metrics from
+// Prometheus for the recording period (after warmup). Returns the collected
+// statistics including cpu(%), write(%), and cost(gb) metrics.
 func runAllocationBenchSample(
 	ctx context.Context,
 	t test.Test,
