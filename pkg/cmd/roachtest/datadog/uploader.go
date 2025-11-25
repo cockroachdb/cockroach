@@ -91,8 +91,7 @@ func ShouldUploadLogs() bool {
 // BuildLogMetadata creates an LogMetadata from runtime test information
 func BuildLogMetadata(
 	l *logger.Logger,
-	testName string,
-	owner registry.Owner,
+	spec *registry.TestSpec,
 	cloud spec.Cloud,
 	osName string,
 	arch vm.CPUArch,
@@ -100,8 +99,8 @@ func BuildLogMetadata(
 ) LogMetadata {
 
 	m := LogMetadata{
-		TestName: testName,
-		Owner:    string(owner),
+		TestName: spec.Name,
+		Owner:    string(spec.Owner),
 		Cloud:    cloudToDatadogTag(cloud),
 		Platform: buildPlatformTag(osName, arch),
 		Cluster:  clusterName,

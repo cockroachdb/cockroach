@@ -343,7 +343,7 @@ var (
 	})
 
 	DatadogAlwaysUpload bool = false
-	_                        = registerRunOpsFlag(&DatadogAlwaysUpload, FlagInfo{
+	_                        = registerRunFlag(&DatadogAlwaysUpload, FlagInfo{
 		Name: "datadog-always-upload",
 		Usage: `Always upload roachtest run log data to Datadog. Logs from master and release branches are uploaded by
 				default.`,
