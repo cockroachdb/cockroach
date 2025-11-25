@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -318,12 +319,14 @@ func (r *Replica) Breaker() *circuit.Breaker {
 	return r.breaker.wrapped
 }
 
-func (r *Replica) AssertState(ctx context.Context, reader storage.Reader) {
+func (r *Replica) AssertState(
+	ctx context.Context, stateRO kvstorage.StateRO, raftRO kvstorage.RaftRO,
+) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, reader)
+	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, stateRO, raftRO)
 }
 
 func (r *Replica) RaftLock() {

@@ -1145,14 +1145,12 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 		txns[strKey] = *txn
 		for _, addrKey := range []roachpb.Key{baseKey, outsideKey} {
 			key := keys.TransactionKey(addrKey, txn.ID)
-			if err := storage.MVCCPutProto(ctx, tc.engine, key, hlc.Timestamp{}, txn, storage.MVCCWriteOptions{}); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, storage.MVCCPutProto(
+				ctx, tc.stateEng, key, hlc.Timestamp{}, txn, storage.MVCCWriteOptions{},
+			))
 		}
 		entry := roachpb.AbortSpanEntry{Key: txn.Key, Timestamp: txn.LastActive()}
-		if err := tc.repl.abortSpan.Put(ctx, tc.engine, nil, txn.ID, &entry); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, tc.repl.abortSpan.Put(ctx, tc.stateEng, nil, txn.ID, &entry))
 	}
 
 	// Run GC.
@@ -1174,7 +1172,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 			txnKey := keys.TransactionKey(roachpb.Key(strKey), txns[strKey].ID)
 			txnTombstoneTSCacheKey := transactionTombstoneMarker(
 				roachpb.Key(strKey), txns[strKey].ID)
-			ok, err := storage.MVCCGetProto(ctx, tc.engine, txnKey, hlc.Timestamp{}, txn,
+			ok, err := storage.MVCCGetProto(ctx, tc.stateEng, txnKey, hlc.Timestamp{}, txn,
 				storage.MVCCGetOptions{})
 			if err != nil {
 				return err
@@ -1238,11 +1236,9 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 			"but only %d are left", exp, count)
 	}
 
-	batch := tc.engine.NewSnapshot()
-	defer batch.Close()
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.RLock()
-	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, batch) // check that in-mem and on-disk state were updated
+	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.stateEng, tc.raftEng) // check that in-mem and on-disk state were updated
 	tc.repl.mu.RUnlock()
 	tc.repl.raftMu.Unlock()
 }
@@ -1349,9 +1345,9 @@ func TestMVCCGCQueueLastProcessedTimestamps(t *testing.T) {
 
 	ts := tc.Clock().Now()
 	for _, lpv := range lastProcessedVals {
-		if err := storage.MVCCPutProto(ctx, tc.engine, lpv.key, hlc.Timestamp{}, &ts, storage.MVCCWriteOptions{}); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, storage.MVCCPutProto(
+			ctx, tc.stateEng, lpv.key, hlc.Timestamp{}, &ts, storage.MVCCWriteOptions{},
+		))
 	}
 
 	confReader, err := tc.store.GetConfReader(ctx)
@@ -1370,7 +1366,7 @@ func TestMVCCGCQueueLastProcessedTimestamps(t *testing.T) {
 	// Verify GC.
 	testutils.SucceedsSoon(t, func() error {
 		for _, lpv := range lastProcessedVals {
-			ok, err := storage.MVCCGetProto(ctx, tc.engine, lpv.key, hlc.Timestamp{}, &ts,
+			ok, err := storage.MVCCGetProto(ctx, tc.stateEng, lpv.key, hlc.Timestamp{}, &ts,
 				storage.MVCCGetOptions{})
 			if err != nil {
 				return err

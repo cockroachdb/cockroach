@@ -1283,9 +1283,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	if shouldAssert {
 		sm.r.mu.RLock()
-		// TODO(sep-raft-log): either check only statemachine invariants or
-		// pass both engines in.
-		sm.r.assertStateRaftMuLockedReplicaMuRLocked(ctx, sm.r.store.TODOEngine())
+		sm.r.assertStateRaftMuLockedReplicaMuRLocked(
+			ctx, sm.r.store.StateEngine(), sm.r.store.LogEngine())
 		sm.r.mu.RUnlock()
 	}
 
