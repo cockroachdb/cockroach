@@ -636,5 +636,11 @@ message BulkMergeSpec {
 // IndexBackfillMapProgress is emitted by map-stage processors to describe newly
 // produced SST manifests.
 message IndexBackfillMapProgress {
-  repeated jobs.jobspb.IndexBackfillSSTManifest sst_manifests = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTManifests"];
+	repeated jobs.jobspb.IndexBackfillSSTManifest sst_manifests = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTManifests"];
+}
+
+// IngestFileSpec describes the set of SSTs to be ingested by an ingest
+// processor. Each SST is expected to be range-aligned and non-overlapping.
+message IngestFileSpec {
+	repeated BulkMergeSpec.SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
 }

@@ -451,6 +451,15 @@ func NewProcessor(
 		}
 		return NewMergeLoopbackProcessor(ctx, flowCtx, processorID, *core.MergeLoopback, post)
 	}
+	if core.IngestFile != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		if NewIngestFileProcessor == nil {
+			return nil, errors.New("IngestFile processor unimplemented")
+		}
+		return NewIngestFileProcessor(ctx, flowCtx, processorID, *core.IngestFile)
+	}
 
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
@@ -521,3 +530,5 @@ var NewLogicalReplicationWriterProcessor func(context.Context, *execinfra.FlowCt
 var NewLogicalReplicationOfflineScanProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.LogicalReplicationOfflineScanSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 var NewCompactBackupsProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.CompactBackupsSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
+
+var NewIngestFileProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.IngestFileSpec) (execinfra.Processor, error)

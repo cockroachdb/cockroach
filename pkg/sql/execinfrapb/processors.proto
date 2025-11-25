@@ -137,9 +137,10 @@ message ProcessorCoreUnion {
   optional BulkMergeSpec bulkMerge = 51;
   optional MergeCoordinatorSpec mergeCoordinator = 52;
   optional MergeLoopbackSpec mergeLoopback = 53;
+  optional IngestFileSpec ingestFile = 54;
 
   reserved 6, 12, 14, 17, 18, 19, 20, 32;
-  // NEXT ID: 54.
+  // NEXT ID: 55.
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
