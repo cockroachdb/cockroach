@@ -255,15 +255,15 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	// Create replica.
 	rg := roachpb.RangeDescriptor{
 		RangeID:       1,
-		StartKey:      roachpb.RKey([]byte("a")),
-		EndKey:        roachpb.RKey([]byte("b")),
+		StartKey:      roachpb.RKey("a"),
+		EndKey:        roachpb.RKey("b"),
 		NextReplicaID: 1,
 	}
 	rg.AddReplica(1, 1, roachpb.VOTER_FULL)
 
 	const replicaID = 1
-	require.NoError(t,
-		kvstorage.MakeStateLoader(rg.RangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+	require.NoError(t, kvstorage.MakeStateLoader(rg.RangeID).SetRaftReplicaID(
+		ctx, store.StateEngine(), replicaID))
 	replica, err := loadInitializedReplicaForTesting(ctx, store, &rg, replicaID)
 	if err != nil {
 		t.Fatalf("make replica error : %+v", err)

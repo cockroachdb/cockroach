@@ -391,9 +391,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{}, &cfg)
 	defer stopper.Stop(ctx)
 
-	if _, err := kvstorage.ReadStoreIdent(ctx, store.TODOEngine()); err != nil {
-		t.Fatalf("unable to read store ident: %+v", err)
-	}
+	_, err := kvstorage.ReadStoreIdent(ctx, store.LogEngine())
+	require.NoError(t, err)
 
 	store.VisitReplicas(func(repl *Replica) (more bool) {
 		// Stats should agree with recomputation. Hold raftMu to avoid
@@ -404,7 +403,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		memMS := repl.GetMVCCStats()
 		// Stats should agree with a recomputation.
 		now := store.Clock().Now()
-		diskMS, err := rditer.ComputeStatsForRange(ctx, repl.Desc(), store.TODOEngine(),
+		diskMS, err := rditer.ComputeStatsForRange(
+			ctx, repl.Desc(), store.StateEngine(),
 			fs.UnknownReadCategory, now.WallTime)
 		require.NoError(t, err)
 		memMS.AgeTo(diskMS.LastUpdateNanos)
@@ -768,7 +768,7 @@ func TestMarkReplicaInitialized(t *testing.T) {
 
 	newID := roachpb.FullReplicaID{RangeID: 3, ReplicaID: 1}
 	require.NoError(t, kvstorage.MakeStateLoader(newID.RangeID).SetRaftReplicaID(
-		ctx, store.TODOEngine(), newID.ReplicaID))
+		ctx, store.StateEngine(), newID.ReplicaID))
 
 	r, err := newUninitializedReplica(store, newID)
 	require.NoError(t, err)
@@ -1310,7 +1310,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 			var txn roachpb.Transaction
 			if ok, err := storage.MVCCGetProto(
-				ctx, store.TODOEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
+				ctx, store.StateEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 			); err != nil {
 				t.Fatal(err)
 			} else if ok {
@@ -1621,7 +1621,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 	var txn roachpb.Transaction
 	if ok, err := storage.MVCCGetProto(
-		ctx, store.TODOEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
+		ctx, store.StateEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 	); !ok || err != nil {
 		t.Fatalf("not found or err: %+v", err)
 	}

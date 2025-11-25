@@ -246,9 +246,7 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	ls.storeMap.Range(func(_ roachpb.StoreID, s *Store) bool {
 		var storeBI gossip.BootstrapInfo
 		var ok bool
-		// TODO(sep-raft-log): probably state engine since it's random data
-		// with no durability guarantees.
-		ok, err = storage.MVCCGetProto(ctx, s.TODOEngine(), keys.StoreGossipKey(), hlc.Timestamp{}, &storeBI,
+		ok, err = storage.MVCCGetProto(ctx, s.LogEngine(), keys.StoreGossipKey(), hlc.Timestamp{}, &storeBI,
 			storage.MVCCGetOptions{})
 		if err != nil {
 			return false
@@ -297,7 +295,7 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	var err error
 	ls.storeMap.Range(func(_ roachpb.StoreID, s *Store) bool {
 		// TODO(sep-raft-log): see ReadBootstrapInfo.
-		err = storage.MVCCPutProto(ctx, s.TODOEngine(), keys.StoreGossipKey(), hlc.Timestamp{}, bi, storage.MVCCWriteOptions{})
+		err = storage.MVCCPutProto(ctx, s.LogEngine(), keys.StoreGossipKey(), hlc.Timestamp{}, bi, storage.MVCCWriteOptions{})
 		return err == nil
 	})
 	return err

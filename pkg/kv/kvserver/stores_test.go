@@ -154,15 +154,11 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 			},
 		}
 
-		require.NoError(t, kvstorage.MakeStateLoader(desc.RangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+		require.NoError(t, kvstorage.MakeStateLoader(desc.RangeID).SetRaftReplicaID(
+			ctx, store.StateEngine(), replicaID))
 		replica, err := loadInitializedReplicaForTesting(ctx, store, desc, replicaID)
-		if err != nil {
-			t.Fatalf("unexpected error when creating replica: %+v", err)
-		}
-		err2 := store.AddReplica(replica)
-		if err2 != nil {
-			t.Fatalf("unexpected error when adding replica: %v", err2)
-		}
+		require.NoError(t, err)
+		require.NoError(t, store.AddReplica(replica))
 	}
 
 	// Test the case where the replica we're looking for exists.

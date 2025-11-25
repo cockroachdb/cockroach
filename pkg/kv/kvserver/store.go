@@ -2147,8 +2147,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Populate the store ident. If not bootstrapped, ReadStoreIntent will
 	// return an error.
-	// TODO(sep-raft-log): which engine holds the ident?
-	ident, err := kvstorage.ReadStoreIdent(ctx, s.TODOEngine())
+	ident, err := kvstorage.ReadStoreIdent(ctx, s.LogEngine())
 	if err != nil {
 		return err
 	}
@@ -2933,7 +2932,7 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 	ctx = s.AnnotateCtx(ctx)
 	return storage.MVCCPutProto(
 		ctx,
-		s.TODOEngine(), // TODO(sep-raft-log): probably state engine
+		s.LogEngine(),
 		keys.StoreLastUpKey(),
 		hlc.Timestamp{},
 		&time,
@@ -2948,7 +2947,7 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 // timestamp is returned instead.
 func (s *Store) ReadLastUpTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	var timestamp hlc.Timestamp
-	ok, err := storage.MVCCGetProto(ctx, s.TODOEngine(), keys.StoreLastUpKey(), hlc.Timestamp{},
+	ok, err := storage.MVCCGetProto(ctx, s.LogEngine(), keys.StoreLastUpKey(), hlc.Timestamp{},
 		&timestamp, storage.MVCCGetOptions{})
 	if err != nil {
 		return hlc.Timestamp{}, err
@@ -2962,8 +2961,8 @@ func (s *Store) ReadLastUpTimestamp(ctx context.Context) (hlc.Timestamp, error) 
 func (s *Store) WriteHLCUpperBound(ctx context.Context, time int64) error {
 	ctx = s.AnnotateCtx(ctx)
 	ts := hlc.Timestamp{WallTime: time}
-	batch := s.TODOEngine().NewBatch() // TODO(sep-raft-log): state engine might be useful here due to need to sync
-	// Write has to sync to disk to ensure HLC monotonicity across restarts
+	// Write has to sync to disk to ensure HLC monotonicity across restarts.
+	batch := s.LogEngine().NewBatch()
 	defer batch.Close()
 	if err := storage.MVCCPutProto(
 		ctx,
@@ -2975,11 +2974,7 @@ func (s *Store) WriteHLCUpperBound(ctx context.Context, time int64) error {
 	); err != nil {
 		return err
 	}
-
-	if err := batch.Commit(true /* sync */); err != nil {
-		return err
-	}
-	return nil
+	return batch.Commit(true /* sync */)
 }
 
 // ReadHLCUpperBound returns the upper bound to the wall time of the HLC
