@@ -611,6 +611,11 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerClampInequalitySelectivity = false
 	notStale()
 
+	evalCtx.SessionData().OptimizerBuildRoutineParamsAsPlaceholders = true
+	stale()
+	evalCtx.SessionData().OptimizerBuildRoutineParamsAsPlaceholders = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)

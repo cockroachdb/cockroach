@@ -4492,6 +4492,24 @@ var varGen = map[string]sessionVar{
 			return sessiondatapb.CanaryStatsModeAuto.String()
 		},
 	},
+
+	`optimizer_build_routine_params_as_placeholders`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_build_routine_params_as_placeholders`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_build_routine_params_as_placeholders", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerBuildRoutineParamsAsPlaceholders(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(
+				evalCtx.SessionData().OptimizerBuildRoutineParamsAsPlaceholders,
+			), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

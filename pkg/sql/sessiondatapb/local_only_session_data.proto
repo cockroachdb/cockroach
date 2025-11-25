@@ -759,6 +759,10 @@ message LocalOnlySessionData {
   // canary statistics (mode == on), stable statistics (mode == off), or
   // let the system decide based on random selection (mode == auto).
   int64 canary_stats_mode = 193 [(gogoproto.casttype) = "CanaryStatsMode"];
+  // OptimizerBuildRoutineParamsAsPlaceholders, when true, instructs the
+  // optimizer to build routine parameters as placeholders instead of outer
+  // columns.
+  bool optimizer_build_routine_params_as_placeholders = 194;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
