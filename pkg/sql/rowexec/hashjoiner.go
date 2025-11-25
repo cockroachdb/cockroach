@@ -157,8 +157,8 @@ func newHashJoiner(
 
 	// If the trace is recording, instrument the hashJoiner to collect stats.
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		h.leftSource = newInputStatCollector(h.leftSource)
-		h.rightSource = newInputStatCollector(h.rightSource)
+		h.leftSource = NewInputStatCollector(h.leftSource)
+		h.rightSource = NewInputStatCollector(h.rightSource)
 		h.ExecStatsForTrace = h.execStatsForTrace
 	}
 
@@ -573,11 +573,11 @@ func (h *hashJoiner) shouldEmitUnmatched(
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (h *hashJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
-	lis, ok := getInputStats(h.leftSource)
+	lis, ok := GetInputStats(h.leftSource)
 	if !ok {
 		return nil
 	}
-	ris, ok := getInputStats(h.rightSource)
+	ris, ok := GetInputStats(h.rightSource)
 	if !ok {
 		return nil
 	}

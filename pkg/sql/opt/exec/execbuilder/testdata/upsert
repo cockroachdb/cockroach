@@ -1077,10 +1077,10 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
   AND operation NOT LIKE 'kv.DistSender: sending pre-commit query intents%'
 ----
-colbatchscan  Scan /Table/120/1/2/0 lock Exclusive (Block, Unreplicated)
-upsert        CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
-upsert        CPut /Table/120/2/3/0 -> /BYTES/0x8a
-sql query     rows affected: 1
+colbatchscan     Scan /Table/120/1/2/0 lock Exclusive (Block, Unreplicated)
+upsertProcessor  CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
+upsertProcessor  CPut /Table/120/2/3/0 -> /BYTES/0x8a
+sql query        rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
@@ -1089,10 +1089,10 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan  Scan /Table/120/1/1/0 lock Exclusive (Block, Unreplicated)
-upsert        CPut /Table/120/1/1/0 -> /TUPLE/2:2:Int/2
-upsert        CPut /Table/120/2/2/0 -> /BYTES/0x89
-sql query     rows affected: 1
+colbatchscan     Scan /Table/120/1/1/0 lock Exclusive (Block, Unreplicated)
+upsertProcessor  CPut /Table/120/1/1/0 -> /TUPLE/2:2:Int/2
+upsertProcessor  CPut /Table/120/2/2/0 -> /BYTES/0x89
+sql query        rows affected: 1
 
 statement error duplicate key value
 SET tracing = on,kv,results; UPSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
@@ -1102,12 +1102,12 @@ set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan  Scan /Table/120/1/2/0 lock Exclusive (Block, Unreplicated)
-colbatchscan  fetched: /kv/kv_pkey/2/v -> /3
-upsert        Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
-upsert        Del (locking) /Table/120/2/3/0
-upsert        CPut /Table/120/2/2/0 -> /BYTES/0x8a
-sql query     execution failed after 0 rows: duplicate key value violates unique constraint "woo"
+colbatchscan     Scan /Table/120/1/2/0 lock Exclusive (Block, Unreplicated)
+colbatchscan     fetched: /kv/kv_pkey/2/v -> /3
+upsertProcessor  Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
+upsertProcessor  Del (locking) /Table/120/2/3/0
+upsertProcessor  CPut /Table/120/2/2/0 -> /BYTES/0x8a
+sql query        execution failed after 0 rows: duplicate key value violates unique constraint "woo"
 
 # Test that implicit SELECT FOR UPDATE doesn't spread to subqueries.
 statement ok
