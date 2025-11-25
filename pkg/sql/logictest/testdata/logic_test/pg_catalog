@@ -3146,6 +3146,7 @@ optimizer_enable_lock_elision                                    on             
 optimizer_hoist_uncorrelated_equality_subqueries                 on                  NULL      NULL        NULL        string
 optimizer_merge_joins_enabled                                    on                  NULL      NULL        NULL        string
 optimizer_min_row_count                                          1                   NULL      NULL        NULL        string
+optimizer_omit_routine_params_in_outer_cols                      off                 NULL      NULL        NULL        string
 optimizer_plan_lookup_joins_with_reverse_scans                   on                  NULL      NULL        NULL        string
 optimizer_prefer_bounded_cardinality                             on                  NULL      NULL        NULL        string
 optimizer_prove_implication_with_virtual_computed_columns        on                  NULL      NULL        NULL        string
@@ -3395,6 +3396,7 @@ optimizer_enable_lock_elision                                    on             
 optimizer_hoist_uncorrelated_equality_subqueries                 on                  NULL  user     NULL      on                  on
 optimizer_merge_joins_enabled                                    on                  NULL  user     NULL      on                  on
 optimizer_min_row_count                                          1                   NULL  user     NULL      1                   1
+optimizer_omit_routine_params_in_outer_cols                      off                 NULL  user     NULL      off                 off
 optimizer_plan_lookup_joins_with_reverse_scans                   on                  NULL  user     NULL      on                  on
 optimizer_prefer_bounded_cardinality                             on                  NULL  user     NULL      on                  on
 optimizer_prove_implication_with_virtual_computed_columns        on                  NULL  user     NULL      on                  on
@@ -3635,6 +3637,7 @@ optimizer_enable_lock_elision                                    NULL    NULL   
 optimizer_hoist_uncorrelated_equality_subqueries                 NULL    NULL     NULL     NULL        NULL
 optimizer_merge_joins_enabled                                    NULL    NULL     NULL     NULL        NULL
 optimizer_min_row_count                                          NULL    NULL     NULL     NULL        NULL
+optimizer_omit_routine_params_in_outer_cols                      NULL    NULL     NULL     NULL        NULL
 optimizer_plan_lookup_joins_with_reverse_scans                   NULL    NULL     NULL     NULL        NULL
 optimizer_prefer_bounded_cardinality                             NULL    NULL     NULL     NULL        NULL
 optimizer_prove_implication_with_virtual_computed_columns        NULL    NULL     NULL     NULL        NULL

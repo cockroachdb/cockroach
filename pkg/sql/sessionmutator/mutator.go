@@ -1110,3 +1110,7 @@ func (m *SessionDataMutator) SetDisableWaitForJobsNotice(val bool) {
 func (m *SessionDataMutator) SetCanaryStatsMode(val sessiondatapb.CanaryStatsMode) {
 	m.Data.CanaryStatsMode = val
 }
+
+func (m *SessionDataMutator) SetOptimizerOmitRoutineParamsInOuterCols(val bool) {
+	m.Data.OptimizerOmitRoutineParamsInOuterCols = val
+}

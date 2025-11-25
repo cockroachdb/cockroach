@@ -759,6 +759,10 @@ message LocalOnlySessionData {
   // canary statistics (mode == on), stable statistics (mode == off), or
   // let the system decide based on random selection (mode == auto).
   int64 canary_stats_mode = 193 [(gogoproto.casttype) = "CanaryStatsMode"];
+  // OptimizerOmitRoutineParamsInOuterCols, when true, causes the optimizer
+  // to omit routine parameters from the set of outer columns tracked during
+  // query optimization.
+  bool optimizer_omit_routine_params_in_outer_cols = 194;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

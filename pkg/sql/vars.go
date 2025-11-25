@@ -4492,6 +4492,24 @@ var varGen = map[string]sessionVar{
 			return sessiondatapb.CanaryStatsModeAuto.String()
 		},
 	},
+
+	`optimizer_omit_routine_params_in_outer_cols`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_omit_routine_params_in_outer_cols`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_omit_routine_params_in_outer_cols", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerOmitRoutineParamsInOuterCols(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(
+				evalCtx.SessionData().OptimizerOmitRoutineParamsInOuterCols,
+			), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
