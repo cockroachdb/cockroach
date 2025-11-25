@@ -71,10 +71,10 @@ func TestFingerprint(t *testing.T) {
 		numSSTsInExportResponses = 0
 	}
 
-	returnPointAndRangeKeys := func(eng storage.Engine) ([]storage.MVCCKeyValue, []storage.MVCCRangeKey) {
+	returnPointAndRangeKeys := func(r storage.Reader) ([]storage.MVCCKeyValue, []storage.MVCCRangeKey) {
 		var rangeKeys []storage.MVCCRangeKey
 		var pointKeys []storage.MVCCKeyValue
-		for _, kvI := range storageutils.ScanKeySpan(t, eng, makeKey("a"), makeKey("z")) {
+		for _, kvI := range storageutils.ScanKeySpan(t, r, makeKey("a"), makeKey("z")) {
 			switch kv := kvI.(type) {
 			case storage.MVCCRangeKeyValue:
 				rangeKeys = append(rangeKeys, kv.RangeKey)
@@ -112,7 +112,7 @@ func TestFingerprint(t *testing.T) {
 
 	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 	require.NoError(t, err)
-	eng := store.TODOEngine()
+	eng := store.StateEngine()
 
 	// Insert some point keys.
 	txn := db.NewTxn(ctx, "test-point-keys")
