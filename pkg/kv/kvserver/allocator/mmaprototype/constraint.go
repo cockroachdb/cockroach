@@ -432,10 +432,16 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	var rels []relationshipVoterAndAll
 	for i := range conf.voterConstraints {
 		if len(conf.voterConstraints[i].constraints) == 0 {
+			if emptyVoterConstraintIndex != -1 {
+				return errors.Errorf("invalid configurations with empty voter constraint")
+			}
 			emptyVoterConstraintIndex = i
 		}
 		for j := range conf.constraints {
 			if len(conf.constraints[j].constraints) == 0 {
+				if emptyConstraintIndex != -1 {
+					return errors.Errorf("invalid configurations with empty voter constraint")
+				}
 				emptyConstraintIndex = j
 			}
 			rels = append(rels, relationshipVoterAndAll{
