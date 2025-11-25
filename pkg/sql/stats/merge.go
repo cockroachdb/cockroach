@@ -30,10 +30,13 @@ func MergedStatistics(
 	ctx context.Context, stats []*TableStatistic, st *cluster.Settings,
 ) []*TableStatistic {
 	var cmpCtx *eval.Context
-	// Map the ColumnIDs to the latest full table statistic.
-	// It relies on the fact that the first full statistic
-	// is the latest.
+	// Map the ColumnIDs to the latest full table statistic. It relies on the
+	// fact that the first full statistic is the latest.
 	fullStatsMap := make(map[descpb.ColumnID]*TableStatistic)
+	// origStatID tracks the StatisticsID of the full statistics. This is needed
+	// since we'll be updating entries in fullStatsMap in-place when merging
+	// partial which overrides StatisticsID to 0.
+	origStatIDMap := make(map[descpb.ColumnID]uint64)
 	// Map from full statistic ID to its lower bound. This is used to determine
 	// where to split histograms for partial statistics at extremes when merging.
 	extremesBoundMap := make(map[uint64]tree.Datum)
@@ -42,15 +45,15 @@ func MergedStatistics(
 			continue
 		}
 		col := fullStat.ColumnIDs[0]
-		_, ok := fullStatsMap[col]
-		if !ok {
+		if _, ok := fullStatsMap[col]; !ok {
 			fullStatsMap[col] = fullStat
-		}
-		if len(fullStat.Histogram) > 0 {
-			fh := fullStat.nonNullHistogram().buckets
-			fh = stripOuterBuckets(ctx, cmpCtx, fh)
-			if len(fh) > 0 {
-				extremesBoundMap[fullStat.StatisticID] = fh[0].UpperBound
+			origStatIDMap[col] = fullStat.StatisticID
+			if len(fullStat.Histogram) > 0 {
+				fh := fullStat.nonNullHistogram().buckets
+				fh = stripOuterBuckets(ctx, cmpCtx, fh)
+				if len(fh) > 0 {
+					extremesBoundMap[fullStat.StatisticID] = fh[0].UpperBound
+				}
 			}
 		}
 	}
@@ -64,19 +67,33 @@ func MergedStatistics(
 			continue
 		}
 		col := partialStat.ColumnIDs[0]
-		if fullStat, ok := fullStatsMap[col]; ok && partialStat.CreatedAt.After(fullStat.CreatedAt) {
-			atExtremes := partialStat.FullStatisticID != 0
-			extremesBound := extremesBoundMap[partialStat.FullStatisticID]
-			merged, err := mergePartialStatistic(ctx, cmpCtx, fullStat, partialStat,
-				st, atExtremes, extremesBound)
-			if err != nil {
-				log.VEventf(ctx, 2, "could not merge statistics for table %v columns %s: %v",
-					fullStat.TableID, redact.Safe(col), err)
-				continue
-			}
-			mergedColIDs.Add(col)
-			fullStatsMap[col] = merged
+		fullStat, ok := fullStatsMap[col]
+		if !ok {
+			continue
 		}
+		atExtremes := partialStat.FullStatisticID != 0
+		if atExtremes && partialStat.FullStatisticID != origStatIDMap[col] {
+			// This partial stat was created USING EXTREMES based on a different
+			// (old) full stat, so we don't want to merge it with the most
+			// recent full stat.
+			continue
+		}
+		if !partialStat.CreatedAt.After(fullStat.CreatedAt) {
+			// This partial stat is more stale than the most recent full stat,
+			// so just ignore it.
+			continue
+		}
+		extremesBound := extremesBoundMap[partialStat.FullStatisticID]
+		merged, err := mergePartialStatistic(
+			ctx, cmpCtx, fullStat, partialStat, st, atExtremes, extremesBound,
+		)
+		if err != nil {
+			log.VEventf(ctx, 2, "could not merge statistics for table %v columns %s: %v",
+				fullStat.TableID, redact.Safe(col), err)
+			continue
+		}
+		mergedColIDs.Add(col)
+		fullStatsMap[col] = merged
 	}
 
 	mergedStats := make([]*TableStatistic, 0, mergedColIDs.Len())
