@@ -1673,12 +1673,9 @@ func NewStore(
 	// it can clean it up. If this fails it's not a correctness issue since the
 	// storage is also cleared before receiving a snapshot.
 	//
-	// TODO(sep-raft-log): need a snapshot storage per engine since we'll need to split
-	// the SSTs. Or probably we don't need snapshots on the raft SST at all - the reason
-	// we use them now is because we want snapshot apply to be completely atomic but that
-	// is out the window with two engines, so we may as well break the atomicity in the
-	// common case and do something more effective.
-	s.sstSnapshotStorage = snaprecv.NewSSTSnapshotStorage(s.TODOEngine(), s.limiters.BulkIOWriteRate)
+	// NB: we don't need the snapshot storage in the raft engine. With separated
+	// storage, the log engine part of snapshot ingestion is written as a batch.
+	s.sstSnapshotStorage = snaprecv.NewSSTSnapshotStorage(s.StateEngine(), s.limiters.BulkIOWriteRate)
 	if err := s.sstSnapshotStorage.Clear(); err != nil {
 		log.KvDistribution.Warningf(ctx, "failed to clear snapshot storage: %v", err)
 	}
