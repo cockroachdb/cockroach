@@ -439,8 +439,8 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 		}
 		for j := range conf.constraints {
 			if len(conf.constraints[j].constraints) == 0 {
-				if emptyConstraintIndex != -1 {
-					return errors.Errorf("invalid configurations with empty voter constraint")
+				if emptyConstraintIndex != -1 && emptyConstraintIndex != j {
+					return errors.Errorf("invalid configurations with empty constraint")
 				}
 				emptyConstraintIndex = j
 			}
