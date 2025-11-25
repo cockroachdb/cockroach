@@ -775,6 +775,20 @@ type analyzedConstraints struct {
 	// slices are also empty.
 	constraints []internedConstraintsConjunction
 
+	// satisfiedByReplica[kind][i] contains the set of storeIDs that satisfy
+	// constraints[i]. These are for stores that satisfy at least one
+	// constraint. Each store should appear exactly once in the 2D slice
+	// ac.satisfiedByReplica[kind]. For example,
+	// satisfiedByReplica[voterIndex][0] = [1, 2, 3], means that the first
+	// constraint (constraints[0]) is satisfied by storeIDs 1, 2, and 3.
+	//
+	// NB: satisfiedByReplica[nonVoterIndex][i] is populated even if this
+	// analyzedConstraints represents a voter constraint. This is done because
+	// satisfiedByReplica[voterIndex][i] may not sufficiently satisfy a
+	// constraint (or even if it does, at a later point one could be
+	// decommissioning one of the voters), and populating the nonVoterIndex
+	// allows MMA to decide to promote a non-voter.
+	//
 	// Overlapping conjunctions: There is nothing preventing overlapping
 	// ConstraintsConjunctions such that the same store can satisfy multiple,
 	// though we expect this to be uncommon. This is algorithmically painful
@@ -796,14 +810,31 @@ type analyzedConstraints struct {
 	// we omit considering it for a later conjunction. That is, we satisfy in a
 	// greedy manner instead of considering all possibilities. So all the
 	// satisfiedBy slices represent sets that are non-intersecting.
+	//
+	// Example on why ordering from most strict to least strict is important:
+	// If the constraints were [region=a,zone=a1:1],[region=a:1] (which is
+	// sorted in decreasing strictness), a voter store in (region=a,zone=a1)
+	// would satisfy both, but it would be present only in
+	// satisfiedByReplica[voterIndex][i] for i=0, not i=1. If the user specified
+	// the constraints in irregular order, [region=a]:1,[region=a,zone=a1]:1,
+	// the voter would only be present in satisfiedByReplica[voterIndex][0] as
+	// well (which now refers to the relaxed constraint), and as a consequence
+	// we would consider (region=a,zone=a1) unfulfilled by this voter. If the
+	// full constraints conjunction had been [region=a]:1, [region=a,zone=a1]:1,
+	// [region=a,zone=a2]:1, and there were voters in that region in zones a1,
+	// a2, and a3, we could end up satisfying [region=a]:1 with the voter in a1,
+	// but then wouldn't consider it for the stricter constraint
+	// [region=a,zone=a1]:1 which no other voter can satisfy. The constraints
+	// would then appear unsatisfiable to the allocator.
 
 	satisfiedByReplica [numReplicaKinds][][]roachpb.StoreID
 
-	// These are stores that satisfy no constraint. Even though we are strict
-	// about constraint satisfaction, this can happen if the SpanConfig changed
-	// or the attributes of a store changed. Additionally, if these
-	// analyzedConstraints correspond to voterConstraints, there can be
-	// non-voters here (which is harmless).
+	// ac.satisfiedNoConstraintReplica[kind] contains the set of storeIDs that
+	// satisfy no constraint. Even though we are strict about constraint
+	// satisfaction, this can happen if the SpanConfig changed or the attributes
+	// of a store changed. Note that if these analyzedConstraints correspond to
+	// voterConstraints, there can be non-voters here which is never used but
+	// harmless.
 	satisfiedNoConstraintReplica [numReplicaKinds][]roachpb.StoreID
 }
 
@@ -838,8 +869,12 @@ func clear2DSlice[T any](v [][]T) [][]T {
 	return v
 }
 
-// rangeAnalyzedConstraints is a function of the spanConfig and the current
-// stores that have replicas for that range (including the ReplicaType).
+// rangeAnalyzedConstraints represents the analyzed constraint state for a
+// range, derived from the range's span config and current replica placement
+// (including ReplicaType). It contains information used to handle constraint
+// satisfaction as part of allocation decisions (e.g. helping identify candidate
+// stores for range rebalancing, lease transfers, up-replication,
+// down-replication, validating whether constraints are satisfied).
 //
 // LEARNER and VOTER_DEMOTING_LEARNER replicas are ignored.
 type rangeAnalyzedConstraints struct {
@@ -936,6 +971,223 @@ type storeMatchesConstraintInterface interface {
 	storeMatches(storeID roachpb.StoreID, constraintConj constraintsConj) bool
 }
 
+// initialize takes in the constraints, current replica set, and a constraint
+// matcher. It populates ac.constraints, ac.satisfiedByReplica and
+// ac.satisfiedNoConstraintReplica by analyzing the current replica set and the
+// constraints replicas satisfy. The given buf.replicas is already populated
+// with the current replica set from buf.tryAddingStore.
+//
+// The algorithm proceeds in 3 phases, with the description of each phase
+// outlined below at the start of each phase.
+//
+// NB: ac.initialize guarantees to assign exactly one constraint in
+// ac.satisfiedByReplica to each store that satisfies at least one constraint.
+// But constraints may remain under-satisfied. If a constraint remains
+// under-satisfied after phase 2, it cannot be corrected in phase 3 and remain
+// to be under-satisfied. This is not essential to correctness but just happens
+// to be true of the algorithm.
+//
+// TODO(wenyihu6): Add an example for phase 2 - if s1 satisfies c1(num=1) and s2
+// satisfies both c1(num=1) and c2(num=1), we should prefer assigning s2 to c2
+// rather than consuming it again for c1.
+//
+// NB: Note that buf.replicaConstraintIndices serves as a scratch space to
+// reduce memory allocation and is expected to be empty at the start of every
+// analyzedConstraints.initialize call and cleared at the end of the call. For
+// every store that satisfies a constraint, we will be clearing the constraint
+// indices for that store in buf.replicaConstraintIndices[kind][i] once we have
+// assigned it to a constraint in ac.satisfiedByReplica[kind][i]. Since we
+// guarantee that each store that satisfies a constraint is assigned to exactly
+// one constraint, buf.replicaConstraintIndices will be an empty 2D slice as
+// part of the algorithm. In addition, clearing the constraint indices for that
+// store in buf.replicaConstraintIndices is also important to help us indicates
+// that the store cannot be reused to satisfy a different constraint.
+//
+// TODO(wenyihu6): add more tests + examples here
+func (ac *analyzedConstraints) initialize(
+	constraints []internedConstraintsConjunction,
+	buf *analyzeConstraintsBuf,
+	constraintMatcher storeMatchesConstraintInterface,
+) {
+	ac.constraints = constraints
+	if len(ac.constraints) == 0 {
+		// Nothing to do.
+		return
+	}
+	for i := 0; i < len(ac.constraints); i++ {
+		ac.satisfiedByReplica[voterIndex] = extend2DSlice(ac.satisfiedByReplica[voterIndex])
+		ac.satisfiedByReplica[nonVoterIndex] = extend2DSlice(ac.satisfiedByReplica[nonVoterIndex])
+	}
+	// In phase 1, for each replica (voter and non-voter), determine which
+	// constraint indices in ac.constraints its store satisfies. We record these
+	// matches in buf.replicaConstraintIndices by iterating over all replicas,
+	// all constraint conjunctions, and checking store satisfaction for each
+	// using constraintMatcher.storeMatches. In addition, it also populates
+	// ac.satisfiedNoConstraintReplica[kind][i] for stores that satisfy no
+	// constraint and ac.satisfiedByReplica[kind][i] for stores that satisfy
+	// exactly one constraint. Since we will be assigning at least one
+	// constraint to each store, these stores are unambiguous.
+	//
+	// Compute the list of all constraints satisfied by each store.
+	for kind := voterIndex; kind < numReplicaKinds; kind++ {
+		for i, store := range buf.replicas[kind] {
+			buf.replicaConstraintIndices[kind] =
+				extend2DSlice(buf.replicaConstraintIndices[kind])
+			for j, c := range ac.constraints {
+				if len(c.constraints) == 0 || constraintMatcher.storeMatches(store.StoreID, c.constraints) {
+					buf.replicaConstraintIndices[kind][i] =
+						append(buf.replicaConstraintIndices[kind][i], int32(j))
+				}
+			}
+			n := len(buf.replicaConstraintIndices[kind][i])
+			if n == 0 {
+				ac.satisfiedNoConstraintReplica[kind] =
+					append(ac.satisfiedNoConstraintReplica[kind], store.StoreID)
+			} else if n == 1 {
+				// Satisfies exactly one constraint, so place it there.
+				constraintIndex := buf.replicaConstraintIndices[kind][i][0]
+				ac.satisfiedByReplica[kind][constraintIndex] =
+					append(ac.satisfiedByReplica[kind][constraintIndex], store.StoreID)
+				buf.replicaConstraintIndices[kind][i] = buf.replicaConstraintIndices[kind][i][:0]
+			}
+			// Else, satisfied multiple constraints. Don't choose yet.
+		}
+	}
+
+	// isConstraintSatisfied checks if the given constraint index has been fully
+	// satisfied by the stores currently assigned to it.
+	// TODO(wenyihu6): voter constraint should only count voters here (#158109)
+	isConstraintSatisfied := func(constraintIndex int) bool {
+		return len(ac.satisfiedByReplica[voterIndex][constraintIndex])+
+			len(ac.satisfiedByReplica[nonVoterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
+	}
+
+	// In phase 2, for each under-satisfied constraint, iterate through all replicas
+	// and assign them to the first store that meets the constraint. Continue until
+	// the constraint becomes satisfied, then move on to the next one. Skip further
+	// matching once a constraint is fulfilled. Note that this phase does not allow
+	// over-satisfaction.
+	//
+	// The only stores not yet in ac are the ones that satisfy multiple
+	// constraints. For each store, the constraint indices it satisfies are in
+	// increasing order. Satisfy constraints in order, while not
+	// oversatisfying.
+	for j := range ac.constraints {
+		satisfied := isConstraintSatisfied(j)
+		if satisfied {
+			continue
+		}
+		for kind := voterIndex; kind < numReplicaKinds; kind++ {
+			for i := range buf.replicaConstraintIndices[kind] {
+				constraintIndices := buf.replicaConstraintIndices[kind][i]
+				for _, index := range constraintIndices {
+					if index == int32(j) {
+						ac.satisfiedByReplica[kind][j] =
+							append(ac.satisfiedByReplica[kind][j], buf.replicas[kind][i].StoreID)
+						buf.replicaConstraintIndices[kind][i] = constraintIndices[:0]
+						satisfied = isConstraintSatisfied(j)
+						// This store is finished.
+						break
+					}
+				}
+
+				// Check if constraint is now satisfied to avoid
+				// over-satisfaction.
+				if satisfied {
+					break
+				}
+			}
+			// Check if constraint is now satisfied to avoid over-satisfaction.
+			if satisfied {
+				break
+			}
+		}
+	}
+	// In phase 3, for each remaining store that satisfies >1 constraints,
+	// assign each to the first constraint it satisfies. This phase allows
+	// over-satisfaction
+	// (len(ac.satisfiedByReplica[voterIndex][i]+len(ac.satisfiedByReplica[nonVoterIndex][i]))
+	// > ac.constraints[i].numReplicas).
+	//
+	// Nothing over-satisfied. Go and greedily assign.
+	for kind := voterIndex; kind < numReplicaKinds; kind++ {
+		for i := range buf.replicaConstraintIndices[kind] {
+			constraintIndices := buf.replicaConstraintIndices[kind][i]
+			for _, index := range constraintIndices {
+				ac.satisfiedByReplica[kind][index] =
+					append(ac.satisfiedByReplica[kind][index], buf.replicas[kind][i].StoreID)
+				buf.replicaConstraintIndices[kind][i] = constraintIndices[:0]
+				break
+			}
+		}
+	}
+}
+
+// diversityOfTwoStoreSets computes the diversity score between two sets of
+// stores.
+//
+// When sameStores is false, intersection between this and other is empty and no
+// de-duplication is needed. For example, given two sets of stores [1, 2, 3] and
+// [4, 5, 6], diversity score is computed among all pairs (1, 4), (1, 5), (1,
+// 6), (2, 4), (2, 5), (2, 6), (3, 4), (3, 5), (3, 6).
+//
+// When sameStores is true, this and other are the same set and de-duplication
+// is needed. For example, given two sets of stores [1, 2, 3] and [1, 2, 3],
+// diversity score should be computed among pairs (1, 2), (1, 3), (2, 3) only.
+func diversityOfTwoStoreSets(
+	this []storeAndLocality, other []storeAndLocality, sameStores bool,
+) (sumScore float64, numSamples int) {
+	for i := range this {
+		s1 := this[i]
+		for j := range other {
+			s2 := other[j]
+			// Only compare pairs of replicas where s2.StoreID > s1.StoreID to avoid
+			// computing the diversity score between each pair of stores twice.
+			if sameStores && s2.StoreID <= s1.StoreID {
+				continue
+			}
+			sumScore += s1.localityTiers.diversityScore(s2.localityTiers)
+			numSamples++
+		}
+	}
+	return sumScore, numSamples
+}
+
+// diversityScore measures how geographically spread out replicas are across the
+// cluster. Higher scores indicate better fault tolerance because replicas are
+// placed further apart in the locality hierarchy. Returns voterDiversityScore
+// and replicaDiversityScore which are the average pairwise distance across all
+// voter-voter pairs and replica pairs respectively.
+func diversityScore(
+	replicas [numReplicaKinds][]storeAndLocality,
+) (voterDiversityScore, replicaDiversityScore float64) {
+	// Helper to calculate average, or a max-value if no samples (represents
+	// lowest possible diversity).
+	scoreFromSumAndSamples := func(sumScore float64, numSamples int) float64 {
+		if numSamples == 0 {
+			return roachpb.MaxDiversityScore
+		}
+		return sumScore / float64(numSamples)
+	}
+
+	voterSum, voterSamples := diversityOfTwoStoreSets(replicas[voterIndex], replicas[voterIndex], true)
+	totalSum := voterSum
+	totalSamples := voterSamples
+
+	nonVoterSum, nonVoterSamples := diversityOfTwoStoreSets(replicas[nonVoterIndex], replicas[nonVoterIndex], true)
+	totalSum += nonVoterSum
+	totalSamples += nonVoterSamples
+
+	voterNonVoterSum, voterNonVoterSamples := diversityOfTwoStoreSets(replicas[voterIndex], replicas[nonVoterIndex], false)
+	totalSum += voterNonVoterSum
+	totalSamples += voterNonVoterSamples
+	return scoreFromSumAndSamples(voterSum, voterSamples), scoreFromSumAndSamples(totalSum, totalSamples)
+}
+
+// finishInit completes initialization for the rangeAnalyzedConstraints, It
+// initializes the constraints and voterConstraints, determines the leaseholder
+// preference index for all voter replicas, builds locality tier information,
+// and computes diversity scores.
 func (rac *rangeAnalyzedConstraints) finishInit(
 	spanConfig *normalizedSpanConfig,
 	constraintMatcher storeMatchesConstraintInterface,
@@ -946,101 +1198,11 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 	rac.numNeededReplicas[nonVoterIndex] = spanConfig.numReplicas - spanConfig.numVoters
 	rac.replicas = rac.buf.replicas
 
-	analyzeFunc := func(ac *analyzedConstraints) {
-		if len(ac.constraints) == 0 {
-			// Nothing to do.
-			return
-		}
-		for i := 0; i < len(ac.constraints); i++ {
-			ac.satisfiedByReplica[voterIndex] = extend2DSlice(ac.satisfiedByReplica[voterIndex])
-			ac.satisfiedByReplica[nonVoterIndex] = extend2DSlice(ac.satisfiedByReplica[nonVoterIndex])
-		}
-		// Compute the list of all constraints satisfied by each store.
-		for kind := voterIndex; kind < numReplicaKinds; kind++ {
-			for i, store := range rac.buf.replicas[kind] {
-				rac.buf.replicaConstraintIndices[kind] =
-					extend2DSlice(rac.buf.replicaConstraintIndices[kind])
-				for j, c := range ac.constraints {
-					if len(c.constraints) == 0 || constraintMatcher.storeMatches(store.StoreID, c.constraints) {
-						rac.buf.replicaConstraintIndices[kind][i] =
-							append(rac.buf.replicaConstraintIndices[kind][i], int32(j))
-					}
-				}
-				n := len(rac.buf.replicaConstraintIndices[kind][i])
-				if n == 0 {
-					ac.satisfiedNoConstraintReplica[kind] =
-						append(ac.satisfiedNoConstraintReplica[kind], store.StoreID)
-				} else if n == 1 {
-					// Satisfies exactly one constraint, so place it there.
-					constraintIndex := rac.buf.replicaConstraintIndices[kind][i][0]
-					ac.satisfiedByReplica[kind][constraintIndex] =
-						append(ac.satisfiedByReplica[kind][constraintIndex], store.StoreID)
-					rac.buf.replicaConstraintIndices[kind][i] = rac.buf.replicaConstraintIndices[kind][i][:0]
-				}
-				// Else, satisfied multiple constraints. Don't choose yet.
-			}
-		}
-		// The only stores not yet in ac are the ones that satisfy multiple
-		// constraints. For each store, the constraint indices it satisfies are in
-		// increasing order. Satisfy constraints in order, while not
-		// oversatisfying.
-		for j := range ac.constraints {
-			doneFunc := func() bool {
-				return len(ac.satisfiedByReplica[voterIndex][j])+
-					len(ac.satisfiedByReplica[nonVoterIndex][j]) >= int(ac.constraints[j].numReplicas)
-			}
-			done := doneFunc()
-			if done {
-				continue
-			}
-			for kind := voterIndex; kind < numReplicaKinds; kind++ {
-				for i := range rac.buf.replicaConstraintIndices[kind] {
-					constraintIndices := rac.buf.replicaConstraintIndices[kind][i]
-					for _, index := range constraintIndices {
-						if index == int32(j) {
-							ac.satisfiedByReplica[kind][j] =
-								append(ac.satisfiedByReplica[kind][j], rac.replicas[kind][i].StoreID)
-							rac.buf.replicaConstraintIndices[kind][i] = constraintIndices[:0]
-							done = doneFunc()
-							// This store is finished.
-							break
-						}
-					}
-					// done can be true if some store was appended to
-					// ac.satisfiedByReplica[kind][j] and made it fully satisfied. Don't
-					// need to look at other stores for this constraint.
-					if done {
-						break
-					}
-				}
-				// done can be true if some store was appended to
-				// ac.satisfiedByReplica[kind][j] and made it fully satisfied. Don't
-				// need to look at other stores for this constraint.
-				if done {
-					break
-				}
-			}
-		}
-		// Nothing over-satisfied. Go and greedily assign.
-		for kind := voterIndex; kind < numReplicaKinds; kind++ {
-			for i := range rac.buf.replicaConstraintIndices[kind] {
-				constraintIndices := rac.buf.replicaConstraintIndices[kind][i]
-				for _, index := range constraintIndices {
-					ac.satisfiedByReplica[kind][index] =
-						append(ac.satisfiedByReplica[kind][index], rac.replicas[kind][i].StoreID)
-					rac.buf.replicaConstraintIndices[kind][i] = constraintIndices[:0]
-					break
-				}
-			}
-		}
-	}
 	if spanConfig.constraints != nil {
-		rac.constraints.constraints = spanConfig.constraints
-		analyzeFunc(&rac.constraints)
+		rac.constraints.initialize(spanConfig.constraints, &rac.buf, constraintMatcher)
 	}
 	if spanConfig.voterConstraints != nil {
-		rac.voterConstraints.constraints = spanConfig.voterConstraints
-		analyzeFunc(&rac.voterConstraints)
+		rac.voterConstraints.initialize(spanConfig.voterConstraints, &rac.buf, constraintMatcher)
 	}
 
 	rac.leaseholderID = leaseholder
@@ -1080,42 +1242,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 	rac.replicaLocalityTiers = makeReplicasLocalityTiers(replicaLocalityTiers)
 	rac.voterLocalityTiers = makeReplicasLocalityTiers(voterLocalityTiers)
 
-	diversityFunc := func(
-		stores1 []storeAndLocality, stores2 []storeAndLocality, sameStores bool,
-	) (sumScore float64, numSamples int) {
-		for i := range stores1 {
-			s1 := stores1[i]
-			for j := range stores2 {
-				s2 := stores2[j]
-				// Only compare pairs of replicas where s2.StoreID > s1.StoreID to avoid
-				// computing the diversity score between each pair of stores twice.
-				if sameStores && s2.StoreID <= s1.StoreID {
-					continue
-				}
-				sumScore += s1.localityTiers.diversityScore(s2.localityTiers)
-				numSamples++
-			}
-		}
-		return sumScore, numSamples
-	}
-	scoreFromSumAndSamples := func(sumScore float64, numSamples int) float64 {
-		if numSamples == 0 {
-			return roachpb.MaxDiversityScore
-		}
-		return sumScore / float64(numSamples)
-	}
-	sumVoterScore, numVoterSamples := diversityFunc(
-		rac.replicas[voterIndex], rac.replicas[voterIndex], true)
-	rac.votersDiversityScore = scoreFromSumAndSamples(sumVoterScore, numVoterSamples)
-
-	sumReplicaScore, numReplicaSamples := sumVoterScore, numVoterSamples
-	srs, nrs := diversityFunc(rac.replicas[nonVoterIndex], rac.replicas[nonVoterIndex], true)
-	sumReplicaScore += srs
-	numReplicaSamples += nrs
-	srs, nrs = diversityFunc(rac.replicas[voterIndex], rac.replicas[nonVoterIndex], false)
-	sumReplicaScore += srs
-	numReplicaSamples += nrs
-	rac.replicasDiversityScore = scoreFromSumAndSamples(sumReplicaScore, numReplicaSamples)
+	rac.votersDiversityScore, rac.replicasDiversityScore = diversityScore(rac.replicas)
 }
 
 // Disjunction of conjunctions.
@@ -1455,8 +1582,20 @@ func isNonVoter(typ roachpb.ReplicaType) bool {
 type analyzeConstraintsBuf struct {
 	replicas [numReplicaKinds][]storeAndLocality
 
-	// Scratch space. replicaConstraintIndices[k][i] is the constraint matching
-	// state for replicas[k][i].
+	// Scratch space. buf.replicaConstraintIndices[kind][i] contains the
+	// constraints indices that the buf.replicas[kind][i] replica satisfies.
+	//
+	// For example, buf.replicaConstraintIndices[voterIndex][0] = [0, 1, 2],
+	// means that the first voter replica (buf.replicas[voterIndex][0])
+	// satisfies the 0th, 1st, and 2nd constraint conjunction in ac.constraints.
+	//
+	// NB: given ac.constraints can represent both replica and voter
+	// constraints. We still populate both voter and non-voter indexes because
+	// we need to know which constraints are satisfied by all replicas to
+	// determine when promotions or demotions should occur.
+	//
+	// NB: expected to be empty at the start of every
+	// analyzedConstraints.initialize call.
 	replicaConstraintIndices [numReplicaKinds][][]int32
 }
 

@@ -164,6 +164,11 @@ type mutationPlanNode interface {
 	// returnsRowsAffected indicates that the planNode returns the number of
 	// rows affected by the mutation, rather than the rows themselves.
 	returnsRowsAffected() bool
+
+	// kvCPUTime returns the cumulative CPU time (in nanoseconds) that KV reported
+	// in BatchResponse headers during the execution of this mutation. It should
+	// only be called once Next returns false.
+	kvCPUTime() int64
 }
 
 // planNodeReadingOwnWrites can be implemented by planNodes which do

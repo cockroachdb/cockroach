@@ -203,6 +203,10 @@ func (r *Replica) SendWithWriteBytes(
 		}
 	}
 
+	cpuTime := grunning.Difference(startCPU, grunning.Time())
+	if br != nil {
+		br.CPUTime = int64(cpuTime)
+	}
 	if pErr == nil {
 		// Return range information if it was requested. Note that we don't return it
 		// on errors because the code doesn't currently support returning both a br
@@ -210,7 +214,7 @@ func (r *Replica) SendWithWriteBytes(
 		// ways of returning range info.
 		r.maybeAddRangeInfoToResponse(ctx, ba, br)
 		// Handle load-based splitting, if necessary.
-		r.recordBatchForLoadBasedSplitting(ctx, ba, br, int(grunning.Difference(startCPU, grunning.Time())))
+		r.recordBatchForLoadBasedSplitting(ctx, ba, br, int(cpuTime))
 	}
 
 	// Record summary throughput information about the batch request for

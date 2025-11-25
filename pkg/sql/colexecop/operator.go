@@ -92,6 +92,9 @@ type KVReader interface {
 	// KV requests. It must be safe for concurrent use. It is used to calculate
 	// the SQL CPU time.
 	GetKVCPUTime() time.Duration
+	// GetKVResponseCPUTime returns the CPU time as reported by KV BatchResponses
+	// processed by the KVReader throughout its lifetime so far.
+	GetKVResponseCPUTime() int64
 	// UsedStreamer returns whether the Streamer API was used by the KVReader.
 	UsedStreamer() bool
 }

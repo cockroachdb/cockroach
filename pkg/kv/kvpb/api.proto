@@ -3207,6 +3207,10 @@ message BatchResponse {
     // The field is cleared by the DistSender because it refers routing
     // information not exposed by the KV API.
     repeated RangeInfo range_infos = 7 [(gogoproto.nullable) = false];
+    // CPUTime is tracked in Replica.Send, meaning it only tracks the CPU time
+    // for the request evaluation goroutine, and not the other replication related
+    // work. The value is either zero (unset) or positive.
+    int64 cpu_time = 8 [(gogoproto.customname) = "CPUTime"];
     // NB: if you add a field here, don't forget to update combine().
   }
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];

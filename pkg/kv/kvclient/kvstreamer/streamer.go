@@ -307,6 +307,9 @@ type Streamer struct {
 type streamerStatistics struct {
 	atomics struct {
 		kvPairsRead *int64
+		// kvCPUTime tracks the cumulative CPU time (in nanoseconds) that KV
+		// reports in the BatchResponse headers.
+		kvCPUTime *int64
 		// batchRequestsIssued tracks the number of BatchRequests issued by the
 		// Streamer. Note that this number is only used for the logging done by
 		// the Streamer itself and is separate from any possible bookkeeping
@@ -381,6 +384,8 @@ type sendFn func(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, erro
 //
 // kvPairsRead should be incremented atomically with the sum of NumKeys
 // parameters of all received responses.
+// kvCPUTime should be incremented atomically with the CPUTime from BatchResponse
+// headers.
 func NewStreamer(
 	distSender *kvcoord.DistSender,
 	metrics *Metrics,
@@ -393,6 +398,7 @@ func NewStreamer(
 	limitBytes int64,
 	acc *mon.BoundAccount,
 	kvPairsRead *int64,
+	kvCPUTime *int64,
 	lockStrength lock.Strength,
 	lockDurability lock.Durability,
 	reverse bool,
@@ -430,6 +436,10 @@ func NewStreamer(
 		kvPairsRead = new(int64)
 	}
 	s.atomics.kvPairsRead = kvPairsRead
+	if kvCPUTime == nil {
+		kvCPUTime = new(int64)
+	}
+	s.atomics.kvCPUTime = kvCPUTime
 	s.coordinator = workerCoordinator{
 		s:                      s,
 		sendFn:                 sendFn,
@@ -1451,6 +1461,11 @@ func (w *workerCoordinator) performRequestAsync(
 			return
 		}
 		atomic.AddInt64(&w.s.atomics.batchRequestsIssued, 1)
+
+		// Accumulate CPU time from the BatchResponse header.
+		if br.CPUTime > 0 {
+			atomic.AddInt64(w.s.atomics.kvCPUTime, br.CPUTime)
+		}
 
 		// First, we have to reconcile the memory budget. We do it
 		// separately from processing the results because we want to know
