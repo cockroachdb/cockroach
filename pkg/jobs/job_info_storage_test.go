@@ -896,8 +896,14 @@ func TestJobPauseStateTransitionsRecorded(t *testing.T) {
 	require.NoError(t, err)
 	jobutils.WaitForJobToRun(t, sql, job.ID())
 
-	sql.Exec(t, "PAUSE JOB $1", job.ID())
+	sql.Exec(t, "PAUSE JOB $1 WITH REASON = 'test pause reason'", job.ID())
 	jobutils.WaitForJobToPause(t, sql, job.ID())
+
+	// Verify the running_status shows the pause reason via SHOW JOB.
+	sql.CheckQueryResults(t,
+		fmt.Sprintf("SELECT running_status FROM [SHOW JOB %d]", job.ID()),
+		[][]string{{"pausing: test pause reason"}},
+	)
 
 	sql.Exec(t, "RESUME JOB $1", job.ID())
 	jobutils.WaitForJobToRun(t, sql, job.ID())
