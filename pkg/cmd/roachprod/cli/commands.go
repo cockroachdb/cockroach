@@ -71,6 +71,8 @@ components match. For example, the tag "a/b" will match both "a/b" and
   local      - Use a provided local binary, must provide the path to the binary.`
 	workloadApp = `
   workload   - Cockroach workload application.`
+	libHelp = `
+  lib        - Supplementary Cockroach libraries (libgeos).`
 )
 
 var bashCompletion = os.ExpandEnv("$HOME/.roachprod/bash-completion.sh")
@@ -1330,7 +1332,10 @@ Some examples of usage:
 
   -- Stage customized binary of CockroachDB at version v23.2.0-alpha.2-4375-g7cd2b76ed00
   roachprod stage my-cluster customized v23.2.0-alpha.2-4375-g7cd2b76ed00
-`, strings.TrimSpace(cockroachApp+workloadApp+releaseApp+customizedApp)),
+
+  -- Stage the most recent edge build of the libraries (libgeos):
+  roachprod stage my-cluster lib
+`, strings.TrimSpace(cockroachApp+workloadApp+releaseApp+customizedApp+libHelp)),
 		Args: cobra.RangeArgs(2, 3),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
 			versionArg := ""
