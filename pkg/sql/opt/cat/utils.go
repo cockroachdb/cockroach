@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
@@ -339,4 +340,21 @@ func MaybeMarkRedactable(unsafe string, markRedactable bool) string {
 		return string(redact.Sprintf("%s", encoding.Unsafe(unsafe)))
 	}
 	return unsafe
+}
+
+// FindLatestFullStat finds the most recent full statistic that can be used for
+// planning and returns the index to be used with tab.Statistic(). If such
+// doesn't exist (meaning that either there are no full stats altogether or that
+// the present ones cannot be used based on the session variables), then
+// tab.StatisticCount() is returned.
+func FindLatestFullStat(tab Table, sd *sessiondata.SessionData) int {
+	// Stats are ordered with most recent first.
+	var first int
+	for first < tab.StatisticCount() &&
+		(tab.Statistic(first).IsPartial() ||
+			(tab.Statistic(first).IsMerged() && !sd.OptimizerUseMergedPartialStatistics) ||
+			(tab.Statistic(first).IsForecast() && !sd.OptimizerUseForecasts)) {
+		first++
+	}
+	return first
 }
