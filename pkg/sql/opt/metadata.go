@@ -125,6 +125,9 @@ type Metadata struct {
 	// dataSourceDeps stores each data source object that the query depends on.
 	dataSourceDeps map[cat.StableID]cat.DataSource
 
+	// paramCols is the set of column IDs that are routine parameter references.
+	paramCols ColSet
+
 	// routineDeps stores each user-defined function and stored procedure overload
 	// (as well as the invocation signature) that the query depends on.
 	routineDeps map[cat.StableID]routineDep
@@ -940,6 +943,14 @@ func (md *Metadata) AddColumn(alias string, typ *types.T) ColumnID {
 	}
 	colID := ColumnID(len(md.cols) + 1)
 	md.cols = append(md.cols, ColumnMeta{MetaID: colID, Alias: alias, Type: typ})
+	return colID
+}
+
+// AddParameterColumn is similar to AddColumn, but is specifically for adding a
+// column that represents a reference to a routine parameter.
+func (md *Metadata) AddParameterColumn(alias string, typ *types.T) ColumnID {
+	colID := md.AddColumn(alias, typ)
+	md.paramCols.Add(colID)
 	return colID
 }
 

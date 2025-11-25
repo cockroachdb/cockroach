@@ -218,7 +218,7 @@ func (b *Builder) synthesizeParameterColumn(
 	if ord >= maxFuncParams {
 		panic(pgerror.New(pgcode.TooManyArguments, "functions cannot have more than 100 arguments"))
 	}
-	colID := b.factory.Metadata().AddColumn(name.MetadataName(), typ)
+	colID := b.factory.Metadata().AddParameterColumn(name.MetadataName(), typ)
 	scope.cols = append(scope.cols, scopeColumn{
 		name:     name,
 		typ:      typ,
