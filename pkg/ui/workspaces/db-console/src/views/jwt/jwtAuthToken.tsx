@@ -62,8 +62,12 @@ export const JwtAuthToken = (props: {
   };
 
   const renderInfo = (info: ConnectionInfo) => {
-    if (username == null) {
+    if (username == null && info.Usernames && info.Usernames.length > 0) {
       setUsername(info.Usernames[0]);
+    }
+
+    if (!info.Usernames || info.Usernames.length === 0) {
+      return <div>No usernames available</div>;
     }
 
     const usernameOptions: OptionValue[] = info.Usernames.map(u => {
@@ -156,18 +160,37 @@ export const JwtAuthTokenPage = () => {
   const { oidc } = useParams<Params>();
 
   useEffect(() => {
-    const { State, Code } = JSON.parse(atob(oidc));
+    if (!oidc) {
+      setError("Missing OIDC parameter");
+      setLoading(false);
+      return;
+    }
 
-    fetch(`oidc/v1/jwt?state=${State}&code=${Code}`).then(
-      (response: Response) => {
-        setLoading(false);
-        if (response.ok) {
-          response.json().then(setInfo);
-        } else {
-          response.text().then(setError);
-        }
-      },
-    );
+    try {
+      const decoded = atob(oidc);
+      const { State, Code } = JSON.parse(decoded);
+
+      fetch(`oidc/v1/jwt?state=${State}&code=${Code}`)
+        .then((response: Response) => {
+          setLoading(false);
+          if (response.ok) {
+            response.json()
+              .then(setInfo)
+              .catch(err => setError(`Failed to parse response: ${err.message}`));
+          } else {
+            response.text()
+              .then(setError)
+              .catch(err => setError(`Failed to read error response: ${err.message}`));
+          }
+        })
+        .catch(err => {
+          setLoading(false);
+          setError(`Network error: ${err.message}`);
+        });
+    } catch (err) {
+      setLoading(false);
+      setError(`Invalid OIDC parameter: ${err.message}`);
+    }
   }, [oidc]);
 
   return <JwtAuthToken loading={loading} error={error} info={info} />;
