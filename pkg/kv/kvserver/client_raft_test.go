@@ -304,7 +304,7 @@ func TestReplicateRange(t *testing.T) {
 	// Verify no intent remains on range descriptor key.
 	key := keys.RangeDescriptorKey(rhsDesc.StartKey)
 	desc := roachpb.RangeDescriptor{}
-	if ok, err := storage.MVCCGetProto(ctx, store.TODOEngine(), key,
+	if ok, err := storage.MVCCGetProto(ctx, store.StateEngine(), key,
 		store.Clock().Now(), &desc, storage.MVCCGetOptions{}); err != nil {
 		t.Fatal(err)
 	} else if !ok {
@@ -317,7 +317,7 @@ func TestReplicateRange(t *testing.T) {
 		meta1 := keys.RangeMetaKey(meta2)
 		for _, key := range []roachpb.RKey{meta2, meta1} {
 			metaDesc := roachpb.RangeDescriptor{}
-			if ok, err := storage.MVCCGetProto(ctx, store.TODOEngine(), key.AsRawKey(),
+			if ok, err := storage.MVCCGetProto(ctx, store.StateEngine(), key.AsRawKey(),
 				store.Clock().Now(), &metaDesc, storage.MVCCGetOptions{}); err != nil {
 				return err
 			} else if !ok {
@@ -5930,12 +5930,12 @@ func TestRaftSnapshotsWithMVCCRangeKeys(t *testing.T) {
 			rangeKVWithTS("a", "b", ts1, storage.MVCCValue{}),
 			rangeKVWithTS("b", "c", ts2, storage.MVCCValue{}),
 			rangeKVWithTS("b", "c", ts1, storage.MVCCValue{}),
-		}, storageutils.ScanRange(t, store.TODOEngine(), descA))
+		}, storageutils.ScanRange(t, store.StateEngine(), descA))
 		require.Equal(t, kvs{
 			rangeKVWithTS("c", "d", ts2, storage.MVCCValue{}),
 			rangeKVWithTS("c", "d", ts1, storage.MVCCValue{}),
 			rangeKVWithTS("d", "e", ts2, storage.MVCCValue{}),
-		}, storageutils.ScanRange(t, store.TODOEngine(), descC))
+		}, storageutils.ScanRange(t, store.StateEngine(), descC))
 	}
 
 	// Quick check of MVCC stats.
@@ -5978,7 +5978,7 @@ func TestRaftSnapshotsWithMVCCRangeKeysEverywhere(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	srv := tc.Server(0)
 	store := tc.GetFirstStoreFromServer(t, 0)
-	engine := store.TODOEngine()
+	engine := store.StateEngine()
 	sender := srv.DB().NonTransactionalSender()
 
 	// Split off ranges at "a" and "b".
@@ -6029,7 +6029,7 @@ func TestRaftSnapshotsWithMVCCRangeKeysEverywhere(t *testing.T) {
 
 	// Look for the range keys on the other servers.
 	for _, srvIdx := range []int{1, 2} {
-		e := tc.GetFirstStoreFromServer(t, srvIdx).TODOEngine()
+		e := tc.GetFirstStoreFromServer(t, srvIdx).StateEngine()
 		for _, desc := range descs {
 			for _, span := range rditer.MakeReplicatedKeySpans(&desc) {
 				prefix := append(span.Key.Clone(), ':')

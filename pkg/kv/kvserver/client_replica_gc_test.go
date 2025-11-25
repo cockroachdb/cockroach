@@ -95,8 +95,6 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		repl1 := store.LookupReplica(roachpb.RKey(k))
 		require.NotNil(t, repl1)
 
-		eng := store.TODOEngine()
-
 		// Put some bogus sideloaded data on the replica which we're about to
 		// remove. Then, at the end of the test, check that that sideloaded
 		// storage is now empty (in other words, GC'ing the Replica took care of
@@ -105,15 +103,10 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		dir := repl1.SideloadedRaftMuLocked().Dir()
 		repl1.RaftUnlock()
 
-		if dir == "" {
-			t.Fatal("no sideloaded directory")
-		}
-		if err := eng.Env().MkdirAll(dir, os.ModePerm); err != nil {
-			t.Fatal(err)
-		}
-		if err := fs.WriteFile(eng.Env(), filepath.Join(dir, "i1000000.t100000"), []byte("foo"), fs.UnspecifiedWriteCategory); err != nil {
-			t.Fatal(err)
-		}
+		require.NotEmpty(t, dir, "no sideloaded directory")
+		eng := store.StateEngine()
+		require.NoError(t, eng.Env().MkdirAll(dir, os.ModePerm))
+		require.NoError(t, fs.WriteFile(eng.Env(), filepath.Join(dir, "i1000000.t100000"), []byte("foo"), fs.UnspecifiedWriteCategory))
 
 		defer func() {
 			if !t.Failed() {
