@@ -240,30 +240,49 @@ var _ cpuTimeModel = &cpuTimeTokenLinearModel{}
 // priority hierarchy; some buckets always have more tokens added per second
 // than others.
 //
-// Consider the refill rate of the lowest priority bucket first. In that case:
-// refillRate = 1s * vCPU count * targetUtilization * linearCorrectionTerm
+// The refill rate is chosen such that the rate at which tokens are added
+// results in an (actual measured) CPU utilization matching the target
+// utilization. Tokens represent CPU work carried out by requests which aqcuired
+// from the bucket, and the actual CPU time used by the requests is consumed
+// from the bucket. However, requests can use additional CPU time that isn't
+// reflected in what's consumed - for example, the CPU work incurred by heap
+// allocations, which need to be garbage collected by the runtime at a
+// near-future point in time, or more generally any other asynchronous work
+// triggered by the request which may outlive it. Additionally, not all work
+// in the system is visible to the bucket: work by the Go runtime is a basic
+// example, but even "userspace work" is likely not tracked in its entirety.
 //
-// This formula is intuitive if linearCorrectionTerm equals 1. If CPU time
-// tokens corresponded exactly to actual CPU time, e.g. one token corresponds
-// to one nanosecond of CPU time, it would imply the token bucket will limit
-// the CPU used by requests subject to it to targetUtilization. Note that
-// targetUtilization is controllable via the admission.cpu_time_tokens.target_util
-// cluster setting.
+// We address both of these issues by assuming an approximately constant ratio
+// between the rate of total and tracked CPU time (at least over short periods
+// of time) and then "punishing" tracked work by that factor, in effect assuming
+// that any "untracked" CPU work is incurred by the tracked work. This motivates
+// the tokenToCPUTimeMultiplier below, which is computed via
 //
-// Example:
-// 8 vCPU machine. admission.cpu_time_tokens.target_util = 0.8 (80%)
-// RefillRate = 8 * 1s * .8 = 6.4 seconds of CPU time per second
+//	tokenToCPUTimeMultiplier = totalCPUTime / trackedCPUTime (over a short interval)
 //
-// linearCorrectionTerm is a correction term derived from a linear model (hence
-// the name of the struct). There is work happening outside the kvserver BatchRequest
-// evaluation path, such as compaction. AC continuously fits a linear model:
-// total-cpu-time = linearCorrectionTerm * reported-cpu-time, where a is forced to be
-// in the interval [1, 20].
+// Observing, for example, 20s of CPU time consumed in the process but only 10s
+// in tracked requests, we would set tokenToCPUTimeMultiplier to 2 (dimensionless),
+// and the refill rate would be halved (which corresponds to saying that a request
+// that consumes, say, 100ms of CPU time should really be billed for twice that
+// amount).
+//
+// Since 1 token represents 1 nanosecond of CPU time, we express CPU capacity in
+// tokens/s (i.e., CPU-nanoseconds per wall-clock second). For example, an 8 vCPU
+// machine has a capacity of 8E9 tokens/s. The refill rate is then simply:
+//
+//	refillRate [tokens/s] = targetUtilization * capacity [tokens/s] / tokenToCPUTimeMultiplier
+//
+// For an 8 vCPU machine (capacity = 8E9 tokens/s), with a target utilization of
+// 80% and a tokenToCPUTimeMultiplier of 1:
+//
+//	refillRate = 0.8 * 8E9 tokens/s / 1 = 6.4E9 tokens/s
+//
+// which corresponds to 6.4 CPU-seconds of work admitted per wall-clock second.
 //
 // Higher priority buckets have higher target utilizations than lower priority
-// buckets. The lowest priority bucket is controlled by admission.cpu_time_tokens.target_util.
-// The next highest priority bucket has a target utilization that is 5% higher than
-// the one below it. And so on.
+// buckets, and incoming requests generally require that the bucket for their
+// priority has enough tokens to accommodate the request, but then withdraw from
+// all buckets (which may put lower-priority buckets in a deficit).
 type cpuTimeTokenLinearModel struct {
 	granter           tokenUsageTracker
 	settings          *cluster.Settings
