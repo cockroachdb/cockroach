@@ -523,13 +523,6 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 	log.KvDistribution.VEventf(ctx, 2, "local store s%d is CPU overloaded (%v >= %v), attempting lease transfers first",
 		store.StoreID, store.dimSummary[CPURate], overloadSlow)
 	// This store is local, and cpu overloaded. Shed leases first.
-	//
-	// NB: due to REQUIREMENT(change-computation), the top-k ranges for ss
-	// reflect the latest adjusted state, including pending changes. Thus,
-	// this store must be a replica and the leaseholder, which is asserted
-	// below. The code below additionally ignores the range if it has pending
-	// changes, which while not necessary for the is-leaseholder assertion,
-	// makes the case where we assert even narrower.
 	topKRanges := ss.adjusted.topKRanges[localStoreID]
 	var leaseTransferCount int
 	n := topKRanges.len()

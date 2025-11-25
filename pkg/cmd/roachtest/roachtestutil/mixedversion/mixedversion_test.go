@@ -11,6 +11,8 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
@@ -476,4 +478,38 @@ func TestSupportsSkipUpgradeTo(t *testing.T) {
 	for _, v := range []string{"v25.1.0", "v25.1.0-beta.1", "v25.3.1", "v25.3.0-rc.1"} {
 		expect(v, false)
 	}
+}
+
+// Regression test for #157852.
+// This tests that our skip upgrade logic does not break when we are in the middle
+// of the version bump process. We bump the current version and the minSupportedVersion
+// separately, so we want to make sure that:
+//  1. supportsSkipUpgradeTo does not let us perform a skip upgrade from a non supportedVersion.
+//     This edge case happens if we bump the minSupportedVersion first and there is only 1 supported
+//     previous release in the current series despite being a .2 or .4 release.
+//  2. supportsSkipUpgradeTo does not let us perform a skip upgrade over a .2 or .4 release.
+//     This edge case happens if we bump the current version first and there could be 3 supported
+//     previous releases in the current series.
+func TestSupportsSkipCurrentVersion(t *testing.T) {
+	mvt := newTest()
+
+	// Case 1: If the minimumSupportedVersion on the current release says there is only 1 supported
+	// previous release, then it doesn't matter if the previous release is an innovation or not,
+	// we can't skip over it.
+	numSupportedVersions := len(clusterversion.SupportedPreviousReleases())
+
+	// Case 2: If the current release is an innovation release, it means the previous release
+	// is _not_ an innovation, i.e. we can't skip over it.
+	currentRelease := clusterversion.Latest.ReleaseSeries()
+	isInnovationRelease := currentRelease.Minor == 1 || currentRelease.Minor == 3
+
+	// We can only perform a skip upgrade to the current version if it's not an innovation and
+	// there are multiple supported previous versions.
+	expected := !isInnovationRelease && numSupportedVersions > 1
+
+	// N.B. The predecessor is only used to determine if we should skip over the
+	// mixedversion test's minimum supported version, and not relevant for this test.
+	pred := clusterupgrade.MustParseVersion("24.2.1")
+	actual := mvt.supportsSkipUpgradeTo(pred, &clusterupgrade.Version{Version: version.MustParse(build.BinaryVersion())})
+	require.Equal(t, expected, actual)
 }
