@@ -457,6 +457,71 @@ func registerKVContention(r registry.Registry) {
 	})
 }
 
+func registerKVLongRunningTxn(r registry.Registry) {
+	const nodes = 4
+	r.Add(registry.TestSpec{
+		Name:             fmt.Sprintf("kv/long-running-writer/nodes=%d", nodes),
+		Owner:            registry.OwnerKV,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(nodes+1, spec.WorkloadNode()),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
+
+			conn := c.Conn(ctx, t.L(), 1)
+			// Disable buffered writes, so the long-running transactions can write
+			// some intents, and we can see the effect of intent resolution.
+			if _, err := conn.Exec(`
+				SET CLUSTER SETTING kv.transaction.write_buffering.enabled = false
+			`); err != nil {
+				t.Fatal(err)
+			}
+			// Enable tracing.
+			if _, err := conn.Exec(`
+				SET CLUSTER SETTING trace.debug.enable = true;
+			`); err != nil {
+				t.Fatal(err)
+			}
+
+			t.Status("running workload")
+			const duration = time.Hour
+			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+			// Run two concurrent KV workloads, both selecting keys from a smaller
+			// keyspace (cycle-length=100), using small batches (batch=1) and a
+			// zipfian distribution to increase contention. The test measures the
+			// latency of the reads to validate their blocking behavior.
+			//
+			// 1. Long-running low-priority write-only transactions. Each transaction
+			// writes 100 keys. Use concurrency of 1 to avoid write-write conflict.
+			//
+			// 2. Read-only requests at normal priority. When each read encounters the
+			// intents of the write-only transactions, it will push based on priority
+			// and resolve (rewrite) the intent. The reads also run at concurrency of
+			// 1 because otherwise the pushes of concurrent reads may conflict with
+			// each other for latches.
+			m.Go(func(ctx context.Context) error {
+				cmd := fmt.Sprintf("./cockroach workload run kv --init --duration=%s --read-percent=0 "+
+					"--long-running-txn --long-running-txn-num-writes=100 --long-running-txn-priority=low "+
+					"--cycle-length=100 --concurrency=1 --batch=1 --zipfian=true {pgurl%s}",
+					duration, c.CRDBNodes())
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
+				return nil
+			})
+			m.Go(func(ctx context.Context) error {
+				histograms := " " + roachtestutil.GetWorkloadHistogramArgs(t, c, nil)
+				cmd := fmt.Sprintf("./cockroach workload run kv --init %s --duration=%s --batch=1 "+
+					"--always-inc-key-seq=true --read-percent=100 --cycle-length=100 --batch=1 "+
+					"--zipfian=true --concurrency=1 {pgurl%s}", histograms, duration, c.CRDBNodes())
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
+				return nil
+			})
+			m.Wait()
+		},
+	})
+}
+
 func registerKVGracefulDraining(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "kv/gracefuldraining",
