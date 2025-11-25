@@ -509,3 +509,56 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 			}
 		})
 }
+
+func relationshipToString(rel conjunctionRelationship) string {
+	switch rel {
+	case conjPossiblyIntersecting:
+		return "possiblyIntersecting"
+	case conjEqualSet:
+		return "equalSet"
+	case conjStrictSubset:
+		return "strictSubset"
+	case conjStrictSuperset:
+		return "strictSuperset"
+	case conjNonIntersecting:
+		return "nonIntersecting"
+	default:
+		return fmt.Sprintf("unknown(%d)", rel)
+	}
+}
+
+func TestVoterAndAllRelationshipTable(t *testing.T) {
+	interner := newStringInterner()
+	datadriven.RunTest(t, "testdata/voter_and_all_relationship_table",
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "voter-and-all-relationship":
+				conf := parseSpanConfig(t, d)
+				var b strings.Builder
+				fmt.Fprintf(&b, "input:\n")
+				printSpanConfig(&b, conf)
+
+				nConf, err := makeBasicNormalizedSpanConfig(&conf, interner)
+				if err != nil {
+					fmt.Fprintf(&b, "normalization error: %s\n", err.Error())
+					return b.String()
+				}
+				rels, emptyConstraintIndex, emptyVoterConstraintIndex, err := buildVoterAndAllRelationships(nConf)
+				fmt.Fprintf(&b, "table:\n")
+				fmt.Fprintf(&b, "\temptyConstraintIndex: %d\n", emptyConstraintIndex)
+				fmt.Fprintf(&b, "\temptyVoterConstraintIndex: %d\n", emptyVoterConstraintIndex)
+				fmt.Fprintf(&b, "\trelationships:\n")
+				if err != nil {
+					fmt.Fprintf(&b, "\terr: %s\n", err.Error())
+					return b.String()
+				}
+				for i, rel := range rels {
+					fmt.Fprintf(&b, "    [%d] voter=%d all=%d rel=%s\n",
+						i, rel.voterIndex, rel.allIndex, relationshipToString(rel.voterAndAllRel))
+				}
+				return b.String()
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+}
