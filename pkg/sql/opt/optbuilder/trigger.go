@@ -801,11 +801,12 @@ func (b *Builder) buildTriggerFunction(
 		{name: triggerColOld, typ: tableTyp, class: tree.RoutineParamIn},
 	}, triggerFuncStaticParams...)
 	paramCols := make(opt.ColList, len(params))
-	for colOrd, param := range params {
-		paramColName := funcParamColName(param.name, colOrd)
-		col := b.synthesizeColumn(triggerFuncScope, paramColName, param.typ, nil /* expr */, nil /* scalar */)
-		col.setParamOrd(colOrd)
-		paramCols[colOrd] = col.id
+	for ord, param := range params {
+		paramColName := funcParamColName(param.name, ord)
+		col := b.synthesizeParameterColumn(
+			triggerFuncScope, paramColName, param.typ, ord, nil, /* scalar */
+		)
+		paramCols[ord] = col.id
 	}
 
 	// Initialize and cache the UDF definition before building the function body.

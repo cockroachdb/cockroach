@@ -11,8 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -121,19 +119,6 @@ const maxFuncParams = 100
 
 // funcParamOrd is a 1-based ordinal of a function parameter.
 type funcParamOrd int8
-
-// setParamOrd sets the column's 1-based function parameter ordinal to the given
-// 0-based ordinal. Panics if the given ordinal is not in the range
-// [0, maxFuncParams).
-func (c *scopeColumn) setParamOrd(ord int) {
-	if ord < 0 {
-		panic(errors.AssertionFailedf("expected non-negative argument ordinal"))
-	}
-	if ord >= maxFuncParams {
-		panic(pgerror.New(pgcode.TooManyArguments, "functions cannot have more than 100 arguments"))
-	}
-	c.paramOrd = funcParamOrd(ord + 1)
-}
 
 // getParamOrd retrieves the 0-based ordinal from the column's 1-based function
 // parameter ordinal. Panics if the function ordinal is unset.

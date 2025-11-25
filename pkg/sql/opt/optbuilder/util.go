@@ -183,17 +183,13 @@ func (b *Builder) expandStarAndResolveType(
 // example, the query `SELECT (x + 1) AS "x_incr" FROM t` has a projection with
 // a synthesized column "x_incr".
 //
-// scope  The scope is passed in so it can be updated with the newly bound
-//
-//	variable.
-//
-// name   This is the name for the new column (e.g., if specified with
-//
-//	the AS keyword).
-//
-// typ    The type of the column.
-// expr   The expression this column refers to (if any).
-// scalar The scalar expression associated with this column (if any).
+//   - scope:  The scope is passed in so it can can be updated with the newly bound
+//     variable.
+//   - name: This is the name for the new column (e.g., if specified with
+//     the AS keyword).
+//   - typ: The type of the column.
+//   - expr: The expression this column refers to (if any).
+//   - scalar: The scalar expression associated with this column (if any).
 //
 // The new column is returned as a scopeColumn object.
 func (b *Builder) synthesizeColumn(
@@ -206,6 +202,29 @@ func (b *Builder) synthesizeColumn(
 		id:     colID,
 		expr:   expr,
 		scalar: scalar,
+	})
+	return &scope.cols[len(scope.cols)-1]
+}
+
+// synthesizeParameterColumn synthesizes a column that represents a reference to
+// a routine parameter. ord is the 0-based parameter ordinal. This function
+// panics if the given ordinal is not in the range [0, maxFuncParams).
+func (b *Builder) synthesizeParameterColumn(
+	scope *scope, name scopeColumnName, typ *types.T, ord int, scalar opt.ScalarExpr,
+) *scopeColumn {
+	if ord < 0 {
+		panic(errors.AssertionFailedf("expected non-negative argument ordinal"))
+	}
+	if ord >= maxFuncParams {
+		panic(pgerror.New(pgcode.TooManyArguments, "functions cannot have more than 100 arguments"))
+	}
+	colID := b.factory.Metadata().AddColumn(name.MetadataName(), typ)
+	scope.cols = append(scope.cols, scopeColumn{
+		name:     name,
+		typ:      typ,
+		id:       colID,
+		paramOrd: funcParamOrd(ord + 1),
+		scalar:   scalar,
 	})
 	return &scope.cols[len(scope.cols)-1]
 }

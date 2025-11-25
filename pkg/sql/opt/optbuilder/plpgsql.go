@@ -1568,8 +1568,7 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(
 		scalar = b.buildSQLExpr(val, typ, inScope)
 	}
 	b.addBarrierIfVolatile(inScope, scalar)
-	col := b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
-	col.setParamOrd(ord)
+	_ = b.ob.synthesizeParameterColumn(assignScope, colName, typ, ord, scalar)
 	b.ob.constructProjectForScope(inScope, assignScope)
 	b.addBarrierIfVolatile(assignScope, scalar)
 	return assignScope
@@ -1593,8 +1592,7 @@ func (b *plpgsqlBuilder) assignToHiddenVariable(inScope *scope, ord int, val ast
 	colName := scopeColName("").WithMetadataName(string(name))
 	scalar := b.buildSQLExpr(val, typ, inScope)
 	b.addBarrierIfVolatile(inScope, scalar)
-	col := b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
-	col.setParamOrd(ord)
+	_ = b.ob.synthesizeParameterColumn(assignScope, colName, typ, ord, scalar)
 	b.ob.constructProjectForScope(inScope, assignScope)
 	b.addBarrierIfVolatile(assignScope, scalar)
 	return assignScope
@@ -1700,10 +1698,11 @@ func (b *plpgsqlBuilder) buildInto(stmtScope *scope, target []ast.Variable) *sco
 			scalar = b.ob.factory.ConstructConstVal(tree.DNull, typ)
 		}
 		scalar = b.coerceType(scalar, typ)
-		col := b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
-		if !targetIsRecordVar {
-			// Setting the param ordinal will be handled in projectRecordVar below.
-			col.setParamOrd(targetOrds[j])
+		if targetIsRecordVar {
+			// The parameter column is synthesized in projectRecordVar below.
+			_ = b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+		} else {
+			_ = b.ob.synthesizeParameterColumn(intoScope, colName, typ, targetOrds[j], scalar)
 		}
 	}
 	b.ob.constructProjectForScope(stmtScope, intoScope)
@@ -2203,8 +2202,7 @@ func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
 		elems[j] = b.ob.factory.ConstructVariable(s.cols[j].id)
 	}
 	tuple := b.ob.factory.ConstructTuple(elems, typ)
-	col := b.ob.synthesizeColumn(recordScope, scopeColName(name), typ, nil /* expr */, tuple)
-	col.setParamOrd(ord)
+	col := b.ob.synthesizeParameterColumn(recordScope, scopeColName(name), typ, ord, tuple)
 	recordScope.expr = b.ob.constructProject(s.expr, []scopeColumn{*col})
 	return recordScope
 }
@@ -2217,12 +2215,11 @@ func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 	s := b.ob.allocScope()
 	params := make(opt.ColList, 0, b.variableCount(len(b.blocks)))
 	addParam := func(name scopeColumnName, typ *types.T) {
-		col := b.ob.synthesizeColumn(s, name, typ, nil /* expr */, nil /* scalar */)
 		// TODO(mgartner): Lift the 100 parameter restriction for synthesized
 		// continuation UDFs.
-		paramOrd := len(params)
-		col.setParamOrd(paramOrd)
-		if b.ob.insideFuncDef && b.options.isTriggerFn && paramOrd == triggerArgvColIdx {
+		ord := len(params)
+		col := b.ob.synthesizeParameterColumn(s, name, typ, ord, nil /* scalar */)
+		if b.ob.insideFuncDef && b.options.isTriggerFn && ord == triggerArgvColIdx {
 			// Due to #135311, we disallow references to the TG_ARGV param for now.
 			if !b.ob.evalCtx.SessionData().AllowCreateTriggerFunctionWithArgvReferences {
 				col.resolveErr = unimplementedArgvErr
@@ -2576,8 +2573,7 @@ func (b *plpgsqlBuilder) projectTupleAsIntoTarget(inScope *scope, target []ast.V
 			memo.TupleOrdinal(i),
 		)
 		scalar = b.coerceType(scalar, typ)
-		col := b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
-		col.setParamOrd(ord)
+		_ = b.ob.synthesizeParameterColumn(intoScope, colName, typ, ord, scalar)
 	}
 	b.ob.constructProjectForScope(inScope, intoScope)
 	return intoScope
