@@ -541,6 +541,88 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 	}
 }
 
+// TestMultiRangeBatchScanWithPerScanLimit runs batches of scan requests with a
+// per-scan key limit. It shows how any or all scans in such a batch can have
+// partial responses, and that the per-scan limit can be exceeded in the final
+// result if a scan spans multiple ranges.
+func TestMultiRangeBatchScanWithPerScanLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, db := startNoSplitMergeServer(t)
+	defer s.Stopper().Stop(ctx)
+
+	require.NoError(t, setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f"))
+	allKeys := []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"}
+	for _, key := range allKeys {
+		require.NoError(t, db.Put(ctx, key, "value"))
+	}
+
+	scans := [][]string{{"a", "c"}, {"b", "d"}, {"c", "f"}, {"f", "z"}}
+
+	// The per-scan limit does not set resume spans, so all results are considered
+	// "satisfied".
+	expSatisfied := make(map[int]struct{})
+	for i := range scans {
+		expSatisfied[i] = struct{}{}
+	}
+
+	for _, tc := range []struct {
+		limit      int
+		expResults [][]string
+	}{
+		{
+			limit: 1,
+			expResults: [][]string{
+				{"a1", "b1"},
+				{"b1", "c1"},
+				{"c1", "d1"},
+				{"f1"},
+			},
+		},
+		{
+			limit: 2,
+			expResults: [][]string{
+				{"a1", "a2", "b1", "b2"},
+				{"b1", "b2", "c1", "c2"},
+				{"c1", "c2", "d1"},
+				{"f1", "f2"},
+			},
+		},
+		{
+			limit: 3,
+			expResults: [][]string{
+				{"a1", "a2", "a3", "b1", "b2"},
+				{"b1", "b2", "c1", "c2"},
+				{"c1", "c2", "d1"},
+				{"f1", "f2", "f3"},
+			},
+		},
+		{
+			limit: 10,
+			expResults: [][]string{
+				{"a1", "a2", "a3", "b1", "b2"},
+				{"b1", "b2", "c1", "c2"},
+				{"c1", "c2", "d1"},
+				{"f1", "f2", "f3"},
+			},
+		},
+	} {
+		t.Run(fmt.Sprintf("MaxPerScanRequestKeys=%d", tc.limit), func(t *testing.T) {
+			b := &kv.Batch{}
+			b.Header.MaxPerScanRequestKeys = int64(tc.limit)
+			for _, span := range scans {
+				b.Scan(span[0], span[1])
+			}
+			require.NoError(t, db.Run(ctx, b))
+			checkScanResults(
+				t, scans, b.Results, tc.expResults, expSatisfied,
+				kvpb.RESUME_UNKNOWN, checkOptions{mode: Strict},
+			)
+		})
+	}
+}
+
 // TestMultiRangeBoundedBatchScanPartialResponses runs multiple scan requests
 // either out-of-order or over overlapping key spans and shows how the batch
 // responses can contain partial responses.

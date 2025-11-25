@@ -1610,6 +1610,13 @@ func (sb *statisticsBuilder) buildJoin(
 		colStat.Histogram = nil
 	}
 
+	// Adjust for a lookup-join with a per-lookup limit.
+	if lookup, ok := h.join.(*LookupJoinExpr); ok && lookup.PerLookupLimit > 0 {
+		// The PerLookupLimit is the maximum number of rows that can be generated
+		// per input row.
+		s.RowCount = min(s.RowCount, leftStats.RowCount*float64(lookup.PerLookupLimit))
+	}
+
 	sb.finalizeFromCardinality(relProps)
 }
 

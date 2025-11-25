@@ -92,6 +92,10 @@ type lookupJoinPlanningInfo struct {
 	// Streamer API is used.
 	parallelize bool
 
+	// If greater than zero, perLookupLimit limits the number of rows returned by
+	// each lookup. This is useful when only a subset of looked-up rows is needed.
+	perLookupLimit int64
+
 	// finalizeLastStageCb will be nil in the spec factory.
 	finalizeLastStageCb func(*physicalplan.PhysicalPlan)
 }

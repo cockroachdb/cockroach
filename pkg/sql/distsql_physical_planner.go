@@ -3408,6 +3408,7 @@ func (dsp *DistSQLPlanner) planLookupJoin(
 		RemoteOnlyLookups:                 planInfo.remoteOnlyLookups,
 		ReverseScans:                      planInfo.reverseScans,
 		Parallelize:                       planInfo.parallelize,
+		PerLookupLimit:                    planInfo.perLookupLimit,
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(planInfo.fetch.catalogCols))

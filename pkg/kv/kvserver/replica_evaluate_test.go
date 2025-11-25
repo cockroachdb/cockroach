@@ -36,7 +36,7 @@ func TestEvaluateBatch(t *testing.T) {
 
 	tcs := []testCase{
 		//
-		// Test suite for MaxRequestSpans.
+		// Test suite for MaxSpanRequestKeys.
 		//
 		{
 			// We should never evaluate empty batches, but here's what would happen
@@ -231,6 +231,89 @@ func TestEvaluateBatch(t *testing.T) {
 			check: func(t *testing.T, r resp) {
 				verifyReadResult(t, r, []string{"a"}, []string{"b"}, nil, nil)
 				verifyResumeSpans(t, r, "", "", "c-", "d-e")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
+			},
+		},
+		//
+		// Test suite for MaxPerScanRequestKeys.
+		//
+		{
+			// Per-scan limit returns the first "limit" rows from each scan.
+			name: "scans with MaxPerScanRequestKeys=1",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				d.ba.Add(scanArgsString("a", "c"))
+				d.ba.Add(scanArgsString("c", "e"))
+				d.ba.MaxPerScanRequestKeys = 1
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"a"}, []string{"c"})
+				verifyResumeSpans(t, r, "", "")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
+			},
+		},
+		{
+			// Ditto in reverse.
+			name: "reverse scans with MaxPerScanRequestKeys=1",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				d.ba.Add(revScanArgsString("c", "e"))
+				d.ba.Add(revScanArgsString("a", "c"))
+				d.ba.MaxPerScanRequestKeys = 1
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"d"}, []string{"b"})
+				verifyResumeSpans(t, r, "", "")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
+			},
+		},
+		{
+			// Per-scan limit applies before the MaxSpanRequestKeys limit.
+			name: "scans with MaxPerScanRequestKeys=2 and MaxSpanRequestKeys=3",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				d.ba.Add(scanArgsString("a", "d"))
+				d.ba.Add(scanArgsString("c", "e"))
+				d.ba.MaxPerScanRequestKeys = 2
+				d.ba.MaxSpanRequestKeys = 3
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"a", "b"}, []string{"c"})
+				verifyResumeSpans(t, r, "", "d-e")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
+			},
+		},
+		{
+			// Ditto in reverse.
+			name: "reverse scans with MaxPerScanRequestKeys=2 and MaxSpanRequestKeys=3",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				d.ba.Add(revScanArgsString("b", "e"))
+				d.ba.Add(revScanArgsString("a", "c"))
+				d.ba.MaxPerScanRequestKeys = 2
+				d.ba.MaxSpanRequestKeys = 3
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"d", "c"}, []string{"b"})
+				verifyResumeSpans(t, r, "", "a-a\x00")
+				verifyAcquiredLocks(t, r, acquiredLocks{})
+			},
+		},
+		{
+			// Per-scan limit is ignored for GetRequests.
+			name: "gets and scans with MaxPerScanRequestKeys=1",
+			setup: func(t *testing.T, d *data) {
+				writeABCDEF(t, d)
+				d.ba.Add(getArgsString("a"))
+				d.ba.Add(scanArgsString("a", "c"))
+				d.ba.Add(getArgsString("c"))
+				d.ba.Add(scanArgsString("c", "e"))
+				d.ba.Add(getArgsString("f"))
+				d.ba.MaxPerScanRequestKeys = 1
+			},
+			check: func(t *testing.T, r resp) {
+				verifyReadResult(t, r, []string{"a"}, []string{"a"}, []string{"c"}, []string{"c"}, []string{"f"})
+				verifyResumeSpans(t, r, "")
 				verifyAcquiredLocks(t, r, acquiredLocks{})
 			},
 		},
