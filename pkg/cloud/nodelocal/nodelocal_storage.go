@@ -110,9 +110,6 @@ func makeLocalFileStorage(
 		return nil, errors.New("nodelocal storage is not available")
 	}
 	cfg := dest.LocalFileConfig
-	if cfg.Path == "" {
-		return nil, errors.Errorf("local storage requested but path not provided")
-	}
 	client, err := args.BlobClientFactory(ctx, cfg.NodeID)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create blob client")

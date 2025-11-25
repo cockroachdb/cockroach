@@ -607,3 +607,9 @@ message BulkMergeSpec {
 
 	// NEXT ID: 4.
 }
+
+// IngestFileSpec describes the set of SSTs to be ingested by an ingest
+// processor. Each SST is expected to be range-aligned and non-overlapping.
+message IngestFileSpec {
+	repeated BulkMergeSpec.SST ssts = 1 [(gogoproto.nullable) = false];
+}
