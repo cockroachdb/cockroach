@@ -7,6 +7,7 @@ package inspect
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"testing"
 	"time"
@@ -765,4 +766,75 @@ func TestMissingIndexEntryWithHistoricalQuery(t *testing.T) {
 	require.Error(t, err, "expected INSPECT to find corruption at historical timestamp")
 	require.Contains(t, err.Error(), "INSPECT found inconsistencies",
 		"INSPECT should detect the missing index entry that existed at the historical timestamp")
+}
+
+func TestInspectWithoutASOFSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	unblockCh := make(chan struct{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Inspect: &sql.InspectTestingKnobs{
+				OnInspectJobStart: func() error {
+					// Block the INSPECT job from starting until the DROP INDEX completes.
+					const maxWait = 30 * time.Second
+					select {
+					case <-unblockCh:
+						return nil
+					case <-time.After(maxWait):
+						return errors.New("timed out waiting for DROP INDEX to complete")
+					}
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(db)
+
+	r.ExecMultiple(t,
+		`SET CLUSTER SETTING jobs.registry.interval.adopt = '500ms'`,
+		`SET enable_inspect_command = true`,
+		`CREATE DATABASE t`,
+		`CREATE TABLE t.pk_swap (
+                       old_pk INT PRIMARY KEY,
+                       new_pk INT UNIQUE NOT NULL,
+                       payload INT NOT NULL,
+                       INDEX payload_idx (payload)
+              )`,
+		`INSERT INTO t.pk_swap SELECT i, i+100, i+200 FROM generate_series(1, 5) AS g(i)`,
+	)
+
+	r.Exec(t, `INSPECT TABLE t.pk_swap WITH OPTIONS INDEX ALL, DETACHED`)
+	r.Exec(t, `DROP INDEX t.pk_swap@payload_idx`)
+	// Unblock the INSPECT job now that the DROP INDEX has completed.
+	close(unblockCh)
+
+	var jobID int64
+	require.Eventually(t, func() bool {
+		row := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY created DESC LIMIT 1`)
+		return row.Scan(&jobID) == nil
+	}, 10*time.Second, 100*time.Millisecond)
+
+	var (
+		status string
+		jobErr gosql.NullString
+	)
+	require.Eventually(t, func() bool {
+		row := db.QueryRow(`SELECT status, error FROM [SHOW JOBS] WHERE job_id = $1`, jobID)
+		if err := row.Scan(&status, &jobErr); err != nil {
+			t.Logf("error polling job status: %v", err)
+			return false
+		}
+		return status != "running" && status != "pending"
+	}, 60*time.Second, time.Second)
+
+	require.Equal(t, "failed", status, "detached job should fail after schema change")
+	require.Regexp(t, `table pk_swap \[\d+\] has had a schema change since the job has started at .+\nHINT: use AS OF SYSTEM TIME to avoid schema changes during inspection`, jobErr.String)
+
+	rows, err := db.Query(`SHOW INSPECT ERRORS FOR TABLE t.pk_swap WITH DETAILS`)
+	require.NoError(t, err)
+	defer rows.Close()
+	require.False(t, rows.Next(), "no inspect errors are recorded when the job aborts before running checks")
 }

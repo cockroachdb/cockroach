@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -80,7 +81,10 @@ type indexConsistencyCheck struct {
 
 	flowCtx *execinfra.FlowCtx
 	indexID descpb.IndexID
-	asOf    hlc.Timestamp
+	// tableVersion is the descriptor version recorded when the check was planned.
+	// It is used to detect concurrent schema changes for non-AS OF inspections.
+	tableVersion descpb.DescriptorVersion
+	asOf         hlc.Timestamp
 
 	tableDesc catalog.TableDescriptor
 	secIndex  catalog.Index
@@ -447,6 +451,17 @@ func (c *indexConsistencyCheck) loadCatalogInfo(ctx context.Context) error {
 		c.tableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, c.tableID)
 		if err != nil {
 			return err
+		}
+		if c.tableVersion != 0 && c.tableDesc.GetVersion() != c.tableVersion {
+			return errors.WithHintf(
+				errors.Newf(
+					"table %s [%d] has had a schema change since the job has started at %s",
+					c.tableDesc.GetName(),
+					c.tableDesc.GetID(),
+					c.tableDesc.GetModificationTime().GoTime().Format(time.RFC3339),
+				),
+				"use AS OF SYSTEM TIME to avoid schema changes during inspection",
+			)
 		}
 
 		c.priIndex = c.tableDesc.GetPrimaryIndex()

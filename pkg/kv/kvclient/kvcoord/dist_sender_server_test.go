@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -4438,9 +4439,8 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 						return nil
 					},
 					TestingApplyCalledTwiceFilter: func(fArgs kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
-						if fArgs.CmdID == cmdID.Load().(kvserverbase.CmdIDKey) {
-							t.Logf("failing application for raft cmdID: %s", cmdID)
-
+						if cID := cmdID.Load().(kvserverbase.CmdIDKey); fArgs.CmdID == cID {
+							t.Logf("failing application for raft cmdID: %s", cID)
 							return 0, kvpb.NewErrorf("test injected error")
 						}
 						return 0, nil
@@ -4472,28 +4472,60 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 	)
 	db := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
 
-	startTxn2 := make(chan struct{})
+	startTxn2Ch := make(chan struct{})
+	var startTxn2Once sync.Once
+	startTxn2 := func() {
+		startTxn2Once.Do(func() { close(startTxn2Ch) })
+	}
 	blockCh := make(chan struct{})
-	var wg sync.WaitGroup
-	wg.Add(1)
 
 	// Write to keyB so that we can later get a lock on it.
+	valueBytes := []byte("valueB")
 	txn := db.NewTxn(ctx, "txn")
-	err := txn.Put(ctx, keyB, "valueB")
+	err := txn.Put(ctx, keyB, valueBytes)
 	require.NoError(t, err)
 	require.NoError(t, txn.Commit(ctx))
 
-	go func() {
-		defer wg.Done()
+	ctx, cancel := context.WithTimeout(context.Background(), testutils.SucceedsSoonDuration())
+	defer cancel()
 
-		err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	tracer := s.TracerI().(*tracing.Tracer)
+	txn1Ctx, collectAndFinishTxn1 := tracing.ContextWithRecordingSpan(ctx, tracer, "txn1")
+	defer func() {
+		rec := collectAndFinishTxn1()
+		if t.Failed() {
+			t.Logf("TXN 1 TRACE: %s", rec)
+		}
+	}()
+
+	g := ctxgroup.WithContext(txn1Ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// If we exit early, unblock main thread to make sure we observe the error.
+			defer startTxn2()
+			t.Logf("txn 1: id=%s epo=%d", txn.ID(), txn.Epoch())
 			if txnID := targetTxnIDString.Load(); txnID == "" {
 				// Store the txnID for the testing knobs.
+				t.Logf("txn 1: ID set for testing knob")
 				targetTxnIDString.Store(txn.ID().String())
-				t.Logf("txn1 ID is: %s", txn.ID())
 			} else if txnID != txn.ID() {
 				// Since txn recovery aborted us, we get retried again but with an
 				// entirely new txnID. This time we just return. Writing nothing.
+				return nil
+			}
+
+			expectErrorMatch := func(err error, s string) error {
+				if err == nil {
+					return errors.New("unexpected nil error")
+				} else if !strings.Contains(err.Error(), s) {
+					return errors.Wrapf(err, "unexpected error does not contain %q", s)
+				}
+				return nil
+			}
+			expectResultMatch := func(res kv.KeyValue, value []byte) error {
+				if !bytes.Equal(res.ValueBytes(), valueBytes) {
+					return errors.Errorf("unexpected result: %v != %v", res.ValueBytes(), valueBytes)
+				}
 				return nil
 			}
 
@@ -4502,45 +4534,77 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 				err := txn.Put(ctx, keyA, "value")
 				require.NoError(t, err)
 				res, err := txn.GetForUpdate(ctx, keyB, kvpb.BestEffort)
-				require.NoError(t, err)
-				require.Equal(t, res.ValueBytes(), []byte("valueB"))
+				if err != nil {
+					return err
+				}
+				if err := expectResultMatch(res, valueBytes); err != nil {
+					return err
+				}
+
 				res, err = txn.GetForShare(ctx, keyB, kvpb.GuaranteedDurability)
-				require.NoError(t, err)
-				require.Equal(t, res.ValueBytes(), []byte("valueB"))
+				if err != nil {
+					return err
+
+				}
+				if err := expectResultMatch(res, valueBytes); err != nil {
+					return err
+				}
+
 				err = txn.Commit(ctx)
-				require.Error(t, err)
-				require.ErrorContains(t, err, "RETRY_ASYNC_WRITE_FAILURE")
+				if matchErr := expectErrorMatch(err, "RETRY_ASYNC_WRITE_FAILURE"); matchErr != nil {
+					return matchErr
+				}
 				// Transfer the lease to n3.
 				transferLease(2)
-				close(startTxn2)
-				// Block until Txn2 recovers us.
-				<-blockCh
+				t.Logf("txn 1: allowing txn 2 to start")
+				startTxn2()
+				// Block until Txn2 recover (and aborts) us.
+				select {
+				case <-blockCh:
+				case <-ctx.Done():
+					return errors.Wrap(ctx.Err(), "txn1 waiting for unblock from txn2")
+				}
+
+				t.Logf("txn 1: resuming execution")
 				return err
 			case 1:
 				// When retrying the write failure we should discover that txn recovery
 				// has aborted this transaction.
 				err := txn.Put(ctx, keyA, "value")
-				require.Error(t, err)
-				require.ErrorContains(t, err, "ABORT_REASON_ABORT_SPAN")
+				if matchErr := expectErrorMatch(err, "ABORT_REASON_ABORT_SPAN"); matchErr != nil {
+					return matchErr
+				}
 				return err
 			default:
-				t.Errorf("unexpected epoch: %d", txn.Epoch())
+				return errors.Errorf("unexpected epoch: %d", txn.Epoch())
 			}
-			return nil
 		})
-		require.NoError(t, err)
+	})
+
+	// Txn2 just runs on the main goroutine.
+	select {
+	case <-startTxn2Ch:
+	case <-ctx.Done():
+		t.Fatal(errors.Wrap(ctx.Err(), "txn2 waiting for start signal from txn1"))
+	}
+
+	txn2Ctx, collectAndFinishTxn2 := tracing.ContextWithRecordingSpan(context.Background(), tracer, "txn1")
+	defer func() {
+		rec := collectAndFinishTxn2()
+		if t.Failed() {
+			t.Logf("TXN 2 TRACE: %s", rec)
+		}
 	}()
-	<-startTxn2
-
-	txn2 := db.NewTxn(ctx, "txn2")
-	res, err := txn2.Get(ctx, keyA)
+	txn2 := db.NewTxn(txn2Ctx, "txn2")
+	t.Logf("txn 2: id=%s, epo=%d", txn2.ID(), txn2.Epoch())
+	res, err := txn2.Get(txn2Ctx, keyA)
 	require.NoError(t, err)
-	// NB: Nothing should exist on keyA, because txn1 didn't commit at epoch 1 (or
-	// any epoch, for that matter).
+	// NB: Nothing should exist on keyA, because txn1 didn't commit at epoch 1
+	// (or any epoch, for that matter).
 	require.False(t, res.Exists())
-
 	close(blockCh)
-	wg.Wait()
+	// Txn1 should now complete. We return a nil error after observing an abort.
+	require.NoError(t, g.Wait())
 }
 
 // TestUnprocessedWritesHaveResumeSpanSet tests that writes that weren't
@@ -4698,8 +4762,8 @@ func TestRollbackAfterRefreshAndFailedCommit(t *testing.T) {
 					return nil
 				},
 				TestingApplyCalledTwiceFilter: func(fArgs kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
-					if fArgs.CmdID == cmdID.Load().(kvserverbase.CmdIDKey) {
-						t.Logf("failing application for raft cmdID: %s", fArgs.CmdID)
+					if cID := cmdID.Load().(kvserverbase.CmdIDKey); fArgs.CmdID == cID {
+						t.Logf("failing application for raft cmdID: %s", cID)
 						return 0, kvpb.NewErrorf("test injected error")
 					}
 					return 0, nil
@@ -4839,8 +4903,8 @@ func TestUnexpectedCommitOnTxnAbortAfterRefresh(t *testing.T) {
 					return nil
 				},
 				TestingApplyCalledTwiceFilter: func(fArgs kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
-					if fArgs.CmdID == cmdID.Load().(kvserverbase.CmdIDKey) {
-						t.Logf("failing application for raft cmdID: %s", fArgs.CmdID)
+					if cID := cmdID.Load().(kvserverbase.CmdIDKey); fArgs.CmdID == cID {
+						t.Logf("failing application for raft cmdID: %s", cID)
 						return 0, kvpb.NewErrorf("test injected error")
 					}
 					return 0, nil
