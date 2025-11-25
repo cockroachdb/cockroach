@@ -6,10 +6,8 @@
 package backup
 
 import (
-	"bytes"
 	"context"
 	"math"
-	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -19,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -123,34 +120,10 @@ func distRestore(
 		// Plan SplitAndScatter on the coordinator node.
 		splitAndScatterStageID := p.NewStageOnNodes(sqlInstanceIDs)
 
-		defaultStream := int32(0)
-		rangeRouterSpec := execinfrapb.OutputRouterSpec_RangeRouterSpec{
-			Spans:       nil,
-			DefaultDest: &defaultStream,
-			Encodings: []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
-				{
-					Column:   0,
-					Encoding: catenumpb.DatumEncoding_ASCENDING_KEY,
-				},
-			},
+		rangeRouterSpec, err := physicalplan.MakeInstanceRouter(sqlInstanceIDs)
+		if err != nil {
+			return nil, nil, err
 		}
-		for stream, sqlInstanceID := range sqlInstanceIDs {
-			startBytes, endBytes, err := routingSpanForSQLInstance(sqlInstanceID)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			span := execinfrapb.OutputRouterSpec_RangeRouterSpec_Span{
-				Start:  startBytes,
-				End:    endBytes,
-				Stream: int32(stream),
-			}
-			rangeRouterSpec.Spans = append(rangeRouterSpec.Spans, span)
-		}
-		// The router expects the spans to be sorted.
-		slices.SortFunc(rangeRouterSpec.Spans, func(a, b execinfrapb.OutputRouterSpec_RangeRouterSpec_Span) int {
-			return bytes.Compare(a.Start, b.Start)
-		})
 
 		// TODO(pbardea): This not super principled. I just wanted something that
 		// wasn't a constant and grew slower than linear with the length of
