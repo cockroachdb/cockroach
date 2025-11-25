@@ -235,10 +235,7 @@ type cpuTimeModel interface {
 var _ cpuTimeModel = &cpuTimeTokenLinearModel{}
 
 // cpuTimeTokenLinearModel computes the number of CPU time tokens to add
-// to each bucket in the cpuTimeTokenGranter, per interval (per 1s). As is
-// discussed in the cpuTimeTokenGranter docs, the buckets are arranged in a
-// priority hierarchy; some buckets always have more tokens added per second
-// than others.
+// to each bucket in the cpuTimeTokenGranter, per interval (per 1s).
 //
 // The refill rate is chosen such that the rate at which tokens are added
 // results in an (actual measured) CPU utilization matching the target
@@ -278,6 +275,21 @@ var _ cpuTimeModel = &cpuTimeTokenLinearModel{}
 //	refillRate = 0.8 * 8E9 tokens/s / 1 = 6.4E9 tokens/s
 //
 // which corresponds to 6.4 CPU-seconds of work admitted per wall-clock second.
+//
+// We clamp tokenToCPUTimeMultiplier to be in the interval [1, 20]. The lower
+// bound 1 reflects our knowledge that whatever is measured by tracked requests
+// was actually consumed (i.e. consumed tokens represent at least the
+// corresponding amount of CPU time). As the multipler increases, it is less and
+// less likely that the tracked requests are actually to blame for the high
+// utilization, but we continue to pretend that we are, to shift queuing into
+// admission control rather than the Go scheduler (where we have little
+// control). In highly degraded situations (multipler >= 20), we cap the
+// multiplier at 20 to avoid penalizing tracked requests further. See fit() for
+// more details.
+//
+// As is discussed in the cpuTimeTokenGranter docs, the buckets are arranged in
+// a priority hierarchy; some buckets always have more tokens added per second
+// than others.
 //
 // Higher priority buckets have higher target utilizations than lower priority
 // buckets, and incoming requests generally require that the bucket for their
