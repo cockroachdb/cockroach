@@ -851,10 +851,9 @@ type storeMatchesConstraintInterface interface {
 // initialize takes in the constraints, current replica set, and a constraint
 // matcher. It populates ac.constraints, ac.satisfiedByReplica and
 // ac.satisfiedNoConstraintReplica by analyzing the current replica set and the
-// constraints replicas satisfy, populating ac.constraints,
-// ac.satisfiedByReplica and ac.satisfiedNoConstraintReplica. They are later
-// used by mma to compute lease-transfer and rebalancing candidates by functions
-// like candidatesToReplaceVoterForRebalance. The given buf.replicas is already
+// constraints replicas satisfy. They are later used by mma to compute
+// lease-transfer and rebalancing candidates by functions like
+// candidatesToReplaceVoterForRebalance. The given buf.replicas is already
 // populated with the current replica set from buf.tryAddingStore.
 //
 // The algorithm proceeds in 3 phases, with the description of each phase
