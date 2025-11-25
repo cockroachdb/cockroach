@@ -206,6 +206,11 @@ func (f fakeLeaseManager) Acquire(
 	return ld, nil
 }
 
+func (f fakeLeaseManager) EnsureBatch(ctx context.Context, ids []descpb.ID) error {
+	// Nothing needs to be cached in memory for this implementation.
+	return nil
+}
+
 func (f fakeLeaseManager) IncGaugeAfterLeaseDuration(gauge lease.AfterLeaseDurationGauge) func() {
 	return func() {}
 }

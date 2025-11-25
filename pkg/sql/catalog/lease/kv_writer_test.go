@@ -282,4 +282,11 @@ func (t teeWriter) insertLease(ctx context.Context, txn *kv.Txn, fields leaseFie
 	)
 }
 
+func (t teeWriter) insertLeases(ctx context.Context, txn *kv.Txn, leases []leaseFields) error {
+	return errors.CombineErrors(
+		t.a.insertLeases(ctx, txn, leases),
+		t.b.insertLeases(ctx, txn, leases),
+	)
+}
+
 var _ writer = (*teeWriter)(nil)
