@@ -785,6 +785,12 @@ func (i *IngestStoppedSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (i *IngestFileSpec) summary() (string, []string) {
+	detail := fmt.Sprintf("ingest %d SSTs", len(i.SSTs))
+	return "IngestFileSpec", []string{detail}
+}
+
+// summary implements the diagramCellType interface.
 func (m *CompactBackupsSpec) summary() (string, []string) {
 	var spanStr strings.Builder
 	if len(m.Spans) > 0 {
