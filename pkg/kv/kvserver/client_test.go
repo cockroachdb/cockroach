@@ -211,12 +211,12 @@ func waitForTombstone(
 	t.Helper()
 	sl := kvstorage.MakeStateLoader(rangeID)
 	testutils.SucceedsSoon(t, func() error {
-		ts, err := sl.LoadRangeTombstone(context.Background(), reader)
+		mark, err := sl.LoadReplicaMark(context.Background(), reader)
 		require.NoError(t, err)
-		if ts.NextReplicaID == 0 {
+		if mark.Exists() {
 			return fmt.Errorf("tombstone not found for range %d", rangeID)
 		}
-		tombstone = ts
+		tombstone = mark.RangeTombstone
 		return nil
 	})
 	return tombstone
