@@ -25,7 +25,8 @@ import (
 // MergedStatistics returns merged stats per single-column full stat by merging
 // them with all newer partial stats for that column in chronological order.
 // Partial statistics that fail to merge are ignored, and full statistics
-// without any successful merges are excluded from the result.
+// without any successful merges are excluded from the result. All stats
+// correspond to the same table.
 func MergedStatistics(
 	ctx context.Context, stats []*TableStatistic, st *cluster.Settings,
 ) []*TableStatistic {
@@ -194,6 +195,7 @@ func mergePartialStatistic(
 	partialHistogram = stripOuterBuckets(ctx, evalCtx, partialHistogram)
 
 	mergedHistogram := fullHistogram
+	var err error
 	if atExtremes {
 		if extremesBound == nil {
 			return nil, errors.New("can't merge partial statistic at extremes without an extremes bound")
@@ -201,24 +203,23 @@ func mergePartialStatistic(
 		// Find the index separating the lower and upper extreme partial buckets.
 		i := 0
 		for i < len(partialHistogram) {
-			if val, err := partialHistogram[i].UpperBound.Compare(ctx, evalCtx, extremesBound); err == nil {
-				if val == 0 {
-					return nil, errors.New("the lowerbound of the full statistic histogram overlaps with the partial statistic histogram")
-				}
-				if val == -1 {
-					i++
-				} else {
-					break
-				}
-			} else {
+			cmp, err := partialHistogram[i].UpperBound.Compare(ctx, evalCtx, extremesBound)
+			if err != nil {
 				return nil, err
+			}
+			if cmp == 0 {
+				return nil, errors.New("the lowerbound of the full statistic histogram overlaps with the partial statistic histogram")
+			}
+			if cmp == -1 {
+				i++
+			} else {
+				break
 			}
 		}
 
 		lowerExtremeBuckets := partialHistogram[:i]
 		upperExtremeBuckets := partialHistogram[i:]
 
-		var err error
 		if len(lowerExtremeBuckets) > 0 {
 			mergedHistogram, err = mergeHistograms(ctx, evalCtx, mergedHistogram, lowerExtremeBuckets)
 			if err != nil {
@@ -232,7 +233,6 @@ func mergePartialStatistic(
 			}
 		}
 	} else {
-		var err error
 		mergedHistogram, err = mergeHistograms(ctx, evalCtx, mergedHistogram, partialHistogram)
 		if err != nil {
 			return nil, err
@@ -288,9 +288,7 @@ func mergePartialStatistic(
 		},
 	}
 
-	hist := histogram{
-		buckets: mergedHistogram,
-	}
+	hist := histogram{buckets: mergedHistogram}
 	hist.adjustCounts(ctx, evalCtx, fullStat.HistogramData.ColumnType, mergedNonNullRowCount, mergedNonNullDistinctCount)
 	histData, err := hist.toHistogramData(ctx, fullStat.HistogramData.ColumnType, st)
 	if err != nil {
@@ -311,8 +309,8 @@ type boundedBucket struct {
 
 func getBoundedBucket(
 	ctx context.Context, evalCtx *eval.Context, histogram []cat.HistogramBucket, idx int,
-) (b boundedBucket) {
-	b = boundedBucket{
+) boundedBucket {
+	b := boundedBucket{
 		HistogramBucket: histogram[idx],
 		lowerBound:      histogram[idx].UpperBound,
 	}
@@ -367,7 +365,8 @@ func filterBucket(
 	bucket boundedBucket, filterLower, filterUpper tree.Datum,
 ) (numRange, distinctRange float64) {
 	rangeBefore, rangeAfter, ok := datumrange.GetRangesBeforeAndAfter(
-		bucket.lowerBound, bucket.UpperBound, filterLower, filterUpper, false /* swap */)
+		bucket.lowerBound, bucket.UpperBound, filterLower, filterUpper, false, /* swap */
+	)
 
 	if ok && rangeBefore > 0 {
 		numRange = bucket.NumRange * rangeAfter / rangeBefore
@@ -478,8 +477,7 @@ func mergeHistograms(
 		for ; j < len(partial); j++ {
 			pBucket := getBoundedBucket(ctx, evalCtx, partial, j)
 
-			overlaps, overlapLower, overlapUpper, err := tryOverlap(ctx, evalCtx,
-				pBucket, fBucket)
+			overlaps, overlapLower, overlapUpper, err := tryOverlap(ctx, evalCtx, pBucket, fBucket)
 			if err != nil {
 				return nil, err
 			}
@@ -496,24 +494,24 @@ func mergeHistograms(
 			b.NumRange = b.NumRange - fNumRange + pNumRange
 			b.DistinctRange = b.DistinctRange - fDistinctRange + pDistinctRange
 
-			if cmp, err := pBucket.UpperBound.Compare(ctx, evalCtx, fBucket.UpperBound); err == nil {
-				if cmp == 0 {
-					// Use the partial bucket's NumEq if the upper bounds are the same.
-					b.NumEq = partial[j].NumEq
-				} else if cmp < 0 {
-					if partial[j].NumEq > 0 {
-						// The partial bucket ends before the full bucket, so we need to
-						// account for the partial bucket's upper bound value.
-						b.DistinctRange += 1
-						b.NumRange += partial[j].NumEq
-					}
-				} else {
-					// The partial bucket ends after the full bucket, so we continue to
-					// the next full bucket.
-					break
+			cmp, err := pBucket.UpperBound.Compare(ctx, evalCtx, fBucket.UpperBound)
+			if err != nil {
+				return nil, err
+			}
+			if cmp == 0 {
+				// Use the partial bucket's NumEq if the upper bounds are the same.
+				b.NumEq = partial[j].NumEq
+			} else if cmp < 0 {
+				if partial[j].NumEq > 0 {
+					// The partial bucket ends before the full bucket, so we need to
+					// account for the partial bucket's upper bound value.
+					b.DistinctRange += 1
+					b.NumRange += partial[j].NumEq
 				}
 			} else {
-				return nil, err
+				// The partial bucket ends after the full bucket, so we continue to
+				// the next full bucket.
+				break
 			}
 		}
 		merged = append(merged, b)
@@ -527,23 +525,23 @@ func mergeHistograms(
 	fUpperBound := full[len(full)-1].UpperBound
 	for ; j < len(partial); j++ {
 		pBucket := getBoundedBucket(ctx, evalCtx, partial, j)
-		if cmp, err := pBucket.lowerBound.Compare(ctx, evalCtx, fUpperBound); err == nil {
-			if cmp < 0 {
-				// The partial bucket overlaps with the last full bucket, so we only
-				// emit the non-overlapping part.
-				numRange, distinctRange := filterBucket(pBucket, fUpperBound, pBucket.UpperBound)
-
-				merged = append(merged, cat.HistogramBucket{
-					NumEq:         partial[j].NumEq,
-					NumRange:      numRange,
-					DistinctRange: distinctRange,
-					UpperBound:    partial[j].UpperBound,
-				})
-			} else {
-				merged = append(merged, partial[j])
-			}
-		} else {
+		cmp, err := pBucket.lowerBound.Compare(ctx, evalCtx, fUpperBound)
+		if err != nil {
 			return nil, err
+		}
+		if cmp < 0 {
+			// The partial bucket overlaps with the last full bucket, so we only
+			// emit the non-overlapping part.
+			numRange, distinctRange := filterBucket(pBucket, fUpperBound, pBucket.UpperBound)
+
+			merged = append(merged, cat.HistogramBucket{
+				NumEq:         partial[j].NumEq,
+				NumRange:      numRange,
+				DistinctRange: distinctRange,
+				UpperBound:    partial[j].UpperBound,
+			})
+		} else {
+			merged = append(merged, partial[j])
 		}
 	}
 

@@ -102,7 +102,7 @@ func TestSampleReservoir(t *testing.T) {
 		}
 		for _, k := range []int{1, 5, 10, 100} {
 			t.Run(fmt.Sprintf("n=%d/k=%d/mem=nolimit", n, k), func(t *testing.T) {
-				runSampleTest(t, &evalCtx, k, k, ranks, nil)
+				runSampleTest(t, &evalCtx, k, k, ranks, mon.NewStandaloneUnlimitedAccount())
 			})
 			for _, mem := range []int64{1 << 8, 1 << 10, 1 << 12} {
 				t.Run(fmt.Sprintf("n=%d/k=%d/mem=%d", n, k, mem), func(t *testing.T) {

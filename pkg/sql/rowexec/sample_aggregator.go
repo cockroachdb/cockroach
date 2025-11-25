@@ -529,8 +529,8 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				columnIDs[i] = s.sampledCols[c]
 			}
 
-			// Delete old stats that have been superseded,
-			// if the new statistic is not partial
+			// Delete old stats that have been superseded, if the new statistic
+			// is not partial.
 			if si.spec.PartialPredicate == "" {
 				if err := stats.DeleteOldStatsForColumns(
 					ctx,
@@ -661,8 +661,7 @@ func (s *sampleAggregator) generateHistogram(
 	}
 
 	if lowerBound != nil {
-		h, buckets, err := stats.ConstructExtremesHistogram(ctx, evalCtx, colType, values, numRows, distinctCount, maxBuckets, lowerBound, evalCtx.Settings)
-		_ = buckets
+		h, _, err := stats.ConstructExtremesHistogram(ctx, evalCtx, colType, values, numRows, distinctCount, maxBuckets, lowerBound, evalCtx.Settings)
 		return h, err
 	}
 

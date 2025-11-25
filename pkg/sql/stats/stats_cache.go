@@ -588,11 +588,9 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 		return nil, nil
 	}
 
-	hgIndex := histogramIndex
-	numStats := statsLen
 	// Validate the input length.
-	if datums.Len() != numStats {
-		return nil, errors.Errorf("%d values returned from table statistics lookup. Expected %d", datums.Len(), numStats)
+	if datums.Len() != statsLen {
+		return nil, errors.Errorf("%d values returned from table statistics lookup. Expected %d", datums.Len(), statsLen)
 	}
 
 	// Validate the input types.
@@ -612,7 +610,7 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 		{"nullCount", nullCountIndex, types.Int, false},
 		{"avgSize", avgSizeIndex, types.Int, false},
 		{"partialPredicate", partialPredicateIndex, types.String, true},
-		{"histogram", hgIndex, types.Bytes, true},
+		{"histogram", histogramIndex, types.Bytes, true},
 		{"fullStatisticID", fullStatisticsIdIndex, types.Int, true},
 	}
 
@@ -645,17 +643,17 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 	if datums[partialPredicateIndex] != tree.DNull {
 		res.PartialPredicate = string(*datums[partialPredicateIndex].(*tree.DString))
 	}
-	if datums[fullStatisticsIdIndex] != tree.DNull {
-		res.FullStatisticID = uint64(*datums[fullStatisticsIdIndex].(*tree.DInt))
-	}
-	if datums[hgIndex] != tree.DNull {
+	if datums[histogramIndex] != tree.DNull {
 		res.HistogramData = &HistogramData{}
 		if err := protoutil.Unmarshal(
-			[]byte(*datums[hgIndex].(*tree.DBytes)),
+			[]byte(*datums[histogramIndex].(*tree.DBytes)),
 			res.HistogramData,
 		); err != nil {
 			return nil, err
 		}
+	}
+	if datums[fullStatisticsIdIndex] != tree.DNull {
+		res.FullStatisticID = uint64(*datums[fullStatisticsIdIndex].(*tree.DInt))
 	}
 	return res, nil
 }
@@ -703,9 +701,7 @@ func (sc *TableStatisticsCache) parseStats(
 				// used when collecting the stats. Changes to types are
 				// backwards compatible across versions, so using a newer
 				// version of the type metadata here is safe.
-				if err = sc.db.DescsTxn(ctx, func(
-					ctx context.Context, txn descs.Txn,
-				) error {
+				if err = sc.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 					resolver := descs.NewDistSQLTypeResolver(txn.Descriptors(), txn.KV())
 					udt, err = resolver.ResolveTypeByOID(ctx, typ.Oid())
 					res.HistogramData.ColumnType = udt
@@ -759,7 +755,7 @@ func DecodeHistogramBuckets(ctx context.Context, tabStat *TableStatistic) error 
 // be non-zero.
 func (h *HistogramData) DecodeBuckets(
 	ctx context.Context,
-) (buckets []cat.HistogramBucket, distinctAdjustment float64, err error) {
+) (buckets []cat.HistogramBucket, distinctAdjustment float64, _ error) {
 	if h.Buckets == nil {
 		return nil, 0, nil
 	}

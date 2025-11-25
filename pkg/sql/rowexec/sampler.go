@@ -154,7 +154,7 @@ func newSamplerProcessor(
 
 	s.sr.Init(int(spec.SampleSize), int(spec.MinSampleSize), inTypes, &s.memAcc, sampleCols)
 
-	outTypes := make([]*types.T, 0, len(inTypes)+7)
+	outTypes := make([]*types.T, 0, len(inTypes)+8)
 
 	// First columns are the same as the input.
 	outTypes = append(outTypes, inTypes...)

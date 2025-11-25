@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"slices"
 	"sync"
 	"time"
 
@@ -444,18 +445,12 @@ func (r *Refresher) autoFullStatsEnabled(desc catalog.TableDescriptor) bool {
 func (r *Refresher) autoStatsEnabledForTableID(
 	tableID descpb.ID, settingOverrides map[descpb.ID]catpb.AutoStatsSettings,
 ) bool {
-	// Check tenant-level read-only status first (applies to all tables in tenant).
-	if r.readOnlyTenant {
-		return false
-	}
-
-	var setting catpb.AutoStatsSettings
-	var ok bool
 	if settingOverrides == nil {
 		// If the setting overrides map doesn't exist, defer to the cluster setting.
 		return AutomaticStatisticsClusterMode.Get(&r.st.SV)
 	}
-	if setting, ok = settingOverrides[tableID]; !ok {
+	setting, ok := settingOverrides[tableID]
+	if !ok {
 		// If there are no setting overrides, defer to the cluster setting.
 		return AutomaticStatisticsClusterMode.Get(&r.st.SV)
 	}
@@ -513,9 +508,7 @@ func (r *Refresher) autoPartialStatsFractionStaleRows(
 func (r *Refresher) getTableDescriptor(
 	ctx context.Context, tableID descpb.ID,
 ) (desc catalog.TableDescriptor) {
-	if err := r.cache.db.DescsTxn(ctx, func(
-		ctx context.Context, txn descs.Txn,
-	) (err error) {
+	if err := r.cache.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) (err error) {
 		if desc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID); err != nil {
 			err = errors.Wrapf(err,
 				"failed to get table descriptor for automatic stats on table id: %d", tableID)
@@ -658,8 +651,10 @@ func (r *Refresher) Start(
 								}
 							}
 							if desc == nil {
-								// Check the cluster setting and table setting before each
-								// refresh in case they were disabled recently.
+								// If we haven't already, check whether auto
+								// stats are still enabled on this table (in
+								// case they were disabled since NotifyMutation
+								// was called).
 								if !r.autoStatsEnabledForTableID(tableID, settingOverrides) {
 									continue
 								}
@@ -946,8 +941,7 @@ func (r *Refresher) EstimateStaleness(ctx context.Context, tableID descpb.ID) (f
 	if r.knobs != nil && r.knobs.StubTimeNow != nil {
 		statsAge = r.knobs.StubTimeNow().Sub(stat.CreatedAt)
 	}
-	staleFraction :=
-		float64(statsAge) / float64(avgRefreshTime) * staleTargetFraction
+	staleFraction := float64(statsAge) / float64(avgRefreshTime) * staleTargetFraction
 
 	return staleFraction, nil
 }
@@ -1016,7 +1010,6 @@ func (r *Refresher) maybeRefreshStats(
 		statsFractionStaleRows := r.autoStatsFractionStaleRows(explicitSettings)
 		statsMinStaleRows := r.autoStatsMinStaleRows(explicitSettings)
 		targetRows := int64(rowCount*statsFractionStaleRows) + statsMinStaleRows
-		// randInt will panic if we pass it a value of 0.
 		randomTargetRows := int64(0)
 		if targetRows > 0 {
 			randomTargetRows = r.rng.Int63n(targetRows)
@@ -1037,11 +1030,10 @@ func (r *Refresher) maybeRefreshStats(
 		}
 
 		// Perform the "dice roll".
-		randomTargetRows := int64(0)
 		partialStatsMinStaleRows := r.autoPartialStatsMinStaleRows(explicitSettings)
 		partialStatsFractionStaleRows := r.autoPartialStatsFractionStaleRows(explicitSettings)
 		targetRows := int64(rowCount*partialStatsFractionStaleRows) + partialStatsMinStaleRows
-		// randInt will panic if we pass it a value of 0.
+		randomTargetRows := int64(0)
 		if targetRows > 0 {
 			randomTargetRows = r.rng.Int63n(targetRows)
 		}
@@ -1160,7 +1152,7 @@ func avgFullRefreshTime(tableStats []*TableStatistic) time.Duration {
 			reference = stat
 			continue
 		}
-		if !areEqual(stat.ColumnIDs, reference.ColumnIDs) {
+		if !slices.Equal(stat.ColumnIDs, reference.ColumnIDs) {
 			continue
 		}
 		if stat.CreatedAt.Equal(reference.CreatedAt) {
@@ -1175,18 +1167,6 @@ func avgFullRefreshTime(tableStats []*TableStatistic) time.Duration {
 		return defaultAverageTimeBetweenRefreshes
 	}
 	return sum / time.Duration(count)
-}
-
-func areEqual(a, b []descpb.ColumnID) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 type concurrentCreateStatisticsError struct{}
