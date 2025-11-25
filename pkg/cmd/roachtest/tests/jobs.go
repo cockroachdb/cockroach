@@ -124,7 +124,7 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	//	group.Go(randomPoller(time.Second, checkJobQueryLatency))
 	//}
 
-	waitTime := time.Duration(rng.Intn(180)+1) * time.Second
+	waitTime := time.Duration(rng.Intn(60))*time.Second + time.Minute
 	jobIDToTableName := make(map[jobspb.JobID]string)
 	var jobIDToTableNameMu sync.Mutex
 
@@ -253,13 +253,13 @@ func pauseResumeChangefeeds(
 		return err
 	}
 	defer rows.Close()
-  
+
 	// find cancelled changefeeds
 	var canceledJobs []jobspb.JobID
 	for rows.Next() {
 		var jobID jobspb.JobID
 		var status string
-		if err := rows.Scan(&jobID,&status); err != nil {
+		if err := rows.Scan(&jobID, &status); err != nil {
 			return err
 		}
 		if status == "canceled" {
@@ -267,33 +267,35 @@ func pauseResumeChangefeeds(
 		}
 	}
 	rows.Close()
-  
-	// resume 10% of canceled changefeeds
-	count := len(canceledJobs) /10
 
 	recreatedCount := 0
-	for i := 0; i < count; i++ {
-		jobIdx := rng.Intn(len(canceledJobs))
-		jobID := canceledJobs[jobIdx]
+	seenTables := make(map[string]struct{})
 
-			// Try to recreate the changefeed
+	for i := 0; i < len(canceledJobs); i++ {
+		jobID := canceledJobs[i]
+
+		// Try to recreate the changefeed
+		jobIDToTableNameMu.Lock()
+		tableName, exists := jobIDToTableName[jobID]
+		jobIDToTableNameMu.Unlock()
+		if !exists {
+			t.L().Printf("No table name found for job %d, skipping recreation", jobID)
+			continue
+		}
+		if _, seen := seenTables[tableName]; seen {
+			continue
+		}
+		var newJobID jobspb.JobID
+		err := conn.QueryRowContext(ctx, fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO 'null://' WITH gc_protect_expires_after='5m', protect_data_from_gc_on_pause", tableName)).Scan(&newJobID)
+		if err == nil {
 			jobIDToTableNameMu.Lock()
-			tableName, exists := jobIDToTableName[jobID]
+			jobIDToTableName[newJobID] = tableName
 			jobIDToTableNameMu.Unlock()
-			if !exists {
-				t.L().Printf("No table name found for job %d, skipping recreation", jobID)
-				continue
-			}
-			var newJobID jobspb.JobID
-			err := conn.QueryRowContext(ctx, fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO 'null://' WITH gc_protect_expires_after='10m', protect_data_from_gc_on_pause", tableName)).Scan(&newJobID)
-			if err == nil {
-				jobIDToTableNameMu.Lock()
-				jobIDToTableName[newJobID] = tableName
-				jobIDToTableNameMu.Unlock()
-				recreatedCount++
-			} else {
-				t.L().Printf("Failed to recreate changefeed for table %s (job %d): %v", tableName, jobID, err)
-			}
+			recreatedCount++
+			seenTables[tableName] = struct{}{}
+		} else {
+			t.L().Printf("Failed to recreate changefeed for table %s (job %d): %v", tableName, jobID, err)
+		}
 	}
 	t.L().Printf("recreated %d changefeeds, of %d total canceled jobs", recreatedCount, len(canceledJobs))
 	return nil
