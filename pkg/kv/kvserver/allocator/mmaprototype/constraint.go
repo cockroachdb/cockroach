@@ -605,7 +605,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	// has some remainingReplicas, we take them here to satisfy the empty voter
 	// constraint as much as possible. Only what is remaining in the empty voter
 	// constraint will then be available for subsequent narrowing.
-	if emptyVoterConstraintIndex > 0 && emptyConstraintIndex > 0 {
+	if emptyVoterConstraintIndex >= 0 && emptyConstraintIndex >= 0 {
 		neededReplicas := conf.voterConstraints[emptyVoterConstraintIndex].numReplicas
 		if voterConstraints[emptyVoterConstraintIndex].numReplicas != 0 {
 			panic("programming error")
