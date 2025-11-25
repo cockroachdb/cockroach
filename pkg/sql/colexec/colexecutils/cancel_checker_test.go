@@ -31,7 +31,7 @@ func TestCancelChecker(t *testing.T) {
 	op.Init(ctx)
 	cancel()
 	err := colexecerror.CatchVectorizedRuntimeError(func() {
-		op.Next()
+		colexecop.NextNoMeta(op)
 	})
 	require.True(t, errors.Is(err, cancelchecker.QueryCanceledError))
 }

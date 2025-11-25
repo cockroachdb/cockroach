@@ -246,8 +246,8 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				}); err == nil {
 					err = colexecerror.CatchVectorizedRuntimeError(func() {
 						result.Root.Init(ctx)
-						result.Root.Next()
-						result.Root.Next()
+						colexecop.NextNoMeta(result.Root)
+						colexecop.NextNoMeta(result.Root)
 					})
 				}
 				if expectNoMemoryError {

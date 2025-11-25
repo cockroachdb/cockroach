@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -28,7 +29,7 @@ func TestBufferOp(t *testing.T) {
 
 	t.Run("TestBufferReturnsInputCorrectly", func(t *testing.T) {
 		buffer.advance()
-		b := buffer.Next()
+		b := colexecop.NextNoMeta(buffer)
 		require.Nil(t, b.Selection())
 		require.Equal(t, len(inputTuples), b.Length())
 		for i, val := range inputTuples {
@@ -36,7 +37,7 @@ func TestBufferOp(t *testing.T) {
 		}
 
 		// We've read over the batch, so we now should get a zero-length batch.
-		b = buffer.Next()
+		b = colexecop.NextNoMeta(buffer)
 		require.Nil(t, b.Selection())
 		require.Equal(t, 0, b.Length())
 	})

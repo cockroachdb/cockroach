@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -90,11 +91,17 @@ type substringInt64Int16Operator struct {
 
 var _ colexecop.Operator = &substringInt64Int16Operator{}
 
-func (s *substringInt64Int16Operator) Next() coldata.Batch {
-	batch := s.Input.Next()
+func (s *substringInt64Int16Operator) Next() (
+	coldata.Batch,
+	*execinfrapb.ProducerMetadata,
+) {
+	batch, meta := s.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	sel := batch.Selection()
@@ -182,7 +189,7 @@ func (s *substringInt64Int16Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type substringInt64Int32Operator struct {
@@ -191,11 +198,17 @@ type substringInt64Int32Operator struct {
 
 var _ colexecop.Operator = &substringInt64Int32Operator{}
 
-func (s *substringInt64Int32Operator) Next() coldata.Batch {
-	batch := s.Input.Next()
+func (s *substringInt64Int32Operator) Next() (
+	coldata.Batch,
+	*execinfrapb.ProducerMetadata,
+) {
+	batch, meta := s.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	sel := batch.Selection()
@@ -283,7 +296,7 @@ func (s *substringInt64Int32Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type substringInt64Int64Operator struct {
@@ -292,11 +305,17 @@ type substringInt64Int64Operator struct {
 
 var _ colexecop.Operator = &substringInt64Int64Operator{}
 
-func (s *substringInt64Int64Operator) Next() coldata.Batch {
-	batch := s.Input.Next()
+func (s *substringInt64Int64Operator) Next() (
+	coldata.Batch,
+	*execinfrapb.ProducerMetadata,
+) {
+	batch, meta := s.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	sel := batch.Selection()
@@ -384,7 +403,7 @@ func (s *substringInt64Int64Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type substringInt16Int16Operator struct {
@@ -393,11 +412,17 @@ type substringInt16Int16Operator struct {
 
 var _ colexecop.Operator = &substringInt16Int16Operator{}
 
-func (s *substringInt16Int16Operator) Next() coldata.Batch {
-	batch := s.Input.Next()
+func (s *substringInt16Int16Operator) Next() (
+	coldata.Batch,
+	*execinfrapb.ProducerMetadata,
+) {
+	batch, meta := s.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	sel := batch.Selection()
@@ -485,7 +510,7 @@ func (s *substringInt16Int16Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type substringInt16Int32Operator struct {
@@ -494,11 +519,17 @@ type substringInt16Int32Operator struct {
 
 var _ colexecop.Operator = &substringInt16Int32Operator{}
 
-func (s *substringInt16Int32Operator) Next() coldata.Batch {
-	batch := s.Input.Next()
+func (s *substringInt16Int32Operator) Next() (
+	coldata.Batch,
+	*execinfrapb.ProducerMetadata,
+) {
+	batch, meta := s.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	sel := batch.Selection()
@@ -586,7 +617,7 @@ func (s *substringInt16Int32Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type substringInt16Int64Operator struct {
@@ -595,11 +626,17 @@ type substringInt16Int64Operator struct {
 
 var _ colexecop.Operator = &substringInt16Int64Operator{}
 
-func (s *substringInt16Int64Operator) Next() coldata.Batch {
-	batch := s.Input.Next()
+func (s *substringInt16Int64Operator) Next() (
+	coldata.Batch,
+	*execinfrapb.ProducerMetadata,
+) {
+	batch, meta := s.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	sel := batch.Selection()
@@ -687,7 +724,7 @@ func (s *substringInt16Int64Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type substringInt32Int16Operator struct {
@@ -696,11 +733,17 @@ type substringInt32Int16Operator struct {
 
 var _ colexecop.Operator = &substringInt32Int16Operator{}
 
-func (s *substringInt32Int16Operator) Next() coldata.Batch {
-	batch := s.Input.Next()
+func (s *substringInt32Int16Operator) Next() (
+	coldata.Batch,
+	*execinfrapb.ProducerMetadata,
+) {
+	batch, meta := s.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	sel := batch.Selection()
@@ -788,7 +831,7 @@ func (s *substringInt32Int16Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type substringInt32Int32Operator struct {
@@ -797,11 +840,17 @@ type substringInt32Int32Operator struct {
 
 var _ colexecop.Operator = &substringInt32Int32Operator{}
 
-func (s *substringInt32Int32Operator) Next() coldata.Batch {
-	batch := s.Input.Next()
+func (s *substringInt32Int32Operator) Next() (
+	coldata.Batch,
+	*execinfrapb.ProducerMetadata,
+) {
+	batch, meta := s.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	sel := batch.Selection()
@@ -889,7 +938,7 @@ func (s *substringInt32Int32Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type substringInt32Int64Operator struct {
@@ -898,11 +947,17 @@ type substringInt32Int64Operator struct {
 
 var _ colexecop.Operator = &substringInt32Int64Operator{}
 
-func (s *substringInt32Int64Operator) Next() coldata.Batch {
-	batch := s.Input.Next()
+func (s *substringInt32Int64Operator) Next() (
+	coldata.Batch,
+	*execinfrapb.ProducerMetadata,
+) {
+	batch, meta := s.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	sel := batch.Selection()
@@ -990,5 +1045,5 @@ func (s *substringInt32Int64Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }

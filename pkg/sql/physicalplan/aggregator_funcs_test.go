@@ -95,7 +95,7 @@ func runTestFlow(
 			if meta.Err != nil {
 				return nil, meta.Err
 			}
-			if meta.LeafTxnFinalState != nil || meta.Metrics != nil || meta.TraceData != nil {
+			if meta.LeafTxnFinalState != nil || meta.Metrics != nil || meta.TraceData != nil || meta.RowNum != nil {
 				continue
 			}
 			t.Fatalf("unexpected metadata: %v", meta)

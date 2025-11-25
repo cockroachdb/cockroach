@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1206,11 +1207,14 @@ type castOpNullAny struct {
 
 var _ colexecop.ClosableOperator = &castOpNullAny{}
 
-func (c *castOpNullAny) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castOpNullAny) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.colIdx)
 	projVec := batch.ColVec(c.outputIdx)
@@ -1234,7 +1238,7 @@ func (c *castOpNullAny) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 // castIdentityOp is a special cast operator for the case when "from" and "to"
@@ -1267,11 +1271,14 @@ func init() {
 	}
 }
 
-func (c *castIdentityOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castIdentityOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	projVec := batch.ColVec(c.outputIdx)
 	c.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
@@ -1289,7 +1296,7 @@ func (c *castIdentityOp) Next() coldata.Batch {
 			})
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 // castBPCharIdentityOp is a specialization of castIdentityOp which handles
@@ -1300,11 +1307,14 @@ type castBPCharIdentityOp struct {
 
 var _ colexecop.ClosableOperator = &castBPCharIdentityOp{}
 
-func (c *castBPCharIdentityOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castBPCharIdentityOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, meta
 	}
 	inputVec := batch.ColVec(c.colIdx)
 	inputCol := inputVec.Bytes()
@@ -1333,7 +1343,7 @@ func (c *castBPCharIdentityOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type castNativeToDatumOp struct {
@@ -1345,11 +1355,14 @@ type castNativeToDatumOp struct {
 
 var _ colexecop.ClosableOperator = &castNativeToDatumOp{}
 
-func (c *castNativeToDatumOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castNativeToDatumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, meta
 	}
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
@@ -1457,7 +1470,7 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 // setNativeToDatumCast performs the cast of the converted datum in
@@ -1473,11 +1486,14 @@ type castBoolFloatOp struct {
 var _ colexecop.ResettableOperator = &castBoolFloatOp{}
 var _ colexecop.ClosableOperator = &castBoolFloatOp{}
 
-func (c *castBoolFloatOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castBoolFloatOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -1611,7 +1627,7 @@ func (c *castBoolFloatOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castBoolInt2Op struct {
@@ -1621,11 +1637,14 @@ type castBoolInt2Op struct {
 var _ colexecop.ResettableOperator = &castBoolInt2Op{}
 var _ colexecop.ClosableOperator = &castBoolInt2Op{}
 
-func (c *castBoolInt2Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castBoolInt2Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -1759,7 +1778,7 @@ func (c *castBoolInt2Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castBoolInt4Op struct {
@@ -1769,11 +1788,14 @@ type castBoolInt4Op struct {
 var _ colexecop.ResettableOperator = &castBoolInt4Op{}
 var _ colexecop.ClosableOperator = &castBoolInt4Op{}
 
-func (c *castBoolInt4Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castBoolInt4Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -1907,7 +1929,7 @@ func (c *castBoolInt4Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castBoolIntOp struct {
@@ -1917,11 +1939,14 @@ type castBoolIntOp struct {
 var _ colexecop.ResettableOperator = &castBoolIntOp{}
 var _ colexecop.ClosableOperator = &castBoolIntOp{}
 
-func (c *castBoolIntOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castBoolIntOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -2055,7 +2080,7 @@ func (c *castBoolIntOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castBoolStringOp struct {
@@ -2065,11 +2090,14 @@ type castBoolStringOp struct {
 var _ colexecop.ResettableOperator = &castBoolStringOp{}
 var _ colexecop.ClosableOperator = &castBoolStringOp{}
 
-func (c *castBoolStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castBoolStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -2271,7 +2299,7 @@ func (c *castBoolStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castBytesStringOp struct {
@@ -2281,11 +2309,14 @@ type castBytesStringOp struct {
 var _ colexecop.ResettableOperator = &castBytesStringOp{}
 var _ colexecop.ClosableOperator = &castBytesStringOp{}
 
-func (c *castBytesStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castBytesStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -2491,7 +2522,7 @@ func (c *castBytesStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castBytesUuidOp struct {
@@ -2501,11 +2532,14 @@ type castBytesUuidOp struct {
 var _ colexecop.ResettableOperator = &castBytesUuidOp{}
 var _ colexecop.ClosableOperator = &castBytesUuidOp{}
 
-func (c *castBytesUuidOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castBytesUuidOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -2635,7 +2669,7 @@ func (c *castBytesUuidOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDateDecimalOp struct {
@@ -2645,11 +2679,14 @@ type castDateDecimalOp struct {
 var _ colexecop.ResettableOperator = &castDateDecimalOp{}
 var _ colexecop.ClosableOperator = &castDateDecimalOp{}
 
-func (c *castDateDecimalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDateDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -2787,7 +2824,7 @@ func (c *castDateDecimalOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDateFloatOp struct {
@@ -2797,11 +2834,14 @@ type castDateFloatOp struct {
 var _ colexecop.ResettableOperator = &castDateFloatOp{}
 var _ colexecop.ClosableOperator = &castDateFloatOp{}
 
-func (c *castDateFloatOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDateFloatOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -2923,7 +2963,7 @@ func (c *castDateFloatOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDateInt2Op struct {
@@ -2933,11 +2973,14 @@ type castDateInt2Op struct {
 var _ colexecop.ResettableOperator = &castDateInt2Op{}
 var _ colexecop.ClosableOperator = &castDateInt2Op{}
 
-func (c *castDateInt2Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDateInt2Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -3075,7 +3118,7 @@ func (c *castDateInt2Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDateInt4Op struct {
@@ -3085,11 +3128,14 @@ type castDateInt4Op struct {
 var _ colexecop.ResettableOperator = &castDateInt4Op{}
 var _ colexecop.ClosableOperator = &castDateInt4Op{}
 
-func (c *castDateInt4Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDateInt4Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -3227,7 +3273,7 @@ func (c *castDateInt4Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDateIntOp struct {
@@ -3237,11 +3283,14 @@ type castDateIntOp struct {
 var _ colexecop.ResettableOperator = &castDateIntOp{}
 var _ colexecop.ClosableOperator = &castDateIntOp{}
 
-func (c *castDateIntOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDateIntOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -3355,7 +3404,7 @@ func (c *castDateIntOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDateStringOp struct {
@@ -3365,11 +3414,14 @@ type castDateStringOp struct {
 var _ colexecop.ResettableOperator = &castDateStringOp{}
 var _ colexecop.ClosableOperator = &castDateStringOp{}
 
-func (c *castDateStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDateStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -3587,7 +3639,7 @@ func (c *castDateStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDecimalBoolOp struct {
@@ -3597,11 +3649,14 @@ type castDecimalBoolOp struct {
 var _ colexecop.ResettableOperator = &castDecimalBoolOp{}
 var _ colexecop.ClosableOperator = &castDecimalBoolOp{}
 
-func (c *castDecimalBoolOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDecimalBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -3715,7 +3770,7 @@ func (c *castDecimalBoolOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDecimalDecimalOp struct {
@@ -3725,11 +3780,14 @@ type castDecimalDecimalOp struct {
 var _ colexecop.ResettableOperator = &castDecimalDecimalOp{}
 var _ colexecop.ClosableOperator = &castDecimalDecimalOp{}
 
-func (c *castDecimalDecimalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDecimalDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -3863,7 +3921,7 @@ func (c *castDecimalDecimalOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDecimalFloatOp struct {
@@ -3873,11 +3931,14 @@ type castDecimalFloatOp struct {
 var _ colexecop.ResettableOperator = &castDecimalFloatOp{}
 var _ colexecop.ClosableOperator = &castDecimalFloatOp{}
 
-func (c *castDecimalFloatOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDecimalFloatOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -4023,7 +4084,7 @@ func (c *castDecimalFloatOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDecimalInt2Op struct {
@@ -4033,11 +4094,14 @@ type castDecimalInt2Op struct {
 var _ colexecop.ResettableOperator = &castDecimalInt2Op{}
 var _ colexecop.ClosableOperator = &castDecimalInt2Op{}
 
-func (c *castDecimalInt2Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDecimalInt2Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -4227,7 +4291,7 @@ func (c *castDecimalInt2Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDecimalInt4Op struct {
@@ -4237,11 +4301,14 @@ type castDecimalInt4Op struct {
 var _ colexecop.ResettableOperator = &castDecimalInt4Op{}
 var _ colexecop.ClosableOperator = &castDecimalInt4Op{}
 
-func (c *castDecimalInt4Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDecimalInt4Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -4431,7 +4498,7 @@ func (c *castDecimalInt4Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDecimalIntOp struct {
@@ -4441,11 +4508,14 @@ type castDecimalIntOp struct {
 var _ colexecop.ResettableOperator = &castDecimalIntOp{}
 var _ colexecop.ClosableOperator = &castDecimalIntOp{}
 
-func (c *castDecimalIntOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDecimalIntOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -4611,7 +4681,7 @@ func (c *castDecimalIntOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDecimalStringOp struct {
@@ -4621,11 +4691,14 @@ type castDecimalStringOp struct {
 var _ colexecop.ResettableOperator = &castDecimalStringOp{}
 var _ colexecop.ClosableOperator = &castDecimalStringOp{}
 
-func (c *castDecimalStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDecimalStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -4827,7 +4900,7 @@ func (c *castDecimalStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castEnumStringOp struct {
@@ -4837,11 +4910,14 @@ type castEnumStringOp struct {
 var _ colexecop.ResettableOperator = &castEnumStringOp{}
 var _ colexecop.ClosableOperator = &castEnumStringOp{}
 
-func (c *castEnumStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castEnumStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -5060,7 +5136,7 @@ func (c *castEnumStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castFloatBoolOp struct {
@@ -5070,11 +5146,14 @@ type castFloatBoolOp struct {
 var _ colexecop.ResettableOperator = &castFloatBoolOp{}
 var _ colexecop.ClosableOperator = &castFloatBoolOp{}
 
-func (c *castFloatBoolOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castFloatBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -5196,7 +5275,7 @@ func (c *castFloatBoolOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castFloatDecimalOp struct {
@@ -5206,11 +5285,14 @@ type castFloatDecimalOp struct {
 var _ colexecop.ResettableOperator = &castFloatDecimalOp{}
 var _ colexecop.ClosableOperator = &castFloatDecimalOp{}
 
-func (c *castFloatDecimalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castFloatDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -5356,7 +5438,7 @@ func (c *castFloatDecimalOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castFloatInt2Op struct {
@@ -5366,11 +5448,14 @@ type castFloatInt2Op struct {
 var _ colexecop.ResettableOperator = &castFloatInt2Op{}
 var _ colexecop.ClosableOperator = &castFloatInt2Op{}
 
-func (c *castFloatInt2Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castFloatInt2Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -5504,7 +5589,7 @@ func (c *castFloatInt2Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castFloatInt4Op struct {
@@ -5514,11 +5599,14 @@ type castFloatInt4Op struct {
 var _ colexecop.ResettableOperator = &castFloatInt4Op{}
 var _ colexecop.ClosableOperator = &castFloatInt4Op{}
 
-func (c *castFloatInt4Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castFloatInt4Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -5652,7 +5740,7 @@ func (c *castFloatInt4Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castFloatIntOp struct {
@@ -5662,11 +5750,14 @@ type castFloatIntOp struct {
 var _ colexecop.ResettableOperator = &castFloatIntOp{}
 var _ colexecop.ClosableOperator = &castFloatIntOp{}
 
-func (c *castFloatIntOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castFloatIntOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -5800,7 +5891,7 @@ func (c *castFloatIntOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castFloatStringOp struct {
@@ -5810,11 +5901,14 @@ type castFloatStringOp struct {
 var _ colexecop.ResettableOperator = &castFloatStringOp{}
 var _ colexecop.ClosableOperator = &castFloatStringOp{}
 
-func (c *castFloatStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castFloatStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -6024,7 +6118,7 @@ func (c *castFloatStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castInt2BoolOp struct {
@@ -6034,11 +6128,14 @@ type castInt2BoolOp struct {
 var _ colexecop.ResettableOperator = &castInt2BoolOp{}
 var _ colexecop.ClosableOperator = &castInt2BoolOp{}
 
-func (c *castInt2BoolOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castInt2BoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -6160,7 +6257,7 @@ func (c *castInt2BoolOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castInt2DecimalOp struct {
@@ -6170,11 +6267,14 @@ type castInt2DecimalOp struct {
 var _ colexecop.ResettableOperator = &castInt2DecimalOp{}
 var _ colexecop.ClosableOperator = &castInt2DecimalOp{}
 
-func (c *castInt2DecimalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castInt2DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -6312,7 +6412,7 @@ func (c *castInt2DecimalOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castInt2FloatOp struct {
@@ -6322,11 +6422,14 @@ type castInt2FloatOp struct {
 var _ colexecop.ResettableOperator = &castInt2FloatOp{}
 var _ colexecop.ClosableOperator = &castInt2FloatOp{}
 
-func (c *castInt2FloatOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castInt2FloatOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -6448,7 +6551,7 @@ func (c *castInt2FloatOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castInt2Int4Op struct {
@@ -6458,11 +6561,14 @@ type castInt2Int4Op struct {
 var _ colexecop.ResettableOperator = &castInt2Int4Op{}
 var _ colexecop.ClosableOperator = &castInt2Int4Op{}
 
-func (c *castInt2Int4Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castInt2Int4Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -6576,7 +6682,7 @@ func (c *castInt2Int4Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castInt2IntOp struct {
@@ -6586,11 +6692,14 @@ type castInt2IntOp struct {
 var _ colexecop.ResettableOperator = &castInt2IntOp{}
 var _ colexecop.ClosableOperator = &castInt2IntOp{}
 
-func (c *castInt2IntOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castInt2IntOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -6704,7 +6813,7 @@ func (c *castInt2IntOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castInt2StringOp struct {
@@ -6714,11 +6823,14 @@ type castInt2StringOp struct {
 var _ colexecop.ResettableOperator = &castInt2StringOp{}
 var _ colexecop.ClosableOperator = &castInt2StringOp{}
 
-func (c *castInt2StringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castInt2StringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -6972,7 +7084,7 @@ func (c *castInt2StringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castInt4BoolOp struct {
@@ -6982,11 +7094,14 @@ type castInt4BoolOp struct {
 var _ colexecop.ResettableOperator = &castInt4BoolOp{}
 var _ colexecop.ClosableOperator = &castInt4BoolOp{}
 
-func (c *castInt4BoolOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castInt4BoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -7108,7 +7223,7 @@ func (c *castInt4BoolOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castInt4DecimalOp struct {
@@ -7118,11 +7233,14 @@ type castInt4DecimalOp struct {
 var _ colexecop.ResettableOperator = &castInt4DecimalOp{}
 var _ colexecop.ClosableOperator = &castInt4DecimalOp{}
 
-func (c *castInt4DecimalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castInt4DecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -7260,7 +7378,7 @@ func (c *castInt4DecimalOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castInt4FloatOp struct {
@@ -7270,11 +7388,14 @@ type castInt4FloatOp struct {
 var _ colexecop.ResettableOperator = &castInt4FloatOp{}
 var _ colexecop.ClosableOperator = &castInt4FloatOp{}
 
-func (c *castInt4FloatOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castInt4FloatOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -7396,7 +7517,7 @@ func (c *castInt4FloatOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castInt4Int2Op struct {
@@ -7406,11 +7527,14 @@ type castInt4Int2Op struct {
 var _ colexecop.ResettableOperator = &castInt4Int2Op{}
 var _ colexecop.ClosableOperator = &castInt4Int2Op{}
 
-func (c *castInt4Int2Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castInt4Int2Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -7548,7 +7672,7 @@ func (c *castInt4Int2Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castInt4IntOp struct {
@@ -7558,11 +7682,14 @@ type castInt4IntOp struct {
 var _ colexecop.ResettableOperator = &castInt4IntOp{}
 var _ colexecop.ClosableOperator = &castInt4IntOp{}
 
-func (c *castInt4IntOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castInt4IntOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -7676,7 +7803,7 @@ func (c *castInt4IntOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castInt4StringOp struct {
@@ -7686,11 +7813,14 @@ type castInt4StringOp struct {
 var _ colexecop.ResettableOperator = &castInt4StringOp{}
 var _ colexecop.ClosableOperator = &castInt4StringOp{}
 
-func (c *castInt4StringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castInt4StringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -7944,7 +8074,7 @@ func (c *castInt4StringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castIntBoolOp struct {
@@ -7954,11 +8084,14 @@ type castIntBoolOp struct {
 var _ colexecop.ResettableOperator = &castIntBoolOp{}
 var _ colexecop.ClosableOperator = &castIntBoolOp{}
 
-func (c *castIntBoolOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castIntBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -8080,7 +8213,7 @@ func (c *castIntBoolOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castIntDecimalOp struct {
@@ -8090,11 +8223,14 @@ type castIntDecimalOp struct {
 var _ colexecop.ResettableOperator = &castIntDecimalOp{}
 var _ colexecop.ClosableOperator = &castIntDecimalOp{}
 
-func (c *castIntDecimalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castIntDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -8232,7 +8368,7 @@ func (c *castIntDecimalOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castIntFloatOp struct {
@@ -8242,11 +8378,14 @@ type castIntFloatOp struct {
 var _ colexecop.ResettableOperator = &castIntFloatOp{}
 var _ colexecop.ClosableOperator = &castIntFloatOp{}
 
-func (c *castIntFloatOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castIntFloatOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -8368,7 +8507,7 @@ func (c *castIntFloatOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castIntInt2Op struct {
@@ -8378,11 +8517,14 @@ type castIntInt2Op struct {
 var _ colexecop.ResettableOperator = &castIntInt2Op{}
 var _ colexecop.ClosableOperator = &castIntInt2Op{}
 
-func (c *castIntInt2Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castIntInt2Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -8520,7 +8662,7 @@ func (c *castIntInt2Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castIntInt4Op struct {
@@ -8530,11 +8672,14 @@ type castIntInt4Op struct {
 var _ colexecop.ResettableOperator = &castIntInt4Op{}
 var _ colexecop.ClosableOperator = &castIntInt4Op{}
 
-func (c *castIntInt4Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castIntInt4Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -8672,7 +8817,7 @@ func (c *castIntInt4Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castIntStringOp struct {
@@ -8682,11 +8827,14 @@ type castIntStringOp struct {
 var _ colexecop.ResettableOperator = &castIntStringOp{}
 var _ colexecop.ClosableOperator = &castIntStringOp{}
 
-func (c *castIntStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castIntStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -8940,7 +9088,7 @@ func (c *castIntStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castIntervalStringOp struct {
@@ -8950,11 +9098,14 @@ type castIntervalStringOp struct {
 var _ colexecop.ResettableOperator = &castIntervalStringOp{}
 var _ colexecop.ClosableOperator = &castIntervalStringOp{}
 
-func (c *castIntervalStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castIntervalStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -9172,7 +9323,7 @@ func (c *castIntervalStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castJsonbStringOp struct {
@@ -9182,11 +9333,14 @@ type castJsonbStringOp struct {
 var _ colexecop.ResettableOperator = &castJsonbStringOp{}
 var _ colexecop.ClosableOperator = &castJsonbStringOp{}
 
-func (c *castJsonbStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castJsonbStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -9384,7 +9538,7 @@ func (c *castJsonbStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringBoolOp struct {
@@ -9394,11 +9548,14 @@ type castStringBoolOp struct {
 var _ colexecop.ResettableOperator = &castStringBoolOp{}
 var _ colexecop.ClosableOperator = &castStringBoolOp{}
 
-func (c *castStringBoolOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -9532,7 +9689,7 @@ func (c *castStringBoolOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringBytesOp struct {
@@ -9542,11 +9699,14 @@ type castStringBytesOp struct {
 var _ colexecop.ResettableOperator = &castStringBytesOp{}
 var _ colexecop.ClosableOperator = &castStringBytesOp{}
 
-func (c *castStringBytesOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringBytesOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -9676,7 +9836,7 @@ func (c *castStringBytesOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringDateOp struct {
@@ -9686,11 +9846,14 @@ type castStringDateOp struct {
 var _ colexecop.ResettableOperator = &castStringDateOp{}
 var _ colexecop.ClosableOperator = &castStringDateOp{}
 
-func (c *castStringDateOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringDateOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -9836,7 +9999,7 @@ func (c *castStringDateOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringDecimalOp struct {
@@ -9846,11 +10009,14 @@ type castStringDecimalOp struct {
 var _ colexecop.ResettableOperator = &castStringDecimalOp{}
 var _ colexecop.ClosableOperator = &castStringDecimalOp{}
 
-func (c *castStringDecimalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -10044,7 +10210,7 @@ func (c *castStringDecimalOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringEnumOp struct {
@@ -10054,11 +10220,14 @@ type castStringEnumOp struct {
 var _ colexecop.ResettableOperator = &castStringEnumOp{}
 var _ colexecop.ClosableOperator = &castStringEnumOp{}
 
-func (c *castStringEnumOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringEnumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -10192,7 +10361,7 @@ func (c *castStringEnumOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringFloatOp struct {
@@ -10202,11 +10371,14 @@ type castStringFloatOp struct {
 var _ colexecop.ResettableOperator = &castStringFloatOp{}
 var _ colexecop.ClosableOperator = &castStringFloatOp{}
 
-func (c *castStringFloatOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringFloatOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -10344,7 +10516,7 @@ func (c *castStringFloatOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringInt2Op struct {
@@ -10354,11 +10526,14 @@ type castStringInt2Op struct {
 var _ colexecop.ResettableOperator = &castStringInt2Op{}
 var _ colexecop.ClosableOperator = &castStringInt2Op{}
 
-func (c *castStringInt2Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringInt2Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -10528,7 +10703,7 @@ func (c *castStringInt2Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringInt4Op struct {
@@ -10538,11 +10713,14 @@ type castStringInt4Op struct {
 var _ colexecop.ResettableOperator = &castStringInt4Op{}
 var _ colexecop.ClosableOperator = &castStringInt4Op{}
 
-func (c *castStringInt4Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringInt4Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -10712,7 +10890,7 @@ func (c *castStringInt4Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringIntOp struct {
@@ -10722,11 +10900,14 @@ type castStringIntOp struct {
 var _ colexecop.ResettableOperator = &castStringIntOp{}
 var _ colexecop.ClosableOperator = &castStringIntOp{}
 
-func (c *castStringIntOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringIntOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -10872,7 +11053,7 @@ func (c *castStringIntOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringIntervalOp struct {
@@ -10882,11 +11063,14 @@ type castStringIntervalOp struct {
 var _ colexecop.ResettableOperator = &castStringIntervalOp{}
 var _ colexecop.ClosableOperator = &castStringIntervalOp{}
 
-func (c *castStringIntervalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringIntervalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -11036,7 +11220,7 @@ func (c *castStringIntervalOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringJsonbOp struct {
@@ -11046,11 +11230,14 @@ type castStringJsonbOp struct {
 var _ colexecop.ResettableOperator = &castStringJsonbOp{}
 var _ colexecop.ClosableOperator = &castStringJsonbOp{}
 
-func (c *castStringJsonbOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringJsonbOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -11180,7 +11367,7 @@ func (c *castStringJsonbOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringStringOp struct {
@@ -11190,11 +11377,14 @@ type castStringStringOp struct {
 var _ colexecop.ResettableOperator = &castStringStringOp{}
 var _ colexecop.ClosableOperator = &castStringStringOp{}
 
-func (c *castStringStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -11392,7 +11582,7 @@ func (c *castStringStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringTimestampOp struct {
@@ -11402,11 +11592,14 @@ type castStringTimestampOp struct {
 var _ colexecop.ResettableOperator = &castStringTimestampOp{}
 var _ colexecop.ClosableOperator = &castStringTimestampOp{}
 
-func (c *castStringTimestampOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringTimestampOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -11572,7 +11765,7 @@ func (c *castStringTimestampOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringTimestamptzOp struct {
@@ -11582,11 +11775,14 @@ type castStringTimestamptzOp struct {
 var _ colexecop.ResettableOperator = &castStringTimestamptzOp{}
 var _ colexecop.ClosableOperator = &castStringTimestamptzOp{}
 
-func (c *castStringTimestamptzOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringTimestamptzOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -11752,7 +11948,7 @@ func (c *castStringTimestamptzOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castStringUuidOp struct {
@@ -11762,11 +11958,14 @@ type castStringUuidOp struct {
 var _ colexecop.ResettableOperator = &castStringUuidOp{}
 var _ colexecop.ClosableOperator = &castStringUuidOp{}
 
-func (c *castStringUuidOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castStringUuidOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -11896,7 +12095,7 @@ func (c *castStringUuidOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castTimestampStringOp struct {
@@ -11906,11 +12105,14 @@ type castTimestampStringOp struct {
 var _ colexecop.ResettableOperator = &castTimestampStringOp{}
 var _ colexecop.ClosableOperator = &castTimestampStringOp{}
 
-func (c *castTimestampStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castTimestampStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -12112,7 +12314,7 @@ func (c *castTimestampStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castTimestamptzStringOp struct {
@@ -12122,11 +12324,14 @@ type castTimestamptzStringOp struct {
 var _ colexecop.ResettableOperator = &castTimestamptzStringOp{}
 var _ colexecop.ClosableOperator = &castTimestamptzStringOp{}
 
-func (c *castTimestamptzStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castTimestamptzStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -12364,7 +12569,7 @@ func (c *castTimestamptzStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castUuidStringOp struct {
@@ -12374,11 +12579,14 @@ type castUuidStringOp struct {
 var _ colexecop.ResettableOperator = &castUuidStringOp{}
 var _ colexecop.ClosableOperator = &castUuidStringOp{}
 
-func (c *castUuidStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castUuidStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -12596,7 +12804,7 @@ func (c *castUuidStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumBoolOp struct {
@@ -12606,11 +12814,14 @@ type castDatumBoolOp struct {
 var _ colexecop.ResettableOperator = &castDatumBoolOp{}
 var _ colexecop.ClosableOperator = &castDatumBoolOp{}
 
-func (c *castDatumBoolOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -12753,7 +12964,7 @@ func (c *castDatumBoolOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumInt2Op struct {
@@ -12763,11 +12974,14 @@ type castDatumInt2Op struct {
 var _ colexecop.ResettableOperator = &castDatumInt2Op{}
 var _ colexecop.ClosableOperator = &castDatumInt2Op{}
 
-func (c *castDatumInt2Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumInt2Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -12910,7 +13124,7 @@ func (c *castDatumInt2Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumInt4Op struct {
@@ -12920,11 +13134,14 @@ type castDatumInt4Op struct {
 var _ colexecop.ResettableOperator = &castDatumInt4Op{}
 var _ colexecop.ClosableOperator = &castDatumInt4Op{}
 
-func (c *castDatumInt4Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumInt4Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -13067,7 +13284,7 @@ func (c *castDatumInt4Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumIntOp struct {
@@ -13077,11 +13294,14 @@ type castDatumIntOp struct {
 var _ colexecop.ResettableOperator = &castDatumIntOp{}
 var _ colexecop.ClosableOperator = &castDatumIntOp{}
 
-func (c *castDatumIntOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumIntOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -13224,7 +13444,7 @@ func (c *castDatumIntOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumFloatOp struct {
@@ -13234,11 +13454,14 @@ type castDatumFloatOp struct {
 var _ colexecop.ResettableOperator = &castDatumFloatOp{}
 var _ colexecop.ClosableOperator = &castDatumFloatOp{}
 
-func (c *castDatumFloatOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumFloatOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -13381,7 +13604,7 @@ func (c *castDatumFloatOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumDecimalOp struct {
@@ -13391,11 +13614,14 @@ type castDatumDecimalOp struct {
 var _ colexecop.ResettableOperator = &castDatumDecimalOp{}
 var _ colexecop.ClosableOperator = &castDatumDecimalOp{}
 
-func (c *castDatumDecimalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -13538,7 +13764,7 @@ func (c *castDatumDecimalOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumDateOp struct {
@@ -13548,11 +13774,14 @@ type castDatumDateOp struct {
 var _ colexecop.ResettableOperator = &castDatumDateOp{}
 var _ colexecop.ClosableOperator = &castDatumDateOp{}
 
-func (c *castDatumDateOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumDateOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -13695,7 +13924,7 @@ func (c *castDatumDateOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumTimestampOp struct {
@@ -13705,11 +13934,14 @@ type castDatumTimestampOp struct {
 var _ colexecop.ResettableOperator = &castDatumTimestampOp{}
 var _ colexecop.ClosableOperator = &castDatumTimestampOp{}
 
-func (c *castDatumTimestampOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumTimestampOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -13852,7 +14084,7 @@ func (c *castDatumTimestampOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumIntervalOp struct {
@@ -13862,11 +14094,14 @@ type castDatumIntervalOp struct {
 var _ colexecop.ResettableOperator = &castDatumIntervalOp{}
 var _ colexecop.ClosableOperator = &castDatumIntervalOp{}
 
-func (c *castDatumIntervalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumIntervalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -14009,7 +14244,7 @@ func (c *castDatumIntervalOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumStringOp struct {
@@ -14019,11 +14254,14 @@ type castDatumStringOp struct {
 var _ colexecop.ResettableOperator = &castDatumStringOp{}
 var _ colexecop.ClosableOperator = &castDatumStringOp{}
 
-func (c *castDatumStringOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -14162,7 +14400,7 @@ func (c *castDatumStringOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumBytesOp struct {
@@ -14172,11 +14410,14 @@ type castDatumBytesOp struct {
 var _ colexecop.ResettableOperator = &castDatumBytesOp{}
 var _ colexecop.ClosableOperator = &castDatumBytesOp{}
 
-func (c *castDatumBytesOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumBytesOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -14315,7 +14556,7 @@ func (c *castDatumBytesOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumTimestamptzOp struct {
@@ -14325,11 +14566,14 @@ type castDatumTimestamptzOp struct {
 var _ colexecop.ResettableOperator = &castDatumTimestamptzOp{}
 var _ colexecop.ClosableOperator = &castDatumTimestamptzOp{}
 
-func (c *castDatumTimestamptzOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumTimestamptzOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -14472,7 +14716,7 @@ func (c *castDatumTimestamptzOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumUuidOp struct {
@@ -14482,11 +14726,14 @@ type castDatumUuidOp struct {
 var _ colexecop.ResettableOperator = &castDatumUuidOp{}
 var _ colexecop.ClosableOperator = &castDatumUuidOp{}
 
-func (c *castDatumUuidOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumUuidOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -14625,7 +14872,7 @@ func (c *castDatumUuidOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumJsonbOp struct {
@@ -14635,11 +14882,14 @@ type castDatumJsonbOp struct {
 var _ colexecop.ResettableOperator = &castDatumJsonbOp{}
 var _ colexecop.ClosableOperator = &castDatumJsonbOp{}
 
-func (c *castDatumJsonbOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumJsonbOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -14778,7 +15028,7 @@ func (c *castDatumJsonbOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type castDatumDatumOp struct {
@@ -14788,11 +15038,14 @@ type castDatumDatumOp struct {
 var _ colexecop.ResettableOperator = &castDatumDatumOp{}
 var _ colexecop.ClosableOperator = &castDatumDatumOp{}
 
-func (c *castDatumDatumOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castDatumDatumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -14954,7 +15207,7 @@ func (c *castDatumDatumOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 // castTuples casts all non-null tuples from the vector named 'inputCol' to the

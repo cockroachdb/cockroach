@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -94,18 +95,21 @@ func (p *partiallyOrderedDistinct) Init(ctx context.Context) {
 	p.distinct.Init(p.Ctx)
 }
 
-func (p *partiallyOrderedDistinct) Next() coldata.Batch {
+func (p *partiallyOrderedDistinct) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.distinct.Next()
+		batch, meta := p.distinct.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
 			if p.input.done() {
 				// We're done, so return a zero-length batch.
-				return coldata.ZeroBatch
+				return coldata.ZeroBatch, nil
 			}
 			// p.distinct will reset p.Input.
 			p.distinct.Reset(p.Ctx)
 		} else {
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -176,13 +180,16 @@ func (c *chunkerOperator) Init(ctx context.Context) {
 	c.input.init(c.Ctx)
 }
 
-func (c *chunkerOperator) Next() coldata.Batch {
+func (c *chunkerOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if c.currentChunkFinished {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	if !c.haveChunksToEmit {
 		// We don't have any chunks to emit, so we need to spool the input.
-		c.input.spool()
+		meta := c.input.spool()
+		if meta != nil {
+			return nil, meta
+		}
 		c.haveChunksToEmit = true
 		c.numTuplesInChunks = c.input.getNumTuples()
 		c.newChunksCol = c.input.getPartitionsCol()
@@ -191,7 +198,7 @@ func (c *chunkerOperator) Next() coldata.Batch {
 	if c.outputTupleStartIdx == outputTupleEndIdx {
 		// Current chunk has been fully output.
 		c.currentChunkFinished = true
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	if c.newChunksCol == nil {
 		// When newChunksCol is nil, then all tuples that are returned via
@@ -217,7 +224,7 @@ func (c *chunkerOperator) Next() coldata.Batch {
 	c.windowedBatch.SetSelection(false)
 	c.windowedBatch.SetLength(outputTupleEndIdx - c.outputTupleStartIdx)
 	c.outputTupleStartIdx = outputTupleEndIdx
-	return c.windowedBatch
+	return c.windowedBatch, nil
 }
 
 func (c *chunkerOperator) done() bool {

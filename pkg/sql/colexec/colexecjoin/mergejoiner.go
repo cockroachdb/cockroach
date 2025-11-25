@@ -315,7 +315,7 @@ func NewMergeJoinOp(
 	diskAcc *mon.BoundAccount,
 	diskQueueMemAcc *mon.BoundAccount,
 	evalCtx *eval.Context,
-) colexecop.ResettableOperator {
+) (colexecop.ResettableOperator, colexecop.MetadataSource) {
 	// Merge joiner only supports the case when the physical types in the
 	// equality columns in both inputs are the same. We, however, also need to
 	// support joining on numeric columns of different types or widths. If we
@@ -411,10 +411,11 @@ func NewMergeJoinOp(
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("merge join of type %s not supported", joinType))
 	}
+	ms := mergeJoinerOp.(colexecop.MetadataSource)
 	if !needProjection {
 		// We didn't add any cast operators, so we can just return the operator
 		// right away.
-		return mergeJoinerOp
+		return mergeJoinerOp, ms
 	}
 	// We need to add a projection to remove all the cast columns we have added
 	// above. Note that all extra columns were appended to the corresponding
@@ -445,7 +446,7 @@ func NewMergeJoinOp(
 	}
 	return colexecbase.NewSimpleProjectOp(
 		mergeJoinerOp, numActualLeftTypes+numActualRightTypes, projection,
-	).(colexecop.ResettableOperator)
+	).(colexecop.ResettableOperator), ms
 }
 
 // Const declarations for the merge joiner cross product (MJCP) zero state.
@@ -505,7 +506,9 @@ func newMergeJoinBase(
 	}
 
 	base := &mergeJoinBase{
-		TwoInputInitHelper: colexecop.MakeTwoInputInitHelper(left, right),
+		metadataHelper: metadataHelper{
+			TwoInputInitHelper: colexecop.MakeTwoInputInitHelper(left, right),
+		},
 		unlimitedAllocator: unlimitedAllocator,
 		memoryLimit:        memoryLimit,
 		diskQueueCfg:       diskQueueCfg,
@@ -540,7 +543,7 @@ func newMergeJoinBase(
 
 // mergeJoinBase extracts the common logic between all merge join operators.
 type mergeJoinBase struct {
-	colexecop.TwoInputInitHelper
+	metadataHelper
 	colexecop.CloserHelper
 
 	unlimitedAllocator *colmem.Allocator
@@ -558,6 +561,9 @@ type mergeJoinBase struct {
 	output         coldata.Batch
 	outputCapacity int
 	outputTypes    []*types.T
+	// continueBatch, if set, indicates that the current output batch should be
+	// continued.
+	continueBatch bool
 
 	// Local buffer for the "working" repeated groups.
 	groups circularGroupsBuffer
@@ -573,10 +579,12 @@ type mergeJoinBase struct {
 
 var _ colexecop.Resetter = &mergeJoinBase{}
 var _ colexecop.Closer = &mergeJoinBase{}
+var _ colexecop.MetadataSource = &mergeJoinBase{}
 
 func (o *mergeJoinBase) Reset(ctx context.Context) {
 	o.TwoInputInitHelper.Reset(ctx)
 	o.cancelChecker.Init(ctx)
+	o.continueBatch = false
 	o.state = mjEntry
 	o.bufferedGroup.helper.Reset(ctx)
 	o.proberState.lBatch = nil
@@ -744,7 +752,7 @@ func (o *mergeJoinBase) sourceFinished() bool {
 func (o *mergeJoinBase) continueLeftBufferedGroup() {
 	// Get the next batch from the left.
 	o.cancelChecker.CheckEveryCall()
-	o.proberState.lIdx, o.proberState.lBatch = 0, o.InputOne.Next()
+	o.proberState.lIdx, o.proberState.lBatch = 0, o.inputOneNext()
 	o.proberState.lLength = o.proberState.lBatch.Length()
 	o.bufferedGroup.leftGroupStartIdx = 0
 	if o.proberState.lLength == 0 {
@@ -767,7 +775,7 @@ func (o *mergeJoinBase) continueLeftBufferedGroup() {
 	groupLength := 1
 	var sel []int
 	o.left.distincterInput.SetBatch(o.proberState.lBatch)
-	o.left.distincter.Next()
+	colexecop.NextNoMeta(o.left.distincter)
 
 	sel = o.proberState.lBatch.Selection()
 	if sel != nil {
@@ -811,7 +819,7 @@ func (o *mergeJoinBase) finishRightBufferedGroup() {
 func (o *mergeJoinBase) completeRightBufferedGroup() {
 	// Get the next batch from the right.
 	o.cancelChecker.CheckEveryCall()
-	o.proberState.rIdx, o.proberState.rBatch = 0, o.InputTwo.Next()
+	o.proberState.rIdx, o.proberState.rBatch = 0, o.inputTwoNext()
 	o.proberState.rLength = o.proberState.rBatch.Length()
 	// The right input has been fully exhausted.
 	if o.proberState.rLength == 0 {
@@ -842,7 +850,7 @@ func (o *mergeJoinBase) completeRightBufferedGroup() {
 		// so the distincter - in a sense - compares the incoming tuples to the
 		// first tuple of the first iteration (which we know is the same group).
 		o.right.distincterInput.SetBatch(o.proberState.rBatch)
-		o.right.distincter.Next()
+		colexecop.NextNoMeta(o.right.distincter)
 
 		sel = o.proberState.rBatch.Selection()
 		var groupLength int
@@ -877,7 +885,7 @@ func (o *mergeJoinBase) completeRightBufferedGroup() {
 			// just appended all the tuples from batch to it, so we need to get a
 			// fresh batch from the input.
 			o.cancelChecker.CheckEveryCall()
-			o.proberState.rIdx, o.proberState.rBatch = 0, o.InputTwo.Next()
+			o.proberState.rIdx, o.proberState.rBatch = 0, o.inputTwoNext()
 			o.proberState.rLength = o.proberState.rBatch.Length()
 			if o.proberState.rLength == 0 {
 				// The input has been exhausted, so the buffered group is now complete.

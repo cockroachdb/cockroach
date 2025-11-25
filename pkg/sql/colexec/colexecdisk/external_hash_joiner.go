@@ -11,11 +11,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
 
@@ -67,7 +69,7 @@ func NewExternalHashJoiner(
 	createDiskBackedSorter DiskBackedSorterConstructor,
 	diskAcc *mon.BoundAccount,
 	diskQueueMemAcc *mon.BoundAccount,
-) colexecop.ClosableOperator {
+) (colexecop.ClosableOperator, colexecop.MetadataSource) {
 	// This memory limit will restrict the size of the batches output by the
 	// in-memory hash joiner in the main strategy as well as by the merge joiner
 	// in the fallback strategy.
@@ -94,6 +96,7 @@ func NewExternalHashJoiner(
 			InitialNumBuckets: uint32(coldata.BatchSize()),
 		})
 	}
+	var mjAsMetadataSource colexecop.MetadataSource
 	diskBackedFallbackOpConstructor := func(
 		partitionedInputs []*partitionerToOperator,
 		maxNumberActivePartitions int,
@@ -111,13 +114,15 @@ func NewExternalHashJoiner(
 		rightPartitionSorter := createDiskBackedSorter(
 			partitionedInputs[1], spec.Right.SourceTypes, rightOrdering, externalSorterMaxNumberPartitions,
 		)
-		return colexecjoin.NewMergeJoinOp(
+		var mj colexecop.ResettableOperator
+		mj, mjAsMetadataSource = colexecjoin.NewMergeJoinOp(
 			ctx, unlimitedAllocator, memoryLimit, args.DiskQueueCfg, fdSemaphore, spec.JoinType,
 			leftPartitionSorter, rightPartitionSorter, spec.Left.SourceTypes,
 			spec.Right.SourceTypes, leftOrdering, rightOrdering, diskAcc, diskQueueMemAcc, flowCtx.EvalCtx,
 		)
+		return mj
 	}
-	return newHashBasedPartitioner(
+	hbp := newHashBasedPartitioner(
 		unlimitedAllocator,
 		flowCtx,
 		args,
@@ -131,4 +136,8 @@ func NewExternalHashJoiner(
 		diskQueueMemAcc,
 		colexecop.ExternalHJMinPartitions,
 	)
+	if mjAsMetadataSource == nil {
+		colexecerror.InternalError(errors.AssertionFailedf("mjAsMetadataSource should have been set when creating diskBackedFallbackOp"))
+	}
+	return hbp, mjAsMetadataSource
 }

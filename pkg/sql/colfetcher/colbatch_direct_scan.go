@@ -66,7 +66,19 @@ func (s *ColBatchDirectScan) Init(ctx context.Context) {
 }
 
 // Next implements the colexecop.Operator interface.
-func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
+func (s *ColBatchDirectScan) Next() (ret coldata.Batch, metadata *execinfrapb.ProducerMetadata) {
+	// Check if it is time to emit a progress update.
+	if s.getRowsReadSinceLastMeta() >= scanProgressFrequency {
+		meta := execinfrapb.GetProducerMeta()
+		meta.Metrics = execinfrapb.GetMetricsMeta()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		meta.Metrics.RowsRead = s.mu.rowsReadSinceLastMeta
+		meta.Metrics.StageID = s.stageID
+		s.mu.rowsReadSinceLastMeta = 0
+		return nil, meta
+	}
+
 	var res row.KVBatchFetcherResponse
 	var err error
 	for {
@@ -77,7 +89,7 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 			colexecerror.InternalError(convertFetchError(s.spec, err))
 		}
 		if !res.MoreKVs {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 		if res.KVs != nil {
 			colexecerror.InternalError(errors.AssertionFailedf("unexpectedly encountered KVs in a direct scan"))
@@ -97,7 +109,7 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 			s.mu.Unlock()
 			// Note that this batch has already been accounted for by the
 			// KVBatchFetcher, so we don't need to do that.
-			return res.ColBatch
+			return res.ColBatch, nil
 		}
 		if res.BatchResponse != nil {
 			break
@@ -116,8 +128,9 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 	batch := s.deserializer.Deserialize(res.BatchResponse)
 	s.mu.Lock()
 	s.mu.rowsRead += int64(batch.Length())
+	s.mu.rowsReadSinceLastMeta += int64(batch.Length())
 	s.mu.Unlock()
-	return batch
+	return batch, nil
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
@@ -126,7 +139,7 @@ func (s *ColBatchDirectScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta := execinfrapb.GetProducerMeta()
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = s.GetBytesRead()
-	meta.Metrics.RowsRead = s.GetRowsRead()
+	meta.Metrics.RowsRead = s.getRowsReadSinceLastMeta()
 	meta.Metrics.StageID = s.stageID
 	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta

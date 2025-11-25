@@ -1192,7 +1192,7 @@ func benchmarkAggregateFunction(
 				// Exhaust aggregator until all batches have been read or limit, if
 				// non-zero, is reached.
 				tupleCount := 0
-				for b := a.Next(); b.Length() != 0; b = a.Next() {
+				for b := colexecop.NextNoMeta(a); b.Length() != 0; b = colexecop.NextNoMeta(a) {
 					tupleCount += b.Length()
 					if limit > 0 && tupleCount >= limit {
 						break

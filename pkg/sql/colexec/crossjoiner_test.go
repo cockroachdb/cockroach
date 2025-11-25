@@ -476,7 +476,7 @@ func BenchmarkCrossJoiner(b *testing.B) {
 						require.NoError(b, err)
 						cj := result.Root
 						cj.Init(ctx)
-						for b := cj.Next(); b.Length() > 0; b = cj.Next() {
+						for b := colexecop.NextNoMeta(cj); b.Length() > 0; b = colexecop.NextNoMeta(cj) {
 						}
 						afterEachRun()
 					}

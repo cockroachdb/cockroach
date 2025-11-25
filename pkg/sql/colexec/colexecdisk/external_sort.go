@@ -361,12 +361,15 @@ func (s *externalSorter) Init(ctx context.Context) {
 	s.cancelChecker.Init(s.Ctx)
 }
 
-func (s *externalSorter) Next() coldata.Batch {
+func (s *externalSorter) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
 		s.cancelChecker.CheckEveryCall()
 		switch s.state {
 		case externalSorterNewPartition:
-			b := s.Input.Next()
+			b, meta := s.Input.Next()
+			if meta != nil {
+				return nil, meta
+			}
 			if b.Length() == 0 {
 				// The input has been fully exhausted, and it is always the case
 				// that the number of partitions is less than the maximum number
@@ -395,7 +398,10 @@ func (s *externalSorter) Next() coldata.Batch {
 			}
 
 		case externalSorterSpillPartition:
-			b := s.Input.Next()
+			b, meta := s.Input.Next()
+			if meta != nil {
+				return nil, meta
+			}
 			partitionDone := s.enqueue(b)
 			if b.Length() == 0 || partitionDone {
 				s.doneWithCurrentPartition()
@@ -434,7 +440,7 @@ func (s *externalSorter) Next() coldata.Batch {
 			s.merger = s.createMergerForPartitions(n)
 			s.merger.Init(s.Ctx)
 			s.numPartitions -= n
-			for b := s.merger.Next(); ; b = s.merger.Next() {
+			for b := colexecop.NextNoMeta(s.merger); ; b = colexecop.NextNoMeta(s.merger) {
 				partitionDone := s.enqueue(b)
 				if b.Length() == 0 || partitionDone {
 					if err := s.merger.Close(s.Ctx); err != nil {
@@ -483,7 +489,7 @@ func (s *externalSorter) Next() coldata.Batch {
 			s.state = externalSorterEmitting
 
 		case externalSorterEmitting:
-			b := s.emitter.Next()
+			b := colexecop.NextNoMeta(s.emitter)
 			if b.Length() == 0 {
 				s.state = externalSorterFinished
 				continue
@@ -497,13 +503,13 @@ func (s *externalSorter) Next() coldata.Batch {
 				}
 				s.emitted += uint64(b.Length())
 			}
-			return b
+			return b, nil
 
 		case externalSorterFinished:
 			if err := s.Close(s.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unexpected externalSorterState %d", s.state))
@@ -797,18 +803,21 @@ type inputPartitioningOperator struct {
 
 var _ colexecop.ResettableOperator = &inputPartitioningOperator{}
 
-func (o *inputPartitioningOperator) Next() coldata.Batch {
+func (o *inputPartitioningOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if o.alreadyUsedMemory >= o.memoryLimit {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	if o.lastBatchState.batch != nil {
 		// We still have some rows from the last batch.
-		return o.emitWindowIntoLastBatch()
+		return o.emitWindowIntoLastBatch(), nil
 	}
-	b := o.Input.Next()
+	b, meta := o.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := b.Length()
 	if n == 0 {
-		return b
+		return b, nil
 	}
 	// This operator is an input to sortOp which will spool all the tuples and
 	// buffer them (by appending into the buffered batch), so we need to account
@@ -824,11 +833,11 @@ func (o *inputPartitioningOperator) Next() coldata.Batch {
 		o.lastBatchState.batch = b
 		o.lastBatchState.emitted = 0
 		o.lastBatchState.avgRowSize = proportionalBatchMemSize / int64(n)
-		return o.emitWindowIntoLastBatch()
+		return o.emitWindowIntoLastBatch(), nil
 	}
 	o.alreadyUsedMemory += proportionalBatchMemSize
 	o.lastBatchState.batch = nil
-	return b
+	return b, nil
 }
 
 // emitWindowIntoLastBatch returns a window into the last batch such that either

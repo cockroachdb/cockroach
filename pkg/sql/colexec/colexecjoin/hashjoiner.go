@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -287,11 +288,14 @@ func (hj *hashJoiner) Init(ctx context.Context) {
 	hj.state = hjBuilding
 }
 
-func (hj *hashJoiner) Next() coldata.Batch {
+func (hj *hashJoiner) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
 		switch hj.state {
 		case hjBuilding:
-			hj.build()
+			meta := hj.build()
+			if meta != nil {
+				return nil, meta
+			}
 			if hj.ht.Vals.Length() == 0 {
 				// The build side is empty, so we might be able to
 				// short-circuit probing phase altogether.
@@ -301,7 +305,10 @@ func (hj *hashJoiner) Next() coldata.Batch {
 			}
 			continue
 		case hjProbing:
-			output := hj.exec()
+			output, meta := hj.exec()
+			if meta != nil {
+				return nil, meta
+			}
 			if output.Length() == 0 {
 				if hj.spec.trackBuildMatches {
 					hj.state = hjEmittingRight
@@ -310,26 +317,29 @@ func (hj *hashJoiner) Next() coldata.Batch {
 				}
 				continue
 			}
-			return output
+			return output, nil
 		case hjEmittingRight:
 			if hj.emittingRightState.rowIdx == hj.ht.Vals.Length() {
 				hj.state = hjDone
 				continue
 			}
 			hj.emitRight(hj.spec.JoinType == descpb.RightSemiJoin /* matched */)
-			return hj.output
+			return hj.output, nil
 		case hjDone:
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("hash joiner in unhandled state"))
 			// This code is unreachable, but the compiler cannot infer that.
-			return nil
+			return nil, nil
 		}
 	}
 }
 
-func (hj *hashJoiner) build() {
-	hj.ht.FullBuild(hj.InputTwo)
+func (hj *hashJoiner) build() *execinfrapb.ProducerMetadata {
+	meta := hj.ht.FullBuild(hj.InputTwo)
+	if meta != nil {
+		return meta
+	}
 
 	// At this point, we have fully built the hash table on the right side
 	// (meaning we have fully consumed the right input), so it'd be a shame to
@@ -385,6 +395,7 @@ func (hj *hashJoiner) build() {
 	}
 
 	hj.state = hjProbing
+	return nil
 }
 
 // emitRight populates the output batch to emit tuples from the right side that
@@ -489,7 +500,7 @@ func (hj *hashJoiner) prepareForCollecting(batchSize int) {
 // left source columns and M is the number of right source columns. The first N
 // columns correspond to the respective left source columns, followed by the
 // right source columns as the last M elements.
-func (hj *hashJoiner) exec() coldata.Batch {
+func (hj *hashJoiner) exec() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if batch := hj.probeState.prevBatch; batch != nil {
 		// We didn't finish probing the last read batch on the previous call to
 		// exec, so we continue where we left off.
@@ -505,16 +516,19 @@ func (hj *hashJoiner) exec() coldata.Batch {
 		nResults := hj.collect(batch, batchSize, sel)
 		if nResults > 0 {
 			hj.congregate(nResults, batch)
-			return hj.output
+			return hj.output, nil
 		}
 		// There were no matches in that batch, so we move on to the next one.
 	}
 	for {
-		batch := hj.InputOne.Next()
+		batch, meta := hj.InputOne.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		batchSize := batch.Length()
 
 		if batchSize == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 
 		for i, colIdx := range hj.spec.Left.EqCols {
@@ -591,7 +605,7 @@ func (hj *hashJoiner) exec() coldata.Batch {
 			break
 		}
 	}
-	return hj.output
+	return hj.output, nil
 }
 
 // congregate uses the probeIdx and buildIdx pairs to stitch together the
