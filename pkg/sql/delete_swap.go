@@ -114,7 +114,7 @@ func (d *deleteSwapNode) processBatch(params runParams) error {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(d.run.td.tableDesc(), int(d.run.rowsAffected()))
+	params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, d.run.td.tableDesc(), int(d.run.rowsAffected()))
 
 	return nil
 }

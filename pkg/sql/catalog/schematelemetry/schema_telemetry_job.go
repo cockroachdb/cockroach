@@ -72,7 +72,7 @@ func (t schemaTelemetryResumer) Resume(ctx context.Context, execCtx interface{})
 		if err != nil {
 			return err
 		}
-		p.ExecCfg().StatsRefresher.NotifyMutation(desc, math.MaxInt64 /* rowCount */)
+		p.ExecCfg().StatsRefresher.NotifyMutation(ctx, desc, math.MaxInt64 /* rowCount */)
 
 		// Note: This won't be perfectly up-to-date, but it will make sure the
 		// metric gets updated periodically. It also gets updated after every

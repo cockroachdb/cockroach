@@ -134,7 +134,7 @@ func (v *vectorInserter) Next() coldata.Batch {
 			// TODO(yuzefovich): when auto-commit enabled, the inserted rows
 			// will be visible sooner than at the end. Is it worth notifying the
 			// stats refresher earlier in that case?
-			v.flowCtx.Cfg.StatsRefresher.NotifyMutation(v.desc, v.rowsWritten)
+			v.flowCtx.Cfg.StatsRefresher.NotifyMutation(v.Ctx, v.desc, v.rowsWritten)
 			v.statsRefresherNotified = true
 		}
 		return coldata.ZeroBatch

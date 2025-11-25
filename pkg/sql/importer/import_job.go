@@ -575,7 +575,7 @@ func (r *importResumer) publishTable(
 	// rows affected per table, so we use a large number because we want to make
 	// sure that stats always get created/refreshed here.
 	desc := tabledesc.NewBuilder(tbl.Desc).BuildImmutableTable()
-	execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
+	execCfg.StatsRefresher.NotifyMutation(ctx, desc, math.MaxInt32 /* rowsAffected */)
 
 	return setPublicTimestamp, nil
 }

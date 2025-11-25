@@ -843,7 +843,9 @@ func (r *Refresher) ensureAllTables(
 // Refresher that a table has been mutated. It should be called after any
 // successful insert, update, upsert or delete. rowsAffected refers to the
 // number of rows written as part of the mutation operation.
-func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected int) {
+func (r *Refresher) NotifyMutation(
+	ctx context.Context, table catalog.TableDescriptor, rowsAffected int,
+) {
 	if !r.autoStatsEnabled(table) {
 		return
 	}
@@ -871,7 +873,7 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 		default:
 			// Don't block if there is no room in the buffered channel.
 			if bufferedChanFullLogLimiter.ShouldLog() {
-				log.Dev.Warningf(context.TODO(),
+				log.Dev.Warningf(ctx,
 					"buffered channel is full. Unable to update settings for table %q (%d) during auto stats refreshing",
 					table.GetName(), table.GetID())
 			}
@@ -889,7 +891,7 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 	default:
 		// Don't block if there is no room in the buffered channel.
 		if bufferedChanFullLogLimiter.ShouldLog() {
-			log.Dev.Warningf(context.TODO(),
+			log.Dev.Warningf(ctx,
 				"buffered channel is full. Unable to refresh stats for table %q (%d) with %d rows affected",
 				table.GetName(), table.GetID(), rowsAffected)
 		}

@@ -917,7 +917,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) (retErr error) {
 		// We wait to trigger a stats refresh until we know the leases have been
 		// updated.
 		if refreshStats {
-			sc.refreshStats(latestDesc)
+			sc.refreshStats(ctx, latestDesc)
 		}
 		return nil
 	}
@@ -1125,7 +1125,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 		// We wait to trigger a stats refresh until we know the leases have been
 		// updated.
 		if refreshStats {
-			sc.refreshStats(desc)
+			sc.refreshStats(ctx, desc)
 		}
 		return nil
 	}
@@ -2297,12 +2297,12 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(ctx context.Context) error {
 	return sc.done(ctx)
 }
 
-func (sc *SchemaChanger) refreshStats(desc catalog.Descriptor) {
+func (sc *SchemaChanger) refreshStats(ctx context.Context, desc catalog.Descriptor) {
 	// Initiate an asynchronous run of CREATE STATISTICS. We use a large number
 	// for rowsAffected because we want to make sure that stats always get
 	// created/refreshed here.
 	if tableDesc, ok := desc.(catalog.TableDescriptor); ok {
-		sc.execCfg.StatsRefresher.NotifyMutation(tableDesc, math.MaxInt32 /* rowsAffected */)
+		sc.execCfg.StatsRefresher.NotifyMutation(ctx, tableDesc, math.MaxInt32 /* rowsAffected */)
 	}
 }
 

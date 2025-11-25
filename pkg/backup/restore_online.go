@@ -759,7 +759,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		r.downloadJobProg = fractionComplete
 
 		if remaining == 0 {
-			r.notifyStatsRefresherOfNewTables()
+			r.notifyStatsRefresherOfNewTables(ctx)
 			return nil
 		}
 

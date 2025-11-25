@@ -1761,12 +1761,12 @@ func (m mockBatchHandler) HandleBatch(
 	}
 	return batchStats{}, nil
 }
-func (m mockBatchHandler) GetLastRow() cdcevent.Row            { return cdcevent.Row{} }
-func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32) {}
-func (m mockBatchHandler) Close(context.Context)               {}
-func (m mockBatchHandler) ReportMutations(_ *stats.Refresher)  {}
-func (m mockBatchHandler) ReleaseLeases(_ context.Context)     {}
-func (m mockBatchHandler) BatchSize() int                      { return m.batchSize }
+func (m mockBatchHandler) GetLastRow() cdcevent.Row                          { return cdcevent.Row{} }
+func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32)               {}
+func (m mockBatchHandler) Close(context.Context)                             {}
+func (m mockBatchHandler) ReportMutations(context.Context, *stats.Refresher) {}
+func (m mockBatchHandler) ReleaseLeases(_ context.Context)                   {}
+func (m mockBatchHandler) BatchSize() int                                    { return m.batchSize }
 
 type mockDLQ int
 
