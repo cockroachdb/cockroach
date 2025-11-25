@@ -703,9 +703,8 @@ func sortTargetCandidateSetAndPick(
 	return cands.candidates[j].StoreID
 }
 
-// ensureAnalyzedConstraints populates information necessary to handle
-// constraint satisfaction for the given range. It uses
-// rangeState.{replicas,conf} as inputs to the computation.
+// ensureAnalyzedConstraints ensures that the constraints field of rangeState is
+// populated. It uses rangeState.{replicas,conf} as inputs to the computation.
 //
 // NB: Caller is responsible for calling clearAnalyzedConstraints when rstate or
 // the rstate.constraints is no longer needed.

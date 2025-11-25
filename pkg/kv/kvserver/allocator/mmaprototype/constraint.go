@@ -857,48 +857,31 @@ type storeMatchesConstraintInterface interface {
 // like candidatesToReplaceVoterForRebalance. The given buf.replicas is already
 // populated with the current replica set from buf.tryAddingStore.
 //
-// The algorithm proceeds in three phases:
-// In phase 1, for each replica (voter and non-voter), determine which
-// constraint indices in ac.constraints its store satisfies. We record these
-// matches in buf.replicaConstraintIndices by iterating over all replicas, all
-// constraint conjunctions, and checking store satisfaction for each using
-// constraintMatcher.storeMatches. In addition, it also populates
-// ac.satisfiedNoConstraintReplica[kind][i] for stores that satisfy no
-// constraint and ac.satisfiedByReplica[kind][i] for stores that satisfy exactly
-// one constraint. Since we will be assigning at least one constraint to each store,
-// these stores are unambiguous.
-// In phase 2, for each under-satisfied constraint, iterate through all replicas
-// and assign them to the first store that meets the constraint. Continue until
-// the constraint becomes satisfied, then move on to the next one. Skip further
-// matching once a constraint is fulfilled. Note that this phase does not allow
-// over-satisfaction.
-// In phase 3, for each remaining store that satisfies >1 constraints, assign
-// each to the first constraint it satisfies. This phase allows
-// over-satisfaction (len(ac.satisfiedByReplica[kind][i]) >
-// ac.constraints[i].numReplicas).
+// The algorithm proceeds in 3 phases, with the description of each phase
+// outlined below at the start of each phase.
 //
 // NB: ac.initialize guarantees to assign exactly one constraint in
 // ac.satisfiedByReplica to each store that satisfies at least one constraint.
 // But constraints may remain under-satisfied. If a constraint remains
-// under-satisfied after phase 2, it cannot be corrected in phase 3 and will
-// remain to be under-satisfied.
+// under-satisfied after phase 2, it cannot be corrected in phase 3 and remain
+// to be under-satisfied. This is not essential to correctness but just happen
+// to be true of the algorithm.
 //
 // TODO(wenyihu6): Add an example for phase 2 - if s1 satisfies c1(num=1) and s2
 // satisfies both c1(num=1) and c2(num=1), we should prefer assigning s2 to c2
 // rather than consuming it again for c1.
 //
-// TODO(wenyihu6): I have the comment here. Is that okay
 // NB: Note that buf.replicaConstraintIndices serves as a scratch space to
 // reduce memory allocation and is expected to be empty at the start of every
 // analyzedConstraints.initialize call and cleared at the end of the call. For
 // every store that satisfies a constraint, we will be clearing the constraint
 // indices for that store in buf.replicaConstraintIndices[kind][i] once we have
 // assigned it to a constraint in ac.satisfiedByReplica[kind][i]. Since we
-// guarantee that each store that satisfies a constraint will be assigned to at
-// least one constraint, buf.replicaConstraintIndices will be an empty 2D slice
-// as part of the algorithm. In addition, clearing the constraint indices for
-// that store in buf.replicaConstraintIndices is also important to help us
-// indicates that the store cannot be reused to satisfy a different constraint.
+// guarantee that each store that satisfies a constraint is assigned to at least
+// one constraint, buf.replicaConstraintIndices will be an empty 2D slice as
+// part of the algorithm. In addition, clearing the constraint indices for that
+// store in buf.replicaConstraintIndices is also important to help us indicates
+// that the store cannot be reused to satisfy a different constraint.
 //
 // TODO(wenyihu6): add more tests + examples here
 func (ac *analyzedConstraints) initialize(
@@ -915,6 +898,16 @@ func (ac *analyzedConstraints) initialize(
 		ac.satisfiedByReplica[voterIndex] = extend2DSlice(ac.satisfiedByReplica[voterIndex])
 		ac.satisfiedByReplica[nonVoterIndex] = extend2DSlice(ac.satisfiedByReplica[nonVoterIndex])
 	}
+	// In phase 1, for each replica (voter and non-voter), determine which
+	// constraint indices in ac.constraints its store satisfies. We record these
+	// matches in buf.replicaConstraintIndices by iterating over all replicas, all
+	// constraint conjunctions, and checking store satisfaction for each using
+	// constraintMatcher.storeMatches. In addition, it also populates
+	// ac.satisfiedNoConstraintReplica[kind][i] for stores that satisfy no
+	// constraint and ac.satisfiedByReplica[kind][i] for stores that satisfy exactly
+	// one constraint. Since we will be assigning at least one constraint to each store,
+	// these stores are unambiguous.
+	//
 	// Compute the list of all constraints satisfied by each store.
 	for kind := voterIndex; kind < numReplicaKinds; kind++ {
 		for i, store := range buf.replicas[kind] {
@@ -949,6 +942,12 @@ func (ac *analyzedConstraints) initialize(
 			len(ac.satisfiedByReplica[nonVoterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
 	}
 
+	// In phase 2, for each under-satisfied constraint, iterate through all replicas
+	// and assign them to the first store that meets the constraint. Continue until
+	// the constraint becomes satisfied, then move on to the next one. Skip further
+	// matching once a constraint is fulfilled. Note that this phase does not allow
+	// over-satisfaction.
+	//
 	// The only stores not yet in ac are the ones that satisfy multiple
 	// constraints. For each store, the constraint indices it satisfies are in
 	// increasing order. Satisfy constraints in order, while not
@@ -984,6 +983,12 @@ func (ac *analyzedConstraints) initialize(
 			}
 		}
 	}
+	// In phase 3, for each remaining store that satisfies >1 constraints,
+	// assign each to the first constraint it satisfies. This phase allows
+	// over-satisfaction
+	// (len(ac.satisfiedByReplica[voterIndex][i]+len(ac.satisfiedByReplica[nonVoterIndex][i]))
+	// > ac.constraints[i].numReplicas).
+	//
 	// Nothing over-satisfied. Go and greedily assign.
 	for kind := voterIndex; kind < numReplicaKinds; kind++ {
 		for i := range buf.replicaConstraintIndices[kind] {
