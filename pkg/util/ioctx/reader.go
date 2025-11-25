@@ -126,6 +126,31 @@ func ReadAll(ctx context.Context, r ReaderCtx) ([]byte, error) {
 	}
 }
 
+// ReadAllWithScratch is like ReadAll but reuses the provided scratch buffer,
+// resetting its length to zero (and growing capacity as needed) before reading
+// and returning the slice containing all data read.
+func ReadAllWithScratch(ctx context.Context, r ReaderCtx, scratch []byte) ([]byte, error) {
+	if scratch == nil {
+		scratch = make([]byte, 0, 512)
+	} else {
+		scratch = scratch[:0]
+	}
+	for {
+		if len(scratch) == cap(scratch) {
+			// Add more capacity (let append pick how much).
+			scratch = append(scratch, 0)[:len(scratch)]
+		}
+		n, err := r.Read(ctx, scratch[len(scratch):cap(scratch)])
+		scratch = scratch[:len(scratch)+n]
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				err = nil
+			}
+			return scratch, err
+		}
+	}
+}
+
 // NopCloser returns a ReadCloser with a no-op Close method wrapping
 // the provided ReaderCtx.
 func NopCloser(r ReaderCtx) ReadCloserCtx {
