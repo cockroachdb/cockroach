@@ -406,6 +406,9 @@ func normalizeConstraints(
 	// count to spanConfig.NumReplicas.
 	if haveZero {
 		nc[0].NumReplicas = numReplicas
+		if len(nc) != 1 {
+			panic("programming error: should only have one zero-replica conjunction")
+		}
 	} else {
 		nc = append(nc, constraints...)
 		// If the sum of non-zero numReplicas of constraints < numReplicas, add
