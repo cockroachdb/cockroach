@@ -102,7 +102,7 @@ func TestPebbleDiskWriteMetrics(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	ts, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		StoreSpecs: []base.StoreSpec{
 			{Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize), Path: tmpDir},
@@ -111,7 +111,7 @@ func TestPebbleDiskWriteMetrics(t *testing.T) {
 	defer ts.Stopper().Stop(ctx)
 
 	// Force a WAL write.
-	require.NoError(t, kvDB.Put(ctx, "kev", "value"))
+	require.NoError(t, ts.DB().Put(ctx, "kev", "value"))
 
 	if err := ts.GetStores().(*Stores).VisitStores(func(s *Store) error {
 		testutils.SucceedsSoon(t, func() error {
@@ -120,6 +120,39 @@ func TestPebbleDiskWriteMetrics(t *testing.T) {
 			}
 			return nil
 		})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestWALSecondaryFileOpLatencyMetric verifies that the secondary WAL file
+// operation latency metric is properly registered and accessible.
+func TestWALSecondaryFileOpLatencyMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tmpDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		StoreSpecs: []base.StoreSpec{
+			{Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize), Path: tmpDir},
+		},
+	})
+	defer ts.Stopper().Stop(ctx)
+
+	// Verify the secondary WAL file operation latency metric is registered.
+	if err := ts.GetStores().(*Stores).VisitStores(func(s *Store) error {
+		if ok := s.Registry().Contains("storage.wal.secondary.file_op.latency"); !ok {
+			return fmt.Errorf("missing secondary WAL file operation latency metric")
+		}
+		// Verify the metric is non-nil in the store metrics.
+		if s.metrics.WALSecondaryFileOpLatency == nil {
+			return fmt.Errorf("WALSecondaryFileOpLatency metric is nil")
+		}
 		return nil
 	}); err != nil {
 		t.Fatal(err)

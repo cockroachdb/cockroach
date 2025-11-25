@@ -3805,8 +3805,14 @@ func (s *Store) ComputeMetricsPeriodically(
 		wt.Subtract(prevMetrics.FlushWriteThroughput)
 
 		if err := updateWindowedHistogram(
-			prevMetrics.WALFsyncLatency, m.LogWriter.FsyncLatency, s.metrics.FsyncLatency); err != nil {
+			prevMetrics.WALFsyncLatency, m.Metrics.WALMetrics.PrimaryFileOpLatency, s.metrics.FsyncLatency); err != nil {
 			return m, err
+		}
+		if m.Metrics.WALMetrics.SecondaryFileOpLatency != nil {
+			if err := updateWindowedHistogram(
+				prevMetrics.WALSecondaryFileOpLatency, m.Metrics.WALMetrics.SecondaryFileOpLatency, s.metrics.WALSecondaryFileOpLatency); err != nil {
+				return m, err
+			}
 		}
 		if m.WAL.Failover.FailoverWriteAndSyncLatency != nil {
 			if err := updateWindowedHistogram(prevMetrics.WALFailoverWriteAndSyncLatency,

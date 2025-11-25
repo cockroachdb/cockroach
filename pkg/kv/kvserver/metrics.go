@@ -3125,6 +3125,9 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	// metaStorageFsyncLatency tracks the primary WAL device latency.
+	// For secondary WAL device latency (when WAL failover is configured),
+	// see metaStorageWALSecondaryFileOpLatency.
 	metaStorageFsyncLatency = metric.Metadata{
 		Name:        "storage.wal.fsync.latency",
 		Help:        "The fsync latency to the Write-Ahead Log device.",
@@ -3140,6 +3143,14 @@ var (
 			metric reflects the fsync latency of the primary and/or the secondary WAL
 			device.
 		`),
+	}
+	metaStorageWALSecondaryFileOpLatency = metric.Metadata{
+		Name:        "storage.wal.secondary.file_op.latency",
+		Help:        "The latency of file operations on the secondary Write-Ahead Log device.",
+		Measurement: "File Op Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_STORAGE,
+		HowToUse:    "Only populated when WAL failover is configured. This metric tracks file operation latency specifically on the secondary WAL device.",
 	}
 	metaStorageWALFailoverSwitchCount = metric.Metadata{
 		Name: "storage.wal.failover.switch.count",
@@ -3753,7 +3764,12 @@ type StoreMetrics struct {
 	SubsumeLocksWritten *metric.Counter
 
 	FlushUtilization *metric.GaugeFloat64
-	FsyncLatency     *metric.ManualWindowHistogram
+	// FsyncLatency tracks file operation latency for the primary WAL device.
+	// When WAL failover is configured, see also WALSecondaryFileOpLatency.
+	FsyncLatency *metric.ManualWindowHistogram
+	// WALSecondaryFileOpLatency tracks file operation latency for the secondary
+	// WAL device. Only populated when WAL failover is configured.
+	WALSecondaryFileOpLatency *metric.ManualWindowHistogram
 
 	// Disk metrics
 	DiskReadBytes              *metric.Counter
@@ -4564,6 +4580,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		FlushUtilization: metric.NewGaugeFloat64(metaStorageFlushUtilization),
 		FsyncLatency: metric.NewManualWindowHistogram(
 			metaStorageFsyncLatency,
+			pebble.FsyncLatencyBuckets,
+			false, /* withRotate */
+		),
+		WALSecondaryFileOpLatency: metric.NewManualWindowHistogram(
+			metaStorageWALSecondaryFileOpLatency,
 			pebble.FsyncLatencyBuckets,
 			false, /* withRotate */
 		),

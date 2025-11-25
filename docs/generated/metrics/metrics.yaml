@@ -10404,6 +10404,15 @@ layers:
       derivative: NONE
       how_to_use: If this value is greater than 100ms, it is an indication of a disk stall. To mitigate the effects of disk stalls, consider deploying your cluster with WAL failover configured. When WAL failover is configured, the more relevant metric is storage.wal.failover_write_and_sync.latency, as this metric reflects the fsync latency of the primary and/or the secondary WAL device.
       visibility: ESSENTIAL
+    - name: storage.wal.secondary.file_op.latency
+      exported_name: storage_wal_secondary_file_op_latency
+      description: The latency of file operations on the secondary Write-Ahead Log device.
+      y_axis_label: File Op Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Only populated when WAL failover is configured. This metric tracks file operation latency specifically on the secondary WAL device.
     - name: storage.write-stalls
       exported_name: storage_write_stalls
       description: Number of instances of intentional write stalls to backpressure incoming writes
