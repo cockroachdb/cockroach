@@ -12,6 +12,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
@@ -52,6 +53,7 @@ func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabledRandomly)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	os.Exit(func() int {
 		ctx := context.Background()
