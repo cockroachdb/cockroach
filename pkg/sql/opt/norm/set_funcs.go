@@ -131,7 +131,7 @@ func (c *CustomFuncs) CanConvertUnionToDistinctUnionAll(
 
 	// Now find a subset of the columns that forms a strict key over the base
 	// table.
-	leftFDs := memo.MakeTableFuncDep(md, leftTableID)
+	leftFDs := memo.MakeTableFuncDep(c.f.evalCtx, md, leftTableID)
 	leftColSet := leftCols.ToSet()
 	if !leftFDs.ColsAreStrictKey(leftColSet) {
 		// The columns must form a strict key over the base table.
@@ -147,7 +147,7 @@ func (c *CustomFuncs) CanConvertUnionToDistinctUnionAll(
 		// transformation is not worth it.
 		return opt.ColSet{}, false
 	}
-	rightFDs := memo.MakeTableFuncDep(md, rightTableID)
+	rightFDs := memo.MakeTableFuncDep(c.f.evalCtx, md, rightTableID)
 	if !rightFDs.ColsAreStrictKey(c.TranslateColSet(keyCols, leftCols, rightCols)) {
 		// The columns must form a strict key over both meta tables. The meta tables
 		// can have different functional dependencies when the

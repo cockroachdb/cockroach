@@ -851,7 +851,7 @@ func (sb *statisticsBuilder) colStatTable(
 	tabID opt.TableID, colSet opt.ColSet,
 ) *props.ColumnStatistic {
 	tableStats := sb.makeTableStatistics(tabID)
-	tableFD := MakeTableFuncDep(sb.md, tabID)
+	tableFD := MakeTableFuncDep(sb.evalCtx, sb.md, tabID)
 	tableNotNullCols := makeTableNotNullCols(sb.md, tabID)
 	return sb.colStatLeaf(colSet, tableStats, tableFD, tableNotNullCols)
 }
@@ -904,7 +904,9 @@ func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relationa
 				c.ExtractNotNullCols(sb.ctx, sb.evalCtx, &notNullCols)
 			}
 		}
-		sb.filterRelExpr(pred, scan, notNullCols, relProps, s, MakeTableFuncDep(sb.md, scan.Table))
+		sb.filterRelExpr(
+			pred, scan, notNullCols, relProps, s, MakeTableFuncDep(sb.evalCtx, sb.md, scan.Table),
+		)
 		sb.finalizeFromCardinality(relProps)
 		return
 	}
@@ -1069,7 +1071,9 @@ func (sb *statisticsBuilder) constrainScan(
 			panic(errors.AssertionFailedf("unexpected placeholder equality columns in partial index predicate"))
 		}
 		constrainedCols.UnionWith(predConstrainedCols)
-		constrainedCols = sb.tryReduceCols(constrainedCols, s, MakeTableFuncDep(sb.md, scan.Table))
+		constrainedCols = sb.tryReduceCols(
+			constrainedCols, s, MakeTableFuncDep(sb.evalCtx, sb.md, scan.Table),
+		)
 		histCols.UnionWith(predHistCols)
 	}
 

@@ -502,7 +502,7 @@ func TryJoinInvertedIndex(
 
 	// The resulting expression must contain at least one column from the input.
 	var p props.Shared
-	memo.BuildSharedProps(invertedExpr, &p, factory.EvalContext())
+	memo.BuildSharedProps(invertedExpr, &p, factory.EvalContext(), factory.Metadata())
 	if !p.OuterCols.Intersects(inputCols) {
 		return nil
 	}

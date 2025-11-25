@@ -133,7 +133,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 			scan.InvertedConstraint.Len() == 1 &&
 			scan.InvertedConstraint[0].IsSingleVal()
 		if !scan.IsInvertedScan(md) || singleKeyInvertedScan {
-			rel.FuncDeps.CopyFrom(MakeTableFuncDep(md, scan.Table))
+			rel.FuncDeps.CopyFrom(MakeTableFuncDep(b.evalCtx, md, scan.Table))
 		}
 		if scan.Constraint != nil {
 			rel.FuncDeps.AddConstants(scan.Constraint.ExtractConstCols(b.sb.ctx, b.evalCtx))
@@ -251,7 +251,7 @@ func (b *logicalPropsBuilder) buildSequenceSelectProps(
 }
 
 func (b *logicalPropsBuilder) buildSelectProps(sel *SelectExpr, rel *props.Relational) {
-	BuildSharedProps(sel, &rel.Shared, b.evalCtx)
+	BuildSharedProps(sel, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	inputProps := sel.Input.Relational()
 
@@ -317,7 +317,7 @@ func (b *logicalPropsBuilder) buildSelectProps(sel *SelectExpr, rel *props.Relat
 }
 
 func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Relational) {
-	BuildSharedProps(prj, &rel.Shared, b.evalCtx)
+	BuildSharedProps(prj, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	inputProps := prj.Input.Relational()
 
@@ -363,7 +363,7 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 func (b *logicalPropsBuilder) buildInvertedFilterProps(
 	invFilter *InvertedFilterExpr, rel *props.Relational,
 ) {
-	BuildSharedProps(invFilter, &rel.Shared, b.evalCtx)
+	BuildSharedProps(invFilter, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	inputProps := invFilter.Input.Relational()
 
@@ -465,7 +465,7 @@ func (b *logicalPropsBuilder) buildAntiJoinApplyProps(
 }
 
 func (b *logicalPropsBuilder) buildJoinProps(join RelExpr, rel *props.Relational) {
-	BuildSharedProps(join, &rel.Shared, b.evalCtx)
+	BuildSharedProps(join, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	var h joinPropsHelper
 	h.init(b, join)
@@ -506,7 +506,7 @@ func (b *logicalPropsBuilder) buildJoinProps(join RelExpr, rel *props.Relational
 }
 
 func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel *props.Relational) {
-	BuildSharedProps(indexJoin, &rel.Shared, b.evalCtx)
+	BuildSharedProps(indexJoin, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	inputProps := indexJoin.Input.Relational()
 	md := b.mem.Metadata()
@@ -537,7 +537,7 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 	// -----------------------
 	// Start with the input FD set, and join that with the table's FD.
 	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	rel.FuncDeps.AddFrom(MakeTableFuncDep(md, indexJoin.Table))
+	rel.FuncDeps.AddFrom(MakeTableFuncDep(b.evalCtx, md, indexJoin.Table))
 	rel.FuncDeps.MakeNotNull(rel.NotNullCols)
 	rel.FuncDeps.ProjectCols(rel.OutputCols)
 
@@ -637,7 +637,7 @@ func (b *logicalPropsBuilder) buildEnsureUpsertDistinctOnProps(
 }
 
 func (b *logicalPropsBuilder) buildGroupingExprProps(groupExpr RelExpr, rel *props.Relational) {
-	BuildSharedProps(groupExpr, &rel.Shared, b.evalCtx)
+	BuildSharedProps(groupExpr, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	inputProps := groupExpr.Child(0).(RelExpr).Relational()
 	aggs := *groupExpr.Child(1).(*AggregationsExpr)
@@ -771,7 +771,7 @@ func (b *logicalPropsBuilder) buildLocalityOptimizedSearchProps(
 }
 
 func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relational) {
-	BuildSharedProps(setNode, &rel.Shared, b.evalCtx)
+	BuildSharedProps(setNode, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	op := setNode.Op()
 	leftProps := setNode.Child(0).(RelExpr).Relational()
@@ -873,7 +873,7 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 }
 
 func (b *logicalPropsBuilder) buildValuesProps(values ValuesContainer, rel *props.Relational) {
-	BuildSharedProps(values, &rel.Shared, b.evalCtx)
+	BuildSharedProps(values, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	card := uint32(values.Len())
 
@@ -933,7 +933,7 @@ func (b *logicalPropsBuilder) buildLiteralValuesProps(
 }
 
 func (b *logicalPropsBuilder) buildBasicProps(e opt.Expr, cols opt.ColList, rel *props.Relational) {
-	BuildSharedProps(e, &rel.Shared, b.evalCtx)
+	BuildSharedProps(e, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	// Output Columns
 	// --------------
@@ -967,7 +967,7 @@ func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relation
 	// Copy over the props from the input.
 	inputProps := with.Main.Relational()
 
-	BuildSharedProps(with, &rel.Shared, b.evalCtx)
+	BuildSharedProps(with, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	// Side Effects
 	// ------------
@@ -1004,7 +1004,7 @@ func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relation
 }
 
 func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *props.Relational) {
-	BuildSharedProps(withScan, &rel.Shared, b.evalCtx)
+	BuildSharedProps(withScan, &rel.Shared, b.evalCtx, b.mem.Metadata())
 	boundExpr := b.mem.Metadata().WithBinding(withScan.With).(RelExpr)
 	bindingProps := boundExpr.Relational()
 
@@ -1043,7 +1043,7 @@ func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *pr
 }
 
 func (b *logicalPropsBuilder) buildRecursiveCTEProps(rec *RecursiveCTEExpr, rel *props.Relational) {
-	BuildSharedProps(rec, &rel.Shared, b.evalCtx)
+	BuildSharedProps(rec, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	// Output Columns
 	// --------------
@@ -1166,7 +1166,7 @@ func (b *logicalPropsBuilder) buildExportProps(export *ExportExpr, rel *props.Re
 }
 
 func (b *logicalPropsBuilder) buildCallProps(call *CallExpr, rel *props.Relational) {
-	BuildSharedProps(call, &rel.Shared, b.evalCtx)
+	BuildSharedProps(call, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	// Output Columns
 	// --------------
@@ -1231,7 +1231,7 @@ func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relat
 func (b *logicalPropsBuilder) buildLimitOrTopKProps(
 	limitNode RelExpr, rel *props.Relational, constLimit int64, haveConstLimit bool,
 ) {
-	BuildSharedProps(limitNode, &rel.Shared, b.evalCtx)
+	BuildSharedProps(limitNode, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	inputProps := limitNode.Child(0).(RelExpr).Relational()
 
@@ -1277,7 +1277,7 @@ func (b *logicalPropsBuilder) buildLimitOrTopKProps(
 }
 
 func (b *logicalPropsBuilder) buildOffsetProps(offset *OffsetExpr, rel *props.Relational) {
-	BuildSharedProps(offset, &rel.Shared, b.evalCtx)
+	BuildSharedProps(offset, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	inputProps := offset.Input.Relational()
 
@@ -1322,7 +1322,7 @@ func (b *logicalPropsBuilder) buildOffsetProps(offset *OffsetExpr, rel *props.Re
 }
 
 func (b *logicalPropsBuilder) buildMax1RowProps(max1Row *Max1RowExpr, rel *props.Relational) {
-	BuildSharedProps(max1Row, &rel.Shared, b.evalCtx)
+	BuildSharedProps(max1Row, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	inputProps := max1Row.Input.Relational()
 
@@ -1358,7 +1358,7 @@ func (b *logicalPropsBuilder) buildMax1RowProps(max1Row *Max1RowExpr, rel *props
 }
 
 func (b *logicalPropsBuilder) buildOrdinalityProps(ord *OrdinalityExpr, rel *props.Relational) {
-	BuildSharedProps(ord, &rel.Shared, b.evalCtx)
+	BuildSharedProps(ord, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	inputProps := ord.Input.Relational()
 
@@ -1403,7 +1403,7 @@ func (b *logicalPropsBuilder) buildOrdinalityProps(ord *OrdinalityExpr, rel *pro
 }
 
 func (b *logicalPropsBuilder) buildWindowProps(window *WindowExpr, rel *props.Relational) {
-	BuildSharedProps(window, &rel.Shared, b.evalCtx)
+	BuildSharedProps(window, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	inputProps := window.Input.Relational()
 
@@ -1467,7 +1467,7 @@ func (b *logicalPropsBuilder) buildWindowProps(window *WindowExpr, rel *props.Re
 func (b *logicalPropsBuilder) buildProjectSetProps(
 	projectSet *ProjectSetExpr, rel *props.Relational,
 ) {
-	BuildSharedProps(projectSet, &rel.Shared, b.evalCtx)
+	BuildSharedProps(projectSet, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	inputProps := projectSet.Input.Relational()
 
@@ -1537,7 +1537,7 @@ func (b *logicalPropsBuilder) buildDeleteProps(del *DeleteExpr, rel *props.Relat
 }
 
 func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Relational) {
-	BuildSharedProps(mutation, &rel.Shared, b.evalCtx)
+	BuildSharedProps(mutation, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	private := mutation.Private().(*MutationPrivate)
 
@@ -1619,7 +1619,7 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 }
 
 func (b *logicalPropsBuilder) buildLockProps(lock *LockExpr, rel *props.Relational) {
-	BuildSharedProps(lock, &rel.Shared, b.evalCtx)
+	BuildSharedProps(lock, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	// Side Effects
 	// ------------
@@ -1646,7 +1646,7 @@ func (b *logicalPropsBuilder) buildVectorSearchProps(
 	search *VectorSearchExpr, rel *props.Relational,
 ) {
 	md := b.mem.Metadata()
-	BuildSharedProps(search, &rel.Shared, b.evalCtx)
+	BuildSharedProps(search, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	// Output Columns
 	// --------------
@@ -1667,7 +1667,7 @@ func (b *logicalPropsBuilder) buildVectorSearchProps(
 	// Initialize key FD's from the table schema, including constant columns
 	// from the constraint, minus any columns that are not projected by the
 	// VectorSearch operator.
-	rel.FuncDeps.CopyFrom(MakeTableFuncDep(md, search.Table))
+	rel.FuncDeps.CopyFrom(MakeTableFuncDep(b.evalCtx, md, search.Table))
 	if idx := md.Table(search.Table).Index(search.Index); idx.PrefixColumnCount() > 0 {
 		// Prefix columns are restricted to constant values.
 		var constants opt.ColSet
@@ -1700,7 +1700,7 @@ func (b *logicalPropsBuilder) buildVectorSearchProps(
 func (b *logicalPropsBuilder) buildVectorMutationSearchProps(
 	search *VectorMutationSearchExpr, rel *props.Relational,
 ) {
-	BuildSharedProps(search, &rel.Shared, b.evalCtx)
+	BuildSharedProps(search, &rel.Shared, b.evalCtx, b.mem.Metadata())
 	inputProps := search.Input.Relational()
 
 	// Output Columns
@@ -1742,7 +1742,7 @@ func (b *logicalPropsBuilder) buildVectorMutationSearchProps(
 }
 
 func (b *logicalPropsBuilder) buildBarrierProps(barrier *BarrierExpr, rel *props.Relational) {
-	BuildSharedProps(barrier, &rel.Shared, b.evalCtx)
+	BuildSharedProps(barrier, &rel.Shared, b.evalCtx, b.mem.Metadata())
 
 	inputProps := barrier.Child(0).(RelExpr).Relational()
 	rel.OutputCols = inputProps.OutputCols.Copy()
@@ -1755,27 +1755,27 @@ func (b *logicalPropsBuilder) buildBarrierProps(barrier *BarrierExpr, rel *props
 }
 
 func (b *logicalPropsBuilder) buildCreateTableProps(ct *CreateTableExpr, rel *props.Relational) {
-	BuildSharedProps(ct, &rel.Shared, b.evalCtx)
+	BuildSharedProps(ct, &rel.Shared, b.evalCtx, b.mem.Metadata())
 }
 
 func (b *logicalPropsBuilder) buildCreateViewProps(cv *CreateViewExpr, rel *props.Relational) {
-	BuildSharedProps(cv, &rel.Shared, b.evalCtx)
+	BuildSharedProps(cv, &rel.Shared, b.evalCtx, b.mem.Metadata())
 }
 
 func (b *logicalPropsBuilder) buildCreateFunctionProps(
 	cf *CreateFunctionExpr, rel *props.Relational,
 ) {
-	BuildSharedProps(cf, &rel.Shared, b.evalCtx)
+	BuildSharedProps(cf, &rel.Shared, b.evalCtx, b.mem.Metadata())
 }
 
 func (b *logicalPropsBuilder) buildCreateTriggerProps(
 	ct *CreateTriggerExpr, rel *props.Relational,
 ) {
-	BuildSharedProps(ct, &rel.Shared, b.evalCtx)
+	BuildSharedProps(ct, &rel.Shared, b.evalCtx, b.mem.Metadata())
 }
 
 func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *props.Scalar) {
-	BuildSharedProps(item.Condition, &scalar.Shared, b.evalCtx)
+	BuildSharedProps(item.Condition, &scalar.Shared, b.evalCtx, b.mem.Metadata())
 
 	// Constraints
 	// -----------
@@ -1812,9 +1812,12 @@ func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *p
 				// expression.
 				if !scalar.VolatilitySet.HasVolatile() &&
 					!CanBeCompositeSensitive(eq.Right) {
-					outerCols := getOuterCols(eq.Right)
+					outerCols := getOuterCols(eq.Right, b.evalCtx, b.mem.Metadata())
 					if !outerCols.Contains(leftVar.Col) {
-						scalar.FuncDeps.AddSynthesizedCol(getOuterCols(eq.Right), leftVar.Col)
+						scalar.FuncDeps.AddSynthesizedCol(
+							getOuterCols(eq.Right, b.evalCtx, b.mem.Metadata()),
+							leftVar.Col,
+						)
 					}
 				}
 			}
@@ -1830,24 +1833,24 @@ func (b *logicalPropsBuilder) buildProjectionsItemProps(
 	item *ProjectionsItem, scalar *props.Scalar,
 ) {
 	item.Typ = item.Element.DataType()
-	BuildSharedProps(item.Element, &scalar.Shared, b.evalCtx)
+	BuildSharedProps(item.Element, &scalar.Shared, b.evalCtx, b.mem.Metadata())
 }
 
 func (b *logicalPropsBuilder) buildAggregationsItemProps(
 	item *AggregationsItem, scalar *props.Scalar,
 ) {
 	item.Typ = item.Agg.DataType()
-	BuildSharedProps(item.Agg, &scalar.Shared, b.evalCtx)
+	BuildSharedProps(item.Agg, &scalar.Shared, b.evalCtx, b.mem.Metadata())
 }
 
 func (b *logicalPropsBuilder) buildWindowsItemProps(item *WindowsItem, scalar *props.Scalar) {
 	item.Typ = item.Function.DataType()
-	BuildSharedProps(item.Function, &scalar.Shared, b.evalCtx)
+	BuildSharedProps(item.Function, &scalar.Shared, b.evalCtx, b.mem.Metadata())
 }
 
 func (b *logicalPropsBuilder) buildZipItemProps(item *ZipItem, scalar *props.Scalar) {
 	item.Typ = item.Fn.DataType()
-	BuildSharedProps(item.Fn, &scalar.Shared, b.evalCtx)
+	BuildSharedProps(item.Fn, &scalar.Shared, b.evalCtx, b.mem.Metadata())
 }
 
 // BuildSharedProps fills in the shared properties derived from the given
@@ -1858,11 +1861,13 @@ func (b *logicalPropsBuilder) buildZipItemProps(item *ZipItem, scalar *props.Sca
 // to be partially filled in already. Boolean fields such as HasPlaceholder,
 // HasCorrelatedSubquery should never be reset to false once set to true;
 // VolatilitySet should never be re-initialized.
-func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context) {
+func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context, md *opt.Metadata) {
 	switch t := e.(type) {
 	case *VariableExpr:
 		// Variable introduces outer column.
-		shared.OuterCols.Add(t.Col)
+		if !isParamCol(t.Col, evalCtx, md) {
+			shared.OuterCols.Add(t.Col)
+		}
 		return
 
 	case *PlaceholderExpr:
@@ -1892,10 +1897,10 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context) {
 
 	case *SubqueryExpr, *ExistsExpr, *AnyExpr, *ArrayFlattenExpr:
 		shared.HasSubquery = true
-		if hasOuterCols(e.Child(0)) {
+		if hasOuterCols(e.Child(0), evalCtx, md) {
 			shared.HasCorrelatedSubquery = true
 		}
-		if t.Op() == opt.AnyOp && hasOuterCols(e.Child(1)) {
+		if t.Op() == opt.AnyOp && hasOuterCols(e.Child(1), evalCtx, md) {
 			shared.HasCorrelatedSubquery = true
 		}
 
@@ -1982,18 +1987,18 @@ func BuildSharedProps(e opt.Expr, shared *props.Shared, evalCtx *eval.Context) {
 				shared.HasUDF = true
 			}
 		} else {
-			BuildSharedProps(e.Child(i), shared, evalCtx)
+			BuildSharedProps(e.Child(i), shared, evalCtx, md)
 		}
 	}
 }
 
 // hasOuterCols returns true if the given expression has outer columns (i.e.
 // columns that are referenced by the expression but not bound by it).
-func hasOuterCols(e opt.Expr) bool {
+func hasOuterCols(e opt.Expr, evalCtx *eval.Context, md *opt.Metadata) bool {
 	// This is a slightly faster implementation of !getOuterCols(e).Empty().
 	switch t := e.(type) {
 	case *VariableExpr:
-		return true
+		return !isParamCol(t.Col, evalCtx, md)
 	case RelExpr:
 		return !t.Relational().OuterCols.Empty()
 	case ScalarPropsExpr:
@@ -2001,7 +2006,7 @@ func hasOuterCols(e opt.Expr) bool {
 	}
 
 	for i, n := 0, e.ChildCount(); i < n; i++ {
-		if hasOuterCols(e.Child(i)) {
+		if hasOuterCols(e.Child(i), evalCtx, md) {
 			return true
 		}
 	}
@@ -2011,10 +2016,14 @@ func hasOuterCols(e opt.Expr) bool {
 
 // getOuterCols returns the outer columns of an expression (i.e.  columns that are
 // referenced by the expression but not bound by it).
-func getOuterCols(e opt.Expr) opt.ColSet {
+func getOuterCols(e opt.Expr, evalCtx *eval.Context, md *opt.Metadata) opt.ColSet {
 	switch t := e.(type) {
 	case *VariableExpr:
-		return opt.MakeColSet(t.Col)
+		var set opt.ColSet
+		if !isParamCol(t.Col, evalCtx, md) {
+			set.Add(t.Col)
+		}
+		return set
 	case RelExpr:
 		return t.Relational().OuterCols
 	case ScalarPropsExpr:
@@ -2023,16 +2032,29 @@ func getOuterCols(e opt.Expr) opt.ColSet {
 
 	var res opt.ColSet
 	for i, n := 0, e.ChildCount(); i < n; i++ {
-		res.UnionWith(getOuterCols(e.Child(i)))
+		res.UnionWith(getOuterCols(e.Child(i), evalCtx, md))
 	}
 	return res
+}
+
+// isParamCol returns true if the given column is a routine parameter column. It
+// always returns false if optimizer_omit_routine_params_in_outer_cols is
+// disabled, which effectively makes callers consider parameter columns as
+// regular outer columns.
+func isParamCol(col opt.ColumnID, evalCtx *eval.Context, md *opt.Metadata) bool {
+	if !evalCtx.SessionData().OptimizerOmitRoutineParamsInOuterCols {
+		return false
+	}
+	return md.ParameterColumns().Contains(col)
 }
 
 // MakeTableFuncDep returns the set of functional dependencies derived from the
 // given base table. The set is derived lazily and is cached in the metadata,
 // since it may be accessed multiple times during query optimization. For more
 // details, see Relational.FuncDepSet.
-func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
+func MakeTableFuncDep(
+	evalCtx *eval.Context, md *opt.Metadata, tabID opt.TableID,
+) *props.FuncDepSet {
 	fd, ok := md.TableAnnotation(tabID, fdAnnID).(*props.FuncDepSet)
 	if ok {
 		// Already made.
@@ -2166,7 +2188,7 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 			// Else, this computed column is an immutable expression over zero or more
 			// other columns in the table.
 
-			from := getOuterCols(expr)
+			from := getOuterCols(expr, evalCtx, md)
 			// We want to set up the FD: from --> colID.
 			// This does not necessarily hold for "composite" types like decimals or
 			// collated strings. For example if d is a decimal, d::TEXT can have
@@ -2404,7 +2426,7 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 		relational.NotNullCols = makeTableNotNullCols(md, join.Table).Copy()
 		relational.NotNullCols.IntersectionWith(relational.OutputCols)
 		relational.Cardinality = props.AnyCardinality
-		relational.FuncDeps.CopyFrom(MakeTableFuncDep(md, join.Table))
+		relational.FuncDeps.CopyFrom(MakeTableFuncDep(sb.evalCtx, md, join.Table))
 		relational.FuncDeps.ProjectCols(relational.OutputCols)
 		*relational.Statistics() = *sb.makeTableStatistics(join.Table)
 	}
@@ -2424,7 +2446,7 @@ func ensureInvertedJoinInputProps(join *InvertedJoinExpr, sb *statisticsBuilder)
 
 		// TODO(rytaft): See if we need to use different functional dependencies
 		// for the inverted index.
-		relational.FuncDeps.CopyFrom(MakeTableFuncDep(md, join.Table))
+		relational.FuncDeps.CopyFrom(MakeTableFuncDep(sb.evalCtx, md, join.Table))
 		relational.FuncDeps.ProjectCols(relational.OutputCols)
 
 		// TODO(rytaft): Change this to use inverted index stats once available.
@@ -2471,7 +2493,7 @@ func ensureInputPropsForIndex(
 		relProps.NotNullCols = makeTableNotNullCols(md, tabID).Copy()
 		relProps.NotNullCols.IntersectionWith(relProps.OutputCols)
 		relProps.Cardinality = props.AnyCardinality
-		relProps.FuncDeps.CopyFrom(MakeTableFuncDep(md, tabID))
+		relProps.FuncDeps.CopyFrom(MakeTableFuncDep(sb.evalCtx, md, tabID))
 		relProps.FuncDeps.ProjectCols(relProps.OutputCols)
 		*relProps.Statistics() = *sb.makeTableStatistics(tabID)
 	}
@@ -2803,7 +2825,7 @@ func (h *joinPropsHelper) addSelfJoinImpliedFDs(rel *props.Relational) {
 	}
 	leftTables.ForEach(func(left int) {
 		leftTable := opt.TableID(left)
-		baseTabFDs := MakeTableFuncDep(md, leftTable)
+		baseTabFDs := MakeTableFuncDep(h.evalCtx, md, leftTable)
 		rightTables.ForEach(func(right int) {
 			rightTable := opt.TableID(right)
 			if md.TableMeta(leftTable).Table.ID() != md.TableMeta(rightTable).Table.ID() {

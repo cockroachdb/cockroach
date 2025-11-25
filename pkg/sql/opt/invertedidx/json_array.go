@@ -109,7 +109,7 @@ func (j *jsonOrArrayJoinPlanner) extractJSONOrArrayJoinCondition(
 	// The non-indexed argument should either come from the input or be a
 	// constant.
 	var p props.Shared
-	memo.BuildSharedProps(val, &p, j.factory.EvalContext())
+	memo.BuildSharedProps(val, &p, j.factory.EvalContext(), j.factory.Metadata())
 	if !p.OuterCols.Empty() {
 		if !p.OuterCols.SubsetOf(j.inputCols) {
 			return nil

@@ -2398,7 +2398,7 @@ func (b *plpgsqlBuilder) addBarrierIfVolatile(s *scope, expr opt.ScalarExpr) {
 		return
 	}
 	var p props.Shared
-	memo.BuildSharedProps(expr, &p, b.ob.evalCtx)
+	memo.BuildSharedProps(expr, &p, b.ob.evalCtx, b.ob.factory.Metadata())
 	if p.VolatilitySet.HasVolatile() {
 		b.ob.addBarrier(s)
 	}

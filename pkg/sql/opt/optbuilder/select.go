@@ -876,7 +876,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 		if memo.ExprIsNeverNull(condition, notNullCols) {
 			// Check if the expression contains non-immutable operators.
 			var sharedProps props.Shared
-			memo.BuildSharedProps(condition, &sharedProps, b.evalCtx)
+			memo.BuildSharedProps(condition, &sharedProps, b.evalCtx, b.factory.Metadata())
 			if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
 				filters = append(filters, b.factory.ConstructFiltersItem(condition))
 			}
@@ -951,7 +951,7 @@ func (b *Builder) addComputedColsForTable(
 			})
 			// Check if the expression contains non-immutable operators.
 			var sharedProps props.Shared
-			memo.BuildSharedProps(scalar, &sharedProps, b.evalCtx)
+			memo.BuildSharedProps(scalar, &sharedProps, b.evalCtx, b.factory.Metadata())
 			if !sharedProps.VolatilitySet.HasStable() && !sharedProps.VolatilitySet.HasVolatile() {
 				tabMeta.AddComputedCol(colID, scalar, sharedProps.OuterCols)
 			}

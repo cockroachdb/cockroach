@@ -79,7 +79,7 @@ func TestMetadata(t *testing.T) {
 	tabMeta := md.TableMeta(tabID)
 	tabMeta.SetConstraints(scalar)
 	var sharedProps props.Shared
-	memo.BuildSharedProps(scalar, &sharedProps, &evalCtx)
+	memo.BuildSharedProps(scalar, &sharedProps, &evalCtx, md)
 	tabMeta.AddComputedCol(cmpID, scalar, sharedProps.OuterCols)
 	tabMeta.AddPartialIndexPredicate(0, scalar)
 	if md.AddSequence(&testcat.Sequence{SeqID: 100}) != seqID {
@@ -401,7 +401,7 @@ func TestDuplicateTable(t *testing.T) {
 	tabMeta.SetConstraints(&memo.VariableExpr{Col: b})
 	scalar := &memo.VariableExpr{Col: b}
 	var sharedProps props.Shared
-	memo.BuildSharedProps(scalar, &sharedProps, &evalCtx)
+	memo.BuildSharedProps(scalar, &sharedProps, &evalCtx, md)
 	tabMeta.AddComputedCol(b2, scalar, sharedProps.OuterCols)
 	tabMeta.AddPartialIndexPredicate(1, &memo.VariableExpr{Col: b})
 

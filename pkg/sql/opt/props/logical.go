@@ -95,6 +95,9 @@ type Shared struct {
 	// expression's location in the query. For example, while the b.x and b.y
 	// columns are not outer columns on the EXISTS expression, they *are* outer
 	// columns on the inner WHERE condition.
+	//
+	// Also note that if optimizer_omit_routine_params_in_outer_cols is enabled,
+	// OuterCols will not include columns that are routine parameters.
 	OuterCols opt.ColSet
 
 	// Rule props are lazily calculated and typically only apply to a single

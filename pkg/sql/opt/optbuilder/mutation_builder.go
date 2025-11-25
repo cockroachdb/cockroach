@@ -863,7 +863,7 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(
 				refCols.Add(newCol)
 			} else {
 				var p props.Shared
-				memo.BuildSharedProps(scalar, &p, mb.b.evalCtx)
+				memo.BuildSharedProps(scalar, &p, mb.b.evalCtx, mb.md)
 				refCols = p.OuterCols
 			}
 			if !refCols.Intersects(updatedColSet) {

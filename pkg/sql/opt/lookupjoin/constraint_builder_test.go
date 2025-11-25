@@ -104,7 +104,7 @@ func TestLookupConstraints(t *testing.T) {
 							return 0, opt.ColSet{}, err
 						}
 						var sharedProps props.Shared
-						memo.BuildSharedProps(compExpr, &sharedProps, &evalCtx)
+						memo.BuildSharedProps(compExpr, &sharedProps, &evalCtx, md)
 						md.TableMeta(tableID).AddComputedCol(colID, compExpr, sharedProps.OuterCols)
 					}
 				}

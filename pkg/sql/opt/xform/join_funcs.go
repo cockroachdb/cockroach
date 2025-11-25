@@ -468,7 +468,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			)
 		}
 
-		tableFDs := memo.MakeTableFuncDep(md, scanPrivate.Table)
+		tableFDs := memo.MakeTableFuncDep(c.e.evalCtx, md, scanPrivate.Table)
 		// A lookup join will drop any input row which contains NULLs, so a lax key
 		// is sufficient.
 		rightKeyCols := lookupConstraint.RightSideCols.ToSet()

@@ -614,7 +614,11 @@ func (s *scope) setTableAlias(alias tree.Name) {
 
 // See (*scope).findExistingCol.
 func findExistingColInList(
-	expr tree.TypedExpr, cols []scopeColumn, allowSideEffects bool, evalCtx *eval.Context,
+	expr tree.TypedExpr,
+	cols []scopeColumn,
+	allowSideEffects bool,
+	evalCtx *eval.Context,
+	md *opt.Metadata,
 ) *scopeColumn {
 	exprStr := symbolicExprStr(expr)
 	for i := range cols {
@@ -627,7 +631,7 @@ func findExistingColInList(
 				return col
 			}
 			var p props.Shared
-			memo.BuildSharedProps(col.scalar, &p, evalCtx)
+			memo.BuildSharedProps(col.scalar, &p, evalCtx, md)
 			if !p.VolatilitySet.HasVolatile() {
 				return col
 			}
@@ -642,7 +646,9 @@ func findExistingColInList(
 // If a column is found and we are tracking view dependencies, we add the column
 // to the view dependencies since it means this column is being referenced.
 func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *scopeColumn {
-	col := findExistingColInList(expr, s.cols, allowSideEffects, s.builder.evalCtx)
+	col := findExistingColInList(
+		expr, s.cols, allowSideEffects, s.builder.evalCtx, s.builder.factory.Metadata(),
+	)
 	if col != nil {
 		s.builder.trackReferencedColumnForViews(col)
 	}
@@ -1441,6 +1447,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.ResolvedFunctionDefi
 		s.windows,
 		false, /* allowSideEffects */
 		s.builder.evalCtx,
+		s.builder.factory.Metadata(),
 	); col != nil {
 		return col.expr
 	}

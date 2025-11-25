@@ -123,7 +123,7 @@ func TestIndexConstraints(t *testing.T) {
 						}
 						computedCols[col] = computedColExpr
 						var sharedProps props.Shared
-						memo.BuildSharedProps(computedColExpr, &sharedProps, &evalCtx)
+						memo.BuildSharedProps(computedColExpr, &sharedProps, &evalCtx, md)
 						colsInComputedColsExpressions.UnionWith(sharedProps.OuterCols)
 					}
 				}

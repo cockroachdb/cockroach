@@ -160,7 +160,7 @@ func (c *CustomFuncs) deriveConditionalHasHoistableSubquery(scalar opt.ScalarExp
 	deriveCanHoistChild := func(child opt.ScalarExpr, isConditional bool) bool {
 		if c.deriveHasHoistableSubquery(child) {
 			if isConditional {
-				memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx)
+				memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx, c.mem.Metadata())
 				return sharedProps.VolatilitySet.IsLeakproof()
 			}
 			return true
@@ -244,7 +244,7 @@ func (c *CustomFuncs) legacyDeriveConditionalHasHoistableSubquery(scalar opt.Sca
 			case *memo.CaseExpr:
 				// Determine whether this is the Else child.
 				if child == t.OrElse {
-					memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx)
+					memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx, c.mem.Metadata())
 					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakproof()
 				}
 
@@ -252,7 +252,7 @@ func (c *CustomFuncs) legacyDeriveConditionalHasHoistableSubquery(scalar opt.Sca
 				// The first argument does not need to be leakproof because it
 				// is always evaluated.
 				for j := 1; j < len(t.Args); j++ {
-					memo.BuildSharedProps(t.Args[j], &sharedProps, c.f.evalCtx)
+					memo.BuildSharedProps(t.Args[j], &sharedProps, c.f.evalCtx, c.mem.Metadata())
 					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakproof()
 					if !hasHoistableSubquery {
 						break
@@ -261,7 +261,7 @@ func (c *CustomFuncs) legacyDeriveConditionalHasHoistableSubquery(scalar opt.Sca
 
 			case *memo.WhenExpr:
 				if child == t.Value {
-					memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx)
+					memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx, c.mem.Metadata())
 					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakproof()
 				}
 
@@ -270,7 +270,7 @@ func (c *CustomFuncs) legacyDeriveConditionalHasHoistableSubquery(scalar opt.Sca
 				// other branches do is tricky because it's a list, but we know that
 				// it's at position 1.
 				if i == 1 {
-					memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx)
+					memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx, c.mem.Metadata())
 					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakproof()
 				}
 			}
@@ -1054,7 +1054,7 @@ func (r *subqueryHoister) constructConditionalExpr(scalar opt.ScalarExpr) opt.Sc
 			// This child expression is conditionally evaluated, so it can only be
 			// hoisted if it does not have side effects.
 			r.scratch = props.Shared{}
-			memo.BuildSharedProps(child, &r.scratch, r.f.evalCtx)
+			memo.BuildSharedProps(child, &r.scratch, r.f.evalCtx, r.mem.Metadata())
 			if !r.scratch.VolatilitySet.IsLeakproof() {
 				return child
 			}

@@ -964,6 +964,12 @@ func (md *Metadata) MaxColumn() ColumnID {
 	return ColumnID(len(md.cols))
 }
 
+// ParameterColumns returns the set of column IDs that represent references
+// to routine parameters. The returned set must not be mutated.
+func (md *Metadata) ParameterColumns() ColSet {
+	return md.paramCols
+}
+
 // ColumnMeta looks up the metadata for the column associated with the given
 // column id. The same column can be added multiple times to the query metadata
 // and associated with multiple column ids.

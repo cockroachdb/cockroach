@@ -432,7 +432,7 @@ func makeComputedCols(
 		}
 		computedCols[col] = computedColExpr
 		var sharedProps props.Shared
-		memo.BuildSharedProps(computedColExpr, &sharedProps, evalCtx)
+		memo.BuildSharedProps(computedColExpr, &sharedProps, evalCtx, f.Metadata())
 	}
 	return computedCols, nil
 }

@@ -530,7 +530,7 @@ func (b *ConstraintBuilder) findComputedColJoinEquality(
 		return nil, false
 	}
 	var sharedProps props.Shared
-	memo.BuildSharedProps(expr, &sharedProps, b.evalCtx)
+	memo.BuildSharedProps(expr, &sharedProps, b.evalCtx, b.md)
 	if !sharedProps.OuterCols.SubsetOf(eqCols) {
 		return nil, false
 	}

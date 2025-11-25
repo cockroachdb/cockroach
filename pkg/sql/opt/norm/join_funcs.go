@@ -514,8 +514,8 @@ func (c *CustomFuncs) CanExtractJoinComparison(
 
 	// Recursively compute properties for left and right sides.
 	var leftProps, rightProps props.Shared
-	memo.BuildSharedProps(a, &leftProps, c.f.evalCtx)
-	memo.BuildSharedProps(b, &rightProps, c.f.evalCtx)
+	memo.BuildSharedProps(a, &leftProps, c.f.evalCtx, c.mem.Metadata())
+	memo.BuildSharedProps(b, &rightProps, c.f.evalCtx, c.mem.Metadata())
 
 	// Disallow cases when one side has a correlated subquery.
 	// TODO(radu): investigate relaxing this.
@@ -558,7 +558,7 @@ func (c *CustomFuncs) ExtractJoinComparison(
 	op := cmp.Op()
 
 	var cmpLeftProps props.Shared
-	memo.BuildSharedProps(condLeft, &cmpLeftProps, c.f.evalCtx)
+	memo.BuildSharedProps(condLeft, &cmpLeftProps, c.f.evalCtx, c.mem.Metadata())
 	if cmpLeftProps.OuterCols.SubsetOf(rightCols) {
 		a, b = b, a
 		op = opt.CommuteEqualityOrInequalityOp(op)
@@ -880,7 +880,7 @@ func (c *CustomFuncs) GetEquijoinStrictKeyCols(
 		return opt.ColSet{}, opt.ColList{}, opt.ColList{}, false
 	}
 	md := c.mem.Metadata()
-	funcDeps := memo.MakeTableFuncDep(md, sp.Table)
+	funcDeps := memo.MakeTableFuncDep(c.f.evalCtx, md, sp.Table)
 
 	// If there is no strict key, no need to proceed further.
 	_, ok = funcDeps.StrictKey()

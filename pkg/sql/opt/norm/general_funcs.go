@@ -643,7 +643,7 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 		return &t.ScalarProps().Shared
 	default:
 		var p props.Shared
-		memo.BuildSharedProps(e, &p, c.f.evalCtx)
+		memo.BuildSharedProps(e, &p, c.f.evalCtx, c.mem.Metadata())
 		return &p
 	}
 }
