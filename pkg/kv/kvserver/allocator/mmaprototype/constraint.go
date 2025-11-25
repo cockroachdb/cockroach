@@ -669,6 +669,20 @@ type analyzedConstraints struct {
 	// slices are also empty.
 	constraints []internedConstraintsConjunction
 
+	// satisfiedByReplica[kind][i] contains the set of storeIDs that satisfy
+	// constraints[i]. These are for stores that satisfy at least one
+	// constraint. Each store should appear exactly once in the 2D slice
+	// ac.satisfiedByReplica[kind]. For example,
+	// satisfiedByReplica[voterIndex][0] = [1, 2, 3], means that the first
+	// constraint (constraints[0]) is satisfied by storeIDs 1, 2, and 3.
+	//
+	// NB: satisfiedByReplica[nonVoterIndex][i] is populated even if this
+	// analyzedConstraints represents a voter constraint. This is done because
+	// satisfiedByReplica[voterIndex][i] may not sufficiently satisfy a
+	// constraint (or even if it does, at a later point one could be
+	// decommissioning one of the voters), and populating the nonVoterIndex
+	// allows MMA to decide to promote a non-voter.
+	//
 	// Overlapping conjunctions: There is nothing preventing overlapping
 	// ConstraintsConjunctions such that the same store can satisfy multiple,
 	// though we expect this to be uncommon. This is algorithmically painful
@@ -691,19 +705,22 @@ type analyzedConstraints struct {
 	// greedy manner instead of considering all possibilities. So all the
 	// satisfiedBy slices represent sets that are non-intersecting.
 	//
-	// satisfiedByReplica[kind][i] contains the set of storeIDs that satisfy
-	// constraints[i]. These are for stores that satisfy at least one
-	// constraint. Each store should appear exactly once in the 2D slice
-	// ac.satisfiedByReplica[kind]. For example,
-	// satisfiedByReplica[voterIndex][0] = [1, 2, 3], means that the first
-	// constraint (constraints[0]) is satisfied by storeIDs 1, 2, and 3.
-	//
-	// NB: satisfiedByReplica[nonVoterIndex][i] is populated even if this
-	// analyzedConstraints represents a voter constraint. This is done because
-	// satisfiedByReplica[voterIndex][i] may not sufficiently satisfy a
-	// constraint (or even if it does, at a later point one could be
-	// decommissioning one of the voters), and populating the nonVoterIndex
-	// allows MMA to decide to promote a non-voter. replica type.
+	// Example on why ordering from most strict to least strict is important:
+	// If the constraints were [region=a,zone=a1:1],[region=a:1] (which is
+	// sorted in decreasing strictness), a voter store in (region=a,zone=a1)
+	// would satisfy both, but it would be present only in
+	// satisfiedByReplica[voterIndex][i] for i=0, not i=1. If the user specified
+	// the constraints in irregular order, [region=a]:1,[region=a,zone=a1]:1,
+	// the voter would only be present in satisfiedByReplica[voterIndex][0] as
+	// well (which now refers to the relaxed constraint), and as a consequence
+	// we would consider (region=a,zone=a1) unfulfilled by this voter. If the
+	// full constraints conjunction had been [region=a]:1, [region=a,zone=a1]:1,
+	// [region=a,zone=a2]:1, and there were voters in that region in zones a1,
+	// a2, and a3, we could end up satisfying [region=a]:1 with the voter in a1,
+	// but then wouldn't consider it for the stricter constraint
+	// [region=a,zone=a1]:1 which no other voter can satisfy. The constraints
+	// would then appear unsatisfiable to the allocator.
+
 	satisfiedByReplica [numReplicaKinds][][]roachpb.StoreID
 
 	// ac.satisfiedNoConstraintReplica[kind] contains the set of storeIDs that
@@ -861,7 +878,7 @@ type storeMatchesConstraintInterface interface {
 // ac.satisfiedByReplica to each store that satisfies at least one constraint.
 // But constraints may remain under-satisfied. If a constraint remains
 // under-satisfied after phase 2, it cannot be corrected in phase 3 and remain
-// to be under-satisfied. This is not essential to correctness but just happen
+// to be under-satisfied. This is not essential to correctness but just happens
 // to be true of the algorithm.
 //
 // TODO(wenyihu6): Add an example for phase 2 - if s1 satisfies c1(num=1) and s2
@@ -874,7 +891,7 @@ type storeMatchesConstraintInterface interface {
 // every store that satisfies a constraint, we will be clearing the constraint
 // indices for that store in buf.replicaConstraintIndices[kind][i] once we have
 // assigned it to a constraint in ac.satisfiedByReplica[kind][i]. Since we
-// guarantee that each store that satisfies a constraint is assigned to at least
+// guarantee that each store that satisfies a constraint is assigned to exactly
 // one constraint, buf.replicaConstraintIndices will be an empty 2D slice as
 // part of the algorithm. In addition, clearing the constraint indices for that
 // store in buf.replicaConstraintIndices is also important to help us indicates
@@ -897,13 +914,13 @@ func (ac *analyzedConstraints) initialize(
 	}
 	// In phase 1, for each replica (voter and non-voter), determine which
 	// constraint indices in ac.constraints its store satisfies. We record these
-	// matches in buf.replicaConstraintIndices by iterating over all replicas, all
-	// constraint conjunctions, and checking store satisfaction for each using
-	// constraintMatcher.storeMatches. In addition, it also populates
+	// matches in buf.replicaConstraintIndices by iterating over all replicas,
+	// all constraint conjunctions, and checking store satisfaction for each
+	// using constraintMatcher.storeMatches. In addition, it also populates
 	// ac.satisfiedNoConstraintReplica[kind][i] for stores that satisfy no
-	// constraint and ac.satisfiedByReplica[kind][i] for stores that satisfy exactly
-	// one constraint. Since we will be assigning at least one constraint to each store,
-	// these stores are unambiguous.
+	// constraint and ac.satisfiedByReplica[kind][i] for stores that satisfy
+	// exactly one constraint. Since we will be assigning at least one
+	// constraint to each store, these stores are unambiguous.
 	//
 	// Compute the list of all constraints satisfied by each store.
 	for kind := voterIndex; kind < numReplicaKinds; kind++ {
