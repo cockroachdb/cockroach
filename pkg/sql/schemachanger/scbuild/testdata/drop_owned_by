@@ -20,7 +20,7 @@ DROP OWNED BY r
 ----
 - [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC]
   {descriptorId: 100, privileges: "4", userName: r, withGrantOption: "4"}
-- [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 0}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 105, name: s}
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]
   {descriptorId: 105, owner: r}
@@ -38,7 +38,7 @@ DROP OWNED BY r
   {indexId: 1, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[Namespace:{DescID: 106, Name: sq, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 106, Name: sq, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 106, name: sq, schemaId: 101}
 - [[Owner:{DescID: 106}, ABSENT], PUBLIC]
   {descriptorId: 106, owner: r}
@@ -52,7 +52,7 @@ DROP OWNED BY r
   {childObjectId: 106, schemaId: 101}
 - [[TableData:{DescID: 106, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 106}
-- [[Namespace:{DescID: 109, Name: t, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 109, Name: t, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 109, name: t, schemaId: 101}
 - [[Owner:{DescID: 109}, ABSENT], PUBLIC]
   {descriptorId: 109, owner: r}
@@ -134,7 +134,7 @@ DROP OWNED BY r
   {indexId: 1, tableId: 109}
 - [[TableData:{DescID: 109, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 109}
-- [[Namespace:{DescID: 107, Name: sq, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 107, Name: sq, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 107, name: sq, schemaId: 105}
 - [[Owner:{DescID: 107}, ABSENT], PUBLIC]
   {descriptorId: 107, owner: r}
@@ -148,7 +148,7 @@ DROP OWNED BY r
   {childObjectId: 107, schemaId: 105}
 - [[TableData:{DescID: 107, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 107}
-- [[Namespace:{DescID: 108, Name: t, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 108, Name: t, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 108, name: t, schemaId: 105}
 - [[Owner:{DescID: 108}, ABSENT], PUBLIC]
   {descriptorId: 108, owner: r}
@@ -230,7 +230,7 @@ DROP OWNED BY r
   {indexId: 1, tableId: 108}
 - [[TableData:{DescID: 108, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 108}
-- [[Namespace:{DescID: 110, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 110, Name: v1, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 110, name: v1, schemaId: 105}
 - [[Owner:{DescID: 110}, ABSENT], PUBLIC]
   {descriptorId: 110, owner: r}
@@ -280,7 +280,7 @@ DROP OWNED BY r
   {columnId: 4.294967292e+09, elementCreationMetadata: {in243OrLater: true, in261OrLater: true}, tableId: 110, type: {family: DecimalFamily, oid: 1700}, typeName: DECIMAL}
 - [[ColumnHidden:{DescID: 110, ColumnID: 4294967292}, ABSENT], PUBLIC]
   {columnId: 4.294967292e+09, tableId: 110}
-- [[Namespace:{DescID: 111, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 111, Name: typ, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 111, name: typ, schemaId: 105}
 - [[Owner:{DescID: 111}, ABSENT], PUBLIC]
   {descriptorId: 111, owner: r}
@@ -296,7 +296,7 @@ DROP OWNED BY r
   {logicalRepresentation: a, physicalRepresentation: gA==, typeId: 111}
 - [[SchemaChild:{DescID: 111, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {childObjectId: 111, schemaId: 105}
-- [[Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 112, Name: _typ, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 112, name: _typ, schemaId: 105}
 - [[Owner:{DescID: 112}, ABSENT], PUBLIC]
   {descriptorId: 112, owner: r}
@@ -310,7 +310,7 @@ DROP OWNED BY r
   {closedTypeIds: [111, 112], type: {arrayContents: {family: EnumFamily, oid: 100111, udtMetadata: {arrayTypeOid: 100112}}, family: ArrayFamily, oid: 100112}, typeId: 112, typeName: 's.typ[]'}
 - [[SchemaChild:{DescID: 112, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {childObjectId: 112, schemaId: 105}
-- [[Namespace:{DescID: 113, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 113, Name: v2, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 113, name: v2, schemaId: 105}
 - [[Owner:{DescID: 113}, ABSENT], PUBLIC]
   {descriptorId: 113, owner: r}

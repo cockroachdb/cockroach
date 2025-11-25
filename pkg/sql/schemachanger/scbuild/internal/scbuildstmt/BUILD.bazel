@@ -21,6 +21,7 @@ go_library(
         "alter_table_rename_column.go",
         "alter_table_rename_constraint.go",
         "alter_table_set_rls_mode.go",
+        "alter_table_set_schema.go",
         "alter_table_validate_constraint.go",
         "comment_on.go",
         "configure_zone.go",

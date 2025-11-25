@@ -10,9 +10,9 @@ Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹pg_temp_123_
  │         ├── 18 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Schema:{DescID: 104 (pg_temp_123_456+)}
  │         │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 104 (pg_temp_123_456+), ReferencedDescID: 100 (defaultdb)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (pg_temp_123_456+), Name: "pg_temp_123_456", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (pg_temp_123_456+), Name: "pg_temp_123_456"}
  │         │    ├── ABSENT → PUBLIC Sequence:{DescID: 105 (sq1+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 104 (pg_temp_123_456+)}
  │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 104 (pg_temp_123_456+)}
  │         │    ├── ABSENT → PUBLIC TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
  │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 105 (sq1+), Name: "START"}
@@ -59,9 +59,9 @@ Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹pg_temp_123_
       │    ├── 18 elements transitioning toward PUBLIC
       │    │    ├── PUBLIC → ABSENT Schema:{DescID: 104 (pg_temp_123_456+)}
       │    │    ├── PUBLIC → ABSENT SchemaParent:{DescID: 104 (pg_temp_123_456+), ReferencedDescID: 100 (defaultdb)}
-      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (pg_temp_123_456+), Name: "pg_temp_123_456", ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (pg_temp_123_456+), Name: "pg_temp_123_456"}
       │    │    ├── PUBLIC → ABSENT Sequence:{DescID: 105 (sq1+)}
-      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 104 (pg_temp_123_456+)}
       │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 104 (pg_temp_123_456+)}
       │    │    ├── PUBLIC → ABSENT TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
       │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 105 (sq1+), Name: "START"}
@@ -81,9 +81,9 @@ Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹pg_temp_123_
            ├── 18 elements transitioning toward PUBLIC
            │    ├── ABSENT → PUBLIC Schema:{DescID: 104 (pg_temp_123_456+)}
            │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 104 (pg_temp_123_456+), ReferencedDescID: 100 (defaultdb)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (pg_temp_123_456+), Name: "pg_temp_123_456", ReferencedDescID: 100 (defaultdb)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (pg_temp_123_456+), Name: "pg_temp_123_456"}
            │    ├── ABSENT → PUBLIC Sequence:{DescID: 105 (sq1+)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 104 (pg_temp_123_456+)}
            │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 104 (pg_temp_123_456+)}
            │    ├── ABSENT → PUBLIC TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
            │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 105 (sq1+), Name: "START"}

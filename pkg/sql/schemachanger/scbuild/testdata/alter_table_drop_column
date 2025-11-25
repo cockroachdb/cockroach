@@ -158,7 +158,7 @@ ALTER TABLE defaultdb.t DROP COLUMN k, DROP COLUMN l
   {columnId: 2, indexId: 5, kind: STORED, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 5, tableId: 104}
-- [[Namespace:{DescID: 105, Name: t_l_seq, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 105, Name: t_l_seq, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 105, name: t_l_seq, schemaId: 101}
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]
   {descriptorId: 105, owner: root}
@@ -208,7 +208,7 @@ ALTER TABLE defaultdb.t DROP COLUMN l
   {indexId: 3, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[Namespace:{DescID: 105, Name: t_l_seq, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 105, Name: t_l_seq, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 105, name: t_l_seq, schemaId: 101}
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]
   {descriptorId: 105, owner: root}

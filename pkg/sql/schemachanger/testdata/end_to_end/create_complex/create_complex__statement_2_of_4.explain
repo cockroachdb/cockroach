@@ -10,7 +10,7 @@ Schema change plan for CREATE SCHEMA ‹db›.‹sc› AUTHORIZATION foo; follow
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 6 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Schema:{DescID: 106 (sc+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (sc+), Name: "sc", ReferencedDescID: 104 (db+)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (sc+), Name: "sc"}
  │         │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 106 (sc+), ReferencedDescID: 104 (db+)}
  │         │    ├── ABSENT → PUBLIC Owner:{DescID: 106 (sc+)}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (sc+), Name: "admin"}
@@ -34,7 +34,7 @@ Schema change plan for CREATE SCHEMA ‹db›.‹sc› AUTHORIZATION foo; follow
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 104 (db+), Name: "root"}
       │    │    ├── PUBLIC → ABSENT Database:{DescID: 104 (db+)}
       │    │    ├── PUBLIC → ABSENT DatabaseData:{DescID: 104 (db+)}
-      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 105 (public+), Name: "public", ReferencedDescID: 104 (db+)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 105 (public+), Name: "public"}
       │    │    ├── PUBLIC → ABSENT Owner:{DescID: 105 (public+)}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 105 (public+), Name: "admin"}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 105 (public+), Name: "public"}
@@ -42,7 +42,7 @@ Schema change plan for CREATE SCHEMA ‹db›.‹sc› AUTHORIZATION foo; follow
       │    │    ├── PUBLIC → ABSENT Schema:{DescID: 105 (public+)}
       │    │    ├── PUBLIC → ABSENT SchemaParent:{DescID: 105 (public+), ReferencedDescID: 104 (db+)}
       │    │    ├── PUBLIC → ABSENT Schema:{DescID: 106 (sc+)}
-      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 106 (sc+), Name: "sc", ReferencedDescID: 104 (db+)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 106 (sc+), Name: "sc"}
       │    │    ├── PUBLIC → ABSENT SchemaParent:{DescID: 106 (sc+), ReferencedDescID: 104 (db+)}
       │    │    ├── PUBLIC → ABSENT Owner:{DescID: 106 (sc+)}
       │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 106 (sc+), Name: "admin"}
@@ -58,7 +58,7 @@ Schema change plan for CREATE SCHEMA ‹db›.‹sc› AUTHORIZATION foo; follow
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (db+), Name: "root"}
            │    ├── ABSENT → PUBLIC Database:{DescID: 104 (db+)}
            │    ├── ABSENT → PUBLIC DatabaseData:{DescID: 104 (db+)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (public+), Name: "public", ReferencedDescID: 104 (db+)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (public+), Name: "public"}
            │    ├── ABSENT → PUBLIC Owner:{DescID: 105 (public+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (public+), Name: "admin"}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (public+), Name: "public"}
@@ -66,7 +66,7 @@ Schema change plan for CREATE SCHEMA ‹db›.‹sc› AUTHORIZATION foo; follow
            │    ├── ABSENT → PUBLIC Schema:{DescID: 105 (public+)}
            │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 105 (public+), ReferencedDescID: 104 (db+)}
            │    ├── ABSENT → PUBLIC Schema:{DescID: 106 (sc+)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (sc+), Name: "sc", ReferencedDescID: 104 (db+)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (sc+), Name: "sc"}
            │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 106 (sc+), ReferencedDescID: 104 (db+)}
            │    ├── ABSENT → PUBLIC Owner:{DescID: 106 (sc+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (sc+), Name: "admin"}

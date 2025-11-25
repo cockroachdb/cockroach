@@ -13,7 +13,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER COLUMN 
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 16 elements transitioning toward ABSENT
       │    │    ├── PUBLIC → DROPPED Sequence:{DescID: 105 (t_j_seq-)}
-      │    │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (t_j_seq-), Name: "t_j_seq", ReferencedDescID: 100 (#100)}
+      │    │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (t_j_seq-), Name: "t_j_seq", ReferencedDescID: 101 (#101)}
       │    │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 105 (t_j_seq-), ReferencedDescID: 101 (#101)}
       │    │    ├── PUBLIC → ABSENT  Column:{DescID: 105 (t_j_seq-), ColumnID: 1 (value-)}
       │    │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 105 (t_j_seq-), ColumnFamilyID: 0, ColumnID: 1 (value-), TypeName: "INT8"}

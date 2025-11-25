@@ -19,7 +19,7 @@ Schema change plan for rolling back CREATE SCHEMA defaultdb.sc; following CREATE
       │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
       │    │    ├── DESCRIPTOR_ADDED      → DROPPED     Schema:{DescID: 105 (sc-)}
-      │    │    ├── PUBLIC                → ABSENT      Namespace:{DescID: 105 (sc-), Name: "sc", ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC                → ABSENT      Namespace:{DescID: 105 (sc-), Name: "sc"}
       │    │    ├── PUBLIC                → ABSENT      SchemaParent:{DescID: 105 (sc-), ReferencedDescID: 100 (defaultdb)}
       │    │    ├── PUBLIC                → ABSENT      Owner:{DescID: 105 (sc-)}
       │    │    ├── PUBLIC                → ABSENT      UserPrivileges:{DescID: 105 (sc-), Name: "admin"}

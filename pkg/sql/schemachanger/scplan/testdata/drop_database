@@ -29,27 +29,27 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     [[Database:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
     [[DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}, ABSENT], PUBLIC] -> ABSENT
     [[DatabaseComment:{DescID: 104, Value: db1 is good}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Schema:{DescID: 105}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaParent:{DescID: 105, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Schema:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaParent:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaComment:{DescID: 106, Value: sc1 is good}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 107}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -88,13 +88,13 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     [[IndexColumn:{DescID: 110, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 108}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 108, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -134,7 +134,7 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -159,7 +159,7 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     [[ColumnName:{DescID: 111, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 111, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 112, Name: v2, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 112}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -187,7 +187,7 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     [[ColumnName:{DescID: 112, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 112, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 113, Name: v3, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 113}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -215,7 +215,7 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     [[ColumnName:{DescID: 113, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 113, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 114, Name: v4, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -243,7 +243,7 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     [[ColumnName:{DescID: 114, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 114, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 115, Name: typ, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 115, Name: typ, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 115}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 115, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 115, Name: public}, ABSENT], PUBLIC] -> ABSENT
@@ -251,14 +251,14 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     [[EnumType:{DescID: 115}, ABSENT], PUBLIC] -> DROPPED
     [[EnumTypeValue:{DescID: 115, Name: a}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 115, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 116}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 116, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 117, Name: v5, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 117}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 117, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -804,6 +804,12 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
         SchemaID: 106
     *scop.RemoveSchemaComment
       SchemaID: 106
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 107
+        Name: sq1
+        SchemaID: 105
     *scop.NotImplementedForPublicObjects
       DescID: 107
       ElementType: scpb.Owner
@@ -813,6 +819,12 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 107
       User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 110
+        Name: t1
+        SchemaID: 105
     *scop.NotImplementedForPublicObjects
       DescID: 110
       ElementType: scpb.Owner
@@ -843,6 +855,12 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967292
       TableID: 110
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 108
+        Name: sq1
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 108
       ElementType: scpb.Owner
@@ -852,6 +870,12 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 108
       User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 109
+        Name: t1
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.Owner
@@ -882,6 +906,12 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967292
       TableID: 109
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 111
+        Name: v1
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 111
       ElementType: scpb.Owner
@@ -906,6 +936,12 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967292
       TableID: 111
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 112
+        Name: v2
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 112
       ElementType: scpb.Owner
@@ -933,6 +969,12 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967292
       TableID: 112
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 113
+        Name: v3
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 113
       ElementType: scpb.Owner
@@ -960,6 +1002,12 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967292
       TableID: 113
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 114
+        Name: v4
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 114
       ElementType: scpb.Owner
@@ -987,6 +1035,12 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967292
       TableID: 114
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 115
+        Name: typ
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 115
       ElementType: scpb.Owner
@@ -999,6 +1053,12 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 115
       User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 116
+        Name: _typ
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 116
       ElementType: scpb.Owner
@@ -1011,6 +1071,12 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 116
       User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 117
+        Name: v5
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 117
       ElementType: scpb.Owner
@@ -1076,18 +1142,6 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 106
       User: root
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 107
-        Name: sq1
-        SchemaID: 105
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 110
-        Name: t1
-        SchemaID: 105
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
       TableID: 110
@@ -1110,18 +1164,6 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
       TableID: 110
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 108
-        Name: sq1
-        SchemaID: 106
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 109
-        Name: t1
-        SchemaID: 106
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
       TableID: 109
@@ -1144,12 +1186,6 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
       TableID: 109
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 111
-        Name: v1
-        SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 111
@@ -1165,12 +1201,6 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967292
       TableID: 111
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 112
-        Name: v2
-        SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 112
@@ -1189,12 +1219,6 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967292
       TableID: 112
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 113
-        Name: v3
-        SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 113
@@ -1213,12 +1237,6 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967292
       TableID: 113
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 114
-        Name: v4
-        SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 114
@@ -1237,24 +1255,6 @@ StatementPhase stage 1 of 1 with 325 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967292
       TableID: 114
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 115
-        Name: typ
-        SchemaID: 106
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 116
-        Name: _typ
-        SchemaID: 106
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 117
-        Name: v5
-        SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 117
@@ -1366,27 +1366,27 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Database:{DescID: 104}, ABSENT], DROPPED] -> PUBLIC
     [[DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}, ABSENT], ABSENT] -> PUBLIC
     [[DatabaseComment:{DescID: 104, Value: db1 is good}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 0}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 105}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Schema:{DescID: 105}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaParent:{DescID: 105, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 0}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Schema:{DescID: 106}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaParent:{DescID: 106, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[SchemaComment:{DescID: 106, Value: sc1 is good}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 107}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Sequence:{DescID: 107}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 105}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 110}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -1425,13 +1425,13 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[IndexColumn:{DescID: 110, ColumnID: 3, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 108}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[Sequence:{DescID: 108}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaChild:{DescID: 108, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -1471,7 +1471,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 111}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -1496,7 +1496,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[ColumnName:{DescID: 111, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnHidden:{DescID: 111, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 112, Name: v2, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 112}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -1524,7 +1524,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[ColumnName:{DescID: 112, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnHidden:{DescID: 112, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 113, Name: v3, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 113}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -1552,7 +1552,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[ColumnName:{DescID: 113, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnHidden:{DescID: 113, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 114, Name: v4, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 114}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -1580,7 +1580,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[ColumnName:{DescID: 114, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnHidden:{DescID: 114, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 115, Name: typ, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 115, Name: typ, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 115}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 115, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 115, Name: public}, ABSENT], ABSENT] -> PUBLIC
@@ -1588,14 +1588,14 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[EnumType:{DescID: 115}, ABSENT], DROPPED] -> PUBLIC
     [[EnumTypeValue:{DescID: 115, Name: a}, ABSENT], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 115, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 116}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 116, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 116, Name: public}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 116, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, ABSENT], DROPPED] -> PUBLIC
     [[SchemaChild:{DescID: 116, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 117, Name: v5, ReferencedDescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 117}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 117, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -1639,27 +1639,27 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     [[Database:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
     [[DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}, ABSENT], PUBLIC] -> ABSENT
     [[DatabaseComment:{DescID: 104, Value: db1 is good}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Schema:{DescID: 105}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaParent:{DescID: 105, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Schema:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaParent:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaComment:{DescID: 106, Value: sc1 is good}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 107}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1698,13 +1698,13 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     [[IndexColumn:{DescID: 110, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 108}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 108, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1744,7 +1744,7 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1769,7 +1769,7 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     [[ColumnName:{DescID: 111, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 111, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 112, Name: v2, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 112}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1797,7 +1797,7 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     [[ColumnName:{DescID: 112, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 112, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 113, Name: v3, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 113}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1825,7 +1825,7 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     [[ColumnName:{DescID: 113, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 113, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 114, Name: v4, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1853,7 +1853,7 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     [[ColumnName:{DescID: 114, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 114, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 115, Name: typ, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 115, Name: typ, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 115}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 115, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 115, Name: public}, ABSENT], PUBLIC] -> ABSENT
@@ -1861,14 +1861,14 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     [[EnumType:{DescID: 115}, ABSENT], PUBLIC] -> DROPPED
     [[EnumTypeValue:{DescID: 115, Name: a}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 115, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 116}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 116, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, ABSENT], PUBLIC] -> DROPPED
     [[SchemaChild:{DescID: 116, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 117, Name: v5, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 117}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 117, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -2414,6 +2414,12 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
         SchemaID: 106
     *scop.RemoveSchemaComment
       SchemaID: 106
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 107
+        Name: sq1
+        SchemaID: 105
     *scop.NotImplementedForPublicObjects
       DescID: 107
       ElementType: scpb.Owner
@@ -2423,6 +2429,12 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 107
       User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 110
+        Name: t1
+        SchemaID: 105
     *scop.NotImplementedForPublicObjects
       DescID: 110
       ElementType: scpb.Owner
@@ -2453,6 +2465,12 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967292
       TableID: 110
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 108
+        Name: sq1
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 108
       ElementType: scpb.Owner
@@ -2462,6 +2480,12 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 108
       User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 109
+        Name: t1
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.Owner
@@ -2492,6 +2516,12 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967292
       TableID: 109
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 111
+        Name: v1
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 111
       ElementType: scpb.Owner
@@ -2516,6 +2546,12 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967292
       TableID: 111
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 112
+        Name: v2
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 112
       ElementType: scpb.Owner
@@ -2543,6 +2579,12 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967292
       TableID: 112
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 113
+        Name: v3
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 113
       ElementType: scpb.Owner
@@ -2570,6 +2612,12 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967292
       TableID: 113
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 114
+        Name: v4
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 114
       ElementType: scpb.Owner
@@ -2597,6 +2645,12 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967292
       TableID: 114
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 115
+        Name: typ
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 115
       ElementType: scpb.Owner
@@ -2609,6 +2663,12 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 115
       User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 116
+        Name: _typ
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 116
       ElementType: scpb.Owner
@@ -2621,6 +2681,12 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 116
       User: root
+    *scop.DrainDescriptorName
+      Namespace:
+        DatabaseID: 104
+        DescriptorID: 117
+        Name: v5
+        SchemaID: 106
     *scop.NotImplementedForPublicObjects
       DescID: 117
       ElementType: scpb.Owner
@@ -2688,18 +2754,6 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 106
       User: root
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 107
-        Name: sq1
-        SchemaID: 105
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 110
-        Name: t1
-        SchemaID: 105
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
       TableID: 110
@@ -2722,18 +2776,6 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
       TableID: 110
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 108
-        Name: sq1
-        SchemaID: 106
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 109
-        Name: t1
-        SchemaID: 106
     *scop.MakePublicColumnWriteOnly
       ColumnID: 1
       TableID: 109
@@ -2756,12 +2798,6 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
       TableID: 109
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 111
-        Name: v1
-        SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 111
@@ -2777,12 +2813,6 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967292
       TableID: 111
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 112
-        Name: v2
-        SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 112
@@ -2801,12 +2831,6 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967292
       TableID: 112
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 113
-        Name: v3
-        SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 113
@@ -2825,12 +2849,6 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967292
       TableID: 113
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 114
-        Name: v4
-        SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 114
@@ -2849,24 +2867,6 @@ PreCommitPhase stage 2 of 2 with 341 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967292
       TableID: 114
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 115
-        Name: typ
-        SchemaID: 106
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 116
-        Name: _typ
-        SchemaID: 106
-    *scop.DrainDescriptorName
-      Namespace:
-        DatabaseID: 104
-        DescriptorID: 117
-        Name: v5
-        SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       TableID: 117
@@ -3183,7 +3183,7 @@ DROP DATABASE db1 CASCADE
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 - from: [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, DROPPED]
-  to:   [Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 104}, ABSENT]
+  to:   [Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 106}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, DROPPED]
@@ -4939,58 +4939,6 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Database:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with attr ref
-- from: [Database:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with attr ref
-- from: [Database:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with attr ref
-- from: [Database:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with attr ref
-- from: [Database:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with attr ref
-- from: [Database:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with attr ref
-- from: [Database:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with attr ref
-- from: [Database:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with attr ref
-- from: [Database:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with attr ref
-- from: [Database:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with attr ref
-- from: [Database:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 115, Name: typ, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with attr ref
-- from: [Database:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with attr ref
-- from: [Database:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with attr ref
-- from: [Database:{DescID: 104}, DROPPED]
   to:   [Owner:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
@@ -5023,7 +4971,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [EnumType:{DescID: 115}, DROPPED]
-  to:   [Namespace:{DescID: 115, Name: typ, ReferencedDescID: 104}, ABSENT]
+  to:   [Namespace:{DescID: 115, Name: typ, ReferencedDescID: 106}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [EnumType:{DescID: 115}, DROPPED]
@@ -5142,55 +5090,55 @@ DROP DATABASE db1 CASCADE
   to:   [Database:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 105, Name: public, ReferencedDescID: 0}, ABSENT]
   to:   [Schema:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 0}, ABSENT]
   to:   [Schema:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 105}, ABSENT]
   to:   [Sequence:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 106}, ABSENT]
   to:   [Sequence:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 109, Name: t1, ReferencedDescID: 106}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 110, Name: t1, ReferencedDescID: 105}, ABSENT]
   to:   [Table:{DescID: 110}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 111, Name: v1, ReferencedDescID: 106}, ABSENT]
   to:   [View:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 112, Name: v2, ReferencedDescID: 106}, ABSENT]
   to:   [View:{DescID: 112}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 113, Name: v3, ReferencedDescID: 106}, ABSENT]
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 114, Name: v4, ReferencedDescID: 106}, ABSENT]
   to:   [View:{DescID: 114}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 115, Name: typ, ReferencedDescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 115, Name: typ, ReferencedDescID: 106}, ABSENT]
   to:   [EnumType:{DescID: 115}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 106}, ABSENT]
   to:   [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT]
+- from: [Namespace:{DescID: 117, Name: v5, ReferencedDescID: 106}, ABSENT]
   to:   [View:{DescID: 117}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -5299,9 +5247,17 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: index no longer public before dependents, excluding columns
 - from: [Schema:{DescID: 105}, DROPPED]
-  to:   [Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT]
+  to:   [Namespace:{DescID: 105, Name: public, ReferencedDescID: 0}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [Schema:{DescID: 105}, DROPPED]
+  to:   [Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 105}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before removing dependent with attr ref
+- from: [Schema:{DescID: 105}, DROPPED]
+  to:   [Namespace:{DescID: 110, Name: t1, ReferencedDescID: 105}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before removing dependent with attr ref
 - from: [Schema:{DescID: 105}, DROPPED]
   to:   [Owner:{DescID: 105}, ABSENT]
   kind: Precedence
@@ -5327,9 +5283,45 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Schema:{DescID: 106}, DROPPED]
-  to:   [Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 104}, ABSENT]
+  to:   [Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 0}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
+- from: [Schema:{DescID: 106}, DROPPED]
+  to:   [Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before removing dependent with attr ref
+- from: [Schema:{DescID: 106}, DROPPED]
+  to:   [Namespace:{DescID: 109, Name: t1, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before removing dependent with attr ref
+- from: [Schema:{DescID: 106}, DROPPED]
+  to:   [Namespace:{DescID: 111, Name: v1, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before removing dependent with attr ref
+- from: [Schema:{DescID: 106}, DROPPED]
+  to:   [Namespace:{DescID: 112, Name: v2, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before removing dependent with attr ref
+- from: [Schema:{DescID: 106}, DROPPED]
+  to:   [Namespace:{DescID: 113, Name: v3, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before removing dependent with attr ref
+- from: [Schema:{DescID: 106}, DROPPED]
+  to:   [Namespace:{DescID: 114, Name: v4, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before removing dependent with attr ref
+- from: [Schema:{DescID: 106}, DROPPED]
+  to:   [Namespace:{DescID: 115, Name: typ, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before removing dependent with attr ref
+- from: [Schema:{DescID: 106}, DROPPED]
+  to:   [Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before removing dependent with attr ref
+- from: [Schema:{DescID: 106}, DROPPED]
+  to:   [Namespace:{DescID: 117, Name: v5, ReferencedDescID: 106}, ABSENT]
+  kind: SameStagePrecedence
+  rule: descriptor drop right before removing dependent with attr ref
 - from: [Schema:{DescID: 106}, DROPPED]
   to:   [Owner:{DescID: 106}, ABSENT]
   kind: Precedence
@@ -5471,7 +5463,7 @@ DROP DATABASE db1 CASCADE
   kind: SameStagePrecedence
   rule: descriptor drop right before removing dependent with expr ref to sequence
 - from: [Sequence:{DescID: 107}, DROPPED]
-  to:   [Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 104}, ABSENT]
+  to:   [Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 105}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Sequence:{DescID: 107}, DROPPED]
@@ -5503,7 +5495,7 @@ DROP DATABASE db1 CASCADE
   kind: SameStagePrecedence
   rule: descriptor drop right before removing dependent with expr ref to sequence
 - from: [Sequence:{DescID: 108}, DROPPED]
-  to:   [Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT]
+  to:   [Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 106}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Sequence:{DescID: 108}, DROPPED]
@@ -5659,7 +5651,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
-  to:   [Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT]
+  to:   [Namespace:{DescID: 109, Name: t1, ReferencedDescID: 106}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
@@ -5823,7 +5815,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
-  to:   [Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT]
+  to:   [Namespace:{DescID: 110, Name: t1, ReferencedDescID: 105}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
@@ -6067,7 +6059,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
-  to:   [Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT]
+  to:   [Namespace:{DescID: 111, Name: v1, ReferencedDescID: 106}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
@@ -6179,7 +6171,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
-  to:   [Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT]
+  to:   [Namespace:{DescID: 112, Name: v2, ReferencedDescID: 106}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
@@ -6291,7 +6283,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
-  to:   [Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT]
+  to:   [Namespace:{DescID: 113, Name: v3, ReferencedDescID: 106}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
@@ -6403,7 +6395,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
-  to:   [Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT]
+  to:   [Namespace:{DescID: 114, Name: v4, ReferencedDescID: 106}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
@@ -6527,7 +6519,7 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
-  to:   [Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT]
+  to:   [Namespace:{DescID: 117, Name: v5, ReferencedDescID: 106}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]

@@ -708,7 +708,7 @@ DROP INDEX idx4 CASCADE
 StatementPhase stage 1 of 1 with 32 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 105, IndexID: 8, ConstraintID: 4, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
-    [[Namespace:{DescID: 106, Name: v, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 106, Name: v, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -841,7 +841,7 @@ StatementPhase stage 1 of 1 with 32 MutationType ops
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[SecondaryIndex:{DescID: 105, IndexID: 8, ConstraintID: 4, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
-    [[Namespace:{DescID: 106, Name: v, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 106, Name: v, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -872,7 +872,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
 PreCommitPhase stage 2 of 2 with 35 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 105, IndexID: 8, ConstraintID: 4, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
-    [[Namespace:{DescID: 106, Name: v, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 106, Name: v, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1280,7 +1280,7 @@ DROP INDEX idx4 CASCADE
   to:   [SecondaryIndex:{DescID: 105, IndexID: 8, ConstraintID: 4, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [Namespace:{DescID: 106, Name: v, ReferencedDescID: 100}, ABSENT]
+- from: [Namespace:{DescID: 106, Name: v, ReferencedDescID: 101}, ABSENT]
   to:   [View:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -1417,7 +1417,7 @@ DROP INDEX idx4 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 106}, DROPPED]
-  to:   [Namespace:{DescID: 106, Name: v, ReferencedDescID: 100}, ABSENT]
+  to:   [Namespace:{DescID: 106, Name: v, ReferencedDescID: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 106}, DROPPED]
@@ -1451,7 +1451,7 @@ DROP INDEX v2@idx CASCADE;
 StatementPhase stage 1 of 1 with 47 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
-    [[Namespace:{DescID: 108, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 108, Name: v3, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1644,7 +1644,7 @@ StatementPhase stage 1 of 1 with 47 MutationType ops
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
-    [[Namespace:{DescID: 108, Name: v3, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 108, Name: v3, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 108}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -1686,7 +1686,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
 PreCommitPhase stage 2 of 2 with 50 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
-    [[Namespace:{DescID: 108, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 108, Name: v3, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT

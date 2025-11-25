@@ -325,7 +325,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT GENERATED ALWAYS AS IDENTITY
   {databaseId: 100, tableId: 104}
 - [[Sequence:{DescID: 107}, PUBLIC], ABSENT]
   {sequenceId: 107}
-- [[Namespace:{DescID: 107, Name: foo_j_seq, ReferencedDescID: 100}, PUBLIC], ABSENT]
+- [[Namespace:{DescID: 107, Name: foo_j_seq, ReferencedDescID: 101}, PUBLIC], ABSENT]
   {databaseId: 100, descriptorId: 107, name: foo_j_seq, schemaId: 101}
 - [[SchemaChild:{DescID: 107, ReferencedDescID: 101}, PUBLIC], ABSENT]
   {childObjectId: 107, schemaId: 101}

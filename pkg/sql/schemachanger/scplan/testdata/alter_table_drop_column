@@ -22,7 +22,7 @@ StatementPhase stage 1 of 1 with 53 MutationType ops
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: v1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
-    [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -262,7 +262,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 107, Name: v1, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
-    [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 108}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -514,7 +514,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 61 MutationType ops
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1270,7 +1270,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT]
+- from: [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 101}, ABSENT]
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -1587,7 +1587,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
-  to:   [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT]
+  to:   [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
@@ -1618,7 +1618,7 @@ StatementPhase stage 1 of 1 with 52 MutationType ops
   transitions:
     [[ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
-    [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1853,7 +1853,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
-    [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 108}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -2114,7 +2114,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 64 MutationType ops
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexName:{DescID: 107, Name: foo_v2_key, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -2918,7 +2918,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT]
+- from: [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 101}, ABSENT]
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -3239,7 +3239,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
-  to:   [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT]
+  to:   [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]

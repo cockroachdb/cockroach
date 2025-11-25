@@ -4,7 +4,7 @@ CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32
 StatementPhase stage 1 of 1 with 24 MutationType ops
   transitions:
     [[Sequence:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[SequenceOption:{DescID: 104, Name: START}, PUBLIC], ABSENT] -> PUBLIC
@@ -119,7 +119,7 @@ StatementPhase stage 1 of 1 with 24 MutationType ops
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Sequence:{DescID: 104}, PUBLIC], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 101}, PUBLIC], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, PUBLIC], PUBLIC] -> ABSENT
     [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
     [[SequenceOption:{DescID: 104, Name: START}, PUBLIC], PUBLIC] -> ABSENT
@@ -139,7 +139,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
 PreCommitPhase stage 2 of 2 with 25 MutationType ops
   transitions:
     [[Sequence:{DescID: 104}, PUBLIC], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[SequenceOption:{DescID: 104, Name: START}, PUBLIC], ABSENT] -> PUBLIC
@@ -335,7 +335,7 @@ CREATE SEQUENCE sq1  MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 3
   to:   [Sequence:{DescID: 105}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
-- from: [Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 100}, PUBLIC]
+- from: [Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 101}, PUBLIC]
   to:   [Sequence:{DescID: 105}, PUBLIC]
   kind: Precedence
   rule: dependents exist before descriptor becomes public
@@ -384,7 +384,7 @@ CREATE SEQUENCE sq1  MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 3
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]
-  to:   [Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 100}, PUBLIC]
+  to:   [Namespace:{DescID: 105, Name: sq1, ReferencedDescID: 101}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Sequence:{DescID: 105}, DESCRIPTOR_ADDED]

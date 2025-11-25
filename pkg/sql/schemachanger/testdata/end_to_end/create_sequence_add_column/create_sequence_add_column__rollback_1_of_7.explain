@@ -10,7 +10,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN j 
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 25 elements transitioning toward ABSENT
-      │    │    ├── PUBLIC        → ABSENT  Namespace:{DescID: 105 (sq1-), Name: "sq1", ReferencedDescID: 100 (#100)}
+      │    │    ├── PUBLIC        → ABSENT  Namespace:{DescID: 105 (sq1-), Name: "sq1", ReferencedDescID: 101 (#101)}
       │    │    ├── PUBLIC        → ABSENT  Owner:{DescID: 105 (sq1-)}
       │    │    ├── PUBLIC        → ABSENT  UserPrivileges:{DescID: 105 (sq1-), Name: "admin"}
       │    │    ├── PUBLIC        → ABSENT  UserPrivileges:{DescID: 105 (sq1-), Name: "root"}

@@ -8,7 +8,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT GENERATED ALWAYS AS IDENTITY
 StatementPhase stage 1 of 1 with 37 MutationType ops
   transitions:
     [[Sequence:{DescID: 105}, PUBLIC], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 105, Name: foo_j_seq, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 105, Name: foo_j_seq, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[Column:{DescID: 105, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
@@ -211,7 +211,7 @@ StatementPhase stage 1 of 1 with 37 MutationType ops
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Sequence:{DescID: 105}, PUBLIC], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 105, Name: foo_j_seq, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 105, Name: foo_j_seq, ReferencedDescID: 101}, PUBLIC], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, PUBLIC], PUBLIC] -> ABSENT
     [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC] -> ABSENT
     [[Column:{DescID: 105, ColumnID: 1}, PUBLIC], PUBLIC] -> ABSENT
@@ -243,7 +243,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
 PreCommitPhase stage 2 of 2 with 43 MutationType ops
   transitions:
     [[Sequence:{DescID: 105}, PUBLIC], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 105, Name: foo_j_seq, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 105, Name: foo_j_seq, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], ABSENT] -> PUBLIC
     [[Column:{DescID: 105, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC

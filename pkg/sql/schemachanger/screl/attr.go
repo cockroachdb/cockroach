@@ -429,7 +429,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	// Common elements.
 	rel.EntityMapping(t((*scpb.Namespace)(nil)),
 		rel.EntityAttr(DescID, "DescriptorID"),
-		rel.EntityAttr(ReferencedDescID, "DatabaseID"),
+		rel.EntityAttr(ReferencedDescID, "SchemaID"),
 		rel.EntityAttr(Name, "Name"),
 	),
 	rel.EntityMapping(t((*scpb.Owner)(nil)),
