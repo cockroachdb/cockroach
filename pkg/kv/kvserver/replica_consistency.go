@@ -679,7 +679,7 @@ func (r *Replica) computeChecksumPostApply(
 
 	// Caller is holding raftMu, so an engine snapshot is automatically
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
-	snap := r.store.TODOEngine().NewSnapshot(rditer.MakeReplicatedKeySpans(&desc)...)
+	snap := r.store.StateEngine().NewSnapshot(rditer.MakeReplicatedKeySpans(&desc)...)
 	if util.RaceEnabled {
 		ss := rditer.MakeReplicatedKeySpanSet(&desc)
 		defer ss.Release()
@@ -767,8 +767,12 @@ func (r *Replica) computeChecksumPostApply(
 		// early, the reply won't make it back to the leaseholder, so it will not be
 		// certain of completing the check. Since we're already in a goroutine
 		// that's about to end, just sleep for a few seconds and then terminate.
-		auxDir := r.store.TODOEngine().GetAuxiliaryDir()
-		_ = r.store.TODOEngine().Env().MkdirAll(auxDir, os.ModePerm)
+		//
+		// TODO(sep-raft-log): the decision to store the fatal file in LogEngine is
+		// somewhat arbitrary, make sure it's fine.
+		eng := r.store.LogEngine()
+		auxDir := eng.GetAuxiliaryDir()
+		_ = eng.Env().MkdirAll(auxDir, os.ModePerm)
 		path := base.PreventedStartupFile(auxDir)
 
 		const attentionFmt = `ATTENTION:
@@ -811,7 +815,7 @@ creation. These directories should be deleted, or inspected with caution.
 `
 		attentionArgs := []any{r, desc.Replicas(), redact.Safe(auxDir), redact.Safe(path)}
 		preventStartupMsg := fmt.Sprintf(attentionFmt, attentionArgs...)
-		if err := fs.WriteFile(r.store.TODOEngine().Env(), path, []byte(preventStartupMsg), fs.UnspecifiedWriteCategory); err != nil {
+		if err := fs.WriteFile(eng.Env(), path, []byte(preventStartupMsg), fs.UnspecifiedWriteCategory); err != nil {
 			log.KvExec.Warningf(ctx, "%v", err)
 		}
 
