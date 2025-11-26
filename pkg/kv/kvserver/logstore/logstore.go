@@ -10,14 +10,12 @@ import (
 	"context"
 	"math"
 	"math/rand"
-	"slices"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -594,44 +592,17 @@ func LoadEntries(
 	ctx context.Context,
 	eng storage.Engine,
 	rangeID roachpb.RangeID,
-	eCache *raftentry.Cache, // TODO(#145562): this should be the caller's concern
 	sideloaded SideloadStorage,
 	lo, hi kvpb.RaftIndex,
-	maxBytes uint64,
-	account *BytesAccount,
-) (_ []raftpb.Entry, _cachedSize uint64, _loadedSize uint64, _ error) {
-	if lo > hi {
-		return nil, 0, 0, errors.Errorf("lo:%d is greater than hi:%d", lo, hi)
-	}
-
-	ents := make([]raftpb.Entry, 0, min(hi-lo, 100))
-	ents, _, hitIndex, _ := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
-
-	// TODO(pav-kv): pass the sizeHelper to eCache.Scan above, to avoid scanning
-	// the same entries twice, and computing their sizes.
-	sh := sizeHelper{maxBytes: maxBytes, account: account}
-	for i, entry := range ents {
-		if sh.done || !sh.add(uint64(entry.Size())) {
-			// Remove the remaining entries, and dereference the memory they hold.
-			ents = slices.Delete(ents, i, len(ents))
-			break
-		}
-	}
-	// NB: if we couldn't get quota for all cached entries, return only a prefix
-	// for which we got it. Even though all the cached entries are already in
-	// memory, returning all of them would increase their lifetime, incur size
-	// amplification when processing them, and risk reaching out-of-memory state.
-	cachedSize := sh.bytes
-	// Return results if the correct number of results came back, or we ran into
-	// the max bytes limit, or reached the memory budget limit.
-	if len(ents) == int(hi-lo) || sh.done {
-		return ents, cachedSize, 0, nil
-	}
+	pol *SizePolicy,
+	ents []raftpb.Entry,
+) (_ []raftpb.Entry, _loadedSize uint64, _ error) {
+	bytesBefore := pol.bytes
+	entriesBefore := len(ents)
 
 	// Scan over the log to find the requested entries in the range [lo, hi),
 	// stopping once we have enough.
-	expectedIndex := hitIndex
-
+	expectedIndex := lo
 	scanFunc := func(ent raftpb.Entry) error {
 		// Exit early if we have any gaps or it has been compacted.
 		if kvpb.RaftIndex(ent.Index) != expectedIndex {
@@ -642,17 +613,15 @@ func LoadEntries(
 		if typ, _, err := raftlog.EncodingOf(ent); err != nil {
 			return err
 		} else if typ.IsSideloaded() {
-			if ent, err = MaybeInlineSideloadedRaftCommand(
-				ctx, rangeID, ent, sideloaded, eCache,
-			); err != nil {
+			if ent, err = MaybeInlineSideloadedRaftCommand(ctx, ent, sideloaded); err != nil {
 				return err
 			}
 		}
 
-		if sh.add(uint64(ent.Size())) {
+		if pol.Add(uint64(ent.Size())) {
 			ents = append(ents, ent)
 		}
-		if sh.done {
+		if pol.done {
 			return iterutil.StopIteration()
 		}
 		return nil
@@ -661,18 +630,16 @@ func LoadEntries(
 	reader := eng.NewReader(storage.StandardDurability)
 	defer reader.Close()
 	if err := raftlog.Visit(ctx, reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
-		return nil, 0, 0, err
+		return nil, 0, err
 	}
-	eCache.Add(rangeID, ents, false /* truncate */)
 
 	// Did the correct number of results come back? If so, we're all good.
 	// Did we hit the size limits? If so, return what we have.
-	if len(ents) == int(hi-lo) || sh.done {
-		return ents, cachedSize, sh.bytes - cachedSize, nil
+	if len(ents)-entriesBefore == int(hi-lo) || pol.Done() {
+		return ents, pol.bytes - bytesBefore, nil
 	}
-
 	// Something went wrong, and we could not load enough entries. We either have
 	// a gap in the log, or hi > LastIndex+1. Let the caller distinguish if they
 	// need to.
-	return nil, 0, 0, raft.ErrUnavailable
+	return nil, 0, raft.ErrUnavailable
 }

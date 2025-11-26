@@ -258,6 +258,33 @@ func (c *Cache) Scan(
 	return ents, bytes, nextIdx, exceededMaxBytes
 }
 
+// ScanPartial is like Scan, but it may skip a prefix of entries that are not
+// cached. If the cached entries are [first, last+1), it scans a prefix of
+// entries in the [max(first, lo), min(last+1, hi)) interval, if any.
+func (c *Cache) ScanPartial(
+	ents []raftpb.Entry, id roachpb.RangeID, lo, hi kvpb.RaftIndex, maxBytes uint64,
+) (_ []raftpb.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool) {
+	c.metrics.Accesses.Inc(1)
+	c.mu.Lock()
+	p := c.getPartLocked(id, false /* create */, true /* recordUse */)
+	c.mu.Unlock()
+	if p == nil {
+		return ents, 0, lo, false
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	ents, bytes, nextIdx, exceededMaxBytes = p.scanPartial(ents, lo, hi, maxBytes)
+	// Track all bytes that are returned to caller, but only consider an access a
+	// "hit" if it returns all requested entries or stops short because of a
+	// maximum bytes limit.
+	c.metrics.ReadBytes.Inc(int64(bytes))
+	if nextIdx == hi || exceededMaxBytes {
+		c.metrics.Hits.Inc(1)
+	}
+	return ents, bytes, nextIdx, exceededMaxBytes
+}
+
 func (c *Cache) getPartLocked(id roachpb.RangeID, create, recordUse bool) *partition {
 	part := c.parts[id]
 	if create && part == nil {

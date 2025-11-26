@@ -149,27 +149,37 @@ func roundSize(size uint64) uint64 {
 	return (size + minReserveSize - 1) / minReserveSize * minReserveSize
 }
 
-// sizeHelper helps to build a batch of entries with the total size not
-// exceeding the static and dynamic byte limits. The user calls the add() method
-// until sizeHelper.done becomes true. For all add() calls that returned true,
+// SizePolicy helps to build a batch of entries with the total size not
+// exceeding the static and dynamic byte limits. The user calls the Add() method
+// until SizePolicy.done becomes true. For all Add() calls that returned true,
 // the corresponding data can be added to the batch.
 //
 // In some exceptional cases, the size of the batch can exceed the limits:
 //   - maxBytes can be exceeded by the first added entry,
 //   - the soft limit can be exceeded by the last added entry.
-type sizeHelper struct {
+type SizePolicy struct {
 	bytes    uint64
 	maxBytes uint64
 	account  *BytesAccount
 	done     bool
 }
 
-// add returns true if the given number of bytes can be added to the batch
+// MakeSizePolicy returns a size policy with the given static bytes limit, and
+// the dynamic limiter. The dynamic limiting account can be nil, in which case
+// only the static limit will be used.
+func MakeSizePolicy(maxBytes uint64, account *BytesAccount) SizePolicy {
+	return SizePolicy{maxBytes: maxBytes, account: account}
+}
+
+// Done returns true if the policies have been exceeded.
+func (s *SizePolicy) Done() bool { return s.done }
+
+// Add returns true if the given number of bytes can be added to the batch
 // without exceeding the maxBytes limit, or overflowing the bytes account. The
 // first add call always returns true.
 //
-// Must not be called after sizeHelper.done becomes true.
-func (s *sizeHelper) add(bytes uint64) bool {
+// Must not be called after SizePolicy.done becomes true.
+func (s *SizePolicy) Add(bytes uint64) bool {
 	if s.bytes == 0 { // this is the first entry, always take it
 		s.bytes += bytes
 		s.done = !s.account.Grow(bytes) || s.bytes > s.maxBytes
