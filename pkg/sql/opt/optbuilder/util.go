@@ -212,13 +212,14 @@ func (b *Builder) synthesizeColumn(
 func (b *Builder) synthesizeParameterColumn(
 	scope *scope, name scopeColumnName, typ *types.T, ord int, scalar opt.ScalarExpr,
 ) *scopeColumn {
+	colID := b.factory.Metadata().AddColumn(name.MetadataName(), typ)
 	scope.cols = append(scope.cols, scopeColumn{
 		name:   name,
 		typ:    typ,
+		id:     colID,
 		scalar: scalar,
 	})
 	col := &scope.cols[len(scope.cols)-1]
-	col.id = b.factory.Metadata().AddColumn(name.MetadataName(), typ)
 	col.setParamOrd(ord)
 	return col
 }

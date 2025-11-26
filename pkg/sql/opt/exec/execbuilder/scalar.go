@@ -1228,6 +1228,11 @@ func (b *Builder) buildRoutinePlanGenerator(
 					if ord, ok := argOrd(t.Col); ok {
 						return f.ConstructConstVal(args[ord], t.Typ)
 					}
+				case *memo.PlaceholderExpr:
+					ord := int(t.Value.(*tree.Placeholder).Idx)
+					if ord < len(args) {
+						return f.ConstructConstVal(args[ord], t.Typ)
+					}
 
 				case *memo.WithScanExpr:
 					// Allow referring to "outer" With expressions, if

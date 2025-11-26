@@ -393,7 +393,10 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 			newDef := *t.Def
 			newDef.Body = make([]memo.RelExpr, len(t.Def.Body))
 			for i := range t.Def.Body {
-				newDef.Body[i] = f.CopyAndReplaceDefault(t.Def.Body[i], replaceFn).(memo.RelExpr)
+				// Do not replace placeholders in the body of the UDF - those
+				// placeholders are references to routine paramaters not
+				// prepared statement parameters.
+				newDef.Body[i] = f.CopyWithoutAssigningPlaceholders(t.Def.Body[i]).(memo.RelExpr)
 			}
 			return f.ConstructUDFCall(newArgs, &memo.UDFCallPrivate{Def: &newDef})
 		case *memo.RecursiveCTEExpr:

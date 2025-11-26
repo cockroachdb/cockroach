@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -458,10 +459,10 @@ func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFCal
 func (c *CustomFuncs) ConvertUDFToSubquery(
 	args memo.ScalarListExpr, udfp *memo.UDFCallPrivate,
 ) opt.ScalarExpr {
-	// argForParam returns the argument that can be substituted for the given
+	// argForParamCol returns the argument that can be substituted for the given
 	// column, if the column is a parameter of the UDF. It returns ok=false if
 	// the column is not a UDF parameter.
-	argForParam := func(col opt.ColumnID) (e opt.Expr, ok bool) {
+	argForParamCol := func(col opt.ColumnID) (e opt.Expr, ok bool) {
 		for i := range udfp.Def.Params {
 			if udfp.Def.Params[i] == col {
 				return args[i], true
@@ -469,15 +470,29 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 		}
 		return nil, false
 	}
+	// argForParam returns the argument that can be substituted for the given
+	// placeholder.
+	argForParam := func(idx tree.PlaceholderIdx) opt.Expr {
+		if int(idx) > len(args) {
+			panic(errors.AssertionFailedf("routine parameter out of range"))
+		}
+		return args[int(idx)]
+	}
 
 	// replace substitutes variables that are UDF parameters with the
 	// corresponding argument from the invocation of the UDF.
 	var replace ReplaceFunc
 	replace = func(nd opt.Expr) opt.Expr {
-		if t, ok := nd.(*memo.VariableExpr); ok {
-			if arg, ok := argForParam(t.Col); ok {
+		switch t := nd.(type) {
+		case *memo.VariableExpr:
+			// TODO(mgartner): This case will be unnecessary when we no longer
+			// build parameters as Variable expressions.
+			if arg, ok := argForParamCol(t.Col); ok {
 				return arg
 			}
+		case *memo.PlaceholderExpr:
+			p := t.Value.(*tree.Placeholder)
+			return argForParam(p.Idx)
 		}
 		return c.f.Replace(nd, replace)
 	}

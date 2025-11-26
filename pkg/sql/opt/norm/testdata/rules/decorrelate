@@ -669,6 +669,7 @@ project
 # --------------------------------------------------
 # TryDecorrelateSelect
 # --------------------------------------------------
+
 norm expect=TryDecorrelateSelect
 SELECT * FROM a WHERE EXISTS(SELECT * FROM (VALUES (k), (i)) WHERE column1=k)
 ----
@@ -8775,3 +8776,191 @@ semi-join-apply
  │         ├── x:8 = u:12 [outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
  │         └── i:2 = 100 [outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
  └── filters (true)
+
+
+# --------------------------------------------------
+# Routine-related decorrelation regression tests
+# --------------------------------------------------
+
+# Regression tests for #157840.
+exec-ddl
+CREATE PROCEDURE p157840a(abs ab[]) LANGUAGE SQL AS $$
+    WITH vals AS (
+        SELECT (v).a, (v).b
+        FROM ROWS FROM (unnest(abs)) AS v
+    )
+    SELECT * FROM xy JOIN vals ON x = a
+$$
+----
+
+# Join filters with parameter columns are not pull up above the join.
+norm format=show-scalars set=(optimizer_build_routine_params_as_placeholders=true)
+CALL p157840a(ARRAY[
+    ROW(1, 'one')::ab,
+    ROW(2, 'two')::ab,
+    ROW(3, 'three')::ab
+])
+----
+call
+ ├── cardinality: [0 - 0]
+ ├── volatile
+ └── procedure: p157840a
+      ├── args
+      │    └── array:
+      │         ├── cast: RECORD
+      │         │    └── tuple
+      │         │         ├── const: 1
+      │         │         └── const: 'one'
+      │         ├── cast: RECORD
+      │         │    └── tuple
+      │         │         ├── const: 2
+      │         │         └── const: 'two'
+      │         └── cast: RECORD
+      │              └── tuple
+      │                   ├── const: 3
+      │                   └── const: 'three'
+      ├── params: abs:1
+      └── body
+           ├── inner-join (hash)
+           │    ├── columns: x:5!null y:6 a:9!null b:10
+           │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+           │    ├── immutable, has-placeholder
+           │    ├── fd: (5)-->(6), (5)==(9), (9)==(5)
+           │    ├── scan xy
+           │    │    ├── columns: x:5!null y:6
+           │    │    ├── key: (5)
+           │    │    └── fd: (5)-->(6)
+           │    ├── project
+           │    │    ├── columns: a:9 b:10
+           │    │    ├── immutable, has-placeholder
+           │    │    ├── project-set
+           │    │    │    ├── columns: unnest:2
+           │    │    │    ├── immutable, has-placeholder
+           │    │    │    ├── values
+           │    │    │    │    ├── cardinality: [1 - 1]
+           │    │    │    │    ├── key: ()
+           │    │    │    │    └── tuple
+           │    │    │    └── zip
+           │    │    │         └── function: unnest [immutable]
+           │    │    │              └── placeholder: $1
+           │    │    └── projections
+           │    │         ├── column-access: 0 [as=a:9, outer=(2)]
+           │    │         │    └── variable: unnest:2
+           │    │         └── column-access: 1 [as=b:10, outer=(2)]
+           │    │              └── variable: unnest:2
+           │    └── filters
+           │         └── eq [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ]), fd=(5)==(9), (9)==(5)]
+           │              ├── variable: x:5
+           │              └── variable: a:9
+           └── values
+                ├── columns: column1:11
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(11)
+                └── tuple
+                     └── null
+
+exec-ddl
+CREATE PROCEDURE p157840b(abs ab[]) LANGUAGE SQL AS $$
+    WITH vals AS (
+        SELECT (v).a, (v).b
+        FROM ROWS FROM (unnest(abs)) AS v
+    )
+    SELECT * FROM xy
+    JOIN vals ON true
+    JOIN LATERAL (SELECT u, u/1.1 AS div FROM uv WHERE x=5 AND y=b) ON true
+$$
+----
+
+# The x=5 filter can be pushed above the xy scan and the y=b filter remains in
+# the lowest join filters possible.
+norm format=show-scalars set=(optimizer_build_routine_params_as_placeholders=true)
+CALL p157840b(ARRAY[
+    ROW(1, 'one')::ab,
+    ROW(2, 'two')::ab,
+    ROW(3, 'three')::ab
+])
+----
+call
+ ├── cardinality: [0 - 0]
+ ├── volatile
+ └── procedure: p157840b
+      ├── args
+      │    └── array:
+      │         ├── cast: RECORD
+      │         │    └── tuple
+      │         │         ├── const: 1
+      │         │         └── const: 'one'
+      │         ├── cast: RECORD
+      │         │    └── tuple
+      │         │         ├── const: 2
+      │         │         └── const: 'two'
+      │         └── cast: RECORD
+      │              └── tuple
+      │                   ├── const: 3
+      │                   └── const: 'three'
+      ├── params: abs:1
+      └── body
+           ├── project
+           │    ├── columns: div:15!null x:5!null y:6!null a:9 b:10!null u:11!null
+           │    ├── immutable, has-placeholder
+           │    ├── fd: ()-->(5,6,10), (11)-->(15), (6)==(10), (10)==(6)
+           │    ├── inner-join (cross)
+           │    │    ├── columns: x:5!null y:6!null a:9 b:10!null u:11!null
+           │    │    ├── immutable, has-placeholder
+           │    │    ├── fd: ()-->(5,6,10), (6)==(10), (10)==(6)
+           │    │    ├── inner-join (hash)
+           │    │    │    ├── columns: x:5!null y:6!null a:9 b:10!null
+           │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+           │    │    │    ├── immutable, has-placeholder
+           │    │    │    ├── fd: ()-->(5,6,10), (6)==(10), (10)==(6)
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: x:5!null y:6
+           │    │    │    │    ├── cardinality: [0 - 1]
+           │    │    │    │    ├── key: ()
+           │    │    │    │    ├── fd: ()-->(5,6)
+           │    │    │    │    ├── scan xy
+           │    │    │    │    │    ├── columns: x:5!null y:6
+           │    │    │    │    │    ├── key: (5)
+           │    │    │    │    │    └── fd: (5)-->(6)
+           │    │    │    │    └── filters
+           │    │    │    │         └── eq [outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
+           │    │    │    │              ├── variable: x:5
+           │    │    │    │              └── const: 5
+           │    │    │    ├── project
+           │    │    │    │    ├── columns: a:9 b:10
+           │    │    │    │    ├── immutable, has-placeholder
+           │    │    │    │    ├── project-set
+           │    │    │    │    │    ├── columns: unnest:2
+           │    │    │    │    │    ├── immutable, has-placeholder
+           │    │    │    │    │    ├── values
+           │    │    │    │    │    │    ├── cardinality: [1 - 1]
+           │    │    │    │    │    │    ├── key: ()
+           │    │    │    │    │    │    └── tuple
+           │    │    │    │    │    └── zip
+           │    │    │    │    │         └── function: unnest [immutable]
+           │    │    │    │    │              └── placeholder: $1
+           │    │    │    │    └── projections
+           │    │    │    │         ├── column-access: 0 [as=a:9, outer=(2)]
+           │    │    │    │         │    └── variable: unnest:2
+           │    │    │    │         └── column-access: 1 [as=b:10, outer=(2)]
+           │    │    │    │              └── variable: unnest:2
+           │    │    │    └── filters
+           │    │    │         └── eq [outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
+           │    │    │              ├── variable: y:6
+           │    │    │              └── variable: b:10
+           │    │    ├── scan uv
+           │    │    │    ├── columns: u:11!null
+           │    │    │    └── key: (11)
+           │    │    └── filters (true)
+           │    └── projections
+           │         └── div [as=div:15, outer=(11)]
+           │              ├── variable: u:11
+           │              └── const: 1.1
+           └── values
+                ├── columns: column1:16
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(16)
+                └── tuple
+                     └── null

@@ -33,7 +33,20 @@ type scopeColumn struct {
 
 	// id is an identifier for this column, which is unique across all the
 	// columns in the query.
+	//
+	// NOTE: If optimizer_build_routine_params_as_placeholders is enabled, only
+	// one of id or paramOrd will be set.
 	id opt.ColumnID
+
+	// paramOrd is the 1-based ordinal of the parameter of the function that
+	// the column corresponds to. It is used to resolve placeholders (e.g., $1)
+	// in function bodies that are references to function arguments. If the
+	// column does not represent a function parameter, then paramOrd is the zero
+	// value.
+	//
+	// NOTE: If optimizer_build_routine_params_as_placeholders is enabled, only
+	// one of id or paramOrd will be set.
+	paramOrd funcParamOrd
 
 	visibility columnVisibility
 
@@ -51,13 +64,6 @@ type scopeColumn struct {
 	// descending indicates whether this column is sorted in descending order.
 	// This field is only used for ordering columns.
 	descending bool
-
-	// paramOrd is the 1-based ordinal of the parameter of the function that
-	// the column corresponds to. It is used to resolve placeholders (e.g., $1)
-	// in function bodies that are references to function arguments. If the
-	// column does not represent a function parameter, then paramOrd is the zero
-	// value.
-	paramOrd funcParamOrd
 
 	// scalar is the scalar expression associated with this column. If it is nil,
 	// then the column is a passthrough from an inner scope or a table column.
@@ -133,6 +139,11 @@ func (c *scopeColumn) setParamOrd(ord int) {
 		panic(pgerror.New(pgcode.TooManyArguments, "functions cannot have more than 100 arguments"))
 	}
 	c.paramOrd = funcParamOrd(ord + 1)
+}
+
+// isParam returns true if the scope column is a routine parameter.
+func (c *scopeColumn) isParam() bool {
+	return c.paramOrd > 0
 }
 
 // getParamOrd retrieves the 0-based ordinal from the column's 1-based function
