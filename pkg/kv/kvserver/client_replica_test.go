@@ -5358,7 +5358,7 @@ func TestRangeMigration(t *testing.T) {
 		}
 
 		sl := kvstorage.MakeStateLoader(rangeID)
-		persistedV, err := sl.LoadVersion(ctx, store.TODOEngine())
+		persistedV, err := sl.LoadVersion(ctx, store.StateEngine())
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -2224,7 +2224,7 @@ func getExpectedSnapshotSizeBytes(
 	}
 	defer snap.Close()
 
-	b := originStore.TODOEngine().NewWriteBatch()
+	b := originStore.StateEngine().NewWriteBatch() // NB: only replicated keys
 	defer b.Close()
 
 	selOpts := rditer.SelectOpts{

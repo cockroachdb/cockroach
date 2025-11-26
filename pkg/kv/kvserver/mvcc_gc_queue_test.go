@@ -863,10 +863,10 @@ func testMVCCGCQueueProcessImpl(t *testing.T, snapshotBounds bool) {
 		var snap storage.Reader
 		desc := tc.repl.Desc()
 		if snapshotBounds {
-			snap = tc.repl.store.TODOEngine().NewSnapshot(rditer.MakeReplicatedKeySpans(desc)...)
+			snap = tc.repl.store.StateEngine().NewSnapshot(rditer.MakeReplicatedKeySpans(desc)...)
 		} else {
 			// Use implicit engine-wide bounds.
-			snap = tc.repl.store.TODOEngine().NewSnapshot()
+			snap = tc.repl.store.StateEngine().NewSnapshot()
 		}
 		defer snap.Close()
 
@@ -949,7 +949,7 @@ func testMVCCGCQueueProcessImpl(t *testing.T, snapshotBounds bool) {
 	// However, because the GC processing pushes transactions and
 	// resolves intents asynchronously, we use a SucceedsSoon loop.
 	testutils.SucceedsSoon(t, func() error {
-		kvs, err := storage.Scan(context.Background(), tc.store.TODOEngine(), key1, keys.MaxKey, 0)
+		kvs, err := storage.Scan(context.Background(), tc.store.StateEngine(), key1, keys.MaxKey, 0)
 		if err != nil {
 			return err
 		}
@@ -1210,7 +1210,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s", strKey, expIntents, spans)
 			}
 			entry := &roachpb.AbortSpanEntry{}
-			abortExists, err := tc.repl.abortSpan.Get(ctx, tc.store.TODOEngine(), txns[strKey].ID, entry)
+			abortExists, err := tc.repl.abortSpan.Get(ctx, tc.store.StateEngine(), txns[strKey].ID, entry)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1224,7 +1224,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 	outsideTxnPrefix := keys.TransactionKey(outsideKey, uuid.UUID{})
 	outsideTxnPrefixEnd := keys.TransactionKey(outsideKey.Next(), uuid.UUID{})
 	var count int
-	if _, err := storage.MVCCIterate(ctx, tc.store.TODOEngine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
+	if _, err := storage.MVCCIterate(ctx, tc.store.StateEngine(), outsideTxnPrefix, outsideTxnPrefixEnd, hlc.Timestamp{},
 		storage.MVCCScanOptions{}, func(roachpb.KeyValue) error {
 			count++
 			return nil
@@ -1305,7 +1305,7 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 		meta := &enginepb.MVCCMetadata{}
 		// The range is specified using only global keys, since the implementation
 		// may use an intentInterleavingIter.
-		return tc.store.TODOEngine().MVCCIterate(context.Background(), keys.LocalMax, roachpb.KeyMax,
+		return tc.store.StateEngine().MVCCIterate(context.Background(), keys.LocalMax, roachpb.KeyMax,
 			storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
 			fs.UnknownReadCategory, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 				if !kv.Key.IsValue() {

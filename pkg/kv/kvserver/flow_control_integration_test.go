@@ -2921,7 +2921,7 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 		}
 
 		sl := kvstorage.MakeStateLoader(desc.RangeID)
-		persistedV, err := sl.LoadVersion(ctx, store.TODOEngine())
+		persistedV, err := sl.LoadVersion(ctx, store.StateEngine())
 		if err != nil {
 			return err
 		}

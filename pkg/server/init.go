@@ -665,6 +665,7 @@ func inspectEngines(
 		// Once cached settings are loaded from any engine we can stop.
 		if len(initialSettingsKVs) == 0 {
 			var err error
+			// TODO(sep-raft-log): inspect only the log engines here.
 			initialSettingsKVs, err = loadCachedSettingsKVs(ctx, eng)
 			if err != nil {
 				return nil, err

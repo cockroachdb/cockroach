@@ -241,7 +241,7 @@ CREATE TABLE data2.foo (a int);
 			store := tcRestore.GetFirstStoreFromServer(t, 0)
 			startKey := keys.SystemSQLCodec.TablePrefix(uint32(id))
 			endKey := startKey.PrefixEnd()
-			it, err := store.TODOEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+			it, err := store.StateEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 				UpperBound: endKey,
 			})
 			require.NoError(t, err)

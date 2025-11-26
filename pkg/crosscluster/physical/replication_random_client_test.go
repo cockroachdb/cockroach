@@ -322,7 +322,7 @@ func assertExactlyEqualKVs(
 ) hlc.Timestamp {
 	// Iterate over the store.
 	store := tc.GetFirstStoreFromServer(t, 0)
-	it, err := store.TODOEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyIterKind, storage.IterOptions{
+	it, err := store.StateEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound: tenantSpan.Key,
 		UpperBound: tenantSpan.EndKey,
 	})
