@@ -209,6 +209,8 @@ const (
 	// Example: A=[+region=a], B=[+zone=a1]
 	//   If zone=a1 happens to be in region=a, then the disjoint result is
 	//   not correct.
+	// Example: A=[+region=a, +zone=a1], B=[+region=a, +zone=a2]
+	//   Since a store cannot be in both zones, the sets are disjoint.
 	conjNonIntersecting
 )
 
@@ -260,6 +262,15 @@ func (cc constraintsConj) relationship(b constraintsConj) conjunctionRelationshi
 
 		// If cc[i] < b[j], we've found a conjunct unique to cc.
 		if cc[i].less(b[j]) {
+			// Found a conjunct that is not in b.
+			if cc[i].typ == b[j].typ && cc[i].key == b[j].key {
+				// For example, +zone=a1, +zone=a2.
+				return conjNonIntersecting
+				// NB: +zone=a1 and -zone=a1 are also non-intersecting, but we will
+				// not detect this case. Finding this case requires searching through
+				// b, and not simply walking in order, since the typ field is the
+				// first in the sort order and differs between these two conjuncts.
+			}
 			extraInCC++
 			i++
 			continue
@@ -924,11 +935,7 @@ func (conf *normalizedSpanConfig) normalizeVoterConstraints() error {
 	// spanconfig contract. What should the operator do in this case?
 	//
 	// Implementation notes:
-	// - Example 1: +region=a,+zone=a1 and +region=a,+zone=a2 are classified as
-	// conjPossiblyIntersecting, but we could do better knowing zone=a1 and
-	// zone=a2 are disjoint.
-	//  TODO(wenyihu6): merge #158722
-	// - Example 2: +region=a,+zone=a1 and +region=a,-zone=a2 are classified as
+	// Example: +region=a,+zone=a1 and +region=a,-zone=a2 are classified as
 	// conjPossiblyIntersecting. If zone=a3 exists in the region, they actually
 	// intersect. We cannot do better without knowing the universe of values.
 	index := 0

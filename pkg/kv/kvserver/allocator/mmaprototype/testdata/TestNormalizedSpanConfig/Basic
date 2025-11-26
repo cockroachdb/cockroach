@@ -363,7 +363,6 @@ after:
    +region=b,+zone=b1:1
    +region=a,-zone=a1:1
    :1
-err=intersecting conjunctions in constraints and voter constraints
 
 # Multi-region with under-specified voter-constraint. In this case the
 # under-specification is not the unconstrained set, but the conjunction
