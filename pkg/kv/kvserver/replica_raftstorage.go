@@ -125,7 +125,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 	r.mu.AssertHeld()
 
 	ctx := r.AnnotateCtx(context.TODO())
-	hs, err := r.raftMu.stateLoader.LoadHardState(ctx, r.store.TODOEngine())
+	hs, err := r.raftMu.stateLoader.LoadHardState(ctx, r.store.StateEngine())
 	if err != nil {
 		r.reportRaftStorageError(err)
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -678,7 +678,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// treated as fatal.
 
 	sl := kvstorage.MakeStateLoader(desc.RangeID)
-	state, err := sl.Load(ctx, r.store.TODOEngine(), desc)
+	state, err := sl.Load(ctx, r.store.StateEngine(), desc)
 	if err != nil {
 		log.KvExec.Fatalf(ctx, "unable to load replica state: %s", err)
 	}
@@ -698,7 +698,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// Read the prior read summary for this range, which was included in the
 	// snapshot. We may need to use it to bump our timestamp cache if we
 	// discover that we are the leaseholder as of the snapshot's log index.
-	prioReadSum, err := readsummary.Load(ctx, r.store.TODOEngine(), r.RangeID)
+	prioReadSum, err := readsummary.Load(ctx, r.store.StateEngine(), r.RangeID)
 	if err != nil {
 		log.KvExec.Fatalf(ctx, "failed to read prior read summary after applying snapshot: %+v", err)
 	}
