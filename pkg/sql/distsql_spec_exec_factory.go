@@ -317,6 +317,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		Reverse:                         params.Reverse,
 		TableDescriptorModificationTime: tabDesc.GetModificationTime(),
 	}
+	// TODO(yuzefovich): record the index usage when applicable.
 	if err := rowenc.InitIndexFetchSpec(&trSpec.FetchSpec, e.planner.ExecCfg().Codec, tabDesc, idx, columnIDs); err != nil {
 		return nil, err
 	}
@@ -871,7 +872,7 @@ func (e *distSQLSpecExecFactory) ConstructIndexJoin(
 	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
-	// TODO(drewk): in an EXPLAIN context, record the index usage.
+	// TODO(drewk): record the index usage when applicable.
 	planInfo := &indexJoinPlanningInfo{
 		fetch:       fetch,
 		keyCols:     keyCols,
@@ -954,7 +955,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 		fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 		fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
-		// TODO(drewk): if in an EXPLAIN context, record the index usage.
+		// TODO(drewk): record the index usage when applicable.
 		planInfo := &lookupJoinPlanningInfo{
 			fetch:                      fetch,
 			joinType:                   joinType,
@@ -1031,7 +1032,7 @@ func (e *distSQLSpecExecFactory) ConstructInvertedJoin(
 	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
-	// TODO(drewk): if we're in an EXPLAIN context, record the index usage.
+	// TODO(drewk): record the index usage when applicable.
 	planInfo := &invertedJoinPlanningInfo{
 		fetch:                     fetch,
 		joinType:                  joinType,
@@ -1093,8 +1094,7 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 		return zigzagPlanningSide{}, err
 	}
 
-	// TODO (cucaroach): update indexUsageStats.
-
+	// TODO(yuzefovich): record the index usage when applicable.
 	return zigzagPlanningSide{
 		desc:              desc,
 		index:             index.(*optIndex).idx,
@@ -1524,6 +1524,7 @@ func (e *distSQLSpecExecFactory) ConstructVectorSearch(
 	if err != nil {
 		return nil, err
 	}
+	// TODO(yuzefovich): record the index usage when applicable.
 	planInfo := &vectorSearchPlanningInfo{
 		table:               tabDesc,
 		index:               indexDesc,
@@ -1562,6 +1563,7 @@ func (e *distSQLSpecExecFactory) ConstructVectorMutationSearch(
 	if isIndexPut {
 		cols = append(cols, colinfo.ResultColumn{Name: "quantized-vector", Typ: types.Bytes})
 	}
+	// TODO(yuzefovich): record the index usage when applicable.
 	planInfo := &vectorMutationSearchPlanningInfo{
 		table:          table.(*optTable).desc,
 		index:          index.(*optIndex).idx,
