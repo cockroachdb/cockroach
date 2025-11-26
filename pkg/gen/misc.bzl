@@ -3,6 +3,7 @@
 MISC_SRCS = [
     "//pkg/backup:data_driven_generated_test.go",
     "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl:generated_test.go",
+    "//pkg/cli:files/cockroachdb_datadog_metrics.yaml",
     "//pkg/internal/team:TEAMS.yaml",
     "//pkg/kv/kvclient/kvcoord:bufferedwrite_interval_btree.go",
     "//pkg/kv/kvclient/kvcoord:bufferedwrite_interval_btree_test.go",
@@ -11,7 +12,7 @@ MISC_SRCS = [
     "//pkg/kv/kvserver/concurrency:keylocks_interval_btree_test.go",
     "//pkg/kv/kvserver/spanlatch:latch_interval_btree.go",
     "//pkg/kv/kvserver/spanlatch:latch_interval_btree_test.go",
-    "//pkg/roachprod/agents/opentelemetry:cockroachdb_metrics.go",
+    "//pkg/roachprod/agents/opentelemetry:files/cockroachdb_metrics.yaml",
     "//pkg/roachprod/install:types_generated.go",
     "//pkg/roachprod/vm/aws:terraform/main.tf",
     "//pkg/spanconfig/spanconfigstore:entry_interval_btree.go",
