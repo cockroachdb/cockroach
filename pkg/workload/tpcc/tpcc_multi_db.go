@@ -39,6 +39,7 @@ type tpccMultiDB struct {
 	// created on and have the workload executed on.
 	dbListFile string
 	dbList     []*tree.ObjectNamePrefix
+	dbNames    map[string]struct{}
 
 	adminUrlStr string
 	adminUrls   []string
@@ -330,6 +331,7 @@ func (t *tpccMultiDB) runInit() error {
 			}
 			// First, sort the prefixes by database name.
 			dbToBucket := make(map[string]int)
+			t.dbNames = make(map[string]struct{})
 			var dbNameListBuckets [][]*tree.ObjectNamePrefix
 			maxBucketLen := 0
 			for _, dbAndSchema := range strDbList {
@@ -347,6 +349,7 @@ func (t *tpccMultiDB) runInit() error {
 				if _, exists := dbToBucket[parts[0]]; !exists {
 					dbNameListBuckets = append(dbNameListBuckets, nil)
 					dbToBucket[parts[0]] = len(dbNameListBuckets) - 1
+					t.dbNames[parts[0]] = struct{}{}
 				}
 				bucket := dbToBucket[parts[0]]
 				dbNameListBuckets[bucket] = append(dbNameListBuckets[bucket], prefix)
@@ -430,11 +433,13 @@ func (t *tpccMultiDB) Hooks() workload.Hooks {
 			return err
 		}
 		// Next configure all the databases as multi-region.
-		for _, dbName := range t.dbList {
-			if _, err := db.Exec("USE $1", dbName.Catalog()); err != nil {
+		// Note: Precreates are run once per database since TPCC usess them to setup
+		// multiregion.
+		for dbName := range t.dbNames {
+			if _, err := db.Exec("USE $1", dbName); err != nil {
 				return err
 			}
-			if _, err := db.Exec(fmt.Sprintf("SET search_path = %s", dbName.Schema())); err != nil {
+			if _, err := db.Exec("SET search_path = public"); err != nil {
 				return err
 			}
 			// Run the usual TPCC pre-create logic after.
