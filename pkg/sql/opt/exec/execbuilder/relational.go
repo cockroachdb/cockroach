@@ -944,7 +944,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 	}
 	root, err := b.factory.ConstructScan(
 		tab,
-		tab.Index(scan.Index),
+		idx,
 		params,
 		reqOrdering,
 	)
@@ -1002,6 +1002,7 @@ func (b *Builder) buildPlaceholderScan(
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
 	idx := tab.Index(scan.Index)
+	b.IndexesUsed.add(tab.ID(), idx.ID())
 
 	// Build the index constraint.
 	spanColumns := make([]opt.OrderingColumn, len(scan.Span))
@@ -1039,7 +1040,7 @@ func (b *Builder) buildPlaceholderScan(
 	}
 	root, err := b.factory.ConstructScan(
 		tab,
-		tab.Index(scan.Index),
+		idx,
 		params,
 		reqOrdering,
 	)
@@ -4115,6 +4116,7 @@ func (b *Builder) buildVectorSearch(
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
 			"vector search is only supported on vector indexes")
 	}
+	b.IndexesUsed.add(table.ID(), index.ID())
 	primaryKeyCols := md.TableMeta(search.Table).IndexKeyColumns(cat.PrimaryIndex)
 	for col, ok := search.Cols.Next(0); ok; col, ok = search.Cols.Next(col + 1) {
 		if !primaryKeyCols.Contains(col) {
@@ -4161,6 +4163,7 @@ func (b *Builder) buildVectorMutationSearch(
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
 			"vector mutation search is only supported on vector indexes")
 	}
+	b.IndexesUsed.add(table.ID(), index.ID())
 
 	input, inputCols, err := b.buildRelational(search.Input)
 	if err != nil {
