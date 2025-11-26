@@ -13,6 +13,7 @@ import {
   latencyBarChart,
   contentionBarChart,
   cpuBarChart,
+  kvCPUTimeBarChart,
   maxMemUsageBarChart,
   networkBytesBarChart,
   retryBarChart,
@@ -152,6 +153,10 @@ export function makeStatementsColumns(
     sampledExecStatsBarChartOptions,
   );
   const cpuBar = cpuBarChart(statements, sampledExecStatsBarChartOptions);
+  const kvCPUTimeBar = kvCPUTimeBarChart(
+    statements,
+    sampledExecStatsBarChartOptions,
+  );
   const maxMemUsageBar = maxMemUsageBarChart(
     statements,
     sampledExecStatsBarChartOptions,
@@ -230,6 +235,13 @@ export function makeStatementsColumns(
       cell: cpuBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.exec_stats.cpu_sql_nanos?.mean)),
+    },
+    {
+      name: "kvCPUTime",
+      title: statisticsTableTitles.kvCPUTime(statType),
+      cell: kvCPUTimeBar,
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.kv_cpu_time_nanos?.mean)),
     },
     {
       name: "latencyMin",

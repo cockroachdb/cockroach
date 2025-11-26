@@ -142,6 +142,11 @@ message StatementStatistics {
   // system.statement_hints table.
   optional int64 stmt_hints_count = 37 [(gogoproto.nullable) = false];
 
+  // kv_cpu_time_nanos is the CPU time in nanoseconds spent by KV. This is
+  // representative of the "synchronous" portion of work performed by KV
+  // (ex/ not replication related work).
+  optional NumericStat kv_cpu_time_nanos = 38 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTimeNanos"];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;
@@ -188,6 +193,11 @@ message TransactionStatistics {
 
   // RowsWritten collects the number of rows written to disk.
   optional NumericStat rows_written = 10 [(gogoproto.nullable) = false];
+  
+  // kv_cpu_time_nanos is the CPU time in nanoseconds spent by KV. This is
+  // representative of the "synchronous" portion of work performed by KV
+  // (ex/ not replication related work).
+  optional NumericStat kv_cpu_time_nanos = 12 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTimeNanos"];
 }
 
 
