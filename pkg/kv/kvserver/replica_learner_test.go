@@ -2236,7 +2236,7 @@ func getExpectedSnapshotSizeBytes(
 		ReplicatedByRangeID:   true,
 		UnreplicatedByRangeID: false,
 	}
-	err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, fs.ReplicationReadCategory, selOpts, func(iter storage.EngineIterator, _ roachpb.Span) error {
+	err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.StateSnap, fs.ReplicationReadCategory, selOpts, func(iter storage.EngineIterator, _ roachpb.Span) error {
 		var err error
 		for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 			hasPoint, hasRange := iter.HasPointAndRange()

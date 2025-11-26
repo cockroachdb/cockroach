@@ -221,10 +221,10 @@ func (r *Replica) GetSnapshot(
 	// the corresponding Raft command not applied yet).
 	r.raftMu.Lock()
 	startKey := r.shMu.state.Desc.StartKey
-	spans := rditer.MakeAllKeySpans(r.shMu.state.Desc) // needs unreplicated to access Raft state
-	snap := r.store.TODOEngine().NewSnapshot(spans...)
+	spans := rditer.MakeReplicatedKeySpans(r.shMu.state.Desc)
+	snap := r.store.StateEngine().NewSnapshot(spans...)
 	if util.RaceEnabled {
-		ss := rditer.MakeAllKeySpanSet(r.shMu.state.Desc)
+		ss := rditer.MakeReplicatedKeySpanSet(r.shMu.state.Desc)
 		defer ss.Release()
 		snap = spanset.NewReader(snap, ss, hlc.Timestamp{})
 	}
@@ -265,7 +265,7 @@ type OutgoingSnapshot struct {
 	// The Raft snapshot message to send. Contains SnapUUID as its data.
 	RaftSnap raftpb.Snapshot
 	// The Pebble snapshot that will be streamed from.
-	EngineSnap storage.Reader
+	StateSnap kvstorage.StateRO
 	// The replica state within the snapshot.
 	State          kvserverpb.ReplicaState
 	sharedBackings []objstorage.RemoteObjectBackingHandle
@@ -284,7 +284,7 @@ func (s OutgoingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // Close releases the resources associated with the snapshot.
 func (s *OutgoingSnapshot) Close() {
-	s.EngineSnap.Close()
+	s.StateSnap.Close()
 	for i := range s.sharedBackings {
 		s.sharedBackings[i].Close()
 	}
@@ -336,7 +336,7 @@ func snapshot(
 	ctx context.Context,
 	snapUUID uuid.UUID,
 	rsl kvstorage.StateLoader,
-	snap storage.Reader,
+	snap kvstorage.StateRO,
 	startKey roachpb.RKey,
 ) (OutgoingSnapshot, error) {
 	var desc roachpb.RangeDescriptor
@@ -365,9 +365,9 @@ func snapshot(
 	state.TruncatedState = nil
 
 	return OutgoingSnapshot{
-		EngineSnap: snap,
-		State:      state,
-		SnapUUID:   snapUUID,
+		StateSnap: snap,
+		State:     state,
+		SnapUUID:  snapUUID,
 		RaftSnap: raftpb.Snapshot{
 			Data: snapUUID.GetBytes(),
 			Metadata: raftpb.SnapshotMetadata{
