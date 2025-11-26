@@ -565,9 +565,8 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	for ; index < len(rels) && rels[index].voterAndAllRel <= conjStrictSubset; index++ {
 		rel := rels[index]
 		if rel.voterIndex == emptyVoterConstraintIndex {
-			// Don't try to satisfy the empty constraint with the corresponding
-			// empty constraint since the latter may be needed by some other voter
-			// constraint.
+			// Don't try to satisfy the empty voter constraint since the empty voter
+			// constraint may need to be narrowed due to replica constraints.
 			continue
 		}
 		remainingAll := allReplicaConstraints[rel.allIndex].remainingReplicas
@@ -599,8 +598,10 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	//
 	// Before we do the narrowing, we consider the pair of conjunctions that are
 	// empty: emptyVoterConstraintIndex and emptyConstraintIndex. We don't want
-	// to narrow unnecessarily, and so if emptyConstraintIndex has some
-	// remainingReplicas, we take them here.
+	// to narrow voter constraints unnecessarily, and so if emptyConstraintIndex
+	// has some remainingReplicas, we take them here to satisfy the empty voter
+	// constraint as much as possible. Only what is remaining in the empty voter
+	// constraint will then be available for subsequent narrowing.
 	if emptyVoterConstraintIndex > 0 && emptyConstraintIndex > 0 {
 		neededReplicas := conf.voterConstraints[emptyVoterConstraintIndex].numReplicas
 		actualReplicas := voterConstraints[emptyVoterConstraintIndex].numReplicas
@@ -672,6 +673,10 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 			err = errors.Errorf("could not satisfy all voter constraints due to " +
 				"non-intersecting conjunctions in voter and all replica constraints")
 			// Just force the satisfaction.
+			//
+			// NB: this is not the same as
+			// voterConstraints[i].numReplicas=neededReplicas, since we may have
+			// non-zero additionalReplicas.
 			voterConstraints[i].numReplicas += neededReplicas - actualReplicas
 		}
 	}
@@ -686,6 +691,8 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 		if voterConstraints[i].numReplicas > 0 {
 			vc = append(vc, voterConstraints[i].internedConstraintsConjunction)
 		}
+		// Else, one of the original voterConstraints got completely narrowed and
+		// replaced by narrower conjunctions.
 	}
 	conf.voterConstraints = vc
 
@@ -706,12 +713,14 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	// needing only 1 replica, while voter constraints specify we need 2
 	// replicas in each. Consider if it were left under-specified, and we had
 	// only 3 voters, 2 in us-west-1 and 1 in us-east-1 and we were temporarily
-	// unable to add a voter in us-east-1. Say we lose the non-voter too, and
-	// need to add one. With the under-specified constraint we could add the
-	// non-voter anywhere, since we think we are allowed 2 replicas with the
-	// empty constraint conjunction. This is technically true, but once we have
-	// the required second voter in us-east-1, we will need to move that
-	// non-voter to us-central-1, which is wasteful.
+	// unable to add a voter in us-east-1. Say we have a non-voter in
+	// us-central-1, and we lose that non-voter, and need to add one. With the
+	// under-specified constraint we could add the non-voter anywhere, since we
+	// think we are allowed 2 replicas with the empty constraint conjunction,
+	// and only one of those places is taken, by the second voter in us-west-1.
+	// This is technically true, but once we have the required second voter in
+	// us-east-1, both places in that empty constraint will be consumed, and we
+	// will need to move that non-voter to us-central-1, which is wasteful.
 	if emptyConstraintIndex >= 0 {
 		// Recompute the relationship since voterConstraints have changed.
 		emptyVoterConstraintIndex = -1
@@ -742,8 +751,10 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 			index++
 		}
 		voterConstraintHasEqualityWithConstraint := make([]bool, len(conf.voterConstraints))
-		// For conjEqualSet, if we can grab from the emptyConstraintIndex, do so.
-		for ; index < len(rels) && rels[index].voterAndAllRel <= conjEqualSet; index++ {
+		// For conjEqualSet, except for the empty constraint, ensure that the
+		// numReplicas in the replica constraint is at least that of the voter
+		// constraint, since a voter is also a replica.
+		for ; index < len(rels) && rels[index].voterAndAllRel == conjEqualSet; index++ {
 			rel := rels[index]
 			voterConstraintHasEqualityWithConstraint[rel.voterIndex] = true
 			if rel.allIndex == emptyConstraintIndex {
@@ -755,6 +766,10 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 					conf.constraints[rel.allIndex].numReplicas
 				availableCount := conf.constraints[emptyConstraintIndex].numReplicas
 				if availableCount < toAddCount {
+					// TODO(wenyihu6): this should also create an error, since we will
+					// end up with two identical constraint conjunctions in replica
+					// constraints and voter constraints, with the former having a lower
+					// count than the latter.
 					toAddCount = availableCount
 				}
 				conf.constraints[emptyConstraintIndex].numReplicas -= toAddCount
@@ -762,8 +777,9 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 			}
 		}
 		// For conjStrictSubset, if the subset relationship is with
-		// emptyConstraintIndex, grab from there.
-		for ; index < len(rels) && rels[index].voterAndAllRel <= conjStrictSubset; index++ {
+		// emptyConstraintIndex, grab from there, and create a new narrower
+		// replica constraint.
+		for ; index < len(rels) && rels[index].voterAndAllRel == conjStrictSubset; index++ {
 			rel := rels[index]
 			if rel.allIndex != emptyConstraintIndex {
 				continue
