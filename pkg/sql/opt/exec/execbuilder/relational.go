@@ -3719,6 +3719,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		udf.Def.BodyProps,
 		udf.Def.BodyStmts,
 		udf.Def.BodyTags,
+		udf.Def.BodyASTs,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		0,     /* resultBufferID */

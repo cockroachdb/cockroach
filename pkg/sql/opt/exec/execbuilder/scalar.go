@@ -8,8 +8,10 @@ package execbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -695,6 +698,7 @@ func (b *Builder) buildExistsSubquery(
 			stmtProps,
 			nil, /* stmtStr */
 			make([]string, len(stmts)),
+			nil,  /* stmtASTs */
 			true, /* allowOuterWithRefs */
 			wrapRootExpr,
 			0, /* resultBufferID */
@@ -822,6 +826,7 @@ func (b *Builder) buildSubquery(
 			stmtProps,
 			nil, /* stmtStr */
 			make([]string, len(stmts)),
+			nil,  /* stmtASTs */
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
 			0,    /* resultBufferID */
@@ -900,7 +905,7 @@ func (b *Builder) buildSubquery(
 			if err != nil {
 				return err
 			}
-			err = fn(plan, "" /* stmtForDistSQLDiagram */, true /* isFinalPlan */)
+			err = fn(plan, nil /* routineStatsBuilder */, "" /* stmtForDistSQLDiagram */, true /* isFinalPlan */)
 			if err != nil {
 				return err
 			}
@@ -1017,6 +1022,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.BodyProps,
 		udf.Def.BodyStmts,
 		udf.Def.BodyTags,
+		udf.Def.BodyASTs,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		udf.Def.ResultBufferID,
@@ -1091,6 +1097,7 @@ func (b *Builder) initRoutineExceptionHandler(
 			action.BodyProps,
 			action.BodyStmts,
 			action.BodyTags,
+			nil,   /* stmtASTs */
 			false, /* allowOuterWithRefs */
 			nil,   /* wrapRootExpr */
 			0,     /* resultBufferID */
@@ -1141,6 +1148,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	stmtProps []*physical.Required,
 	stmtStr []string,
 	stmtTags []string,
+	stmtASTs []tree.Statement,
 	allowOuterWithRefs bool,
 	wrapRootExpr wrapRootExprFn,
 	resultBufferID memo.RoutineResultBufferID,
@@ -1174,6 +1182,8 @@ func (b *Builder) buildRoutinePlanGenerator(
 	//
 	// Note: we put o outside of the function so we allocate it only once.
 	var o xform.Optimizer
+	var gistFactory explain.PlanGistFactory
+	var latencyRecorder = sqlstats.NewStatementLatencyRecorder()
 	originalMemo := b.mem
 	planGen := func(
 		ctx context.Context,
@@ -1206,8 +1216,14 @@ func (b *Builder) buildRoutinePlanGenerator(
 
 		dbName := b.evalCtx.SessionData().Database
 		appName := b.evalCtx.SessionData().ApplicationName
-
+		// TODO(yuzefovich): look into computing fingerprintFormat lazily.
+		fingerprintFormat := tree.FmtHideConstants | tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&b.evalCtx.Settings.SV))
 		for i := range stmts {
+			latencyRecorder.Reset()
+			var builder *sqlstats.RecordedStatementStatsBuilder
+			var statsBuilderWithLatencies tree.RoutineStatsBuilder
+			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementStarted)
+			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementStartParsing)
 			stmt := stmts[i]
 			props := stmtProps[i]
 			var tag string
@@ -1216,6 +1232,22 @@ func (b *Builder) buildRoutinePlanGenerator(
 			if i < len(stmtTags) {
 				tag = stmtTags[i]
 			}
+			if i < len(stmtASTs) && stmtASTs[i] != nil {
+				fingerprint := tree.FormatStatementHideConstants(stmtASTs[i], fingerprintFormat)
+				fpId := appstatspb.ConstructStatementFingerprintID(fingerprint, b.evalCtx.TxnImplicit, dbName)
+				summary := tree.FormatStatementSummary(stmtASTs[i], fingerprintFormat)
+				stmtType := stmtASTs[i].StatementType()
+				builder = sqlstats.NewRecordedStatementStatsBuilder(
+					fpId, dbName, fingerprint, summary, stmtType, appName,
+				)
+
+				statsBuilderWithLatencies = &sqlstats.StatsBuilderWithLatencyRecorder{
+					StatsBuilder:    builder,
+					LatencyRecorder: latencyRecorder,
+				}
+			}
+			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEndParsing)
+			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementStartPlanning)
 			o.Init(ctx, b.evalCtx, b.catalog)
 			f := o.Factory()
 
@@ -1287,9 +1319,14 @@ func (b *Builder) buildRoutinePlanGenerator(
 				tailCalls = make(map[opt.ScalarExpr]struct{})
 				memo.ExtractTailCalls(optimizedExpr, tailCalls)
 			}
-
 			// Build the memo into a plan.
 			ef := ref.(exec.Factory)
+			if builder != nil && !b.evalCtx.SessionData().DisablePlanGists {
+				gistFactory.Reset()
+				gistFactory.Init(ef)
+				ef = &gistFactory
+			}
+
 			eb := New(ctx, ef, &o, f.Memo(), b.catalog, optimizedExpr, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 			eb.withExprs = withExprs
 			eb.disableTelemetry = true
@@ -1303,6 +1340,10 @@ func (b *Builder) buildRoutinePlanGenerator(
 				eb.addRoutineResultBuffer(resultBufferID, resultWriter)
 			}
 			plan, err := eb.Build()
+			if gistFactory.Initialized() {
+				planGist := gistFactory.PlanGist()
+				builder.PlanGist(planGist.String(), planGist.Hash())
+			}
 			if err != nil {
 				if errors.IsAssertionFailure(err) {
 					// Enhance the error with the EXPLAIN (OPT, VERBOSE) of the
@@ -1324,7 +1365,8 @@ func (b *Builder) buildRoutinePlanGenerator(
 				stmtForDistSQLDiagram = stmtStr[i]
 			}
 			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag)
-			err = fn(plan, stmtForDistSQLDiagram, isFinalPlan)
+			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEndPlanning)
+			err = fn(plan, statsBuilderWithLatencies, stmtForDistSQLDiagram, isFinalPlan)
 			if err != nil {
 				return err
 			}
