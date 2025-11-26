@@ -28,7 +28,7 @@ func TestTableRollback(t *testing.T) {
 	s, sqlDB, kv := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "test"})
 	defer s.Stopper().Stop(context.Background())
 	tt := s.ApplicationLayer()
-	codec, sv := tt.Codec(), &tt.ClusterSettings().SV
+	codec := tt.Codec()
 	execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -61,8 +61,7 @@ func TestTableRollback(t *testing.T) {
 
 	predicates := kvpb.DeleteRangePredicates{StartTime: targetTime}
 	require.NoError(t, sql.DeleteTableWithPredicate(
-		ctx, kv, codec, sv, execCfg.DistSender, desc.GetID(), predicates, 10))
+		ctx, kv, codec, tt.ClusterSettings(), execCfg.DistSender, desc.GetID(), predicates, 10))
 
 	db.CheckQueryResults(t, `SELECT count(*) FROM test`, beforeNumRows)
-
 }
