@@ -111,6 +111,18 @@ func (ef *execFactory) ConstructLiteralValues(
 	}
 }
 
+// recordIndexRead - if applicable - records the fact that the given index has
+// been used for reading.
+func (ef *execFactory) recordIndexRead(tabDesc catalog.TableDescriptor, idx catalog.Index) {
+	if !ef.isExplain && !ef.planner.SessionData().Internal {
+		idxUsageKey := roachpb.IndexUsageKey{
+			TableID: roachpb.TableID(tabDesc.GetID()),
+			IndexID: roachpb.IndexID(idx.GetID()),
+		}
+		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(idxUsageKey)
+	}
+}
+
 // ConstructScan is part of the exec.Factory interface.
 func (ef *execFactory) ConstructScan(
 	table cat.Table, index cat.Index, params exec.ScanParams, reqOrdering exec.OutputOrdering,
@@ -158,13 +170,7 @@ func (ef *execFactory) ConstructScan(
 	scan.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
 	scan.lockingDurability = descpb.ToScanLockingDurability(params.Locking.Durability)
 	scan.localityOptimized = params.LocalityOptimized
-	if !ef.isExplain && !ef.planner.SessionData().Internal {
-		idxUsageKey := roachpb.IndexUsageKey{
-			TableID: roachpb.TableID(tabDesc.GetID()),
-			IndexID: roachpb.IndexID(idx.GetID()),
-		}
-		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(idxUsageKey)
-	}
+	ef.recordIndexRead(tabDesc, idx)
 
 	return scan, nil
 }
@@ -681,18 +687,11 @@ func (ef *execFactory) ConstructIndexJoin(
 	}
 
 	idx := tabDesc.GetPrimaryIndex()
+	ef.recordIndexRead(tabDesc, idx)
 	fetch.index = idx
 	fetch.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
-
-	if !ef.isExplain && !ef.planner.SessionData().Internal {
-		idxUsageKey := roachpb.IndexUsageKey{
-			TableID: roachpb.TableID(tabDesc.GetID()),
-			IndexID: roachpb.IndexID(idx.GetID()),
-		}
-		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(idxUsageKey)
-	}
 
 	n := &indexJoinNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
@@ -744,18 +743,11 @@ func (ef *execFactory) ConstructLookupJoin(
 		return nil, err
 	}
 
+	ef.recordIndexRead(tabDesc, idx)
 	fetch.index = idx
 	fetch.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
-
-	if !ef.isExplain && !ef.planner.SessionData().Internal {
-		idxUsageKey := roachpb.IndexUsageKey{
-			TableID: roachpb.TableID(tabDesc.GetID()),
-			IndexID: roachpb.IndexID(idx.GetID()),
-		}
-		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(idxUsageKey)
-	}
 
 	n := &lookupJoinNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
@@ -881,18 +873,11 @@ func (ef *execFactory) ConstructInvertedJoin(
 	if err := fetch.initDescDefaults(tabDesc, colCfg); err != nil {
 		return nil, err
 	}
+	ef.recordIndexRead(tabDesc, idx)
 	fetch.index = idx
 	fetch.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
-
-	if !ef.isExplain && !ef.planner.SessionData().Internal {
-		idxUsageKey := roachpb.IndexUsageKey{
-			TableID: roachpb.TableID(tabDesc.GetID()),
-			IndexID: roachpb.IndexID(idx.GetID()),
-		}
-		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(idxUsageKey)
-	}
 
 	n := &invertedJoinNode{
 		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
@@ -954,22 +939,15 @@ func (ef *execFactory) constructFetchForZigzag(
 		return fetchPlanningInfo{}, nil, err
 	}
 
-	tableDesc := table.(*optTable).desc
-	idxDesc := index.(*optIndex).idx
+	tabDesc := table.(*optTable).desc
+	idx := index.(*optIndex).idx
 	var fetch fetchPlanningInfo
-	if err := fetch.initDescDefaults(tableDesc, colCfg); err != nil {
+	if err := fetch.initDescDefaults(tabDesc, colCfg); err != nil {
 		return fetchPlanningInfo{}, nil, err
 	}
 
-	if !ef.isExplain && !ef.planner.SessionData().Internal {
-		idxUsageKey := roachpb.IndexUsageKey{
-			TableID: roachpb.TableID(tableDesc.GetID()),
-			IndexID: roachpb.IndexID(idxDesc.GetID()),
-		}
-		ef.planner.extendedEvalCtx.indexUsageStats.RecordRead(idxUsageKey)
-	}
-
-	fetch.index = idxDesc
+	ef.recordIndexRead(tabDesc, idx)
+	fetch.index = idx
 	fetch.lockingStrength = descpb.ToScanLockingStrength(locking.Strength)
 	fetch.lockingWaitPolicy = descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
 	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
@@ -1962,23 +1940,24 @@ func (ef *execFactory) ConstructVectorSearch(
 	targetNeighborCount uint64,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
-	indexDesc := index.(*optIndex).idx
+	idx := index.(*optIndex).idx
 	cols := makeColList(table, outCols)
 	resultCols := colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols)
 
 	// Encode the prefix constraint as a list of roachpb.Keys.
 	var sb span.Builder
 	sb.InitAllowingExternalRowData(
-		ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, indexDesc,
+		ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, idx,
 	)
 	prefixKeys, err := sb.KeysFromVectorPrefixConstraint(ef.ctx, prefixConstraint)
 	if err != nil {
 		return nil, err
 	}
+	ef.recordIndexRead(tabDesc, idx)
 	return &vectorSearchNode{
 		vectorSearchPlanningInfo: vectorSearchPlanningInfo{
 			table:               tabDesc,
-			index:               indexDesc,
+			index:               idx,
 			prefixKeys:          prefixKeys,
 			queryVector:         queryVector,
 			targetNeighborCount: targetNeighborCount,
@@ -2009,11 +1988,14 @@ func (ef *execFactory) ConstructVectorMutationSearch(
 		cols = append(cols, colinfo.ResultColumn{Name: "quantized-vector", Typ: types.Bytes})
 	}
 
+	tabDesc := table.(*optTable).desc
+	idx := index.(*optIndex).idx
+	ef.recordIndexRead(tabDesc, idx)
 	return &vectorMutationSearchNode{
 		singleInputPlanNode: singleInputPlanNode{input: inputPlan},
 		vectorMutationSearchPlanningInfo: vectorMutationSearchPlanningInfo{
-			table:          table.(*optTable).desc,
-			index:          index.(*optIndex).idx,
+			table:          tabDesc,
+			index:          idx,
 			prefixKeyCols:  prefixKeyCols,
 			queryVectorCol: queryVectorCol,
 			suffixKeyCols:  suffixKeyCols,
