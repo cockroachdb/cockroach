@@ -6,6 +6,7 @@
 package screl
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -606,3 +607,14 @@ var (
 			}
 		})
 )
+
+func init() {
+	// Ensure that the element schema options are updated when new element
+	// protos are added.
+	// The options are one longer because of the `Element` attribute at the
+	// start.
+	if len(elementSchemaOptions)-1 != len(scpb.GetElementOneOfProtos()) {
+		panic(fmt.Sprintf("mismatched element schema options length %d and element protos length %d",
+			len(elementSchemaOptions), len(scpb.GetElementOneOfProtos())))
+	}
+}
