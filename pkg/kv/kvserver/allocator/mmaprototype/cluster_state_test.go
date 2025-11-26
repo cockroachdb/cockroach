@@ -345,6 +345,9 @@ func TestClusterState(t *testing.T) {
 		func(t *testing.T, path string) {
 			ts := timeutil.NewManualTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 			cs := newClusterState(ts, newStringInterner())
+			tr := tracing.NewTracer()
+			tr.SetRedactable(true)
+			defer tr.Close()
 
 			printNodeListMeta := func(t *testing.T) string {
 				nodeList := []int{}
@@ -401,6 +404,11 @@ func TestClusterState(t *testing.T) {
 			// Recursively invoked in `include` directive.
 			var invokeFn func(t *testing.T, d *datadriven.TestData) string
 			invokeFn = func(t *testing.T, d *datadriven.TestData) string {
+				// Start a recording span for each command. Commands that want to
+				// include the trace in their output can call finishAndGet().
+				ctx, finishAndGet := tracing.ContextWithRecordingSpan(
+					context.Background(), tr, d.Cmd,
+				)
 				switch d.Cmd {
 				case "include":
 					loc := dd.ScanArg[string](t, d, "path")
@@ -576,10 +584,6 @@ func TestClusterState(t *testing.T) {
 					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
 					rng := rand.New(rand.NewSource(0))
 					dsm := newDiversityScoringMemo()
-					tr := tracing.NewTracer()
-					tr.SetRedactable(true)
-					defer tr.Close()
-					ctx, finishAndGet := tracing.ContextWithRecordingSpan(context.Background(), tr, "rebalance-stores")
 					re := newRebalanceEnv(cs, rng, dsm, cs.ts.Now())
 
 					if n, ok := dd.ScanArgOpt[int](t, d, "max-lease-transfer-count"); ok {
