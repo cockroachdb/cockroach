@@ -609,8 +609,6 @@ output:
 
 # Replicas are not constrained. The voter constraints are promoted to replica
 # constraints.
-#
-# TODO(sumeer): investigate why the normalization also threw an error.
 normalize num-replicas=5 num-voters=3
 constraint num-replicas=5
 voter-constraint num-replicas=1 +region=a +zone=a1
@@ -623,7 +621,6 @@ input:
  voter-constraints:
    +region=a,+zone=a1:1
    +region=a,+zone=a2:1
-err=could not satisfy all voter constraints due to non-intersecting conjunctions in voter and all replica constraints
 output:
  num-replicas=5 num-voters=3
  constraints:

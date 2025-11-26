@@ -1,0 +1,721 @@
+# Test basic case with no constraints - should have empty constraints
+voter-and-all-relationship num-replicas=3 num-voters=3
+----
+input:
+ num-replicas=3 num-voters=3
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+
+# Test with only voter constraints - should have empty constraint index
+voter-and-all-relationship num-replicas=5 num-voters=3
+voter-constraint +region=a
+----
+input:
+ num-replicas=5 num-voters=3
+ voter-constraints:
+   +region=a
+table:
+	emptyConstraintIndex: 0
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=strictSubset
+
+# Test with equal voter and all constraints
+voter-and-all-relationship num-replicas=3 num-voters=3
+constraint +region=us-west
+voter-constraint +region=us-west
+----
+input:
+ num-replicas=3 num-voters=3
+ constraints:
+   +region=us-west
+ voter-constraints:
+   +region=us-west
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=equalSet
+
+# Test with voter constraint being a strict subset of all constraint
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint +region=us-west
+voter-constraint +region=us-west +zone=us-west-a
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west
+ voter-constraints:
+   +region=us-west,+zone=us-west-a
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=strictSubset
+
+# Test with voter constraint being a strict superset of all constraint
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint +region=us-west +zone=us-west-a
+voter-constraint +region=us-west
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west,+zone=us-west-a
+ voter-constraints:
+   +region=us-west
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=strictSuperset
+
+# Test with non-intersecting constraints
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint +region=us-west
+voter-constraint +region=us-east
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west
+ voter-constraints:
+   +region=us-east
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=nonIntersecting
+
+# Test with multiple voter and all constraints - cartesian product
+voter-and-all-relationship num-replicas=7 num-voters=5
+constraint num-replicas=3 +region=us-west
+constraint num-replicas=2 +region=us-east
+voter-constraint num-replicas=3 +region=us-west +zone=us-west-a
+voter-constraint num-replicas=2 +region=us-east
+----
+input:
+ num-replicas=7 num-voters=5
+ constraints:
+   +region=us-west:3
+   +region=us-east:2
+ voter-constraints:
+   +region=us-west,+zone=us-west-a:3
+   +region=us-east:2
+table:
+	emptyConstraintIndex: 2
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=1 all=1 rel=equalSet
+    [1] voter=0 all=0 rel=strictSubset
+    [2] voter=0 all=2 rel=strictSubset
+    [3] voter=1 all=2 rel=strictSubset
+    [4] voter=0 all=1 rel=nonIntersecting
+    [5] voter=1 all=0 rel=nonIntersecting
+
+# Test with possibly intersecting constraints
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint +region=us-west -zone=us-west-b
+voter-constraint +region=us-west +zone=us-west-a
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west,-zone=us-west-b
+ voter-constraints:
+   +region=us-west,+zone=us-west-a
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=possiblyIntersecting
+
+# Test relationships are sorted by relationship type
+voter-and-all-relationship num-replicas=9 num-voters=7
+constraint num-replicas=2 +region=us-west +zone=us-west-a
+constraint num-replicas=2 +region=us-west
+constraint num-replicas=2 +region=us-east
+voter-constraint num-replicas=3 +region=us-west
+voter-constraint num-replicas=2 +region=us-west +zone=us-west-a -rack=r1
+voter-constraint num-replicas=2 +region=us-central
+----
+input:
+ num-replicas=9 num-voters=7
+ constraints:
+   +region=us-west,+zone=us-west-a:2
+   +region=us-west:2
+   +region=us-east:2
+ voter-constraints:
+   +region=us-west:3
+   +region=us-west,+zone=us-west-a,-rack=r1:2
+   +region=us-central:2
+table:
+	emptyConstraintIndex: 3
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=1 rel=equalSet
+    [1] voter=0 all=3 rel=strictSubset
+    [2] voter=1 all=0 rel=strictSubset
+    [3] voter=1 all=1 rel=strictSubset
+    [4] voter=1 all=3 rel=strictSubset
+    [5] voter=2 all=3 rel=strictSubset
+    [6] voter=0 all=0 rel=strictSuperset
+    [7] voter=0 all=2 rel=nonIntersecting
+    [8] voter=1 all=2 rel=nonIntersecting
+    [9] voter=2 all=0 rel=nonIntersecting
+    [10] voter=2 all=1 rel=nonIntersecting
+    [11] voter=2 all=2 rel=nonIntersecting
+
+# Test error case: multiple empty voter constraints
+voter-and-all-relationship num-replicas=5 num-voters=3
+voter-constraint num-replicas=1
+voter-constraint num-replicas=2
+----
+input:
+ num-replicas=5 num-voters=3
+ voter-constraints:
+   :1
+   :2
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+	err: invalid configurations with empty voter constraint
+
+# Test error case: multiple empty constraints at different indices
+voter-and-all-relationship num-replicas=7 num-voters=5
+constraint num-replicas=2 +region=us-west
+constraint num-replicas=2
+constraint num-replicas=3
+----
+input:
+ num-replicas=7 num-voters=5
+ constraints:
+   +region=us-west:2
+   :2
+   :3
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+
+# Test empty voter and empty all constraints
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint num-replicas=2 +region=us-west
+constraint num-replicas=1
+voter-constraint num-replicas=2 +region=us-west
+voter-constraint num-replicas=1
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west:2
+   :1
+ voter-constraints:
+   +region=us-west:2
+   :1
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+	err: invalid configurations with empty constraint
+
+# Test with prohibited constraints
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint +region=us-west -zone=us-west-b
+voter-constraint +region=us-west
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west,-zone=us-west-b
+ voter-constraints:
+   +region=us-west
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=strictSuperset
+
+# Test possiblyIntersecting: A and B share some constraints but differ in others
+# This case shows a possibly intersecting relationship that doesn't result in error
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint +region=us-west
+voter-constraint +region=us-west -zone=us-west-b
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west
+ voter-constraints:
+   +region=us-west,-zone=us-west-b
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=strictSubset
+
+# Test possiblyIntersecting: With multiple conjunctions having possibly intersecting relationships
+voter-and-all-relationship num-replicas=9 num-voters=5
+constraint num-replicas=3 +region=us-west
+constraint num-replicas=2 +region=us-east +zone=us-east-a
+voter-constraint num-replicas=3 +region=us-west -zone=us-west-b
+voter-constraint num-replicas=2 +region=us-east
+----
+input:
+ num-replicas=9 num-voters=5
+ constraints:
+   +region=us-west:3
+   +region=us-east,+zone=us-east-a:2
+ voter-constraints:
+   +region=us-west,-zone=us-west-b:3
+   +region=us-east:2
+table:
+	emptyConstraintIndex: 2
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=strictSubset
+    [1] voter=0 all=2 rel=strictSubset
+    [2] voter=1 all=2 rel=strictSubset
+    [3] voter=1 all=1 rel=strictSuperset
+    [4] voter=0 all=1 rel=nonIntersecting
+    [5] voter=1 all=0 rel=nonIntersecting
+
+# Test possiblyIntersecting: Multiple prohibited constraints
+# This is considered possiblyIntersecting which results in an error
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint +region=us-west -zone=us-west-a
+voter-constraint +region=us-west -rack=r1
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west,-zone=us-west-a
+ voter-constraints:
+   +region=us-west,-rack=r1
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=possiblyIntersecting
+
+# Test strictSubset: Voter has additional required constraint
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint +region=us-west
+voter-constraint +region=us-west +zone=us-west-a +rack=r1
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west
+ voter-constraints:
+   +region=us-west,+zone=us-west-a,+rack=r1
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=strictSubset
+
+# Test strictSubset: Voter has both required and prohibited constraints
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint +region=us-west -zone=us-west-a
+voter-constraint +region=us-west -zone=us-west-a +rack=r1
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west,-zone=us-west-a
+ voter-constraints:
+   +region=us-west,-zone=us-west-a,+rack=r1
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=strictSubset
+
+# Test strictSubset: Multiple voter constraints, all strict subsets
+voter-and-all-relationship num-replicas=9 num-voters=7
+constraint num-replicas=3 +region=us-west
+constraint num-replicas=2 +region=us-east
+voter-constraint num-replicas=2 +region=us-west +zone=us-west-a
+voter-constraint num-replicas=1 +region=us-west +zone=us-west-b
+voter-constraint num-replicas=2 +region=us-east +zone=us-east-a
+----
+input:
+ num-replicas=9 num-voters=7
+ constraints:
+   +region=us-west:3
+   +region=us-east:2
+ voter-constraints:
+   +region=us-west,+zone=us-west-a:2
+   +region=us-west,+zone=us-west-b:1
+   +region=us-east,+zone=us-east-a:2
+table:
+	emptyConstraintIndex: 2
+	emptyVoterConstraintIndex: 3
+	relationships:
+    [0] voter=3 all=2 rel=equalSet
+    [1] voter=0 all=0 rel=strictSubset
+    [2] voter=0 all=2 rel=strictSubset
+    [3] voter=1 all=0 rel=strictSubset
+    [4] voter=1 all=2 rel=strictSubset
+    [5] voter=2 all=1 rel=strictSubset
+    [6] voter=2 all=2 rel=strictSubset
+    [7] voter=3 all=0 rel=strictSuperset
+    [8] voter=3 all=1 rel=strictSuperset
+    [9] voter=0 all=1 rel=nonIntersecting
+    [10] voter=1 all=1 rel=nonIntersecting
+    [11] voter=2 all=0 rel=nonIntersecting
+
+# Test strictSuperset: All constraint has additional constraints
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint +region=us-west +zone=us-west-a +rack=r1
+voter-constraint +region=us-west
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west,+zone=us-west-a,+rack=r1
+ voter-constraints:
+   +region=us-west
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=strictSuperset
+
+# Test strictSuperset: Multiple all constraints with strict superset relationships
+voter-and-all-relationship num-replicas=9 num-voters=5
+constraint num-replicas=2 +region=us-west +zone=us-west-a
+constraint num-replicas=2 +region=us-west +zone=us-west-b
+constraint num-replicas=2 +region=us-east +zone=us-east-a
+voter-constraint num-replicas=3 +region=us-west
+voter-constraint num-replicas=2 +region=us-east
+----
+input:
+ num-replicas=9 num-voters=5
+ constraints:
+   +region=us-west,+zone=us-west-a:2
+   +region=us-west,+zone=us-west-b:2
+   +region=us-east,+zone=us-east-a:2
+ voter-constraints:
+   +region=us-west:3
+   +region=us-east:2
+table:
+	emptyConstraintIndex: 3
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=3 rel=strictSubset
+    [1] voter=1 all=3 rel=strictSubset
+    [2] voter=0 all=0 rel=strictSuperset
+    [3] voter=0 all=1 rel=strictSuperset
+    [4] voter=1 all=2 rel=strictSuperset
+    [5] voter=0 all=2 rel=nonIntersecting
+    [6] voter=1 all=0 rel=nonIntersecting
+    [7] voter=1 all=1 rel=nonIntersecting
+
+# Test strictSuperset: With prohibited constraints
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint +region=us-west +zone=us-west-a -rack=r1
+voter-constraint +region=us-west -rack=r1
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west,+zone=us-west-a,-rack=r1
+ voter-constraints:
+   +region=us-west,-rack=r1
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=strictSuperset
+
+# Test nonIntersecting: Different regions
+voter-and-all-relationship num-replicas=7 num-voters=5
+constraint num-replicas=3 +region=us-west
+constraint num-replicas=2 +region=us-east
+voter-constraint num-replicas=3 +region=eu-central
+voter-constraint num-replicas=2 +region=ap-south
+----
+input:
+ num-replicas=7 num-voters=5
+ constraints:
+   +region=us-west:3
+   +region=us-east:2
+ voter-constraints:
+   +region=eu-central:3
+   +region=ap-south:2
+table:
+	emptyConstraintIndex: 2
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=2 rel=strictSubset
+    [1] voter=1 all=2 rel=strictSubset
+    [2] voter=0 all=0 rel=nonIntersecting
+    [3] voter=0 all=1 rel=nonIntersecting
+    [4] voter=1 all=0 rel=nonIntersecting
+    [5] voter=1 all=1 rel=nonIntersecting
+
+# Test nonIntersecting: Different keys entirely
+voter-and-all-relationship num-replicas=7 num-voters=4
+constraint num-replicas=3 +region=us-west
+voter-constraint num-replicas=2 +zone=us-west-a
+voter-constraint num-replicas=2 +rack=r1
+----
+input:
+ num-replicas=7 num-voters=4
+ constraints:
+   +region=us-west:3
+ voter-constraints:
+   +zone=us-west-a:2
+   +rack=r1:2
+table:
+	emptyConstraintIndex: 1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=1 rel=strictSubset
+    [1] voter=1 all=1 rel=strictSubset
+    [2] voter=0 all=0 rel=nonIntersecting
+    [3] voter=1 all=0 rel=nonIntersecting
+
+# Test nonIntersecting: With prohibited constraints that don't overlap
+voter-and-all-relationship num-replicas=7 num-voters=4
+constraint num-replicas=3 +region=us-west -zone=us-west-a
+voter-constraint num-replicas=2 +region=us-east -zone=us-east-a
+voter-constraint num-replicas=2 +region=eu-central
+----
+input:
+ num-replicas=7 num-voters=4
+ constraints:
+   +region=us-west,-zone=us-west-a:3
+ voter-constraints:
+   +region=us-east,-zone=us-east-a:2
+   +region=eu-central:2
+table:
+	emptyConstraintIndex: 1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=1 rel=strictSubset
+    [1] voter=1 all=1 rel=strictSubset
+    [2] voter=0 all=0 rel=nonIntersecting
+    [3] voter=1 all=0 rel=nonIntersecting
+
+# Test equalSet: Identical single constraints
+voter-and-all-relationship num-replicas=3 num-voters=3
+constraint +region=us-west
+voter-constraint +region=us-west
+----
+input:
+ num-replicas=3 num-voters=3
+ constraints:
+   +region=us-west
+ voter-constraints:
+   +region=us-west
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=equalSet
+
+# Test equalSet: Identical complex constraints with multiple required constraints
+voter-and-all-relationship num-replicas=3 num-voters=3
+constraint +region=us-west +zone=us-west-a +rack=r1
+voter-constraint +region=us-west +zone=us-west-a +rack=r1
+----
+input:
+ num-replicas=3 num-voters=3
+ constraints:
+   +region=us-west,+zone=us-west-a,+rack=r1
+ voter-constraints:
+   +region=us-west,+zone=us-west-a,+rack=r1
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=equalSet
+
+# Test equalSet: Identical constraints with both required and prohibited
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint +region=us-west +zone=us-west-a -rack=r1 -rack=r2
+voter-constraint +region=us-west +zone=us-west-a -rack=r1 -rack=r2
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west,+zone=us-west-a,-rack=r1,-rack=r2
+ voter-constraints:
+   +region=us-west,+zone=us-west-a,-rack=r1,-rack=r2
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=equalSet
+
+# Test equalSet: Multiple identical constraint pairs
+voter-and-all-relationship num-replicas=9 num-voters=7
+constraint num-replicas=3 +region=us-west
+constraint num-replicas=2 +region=us-east +zone=us-east-a
+constraint num-replicas=2 +region=eu-central
+voter-constraint num-replicas=3 +region=us-west
+voter-constraint num-replicas=2 +region=us-east +zone=us-east-a
+voter-constraint num-replicas=2 +region=eu-central
+----
+input:
+ num-replicas=9 num-voters=7
+ constraints:
+   +region=us-west:3
+   +region=us-east,+zone=us-east-a:2
+   +region=eu-central:2
+ voter-constraints:
+   +region=us-west:3
+   +region=us-east,+zone=us-east-a:2
+   +region=eu-central:2
+table:
+	emptyConstraintIndex: 3
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=equalSet
+    [1] voter=1 all=1 rel=equalSet
+    [2] voter=2 all=2 rel=equalSet
+    [3] voter=0 all=3 rel=strictSubset
+    [4] voter=1 all=3 rel=strictSubset
+    [5] voter=2 all=3 rel=strictSubset
+    [6] voter=0 all=1 rel=nonIntersecting
+    [7] voter=0 all=2 rel=nonIntersecting
+    [8] voter=1 all=0 rel=nonIntersecting
+    [9] voter=1 all=2 rel=nonIntersecting
+    [10] voter=2 all=0 rel=nonIntersecting
+    [11] voter=2 all=1 rel=nonIntersecting
+
+# Test edge case: Only prohibited constraints (identical)
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint -zone=us-west-a -zone=us-west-b
+voter-constraint -zone=us-west-a -zone=us-west-b
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   -zone=us-west-a,-zone=us-west-b
+ voter-constraints:
+   -zone=us-west-a,-zone=us-west-b
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=equalSet
+
+# Test edge case: Voter has more prohibited constraints
+voter-and-all-relationship num-replicas=5 num-voters=3
+constraint +region=us-west -zone=us-west-a
+voter-constraint +region=us-west -zone=us-west-a -rack=r1
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west,-zone=us-west-a
+ voter-constraints:
+   +region=us-west,-zone=us-west-a,-rack=r1
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=0 all=0 rel=strictSubset
+
+# Test edge case: Complex mix with empty constraint in all replicas
+voter-and-all-relationship num-replicas=7 num-voters=5
+constraint num-replicas=3 +region=us-west
+constraint num-replicas=2
+voter-constraint num-replicas=3 +region=us-west +zone=us-west-a
+voter-constraint num-replicas=2 +region=us-east
+----
+input:
+ num-replicas=7 num-voters=5
+ constraints:
+   +region=us-west:3
+   :2
+ voter-constraints:
+   +region=us-west,+zone=us-west-a:3
+   +region=us-east:2
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+	err: invalid configurations with empty constraint
+
+# Test edge case: Empty all constraint with multiple voter constraints
+voter-and-all-relationship num-replicas=7 num-voters=3
+constraint num-replicas=3 +region=us-west
+constraint num-replicas=2
+voter-constraint num-replicas=3 +region=us-west
+----
+input:
+ num-replicas=7 num-voters=3
+ constraints:
+   +region=us-west:3
+   :2
+ voter-constraints:
+   +region=us-west:3
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+	err: invalid configurations with empty constraint
+
+# Test edge case: Large number of constraints showing all relationship types
+voter-and-all-relationship num-replicas=15 num-voters=11
+constraint num-replicas=2 +region=us-west
+constraint num-replicas=2 +region=us-west +zone=us-west-a
+constraint num-replicas=2 +region=us-east
+constraint num-replicas=2 +region=eu-central
+voter-constraint num-replicas=3 +region=us-west
+voter-constraint num-replicas=2 +region=us-west +zone=us-west-a +rack=r1
+voter-constraint num-replicas=2 +region=us-east +zone=us-east-a
+voter-constraint num-replicas=2 +region=ap-south
+voter-constraint num-replicas=2 +region=us-west -zone=us-west-b
+----
+input:
+ num-replicas=15 num-voters=11
+ constraints:
+   +region=us-west:2
+   +region=us-west,+zone=us-west-a:2
+   +region=us-east:2
+   +region=eu-central:2
+ voter-constraints:
+   +region=us-west:3
+   +region=us-west,+zone=us-west-a,+rack=r1:2
+   +region=us-east,+zone=us-east-a:2
+   +region=ap-south:2
+   +region=us-west,-zone=us-west-b:2
+table:
+	emptyConstraintIndex: 4
+	emptyVoterConstraintIndex: -1
+	relationships:
+    [0] voter=4 all=1 rel=possiblyIntersecting
+    [1] voter=0 all=0 rel=equalSet
+    [2] voter=2 all=2 rel=strictSubset
+    [3] voter=1 all=4 rel=strictSubset
+    [4] voter=0 all=4 rel=strictSubset
+    [5] voter=1 all=0 rel=strictSubset
+    [6] voter=1 all=1 rel=strictSubset
+    [7] voter=4 all=4 rel=strictSubset
+    [8] voter=2 all=4 rel=strictSubset
+    [9] voter=4 all=0 rel=strictSubset
+    [10] voter=3 all=4 rel=strictSubset
+    [11] voter=0 all=1 rel=strictSuperset
+    [12] voter=2 all=0 rel=nonIntersecting
+    [13] voter=0 all=2 rel=nonIntersecting
+    [14] voter=0 all=3 rel=nonIntersecting
+    [15] voter=3 all=0 rel=nonIntersecting
+    [16] voter=3 all=1 rel=nonIntersecting
+    [17] voter=3 all=2 rel=nonIntersecting
+    [18] voter=3 all=3 rel=nonIntersecting
+    [19] voter=2 all=1 rel=nonIntersecting
+    [20] voter=2 all=3 rel=nonIntersecting
+    [21] voter=1 all=3 rel=nonIntersecting
+    [22] voter=4 all=2 rel=nonIntersecting
+    [23] voter=4 all=3 rel=nonIntersecting
+    [24] voter=1 all=2 rel=nonIntersecting
