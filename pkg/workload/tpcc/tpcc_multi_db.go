@@ -39,6 +39,7 @@ type tpccMultiDB struct {
 	// created on and have the workload executed on.
 	dbListFile string
 	dbList     []*tree.ObjectNamePrefix
+	dbNames    map[string]struct{}
 
 	adminUrlStr string
 	adminUrls   []string
@@ -303,8 +304,10 @@ func (t *tpccMultiDB) Tables() []workload.Table {
 	// Take the normal TPCC tables and make a copy for each
 	// database in the list.
 	tablesPerDb := make([]workload.Table, 0, len(existingTables)*len(t.dbList))
-	for _, db := range t.dbList {
-		for _, tbl := range existingTables {
+	// We are going to order the list such that we are working on different
+	// databases in a round-robin fashion.
+	for _, tbl := range existingTables {
+		for _, db := range t.dbList {
 			tbl.ObjectPrefix = db
 			tablesPerDb = append(tablesPerDb, tbl)
 		}
@@ -326,7 +329,11 @@ func (t *tpccMultiDB) runInit() error {
 			if v := len(strDbList); v > 0 && len(strDbList[v-1]) == 0 {
 				strDbList = strDbList[:v-1]
 			}
-
+			// First, sort the prefixes by database name.
+			dbToBucket := make(map[string]int)
+			t.dbNames = make(map[string]struct{})
+			var dbNameListBuckets [][]*tree.ObjectNamePrefix
+			maxBucketLen := 0
 			for _, dbAndSchema := range strDbList {
 				parts := strings.Split(dbAndSchema, ".")
 				prefix := &tree.ObjectNamePrefix{
@@ -338,7 +345,28 @@ func (t *tpccMultiDB) runInit() error {
 				if len(parts) > 1 {
 					prefix.SchemaName = tree.Name(parts[1])
 				}
-				t.dbList = append(t.dbList, prefix)
+				// Assign an index based on the database bucket.
+				if _, exists := dbToBucket[parts[0]]; !exists {
+					dbNameListBuckets = append(dbNameListBuckets, nil)
+					dbToBucket[parts[0]] = len(dbNameListBuckets) - 1
+					t.dbNames[parts[0]] = struct{}{}
+				}
+				bucket := dbToBucket[parts[0]]
+				dbNameListBuckets[bucket] = append(dbNameListBuckets[bucket], prefix)
+				maxBucketLen = max(maxBucketLen, len(dbNameListBuckets[bucket]))
+			}
+			// Next, generate the dbList slice by doing a round-robin across the
+			// databases in the map. This minimizes deadlocks by ensuring we are
+			// concurrently working on separate databases.
+			t.dbList = make([]*tree.ObjectNamePrefix, 0, len(strDbList))
+			for range maxBucketLen {
+				for idx := range dbNameListBuckets {
+					if len(dbNameListBuckets[idx]) == 0 {
+						continue
+					}
+					t.dbList = append(t.dbList, dbNameListBuckets[idx][0])
+					dbNameListBuckets[idx] = dbNameListBuckets[idx][1:]
+				}
 			}
 		}
 		// Validate that both options must be specified together.
@@ -405,11 +433,13 @@ func (t *tpccMultiDB) Hooks() workload.Hooks {
 			return err
 		}
 		// Next configure all the databases as multi-region.
-		for _, dbName := range t.dbList {
-			if _, err := db.Exec("USE $1", dbName.Catalog()); err != nil {
+		// Note: Precreates are run once per database since TPCC usess them to setup
+		// multiregion.
+		for dbName := range t.dbNames {
+			if _, err := db.Exec("USE $1", dbName); err != nil {
 				return err
 			}
-			if _, err := db.Exec(fmt.Sprintf("SET search_path = %s", dbName.Schema())); err != nil {
+			if _, err := db.Exec("SET search_path = public"); err != nil {
 				return err
 			}
 			// Run the usual TPCC pre-create logic after.

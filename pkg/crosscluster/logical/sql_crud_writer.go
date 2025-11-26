@@ -159,14 +159,13 @@ func (c *sqlCrudWriter) ReleaseLeases(ctx context.Context) {
 	}
 }
 
-// ReportMutations implements BatchHandler.
-func (c *sqlCrudWriter) ReportMutations(*stats.Refresher) {
-}
+// ReportMutations implements the BatchHandler interface, but is a no-op for
+// sqlCrudWriter because its mutations are already reported by the queries it
+// runs when they are run.
+func (c *sqlCrudWriter) ReportMutations(context.Context, *stats.Refresher) {}
 
 // SetSyntheticFailurePercent implements BatchHandler.
-func (c *sqlCrudWriter) SetSyntheticFailurePercent(uint32) {
-
-}
+func (c *sqlCrudWriter) SetSyntheticFailurePercent(uint32) {}
 
 // BatchSize implements BatchHandler.
 func (c *sqlCrudWriter) BatchSize() int {

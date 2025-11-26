@@ -803,7 +803,7 @@ func TestMutationsAndSettingOverrideChannels(t *testing.T) {
 	// Test that the mutations channel doesn't block even when we add 10 more
 	// items than can fit in the buffer.
 	for i := 0; i < refreshChanBufferLen+10; i++ {
-		r.NotifyMutation(tableDesc, 5 /* rowsAffected */)
+		r.NotifyMutation(ctx, tableDesc, 5 /* rowsAffected */)
 	}
 
 	if expected, actual := refreshChanBufferLen, len(r.mutations); expected != actual {
@@ -819,7 +819,7 @@ func TestMutationsAndSettingOverrideChannels(t *testing.T) {
 	for i := 0; i < refreshChanBufferLen+10; i++ {
 		int64CurrIteration := int64(i)
 		autoStatsSettings.MinStaleRows = &int64CurrIteration
-		r.NotifyMutation(tableDesc, 5 /* rowsAffected */)
+		r.NotifyMutation(ctx, tableDesc, 5 /* rowsAffected */)
 	}
 
 	if expected, actual := refreshChanBufferLen, len(r.settings); expected != actual {
@@ -1011,34 +1011,21 @@ func TestAutoStatsDisabledReadOnlyTenant(t *testing.T) {
 	readOnlyRefresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache,
 		time.Microsecond /* asOfTime */, nil /* knobs */, true /* readOnlyTenant */)
 
-	enabledTrue := true
-	enabledSettings := catpb.AutoStatsSettings{Enabled: &enabledTrue}
-	settingsMap := map[descpb.ID]catpb.AutoStatsSettings{
-		descA.GetID(): enabledSettings,
-	}
-
 	// Test normal table descriptor with normal tenant (should have auto stats enabled).
 	require.True(t, refresher.autoStatsEnabled(descA))
-	require.True(t, refresher.autoStatsEnabledForTableID(descA.GetID(), settingsMap))
 
 	// Test table descriptor with read-only tenant (should have auto stats disabled).
 	require.False(t, readOnlyRefresher.autoStatsEnabled(descA))
-	require.False(t, readOnlyRefresher.autoStatsEnabledForTableID(descA.GetID(), settingsMap))
 
 	// Test nil descriptor (should defer to cluster setting).
 	require.True(t, refresher.autoStatsEnabled(nil))
-	require.True(t, refresher.autoStatsEnabledForTableID(descA.GetID(), nil))          // nil settings map defers to cluster setting
-	require.False(t, readOnlyRefresher.autoStatsEnabled(nil))                          // Read-only tenant should always return false
-	require.False(t, readOnlyRefresher.autoStatsEnabledForTableID(descA.GetID(), nil)) // Read-only tenant should always return false
+	require.False(t, readOnlyRefresher.autoStatsEnabled(nil)) // Read-only tenant should always return false
 
 	// Test with cluster setting disabled.
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
-	require.False(t, readOnlyRefresher.autoStatsEnabled(descA))                                // Still false due to read-only tenant
-	require.False(t, readOnlyRefresher.autoStatsEnabledForTableID(descA.GetID(), settingsMap)) // Still false due to read-only tenant
-	require.False(t, readOnlyRefresher.autoStatsEnabled(nil))                                  // Still false due to read-only tenant
-	require.False(t, readOnlyRefresher.autoStatsEnabledForTableID(descA.GetID(), nil))         // Still false due to read-only tenant
-	require.False(t, refresher.autoStatsEnabled(nil))                                          // Now false due to cluster setting
-	require.False(t, refresher.autoStatsEnabledForTableID(descA.GetID(), nil))                 // Now false due to cluster setting
+	require.False(t, readOnlyRefresher.autoStatsEnabled(descA)) // Still false due to read-only tenant
+	require.False(t, readOnlyRefresher.autoStatsEnabled(nil))   // Still false due to read-only tenant
+	require.False(t, refresher.autoStatsEnabled(nil))           // Now false due to cluster setting
 }
 
 func TestRefresherReadOnlyShutdown(t *testing.T) {

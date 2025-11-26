@@ -125,7 +125,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 	r.mu.AssertHeld()
 
 	ctx := r.AnnotateCtx(context.TODO())
-	hs, err := r.raftMu.stateLoader.LoadHardState(ctx, r.store.TODOEngine())
+	hs, err := r.raftMu.stateLoader.LoadHardState(ctx, r.store.LogEngine())
 	if err != nil {
 		r.reportRaftStorageError(err)
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -221,10 +221,10 @@ func (r *Replica) GetSnapshot(
 	// the corresponding Raft command not applied yet).
 	r.raftMu.Lock()
 	startKey := r.shMu.state.Desc.StartKey
-	spans := rditer.MakeAllKeySpans(r.shMu.state.Desc) // needs unreplicated to access Raft state
-	snap := r.store.TODOEngine().NewSnapshot(spans...)
+	spans := rditer.MakeReplicatedKeySpans(r.shMu.state.Desc)
+	snap := r.store.StateEngine().NewSnapshot(spans...)
 	if util.RaceEnabled {
-		ss := rditer.MakeAllKeySpanSet(r.shMu.state.Desc)
+		ss := rditer.MakeReplicatedKeySpanSet(r.shMu.state.Desc)
 		defer ss.Release()
 		snap = spanset.NewReader(snap, ss, hlc.Timestamp{})
 	}
@@ -265,7 +265,7 @@ type OutgoingSnapshot struct {
 	// The Raft snapshot message to send. Contains SnapUUID as its data.
 	RaftSnap raftpb.Snapshot
 	// The Pebble snapshot that will be streamed from.
-	EngineSnap storage.Reader
+	StateSnap kvstorage.StateRO
 	// The replica state within the snapshot.
 	State          kvserverpb.ReplicaState
 	sharedBackings []objstorage.RemoteObjectBackingHandle
@@ -284,7 +284,7 @@ func (s OutgoingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // Close releases the resources associated with the snapshot.
 func (s *OutgoingSnapshot) Close() {
-	s.EngineSnap.Close()
+	s.StateSnap.Close()
 	for i := range s.sharedBackings {
 		s.sharedBackings[i].Close()
 	}
@@ -336,7 +336,7 @@ func snapshot(
 	ctx context.Context,
 	snapUUID uuid.UUID,
 	rsl kvstorage.StateLoader,
-	snap storage.Reader,
+	snap kvstorage.StateRO,
 	startKey roachpb.RKey,
 ) (OutgoingSnapshot, error) {
 	var desc roachpb.RangeDescriptor
@@ -365,9 +365,9 @@ func snapshot(
 	state.TruncatedState = nil
 
 	return OutgoingSnapshot{
-		EngineSnap: snap,
-		State:      state,
-		SnapUUID:   snapUUID,
+		StateSnap: snap,
+		State:     state,
+		SnapUUID:  snapUUID,
 		RaftSnap: raftpb.Snapshot{
 			Data: snapUUID.GetBytes(),
 			Metadata: raftpb.SnapshotMetadata{
@@ -678,7 +678,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// treated as fatal.
 
 	sl := kvstorage.MakeStateLoader(desc.RangeID)
-	state, err := sl.Load(ctx, r.store.TODOEngine(), desc)
+	state, err := sl.Load(ctx, r.store.StateEngine(), desc)
 	if err != nil {
 		log.KvExec.Fatalf(ctx, "unable to load replica state: %s", err)
 	}
@@ -698,7 +698,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// Read the prior read summary for this range, which was included in the
 	// snapshot. We may need to use it to bump our timestamp cache if we
 	// discover that we are the leaseholder as of the snapshot's log index.
-	prioReadSum, err := readsummary.Load(ctx, r.store.TODOEngine(), r.RangeID)
+	prioReadSum, err := readsummary.Load(ctx, r.store.StateEngine(), r.RangeID)
 	if err != nil {
 		log.KvExec.Fatalf(ctx, "failed to read prior read summary after applying snapshot: %+v", err)
 	}

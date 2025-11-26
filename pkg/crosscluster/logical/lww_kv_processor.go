@@ -204,11 +204,11 @@ func (p *kvRowProcessor) processRow(
 	return batchStats{}, p.addToBatch(ctx, txn.KV(), b, dstTableID, row, keyValue, prevValue)
 }
 
-func (p *kvRowProcessor) ReportMutations(refresher *stats.Refresher) {
+func (p *kvRowProcessor) ReportMutations(ctx context.Context, refresher *stats.Refresher) {
 	for _, w := range p.writers {
 		if w.unreportedMutations > 0 && w.leased != nil {
 			if desc := w.leased.Underlying(); desc != nil {
-				refresher.NotifyMutation(desc.(catalog.TableDescriptor), w.unreportedMutations)
+				refresher.NotifyMutation(ctx, desc.(catalog.TableDescriptor), w.unreportedMutations)
 				w.unreportedMutations = 0
 			}
 		}

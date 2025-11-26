@@ -129,7 +129,7 @@ func (n *upsertNode) processBatch(params runParams) (lastBatch bool, err error) 
 			return false, err
 		}
 		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(n.run.tw.tableDesc(), int(n.run.tw.rowsAffected()))
+		params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, n.run.tw.tableDesc(), int(n.run.tw.rowsAffected()))
 	}
 	return lastBatch, nil
 }

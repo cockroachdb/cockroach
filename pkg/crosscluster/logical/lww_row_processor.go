@@ -272,7 +272,7 @@ func makeSQLProcessorFromQuerier(
 // ReportMutations implements the BatchHandler interface, but is a no-op for
 // sqlRowProcessor because its mutations are already reported by the queries it
 // runs when they are run.
-func (sqlRowProcessor) ReportMutations(_ *stats.Refresher) {}
+func (sqlRowProcessor) ReportMutations(context.Context, *stats.Refresher) {}
 
 // ReleaseLeases implements the BatchHandler interface but is a no-op since each
 // query does this itself.

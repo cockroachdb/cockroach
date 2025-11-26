@@ -25,15 +25,19 @@ import (
 // MergedStatistics returns merged stats per single-column full stat by merging
 // them with all newer partial stats for that column in chronological order.
 // Partial statistics that fail to merge are ignored, and full statistics
-// without any successful merges are excluded from the result.
+// without any successful merges are excluded from the result. All stats
+// correspond to the same table.
 func MergedStatistics(
 	ctx context.Context, stats []*TableStatistic, st *cluster.Settings,
 ) []*TableStatistic {
 	var cmpCtx *eval.Context
-	// Map the ColumnIDs to the latest full table statistic.
-	// It relies on the fact that the first full statistic
-	// is the latest.
+	// Map the ColumnIDs to the latest full table statistic. It relies on the
+	// fact that the first full statistic is the latest.
 	fullStatsMap := make(map[descpb.ColumnID]*TableStatistic)
+	// origStatID tracks the StatisticsID of the full statistics. This is needed
+	// since we'll be updating entries in fullStatsMap in-place when merging
+	// partial which overrides StatisticsID to 0.
+	origStatIDMap := make(map[descpb.ColumnID]uint64)
 	// Map from full statistic ID to its lower bound. This is used to determine
 	// where to split histograms for partial statistics at extremes when merging.
 	extremesBoundMap := make(map[uint64]tree.Datum)
@@ -42,15 +46,15 @@ func MergedStatistics(
 			continue
 		}
 		col := fullStat.ColumnIDs[0]
-		_, ok := fullStatsMap[col]
-		if !ok {
+		if _, ok := fullStatsMap[col]; !ok {
 			fullStatsMap[col] = fullStat
-		}
-		if len(fullStat.Histogram) > 0 {
-			fh := fullStat.nonNullHistogram().buckets
-			fh = stripOuterBuckets(ctx, cmpCtx, fh)
-			if len(fh) > 0 {
-				extremesBoundMap[fullStat.StatisticID] = fh[0].UpperBound
+			origStatIDMap[col] = fullStat.StatisticID
+			if len(fullStat.Histogram) > 0 {
+				fh := fullStat.nonNullHistogram().buckets
+				fh = stripOuterBuckets(ctx, cmpCtx, fh)
+				if len(fh) > 0 {
+					extremesBoundMap[fullStat.StatisticID] = fh[0].UpperBound
+				}
 			}
 		}
 	}
@@ -64,19 +68,33 @@ func MergedStatistics(
 			continue
 		}
 		col := partialStat.ColumnIDs[0]
-		if fullStat, ok := fullStatsMap[col]; ok && partialStat.CreatedAt.After(fullStat.CreatedAt) {
-			atExtremes := partialStat.FullStatisticID != 0
-			extremesBound := extremesBoundMap[partialStat.FullStatisticID]
-			merged, err := mergePartialStatistic(ctx, cmpCtx, fullStat, partialStat,
-				st, atExtremes, extremesBound)
-			if err != nil {
-				log.VEventf(ctx, 2, "could not merge statistics for table %v columns %s: %v",
-					fullStat.TableID, redact.Safe(col), err)
-				continue
-			}
-			mergedColIDs.Add(col)
-			fullStatsMap[col] = merged
+		fullStat, ok := fullStatsMap[col]
+		if !ok {
+			continue
 		}
+		atExtremes := partialStat.FullStatisticID != 0
+		if atExtremes && partialStat.FullStatisticID != origStatIDMap[col] {
+			// This partial stat was created USING EXTREMES based on a different
+			// (old) full stat, so we don't want to merge it with the most
+			// recent full stat.
+			continue
+		}
+		if !partialStat.CreatedAt.After(fullStat.CreatedAt) {
+			// This partial stat is more stale than the most recent full stat,
+			// so just ignore it.
+			continue
+		}
+		extremesBound := extremesBoundMap[partialStat.FullStatisticID]
+		merged, err := mergePartialStatistic(
+			ctx, cmpCtx, fullStat, partialStat, st, atExtremes, extremesBound,
+		)
+		if err != nil {
+			log.VEventf(ctx, 2, "could not merge statistics for table %v columns %s: %v",
+				fullStat.TableID, redact.Safe(col), err)
+			continue
+		}
+		mergedColIDs.Add(col)
+		fullStatsMap[col] = merged
 	}
 
 	mergedStats := make([]*TableStatistic, 0, mergedColIDs.Len())
@@ -177,6 +195,7 @@ func mergePartialStatistic(
 	partialHistogram = stripOuterBuckets(ctx, evalCtx, partialHistogram)
 
 	mergedHistogram := fullHistogram
+	var err error
 	if atExtremes {
 		if extremesBound == nil {
 			return nil, errors.New("can't merge partial statistic at extremes without an extremes bound")
@@ -184,24 +203,23 @@ func mergePartialStatistic(
 		// Find the index separating the lower and upper extreme partial buckets.
 		i := 0
 		for i < len(partialHistogram) {
-			if val, err := partialHistogram[i].UpperBound.Compare(ctx, evalCtx, extremesBound); err == nil {
-				if val == 0 {
-					return nil, errors.New("the lowerbound of the full statistic histogram overlaps with the partial statistic histogram")
-				}
-				if val == -1 {
-					i++
-				} else {
-					break
-				}
-			} else {
+			cmp, err := partialHistogram[i].UpperBound.Compare(ctx, evalCtx, extremesBound)
+			if err != nil {
 				return nil, err
+			}
+			if cmp == 0 {
+				return nil, errors.New("the lowerbound of the full statistic histogram overlaps with the partial statistic histogram")
+			}
+			if cmp == -1 {
+				i++
+			} else {
+				break
 			}
 		}
 
 		lowerExtremeBuckets := partialHistogram[:i]
 		upperExtremeBuckets := partialHistogram[i:]
 
-		var err error
 		if len(lowerExtremeBuckets) > 0 {
 			mergedHistogram, err = mergeHistograms(ctx, evalCtx, mergedHistogram, lowerExtremeBuckets)
 			if err != nil {
@@ -215,7 +233,6 @@ func mergePartialStatistic(
 			}
 		}
 	} else {
-		var err error
 		mergedHistogram, err = mergeHistograms(ctx, evalCtx, mergedHistogram, partialHistogram)
 		if err != nil {
 			return nil, err
@@ -271,9 +288,7 @@ func mergePartialStatistic(
 		},
 	}
 
-	hist := histogram{
-		buckets: mergedHistogram,
-	}
+	hist := histogram{buckets: mergedHistogram}
 	hist.adjustCounts(ctx, evalCtx, fullStat.HistogramData.ColumnType, mergedNonNullRowCount, mergedNonNullDistinctCount)
 	histData, err := hist.toHistogramData(ctx, fullStat.HistogramData.ColumnType, st)
 	if err != nil {
@@ -294,8 +309,8 @@ type boundedBucket struct {
 
 func getBoundedBucket(
 	ctx context.Context, evalCtx *eval.Context, histogram []cat.HistogramBucket, idx int,
-) (b boundedBucket) {
-	b = boundedBucket{
+) boundedBucket {
+	b := boundedBucket{
 		HistogramBucket: histogram[idx],
 		lowerBound:      histogram[idx].UpperBound,
 	}
@@ -350,7 +365,8 @@ func filterBucket(
 	bucket boundedBucket, filterLower, filterUpper tree.Datum,
 ) (numRange, distinctRange float64) {
 	rangeBefore, rangeAfter, ok := datumrange.GetRangesBeforeAndAfter(
-		bucket.lowerBound, bucket.UpperBound, filterLower, filterUpper, false /* swap */)
+		bucket.lowerBound, bucket.UpperBound, filterLower, filterUpper, false, /* swap */
+	)
 
 	if ok && rangeBefore > 0 {
 		numRange = bucket.NumRange * rangeAfter / rangeBefore
@@ -461,8 +477,7 @@ func mergeHistograms(
 		for ; j < len(partial); j++ {
 			pBucket := getBoundedBucket(ctx, evalCtx, partial, j)
 
-			overlaps, overlapLower, overlapUpper, err := tryOverlap(ctx, evalCtx,
-				pBucket, fBucket)
+			overlaps, overlapLower, overlapUpper, err := tryOverlap(ctx, evalCtx, pBucket, fBucket)
 			if err != nil {
 				return nil, err
 			}
@@ -479,24 +494,24 @@ func mergeHistograms(
 			b.NumRange = b.NumRange - fNumRange + pNumRange
 			b.DistinctRange = b.DistinctRange - fDistinctRange + pDistinctRange
 
-			if cmp, err := pBucket.UpperBound.Compare(ctx, evalCtx, fBucket.UpperBound); err == nil {
-				if cmp == 0 {
-					// Use the partial bucket's NumEq if the upper bounds are the same.
-					b.NumEq = partial[j].NumEq
-				} else if cmp < 0 {
-					if partial[j].NumEq > 0 {
-						// The partial bucket ends before the full bucket, so we need to
-						// account for the partial bucket's upper bound value.
-						b.DistinctRange += 1
-						b.NumRange += partial[j].NumEq
-					}
-				} else {
-					// The partial bucket ends after the full bucket, so we continue to
-					// the next full bucket.
-					break
+			cmp, err := pBucket.UpperBound.Compare(ctx, evalCtx, fBucket.UpperBound)
+			if err != nil {
+				return nil, err
+			}
+			if cmp == 0 {
+				// Use the partial bucket's NumEq if the upper bounds are the same.
+				b.NumEq = partial[j].NumEq
+			} else if cmp < 0 {
+				if partial[j].NumEq > 0 {
+					// The partial bucket ends before the full bucket, so we need to
+					// account for the partial bucket's upper bound value.
+					b.DistinctRange += 1
+					b.NumRange += partial[j].NumEq
 				}
 			} else {
-				return nil, err
+				// The partial bucket ends after the full bucket, so we continue to
+				// the next full bucket.
+				break
 			}
 		}
 		merged = append(merged, b)
@@ -510,23 +525,23 @@ func mergeHistograms(
 	fUpperBound := full[len(full)-1].UpperBound
 	for ; j < len(partial); j++ {
 		pBucket := getBoundedBucket(ctx, evalCtx, partial, j)
-		if cmp, err := pBucket.lowerBound.Compare(ctx, evalCtx, fUpperBound); err == nil {
-			if cmp < 0 {
-				// The partial bucket overlaps with the last full bucket, so we only
-				// emit the non-overlapping part.
-				numRange, distinctRange := filterBucket(pBucket, fUpperBound, pBucket.UpperBound)
-
-				merged = append(merged, cat.HistogramBucket{
-					NumEq:         partial[j].NumEq,
-					NumRange:      numRange,
-					DistinctRange: distinctRange,
-					UpperBound:    partial[j].UpperBound,
-				})
-			} else {
-				merged = append(merged, partial[j])
-			}
-		} else {
+		cmp, err := pBucket.lowerBound.Compare(ctx, evalCtx, fUpperBound)
+		if err != nil {
 			return nil, err
+		}
+		if cmp < 0 {
+			// The partial bucket overlaps with the last full bucket, so we only
+			// emit the non-overlapping part.
+			numRange, distinctRange := filterBucket(pBucket, fUpperBound, pBucket.UpperBound)
+
+			merged = append(merged, cat.HistogramBucket{
+				NumEq:         partial[j].NumEq,
+				NumRange:      numRange,
+				DistinctRange: distinctRange,
+				UpperBound:    partial[j].UpperBound,
+			})
+		} else {
+			merged = append(merged, partial[j])
 		}
 	}
 

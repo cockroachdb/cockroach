@@ -161,7 +161,7 @@ func (d *deleteNode) processBatch(params runParams) (lastBatch bool, err error) 
 			return false, err
 		}
 		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(d.run.td.tableDesc(), int(d.run.rowsAffected()))
+		params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, d.run.td.tableDesc(), int(d.run.rowsAffected()))
 	}
 	return lastBatch, nil
 }
