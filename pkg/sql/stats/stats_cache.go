@@ -664,25 +664,10 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 // need to run a query to get user defined type metadata.
 func (sc *TableStatisticsCache) parseStats(
 	ctx context.Context, datums tree.Datums, typeResolver *descs.DistSQLTypeResolver,
-) (_ *TableStatistic, _ *types.T, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// In the event of a "safe" panic, we only want to log the error and
-			// continue executing the query without stats for this table. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+) (_ *TableStatistic, _ *types.T, retErr error) {
+	defer errorutil.MaybeCatchPanic(&retErr)
 
-	var tsp *TableStatisticProto
-	tsp, err = NewTableStatisticProto(datums)
+	tsp, err := NewTableStatisticProto(datums)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -992,7 +977,7 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 	forecast bool,
 	st *cluster.Settings,
 	typeResolver *descs.DistSQLTypeResolver,
-) (_ []*TableStatistic, _ map[descpb.ColumnID]*types.T, err error) {
+) (_ []*TableStatistic, _ map[descpb.ColumnID]*types.T, retErr error) {
 	it, err := sc.db.Executor().QueryIteratorEx(
 		ctx, "get-table-statistics", nil /* txn */, sessiondata.NodeUserSessionDataOverride, getTableStatisticsStmt, tableID,
 	)
@@ -1001,21 +986,7 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 	}
 
 	// Guard against crashes in the code below.
-	defer func() {
-		if r := recover(); r != nil {
-			// In the event of a "safe" panic, we only want to log the error and
-			// continue executing the query without stats for this table. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+	defer errorutil.MaybeCatchPanic(&retErr)
 
 	var statsList []*TableStatistic
 	var udts map[descpb.ColumnID]*types.T
@@ -1070,7 +1041,7 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 // user-defined type that doesn't exist) and returns the rest (with no error).
 func getTableStatsProtosFromDB(
 	ctx context.Context, tableID descpb.ID, executor isql.Executor,
-) (statsProtos []*TableStatisticProto, err error) {
+) (statsProtos []*TableStatisticProto, retErr error) {
 	it, err := executor.QueryIteratorEx(
 		ctx, "get-table-statistics-protos", nil /* txn */, sessiondata.NodeUserSessionDataOverride, getTableStatisticsStmt, tableID,
 	)
@@ -1079,31 +1050,19 @@ func getTableStatsProtosFromDB(
 	}
 
 	// Guard against crashes in the code below.
-	defer func() {
-		if r := recover(); r != nil {
-			// In the event of a "safe" panic, we only want to log the error and
-			// continue executing the query without stats for this table. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+	defer errorutil.MaybeCatchPanic(&retErr)
 
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		var tsp *TableStatisticProto
-		tsp, err = NewTableStatisticProto(it.Cur())
+		tsp, err := NewTableStatisticProto(it.Cur())
 		if err != nil {
 			log.Dev.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
 			continue
 		}
 		statsProtos = append(statsProtos, tsp)
+	}
+	if err != nil {
+		return nil, err
 	}
 	return statsProtos, nil
 }
