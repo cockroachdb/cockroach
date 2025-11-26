@@ -520,18 +520,16 @@ func makeStoreAndLocality(
 	}
 }
 
-func TestDiversityFunc(t *testing.T) {
+func TestDiversityOfTwoStoreSets(t *testing.T) {
 	interner := newStringInterner()
 	lti := newLocalityTierInterner(interner)
 
 	tests := []struct {
-		name       string
-		this       []storeAndLocality
-		other      []storeAndLocality
-		sameStores bool
-		// Expected sum of diversity scores
-		expectedSumScore float64
-		// Expected number of pairs compared
+		name               string
+		this               []storeAndLocality
+		other              []storeAndLocality
+		sameStores         bool
+		expectedSumScore   float64
 		expectedNumSamples int
 	}{
 		{
@@ -709,6 +707,9 @@ func TestDiversityFunc(t *testing.T) {
 				"expected sum score %.4f, got %.4f", tt.expectedSumScore, sumScore)
 			require.Equal(t, tt.expectedNumSamples, numSamples,
 				"expected %d samples, got %d", tt.expectedNumSamples, numSamples)
+			sumScore2, numSamples2 := diversityOfTwoStoreSets(tt.other, tt.this, tt.sameStores)
+			require.Equal(t, sumScore, sumScore2)
+			require.Equal(t, numSamples, numSamples2)
 		})
 	}
 }
