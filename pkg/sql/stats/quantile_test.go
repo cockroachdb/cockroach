@@ -594,13 +594,17 @@ func (th testHistogram) toHistogram() histogram {
 	}
 	h := histogram{buckets: make([]cat.HistogramBucket, len(th))}
 	for i := range th {
-		// Unlike in TableStatistic.setHistogramBuckets and
-		// histogram.toHistogramData, we do not round here so that we can test the
-		// rounding behavior of those functions.
-		h.buckets[i].NumEq = th[i].NumEq
-		h.buckets[i].NumRange = th[i].NumRange
-		h.buckets[i].DistinctRange = th[i].DistinctRange
-		h.buckets[i].UpperBound = tree.NewDFloat(tree.DFloat(th[i].UpperBound))
+		if isDelimiterBucket(th[i]) {
+			h.buckets[i].UpperBound = tree.DNull
+		} else {
+			// Unlike in TableStatistic.setHistogramBuckets and
+			// histogram.toHistogramData, we do not round here so that we can test the
+			// rounding behavior of those functions.
+			h.buckets[i].NumEq = th[i].NumEq
+			h.buckets[i].NumRange = th[i].NumRange
+			h.buckets[i].DistinctRange = th[i].DistinctRange
+			h.buckets[i].UpperBound = tree.NewDFloat(tree.DFloat(th[i].UpperBound))
+		}
 	}
 	return h
 }

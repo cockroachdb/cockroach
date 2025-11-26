@@ -392,12 +392,11 @@ func TestEquiDepthHistogram(t *testing.T) {
 	})
 }
 
-func TestConstructExtremesHistogram(t *testing.T) {
+func TestConstructPartialHistogram(t *testing.T) {
 	testCases := []struct {
-		values                 []int64
+		values                 [][]int64
 		numRows, distinctCount int64
 		maxBuckets             int
-		lowerBound             int64
 		expected               []expBucket
 	}{
 		// This case is intended to simulate when the distribution of the
@@ -411,14 +410,14 @@ func TestConstructExtremesHistogram(t *testing.T) {
 		// should be undefined. This test helps validate that the constructed
 		// histogram does not include the undefined range.
 		{
-			values:        []int64{0, 1, 3, 4, 5, 6, 7, 8, 9, 10},
+			values:        [][]int64{{0, 1}, {3, 4, 5, 6, 7, 8, 9, 10}},
 			numRows:       10,
 			distinctCount: 10,
 			maxBuckets:    4,
-			lowerBound:    2,
 			expected: []expBucket{
 				{0, 1, 0, 0},
 				{1, 1, 0, 0},
+				{numEq: -1}, // delimiterBucket
 				{3, 1, 1, 0.67},
 				{10, 1, 6, 5.33},
 			},
@@ -426,15 +425,15 @@ func TestConstructExtremesHistogram(t *testing.T) {
 		{
 			// Test with a small distribution of values but a large
 			// number of rows.
-			values:        []int64{1, 2, 4, 5},
+			values:        [][]int64{{1, 2}, {4, 5}},
 			numRows:       3000,
 			distinctCount: 600,
 			maxBuckets:    5,
-			lowerBound:    3,
 			expected: []expBucket{
 				{math.MinInt64, 0, 0, 0},
 				{1, 601, 298, 297.5},
 				{2, 601, 0, 0},
+				{numEq: -1}, // delimiterBucket
 				{4, 601, 1, 1},
 				{5, 601, 0, 0},
 				{math.MaxInt64, 0, 298, 297.5},
@@ -442,28 +441,28 @@ func TestConstructExtremesHistogram(t *testing.T) {
 		},
 		{
 			// Test with a lowerbound towards the end of the range.
-			values:        []int64{3, 6, 9, 12, 18},
+			values:        [][]int64{{3, 6, 9, 12}, {18}},
 			numRows:       500,
 			distinctCount: 5,
 			maxBuckets:    10,
-			lowerBound:    15,
 			expected: []expBucket{
 				{3, 100, 0, 0},
 				{6, 100, 0, 0},
 				{9, 100, 0, 0},
 				{12, 100, 0, 0},
+				{numEq: -1}, // delimiterBucket
 				{18, 100, 0, 0}},
 		},
 		{
 			// Test with values that are very sparsely distributed.
-			values:        []int64{0, 100, 500, 800},
+			values:        [][]int64{{0, 100}, {500, 800}},
 			numRows:       50,
 			distinctCount: 20,
 			maxBuckets:    8,
-			lowerBound:    250,
 			expected: []expBucket{
 				{0, 9, 0, 0},
 				{100, 9, 2, 1.99},
+				{numEq: -1}, // delimiterBucket
 				{500, 9, 8, 8.01},
 				{800, 9, 6, 6},
 			},
@@ -475,17 +474,20 @@ func TestConstructExtremesHistogram(t *testing.T) {
 	evalCtx := eval.NewTestingEvalContext(st)
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			samples := make(tree.Datums, len(tc.values))
-			perm := rand.Perm(len(tc.values))
-			for i := range samples {
-				// Randomly permute the samples.
-				val := tc.values[perm[i]]
+			samples := make([]tree.Datums, len(tc.values))
+			for i, spanSamples := range tc.values {
+				samples[i] = make(tree.Datums, len(spanSamples))
 
-				samples[i] = tree.NewDInt(tree.DInt(val))
+				perm := rand.Perm(len(spanSamples))
+				for j := range spanSamples {
+					// Randomly permute the samples.
+					val := spanSamples[perm[j]]
+					samples[i][j] = tree.NewDInt(tree.DInt(val))
+				}
 			}
-			h, _, err := ConstructExtremesHistogram(
+			h, _, err := ConstructPartialHistogram(
 				ctx, evalCtx, types.Int, samples, tc.numRows, tc.distinctCount,
-				tc.maxBuckets, tree.NewDInt(tree.DInt(tc.lowerBound)), st,
+				tc.maxBuckets, st,
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -1230,6 +1232,19 @@ func validateHistogramBuckets(t *testing.T, expected []expBucket, h HistogramDat
 			t.Fatal(err)
 		}
 		exp := expected[i]
+
+		valDelimiter := val == tree.DNull
+		expDelimiter := exp.numEq == -1
+		if valDelimiter != expDelimiter {
+			if valDelimiter {
+				t.Errorf("bucket %d: incorrect <null> delimiter, expected %d", i, exp.upper)
+			} else {
+				t.Errorf("bucket %d: incorrect bucket %d, expected <null> delimiter ", i, *val.(*tree.DInt))
+			}
+		} else if valDelimiter && expDelimiter {
+			continue
+		}
+
 		if int64(*val.(*tree.DInt)) != int64(exp.upper) {
 			t.Errorf("bucket %d: incorrect boundary %d, expected %d", i, *val.(*tree.DInt), exp.upper)
 		}

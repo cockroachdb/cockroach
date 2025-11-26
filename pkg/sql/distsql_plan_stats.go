@@ -379,7 +379,6 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	}
 
 	var predicate string
-	var prevLowerBound tree.Datum
 	if details.UsingExtremes {
 		var sb span.Builder
 		sb.InitAllowingExternalRowData(
@@ -400,7 +399,6 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 				scan.desc.GetName(), scan.index.GetName(), stat.TableID, stat.ColumnIDs,
 			)
 		}
-		prevLowerBound = lowerBound
 
 		extremesSpans, err := bounds.ConstructUsingExtremesSpans(
 			lowerBound, upperBound, scan.index,
@@ -439,9 +437,10 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		Columns:             make([]uint32, len(reqStat.columns)),
 		StatName:            reqStat.name,
 		PartialPredicate:    predicate,
+		PartialSpans:        scan.spans,
+		Table:               *desc.TableDesc(),
 	}
-	if details.UsingExtremes && prevLowerBound != nil {
-		spec.PrevLowerBound = tree.Serialize(prevLowerBound)
+	if details.UsingExtremes {
 		spec.FullStatisticID = stat.StatisticID
 	}
 

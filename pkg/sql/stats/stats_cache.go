@@ -922,8 +922,8 @@ func (tabStat *TableStatistic) setHistogramBuckets(hist histogram) {
 	}
 }
 
-// nonNullHistogram returns the TableStatistic histogram with the NULL bucket
-// removed.
+// nonNullHistogram returns the TableStatistic histogram with the leading NULL
+// bucket removed.
 func (tabStat *TableStatistic) nonNullHistogram() histogram {
 	if len(tabStat.Histogram) > 0 && tabStat.Histogram[0].UpperBound == tree.DNull {
 		return histogram{buckets: tabStat.Histogram[1:]}
