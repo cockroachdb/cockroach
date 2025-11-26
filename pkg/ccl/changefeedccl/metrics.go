@@ -765,7 +765,7 @@ var (
 		Help:        "Total retryable errors encountered by all changefeeds",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse: crstrings.UnwrapText(`
 			This metric tracks transient changefeed errors. Alert on "too many"
@@ -781,7 +781,7 @@ var (
 		Help:        "Total number of changefeed jobs which have failed",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse: crstrings.UnwrapText(`
 			This metric tracks the permanent changefeed job failures that the jobs
@@ -866,7 +866,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "Messages emitted by all feeds",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse: crstrings.UnwrapText(`
 			This metric provides a useful context when assessing the state of
@@ -894,7 +894,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "Bytes emitted by all feeds",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse: crstrings.UnwrapText(`
 			This metric provides a useful context when assessing the state of
@@ -945,7 +945,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse: crstrings.UnwrapText(`
 			This metric provides a useful context when assessing the state of
@@ -970,6 +970,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "Number of changefeeds currently executing backfill",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaChangefeedBackfillPendingRanges := metric.Metadata{
 		Name:        "changefeed.backfill_pending_ranges",
@@ -982,7 +983,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "Number of currently running changefeeds, including sinkless",
 		Measurement: "Changefeeds",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CHANGEFEEDS,
 		HowToUse:    `This metric tracks the total number of all running changefeeds.`,
 	}
@@ -1119,6 +1120,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "The most any changefeed's persisted checkpoint is behind the present",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaChangefeedSpanProgressSkew := metric.Metadata{
 		Name:        "changefeed.progress_skew.span",

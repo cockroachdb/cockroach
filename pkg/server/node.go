@@ -112,6 +112,7 @@ understanding the health of the KV layer.
 `,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaExecSuccess = metric.Metadata{
 		Name: "exec.success",
