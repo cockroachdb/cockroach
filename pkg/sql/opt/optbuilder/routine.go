@@ -338,8 +338,9 @@ func (b *Builder) buildRoutine(
 				args[i] = b.factory.ConstructCast(args[i], desiredTyp)
 			}
 			argColName := funcParamColName(tree.Name(paramTypes[i].Name), i)
-			col := b.synthesizeColumn(bodyScope, argColName, desiredTyp, nil /* expr */, nil /* scalar */)
-			col.setParamOrd(i)
+			col := b.synthesizeParameterColumn(
+				bodyScope, argColName, desiredTyp, i, nil, /* scalar */
+			)
 			params[i] = col.id
 		}
 	}
