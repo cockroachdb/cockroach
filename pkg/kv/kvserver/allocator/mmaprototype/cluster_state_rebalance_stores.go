@@ -112,6 +112,9 @@ func newRebalanceEnv(
 
 type sheddingStore struct {
 	roachpb.StoreID
+	// storeLoadSummary is relative to the entire cluster (not a set of valid
+	// replacement stores for some particular replica), see the comment where
+	// sheddingStores are constructed.
 	storeLoadSummary
 }
 
@@ -595,6 +598,9 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		if len(candsPL) <= 1 {
 			continue // leaseholder is the only candidate
 		}
+
+		candsPL = retainReadyLeaseTargetStoresOnly(ctx, candsPL, re.stores, rangeID)
+
 		clear(re.scratch.nodes)
 		means := computeMeansForStoreSet(re, candsPL, re.scratch.nodes, re.scratch.stores)
 		sls := re.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
@@ -607,12 +613,6 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 		var candsSet candidateSet
 		for _, cand := range cands {
-			if disp := re.stores[cand.storeID].adjusted.replicas[rangeID].LeaseDisposition; disp != LeaseDispositionOK {
-				// Don't transfer lease to a store that is lagging.
-				log.KvDistribution.Infof(ctx, "skipping store s%d for lease transfer: lease disposition %v",
-					cand.storeID, disp)
-				continue
-			}
 			candSls := re.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)
 			candsSet.candidates = append(candsSet.candidates, candidateInfo{
 				StoreID:              cand.storeID,
@@ -684,4 +684,35 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 	}
 	// We iterated through all top-K ranges without running into any limits.
 	return leaseTransferCount
+}
+
+// retainReadyLeaseTargetStoresOnly filters the input set to only those stores that
+// are ready to accept a lease for the given range. A store is not ready if it
+// is not healthy, or does not accept leases at either the store or replica level.
+//
+// The input storeSet is mutated (and used to for the returned result).
+func retainReadyLeaseTargetStoresOnly(
+	ctx context.Context,
+	in storeSet,
+	stores map[roachpb.StoreID]*storeState,
+	rangeID roachpb.RangeID,
+) storeSet {
+	out := in[:0]
+	for _, storeID := range in {
+		s := stores[storeID].status
+		switch {
+		case s.Health != HealthOK:
+			// NB: we don't strictly need to check health here since only
+			// healthy stores can have "green" dispositions, but it's nice for
+			// logging.
+			log.KvDistribution.VEventf(ctx, 2, "skipping s%d for lease transfer: health %v", storeID, s.Health)
+		case s.Disposition.Lease != LeaseDispositionOK:
+			log.KvDistribution.VEventf(ctx, 2, "skipping s%d for lease transfer: lease disposition %v", storeID, s.Disposition.Lease)
+		case stores[storeID].adjusted.replicas[rangeID].LeaseDisposition != LeaseDispositionOK:
+			log.KvDistribution.VEventf(ctx, 2, "skipping s%d for lease transfer: replica lease disposition %v", storeID, stores[storeID].adjusted.replicas[rangeID].LeaseDisposition)
+		default:
+			out = append(out, storeID)
+		}
+	}
+	return out
 }
