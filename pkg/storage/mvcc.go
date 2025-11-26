@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -3705,6 +3706,221 @@ func MVCCDeleteRange(
 	return keys, res.ResumeSpan, res.NumKeys, acqs, nil
 }
 
+// checkDeletePredicates returns true if the value at the current iterator
+// position should be deleted.
+func checkDeletePredicates(
+	it SimpleMVCCIterator, predicates *kvpb.DeleteRangePredicates,
+) (bool, error) {
+	if predicates.ImportEpoch > 0 {
+		// TODO(ssd): We will likely eventually want something that constructs our
+		// iterator options based on the predicate so that we can use a
+		// block-property filter for import epochs.
+		rawV, err := it.UnsafeValue()
+		if err != nil {
+			return false, err
+		}
+		v, err := DecodeMVCCValue(rawV)
+		if err != nil {
+			return false, err
+		}
+		return v.ImportEpoch == predicates.ImportEpoch, nil
+	} else {
+		return predicates.StartTime.Less(it.UnsafeKey().Timestamp), nil
+	}
+}
+
+// MVCCPredicateDeleteRangePointTombstones issues MVCC tombstones at endTime to
+// live keys within the span [startKey, endKey) that also have MVCC versions
+// that match the predicate filters.
+//
+// This operation is non-transactional, but will check for existing intents in
+// the target key span, regardless of timestamp, and return a LockConflictError
+// containing up to maxLockConflicts locks.
+//
+// MVCCPredicateDeleteRangePointTombstones will return with a resumeSpan if the
+// number of tombstones written exceeds maxBatchSize or the size of the written
+// tombstones exceeds maxByteSize. These constraints prevent overwhelming raft.
+//
+// If an MVCC key surfaced has a timestamp at or above endTime,
+// MVCCPredicateDeleteRangePointTombstones returns a WriteTooOldError without a
+// resumeSpan, even if tombstones were already written to disk. To resolve, the
+// caller should retry the call at a higher timestamp, assuming they have the
+// appropriate level of isolation (e.g. the span covers an offline table, in
+// the case of IMPORT rollbacks).
+//
+// An example of how this works: Issuing DeleteRange[a,e)@3 with
+// Predicate{StartTime=1} on the following keys would issue tombstones at a@3,
+// b@3, and d@3.
+//
+// t3
+// t2 a2 b2    d2 e2
+// t1    b1 c1
+//
+//	a  b  c  d  e
+func MVCCPredicateDeleteRangePointTombstones(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	startKey, endKey roachpb.Key,
+	endTime hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
+	predicates kvpb.DeleteRangePredicates,
+	maxBatchSize int64,
+	maxBatchByteSize int64,
+	maxLockConflicts int64,
+	targetLockConflictBytes int64,
+) (*roachpb.Span, error) {
+	if endTime.IsEmpty() {
+		return nil, errors.AssertionFailedf("MVCCPredicateDeleteRange expects non-empty endTime")
+	}
+	if ms == nil {
+		return nil, errors.AssertionFailedf(
+			"MVCCStats passed in to MVCCPredicateDeleteRange must be non-nil to ensure proper stats" +
+				" computation during Delete operations")
+	}
+
+	// Check for any overlapping locks, and return them to be resolved.
+	if locks, err := ScanLocks(ctx, rw, startKey, endKey, maxLockConflicts, targetLockConflictBytes); err != nil {
+		return nil, err
+	} else if len(locks) > 0 {
+		return nil, &kvpb.LockConflictError{Locks: locks}
+	}
+
+	// Create some reusable machinery for flushing a run with point tombstones
+	// that is typically used in a single MVCCPut call.
+	pointTombstoneIter, err := newMVCCIterator(
+		ctx, rw, endTime, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
+		IterOptions{
+			KeyTypes:     IterKeyTypePointsAndRanges,
+			Prefix:       true,
+			ReadCategory: fs.BatchEvalReadCategory,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer pointTombstoneIter.Close()
+
+	ltScanner, err := newLockTableKeyScanner(
+		ctx, rw, uuid.UUID{} /* txnID */, lock.Intent,
+		maxLockConflicts, targetLockConflictBytes, fs.BatchEvalReadCategory,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer ltScanner.close()
+
+	pointTombstoneBuf := newPutBuffer()
+	defer pointTombstoneBuf.release()
+
+	deleteKey := func(key roachpb.Key) error {
+		// Use Point tombstones
+		_, acq, err := mvccPutInternal(
+			ctx, rw, pointTombstoneIter, ltScanner, key, endTime, noValue, pointTombstoneBuf,
+			nil, MVCCWriteOptions{
+				LocalTimestamp: localTimestamp, Stats: ms, Category: fs.BatchEvalReadCategory},
+		)
+		if err != nil {
+			return err
+		}
+		if !acq.Empty() {
+			log.Dev.Fatal(ctx, "expected empty lock acquisition for non-transactional point delete")
+		}
+		return nil
+	}
+
+	// Note: The range tombstone based predicate deletion logic used an mvcc
+	// incremental iterator because it needed to know when it was skipping over
+	// keys so that it didn't accidentally lay down range tombstones on key
+	// values that are older than the MinTimestamp. Since we are only using point
+	// tombstones, we can use a normal mvcc iterator with timestamp masking.
+	iter, err := newMVCCIterator(ctx, rw, endTime, true, true, IterOptions{
+		LowerBound:   startKey,
+		UpperBound:   endKey,
+		MinTimestamp: predicates.StartTime,
+		// Notice that the iterator's EndTime is set to hlc.MaxTimestamp, in order to
+		// detect and fail on any keys written at or after the client provided
+		// endTime. We don't _expect_ to hit intents or newer keys in the client
+		// provided span since the MVCCPredicateDeleteRange is only intended for
+		// non-live key spans, but there could be an intent leftover.
+		MaxTimestamp:         hlc.MaxTimestamp,
+		KeyTypes:             IterKeyTypePointsAndRanges,
+		ReadCategory:         fs.BatchEvalReadCategory,
+		RangeKeyMaskingBelow: endTime,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer iter.Close()
+
+	var batchSize, batchSizeBytes int64
+	iter.SeekGE(MVCCKey{Key: startKey})
+	for {
+		if ok, err := iter.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+
+		hasPointKey, hasRangeKey := iter.HasPointAndRange()
+		if hasRangeKey && iter.RangeKeyChanged() {
+			// If the range keys have changed check to see if one is more recent than
+			// the write time.
+			rangeKeys := iter.RangeKeys()
+			if endTime.LessEq(rangeKeys.Newest()) {
+				return nil, kvpb.NewWriteTooOldError(
+					endTime, rangeKeys.Newest().Next(), rangeKeys.Bounds.Key.Clone())
+			}
+		}
+
+		// NOTE: We don't check for a range key covering the point key because the
+		// iterator has range key masking enabled.
+		if !hasPointKey {
+			iter.Next()
+			continue
+		}
+
+		if endTime.LessEq(iter.UnsafeKey().Timestamp) {
+			return nil, kvpb.NewWriteTooOldError(endTime, iter.UnsafeKey().Timestamp.Next(), iter.UnsafeKey().Key.Clone())
+		}
+
+		_, tombstone, err := iter.MVCCValueLenAndIsTombstone()
+		if err != nil {
+			return nil, err
+		}
+		if tombstone {
+			iter.NextKey()
+			continue
+		}
+
+		delete, err := checkDeletePredicates(iter, &predicates)
+		if err != nil {
+			return nil, err
+		}
+		if !delete {
+			iter.NextKey()
+			continue
+		}
+
+		k := iter.UnsafeKey().Clone()
+		batchSize += 1
+		batchSizeBytes += int64(k.EncodedSize())
+
+		if maxBatchSize < batchSize || maxBatchByteSize < batchSizeBytes {
+			// If deleting the key would cross the batch size limits, do not delete
+			// it. Pass it back to the caller for the next iteration.
+			return &roachpb.Span{Key: k.Key, EndKey: endKey}, nil
+		}
+
+		if err := deleteKey(k.Key); err != nil {
+			return nil, err
+		}
+
+		iter.NextKey()
+	}
+	return nil, nil
+}
+
 // MVCCPredicateDeleteRange issues MVCC tombstones at endTime to live keys
 // within the span [startKey, endKey) that also have MVCC versions that match
 // the predicate filters. Long runs of matched keys will get deleted with a
@@ -3749,6 +3965,10 @@ func MVCCPredicateDeleteRange(
 	maxLockConflicts int64,
 	targetLockConflictBytes int64,
 ) (*roachpb.Span, error) {
+	// TODO(jeffswenson): delete the range tombstone predicate delete once V25_2
+	// is no longer supported as an upgrade path.
+	_ = clusterversion.V25_2
+
 	if endTime.IsEmpty() {
 		return nil, errors.AssertionFailedf("MVCCPredicateDeleteRange expects non-empty endTime")
 	}
@@ -3789,29 +4009,6 @@ func MVCCPredicateDeleteRange(
 		return nil, err
 	} else if len(locks) > 0 {
 		return nil, &kvpb.LockConflictError{Locks: locks}
-	}
-
-	var stopRunBasedOnPredicate func(k MVCCKey, iter *MVCCIncrementalIterator) (bool, error)
-	if predicates.ImportEpoch > 0 {
-		// TODO(ssd): We will likely eventually want something
-		// that consturcts our iterator opetions based on the
-		// predicate so that we can use a block-property
-		// filter for import epochs.
-		stopRunBasedOnPredicate = func(k MVCCKey, it *MVCCIncrementalIterator) (bool, error) {
-			rawV, err := it.UnsafeValue()
-			if err != nil {
-				return true, err
-			}
-			v, err := DecodeMVCCValue(rawV)
-			if err != nil {
-				return true, err
-			}
-			return v.ImportEpoch != predicates.ImportEpoch, nil
-		}
-	} else {
-		stopRunBasedOnPredicate = func(k MVCCKey, _ *MVCCIncrementalIterator) (bool, error) {
-			return k.Timestamp.LessEq(predicates.StartTime), nil
-		}
 	}
 
 	// continueRun returns three bools: the first is true if the current run
@@ -3864,10 +4061,13 @@ func MVCCPredicateDeleteRange(
 			return true, true, false, nil
 		}
 
-		// The latest key is a live point key. Conduct predicate filtering.
-		if stop, err := stopRunBasedOnPredicate(k, iter); err != nil {
+		// The latest key is a live point key. Conduct predicate filtering and stop
+		// the current run if the key does not match the predicate.
+		shouldDelete, err := checkDeletePredicates(iter, &predicates)
+		if err != nil {
 			return false, false, false, err
-		} else if stop {
+		}
+		if !shouldDelete {
 			return false, false, false, nil
 		}
 
