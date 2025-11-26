@@ -154,7 +154,7 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	}
 	queryStats, err := runPlanInsidePlan(
 		planAndRunCtx, params, newPlan.(*planComponents), rowResultWriter(n),
-		nil /* deferredRoutineSender */, "", /* stmtForDistSQLDiagram */
+		nil /* deferredRoutineSender */, "" /* stmtForDistSQLDiagram */, nil, /* sqlStatsBuilder */
 	)
 	if err != nil {
 		return false, err
