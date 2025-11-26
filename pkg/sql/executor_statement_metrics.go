@@ -208,7 +208,7 @@ func (ex *connExecutor) recordStatementSummary(
 			).
 			PlanGist(planner.instrumentation.planGist.String(), planner.instrumentation.planGist.Hash()).
 			LatencyRecorder(ex.statsCollector).
-			QueryLevelStats(stats.bytesRead, stats.rowsRead, stats.rowsWritten).
+			QueryLevelStats(stats.bytesRead, stats.rowsRead, stats.rowsWritten, stats.kvCPUTime.Nanoseconds()).
 			ExecStats(queryLevelStats).
 			// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
 			// converting to strings.

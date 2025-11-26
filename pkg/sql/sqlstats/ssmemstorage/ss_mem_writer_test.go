@@ -117,6 +117,7 @@ func TestContainer_Add(t *testing.T) {
 			BytesRead:          100,
 			RowsRead:           20,
 			RowsWritten:        5,
+			KVCPUTime:          30,
 			Failed:             true,
 			Generic:            true,
 			AppliedStmtHints:   true,
@@ -137,6 +138,7 @@ func TestContainer_Add(t *testing.T) {
 			RowsRead:       20,
 			RowsWritten:    5,
 			BytesRead:      100,
+			KVCPUTime:      30 * time.Nanosecond,
 		}
 		require.NoError(t, src.RecordTransaction(ctx, txnStats))
 
@@ -160,6 +162,7 @@ func TestContainer_Add(t *testing.T) {
 			BytesRead:          60,
 			RowsRead:           70,
 			RowsWritten:        80,
+			KVCPUTime:          90,
 			Failed:             true,
 			Generic:            true,
 			AppliedStmtHints:   true,
@@ -177,6 +180,7 @@ func TestContainer_Add(t *testing.T) {
 			RowsRead:       20,
 			RowsWritten:    5,
 			BytesRead:      100,
+			KVCPUTime:      90 * time.Nanosecond,
 		}
 		require.NoError(t, dest.RecordStatement(ctx, reducedStmtStats))
 		require.NoError(t, dest.RecordTransaction(ctx, reducedTxnStats))
@@ -221,6 +225,7 @@ func verifyStmtStatsMultiple(
 	require.InEpsilon(t, float64(stmtStats.BytesRead), destStmtStats.mu.data.BytesRead.Mean, epsilon)
 	require.InEpsilon(t, float64(stmtStats.RowsRead), destStmtStats.mu.data.RowsRead.Mean, epsilon)
 	require.InEpsilon(t, float64(stmtStats.RowsWritten), destStmtStats.mu.data.RowsWritten.Mean, epsilon)
+	require.InEpsilon(t, float64(stmtStats.KVCPUTime), destStmtStats.mu.data.KVCPUTime.Mean, epsilon)
 }
 
 // verifyStmtStatsReduced verifies that statement statistics have been properly
@@ -241,6 +246,7 @@ func verifyStmtStatsReduced(
 	require.InEpsilon(t, float64(stmtStats.BytesRead)/cnt, destStmtStats.mu.data.BytesRead.Mean, epsilon)
 	require.InEpsilon(t, float64(stmtStats.RowsRead)/cnt, destStmtStats.mu.data.RowsRead.Mean, epsilon)
 	require.InEpsilon(t, float64(stmtStats.RowsWritten)/cnt, destStmtStats.mu.data.RowsWritten.Mean, epsilon)
+	require.InEpsilon(t, float64(stmtStats.KVCPUTime)/cnt, destStmtStats.mu.data.KVCPUTime.Mean, epsilon)
 }
 
 // verifyTxnStatsMultiple verifies that transaction statistics have been recorded
@@ -259,6 +265,7 @@ func verifyTxnStatsMultiple(
 	require.InEpsilon(t, float64(txnStats.RowsRead), destTxnStats.mu.data.RowsRead.Mean, epsilon)
 	require.InEpsilon(t, float64(txnStats.RowsWritten), destTxnStats.mu.data.RowsWritten.Mean, epsilon)
 	require.InEpsilon(t, float64(txnStats.BytesRead), destTxnStats.mu.data.BytesRead.Mean, epsilon)
+	require.InEpsilon(t, float64(txnStats.KVCPUTime.Nanoseconds()), destTxnStats.mu.data.KVCPUTime.Mean, epsilon)
 }
 
 // verifyTxnStatsReduced verifies that transaction statistics have been properly
@@ -277,6 +284,7 @@ func verifyTxnStatsReduced(
 	require.InEpsilon(t, float64(txnStats.RowsRead)/cnt, destTxnStats.mu.data.RowsRead.Mean, epsilon)
 	require.InEpsilon(t, float64(txnStats.RowsWritten)/cnt, destTxnStats.mu.data.RowsWritten.Mean, epsilon)
 	require.InEpsilon(t, float64(txnStats.BytesRead)/cnt, destTxnStats.mu.data.BytesRead.Mean, epsilon)
+	require.InEpsilon(t, float64(txnStats.KVCPUTime.Nanoseconds())/cnt, destTxnStats.mu.data.KVCPUTime.Mean, epsilon)
 }
 
 func testMonitor(

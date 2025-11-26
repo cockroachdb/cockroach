@@ -1757,15 +1757,14 @@ type connExecutor struct {
 		// client to send statements while holding the transaction open.
 		idleLatency time.Duration
 
-		// rowsRead and bytesRead are separate from QueryLevelStats because they are
-		// accumulated independently since they are always collected, as opposed to
-		// QueryLevelStats which are sampled.
+		// rowsRead, bytesRead, kvCPUTime, and rowsWritten are separate from accumulatedStats
+		// since they are always collected as opposed to QueryLevelStats which are sampled.
 		rowsRead  int64
 		bytesRead int64
-
 		// rowsWritten tracks the number of rows written (modified) by all
 		// statements in this txn so far.
 		rowsWritten int64
+		kvCPUTime   time.Duration
 
 		// rowsWrittenLogged and rowsReadLogged indicates whether we have
 		// already logged an event about reaching written/read rows setting,
