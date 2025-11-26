@@ -306,6 +306,7 @@ func (t *innerTxnStats) jsonFields() jsonFields {
 		{"bytesRead", (*numericStats)(&t.BytesRead)},
 		{"rowsRead", (*numericStats)(&t.RowsRead)},
 		{"rowsWritten", (*numericStats)(&t.RowsWritten)},
+		{"kvCPUTimeNanos", (*numericStats)(&t.KVCPUTimeNanos)},
 	}
 }
 
@@ -335,6 +336,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"bytesRead", (*numericStats)(&s.BytesRead)},
 		{"rowsRead", (*numericStats)(&s.RowsRead)},
 		{"rowsWritten", (*numericStats)(&s.RowsWritten)},
+		{"kvCPUTimeNanos", (*numericStats)(&s.KVCPUTimeNanos)},
 		{"nodes", (*int64Array)(&s.Nodes)},
 		{"kvNodeIds", (*int32Array)(&s.KVNodeIDs)},
 		{"regions", (*stringArray)(&s.Regions)},

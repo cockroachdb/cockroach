@@ -59,6 +59,13 @@ const admissionWaitTimeBars = [
   ),
 ];
 
+const kvCPUTimeBars = [
+  bar(
+    "kv-cpu-time",
+    (d: StatementStatistics) => d.stats.kv_cpu_time_nanos?.mean,
+  ),
+];
+
 const maxMemUsageBars = [
   bar(
     "max-mem-usage",
@@ -102,6 +109,9 @@ const admissionWaitTimeStdDev = bar(
       d.stats.exec_stats.count,
     ),
 );
+const kvCPUTimeStdDev = bar(cx("kv-cpu-time-dev"), (d: StatementStatistics) =>
+  stdDevLong(d.stats.kv_cpu_time_nanos, d.stats.count),
+);
 const maxMemUsageStdDev = bar(
   cx("max-mem-usage-dev"),
   (d: StatementStatistics) =>
@@ -143,6 +153,12 @@ export const admissionWaitTimeBarChart = barChartFactory(
   admissionWaitTimeBars,
   v => Duration(v),
   admissionWaitTimeStdDev,
+);
+export const kvCPUTimeBarChart = barChartFactory(
+  "grey",
+  kvCPUTimeBars,
+  v => Duration(v),
+  kvCPUTimeStdDev,
 );
 export const maxMemUsageBarChart = barChartFactory(
   "grey",

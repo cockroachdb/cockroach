@@ -170,6 +170,7 @@ type Statistics = {
   runLat: NumericStat;
   svcLat: NumericStat;
   regions: string[];
+  kvCPUTimeNanos?: NumericStat;
 };
 
 type ExecStats = {
@@ -256,6 +257,7 @@ export function convertStatementRawFormatToAggregatedStatistics(
       service_lat: s.statistics.statistics.svcLat,
       sql_type: s.metadata.stmtType,
       regions: s.statistics.statistics.regions,
+      kv_cpu_time_nanos: s.statistics.statistics.kvCPUTimeNanos,
     },
   };
 }

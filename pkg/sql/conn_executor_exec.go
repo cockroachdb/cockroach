@@ -2953,6 +2953,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.rowsRead += stats.rowsRead
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
+	ex.extraTxnState.kvCPUTimeNanos += stats.kvCPUTimeNanos
 
 	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 		// We need to ensure that we're using the planner bound to the first-time
@@ -3341,8 +3342,8 @@ type topLevelQueryStats struct {
 	// client receiving the PGWire protocol messages (as well as construcing
 	// those messages).
 	clientTime time.Duration
-	// kvCPUTime is the CPU time consumed by KV operations during query execution.
-	kvCPUTime time.Duration
+	// kvCPUTimeNanos is the CPU time consumed by KV operations during query execution.
+	kvCPUTimeNanos time.Duration
 	// NB: when adding another field here, consider whether
 	// forwardInnerQueryStats method needs an adjustment.
 }
@@ -3355,7 +3356,7 @@ func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
 	s.indexRowsWritten += other.indexRowsWritten
 	s.networkEgressEstimate += other.networkEgressEstimate
 	s.clientTime += other.clientTime
-	s.kvCPUTime += other.kvCPUTime
+	s.kvCPUTimeNanos += other.kvCPUTimeNanos
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
@@ -4201,6 +4202,7 @@ func (ex *connExecutor) onTxnRestart(ctx context.Context) {
 		ex.extraTxnState.rowsRead = 0
 		ex.extraTxnState.bytesRead = 0
 		ex.extraTxnState.rowsWritten = 0
+		ex.extraTxnState.kvCPUTimeNanos = 0
 
 		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
 			ex.server.cfg.TestingKnobs.BeforeRestart(ctx, ex.state.mu.autoRetryReason)
@@ -4232,6 +4234,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 	ex.extraTxnState.idleLatency = 0
 	ex.extraTxnState.rowsRead = 0
+	ex.extraTxnState.kvCPUTimeNanos = 0
 	ex.extraTxnState.bytesRead = 0
 	ex.extraTxnState.rowsWritten = 0
 	ex.extraTxnState.rowsWrittenLogged = false
@@ -4344,6 +4347,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		RowsRead:                ex.extraTxnState.rowsRead,
 		RowsWritten:             ex.extraTxnState.rowsWritten,
 		BytesRead:               ex.extraTxnState.bytesRead,
+		KVCPUTimeNanos:          ex.extraTxnState.kvCPUTimeNanos,
 		Priority:                ex.state.mu.priority,
 		// TODO(107318): add isolation level
 		// TODO(107318): add qos

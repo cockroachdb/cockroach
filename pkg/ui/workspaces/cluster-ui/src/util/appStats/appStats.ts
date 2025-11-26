@@ -237,6 +237,12 @@ export function addStatementStats(
       countA,
       countB,
     ),
+    kv_cpu_time_nanos: aggregateNumericStats(
+      a.kv_cpu_time_nanos,
+      b.kv_cpu_time_nanos,
+      countA,
+      countB,
+    ),
     rows_read: aggregateNumericStats(a.rows_read, b.rows_read, countA, countB),
     rows_written: aggregateNumericStats(
       a.rows_written,
