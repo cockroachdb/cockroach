@@ -19,6 +19,7 @@ var (
 		Help:        "Time spent in RangeFeed catchup scan",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaRangeFeedExhausted = metric.Metadata{
 		Name:        "kv.rangefeed.budget_allocation_failed",
