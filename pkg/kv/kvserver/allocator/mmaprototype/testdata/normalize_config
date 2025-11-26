@@ -314,7 +314,6 @@ input:
  voter-constraints:
    +region=b,+zone=b1:1
    +region=a,-zone=a1:1
-err=intersecting conjunctions in constraints and voter constraints
 output:
  num-replicas=5 num-voters=3
  constraints:
