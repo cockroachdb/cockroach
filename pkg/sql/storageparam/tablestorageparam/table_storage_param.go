@@ -9,8 +9,11 @@ package tablestorageparam
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -130,8 +133,10 @@ func (po *Setter) getOrCreateRowLevelTTL() *catpb.RowLevelTTL {
 }
 
 type tableParam struct {
-	onSet   func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error
-	onReset func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error
+	validateSetValue func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error)
+	onSet            func(ctx context.Context, po *Setter, key string, value string) error
+	getResetValue    func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) (string, error)
+	onReset          func(ctx context.Context, po *Setter, key string, value string) error
 }
 
 var ttlAutomaticColumnNotice = pgnotice.Newf("ttl_automatic_column is no longer used. " +
@@ -142,28 +147,25 @@ var ttlRangeConcurrencyNotice = pgnotice.Newf("ttl_range_concurrency is no longe
 
 var tableParams = map[string]tableParam{
 	`fillfactor`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
-			return storageparam.SetFillFactor(ctx, evalCtx, key, datum)
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+			// SetFillFactor validates the value and issues a notice but doesn't actually set anything.
+			if err := storageparam.SetFillFactor(ctx, evalCtx, key, datum); err != nil {
+				return "", err
+			}
+			return "", nil
 		},
-		onReset: func(_ context.Context, po *Setter, _ *eval.Context, key string) error {
-			// Operation is a no-op so do nothing.
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			return nil
+		},
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			return nil
 		},
 	},
 	`autovacuum_enabled`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
-			var boolVal bool
-			if stringVal, err := paramparse.DatumAsString(ctx, evalCtx, key, datum); err == nil {
-				boolVal, err = paramparse.ParseBoolVar(key, stringVal)
-				if err != nil {
-					return err
-				}
-			} else {
-				s, err := paramparse.GetSingleBool(key, datum)
-				if err != nil {
-					return err
-				}
-				boolVal = bool(*s)
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+			boolVal, err := boolFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return "", err
 			}
 			if !boolVal && evalCtx != nil {
 				evalCtx.ClientNoticeSender.BufferClientNotice(
@@ -171,25 +173,23 @@ var tableParams = map[string]tableParam{
 					pgnotice.Newf(`storage parameter "%s = %s" is ignored`, key, datum.String()),
 				)
 			}
+			return fmt.Sprintf("%t", boolVal), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, _ *eval.Context, key string) error {
-			// Operation is a no-op so do nothing.
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			return nil
 		},
 	},
 	`ttl`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			setTrue, err := boolFromDatum(ctx, evalCtx, key, datum)
 			if err != nil {
-				return err
+				return "", err
 			}
-			if setTrue {
-				// Set the base struct, but do not populate it.
-				// An error from runPostChecks will appear if the requisite fields are not set.
-				po.getOrCreateRowLevelTTL()
-			} else {
-				return errors.WithHintf(
+			if !setTrue {
+				return "", errors.WithHintf(
 					pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						`setting "ttl = 'off'" is not permitted`,
@@ -197,30 +197,42 @@ var tableParams = map[string]tableParam{
 					"use `RESET (ttl)` to remove TTL from the table",
 				)
 			}
+			return fmt.Sprintf("%t", setTrue), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			// Set the base struct, but do not populate it.
+			// An error from runPostChecks will appear if the requisite fields are not set.
+			po.getOrCreateRowLevelTTL()
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			po.UpdatedRowLevelTTL = nil
 			return nil
 		},
 	},
 	`ttl_automatic_column`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			evalCtx.ClientNoticeSender.BufferClientNotice(ctx, ttlAutomaticColumnNotice)
+			return "", nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
 			return nil
 		},
-		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		getResetValue: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) (string, error) {
 			evalCtx.ClientNoticeSender.BufferClientNotice(ctx, ttlAutomaticColumnNotice)
+			return "", nil
+		},
+		onReset: func(ctx context.Context, po *Setter, key string, value string) error {
 			return nil
 		},
 	},
 	`ttl_expire_after`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			var d *tree.DInterval
 			if stringVal, err := paramparse.DatumAsString(ctx, evalCtx, key, datum); err == nil {
 				d, err = tree.ParseDInterval(evalCtx.SessionData().GetIntervalStyle(), stringVal)
 				if err != nil {
-					return pgerror.Wrapf(
+					return "", pgerror.Wrapf(
 						err,
 						pgcode.InvalidParameterValue,
 						`value of %q must be an interval`,
@@ -228,7 +240,7 @@ var tableParams = map[string]tableParam{
 					)
 				}
 				if d == nil {
-					return pgerror.Newf(
+					return "", pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						`value of %q must be an interval`,
 						key,
@@ -238,7 +250,7 @@ var tableParams = map[string]tableParam{
 				var ok bool
 				d, ok = datum.(*tree.DInterval)
 				if !ok || d == nil {
-					return pgerror.Newf(
+					return "", pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						`value of %q must be an interval`,
 						key,
@@ -247,17 +259,20 @@ var tableParams = map[string]tableParam{
 			}
 
 			if d.Duration.Compare(duration.MakeDuration(0, 0, 0)) < 0 {
-				return pgerror.Newf(
+				return "", pgerror.Newf(
 					pgcode.InvalidParameterValue,
 					`value of %q must be at least zero`,
 					key,
 				)
 			}
+			return tree.Serialize(d), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
 			rowLevelTTL := po.getOrCreateRowLevelTTL()
-			rowLevelTTL.DurationExpr = catpb.Expression(tree.Serialize(d))
+			rowLevelTTL.DurationExpr = catpb.Expression(value)
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			if po.hasRowLevelTTL() {
 				po.UpdatedRowLevelTTL.DurationExpr = ""
 			}
@@ -265,16 +280,15 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_expiration_expression`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
-			stringVal, err := paramparse.DatumAsString(ctx, evalCtx, key, datum)
-			if err != nil {
-				return err
-			}
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+			return paramparse.DatumAsString(ctx, evalCtx, key, datum)
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
 			rowLevelTTL := po.getOrCreateRowLevelTTL()
-			rowLevelTTL.ExpirationExpr = catpb.Expression(stringVal)
+			rowLevelTTL.ExpirationExpr = catpb.Expression(value)
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			if po.hasRowLevelTTL() {
 				po.UpdatedRowLevelTTL.ExpirationExpr = ""
 			}
@@ -282,19 +296,26 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_select_batch_size`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			val, err := paramparse.DatumAsInt(ctx, evalCtx, key, datum)
 			if err != nil {
-				return err
+				return "", err
 			}
 			if err := tabledesc.ValidateTTLBatchSize(key, val); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%d", val), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			val, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
 				return err
 			}
 			rowLevelTTL := po.getOrCreateRowLevelTTL()
 			rowLevelTTL.SelectBatchSize = val
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			if po.hasRowLevelTTL() {
 				po.UpdatedRowLevelTTL.SelectBatchSize = 0
 			}
@@ -302,19 +323,26 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_delete_batch_size`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			val, err := paramparse.DatumAsInt(ctx, evalCtx, key, datum)
 			if err != nil {
-				return err
+				return "", err
 			}
 			if err := tabledesc.ValidateTTLBatchSize(key, val); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%d", val), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			val, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
 				return err
 			}
 			rowLevelTTL := po.getOrCreateRowLevelTTL()
 			rowLevelTTL.DeleteBatchSize = val
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			if po.hasRowLevelTTL() {
 				po.UpdatedRowLevelTTL.DeleteBatchSize = 0
 			}
@@ -322,29 +350,42 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_range_concurrency`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			evalCtx.ClientNoticeSender.BufferClientNotice(ctx, ttlRangeConcurrencyNotice)
+			return "", nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
 			return nil
 		},
-		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		getResetValue: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) (string, error) {
 			evalCtx.ClientNoticeSender.BufferClientNotice(ctx, ttlRangeConcurrencyNotice)
+			return "", nil
+		},
+		onReset: func(ctx context.Context, po *Setter, key string, value string) error {
 			return nil
 		},
 	},
 	`ttl_select_rate_limit`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			val, err := paramparse.DatumAsInt(ctx, evalCtx, key, datum)
 			if err != nil {
-				return err
+				return "", err
 			}
 			if err := tabledesc.ValidateTTLRateLimit(key, val); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%d", val), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			val, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
 				return err
 			}
 			rowLevelTTL := po.getOrCreateRowLevelTTL()
 			rowLevelTTL.SelectRateLimit = val
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			if po.hasRowLevelTTL() {
 				po.UpdatedRowLevelTTL.SelectRateLimit = 0
 			}
@@ -352,19 +393,26 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_delete_rate_limit`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			val, err := paramparse.DatumAsInt(ctx, evalCtx, key, datum)
 			if err != nil {
-				return err
+				return "", err
 			}
 			if err := tabledesc.ValidateTTLRateLimit(key, val); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%d", val), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			val, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
 				return err
 			}
 			rowLevelTTL := po.getOrCreateRowLevelTTL()
 			rowLevelTTL.DeleteRateLimit = val
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			if po.hasRowLevelTTL() {
 				po.UpdatedRowLevelTTL.DeleteRateLimit = 0
 			}
@@ -372,8 +420,15 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_label_metrics`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			val, err := boolFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%t", val), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			val, err := strconv.ParseBool(value)
 			if err != nil {
 				return err
 			}
@@ -381,7 +436,7 @@ var tableParams = map[string]tableParam{
 			rowLevelTTL.LabelMetrics = val
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			if po.hasRowLevelTTL() {
 				po.UpdatedRowLevelTTL.LabelMetrics = false
 			}
@@ -389,19 +444,22 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_job_cron`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			str, err := paramparse.DatumAsString(ctx, evalCtx, key, datum)
 			if err != nil {
-				return err
+				return "", err
 			}
 			if err := tabledesc.ValidateTTLCronExpr(key, str); err != nil {
-				return err
+				return "", err
 			}
+			return str, nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
 			rowLevelTTL := po.getOrCreateRowLevelTTL()
-			rowLevelTTL.DeletionCron = str
+			rowLevelTTL.DeletionCron = value
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			if po.hasRowLevelTTL() {
 				po.UpdatedRowLevelTTL.DeletionCron = ""
 			}
@@ -409,8 +467,15 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_pause`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			b, err := boolFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%t", b), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			b, err := strconv.ParseBool(value)
 			if err != nil {
 				return err
 			}
@@ -418,7 +483,7 @@ var tableParams = map[string]tableParam{
 			rowLevelTTL.Pause = b
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			if po.hasRowLevelTTL() {
 				po.UpdatedRowLevelTTL.Pause = false
 			}
@@ -426,19 +491,26 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_row_stats_poll_interval`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			d, err := paramparse.DatumAsDuration(ctx, evalCtx, key, datum)
 			if err != nil {
-				return err
+				return "", err
 			}
 			if err := tabledesc.ValidateNotNegativeInterval(key, d); err != nil {
+				return "", err
+			}
+			return d.String(), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			d, err := time.ParseDuration(value)
+			if err != nil {
 				return err
 			}
 			rowLevelTTL := po.getOrCreateRowLevelTTL()
 			rowLevelTTL.RowStatsPollInterval = d
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			if po.hasRowLevelTTL() {
 				po.UpdatedRowLevelTTL.RowStatsPollInterval = 0
 			}
@@ -446,8 +518,15 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`ttl_disable_changefeed_replication`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			b, err := boolFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%t", b), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			b, err := strconv.ParseBool(value)
 			if err != nil {
 				return err
 			}
@@ -455,7 +534,7 @@ var tableParams = map[string]tableParam{
 			rowLevelTTL.DisableChangefeedReplication = b
 			return nil
 		},
-		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, key string, value string) error {
 			if po.hasRowLevelTTL() {
 				po.UpdatedRowLevelTTL.DisableChangefeedReplication = false
 			}
@@ -463,8 +542,14 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`exclude_data_from_backup`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext,
-			evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+			excludeDataFromBackup, err := boolFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%t", excludeDataFromBackup), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
 			if po.TableDesc.Temporary {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"cannot set data in a temporary table to be excluded from backup")
@@ -479,7 +564,7 @@ var tableParams = map[string]tableParam{
 				return errors.New("cannot set data in a table with inbound foreign key constraints to be excluded from backup")
 			}
 
-			excludeDataFromBackup, err := boolFromDatum(ctx, evalCtx, key, datum)
+			excludeDataFromBackup, err := strconv.ParseBool(value)
 			if err != nil {
 				return err
 			}
@@ -491,157 +576,204 @@ var tableParams = map[string]tableParam{
 			po.TableDesc.ExcludeDataFromBackup = excludeDataFromBackup
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			po.TableDesc.ExcludeDataFromBackup = false
 			return nil
 		},
 	},
 	catpb.AutoStatsEnabledTableSettingName: {
-		onSet:   autoStatsEnabledSettingFunc,
-		onReset: autoStatsTableSettingResetFunc,
+		validateSetValue: autoStatsEnabledPreSetFunc,
+		onSet:            autoStatsEnabledSetFunc,
+		onReset:          autoStatsTableSettingResetFunc,
 	},
 	catpb.AutoStatsMinStaleTableSettingName: {
-		onSet: autoStatsMinStaleRowsSettingFunc(func(intVal int64) error {
+		validateSetValue: autoStatsMinStaleRowsPreSetFunc(func(intVal int64) error {
 			if intVal < 0 {
 				return errors.Newf("cannot be set to a negative value: %d", intVal)
 			}
 			return nil
 		}),
+		onSet:   autoStatsMinStaleRowsSetFunc,
 		onReset: autoStatsTableSettingResetFunc,
 	},
 	catpb.AutoStatsFractionStaleTableSettingName: {
-		onSet: autoStatsFractionStaleRowsSettingFunc(func(floatVal float64) error {
+		validateSetValue: autoStatsFractionStaleRowsPreSetFunc(func(floatVal float64) error {
 			if floatVal < 0 {
 				return errors.Newf("cannot set to a negative value: %f", floatVal)
 			}
 			return nil
 		}),
+		onSet:   autoStatsFractionStaleRowsSetFunc,
 		onReset: autoStatsTableSettingResetFunc,
 	},
 	catpb.AutoPartialStatsEnabledTableSettingName: {
-		onSet:   autoStatsEnabledSettingFunc,
-		onReset: autoStatsTableSettingResetFunc,
+		validateSetValue: autoStatsEnabledPreSetFunc,
+		onSet:            autoStatsEnabledSetFunc,
+		onReset:          autoStatsTableSettingResetFunc,
 	},
 	catpb.AutoFullStatsEnabledTableSettingName: {
-		onSet:   autoStatsEnabledSettingFunc,
-		onReset: autoStatsTableSettingResetFunc,
+		validateSetValue: autoStatsEnabledPreSetFunc,
+		onSet:            autoStatsEnabledSetFunc,
+		onReset:          autoStatsTableSettingResetFunc,
 	},
 	catpb.AutoPartialStatsMinStaleTableSettingName: {
-		onSet: autoStatsMinStaleRowsSettingFunc(func(intVal int64) error {
+		validateSetValue: autoStatsMinStaleRowsPreSetFunc(func(intVal int64) error {
 			if intVal < 0 {
 				return errors.Newf("cannot be set to a negative value: %d", intVal)
 			}
 			return nil
 		}),
+		onSet:   autoStatsMinStaleRowsSetFunc,
 		onReset: autoStatsTableSettingResetFunc,
 	},
 	catpb.AutoPartialStatsFractionStaleTableSettingName: {
-		onSet: autoStatsFractionStaleRowsSettingFunc(func(floatVal float64) error {
+		validateSetValue: autoStatsFractionStaleRowsPreSetFunc(func(floatVal float64) error {
 			if floatVal < 0 {
 				return errors.Newf("cannot set to a negative value: %f", floatVal)
 			}
 			return nil
 		}),
+		onSet:   autoStatsFractionStaleRowsSetFunc,
 		onReset: autoStatsTableSettingResetFunc,
 	},
 	`sql_stats_forecasts_enabled`: {
-		onSet: func(
-			ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum,
-		) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			enabled, err := boolFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%t", enabled), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			enabled, err := strconv.ParseBool(value)
 			if err != nil {
 				return err
 			}
 			po.TableDesc.ForecastStats = &enabled
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			po.TableDesc.ForecastStats = nil
 			return nil
 		},
 	},
 	`sql_stats_histogram_samples_count`: {
-		onSet: func(
-			ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum,
-		) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			intVal, err := intFromDatum(ctx, evalCtx, key, datum)
 			if err != nil {
-				return err
+				return "", err
 			}
 			if err := nonNegativeIntWithMaximum(math.MaxUint32)(intVal); err != nil {
-				return errors.Wrapf(err, "invalid integer value for %s", key)
+				return "", errors.Wrapf(err, "invalid integer value for %s", key)
+			}
+			return fmt.Sprintf("%d", intVal), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			intVal, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return err
 			}
 			uint32Val := uint32(intVal)
 			po.TableDesc.HistogramSamples = &uint32Val
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			po.TableDesc.HistogramSamples = nil
 			return nil
 		},
 	},
 	`sql_stats_histogram_buckets_count`: {
-		onSet: func(
-			ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum,
-		) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			intVal, err := intFromDatum(ctx, evalCtx, key, datum)
 			if err != nil {
-				return err
+				return "", err
 			}
-			if err = nonNegativeIntWithMaximum(math.MaxUint32)(intVal); err != nil {
-				return errors.Wrapf(err, "invalid integer value for %s", key)
+			if err := nonNegativeIntWithMaximum(math.MaxUint32)(intVal); err != nil {
+				return "", errors.Wrapf(err, "invalid integer value for %s", key)
+			}
+			return fmt.Sprintf("%d", intVal), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			intVal, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return err
 			}
 			uint32Val := uint32(intVal)
 			po.TableDesc.HistogramBuckets = &uint32Val
 			return nil
 		},
-		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(_ context.Context, po *Setter, key string, value string) error {
 			po.TableDesc.HistogramBuckets = nil
 			return nil
 		},
 	},
 	`schema_locked`: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			boolVal, err := boolFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%t", boolVal), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			boolVal, err := strconv.ParseBool(value)
 			if err != nil {
 				return err
 			}
 			po.TableDesc.SchemaLocked = boolVal
 			return nil
 		},
-		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		getResetValue: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) (string, error) {
 			schemaLockedDefault := evalCtx.SessionData().CreateTableWithSchemaLocked
 			// Before 25.3 tables were never created with schema_locked by default.
 			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_3) {
 				schemaLockedDefault = false
 			}
-			po.TableDesc.SchemaLocked = schemaLockedDefault
+			return fmt.Sprintf("%t", schemaLockedDefault), nil
+		},
+		onReset: func(ctx context.Context, po *Setter, key string, value string) error {
+			boolVal, err := strconv.ParseBool(value)
+			if err != nil {
+				return err
+			}
+			po.TableDesc.SchemaLocked = boolVal
 			return nil
 		},
 	},
 	catpb.RBRUsingConstraintTableSettingName: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+			// Handled by the schema changer.
+			return "", nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
 			// Handled by the schema changer.
 			return nil
 		},
-		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, key string, value string) error {
 			po.TableDesc.RBRUsingConstraint = descpb.ConstraintID(0)
 			return nil
 		},
 	},
 	catpb.CanaryStatsWindowSettingName: {
-		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+		validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 			d, err := paramparse.DatumAsDuration(ctx, evalCtx, key, datum)
 			if err != nil {
-				return err
+				return "", err
 			}
 			if err := tabledesc.ValidateNotNegativeInterval(key, d); err != nil {
+				return "", err
+			}
+			return d.String(), nil
+		},
+		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+			d, err := time.ParseDuration(value)
+			if err != nil {
 				return err
 			}
 			po.TableDesc.StatsCanaryWindow = d
 			return nil
 		},
-		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+		onReset: func(ctx context.Context, po *Setter, key string, value string) error {
 			po.TableDesc.StatsCanaryWindow = 0
 			return nil
 		},
@@ -691,25 +823,35 @@ func init() {
 		`user_catalog_table`,
 	} {
 		tableParams[param] = tableParam{
-			onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
-				return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
+			validateSetValue: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+				return "", unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
 			},
-			onReset: func(_ context.Context, po *Setter, _ *eval.Context, key string) error {
+			onSet: func(ctx context.Context, po *Setter, key string, value string) error {
+				return nil
+			},
+			onReset: func(_ context.Context, po *Setter, key string, value string) error {
 				return nil
 			},
 		}
 	}
 }
 
-func autoStatsEnabledSettingFunc(
+func autoStatsEnabledPreSetFunc(
 	ctx context.Context,
-	po *Setter,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
 	key string,
 	datum tree.Datum,
-) error {
+) (string, error) {
 	boolVal, err := boolFromDatum(ctx, evalCtx, key, datum)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%t", boolVal), nil
+}
+
+func autoStatsEnabledSetFunc(ctx context.Context, po *Setter, key string, value string) error {
+	boolVal, err := strconv.ParseBool(value)
 	if err != nil {
 		return err
 	}
@@ -731,64 +873,79 @@ func autoStatsEnabledSettingFunc(
 	return errors.AssertionFailedf("unable to set table setting %s", key)
 }
 
-func autoStatsMinStaleRowsSettingFunc(
+func autoStatsMinStaleRowsPreSetFunc(
 	validateFunc func(v int64) error,
-) func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
-	return func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+) func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+	return func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 		intVal, err := intFromDatum(ctx, evalCtx, key, datum)
 		if err != nil {
-			return err
-		}
-		if po.TableDesc.AutoStatsSettings == nil {
-			po.TableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
+			return "", err
 		}
 		if err = validateFunc(intVal); err != nil {
-			return errors.Wrapf(err, "invalid integer value for %s", key)
+			return "", errors.Wrapf(err, "invalid integer value for %s", key)
 		}
-
-		switch key {
-		case catpb.AutoStatsMinStaleTableSettingName:
-			po.TableDesc.AutoStatsSettings.MinStaleRows = &intVal
-			return nil
-		case catpb.AutoPartialStatsMinStaleTableSettingName:
-			po.TableDesc.AutoStatsSettings.PartialMinStaleRows = &intVal
-			return nil
-		}
-		return errors.AssertionFailedf("unable to set table setting %s", key)
+		return fmt.Sprintf("%d", intVal), nil
 	}
 }
 
-func autoStatsFractionStaleRowsSettingFunc(
+func autoStatsMinStaleRowsSetFunc(ctx context.Context, po *Setter, key string, value string) error {
+	intVal, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return err
+	}
+	if po.TableDesc.AutoStatsSettings == nil {
+		po.TableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
+	}
+
+	switch key {
+	case catpb.AutoStatsMinStaleTableSettingName:
+		po.TableDesc.AutoStatsSettings.MinStaleRows = &intVal
+		return nil
+	case catpb.AutoPartialStatsMinStaleTableSettingName:
+		po.TableDesc.AutoStatsSettings.PartialMinStaleRows = &intVal
+		return nil
+	}
+	return errors.AssertionFailedf("unable to set table setting %s", key)
+}
+
+func autoStatsFractionStaleRowsPreSetFunc(
 	validateFunc func(v float64) error,
-) func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
-	return func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext,
-		evalCtx *eval.Context, key string, datum tree.Datum) error {
+) func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+	return func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
 		floatVal, err := floatFromDatum(ctx, evalCtx, key, datum)
 		if err != nil {
-			return err
-		}
-		if po.TableDesc.AutoStatsSettings == nil {
-			po.TableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
+			return "", err
 		}
 		if err = validateFunc(floatVal); err != nil {
-			return errors.Wrapf(err, "invalid float value for %s", key)
+			return "", errors.Wrapf(err, "invalid float value for %s", key)
 		}
-
-		switch key {
-		case catpb.AutoStatsFractionStaleTableSettingName:
-			po.TableDesc.AutoStatsSettings.FractionStaleRows = &floatVal
-			return nil
-		case catpb.AutoPartialStatsFractionStaleTableSettingName:
-			po.TableDesc.AutoStatsSettings.PartialFractionStaleRows = &floatVal
-			return nil
-		}
-		return errors.AssertionFailedf("unable to set table setting %s", key)
+		return fmt.Sprintf("%f", floatVal), nil
 	}
 }
 
-func autoStatsTableSettingResetFunc(
-	_ context.Context, po *Setter, evalCtx *eval.Context, key string,
+func autoStatsFractionStaleRowsSetFunc(
+	ctx context.Context, po *Setter, key string, value string,
 ) error {
+	floatVal, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return err
+	}
+	if po.TableDesc.AutoStatsSettings == nil {
+		po.TableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
+	}
+
+	switch key {
+	case catpb.AutoStatsFractionStaleTableSettingName:
+		po.TableDesc.AutoStatsSettings.FractionStaleRows = &floatVal
+		return nil
+	case catpb.AutoPartialStatsFractionStaleTableSettingName:
+		po.TableDesc.AutoStatsSettings.PartialFractionStaleRows = &floatVal
+		return nil
+	}
+	return errors.AssertionFailedf("unable to set table setting %s", key)
+}
+
+func autoStatsTableSettingResetFunc(_ context.Context, po *Setter, key string, value string) error {
 	if po.TableDesc.AutoStatsSettings == nil {
 		return nil
 	}
@@ -819,8 +976,8 @@ func autoStatsTableSettingResetFunc(
 	return errors.AssertionFailedf("unable to reset table setting %s", key)
 }
 
-// Set implements the Setter interface.
-func (po *Setter) Set(
+// EvalAndSet evaluates a storage parameter value and applies it.
+func (po *Setter) EvalAndSet(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
@@ -834,9 +991,24 @@ func (po *Setter) Set(
 		)
 	}
 	if p, ok := tableParams[key]; ok {
-		return p.onSet(ctx, po, semaCtx, evalCtx, key, datum)
+		value, err := p.validateSetValue(ctx, semaCtx, evalCtx, key, datum)
+		if err != nil {
+			return err
+		}
+		return p.onSet(ctx, po, key, value)
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
+}
+
+// Set implements the Setter interface.
+func (po *Setter) Set(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	key string,
+	datum tree.Datum,
+) error {
+	return po.EvalAndSet(ctx, semaCtx, evalCtx, key, datum)
 }
 
 // Reset implements the Setter interface.
@@ -848,7 +1020,15 @@ func (po *Setter) Reset(ctx context.Context, evalCtx *eval.Context, key string) 
 		)
 	}
 	if p, ok := tableParams[key]; ok {
-		return p.onReset(ctx, po, evalCtx, key)
+		value := ""
+		var err error
+		if p.getResetValue != nil {
+			value, err = p.getResetValue(ctx, po, evalCtx, key)
+			if err != nil {
+				return err
+			}
+		}
+		return p.onReset(ctx, po, key, value)
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
