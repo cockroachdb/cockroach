@@ -509,3 +509,373 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 			}
 		})
 }
+
+func makeStoreAndLocality(
+	t *testing.T, storeID roachpb.StoreID, localityStr string, lti *localityTierInterner,
+) storeAndLocality {
+	locality := parseLocalityTiers(t, localityStr)
+	return storeAndLocality{
+		StoreID:       storeID,
+		localityTiers: lti.intern(locality),
+	}
+}
+
+func TestDiversityOfTwoStoreSets(t *testing.T) {
+	interner := newStringInterner()
+	lti := newLocalityTierInterner(interner)
+
+	tests := []struct {
+		name               string
+		this               []storeAndLocality
+		other              []storeAndLocality
+		sameStores         bool
+		expectedSumScore   float64
+		expectedNumSamples int
+	}{
+		{
+			name:               "empty sets",
+			this:               []storeAndLocality{},
+			other:              []storeAndLocality{},
+			sameStores:         false,
+			expectedNumSamples: 0,
+			expectedSumScore:   0,
+		},
+		{
+			name: "one empty set",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			other:              []storeAndLocality{},
+			sameStores:         false,
+			expectedNumSamples: 0,
+			expectedSumScore:   0,
+		},
+		{
+			name: "single store each, sameStores=false",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-west,zone=b", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			// Different at tier 0 (region), so score = (2-0)/2 = 1.0
+			expectedSumScore: 1.0,
+		},
+		{
+			name: "single store each, sameStores=true",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			sameStores:         true,
+			expectedNumSamples: 0, // s2.StoreID (1) <= s1.StoreID (1), so skipped
+			expectedSumScore:   0,
+		},
+		{
+			name: "two stores, sameStores=false, all pairs",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 3, "region=us-west,zone=c", lti),
+				makeStoreAndLocality(t, 4, "region=us-west,zone=d", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 4, // (1,3), (1,4), (2,3), (2,4)
+			// All pairs differ at tier 0 (region), so each score = (2-0)/2 = 1.0
+			expectedSumScore: 4.0,
+		},
+		{
+			name: "two stores, sameStores=true, de-duplicated pairs",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+			},
+			sameStores:         true,
+			expectedNumSamples: 1, // Only (1,2)
+			// Same region, different zone, so score = (2-1)/2 = 0.5
+			expectedSumScore: 0.5,
+		},
+		{
+			name: "three stores, sameStores=true, de-duplicated pairs",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+				makeStoreAndLocality(t, 3, "region=us-west,zone=c", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+				makeStoreAndLocality(t, 3, "region=us-west,zone=c", lti),
+			},
+			sameStores:         true,
+			expectedNumSamples: 3, // (1,2), (1,3), (2,3)
+			// (1,2): same region, different zone = 0.5
+			// (1,3): different region = 1.0
+			// (2,3): different region = 1.0
+			expectedSumScore: 2.5,
+		},
+		{
+			name: "identical localities, sameStores=false",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-east,zone=a", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			expectedSumScore:   0, // Identical localities
+		},
+		{
+			name: "different localities with common prefix, three tiers",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a,building=x", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-east,zone=a,building=y", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			expectedSumScore:   1.0 / 3.0,
+		},
+		{
+			name: "different length localities with common prefix, this has more tiers",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-east", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			expectedSumScore:   0,
+		},
+		{
+			name: "different length localities with common prefix, other has more tiers",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-east,zone=a,building=x", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			expectedSumScore:   0,
+		},
+		{
+			name: "different length localities with different prefix, this has more tiers",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-west", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			// Different at tier 0 (region), so score = (1-0)/1 = 1.0
+			expectedSumScore: 1.0,
+		},
+		{
+			name: "different length localities with different prefix, other has more tiers",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-west,zone=b", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-west,zone=a,building=x", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			// Different at tier 1 (zone), so score = (2-1)/2 = 0.5
+			expectedSumScore: 0.5,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sumScore, numSamples := diversityOfTwoStoreSets(tt.this, tt.other, tt.sameStores)
+			require.InDelta(t, tt.expectedSumScore, sumScore, 0.0001,
+				"expected sum score %.4f, got %.4f", tt.expectedSumScore, sumScore)
+			require.Equal(t, tt.expectedNumSamples, numSamples,
+				"expected %d samples, got %d", tt.expectedNumSamples, numSamples)
+			sumScore2, numSamples2 := diversityOfTwoStoreSets(tt.other, tt.this, tt.sameStores)
+			require.Equal(t, sumScore, sumScore2)
+			require.Equal(t, numSamples, numSamples2)
+		})
+	}
+}
+
+func TestDiversityScore(t *testing.T) {
+	interner := newStringInterner()
+	lti := newLocalityTierInterner(interner)
+
+	tests := []struct {
+		name                 string
+		voters               []storeAndLocality
+		nonVoters            []storeAndLocality
+		expectedVoterScore   float64
+		expectedReplicaScore float64
+	}{
+		{
+			name:                 "empty replicas - no voters, no non-voters",
+			voters:               []storeAndLocality{},
+			nonVoters:            []storeAndLocality{},
+			expectedVoterScore:   roachpb.MaxDiversityScore,
+			expectedReplicaScore: roachpb.MaxDiversityScore,
+		},
+		{
+			name: "single voter, no non-voters",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			nonVoters:            []storeAndLocality{},
+			expectedVoterScore:   roachpb.MaxDiversityScore,
+			expectedReplicaScore: roachpb.MaxDiversityScore,
+		},
+		{
+			name: "two voters, no non-voters - same region, different zones",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+			},
+			nonVoters: []storeAndLocality{},
+			// Voter-voter pair: (1,2) - same region, different zone = (2-1)/2 = 0.5
+			expectedVoterScore:   0.5,
+			expectedReplicaScore: 0.5,
+		},
+		{
+			name: "three voters, no non-voters",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+				makeStoreAndLocality(t, 3, "region=us-west,zone=c", lti),
+			},
+			nonVoters: []storeAndLocality{},
+			// Voter-voter pairs: (1,2), (1,3), (2,3)
+			// (1,2): same region, different zone = 0.5
+			// (1,3): different region = 1.0
+			// (2,3): different region = 1.0
+			// Average: (0.5 + 1.0 + 1.0) / 3 = 2.5 / 3 ≈ 0.8333
+			expectedVoterScore:   2.5 / 3.0,
+			expectedReplicaScore: 2.5 / 3.0,
+		},
+		{
+			name: "three voters, no non-voters - all different regions",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-west,zone=b", lti),
+				makeStoreAndLocality(t, 3, "region=eu-west,zone=c", lti),
+			},
+			nonVoters: []storeAndLocality{},
+			// All pairs: different regions = 1.0 each
+			// Average: (1.0 + 1.0 + 1.0) / 3 = 1.0
+			expectedVoterScore:   1.0,
+			expectedReplicaScore: 1.0,
+		},
+		{
+			name: "five voters, no non-voters",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+				makeStoreAndLocality(t, 3, "region=us-west,zone=c", lti),
+				makeStoreAndLocality(t, 4, "region=us-west,zone=d", lti),
+				makeStoreAndLocality(t, 5, "region=eu-west,zone=e", lti),
+			},
+			nonVoters: []storeAndLocality{},
+			// Voter-voter pairs: 5 choose 2 = 10 pairs
+			// (1,2): same region = 0.5
+			// (3,4): same region = 0.5
+			// All other pairs: different regions = 1.0
+			// Sum: 0.5 + 0.5 + 8*1.0 = 9.0
+			// Average: 9.0 / 10 = 0.9
+			expectedVoterScore:   0.9,
+			expectedReplicaScore: 0.9,
+		},
+		{
+			name:   "no voters, single non-voter",
+			voters: []storeAndLocality{},
+			nonVoters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			expectedVoterScore:   roachpb.MaxDiversityScore,
+			expectedReplicaScore: roachpb.MaxDiversityScore,
+		},
+		{
+			name:   "no voters, two non-voters",
+			voters: []storeAndLocality{},
+			nonVoters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+			},
+			// Non-voter-non-voter pair: (1,2) - same region, different zone = 0.5
+			expectedVoterScore:   roachpb.MaxDiversityScore,
+			expectedReplicaScore: 0.5,
+		},
+		{
+			name: "three voters with two non-voters",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+				makeStoreAndLocality(t, 3, "region=us-west,zone=c", lti),
+			},
+			nonVoters: []storeAndLocality{
+				makeStoreAndLocality(t, 4, "region=eu-west,zone=d", lti),
+				makeStoreAndLocality(t, 5, "region=eu-west,zone=e", lti),
+			},
+			// Voter-voter pairs: (1,2), (1,3), (2,3)
+			// (1,2): same region = 0.5
+			// (1,3): different region = 1.0
+			// (2,3): different region = 1.0
+			// Voter voter score: 2.5 / 3 ≈ 0.8333
+			// Non-voter-non-voter pairs: (4,5) - same region = 0.5
+			// Voter-non-voter pairs: (1,4), (1,5), (2,4), (2,5), (3,4), (3,5) = 6 pairs
+			// All different regions = 1.0 each
+			// Total sum: 2.5 (voter-voter) + 0.5 (non-voter-non-voter) + 6.0 (voter-non-voter) = 9.0
+			// Total samples: 3 + 1 + 6 = 10
+			// Replica score: 9.0 / 10 = 0.9
+			expectedVoterScore:   2.5 / 3.0,
+			expectedReplicaScore: 0.9,
+		},
+		{
+			name: "three voters with two non-voters and identical localities",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 3, "region=us-east,zone=a", lti),
+			},
+			nonVoters: []storeAndLocality{
+				makeStoreAndLocality(t, 4, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 5, "region=us-east,zone=a", lti),
+			},
+			expectedVoterScore:   0.0,
+			expectedReplicaScore: 0.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var replicas [numReplicaKinds][]storeAndLocality
+			replicas[voterIndex] = tt.voters
+			replicas[nonVoterIndex] = tt.nonVoters
+
+			voterScore, replicaScore := diversityScore(replicas)
+
+			require.InDelta(t, tt.expectedVoterScore, voterScore, 0.0001,
+				"test: %s\nvoter diversity score: expected %.6f, got %.6f",
+				tt.name, tt.expectedVoterScore, voterScore)
+
+			require.InDelta(t, tt.expectedReplicaScore, replicaScore, 0.0001,
+				"test: %s\nreplica diversity score: expected %.6f, got %.6f",
+				tt.name, tt.expectedReplicaScore, replicaScore)
+		})
+	}
+}
