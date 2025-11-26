@@ -52,9 +52,9 @@ var (
 		Measurement: "goroutines",
 		Unit:        metric.Unit_COUNT,
 
-		Essential: true,
-		Category:  metric.Metadata_HARDWARE,
-		HowToUse:  `If this metric has a value over 30, it indicates a CPU overload. If the condition lasts a short period of time (a few seconds), the database users are likely to experience inconsistent response times. If the condition persists for an extended period of time (tens of seconds, or minutes) the cluster may start developing stability issues. Review CPU planning.`}
+		Visibility: metric.Metadata_ESSENTIAL,
+		Category:   metric.Metadata_HARDWARE,
+		HowToUse:   `If this metric has a value over 30, it indicates a CPU overload. If the condition lasts a short period of time (a few seconds), the database users are likely to experience inconsistent response times. If the condition persists for an extended period of time (tens of seconds, or minutes) the cluster may start developing stability issues. Review CPU planning.`}
 	metaGoAllocBytes = metric.Metadata{
 		Name:        "sys.go.allocbytes",
 		Help:        "Current bytes of memory allocated by go",
@@ -169,7 +169,7 @@ var (
 		Help:        "Current user cpu percentage consumed by the CRDB process",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_HARDWARE,
 		HowToUse: `This metric gives the CPU usage percentage at the user
 		level by the CockroachDB process only. This is similar to the Linux
@@ -188,7 +188,7 @@ var (
 		Help:        "Current system cpu percentage consumed by the CRDB process",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_HARDWARE,
 		HowToUse: `This metric gives the CPU usage percentage at the system
 		(Linux kernel) level by the CockroachDB process only. This is
@@ -201,7 +201,7 @@ var (
 		Help:        "Current user+system cpu percentage consumed by the CRDB process, normalized 0-1 by number of cores",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_HARDWARE,
 		HowToUse: `This metric gives the CPU utilization percentage by the CockroachDB process. 
 		If it is equal to 1 (or 100%), then the CPU is overloaded. The CockroachDB process should 
@@ -220,7 +220,7 @@ var (
 		Help:        "Current user+system cpu percentage across the whole machine, normalized 0-1 by number of cores",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_HARDWARE,
 		HowToUse: `This metric gives the CPU utilization percentage of the
 		underlying server, virtual machine, or container hosting the
@@ -241,7 +241,7 @@ var (
 		Help:        "Current process RSS",
 		Measurement: "RSS",
 		Unit:        metric.Unit_BYTES,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_HARDWARE,
 		HowToUse: `This metric gives the amount of RAM used by the
 		CockroachDB process. Persistently low values over an extended
@@ -275,9 +275,9 @@ var (
 		Measurement: "Uptime",
 		Unit:        metric.Unit_SECONDS,
 
-		Essential: true,
-		Category:  metric.Metadata_HARDWARE,
-		HowToUse:  `This metric measures the length of time, in seconds, that the CockroachDB process has been running. Monitor this metric to detect events such as node restarts, which may require investigation or intervention.`,
+		Visibility: metric.Metadata_ESSENTIAL,
+		Category:   metric.Metadata_HARDWARE,
+		HowToUse:   `This metric measures the length of time, in seconds, that the CockroachDB process has been running. Monitor this metric to detect events such as node restarts, which may require investigation or intervention.`,
 	}
 
 	// These disk and network stats are counters of the number of operations, packets, bytes, and
@@ -290,9 +290,9 @@ var (
 		Measurement: "Operations",
 		Help:        "Disk read operations across all disks since this process started (as reported by the OS)",
 
-		Essential: true,
-		Category:  metric.Metadata_HARDWARE,
-		HowToUse:  `This metric reports the effective storage device read IOPS rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
+		Visibility: metric.Metadata_ESSENTIAL,
+		Category:   metric.Metadata_HARDWARE,
+		HowToUse:   `This metric reports the effective storage device read IOPS rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
 	}
 	metaHostDiskReadBytes = metric.Metadata{
 		Name:        "sys.host.disk.read.bytes",
@@ -300,9 +300,9 @@ var (
 		Measurement: "Bytes",
 		Help:        "Bytes read from all disks since this process started (as reported by the OS)",
 
-		Essential: true,
-		Category:  metric.Metadata_HARDWARE,
-		HowToUse:  `This metric reports the effective storage device read throughput (MB/s) rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
+		Visibility: metric.Metadata_ESSENTIAL,
+		Category:   metric.Metadata_HARDWARE,
+		HowToUse:   `This metric reports the effective storage device read throughput (MB/s) rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
 	}
 	metaHostDiskReadTime = metric.Metadata{
 		Name:        "sys.host.disk.read.time",
@@ -316,9 +316,9 @@ var (
 		Measurement: "Operations",
 		Help:        "Disk write operations across all disks since this process started (as reported by the OS)",
 
-		Essential: true,
-		Category:  metric.Metadata_HARDWARE,
-		HowToUse:  `This metric reports the effective storage device write IOPS rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
+		Visibility: metric.Metadata_ESSENTIAL,
+		Category:   metric.Metadata_HARDWARE,
+		HowToUse:   `This metric reports the effective storage device write IOPS rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
 	}
 	metaHostDiskWriteBytes = metric.Metadata{
 		Name:        "sys.host.disk.write.bytes",
@@ -326,9 +326,9 @@ var (
 		Measurement: "Bytes",
 		Help:        "Bytes written to all disks since this process started (as reported by the OS)",
 
-		Essential: true,
-		Category:  metric.Metadata_HARDWARE,
-		HowToUse:  `This metric reports the effective storage device write throughput (MB/s) rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
+		Visibility: metric.Metadata_ESSENTIAL,
+		Category:   metric.Metadata_HARDWARE,
+		HowToUse:   `This metric reports the effective storage device write throughput (MB/s) rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
 	}
 	metaHostDiskWriteTime = metric.Metadata{
 		Name:        "sys.host.disk.write.time",
@@ -354,9 +354,9 @@ var (
 		Measurement: "Operations",
 		Help:        "IO operations currently in progress on this host (as reported by the OS)",
 
-		Essential: true,
-		Category:  metric.Metadata_HARDWARE,
-		HowToUse:  `This metric gives the average queue length of the storage device. It characterizes the storage device's performance capability. All I/O performance metrics are Linux counters and correspond to the avgqu-sz in the Linux iostat command output. You need to view the device queue graph in the context of the actual read/write IOPS and MBPS metrics that show the actual device utilization. If the device is not keeping up, the queue will grow. Values over 10 are bad. Values around 5 mean the device is working hard trying to keep up. For internal (on chassis) NVMe devices, the queue values are typically 0. For network connected devices, such as AWS EBS volumes, the normal operating range of values is 1 to 2. Spikes in values are OK. They indicate an I/O spike where the device fell behind and then caught up. End users may experience inconsistent response times, but there should be no cluster stability issues. If the queue is greater than 5 for an extended period of time and IOPS or MBPS are low, then the storage is most likely not provisioned per Cockroach Labs guidance. In AWS EBS, it is commonly an EBS type, such as gp2, not suitable as database primary storage. If I/O is low and the queue is low, the most likely scenario is that the CPU is lacking and not driving I/O. One such case is a cluster with nodes with only 2 vcpus which is not supported sizing for production deployments. There are quite a few background processes in the database that take CPU away from the workload, so the workload is just not getting the CPU. Review storage and disk I/O.`,
+		Visibility: metric.Metadata_ESSENTIAL,
+		Category:   metric.Metadata_HARDWARE,
+		HowToUse:   `This metric gives the average queue length of the storage device. It characterizes the storage device's performance capability. All I/O performance metrics are Linux counters and correspond to the avgqu-sz in the Linux iostat command output. You need to view the device queue graph in the context of the actual read/write IOPS and MBPS metrics that show the actual device utilization. If the device is not keeping up, the queue will grow. Values over 10 are bad. Values around 5 mean the device is working hard trying to keep up. For internal (on chassis) NVMe devices, the queue values are typically 0. For network connected devices, such as AWS EBS volumes, the normal operating range of values is 1 to 2. Spikes in values are OK. They indicate an I/O spike where the device fell behind and then caught up. End users may experience inconsistent response times, but there should be no cluster stability issues. If the queue is greater than 5 for an extended period of time and IOPS or MBPS are low, then the storage is most likely not provisioned per Cockroach Labs guidance. In AWS EBS, it is commonly an EBS type, such as gp2, not suitable as database primary storage. If I/O is low and the queue is low, the most likely scenario is that the CPU is lacking and not driving I/O. One such case is a cluster with nodes with only 2 vcpus which is not supported sizing for production deployments. There are quite a few background processes in the database that take CPU away from the workload, so the workload is just not getting the CPU. Review storage and disk I/O.`,
 	}
 	metaHostNetRecvBytes = metric.Metadata{
 		Name:        "sys.host.net.recv.bytes",
@@ -364,9 +364,9 @@ var (
 		Measurement: "Bytes",
 		Help:        "Bytes received on all network interfaces since this process started (as reported by the OS)",
 
-		Essential: true,
-		Category:  metric.Metadata_HARDWARE,
-		HowToUse:  `This metric gives the node's ingress/egress network transfer rates for flat sections which may indicate insufficiently provisioned networking or high error rates. CockroachDB is using a reliable TCP/IP protocol, so errors result in delivery retries that create a "slow network" effect.`,
+		Visibility: metric.Metadata_ESSENTIAL,
+		Category:   metric.Metadata_HARDWARE,
+		HowToUse:   `This metric gives the node's ingress/egress network transfer rates for flat sections which may indicate insufficiently provisioned networking or high error rates. CockroachDB is using a reliable TCP/IP protocol, so errors result in delivery retries that create a "slow network" effect.`,
 	}
 	metaHostNetRecvPackets = metric.Metadata{
 		Name:        "sys.host.net.recv.packets",
@@ -392,9 +392,9 @@ var (
 		Measurement: "Bytes",
 		Help:        "Bytes sent on all network interfaces since this process started (as reported by the OS)",
 
-		Essential: true,
-		Category:  metric.Metadata_HARDWARE,
-		HowToUse:  `This metric gives the node's ingress/egress network transfer rates for flat sections which may indicate insufficiently provisioned networking or high error rates. CockroachDB is using a reliable TCP/IP protocol, so errors result in delivery retries that create a "slow network" effect.`,
+		Visibility: metric.Metadata_ESSENTIAL,
+		Category:   metric.Metadata_HARDWARE,
+		HowToUse:   `This metric gives the node's ingress/egress network transfer rates for flat sections which may indicate insufficiently provisioned networking or high error rates. CockroachDB is using a reliable TCP/IP protocol, so errors result in delivery retries that create a "slow network" effect.`,
 	}
 	metaHostNetSendPackets = metric.Metadata{
 		Name:        "sys.host.net.send.packets",
@@ -419,7 +419,7 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Segments",
 		Category:    metric.Metadata_NETWORKING,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		HowToUse: `
 Phase changes, especially when occurring on groups of nodes, can indicate packet
 loss in the network or a slow consumer of packets. On slow consumers, the

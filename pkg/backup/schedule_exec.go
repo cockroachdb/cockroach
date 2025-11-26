@@ -604,7 +604,7 @@ func init() {
 						`),
 						Measurement: "Jobs",
 						Unit:        metric.Unit_TIMESTAMP_SEC,
-						Essential:   true,
+						Visibility:  metric.Metadata_ESSENTIAL,
 						Category:    metric.Metadata_SQL,
 						HowToUse: crstrings.UnwrapText(`
 							Monitor this metric to ensure that backups are meeting the

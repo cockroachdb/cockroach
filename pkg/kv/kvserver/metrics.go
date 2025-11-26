@@ -51,7 +51,7 @@ var (
 		Help:        "Number of replicas",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric provides an essential characterization of the data distribution across cluster nodes.`,
 	}
@@ -90,7 +90,7 @@ var (
 		Help:        "Number of lease holders",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric provides an essential characterization of the data processing points across cluster nodes.`,
 	}
@@ -138,7 +138,7 @@ var (
 		Help:        "Number of ranges",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric provides a measure of the scale of the data size.`,
 	}
@@ -147,7 +147,7 @@ var (
 		Help:        "Number of ranges with fewer live replicas than needed for quorum",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse: crstrings.UnwrapText(`
 			This metric is an indicator of replication issues. It shows whether the
@@ -160,7 +160,7 @@ var (
 		Help:        "Number of ranges with fewer live replicas than the replication target",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric is an indicator of replication issues. It shows whether the cluster has data that is not conforming to resilience goals. The next step is to determine the corresponding database object, such as the table or index, of these under-replicated ranges and whether the under-replication is temporarily expected. Use the statement SELECT table_name, index_name FROM [SHOW RANGES WITH INDEXES] WHERE range_id = {id of under-replicated range};`,
 	}
@@ -260,7 +260,7 @@ var (
 		Help:        "Number of successful lease transfers",
 		Measurement: "Lease Transfers",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `A high number of lease transfers is not a negative or positive signal, rather it is a reflection of the elastic cluster activities. For example, this metric is high during cluster topology changes. A high value is often the reason for NotLeaseHolderErrors which are normal and expected during rebalancing. Observing this metric may provide a confirmation of the cause of such errors.`,
 	}
@@ -469,7 +469,7 @@ var (
 		Help:        "Total storage capacity",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric gives total storage capacity. Measurements should comply with
@@ -482,7 +482,7 @@ var (
 		Help:        "Available storage capacity",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric gives available storage capacity. Measurements should comply
@@ -495,7 +495,7 @@ var (
 		Help:        "Used storage capacity",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric gives used storage capacity. Measurements should comply with
@@ -535,7 +535,7 @@ var (
 		Help:        "Number of kv-level requests received per second by the store, considering the last 30 minutes, as used in rebalancing decisions.",
 		Measurement: "Queries/Sec",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric shows hotspots along the queries per second (QPS) dimension. It provides insights into the ongoing rebalancing activities.`,
 	}
@@ -574,7 +574,7 @@ var (
 		Help:        "Average CPU nanoseconds spent on processing replica operations in the last 30 minutes.",
 		Measurement: "Nanoseconds/Sec",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `A high value of this metric could indicate that one of the store's replicas is part of a hot range.`,
 	}
@@ -586,7 +586,7 @@ var (
 		`),
 		Measurement: "Nanoseconds/Sec",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse: crstrings.UnwrapText(`
 			A high value of this metric could indicate that one of the store's
@@ -602,7 +602,7 @@ var (
 		`),
 		Measurement: "Queries/Sec",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `A high value of this metric could indicate that one of the store's replicas is part of a hot range. See also: rebalancing_replicas_cpunanospersecond.`,
 	}
@@ -694,7 +694,7 @@ var (
 		Help:        "Count of block cache hits",
 		Measurement: "Cache Ops",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric gives hits to block cache which is reserved memory. It is
@@ -708,7 +708,7 @@ var (
 		Help:        "Count of block cache misses",
 		Measurement: "Cache Ops",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric gives misses to block cache which is reserved memory. It is
@@ -758,7 +758,7 @@ var (
 		Help:        "Number of table compactions",
 		Measurement: "Compactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric reports the number of a node's LSM compactions. If the number
@@ -880,7 +880,7 @@ var (
 		Help:        "Number of instances of intentional write stalls to backpressure incoming writes",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric reports actual disk stall events. Ideally, investigate all
@@ -1447,7 +1447,7 @@ var (
 		Help:        "Number of range splits",
 		Measurement: "Range Ops",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric indicates how fast a workload is scaling up. Spikes can indicate resource hotspots since the split heuristic is based on QPS. To understand whether hotspots are an issue and with which tables and indexes they are occurring, correlate this metric with other metrics such as CPU usage, such as sys.cpu.combined.percent-normalized, or use the Hot Ranges page.`,
 	}
@@ -1456,7 +1456,7 @@ var (
 		Help:        "Number of range merges",
 		Measurement: "Range Ops",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric indicates how fast a workload is scaling down. Merges are Cockroach's optimization for performance. This metric indicates that there have been deletes in the workload.`,
 	}
@@ -2287,7 +2287,7 @@ var (
 		`),
 		Measurement: "Threshold",
 		Unit:        metric.Unit_PERCENT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			If the value of this metric exceeds 1, then it indicates overload. You can
@@ -3082,7 +3082,7 @@ var (
 		Help:        "The fsync latency to the Write-Ahead Log device.",
 		Measurement: "Fsync Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			If this value is greater than 100ms, it is an indication of a disk stall.
@@ -3125,7 +3125,7 @@ var (
 		Help:        "The observed latency for writing and syncing to the logical Write-Ahead Log.",
 		Measurement: "Nanoseconds",
 		Category:    metric.Metadata_STORAGE,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Unit:        metric.Unit_NANOSECONDS,
 		HowToUse: crstrings.UnwrapText(`
 			Only populated when WAL failover is configured. Without WAL failover, the
