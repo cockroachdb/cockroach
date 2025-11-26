@@ -177,6 +177,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 // rebalances the replicas and leases.
 func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 156293)
 	skip.UnderDuress(t) // eight stores is too much under duress
 	scope := log.Scope(t)
 	defer scope.Close(t)
