@@ -250,6 +250,16 @@ func (sr *SampleReservoir) copyRow(
 			sr.scratch[i].Datum = tree.DNull
 			continue
 		}
+		// If we've already decoded this EncDatum, unset the decoded datum. We
+		// do so in order to not accumulate a bounded memory leak by keeping the
+		// datum that came from the DatumAlloc elsewhere (which would share the
+		// underlying slice with 15 another datums).
+		//
+		// (This should only happen for datums needed for evaluating the virtual
+		// computed column expressions in the tableReader which should be rare.)
+		if src[i].EncodedBytes() != nil {
+			src[i].Datum = nil
+		}
 		// Copy only the decoded datum to ensure that we remove any reference to
 		// the encoded bytes. The encoded bytes would have been scanned in a batch
 		// of ~10000 rows, so we must delete the reference to allow the garbage

@@ -1818,6 +1818,9 @@ func (txn *Txn) CreateSavepoint(ctx context.Context) (SavepointToken, error) {
 // and can be reused later (e.g. to release or roll back again).
 //
 // This method is only valid when called on RootTxns.
+//
+// NB: after calling RollbackToSavepoint, the transaction's read sequence number
+// must be stepped by calling Step() before any further requests are performed.
 func (txn *Txn) RollbackToSavepoint(ctx context.Context, s SavepointToken) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
