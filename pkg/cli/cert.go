@@ -86,6 +86,7 @@ Once the client.node.crt exists, all client certificates will be verified using 
 func runCreateClientCACert(cmd *cobra.Command, args []string) error {
 	return errors.Wrap(
 		security.CreateClientCAPair(
+			
 			certCtx.certsDir,
 			certCtx.caKey,
 			certCtx.keySize,
