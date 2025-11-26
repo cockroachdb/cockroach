@@ -29,7 +29,7 @@ import (
 // directory of scratches created. A scratch manages the SSTs created during a
 // specific snapshot.
 type SSTSnapshotStorage struct {
-	engine  storage.Engine
+	env     *fs.Env
 	limiter *rate.Limiter
 	dir     string
 	mu      struct {
@@ -41,7 +41,7 @@ type SSTSnapshotStorage struct {
 // NewSSTSnapshotStorage creates a new SST snapshot storage.
 func NewSSTSnapshotStorage(engine storage.Engine, limiter *rate.Limiter) SSTSnapshotStorage {
 	return SSTSnapshotStorage{
-		engine:  engine,
+		env:     engine.Env(),
 		limiter: limiter,
 		dir:     filepath.Join(engine.GetAuxiliaryDir(), "sstsnapshot"),
 		mu: struct {
@@ -70,7 +70,7 @@ func (s *SSTSnapshotStorage) NewScratchSpace(
 
 // Clear removes all created directories and SSTs.
 func (s *SSTSnapshotStorage) Clear() error {
-	return s.engine.Env().RemoveAll(s.dir)
+	return s.env.RemoveAll(s.dir)
 }
 
 // scratchClosed is called when an SSTSnapshotStorageScratch created by this
@@ -91,7 +91,7 @@ func (s *SSTSnapshotStorage) scratchClosed(rangeID roachpb.RangeID) {
 		// Suppressing an error here is okay, as orphaned directories are at worst
 		// a performance issue when we later walk directories in pebble.Capacity()
 		// but not a correctness issue.
-		_ = s.engine.Env().RemoveAll(filepath.Join(s.dir, strconv.Itoa(int(rangeID))))
+		_ = s.env.RemoveAll(filepath.Join(s.dir, strconv.Itoa(int(rangeID))))
 	}
 }
 
@@ -113,7 +113,7 @@ func (s *SSTSnapshotStorageScratch) filename(id int) string {
 }
 
 func (s *SSTSnapshotStorageScratch) createDir() error {
-	err := s.storage.engine.Env().MkdirAll(s.snapDir, os.ModePerm)
+	err := s.storage.env.MkdirAll(s.snapDir, os.ModePerm)
 	s.dirCreated = s.dirCreated || err == nil
 	return err
 }
@@ -187,7 +187,7 @@ func (s *SSTSnapshotStorageScratch) Close() error {
 	}
 	s.closed = true
 	defer s.storage.scratchClosed(s.rangeID)
-	return s.storage.engine.Env().RemoveAll(s.snapDir)
+	return s.storage.env.RemoveAll(s.snapDir)
 }
 
 // SSTSnapshotStorageFile is an SST file managed by a
@@ -220,9 +220,9 @@ func (f *SSTSnapshotStorageFile) ensureFile() error {
 	}
 	var err error
 	if f.bytesPerSync > 0 {
-		f.file, err = fs.CreateWithSync(f.scratch.storage.engine.Env(), f.filename, int(f.bytesPerSync), fs.RaftSnapshotWriteCategory)
+		f.file, err = fs.CreateWithSync(f.scratch.storage.env, f.filename, int(f.bytesPerSync), fs.RaftSnapshotWriteCategory)
 	} else {
-		f.file, err = f.scratch.storage.engine.Env().Create(f.filename, fs.RaftSnapshotWriteCategory)
+		f.file, err = f.scratch.storage.env.Create(f.filename, fs.RaftSnapshotWriteCategory)
 	}
 	if err != nil {
 		return err
