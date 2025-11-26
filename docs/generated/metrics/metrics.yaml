@@ -12348,17 +12348,9 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: kv.rangefeed.processors_goroutine
-      exported_name: kv_rangefeed_processors_goroutine
-      description: Number of active RangeFeed processors using goroutines
-      y_axis_label: Processors
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: kv.rangefeed.processors_scheduler
-      exported_name: kv_rangefeed_processors_scheduler
-      description: Number of active RangeFeed processors using scheduler
+    - name: kv.rangefeed.processors
+      exported_name: kv_rangefeed_processors
+      description: Number of active RangeFeed processors
       y_axis_label: Processors
       type: GAUGE
       unit: COUNT
