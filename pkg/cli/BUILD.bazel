@@ -2,6 +2,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
+genrule(
+    name = "cockroachdb_datadog_metrics",
+    srcs = ["@datadog_cockroachdb_metrics//:metrics.py"],
+    outs = ["files/cockroachdb_datadog_metrics.yaml"],
+    cmd = "$(location //build/tools/gen-cockroachdb-metrics) --datadog-only $(location @datadog_cockroachdb_metrics//:metrics.py) $@",
+    tools = ["//build/tools/gen-cockroachdb-metrics"],
+    visibility = ["//pkg/gen:__pkg__"],
+)
+
 go_library(
     name = "cli",
     srcs = [
@@ -96,6 +105,10 @@ go_library(
     # keep
     cppopts = [
         "-DJEMALLOC_NO_DEMANGLE",
+    ],
+    embedsrcs = [
+        "files/cockroachdb_metrics_base.yaml",
+        "files/cockroachdb_datadog_metrics.yaml",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cli",
     visibility = ["//visibility:public"],
@@ -231,6 +244,7 @@ go_library(
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/tracing/zipper",
         "//pkg/util/uuid",
+        "//pkg/util/yamlutil",
         "//pkg/workload",
         "//pkg/workload/bank",
         "//pkg/workload/bulkingest",

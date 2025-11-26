@@ -10,12 +10,14 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	_ "embed"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"go.yaml.in/yaml/v4"
 )
@@ -71,7 +74,26 @@ var (
 		"GAUGE":   datadogV2.METRICINTAKETYPE_GAUGE.Ptr(),
 		"COUNTER": datadogV2.METRICINTAKETYPE_COUNT.Ptr(),
 	}
+	prometheusNameReplaceRE = regexp.MustCompile("^[^a-zA-Z_:]|[^a-zA-Z0-9_:]")
+	// Skip patterns - metrics that we haven't included for historical reasons
+	skipPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`^auth_`),
+		regexp.MustCompile(`^distsender_rpc_err_errordetailtype_`),
+		regexp.MustCompile(`^gossip_callbacks_`),
+		regexp.MustCompile(`^jobs_auto_config_env_runner_`),
+		regexp.MustCompile(`^jobs_update_table_`),
+		regexp.MustCompile(`^logical_replication_`),
+		regexp.MustCompile(`^sql_crud_`),
+		regexp.MustCompile(`^storage_l\d_`),
+		regexp.MustCompile(`^storage_sstable_compression_`),
+	}
 )
+
+//go:embed files/cockroachdb_metrics_base.yaml
+var cockroachdbMetricsBaseYAMLBytes []byte
+
+//go:embed files/cockroachdb_datadog_metrics.yaml
+var cockroachdbMetricsYAMLBytes []byte
 
 // FailedRequest represents a failed metric upload request that can be retried
 type FailedRequest struct {
@@ -92,6 +114,12 @@ type GapFillProcessor struct{}
 
 func NewGapFillProcessor() *GapFillProcessor {
 	return &GapFillProcessor{}
+}
+
+// BaseMappingsYAML represents the structure of cockroachdb_metrics_base.yaml
+type BaseMappingsYAML struct {
+	RuntimeConditionalMetrics []MetricInfo      `yaml:"runtime_conditional_metrics"`
+	LegacyMetrics             map[string]string `yaml:"legacy_metrics"`
 }
 
 // processCounterMetric interpolates 30-minute resolution counter metrics to 10-second resolution.
@@ -190,6 +218,8 @@ type datadogWriter struct {
 	cumulativeToDeltaProcessor *CumulativeToDeltaProcessor
 	// gapFillProcessor is used to interpolate 30-minute resolution counter metrics to 10-second resolution
 	gapFillProcessor *GapFillProcessor
+	// metricsNameMap maps metric names to their Datadog format
+	metricsNameMap map[string]string
 }
 
 func makeDatadogWriter(
@@ -207,6 +237,13 @@ func makeDatadogWriter(
 	if err != nil {
 		fmt.Printf(
 			"error loading metric types map: %v\nThis may lead to some metrics not behaving correctly on Datadog.\n", err)
+	}
+
+	metricsNameMap, err := generateMetricsNameMap(context.Background())
+	if err != nil {
+		fmt.Printf(
+			"error loading metrics name map: %v\nThis will affect metric naming consistency.\n", err)
+		return nil, err
 	}
 
 	ctx := context.WithValue(
@@ -254,6 +291,7 @@ func makeDatadogWriter(
 		isPartialUploadOfFailedRequests: isPartialUploadOfFailedRequests,
 		cumulativeToDeltaProcessor:      NewCumulativeToDeltaProcessor(),
 		gapFillProcessor:                NewGapFillProcessor(),
+		metricsNameMap:                  metricsNameMap,
 	}, nil
 }
 
@@ -315,6 +353,12 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 	} else {
 		// add default node_id as 0 as there is no metric match for the regex.
 		appendTag(series, nodeKey, "0")
+	}
+
+	// Convert metric name to Prometheus format and lookup in metricsNameMap
+	promName := prometheusNameReplaceRE.ReplaceAllString(series.Metric, "_")
+	if datadogName, ok := d.metricsNameMap[promName]; ok {
+		series.Metric = datadogName
 	}
 
 	isSorted := true
@@ -1006,6 +1050,128 @@ func loadMetricTypesMap(ctx context.Context) (map[string]string, error) {
 	}
 
 	return metricTypeMap, nil
+}
+
+// generateMetricsNameMap creates a comprehensive metrics name map by:
+// 1. Getting all metrics from gen metric-list output
+// 2. Appending runtime conditional metrics from base YAML
+// 3. Mapping them to Datadog format
+// 4. Mapping with legacy mappings
+func generateMetricsNameMap(ctx context.Context) (map[string]string, error) {
+	// Get all metrics from gen metric-list
+	metricLayers, err := generateMetricList(ctx, true /* skipFiltering */)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to generate metric list")
+	}
+
+	// Load base mappings (runtime conditional + legacy metrics)
+	baseMappings, err := loadBaseMappingsFromFile()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load base mappings")
+	}
+
+	// Load Datadog mappings
+	datadogMappings, err := loadDatadogMappingsFromFile()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load Datadog mappings")
+	}
+
+	// Collect all metrics from metric-list and runtime conditional metrics
+	allMetrics := make([]MetricInfo, 0)
+
+	// Process metrics from gen metric-list
+	for _, layer := range metricLayers {
+		for _, category := range layer.Categories {
+			allMetrics = append(allMetrics, category.Metrics...)
+		}
+	}
+	allMetrics = append(allMetrics, baseMappings.RuntimeConditionalMetrics...)
+	metricNameMap := mapMetricsToDatadog(allMetrics, datadogMappings)
+	metricNameMap = mergeLegacyMappings(baseMappings.LegacyMetrics, metricNameMap)
+
+	return metricNameMap, nil
+}
+
+// mapMetricsToDatadog processes the CRDB metrics and maps them to Datadog names
+func mapMetricsToDatadog(
+	metrics []MetricInfo, datadogMappings map[string]string,
+) map[string]string {
+	result := make(map[string]string)
+
+	for _, metric := range metrics {
+		// Convert to prometheus format (replace non-alphanumeric with underscore)
+		promName := prometheusNameReplaceRE.ReplaceAllString(metric.Name, "_")
+
+		if shouldSkipMetric(promName) {
+			continue
+		}
+
+		// Get Datadog name from mapping, default to normalized CRDB name
+		var datadogName = ""
+		if ddName, exists := datadogMappings[strings.ToLower(promName)]; exists {
+			datadogName = ddName
+		} else {
+			// Normalize metric name for Datadog by replacing hyphens with underscores
+			// Datadog metric names should not contain hyphens
+			datadogName = strings.ReplaceAll(metric.Name, "-", "_")
+		}
+
+		result[promName] = datadogName
+
+		// Add histogram variants if applicable
+		if metric.Type == "HISTOGRAM" {
+			result[promName+"_bucket"] = datadogName + ".bucket"
+			result[promName+"_count"] = datadogName + ".count"
+			result[promName+"_sum"] = datadogName + ".sum"
+		}
+	}
+
+	return result
+}
+
+// shouldSkipMetric checks if a metric name matches any skip patterns
+func shouldSkipMetric(promName string) bool {
+	for _, pattern := range skipPatterns {
+		if pattern.MatchString(promName) {
+			return true
+		}
+	}
+	return false
+}
+
+// mergeLegacyMappings combines legacy mappings with new mappings, giving priority to new mappings
+func mergeLegacyMappings(legacyMappings, newMappings map[string]string) map[string]string {
+	result := make(map[string]string)
+
+	for k, v := range legacyMappings {
+		result[k] = v
+	}
+
+	for k, v := range newMappings {
+		result[k] = v
+	}
+
+	return result
+}
+
+// loadBaseMappingsFromFile loads the base mappings YAML file
+func loadBaseMappingsFromFile() (*BaseMappingsYAML, error) {
+	var baseMappings BaseMappingsYAML
+	if err := yamlutil.UnmarshalStrict(cockroachdbMetricsBaseYAMLBytes, &baseMappings); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal cockroachdb_metrics_base.yaml")
+	}
+
+	return &baseMappings, nil
+}
+
+// loadDatadogMappingsFromFile loads the Datadog mappings YAML file
+func loadDatadogMappingsFromFile() (map[string]string, error) {
+	var datadogMappings map[string]string
+	if err := yamlutil.UnmarshalStrict(cockroachdbMetricsYAMLBytes, &datadogMappings); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal cockroachdb_datadog_metrics.yaml")
+	}
+
+	return datadogMappings, nil
 }
 
 // uploadInitMetrics uploads all available metrics with zero values and current timestamp
