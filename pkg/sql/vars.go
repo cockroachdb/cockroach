@@ -4508,7 +4508,7 @@ var varGen = map[string]sessionVar{
 				evalCtx.SessionData().OptimizerBuildRoutineParamsAsPlaceholders,
 			), nil
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: globalTrue,
 	},
 }
 

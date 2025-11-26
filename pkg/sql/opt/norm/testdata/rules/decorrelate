@@ -8794,7 +8794,7 @@ $$
 ----
 
 # Join filters with parameter columns are not pull up above the join.
-norm format=show-scalars set=(optimizer_build_routine_params_as_placeholders=true)
+norm format=show-scalars
 CALL p157840a(ARRAY[
     ROW(1, 'one')::ab,
     ROW(2, 'two')::ab,
@@ -8874,7 +8874,7 @@ $$
 
 # The x=5 filter can be pushed above the xy scan and the y=b filter remains in
 # the lowest join filters possible.
-norm format=show-scalars set=(optimizer_build_routine_params_as_placeholders=true)
+norm format=show-scalars
 CALL p157840b(ARRAY[
     ROW(1, 'one')::ab,
     ROW(2, 'two')::ab,

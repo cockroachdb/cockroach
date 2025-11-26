@@ -814,7 +814,7 @@ insert ab
       │         │                                       └── values
       │         │                                            ├── columns: stmt_return_2:46
       │         │                                            └── tuple
-      │         │                                                 └── variable: new:22
+      │         │                                                 └── placeholder: $1
       │         └── filters
       │              └── is-not
       │                   ├── variable: insert_ab:48

@@ -321,8 +321,10 @@ func (b *Builder) finishBuildScalarRef(
 	// If this is not a projection context, then build a variable reference that
 	// can be embedded in outer expression(s).
 	if outScope == nil {
-		if isOuterColumn && col.isParam() &&
-			b.evalCtx.SessionData().OptimizerBuildRoutineParamsAsPlaceholders {
+		if col.isParam() &&
+			b.evalCtx.SessionData().OptimizerBuildRoutineParamsAsPlaceholders &&
+			isOuterColumn {
+			// TODO(mgartner): Do I need this?
 			if colRefs != nil {
 				colRefs.Remove(col.id)
 			}

@@ -1711,19 +1711,19 @@ select
                      └── limit
                           ├── columns: x:14!null
                           ├── internal-ordering: +14
-                          ├── outer: (13)
                           ├── cardinality: [0 - 1]
+                          ├── has-placeholder
                           ├── key: ()
                           ├── fd: ()-->(14)
                           ├── select
                           │    ├── columns: x:14!null
-                          │    ├── outer: (13)
+                          │    ├── has-placeholder
                           │    ├── key: (14)
                           │    ├── scan xy
                           │    │    ├── columns: x:14!null
                           │    │    └── key: (14)
                           │    └── filters
-                          │         └── x:14 > i:13 [outer=(13,14), constraints=(/13: (/NULL - ]; /14: (/NULL - ])]
+                          │         └── x:14 > $1 [outer=(14), constraints=(/14: (/NULL - ])]
                           └── 1
 
 # UDFs with volatile arguments are not inlined.

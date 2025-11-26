@@ -485,8 +485,6 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 	replace = func(nd opt.Expr) opt.Expr {
 		switch t := nd.(type) {
 		case *memo.VariableExpr:
-			// TODO(mgartner): This case will be unnecessary when we no longer
-			// build parameters as Variable expressions.
 			if arg, ok := argForParamCol(t.Col); ok {
 				return arg
 			}
