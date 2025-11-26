@@ -838,6 +838,13 @@ export class StatementDetails extends React.Component<
                   )}
                 />
                 <SummaryCardItem
+                  label="KV CPU Time"
+                  value={formatNumberForDisplay(
+                    stats?.kv_cpu_time?.mean,
+                    Duration,
+                  )}
+                />
+                <SummaryCardItem
                   label="Client Wait Time"
                   value={formatNumberForDisplay(stats?.idle_lat.mean, duration)}
                 />

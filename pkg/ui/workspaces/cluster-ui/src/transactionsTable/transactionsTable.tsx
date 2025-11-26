@@ -40,6 +40,7 @@ import {
   transactionsServiceLatencyBarChart,
   transactionsContentionBarChart,
   transactionsCPUBarChart,
+  transactionsKVCPUTimeBarChart,
   transactionsMaxMemUsageBarChart,
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
@@ -130,6 +131,10 @@ export function makeTransactionsColumns(
   const cpuBar = transactionsCPUBarChart(
     transactions,
     sampledExecStatsBarChartOptions,
+  );
+  const kvCPUTimeBar = transactionsKVCPUTimeBarChart(
+    transactions,
+    defaultBarChartOptions, // kvCPUTime is always collected, it is not part of the sampled exec stats.
   );
   const maxMemUsageBar = transactionsMaxMemUsageBarChart(
     transactions,
@@ -238,6 +243,14 @@ export function makeTransactionsColumns(
       className: cx("statements-table__col-cpu"),
       sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.exec_stats.cpu_sql_nanos?.mean)),
+    },
+    {
+      name: "kvCPUTime",
+      title: statisticsTableTitles.kvCPUTime(statType),
+      cell: kvCPUTimeBar,
+      className: cx("statements-table__col-kv-cpu-time"),
+      sort: (item: TransactionInfo) =>
+        FixLong(Number(item.stats_data.stats.kv_cpu_time?.mean)),
     },
     {
       name: "maxMemUsage",

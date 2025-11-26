@@ -158,6 +158,7 @@ function addTransactionStats(
       countB,
     ),
     exec_stats: addExecStats(a.exec_stats, b.exec_stats),
+    kv_cpu_time: aggregateNumericStats(a.kv_cpu_time, b.kv_cpu_time, countA, countB),
   };
 }
 

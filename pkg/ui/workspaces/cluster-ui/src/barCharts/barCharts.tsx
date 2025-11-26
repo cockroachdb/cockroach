@@ -52,6 +52,13 @@ const cpuBars = [
   ),
 ];
 
+const kvCPUTimeBars = [
+  bar(
+    "kv-cpu-time",
+    (d: StatementStatistics) => d.stats.kv_cpu_time?.mean,
+  ),
+];
+
 const maxMemUsageBars = [
   bar(
     "max-mem-usage",
@@ -86,6 +93,9 @@ const contentionStdDev = bar(cx("contention-dev"), (d: StatementStatistics) =>
 );
 const cpuStdDev = bar(cx("cpu-dev"), (d: StatementStatistics) =>
   stdDevLong(d.stats.exec_stats.cpu_sql_nanos, d.stats.exec_stats.count),
+);
+const kvCPUTimeStdDev = bar(cx("kv-cpu-time-dev"), (d: StatementStatistics) =>
+  stdDevLong(d.stats.kv_cpu_time, d.stats.count),
 );
 const maxMemUsageStdDev = bar(
   cx("max-mem-usage-dev"),
@@ -122,6 +132,12 @@ export const cpuBarChart = barChartFactory(
   cpuBars,
   v => Duration(v),
   cpuStdDev,
+);
+export const kvCPUTimeBarChart = barChartFactory(
+  "grey",
+  kvCPUTimeBars,
+  v => Duration(v),
+  kvCPUTimeStdDev,
 );
 export const maxMemUsageBarChart = barChartFactory(
   "grey",

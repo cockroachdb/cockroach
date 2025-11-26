@@ -131,6 +131,7 @@ func (t *TransactionStatistics) Add(other *TransactionStatistics) {
 	t.RowsRead.Add(other.RowsRead, t.Count, other.Count)
 	t.BytesRead.Add(other.BytesRead, t.Count, other.Count)
 	t.RowsWritten.Add(other.RowsWritten, t.Count, other.Count)
+	t.KVCPUTime.Add(other.KVCPUTime, t.Count, other.Count)
 
 	t.ExecStats.Add(other.ExecStats)
 
@@ -181,6 +182,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
 	s.RowsWritten.Add(other.RowsWritten, s.Count, other.Count)
+	s.KVCPUTime.Add(other.KVCPUTime, s.Count, other.Count)
 	s.Nodes = util.CombineUnique(s.Nodes, other.Nodes)
 	s.KVNodeIDs = util.CombineUnique(s.KVNodeIDs, other.KVNodeIDs)
 	s.Regions = util.CombineUnique(s.Regions, other.Regions)
