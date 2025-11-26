@@ -634,3 +634,25 @@ output:
    +region=a,+zone=a1:1
    +region=a,+zone=a2:1
    :1
+
+# Regression test for out-of-bounds access bug when all relationships are
+# conjPossiblyIntersecting. The voter constraint (+region=a,+zone=a1) and the
+# all-replica constraint (+region=a,+zone=a2) share +region=a but differ in
+# zone constraints, creating the only possibly intersecting relationship.
+normalize num-replicas=3 num-voters=3
+constraint num-replicas=3 +region=a +zone=a2
+voter-constraint num-replicas=3 +region=a +dc=dc1
+----
+input:
+ num-replicas=3 num-voters=3
+ constraints:
+   +region=a,+zone=a2:3
+ voter-constraints:
+   +region=a,+dc=dc1:3
+err=could not satisfy all voter constraints due to non-intersecting conjunctions in voter and all replica constraints
+output:
+ num-replicas=3 num-voters=3
+ constraints:
+   +region=a,+zone=a2:3
+ voter-constraints:
+   +region=a,+dc=dc1:3
