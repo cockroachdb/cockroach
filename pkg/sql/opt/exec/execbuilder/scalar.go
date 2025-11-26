@@ -1191,28 +1191,13 @@ func (b *Builder) buildRoutinePlanGenerator(
 		resultWriter tree.RoutineResultWriter,
 		args tree.Datums,
 		fn tree.RoutinePlanGeneratedFunc,
-	) (err error) {
-		defer func() {
-			if r := recover(); r != nil {
-				// This code allows us to propagate internal errors without
-				// having to add error checks everywhere throughout the code.
-				// This is only possible because the code does not update shared
-				// state and does not manipulate locks.
-				//
-				// This is the same panic-catching logic that exists in
-				// o.Optimize() below. It's required here because it's possible
-				// for factory functions to panic below, like
-				// CopyAndReplaceDefault.
-				if ok, e := errorutil.ShouldCatch(r); ok {
-					err = e
-					log.VEventf(ctx, 1, "%v", err)
-				} else {
-					// Other panic objects can't be considered "safe" and thus
-					// are propagated as crashes that terminate the session.
-					panic(r)
-				}
-			}
-		}()
+	) (retErr error) {
+		// This is the same panic-catching logic that exists in o.Optimize()
+		// below. It's required here because it's possible for factory functions
+		// to panic below, like CopyAndReplaceDefault.
+		defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
+			log.VEventf(ctx, 1, "%v", caughtErr)
+		})
 
 		dbName := b.evalCtx.SessionData().Database
 		appName := b.evalCtx.SessionData().ApplicationName
@@ -1434,28 +1419,10 @@ func (b *Builder) buildTxnControl(
 	}
 	gen := func(
 		ctx context.Context, evalArgs tree.Datums,
-	) (con tree.StoredProcContinuation, err error) {
-		defer func() {
-			if r := recover(); r != nil {
-				// This code allows us to propagate internal errors without
-				// having to add error checks everywhere throughout the code.
-				// This is only possible because the code does not update shared
-				// state and does not manipulate locks.
-				//
-				// This is the same panic-catching logic that exists in
-				// o.Optimize() below. It's required here because it's possible
-				// for factory functions to panic below, like
-				// CopyAndReplaceDefault.
-				if ok, e := errorutil.ShouldCatch(r); ok {
-					err = e
-					log.VEventf(ctx, 1, "%v", err)
-				} else {
-					// Other panic objects can't be considered "safe" and thus
-					// are propagated as crashes that terminate the session.
-					panic(r)
-				}
-			}
-		}()
+	) (con tree.StoredProcContinuation, retErr error) {
+		defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
+			log.VEventf(ctx, 1, "%v", caughtErr)
+		})
 		// Build the plan for the "continuation" procedure that will resume
 		// execution of the parent stored procedure in a new transaction.
 		var f norm.Factory

@@ -662,25 +662,10 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 // need to run a query to get user defined type metadata.
 func (sc *TableStatisticsCache) parseStats(
 	ctx context.Context, datums tree.Datums, typeResolver *descs.DistSQLTypeResolver,
-) (_ *TableStatistic, _ *types.T, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// In the event of a "safe" panic, we only want to log the error and
-			// continue executing the query without stats for this table. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+) (_ *TableStatistic, _ *types.T, retErr error) {
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
-	var tsp *TableStatisticProto
-	tsp, err = NewTableStatisticProto(datums)
+	tsp, err := NewTableStatisticProto(datums)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -997,21 +982,7 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 	}
 
 	// Guard against crashes in the code below.
-	defer func() {
-		if r := recover(); r != nil {
-			// In the event of a "safe" panic, we only want to log the error and
-			// continue executing the query without stats for this table. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				retErr = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 	var statsList []*TableStatistic
 	var udts map[descpb.ColumnID]*types.T
@@ -1075,21 +1046,7 @@ func getTableStatsProtosFromDB(
 	}
 
 	// Guard against crashes in the code below.
-	defer func() {
-		if r := recover(); r != nil {
-			// In the event of a "safe" panic, we only want to log the error and
-			// continue executing the query without stats for this table. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				retErr = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 	var ok bool
 	for ok, queryErr = it.Next(ctx); ok; ok, queryErr = it.Next(ctx) {
