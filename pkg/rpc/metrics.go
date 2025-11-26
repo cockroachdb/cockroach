@@ -49,7 +49,7 @@ var (
 		Help:        "Gauge of current connections in a healthy state (i.e. bidirectionally connected and heartbeating)",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `See Description.`,
 	}
@@ -59,7 +59,7 @@ var (
 		Help:        "Gauge of current connections in an unhealthy state (not bidirectionally connected or heartbeating)",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `If the value of this metric is greater than 0, this could indicate a network partition.`,
 	}
@@ -83,7 +83,7 @@ the constituent parts of this metric are available on a per-peer basis and one c
 for how long a given peer has been connected`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `This can be useful for monitoring the stability and health of connections within your CockroachDB cluster.`,
 	}
@@ -97,7 +97,7 @@ the constituent parts of this metric are available on a per-peer basis and one c
 for how long a given peer has been unreachable`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `If this duration is greater than 0, this could indicate how long a network partition has been occurring.`,
 	}
@@ -107,7 +107,7 @@ for how long a given peer has been unreachable`,
 		Help:        `Counter of successful heartbeats.`,
 		Measurement: "Heartbeats",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `See Description.`,
 	}
@@ -124,7 +124,7 @@ Decommissioned peers are excluded.
 `,
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `See Description.`,
 	}
@@ -148,7 +148,7 @@ This metric does not track failed connection. A failed connection's contribution
 is reset to zero.
 `,
 		Measurement: "Latency",
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `This metric is helpful in understanding general network issues outside of CockroachDB that could be impacting the user’s workload.`,
 	}
@@ -165,7 +165,7 @@ this reflects pure network latency and is less affected by CPU overload effects.
 This metric is only available on Linux.
 `,
 		Measurement: "Latency",
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `High TCP RTT values indicate network issues outside of CockroachDB that could be impacting the user's workload.`,
 	}
@@ -182,7 +182,7 @@ connection latency.
 This metric is only available on Linux.
 `,
 		Measurement: "Latency Variance",
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `High TCP RTT variance values indicate network stability issues outside of CockroachDB that could be impacting the user's workload.`,
 	}

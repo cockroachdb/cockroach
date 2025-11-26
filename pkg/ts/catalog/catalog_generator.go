@@ -55,7 +55,7 @@ func generateInternal(
 			dstUnit = AxisUnits(candidate)
 		}
 
-		if meta.Essential {
+		if meta.Visibility == metric.Metadata_ESSENTIAL {
 			if meta.Category == metric.Metadata_UNSET {
 				panic(fmt.Sprintf("Metric %s is essential but has no Category", name))
 			}
@@ -98,7 +98,7 @@ func generateInternal(
 					AxisLabel:      meta.Measurement,
 					PreferredUnits: dstUnit,
 					MetricType:     meta.MetricType,
-					Essential:      meta.Essential,
+					Visibility:     meta.Visibility.String(),
 					HowToUse:       strings.TrimSpace(meta.HowToUse),
 					LabeledName:    formatLabeledName(meta),
 				},

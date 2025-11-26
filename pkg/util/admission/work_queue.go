@@ -1745,7 +1745,7 @@ var (
 		Help:        "Wait time durations for requests that waited",
 		Measurement: "Wait time Duration",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This metric shows if CPU utilization-based admission control feature is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.",
 	}
@@ -1754,7 +1754,7 @@ var (
 		Help:        "Wait time durations for requests that waited",
 		Measurement: "Wait time Duration",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_OVERLOAD,
 		HowToUse:    "This metric shows if I/O utilization-based admission control feature is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.",
 	}

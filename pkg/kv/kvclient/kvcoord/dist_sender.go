@@ -154,7 +154,7 @@ var (
 		Help:        "Number of replica-addressed RPCs sent due to per-replica errors",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_DISTRIBUTED,
 		HowToUse: crstrings.UnwrapText(`
 			RPC errors do not necessarily indicate a problem. This metric tracks
@@ -170,7 +170,7 @@ var (
 		Help:        "Number of NotLeaseHolderErrors encountered from replica-addressed RPCs",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_DISTRIBUTED,
 		HowToUse: crstrings.UnwrapText(`
 			Errors of this type are normal during elastic cluster topology changes

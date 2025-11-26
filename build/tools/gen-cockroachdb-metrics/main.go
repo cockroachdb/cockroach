@@ -59,7 +59,7 @@ type MetricInfo struct {
 	Aggregation  string `yaml:"aggregation"`
 	Derivative   string `yaml:"derivative"`
 	HowToUse     string `yaml:"how_to_use,omitempty"`
-	Essential    bool   `yaml:"essential,omitempty"`
+	Visibility   string `yaml:"visibility,omitempty"`
 }
 
 // Category represents a category of metrics
@@ -170,9 +170,9 @@ func parseDatadogMappings(r io.Reader) (map[string]string, error) {
 
 	// CRDB-Datadog mappings are stored as python dictionaries in the following file:
 	// https://github.com/DataDog/integrations-core/blob/master/cockroachdb/datadog_checks/cockroachdb/metrics.py
-	//   - METRIC_MAP: represents the raw CRDB-Datadog metric name mapping. 
+	//   - METRIC_MAP: represents the raw CRDB-Datadog metric name mapping.
 	//   - OMV2_METRIC_MAP: represents the metric in OpenMetrics V2 format.
-	// E.g. 
+	// E.g.
 	// 'admission_errored_sql_kv_response': 'admission.errored.sql_kv.response'
 	// here the key is the CRDB metric name in prometheus format, and the value is the corresponding metric name visible in Datadog.
 	// Both maps are mutually exclusive. Parse both dictionaries to get the complete mapping.
