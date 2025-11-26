@@ -7,17 +7,21 @@ package sql_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +32,7 @@ func TestTableRollback(t *testing.T) {
 	s, sqlDB, kv := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "test"})
 	defer s.Stopper().Stop(context.Background())
 	tt := s.ApplicationLayer()
-	codec, sv := tt.Codec(), &tt.ClusterSettings().SV
+	codec := tt.Codec()
 	execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -61,8 +65,55 @@ func TestTableRollback(t *testing.T) {
 
 	predicates := kvpb.DeleteRangePredicates{StartTime: targetTime}
 	require.NoError(t, sql.DeleteTableWithPredicate(
-		ctx, kv, codec, sv, execCfg.DistSender, desc.GetID(), predicates, 10))
+		ctx, kv, codec, &tt.ClusterSettings().SV, execCfg.DistSender, desc.GetID(), predicates, 10))
 
 	db.CheckQueryResults(t, `SELECT count(*) FROM test`, beforeNumRows)
+}
 
+func TestRollbackRandomTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, kv := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "test"})
+	defer s.Stopper().Stop(ctx)
+	tt := s.ApplicationLayer()
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `CREATE DATABASE IF NOT EXISTS test`)
+
+	rng, _ := randutil.NewPseudoRand()
+	tableName := "rand_table"
+	// Virtual columns make it possible to create rows that can't be
+	// fingerprinted. E.g. an expression like a+b may cause an integer overflow.
+	noVirtualColumns := randgen.WithColumnFilter(func(col *tree.ColumnTableDef) bool {
+		return !col.IsVirtual()
+	})
+	createStmt := randgen.RandCreateTableWithName(
+		ctx, rng, tableName, 1,
+		[]randgen.TableOption{noVirtualColumns})
+	stmt := tree.SerializeForDisplay(createStmt)
+	t.Log(stmt)
+
+	db.Exec(t, stmt)
+
+	_, err := randgen.PopulateTableWithRandData(rng, sqlDB, tableName, 100, nil)
+	require.NoError(t, err)
+
+	rollbackTs := tt.Clock().Now()
+	fingerprint := db.QueryStr(t, fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE test.%s", tableName))
+
+	_, err = randgen.PopulateTableWithRandData(rng, sqlDB, tableName, 100, nil)
+	require.NoError(t, err)
+
+	codec := tt.Codec()
+	desc := desctestutils.TestingGetPublicTableDescriptor(kv, codec, "test", tableName)
+	predicates := kvpb.DeleteRangePredicates{StartTime: rollbackTs}
+
+	execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)
+	require.NoError(t, sql.DeleteTableWithPredicate(
+		ctx, kv, codec, &tt.ClusterSettings().SV, execCfg.DistSender, desc.GetID(), predicates, 10))
+
+	afterFingerprint := db.QueryStr(t, fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE test.%s", tableName))
+	require.Equal(t, fingerprint, afterFingerprint)
 }
