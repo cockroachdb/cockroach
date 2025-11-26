@@ -1032,27 +1032,11 @@ func (p *planner) DecodeGist(ctx context.Context, gist string, external bool) ([
 // optimal plan.
 func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	ctx context.Context,
-) (_ []indexrec.Rec, err error) {
+) (_ []indexrec.Rec, retErr error) {
 	origCtx := ctx
 	ctx, sp := tracing.EnsureChildSpan(ctx, opc.p.execCfg.AmbientCtx.Tracer, "index recommendation")
 	defer sp.Finish()
-
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal errors without having to add
-			// error checks everywhere throughout the code. This is only possible
-			// because the code does not update shared state and does not manipulate
-			// locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-				log.VEventf(ctx, 1, "%v", err)
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+	defer errorutil.MaybeCatchPanic(ctx, &retErr, true /* doLog */)
 
 	// Save the normalized memo created by the optbuilder.
 	savedMemo := opc.optimizer.DetachMemo(ctx)
@@ -1072,7 +1056,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	opc.optimizer.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		return ruleName.IsNormalize()
 	})
-	if _, err = opc.optimizer.Optimize(); err != nil {
+	if _, err := opc.optimizer.Optimize(); err != nil {
 		return nil, err
 	}
 
@@ -1091,12 +1075,11 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 		f.CopyWithoutAssigningPlaceholders,
 	)
 	opc.optimizer.Memo().Metadata().UpdateTableMeta(ctx, f.EvalContext(), hypTables)
-	if _, err = opc.optimizer.Optimize(); err != nil {
+	if _, err := opc.optimizer.Optimize(); err != nil {
 		return nil, err
 	}
 
-	var indexRecs []indexrec.Rec
-	indexRecs, err = indexrec.FindRecs(ctx, f.Memo().RootExpr(), f.Metadata())
+	indexRecs, err := indexrec.FindRecs(ctx, f.Memo().RootExpr(), f.Metadata())
 	if err != nil {
 		return nil, err
 	}

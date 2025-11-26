@@ -6,6 +6,7 @@
 package pretty
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -45,22 +46,8 @@ const (
 // (colors, etc.).
 func Pretty(
 	d Doc, n int, useTabs bool, tabWidth int, keywordTransform func(string) string,
-) (_ string, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal errors without having
-			// to add error checks everywhere throughout the code. This is only
-			// possible because the code does not update shared state and does
-			// not manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as panics.
-				panic(r)
-			}
-		}
-	}()
+) (_ string, retErr error) {
+	defer errorutil.MaybeCatchPanic(context.Background(), &retErr, false /* doLog */)
 
 	var sb strings.Builder
 	b := beExec{
