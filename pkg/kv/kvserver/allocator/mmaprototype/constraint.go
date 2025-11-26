@@ -467,7 +467,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	// don't know the semantics of regions, zones or the universe of possible
 	// values of the zone.
 	index := 0
-	for rels[index].voterAndAllRel == conjPossiblyIntersecting {
+	for index < len(rels) && rels[index].voterAndAllRel == conjPossiblyIntersecting {
 		index++
 	}
 	var err error
@@ -691,7 +691,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 		})
 		// Ignore conjPossiblyIntersecting.
 		index = 0
-		for rels[index].voterAndAllRel == conjPossiblyIntersecting {
+		for index < len(rels) && rels[index].voterAndAllRel == conjPossiblyIntersecting {
 			index++
 		}
 		voterConstraintHasEqualityWithConstraint := make([]bool, len(conf.voterConstraints))
