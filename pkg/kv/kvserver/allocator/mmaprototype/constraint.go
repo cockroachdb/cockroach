@@ -517,6 +517,26 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 			internedConstraintsConjunction: constraint,
 		})
 	}
+	trySatisfyVoterWithAll := func(voterIndex, allIndex int) {
+		if voterConstraints[voterIndex].additionalReplicas != 0 {
+			panic("additionalReplicas should be 0 here")
+		}
+		remainingAll := allReplicaConstraints[allIndex].remainingReplicas
+		// NB: we don't bother subtracting
+		// voterConstraints[voterIndex].additionalReplicas since it is always 0 at
+		// this point in the code (asserted above).
+		neededVoterReplicas := conf.voterConstraints[voterIndex].numReplicas -
+			voterConstraints[voterIndex].numReplicas
+		if neededVoterReplicas > 0 && remainingAll > 0 {
+			// We can satisfy some voter replicas.
+			toAdd := remainingAll
+			if toAdd > neededVoterReplicas {
+				toAdd = neededVoterReplicas
+			}
+			voterConstraints[voterIndex].numReplicas += toAdd
+			allReplicaConstraints[allIndex].remainingReplicas -= toAdd
+		}
+	}
 	// Now resume iterating from index, and consume all relationships that are
 	// conjEqualSet and conjStrictSubset.
 	for ; index < len(rels) && rels[index].voterAndAllRel <= conjStrictSubset; index++ {
@@ -527,21 +547,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 			// constraint.
 			continue
 		}
-		remainingAll := allReplicaConstraints[rel.allIndex].remainingReplicas
-		// NB: we don't bother subtracting
-		// voterConstraints[rel.voterIndex].additionalReplicas since it is always
-		// 0 at this point in the code.
-		neededVoterReplicas := conf.voterConstraints[rel.voterIndex].numReplicas -
-			voterConstraints[rel.voterIndex].numReplicas
-		if neededVoterReplicas > 0 && remainingAll > 0 {
-			// We can satisfy some voter replicas.
-			toAdd := remainingAll
-			if toAdd > neededVoterReplicas {
-				toAdd = neededVoterReplicas
-			}
-			voterConstraints[rel.voterIndex].numReplicas += toAdd
-			allReplicaConstraints[rel.allIndex].remainingReplicas -= toAdd
-		}
+		trySatisfyVoterWithAll(rel.voterIndex, rel.allIndex)
 	}
 	// The only relationships remaining are conjStrictSuperset and
 	// conjNonIntersecting. We don't care about the latter. conjStrictSuperset
@@ -559,20 +565,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	// to narrow unnecessarily, and so if emptyConstraintIndex has some
 	// remainingReplicas, we take them here.
 	if emptyVoterConstraintIndex > 0 && emptyConstraintIndex > 0 {
-		neededReplicas := conf.voterConstraints[emptyVoterConstraintIndex].numReplicas
-		actualReplicas := voterConstraints[emptyVoterConstraintIndex].numReplicas
-		remaining := neededReplicas - actualReplicas
-		if remaining > 0 {
-			remainingSatisfiable := allReplicaConstraints[emptyConstraintIndex].remainingReplicas
-			if remainingSatisfiable > 0 {
-				count := remainingSatisfiable
-				if count > remaining {
-					count = remaining
-				}
-				voterConstraints[emptyVoterConstraintIndex].numReplicas += count
-				allReplicaConstraints[emptyConstraintIndex].remainingReplicas -= count
-			}
-		}
+		trySatisfyVoterWithAll(emptyVoterConstraintIndex, emptyConstraintIndex)
 	}
 
 	// The aforementioned "load-balancing" of the satisfaction is why we need
