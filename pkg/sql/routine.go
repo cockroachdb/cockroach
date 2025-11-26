@@ -409,7 +409,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 				}()
 			}
 			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementStartExec)
-			queryStats, err := runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram)
+			queryStats, err := runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram, statsBuilder)
 			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEndExec)
 			if err != nil {
 				statsBuilder.StatementError(err)
