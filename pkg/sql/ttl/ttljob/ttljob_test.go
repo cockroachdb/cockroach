@@ -128,6 +128,8 @@ func newRowLevelTTLTestJobTestHelper(
 			Settings:          makeSettings(),
 			Knobs:             baseTestingKnobs,
 			InsecureWebAccess: true,
+			// TODO(server): re-enable DRPC once flakiness is addressed, see #158387.
+			DefaultDRPCOption: base.TestDRPCDisabled,
 		},
 	})
 	th.testCluster = testCluster
@@ -593,7 +595,6 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 158317)
 
 	skip.UnderRace(t, "the test times out under race")
 
