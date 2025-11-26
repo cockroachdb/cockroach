@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -22,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -316,4 +319,85 @@ func constructNameToIDMapping(
 		}
 	}
 	return namesToID, tempSchemaNames
+}
+
+// TestTemporaryObjectCleanupRetriesWithPoisonedTransaction tests that the
+// cleanup process doesn't retry when encountering a poisoned transaction error.
+func TestTemporaryObjectCleanupRetriesWithPoisonedTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	testCases := []struct {
+		name               string
+		errorInjectionFunc func(attemptCount *int) error
+		expectedAttempts   int
+		expectError        bool
+		errorSubstring     string
+	}{
+		{
+			name: "poisoned transaction stops retry",
+			errorInjectionFunc: func(attemptCount *int) error {
+				*attemptCount++
+				return &kvpb.TxnAlreadyEncounteredErrorError{}
+			},
+			expectedAttempts: 1,
+			expectError:      true,
+			errorSubstring:   "txn already encountered an error",
+		},
+		{
+			name: "regular error retries and succeeds",
+			errorInjectionFunc: func(attemptCount *int) error {
+				*attemptCount++
+				// Fail on first attempt, succeed on second
+				if *attemptCount == 1 {
+					return errors.New("some retryable error")
+				}
+				return nil
+			},
+			expectedAttempts: 2,
+			expectError:      false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var attemptCount int
+
+			testingKnobs := ExecutorTestingKnobs{
+				TempObjectCleanupErrorInjection: func() error {
+					return tc.errorInjectionFunc(&attemptCount)
+				},
+			}
+
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+
+			execCfg := s.ExecutorConfig().(ExecutorConfig)
+
+			// Create a temporary object cleaner with our testing knobs
+			cleaner := NewTemporaryObjectCleaner(
+				execCfg.Settings,
+				execCfg.InternalDB,
+				execCfg.Codec,
+				metric.NewRegistry(),
+				execCfg.SQLStatusServer,
+				func(context.Context, hlc.ClockTimestamp) (bool, error) { return true, nil },
+				testingKnobs,
+				nil,
+			)
+
+			// Run cleanup and verify behavior
+			err := cleaner.doTemporaryObjectCleanup(ctx, nil)
+			if tc.expectError {
+				require.Error(t, err)
+				require.ErrorContains(t, err, tc.errorSubstring)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.expectedAttempts, attemptCount,
+				"expected %d attempts, got %d", tc.expectedAttempts, attemptCount)
+		})
+	}
 }

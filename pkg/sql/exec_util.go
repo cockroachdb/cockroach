@@ -2033,6 +2033,9 @@ type ExecutorTestingKnobs struct {
 	// OnTempObjectsCleanupDone will trigger when the temporary objects cleanup
 	// job is done.
 	OnTempObjectsCleanupDone func()
+	// TempObjectCleanupErrorInjection, if set, will be called during temp object
+	// cleanup and can return an error to inject into the cleanup process.
+	TempObjectCleanupErrorInjection func() error
 
 	// WithStatementTrace is called after the statement is executed in
 	// execStmtInOpenState.
