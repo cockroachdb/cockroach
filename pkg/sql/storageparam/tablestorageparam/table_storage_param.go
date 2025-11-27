@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -24,8 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/normalize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -173,7 +177,7 @@ var tableParams = map[string]tableParam{
 					pgnotice.Newf(`storage parameter "%s = %s" is ignored`, key, datum.String()),
 				)
 			}
-			return fmt.Sprintf("%t", boolVal), nil
+			return "", nil
 		},
 		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
 			return nil
@@ -976,8 +980,8 @@ func autoStatsTableSettingResetFunc(_ context.Context, po *Setter, key string, v
 	return errors.AssertionFailedf("unable to reset table setting %s", key)
 }
 
-// EvalAndSet evaluates a storage parameter value and applies it.
-func (po *Setter) EvalAndSet(
+// Set implements the Setter interface.
+func (po *Setter) Set(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
@@ -1000,17 +1004,6 @@ func (po *Setter) EvalAndSet(
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
 
-// Set implements the Setter interface.
-func (po *Setter) Set(
-	ctx context.Context,
-	semaCtx *tree.SemaContext,
-	evalCtx *eval.Context,
-	key string,
-	datum tree.Datum,
-) error {
-	return po.EvalAndSet(ctx, semaCtx, evalCtx, key, datum)
-}
-
 // Reset implements the Setter interface.
 func (po *Setter) Reset(ctx context.Context, evalCtx *eval.Context, key string) error {
 	if strings.HasPrefix(key, "ttl_") && len(po.TableDesc.AllMutations()) > 0 {
@@ -1031,4 +1024,67 @@ func (po *Setter) Reset(ctx context.Context, evalCtx *eval.Context, key string) 
 		return p.onReset(ctx, po, key, value)
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
+}
+
+// SetToStringValue sets the param value to an already validated string representation.
+// This function was introduced to be used by the declarative schema changer.
+func (po *Setter) SetToStringValue(ctx context.Context, key string, value string) error {
+	if p, ok := tableParams[key]; ok {
+		return p.onSet(ctx, po, key, value)
+	}
+	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
+}
+
+// ResetToStringValue resets the param value. It will use the string value if specified.
+// This function was introduced to be used by the declarative schema changer.
+func (po *Setter) ResetToStringValue(ctx context.Context, key string, value string) error {
+	if p, ok := tableParams[key]; ok {
+		return p.onReset(ctx, po, key, value)
+	}
+	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
+}
+
+// ParseAndValidate evaluates and validates a storage parameter value without
+// applying it. It returns the validated string value that would be passed to
+// onSet, allowing callers to perform validation before committing changes.
+// This function was introduced to be used by the declarative schema changer.
+func ParseAndValidate(
+	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, param tree.StorageParam,
+) (string, error) {
+	key := param.Key
+	if param.Value == nil {
+		return "", pgerror.Newf(pgcode.InvalidParameterValue, "storage parameter %q requires a value", key)
+	}
+	telemetry.Inc(sqltelemetry.SetTableStorageParameter(key))
+
+	// Expressions may be an unresolved name.
+	// Cast these as strings.
+	expr := paramparse.UnresolvedNameToStrVal(param.Value)
+
+	// Storage params handle their own scalar arguments, with no help from the
+	// optimizer. As such, they cannot contain subqueries.
+	defer semaCtx.Properties.Restore(semaCtx.Properties)
+	semaCtx.Properties.Require("table storage parameters", tree.RejectSubqueries)
+
+	// Convert the expressions to a datum.
+	typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.AnyElement)
+	if err != nil {
+		return "", err
+	}
+	if typedExpr, err = normalize.Expr(ctx, evalCtx, typedExpr); err != nil {
+		return "", err
+	}
+	datum, err := eval.Expr(ctx, evalCtx, typedExpr)
+	if err != nil {
+		return "", err
+	}
+
+	if p, ok := tableParams[key]; ok {
+		value, err := p.validateSetValue(ctx, semaCtx, evalCtx, key, datum)
+		if err != nil {
+			return "", err
+		}
+		return value, nil
+	}
+	return "", pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
