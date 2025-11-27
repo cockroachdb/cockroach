@@ -20,6 +20,8 @@ type DistSQLMetrics struct {
 	DistributedCount            *metric.Counter
 	ContendedQueriesCount       *aggmetric.SQLCounter
 	CumulativeContentionNanos   *aggmetric.SQLCounter
+	CumulativeSQLCPUNanos       *aggmetric.SQLCounter
+	SQLCPUStatementsCount       *aggmetric.SQLCounter
 	FlowsActive                 *metric.Gauge
 	FlowsTotal                  *metric.Counter
 	MaxBytesHist                metric.IHistogram
@@ -72,6 +74,24 @@ var (
 		Help:        "Cumulative contention across all queries (in nanoseconds)",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaCumulativeSQLCPUNanos = metric.Metadata{
+		Name:        "sql.distsql.cumulative_sql_cpu_nanos",
+		Help:        "Cumulative CPU time spent executing SQL operations across all queries (in nanoseconds)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `Monitor this metric to track overall SQL CPU consumption across the cluster.`,
+	}
+
+	metaSQLCPUStatementsCount = metric.Metadata{
+		Name:        "sql.distsql.cpu_sql_statements.count",
+		Help:        "Number of SQL statements for which CPU time was recorded",
+		Measurement: "Statements",
+		Unit:        metric.Unit_COUNT,
+		Essential:   false,
+		Category:    metric.Metadata_SQL,
 	}
 	metaFlowsActive = metric.Metadata{
 		Name:        "sql.distsql.flows.active",
@@ -159,6 +179,8 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		DistributedCount:          metric.NewCounter(metaDistributedCount),
 		ContendedQueriesCount:     aggmetric.NewSQLCounter(metaContendedQueriesCount),
 		CumulativeContentionNanos: aggmetric.NewSQLCounter(metaCumulativeContentionNanos),
+		CumulativeSQLCPUNanos:     aggmetric.NewSQLCounter(metaCumulativeSQLCPUNanos),
+		SQLCPUStatementsCount:     aggmetric.NewSQLCounter(metaSQLCPUStatementsCount),
 		FlowsActive:               metric.NewGauge(metaFlowsActive),
 		FlowsTotal:                metric.NewCounter(metaFlowsTotal),
 		MaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
@@ -176,7 +198,8 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 			Duration:     histogramWindow,
 			MaxVal:       log10int64times1000,
 			SigFigs:      3,
-			BucketConfig: metric.MemoryUsage64MBBuckets}),
+			BucketConfig: metric.MemoryUsage64MBBuckets,
+		}),
 		QueriesSpilled:              metric.NewCounter(metaQueriesSpilled),
 		SpilledBytesWritten:         metric.NewCounter(metaSpilledBytesWritten),
 		SpilledBytesRead:            metric.NewCounter(metaSpilledBytesRead),

@@ -256,6 +256,13 @@ func (ex *connExecutor) recordStatementSummary(
 			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.ContendedQueriesCount.Inc(1, dbName, appName)
 			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.CumulativeContentionNanos.Inc(queryLevelStats.ContentionTime.Nanoseconds(), dbName, appName)
 		}
+
+		if queryLevelStats.CPUTime > 0 {
+			dbName := ex.sessionData().Database
+			appName := ex.sessionData().ApplicationName
+			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.CumulativeSQLCPUNanos.Inc(queryLevelStats.CPUTime.Nanoseconds(), dbName, appName)
+			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.SQLCPUStatementsCount.Inc(1, dbName, appName)
+		}
 	}
 
 	// Do some transaction level accounting for the transaction this statement is
