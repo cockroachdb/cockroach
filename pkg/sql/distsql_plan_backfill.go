@@ -7,9 +7,11 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -92,7 +94,10 @@ var distributedMergeIndexBackfillEnabled = settings.RegisterBoolSetting(
 )
 
 func maybeEnableDistributedMergeIndexBackfill(
-	ctx context.Context, st *cluster.Settings, spec *execinfrapb.BackfillerSpec,
+	ctx context.Context,
+	st *cluster.Settings,
+	nodeID base.SQLInstanceID,
+	spec *execinfrapb.BackfillerSpec,
 ) error {
 	if !distributedMergeIndexBackfillEnabled.Get(&st.SV) {
 		return nil
@@ -101,6 +106,7 @@ func maybeEnableDistributedMergeIndexBackfill(
 		return pgerror.New(pgcode.FeatureNotSupported, "distributed merge requires cluster version 26.1")
 	}
 	spec.UseDistributedMergeSink = true
+	spec.DistributedMergeFilePrefix = fmt.Sprintf("nodelocal://%d/index-backfill", nodeID)
 	return nil
 }
 

@@ -25,12 +25,17 @@ func convertToJobBackfillProgress(
 		if err != nil {
 			return nil, err
 		}
+		manifests, err := stripTenantPrefixFromSSTManifests(codec, bp.SSTManifests)
+		if err != nil {
+			return nil, err
+		}
 		ret = append(ret, jobspb.BackfillProgress{
 			TableID:        bp.TableID,
 			SourceIndexID:  bp.SourceIndexID,
 			DestIndexIDs:   bp.DestIndexIDs,
 			WriteTimestamp: bp.MinimumWriteTimestamp,
 			CompletedSpans: strippedSpans,
+			SSTManifests:   manifests,
 		})
 	}
 	return ret, nil
@@ -49,6 +54,7 @@ func convertFromJobBackfillProgress(
 			},
 			MinimumWriteTimestamp: bp.WriteTimestamp,
 			CompletedSpans:        addTenantPrefixToSpans(codec, bp.CompletedSpans),
+			SSTManifests:          addTenantPrefixToSSTManifests(codec, bp.SSTManifests),
 		})
 	}
 	return ret
@@ -130,6 +136,67 @@ func removeTenantPrefixFromSpans(
 		ret = append(ret, stripped)
 	}
 	return ret, nil
+}
+
+// stripTenantPrefixFromSSTManifests normalizes SST manifest metadata by
+// removing tenant prefixes before persisting it in job state. This matches
+// the CompletedSpans handling and keeps job progress tenant-agnostic.
+func stripTenantPrefixFromSSTManifests(
+	codec keys.SQLCodec, manifests []jobspb.IndexBackfillSSTManifest,
+) ([]jobspb.IndexBackfillSSTManifest, error) {
+	ret := make([]jobspb.IndexBackfillSSTManifest, len(manifests))
+	for i, out := range manifests {
+		ret[i].URI = out.URI
+		ret[i].FileSize = out.FileSize
+		if out.WriteTimestamp != nil {
+			ts := *out.WriteTimestamp
+			ret[i].WriteTimestamp = &ts
+		}
+		if out.Span != nil {
+			stripped, err := removeTenantPrefixFromSpans(codec, []roachpb.Span{*out.Span})
+			if err != nil {
+				return nil, err
+			}
+			span := stripped[0]
+			ret[i].Span = &span
+		}
+		if len(out.RowSample) > 0 {
+			key, err := codec.StripTenantPrefix(out.RowSample)
+			if err != nil {
+				return nil, err
+			}
+			ret[i].RowSample = append(roachpb.Key(nil), key...)
+		}
+	}
+	return ret, nil
+}
+
+// addTenantPrefixToSSTManifests rehydrates manifests with the executing
+// processor's tenant prefix so they can be used against the local keyspace.
+func addTenantPrefixToSSTManifests(
+	codec keys.SQLCodec, manifests []jobspb.IndexBackfillSSTManifest,
+) []jobspb.IndexBackfillSSTManifest {
+	ret := make([]jobspb.IndexBackfillSSTManifest, len(manifests))
+	for i, out := range manifests {
+		ret[i].URI = out.URI
+		ret[i].FileSize = out.FileSize
+		if out.WriteTimestamp != nil {
+			ts := *out.WriteTimestamp
+			ret[i].WriteTimestamp = &ts
+		}
+		if out.Span != nil {
+			spans := addTenantPrefixToSpans(codec, []roachpb.Span{*out.Span})
+			span := spans[0]
+			ret[i].Span = &span
+		}
+		if len(out.RowSample) > 0 {
+			prefixed := make(roachpb.Key, 0, len(codec.TenantPrefix())+len(out.RowSample))
+			prefixed = append(prefixed, codec.TenantPrefix()...)
+			prefixed = append(prefixed, out.RowSample...)
+			ret[i].RowSample = prefixed
+		}
+	}
+	return ret
 }
 
 func newBackfillProgress(codec keys.SQLCodec, bp scexec.BackfillProgress) *backfillProgress {

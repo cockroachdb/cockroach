@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,12 +26,46 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	gogotypes "github.com/gogo/protobuf/types"
 )
 
 // IndexBackfillPlanner holds dependencies for an index backfiller
 // for use in the declarative schema changer.
 type IndexBackfillPlanner struct {
 	execCfg *ExecutorConfig
+}
+
+type sstManifestBuffer struct {
+	syncutil.Mutex
+	manifests []jobspb.IndexBackfillSSTManifest
+}
+
+func newSSTManifestBuffer(initial []jobspb.IndexBackfillSSTManifest) *sstManifestBuffer {
+	buf := &sstManifestBuffer{}
+	buf.manifests = append(buf.manifests, initial...)
+	return buf
+}
+
+func (b *sstManifestBuffer) snapshotLocked() []jobspb.IndexBackfillSSTManifest {
+	return append([]jobspb.IndexBackfillSSTManifest(nil), b.manifests...)
+}
+
+func (b *sstManifestBuffer) Snapshot() []jobspb.IndexBackfillSSTManifest {
+	b.Lock()
+	defer b.Unlock()
+	return b.snapshotLocked()
+}
+
+func (b *sstManifestBuffer) Append(
+	newManifests []jobspb.IndexBackfillSSTManifest,
+) []jobspb.IndexBackfillSSTManifest {
+	if len(newManifests) == 0 {
+		return b.Snapshot()
+	}
+	b.Lock()
+	defer b.Unlock()
+	b.manifests = append(b.manifests, newManifests...)
+	return b.snapshotLocked()
 }
 
 // NewIndexBackfiller creates a new IndexBackfillPlanner.
@@ -81,6 +116,11 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	}
 	// Add spans that were already completed before the job resumed.
 	addCompleted(progress.CompletedSpans...)
+	sstManifestBuf := newSSTManifestBuffer(progress.SSTManifests)
+	progress.SSTManifests = sstManifestBuf.Snapshot()
+	updateSSTManifests := func(newManifests []jobspb.IndexBackfillSSTManifest) {
+		progress.SSTManifests = sstManifestBuf.Append(newManifests)
+	}
 	updateFunc := func(
 		ctx context.Context, meta *execinfrapb.ProducerMetadata,
 	) error {
@@ -88,6 +128,13 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 			return nil
 		}
 		progress.CompletedSpans = addCompleted(meta.BulkProcessorProgress.CompletedSpans...)
+		var mapProgress execinfrapb.IndexBackfillMapProgress
+		if gogotypes.Is(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress) {
+			if err := gogotypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress); err != nil {
+				return err
+			}
+			updateSSTManifests(mapProgress.SSTManifests)
+		}
 		// Make sure the progress update does not contain overlapping spans.
 		// This is a sanity check that only runs in test configurations, since it
 		// is an expensive n^2 check.
@@ -211,7 +258,7 @@ func (ib *IndexBackfillPlanner) plan(
 			*td.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize,
 			indexesToBackfill, sourceIndexID,
 		)
-		if err := maybeEnableDistributedMergeIndexBackfill(ctx, ib.execCfg.Settings, &spec); err != nil {
+		if err := maybeEnableDistributedMergeIndexBackfill(ctx, ib.execCfg.Settings, ib.execCfg.NodeInfo.NodeID.SQLInstanceID(), &spec); err != nil {
 			return err
 		}
 		var err error
