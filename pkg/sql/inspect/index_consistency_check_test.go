@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -827,7 +828,7 @@ func TestInspectWithoutASOFSchemaChange(t *testing.T) {
 			t.Logf("error polling job status: %v", err)
 			return false
 		}
-		return status != "running" && status != "pending"
+		return status == "failed"
 	}, 60*time.Second, time.Second)
 
 	require.Equal(t, "failed", status, "detached job should fail after schema change")
@@ -837,4 +838,74 @@ func TestInspectWithoutASOFSchemaChange(t *testing.T) {
 	require.NoError(t, err)
 	defer rows.Close()
 	require.False(t, rows.Next(), "no inspect errors are recorded when the job aborts before running checks")
+}
+
+// TestInspectASOFAfterPrimaryKeySwapFails runs an INSPECT ASOF statement while
+// doing a schema change after the ASOF time.
+func TestInspectASOFAfterPrimaryKeySwap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(db)
+
+	r.ExecMultiple(t,
+		`SET enable_inspect_command = true`,
+		`CREATE DATABASE t`,
+		`CREATE TABLE t.pk_swap (
+			old_pk INT PRIMARY KEY,
+			new_pk INT UNIQUE NOT NULL,
+			payload INT NOT NULL,
+			INDEX payload_idx (payload)
+		)`,
+		`INSERT INTO t.pk_swap SELECT i, i+100, i+200 FROM generate_series(1, 5) AS g(i)`,
+	)
+
+	var asOf string
+	r.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&asOf)
+
+	// Rewrite the table descriptors by swapping the primary key.
+	r.Exec(t, `ALTER TABLE t.pk_swap ALTER PRIMARY KEY USING COLUMNS (new_pk)`)
+
+	// Helper function to wait for the latest INSPECT job to complete successfully.
+	waitForInspectJob := func() {
+		var jobID int64
+		var status string
+		var fractionCompleted float64
+		testutils.SucceedsSoon(t, func() error {
+			row := db.QueryRow(`SELECT job_id, status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`)
+			if err := row.Scan(&jobID, &status, &fractionCompleted); err != nil {
+				return err
+			}
+			if status == "succeeded" || status == "failed" {
+				return nil
+			}
+			return errors.Newf("job is not in the succeeded or failed state: %q", status)
+		})
+		require.Equal(t, "succeeded", status, "INSPECT job should succeed")
+		require.InEpsilon(t, 1.0, fractionCompleted, 0.01, "progress should reach 100%% on successful completion")
+		requireCheckCountsMatch(t, r, jobID)
+	}
+
+	t.Run("non-detached", func(t *testing.T) {
+		r.Exec(t, fmt.Sprintf(`INSPECT TABLE t.pk_swap AS OF SYSTEM TIME '%s' WITH OPTIONS INDEX ALL`, asOf))
+		waitForInspectJob()
+	})
+
+	t.Run("detached with implicit transaction", func(t *testing.T) {
+		r.Exec(t, fmt.Sprintf(`INSPECT TABLE t.pk_swap AS OF SYSTEM TIME '%s' WITH OPTIONS INDEX ALL, DETACHED`, asOf))
+		waitForInspectJob()
+	})
+
+	t.Run("detached with explicit transaction", func(t *testing.T) {
+		_, err := db.Exec("BEGIN AS OF SYSTEM TIME '" + asOf + "'")
+		require.NoError(t, err)
+		_, err = db.Exec(fmt.Sprintf(`INSPECT TABLE t.pk_swap AS OF SYSTEM TIME '%s' WITH OPTIONS INDEX ALL, DETACHED`, asOf))
+		require.NoError(t, err)
+		_, err = db.Exec("COMMIT")
+		// Expecting the commit to fail due to the schema change after ASOF time.
+		require.Contains(t, err.Error(), "TransactionRetryError")
+	})
 }
