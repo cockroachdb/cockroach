@@ -685,7 +685,6 @@ func (r *Refresher) Start(
 							case <-ctx.Done():
 								return
 							case <-r.drainAutoStats:
-								// Ditto.
 								return
 							default:
 							}
