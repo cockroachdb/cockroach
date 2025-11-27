@@ -11,11 +11,11 @@ range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 raft_event
 range_id=1
@@ -29,11 +29,11 @@ range_id=1
     replica_id=3 [1,2)
 ----
 t1/s1: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -85,11 +85,11 @@ range_id=1
     replica_id=3 [2,2)
 ----
 t1/s1: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
-       send reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
+       send reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
-       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # The stats shouldn't have changed, as we haven't refreshed them via ticking.
 send_stream_stats range_id=1 refresh=false
@@ -108,11 +108,11 @@ raft_event
 range_id=1
 ----
 t1/s1: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
-       send reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
+       send reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
-       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 
 # The stats now should have been populated.

@@ -10,13 +10,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
-
-// Aliases to make the code below slightly easier to read.
-const regular, elastic = admissionpb.RegularWorkClass, admissionpb.ElasticWorkClass
 
 var (
 	// TokenCounter metrics.
@@ -156,7 +155,7 @@ var (
 // annotateMetricTemplateWithWorkClass uses the given metric template to build
 // one suitable for the specific token type and work class.
 func annotateMetricTemplateWithWorkClassAndType(
-	wc admissionpb.WorkClass, tmpl metric.Metadata, t TokenType,
+	wc WorkClassOrInflight, tmpl metric.Metadata, t TokenType,
 ) metric.Metadata {
 	rv := tmpl
 	rv.Name = fmt.Sprintf(tmpl.Name, t, wc)
@@ -225,11 +224,48 @@ func (m *TokenMetrics) TestingClear() {
 	}
 }
 
+type WorkClassOrInflight admissionpb.WorkClass
+
+const (
+	RegularWC WorkClassOrInflight = WorkClassOrInflight(admissionpb.RegularWorkClass)
+	ElasticWC WorkClassOrInflight = WorkClassOrInflight(admissionpb.ElasticWorkClass)
+	// InFlight tokens is a soft limit on the maximum inflight bytes for a
+	// stream when using MsgAppPull mode. The RangeControllers only attempt to
+	// respect this when force-flushing a replicaSendStream, since the typical
+	// production configuration of this value (64MiB) is larger than the typical
+	// production configuration of the shared regular token pool (16MiB), so
+	// attempting to respect this when doing non-force-flush sends is
+	// unnecessary. One could consider respecting this when not allowed to form
+	// a send-queue, but (a) that case doesn't result in a burst, (b) we don't
+	// want to delay quorum by creating a send-queue where there was none, so we
+	// choose not to respect this limit.
+	InFlight               WorkClassOrInflight = WorkClassOrInflight(admissionpb.NumWorkClasses)
+	NumWorkClassOrInflight WorkClassOrInflight = 3
+)
+
+func (w WorkClassOrInflight) String() string {
+	return redact.StringWithoutMarkers(w)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (w WorkClassOrInflight) SafeFormat(p redact.SafePrinter, verb rune) {
+	switch w {
+	case RegularWC:
+		p.SafeString("regular")
+	case ElasticWC:
+		p.SafeString("elastic")
+	case InFlight:
+		p.SafeString("inflight")
+	default:
+		p.SafeString("<unknown-class>")
+	}
+}
+
 type TokenCounterMetrics struct {
-	Deducted     [admissionpb.NumWorkClasses]*metric.Counter
-	Returned     [admissionpb.NumWorkClasses]*metric.Counter
-	Unaccounted  [admissionpb.NumWorkClasses]*metric.Counter
-	Disconnected [admissionpb.NumWorkClasses]*metric.Counter
+	Deducted     [NumWorkClassOrInflight]*metric.Counter
+	Returned     [NumWorkClassOrInflight]*metric.Counter
+	Unaccounted  [NumWorkClassOrInflight]*metric.Counter
+	Disconnected [NumWorkClassOrInflight]*metric.Counter
 	// SendQueue is nil for the eval flow control metric type as it pertains only
 	// to the send queue, using send tokens. The metric registry will ignore nil
 	// values in a array but not a struct, so wrap the struct in an array to
@@ -244,10 +280,11 @@ func (m *TokenCounterMetrics) MetricStruct() {}
 
 func newTokenCounterMetrics(t TokenType) *TokenCounterMetrics {
 	m := &TokenCounterMetrics{}
-	for _, wc := range []admissionpb.WorkClass{
-		admissionpb.RegularWorkClass,
-		admissionpb.ElasticWorkClass,
-	} {
+	numWC := NumWorkClassOrInflight
+	if t == EvalToken {
+		numWC = InFlight
+	}
+	for wc := WorkClassOrInflight(0); wc < numWC; wc++ {
 		m.Deducted[wc] = metric.NewCounter(
 			annotateMetricTemplateWithWorkClassAndType(wc, flowTokensDeducted, t),
 		)
@@ -268,11 +305,11 @@ func newTokenCounterMetrics(t TokenType) *TokenCounterMetrics {
 	return m
 }
 
-func (m *TokenCounterMetrics) onTokenAdjustment(
-	adjustment tokensPerWorkClass, flag TokenAdjustFlag,
+func (m *TokenCounterMetrics) onTokenAdjustmentRegular(
+	adjustment kvflowcontrol.Tokens, flag TokenAdjustFlag,
 ) {
-	if adjustment.regular < 0 {
-		m.Deducted[regular].Inc(-int64(adjustment.regular))
+	if adjustment < 0 {
+		m.Deducted[RegularWC].Inc(-int64(adjustment))
 		switch flag {
 		case AdjNormal:
 			// Nothing to do.
@@ -281,17 +318,17 @@ func (m *TokenCounterMetrics) onTokenAdjustment(
 		case AdjForceFlush:
 			panic(errors.AssertionFailedf("unexpected force flush deducting regular tokens, only elastic tokens should be deducted"))
 		case AdjPreventSendQueue:
-			m.SendQueue[0].PreventionDeducted[regular].Inc(-int64(adjustment.regular))
+			m.SendQueue[0].PreventionDeducted[RegularWC].Inc(-int64(adjustment))
 		default:
 			panic(errors.AssertionFailedf("unexpected flag %v", flag))
 		}
-	} else if adjustment.regular > 0 {
-		m.Returned[regular].Inc(int64(adjustment.regular))
+	} else if adjustment > 0 {
+		m.Returned[RegularWC].Inc(int64(adjustment))
 		switch flag {
 		case AdjNormal:
 			// Nothing to do.
 		case AdjDisconnect:
-			m.Disconnected[regular].Inc(int64(adjustment.regular))
+			m.Disconnected[RegularWC].Inc(int64(adjustment))
 		case AdjForceFlush:
 			panic(errors.AssertionFailedf("unexpected force flush returning tokens, they should be deducted"))
 		case AdjPreventSendQueue:
@@ -300,27 +337,31 @@ func (m *TokenCounterMetrics) onTokenAdjustment(
 			panic(errors.AssertionFailedf("unexpected flag %v", flag))
 		}
 	}
-	if adjustment.elastic < 0 {
-		m.Deducted[elastic].Inc(-int64(adjustment.elastic))
+}
+func (m *TokenCounterMetrics) onTokenAdjustmentElastic(
+	adjustment kvflowcontrol.Tokens, flag TokenAdjustFlag,
+) {
+	if adjustment < 0 {
+		m.Deducted[ElasticWC].Inc(-int64(adjustment))
 		switch flag {
 		case AdjNormal:
 			// Nothing to do.
 		case AdjDisconnect:
 			panic(errors.AssertionFailedf("unexpected disconnect deducting tokens, they should be returned"))
 		case AdjForceFlush:
-			m.SendQueue[0].ForceFlushDeducted.Inc(-int64(adjustment.elastic))
+			m.SendQueue[0].ForceFlushDeducted.Inc(-int64(adjustment))
 		case AdjPreventSendQueue:
-			m.SendQueue[0].PreventionDeducted[elastic].Inc(-int64(adjustment.elastic))
+			m.SendQueue[0].PreventionDeducted[ElasticWC].Inc(-int64(adjustment))
 		default:
 			panic(errors.AssertionFailedf("unexpected flag %v", flag))
 		}
-	} else if adjustment.elastic > 0 {
-		m.Returned[elastic].Inc(int64(adjustment.elastic))
+	} else if adjustment > 0 {
+		m.Returned[ElasticWC].Inc(int64(adjustment))
 		switch flag {
 		case AdjNormal:
 			// Nothing to do.
 		case AdjDisconnect:
-			m.Disconnected[elastic].Inc(int64(adjustment.elastic))
+			m.Disconnected[ElasticWC].Inc(int64(adjustment))
 		case AdjForceFlush:
 			panic(errors.AssertionFailedf("unexpected force flush returning tokens, they should be deducted"))
 		case AdjPreventSendQueue:
@@ -331,9 +372,43 @@ func (m *TokenCounterMetrics) onTokenAdjustment(
 	}
 }
 
-func (m *TokenCounterMetrics) onUnaccounted(unaccounted tokensPerWorkClass) {
-	m.Unaccounted[regular].Inc(int64(unaccounted.regular))
-	m.Unaccounted[elastic].Inc(int64(unaccounted.elastic))
+func (m *TokenCounterMetrics) onTokenAdjustmentInFlight(
+	adjustment kvflowcontrol.Tokens, flag TokenAdjustFlag,
+) {
+	// NB: we only use AdjNormal, AdjDisconnect for in-flight token adjustment.
+	switch flag {
+	case AdjNormal, AdjDisconnect:
+		// Nothing to do.
+	case AdjForceFlush:
+		panic(errors.AssertionFailedf("unexpected force flush deducting inflight tokens"))
+	case AdjPreventSendQueue:
+		panic(errors.AssertionFailedf("unexpected force flush deducting prevent send-queue tokens"))
+	default:
+		panic(errors.AssertionFailedf("unexpected flag %v", flag))
+	}
+	if adjustment < 0 {
+		m.Deducted[InFlight].Inc(-int64(adjustment))
+		if flag == AdjDisconnect {
+			panic(errors.AssertionFailedf("unexpected disconnect deducting tokens, they should be returned"))
+		}
+	} else if adjustment > 0 {
+		m.Returned[InFlight].Inc(int64(adjustment))
+		if flag == AdjDisconnect {
+			m.Disconnected[InFlight].Inc(int64(adjustment))
+		}
+	}
+}
+
+func (m *TokenCounterMetrics) onUnaccountedRegular(unaccounted kvflowcontrol.Tokens) {
+	m.Unaccounted[RegularWC].Inc(int64(unaccounted))
+}
+
+func (m *TokenCounterMetrics) onUnaccountedElastic(unaccounted kvflowcontrol.Tokens) {
+	m.Unaccounted[ElasticWC].Inc(int64(unaccounted))
+}
+
+func (m *TokenCounterMetrics) onUnaccountedInFlight(unaccounted kvflowcontrol.Tokens) {
+	m.Unaccounted[InFlight].Inc(int64(unaccounted))
 }
 
 type SendQueueTokenCounterMetrics struct {
@@ -361,9 +436,9 @@ func newSendQueueTokenMetrics() *SendQueueTokenCounterMetrics {
 }
 
 type TokenStreamMetrics struct {
-	Count           [admissionpb.NumWorkClasses]*metric.Gauge
-	BlockedCount    [admissionpb.NumWorkClasses]*metric.Gauge
-	TokensAvailable [admissionpb.NumWorkClasses]*metric.Gauge
+	Count           [NumWorkClassOrInflight]*metric.Gauge
+	BlockedCount    [NumWorkClassOrInflight]*metric.Gauge
+	TokensAvailable [NumWorkClassOrInflight]*metric.Gauge
 }
 
 var _ metric.Struct = &TokenStreamMetrics{}
@@ -373,10 +448,11 @@ func (m *TokenStreamMetrics) MetricStruct() {}
 
 func newTokenStreamMetrics(t TokenType) *TokenStreamMetrics {
 	m := &TokenStreamMetrics{}
-	for _, wc := range []admissionpb.WorkClass{
-		admissionpb.RegularWorkClass,
-		admissionpb.ElasticWorkClass,
-	} {
+	numWC := NumWorkClassOrInflight
+	if t == EvalToken {
+		numWC = InFlight
+	}
+	for wc := WorkClassOrInflight(0); wc < numWC; wc++ {
 		m.Count[wc] = metric.NewGauge(
 			annotateMetricTemplateWithWorkClassAndType(wc, totalStreamCount, t),
 		)
@@ -483,8 +559,11 @@ type SendQueueMetrics struct {
 	SizeBytes *metric.Gauge
 	// The below metrics are maintained incrementally by each RangeController.
 	ForceFlushedScheduledCount *metric.Gauge
-	DeductedForSchedulerBytes  *metric.Gauge
-	PreventionCount            *metric.Counter
+	// TODO(sumeer): could also track deducted for scheduler for inflight bytes
+	// tokens if useful. I've never found the existing
+	// DeductedForSchedulerTokens to be useful, so we should probably wait.
+	DeductedForSchedulerBytes *metric.Gauge
+	PreventionCount           *metric.Counter
 }
 
 func NewSendQueueMetrics() *SendQueueMetrics {

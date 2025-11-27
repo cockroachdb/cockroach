@@ -7,11 +7,11 @@ range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Append one entry. Replica 1 has no send tokens, but is not allowed to form a
 # send-queue since it is the leader. Replica 3 also has no send tokens, but is
@@ -24,11 +24,11 @@ range_id=1
     term=1 index=3 pri=NormalPri size=1MiB
 ----
 t1/s1: eval reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
-       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
-       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -156,11 +156,11 @@ range_id=1
     term=1 index=6 pri=NormalPri size=1.5MiB
 ----
 t1/s1: eval reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB
+       send reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=-4.5 MiB/+16 MiB ela=-4.5 MiB/+8.0 MiB
-       send reg=-4.5 MiB/+16 MiB ela=-4.5 MiB/+8.0 MiB
+       send reg=-4.5 MiB/+16 MiB ela=-4.5 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 stream_state range_id=1
 ----

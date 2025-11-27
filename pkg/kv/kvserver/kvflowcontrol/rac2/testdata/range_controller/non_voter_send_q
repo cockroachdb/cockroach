@@ -8,13 +8,13 @@ range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3,(n4,s4):4NON_VOTER]
 t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Make replica 3 more overloaded than replica 2 and replica 2 more overloaded
 # than replica 4.
@@ -23,13 +23,13 @@ adjust_tokens send
   store_id=3 pri=HighPri tokens=-3MiB
 ----
 t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Append an entry. Replica 1, 2 are not permitted to form a send-queue, even
 # though they have no send tokens. Replica 4 is not picked since it is a
@@ -40,13 +40,13 @@ range_id=1
     term=1 index=1 pri=NormalPri size=1MiB
 ----
 t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -111,13 +111,13 @@ adjust_tokens send
   store_id=4 pri=HighPri tokens=500KiB
 ----
 t1/s1: eval reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB
+       send reg=-1.0 MiB/+16 MiB ela=-1.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
+       send reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=-3.0 MiB/+16 MiB ela=-3.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
-       send reg=+500 KiB/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+500 KiB/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Note the deducted value. Replica 4 is waiting for a scheduler event.
 stream_state range_id=1

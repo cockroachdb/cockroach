@@ -12725,6 +12725,22 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: kvflowcontrol.streams.send.inflight.blocked_count
+      exported_name: kvflowcontrol_streams_send_inflight_blocked_count
+      description: Number of send replication streams with no flow tokens available for inflight requests
+      y_axis_label: Count
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: kvflowcontrol.streams.send.inflight.total_count
+      exported_name: kvflowcontrol_streams_send_inflight_total_count
+      description: Total number of send replication streams for inflight requests
+      y_axis_label: Count
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: kvflowcontrol.streams.send.regular.blocked_count
       exported_name: kvflowcontrol_streams_send_regular_blocked_count
       description: Number of send replication streams with no flow tokens available for regular requests
@@ -12872,6 +12888,46 @@ layers:
     - name: kvflowcontrol.tokens.send.elastic.unaccounted
       exported_name: kvflowcontrol_tokens_send_elastic_unaccounted
       description: Flow send tokens returned by elastic requests that were unaccounted for, across all replication streams
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kvflowcontrol.tokens.send.inflight.available
+      exported_name: kvflowcontrol_tokens_send_inflight_available
+      description: Flow send tokens available for inflight requests, across all replication streams
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: kvflowcontrol.tokens.send.inflight.deducted
+      exported_name: kvflowcontrol_tokens_send_inflight_deducted
+      description: Flow send tokens deducted by inflight requests, across all replication streams
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kvflowcontrol.tokens.send.inflight.returned
+      exported_name: kvflowcontrol_tokens_send_inflight_returned
+      description: Flow send tokens returned by inflight requests, across all replication streams
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kvflowcontrol.tokens.send.inflight.returned.disconnect
+      exported_name: kvflowcontrol_tokens_send_inflight_returned_disconnect
+      description: Flow send tokens returned early by inflight due disconnects, across all replication stream, this is a subset of returned tokens
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kvflowcontrol.tokens.send.inflight.unaccounted
+      exported_name: kvflowcontrol_tokens_send_inflight_unaccounted
+      description: Flow send tokens returned by inflight requests that were unaccounted for, across all replication streams
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES

@@ -651,7 +651,7 @@ var _ ticker = &streamsTicker{}
 
 // tick is part of the ticker interface.
 func (st *streamsTicker) tick(ctx context.Context, t time.Time) {
-	wc := admissionpb.WorkClassFromPri(st.pri)
+	wc := WorkClassOrInflight(admissionpb.WorkClassFromPri(st.pri))
 	if ds, ok := st.deduct[t]; ok {
 		for _, deduct := range ds {
 			deduct()
@@ -984,7 +984,7 @@ func (t *tokenCounter) testingNonBlockingAdmit(
 	}
 
 	admit = func() bool {
-		tokens := t.tokens(wc)
+		tokens := t.tokens(WorkClassOrInflight(wc))
 		if tokens <= 0 {
 			return false
 		}

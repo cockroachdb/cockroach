@@ -85,7 +85,7 @@ var RegularTokensPerStream = settings.RegisterByteSizeSetting(
 	"kvadmission.flow_controller.regular_tokens_per_stream",
 	"flow tokens available for regular work on a per-stream basis",
 	16<<20, // 16 MiB
-	validateTokenRange,
+	validateTokenRange(maxTokensPerStream),
 )
 
 // ElasticTokensPerStream determines the flow tokens available for elastic work
@@ -95,24 +95,37 @@ var ElasticTokensPerStream = settings.RegisterByteSizeSetting(
 	"kvadmission.flow_controller.elastic_tokens_per_stream",
 	"flow tokens available for elastic work on a per-stream basis",
 	8<<20, // 8 MiB
-	validateTokenRange,
+	validateTokenRange(maxTokensPerStream),
+)
+
+// InFlightTokensPerStream determines the flow tokens available for inflight
+// work on a per-stream basis.
+var InFlightTokensPerStream = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_controller.in_flight_tokens_per_stream",
+	"flow tokens available for in-flight work on a per-stream basis",
+	64<<20, // 64 MiB
+	validateTokenRange(maxInFlightTokensPerStream),
 )
 
 const (
-	minTokensPerStream Tokens = 1 << 20  // 1 MiB
-	maxTokensPerStream Tokens = 64 << 20 // 64 MiB
+	minTokensPerStream         Tokens = 1 << 20   // 1 MiB
+	maxTokensPerStream         Tokens = 64 << 20  // 64 MiB
+	maxInFlightTokensPerStream        = 512 << 20 // 512MiB
 )
 
-var validateTokenRange = settings.WithValidateInt(func(b int64) error {
-	t := Tokens(b)
-	if t < minTokensPerStream {
-		return fmt.Errorf("minimum flowed tokens allowed is %s, got %s", minTokensPerStream, t)
-	}
-	if t > maxTokensPerStream {
-		return fmt.Errorf("maximum flow tokens allowed is %s, got %s", maxTokensPerStream, t)
-	}
-	return nil
-})
+func validateTokenRange(maxTokens Tokens) settings.SettingOption {
+	return settings.WithValidateInt(func(b int64) error {
+		t := Tokens(b)
+		if t < minTokensPerStream {
+			return fmt.Errorf("minimum flowed tokens allowed is %s, got %s", minTokensPerStream, t)
+		}
+		if t > maxTokens {
+			return fmt.Errorf("maximum flow tokens allowed is %s, got %s", maxTokens, t)
+		}
+		return nil
+	})
+}
 
 // TokenCounterResetEpoch is an escape hatch for administrators that should
 // never be needed. By incrementing this epoch (or changing it to a value

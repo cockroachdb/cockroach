@@ -2273,7 +2273,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		if buildutil.CrdbTestBuild {
 			// Ensure that this is actually test build. If it is not, we should not
 			// be compensating for an underlying bug.
-			s.cfg.KVFlowSendTokenWatcher = rac2.NewSendTokenWatcher(s.stopper, timeutil.DefaultTimeSource{})
+			s.cfg.KVFlowSendTokenWatcher = rac2.NewSendTokenWatcher(
+				s.stopper, timeutil.DefaultTimeSource{}, rac2.ElasticWC)
 		} else {
 			return errors.New("missing KVFlowSendTokenWatcher")
 		}

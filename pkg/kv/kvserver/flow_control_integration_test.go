@@ -137,7 +137,7 @@ func TestFlowControlBasicV2(t *testing.T) {
 			h.query(n1, `
   SELECT name, value
     FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%stream%'
+   WHERE name LIKE '%kvflowcontrol%stream%' AND name NOT LIKE '%inflight%'
 ORDER BY name ASC;
 `)
 
@@ -3839,7 +3839,8 @@ var flowPerStoreDeductionQueryHeaderStrs = []string{
 	"range_id", "store_id", "priority", "tokens"}
 
 // v2FlowTokensQueryStr is the query string to fetch flow tokens metrics from
-// the node metrics table.
+// the node metrics table. We exclude the inflight metrics since they are
+// non-deterministic.
 const v2FlowTokensQueryStr = `
 SELECT
   name,
@@ -3847,7 +3848,7 @@ SELECT
 FROM
   crdb_internal.node_metrics
 WHERE
-  name LIKE '%kvflowcontrol%tokens%'
+  name LIKE '%kvflowcontrol%tokens%' AND name NOT LIKE '%inflight%'
 ORDER BY
   name ASC;
 `
