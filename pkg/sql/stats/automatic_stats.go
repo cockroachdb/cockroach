@@ -568,8 +568,8 @@ func (r *Refresher) Start(
 			refreshInterval = 0
 		}
 
-		timer := time.NewTimer(refreshInterval)
-		defer timer.Stop()
+		statsRefresherTimer := time.NewTimer(refreshInterval)
+		defer statsRefresherTimer.Stop()
 
 		// Ensure that read-only tables will have stats created at least
 		// once on startup.
@@ -588,7 +588,7 @@ func (r *Refresher) Start(
 					ensuringAllTables = true
 				}
 
-			case <-timer.C:
+			case <-statsRefresherTimer.C:
 				mutationCounts := r.mutationCounts
 				refreshingAllTables := ensuringAllTables
 				ensuringAllTables = false
@@ -689,7 +689,7 @@ func (r *Refresher) Start(
 							default:
 							}
 						}
-						timer.Reset(refreshInterval)
+						statsRefresherTimer.Reset(refreshInterval)
 					}); err != nil {
 					r.startedTasksWG.Done()
 					log.Dev.Errorf(ctx, "failed to start async stats task: %v", err)
