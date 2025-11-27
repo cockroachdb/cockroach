@@ -82,6 +82,12 @@ type StatsCollector struct {
 	// statement insights.
 	sendInsights bool
 
+	// bufferStmtStats is true if we should accumulate the current transaction's
+	// statement statistics in stmtBuf.
+	//
+	// This value is reset for every new transaction.
+	bufferStmtStats bool
+
 	// flushTarget is the sql stats container for the current application.
 	// This is the target where the statement stats are flushed to upon
 	// transaction completion. Note that these are the global stats for the
@@ -157,6 +163,7 @@ func (s *StatsCollector) Close(_ctx context.Context, sessionID clusterunique.ID)
 // StartTransaction sets up the StatsCollector for a new transaction.
 func (s *StatsCollector) StartTransaction() {
 	s.sendInsights = s.shouldObserveInsights()
+	s.bufferStmtStats = sqlstats.StmtStatsEnable.Get(&s.st.SV)
 }
 
 // EndTransaction informs the StatsCollector that the current txn has
@@ -233,7 +240,9 @@ func (s *StatsCollector) RecordStatement(
 		return err
 	}
 
-	s.stmtBuf = append(s.stmtBuf, value)
+	if s.bufferStmtStats {
+		s.stmtBuf = append(s.stmtBuf, value)
+	}
 	return nil
 }
 
