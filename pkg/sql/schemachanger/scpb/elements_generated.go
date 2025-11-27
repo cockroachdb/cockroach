@@ -2785,6 +2785,43 @@ func (c *ElementCollection[E]) FilterTableSchemaLocked() *ElementCollection[*Tab
 	return (*ElementCollection[*TableSchemaLocked])(ret)
 }
 
+func (e TableStorageParam) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_TableStorageParam) Element() Element {
+	return e.TableStorageParam
+}
+
+// ForEachTableStorageParam iterates over elements of type TableStorageParam.
+// Deprecated
+func ForEachTableStorageParam(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *TableStorageParam),
+) {
+  c.FilterTableStorageParam().ForEach(fn)
+}
+
+// FindTableStorageParam finds the first element of type TableStorageParam.
+// Deprecated
+func FindTableStorageParam(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *TableStorageParam) {
+	if tc := c.FilterTableStorageParam(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*TableStorageParam)
+	}
+	return current, target, element
+}
+
+// TableStorageParamElements filters elements of type TableStorageParam.
+func (c *ElementCollection[E]) FilterTableStorageParam() *ElementCollection[*TableStorageParam] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*TableStorageParam)
+		return ok
+	})
+	return (*ElementCollection[*TableStorageParam])(ret)
+}
+
 func (e TableZoneConfig) element() {}
 
 // Element implements ElementGetter.
@@ -3532,6 +3569,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_TablePartitioning{ TablePartitioning: t}
 		case *TableSchemaLocked:
 			e.ElementOneOf = &ElementProto_TableSchemaLocked{ TableSchemaLocked: t}
+		case *TableStorageParam:
+			e.ElementOneOf = &ElementProto_TableStorageParam{ TableStorageParam: t}
 		case *TableZoneConfig:
 			e.ElementOneOf = &ElementProto_TableZoneConfig{ TableZoneConfig: t}
 		case *TemporaryIndex:
@@ -3645,6 +3684,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_TableLocalitySecondaryRegion)(nil)),
 	((*ElementProto_TablePartitioning)(nil)),
 	((*ElementProto_TableSchemaLocked)(nil)),
+	((*ElementProto_TableStorageParam)(nil)),
 	((*ElementProto_TableZoneConfig)(nil)),
 	((*ElementProto_TemporaryIndex)(nil)),
 	((*ElementProto_Trigger)(nil)),
@@ -3743,6 +3783,7 @@ func GetElementTypes() []interface{} {
 	((*TableLocalitySecondaryRegion)(nil)),
 	((*TablePartitioning)(nil)),
 	((*TableSchemaLocked)(nil)),
+	((*TableStorageParam)(nil)),
 	((*TableZoneConfig)(nil)),
 	((*TemporaryIndex)(nil)),
 	((*Trigger)(nil)),

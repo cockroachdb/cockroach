@@ -136,7 +136,7 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		return version.IsActive(clusterversion.V25_2)
 	case *scpb.TableLocalityRegionalByRowUsingConstraint:
 		return version.IsActive(clusterversion.V25_3)
-	case *scpb.ColumnGeneratedAsIdentity, *scpb.ColumnHidden:
+	case *scpb.ColumnGeneratedAsIdentity, *scpb.ColumnHidden, *scpb.TableStorageParam:
 		return version.IsActive(clusterversion.V26_1)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
