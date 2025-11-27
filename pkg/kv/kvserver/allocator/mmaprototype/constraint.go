@@ -439,6 +439,7 @@ type relationshipVoterAndAll struct {
 	voterAndAllRel conjunctionRelationship
 }
 
+// TODO(wenyihu6): take in a scratch slice to avoid repeated allocations.
 func buildVoterAndAllRelationships(
 	conf *normalizedSpanConfig,
 ) (
@@ -503,26 +504,10 @@ func buildVoterAndAllRelationships(
 // empty constraint conjunction. This is technically true, but once we have
 // the required second voter in us-east-1, we will need to move that
 // non-voter to us-central-1, which is wasteful.
-func narrowEmptyConstraint(
-	conf *normalizedSpanConfig, rels []relationshipVoterAndAll, emptyConstraintIndex int,
-) {
+func narrowEmptyConstraint(conf *normalizedSpanConfig) {
+	rels, emptyConstraintIndex, _, _ := buildVoterAndAllRelationships(conf)
 	if emptyConstraintIndex >= 0 {
 		// Recompute the relationship since voterConstraints have changed.
-		rels = rels[:0]
-		for i := range conf.voterConstraints {
-			for j := range conf.constraints {
-				rels = append(rels, relationshipVoterAndAll{
-					voterIndex: i,
-					allIndex:   j,
-					voterAndAllRel: conf.voterConstraints[i].constraints.relationship(
-						conf.constraints[j].constraints),
-				})
-			}
-		}
-		// Sort these relationships in the order we want to examine them.
-		slices.SortFunc(rels, func(a, b relationshipVoterAndAll) int {
-			return cmp.Compare(a.voterAndAllRel, b.voterAndAllRel)
-		})
 		// Ignore conjPossiblyIntersecting.
 		index := 0
 		for rels[index].voterAndAllRel == conjPossiblyIntersecting {
@@ -794,7 +779,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 		}
 	}
 	conf.voterConstraints = vc
-	narrowEmptyConstraint(conf, rels, emptyConstraintIndex)
+	narrowEmptyConstraint(conf)
 	return err
 }
 
