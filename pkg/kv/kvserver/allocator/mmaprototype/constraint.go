@@ -380,9 +380,7 @@ func makeNormalizedSpanConfig(
 //     but +region=a:0 and +region=b,zone=b1:0 is valid.
 //
 // Caller should check for errors and return it to users. These are cases where
-// the span configuration is invalid. Caller may choose to ignore the error and
-// proceed with the normalization. Things will be best-effort and can give
-// undefined behavior.
+// the span configuration is invalid. Caller cannot ignore the error.
 //
 // TODO(wenyihu6): we should see what checks can be lifted up to the zone config
 // validation stage.
