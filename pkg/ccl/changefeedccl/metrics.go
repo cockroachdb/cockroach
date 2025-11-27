@@ -970,6 +970,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "Number of changefeeds currently executing backfill",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaChangefeedBackfillPendingRanges := metric.Metadata{
 		Name:        "changefeed.backfill_pending_ranges",
@@ -1119,6 +1120,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "The most any changefeed's persisted checkpoint is behind the present",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaChangefeedSpanProgressSkew := metric.Metadata{
 		Name:        "changefeed.progress_skew.span",

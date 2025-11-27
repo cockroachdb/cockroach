@@ -216,6 +216,7 @@ var (
 		Help:        "Number of restarted KV transactions",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	// There are two ways we can get "write too old" restarts. In both cases, a
 	// WriteTooOldError is generated in the MVCC layer. This is intercepted on

@@ -93,6 +93,7 @@ rare or short-lived degradations.
 `,
 		Measurement: "Round-trip time",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 
 	metaDefaultConnectionRoundTripLatency = metric.Metadata{

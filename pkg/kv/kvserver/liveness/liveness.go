@@ -179,6 +179,7 @@ var (
 		Help:        "Number of failed node liveness heartbeats from this node",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaEpochIncrements = metric.Metadata{
 		Name:        "liveness.epochincrements",

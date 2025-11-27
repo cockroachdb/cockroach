@@ -49,6 +49,7 @@ var schedulerLatency = metric.Metadata{
 	Help:        "Go scheduling latency",
 	Measurement: "Nanoseconds",
 	Unit:        metric.Unit_NANOSECONDS,
+	Visibility:  metric.Metadata_SUPPORT,
 }
 
 // StartSampler spawn a goroutine to periodically sample the scheduler latencies

@@ -45,6 +45,7 @@ var (
 		Help:        "Current number of goroutines",
 		Measurement: "goroutines",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaRunnableGoroutinesPerCPU = metric.Metadata{
 		Name:        "sys.runnable.goroutines.per.cpu",
@@ -60,12 +61,14 @@ var (
 		Help:        "Current bytes of memory allocated by go",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaGoTotalBytes = metric.Metadata{
 		Name:        "sys.go.totalbytes",
 		Help:        "Total bytes of memory allocated by go, but not released",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaGoLimitBytes = metric.Metadata{
 		Name:        "sys.go.limitbytes",
@@ -84,6 +87,7 @@ var (
 		Help:        "Total heap fragmentation bytes, derived from bytes in in-use spans minus bytes allocated",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaGoHeapReservedBytes = metric.Metadata{
 		Name:        "sys.go.heap.heapreservedbytes",
@@ -102,30 +106,35 @@ var (
 		Help:        "Cumulative bytes allocated for heap objects.",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaCgoAllocBytes = metric.Metadata{
 		Name:        "sys.cgo.allocbytes",
 		Help:        "Current bytes of memory allocated by cgo",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaCgoTotalBytes = metric.Metadata{
 		Name:        "sys.cgo.totalbytes",
 		Help:        "Total bytes of memory allocated by cgo, but not released",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaGCCount = metric.Metadata{
 		Name:        "sys.gc.count",
 		Help:        "Total number of GC runs",
 		Measurement: "GC Runs",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaGCPauseNS = metric.Metadata{
 		Name:        "sys.gc.pause.ns",
 		Help:        "Total GC pause",
 		Measurement: "GC Pause",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaGCStopNS = metric.Metadata{
 		Name:        "sys.gc.stop.ns",
@@ -138,6 +147,7 @@ var (
 		Help:        "Current GC pause percentage",
 		Measurement: "GC Pause",
 		Unit:        metric.Unit_PERCENT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaGCAssistNS = metric.Metadata{
 		Name:        "sys.gc.assist.ns",
@@ -163,6 +173,7 @@ var (
 		Help:        "Total user cpu time consumed by the CRDB process",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaCPUUserPercent = metric.Metadata{
 		Name:        "sys.cpu.user.percent",
@@ -182,6 +193,7 @@ var (
 		Help:        "Total system cpu time consumed by the CRDB process",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaCPUSysPercent = metric.Metadata{
 		Name:        "sys.cpu.sys.percent",
@@ -256,6 +268,7 @@ var (
 		Help:        "Total memory (both free and used)",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaFDOpen = metric.Metadata{
 		Name:        "sys.fd.open",

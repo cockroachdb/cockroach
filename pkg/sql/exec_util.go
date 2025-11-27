@@ -819,6 +819,7 @@ var (
 		Help:        "Latency of SQL statement execution",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	MetaSQLExecLatencyConsistent = metric.Metadata{
 		Name:        "sql.exec.latency.consistent",
@@ -1205,6 +1206,7 @@ var (
 		Help:        "Number of SQL operations started including queries, and transaction control statements",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	MetaTxnBeginExecuted = metric.Metadata{
 		Name:         "sql.txn.begin.count",
