@@ -46,7 +46,7 @@ type state struct {
 	stores                  map[StoreID]*store
 	load                    map[RangeID]ReplicaLoad
 	loadsplits              map[StoreID]LoadSplitter
-	nodeLiveness            MockNodeLiveness
+	statusTracker           StatusTracker
 	capacityChangeListeners []CapacityChangeListener
 	newCapacityListeners    []NewCapacityListener
 	configChangeListeners   []ConfigChangeListener
@@ -81,9 +81,11 @@ func newState(settings *config.SimulationSettings) *state {
 		usageInfo:         newClusterUsageInfo(),
 		settings:          settings,
 	}
-	s.nodeLiveness = MockNodeLiveness{
-		clock:     hlc.NewClockForTesting(s.clock),
-		statusMap: map[NodeID]livenesspb.NodeLivenessStatus{},
+	s.statusTracker = StatusTracker{
+		clock:          hlc.NewClockForTesting(s.clock),
+		storeStatusMap: map[StoreID]StoreStatus{},
+		nodeStatusMap:  map[NodeID]NodeStatus{},
+		storeToNode:    map[StoreID]NodeID{},
 	}
 
 	s.load = map[RangeID]ReplicaLoad{FirstRangeID: NewReplicaLoadCounter(s.clock)}
@@ -436,7 +438,7 @@ func (s *state) AddNode(nodeCPUCapacity int64, locality roachpb.Locality) Node {
 		as:          mmaintegration.NewAllocatorSync(sp, mmAllocator, s.settings.ST, nil),
 	}
 	s.nodes[nodeID] = node
-	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
+	s.SetNodeStatus(nodeID, NodeStatus{Membership: livenesspb.MembershipStatus_ACTIVE})
 	s.SetNodeLocality(nodeID, locality)
 	s.SetNodeCPURateCapacity(nodeID, nodeCPUCapacity)
 	return node
@@ -586,6 +588,10 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	// Commit the new store to state.
 	node.stores = append(node.stores, storeID)
 	s.stores[storeID] = store
+
+	// Register the store with the liveness tracker, associating
+	// this store with its node.
+	s.statusTracker.registerStore(storeID, nodeID)
 
 	// Add a range load splitter for this store.
 	s.loadsplits[storeID] = NewSplitDecider(s.settings)
@@ -1177,10 +1183,45 @@ func (s *state) NextReplicasFn(storeID StoreID) func() []Replica {
 	return nextReplFn
 }
 
-// SetNodeLiveness sets the liveness status of the node with ID NodeID to be
-// the status given.
-func (s *state) SetNodeLiveness(nodeID NodeID, status livenesspb.NodeLivenessStatus) {
-	s.nodeLiveness.statusMap[nodeID] = status
+// SetStoreStatus sets the liveness for a store.
+func (s *state) SetStoreStatus(storeID StoreID, status StoreStatus) {
+	// NB: the store->node map entry was created when the store
+	// was created, so we don't need to create it here.
+	s.statusTracker.storeStatusMap[storeID] = status
+}
+
+// StoreStatus returns the liveness status for a store.
+func (s *state) StoreStatus(storeID StoreID) StoreStatus {
+	return s.statusTracker.storeStatusMap[storeID]
+}
+
+// SetNodeStatus sets the membership and draining signals for a node.
+func (s *state) SetNodeStatus(nodeID NodeID, status NodeStatus) {
+	s.statusTracker.nodeStatusMap[nodeID] = status
+}
+
+// NodeStatus returns the membership and draining signals for a node.
+func (s *state) NodeStatus(nodeID NodeID) NodeStatus {
+	return s.statusTracker.nodeStatusMap[nodeID]
+}
+
+// SetAllStoresLiveness sets the liveness for all stores on a node at once.
+func (s *state) SetAllStoresLiveness(nodeID NodeID, liveness LivenessState) {
+	node, ok := s.nodes[nodeID]
+	if !ok {
+		return
+	}
+	for _, storeID := range node.stores {
+		s.statusTracker.storeStatusMap[storeID] = StoreStatus{Liveness: liveness}
+	}
+}
+
+// NodeLiveness returns the aggregated liveness for a node, which is
+// the "worst" state. In effect, if one store is doing poorly, we
+// report this node as doing as poorly. This is needed for the single-
+// metric allocator, which thinks about liveness at the node level.
+func (s *state) NodeLiveness(nodeID NodeID) LivenessState {
+	return s.statusTracker.worstLivenessForStoresOnNode(nodeID)
 }
 
 // NodeLivenessFn returns a function, that when called will return the
@@ -1188,23 +1229,19 @@ func (s *state) SetNodeLiveness(nodeID NodeID, status livenesspb.NodeLivenessSta
 // TODO(kvoli): Find a better home for this method, required by the storepool.
 func (s *state) NodeLivenessFn() storepool.NodeLivenessFunc {
 	return func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
-		return s.nodeLiveness.statusMap[NodeID(nid)]
+		return s.statusTracker.convertToNodeVitality(NodeID(nid), s.statusTracker.clock.Now()).LivenessStatus()
 	}
 }
 
 // NodeCountFn returns a function, that when called will return the current
 // number of nodes that exist in this state.
 // TODO(kvoli): Find a better home for this method, required by the storepool.
-// TODO(wenyihu6): introduce the concept of membership separated from the
-// liveness map.
 func (s *state) NodeCountFn() storepool.NodeCountFunc {
 	return func() int {
 		count := 0
-		for _, status := range s.nodeLiveness.statusMap {
-			// Nodes with a liveness status other than decommissioned or
-			// decommissioning are considered active members (see
-			// liveness.MembershipStatus).
-			if status != livenesspb.NodeLivenessStatus_DECOMMISSIONED && status != livenesspb.NodeLivenessStatus_DECOMMISSIONING {
+		for _, ns := range s.statusTracker.nodeStatusMap {
+			// Only nodes with ACTIVE membership are counted.
+			if ns.Membership.Active() {
 				count++
 			}
 		}
@@ -1356,7 +1393,7 @@ func (s *state) Scan(
 // state of ranges.
 func (s *state) Report() roachpb.SpanConfigConformanceReport {
 	reporter := spanconfigreporter.New(
-		s.nodeLiveness, s, s, s,
+		s.statusTracker, s, s, s,
 		s.settings.ST, &spanconfig.TestingKnobs{})
 	report, err := reporter.SpanConfigConformance(context.Background(), []roachpb.Span{{}})
 	if err != nil {

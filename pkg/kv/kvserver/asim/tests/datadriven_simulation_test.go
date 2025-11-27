@@ -89,11 +89,13 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     an extra line should follow with the replica placement. A example of
 //     the replica placement is: {s1:*,s2,s3:NON_VOTER}:1 {s4:*,s5,s6}:1.
 //
-//   - set_liveness node=<int> liveness=(livenesspb.NodeLivenessStatus) [delay=<duration>]
-//     status=(dead|decommisssioning|draining|unavailable)
-//     Set the liveness status of the node with ID NodeID. This applies at the
-//     start of the simulation or with some delay after the simulation starts,
-//     if specified.
+//   - set_status store=<int> [delay=<duration>] liveness=(live|unavailable|dead)
+//   - set_status node=<int> [delay=<duration>] [liveness=(live|unavailable|dead)]
+//       [membership=(active|decommissioning|decommissioned)] [draining=<bool>]
+//     Set status signals for stores or nodes. The store= form sets liveness for
+//     a single store. The node= form can set liveness for all stores on a node
+//     and/or set membership/draining (which are per-node). Defaults for node=:
+//     membership=active, draining=false.
 //
 //   - set_locality node=<int> [delay=<duration] locality=string
 //     Sets the locality of the node with ID NodeID. This applies at the start
@@ -423,20 +425,100 @@ func TestDataDriven(t *testing.T) {
 						})
 					}
 					return ""
-				case "set_liveness":
-					var nodeID int
+				case "set_status":
+					var storeID, nodeID int
 					var delay time.Duration
-					livenessStatus := livenesspb.NodeLivenessStatus_LIVE
-					scanMustExist(t, d, "node", &nodeID)
-					scanMustExist(t, d, "liveness", &livenessStatus)
+					var livenessStr string
+
 					scanIfExists(t, d, "delay", &delay)
-					events = append(events, scheduled.ScheduledEvent{
-						At: settingsGen.Settings.StartTime.Add(delay),
-						TargetEvent: event.SetNodeLivenessEvent{
-							NodeId:         state.NodeID(nodeID),
-							LivenessStatus: livenessStatus,
-						},
-					})
+
+					// Check if this is a store-level or node-level command.
+					if scanIfExists(t, d, "store", &storeID) {
+						// Store-level: only liveness is valid.
+						liveness := state.LivenessLive
+						if scanIfExists(t, d, "liveness", &livenessStr) {
+							switch livenessStr {
+							case "live":
+								liveness = state.LivenessLive
+							case "unavailable":
+								liveness = state.LivenessUnavailable
+							case "dead":
+								liveness = state.LivenessDead
+							default:
+								t.Fatalf("unknown liveness value: %s", livenessStr)
+							}
+						}
+						events = append(events, scheduled.ScheduledEvent{
+							At: settingsGen.Settings.StartTime.Add(delay),
+							TargetEvent: event.SetStoreStatusEvent{
+								StoreID: state.StoreID(storeID),
+								Status:  state.StoreStatus{Liveness: liveness},
+							},
+						})
+					} else if scanIfExists(t, d, "node", &nodeID) {
+						// Node-level: can set liveness (for all stores) and/or membership/draining.
+						var hasLiveness bool
+						liveness := state.LivenessLive
+						if scanIfExists(t, d, "liveness", &livenessStr) {
+							hasLiveness = true
+							switch livenessStr {
+							case "live":
+								liveness = state.LivenessLive
+							case "unavailable":
+								liveness = state.LivenessUnavailable
+							case "dead":
+								liveness = state.LivenessDead
+							default:
+								t.Fatalf("unknown liveness value: %s", livenessStr)
+							}
+						}
+
+						// If liveness was specified, add a SetNodeLivenessEvent.
+						// See SetNodeLivenessEvent for why we can't expand to individual
+						// store events here.
+						if hasLiveness {
+							events = append(events, scheduled.ScheduledEvent{
+								At: settingsGen.Settings.StartTime.Add(delay),
+								TargetEvent: event.SetNodeLivenessEvent{
+									NodeID:   state.NodeID(nodeID),
+									Liveness: liveness,
+								},
+							})
+						}
+
+						// If membership or draining was specified, add a SetNodeStatusEvent.
+						var membershipStr string
+						var membership livenesspb.MembershipStatus
+						var draining bool
+						hasMembership := scanIfExists(t, d, "membership", &membershipStr)
+						if hasMembership {
+							switch membershipStr {
+							case "active":
+								membership = livenesspb.MembershipStatus_ACTIVE
+							case "decommissioning":
+								membership = livenesspb.MembershipStatus_DECOMMISSIONING
+							case "decommissioned":
+								membership = livenesspb.MembershipStatus_DECOMMISSIONED
+							default:
+								t.Fatalf("unknown membership value: %s", membershipStr)
+							}
+						}
+						hasDraining := scanIfExists(t, d, "draining", &draining)
+						if hasMembership || hasDraining {
+							events = append(events, scheduled.ScheduledEvent{
+								At: settingsGen.Settings.StartTime.Add(delay),
+								TargetEvent: event.SetNodeStatusEvent{
+									NodeID: state.NodeID(nodeID),
+									Status: state.NodeStatus{
+										Membership: membership,
+										Draining:   draining,
+									},
+								},
+							})
+						}
+					} else {
+						t.Fatalf("set_status requires either store=<int> or node=<int>")
+					}
 					return ""
 				case "set_locality":
 					var nodeID int
