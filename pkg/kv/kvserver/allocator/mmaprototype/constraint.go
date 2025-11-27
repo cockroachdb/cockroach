@@ -700,16 +700,7 @@ func (conf *normalizedSpanConfig) normalizeVoterConstraints() error {
 	// to narrow unnecessarily, and so if emptyConstraintIndex has some
 	// remainingReplicas, we take them here.
 	if emptyVoterConstraintIndex >= 0 && emptyConstraintIndex >= 0 {
-		neededReplicas := conf.voterConstraints[emptyVoterConstraintIndex].numReplicas
-		if voterConstraints[emptyVoterConstraintIndex].numReplicas != 0 {
-			panic("programming error")
-		}
-		remainingSatisfiable := allReplicaConstraints[emptyConstraintIndex].remainingReplicas
-		if neededReplicas > 0 && remainingSatisfiable > 0 {
-			count := min(remainingSatisfiable, neededReplicas)
-			voterConstraints[emptyVoterConstraintIndex].numReplicas += count
-			allReplicaConstraints[emptyConstraintIndex].remainingReplicas -= count
-		}
+		nct.allocFromAllToVoterConstraints(emptyVoterConstraintIndex, emptyConstraintIndex)
 	}
 
 	// The aforementioned "load-balancing" of the satisfaction is why we need
