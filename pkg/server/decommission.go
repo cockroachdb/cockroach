@@ -250,9 +250,16 @@ func (s *topLevelServer) DecommissionPreCheck(
 			}
 			for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 				action, _, recording, rErr = evalStore.AllocatorCheckRange(ctx, &desc, collectTraces, overrideStorePool)
+				// If there is no error, we're done.
 				if rErr == nil {
 					break
 				}
+				// If the error is not due to store throttling, don't retry.
+				if !errors.Is(rErr, allocatorimpl.ErrThrottledStores) {
+					log.KvDistribution.Infof(ctx, "allocator found error for r%d, not retrying: %v", desc.RangeID, rErr)
+					break
+				}
+				// Otherwise, error is due to throttled stores, retry.
 			}
 			rangesChecked += 1
 			actionCounts[action.String()] += 1
