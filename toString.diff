@@ -1,0 +1,465 @@
+diff --git a/pkg/sql/storageparam/tablestorageparam/table_storage_param.go b/pkg/sql/storageparam/tablestorageparam/table_storage_param.go
+index c4dcd99c39a..edf6e15bb9e 100644
+--- a/pkg/sql/storageparam/tablestorageparam/table_storage_param.go
++++ b/pkg/sql/storageparam/tablestorageparam/table_storage_param.go
+@@ -137,6 +137,7 @@ type tableParam struct {
+ 	onSet    func(ctx context.Context, po *Setter, key string, value string) error
+ 	preReset func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) (string, error)
+ 	onReset  func(ctx context.Context, po *Setter, key string, value string) error
++	toString func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error)
+ }
+ 
+ var ttlAutomaticColumnNotice = pgnotice.Newf("ttl_automatic_column is no longer used. " +
+@@ -160,6 +161,9 @@ var tableParams = map[string]tableParam{
+ 		onReset: func(_ context.Context, po *Setter, key string, value string) error {
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			return "", nil
++		},
+ 	},
+ 	`autovacuum_enabled`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -181,6 +185,9 @@ var tableParams = map[string]tableParam{
+ 		onReset: func(_ context.Context, po *Setter, key string, value string) error {
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			return "", nil
++		},
+ 	},
+ 	`ttl`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -209,6 +216,9 @@ var tableParams = map[string]tableParam{
+ 			po.UpdatedRowLevelTTL = nil
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			return fmt.Sprintf("%t", tableDesc.HasRowLevelTTL()), nil
++		},
+ 	},
+ 	`ttl_automatic_column`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -225,6 +235,9 @@ var tableParams = map[string]tableParam{
+ 		onReset: func(ctx context.Context, po *Setter, key string, value string) error {
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			return "", nil
++		},
+ 	},
+ 	`ttl_expire_after`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -278,6 +291,13 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.HasRowLevelTTL() {
++				ttl := tableDesc.GetRowLevelTTL()
++				return string(ttl.DurationExpr), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`ttl_expiration_expression`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -294,6 +314,13 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.HasRowLevelTTL() {
++				ttl := tableDesc.GetRowLevelTTL()
++				return string(ttl.ExpirationExpr), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`ttl_select_batch_size`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -321,6 +348,13 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.HasRowLevelTTL() {
++				ttl := tableDesc.GetRowLevelTTL()
++				return fmt.Sprintf("%d", ttl.SelectBatchSize), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`ttl_delete_batch_size`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -348,6 +382,13 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.HasRowLevelTTL() {
++				ttl := tableDesc.GetRowLevelTTL()
++				return fmt.Sprintf("%d", ttl.DeleteBatchSize), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`ttl_range_concurrency`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -364,6 +405,9 @@ var tableParams = map[string]tableParam{
+ 		onReset: func(ctx context.Context, po *Setter, key string, value string) error {
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			return "", nil
++		},
+ 	},
+ 	`ttl_select_rate_limit`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -391,6 +435,13 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.HasRowLevelTTL() {
++				ttl := tableDesc.GetRowLevelTTL()
++				return fmt.Sprintf("%d", ttl.SelectRateLimit), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`ttl_delete_rate_limit`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -418,6 +469,13 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.HasRowLevelTTL() {
++				ttl := tableDesc.GetRowLevelTTL()
++				return fmt.Sprintf("%d", ttl.DeleteRateLimit), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`ttl_label_metrics`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -442,6 +500,13 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.HasRowLevelTTL() {
++				ttl := tableDesc.GetRowLevelTTL()
++				return fmt.Sprintf("%t", ttl.LabelMetrics), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`ttl_job_cron`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -465,6 +530,13 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.HasRowLevelTTL() {
++				ttl := tableDesc.GetRowLevelTTL()
++				return ttl.DeletionCron, nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`ttl_pause`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -489,6 +561,13 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.HasRowLevelTTL() {
++				ttl := tableDesc.GetRowLevelTTL()
++				return fmt.Sprintf("%t", ttl.Pause), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`ttl_row_stats_poll_interval`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -516,6 +595,13 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.HasRowLevelTTL() {
++				ttl := tableDesc.GetRowLevelTTL()
++				return ttl.RowStatsPollInterval.String(), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`ttl_disable_changefeed_replication`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -540,6 +626,13 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.HasRowLevelTTL() {
++				ttl := tableDesc.GetRowLevelTTL()
++				return fmt.Sprintf("%t", ttl.DisableChangefeedReplication), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`exclude_data_from_backup`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -580,11 +673,15 @@ var tableParams = map[string]tableParam{
+ 			po.TableDesc.ExcludeDataFromBackup = false
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			return fmt.Sprintf("%t", tableDesc.ExcludeDataFromBackup), nil
++		},
+ 	},
+ 	catpb.AutoStatsEnabledTableSettingName: {
+-		preSet:  autoStatsEnabledPreSetFunc,
+-		onSet:   autoStatsEnabledSetFunc,
+-		onReset: autoStatsTableSettingResetFunc,
++		preSet:   autoStatsEnabledPreSetFunc,
++		onSet:    autoStatsEnabledSetFunc,
++		onReset:  autoStatsTableSettingResetFunc,
++		toString: getAutoStatsToStringFunc(catpb.AutoStatsEnabledTableSettingName),
+ 	},
+ 	catpb.AutoStatsMinStaleTableSettingName: {
+ 		preSet: autoStatsMinStaleRowsPreSetFunc(func(intVal int64) error {
+@@ -593,8 +690,9 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		}),
+-		onSet:   autoStatsMinStaleRowsSetFunc,
+-		onReset: autoStatsTableSettingResetFunc,
++		onSet:    autoStatsMinStaleRowsSetFunc,
++		onReset:  autoStatsTableSettingResetFunc,
++		toString: getAutoStatsToStringFunc(catpb.AutoStatsMinStaleTableSettingName),
+ 	},
+ 	catpb.AutoStatsFractionStaleTableSettingName: {
+ 		preSet: autoStatsFractionStaleRowsPreSetFunc(func(floatVal float64) error {
+@@ -603,18 +701,21 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		}),
+-		onSet:   autoStatsFractionStaleRowsSetFunc,
+-		onReset: autoStatsTableSettingResetFunc,
++		onSet:    autoStatsFractionStaleRowsSetFunc,
++		onReset:  autoStatsTableSettingResetFunc,
++		toString: getAutoStatsToStringFunc(catpb.AutoStatsFractionStaleTableSettingName),
+ 	},
+ 	catpb.AutoPartialStatsEnabledTableSettingName: {
+-		preSet:  autoStatsEnabledPreSetFunc,
+-		onSet:   autoStatsEnabledSetFunc,
+-		onReset: autoStatsTableSettingResetFunc,
++		preSet:   autoStatsEnabledPreSetFunc,
++		onSet:    autoStatsEnabledSetFunc,
++		onReset:  autoStatsTableSettingResetFunc,
++		toString: getAutoStatsToStringFunc(catpb.AutoPartialStatsEnabledTableSettingName),
+ 	},
+ 	catpb.AutoFullStatsEnabledTableSettingName: {
+-		preSet:  autoStatsEnabledPreSetFunc,
+-		onSet:   autoStatsEnabledSetFunc,
+-		onReset: autoStatsTableSettingResetFunc,
++		preSet:   autoStatsEnabledPreSetFunc,
++		onSet:    autoStatsEnabledSetFunc,
++		onReset:  autoStatsTableSettingResetFunc,
++		toString: getAutoStatsToStringFunc(catpb.AutoFullStatsEnabledTableSettingName),
+ 	},
+ 	catpb.AutoPartialStatsMinStaleTableSettingName: {
+ 		preSet: autoStatsMinStaleRowsPreSetFunc(func(intVal int64) error {
+@@ -623,8 +724,9 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		}),
+-		onSet:   autoStatsMinStaleRowsSetFunc,
+-		onReset: autoStatsTableSettingResetFunc,
++		onSet:    autoStatsMinStaleRowsSetFunc,
++		onReset:  autoStatsTableSettingResetFunc,
++		toString: getAutoStatsToStringFunc(catpb.AutoPartialStatsMinStaleTableSettingName),
+ 	},
+ 	catpb.AutoPartialStatsFractionStaleTableSettingName: {
+ 		preSet: autoStatsFractionStaleRowsPreSetFunc(func(floatVal float64) error {
+@@ -633,8 +735,9 @@ var tableParams = map[string]tableParam{
+ 			}
+ 			return nil
+ 		}),
+-		onSet:   autoStatsFractionStaleRowsSetFunc,
+-		onReset: autoStatsTableSettingResetFunc,
++		onSet:    autoStatsFractionStaleRowsSetFunc,
++		onReset:  autoStatsTableSettingResetFunc,
++		toString: getAutoStatsToStringFunc(catpb.AutoPartialStatsFractionStaleTableSettingName),
+ 	},
+ 	`sql_stats_forecasts_enabled`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -656,6 +759,12 @@ var tableParams = map[string]tableParam{
+ 			po.TableDesc.ForecastStats = nil
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.ForecastStats != nil {
++				return fmt.Sprintf("%t", *tableDesc.ForecastStats), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`sql_stats_histogram_samples_count`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -681,6 +790,12 @@ var tableParams = map[string]tableParam{
+ 			po.TableDesc.HistogramSamples = nil
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.HistogramSamples != nil {
++				return fmt.Sprintf("%d", *tableDesc.HistogramSamples), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`sql_stats_histogram_buckets_count`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -706,6 +821,12 @@ var tableParams = map[string]tableParam{
+ 			po.TableDesc.HistogramBuckets = nil
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.HistogramBuckets != nil {
++				return fmt.Sprintf("%d", *tableDesc.HistogramBuckets), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	`schema_locked`: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -739,6 +860,9 @@ var tableParams = map[string]tableParam{
+ 			po.TableDesc.SchemaLocked = boolVal
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			return fmt.Sprintf("%t", tableDesc.SchemaLocked), nil
++		},
+ 	},
+ 	catpb.RBRUsingConstraintTableSettingName: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -753,6 +877,12 @@ var tableParams = map[string]tableParam{
+ 			po.TableDesc.RBRUsingConstraint = descpb.ConstraintID(0)
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.RBRUsingConstraint != 0 {
++				return fmt.Sprintf("%d", tableDesc.RBRUsingConstraint), nil
++			}
++			return "", nil
++		},
+ 	},
+ 	catpb.CanaryStatsWindowSettingName: {
+ 		preSet: func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error) {
+@@ -777,6 +907,12 @@ var tableParams = map[string]tableParam{
+ 			po.TableDesc.StatsCanaryWindow = 0
+ 			return nil
+ 		},
++		toString: func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++			if tableDesc.StatsCanaryWindow != 0 {
++				return tableDesc.StatsCanaryWindow.String(), nil
++			}
++			return "", nil
++		},
+ 	},
+ }
+ 
+@@ -832,6 +968,9 @@ func init() {
+ 			onReset: func(_ context.Context, po *Setter, key string, value string) error {
+ 				return nil
+ 			},
++			toString: func(_ context.Context, _ *tabledesc.Mutable) (string, error) {
++				return "", nil
++			},
+ 		}
+ 	}
+ }
+@@ -976,6 +1115,54 @@ func autoStatsTableSettingResetFunc(_ context.Context, po *Setter, key string, v
+ 	return errors.AssertionFailedf("unable to reset table setting %s", key)
+ }
+ 
++func getAutoStatsToStringFunc(
++	key string,
++) func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++	return func(ctx context.Context, tableDesc *tabledesc.Mutable) (string, error) {
++		if tableDesc.AutoStatsSettings == nil {
++			return "", nil
++		}
++		switch key {
++		case catpb.AutoStatsEnabledTableSettingName:
++			ptr := tableDesc.AutoStatsSettings.Enabled
++			if ptr != nil {
++				return fmt.Sprintf("%t", *ptr), nil
++			}
++		case catpb.AutoPartialStatsEnabledTableSettingName:
++			ptr := tableDesc.AutoStatsSettings.PartialEnabled
++			if ptr != nil {
++				return fmt.Sprintf("%t", *ptr), nil
++			}
++		case catpb.AutoFullStatsEnabledTableSettingName:
++			ptr := tableDesc.AutoStatsSettings.FullEnabled
++			if ptr != nil {
++				return fmt.Sprintf("%t", *ptr), nil
++			}
++		case catpb.AutoStatsMinStaleTableSettingName:
++			ptr := tableDesc.AutoStatsSettings.MinStaleRows
++			if ptr != nil {
++				return fmt.Sprintf("%d", *ptr), nil
++			}
++		case catpb.AutoPartialStatsMinStaleTableSettingName:
++			ptr := tableDesc.AutoStatsSettings.PartialMinStaleRows
++			if ptr != nil {
++				return fmt.Sprintf("%d", *ptr), nil
++			}
++		case catpb.AutoStatsFractionStaleTableSettingName:
++			ptr := tableDesc.AutoStatsSettings.FractionStaleRows
++			if ptr != nil {
++				return fmt.Sprintf("%f", *ptr), nil
++			}
++		case catpb.AutoPartialStatsFractionStaleTableSettingName:
++			ptr := tableDesc.AutoStatsSettings.PartialFractionStaleRows
++			if ptr != nil {
++				return fmt.Sprintf("%f", *ptr), nil
++			}
++		}
++		return "", nil
++	}
++}
++
+ // EvalAndSet evaluates a storage parameter value and applies it.
+ func (po *Setter) EvalAndSet(
+ 	ctx context.Context,
+@@ -1032,3 +1219,23 @@ func (po *Setter) Reset(ctx context.Context, evalCtx *eval.Context, key string)
+ 	}
+ 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
+ }
++
++// GetStorageParams iterates over all storage parameters and returns a map of
++// parameter names to their string values, excluding empty values.
++func GetStorageParams(
++	ctx context.Context, tableDesc *tabledesc.Mutable,
++) (map[string]string, error) {
++	result := make(map[string]string)
++	for key, param := range tableParams {
++		if param.toString != nil {
++			value, err := param.toString(ctx, tableDesc)
++			if err != nil {
++				return nil, err
++			}
++			if value != "" {
++				result[key] = value
++			}
++		}
++	}
++	return result, nil
++}

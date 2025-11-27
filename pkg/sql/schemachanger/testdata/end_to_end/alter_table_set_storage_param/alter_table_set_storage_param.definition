@@ -1,0 +1,8 @@
+setup
+CREATE TABLE t (i int);
+CREATE SCHEMA sc;
+----
+
+test
+ALTER TABLE t SET (exclude_data_from_backup=true);
+----
