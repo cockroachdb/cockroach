@@ -3879,11 +3879,9 @@ def go_deps():
         name = "com_github_golang_jwt_jwt_v5",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/golang-jwt/jwt/v5",
-        sha256 = "ad5cdc5c6bac562a2b890e96347208ffdb30a940243b558465ab7de90913a180",
-        strip_prefix = "github.com/golang-jwt/jwt/v5@v5.2.1",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang-jwt/jwt/v5/com_github_golang_jwt_jwt_v5-v5.2.1.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:Rl4B7itRWVtYIHFrSNd7vhTiz9UpLdi6gZhZ3wEeDy8=",
+        version = "v5.2.2",
     )
     go_repository(
         name = "com_github_golang_mock",
@@ -4009,11 +4007,9 @@ def go_deps():
         name = "com_github_google_go_cmp",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/google/go-cmp",
-        sha256 = "4b4e9bf6c48211080651b491dfb48d68b736c66a305bcf94605606e1ba2eaa4a",
-        strip_prefix = "github.com/google/go-cmp@v0.6.0",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-cmp/com_github_google_go_cmp-v0.6.0.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=",
+        version = "v0.7.0",
     )
     go_repository(
         name = "com_github_google_go_github",
@@ -4054,6 +4050,14 @@ def go_deps():
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/gofuzz/com_github_google_gofuzz-v1.2.0.zip",
         ],
+    )
+    go_repository(
+        name = "com_github_google_jsonschema_go",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/google/jsonschema-go",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:6AH2TxVNtk3IlvkkhjrtbUc4S8AvO0Xii0DxIygDg+Q=",
+        version = "v0.3.0",
     )
     go_repository(
         name = "com_github_google_martian",
@@ -6505,6 +6509,14 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_modelcontextprotocol_go_sdk",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/modelcontextprotocol/go-sdk",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:Z4MSjLi38bTgLrd/LjSmofqRqyBiVKRyQSJgw8q8V74=",
+        version = "v1.0.0",
+    )
+    go_repository(
         name = "com_github_modern_go_concurrent",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/modern-go/concurrent",
@@ -8762,6 +8774,14 @@ def go_deps():
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/xordataexchange/crypt/com_github_xordataexchange_crypt-v0.0.3-0.20170626215501-b2862e3d0a77.zip",
         ],
+    )
+    go_repository(
+        name = "com_github_yosida95_uritemplate_v3",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/yosida95/uritemplate/v3",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:Ed3Oyj9yrmi9087+NczuL5BwkIc4wvTb5zIM+UJPGz4=",
+        version = "v3.0.2",
     )
     go_repository(
         name = "com_github_yosssi_ace",

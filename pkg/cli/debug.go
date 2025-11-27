@@ -1157,6 +1157,21 @@ matching via flags. If the filter regexp contains captures, such as
 	RunE: runDebugMergeLogs,
 }
 
+var debugMCPCmd = &cobra.Command{
+	Use:   "mcp",
+	Short: "debug MCP server functionality",
+	Long: `
+Debug command for MCP (Model Context Protocol) server functionality.
+Provides utilities for decoding tsdump files.
+
+Environment Variables:
+  COCKROACH_DEBUG_MCP_INSTRUCTIONS
+    Path to a file containing custom instructions for the MCP server.
+    If not set, uses the default embedded instructions.
+`,
+	RunE: runDebugMCP,
+}
+
 // filePattern matches log file paths. Redeclared here from the log package
 // due to significant test breakage when adding the fpath named capture group.
 const logFilePattern = "^(?:(?P<fpath>.*)/)?" + log.FileNamePattern + "$"
@@ -1345,6 +1360,7 @@ var debugCmds = []*cobra.Command{
 	debugGCCmd,
 	debugIntentCount,
 	debugKeysCmd,
+	debugMCPCmd,
 	debugRaftLogCmd,
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
@@ -1552,6 +1568,11 @@ func init() {
 		"force use of TTY escape codes to colorize the output")
 	f.StringSliceVar(&debugMergeLogsOpts.tenantIDsFilter, "tenant-ids", nil,
 		"tenant IDs to filter logs by")
+
+	f = debugMCPCmd.Flags()
+	f.String("kapa-api-key", "", "Kapa.AI API key for documentation queries")
+	f.String("kapa-project-id", "9828e446-2c28-467f-9dfa-73cd90fa56a2", "Kapa.AI project ID")
+	_ = f.MarkHidden("kapa-project-id")
 
 	f = debugZipUploadCmd.Flags()
 	f.StringVar(&debugZipUploadOpts.ddAPIKey, "dd-api-key", getEnvOrDefault(datadogAPIKeyEnvVar, ""),
