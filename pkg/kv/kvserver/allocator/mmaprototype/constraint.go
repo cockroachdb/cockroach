@@ -376,7 +376,7 @@ func makeNormalizedSpanConfig(
 	if err != nil {
 		return nil, err
 	}
-	err = doStructuralNormalization(nConf)
+	err = nConf.doStructuralNormalization()
 	return nConf, err
 }
 
@@ -440,9 +440,7 @@ type relationshipVoterAndAll struct {
 }
 
 // TODO(wenyihu6): take in a scratch slice to avoid repeated allocations.
-func buildVoterAndAllRelationships(
-	conf *normalizedSpanConfig,
-) (
+func (conf *normalizedSpanConfig) buildVoterAndAllRelationships() (
 	rels []relationshipVoterAndAll, emptyConstraintIndex int, emptyVoterConstraintIndex int, err error,
 ) {
 	emptyConstraintIndex = -1
@@ -504,8 +502,8 @@ func buildVoterAndAllRelationships(
 // empty constraint conjunction. This is technically true, but once we have
 // the required second voter in us-east-1, we will need to move that
 // non-voter to us-central-1, which is wasteful.
-func narrowEmptyConstraint(conf *normalizedSpanConfig) {
-	rels, emptyConstraintIndex, _, _ := buildVoterAndAllRelationships(conf)
+func (conf *normalizedSpanConfig) narrowEmptyConstraint() {
+	rels, emptyConstraintIndex, _, _ := conf.buildVoterAndAllRelationships()
 	if emptyConstraintIndex >= 0 {
 		// Recompute the relationship since voterConstraints have changed.
 		// Ignore conjPossiblyIntersecting.
@@ -584,13 +582,13 @@ func narrowEmptyConstraint(conf *normalizedSpanConfig) {
 // constraint examples in the datadriven test -- we sometimes see these in
 // production settings, and we want to fix ones that we can, and raise an
 // error for users to fix their configs.
-func doStructuralNormalization(conf *normalizedSpanConfig) error {
+func (conf *normalizedSpanConfig) doStructuralNormalization() error {
 	if len(conf.constraints) == 0 || len(conf.voterConstraints) == 0 {
 		return nil
 	}
 	// Relationships between each voter constraint and each all replica
 	// constraint.
-	rels, emptyConstraintIndex, emptyVoterConstraintIndex, err := buildVoterAndAllRelationships(conf)
+	rels, emptyConstraintIndex, emptyVoterConstraintIndex, err := conf.buildVoterAndAllRelationships()
 	if err != nil {
 		return err
 	}
@@ -779,7 +777,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 		}
 	}
 	conf.voterConstraints = vc
-	narrowEmptyConstraint(conf)
+	conf.narrowEmptyConstraint()
 	return err
 }
 
