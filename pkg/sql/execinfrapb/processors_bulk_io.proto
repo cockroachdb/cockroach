@@ -85,7 +85,9 @@ message BackfillerSpec {
   // the value of 0 is specified then the primary index will be used implicitly.
   optional uint32 source_index_id = 16 [(gogoproto.nullable) = false, (gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
 
-  // NEXTID: 17.
+  optional bool use_distributed_merge_sink = 17 [(gogoproto.nullable) = false];
+
+  // NEXTID: 18.
 }
 
 // JobProgress identifies the job to report progress on. This reporting
