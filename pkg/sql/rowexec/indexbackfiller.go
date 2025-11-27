@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -48,6 +49,8 @@ type indexBackfiller struct {
 	processorID int32
 
 	filter backfill.MutationFilter
+
+	bulkAdderFactory indexBackfillBulkAdderFactory
 }
 
 var _ execinfra.Processor = &indexBackfiller{}
@@ -86,6 +89,40 @@ var indexBackfillElasticCPUControlEnabled = settings.RegisterBoolSetting(
 	false, // TODO(dt): enable this by default after more benchmarking.
 )
 
+// indexBackfillSink abstracts the destination for index backfill output so the
+// ingestion pipeline can route built KVs either to the legacy BulkAdder path or
+// to future sinks (e.g. distributed-merge SST writers) without rewriting the
+// DistSQL processor. All sinks share the same Add/Flush/progress contract.
+type indexBackfillSink interface {
+	// Add enqueues a single KV pair for eventual persistence in the sink-specific
+	// backing store.
+	Add(ctx context.Context, key roachpb.Key, value []byte) error
+	// Flush forces any buffered state to be persisted.
+	Flush(ctx context.Context) error
+	// Close releases resources owned by the sink. Implementations should be
+	// idempotent and safe to call even if Flush returns an error.
+	Close(ctx context.Context)
+	// SetOnFlush installs a callback that is invoked after the sink writes a
+	// batch (mirrors kvserverbase.BulkAdder semantics so existing progress
+	// plumbing can be reused).
+	SetOnFlush(func(summary kvpb.BulkOpSummary))
+}
+
+// indexBackfillBulkAdderFactory mirrors kvserverbase.BulkAdderFactory but is
+// injected so tests can swap in fakes and future sinks can reuse the backfiller
+// without referencing execinfra.ServerConfig directly.
+type indexBackfillBulkAdderFactory func(
+	ctx context.Context, writeAsOf hlc.Timestamp, opts kvserverbase.BulkAdderOptions,
+) (kvserverbase.BulkAdder, error)
+
+// bulkAdderIndexBackfillSink is the default sink implementation backed by
+// kvserverbase.BulkAdder.
+type bulkAdderIndexBackfillSink struct {
+	kvserverbase.BulkAdder
+}
+
+var _ indexBackfillSink = (*bulkAdderIndexBackfillSink)(nil)
+
 func newIndexBackfiller(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -101,6 +138,11 @@ func newIndexBackfiller(
 		flowCtx:     flowCtx,
 		processorID: processorID,
 		filter:      backfill.IndexMutationFilter,
+		bulkAdderFactory: func(
+			ctx context.Context, writeAsOf hlc.Timestamp, opts kvserverbase.BulkAdderOptions,
+		) (kvserverbase.BulkAdder, error) {
+			return flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeAsOf, opts)
+		},
 	}
 
 	if err := ib.IndexBackfiller.InitForDistributedUse(
@@ -257,15 +299,16 @@ func (ib *indexBackfiller) maybeReencodeAndWriteVectorIndexEntry(
 	return true, nil
 }
 
-// ingestIndexEntries adds the batches of built index entries to the buffering
-// adder and reports progress back to the coordinator node.
-func (ib *indexBackfiller) ingestIndexEntries(
-	ctx context.Context,
-	indexEntryCh <-chan indexEntryBatch,
-	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-) error {
-	ctx, span := tracing.ChildSpan(ctx, "ingestIndexEntries")
-	defer span.Finish()
+// makeIndexBackfillSink materializes whatever sink the current backfill should
+// use (legacy BulkAdder or distributed-merge sink). The choice is driven by
+// execinfrapb.BackfillerSpec.
+func (ib *indexBackfiller) makeIndexBackfillSink(ctx context.Context) (indexBackfillSink, error) {
+	if ib.spec.UseDistributedMergeSink {
+		return nil, unimplemented.New(
+			"distributed merge index backfill sink",
+			"index backfill distributed merge sink is not implemented yet",
+		)
+	}
 
 	minBufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
 	maxBufferSize := func() int64 { return backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
@@ -278,11 +321,33 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		InitialSplitsIfUnordered: int(ib.spec.InitialSplits),
 		WriteAtBatchTimestamp:    ib.spec.WriteAtBatchTimestamp,
 	}
-	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB.KV(), ib.spec.WriteAsOf, opts)
+
+	adderFactory := ib.bulkAdderFactory
+	if adderFactory == nil {
+		return nil, errors.AssertionFailedf("index backfiller bulk adder factory must be configured")
+	}
+	adder, err := adderFactory(ctx, ib.spec.WriteAsOf, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &bulkAdderIndexBackfillSink{BulkAdder: adder}, nil
+}
+
+// ingestIndexEntries adds the batches of built index entries to the buffering
+// adder and reports progress back to the coordinator node.
+func (ib *indexBackfiller) ingestIndexEntries(
+	ctx context.Context,
+	indexEntryCh <-chan indexEntryBatch,
+	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+) error {
+	ctx, span := tracing.ChildSpan(ctx, "ingestIndexEntries")
+	defer span.Finish()
+
+	sink, err := ib.makeIndexBackfillSink(ctx)
 	if err != nil {
 		return err
 	}
-	defer adder.Close(ctx)
+	defer sink.Close(ctx)
 
 	// Synchronizes read and write access on completedSpans which is updated on a
 	// BulkAdder flush, but is read when progress is being sent back to the
@@ -302,7 +367,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		mu.completedSpans = append(mu.completedSpans, mu.addedSpans...)
 		mu.addedSpans = nil
 	}
-	adder.SetOnFlush(flushAddedSpans)
+	sink.SetOnFlush(flushAddedSpans)
 
 	pushProgress := func() {
 		mu.Lock()
@@ -365,7 +430,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 					}
 				}
 
-				if err := adder.Add(ctx, indexEntry.Key, indexEntry.Value.RawBytes); err != nil {
+				if err := sink.Add(ctx, indexEntry.Key, indexEntry.Value.RawBytes); err != nil {
 					return ib.wrapDupError(ctx, err)
 				}
 			}
@@ -391,7 +456,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 
 			knobs := &ib.flowCtx.Cfg.TestingKnobs
 			if knobs.BulkAdderFlushesEveryBatch {
-				if err := adder.Flush(ctx); err != nil {
+				if err := sink.Flush(ctx); err != nil {
 					return ib.wrapDupError(ctx, err)
 				}
 				pushProgress()
@@ -412,7 +477,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	if err := g.Wait(); err != nil {
 		return err
 	}
-	if err := adder.Flush(ctx); err != nil {
+	if err := sink.Flush(ctx); err != nil {
 		return ib.wrapDupError(ctx, err)
 	}
 

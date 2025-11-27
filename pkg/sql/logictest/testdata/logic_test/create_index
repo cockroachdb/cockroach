@@ -705,3 +705,30 @@ statement error pgcode 42P07 index with name \"t_index_name_conflicts_with_prima
 CREATE INDEX t_index_name_conflicts_with_primary_key_pkey ON t_index_name_conflicts_with_primary_key (a);
 
 subtest end
+
+# Temporary check to ensure the distributed merge setting is wired up. When we
+# implement distributed merge, we probably want to test this by reusing as many
+# existing tests as possible rather than strictly writing new ones.
+subtest distributed_merge_index_backfill_placeholder
+
+statement ok
+CREATE TABLE dist_merge_idx (a INT PRIMARY KEY, b INT)
+
+statement ok
+SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.enabled = true
+
+skipif config local-mixed-25.3 local-mixed-25.4
+statement error pq: .*index backfill distributed merge sink is not implemented yet.*
+CREATE INDEX dist_merge_idx_idx ON dist_merge_idx (b)
+
+onlyif config local-mixed-25.3 local-mixed-25.4
+statement error pq: .*distributed merge requires cluster version 26.*
+CREATE INDEX dist_merge_idx_idx ON dist_merge_idx (b)
+
+statement ok
+SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.enabled = false
+
+statement ok
+DROP TABLE dist_merge_idx
+
+subtest end

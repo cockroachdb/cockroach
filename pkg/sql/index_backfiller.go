@@ -211,6 +211,9 @@ func (ib *IndexBackfillPlanner) plan(
 			*td.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize,
 			indexesToBackfill, sourceIndexID,
 		)
+		if err := maybeEnableDistributedMergeIndexBackfill(ctx, ib.execCfg.Settings, &spec); err != nil {
+			return err
+		}
 		var err error
 		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, sourceSpans)
 		return err
