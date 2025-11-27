@@ -1093,8 +1093,7 @@ func TestEstimateStaleness(t *testing.T) {
 
 	checkEstimatedStaleness := func(expected float64) error {
 		return testutils.SucceedsSoonError(func() error {
-			actual, err := refresher.EstimateStaleness(ctx,
-				table.GetID())
+			actual, err := refresher.EstimateStaleness(ctx, table)
 			if err != nil {
 				return err
 			}
@@ -1165,7 +1164,7 @@ func TestEstimateStaleness(t *testing.T) {
 	}
 
 	// Ensure that we return an error if estimating staleness without any stats.
-	_, err := refresher.EstimateStaleness(ctx, table.GetID())
+	_, err := refresher.EstimateStaleness(ctx, table)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no full statistics available")
 
@@ -1173,7 +1172,7 @@ func TestEstimateStaleness(t *testing.T) {
 	// doesn't allow auto stats.
 	descTableStats := desctestutils.TestingGetPublicTableDescriptor(s.DB(),
 		codec, "system", "table_statistics")
-	_, err = refresher.EstimateStaleness(ctx, descTableStats.GetID())
+	_, err = refresher.EstimateStaleness(ctx, descTableStats)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "automatic stats collection is not allowed for this table")
 
@@ -1188,7 +1187,7 @@ func TestEstimateStaleness(t *testing.T) {
 	}
 
 	err = testutils.SucceedsSoonError(func() error {
-		_, err := refresher.EstimateStaleness(ctx, table.GetID())
+		_, err := refresher.EstimateStaleness(ctx, table)
 		if err == nil {
 			return fmt.Errorf("expected error but got nil")
 		}

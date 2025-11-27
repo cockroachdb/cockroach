@@ -345,10 +345,6 @@ type TableStatsTestingKnobs struct {
 	// DisableInitialTableCollection, if set, indicates that the "initial table
 	// collection" performed by the Refresher should be skipped.
 	DisableInitialTableCollection bool
-	// DisableFullStatsRefresh, if set, indicates that the Refresher should not
-	// perform full statistics refreshes. Useful for testing the partial stats
-	// refresh logic.
-	DisableFullStatsRefresh bool
 	// StubTimeNow allows tests to override the current time, used by
 	// EstimateStaleness to get the latest stats' age.
 	StubTimeNow func() time.Time
@@ -554,6 +550,13 @@ func (r *Refresher) Start(
 		return nil
 	}
 
+	// We always sleep for r.asOfTime at the beginning of each refresh, so
+	// subtract it from the refreshInterval.
+	refreshInterval -= r.asOfTime
+	if refreshInterval < 0 {
+		refreshInterval = 0
+	}
+
 	// The refresher has the same lifetime as the server, so the cancellation
 	// function can be ignored and it'll be called by the stopper.
 	stoppingCtx, _ := stopper.WithCancelOnQuiesce(context.Background()) // nolint:quiesce
@@ -561,13 +564,6 @@ func (r *Refresher) Start(
 	r.startedTasksWG.Add(1)
 	if err := stopper.RunAsyncTask(bgCtx, "refresher", func(ctx context.Context) {
 		defer r.startedTasksWG.Done()
-
-		// We always sleep for r.asOfTime at the beginning of each refresh, so
-		// subtract it from the refreshInterval.
-		refreshInterval -= r.asOfTime
-		if refreshInterval < 0 {
-			refreshInterval = 0
-		}
 
 		timer := time.NewTimer(refreshInterval)
 		defer timer.Stop()
@@ -685,7 +681,6 @@ func (r *Refresher) Start(
 							case <-ctx.Done():
 								return
 							case <-r.drainAutoStats:
-								// Ditto.
 								return
 							default:
 							}
@@ -904,12 +899,10 @@ func (r *Refresher) NotifyMutation(
 // EstimateStaleness returns an estimate fraction of stale rows in the given
 // table based on how long it has been since the last full statistics refresh,
 // and the average time between refreshes.
-func (r *Refresher) EstimateStaleness(ctx context.Context, tableID descpb.ID) (float64, error) {
-	desc := r.getTableDescriptor(ctx, tableID)
-	if desc == nil {
-		return 0, errors.New("could not access the table descriptor")
-	}
-	if !r.cache.autostatsCollectionAllowed(desc) {
+func (r *Refresher) EstimateStaleness(
+	ctx context.Context, tableDesc catalog.TableDescriptor,
+) (float64, error) {
+	if !r.cache.autostatsCollectionAllowed(tableDesc) {
 		return 0, errors.New("automatic stats collection is not allowed for this table")
 	}
 
@@ -917,7 +910,7 @@ func (r *Refresher) EstimateStaleness(ctx context.Context, tableID descpb.ID) (f
 	// NB: we pass nil boolean as 'forecast' argument in order to not invalidate
 	// the stats cache entry since we don't care whether there is a forecast or
 	// not in the stats.
-	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableDesc.GetID(), forecast, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		return 0, err
 	}
@@ -935,7 +928,7 @@ func (r *Refresher) EstimateStaleness(ctx context.Context, tableID descpb.ID) (f
 	}
 
 	var explicitSettings *catpb.AutoStatsSettings
-	if s, ok := r.settingOverrides[tableID]; ok {
+	if s, ok := r.settingOverrides[tableDesc.GetID()]; ok {
 		explicitSettings = &s
 	}
 	staleTargetFraction := r.autoStatsFractionStaleRows(explicitSettings)
@@ -1009,23 +1002,22 @@ func (r *Refresher) maybeRefreshStats(
 		mustRefresh = true
 	}
 
-	// We will always do a full stats refresh if we must or if the maximum
-	// rowsAffected value was specified.
-	doFullRefresh := mustRefresh || rowsAffected >= math.MaxInt32
-	if !doFullRefresh {
-		// Perform the "dice roll".
-		statsFractionStaleRows := r.autoStatsFractionStaleRows(explicitSettings)
-		statsMinStaleRows := r.autoStatsMinStaleRows(explicitSettings)
-		targetRows := int64(rowCount*statsFractionStaleRows) + statsMinStaleRows
-		randomTargetRows := int64(0)
-		if targetRows > 0 {
-			randomTargetRows = r.rng.Int63n(targetRows)
+	var doFullRefresh bool
+	if fullStatsEnabled {
+		// We will always do a full stats refresh if we must or if the maximum
+		// rowsAffected value was specified.
+		doFullRefresh = mustRefresh || rowsAffected >= math.MaxInt32
+		if !doFullRefresh {
+			// Perform the "dice roll".
+			statsFractionStaleRows := r.autoStatsFractionStaleRows(explicitSettings)
+			statsMinStaleRows := r.autoStatsMinStaleRows(explicitSettings)
+			targetRows := int64(rowCount*statsFractionStaleRows) + statsMinStaleRows
+			randomTargetRows := int64(0)
+			if targetRows > 0 {
+				randomTargetRows = r.rng.Int63n(targetRows)
+			}
+			doFullRefresh = randomTargetRows < rowsAffected
 		}
-		doFullRefresh = randomTargetRows < rowsAffected
-	}
-	if (r.knobs != nil && r.knobs.DisableFullStatsRefresh) || !fullStatsEnabled {
-		// We cannot do the full stats refresh.
-		doFullRefresh = false
 	}
 
 	if !doFullRefresh {

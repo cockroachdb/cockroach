@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -1167,6 +1167,7 @@ type DistSQLReceiver struct {
 	// scanStageEstimateMap maps stage IDs for logical scans to their
 	// corresponding scanStageEstimate.
 	scanStageEstimateMap map[int32]scanStageEstimate
+	logMisestimates      bool
 
 	// isTenantExplainAnalyze is used to indicate that network egress should be
 	// collected in order to estimate RU consumption for a tenant that is running
@@ -1191,6 +1192,8 @@ type DistSQLReceiver struct {
 }
 
 var _ metadataForwarder = &DistSQLReceiver{}
+var _ execinfra.RowReceiver = &DistSQLReceiver{}
+var _ execinfra.BatchReceiver = &DistSQLReceiver{}
 
 // rowResultWriter is a subset of CommandResult to be used with the
 // DistSQLReceiver. It's implemented by RowResultWriter.
@@ -1405,7 +1408,7 @@ func (c *CallbackResultWriter) Err() error {
 type scanStageEstimate struct {
 	estimatedRowCount uint64
 	statsCreatedAt    time.Time
-	tableID           descpb.ID
+	tableDesc         catalog.TableDescriptor
 	indexName         string
 
 	rowsRead uint64
@@ -1414,7 +1417,9 @@ type scanStageEstimate struct {
 var misestimateLogLimiter = log.Every(10 * time.Second)
 
 func (s *scanStageEstimate) logMisestimate(ctx context.Context, planner *planner) {
-	tn, err := planner.GetQualifiedTableNameByID(ctx, int64(s.tableID), tree.ResolveAnyTableKind)
+	// TODO(yuzefovich): we have the table descriptor, so we can probably
+	// simplify this.
+	tn, err := planner.GetQualifiedTableNameByID(ctx, int64(s.tableDesc.GetID()), tree.ResolveAnyTableKind)
 	if err != nil {
 		return
 	}
@@ -1432,16 +1437,13 @@ func (s *scanStageEstimate) logMisestimate(ctx context.Context, planner *planner
 		event.NanosSinceStatsCollected = nanosSinceStats
 
 		if estimatedStaleness, err :=
-			planner.ExecCfg().StatsRefresher.EstimateStaleness(ctx, s.tableID); err == nil {
+			planner.ExecCfg().StatsRefresher.EstimateStaleness(ctx, s.tableDesc); err == nil {
 			event.EstimatedStaleness = estimatedStaleness
 		}
 	}
 
 	log.StructuredEvent(ctx, severity.WARNING, event)
 }
-
-var _ execinfra.RowReceiver = &DistSQLReceiver{}
-var _ execinfra.BatchReceiver = &DistSQLReceiver{}
 
 var receiverSyncPool = sync.Pool{
 	New: func() interface{} {
@@ -1930,32 +1932,68 @@ func (r *DistSQLReceiver) ProducerDone() {
 	r.closed = true
 }
 
-func (r *DistSQLReceiver) makeScanEstimates(physPlan *PhysicalPlan, st *cluster.Settings) {
-	if !execinfra.LogScanRowCountMisestimate.Get(&st.SV) {
+// logScanRowCountMisestimate controls whether we log a warning when the
+// actual row count observed by a scan differs significantly from the optimizer
+// estimate.
+var logScanRowCountMisestimate = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.log.scan_row_count_misestimate.enabled",
+	"when set to true, log a warning when a scan's actual row count differs "+
+		"significantly from the optimizer's estimate",
+	false,
+	settings.WithPublic,
+)
+
+func (r *DistSQLReceiver) makeScanEstimates(
+	ctx context.Context, planner *planner, physPlan *PhysicalPlan, st *cluster.Settings,
+) {
+	if planner.SessionData().Internal {
+		// Internal queries should only touch the system tables which we exempt
+		// from the scan estimates.
+		return
+	}
+	r.logMisestimates = logScanRowCountMisestimate.Get(&st.SV)
+	if !r.logMisestimates {
 		return
 	}
 
 	for _, p := range physPlan.Processors {
-		if p.Spec.Core.TableReader == nil {
+		core := p.Spec.Core.TableReader
+		if core == nil {
 			continue
 		}
 		stageID := p.Spec.StageID
-		if _, exists := r.scanStageEstimateMap[stageID]; !exists {
-			r.scanStageEstimateMap[stageID] = scanStageEstimate{
-				estimatedRowCount: p.Spec.EstimatedRowCount,
-				statsCreatedAt:    p.Spec.StatsCreatedAt,
-				tableID:           p.Spec.Core.TableReader.FetchSpec.TableID,
-				indexName:         p.Spec.Core.TableReader.FetchSpec.IndexName,
-			}
+		if _, exists := r.scanStageEstimateMap[stageID]; exists {
+			continue
+		}
+		tableID := core.FetchSpec.TableID
+		tableDesc, err := planner.LookupTableByID(ctx, tableID)
+		if err != nil {
+			continue
+		}
+		// Exempt the following:
+		// - system tables since we hope to have the internal queries touching
+		//   them to be resilient / agnostic to table stats and the users
+		//   shouldn't be touching the system tables.
+		// - virtual tables and views since we cannot collect stats on them.
+		if catalog.IsSystemDescriptor(tableDesc) || tableDesc.IsVirtualTable() || tableDesc.IsView() {
+			continue
+		}
+		r.scanStageEstimateMap[stageID] = scanStageEstimate{
+			estimatedRowCount: p.Spec.EstimatedRowCount,
+			statsCreatedAt:    p.Spec.StatsCreatedAt,
+			tableDesc:         tableDesc,
+			indexName:         core.FetchSpec.IndexName,
 		}
 	}
 }
 
-func (r *DistSQLReceiver) maybeLogMisestimates(ctx context.Context, planner *planner) {
-	if !execinfra.LogScanRowCountMisestimate.Get(&planner.ExecCfg().Settings.SV) {
+// TODO(yuzefovich): consider whether we want to handle misestimates for
+// postqueries too.
+func (r *DistSQLReceiver) handleMisestimates(ctx context.Context, planner *planner) {
+	if !r.logMisestimates {
 		return
 	}
-
 	checkedLimiter := false
 	for _, s := range r.scanStageEstimateMap {
 		actualRowCount := s.rowsRead
@@ -1972,18 +2010,17 @@ func (r *DistSQLReceiver) maybeLogMisestimates(ctx context.Context, planner *pla
 		if !inaccurateEstimate {
 			continue
 		}
-		if isSystemTable, err := planner.IsSystemTable(ctx, int64(s.tableID)); err != nil || isSystemTable {
-			continue
-		}
 
-		// Log all or none of the misestimated scans in the query.
-		if !checkedLimiter {
-			if !misestimateLogLimiter.ShouldLog() {
-				return
+		if r.logMisestimates {
+			if !checkedLimiter {
+				// Log all or none of the misestimated scans in the query.
+				if !misestimateLogLimiter.ShouldLog() {
+					return
+				}
+				checkedLimiter = true
 			}
-			checkedLimiter = true
+			s.logMisestimate(ctx, planner)
 		}
-		s.logMisestimate(ctx, planner)
 	}
 }
 
@@ -2179,7 +2216,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	// receiver, and use it and serialize the results of the subquery. The type
 	// of the results stored in the container depends on the type of the subquery.
 	subqueryRecv := recv.clone()
-	subqueryRecv.makeScanEstimates(subqueryPhysPlan, dsp.st)
+	subqueryRecv.makeScanEstimates(ctx, planner, subqueryPhysPlan, dsp.st)
 	defer subqueryRecv.Release()
 	defer recv.stats.add(&subqueryRecv.stats)
 	var typs []*types.T
@@ -2305,7 +2342,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		// with many duplicate elements.
 		subqueryResultMemAcc.Shrink(ctx, alreadyAccountedFor-actualSize)
 	}
-	subqueryRecv.maybeLogMisestimates(ctx, planner)
+	subqueryRecv.handleMisestimates(ctx, planner)
 	return nil
 }
 
@@ -2353,7 +2390,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	} else {
 		finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 		recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
-		recv.makeScanEstimates(physPlan, dsp.st)
+		recv.makeScanEstimates(ctx, planCtx.planner, physPlan, dsp.st)
 		dsp.Run(ctx, planCtx, txn, physPlan, recv, &extEvalCtx.Context, finishedSetupFn)
 	}
 	if planCtx.isLocal {
@@ -2426,7 +2463,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		}
 		finalizePlanWithRowCount(ctx, localPlanCtx, localPhysPlan, localPlanCtx.planner.curPlan.mainRowCount)
 		recv.expectedRowsRead = int64(localPhysPlan.TotalEstimatedScannedRows)
-		recv.makeScanEstimates(localPhysPlan, dsp.st)
+		recv.makeScanEstimates(ctx, localPlanCtx.planner, localPhysPlan, dsp.st)
 		// We already called finishedSetupFn in the previous call to Run, since we
 		// only got here if we got a distributed error, not an error during setup.
 		dsp.Run(ctx, localPlanCtx, txn, localPhysPlan, recv, &extEvalCtx.Context, nil /* finishedSetupFn */)
