@@ -78,7 +78,7 @@ input:
    +zone=us-west-a
  lease-preferences:
    +region=us-west,+rack=10
-err=invalid mix of constraints
+err=cannot have zero-replica constraints mixed with non-zero-replica constraints
 
 # Replica constraints and voter constraints are fleshed out by adding the
 # empty conjunctions.
