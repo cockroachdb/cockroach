@@ -577,14 +577,10 @@ type voterConstraintsAndAdditionalInfo struct {
 	additionalReplicas int32
 }
 
-var voterConstraints []voterConstraintsAndAdditionalInfo
-
 type allReplicaConstraintsInfo struct {
 	remainingReplicas int32
 	newVoterIndex     int
 }
-
-var allReplicaConstraints []allReplicaConstraintsInfo
 
 func (nct *normalizedConstraintsContext) allocFromAllToVoterConstraints(voterIndex int, allIndex int) {
 	remainingAll := nct.allReplicaConstraints[allIndex].remainingReplicas
@@ -598,6 +594,48 @@ func (nct *normalizedConstraintsContext) allocFromAllToVoterConstraints(voterInd
 		nct.voterConstraints[voterIndex].numReplicas += toAdd
 		nct.allReplicaConstraints[allIndex].remainingReplicas -= toAdd
 	}
+}
+
+// getOrCreateNarrowVoterConstraint returns the index of a narrower voter
+// constraint derived from the all-replica constraint at allIndex. If one
+// doesn't exist yet, it creates it.
+func (nct *normalizedConstraintsContext) getOrCreateNarrowVoterConstraint(allIndex int) int {
+	newVoterIndex := nct.allReplicaConstraints[allIndex].newVoterIndex
+	if newVoterIndex == -1 {
+		// We haven't yet created a narrower voter constraint for this.
+		newVoterIndex = len(nct.voterConstraints)
+		nct.allReplicaConstraints[allIndex].newVoterIndex = newVoterIndex
+		nct.voterConstraints = append(nct.voterConstraints, voterConstraintsAndAdditionalInfo{
+			internedConstraintsConjunction: internedConstraintsConjunction{
+				numReplicas: 0,
+				constraints: nct.conf.constraints[allIndex].constraints,
+			},
+			additionalReplicas: 0,
+		})
+	}
+	return newVoterIndex
+}
+
+// tryAllocOneReplicaWithNarrowing attempts to satisfy 1 voter replica by
+// creating or using a narrower voter constraint derived from an all-replica
+// constraint. This is used for load-balancing across multiple all-replica
+// constraints. Returns true if a replica was allocated.
+func (nct *normalizedConstraintsContext) tryAllocOneReplicaWithNarrowing(
+	voterIndex int, allIndex int,
+) bool {
+	neededVoterReplicas := nct.conf.voterConstraints[voterIndex].numReplicas -
+		nct.voterConstraints[voterIndex].numReplicas -
+		nct.voterConstraints[voterIndex].additionalReplicas
+	remainingAll := nct.allReplicaConstraints[allIndex].remainingReplicas
+	if neededVoterReplicas <= 0 || remainingAll <= 0 {
+		return false
+	}
+	// Satisfy 1 replica by transferring from all-replica to a narrower voter constraint.
+	nct.voterConstraints[voterIndex].additionalReplicas++
+	nct.allReplicaConstraints[allIndex].remainingReplicas--
+	newVoterIndex := nct.getOrCreateNarrowVoterConstraint(allIndex)
+	nct.voterConstraints[newVoterIndex].numReplicas++
+	return true
 }
 
 func makeNormalizedConstraintsContext(conf *normalizedSpanConfig) *normalizedConstraintsContext {
@@ -718,28 +756,7 @@ func (conf *normalizedSpanConfig) normalizeVoterConstraints() error {
 		added := false
 		for i := index; i < len(rels) && rels[i].voterAndAllRel == conjStrictSuperset; i++ {
 			rel := rels[i]
-			remainingAll := allReplicaConstraints[rel.allIndex].remainingReplicas
-			neededVoterReplicas := conf.voterConstraints[rel.voterIndex].numReplicas -
-				voterConstraints[rel.voterIndex].numReplicas -
-				voterConstraints[rel.voterIndex].additionalReplicas
-			if neededVoterReplicas > 0 && remainingAll > 0 {
-				// Satisfy 1 replica.
-				voterConstraints[rel.voterIndex].additionalReplicas++
-				allReplicaConstraints[rel.allIndex].remainingReplicas--
-				newVoterIndex := allReplicaConstraints[rel.allIndex].newVoterIndex
-				if newVoterIndex == -1 {
-					// We haven't yet created a narrower voter constraint for this.
-					newVoterIndex = len(voterConstraints)
-					allReplicaConstraints[rel.allIndex].newVoterIndex = newVoterIndex
-					voterConstraints = append(voterConstraints, voterConstraintsAndAdditionalInfo{
-						internedConstraintsConjunction: internedConstraintsConjunction{
-							numReplicas: 0,
-							constraints: conf.constraints[rel.allIndex].constraints,
-						},
-						additionalReplicas: 0,
-					})
-				}
-				voterConstraints[newVoterIndex].numReplicas++
+			if nct.tryAllocOneReplicaWithNarrowing(rel.voterIndex, rel.allIndex) {
 				added = true
 			}
 		}
@@ -749,7 +766,7 @@ func (conf *normalizedSpanConfig) normalizeVoterConstraints() error {
 	}
 	for i := range conf.voterConstraints {
 		neededReplicas := conf.voterConstraints[i].numReplicas
-		actualReplicas := voterConstraints[i].numReplicas + voterConstraints[i].additionalReplicas
+		actualReplicas := nct.voterConstraints[i].numReplicas + nct.voterConstraints[i].additionalReplicas
 		if actualReplicas > neededReplicas {
 			panic("code bug")
 		}
@@ -757,22 +774,22 @@ func (conf *normalizedSpanConfig) normalizeVoterConstraints() error {
 			err = errors.Errorf("could not satisfy all voter constraints due to " +
 				"non-intersecting conjunctions in voter and all replica constraints")
 			// Just force the satisfaction.
-			voterConstraints[i].numReplicas += neededReplicas - actualReplicas
+			nct.voterConstraints[i].numReplicas += neededReplicas - actualReplicas
 		}
 	}
-	n := len(voterConstraints) - 1
+	n := len(nct.voterConstraints) - 1
 	if emptyVoterConstraintIndex >= 0 && emptyVoterConstraintIndex < n {
 		// Move it to the end, since it is the biggest set.
-		voterConstraints[emptyVoterConstraintIndex], voterConstraints[n] =
-			voterConstraints[n], voterConstraints[emptyVoterConstraintIndex]
+		nct.voterConstraints[emptyVoterConstraintIndex], nct.voterConstraints[n] =
+			nct.voterConstraints[n], nct.voterConstraints[emptyVoterConstraintIndex]
 	}
 	var vc []internedConstraintsConjunction
-	for i := range voterConstraints {
-		if voterConstraints[i].numReplicas > 0 {
-			vc = append(vc, voterConstraints[i].internedConstraintsConjunction)
+	for i := range nct.voterConstraints {
+		if nct.voterConstraints[i].numReplicas > 0 {
+			vc = append(vc, nct.voterConstraints[i].internedConstraintsConjunction)
 		}
 	}
-	conf.voterConstraints = vc
+	nct.conf.voterConstraints = vc
 	return err
 }
 
