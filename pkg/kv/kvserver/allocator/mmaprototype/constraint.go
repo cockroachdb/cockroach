@@ -389,20 +389,17 @@ func makeNormalizedSpanConfig(
 func normalizeConstraints(
 	constraints []roachpb.ConstraintsConjunction, numReplicas int32, interner *stringInterner,
 ) ([]internedConstraintsConjunction, error) {
-	var nc []roachpb.ConstraintsConjunction
 	haveZero := false
 	sumReplicas := int32(0)
 
+	var zrc roachpb.ConstraintsConjunction
 	// Combine zero-replica constraints into a single conjunction on nc[0] if
 	// there are any.
 	for i := range constraints {
 		if constraints[i].NumReplicas == 0 {
 			haveZero = true
-			if len(nc) == 0 {
-				nc = append(nc, roachpb.ConstraintsConjunction{})
-			}
 			// Conjunction of conjunctions, since they all must be satisfied.
-			nc[0].Constraints = append(nc[0].Constraints, constraints[i].Constraints...)
+			zrc.Constraints = append(zrc.Constraints, constraints[i].Constraints...)
 		} else {
 			sumReplicas += constraints[i].NumReplicas
 		}
@@ -411,7 +408,7 @@ func normalizeConstraints(
 	// Validate that zero-replica constraints appear only if all conjunctions
 	// are zero-replica.
 	if haveZero && sumReplicas > 0 {
-		return nil, errors.Errorf("invalid mix of constraints")
+		return nil, errors.Errorf("cannot have zero-replica constraints mixed with non-zero-replica constraints")
 	}
 
 	// Validate that sum of non-zero numReplicas of constraints ≤ the given
@@ -423,32 +420,35 @@ func normalizeConstraints(
 	// After combining zero-replica constraints, set the constraint replica
 	// count to numReplicas parameter.
 	if haveZero {
-		nc[0].NumReplicas = numReplicas
-		if len(nc) != 1 {
-			panic("programming error: should only have one zero-replica conjunction")
-		}
+		return []internedConstraintsConjunction{
+			{
+				numReplicas: numReplicas,
+				constraints: interner.internConstraintsConj(zrc.Constraints),
+			},
+		}, nil
 	} else {
-		nc = append(nc, constraints...)
+		// Calculate total capacity needed (original + possible synthetic
+		// constraint).
+		capacity := len(constraints) + 1
+		rv := make([]internedConstraintsConjunction, 0, capacity)
+		// Intern existing constraints.
+		for i := range constraints {
+			rv = append(rv, internedConstraintsConjunction{
+				numReplicas: constraints[i].NumReplicas,
+				constraints: interner.internConstraintsConj(constraints[i].Constraints),
+			})
+		}
 		// If the sum of non-zero numReplicas of constraints < numReplicas, add
 		// a synthesized empty constraint conjunction with the difference as the
 		// NumReplicas. These represent the unconstrained replicas.
 		if sumReplicas < numReplicas {
-			cc := roachpb.ConstraintsConjunction{
-				NumReplicas: numReplicas - sumReplicas,
-				Constraints: nil,
-			}
-			nc = append(nc, cc)
+			rv = append(rv, internedConstraintsConjunction{
+				numReplicas: numReplicas - sumReplicas,
+				constraints: interner.internConstraintsConj(nil),
+			})
 		}
+		return rv, nil
 	}
-	var rv []internedConstraintsConjunction
-	for i := range nc {
-		icc := internedConstraintsConjunction{
-			numReplicas: nc[i].NumReplicas,
-			constraints: interner.internConstraintsConj(nc[i].Constraints),
-		}
-		rv = append(rv, icc)
-	}
-	return rv, nil
 }
 
 // Structural normalization establishes relationships between every pair of
