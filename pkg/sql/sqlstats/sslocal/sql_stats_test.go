@@ -587,6 +587,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 
 		for _, txn := range simulatedTxns {
 			// Collect stats for the simulated transaction.
+			statsCollector.StartTransaction()
 			txnFingerprintIDHash := util.MakeFNV64()
 			for _, fingerprint := range txn.stmtFingerprints {
 				stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(fingerprint, false, "defaultdb")
