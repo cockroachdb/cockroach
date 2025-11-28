@@ -126,47 +126,11 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "create-descriptor":
-				startKey := dd.ScanArg[string](t, d, "start")
-				endKey := dd.ScanArg[string](t, d, "end")
-				replicaNodeIDs := dd.ScanArg[[]roachpb.NodeID](t, d, "replicas")
+				desc := tc.createRangeDesc(t, roachpb.RSpan{
+					Key:    roachpb.RKey(dd.ScanArg[string](t, d, "start")),
+					EndKey: roachpb.RKey(dd.ScanArg[string](t, d, "end")),
+				}, dd.ScanArg[[]roachpb.NodeID](t, d, "replicas"))
 
-				// The test is written from the perspective of n1/s1, so not having n1
-				// in this list should return an error.
-				require.True(t, slices.Contains(replicaNodeIDs, 1), "replica list must contain n1")
-
-				rangeID := tc.nextRangeID
-				tc.nextRangeID++
-				var internalReplicas []roachpb.ReplicaDescriptor
-				for i, id := range replicaNodeIDs {
-					internalReplicas = append(internalReplicas, roachpb.ReplicaDescriptor{
-						ReplicaID: roachpb.ReplicaID(i + 1),
-						NodeID:    id,
-						StoreID:   roachpb.StoreID(id),
-						Type:      roachpb.VOTER_FULL,
-					})
-				}
-				desc := roachpb.RangeDescriptor{
-					RangeID:          rangeID,
-					StartKey:         roachpb.RKey(startKey),
-					EndKey:           roachpb.RKey(endKey),
-					InternalReplicas: internalReplicas,
-					NextReplicaID:    roachpb.ReplicaID(len(internalReplicas) + 1),
-				}
-				require.True(t, desc.StartKey.Compare(desc.EndKey) < 0)
-
-				// Ranges are expected to be non-overlapping. Before creating a
-				// new one, sanity check that we're not violating this property
-				// in the test context.
-				for existingRangeID, existingRS := range tc.ranges {
-					existingDesc := existingRS.desc
-					require.False(t, desc.StartKey.Compare(existingDesc.EndKey) < 0 &&
-						existingDesc.StartKey.Compare(desc.EndKey) < 0,
-						"descriptor overlaps with existing range %d [%s,%s)",
-						existingRangeID, existingDesc.StartKey, existingDesc.EndKey)
-				}
-
-				rs := newRangeState(desc)
-				tc.ranges[rangeID] = rs
 				return fmt.Sprintf("created descriptor: %v", desc)
 
 			case "create-replica":
@@ -464,6 +428,46 @@ func (tc *testCtx) mutate(t *testing.T, write func(storage.Batch)) string {
 	// datadriven test driver. Until that TODO is addressed, we manually split
 	// things out here.
 	return strings.ReplaceAll(output, "\n\n", "\n")
+}
+
+// createRangeDesc creates a new RangeDescriptor for the given keys span and list
+// of replica locations, assigned to the next unused RangeID.
+func (tc *testCtx) createRangeDesc(
+	t *testing.T, span roachpb.RSpan, replicasOn []roachpb.NodeID,
+) roachpb.RangeDescriptor {
+	require.True(t, span.EndKey.Compare(span.Key) > 0)
+	require.True(t, slices.Contains(replicasOn, 1), "replica list must contain n1")
+
+	// Ranges are expected to be non-overlapping. Before creating a new one,
+	// sanity check that we're not violating this property in the test context.
+	for id, rs := range tc.ranges {
+		otherSpan := rs.desc.RSpan()
+		require.False(t,
+			span.Key.Compare(otherSpan.EndKey) < 0 &&
+				span.EndKey.Compare(otherSpan.Key) > 0,
+			"descriptor overlaps with existing range %d: %v", id, otherSpan,
+		)
+	}
+
+	desc := roachpb.RangeDescriptor{
+		RangeID:          tc.nextRangeID,
+		StartKey:         span.Key,
+		EndKey:           span.EndKey,
+		InternalReplicas: make([]roachpb.ReplicaDescriptor, len(replicasOn)),
+		NextReplicaID:    roachpb.ReplicaID(len(replicasOn) + 1),
+	}
+	tc.nextRangeID++
+	for i, id := range replicasOn {
+		desc.InternalReplicas[i] = roachpb.ReplicaDescriptor{
+			ReplicaID: roachpb.ReplicaID(i + 1),
+			NodeID:    id,
+			StoreID:   roachpb.StoreID(id),
+			Type:      roachpb.VOTER_FULL,
+		}
+	}
+
+	tc.ranges[desc.RangeID] = newRangeState(desc)
+	return desc
 }
 
 // newRangeState constructs a new rangeState for the supplied descriptor.
