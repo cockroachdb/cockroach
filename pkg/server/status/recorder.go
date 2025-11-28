@@ -451,18 +451,40 @@ func (mr *MetricsRecorder) GetTimeSeriesData(childMetrics bool) []tspb.TimeSerie
 		return nil
 	}
 
+	now := mr.clock.Now()
+	lastDataCount := atomic.LoadInt64(&mr.lastDataCount)
+	data := make([]tspb.TimeSeriesData, 0, lastDataCount)
+
 	if childMetrics {
 		if !ChildMetricsStorageEnabled.Get(&mr.settings.SV) {
 			return nil
 		}
-		return nil // TODO(jasonlmfong): to be implemented
+
+		// Record child metrics from app registry for system tenant only.
+		recorder := registryRecorder{
+			registry:       mr.mu.appRegistry,
+			format:         nodeTimeSeriesPrefix,
+			source:         mr.mu.desc.NodeID.String(),
+			timestampNanos: now.UnixNano(),
+		}
+		recorder.recordChangefeedChildMetrics(&data)
+
+		// Record child metrics from app-level registries for secondary tenants
+		for tenantID, r := range mr.mu.tenantRegistries {
+			tenantRecorder := registryRecorder{
+				registry:       r,
+				format:         nodeTimeSeriesPrefix,
+				source:         tsutil.MakeTenantSource(mr.mu.desc.NodeID.String(), tenantID.String()),
+				timestampNanos: now.UnixNano(),
+			}
+			tenantRecorder.recordChangefeedChildMetrics(&data)
+		}
+
+		atomic.CompareAndSwapInt64(&mr.lastDataCount, lastDataCount, int64(len(data)))
+		return data
 	}
 
-	lastDataCount := atomic.LoadInt64(&mr.lastDataCount)
-	data := make([]tspb.TimeSeriesData, 0, lastDataCount)
-
 	// Record time series from node-level registries.
-	now := mr.clock.Now()
 	recorder := registryRecorder{
 		registry:       mr.mu.nodeRegistry,
 		format:         nodeTimeSeriesPrefix,
@@ -901,6 +923,71 @@ func (rr registryRecorder) recordChild(
 					},
 				},
 			})
+		}
+		promIter.Each(m.Label, processChildMetric)
+	})
+}
+
+// recordChangefeedChildMetrics iterates through changefeed metrics in the registry and processes child metrics
+// for those that have TsdbRecordLabeled set to true in their metadata.
+// Records up to 1024 child metrics to prevent unbounded memory usage and performance issues.
+//
+// NB: Only available for Counter and Gauge metrics.
+func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesData) {
+	maxChildMetricsPerMetric := 1024
+
+	labels := rr.registry.GetLabels()
+	rr.registry.Each(func(name string, v interface{}) {
+		// Check if the metric has child collection enabled in its metadata
+		iterable, ok := v.(metric.Iterable)
+		if !ok {
+			// If we can't get metadata, skip child collection for safety
+			return
+		}
+		metadata := iterable.GetMetadata()
+		if !metadata.GetTsdbRecordLabeled() {
+			return // Skip this metric if child collection is not enabled
+		}
+		if metadata.Category != metric.Metadata_CHANGEFEEDS {
+			return
+		}
+
+		prom, ok := v.(metric.PrometheusExportable)
+		if !ok {
+			return
+		}
+		promIter, ok := v.(metric.PrometheusIterable)
+		if !ok {
+			return
+		}
+		m := prom.ToPrometheusMetric()
+		m.Label = append(labels, prom.GetLabels(false /* useStaticLabels */)...)
+
+		var childMetricsCount int
+		processChildMetric := func(childMetric *prometheusgo.Metric) {
+			if childMetricsCount >= maxChildMetricsPerMetric {
+				return // Stop processing once we hit the limit
+			}
+
+			var value float64
+			if childMetric.Gauge != nil {
+				value = *childMetric.Gauge.Value
+			} else if childMetric.Counter != nil {
+				value = *childMetric.Counter.Value
+			} else {
+				return
+			}
+			*dest = append(*dest, tspb.TimeSeriesData{
+				Name:   metric.EncodeLabeledName(rr.format, prom.GetName(false /* useStaticLabels */), childMetric.Label),
+				Source: rr.source,
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: rr.timestampNanos,
+						Value:          value,
+					},
+				},
+			})
+			childMetricsCount++
 		}
 		promIter.Each(m.Label, processChildMetric)
 	})

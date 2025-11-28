@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -79,7 +80,7 @@ func NewRegistry() *Registry {
 func (r *Registry) AddLabel(name string, value interface{}) {
 	r.Lock()
 	defer r.Unlock()
-	r.labels = append(r.labels, labelPair{name: exportedLabel(name), value: value})
+	r.labels = append(r.labels, labelPair{name: ExportedLabel(name), value: value})
 	r.computedLabels = append(r.computedLabels, &prometheusgo.LabelPair{})
 }
 
@@ -288,9 +289,47 @@ func ExportedName(name string) string {
 	return prometheusNameReplaceRE.ReplaceAllString(name, "_")
 }
 
-// exportedLabel takes a metric name and generates a valid prometheus name.
-func exportedLabel(name string) string {
+// ExportedLabel takes a metric label and generates a valid prometheus label name.
+func ExportedLabel(name string) string {
 	return prometheusLabelReplaceRE.ReplaceAllString(name, "_")
+}
+
+// EncodeLabeledName formats a metric name with labels in Prometheus format.
+// The labels are sanitized, sorted by key, and encoded as key="value" pairs
+// within curly braces. Example: metric_name{label1="value1",label2="value2"}
+func EncodeLabeledName(format string, name string, labels []*prometheusgo.LabelPair) string {
+	if len(labels) == 0 {
+		return fmt.Sprintf(format, name)
+	}
+
+	// Sanitize and sort labels
+	type labelPair struct {
+		key   string
+		value string
+	}
+	sanitizedLabels := make([]labelPair, len(labels))
+	for i, label := range labels {
+		sanitizedLabels[i].key = ExportedLabel(label.GetName())
+		sanitizedLabels[i].value = label.GetValue()
+	}
+
+	// Sort by key for consistent ordering
+	sort.Slice(sanitizedLabels, func(i, j int) bool {
+		return sanitizedLabels[i].key < sanitizedLabels[j].key
+	})
+
+	// Build labels suffix
+	var labelsSuffix strings.Builder
+	labelsSuffix.WriteByte('{')
+	for i, label := range sanitizedLabels {
+		if i > 0 {
+			labelsSuffix.WriteByte(',')
+		}
+		fmt.Fprintf(&labelsSuffix, "%s=\"%s\"", label.key, label.value)
+	}
+	labelsSuffix.WriteByte('}')
+
+	return fmt.Sprintf(format, name+labelsSuffix.String())
 }
 
 var panicHandler = log.Dev.Fatalf
