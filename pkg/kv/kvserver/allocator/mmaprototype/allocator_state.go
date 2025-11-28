@@ -796,10 +796,10 @@ func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
 // - Need diversity change for each candidate.
 //
 // The first 3 bullets are encapsulated in the helper function
-// computeCandidatesForRange. It works for both replica additions and
+// computeCandidatesForReplicaTransfer. It works for both replica additions and
 // rebalancing.
 //
-// For the last bullet (diversity), the caller of computeCandidatesForRange
+// For the last bullet (diversity), the caller of computeCandidatesForReplicaTransfer
 // needs to populate candidateInfo.diversityScore for each candidate in
 // candidateSet. It does so via diversityScoringMemo. Then the (loadSummary,
 // diversityScore) pair can be used to order candidates for attempts to add.
@@ -827,37 +827,118 @@ func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
 
 // loadSheddingStore is only specified if this candidate computation is
 // happening because of overload.
-func (cs *clusterState) computeCandidatesForRange(
+//
+// postMeansExclusions are filtered post-means: their load is included in the
+// mean (they're viable locations in principle) but they're not candidates for
+// this specific transfer (the classic case: already have a replica).
+func (cs *clusterState) computeCandidatesForReplicaTransfer(
 	ctx context.Context,
-	expr constraintsDisj,
-	storesToExclude storeSet,
+	conj constraintsConj,
+	postMeansExclusions storeSet,
 	loadSheddingStore roachpb.StoreID,
 ) (_ candidateSet, sheddingSLS storeLoadSummary) {
-	means := cs.meansMemo.getMeans(expr)
-	if loadSheddingStore > 0 {
-		sheddingSS := cs.stores[loadSheddingStore]
-		sheddingSLS = cs.meansMemo.getStoreLoadSummary(ctx, means, loadSheddingStore, sheddingSS.loadSeqNum)
-		if sheddingSLS.sls <= loadNoChange && sheddingSLS.nls <= loadNoChange {
-			// In this set of stores, this store no longer looks overloaded.
-			return candidateSet{}, sheddingSLS
-		}
+	cs.scratchDisj[0] = conj
+	means := cs.meansMemo.getMeans(cs.scratchDisj[:1])
+
+	// Pre-means filtering: copy to scratch, then filter in place.
+	// Filter out stores that are unhealthy or have non-OK replica disposition.
+	cs.scratchStoreSet = append(cs.scratchStoreSet[:0], means.stores...)
+	filteredStores := retainReadyReplicaTargetStoresOnly(ctx, cs.scratchStoreSet, cs.stores, loadSheddingStore)
+
+	// Determine which means to use.
+	//
+	// TODO(tbg): unit testing.
+	var effectiveMeans *meansLoad
+	if len(filteredStores) == len(means.stores) {
+		// Common case: nothing was filtered, use cached means.
+		effectiveMeans = &means.meansLoad
+	} else if len(filteredStores) == 0 {
+		// No viable candidates at all.
+		return candidateSet{}, sheddingSLS
+	} else {
+		// Some stores were filtered; recompute means over filtered set.
+		cs.scratchMeans = computeMeansForStoreSet(
+			cs, filteredStores, cs.meansMemo.scratchNodes, cs.meansMemo.scratchStores)
+		effectiveMeans = &cs.scratchMeans
+		log.KvDistribution.VEventf(ctx, 2,
+			"pre-means filtered %d stores → remaining %v, means: store=%v node=%v",
+			len(means.stores)-len(filteredStores), filteredStores,
+			effectiveMeans.storeLoad, effectiveMeans.nodeLoad)
 	}
-	// We only filter out stores that are not fdOK. The rest of the filtering
-	// happens later.
+
+	sheddingSLS = cs.computeLoadSummary(ctx, loadSheddingStore, &effectiveMeans.storeLoad, &effectiveMeans.nodeLoad)
+	if sheddingSLS.sls <= loadNoChange && sheddingSLS.nls <= loadNoChange {
+		// In this set of stores, this store no longer looks overloaded.
+		return candidateSet{}, sheddingSLS
+	}
+
 	var cset candidateSet
-	for _, storeID := range means.stores {
-		if storesToExclude.contains(storeID) {
+	for _, storeID := range filteredStores {
+		if postMeansExclusions.contains(storeID) {
+			// This store's load is included in the mean, but it's not a viable
+			// target for this specific transfer (e.g. it already has a replica,
+			// or it's the store we're shedding load from).
 			continue
 		}
-		ss := cs.stores[storeID]
-		csls := cs.meansMemo.getStoreLoadSummary(ctx, means, storeID, ss.loadSeqNum)
+		csls := cs.computeLoadSummary(ctx, storeID, &effectiveMeans.storeLoad, &effectiveMeans.nodeLoad)
 		cset.candidates = append(cset.candidates, candidateInfo{
 			StoreID:          storeID,
 			storeLoadSummary: csls,
 		})
 	}
-	cset.means = &means.meansLoad
+	cset.means = effectiveMeans
 	return cset, sheddingSLS
+}
+
+// retainReadyReplicaTargetStoresOnly filters the input set to only those stores
+// that are ready to accept a replica. A store is not ready if it has a non-OK
+// non-OK replica disposition.
+//
+// The loadSheddingStore bypasses the disposition check since it already has the
+// replica - its load should be in the mean regardless of its disposition.
+//
+// TODO(tbg): By the same logic, we need to consider ALL stores with replicas of
+// this range for bypassing the disposition check. But there is a semantic
+// mismatch: disposition is about accepting NEW work, but these stores already
+// have the load. But if a store is unhealthy - it might even be down - we don't
+// actually know its true load, so we should likely filter it. This suggests that
+// health *should* play a role here, which is counter to what we originally envisioned.
+// TODO(tbg): as our thinking evolves, the corresponding logic for lease transfers
+// also needs an update.
+//
+// The input storeSet is mutated (and returned as the result).
+func retainReadyReplicaTargetStoresOnly(
+	ctx context.Context,
+	in storeSet,
+	stores map[roachpb.StoreID]*storeState,
+	loadSheddingStore roachpb.StoreID,
+) storeSet {
+	out := in[:0]
+	for _, storeID := range in {
+		if storeID == loadSheddingStore {
+			// The shedding store bypasses this check - it already has the replica,
+			// so its disposition (about accepting NEW replicas) is irrelevant for
+			// mean computation.
+			// See the TODO above for open questions on whether this ought to be
+			// extended to all stores with replicas.
+			out = append(out, storeID)
+			continue
+		}
+		ss := stores[storeID]
+		switch {
+		case ss.status.Disposition.Replica != ReplicaDispositionOK:
+			log.KvDistribution.VEventf(ctx, 2, "skipping s%d for replica transfer: replica disposition %v (health %v)", storeID, ss.status.Disposition.Replica, ss.status.Health)
+		case highDiskSpaceUtilization(ss.reportedLoad[ByteSize], ss.capacity[ByteSize]):
+			// TODO(tbg): remove this from mma and just let the caller set this
+			// disposition based on the following cluster settings:
+			// - kv.allocator.max_disk_utilization_threshold
+			// - kv.allocator.rebalance_to_max_disk_utilization_threshold
+			log.KvDistribution.VEventf(ctx, 2, "skipping s%d for replica transfer: high disk utilization (health %v)", storeID, ss.status.Health)
+		default:
+			out = append(out, storeID)
+		}
+	}
+	return out
 }
 
 // Diversity scoring is very amenable to caching, since the set of unique
