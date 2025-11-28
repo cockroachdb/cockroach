@@ -450,7 +450,7 @@ func DialRPCClient[C any](
 	drpcClientFn func(drpc.Conn) C,
 ) (C, error) {
 	return rpcbase.DialRPCClient(nd, ctx, nodeID, class, grpcClientFn,
-		drpcClientFn, nd.rpcContext.Settings)
+		drpcClientFn, nd.rpcContext.UseDRPC)
 }
 
 // DialRPCClientNoBreaker is like DialRPCClient, but will not check the
@@ -464,5 +464,5 @@ func DialRPCClientNoBreaker[C any](
 	drpcClientFn func(drpc.Conn) C,
 ) (C, error) {
 	return rpcbase.DialRPCClientNoBreaker(nd, ctx, nodeID, class, grpcClientFn,
-		drpcClientFn, nd.rpcContext.Settings)
+		drpcClientFn, nd.rpcContext.UseDRPC)
 }
