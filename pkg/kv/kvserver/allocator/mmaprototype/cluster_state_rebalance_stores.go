@@ -245,6 +245,43 @@ func (re *rebalanceEnv) rebalanceStores(
 	return re.changes
 }
 
+// rebalanceStore attempts to shed load from a single overloaded store via lease
+// transfers and/or replica rebalances.
+//
+// # Candidate Filtering Strategy
+//
+// When selecting rebalance targets, we filter candidates in two phases. The key
+// consideration is which stores should be included when computing load means,
+// since the means determine whether a store looks "underloaded" (good target)
+// or "overloaded" (bad target).
+//
+// **Pre-means filtering** (stores excluded from mean computation):
+//   - Dead or unhealthy stores: not viable targets, so their load is irrelevant
+//     to "among viable targets, who is underloaded?"
+//   - Stores with non-OK disposition (refusing/shedding): same reasoning.
+//     Disposition should be the single source of truth for "can this store
+//     accept work?" - whether due to drain, maintenance, disk capacity, or any
+//     other reason.
+//
+// **Post-means filtering** (stores included in means but filtered as targets):
+//
+//	These are viable "in principle", but not all are "advisable" targets:
+//	- targets ending up with the target worse off than the source could cause thrashing
+//	- pending changes involving a target reduce our confidence in our load arithmetic
+//
+// The distinction is: pre-means filtering removes stores that aren't viable
+// targets (their load is irrelevant to comparing viable candidates), while
+// post-means filtering removes targets that are viable but not advisable.
+//
+// TODO(tbg): the current highDiskSpaceUtilization check is a post-means filter, but
+// ideally disk capacity constraints would be expressed via disposition and
+// handled pre-means.
+//
+// TODO(tbg): The above describes the intended design. Lease transfers follow this
+// pattern (see retainReadyLeaseTargetStoresOnly). Replica transfers are still
+// being cleaned up: they currently compute means over all constraint-matching
+// stores and filter only afterward, which is not intentional.
+// Tracking issue: https://github.com/cockroachdb/cockroach/pull/158373
 func (re *rebalanceEnv) rebalanceStore(
 	ctx context.Context, store sheddingStore, localStoreID roachpb.StoreID,
 ) {
