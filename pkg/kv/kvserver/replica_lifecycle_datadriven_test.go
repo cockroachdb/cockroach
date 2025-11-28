@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -136,13 +135,16 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 
 			case "create-replica":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				replicaID := dd.ScanArgOr[roachpb.ReplicaID](t, d, "replica-id", 0)
 				initialized := d.HasArg("initialized")
 
 				rs := tc.mustGetRangeState(t, rangeID)
-				if rs.replica != nil {
-					return errors.New("initialized replica already exists on n1/s1").Error()
+				require.Nil(t, rs.replica, "replica already exists on n1/s1")
+				repl := *rs.mustGetReplicaDescriptor(t, roachpb.NodeID(1))
+				if replicaID != 0 {
+					require.False(t, initialized, "custom ReplicaID not supported for initialized replicas")
+					repl.ReplicaID = replicaID
 				}
-				repl := rs.mustGetReplicaDescriptor(t, roachpb.NodeID(1))
 
 				output := tc.mutate(t, func(batch storage.Batch) {
 					if initialized {

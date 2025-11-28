@@ -1,0 +1,40 @@
+create-descriptor start=a end=d replicas=(1,2,3) replica-id=5
+----
+created descriptor: r1:{a-d} [(n1,s1):5, (n2,s2):6, (n3,s3):7, next=8, gen=0]
+
+create-replica range-id=1
+----
+created replica: (n1,s1):5
+Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:5 
+
+# Make the uninitialized replica vote.
+update-hard-state range-id=1 term=10 vote=2
+----
+HardState {Term:10 Vote:2 Commit:0 Lead:0 LeadEpoch:0}
+
+# Replica for r1 is uninitialized.
+print-range-state
+----
+range desc: r1:{a-d} [(n1,s1):5, (n2,s2):6, (n3,s3):7, next=8, gen=0]
+		replica (n1/s1): id=5 [uninitialized] HardState={Term:10,Vote:2,Commit:0}
+
+restart
+----
+ok
+
+# After restart, the uninitialized replica for r1 is not loaded.
+print-range-state
+----
+range desc: r1:{a-d} [(n1,s1):5, (n2,s2):6, (n3,s3):7, next=8, gen=0]
+
+# TODO(pav-kv): must not be allowed because there is already ReplicaID=5.
+create-replica range-id=1 replica-id=1
+----
+created replica: (n1,s1):1
+Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
+
+# TODO(pav-kv): the new replica must not inherit the old replica's HardState.
+print-range-state
+----
+range desc: r1:{a-d} [(n1,s1):5, (n2,s2):6, (n3,s3):7, next=8, gen=0]
+		replica (n1/s1): id=1 [uninitialized] HardState={Term:10,Vote:2,Commit:0}
