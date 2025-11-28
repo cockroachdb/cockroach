@@ -22,3 +22,14 @@ var LongLatchHoldThreshold = settings.RegisterDurationSetting(
 	"the threshold for logging long latch holds",
 	3*time.Second,
 )
+
+// SlowLatchRequestThreshold controls when we will log slow latch acquisition
+// attempts. When a latch acquisition has been waiting for this duration, a
+// warning is logged and the slow request metric is incremented.
+var SlowLatchRequestThreshold = settings.RegisterDurationSettingWithExplicitUnit(
+	settings.SystemOnly,
+	"kv.concurrency.slow_latch_request_duration",
+	"the threshold for logging slow latch acquisition attempts",
+	5*time.Second,
+	settings.DurationWithMinimum(10*time.Millisecond),
+)
