@@ -63,6 +63,12 @@ import (
 // Creates a replica on n1/s1 for the specified range ID. The created replica
 // may be initialized or uninitialized.
 //
+// update-hard-state range-id=<int> [term=<int>] [vote=<int>]
+// ----
+//
+//	Updates the specified fields of the existing replica's HardState. Other
+//	fields of the HardState are retained.
+//
 // create-split range-id=<int> split-key=<key>
 // ----
 //
@@ -165,6 +171,23 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				})
 
 				return fmt.Sprintf("created replica: %v\n%s", repl, output)
+
+			case "update-hard-state":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				rs := tc.mustGetRangeState(t, rangeID)
+				require.NotNil(t, rs.replica, "replica does not exist")
+
+				if term, upd := dd.ScanArgOpt[uint64](t, d, "term"); upd {
+					rs.replica.hs.Term = term
+				}
+				if vote, upd := dd.ScanArgOpt[raftpb.PeerID](t, d, "vote"); upd {
+					rs.replica.hs.Vote = vote
+				}
+
+				require.NoError(t, kvstorage.MakeStateLoader(rangeID).SetHardState(
+					ctx, tc.storage, rs.replica.hs,
+				))
+				return fmt.Sprintf("HardState %+v", rs.replica.hs)
 
 			case "create-split":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
