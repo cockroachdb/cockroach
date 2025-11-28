@@ -377,6 +377,11 @@ type replicaInfo struct {
 	lastIdx kvpb.RaftIndex
 }
 
+// initialized returns true iff the replica is initialized.
+func (r *replicaInfo) initialized() bool {
+	return r.hs.Commit > 0 // NB: or r.ts.Index > 0
+}
+
 // testCtx is a single test's context. It tracks the state of all ranges and any
 // intermediate steps when performing replica lifecycle events.
 type testCtx struct {
@@ -569,12 +574,16 @@ func (rs *rangeState) String() string {
 func (r *replicaInfo) String() string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("id=%s ", r.FullReplicaID.ReplicaID))
-	if r.hs == (raftpb.HardState{}) {
-		sb.WriteString("uninitialized")
-	} else {
-		sb.WriteString(fmt.Sprintf("HardState={Term:%d,Vote:%d,Commit:%d}", r.hs.Term, r.hs.Vote, r.hs.Commit))
-		sb.WriteString(fmt.Sprintf(" TruncatedState={Index:%d,Term:%d}", r.ts.Index, r.ts.Term))
-		sb.WriteString(fmt.Sprintf(" LastIdx=%d", r.lastIdx))
+	hs := fmt.Sprintf("HardState={Term:%d,Vote:%d,Commit:%d}", r.hs.Term, r.hs.Vote, r.hs.Commit)
+
+	if !r.initialized() {
+		sb.WriteString("[uninitialized] ")
+		sb.WriteString(hs)
+		return sb.String()
 	}
+
+	sb.WriteString(hs)
+	sb.WriteString(fmt.Sprintf(" TruncatedState={Index:%d,Term:%d}", r.ts.Index, r.ts.Term))
+	sb.WriteString(fmt.Sprintf(" LastIdx=%d", r.lastIdx))
 	return sb.String()
 }
