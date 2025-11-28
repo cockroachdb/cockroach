@@ -82,9 +82,12 @@ func TestHighCardinalityCounter(t *testing.T) {
 	r := metric.NewRegistry()
 	writePrometheusMetrics := WritePrometheusMetricsFunc(r)
 
-	c := NewHighCardinalityCounter(metric.Metadata{
-		Name: "foo_counter",
-	}, "database", "application_name")
+	c := NewHighCardinalityCounter(
+		metric.HighCardinalityMetricOptions{
+			Metadata: metric.Metadata{Name: "foo_counter"},
+		},
+		"database", "application_name",
+	)
 	c.mu.children = &UnorderedCacheWrapper{
 		cache: initialiseCacheStorageForTesting(),
 	}
@@ -144,6 +147,7 @@ func TestHighCardinalityCounter(t *testing.T) {
 }
 
 func initialiseCacheStorageForTesting() *cache.UnorderedCache {
+	const cacheSize = 10
 	return cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(size int, key, value interface{}) bool {
