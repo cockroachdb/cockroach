@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -121,6 +122,10 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	updateSSTManifests := func(newManifests []jobspb.IndexBackfillSSTManifest) {
 		progress.SSTManifests = sstManifestBuf.Append(newManifests)
 	}
+	mode, err := getIndexBackfillDistributedMergeMode(job)
+	if err != nil {
+		return err
+	}
 	updateFunc := func(
 		ctx context.Context, meta *execinfrapb.ProducerMetadata,
 	) error {
@@ -175,6 +180,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	// timestamp because other writing transactions have been writing at the
 	// appropriate timestamps in-between.
 	readAsOf := now
+	useDistributedMerge := mode == jobspb.IndexBackfillDistributedMergeMode_Enabled
 	run, retErr := ib.plan(
 		ctx,
 		descriptor,
@@ -184,6 +190,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		spansToDo,
 		progress.DestIndexIDs,
 		progress.SourceIndexID,
+		useDistributedMerge,
 		updateFunc,
 	)
 	if retErr != nil {
@@ -235,6 +242,7 @@ func (ib *IndexBackfillPlanner) plan(
 	sourceSpans []roachpb.Span,
 	indexesToBackfill []descpb.IndexID,
 	sourceIndexID descpb.IndexID,
+	useDistributedMerge bool,
 	callback func(_ context.Context, meta *execinfrapb.ProducerMetadata) error,
 ) (runFunc func(context.Context) error, _ error) {
 
@@ -258,8 +266,8 @@ func (ib *IndexBackfillPlanner) plan(
 			*td.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize,
 			indexesToBackfill, sourceIndexID,
 		)
-		if err := maybeEnableDistributedMergeIndexBackfill(ctx, ib.execCfg.Settings, ib.execCfg.NodeInfo.NodeID.SQLInstanceID(), &spec); err != nil {
-			return err
+		if useDistributedMerge {
+			backfill.EnableDistributedMergeIndexBackfillSink(ib.execCfg.NodeInfo.NodeID.SQLInstanceID(), &spec)
 		}
 		var err error
 		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, sourceSpans)
@@ -285,4 +293,16 @@ func (ib *IndexBackfillPlanner) plan(
 		ib.execCfg.DistSQLPlanner.Run(ctx, planCtx, nil, p, recv, evalCtxCopy, nil)
 		return cbw.Err()
 	}, nil
+}
+
+func getIndexBackfillDistributedMergeMode(
+	job *jobs.Job,
+) (jobspb.IndexBackfillDistributedMergeMode, error) {
+	payload := job.Payload()
+	details := payload.GetNewSchemaChange()
+	if details == nil {
+		return jobspb.IndexBackfillDistributedMergeMode_Disabled,
+			errors.AssertionFailedf("expected new schema change details on job %d", job.ID())
+	}
+	return details.DistributedMergeMode, nil
 }

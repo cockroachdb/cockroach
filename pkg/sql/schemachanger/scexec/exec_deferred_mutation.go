@@ -30,6 +30,7 @@ type deferredState struct {
 	indexesToSplitAndScatter     []indexesToSplitAndScatter
 	ttlScheduleMetadataUpdates   []ttlScheduleMetadataUpdate
 	gcJobs
+	distributedMergeMode jobspb.IndexBackfillDistributedMergeMode
 }
 
 type databaseRoleSettingToDelete struct {
@@ -103,6 +104,7 @@ func (s *deferredState) AddNewSchemaChangerJob(
 	if s.schemaChangerJob != nil {
 		return errors.AssertionFailedf("cannot create more than one new schema change job")
 	}
+	mode := s.distributedMergeMode
 	s.schemaChangerJob = MakeDeclarativeSchemaChangeJobRecord(
 		jobID,
 		stmts,
@@ -110,6 +112,7 @@ func (s *deferredState) AddNewSchemaChangerJob(
 		auth,
 		descriptorIDs,
 		runningStatus,
+		mode,
 	)
 	return nil
 }
@@ -130,6 +133,7 @@ func MakeDeclarativeSchemaChangeJobRecord(
 	auth scpb.Authorization,
 	descriptorIDs catalog.DescriptorIDSet,
 	runningStatus redact.RedactableString,
+	distributedMergeMode jobspb.IndexBackfillDistributedMergeMode,
 ) *jobs.Record {
 	stmtStrs := make([]string, len(stmts))
 	for i, stmt := range stmts {
@@ -149,7 +153,9 @@ func MakeDeclarativeSchemaChangeJobRecord(
 		Statements:    stmtStrs,
 		Username:      username.MakeSQLUsernameFromPreNormalizedString(auth.UserName),
 		DescriptorIDs: descriptorIDs.Ordered(),
-		Details:       jobspb.NewSchemaChangeDetails{},
+		Details: jobspb.NewSchemaChangeDetails{
+			DistributedMergeMode: distributedMergeMode,
+		},
 		Progress:      jobspb.NewSchemaChangeProgress{},
 		StatusMessage: jobs.StatusMessage(runningStatus),
 		NonCancelable: isNonCancelable,
