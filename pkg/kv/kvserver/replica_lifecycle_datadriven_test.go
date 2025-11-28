@@ -113,6 +113,12 @@ import (
 // Prints the current range state in the test context. By default, ranges are
 // sorted by range ID. If sort-keys is set to true, ranges are sorted by their
 // descriptor's start key instead.
+//
+// restart
+// ----
+//
+//	Simulates the node restart. It causes all uninitialized replicas to be
+//	forgotten because we don't load them on server startup.
 func TestReplicaLifecycleDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -349,6 +355,10 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				}
 				return sb.String()
 
+			case "restart":
+				tc.restart()
+				return "ok"
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
@@ -569,6 +579,16 @@ func (rs *rangeState) String() string {
 		sb.WriteString(fmt.Sprintf("\n		lease: %s", rs.lease))
 	}
 	return sb.String()
+}
+
+// restart imitates the node restart. It causes all uninitialized replicas to be
+// forgotten because we don't load them on server startup.
+func (tc *testCtx) restart() {
+	for _, rs := range tc.ranges {
+		if rs.replica != nil && !rs.replica.initialized() {
+			rs.replica = nil
+		}
+	}
 }
 
 func (r *replicaInfo) String() string {
