@@ -27,14 +27,13 @@ print-range-state
 ----
 range desc: r1:{a-d} [(n1,s1):5, (n2,s2):6, (n3,s3):7, next=8, gen=0]
 
-# TODO(pav-kv): must not be allowed because there is already ReplicaID=5.
+# ReplicaID is already destroyed, so this returns an error.
 create-replica range-id=1 replica-id=1
 ----
-created replica: (n1,s1):1
-Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
+raft group deleted
 
-# TODO(pav-kv): the new replica must not inherit the old replica's HardState.
+# The already existing newer replica state remains correct.
 print-range-state
 ----
 range desc: r1:{a-d} [(n1,s1):5, (n2,s2):6, (n3,s3):7, next=8, gen=0]
-		replica (n1/s1): id=1 [uninitialized] HardState={Term:10,Vote:2,Commit:0}
+		replica (n1/s1): id=5 [uninitialized] HardState={Term:10,Vote:2,Commit:0}
