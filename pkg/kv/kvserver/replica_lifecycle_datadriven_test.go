@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -158,6 +159,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					repl.ReplicaID = replicaID
 				}
 
+				var err error
 				output := tc.mutate(t, func(batch storage.Batch) {
 					if initialized {
 						require.NoError(t, kvstorage.WriteInitialRangeState(
@@ -165,13 +167,19 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 							rs.desc, repl.ReplicaID, rs.version,
 						))
 					} else {
-						require.NoError(t, kvstorage.CreateUninitializedReplica(
+						err = kvstorage.CreateUninitializedReplica(
 							ctx, kvstorage.TODOState(batch), batch, 1, /* StoreID */
 							roachpb.FullReplicaID{RangeID: rs.desc.RangeID, ReplicaID: repl.ReplicaID},
-						))
+						)
 					}
 					tc.updatePostReplicaCreateState(t, ctx, rs, batch)
 				})
+				// CreateUninitializedReplica can return an error if the replica is
+				// already destroyed.
+				if errors.HasType(err, &kvpb.RaftGroupDeletedError{}) {
+					return err.Error()
+				}
+				require.NoError(t, err)
 
 				return fmt.Sprintf("created replica: %v\n%s", repl, output)
 
