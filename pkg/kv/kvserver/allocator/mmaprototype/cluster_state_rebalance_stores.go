@@ -76,12 +76,13 @@ type rebalanceEnv struct {
 	// pass. Can be nil.
 	passObs *rebalancingPassMetricsAndLogger
 	// Scratch variables reused across iterations.
+	// TODO(tbg): these are a potential source of errors (imagine two nested
+	// calls using the same scratch variable). Just make a global variable
+	// that wraps a bunch of sync.Pools for the types we need.
 	scratch struct {
-		disj                    [1]constraintsConj
-		storesToExclude         storeSet
-		storesToExcludeForRange storeSet
-		nodes                   map[roachpb.NodeID]*NodeLoad
-		stores                  map[roachpb.StoreID]struct{}
+		postMeansExclusions storeSet
+		nodes               map[roachpb.NodeID]*NodeLoad
+		stores              map[roachpb.StoreID]struct{}
 	}
 }
 
@@ -429,22 +430,11 @@ func (re *rebalanceEnv) rebalanceReplicas(
 	localStoreID roachpb.StoreID,
 	ignoreLevel ignoreLevel,
 ) {
-	// If the node is cpu overloaded, or the store/node is not fdOK, exclude
-	// the other stores on this node from receiving replicas shed by this
-	// store.
-	excludeStoresOnNode := store.nls > overloadSlow
-	re.scratch.storesToExclude = re.scratch.storesToExclude[:0]
-	if excludeStoresOnNode {
-		nodeID := ss.NodeID
-		for _, storeID := range re.nodes[nodeID].stores {
-			re.scratch.storesToExclude.insert(storeID)
-		}
-		log.KvDistribution.VEventf(ctx, 2, "excluding all stores on n%d due to overload/fd status", nodeID)
-	} else {
-		// This store is excluded of course.
-		re.scratch.storesToExclude.insert(store.StoreID)
+	if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
+		re.now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
+		log.KvDistribution.VEventf(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
+		return
 	}
-
 	// Iterate over top-K ranges first and try to move them.
 	topKRanges := ss.adjusted.topKRanges[localStoreID]
 	n := topKRanges.len()
@@ -498,6 +488,8 @@ func (re *rebalanceEnv) rebalanceReplicas(
 				"rstate_replicas=%v rstate_constraints=%v",
 				store.StoreID, rangeID, rstate.pendingChanges, rstate.replicas, rstate.constraints))
 		}
+		// Get the constraint conjunction which will allow us to look up stores
+		// that could replace the shedding store.
 		var conj constraintsConj
 		var err error
 		if isVoter {
@@ -512,32 +504,43 @@ func (re *rebalanceEnv) rebalanceReplicas(
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: constraint violation needs fixing first: %v", rangeID, err)
 			continue
 		}
-		re.scratch.disj[0] = conj
-		re.scratch.storesToExcludeForRange = append(re.scratch.storesToExcludeForRange[:0], re.scratch.storesToExclude...)
-		// Also exclude all stores on nodes that have existing replicas.
+		// Build post-means exclusions: stores whose load is included in the mean
+		// (they're viable locations in principle) but aren't valid targets for
+		// this specific transfer.
+		//
+		// NB: to prevent placing replicas on multiple CRDB nodes sharing a
+		// host, we'd need to make changes here.
+		// See: https://github.com/cockroachdb/cockroach/issues/153863
+		re.scratch.postMeansExclusions = re.scratch.postMeansExclusions[:0]
+		existingReplicas := storeSet{} // TODO(tbg): avoid allocation
 		for _, replica := range rstate.replicas {
 			storeID := replica.StoreID
+			existingReplicas.insert(storeID)
 			if storeID == store.StoreID {
-				// We don't exclude other stores on this node, since we are allowed to
-				// transfer the range to them. If the node is overloaded or not fdOK,
-				// we have already excluded those stores above.
+				// Exclude the shedding store (we're moving away from it), but not
+				// other stores on its node (within-node rebalance is allowed).
+				re.scratch.postMeansExclusions.insert(storeID)
 				continue
 			}
+			// Exclude all stores on nodes with other existing replicas.
 			nodeID := re.stores[storeID].NodeID
 			for _, storeID := range re.nodes[nodeID].stores {
-				re.scratch.storesToExcludeForRange.insert(storeID)
+				re.scratch.postMeansExclusions.insert(storeID)
 			}
 		}
+
+		// Compute the candidates. These are already filtered down to only those stores
+		// that we'll actually be happy to transfer the range to.
+		// Note that existingReplicas is a subset of postMeansExclusions, so they'll
+		// be included in the mean, but are never considered as candidates.
+		//
 		// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
-		cands, ssSLS := re.computeCandidatesForRange(
-			ctx, re.scratch.disj[:], re.scratch.storesToExcludeForRange, store.StoreID, re.passObs)
+		cands, ssSLS := re.computeCandidatesForReplicaTransfer(ctx, conj, existingReplicas, re.scratch.postMeansExclusions, store.StoreID, re.passObs)
 		log.KvDistribution.VEventf(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
 			rangeID, store.StoreID, ss.adjusted.load)
-		if log.V(2) {
-			log.KvDistribution.Infof(ctx, "candidates are:")
-			for _, c := range cands.candidates {
-				log.KvDistribution.Infof(ctx, " s%d: %s", c.StoreID, c.storeLoadSummary)
-			}
+		log.KvDistribution.VEventf(ctx, 3, "candidates are:")
+		for _, c := range cands.candidates {
+			log.KvDistribution.VEventf(ctx, 3, " s%d: %s", c.StoreID, c.storeLoadSummary)
 		}
 
 		if len(cands.candidates) == 0 {
@@ -753,6 +756,8 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		// which is also in cands.
 
 		clear(re.scratch.nodes)
+		// NB: candsPL is not empty - it includes at least the current leaseholder
+		// and one additional candidate.
 		means := computeMeansForStoreSet(re, candsPL, re.scratch.nodes, re.scratch.stores)
 		sls := re.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
 		if sls.dimSummary[CPURate] < overloadSlow {
