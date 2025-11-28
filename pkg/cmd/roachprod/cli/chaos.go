@@ -121,6 +121,7 @@ Default: all`)
 	// Add subcommands
 	chaosCmd.AddCommand(cr.buildChaosNetworkPartitionCmd())
 	chaosCmd.AddCommand(cr.buildChaosNetworkLatencyCmd())
+	chaosCmd.AddCommand(cr.buildChaosDiskStallCmd())
 
 	return chaosCmd
 }

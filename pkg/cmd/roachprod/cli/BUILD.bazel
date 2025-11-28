@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "bash_completion.go",
         "chaos.go",
+        "chaos_disk.go",
         "chaos_network.go",
         "commands.go",
         "flags.go",
