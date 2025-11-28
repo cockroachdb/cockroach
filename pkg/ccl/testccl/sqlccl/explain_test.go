@@ -210,6 +210,17 @@ func TestExplainGist(t *testing.T) {
 						return
 					}
 				}
+				// Check for declarative schema changer errors.
+				for _, stmtAndError := range []struct {
+					stmt string
+					err  string
+				}{
+					{"DROP COLUMN", "ALTER TABLE: unable to make progress"}, // #152841
+				} {
+					if strings.Contains(err.Error(), stmtAndError.err) && strings.Contains(stmt, stmtAndError.stmt) {
+						return
+					}
+				}
 				t.Log(stmts.String())
 				t.Fatalf("%v:\n%s;", err, stmt)
 			}
