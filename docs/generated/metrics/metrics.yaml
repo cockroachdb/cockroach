@@ -3,6 +3,260 @@ layers:
   categories:
   - name: CHANGEFEEDS
     metrics:
+    - name: changefeed.admit_latency
+      exported_name: changefeed_admit_latency
+      description: 'Event admission latency: a difference between event MVCC timestamp and the time it was admitted into changefeed pipeline; Note: this metric includes the time spent waiting until event can be processed due to backpressure or time spent resolving schema descriptors. Also note, this metric excludes latency during backfill'
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.aggregator_progress
+      exported_name: changefeed_aggregator_progress
+      description: The earliest timestamp up to which any aggregator is guaranteed to have emitted all values for
+      y_axis_label: Unix Timestamp Nanoseconds
+      type: GAUGE
+      unit: TIMESTAMP_NS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.backfill_count
+      exported_name: changefeed_backfill_count
+      description: Number of changefeeds currently executing backfill
+      y_axis_label: Count
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.backfill_pending_ranges
+      exported_name: changefeed_backfill_pending_ranges
+      description: Number of ranges in an ongoing backfill that are yet to be fully emitted
+      y_axis_label: Count
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.batch_reduction_count
+      exported_name: changefeed_batch_reduction_count
+      description: Number of times a changefeed aggregator node attempted to reduce the size of message batches it emitted to the sink
+      y_axis_label: Batch Size Reductions
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.buffer_entries.allocated_mem
+      exported_name: changefeed_buffer_entries_allocated_mem
+      description: Current quota pool memory allocation
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.buffer_entries.flush.aggregator
+      exported_name: changefeed_buffer_entries_flush_aggregator
+      labeled_name: 'changefeed.buffer_entries.flush{buffer_type: aggregator}'
+      description: Number of flush elements added to the buffer - between the kvfeed and the sink
+      y_axis_label: Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_entries.flush.rangefeed
+      exported_name: changefeed_buffer_entries_flush_rangefeed
+      labeled_name: 'changefeed.buffer_entries.flush{buffer_type: rangefeed}'
+      description: Number of flush elements added to the buffer - between the rangefeed and the kvfeed
+      y_axis_label: Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_entries.in.aggregator
+      exported_name: changefeed_buffer_entries_in_aggregator
+      labeled_name: 'changefeed.buffer_entries.in{buffer_type: aggregator}'
+      description: Total entries entering the buffer between raft and changefeed sinks - between the kvfeed and the sink
+      y_axis_label: Entries
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_entries.in.rangefeed
+      exported_name: changefeed_buffer_entries_in_rangefeed
+      labeled_name: 'changefeed.buffer_entries.in{buffer_type: rangefeed}'
+      description: Total entries entering the buffer between raft and changefeed sinks - between the rangefeed and the kvfeed
+      y_axis_label: Entries
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_entries.kv.aggregator
+      exported_name: changefeed_buffer_entries_kv_aggregator
+      labeled_name: 'changefeed.buffer_entries.kv{buffer_type: aggregator}'
+      description: Number of kv elements added to the buffer - between the kvfeed and the sink
+      y_axis_label: Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_entries.kv.rangefeed
+      exported_name: changefeed_buffer_entries_kv_rangefeed
+      labeled_name: 'changefeed.buffer_entries.kv{buffer_type: rangefeed}'
+      description: Number of kv elements added to the buffer - between the rangefeed and the kvfeed
+      y_axis_label: Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_entries.out.aggregator
+      exported_name: changefeed_buffer_entries_out_aggregator
+      labeled_name: 'changefeed.buffer_entries.out{buffer_type: aggregator}'
+      description: Total entries leaving the buffer between raft and changefeed sinks - between the kvfeed and the sink
+      y_axis_label: Entries
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_entries.out.rangefeed
+      exported_name: changefeed_buffer_entries_out_rangefeed
+      labeled_name: 'changefeed.buffer_entries.out{buffer_type: rangefeed}'
+      description: Total entries leaving the buffer between raft and changefeed sinks - between the rangefeed and the kvfeed
+      y_axis_label: Entries
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_entries.released.aggregator
+      exported_name: changefeed_buffer_entries_released_aggregator
+      labeled_name: 'changefeed.buffer_entries.released{buffer_type: aggregator}'
+      description: Total entries processed, emitted and acknowledged by the sinks - between the kvfeed and the sink
+      y_axis_label: Entries
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_entries.released.rangefeed
+      exported_name: changefeed_buffer_entries_released_rangefeed
+      labeled_name: 'changefeed.buffer_entries.released{buffer_type: rangefeed}'
+      description: Total entries processed, emitted and acknowledged by the sinks - between the rangefeed and the kvfeed
+      y_axis_label: Entries
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_entries.resolved.aggregator
+      exported_name: changefeed_buffer_entries_resolved_aggregator
+      labeled_name: 'changefeed.buffer_entries.resolved{buffer_type: aggregator}'
+      description: Number of resolved elements added to the buffer - between the kvfeed and the sink
+      y_axis_label: Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_entries.resolved.rangefeed
+      exported_name: changefeed_buffer_entries_resolved_rangefeed
+      labeled_name: 'changefeed.buffer_entries.resolved{buffer_type: rangefeed}'
+      description: Number of resolved elements added to the buffer - between the rangefeed and the kvfeed
+      y_axis_label: Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_entries_mem.acquired
+      exported_name: changefeed_buffer_entries_mem_acquired
+      description: Total amount of memory acquired for entries as they enter the system
+      y_axis_label: Entries
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_entries_mem.released
+      exported_name: changefeed_buffer_entries_mem_released
+      description: Total amount of memory released by the entries after they have been emitted
+      y_axis_label: Entries
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_pushback_nanos.aggregator
+      exported_name: changefeed_buffer_pushback_nanos_aggregator
+      labeled_name: 'changefeed.buffer_pushback_nanos{buffer_type: aggregator}'
+      description: Total time spent waiting while the buffer was full - between the kvfeed and the sink
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.buffer_pushback_nanos.rangefeed
+      exported_name: changefeed_buffer_pushback_nanos_rangefeed
+      labeled_name: 'changefeed.buffer_pushback_nanos{buffer_type: rangefeed}'
+      description: Total time spent waiting while the buffer was full - between the rangefeed and the kvfeed
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.bytes.messages_pushback_nanos
+      exported_name: changefeed_bytes_messages_pushback_nanos
+      description: Total time spent throttled for bytes quota
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.checkpoint.create_nanos
+      exported_name: changefeed_checkpoint_create_nanos
+      description: Time it takes to create a changefeed checkpoint
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.checkpoint.span_count
+      exported_name: changefeed_checkpoint_span_count
+      description: Number of spans in a changefeed checkpoint
+      y_axis_label: Spans
+      type: HISTOGRAM
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.checkpoint.timestamp_count
+      exported_name: changefeed_checkpoint_timestamp_count
+      description: Number of unique timestamps in a changefeed checkpoint
+      y_axis_label: Timestamps
+      type: HISTOGRAM
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.checkpoint.total_bytes
+      exported_name: changefeed_checkpoint_total_bytes
+      description: Total size of a changefeed checkpoint
+      y_axis_label: Bytes
+      type: HISTOGRAM
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.checkpoint_hist_nanos
+      exported_name: changefeed_checkpoint_hist_nanos
+      description: Time spent checkpointing changefeed progress
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.checkpoint_progress
+      exported_name: changefeed_checkpoint_progress
+      description: The earliest timestamp of any changefeed's persisted checkpoint (values prior to this timestamp will never need to be re-emitted)
+      y_axis_label: Unix Timestamp Nanoseconds
+      type: GAUGE
+      unit: TIMESTAMP_NS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.cloudstorage_buffered_bytes
+      exported_name: changefeed_cloudstorage_buffered_bytes
+      description: The number of bytes buffered in cloudstorage sink files which have not been emitted yet
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: changefeed.commit_latency
       exported_name: changefeed_commit_latency
       description: 'Event commit latency: a difference between event MVCC timestamp and the time it was acknowledged by the downstream sink. If the sink batches events, then the difference between the oldest event in the batch and acknowledgement is recorded. Excludes latency during backfill.'
@@ -13,6 +267,14 @@ layers:
       derivative: NONE
       how_to_use: This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the end-to-end lag between a committed change and that change applied at the destination.
       essential: true
+    - name: changefeed.emitted_batch_sizes
+      exported_name: changefeed_emitted_batch_sizes
+      description: Size of batches emitted emitted by all feeds
+      y_axis_label: Number of Messages in Batch
+      type: HISTOGRAM
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: changefeed.emitted_bytes
       exported_name: changefeed_emitted_bytes
       description: Bytes emitted by all feeds
@@ -53,6 +315,214 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric tracks the permanent changefeed job failures that the jobs system will not try to restart. Any increase in this counter should be investigated. An alert on this metric is recommended.
       essential: true
+    - name: changefeed.filtered_messages
+      exported_name: changefeed_filtered_messages
+      description: Messages filtered out by all feeds. This count does not include the number of messages that may be filtered due to the range constraints.
+      y_axis_label: Messages
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.flush.messages_pushback_nanos
+      exported_name: changefeed_flush_messages_pushback_nanos
+      description: Total time spent throttled for flush quota
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.flush_hist_nanos
+      exported_name: changefeed_flush_hist_nanos
+      description: Time spent flushing messages across all changefeeds
+      y_axis_label: Changefeeds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.flushed_bytes
+      exported_name: changefeed_flushed_bytes
+      description: Bytes emitted by all feeds; maybe different from changefeed.emitted_bytes when compression is enabled
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.flushes
+      exported_name: changefeed_flushes
+      description: Total flushes across all feeds.
+      y_axis_label: Flushes
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.forwarded_resolved_messages
+      exported_name: changefeed_forwarded_resolved_messages
+      description: Resolved timestamps forwarded from the change aggregator to the change frontier
+      y_axis_label: Messages
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.frontier_updates
+      exported_name: changefeed_frontier_updates
+      description: Number of change frontier updates across all feeds
+      y_axis_label: Updates
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.internal_retry_message_count
+      exported_name: changefeed_internal_retry_message_count
+      description: Number of messages for which an attempt to retry them within an aggregator node was made.
+      y_axis_label: Messages
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.kafka_throttling_hist_nanos
+      exported_name: changefeed_kafka_throttling_hist_nanos
+      description: Time spent in throttling due to exceeding kafka quota
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.lagging_ranges
+      exported_name: changefeed_lagging_ranges
+      description: The number of ranges considered to be lagging behind
+      y_axis_label: Ranges
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.max_behind_nanos
+      exported_name: changefeed_max_behind_nanos
+      description: The most any changefeed's persisted checkpoint is behind the present
+      y_axis_label: Nanoseconds
+      type: GAUGE
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.message_size_hist
+      exported_name: changefeed_message_size_hist
+      description: Message size histogram
+      y_axis_label: Bytes
+      type: HISTOGRAM
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.messages.messages_pushback_nanos
+      exported_name: changefeed_messages_messages_pushback_nanos
+      description: Total time spent throttled for messages quota
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.network.bytes_in
+      exported_name: changefeed_network_bytes_in
+      description: The number of bytes received from the network by changefeeds
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.network.bytes_out
+      exported_name: changefeed_network_bytes_out
+      description: The number of bytes sent over the network by changefeeds
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.nprocs_consume_event_nanos
+      exported_name: changefeed_nprocs_consume_event_nanos
+      description: Total time spent waiting to add an event to the parallel consumer
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.nprocs_flush_nanos
+      exported_name: changefeed_nprocs_flush_nanos
+      description: Total time spent idle waiting for the parallel consumer to flush
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.nprocs_in_flight_count
+      exported_name: changefeed_nprocs_in_flight_count
+      description: Number of buffered events in the parallel consumer
+      y_axis_label: Count of Events
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.parallel_io_in_flight_keys
+      exported_name: changefeed_parallel_io_in_flight_keys
+      description: The number of keys currently in-flight which may contend with batches pending to be emitted
+      y_axis_label: Keys
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.parallel_io_pending_rows
+      exported_name: changefeed_parallel_io_pending_rows
+      description: Number of rows which are blocked from being sent due to conflicting in-flight keys.
+      y_axis_label: Messages
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.parallel_io_queue_nanos
+      exported_name: changefeed_parallel_io_queue_nanos
+      description: Time that outgoing requests to the sink spend waiting in a queue due to in-flight requests with conflicting keys.
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.parallel_io_result_queue_nanos
+      exported_name: changefeed_parallel_io_result_queue_nanos
+      description: Time that incoming results from the sink spend waiting in parallel io emitter before they are acknowledged by the changefeed
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.parallel_io_workers
+      exported_name: changefeed_parallel_io_workers
+      description: The number of workers in the ParallelIO
+      y_axis_label: Workers
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.progress_skew.span
+      exported_name: changefeed_progress_skew_span
+      description: The time difference between the fastest and slowest span's resolved timestamp
+      y_axis_label: Nanoseconds
+      type: GAUGE
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.progress_skew.table
+      exported_name: changefeed_progress_skew_table
+      description: The time difference between the fastest and slowest table's resolved timestamp
+      y_axis_label: Nanoseconds
+      type: GAUGE
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.queue_time_nanos
+      exported_name: changefeed_queue_time_nanos
+      description: Time KV event spent waiting to be processed
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.running
       exported_name: changefeed_running
       description: Number of currently running changefeeds, including sinkless
@@ -63,6 +533,218 @@ layers:
       derivative: NONE
       how_to_use: This metric tracks the total number of all running changefeeds.
       essential: true
+    - name: changefeed.schema_registry.registrations
+      exported_name: changefeed_schema_registry_registrations
+      description: Number of registration attempts with the schema registry.
+      y_axis_label: Registrations
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.schema_registry.retry_count
+      exported_name: changefeed_schema_registry_retry_count
+      description: Number of retries encountered when sending requests to the schema registry.
+      y_axis_label: Retries
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.schemafeed.table_history_scans
+      exported_name: changefeed_schemafeed_table_history_scans
+      description: The number of table history scans during polling
+      y_axis_label: Counts
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.schemafeed.table_metadata_nanos
+      exported_name: changefeed_schemafeed_table_metadata_nanos
+      description: Time blocked while verifying table metadata histories
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.sink_backpressure_nanos
+      exported_name: changefeed_sink_backpressure_nanos
+      description: Time spent waiting for quota when emitting to the sink (back-pressure). Only populated for sinks using the batching_sink wrapper. As of writing, this includes Kafka (v2), Pub/Sub (v2), and Webhook (v2).
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.sink_batch_hist_nanos
+      exported_name: changefeed_sink_batch_hist_nanos
+      description: Time spent batched in the sink buffer before being flushed and acknowledged.
+      y_axis_label: Changefeeds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.sink_errors
+      exported_name: changefeed_sink_errors
+      description: Number of changefeed errors caused by the sink
+      y_axis_label: Count
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.sink_io_inflight
+      exported_name: changefeed_sink_io_inflight
+      description: The number of keys currently inflight as IO requests being sent to the sink
+      y_axis_label: Messages
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.size_based_flushes
+      exported_name: changefeed_size_based_flushes
+      description: Total size based flushes across all feeds.
+      y_axis_label: Flushes
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.stage.checkpoint_job_progress.latency
+      exported_name: changefeed_stage_checkpoint_job_progress_latency
+      labeled_name: 'changefeed.stage.latency{name: checkpoint_job_progress}'
+      description: 'Latency of the changefeed stage: checkpointing job progress'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.downstream_client_send.latency
+      exported_name: changefeed_stage_downstream_client_send_latency
+      labeled_name: 'changefeed.stage.latency{name: downstream_client_send}'
+      description: 'Latency of the changefeed stage: flushing messages from the sink''s client to its downstream. This includes sends that failed for most but not all sinks.'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.emit_row.latency
+      exported_name: changefeed_stage_emit_row_latency
+      labeled_name: 'changefeed.stage.latency{name: emit_row}'
+      description: 'Latency of the changefeed stage: emitting row to sink'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.encode.latency
+      exported_name: changefeed_stage_encode_latency
+      labeled_name: 'changefeed.stage.latency{name: encode}'
+      description: 'Latency of the changefeed stage: encoding data'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.frontier_persistence.latency
+      exported_name: changefeed_stage_frontier_persistence_latency
+      labeled_name: 'changefeed.stage.latency{name: frontier_persistence}'
+      description: 'Latency of the changefeed stage: persisting frontier to job info'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.kv_feed_buffer.latency
+      exported_name: changefeed_stage_kv_feed_buffer_latency
+      labeled_name: 'changefeed.stage.latency{name: kv_feed_buffer}'
+      description: 'Latency of the changefeed stage: waiting to buffer kv events'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.kv_feed_wait_for_table_event.latency
+      exported_name: changefeed_stage_kv_feed_wait_for_table_event_latency
+      labeled_name: 'changefeed.stage.latency{name: kv_feed_wait_for_table_event}'
+      description: 'Latency of the changefeed stage: waiting for a table schema event to join to the kv event'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.pts.create.latency
+      exported_name: changefeed_stage_pts_create_latency
+      labeled_name: 'changefeed.stage.pts.latency{name: create}'
+      description: 'Latency of the changefeed stage: Time spent creating protected timestamp records on changefeed creation'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.pts.manage.latency
+      exported_name: changefeed_stage_pts_manage_latency
+      labeled_name: 'changefeed.stage.pts.latency{name: manage}'
+      description: 'Latency of the changefeed stage: Time spent successfully managing protected timestamp records on highwater advance, including time spent creating new protected timestamps when needed'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.pts.manage_error.latency
+      exported_name: changefeed_stage_pts_manage_error_latency
+      labeled_name: 'changefeed.stage.pts.latency{name: manage_error}'
+      description: 'Latency of the changefeed stage: Time spent managing protected timestamp when we eventually error'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.rangefeed_buffer_checkpoint.latency
+      exported_name: changefeed_stage_rangefeed_buffer_checkpoint_latency
+      labeled_name: 'changefeed.stage.latency{name: rangefeed_buffer_checkpoint}'
+      description: 'Latency of the changefeed stage: buffering rangefeed checkpoint events'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.stage.rangefeed_buffer_value.latency
+      exported_name: changefeed_stage_rangefeed_buffer_value_latency
+      labeled_name: 'changefeed.stage.latency{name: rangefeed_buffer_value}'
+      description: 'Latency of the changefeed stage: buffering rangefeed value events'
+      y_axis_label: Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.total_ranges
+      exported_name: changefeed_total_ranges
+      description: The total number of ranges being watched by changefeed aggregators
+      y_axis_label: Ranges
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.usage.error_count
+      exported_name: changefeed_usage_error_count
+      description: Count of errors encountered while generating usage metrics for changefeeds
+      y_axis_label: Errors
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.usage.query_duration
+      exported_name: changefeed_usage_query_duration
+      description: Time taken by the queries used to generate usage metrics for changefeeds
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: changefeed.usage.table_bytes
+      exported_name: changefeed_usage_table_bytes
+      description: Aggregated number of bytes of data per table watched by changefeeds
+      y_axis_label: Storage
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
     - name: jobs.changefeed.currently_paused
       exported_name: jobs_changefeed_currently_paused
       labeled_name: 'jobs{name: changefeed, status: currently_paused}'
@@ -1282,688 +1964,6 @@ layers:
       y_axis_label: Jobs
       type: GAUGE
       unit: TIMESTAMP_SEC
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.admit_latency
-      exported_name: changefeed_admit_latency
-      description: 'Event admission latency: a difference between event MVCC timestamp and the time it was admitted into changefeed pipeline; Note: this metric includes the time spent waiting until event can be processed due to backpressure or time spent resolving schema descriptors. Also note, this metric excludes latency during backfill'
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.aggregator_progress
-      exported_name: changefeed_aggregator_progress
-      description: The earliest timestamp up to which any aggregator is guaranteed to have emitted all values for
-      y_axis_label: Unix Timestamp Nanoseconds
-      type: GAUGE
-      unit: TIMESTAMP_NS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.backfill_count
-      exported_name: changefeed_backfill_count
-      description: Number of changefeeds currently executing backfill
-      y_axis_label: Count
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.backfill_pending_ranges
-      exported_name: changefeed_backfill_pending_ranges
-      description: Number of ranges in an ongoing backfill that are yet to be fully emitted
-      y_axis_label: Count
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.batch_reduction_count
-      exported_name: changefeed_batch_reduction_count
-      description: Number of times a changefeed aggregator node attempted to reduce the size of message batches it emitted to the sink
-      y_axis_label: Batch Size Reductions
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.buffer_entries.allocated_mem
-      exported_name: changefeed_buffer_entries_allocated_mem
-      description: Current quota pool memory allocation
-      y_axis_label: Bytes
-      type: GAUGE
-      unit: BYTES
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.buffer_entries.flush.aggregator
-      exported_name: changefeed_buffer_entries_flush_aggregator
-      labeled_name: 'changefeed.buffer_entries.flush{buffer_type: aggregator}'
-      description: Number of flush elements added to the buffer - between the kvfeed and the sink
-      y_axis_label: Events
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.flush.rangefeed
-      exported_name: changefeed_buffer_entries_flush_rangefeed
-      labeled_name: 'changefeed.buffer_entries.flush{buffer_type: rangefeed}'
-      description: Number of flush elements added to the buffer - between the rangefeed and the kvfeed
-      y_axis_label: Events
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.in.aggregator
-      exported_name: changefeed_buffer_entries_in_aggregator
-      labeled_name: 'changefeed.buffer_entries.in{buffer_type: aggregator}'
-      description: Total entries entering the buffer between raft and changefeed sinks - between the kvfeed and the sink
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.in.rangefeed
-      exported_name: changefeed_buffer_entries_in_rangefeed
-      labeled_name: 'changefeed.buffer_entries.in{buffer_type: rangefeed}'
-      description: Total entries entering the buffer between raft and changefeed sinks - between the rangefeed and the kvfeed
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.kv.aggregator
-      exported_name: changefeed_buffer_entries_kv_aggregator
-      labeled_name: 'changefeed.buffer_entries.kv{buffer_type: aggregator}'
-      description: Number of kv elements added to the buffer - between the kvfeed and the sink
-      y_axis_label: Events
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.kv.rangefeed
-      exported_name: changefeed_buffer_entries_kv_rangefeed
-      labeled_name: 'changefeed.buffer_entries.kv{buffer_type: rangefeed}'
-      description: Number of kv elements added to the buffer - between the rangefeed and the kvfeed
-      y_axis_label: Events
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.out.aggregator
-      exported_name: changefeed_buffer_entries_out_aggregator
-      labeled_name: 'changefeed.buffer_entries.out{buffer_type: aggregator}'
-      description: Total entries leaving the buffer between raft and changefeed sinks - between the kvfeed and the sink
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.out.rangefeed
-      exported_name: changefeed_buffer_entries_out_rangefeed
-      labeled_name: 'changefeed.buffer_entries.out{buffer_type: rangefeed}'
-      description: Total entries leaving the buffer between raft and changefeed sinks - between the rangefeed and the kvfeed
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.released.aggregator
-      exported_name: changefeed_buffer_entries_released_aggregator
-      labeled_name: 'changefeed.buffer_entries.released{buffer_type: aggregator}'
-      description: Total entries processed, emitted and acknowledged by the sinks - between the kvfeed and the sink
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.released.rangefeed
-      exported_name: changefeed_buffer_entries_released_rangefeed
-      labeled_name: 'changefeed.buffer_entries.released{buffer_type: rangefeed}'
-      description: Total entries processed, emitted and acknowledged by the sinks - between the rangefeed and the kvfeed
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.resolved.aggregator
-      exported_name: changefeed_buffer_entries_resolved_aggregator
-      labeled_name: 'changefeed.buffer_entries.resolved{buffer_type: aggregator}'
-      description: Number of resolved elements added to the buffer - between the kvfeed and the sink
-      y_axis_label: Events
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.resolved.rangefeed
-      exported_name: changefeed_buffer_entries_resolved_rangefeed
-      labeled_name: 'changefeed.buffer_entries.resolved{buffer_type: rangefeed}'
-      description: Number of resolved elements added to the buffer - between the rangefeed and the kvfeed
-      y_axis_label: Events
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries_mem.acquired
-      exported_name: changefeed_buffer_entries_mem_acquired
-      description: Total amount of memory acquired for entries as they enter the system
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries_mem.released
-      exported_name: changefeed_buffer_entries_mem_released
-      description: Total amount of memory released by the entries after they have been emitted
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_pushback_nanos.aggregator
-      exported_name: changefeed_buffer_pushback_nanos_aggregator
-      labeled_name: 'changefeed.buffer_pushback_nanos{buffer_type: aggregator}'
-      description: Total time spent waiting while the buffer was full - between the kvfeed and the sink
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_pushback_nanos.rangefeed
-      exported_name: changefeed_buffer_pushback_nanos_rangefeed
-      labeled_name: 'changefeed.buffer_pushback_nanos{buffer_type: rangefeed}'
-      description: Total time spent waiting while the buffer was full - between the rangefeed and the kvfeed
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.bytes.messages_pushback_nanos
-      exported_name: changefeed_bytes_messages_pushback_nanos
-      description: Total time spent throttled for bytes quota
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.checkpoint.create_nanos
-      exported_name: changefeed_checkpoint_create_nanos
-      description: Time it takes to create a changefeed checkpoint
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.checkpoint.span_count
-      exported_name: changefeed_checkpoint_span_count
-      description: Number of spans in a changefeed checkpoint
-      y_axis_label: Spans
-      type: HISTOGRAM
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.checkpoint.timestamp_count
-      exported_name: changefeed_checkpoint_timestamp_count
-      description: Number of unique timestamps in a changefeed checkpoint
-      y_axis_label: Timestamps
-      type: HISTOGRAM
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.checkpoint.total_bytes
-      exported_name: changefeed_checkpoint_total_bytes
-      description: Total size of a changefeed checkpoint
-      y_axis_label: Bytes
-      type: HISTOGRAM
-      unit: BYTES
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.checkpoint_hist_nanos
-      exported_name: changefeed_checkpoint_hist_nanos
-      description: Time spent checkpointing changefeed progress
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.checkpoint_progress
-      exported_name: changefeed_checkpoint_progress
-      description: The earliest timestamp of any changefeed's persisted checkpoint (values prior to this timestamp will never need to be re-emitted)
-      y_axis_label: Unix Timestamp Nanoseconds
-      type: GAUGE
-      unit: TIMESTAMP_NS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.cloudstorage_buffered_bytes
-      exported_name: changefeed_cloudstorage_buffered_bytes
-      description: The number of bytes buffered in cloudstorage sink files which have not been emitted yet
-      y_axis_label: Bytes
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.emitted_batch_sizes
-      exported_name: changefeed_emitted_batch_sizes
-      description: Size of batches emitted emitted by all feeds
-      y_axis_label: Number of Messages in Batch
-      type: HISTOGRAM
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.filtered_messages
-      exported_name: changefeed_filtered_messages
-      description: Messages filtered out by all feeds. This count does not include the number of messages that may be filtered due to the range constraints.
-      y_axis_label: Messages
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.flush.messages_pushback_nanos
-      exported_name: changefeed_flush_messages_pushback_nanos
-      description: Total time spent throttled for flush quota
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.flush_hist_nanos
-      exported_name: changefeed_flush_hist_nanos
-      description: Time spent flushing messages across all changefeeds
-      y_axis_label: Changefeeds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.flushed_bytes
-      exported_name: changefeed_flushed_bytes
-      description: Bytes emitted by all feeds; maybe different from changefeed.emitted_bytes when compression is enabled
-      y_axis_label: Bytes
-      type: COUNTER
-      unit: BYTES
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.flushes
-      exported_name: changefeed_flushes
-      description: Total flushes across all feeds.
-      y_axis_label: Flushes
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.forwarded_resolved_messages
-      exported_name: changefeed_forwarded_resolved_messages
-      description: Resolved timestamps forwarded from the change aggregator to the change frontier
-      y_axis_label: Messages
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.frontier_updates
-      exported_name: changefeed_frontier_updates
-      description: Number of change frontier updates across all feeds
-      y_axis_label: Updates
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.internal_retry_message_count
-      exported_name: changefeed_internal_retry_message_count
-      description: Number of messages for which an attempt to retry them within an aggregator node was made.
-      y_axis_label: Messages
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.kafka_throttling_hist_nanos
-      exported_name: changefeed_kafka_throttling_hist_nanos
-      description: Time spent in throttling due to exceeding kafka quota
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.lagging_ranges
-      exported_name: changefeed_lagging_ranges
-      description: The number of ranges considered to be lagging behind
-      y_axis_label: Ranges
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.max_behind_nanos
-      exported_name: changefeed_max_behind_nanos
-      description: The most any changefeed's persisted checkpoint is behind the present
-      y_axis_label: Nanoseconds
-      type: GAUGE
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.message_size_hist
-      exported_name: changefeed_message_size_hist
-      description: Message size histogram
-      y_axis_label: Bytes
-      type: HISTOGRAM
-      unit: BYTES
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.messages.messages_pushback_nanos
-      exported_name: changefeed_messages_messages_pushback_nanos
-      description: Total time spent throttled for messages quota
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.network.bytes_in
-      exported_name: changefeed_network_bytes_in
-      description: The number of bytes received from the network by changefeeds
-      y_axis_label: Bytes
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.network.bytes_out
-      exported_name: changefeed_network_bytes_out
-      description: The number of bytes sent over the network by changefeeds
-      y_axis_label: Bytes
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.nprocs_consume_event_nanos
-      exported_name: changefeed_nprocs_consume_event_nanos
-      description: Total time spent waiting to add an event to the parallel consumer
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.nprocs_flush_nanos
-      exported_name: changefeed_nprocs_flush_nanos
-      description: Total time spent idle waiting for the parallel consumer to flush
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.nprocs_in_flight_count
-      exported_name: changefeed_nprocs_in_flight_count
-      description: Number of buffered events in the parallel consumer
-      y_axis_label: Count of Events
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.parallel_io_in_flight_keys
-      exported_name: changefeed_parallel_io_in_flight_keys
-      description: The number of keys currently in-flight which may contend with batches pending to be emitted
-      y_axis_label: Keys
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.parallel_io_pending_rows
-      exported_name: changefeed_parallel_io_pending_rows
-      description: Number of rows which are blocked from being sent due to conflicting in-flight keys.
-      y_axis_label: Messages
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.parallel_io_queue_nanos
-      exported_name: changefeed_parallel_io_queue_nanos
-      description: Time that outgoing requests to the sink spend waiting in a queue due to in-flight requests with conflicting keys.
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.parallel_io_result_queue_nanos
-      exported_name: changefeed_parallel_io_result_queue_nanos
-      description: Time that incoming results from the sink spend waiting in parallel io emitter before they are acknowledged by the changefeed
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.parallel_io_workers
-      exported_name: changefeed_parallel_io_workers
-      description: The number of workers in the ParallelIO
-      y_axis_label: Workers
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.progress_skew.span
-      exported_name: changefeed_progress_skew_span
-      description: The time difference between the fastest and slowest span's resolved timestamp
-      y_axis_label: Nanoseconds
-      type: GAUGE
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.progress_skew.table
-      exported_name: changefeed_progress_skew_table
-      description: The time difference between the fastest and slowest table's resolved timestamp
-      y_axis_label: Nanoseconds
-      type: GAUGE
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.queue_time_nanos
-      exported_name: changefeed_queue_time_nanos
-      description: Time KV event spent waiting to be processed
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.schema_registry.registrations
-      exported_name: changefeed_schema_registry_registrations
-      description: Number of registration attempts with the schema registry.
-      y_axis_label: Registrations
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.schema_registry.retry_count
-      exported_name: changefeed_schema_registry_retry_count
-      description: Number of retries encountered when sending requests to the schema registry.
-      y_axis_label: Retries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.schemafeed.table_history_scans
-      exported_name: changefeed_schemafeed_table_history_scans
-      description: The number of table history scans during polling
-      y_axis_label: Counts
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.schemafeed.table_metadata_nanos
-      exported_name: changefeed_schemafeed_table_metadata_nanos
-      description: Time blocked while verifying table metadata histories
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.sink_backpressure_nanos
-      exported_name: changefeed_sink_backpressure_nanos
-      description: Time spent waiting for quota when emitting to the sink (back-pressure). Only populated for sinks using the batching_sink wrapper. As of writing, this includes Kafka (v2), Pub/Sub (v2), and Webhook (v2).
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.sink_batch_hist_nanos
-      exported_name: changefeed_sink_batch_hist_nanos
-      description: Time spent batched in the sink buffer before being flushed and acknowledged.
-      y_axis_label: Changefeeds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.sink_errors
-      exported_name: changefeed_sink_errors
-      description: Number of changefeed errors caused by the sink
-      y_axis_label: Count
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.sink_io_inflight
-      exported_name: changefeed_sink_io_inflight
-      description: The number of keys currently inflight as IO requests being sent to the sink
-      y_axis_label: Messages
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.size_based_flushes
-      exported_name: changefeed_size_based_flushes
-      description: Total size based flushes across all feeds.
-      y_axis_label: Flushes
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.stage.checkpoint_job_progress.latency
-      exported_name: changefeed_stage_checkpoint_job_progress_latency
-      labeled_name: 'changefeed.stage.latency{name: checkpoint_job_progress}'
-      description: 'Latency of the changefeed stage: checkpointing job progress'
-      y_axis_label: Latency
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.stage.downstream_client_send.latency
-      exported_name: changefeed_stage_downstream_client_send_latency
-      labeled_name: 'changefeed.stage.latency{name: downstream_client_send}'
-      description: 'Latency of the changefeed stage: flushing messages from the sink''s client to its downstream. This includes sends that failed for most but not all sinks.'
-      y_axis_label: Latency
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.stage.emit_row.latency
-      exported_name: changefeed_stage_emit_row_latency
-      labeled_name: 'changefeed.stage.latency{name: emit_row}'
-      description: 'Latency of the changefeed stage: emitting row to sink'
-      y_axis_label: Latency
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.stage.encode.latency
-      exported_name: changefeed_stage_encode_latency
-      labeled_name: 'changefeed.stage.latency{name: encode}'
-      description: 'Latency of the changefeed stage: encoding data'
-      y_axis_label: Latency
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.stage.frontier_persistence.latency
-      exported_name: changefeed_stage_frontier_persistence_latency
-      labeled_name: 'changefeed.stage.latency{name: frontier_persistence}'
-      description: 'Latency of the changefeed stage: persisting frontier to job info'
-      y_axis_label: Latency
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.stage.kv_feed_buffer.latency
-      exported_name: changefeed_stage_kv_feed_buffer_latency
-      labeled_name: 'changefeed.stage.latency{name: kv_feed_buffer}'
-      description: 'Latency of the changefeed stage: waiting to buffer kv events'
-      y_axis_label: Latency
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.stage.kv_feed_wait_for_table_event.latency
-      exported_name: changefeed_stage_kv_feed_wait_for_table_event_latency
-      labeled_name: 'changefeed.stage.latency{name: kv_feed_wait_for_table_event}'
-      description: 'Latency of the changefeed stage: waiting for a table schema event to join to the kv event'
-      y_axis_label: Latency
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.stage.pts.create.latency
-      exported_name: changefeed_stage_pts_create_latency
-      labeled_name: 'changefeed.stage.pts.latency{name: create}'
-      description: 'Latency of the changefeed stage: Time spent creating protected timestamp records on changefeed creation'
-      y_axis_label: Latency
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.stage.pts.manage.latency
-      exported_name: changefeed_stage_pts_manage_latency
-      labeled_name: 'changefeed.stage.pts.latency{name: manage}'
-      description: 'Latency of the changefeed stage: Time spent successfully managing protected timestamp records on highwater advance, including time spent creating new protected timestamps when needed'
-      y_axis_label: Latency
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.stage.pts.manage_error.latency
-      exported_name: changefeed_stage_pts_manage_error_latency
-      labeled_name: 'changefeed.stage.pts.latency{name: manage_error}'
-      description: 'Latency of the changefeed stage: Time spent managing protected timestamp when we eventually error'
-      y_axis_label: Latency
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.stage.rangefeed_buffer_checkpoint.latency
-      exported_name: changefeed_stage_rangefeed_buffer_checkpoint_latency
-      labeled_name: 'changefeed.stage.latency{name: rangefeed_buffer_checkpoint}'
-      description: 'Latency of the changefeed stage: buffering rangefeed checkpoint events'
-      y_axis_label: Latency
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.stage.rangefeed_buffer_value.latency
-      exported_name: changefeed_stage_rangefeed_buffer_value_latency
-      labeled_name: 'changefeed.stage.latency{name: rangefeed_buffer_value}'
-      description: 'Latency of the changefeed stage: buffering rangefeed value events'
-      y_axis_label: Latency
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.total_ranges
-      exported_name: changefeed_total_ranges
-      description: The total number of ranges being watched by changefeed aggregators
-      y_axis_label: Ranges
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.usage.error_count
-      exported_name: changefeed_usage_error_count
-      description: Count of errors encountered while generating usage metrics for changefeeds
-      y_axis_label: Errors
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.usage.query_duration
-      exported_name: changefeed_usage_query_duration
-      description: Time taken by the queries used to generate usage metrics for changefeeds
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.usage.table_bytes
-      exported_name: changefeed_usage_table_bytes
-      description: Aggregated number of bytes of data per table watched by changefeeds
-      y_axis_label: Storage
-      type: GAUGE
-      unit: BYTES
       aggregation: AVG
       derivative: NONE
     - name: clock-offset.medianabsdevnanos
