@@ -49,13 +49,13 @@ import (
 // The test has a single storage engine that corresponds to n1/s1, and all batch
 // operations to storage are printed out. It uses the following format:
 //
-// create-descriptor start=<key> end=<key> replicas=[<int>,<int>,...]
+// create-descriptor start=<key> end=<key> replicas=[<int>,<int>,...] [replica-id=<int>]
 // ----
 //
 //	Creates a range descriptor with the specified start and end keys and
 //	optional replica list. The range ID is auto-assigned. If provided,
-//	replicas specify NodeIDs for replicas of the range. Note that ReplicaIDs
-//	are assigned incrementally starting from 1.
+//	replicas specify NodeIDs for replicas of the range. ReplicaIDs are
+//	assigned incrementally starting from replica-id (default=1).
 //
 // create-replica range-id=<int> [initialized]
 // ----
@@ -126,7 +126,8 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "create-descriptor":
-				desc := tc.createRangeDesc(t, roachpb.RSpan{
+				replicaID := dd.ScanArgOr[roachpb.ReplicaID](t, d, "replica-id", 1)
+				desc := tc.createRangeDesc(t, replicaID, roachpb.RSpan{
 					Key:    roachpb.RKey(dd.ScanArg[string](t, d, "start")),
 					EndKey: roachpb.RKey(dd.ScanArg[string](t, d, "end")),
 				}, dd.ScanArg[[]roachpb.NodeID](t, d, "replicas"))
@@ -459,7 +460,7 @@ func (tc *testCtx) mutate(t *testing.T, write func(storage.Batch)) string {
 // createRangeDesc creates a new RangeDescriptor for the given keys span and list
 // of replica locations, assigned to the next unused RangeID.
 func (tc *testCtx) createRangeDesc(
-	t *testing.T, span roachpb.RSpan, replicasOn []roachpb.NodeID,
+	t *testing.T, replicaID roachpb.ReplicaID, span roachpb.RSpan, replicasOn []roachpb.NodeID,
 ) roachpb.RangeDescriptor {
 	require.True(t, span.EndKey.Compare(span.Key) > 0)
 	require.True(t, slices.Contains(replicasOn, 1), "replica list must contain n1")
@@ -480,12 +481,12 @@ func (tc *testCtx) createRangeDesc(
 		StartKey:         span.Key,
 		EndKey:           span.EndKey,
 		InternalReplicas: make([]roachpb.ReplicaDescriptor, len(replicasOn)),
-		NextReplicaID:    roachpb.ReplicaID(len(replicasOn) + 1),
+		NextReplicaID:    replicaID + roachpb.ReplicaID(len(replicasOn)),
 	}
 	tc.nextRangeID++
 	for i, id := range replicasOn {
 		desc.InternalReplicas[i] = roachpb.ReplicaDescriptor{
-			ReplicaID: roachpb.ReplicaID(i + 1),
+			ReplicaID: replicaID + roachpb.ReplicaID(i),
 			NodeID:    id,
 			StoreID:   roachpb.StoreID(id),
 			Type:      roachpb.VOTER_FULL,
