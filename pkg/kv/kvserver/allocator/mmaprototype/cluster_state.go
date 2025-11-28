@@ -1259,6 +1259,9 @@ type clusterState struct {
 	ranges map[roachpb.RangeID]*rangeState
 
 	scratchRangeMap map[roachpb.RangeID]struct{}
+	scratchStoreSet storeSet           // scratch space for pre-means filtering
+	scratchMeans    meansLoad          // scratch space for recomputed means
+	scratchDisj     [1]constraintsConj // scratch space for getMeans call
 
 	// Added to when a change is proposed. Will also add to corresponding
 	// rangeState.pendingChanges and to the affected storeStates.
