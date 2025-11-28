@@ -160,6 +160,23 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 
 				return fmt.Sprintf("created replica: %v\n%s", repl, output)
 
+			case "update-hard-state":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				rs := tc.mustGetRangeState(t, rangeID)
+				require.NotNil(t, rs.replica, "replica does not exist")
+
+				if term, upd := dd.ScanArgOpt[uint64](t, d, "term"); upd {
+					rs.replica.hs.Term = term
+				}
+				if vote, upd := dd.ScanArgOpt[raftpb.PeerID](t, d, "vote"); upd {
+					rs.replica.hs.Vote = vote
+				}
+
+				require.NoError(t, kvstorage.MakeStateLoader(rangeID).SetHardState(
+					ctx, tc.storage, rs.replica.hs,
+				))
+				return fmt.Sprintf("HardState %+v", rs.replica.hs)
+
 			case "create-split":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
 				splitKey := dd.ScanArg[string](t, d, "split-key")
