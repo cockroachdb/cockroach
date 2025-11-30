@@ -180,6 +180,7 @@ type ExecStats = {
   networkBytes: NumericStat;
   networkMsgs: NumericStat;
   cpuSQLNanos: NumericStat;
+  admissionWaitTime: NumericStat;
 };
 
 type StatementStatistics = {
@@ -224,6 +225,8 @@ export function convertStatementRawFormatToAggregatedStatistics(
         network_bytes: s.statistics.execution_statistics.networkBytes,
         network_messages: s.statistics.execution_statistics.networkMsgs,
         cpu_sql_nanos: s.statistics.execution_statistics.cpuSQLNanos,
+        admission_wait_time:
+          s.statistics.execution_statistics.admissionWaitTime,
       },
       bytes_read: s.statistics.statistics.bytesRead,
       count: s.statistics.statistics.cnt,

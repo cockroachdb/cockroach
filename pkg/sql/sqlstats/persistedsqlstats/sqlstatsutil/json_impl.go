@@ -370,6 +370,7 @@ func (e *execStats) jsonFields() jsonFields {
 		{"maxDiskUsage", (*numericStats)(&e.MaxDiskUsage)},
 		{"cpuSQLNanos", (*numericStats)(&e.CPUSQLNanos)},
 		{"mvccIteratorStats", (*iteratorStats)(&e.MVCCIteratorStats)},
+		{"admissionWaitTime", (*numericStats)(&e.AdmissionWaitTime)},
 	}
 }
 

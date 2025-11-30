@@ -22,6 +22,7 @@ import {
 // Single place for column names. Used in table columns and in columns selector.
 export const statisticsColumnLabels = {
   actions: "Actions",
+  admissionWaitTime: "Admission Wait Time",
   applicationName: "Application Name",
   bytesRead: "Bytes Read",
   clientAddress: "Client IP Address",
@@ -681,6 +682,26 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("cpu")}
+      </Tooltip>
+    );
+  },
+  admissionWaitTime: (_: StatisticType) => {
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <>
+            <p>
+              Average time spent waiting in admission control queues within the
+              specified time interval. The gray bar indicates mean admission
+              wait time. The blue bar indicates one standard deviation from the
+              mean.
+            </p>
+          </>
+        }
+      >
+        {getLabel("admissionWaitTime")}
       </Tooltip>
     );
   },

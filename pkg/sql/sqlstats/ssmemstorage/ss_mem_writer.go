@@ -248,6 +248,7 @@ func (s *Container) RecordTransaction(ctx context.Context, value *sqlstats.Recor
 		stats.mu.data.ExecStats.NetworkMessages.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.DistSQLNetworkMessages))
 		stats.mu.data.ExecStats.MaxDiskUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxDiskUsage))
 		stats.mu.data.ExecStats.CPUSQLNanos.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.SQLCPUTime.Nanoseconds()))
+		stats.mu.data.ExecStats.AdmissionWaitTime.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.AdmissionWaitTime.Nanoseconds()))
 
 		stats.mu.data.ExecStats.MVCCIteratorStats.StepCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccSteps))
 		stats.mu.data.ExecStats.MVCCIteratorStats.StepCountInternal.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccStepsInternal))

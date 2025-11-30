@@ -382,6 +382,7 @@ func (s *stmtStats) recordExecStatsLocked(stats execstats.QueryLevelStats) {
 	s.mu.data.ExecStats.NetworkMessages.Record(count, float64(stats.DistSQLNetworkMessages))
 	s.mu.data.ExecStats.MaxDiskUsage.Record(count, float64(stats.MaxDiskUsage))
 	s.mu.data.ExecStats.CPUSQLNanos.Record(count, float64(stats.SQLCPUTime.Nanoseconds()))
+	s.mu.data.ExecStats.AdmissionWaitTime.Record(count, float64(stats.AdmissionWaitTime.Nanoseconds()))
 
 	s.mu.data.ExecStats.MVCCIteratorStats.StepCount.Record(count, float64(stats.MvccSteps))
 	s.mu.data.ExecStats.MVCCIteratorStats.StepCountInternal.Record(count, float64(stats.MvccStepsInternal))
