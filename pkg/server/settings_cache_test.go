@@ -115,10 +115,11 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 
 	var initServer *initServer
 	{
-		getDialOpts := s.RPCContext().GRPCDialOptions
+		getGRPCDialOpts := s.RPCContext().GRPCDialOptions
+		getDRPCDialOpts := s.RPCContext().DRPCDialOptions
 
 		cfg := s.SystemLayer().(*testServer).topLevelServer.cfg
-		initConfig := newInitServerConfig(ctx, cfg, getDialOpts)
+		initConfig := newInitServerConfig(ctx, cfg, getGRPCDialOpts, getDRPCDialOpts)
 		inspectState, err := inspectEngines(
 			context.Background(),
 			s.Engines(),
