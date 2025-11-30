@@ -366,6 +366,9 @@ message ExecStats {
   optional MVCCIteratorStats mvcc_iterator_stats = 8 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "MVCCIteratorStats"];
 
+  // AdmissionWaitTime is the cumulative time spent in admission control queues.
+  optional NumericStat admission_wait_time = 9 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields
   // here!
 }

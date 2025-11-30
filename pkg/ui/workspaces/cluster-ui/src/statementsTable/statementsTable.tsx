@@ -13,6 +13,7 @@ import {
   latencyBarChart,
   contentionBarChart,
   cpuBarChart,
+  admissionWaitTimeBarChart,
   maxMemUsageBarChart,
   networkBytesBarChart,
   retryBarChart,
@@ -152,6 +153,10 @@ export function makeStatementsColumns(
     sampledExecStatsBarChartOptions,
   );
   const cpuBar = cpuBarChart(statements, sampledExecStatsBarChartOptions);
+  const admissionWaitTimeBar = admissionWaitTimeBarChart(
+    statements,
+    sampledExecStatsBarChartOptions,
+  );
   const maxMemUsageBar = maxMemUsageBarChart(
     statements,
     sampledExecStatsBarChartOptions,
@@ -230,6 +235,14 @@ export function makeStatementsColumns(
       cell: cpuBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.exec_stats.cpu_sql_nanos?.mean)),
+    },
+    {
+      name: "admissionWaitTime",
+      title: statisticsTableTitles.admissionWaitTime(statType),
+      cell: admissionWaitTimeBar,
+      className: cx("statements-table__col-admission-wait-time"),
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.exec_stats.admission_wait_time?.mean)),
     },
     {
       name: "latencyMin",
