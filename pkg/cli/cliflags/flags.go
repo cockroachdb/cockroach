@@ -719,6 +719,14 @@ information.
 `,
 	}
 
+	UseNewRPC = FlagInfo{
+		Name: "use-new-rpc",
+		Description: `
+Use the new RPC framework for internode communication instead of gRPC. This is
+a preview feature and is intended for non-production use only.
+`,
+	}
+
 	LocalityAdvertiseAddr = FlagInfo{
 		Name: "locality-advertise-addr",
 		Description: `
