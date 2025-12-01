@@ -74,8 +74,10 @@ func (r *RecoveryVerifyResponse_UnavailableRanges) Empty() bool {
 // can't tell what the true prefix for each metric is). Additionally, for histograms
 // we generate the names for the quantiles that are exported (internal TSDB does
 // not support full histograms).
+//
+// If nonVerbose is true, only metrics marked as essential or support will be included.
 func GetInternalTimeseriesNamesFromServer(
-	ctx context.Context, ac RPCAdminClient,
+	ctx context.Context, ac RPCAdminClient, nonVerbose bool,
 ) ([]string, error) {
 	resp, err := ac.AllMetricMetadata(ctx, &MetricMetadataRequest{})
 	if err != nil {
@@ -83,6 +85,11 @@ func GetInternalTimeseriesNamesFromServer(
 	}
 	var sl []string
 	for name, meta := range resp.Metadata {
+		// Filter for essential and support metrics when nonVerbose is true.
+		isEssentialOrSupportMetric := meta.Visibility == metric.Metadata_ESSENTIAL || meta.Visibility == metric.Metadata_SUPPORT
+		if nonVerbose && !isEssentialOrSupportMetric {
+			continue
+		}
 		if meta.MetricType == io_prometheus_client.MetricType_HISTOGRAM {
 			// See usage of HistogramMetricComputers in pkg/server/status/recorder.go.
 			for _, q := range metric.HistogramMetricComputers {
