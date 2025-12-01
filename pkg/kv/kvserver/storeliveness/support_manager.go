@@ -121,15 +121,15 @@ func (sm *SupportManager) SupportFor(id slpb.StoreIdent) (slpb.Epoch, bool) {
 }
 
 // InspectSupportFrom implements the InspectFabric interface.
-func (sm *SupportManager) InspectSupportFrom() slpb.SupportStatesPerStore {
-	supportStates := sm.requesterStateHandler.exportAllSupportFrom()
-	return slpb.SupportStatesPerStore{StoreID: sm.storeID, SupportStates: supportStates}
+func (sm *SupportManager) InspectSupportFrom() slpb.InspectSupportFromStatesPerStore {
+	supportFromStates := sm.requesterStateHandler.exportAllSupportFrom()
+	return slpb.InspectSupportFromStatesPerStore{StoreID: sm.storeID, SupportFromStates: supportFromStates}
 }
 
 // InspectSupportFor implements the InspectFabric interface.
-func (sm *SupportManager) InspectSupportFor() slpb.SupportStatesPerStore {
-	supportStates := sm.supporterStateHandler.exportAllSupportFor()
-	return slpb.SupportStatesPerStore{StoreID: sm.storeID, SupportStates: supportStates}
+func (sm *SupportManager) InspectSupportFor() slpb.InspectSupportForStatesPerStore {
+	supportForStates := sm.supporterStateHandler.exportAllSupportFor()
+	return slpb.InspectSupportForStatesPerStore{StoreID: sm.storeID, SupportForStates: supportForStates}
 }
 
 // SupportFrom implements the Fabric interface. It delegates the response to the

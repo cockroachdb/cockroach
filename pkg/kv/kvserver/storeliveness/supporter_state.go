@@ -122,16 +122,19 @@ func (ssh *supporterStateHandler) getNumSupportFor() int {
 	return len(ssh.supporterState.supportFor)
 }
 
-// exportAllSupportFor exports a copy of all SupportStates from the
+// exportAllSupportFor exports a copy of all InspectSupportForStates from the
 // supporterState.supportFor map.
-func (ssh *supporterStateHandler) exportAllSupportFor() []slpb.SupportState {
+func (ssh *supporterStateHandler) exportAllSupportFor() []slpb.InspectSupportForState {
 	ssh.mu.RLock()
 	defer ssh.mu.RUnlock()
-	supportStates := make([]slpb.SupportState, 0, len(ssh.supporterState.supportFor))
+	supportForStates := make([]slpb.InspectSupportForState, 0, len(ssh.supporterState.supportFor))
 	for _, ss := range ssh.supporterState.supportFor {
-		supportStates = append(supportStates, ss.SupportState)
+		supportForStates = append(supportForStates, slpb.InspectSupportForState{
+			SupportState:             ss.SupportState,
+			LastSupportWithdrawnTime: ss.lastSupportWithdrawnTime,
+		})
 	}
-	return supportStates
+	return supportForStates
 }
 
 // Functions for handling supporterState updates.
