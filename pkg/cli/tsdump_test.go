@@ -271,6 +271,28 @@ sql.query.count
 			require.True(t, expected, "unexpected metric in output: %s", metric)
 		}
 	})
+
+	t.Run("debug tsdump with --non-verbose and --metrics-list-file flags together should fail", func(t *testing.T) {
+		// Create a temporary metrics list file
+		metricsListFile, err := os.CreateTemp("", "metrics_list_mutual_exclusion_*.txt")
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, os.Remove(metricsListFile.Name()))
+		}()
+
+		_, err = metricsListFile.WriteString("sql.query.count\n")
+		require.NoError(t, err)
+		require.NoError(t, metricsListFile.Close())
+
+		// Run tsdump with both --non-verbose and --metrics-list-file flags
+		out, _ := c.RunWithCapture(fmt.Sprintf(
+			"debug tsdump --format=csv --non-verbose --metrics-list-file=%s --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+			metricsListFile.Name(),
+		))
+
+		// Verify that the error message about mutual exclusivity is returned
+		require.Contains(t, out, "--non-verbose and --metrics-list-file cannot be used together")
+	})
 }
 
 func TestMakeOpenMetricsWriter(t *testing.T) {

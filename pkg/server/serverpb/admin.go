@@ -102,8 +102,11 @@ func (r *RecoveryVerifyResponse_UnavailableRanges) Empty() bool {
 //
 // When a filter is provided, stats contains match counts and unmatched literals.
 // When no filter is provided, stats fields are empty/nil.
+//
+// If nonVerbose is true and no filter is provided, only metrics marked as essential
+// or support will be included. The nonVerbose parameter is ignored when a filter is provided.
 func GetInternalTimeseriesNamesFromServer(
-	ctx context.Context, ac RPCAdminClient, filter []MetricsFilterEntry,
+	ctx context.Context, ac RPCAdminClient, filter []MetricsFilterEntry, nonVerbose bool,
 ) (names []string, stats FilterStats, err error) {
 	resp, err := ac.AllMetricMetadata(ctx, &MetricMetadataRequest{})
 	if err != nil {
@@ -121,7 +124,12 @@ func GetInternalTimeseriesNamesFromServer(
 	} else {
 		// No filter - use all metrics
 		namesToProcess = make([]string, 0, len(resp.Metadata))
-		for name := range resp.Metadata {
+		for name, meta := range resp.Metadata {
+			// Filter for essential and support metrics when nonVerbose is true.
+			isEssentialOrSupportMetric := meta.Visibility == metric.Metadata_ESSENTIAL || meta.Visibility == metric.Metadata_SUPPORT
+			if nonVerbose && !isEssentialOrSupportMetric {
+				continue
+			}
 			namesToProcess = append(namesToProcess, name)
 		}
 	}
