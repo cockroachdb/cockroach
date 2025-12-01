@@ -159,7 +159,8 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 ) *PhysicalPlan {
 	// Estimate the expected number of rows based on existing stats in the cache.
 	var rowsExpected uint64
-	if len(tableStats) > 0 {
+	// TODO(yuzefovich): plumb the estimate for USING SPANS stats collection.
+	if len(tableStats) > 0 && !details.UsingSpans {
 		overhead := stats.AutomaticStatisticsFractionStaleRows.Get(&dsp.st.SV)
 		if autoStatsFractionStaleRowsForTable, ok := desc.AutoStatsFractionStaleRows(); ok {
 			overhead = autoStatsFractionStaleRowsForTable
@@ -172,6 +173,7 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 				float64(tableStats[0].RowCount) * overhead,
 			))
 		} else {
+			// TODO: think about this.
 			rowsExpected = uint64(int64(
 				// The total expected number of rows is the same number that was measured
 				// most recently, plus some overhead for possible insertions.
@@ -328,8 +330,12 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	scan.desc = desc
 	if details.UsingExtremes {
 		err = scan.initDescSpecificCol(colCfg, column)
-	} else if details.WhereClause != "" {
+	} else if details.WhereIndexID != 0 {
 		err = scan.initDescSpecificIndex(colCfg, column, details.WhereIndexID)
+	} else {
+		err = errors.AssertionFailedf(
+			"partial stats require either USING EXTREMES, a WHERE clause, or USING SPANS",
+		)
 	}
 	if err != nil {
 		return nil, err
@@ -418,12 +424,9 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		if err != nil {
 			return nil, err
 		}
-	} else if details.WhereClause != "" {
+	} else {
 		predicate = details.WhereClause
 		scan.spans = details.WhereSpans
-	} else {
-		return nil, errors.AssertionFailedf(
-			"partial stats require either USING EXTREMES or a WHERE clause")
 	}
 	p, err := dsp.createTableReaders(ctx, planCtx, &scan)
 	if err != nil {
@@ -764,7 +767,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 		if details.ColumnStats[i].HistogramMaxBuckets > 0 {
 			histogramMaxBuckets = details.ColumnStats[i].HistogramMaxBuckets
 		}
-		if details.ColumnStats[i].Inverted && details.UsingExtremes {
+		if details.ColumnStats[i].Inverted && (details.UsingExtremes || details.WhereIndexID != 0) {
 			return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cannot create partial statistics on an inverted index column")
 		}
 		reqStats[i] = requestedStat{
@@ -780,7 +783,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 		return nil, errors.New("no stats requested")
 	}
 
-	if details.UsingExtremes || details.WhereClause != "" {
+	if details.UsingExtremes || details.WhereIndexID != 0 {
 		return dsp.createPartialStatsPlan(ctx, planCtx, tableDesc, reqStats, jobID, details, numIndexes, curIndex)
 	}
 	return dsp.createStatsPlan(ctx, planCtx, semaCtx, tableDesc, reqStats, jobID, details, numIndexes, curIndex)

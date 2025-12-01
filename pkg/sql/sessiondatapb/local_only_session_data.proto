@@ -792,6 +792,11 @@ message LocalOnlySessionData {
   // OptimizerUseMinRowCountAntiJoinFix, when true, causes the
   // optimizer_min_row_count setting to be applied correctly to anti-joins.
   bool optimizer_use_min_row_count_anti_join_fix = 203;
+  // EnableCreateStatsUsingSpans, when true, allows the use of
+  // CREATE STATISTICS .. USING SPANS (which is utilized by the "fix
+  // misestimates" auto partial stats).
+  bool enable_create_stats_using_spans = 204;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

@@ -4675,6 +4675,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`enable_create_stats_using_spans`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_create_stats_using_spans`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_create_stats_using_spans", s)
+			if err != nil {
+				return err
+			}
+			m.SetEnableCreateStatsUsingSpans(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableCreateStatsUsingSpans), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

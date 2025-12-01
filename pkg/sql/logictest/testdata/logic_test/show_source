@@ -96,6 +96,7 @@ distsql_use_reduced_leaf_write_sets                              on
 enable_auto_rehoming                                             off
 enable_create_stats_using_extremes                               on
 enable_create_stats_using_extremes_bool_enum                     off
+enable_create_stats_using_spans                                  on
 enable_durable_locking_for_serializable                          off
 enable_experimental_alter_column_type_general                    off
 enable_implicit_fk_locking_for_serializable                      off
