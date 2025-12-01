@@ -60,7 +60,7 @@ var reuseSession = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"cloudstorage.azure.session_reuse.enabled",
 	"persist the last opened azure client and re-use it when opening a new client with the same argument (some settings may take 2mins to take effect)",
-	false,
+	true,
 )
 
 // A note on Azure authentication:

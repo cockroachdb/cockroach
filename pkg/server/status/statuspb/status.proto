@@ -82,11 +82,19 @@ message NodeStatus {
   int64 total_system_memory = 11;
 
   // num_cpus is the number of logical CPUs as reported by the operating system
-  // on the host where the `cockroach` process is running. Note that
-  // this does not report the number of CPUs actually used by `cockroach`;
-  // this parameter is controlled separately.
+  // on the host where the `cockroach` process is running. This reflects the
+  // physical CPU count and does not account for container/cgroup limits.
+  // See num_vcpus for container-aware CPU allocation.
   // API: PUBLIC ALPHA
   int32 num_cpus = 12;
+
+  // num_vcpus is the number of vCPUs allocated to the process by the container
+  // orchestrator (e.g., Kubernetes, Docker) based on cgroup CPU quota/period.
+  // This represents the platform CPU allocation and is independent of GOMAXPROCS
+  // runtime tuning. Falls back to num_cpus if no container limits are configured.
+  // Supports fractional values (e.g., 1.5 for Kubernetes CPU limits like "1500m").
+  // API: PUBLIC ALPHA
+  double num_vcpus = 13;
 }
 
 // A HealthAlert is an undesired condition detected by a server which should be

@@ -109,6 +109,7 @@ message CPUInfo {
   string model = 4; // reported model name e.g. `Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz`
   float mhz = 5;  // speed of first cpu e.g. 3100
   repeated string features = 6; // cpu feature flags for first cpu
+  float numvcpu = 7; // container-aware vCPU allocation from cgroup limits
 }
 
 message HardwareInfo {

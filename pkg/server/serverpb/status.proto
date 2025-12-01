@@ -298,6 +298,10 @@ message NodeResponse {
   // this parameter is controlled separately.
   // API: PUBLIC ALPHA
   int32 num_cpus = 12;
+
+  // num_vcpus is the number of provisioned vCPUs as reported by
+  // cgroups or the operating system.
+  double num_vcpus = 13;
 }
 
 // RegionsRequest requests all available regions.

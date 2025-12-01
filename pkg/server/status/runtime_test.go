@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/kr/pretty"
 	"github.com/shirou/gopsutil/v3/net"
 	"github.com/stretchr/testify/assert"
@@ -420,4 +421,44 @@ TcpExt: b
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "could not parse value")
 	})
+}
+
+func TestGetVCPUs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// GetVCPUs should return a positive number. The exact value depends on
+	// whether we're running in a cgroup with CPU limits or not, but in either
+	// case it should be greater than 0.
+	vcpus := GetVCPUs(ctx)
+	require.Greater(t, vcpus, float64(0), "GetVCPUs should return a positive value")
+
+	// GetVCPUs should never return more than systemuNumCPU() in a non-cgroup
+	// environment, but it may return less in a containerized environment.
+	// We can't test the exact value without setting up cgroups, but we can
+	// verify it's reasonable.
+	numCPU := float64(system.NumCPU())
+	require.LessOrEqual(t, vcpus, numCPU, "GetVCPUs should not return more than NumCPU (sanity check)")
+
+	// Verify that GetVCPUs returns a different result than GetCPUCapacity when
+	// GOMAXPROCS is set lower than available CPUs.
+	currentMaxProcs := runtime.GOMAXPROCS(0)
+	if currentMaxProcs > 1 {
+		// Set GOMAXPROCS to 1 temporarily
+		runtime.GOMAXPROCS(1)
+		defer runtime.GOMAXPROCS(currentMaxProcs)
+
+		vcpusWithLowMaxProcs := GetVCPUs(ctx)
+		cpuCapacityWithLowMaxProcs := GetCPUCapacity()
+
+		// GetVCPUs should ignore GOMAXPROCS in non-cgroup environments
+		// (it should still return system.NumCPU())
+		// GetCPUCapacity should respect GOMAXPROCS and return 1
+		require.Equal(t, float64(1), cpuCapacityWithLowMaxProcs,
+			"GetCPUCapacity should respect GOMAXPROCS")
+
+		// GetVCPUs should be >= GetCPUCapacity when GOMAXPROCS is artificially low
+		require.GreaterOrEqual(t, vcpusWithLowMaxProcs, cpuCapacityWithLowMaxProcs,
+			"GetVCPUs should ignore GOMAXPROCS and return cgroup limit or NumCPU")
+	}
 }

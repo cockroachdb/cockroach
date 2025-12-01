@@ -17,10 +17,13 @@ const cx = classNames.bind(styles);
 
 type Job = cockroach.server.serverpb.IJobResponse;
 
-export class JobStatusBadge extends React.PureComponent<{ jobStatus: string }> {
+export class JobStatusBadge extends React.PureComponent<{
+  jobStatus: string;
+  advisory?: string;
+}> {
   render(): React.ReactElement {
     const jobStatus = this.props.jobStatus;
-    const badgeStatus = jobStatusToBadgeStatus(jobStatus);
+    const badgeStatus = jobStatusToBadgeStatus(jobStatus, this.props.advisory);
     return <Badge status={badgeStatus} text={jobStatus} />;
   }
 }
