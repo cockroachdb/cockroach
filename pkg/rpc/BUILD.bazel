@@ -36,6 +36,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/multitenant/tenantcapabilities",
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/rpc/rpcbase",
         "//pkg/security",

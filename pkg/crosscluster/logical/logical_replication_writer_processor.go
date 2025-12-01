@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	kvbulk "github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -359,7 +360,8 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 				log.Dev.Infof(lrw.Ctx(), "consumer completed. Error: %s", err)
 				lrw.sendError(errors.Wrap(err, "consume events"))
 			}
-		}, "proc", fmt.Sprintf("%d", lrw.ProcessorID))
+		}, workloadid.ProfileTag, workloadid.WORKLOAD_NAME_LDR,
+			"proc", fmt.Sprintf("%d", lrw.ProcessorID))
 		return nil
 	})
 }

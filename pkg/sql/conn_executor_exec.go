@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -4434,7 +4435,7 @@ func (ex *connExecutor) execWithProfiling(
 	ctx context.Context, ast tree.Statement, prepared *prep.Statement, op func(context.Context) error,
 ) error {
 	var err error
-	if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
+	if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels || log.HasSpan(ctx) {
 		remoteAddr := "internal"
 		if rAddr := ex.sessionData().RemoteAddr; rAddr != nil {
 			remoteAddr = rAddr.String()
@@ -4448,6 +4449,7 @@ func (ex *connExecutor) execWithProfiling(
 		pprofutil.Do(ctx, func(ctx context.Context) {
 			err = op(ctx)
 		},
+			workloadid.ProfileTag, fmt.Sprintf("%x", ex.planner.instrumentation.fingerprintId),
 			"appname", ex.sessionData().ApplicationName,
 			"addr", remoteAddr,
 			"stmt.tag", ast.StatementTag(),
