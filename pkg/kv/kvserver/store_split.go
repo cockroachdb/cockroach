@@ -175,6 +175,12 @@ func splitPreApply(
 	if err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
+	// Update the RHS applied state with the computed closed timestamp.
+	as.RaftClosedTimestamp = in.initClosedTimestamp
+	if err := rsl.SetRangeAppliedState(ctx, stateRW, as); err != nil {
+		log.KvExec.Fatalf(ctx, "%s", err)
+	}
+
 	// Update raft HardState and truncated state to reflect the replica
 	// initialization. Take into account the existing HardState since the
 	// uninitialized replica could have already moved it forward.
@@ -189,12 +195,6 @@ func splitPreApply(
 		log.KvExec.Fatalf(ctx, "%v", err)
 	} else if err := rsl.SetRaftTruncatedState(ctx, raftRW.WO, &initTS); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
-	}
-
-	// Update the RHS applied state with the computed closed timestamp.
-	as.RaftClosedTimestamp = in.initClosedTimestamp
-	if err := rsl.SetRangeAppliedState(ctx, stateRW, as); err != nil {
-		log.KvExec.Fatalf(ctx, "%s", err)
 	}
 }
 
