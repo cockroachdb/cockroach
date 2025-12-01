@@ -8,16 +8,21 @@ package rowexec
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -34,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,15 +52,38 @@ func TestIndexBackfillSinkSelection(t *testing.T) {
 	t.Run("bulk-adder sink selected", func(t *testing.T) {
 		settings := cluster.MakeTestingClusterSettings()
 		ib := makeTestIndexBackfiller(settings, fakeAdder)
+		srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
 
+		ib.spec.UseDistributedMergeSink = false
 		sink, err := ib.makeIndexBackfillSink(ctx)
 		require.NoError(t, err)
 		require.IsType(t, &bulkAdderIndexBackfillSink{}, sink)
+		sink.Close(ctx)
 
+		tempDir := t.TempDir()
 		ib.spec.UseDistributedMergeSink = true
-		_, err = ib.makeIndexBackfillSink(ctx)
-		require.Error(t, err)
-		require.True(t, testutils.IsError(err, "not implemented"))
+		ib.spec.DistributedMergeFilePrefix = "nodelocal://0/index-backfill/test"
+		ib.flowCtx.Cfg.DB = srv.SystemLayer().InternalDB().(descs.DB)
+		ib.flowCtx.Cfg.ExternalStorageFromURI = func(
+			ctx context.Context, uri string, _ username.SQLUsername, opts ...cloud.ExternalStorageOption,
+		) (cloud.ExternalStorage, error) {
+			if !strings.HasPrefix(uri, "nodelocal://") {
+				return nil, errors.New("unexpected URI")
+			}
+			es := nodelocal.TestingMakeNodelocalStorage(
+				tempDir,
+				settings,
+				cloudpb.ExternalStorage{},
+			)
+			t.Cleanup(func() { es.Close() })
+			return es, nil
+		}
+
+		sink, err = ib.makeIndexBackfillSink(ctx)
+		require.NoError(t, err)
+		require.IsType(t, &sstIndexBackfillSink{}, sink)
+		sink.Close(ctx)
 	})
 }
 
@@ -267,6 +296,7 @@ func makeTestIndexBackfiller(
 			},
 		},
 	}
+
 	ib.desc = tabledesc.NewBuilder(&descpb.TableDescriptor{
 		ID:   1,
 		Name: "t",

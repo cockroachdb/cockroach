@@ -843,6 +843,19 @@ message BackfillProgress {
   // backfilled into the destination indexes. Note that this will never contain
   // tenant prefixes even if the data corresponds to a secondary tenant.
   repeated roachpb.Span completed_spans = 5 [(gogoproto.nullable) = false];
+
+  // SSTManifests contains metadata about SST files produced while backfilling
+  // via the distributed merge pipeline. Each entry corresponds to a flushed SST.
+  repeated IndexBackfillSSTManifest sst_manifests = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTManifests"];
+}
+
+// IndexBackfillSSTManifest describes an SST produced by the backfill map stage.
+message IndexBackfillSSTManifest {
+  string uri = 1 [(gogoproto.customname) = "URI"];
+  roachpb.Span span = 2;
+  uint64 file_size = 3;
+  bytes row_sample = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  util.hlc.Timestamp write_timestamp = 5;
 }
 
 // MergeProgress is used to track index merge progress in the declarative

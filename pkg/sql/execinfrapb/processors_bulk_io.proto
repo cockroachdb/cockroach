@@ -87,7 +87,11 @@ message BackfillerSpec {
 
   optional bool use_distributed_merge_sink = 17 [(gogoproto.nullable) = false];
 
-  // NEXTID: 18.
+  // distributed_merge_file_prefix is the ExternalStorage URI prefix to use when
+  // writing map outputs for the distributed merge pipeline.
+  optional string distributed_merge_file_prefix = 18 [(gogoproto.nullable) = false];
+
+  // NEXTID: 19.
 }
 
 // JobProgress identifies the job to report progress on. This reporting
@@ -608,4 +612,10 @@ message BulkMergeSpec {
 	optional string output_uri = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "OutputURI"];
 
 	// NEXT ID: 4.
+}
+
+// IndexBackfillMapProgress is emitted by map-stage processors to describe newly
+// produced SST manifests.
+message IndexBackfillMapProgress {
+  repeated jobs.jobspb.IndexBackfillSSTManifest sst_manifests = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTManifests"];
 }
