@@ -303,3 +303,55 @@ func TestNewDatadogContextDatadogSiteSet(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "1234", apiKeyMap["apiKeyAuth"].Key)
 }
+
+func TestShouldUploadLogs(t *testing.T) {
+	// Save and restore env var and flag
+	originalBranch := os.Getenv("TC_BUILD_BRANCH")
+	originalFlag := roachtestflags.DatadogAlwaysUpload
+	defer func() {
+		_ = os.Setenv("TC_BUILD_BRANCH", originalBranch)
+		roachtestflags.DatadogAlwaysUpload = originalFlag
+	}()
+
+	tests := []struct {
+		name                 string
+		branch               string
+		datadogAlwaysUpload  bool
+		expectedShouldUpload bool
+	}{
+		{
+			name:                 "always upload flag set",
+			branch:               "feature-branch",
+			datadogAlwaysUpload:  true,
+			expectedShouldUpload: true,
+		},
+		{
+			name:                 "master branch",
+			branch:               "master",
+			datadogAlwaysUpload:  false,
+			expectedShouldUpload: true,
+		},
+		{
+			name:                 "release branch",
+			branch:               "release-24.1",
+			datadogAlwaysUpload:  false,
+			expectedShouldUpload: true,
+		},
+		{
+			name:                 "feature branch",
+			branch:               "feature-new-stuff",
+			datadogAlwaysUpload:  false,
+			expectedShouldUpload: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = os.Setenv("TC_BUILD_BRANCH", tt.branch)
+			roachtestflags.DatadogAlwaysUpload = tt.datadogAlwaysUpload
+
+			result := ShouldUploadLogs()
+			require.Equal(t, tt.expectedShouldUpload, result)
+		})
+	}
+}

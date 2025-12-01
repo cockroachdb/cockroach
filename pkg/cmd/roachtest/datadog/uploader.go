@@ -110,6 +110,7 @@ func BuildLogMetadata(
 	}
 
 	// Find hostname from teamcity's build properties file
+	// TODO verify this works on TC
 	tcBuildPropertiesPath := os.Getenv("TEAMCITY_BUILD_PROPERTIES_FILE")
 	if tcBuildPropertiesPath != "" {
 		file, err := os.Open(tcBuildPropertiesPath)

@@ -1625,12 +1625,16 @@ func (r *testRunner) runTest(
 
 	// Upload test logs to Datadog if running in TeamCity on release branches
 	if datadog.ShouldUploadLogs() {
+		t.L().Printf("uploading test logs to Datadog")
 		logPath := filepath.Join(t.artifactsDir, "test.log")
 		m := datadog.BuildLogMetadata(t.L(), t.spec, c.cloud, c.os, c.arch, c.name)
 		if err := datadog.MaybeUploadTestLog(ctx, t.L(), logPath, m); err != nil {
 			// Best effort
 			t.L().Printf("error uploading logs to Datadog: %v", err)
 		}
+	} else {
+		// TODO remove
+		t.L().Printf("not uploading test logs to Datadog")
 	}
 }
 
