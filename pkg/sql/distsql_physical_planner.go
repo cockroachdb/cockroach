@@ -5619,3 +5619,10 @@ func (dsp *DistSQLPlanner) createPlanForInsert(
 func (dsp *DistSQLPlanner) NodeDescStore() kvclient.NodeDescStore {
 	return dsp.nodeDescs
 }
+
+func SingleLocalityFilter(l roachpb.Locality) []roachpb.Locality {
+	if l.Empty() {
+		return nil
+	}
+	return []roachpb.Locality{l}
+}
