@@ -94,16 +94,43 @@ message Metadata {
     EXPIRATIONS = 16;
   }
 
-  // if essential is true, the metric is required to be included in
-  // a DB Console dashboard, in our public docs, and in all tsdump
-  // exports.
-  //
-  // The initial list of essential metrics was based on the "100 essential
-  // metrics" that can be found at
-  // https://github.com/cockroachlabs/cockroachdb-runbook-template/blob/main/monitoring-alerts/monitoring-dashboard-custom.md
-  required bool essential = 9 [(gogoproto.nullable) = false];
+  // MetricVisibility defines the intended audience and usage level for a metric.
+  // This controls where the metric appears (e.g., in tsdump output, public docs,
+  // dashboards) and helps categorize metrics by their relevance to different users.
+  enum MetricVisibility {
+    // INTERNAL is used for metrics which are only useful for internal debugging purposes.
+    // When a metric is marked INTERNAL:
+    // - It is included in verbose tsdump output only.
+    // - It is NOT intended for public documentation, dashboards, or customer troubleshooting.
+    // - If MetricVisibility is not set, the metric is treated as INTERNAL by default.
+    INTERNAL = 0;
+
+    // SUPPORT is used for metrics which are needed to help diagnose production issues.
+    // When a metric is marked SUPPORT:
+    // - It is included in both verbose and non-verbose tsdump output.
+    // - It is NOT required in public docs or dashboards (i.e., not user-facing).
+    SUPPORT = 1;
+
+    // ESSENTIAL is used for metrics which are critical to track the health of the cluster. 
+    // When a metric is marked ESSENTIAL:
+    // - It is included in both verbose and non-verbose tsdump output.
+    // - It is included in documentations, dashboards and monitoring pipelines.
+    //
+    // The initial list of essential metrics was based on the "100 essential
+    // metrics" that can be found at
+    // https://github.com/cockroachlabs/cockroachdb-runbook-template/blob/main/monitoring-alerts/monitoring-dashboard-custom.md
+    ESSENTIAL = 2;
+  }
+
+  // Field 9 was 'essential' (bool), replaced by 'visibility' field (field 10).
+  reserved 9;
+  reserved "essential";
+
+  // visibility defines the intended audience and usage level for this metric.
+  // See MetricVisibility for details on each visibility level.
+  required MetricVisibility visibility = 10 [(gogoproto.nullable) = false];
   // category is the dashboard category of this metric. This is
-  // required if `essential` is true.
+  // required if visibility is ESSENTIAL.
   required Category category = 11 [(gogoproto.nullable) = false];
   // how_to_use provides extended information about how to interpret this
   // metric's values in a running cluster. It should include guidance on:
@@ -111,7 +138,7 @@ message Metadata {
   // - Where to follow up an investigation
   // - Related cluster settings or other metrics
   //
-  // This field is required if `essential` is true. It is NOT exported to the
+  // This field is required if visibility is ESSENTIAL. It is NOT exported to the
   // Prometheus scrape endpoint, so it can be significantly longer than the help
   // text and may contain multiple paragraphs. Each paragraph should be a single
   // line, and paragraphs should be separated by a blank line. The text cannot
@@ -122,5 +149,5 @@ message Metadata {
   // purposes, with plans for future use in automated dashboard generation.
   required string how_to_use = 12 [(gogoproto.nullable) = false];
 
-  // Next ID: 10 (then 13).
+  // Next ID: 13.
 }

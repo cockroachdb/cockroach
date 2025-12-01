@@ -41,7 +41,7 @@ var LicenseTTLMetadata = metric.Metadata{
 	Help:        "Seconds until license expiry (0 if no license present)",
 	Measurement: "Seconds",
 	Unit:        metric.Unit_SECONDS,
-	Essential:   true,
+	Visibility:  metric.Metadata_ESSENTIAL,
 	Category:    metric.Metadata_EXPIRATIONS,
 	HowToUse:    "See Description.",
 }
@@ -51,7 +51,7 @@ var AdditionalLicenseTTLMetadata = metric.Metadata{
 	Help:        "Seconds until license expiry (0 if no license present)",
 	Measurement: "Seconds",
 	Unit:        metric.Unit_SECONDS,
-	Essential:   true,
+	Visibility:  metric.Metadata_ESSENTIAL,
 	Category:    metric.Metadata_EXPIRATIONS,
 	HowToUse:    "See Description.",
 }

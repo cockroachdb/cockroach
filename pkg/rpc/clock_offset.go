@@ -49,7 +49,7 @@ var (
 		Help:        "Mean clock offset with other nodes",
 		Measurement: "Clock Offset",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    "This metric gives the node's clock skew. In a well-configured environment, the actual clock skew would be in the sub-millisecond range. A skew exceeding 5 ms is likely due to a NTP service mis-configuration. Reducing the actual clock skew reduces the probability of uncertainty related conflicts and corresponding retires which has a positive impact on workload performance. Conversely, a larger actual clock skew increases the probability of retries due to uncertainty conflicts, with potentially measurable adverse effects on workload performance.",
 	}
@@ -93,6 +93,7 @@ rare or short-lived degradations.
 `,
 		Measurement: "Round-trip time",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 
 	metaDefaultConnectionRoundTripLatency = metric.Metadata{
