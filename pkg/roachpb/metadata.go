@@ -650,6 +650,13 @@ func (l Locality) Matches(filter Locality) (bool, Tier) {
 	return true, Tier{}
 }
 
+func (l Locality) NonEmptySlice() []Locality {
+	if l.Empty() {
+		return nil
+	}
+	return []Locality{l}
+}
+
 // getFirstRegionFirstZone returns the first region and zone values found in the locality tiers.
 // Returns:
 // - First region value and whether region was found.
