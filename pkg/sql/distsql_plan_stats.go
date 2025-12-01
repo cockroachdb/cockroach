@@ -172,6 +172,7 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 				float64(tableStats[0].RowCount) * overhead,
 			))
 		} else {
+			// TODO: think about this.
 			rowsExpected = uint64(int64(
 				// The total expected number of rows is the same number that was measured
 				// most recently, plus some overhead for possible insertions.
@@ -328,7 +329,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	scan.desc = desc
 	if details.UsingExtremes {
 		err = scan.initDescSpecificCol(colCfg, column)
-	} else if details.WhereClause != "" {
+	} else if details.WhereClause != "" || details.UsingSpan {
 		err = scan.initDescSpecificIndex(colCfg, column, details.WhereIndexID)
 	}
 	if err != nil {
@@ -418,7 +419,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		if err != nil {
 			return nil, err
 		}
-	} else if details.WhereClause != "" {
+	} else if details.WhereClause != "" || details.UsingSpan {
 		predicate = details.WhereClause
 		scan.spans = details.WhereSpans
 	} else {
@@ -764,6 +765,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 		if details.ColumnStats[i].HistogramMaxBuckets > 0 {
 			histogramMaxBuckets = details.ColumnStats[i].HistogramMaxBuckets
 		}
+		// TODO: think about this.
 		if details.ColumnStats[i].Inverted && details.UsingExtremes {
 			return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "cannot create partial statistics on an inverted index column")
 		}
@@ -780,7 +782,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 		return nil, errors.New("no stats requested")
 	}
 
-	if details.UsingExtremes || details.WhereClause != "" {
+	if details.UsingExtremes || details.WhereClause != "" || details.UsingSpan {
 		return dsp.createPartialStatsPlan(ctx, planCtx, tableDesc, reqStats, jobID, details, numIndexes, curIndex)
 	}
 	return dsp.createStatsPlan(ctx, planCtx, semaCtx, tableDesc, reqStats, jobID, details, numIndexes, curIndex)

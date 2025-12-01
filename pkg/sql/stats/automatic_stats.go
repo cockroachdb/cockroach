@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -286,6 +287,8 @@ type Refresher struct {
 	// metadata about SQL mutations to the background Refresher thread.
 	mutations chan mutation
 
+	misestimates chan misestimate
+
 	// settings is the buffered channel used to pass messages containing
 	// autostats setting override information to the background Refresher thread.
 	settings chan settingOverride
@@ -303,6 +306,10 @@ type Refresher struct {
 	// mutationCounts contains aggregated mutation counts for each table that
 	// have yet to be processed by the refresher.
 	mutationCounts map[descpb.ID]int64
+
+	misestimateSpans map[tableIDIndexID][]roachpb.Span
+
+	spanForAutoPartial map[tableIDIndexID]roachpb.Span
 
 	// settingOverrides holds any autostats cluster setting overrides for each
 	// table.
@@ -330,6 +337,16 @@ type mutation struct {
 	// cluster setting overrides for the table with the above tableID.
 	// The default value of false is a no-Op.
 	removeSettingOverrides bool
+}
+
+type tableIDIndexID struct {
+	tableID descpb.ID
+	indexID descpb.IndexID
+}
+
+type misestimate struct {
+	tableIDIndexID
+	spans []roachpb.Span
 }
 
 // settingOverride specifies the autostats setting override values to use in
@@ -368,20 +385,23 @@ func MakeRefresher(
 	readOnlyTenant bool,
 ) *Refresher {
 	return &Refresher{
-		AmbientContext:   ambientCtx,
-		st:               st,
-		internalDB:       internalDB,
-		cache:            cache,
-		knobs:            knobs,
-		readOnlyTenant:   readOnlyTenant,
-		rng:              rand.New(rand.NewSource(rand.Int63())),
-		mutations:        make(chan mutation, mutationsChanBufferLen),
-		settings:         make(chan settingOverride, settingsChanBufferLen),
-		asOfTime:         asOfTime,
-		extraTime:        time.Duration(rand.Int63n(int64(time.Hour))),
-		mutationCounts:   make(map[descpb.ID]int64, 16),
-		settingOverrides: make(map[descpb.ID]catpb.AutoStatsSettings),
-		drainAutoStats:   make(chan struct{}),
+		AmbientContext:     ambientCtx,
+		st:                 st,
+		internalDB:         internalDB,
+		cache:              cache,
+		knobs:              knobs,
+		readOnlyTenant:     readOnlyTenant,
+		rng:                rand.New(rand.NewSource(rand.Int63())),
+		mutations:          make(chan mutation, mutationsChanBufferLen),
+		misestimates:       make(chan misestimate, mutationsChanBufferLen),
+		settings:           make(chan settingOverride, settingsChanBufferLen),
+		asOfTime:           asOfTime,
+		extraTime:          time.Duration(rand.Int63n(int64(time.Hour))),
+		mutationCounts:     make(map[descpb.ID]int64, 16),
+		misestimateSpans:   make(map[tableIDIndexID][]roachpb.Span, 16),
+		spanForAutoPartial: make(map[tableIDIndexID]roachpb.Span, 16),
+		settingOverrides:   make(map[descpb.ID]catpb.AutoStatsSettings),
+		drainAutoStats:     make(chan struct{}),
 	}
 }
 
@@ -568,8 +588,10 @@ func (r *Refresher) Start(
 			refreshInterval = 0
 		}
 
-		timer := time.NewTimer(refreshInterval)
-		defer timer.Stop()
+		statsRefresherTimer := time.NewTimer(refreshInterval)
+		defer statsRefresherTimer.Stop()
+		fixMisestimatesTimer := time.NewTimer(refreshInterval)
+		defer fixMisestimatesTimer.Stop()
 
 		// Ensure that read-only tables will have stats created at least
 		// once on startup.
@@ -588,7 +610,7 @@ func (r *Refresher) Start(
 					ensuringAllTables = true
 				}
 
-			case <-timer.C:
+			case <-statsRefresherTimer.C:
 				mutationCounts := r.mutationCounts
 				refreshingAllTables := ensuringAllTables
 				ensuringAllTables = false
@@ -684,12 +706,11 @@ func (r *Refresher) Start(
 							case <-ctx.Done():
 								return
 							case <-r.drainAutoStats:
-								// Ditto.
 								return
 							default:
 							}
 						}
-						timer.Reset(refreshInterval)
+						statsRefresherTimer.Reset(refreshInterval)
 					}); err != nil {
 					r.startedTasksWG.Done()
 					log.Dev.Errorf(ctx, "failed to start async stats task: %v", err)
@@ -701,6 +722,67 @@ func (r *Refresher) Start(
 				// are read-only.
 				r.mutationCounts = make(map[descpb.ID]int64, len(r.mutationCounts))
 
+			case <-fixMisestimatesTimer.C:
+				misestimateSpans := r.misestimateSpans
+				// TODO: setting overrides
+
+				r.startedTasksWG.Add(1)
+				if err := stopper.RunAsyncTask(
+					ctx, "stats.Refresher: fixMisestimates", func(ctx context.Context) {
+						defer r.startedTasksWG.Done()
+
+						// Wait so that the latest changes will be reflected according to the
+						// AS OF time.
+						timerAsOf := time.NewTimer(r.asOfTime)
+						defer timerAsOf.Stop()
+						select {
+						case <-timerAsOf.C:
+							break
+						case <-r.drainAutoStats:
+							return
+						case <-ctx.Done():
+							return
+						}
+
+						for target, spans := range misestimateSpans {
+							desc := r.getTableDescriptor(ctx, target.tableID)
+							if r.autoPartialStatsEnabled(desc) {
+								// TODO: think about concurrency between tables.
+								for _, span := range spans {
+									err := r.refreshAutoPartialUsingSpan(ctx, target, span)
+									// TODO: think about error handling.
+									// Namely, we might want to remember the
+									// IndexID of the last successful index
+									// we collected from.
+									if !errors.Is(err, ConcurrentCreateStatsError) {
+										log.Dev.Warningf(ctx, "failed to refresh auto partial stats on %d@%d using span: %v", target.tableID, target.indexID, err)
+									}
+
+									select {
+									case <-ctx.Done():
+										return
+									case <-r.drainAutoStats:
+										return
+									default:
+									}
+								}
+							}
+
+							select {
+							case <-ctx.Done():
+								return
+							case <-r.drainAutoStats:
+								return
+							default:
+							}
+						}
+						fixMisestimatesTimer.Reset(refreshInterval)
+					}); err != nil {
+					r.startedTasksWG.Done()
+					log.Dev.Errorf(ctx, "failed to start async stats task: %v", err)
+				}
+				r.misestimateSpans = make(map[tableIDIndexID][]roachpb.Span, len(r.misestimateSpans))
+
 			case mut := <-r.mutations:
 				r.mutationCounts[mut.tableID] += int64(mut.rowsAffected)
 				// The mutations channel also handles resetting of cluster setting
@@ -708,6 +790,46 @@ func (r *Refresher) Start(
 				// when nothing is overridden).
 				if mut.removeSettingOverrides {
 					delete(r.settingOverrides, mut.tableID)
+				}
+
+			case mis := <-r.misestimates:
+				oldSpans := r.misestimateSpans[mis.tableIDIndexID]
+				// Check whether any of the newly-received misestimated spans
+				// are duplicates of the ones we already have in the queue (in
+				// which case we can just ignore the new one) or whether they
+				// can be merged with the existing one into a single span.
+				// TODO(yuzefovich): consider optimizing this loop.
+				for _, newSpan := range mis.spans {
+					var dup bool
+					adjacentSpanIndex := -1
+					for spanIdx, oldSpan := range oldSpans {
+						if oldSpan.Equal(newSpan) {
+							dup = true
+							break
+						}
+						if adjacentSpanIndex == -1 &&
+							(oldSpan.Key.Equal(newSpan.EndKey) || newSpan.Key.Equal(oldSpan.EndKey)) {
+							adjacentSpanIndex = spanIdx
+						}
+					}
+					if !dup {
+						if adjacentSpanIndex != -1 {
+							oldSpan := oldSpans[adjacentSpanIndex]
+							if oldSpan.Key.Equal(newSpan.EndKey) {
+								r.misestimateSpans[mis.tableIDIndexID][adjacentSpanIndex] = roachpb.Span{
+									Key:    newSpan.Key,
+									EndKey: oldSpan.EndKey,
+								}
+							} else {
+								r.misestimateSpans[mis.tableIDIndexID][adjacentSpanIndex] = roachpb.Span{
+									Key:    oldSpan.Key,
+									EndKey: newSpan.EndKey,
+								}
+							}
+						} else {
+							r.misestimateSpans[mis.tableIDIndexID] = append(r.misestimateSpans[mis.tableIDIndexID], newSpan)
+						}
+					}
 				}
 
 			case clusterSettingOverride := <-r.settings:
@@ -952,6 +1074,44 @@ func (r *Refresher) EstimateStaleness(ctx context.Context, tableID descpb.ID) (f
 	return staleFraction, nil
 }
 
+func (r *Refresher) FixMisestimate(
+	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID, spans []roachpb.Span,
+) error {
+	desc := r.getTableDescriptor(ctx, tableID)
+	if desc == nil {
+		return errors.New("could not access the table descriptor")
+	}
+	if !r.cache.autostatsCollectionAllowed(desc) {
+		return errors.New("automatic stats collection is not allowed for this table")
+	}
+	// TODO: think about copies.
+	spansCopy := make([]roachpb.Span, len(spans))
+	copy(spansCopy, spans)
+	select {
+	case r.misestimates <- misestimate{
+		tableIDIndexID: tableIDIndexID{
+			tableID: tableID,
+			indexID: indexID,
+		},
+		spans: spansCopy,
+	}:
+	default:
+		// Don't block if there is no room in the buffered channel.
+		if bufferedChanFullLogLimiter.ShouldLog() {
+			log.Dev.Warningf(ctx, "buffered channel is full. Unable to fix misestimates for table ID %d", tableID)
+		}
+	}
+	return nil
+}
+
+func (r *Refresher) GetSpanForTableID(tableID descpb.ID, indexID uint32) (roachpb.Span, error) {
+	span, ok := r.spanForAutoPartial[tableIDIndexID{tableID: tableID, indexID: descpb.IndexID(indexID)}]
+	if !ok {
+		return roachpb.Span{}, errors.AssertionFailedf("didn't find span for auto partial refresh for table ID %d", tableID)
+	}
+	return span, nil
+}
+
 // maybeRefreshStats implements the core logic described in the comment for
 // Refresher. It is called by the background Refresher thread.
 // explicitSettings, if non-nil, holds any autostats cluster setting overrides
@@ -1120,6 +1280,34 @@ func (r *Refresher) refreshStats(
 	_ /* rows */, err := r.internalDB.Executor().Exec(
 		ctx,
 		"create-stats",
+		nil, /* txn */
+		stmt,
+	)
+	return err
+}
+
+func (r *Refresher) refreshAutoPartialUsingSpan(
+	ctx context.Context, target tableIDIndexID, span roachpb.Span,
+) error {
+	r.spanForAutoPartial[target] = span
+	defer func() {
+		delete(r.spanForAutoPartial, target)
+	}()
+	stmt := fmt.Sprintf(
+		"CREATE STATISTICS %s FROM [%d] WITH OPTIONS THROTTLING %g AS OF SYSTEM TIME '-%s' USING SPAN ON %d",
+		jobspb.AutoPartialStatsName,
+		target.tableID,
+		AutomaticStatisticsMaxIdleTime.Get(&r.st.SV),
+		r.asOfTime.String(),
+		target.indexID,
+	)
+
+	if log.ExpensiveLogEnabled(ctx, 1) {
+		log.Dev.Infof(ctx, "automatically executing %q", stmt)
+	}
+	_ /* rows */, err := r.internalDB.Executor().Exec(
+		ctx,
+		"create-stats-using-span",
 		nil, /* txn */
 		stmt,
 	)
