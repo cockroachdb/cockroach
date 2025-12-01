@@ -10,6 +10,7 @@ import (
 	"time"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
@@ -566,7 +567,10 @@ func (t *Transport) startProcessNewQueue(
 	err := t.stopper.RunAsyncTask(
 		ctx, "storeliveness.Transport: sending messages",
 		func(ctx context.Context) {
-			pprofutil.Do(ctx, worker, "remote_node_id", toNodeID.String())
+			pprofutil.Do(ctx, worker,
+				workloadid.ProfileTag, workloadid.WORKLOAD_NAME_STORELIVENESS,
+				"remote_node_id", toNodeID.String(),
+			)
 		},
 	)
 	if err != nil {
