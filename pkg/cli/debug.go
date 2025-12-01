@@ -1622,6 +1622,7 @@ func init() {
 	f.IntVar(&debugTimeSeriesDumpOpts.noOfUploadWorkers, "upload-workers", 75, "number of workers to upload the time series data in parallel")
 	f.BoolVar(&debugTimeSeriesDumpOpts.retryFailedRequests, "retry-failed-requests", false, "retry previously failed requests from file")
 	f.BoolVar(&debugTimeSeriesDumpOpts.disableDeltaProcessing, "disable-delta-processing", false, "disable delta calculation for counter metrics (enabled by default)")
+	f.BoolVar(&debugTimeSeriesDumpOpts.nonVerbose, "non-verbose", false, "dump only essential metrics and support metrics")
 	f.Int64Var(&debugTimeSeriesDumpOpts.ddMetricInterval, "dd-metric-interval", debugTimeSeriesDumpOpts.ddMetricInterval, "interval in seconds for datadoginit format only (default 10). Regular datadog format uses actual intervals from tsdump.")
 	f.Lookup("dd-metric-interval").Hidden = true // this is for internal use only
 
