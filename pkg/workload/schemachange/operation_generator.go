@@ -1326,6 +1326,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		{code: pgcode.FeatureNotSupported, condition: hasVectorType},
 		{code: pgcode.Syntax, condition: hasCitextType},
 		{code: pgcode.FeatureNotSupported, condition: hasCitextType},
+		{code: pgcode.UndefinedObject, condition: hasCitextType},
 	})
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
