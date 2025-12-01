@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "fingerprint",
+    srcs = ["gatherer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/fingerprint",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/sql",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/hlc",
+        "//pkg/util/span",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "fingerprint_test",
+    srcs = [
+        "gatherer_test.go",
+        "main_test.go",
+    ],
+    embed = [":fingerprint"],
+    deps = [
+        "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/span",
+        "@com_github_stretchr_testify//require",
+    ],
+)
