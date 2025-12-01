@@ -1534,6 +1534,18 @@ message InspectDetails {
   ];
 }
 
+message FingerprintDetails {
+  repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp as_of = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp start = 3 [(gogoproto.nullable) = false];
+  bool stripped = 4;
+  bytes pts = 5 [(gogoproto.customname) = "PTS", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID", (gogoproto.nullable) = false];
+}
+
+message FingerprintProgress {
+ // Not used: progress is stored in its own info key(s) and frontier.
+}
+
 message UpdateTableMetadataCacheDetails {}
 message UpdateTableMetadataCacheProgress {
   enum Status {
@@ -1659,6 +1671,7 @@ message Payload {
     SqlActivityFlushDetails sql_activity_flush_details = 51;
     HotRangesLoggerDetails hot_ranges_logger_details = 52;
     InspectDetails inspect_details = 53;
+    FingerprintDetails fingerprint_details = 54;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1743,6 +1756,7 @@ message Progress {
     SqlActivityFlushProgress sql_activity_flush = 39;
     HotRangesLoggerProgress hot_ranges_logger = 40;
     InspectProgress inspect = 41;
+    FingerprintProgress fingerprint = 42;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1790,6 +1804,7 @@ enum Type {
   SQL_ACTIVITY_FLUSH = 31 [(gogoproto.enumvalue_customname) = "TypeSQLActivityFlush"];
   HOT_RANGES_LOGGER = 32 [(gogoproto.enumvalue_customname) = "TypeHotRangesLogger"];
   INSPECT = 33 [(gogoproto.enumvalue_customname) = "TypeInspect"];
+  FINGERPRINT = 34 [(gogoproto.enumvalue_customname) = "TypeFingerprint"];
 }
 
 message Job {
