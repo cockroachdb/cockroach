@@ -1340,8 +1340,8 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 		// replicas.
 		cs.applyChangeLoadDelta(change.ReplicaChange)
 	}
-	log.KvDistribution.VEventf(ctx, 2, "processStoreLoadMsg for store s%v: %v",
-		storeMsg.StoreID, ss.adjusted.load)
+	log.KvDistribution.VEventf(ctx, 2, "processStoreLoadMsg for store s%v: %v, capacity: %v",
+		storeMsg.StoreID, ss.adjusted.load, ss.storeLoad.capacity)
 }
 
 func (cs *clusterState) processStoreLeaseholderMsg(
