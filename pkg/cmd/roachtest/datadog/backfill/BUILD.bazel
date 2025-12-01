@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "backfill_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/datadog/backfill",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cmd/roachtest/datadog",
+        "//pkg/release",
+        "//pkg/roachprod/logger",
+    ],
+)
+
+go_binary(
+    name = "backfill",
+    embed = [":backfill_lib"],
+    visibility = ["//visibility:public"],
+)
