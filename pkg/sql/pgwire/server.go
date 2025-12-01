@@ -202,42 +202,63 @@ var (
 		Help:        "Latency to establish and authenticate a SQL connection using JWT Token",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthCertConnLatency = metric.Metadata{
 		Name:        "auth.cert.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using certificate",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthPassConnLatency = metric.Metadata{
 		Name:        "auth.password.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using password",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthLDAPConnLatency = metric.Metadata{
 		Name:        "auth.ldap.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using LDAP",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthGSSConnLatency = metric.Metadata{
 		Name:        "auth.gss.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using GSS",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthScramConnLatency = metric.Metadata{
 		Name:        "auth.scram.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using SCRAM",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthLDAPConnLatencyInternal = metric.Metadata{
 		Name:        "auth.ldap.conn.latency.internal",
 		Help:        "Internal Auth Latency to establish and authenticate a SQL connection using LDAP(excludes external LDAP calls)",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 )
 

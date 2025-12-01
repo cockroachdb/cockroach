@@ -330,6 +330,76 @@ layers:
       essential: true
   - name: SQL
     metrics:
+    - name: auth.cert.conn.latency
+      exported_name: auth_cert_conn_latency
+      description: Latency to establish and authenticate a SQL connection using certificate
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      essential: true
+    - name: auth.gss.conn.latency
+      exported_name: auth_gss_conn_latency
+      description: Latency to establish and authenticate a SQL connection using GSS
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      essential: true
+    - name: auth.jwt.conn.latency
+      exported_name: auth_jwt_conn_latency
+      description: Latency to establish and authenticate a SQL connection using JWT Token
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      essential: true
+    - name: auth.ldap.conn.latency
+      exported_name: auth_ldap_conn_latency
+      description: Latency to establish and authenticate a SQL connection using LDAP
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      essential: true
+    - name: auth.ldap.conn.latency.internal
+      exported_name: auth_ldap_conn_latency_internal
+      description: Internal Auth Latency to establish and authenticate a SQL connection using LDAP(excludes external LDAP calls)
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      essential: true
+    - name: auth.password.conn.latency
+      exported_name: auth_password_conn_latency
+      description: Latency to establish and authenticate a SQL connection using password
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      essential: true
+    - name: auth.scram.conn.latency
+      exported_name: auth_scram_conn_latency
+      description: Latency to establish and authenticate a SQL connection using SCRAM
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      essential: true
     - name: jobs.auto_create_partial_stats.currently_paused
       exported_name: jobs_auto_create_partial_stats_currently_paused
       labeled_name: 'jobs{name: auto_create_partial_stats, status: currently_paused}'
@@ -1220,62 +1290,6 @@ layers:
       essential: true
   - name: UNSET
     metrics:
-    - name: auth.cert.conn.latency
-      exported_name: auth_cert_conn_latency
-      description: Latency to establish and authenticate a SQL connection using certificate
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: auth.gss.conn.latency
-      exported_name: auth_gss_conn_latency
-      description: Latency to establish and authenticate a SQL connection using GSS
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: auth.jwt.conn.latency
-      exported_name: auth_jwt_conn_latency
-      description: Latency to establish and authenticate a SQL connection using JWT Token
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: auth.ldap.conn.latency
-      exported_name: auth_ldap_conn_latency
-      description: Latency to establish and authenticate a SQL connection using LDAP
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: auth.ldap.conn.latency.internal
-      exported_name: auth_ldap_conn_latency_internal
-      description: Internal Auth Latency to establish and authenticate a SQL connection using LDAP(excludes external LDAP calls)
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: auth.password.conn.latency
-      exported_name: auth_password_conn_latency
-      description: Latency to establish and authenticate a SQL connection using password
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: auth.scram.conn.latency
-      exported_name: auth_scram_conn_latency
-      description: Latency to establish and authenticate a SQL connection using SCRAM
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
     - name: backup.last-failed-time.kms-inaccessible
       exported_name: backup_last_failed_time_kms_inaccessible
       description: The unix timestamp of the most recent failure of backup due to errKMSInaccessible by a backup specified as maintaining this metric
