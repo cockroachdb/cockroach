@@ -153,14 +153,10 @@ func (u *tableMetadataUpdater) pruneCache(ctx context.Context) (removed int, err
 			nil, // txn
 			sessiondata.NodeUserWithBulkLowPriSessionDataOverride, `
 DELETE FROM system.table_metadata
-WHERE table_id IN (
-  SELECT table_id
-  FROM system.table_metadata
-  WHERE table_id NOT IN (
-    SELECT id FROM system.namespace
-  )
-  LIMIT $1
+WHERE table_id NOT IN (
+  SELECT id FROM system.descriptor
 )
+LIMIT $1
 RETURNING table_id`, pruneBatchSize)
 
 		if err != nil {
