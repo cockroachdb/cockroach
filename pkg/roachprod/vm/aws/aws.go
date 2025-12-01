@@ -166,8 +166,8 @@ func (d *ebsDisk) Set(s string) error {
 	case "gp2":
 		// Nothing -- size checked above.
 	case "gp3":
-		if d.IOPs > 16000 {
-			return errors.AssertionFailedf("Iops required for gp3 disk: [3000, 16000]")
+		if d.IOPs > 80000 {
+			return errors.AssertionFailedf("Iops required for gp3 disk: [3000, 80000]")
 		}
 		if d.IOPs == 0 {
 			// 3000 is a base IOPs for gp3.
@@ -1378,7 +1378,8 @@ func (p *Provider) runInstance(
 	}
 	imageID := withFlagOverride(az.Region.AMI_X86_64, &providerOpts.ImageAMI)
 	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "6gd.") == 1 ||
-		strings.Index(machineType, "7g.") == 1 || strings.Index(machineType, "7gd.") == 1
+		strings.Index(machineType, "7g.") == 1 || strings.Index(machineType, "7gd.") == 1 ||
+		strings.Index(machineType, "8g.") == 1 || strings.Index(machineType, "8gd.") == 1
 	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
 		return nil, errors.Errorf("machine type %s is arm64, but requested arch is %s", machineType, opts.Arch)
 	}

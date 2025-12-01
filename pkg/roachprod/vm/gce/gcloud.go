@@ -347,16 +347,18 @@ type ProviderOpts struct {
 	// projects represent the GCE projects to operate on. Accessed through
 	// GetProject() or GetProjects() depending on whether the command accepts
 	// multiple projects or a single one.
-	MachineType      string
-	MinCPUPlatform   string
-	BootDiskType     string
-	Zones            []string
-	Image            string
-	SSDCount         int
-	PDVolumeType     string
-	PDVolumeSize     int
-	PDVolumeCount    int
-	UseMultipleDisks bool
+	MachineType                   string
+	MinCPUPlatform                string
+	BootDiskType                  string
+	Zones                         []string
+	Image                         string
+	SSDCount                      int
+	PDVolumeType                  string
+	PDVolumeSize                  int
+	PDVolumeCount                 int
+	PDVolumeProvisionedIOPS       int
+	PDVolumeProvisionedThroughput int
+	UseMultipleDisks              bool
 	// use spot instances (i.e., latest version of preemptibles which can run > 24 hours)
 	UseSpot bool
 	// Use an instance template and a managed instance group to create VMs. This
@@ -740,12 +742,12 @@ func (p *Provider) CreateVolume(
 	}
 
 	switch vco.Type {
-	case "local-ssd", "pd-balanced", "pd-extreme", "pd-ssd", "pd-standard":
+	case "local-ssd", "pd-balanced", "pd-extreme", "pd-ssd", "pd-standard", "hyperdisk-balanced":
 		args = append(args, "--type", vco.Type)
 	case "":
 	// use the default
 	default:
-		return vol, errors.Newf("Expected type to be one of local-ssd, pd-balanced, pd-extreme, pd-ssd, pd-standard got %s\n", vco.Type)
+		return vol, errors.Newf("Expected type to be one of local-ssd, pd-balanced, pd-extreme, pd-ssd, pd-standard, hyperdisk-balanced got %s\n", vco.Type)
 	}
 
 	var commandResponse []describeVolumeCommandResponse
@@ -1140,11 +1142,16 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
 		"Number of local SSDs to create, only used if local-ssd=true")
 	flags.StringVar(&o.PDVolumeType, ProviderName+"-pd-volume-type", "pd-ssd",
-		"Type of the persistent disk volume, only used if local-ssd=false")
+		"Type of the persistent disk volume, only used if local-ssd=false "+
+			"(pd-ssd, pd-balanced, pd-extreme, pd-standard, hyperdisk-balanced)")
 	flags.IntVar(&o.PDVolumeSize, ProviderName+"-pd-volume-size", 500,
 		"Size in GB of persistent disk volume, only used if local-ssd=false")
 	flags.IntVar(&o.PDVolumeCount, ProviderName+"-pd-volume-count", 1,
 		"Number of persistent disk volumes, only used if local-ssd=false")
+	flags.IntVar(&o.PDVolumeProvisionedIOPS, ProviderName+"-pd-volume-provisioned-iops", 0,
+		"Provisioned IOPS for the disk volume (required for hyperdisk-balanced, optional for pd-extreme)")
+	flags.IntVar(&o.PDVolumeProvisionedThroughput, ProviderName+"-pd-volume-provisioned-throughput", 0,
+		"Provisioned throughput in MiB/s for the disk volume (required for hyperdisk-balanced)")
 	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
 		false, "Enable the use of multiple stores by creating one store directory per disk. "+
 			"Default is to raid0 stripe all disks.")
@@ -1503,9 +1510,14 @@ func (p *Provider) computeInstanceArgs(
 					fmt.Sprintf("size=%dGB", providerOpts.PDVolumeSize),
 					"auto-delete=yes",
 				}
-				// TODO(pavelkalinnikov): support disk types with "provisioned-throughput"
-				// option, such as Hyperdisk Throughput:
-				// https://cloud.google.com/compute/docs/disks/add-hyperdisk#hyperdisk-throughput.
+				// Add provisioned IOPS if specified (required for hyperdisk-balanced, optional for pd-extreme).
+				if providerOpts.PDVolumeProvisionedIOPS > 0 {
+					pdProps = append(pdProps, fmt.Sprintf("provisioned-iops=%d", providerOpts.PDVolumeProvisionedIOPS))
+				}
+				// Add provisioned throughput if specified (required for hyperdisk-balanced).
+				if providerOpts.PDVolumeProvisionedThroughput > 0 {
+					pdProps = append(pdProps, fmt.Sprintf("provisioned-throughput=%d", providerOpts.PDVolumeProvisionedThroughput))
+				}
 				args = append(args, "--create-disk", strings.Join(pdProps, ","))
 			}
 			// Enable DISCARD commands for persistent disks, as is advised in:
