@@ -28,6 +28,7 @@ import (
 
 const (
 	// Static tags for all roachtest logs
+	// TODO remove appended -test from tags after e2e verification
 	defaultEnv      = "test-infra"
 	defaultDDSource = "teamcity-test"
 	defaultService  = "roachtest-test"
@@ -36,13 +37,13 @@ const (
 // LogMetadata contains the configuration for uploading logs to Datadog
 type LogMetadata struct {
 	TestName string
-	Owner    string // roachtest registry owner
+	Owner    string
 	Cloud    string
 	Platform string // e.g., linux-amd64, linux-arm64
 	Host     string // teamcity agent hostname e.g., gce-agent-nightlies-roachtest-20240520-no-preempt-43
 	Version  string // branch name e.g., master, release-25.1
 	BuildID  string // TC Build ID
-	Cluster  string // roachprod cluster ID
+	Cluster  string // roachprod cluster
 }
 
 // makeTags builds the ddtags string, empty tags won't cause errors
@@ -101,7 +102,7 @@ func BuildLogMetadata(
 	m := LogMetadata{
 		TestName: spec.Name,
 		Owner:    string(spec.Owner),
-		Cloud:    cloudToDatadogTag(cloud),
+		Cloud:    cloud.String(),
 		Platform: buildPlatformTag(osName, arch),
 		Cluster:  clusterName,
 		Version:  os.Getenv("TC_BUILD_BRANCH"),

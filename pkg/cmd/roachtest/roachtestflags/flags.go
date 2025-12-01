@@ -355,8 +355,13 @@ var (
 		Usage: `Datadog site to communicate with (e.g., us5.datadoghq.com).`,
 	})
 
+	// TODO(wchoe): remove this flag, pass in api key via env var
 	DatadogAPIKey string = ""
-	_                    = registerRunOpsFlag(&DatadogAPIKey, FlagInfo{
+	_                    = registerRunFlag(&DatadogAPIKey, FlagInfo{
+		Name:  "datadog-api-key",
+		Usage: `Datadog API key to emit telemetry data to Datadog.`,
+	})
+	_ = registerRunOpsFlag(&DatadogAPIKey, FlagInfo{
 		Name:  "datadog-api-key",
 		Usage: `Datadog API key to emit telemetry data to Datadog.`,
 	})
