@@ -345,7 +345,7 @@ func TestGetInternalTimeseriesNamesFromServer(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			names, stats, err := GetInternalTimeseriesNamesFromServer(ctx, mockClient, tc.filter)
+			names, stats, err := GetInternalTimeseriesNamesFromServer(ctx, mockClient, tc.filter, false)
 			require.NoError(t, err)
 
 			require.Equal(t, tc.expectedNames, names)
@@ -361,6 +361,167 @@ func TestGetInternalTimeseriesNamesFromServer(t *testing.T) {
 			} else {
 				require.Empty(t, stats.UnmatchedLiterals)
 			}
+		})
+	}
+}
+
+// TestGetInternalTimeseriesNamesFromServer_NonVerboseFiltering tests that
+// the nonVerbose parameter correctly filters metrics by visibility.
+func TestGetInternalTimeseriesNamesFromServer_NonVerboseFiltering(t *testing.T) {
+	ctx := context.Background()
+
+	mockMetadata := map[string]metric.Metadata{
+		"sys.cpu.user.percent": {
+			Name:       "sys.cpu.user.percent",
+			Visibility: metric.Metadata_ESSENTIAL,
+			MetricType: io_prometheus_client.MetricType_GAUGE,
+		},
+		"sql.txn.commit.count": {
+			Name:       "sql.txn.commit.count",
+			Visibility: metric.Metadata_ESSENTIAL,
+			MetricType: io_prometheus_client.MetricType_COUNTER,
+		},
+		"queue.gc.pending": {
+			Name:       "queue.gc.pending",
+			Visibility: metric.Metadata_SUPPORT,
+			MetricType: io_prometheus_client.MetricType_GAUGE,
+		},
+		"storage.disk-slow": {
+			Name:       "storage.disk-slow",
+			Visibility: metric.Metadata_SUPPORT,
+			MetricType: io_prometheus_client.MetricType_COUNTER,
+		},
+		"internal.debug.metric1": {
+			Name:       "internal.debug.metric1",
+			Visibility: metric.Metadata_INTERNAL,
+			MetricType: io_prometheus_client.MetricType_GAUGE,
+		},
+		"internal.debug.metric2": {
+			Name:       "internal.debug.metric2",
+			Visibility: metric.Metadata_INTERNAL,
+			MetricType: io_prometheus_client.MetricType_COUNTER,
+		},
+	}
+
+	testCases := []struct {
+		name       string
+		nonVerbose bool
+		expected   []string
+	}{
+		{
+			name:       "verbose mode includes all metrics",
+			nonVerbose: false,
+			expected: []string{
+				"cr.node.sys.cpu.user.percent", "cr.store.sys.cpu.user.percent",
+				"cr.node.sql.txn.commit.count", "cr.store.sql.txn.commit.count",
+				"cr.node.queue.gc.pending", "cr.store.queue.gc.pending",
+				"cr.node.storage.disk-slow", "cr.store.storage.disk-slow",
+				"cr.node.internal.debug.metric1", "cr.store.internal.debug.metric1",
+				"cr.node.internal.debug.metric2", "cr.store.internal.debug.metric2",
+			},
+		},
+		{
+			name:       "non-verbose mode excludes internal metrics",
+			nonVerbose: true,
+			expected: []string{
+				"cr.node.sys.cpu.user.percent", "cr.store.sys.cpu.user.percent",
+				"cr.node.sql.txn.commit.count", "cr.store.sql.txn.commit.count",
+				"cr.node.queue.gc.pending", "cr.store.queue.gc.pending",
+				"cr.node.storage.disk-slow", "cr.store.storage.disk-slow",
+			},
+		},
+	}
+
+	mockClient := &mockAdminClient{metadata: mockMetadata}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual, _, err := GetInternalTimeseriesNamesFromServer(ctx, mockClient, nil, tc.nonVerbose)
+			require.NoError(t, err)
+			require.ElementsMatch(t, tc.expected, actual)
+		})
+	}
+}
+
+// TestGetInternalTimeseriesNamesFromServer_OutputValidation verifies empty metadata
+// handling, complete filtering when all metrics are INTERNAL, and alphabetical sorting.
+func TestGetInternalTimeseriesNamesFromServer_OutputValidation(t *testing.T) {
+	ctx := context.Background()
+
+	testCases := []struct {
+		name       string
+		metadata   map[string]metric.Metadata
+		nonVerbose bool
+		validate   func(t *testing.T, names []string, err error)
+	}{
+		{
+			name:       "empty metadata returns empty list",
+			metadata:   map[string]metric.Metadata{},
+			nonVerbose: false,
+			validate: func(t *testing.T, names []string, err error) {
+				require.NoError(t, err)
+				require.Empty(t, names)
+			},
+		},
+		{
+			name: "all internal metrics filtered in non-verbose",
+			metadata: map[string]metric.Metadata{
+				"internal1": {
+					Name:       "internal1",
+					Help:       "Internal metric 1",
+					Visibility: metric.Metadata_INTERNAL,
+					MetricType: io_prometheus_client.MetricType_GAUGE,
+				},
+				"internal2": {
+					Name:       "internal2",
+					Help:       "Internal metric 2",
+					Visibility: metric.Metadata_INTERNAL,
+					MetricType: io_prometheus_client.MetricType_COUNTER,
+				},
+			},
+			nonVerbose: true,
+			validate: func(t *testing.T, names []string, err error) {
+				require.NoError(t, err)
+				require.Empty(t, names, "all internal metrics should be filtered out")
+			},
+		},
+		{
+			name: "metrics are sorted alphabetically",
+			metadata: map[string]metric.Metadata{
+				"zebra": {
+					Name:       "zebra",
+					Help:       "Z metric",
+					Visibility: metric.Metadata_ESSENTIAL,
+					MetricType: io_prometheus_client.MetricType_GAUGE,
+				},
+				"alpha": {
+					Name:       "alpha",
+					Help:       "A metric",
+					Visibility: metric.Metadata_ESSENTIAL,
+					MetricType: io_prometheus_client.MetricType_GAUGE,
+				},
+				"beta": {
+					Name:       "beta",
+					Help:       "B metric",
+					Visibility: metric.Metadata_ESSENTIAL,
+					MetricType: io_prometheus_client.MetricType_GAUGE,
+				},
+			},
+			nonVerbose: false,
+			validate: func(t *testing.T, names []string, err error) {
+				require.NoError(t, err)
+				for i := 1; i < len(names); i++ {
+					require.Less(t, names[i-1], names[i], "names should be sorted alphabetically")
+				}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockClient := &mockAdminClient{metadata: tc.metadata}
+			names, _, err := GetInternalTimeseriesNamesFromServer(ctx, mockClient, nil, tc.nonVerbose)
+			tc.validate(t, names, err)
 		})
 	}
 }
