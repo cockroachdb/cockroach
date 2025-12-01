@@ -428,28 +428,57 @@ func (m *cpuTimeTokenLinearModel) fit(targets targetUtilizations) rates {
 	const lowCPUUtilFrac = 0.25
 	isLowCPUUtil := intCPUTimeNanos < int64(float64(elapsedSinceLastFit.Nanoseconds())*cpuCapacity*lowCPUUtilFrac)
 	if isLowCPUUtil {
-		// With good integration with admission control, we hope to have a
-		// tokenToCPUTimeMultiplier < 2 (in experiments, we have seen values as
-		// high as 3). Say tokenToCPUMultiplier was very high, say 10, and we
-		// observed < 25% utilization. We are paranoid about (a) an incorrect model being
-		// the cause of the low CPU utilization, (b) we expect the model to be more
-		// inaccurate when fit at low utilization, so we don't want to fit the model at
-		// this low utilization. So we adopt the heuristic of leaving the multiplier
-		// unchanged (to avoid (b)), except for when the multiplier is large enough to cause
-		// utilization < 25% (if the unknown true multiplier was 1) (to avoid (a)). The
-		// upperBound will allow admission of 1/upperBound which should cause CPU utilization
-		// > 25% if the unknown true multiplier was 1.
-		const upperBound = (1 / lowCPUUtilFrac) * 0.9 // 3.6
-		// Algorithmically, if CPU is less than 25%, and if tokenToCPUTimeMultiplier is less
-		// 3.6, tokenToCPUTimeMultiplier is left alone. If tokenToCPUTimeMultiplier is greater
-		// than 3.6, tokenToCPUTimeMultiplier is divided by 1.5 until it is <= 3.6.
+		// With good integration with admission control, most foreground
+		// work will be tracked by AC and reflected in the model, and the
+		// unaccounted CPU utilization in the system is likely to a large degree
+		// directly induced by foreground work (heap GC, etc).
 		//
-		// See above for rationale, including why 3.6 is chosen.
-		if m.tokenToCPUTimeMultiplier > upperBound {
-			m.tokenToCPUTimeMultiplier /= 1.5
-			if m.tokenToCPUTimeMultiplier < upperBound {
-				m.tokenToCPUTimeMultiplier = upperBound
-			}
+		// As a result, in that situation, we expect a tokenToCPUTimeMultiplier
+		// < 2 (in experiments, we have seen values as high as 3).
+		//
+		// Re-fitting the model at low utilization is generally problematic
+		// because smaller sample sizes and inaccuracies can dominate and
+		// result in noisy measurements. So we want to leave the multiplier
+		// (which was computed at a higher utilization, and is hopefully
+		// still meaningful) unchanged until CPU utilization picks up again.
+		//
+		// The exception to this is when the multiplier is actually the cause
+		// of the low utilization. Consider the following scenario:
+		//
+		// - t=0: we re-fit and compute a multiplier of 10. Unbeknownst to the
+		//   model, there was a one-off untracked request that consumed a large
+		//   amount of CPU time during this interval; regular workload is unchanged
+		//   in this example and would have resulted in a true multiplier of 1.
+		// - t=[0,1s]: the large multiplier throttles tracked work (which is all
+		//   work in this example) and CPU utilization drops to 10%.
+		// - t=1s: the model re-fits and enters this branch. If it skips adjusting
+		//   the multiplier (for the reasons outlined above), the workload remains
+		//   throttled indefinitely.
+		//
+		// We address this scenario as follows:
+		// - assume our high multiplier is M (10 for example)
+		// - assume there is a "true" multiplier T (2 for example), i.e. a reported
+		//   token causes T nanoseconds of CPU time to be consumed.
+		// - M emits tokens at rate R := targetUtil*M tokens/second.
+		// - if this rate were consumed by the workload in entirety, this would
+		//   result in a CPU utilization of T*R.
+		// - solving for T*R < lowCPUUtilFrac, we get
+		//     M >  T*targetUtil/lowCPUUtilFrac
+		//       >= targetUtil/lowCPUUtilFrac       (because T>=1)
+		// - so whenever M > targetUtil/lowCPUUtilFrac, it could possibly be true
+		//   that the multiplier is the cause of the low utilization. So we adjust
+		//   the multiplier down by 50%, so that, possibly over multiple fitting
+		//   intervalls, it will drop below the threshold at which it could be
+		//   responsible for the low utilization. (We smear this process over
+		//   multiple intervals because the multiplier may also have been correct
+		//   and load might pick up again soon).
+		//
+		// TODO(joshimhoff): why is the target utilization hard-coded to 0.9 here?
+		// If we don't want to specify it, wouldn't we need to hard-code the lowest
+		// possible target utilization?
+		const upperBound = 0.9 / lowCPUUtilFrac // example: 3.6 for 25% threshold
+		if mult := m.tokenToCPUTimeMultiplier; mult > upperBound {
+			m.tokenToCPUTimeMultiplier = max(mult/1.5, upperBound)
 		}
 	} else {
 		tokenToCPUTimeMultiplier :=
