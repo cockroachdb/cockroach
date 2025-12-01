@@ -1682,6 +1682,7 @@ GO_TARGETS = [
     "//pkg/obs/eventagg:eventagg_test",
     "//pkg/obs/logstream:logstream",
     "//pkg/obs/logstream:logstream_test",
+    "//pkg/obs/workloadid:workloadid",
     "//pkg/obs:obs",
     "//pkg/raft/confchange:confchange",
     "//pkg/raft/confchange:confchange_test",
