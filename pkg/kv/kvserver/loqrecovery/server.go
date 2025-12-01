@@ -479,7 +479,7 @@ func (s Server) NodeStatus(
 		status.PendingPlanID = &plan.PlanID
 	}
 	err = s.stores.VisitStores(func(s *kvserver.Store) error {
-		r, ok, err := readNodeRecoveryStatusInfo(ctx, s.TODOEngine())
+		r, ok, err := readNodeRecoveryStatusInfo(ctx, s.LogEngine())
 		if err != nil {
 			return err
 		}
