@@ -36,6 +36,26 @@ send "\\demo restart 2\r"
 eexpect "node 2 is already running"
 eexpect "defaultdb>"
 
+# Wait for the liveness range to have the default 5 voters. If its replication
+# factor is too low, shutting down the node below can cause it to lose quorum
+# and stall queries to system tables (example: #147867).
+set timeout 2
+set stmt "select range_id, array_length(voting_replicas,1) from crdb_internal.ranges where range_id=2;\r"
+send $stmt
+expect {
+    "2 |            5" {
+        puts "\rliveness range has 5 voters"
+    }
+    timeout {
+        puts "\rliveness range does not yet have 5 voters"
+        sleep 2
+        send $stmt
+        exp_continue
+    }
+}
+# Reset timeout back to 45 to match common.tcl.
+set timeout 45
+
 # Shut down a separate node.
 send "\\demo shutdown 3\r"
 eexpect "node 3 has been shutdown"
@@ -147,6 +167,26 @@ eexpect "3 | region=us-east1,az=d"
 eexpect "5 | region=us-west1,az=b"
 eexpect "6 | region=ca-central,zone=a"
 eexpect "defaultdb>"
+
+# Wait for the liveness range to have the default 5 voters. If its replication
+# factor is too low, shutting down the node below can cause it to lose quorum
+# and stall queries to system tables (example: #147867).
+set timeout 2
+set stmt "select range_id, array_length(voting_replicas,1) from crdb_internal.ranges where range_id=2;\r"
+send $stmt
+expect {
+    "2 |            5" {
+        puts "\rliveness range has 5 voters"
+    }
+    timeout {
+        puts "\rliveness range does not yet have 5 voters"
+        sleep 2
+        send $stmt
+        exp_continue
+    }
+}
+# Reset timeout back to 45 to match common.tcl.
+set timeout 45
 
 # Shut down the newly created node.
 send "\\demo shutdown 6\r"
