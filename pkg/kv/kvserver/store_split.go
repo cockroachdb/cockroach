@@ -120,7 +120,7 @@ func validateAndPrepareSplit(
 // split commit.
 func splitPreApply(
 	ctx context.Context, stateRW kvstorage.StateRW, raftRW kvstorage.Raft, in splitPreApplyInput,
-) {
+) error {
 	rsl := kvstorage.MakeStateLoader(in.rhsDesc.RangeID)
 	// After PR #149620, the split trigger batch may only contain replicated state
 	// machine keys, and never contains unreplicated / raft keys. One exception:
@@ -139,11 +139,11 @@ func splitPreApply(
 	// TODO(#152847): remove this workaround when there are no historical
 	// proposals with RaftTruncatedState, e.g. after a below-raft migration.
 	if ts, err := rsl.LoadRaftTruncatedState(ctx, stateRW); err != nil {
-		log.KvExec.Fatalf(ctx, "cannot load RaftTruncatedState: %v", err)
+		return errors.Wrapf(err, "cannot load RHS truncated state")
 	} else if ts == (kvserverpb.RaftTruncatedState{}) {
 		// Common case. Do nothing.
 	} else if err := rsl.ClearRaftTruncatedState(stateRW); err != nil {
-		log.KvExec.Fatalf(ctx, "cannot clear RaftTruncatedState: %v", err)
+		return errors.Wrapf(err, "cannot clear RaftTruncatedState")
 	}
 
 	if in.destroyed {
@@ -164,38 +164,39 @@ func splitPreApply(
 		if err := kvstorage.RemoveStaleRHSFromSplit(
 			ctx, kvstorage.WrapState(stateRW), in.rhsDesc.RangeID, in.rhsDesc.RSpan(),
 		); err != nil {
-			log.KvExec.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
+			return errors.Wrapf(err, "failed to clear range data for removed RHS")
 		}
-		return
+		return nil
 	}
 
 	// The RHS replica exists and is uninitialized. We are initializing it here.
 	// This is the common case.
 	as, err := rsl.LoadRangeAppliedState(ctx, stateRW)
 	if err != nil {
-		log.KvExec.Fatalf(ctx, "%v", err)
+		return err
 	}
 	// Update the RHS applied state with the computed closed timestamp.
 	as.RaftClosedTimestamp = in.initClosedTimestamp
 	if err := rsl.SetRangeAppliedState(ctx, stateRW, as); err != nil {
-		log.KvExec.Fatalf(ctx, "%s", err)
+		return err
 	}
 
 	// Update raft HardState and truncated state to reflect the replica
 	// initialization. Take into account the existing HardState since the
 	// uninitialized replica could have already moved it forward.
 	if hs, err := rsl.LoadHardState(ctx, raftRW.RO); err != nil {
-		log.KvExec.Fatalf(ctx, "%v", err)
+		return err
 	} else if newHS, initTS, err := kvstorage.SynthesizeRaftState(hs, logstore.EntryID{
 		Index: as.RaftAppliedIndex,
 		Term:  as.RaftAppliedIndexTerm,
 	}); err != nil {
-		log.KvExec.Fatalf(ctx, "%v", err)
+		return err
 	} else if err := rsl.SetHardState(ctx, raftRW.WO, newHS); err != nil {
-		log.KvExec.Fatalf(ctx, "%v", err)
+		return err
 	} else if err := rsl.SetRaftTruncatedState(ctx, raftRW.WO, &initTS); err != nil {
-		log.KvExec.Fatalf(ctx, "%v", err)
+		return err
 	}
+	return nil
 }
 
 // splitPostApply is the part of the split trigger which coordinates the actual

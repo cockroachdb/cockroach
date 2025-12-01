@@ -4050,7 +4050,7 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	))
 	in, err := validateAndPrepareSplit(ctx, lhsRepl, roachpb.SplitTrigger{LeftDesc: leftDesc, RightDesc: rightDesc}, nil)
 	require.NoError(t, err)
-	splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), in)
+	require.NoError(t, splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), in))
 
 	// Verify that the RHS truncated state is initialized as expected.
 	rsl := kvstorage.MakeStateLoader(rightDesc.RangeID)
@@ -4097,7 +4097,9 @@ func TestSplitPreApplyWithSeparatedEngines(t *testing.T) {
 			RaftAppliedIndex:     kvstorage.RaftInitialLogIndex,
 			RaftAppliedIndexTerm: kvstorage.RaftInitialLogTerm,
 		}))
-	splitPreApply(ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), in)
+	require.NoError(t, splitPreApply(
+		ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), in,
+	))
 
 	require.NoError(t, stateBatch.Commit(false /* sync */))
 	require.NoError(t, raftBatch.Commit(false /* sync */))
