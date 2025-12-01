@@ -122,7 +122,7 @@ jobs:
         with:
           path: examples-orms
           repository: cockroachdb/examples-orms
-          ref: 876b2d52ae2b63aa9cc1741c8d189ff0b66ab0d7
+          ref: 4422aff128585c3e0558b530558daa31972c3a40
       - name: compute metadata
         run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./cockroach/build/github/get-engflow-keys.sh
