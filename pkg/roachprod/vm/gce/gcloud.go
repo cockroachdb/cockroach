@@ -2451,12 +2451,16 @@ func (p *Provider) ListLoadBalancers(_ *logger.Logger, vms vm.List) ([]vm.Servic
 	return addresses, nil
 }
 
-// Given a machine type, return the allowed number (> 0) of local SSDs, sorted in ascending order.
-// N.B. Only n1, n2, n2d and c2 instances are supported since we don't typically use other instance types.
-// Consult https://cloud.google.com/compute/docs/disks/#local_ssd_machine_type_restrictions for other types of instances.
+// AllowedLocalSSDCount return the allowed number (> 0) of local SSDs for the
+// given machine type, sorted in ascending order. N.B. Only n1, n2, n2d, c2, and
+// c4-lssd instances are supported since we don't typically use other instance
+// types.
+//
+// Consult https://cloud.google.com/compute/docs/disks/local-ssd for other types
+// of instances.
 func AllowedLocalSSDCount(machineType string) ([]int, error) {
-	// E.g., n2-standard-4, n2-custom-8-16384.
-	machineTypes := regexp.MustCompile(`^([cn])(\d+)(?:d)?-[a-z]+-(\d+)(?:-\d+)?$`)
+	// E.g., n2-standard-4, n2-custom-8-16384, c4-standard-48-lssd.
+	machineTypes := regexp.MustCompile(`^([cn])(\d+)(?:d)?-[a-z]+-(\d+)(?:-\d+)?(-lssd)?(?:-metal)?$`)
 	matches := machineTypes.FindStringSubmatch(machineType)
 
 	if len(matches) >= 3 {
@@ -2465,10 +2469,10 @@ func AllowedLocalSSDCount(machineType string) ([]int, error) {
 		if err != nil {
 			return nil, err
 		}
-		if family == "n1" {
-			return []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, nil
-		}
 		switch family {
+		case "n1":
+			return []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, nil
+
 		case "n2":
 			if numCpus <= 10 {
 				return []int{1, 2, 4, 8, 16, 24}, nil
@@ -2485,6 +2489,7 @@ func AllowedLocalSSDCount(machineType string) ([]int, error) {
 			if numCpus <= 128 {
 				return []int{16, 24}, nil
 			}
+
 		case "c2":
 			if numCpus <= 8 {
 				return []int{1, 2, 4, 8}, nil
@@ -2497,6 +2502,33 @@ func AllowedLocalSSDCount(machineType string) ([]int, error) {
 			}
 			if numCpus <= 60 {
 				return []int{8}, nil
+			}
+
+		case "c4":
+			if len(matches) < 4 || matches[4] != "-lssd" {
+				break
+			}
+			// c4-lssd types have fixed SSD counts based on vCPU count.
+			// See https://cloud.google.com/compute/docs/disks/local-ssd
+			switch numCpus {
+			case 4, 8:
+				return []int{1}, nil
+			case 16:
+				return []int{2}, nil
+			case 24:
+				return []int{4}, nil
+			case 32:
+				return []int{5}, nil
+			case 48:
+				return []int{8}, nil
+			case 96:
+				return []int{16}, nil
+			case 144:
+				return []int{24}, nil
+			case 192:
+				return []int{32}, nil
+			case 288:
+				return []int{48}, nil
 			}
 		}
 	}

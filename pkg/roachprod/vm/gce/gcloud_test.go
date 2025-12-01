@@ -53,6 +53,21 @@ func TestAllowedLocalSSDCount(t *testing.T) {
 		{"c2-standard-60", []int{8}, false},
 		// c2-standard-64 doesn't exist and exceed cpu count, so we expect an error.
 		{"c2-standard-64", nil, true},
+
+		// c4-lssd types have fixed SSD counts based on vCPU count.
+		{"c4-standard-4-lssd", []int{1}, false},
+		{"c4-standard-8-lssd", []int{1}, false},
+		{"c4-highmem-8-lssd", []int{1}, false},
+		{"c4-standard-16-lssd", []int{2}, false},
+		{"c4-standard-24-lssd", []int{4}, false},
+		{"c4-standard-32-lssd", []int{5}, false},
+		{"c4-standard-48-lssd", []int{8}, false},
+		{"c4-standard-96-lssd", []int{16}, false},
+		{"c4-standard-144-lssd", []int{24}, false},
+		{"c4-standard-192-lssd", []int{32}, false},
+		{"c4-standard-288-lssd-metal", []int{48}, false},
+		// c4 without -lssd suffix is not supported.
+		{"c4-standard-48", nil, true},
 	} {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			actual, err := AllowedLocalSSDCount(c.machineType)
