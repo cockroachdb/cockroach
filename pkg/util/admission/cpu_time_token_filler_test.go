@@ -342,22 +342,29 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	}
 	require.InDelta(t, 20, model.tokenToCPUTimeMultiplier, tolerance)
 
-	// Reduce to 3.6x, since low CPU mode, and tokenToCPUTimeMultiplier = 20 > 3.6.
+	// Iteratively reduce to 3.6x, since low CPU mode, and
+	// tokenToCPUTimeMultiplier = 20 > 3.6.
 	tokenCPUTime.append(dur.Nanoseconds()/5, 100)
 	actualCPUTime.append(dur.Milliseconds()/5, 100)
-	for i := 0; i < 100; i++ {
-		testTime.Advance(time.Second)
-		_ = model.fit(targets)
+	{
+		lastMult := model.tokenToCPUTimeMultiplier
+		for i := 0; ; i++ {
+			require.Less(t, i, 100)
+			testTime.Advance(time.Second)
+			refillRates = model.fit(targets)
+			mult := model.tokenToCPUTimeMultiplier
+			if mult == lastMult {
+				break
+			}
+			require.Less(t, mult, lastMult)
+			lastMult = mult
+		}
 	}
 	require.InDelta(t, 3.6, model.tokenToCPUTimeMultiplier, tolerance)
 
 	// Check refillRates again, this time with tokenToCPUTimeMultiplier equal to 3.6
 	// instead of one.
-	tokenCPUTime.append(dur.Nanoseconds()/5, 1)
-	actualCPUTime.append(dur.Milliseconds()/5, 1)
-	testTime.Advance(time.Second)
-	refillRates = model.fit(targets)
-	require.InDelta(t, 3.6, model.tokenToCPUTimeMultiplier, tolerance)
+
 	// 80% -> 10 vCPUs * .8 * 1s = 8s -> 8s / 3.6 ~= 2.22222222s
 	require.Equal(t, int64(2222222222), refillRates[testTier1][noBurst])
 	// 85% -> 10 vCPUs * .85 * 1s = 8.5s -> 8.5s / 3.6 ~= 2.36111111s
