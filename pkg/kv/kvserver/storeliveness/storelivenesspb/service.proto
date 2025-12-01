@@ -155,19 +155,42 @@ message SupportState {
   util.hlc.Timestamp expiration = 3 [(gogoproto.nullable) = false];
 }
 
+// InspectSupportForState is used for observability via inspectz. It wraps
+// SupportState and includes additional non-persisted metadata like
+// LastSupportWithdrawnTime.
+message InspectSupportForState {
+  SupportState       support_state                = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // LastSupportWithdrawnTime is the timestamp at which support was last
+  // withdrawn from the remote store. This field is not persisted to disk.
+  util.hlc.Timestamp last_support_withdrawn_time  = 2 [(gogoproto.nullable) = false];
+}
+
 // InspectStoreLivenessRequest is used to power the Store Liveness /inspectz
 // functionality. The request doesn't take any parameters.
 message InspectStoreLivenessRequest {}
 
-// InspectStoreLivenessRequest is used to power the Store Liveness /inspectz
-// functionality. The response is a list of SupportStatesPerStore.
-message InspectStoreLivenessResponse {
-  repeated SupportStatesPerStore support_states_per_store = 1 [(gogoproto.nullable) = false];
+// InspectSupportFromResponse is used to power the Store Liveness /inspectz
+// supportFrom functionality.
+message InspectSupportFromResponse {
+  repeated InspectSupportFromStatesPerStore support_from_states_per_store = 1 [(gogoproto.nullable) = false];
 }
 
-// SupportStatesPerStore includes all SupportStates for a given store; they
-// correspond to either the support-from or support-for map of a given store.
-message SupportStatesPerStore {
+// InspectSupportForResponse is used to power the Store Liveness /inspectz
+// supportFor functionality.
+message InspectSupportForResponse {
+  repeated InspectSupportForStatesPerStore support_for_states_per_store = 1 [(gogoproto.nullable) = false];
+}
+
+// InspectSupportFromStatesPerStore includes all SupportStates for a given
+// store; they correspond to the support-from map of a given store.
+message InspectSupportFromStatesPerStore {
   StoreIdent store_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID"];
-  repeated SupportState support_states = 2 [(gogoproto.nullable) = false];
+  repeated SupportState support_from_states = 2 [(gogoproto.nullable) = false];
+}
+
+// InspectSupportForStatesPerStore includes all InspectSupportForStates for a
+// given store; they correspond to the support-for map of a given store.
+message InspectSupportForStatesPerStore {
+  StoreIdent store_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID"];
+  repeated InspectSupportForState support_for_states = 2 [(gogoproto.nullable) = false];
 }
