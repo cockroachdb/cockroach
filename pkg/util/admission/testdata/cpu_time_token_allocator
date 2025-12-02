@@ -1,3 +1,27 @@
+# First call to resetInterval should add refillRates to all buckets.
+# We want the buckets to start full, and cpuTimeTokenFiller calls
+# resetInterval on startup. The target CPU utilizations are passed as
+# an argument to fit, and they are a function of cluster settings, plus
+# some simple logic in resetInterval. Here, the  default values for the
+# target CPU utilizations are shown.
+resetInterval
+----
+fit(
+	tier1 noBurst -> 80%
+	tier1 canBurst -> 85%
+	tier0 noBurst -> 95%
+	tier0 canBurst -> 100%
+)
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2
+
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
 allocate remaining=5
 ----
 cpuTTG canBurst noBurst
@@ -30,8 +54,17 @@ tier1  3        2
 
 resetInterval
 ----
+fit(
+	tier1 noBurst -> 80%
+	tier1 canBurst -> 85%
+	tier0 noBurst -> 95%
+	tier0 canBurst -> 100%
+)
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2
 
-# No more tokens added due to burst budget.
+# No more tokens added due to bucket capacities being hit.
 allocate remaining=5
 ----
 cpuTTG canBurst noBurst
@@ -55,6 +88,15 @@ tier1  2        1
 
 resetInterval
 ----
+fit(
+	tier1 noBurst -> 80%
+	tier1 canBurst -> 85%
+	tier0 noBurst -> 95%
+	tier0 canBurst -> 100%
+)
+cpuTTG canBurst noBurst
+tier0  4        3
+tier1  2        1
 
 clear
 ----
@@ -72,6 +114,15 @@ tier1  3        2
 
 resetInterval
 ----
+fit(
+	tier1 noBurst -> 80%
+	tier1 canBurst -> 85%
+	tier0 noBurst -> 95%
+	tier0 canBurst -> 100%
+)
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2
 
 clear
 ----
@@ -90,3 +141,96 @@ allocate remaining=1
 cpuTTG canBurst noBurst
 tier0  5        4
 tier1  3        2
+
+# These final cases test how cpuTimeTokenAllocator handles changes to
+# refillRates. See the comment above deltaRefillRates for a full explanation
+# of the approach. TLDR is the allocator will compute the amount of change in
+# refillRates & add it immediately to the buckets, before any calls to allocate
+# are made. Thus, if we increase refillRates by one (on all buckets), we expect
+# one token is added to all buckets, as below.
+resetInterval increase_rates_by=1
+----
+fit(
+	tier1 noBurst -> 80%
+	tier1 canBurst -> 85%
+	tier0 noBurst -> 95%
+	tier0 canBurst -> 100%
+)
+cpuTTG canBurst noBurst
+tier0  6        5
+tier1  4        3
+
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+# The updated refillRate is added to the buckets (in one tick for simplicity,
+# since remaining=1).
+allocate remaining=1
+----
+cpuTTG canBurst noBurst
+tier0  6        5
+tier1  4        3
+
+# Another test of a change to refillRates. If we decrease refillRates by two
+# (on all buckets), we expect two tokens to be removed from all buckets, as
+# below.
+resetInterval increase_rates_by=-2
+----
+fit(
+	tier1 noBurst -> 80%
+	tier1 canBurst -> 85%
+	tier0 noBurst -> 95%
+	tier0 canBurst -> 100%
+)
+cpuTTG canBurst noBurst
+tier0  4        3
+tier1  2        1
+
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+# The updated refillRate is added to the buckets (in one tick for simplicity,
+# since remaining=1).
+allocate remaining=1
+----
+cpuTTG canBurst noBurst
+tier0  4        3
+tier1  2        1
+
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+# Test of computation of target CPU utilizations from overridden cluster
+# settings. The noBurst targets are configurable by cluster settings, which
+# are overridden in this test case. A canBurst target adds
+# admission.cpu_time_tokens.target_util.burst_delta, which is also overridden
+# here, to the corresponding noBurst target. See resetInterval for more.
+setClusterSettings app=0.5 system=0.75 burst=0.1
+----
+SET CLUSTER SETTING admission.cpu_time_tokens.target_util.app_tenant = 0.5
+SET CLUSTER SETTING admission.cpu_time_tokens.target_util.system_tenant = 0.75
+SET CLUSTER SETTING admission.cpu_time_tokens.target_util.burst_delta = 0.1
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+resetInterval
+----
+fit(
+	tier1 noBurst -> 50%
+	tier1 canBurst -> 60%
+	tier0 noBurst -> 75%
+	tier0 canBurst -> 85%
+)
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0

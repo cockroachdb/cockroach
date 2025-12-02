@@ -22,6 +22,17 @@ try-get tier=tier0 v=1
 ----
 kvtier0: tryGet(1) returned false
 
+# Returns tokens used since last call to reset-tokens-used.
+# Since only one try-get v=1 succeeded, only one token used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 1
+
+# Since reset-tokens-used just called, should return zero.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 0
+
 # More simple tryGet calls. This time, tier1 work is admitted.
 init tier0=2 tier1=1
 ----
@@ -59,6 +70,11 @@ try-get tier=tier0 v=1
 ----
 kvtier0: tryGet(1) returned false
 
+# Since two try-gets v=1 succeeded, should return two.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 2
+
 # returnGrant adds tokens to the buckets, when a positive count is used.
 init tier0=1 tier1=1
 ----
@@ -89,6 +105,12 @@ cpuTTG canBurst noBurst
 tier0  -1       0
 tier1  -1       0
 
+# The net of one return-grant v=1 with two try-gets v=1 is one
+# token used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 1
+
 # Simple tookWithoutPermission test.
 init tier0=3 tier1=3
 ----
@@ -113,6 +135,11 @@ try-get tier=tier1 v=1
 ----
 kvtier1: tryGet(1) returned false
 
+# took-without-permission v=3 is the only successful call, so three tokens used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 3
+
 # Test granting. A single tier0 request will be admitted.
 init tier0waiter=2 tier1waiter=1
 ----
@@ -127,6 +154,12 @@ return-grant tier=tier0 v=2
 kvtier0: returnGrant(2)
 kvtier0: granted in chain 0, and returning 2
 
+# The net of one return-grant v=2 with that grant leading to admission of request
+# with token count equal to two is zero tokens used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 0
+
 # Test granting. Two tier1 requests will be admitted.
 init tier0=-1 tier0burst=-1 tier1=-1 tier1burst=-1 tier1waiter=1
 ----
@@ -138,7 +171,7 @@ tier1requester: waitingRequests: true, returnValueFromHasWaitingRequests: noBurs
 
 # With three returned, tier1 burst will have two tokens. Thus two tier1
 # requests can be granted admission. Note that the test requester is not
-# stateful. In init, tier1water=1 means the tier1 requester always has a waiting
+# stateful. In init, tier1waiter=1 means the tier1 requester always has a waiting
 # request, and the ret value from granted is always 1. Thus, after two tier1 requests
 # are granted admission, the bucket is empty again.
 return-grant tier=tier0 v=3
@@ -149,6 +182,12 @@ kvtier1: granted in chain 0, and returning 1
 cpuTTG canBurst noBurst
 tier0  0        0
 tier1  0        0
+
+# The net of one return-grant v=3 with that grant leading to admission of two requests
+# with token count equal to one is -1 tokens used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned -1
 
 # Simple tryGet calls, with burst this time.
 init tier0burst=1
@@ -174,6 +213,11 @@ try-get tier=tier0 burst v=1
 ----
 kvtier0: tryGet(1) returned false
 
+# Since two try-gets v=1 succeeded, should return one.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 1
+
 # Test granting, with burst. After the call to return-grant, only tier1 burst will
 # have enough tokens to grant. So grant a tier1 request.
 init tier0burst=-1 tier0=-1 tier1burst=0 tier1=-1 tier1waiter=1 tier1burstwaiter
@@ -188,6 +232,12 @@ return-grant tier=tier0 v=1
 ----
 kvtier0: returnGrant(1)
 kvtier1: granted in chain 0, and returning 1
+
+# The net of one return-grant v=1 with that grant leading to admission of one request
+# with token count equal to one is zero tokens used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 0
 
 # Test granting, with burst. After the call to return-grant, only tier1 no-burst will
 # have enough tokens to grant. So no grant, since the tier1 waiting request is a burst request.
@@ -206,9 +256,15 @@ cpuTTG canBurst noBurst
 tier0  0        0
 tier1  0        1
 
+# The net of one return-grant v=1 with that grant not leading to any admission is
+# -1 tokens used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned -1
+
 # Test refill, which is the interface cpuTimeTokenFiller uses to add tokens to
 # the buckets. The final allocation of tokens in the buckets is a result of
-# the delta argument to refill, the bucket capacities in certain cases capping how
+# the toAdd argument to refill, the bucket capacities in certain cases capping how
 # tokens should be added, and one queued request being granted admission.
 init tier1waiter=1
 ----
@@ -225,3 +281,10 @@ refill([[5 4] [3 1]] [[4 3] [10 1]])
 cpuTTG canBurst noBurst
 tier0  3        2
 tier1  2        0
+
+# Refilling the buckets does not count as token usage. The only usage that happens
+# here is that one request with token count equal to one is granted admission, due to
+# the refill (see "granted in..." message above). So one token used.
+reset-tokens-used
+----
+reset-tokens-used-in-interval() returned 1

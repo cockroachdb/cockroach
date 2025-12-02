@@ -167,6 +167,11 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 			fmt.Fprintf(&buf, "refill(%v %v)\n", delta, bucketCapacity)
 			return flushAndReset(false /* init */)
 
+		case "reset-tokens-used":
+			used := granter.resetTokensUsedInInterval()
+			fmt.Fprintf(&buf, "reset-tokens-used-in-interval() returned %d\n", used)
+			return flushAndReset(false /* init */)
+
 		// For cpuTimeTokenChildGranter, this is a NOP. Still, it will be
 		// called in production. So best to test it doesn't panic, or similar.
 		case "continue-grant-chain":
