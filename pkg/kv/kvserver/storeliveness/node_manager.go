@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-
 // NodeContainer is a container for all StoreLiveness state on a single node. It
 // encapsulates all dependencies required to create per-store SupportManagers
 // and keeps track of them once created.
@@ -31,9 +30,11 @@ type NodeContainer struct {
 
 	mu struct {
 		syncutil.Mutex
-		supportManagers map[roachpb.StoreID]*SupportManager
+		supportManagers map[roachpb.StoreID]Fabric
 	}
 }
+
+var _ SupportStatus = (*NodeContainer)(nil)
 
 // NewNodeContainer creates a new NodeContainer.
 func NewNodeContainer(
@@ -53,7 +54,7 @@ func NewNodeContainer(
 		stopper:         stopper,
 		nodeID:          nodeID,
 	}
-	nc.mu.supportManagers = make(map[roachpb.StoreID]*SupportManager)
+	nc.mu.supportManagers = make(map[roachpb.StoreID]Fabric)
 	return nc
 }
 
@@ -80,6 +81,26 @@ func (n *NodeContainer) NewSupportManager(
 	)
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	// NB: We currently never need to remove a SupportManager from this map.
+	// However, once we have the ability to remove a Store from the cluster by
+	// decommissioning it, we'll need to unlink it from this map.
 	n.mu.supportManagers[storeID] = sm
 	return sm
+}
+
+// SupportState implements the SupportStatus interface.
+func (n *NodeContainer) SupportState(id slpb.StoreIdent) (SupportState, hlc.Timestamp) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	// Aggregate the support state across all SupportManagers. We take the most
+	// conservative view across these.
+	aggregateState := StateUnknown
+	var maxWithdrawnTS hlc.Timestamp
+	for _, sm := range n.mu.supportManagers {
+		state, withdrawnTS := sm.SupportState(id)
+		aggregateState.combine(state)
+		maxWithdrawnTS.Forward(withdrawnTS)
+	}
+	return aggregateState, maxWithdrawnTS
 }

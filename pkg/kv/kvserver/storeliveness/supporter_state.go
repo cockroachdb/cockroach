@@ -28,6 +28,11 @@ type supportState struct {
 	lastSupportWithdrawnTime hlc.Timestamp
 }
 
+// empty returns true if the supportState is empty.
+func (ss supportState) empty() bool {
+	return ss == supportState{}
+}
+
 // supporterState stores the core data structures for providing support.
 type supporterState struct {
 	// meta stores the SupporterMeta, including the max timestamp at which this
@@ -107,12 +112,12 @@ type supporterStateForUpdate struct {
 	inProgress supporterState
 }
 
-// getSupportFor returns the SupportState corresponding to the given store in
+// getSupportFor returns the supportState corresponding to the given store in
 // supporterState.supportFor.
-func (ssh *supporterStateHandler) getSupportFor(id slpb.StoreIdent) slpb.SupportState {
+func (ssh *supporterStateHandler) getSupportFor(id slpb.StoreIdent) supportState {
 	ssh.mu.RLock()
 	defer ssh.mu.RUnlock()
-	return ssh.supporterState.supportFor[id].SupportState
+	return ssh.supporterState.supportFor[id]
 }
 
 // getNumSupportFor returns the size of the supporterState.supportFor map.
