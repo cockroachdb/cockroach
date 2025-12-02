@@ -26,21 +26,27 @@ func (cr *commandRegistry) buildChaosDiskStallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "disk-stall <cluster>",
 		Short: "Injects disk stalls to test storage resilience",
-		Long: `Injects disk stalls using cgroup to throttle disk I/O.
+		Long: `Injects disk stalls to test storage resilience.
 
-Disk stall type:
-  cgroup: Uses cgroups v2 to throttle disk I/O operations
+Disk stall types:
+  cgroup:  Uses cgroups v2 to throttle disk I/O operations.
+           Supports partial throttling and selective stalling
+           (reads only, writes only, or including logs).
 
-By default, cgroup stalls write operations completely. This simulates scenarios where
-the disk becomes slow or unresponsive, allowing you to test how CockroachDB handles
-degraded storage performance.
+  dmsetup: Uses device-mapper linear target with suspend/resume.
+           Completely freezes All disk I/O (reads and writes).
+           Requires node restart during setup to disable filesystem journaling.
+           More closely simulates a hardware disk failure.
 
-The stall can be temporary (default 5 minutes) or you can use --run-forever to keep
-it active until manually stopped with Ctrl+C.
+By default, stalls are maintained for 5 minutes. Use --run-forever to keep
+the stall active until manually stopped with Ctrl+C.
 
 Examples:
-  # Stall disk I/O on nodes 1,2,3 for 5 minutes (default)
+  # Stall disk writes on nodes 1,2,3 using cgroup
   roachprod chaos disk-stall mycluster --type cgroup --nodes 1,2,3
+
+  # Completely freeze disk I/O using dmsetup (simulates hardware failure)
+  roachprod chaos disk-stall mycluster --type dmsetup --nodes 1,2
 
   # Cycle stalling on/off with custom durations
   roachprod chaos disk-stall mycluster --type cgroup --nodes 1 \
@@ -52,8 +58,8 @@ Examples:
   # Stall for 15 minutes before recovery
   roachprod chaos disk-stall mycluster --type cgroup --nodes 1 --wait-before-cleanup 15m
 
-	# Stall for 30s before recovery on an insecure cluster
-	roachprod chaos disk-stall mycluster --type cgroup --nodes 1 --wait-before-cleanup 30s --insecure
+  # dmsetup stall on an insecure cluster
+  roachprod chaos disk-stall mycluster --type dmsetup --nodes 1 --wait-before-cleanup 30s --insecure
 `,
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
@@ -87,8 +93,23 @@ Examples:
 				config.Logger.Printf("Stalling disk I/O on nodes %s using cgroup",
 					formatNodeList(nodeList))
 
+			case "dmsetup":
+				failureName = failures.DmsetupDiskStallName
+				// Dmsetup freezes all I/O completely - no granular control like cgroup.
+				// It suspends the device-mapper target, blocking all reads and writes.
+				failureArgs = failures.DiskStallArgs{
+					StallWrites:          true, // Always true for dmsetup (stalls everything)
+					RestartNodes:         restartNodes,
+					Nodes:                nodeList,
+					Cycle:                cycle,
+					CycleStallDuration:   cycleStallDuration,
+					CycleUnstallDuration: cycleUnstallDuration,
+				}
+				config.Logger.Printf("Stalling disk I/O on nodes %s using dmsetup device-mapper",
+					formatNodeList(nodeList))
+
 			default:
-				return errors.Newf("--type must be 'cgroup', got: %s", stallType)
+				return errors.Newf("--type must be 'cgroup' or 'dmsetup', got: %s", stallType)
 			}
 
 			opts, err := getGlobalChaosOpts()
@@ -119,7 +140,7 @@ Examples:
 	cmd.Flags().Int32SliceVarP(&nodes, "nodes", "n", nil,
 		"nodes on which to inject the disk stall")
 	cmd.Flags().StringVar(&stallType, "type", "",
-		"disk staller type: cgroup (uses cgroups v2 to throttle I/O)")
+		"disk staller type: cgroup (throttles I/O via cgroups v2) or dmsetup (freezes I/O via device-mapper)")
 	cmd.Flags().BoolVar(&restartNodes, "restart-nodes", true,
 		"allow the failure mode to restart nodes as needed")
 	cmd.Flags().BoolVar(&cycle, "cycle", false,

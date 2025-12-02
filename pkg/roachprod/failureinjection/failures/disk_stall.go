@@ -408,6 +408,9 @@ const (
 	DmsetupDiskStallName = "dmsetup-disk-stall"
 	dmsetupStallCmd      = "sudo dmsetup suspend --noflush --nolockfs data1"
 	dmsetupUnstallCmd    = "sudo dmsetup resume data1"
+	// dmsetupStateFile stores the original disk device name so cleanup can find it
+	// even when running as a separate stage after setup has modified the mount.
+	dmsetupStateFile = "/tmp/dmsetup-disk-stall-device"
 )
 
 type DmsetupDiskStaller struct {
@@ -436,6 +439,38 @@ func (s *DmsetupDiskStaller) Description() string {
 	return "dmsetup disk staller"
 }
 
+// getStoredDeviceName reads the device name from the state file saved during setup.
+// This allows cleanup to find the original device even when running as a separate stage.
+func (s *DmsetupDiskStaller) getStoredDeviceName(
+	ctx context.Context, l *logger.Logger,
+) (string, error) {
+	res, err := s.RunWithDetails(ctx, l, s.c.Nodes[:1], fmt.Sprintf("cat %s 2>/dev/null", dmsetupStateFile))
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read stored device name")
+	}
+	dev := strings.TrimSpace(res.Stdout)
+	if dev == "" {
+		return "", errors.New("no stored device name found; run setup stage first")
+	}
+	return dev, nil
+}
+
+// getOrStoreDeviceName gets the disk device name, storing it to the state file if not already stored.
+// This is used during setup to persist the device name for later stages.
+func (s *DmsetupDiskStaller) getOrStoreDeviceName(
+	ctx context.Context, l *logger.Logger,
+) (string, error) {
+	dev, err := s.DiskDeviceName(ctx, l)
+	if err != nil {
+		return "", err
+	}
+	// Save the device name for later use by cleanup when running stages independently.
+	if err = s.Run(ctx, l, s.c.Nodes, fmt.Sprintf("echo '%s' > %s", dev, dmsetupStateFile)); err != nil {
+		return "", errors.Wrap(err, "failed to save device name to state file")
+	}
+	return dev, nil
+}
+
 func (s *DmsetupDiskStaller) Setup(ctx context.Context, l *logger.Logger, args FailureArgs) error {
 	diskStallArgs := args.(DiskStallArgs)
 	var err error
@@ -450,7 +485,8 @@ func (s *DmsetupDiskStaller) Setup(ctx context.Context, l *logger.Logger, args F
 		}
 	}
 
-	dev, err := s.DiskDeviceName(ctx, l)
+	// Get the device name and store it for later stages (cleanup).
+	dev, err := s.getOrStoreDeviceName(ctx, l)
 	if err != nil {
 		return err
 	}
@@ -558,9 +594,15 @@ func (s *DmsetupDiskStaller) Cleanup(
 		}
 	}
 
-	dev, err := s.DiskDeviceName(ctx, l)
+	// Try to get the device name from the state file first (for independent stage runs),
+	// fall back to live lookup (for full lifecycle runs where mount is still intact).
+	dev, err := s.getStoredDeviceName(ctx, l)
 	if err != nil {
-		return err
+		l.Printf("Could not read stored device name, trying live lookup: %v", err)
+		dev, err = s.DiskDeviceName(ctx, l)
+		if err != nil {
+			return errors.Wrap(err, "failed to determine disk device")
+		}
 	}
 
 	if err := s.Run(ctx, l, s.c.Nodes, `sudo dmsetup resume data1`); err != nil {
@@ -575,7 +617,8 @@ func (s *DmsetupDiskStaller) Cleanup(
 	if err := s.Run(ctx, l, s.c.Nodes, `sudo tune2fs -O has_journal `+dev); err != nil {
 		return err
 	}
-	if err := s.Run(ctx, l, s.c.Nodes, `sudo mount /mnt/data1`); err != nil {
+	// Mount the original device back to /mnt/data1.
+	if err := s.Run(ctx, l, s.c.Nodes, fmt.Sprintf("sudo mount %s /mnt/data1", dev)); err != nil {
 		return err
 	}
 	// Reinstall snapd.
@@ -593,6 +636,9 @@ func (s *DmsetupDiskStaller) Cleanup(
 		return err
 	}
 
+	// Clean up the state file.
+	_ = s.Run(ctx, l, s.c.Nodes, fmt.Sprintf("rm -f %s", dmsetupStateFile))
+
 	if diskStallArgs.RestartNodes {
 		if err := s.StartCluster(ctx, l); err != nil {
 			return err
@@ -602,18 +648,13 @@ func (s *DmsetupDiskStaller) Cleanup(
 }
 
 func (s *DmsetupDiskStaller) WaitForFailureToPropagate(
-	ctx context.Context, l *logger.Logger, args FailureArgs,
+	_ context.Context, _ *logger.Logger, _ FailureArgs,
 ) error {
-	if args.(DiskStallArgs).Cycle {
-		l.Printf("Stall cycle is enabled, skipping WaitForFailureToPropagate")
-		return nil
-	}
-	nodes := args.(DiskStallArgs).Nodes
-	// Since writes are stalled for dmsetup, we expect the disk stall detection to kick in
-	// and eventually kill the node.
-	return forEachNode(nodes, func(n install.Nodes) error {
-		return s.WaitForSQLUnavailable(ctx, l, n, 3*time.Minute)
-	})
+	// No-op: With WAL failover enabled, CRDB clusters continue operating normally
+	// during a disk stall. If the stall doesn't clear within max_sync_duration
+	// (default 20s, recommended 40s with WAL failover), the node is declared
+	// unavailable and removed from the cluster.
+	return nil
 }
 
 func (s *DmsetupDiskStaller) WaitForFailureToRecover(

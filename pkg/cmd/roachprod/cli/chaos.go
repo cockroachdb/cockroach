@@ -38,6 +38,8 @@ const (
 	StageRecover FailureStage = "recover"
 	// StageCleanup runs only the cleanup phase
 	StageCleanup FailureStage = "cleanup"
+	// StageInjectRecover runs inject, waits, then recovers (without setup/cleanup)
+	StageInjectRecover FailureStage = "inject-recover"
 )
 
 // ValidStages returns all valid lifecycle stage values for a failure
@@ -48,6 +50,7 @@ func ValidStages() []string {
 		string(StageInject),
 		string(StageRecover),
 		string(StageCleanup),
+		string(StageInjectRecover),
 	}
 }
 
@@ -113,6 +116,7 @@ Global flags control the duration and cleanup behavior of all chaos commands.
   - inject: runs only the inject phase (activates the failure)
   - recover: runs only the recover phase (removes the failure)
   - cleanup: runs only the cleanup phase (removes failure dependencies)
+  - inject-recover: runs inject, waits for --wait-before-cleanup or --run-forever, then recovers
 Default: all`)
 	chaosCmd.PersistentFlags().BoolVar(&verbose,
 		"verbose", false,
@@ -230,6 +234,8 @@ func runFailureLifecycle(
 		return runRecoverStage(ctx, failer, args)
 	case StageCleanup:
 		return runCleanupStage(ctx, failer, args)
+	case StageInjectRecover:
+		return runInjectRecoverStage(ctx, failer, args, opts)
 	case StageAll:
 		return runFullLifecycle(ctx, failer, args, opts)
 	default:
@@ -300,6 +306,29 @@ func runCleanupStage(
 	return nil
 }
 
+// runInjectRecoverStage runs inject, waits for the configured duration or interrupt,
+// then recovers. This is useful when setup has already been run separately and cleanup
+// will be run separately afterward.
+func runInjectRecoverStage(
+	ctx context.Context, failer *failures.Failer, args failures.FailureArgs, opts GlobalChaosOpts,
+) error {
+	// Inject phase
+	if err := runInjectStage(ctx, failer, args); err != nil {
+		return err
+	}
+
+	// Wait phase
+	waitForDurationOrInterrupt(opts)
+
+	// Recover phase
+	if err := runRecoverStage(ctx, failer, args); err != nil {
+		return err
+	}
+
+	config.Logger.Printf("Inject-recover stage completed successfully")
+	return nil
+}
+
 // runFullLifecycle executes the complete failure lifecycle:
 // Setup → Inject → Wait → Recover → Cleanup
 func runFullLifecycle(
@@ -327,19 +356,7 @@ func runFullLifecycle(
 	}
 
 	// Wait phase
-	if opts.RunForever {
-		config.Logger.Printf("Failure injected. Waiting for interrupt (Ctrl+C)...")
-		<-waitForInterrupt()
-		config.Logger.Printf("Interrupt received. Beginning recovery...")
-	} else {
-		config.Logger.Printf("Failure injected. Waiting %s before recovery...", opts.WaitBeforeCleanup)
-		select {
-		case <-time.After(opts.WaitBeforeCleanup):
-			config.Logger.Printf("Wait period complete. Beginning recovery...")
-		case <-waitForInterrupt():
-			config.Logger.Printf("Interrupt received. Beginning recovery...")
-		}
-	}
+	waitForDurationOrInterrupt(opts)
 
 	// Recover phase
 	if err := runRecoverStage(ctx, failer, args); err != nil {
@@ -354,6 +371,24 @@ func runFullLifecycle(
 	cleanupDone = true
 	config.Logger.Printf("Failure lifecycle completed successfully")
 	return nil
+}
+
+// waitForDurationOrInterrupt waits for the configured duration or until an interrupt signal
+// is received, whichever comes first. If RunForever is set, it waits indefinitely until interrupted.
+func waitForDurationOrInterrupt(opts GlobalChaosOpts) {
+	if opts.RunForever {
+		config.Logger.Printf("Failure injected. Waiting for interrupt (Ctrl+C)...")
+		<-waitForInterrupt()
+		config.Logger.Printf("Interrupt received. Beginning recovery...")
+	} else {
+		config.Logger.Printf("Failure injected. Waiting %s before recovery...", opts.WaitBeforeCleanup)
+		select {
+		case <-time.After(opts.WaitBeforeCleanup):
+			config.Logger.Printf("Wait period complete. Beginning recovery...")
+		case <-waitForInterrupt():
+			config.Logger.Printf("Interrupt received. Beginning recovery...")
+		}
+	}
 }
 
 // waitForInterrupt returns a channel that receives a signal when SIGINT or SIGTERM is received
