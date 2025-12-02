@@ -9,10 +9,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSSTFilesAppend(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// Create first SSTFiles
 	sst1 := &SSTFiles{
 		SST: []*SSTFileInfo{
@@ -65,6 +67,7 @@ func TestSSTFilesAppend(t *testing.T) {
 }
 
 func TestSSTFilesAppendEmpty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// Create non-empty SSTFiles
 	sst1 := &SSTFiles{
 		SST: []*SSTFileInfo{
@@ -90,6 +93,7 @@ func TestSSTFilesAppendEmpty(t *testing.T) {
 }
 
 func TestSSTFilesAppendToEmpty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	// Create empty SSTFiles
 	sst1 := &SSTFiles{}
 
