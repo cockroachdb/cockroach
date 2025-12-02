@@ -43,7 +43,7 @@ func CreateTestAllocatorWithKnobs(
 	allocSyncKnobs *mmaintegration.TestingKnobs,
 ) (*stop.Stopper, *gossip.Gossip, *storepool.StorePool, Allocator, *timeutil.ManualTime) {
 	st := cluster.MakeTestingClusterSettings()
-	stopper, g, manual, storePool, _ := storepool.CreateTestStorePool(ctx, st,
+	stopper, g, manual, storePool, _, _ := storepool.CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDeadOff, deterministic,
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -61,7 +62,7 @@ func testingResetLoad(s State, rangeID RangeID) {
 func NewStorePool(
 	nodeCountFn storepool.NodeCountFunc,
 	nodeLivenessFn storepool.NodeLivenessFunc,
-	hlc *hlc.Clock,
+	clock *hlc.Clock,
 	st *cluster.Settings,
 ) *storepool.StorePool {
 	stopper := stop.NewStopper()
@@ -75,10 +76,15 @@ func NewStorePool(
 		ambientCtx,
 		st,
 		g,
-		hlc,
+		clock,
 		nodeCountFn,
 		nodeLivenessFn,
-		/* deterministic */ true,
+		// TODO(kv-distribution): consider adding tests which mock
+		// StoreLivenessFn.
+		func(roachpb.NodeID, roachpb.StoreID) (bool, hlc.Timestamp) {
+			return true, hlc.Timestamp{}
+		},
+		true, /* deterministic */ 
 	)
 	return sp
 }
