@@ -2236,7 +2236,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	{
 		truncator := s.raftTruncator
 		// When state machine has persisted new RaftAppliedIndex, fire callback.
-		s.TODOEngine().RegisterFlushCompletedCallback(func() {
+		s.StateEngine().RegisterFlushCompletedCallback(func() {
 			truncator.durabilityAdvancedCallback()
 		})
 	}

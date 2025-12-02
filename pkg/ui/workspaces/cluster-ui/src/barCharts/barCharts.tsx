@@ -52,6 +52,13 @@ const cpuBars = [
   ),
 ];
 
+const admissionWaitTimeBars = [
+  bar(
+    "admission-wait-time",
+    (d: StatementStatistics) => d.stats.exec_stats.admission_wait_time?.mean,
+  ),
+];
+
 const maxMemUsageBars = [
   bar(
     "max-mem-usage",
@@ -86,6 +93,14 @@ const contentionStdDev = bar(cx("contention-dev"), (d: StatementStatistics) =>
 );
 const cpuStdDev = bar(cx("cpu-dev"), (d: StatementStatistics) =>
   stdDevLong(d.stats.exec_stats.cpu_sql_nanos, d.stats.exec_stats.count),
+);
+const admissionWaitTimeStdDev = bar(
+  cx("admission-wait-time-dev"),
+  (d: StatementStatistics) =>
+    stdDevLong(
+      d.stats.exec_stats.admission_wait_time,
+      d.stats.exec_stats.count,
+    ),
 );
 const maxMemUsageStdDev = bar(
   cx("max-mem-usage-dev"),
@@ -122,6 +137,12 @@ export const cpuBarChart = barChartFactory(
   cpuBars,
   v => Duration(v),
   cpuStdDev,
+);
+export const admissionWaitTimeBarChart = barChartFactory(
+  "grey",
+  admissionWaitTimeBars,
+  v => Duration(v),
+  admissionWaitTimeStdDev,
 );
 export const maxMemUsageBarChart = barChartFactory(
   "grey",

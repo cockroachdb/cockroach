@@ -840,7 +840,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 func waitForTruncationForTesting(t *testing.T, r *kvserver.Replica, compacted kvpb.RaftIndex) {
 	testutils.SucceedsSoon(t, func() error {
 		// Flush the engine to advance durability, which triggers truncation.
-		require.NoError(t, r.Store().TODOEngine().Flush())
+		require.NoError(t, r.Store().StateEngine().Flush())
 		if index := r.GetCompactedIndex(); index != compacted {
 			return errors.Errorf("expected compacted index == %d, got %d", compacted, index)
 		}

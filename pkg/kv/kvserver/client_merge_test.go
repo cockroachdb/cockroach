@@ -756,9 +756,9 @@ func mergeCheckingTimestampCaches(
 			// the result to apply on the majority quorum.
 			testutils.SucceedsSoon(t, func() error {
 				for _, r := range lhsRepls[1:] {
-					// Loosely-coupled truncation requires an engine flush to advance
-					// guaranteed durability.
-					require.NoError(t, r.Store().TODOEngine().Flush())
+					// Loosely-coupled truncation requires the state engine flush to
+					// advance guaranteed durability.
+					require.NoError(t, r.Store().StateEngine().Flush())
 					if firstIndex := r.GetCompactedIndex() + 1; firstIndex < truncIndex {
 						return errors.Errorf("truncate not applied, %d < %d", firstIndex, truncIndex)
 					}

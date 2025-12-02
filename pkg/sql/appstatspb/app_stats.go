@@ -254,6 +254,7 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.NetworkMessages.Add(other.NetworkMessages, execStatCollectionCount, other.Count)
 	s.MaxDiskUsage.Add(other.MaxDiskUsage, execStatCollectionCount, other.Count)
 	s.CPUSQLNanos.Add(other.CPUSQLNanos, execStatCollectionCount, other.Count)
+	s.AdmissionWaitTime.Add(other.AdmissionWaitTime, execStatCollectionCount, other.Count)
 
 	s.MVCCIteratorStats.StepCount.Add(other.MVCCIteratorStats.StepCount, execStatCollectionCount, other.Count)
 	s.MVCCIteratorStats.StepCountInternal.Add(other.MVCCIteratorStats.StepCountInternal, execStatCollectionCount, other.Count)
