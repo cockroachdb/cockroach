@@ -12,11 +12,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -255,6 +258,7 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 	rowResultWriter := NewRowResultWriter(&a.run.rightRows)
 	queryStats, err := runPlanInsidePlan(
 		ctx, params, plan, rowResultWriter, nil /* deferredRoutineSender */, "", /* stmtForDistSQLDiagram */
+		nil, /* sqlStatsBuilder */
 	)
 	if err != nil {
 		return err
@@ -273,7 +277,8 @@ func runPlanInsidePlan(
 	resultWriter rowResultWriter,
 	deferredRoutineSender eval.DeferredRoutineSender,
 	stmtForDistSQLDiagram string,
-) (topLevelQueryStats, error) {
+	sqlStatsBuilder *sqlstats.RecordedStatementStatsBuilder,
+) (stats topLevelQueryStats, retErr error) {
 	defer plan.close(ctx)
 	execCfg := params.ExecCfg()
 	recv := MakeDistSQLReceiver(
@@ -337,6 +342,26 @@ func runPlanInsidePlan(
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)
 	planCtx.distSQLProhibitedErr = distSQLProhibitedErr
 	planCtx.stmtType = recv.stmtType
+	if sqlStatsBuilder != nil && plannerCopy.instrumentation.ShouldSaveFlows() {
+		planCtx.collectExecStats = true
+		planCtx.saveFlows = getDefaultSaveFlowsFunc(ctx, &plannerCopy, planComponentTypeInner)
+		defer func() {
+			sp := tracing.SpanFromContext(ctx)
+			recording := sp.GetRecording(tracingpb.RecordingStructured)
+			if recording.Len() == 0 {
+				return
+			}
+
+			var flowsMetadata []*execstats.FlowsMetadata
+			for _, flowInfo := range plannerCopy.curPlan.distSQLFlowInfos {
+				flowsMetadata = append(flowsMetadata, flowInfo.flowsMetadata)
+			}
+			queryLevelStats, err := execstats.GetQueryLevelStats(recording, false /* deterministicExplainAnalyze */, flowsMetadata)
+			if err == nil {
+				sqlStatsBuilder.ExecStats(&queryLevelStats)
+			}
+		}()
+	}
 	if params.p.innerPlansMustUseLeafTxn() {
 		planCtx.flowConcurrency = distsql.ConcurrencyWithOuterPlan
 	}
