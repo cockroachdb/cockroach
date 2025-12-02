@@ -722,9 +722,13 @@ message ImportDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"
   ];
 
+  // UseDistributedMerge indicates whether this import should use the
+  // distributed merge pipeline. Determined at planning time based on cluster settings.
+  bool use_distributed_merge = 29;
+
   reserved 4, 7, 8, 9, 10, 11, 14, 22, 23, 24, 25;
 
-  // next val: 29
+  // next val: 30
 }
 
 // SequenceValChunks represents a single chunk of sequence values allocated
