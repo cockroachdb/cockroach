@@ -3317,3 +3317,68 @@ func TestLoadJobProgress(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []float32{7.1}, p.GetDetails().(*jobspb.Progress_Import).Import.ReadProgress)
 }
+
+func TestAdoptionDelayAfterJobFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+
+	ctx := context.Background()
+	adoptionCompleted := make(chan struct{})
+	// We disable the adoption loop to prevent adoption attempts from laying a
+	// claim on a failed job before we can verify the behavior.
+	knobs := jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour, time.Hour, time.Hour)
+	claimTTL := jobs.DefaultAdoptInterval
+	knobs.IntervalOverrides.ClaimTTLOnFailure = &claimTTL
+
+	var testJobID jobspb.JobID
+	knobs.AfterJobStateMachine = func(id jobspb.JobID) {
+		if id != testJobID {
+			return
+		}
+		close(adoptionCompleted)
+	}
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: knobs,
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	cleanup := jobs.TestingRegisterConstructor(
+		jobspb.TypeRestore,
+		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+			return jobstest.FakeResumer{
+				OnResume: func(ctx context.Context) error {
+					return errors.New("job failed")
+				},
+				FailOrCancel: func(ctx context.Context) error {
+					return errors.New("job fast-failed reverting")
+				},
+			}
+		},
+		jobs.UsesTenantCostControl,
+	)
+	defer cleanup()
+
+	registry := s.JobRegistry().(*jobs.Registry)
+	rec := jobs.Record{
+		Details:  jobspb.RestoreDetails{},
+		Progress: jobspb.RestoreProgress{},
+		Username: username.TestUserName(),
+	}
+
+	testJobID = registry.MakeJobID()
+	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, testJobID, nil /* txn */)
+	require.NoError(t, err)
+	registry.TestingNudgeAdoptionQueue()
+
+	<-adoptionCompleted
+	var claimID gosql.NullInt64
+	err = db.QueryRow(
+		"SELECT claim_instance_id FROM system.jobs WHERE id = $1", testJobID,
+	).Scan(&claimID)
+	require.NoError(t, err)
+	require.True(t, claimID.Valid, "expected job to still have a claim_instance_id after failure")
+}

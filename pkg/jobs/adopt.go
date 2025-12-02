@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -426,11 +428,28 @@ func (r *Registry) runJob(
 	// NB: After this point, the job may no longer have the claim
 	// and further updates to the job record from this node may
 	// fail.
-	r.maybeClearLease(job, err)
-	r.maybeDumpTrace(ctx, resumer, job.ID())
+	grp := ctxgroup.WithContext(ctx)
+	if err != nil {
+		grp.GoCtx(func(ctx context.Context) error {
+			// We delay clearing the lease to avoid situations where a job fast-fails
+			// and is immediately re-adopted by another node, causing a hot loop of job
+			// status changes. See #158597 for more info.
+			select {
+			case <-ctx.Done():
+			case <-time.After(r.GetLoopInterval(claimTTLOnFailure, r.knobs.IntervalOverrides.ClaimTTLOnFailure)):
+			}
+			r.maybeClearLease(job, err)
+			return nil
+		})
+	}
+	grp.GoCtx(func(ctx context.Context) error {
+		r.maybeDumpTrace(ctx, resumer, job.ID())
+		return nil
+	})
 	if r.knobs.AfterJobStateMachine != nil {
 		r.knobs.AfterJobStateMachine(job.ID())
 	}
+	grp.Wait() // nolint:errcheck
 	return err
 }
 

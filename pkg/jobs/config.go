@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -20,6 +20,7 @@ const (
 	adoptIntervalSettingKey    = "jobs.registry.interval.adopt"
 	cancelIntervalSettingKey   = "jobs.registry.interval.cancel"
 	gcIntervalSettingKey       = "jobs.registry.interval.gc"
+	claimTTLOnFailureKey       = "jobs.registry.claim_ttl_on_failure"
 	maxAdoptionsPerLoopKey     = "jobs.registry.max_adoptions_per_loop"
 	retentionTimeSettingKey    = "jobs.retention_time"
 	cancelUpdateLimitKey       = "jobs.cancel_update_limit"
@@ -82,6 +83,20 @@ var (
 		"the maximum number of jobs a node can adopt in one adoption loop",
 		defaultMaxAdoptionsPerLoop,
 		settings.PositiveInt,
+	)
+
+	claimTTLOnFailure = settings.RegisterDurationSetting(
+		settings.ApplicationLevel,
+		claimTTLOnFailureKey,
+		"the duration of how long a claim on a failed job is held before it is released",
+		func() time.Duration {
+			// For test builds, we disable the claim TTL to speed up job retries.
+			if buildutil.CrdbTestBuild {
+				return 0
+			}
+			return defaultAdoptInterval
+		}(),
+		settings.DurationWithMinimum(0),
 	)
 
 	cancelIntervalSetting = settings.RegisterDurationSetting(
@@ -177,18 +192,13 @@ type loopController struct {
 // at regular intervals. The structure's cleanup method should be deferred to
 // execute before destroying the instantiated structure.
 func makeLoopController(
-	st *cluster.Settings, s *settings.DurationSetting, overrideKnob *time.Duration,
+	r *Registry, s *settings.DurationSetting, overrideKnob *time.Duration,
 ) loopController {
 	lc := loopController{
 		lastRun: timeutil.Now(),
 		updated: make(chan struct{}, 1),
-		// getInterval returns the value of the associated cluster setting. If
-		// overrideKnob is not nil, it overrides the cluster setting.
 		getInterval: func() time.Duration {
-			if overrideKnob != nil {
-				return *overrideKnob
-			}
-			return time.Duration(intervalBaseSetting.Get(&st.SV) * float64(s.Get(&st.SV)))
+			return r.GetLoopInterval(s, overrideKnob)
 		},
 	}
 
@@ -202,8 +212,8 @@ func makeLoopController(
 	}
 
 	// register onChange() to get a notification when the cluster is updated.
-	s.SetOnChange(&st.SV, onChange)
-	intervalBaseSetting.SetOnChange(&st.SV, onChange)
+	s.SetOnChange(&r.settings.SV, onChange)
+	intervalBaseSetting.SetOnChange(&r.settings.SV, onChange)
 
 	lc.timer.Reset(jitter(lc.getInterval()))
 	return lc
