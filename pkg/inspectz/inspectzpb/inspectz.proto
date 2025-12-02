@@ -32,13 +32,13 @@ service Inspectz {
   // storeliveness.SupportManagers' views of support provided from other stores.
   // It's housed under /inspectz/storeliveness/supportFrom.
   rpc StoreLivenessSupportFrom(kv.kvserver.storeliveness.storelivenesspb.InspectStoreLivenessRequest)
-      returns (kv.kvserver.storeliveness.storelivenesspb.InspectStoreLivenessResponse) {}
+      returns (kv.kvserver.storeliveness.storelivenesspb.InspectSupportFromResponse) {}
 
   // StoreLivenessSupportFor exposes the in-memory state of all stores'
   // storeliveness.SupportManagers' views of support provided for other stores.
   // It's housed under /inspectz/storeliveness/supportFor.
   rpc StoreLivenessSupportFor(kv.kvserver.storeliveness.storelivenesspb.InspectStoreLivenessRequest)
-      returns (kv.kvserver.storeliveness.storelivenesspb.InspectStoreLivenessResponse) {}
+      returns (kv.kvserver.storeliveness.storelivenesspb.InspectSupportForResponse) {}
 
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -191,10 +193,15 @@ func TestLeaseTransferAfterStoreLivenessSupportWithdrawn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDuress(t, "runs a while")
+	skip.UnderShort(t, "runs a while")
+
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	// Ensure we're using leader leases which rely on store liveness.
 	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
+	// Reduce the suspect duration to speed up the test.
+	liveness.TimeAfterNodeSuspect.Override(ctx, &st.SV, 10*time.Second)
 
 	const numNodes = 3
 	// Set up zone config with lease preference on n1 (rack=1).
@@ -335,25 +342,29 @@ func TestLeaseTransferAfterStoreLivenessSupportWithdrawn(t *testing.T) {
 	})
 	t.Logf("n1 has regained support from n2 and n3")
 
-	// Now enqueue the range in the lease queue on the current leaseholder.
-	// The lease queue should attempt to transfer the lease back to n1, since
-	// n1 is the preferred leaseholder, but it should only do so if it doesn't
-	// treat n1 as suspect. Currently, n1 is not treated as suspect if support
-	// has been recently withdrawn from it, which demonstrates the issue.
 	repl := newLeaderStore.LookupReplica(roachpb.RKey(scratchKey))
 	require.NotNil(t, repl)
 
-	_, err = newLeaderStore.Enqueue(ctx, "lease", repl, true /* skipShouldQueue */, false /* async */)
-	require.NoError(t, err)
-
-	// TODO(arul): This should be a require.Never followed by a require.Eventually
-	// once the suspect duration has passed.
-	require.Eventually(t, func() bool {
+	// Now, enqueue the range in the lease queue on the current leaseholder and
+	// check that the lease transfer was successful. The lease will only be transferred
+	// if n1 is not considered suspect. We expect it to be treated as suspect for
+	// TimeAfterSuspectDuration.
+	enqueueInLeaseQueueAndCheckTransferSuccessful := func() bool {
+		_, err = newLeaderStore.Enqueue(ctx, "lease", repl, true /* skipShouldQueue */, false /* async */)
+		require.NoError(t, err)
 		repl1 := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(scratchKey))
 		leaseStatus := repl1.CurrentLeaseStatus(ctx)
 		if !leaseStatus.IsValid() {
 			return false
 		}
 		return leaseStatus.OwnedBy(tc.Target(0).StoreID)
-	}, 20*time.Second, 100*time.Millisecond)
+	}
+
+	// n1 is considered suspect for TimeAfterSuspectDuration, which we set to
+	// 10 seconds above. To prevent flakes, we only check that the lease isn't
+	// transferred to it for the first 5 seconds.
+	require.Never(t, enqueueInLeaseQueueAndCheckTransferSuccessful, 5*time.Second, 100*time.Millisecond)
+	// Eventually, once it's no longer treated as suspect, the lease should be
+	// transferred to it.
+	require.Eventually(t, enqueueInLeaseQueueAndCheckTransferSuccessful, 20*time.Second, 100*time.Millisecond)
 }
