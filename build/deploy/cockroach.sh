@@ -154,13 +154,13 @@ setup_db() {
   create_defaultdb
   create_default_user
 
-  local init_env_query=( --certs-dir="$certs_dir" )
+  # Only run privilege grants if COCKROACH_USER is set
   if [[ -n "$COCKROACH_USER" ]]; then
-    init_env_query+=( -e "GRANT ALL ON DATABASE "$COCKROACH_DATABASE" TO "$COCKROACH_USER"" \
-                      -e "GRANT admin TO "$COCKROACH_USER" " )
+    local init_env_query=( --certs-dir="$certs_dir" \
+                           -e "GRANT ALL ON DATABASE "$COCKROACH_DATABASE" TO "$COCKROACH_USER"" \
+                           -e "GRANT admin TO "$COCKROACH_USER" " )
+    run_sql_query "${init_env_query[@]}"
   fi
-
-  run_sql_query "${init_env_query[@]}"
 }
 
 # process_init_files run all the init scripts from /docker-entrypoint-initdb.d.
