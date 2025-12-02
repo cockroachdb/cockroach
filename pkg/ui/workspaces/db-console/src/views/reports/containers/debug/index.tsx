@@ -291,6 +291,11 @@ export default function Debug() {
           note="Create a custom chart of time series data."
         />
         <DebugPanelLink
+          name="Cluster Explorer"
+          url="#/cluster-explorer"
+          note="Explore and analyze your cluster with interactive node and range visualization."
+        />
+        <DebugPanelLink
           name="Problem Ranges"
           url="#/reports/problemranges"
           note="View ranges in your cluster that are unavailable, underreplicated, slow, or have other problems."
