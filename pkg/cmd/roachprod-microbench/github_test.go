@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreatePostRequest(t *testing.T) {
@@ -79,19 +80,8 @@ func TestCreateRegressionPostRequestBasic(t *testing.T) {
 	)
 
 	// Verify labels
-	expectedLabels := []string{"O-microbench", "C-performance"}
-	for _, label := range expectedLabels {
-		found := false
-		for _, l := range req.Labels {
-			if l == label {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("Expected label %q not found in %v", label, req.Labels)
-		}
-	}
+	require.Contains(t, req.Labels, "O-microbench")
+	require.Contains(t, req.Labels, "C-performance")
 
 	// Verify title contains package name
 	data := issues.TemplateData{
@@ -101,29 +91,15 @@ func TestCreateRegressionPostRequestBasic(t *testing.T) {
 		PackageNameShort: req.PackageName,
 	}
 	title := formatter.Title(data)
-	if !strings.Contains(title, "pkg/sql") {
-		t.Errorf("Title should contain package name: %s", title)
-	}
-	if !strings.Contains(title, "performance regression") {
-		t.Errorf("Title should contain 'performance regression': %s", title)
-	}
+	require.Contains(t, title, "pkg/sql")
+	require.Contains(t, title, "performance regression")
 
 	// Verify message contains key information
-	if !strings.Contains(req.Message, "pkg/sql") {
-		t.Error("Message should contain package name")
-	}
-	if !strings.Contains(req.Message, "BenchmarkScan") {
-		t.Error("Message should contain benchmark name")
-	}
-	if !strings.Contains(req.Message, "25.5%") {
-		t.Error("Message should contain percentage")
-	}
-	if !strings.Contains(req.Message, "https://docs.google.com/spreadsheets/d/test123") {
-		t.Error("Message should contain sheet link")
-	}
-	if !strings.Contains(req.Message, "master -> release-24.1") {
-		t.Error("Message should contain comparison description")
-	}
+	require.Contains(t, req.Message, "pkg/sql")
+	require.Contains(t, req.Message, "BenchmarkScan")
+	require.Contains(t, req.Message, "25.5%")
+	require.Contains(t, req.Message, "https://docs.google.com/spreadsheets/d/test123")
+	require.Contains(t, req.Message, "master -> release-24.1")
 }
 
 func TestCreateRegressionPostRequestMultiple(t *testing.T) {
@@ -146,24 +122,16 @@ func TestCreateRegressionPostRequestMultiple(t *testing.T) {
 	)
 
 	// Should mention total count
-	if !strings.Contains(req.Message, "15 benchmark(s)") {
-		t.Error("Message should contain total regression count")
-	}
+	require.Contains(t, req.Message, "15 benchmark(s)")
 
 	// Should truncate to 10 and show "... and 5 more"
-	if !strings.Contains(req.Message, "5 more regression(s)") {
-		t.Errorf("Message should indicate truncation. Got: %s", req.Message)
-	}
+	require.Contains(t, req.Message, "5 more regression(s)")
 
 	// First regression should be present
-	if !strings.Contains(req.Message, "Benchmark0") {
-		t.Error("Message should contain first benchmark")
-	}
+	require.Contains(t, req.Message, "Benchmark0")
 
 	// 11th regression should not be listed individually
-	if strings.Contains(req.Message, "Benchmark10") {
-		t.Error("Message should not list 11th benchmark individually")
-	}
+	require.NotContains(t, req.Message, "Benchmark10")
 }
 
 func TestCreateRegressionPostRequestTruncation(t *testing.T) {
@@ -187,15 +155,11 @@ func TestCreateRegressionPostRequestTruncation(t *testing.T) {
 
 	// All 10 should be listed
 	for i := 0; i < 10; i++ {
-		if !strings.Contains(req.Message, fmt.Sprintf("Benchmark%d", i)) {
-			t.Errorf("Message should contain Benchmark%d", i)
-		}
+		require.Contains(t, req.Message, fmt.Sprintf("Benchmark%d", i))
 	}
 
 	// Should not show truncation message for exactly 10
-	if strings.Contains(req.Message, "more regression(s)") {
-		t.Error("Should not show truncation message for exactly 10 regressions")
-	}
+	require.NotContains(t, req.Message, "more regression(s)")
 }
 
 func TestCreateRegressionPostRequestFormat(t *testing.T) {
@@ -224,9 +188,7 @@ func TestCreateRegressionPostRequestFormat(t *testing.T) {
 
 	// Verify the full formatted message structure
 	output, err := formatPostRequest(formatter, req)
-	if err != nil {
-		t.Fatalf("Failed to format post request: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Check title format
 	data := issues.TemplateData{
@@ -238,12 +200,8 @@ func TestCreateRegressionPostRequestFormat(t *testing.T) {
 	title := formatter.Title(data)
 
 	// Verify title structure
-	if !strings.Contains(title, "pkg/sql/exec") {
-		t.Errorf("Title should contain package name, got: %s", title)
-	}
-	if !strings.Contains(title, "performance regression") {
-		t.Errorf("Title should contain 'performance regression', got: %s", title)
-	}
+	require.Contains(t, title, "pkg/sql/exec")
+	require.Contains(t, title, "performance regression")
 
 	// Verify formatted output contains all key elements
 	expectedElements := []string{
@@ -258,27 +216,12 @@ func TestCreateRegressionPostRequestFormat(t *testing.T) {
 	}
 
 	for _, expected := range expectedElements {
-		if !strings.Contains(output, expected) {
-			t.Errorf("Formatted output should contain %q\nGot:\n%s", expected, output)
-		}
+		require.Contains(t, output, expected)
 	}
 
 	// Verify labels are correct
-	if !containsLabel(req.Labels, "O-microbench") {
-		t.Errorf("Should have O-microbench label, got: %v", req.Labels)
-	}
-	if !containsLabel(req.Labels, "C-performance") {
-		t.Errorf("Should have C-performance label, got: %v", req.Labels)
-	}
-}
-
-func containsLabel(labels []string, label string) bool {
-	for _, l := range labels {
-		if l == label {
-			return true
-		}
-	}
-	return false
+	require.Contains(t, req.Labels, "O-microbench")
+	require.Contains(t, req.Labels, "C-performance")
 }
 
 func formatPostRequest(formatter issues.IssueFormatter, req issues.PostRequest) (string, error) {
