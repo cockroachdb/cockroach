@@ -94,8 +94,8 @@ echo $ts_dev_id | sudo tee /sys/bus/vmbus/drivers/hv_utils/unbind
 {{ template "ssh_utils" . }}
 {{ template "node_exporter" . }}
 {{ template "ebpf_exporter" . }}
-
-sudo touch {{ .OSInitializedFile }}
+{{ template "touch_initialized_file" . }}
+{{ template "tail_utils" . }}
 `
 
 // evalStartupTemplate evaluates startup template defined above and returns
