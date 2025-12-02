@@ -223,8 +223,7 @@ func (b *Builder) buildFunctionForTrigger(
 	triggerFuncParams = append(triggerFuncParams, triggerFuncStaticParams...)
 	for i, param := range triggerFuncParams {
 		paramColName := funcParamColName(param.name, i)
-		col := b.synthesizeColumn(funcScope, paramColName, param.typ, nil /* expr */, nil /* scalar */)
-		col.setParamOrd(i)
+		col := b.synthesizeParameterColumn(funcScope, paramColName, param.typ, i, nil /* scalar */)
 		if i == triggerArgvColIdx {
 			// Due to #135311, we disallow references to the TG_ARGV param for now.
 			if !b.evalCtx.SessionData().AllowCreateTriggerFunctionWithArgvReferences {

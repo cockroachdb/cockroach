@@ -74,7 +74,7 @@ call
                 │                        │         │    │    │    │         └── filters
                 │                        │         │    │    │    │              └── eq
                 │                        │         │    │    │    │                   ├── variable: k:9
-                │                        │         │    │    │    │                   └── variable: arg_k:5
+                │                        │         │    │    │    │                   └── placeholder: $1
                 │                        │         │    │    │    └── aggregations
                 │                        │         │    │    │         └── count-rows [as=count_rows:14]
                 │                        │         │    │    └── const: 1
@@ -102,7 +102,7 @@ call
                 │                                                      ├── true
                 │                                                      ├── when
                 │                                                      │    ├── gt
-                │                                                      │    │    ├── variable: c:18
+                │                                                      │    │    ├── placeholder: $4
                 │                                                      │    │    └── const: 0
                 │                                                      │    └── subquery
                 │                                                      │         ├── tail-call
@@ -136,7 +136,7 @@ call
                 │                                                      │                             │         │    └── filters
                 │                                                      │                             │         │         └── eq
                 │                                                      │                             │         │              ├── variable: k:33
-                │                                                      │                             │         │              └── variable: arg_k:24
+                │                                                      │                             │         │              └── placeholder: $1
                 │                                                      │                             │         └── projections
                 │                                                      │                             │              ├── variable: new_i:25 [as=i_new:38]
                 │                                                      │                             │              └── variable: new_s:26 [as=s_new:39]
@@ -263,7 +263,7 @@ call
                 │    │         │    │         └── const: 10 [as=y:2]
                 │    │         │    └── projections
                 │    │         │         └── plus [as=x:3]
-                │    │         │              ├── variable: x:1
+                │    │         │              ├── placeholder: $1
                 │    │         │              └── const: 1
                 │    │         └── projections
                 │    │              └── plus [as=y:4]
@@ -319,11 +319,11 @@ call
                 │                        │         │    │    │         └── const: 100 [as=z:17]
                 │                        │         │    │    └── projections
                 │                        │         │    │         └── plus [as=x:18]
-                │                        │         │    │              ├── variable: x:5
+                │                        │         │    │              ├── placeholder: $1
                 │                        │         │    │              └── const: 1
                 │                        │         │    └── projections
                 │                        │         │         └── plus [as=y:19]
-                │                        │         │              ├── variable: y:6
+                │                        │         │              ├── placeholder: $2
                 │                        │         │              └── const: 1
                 │                        │         └── projections
                 │                        │              └── plus [as=z:20]
@@ -394,11 +394,11 @@ call
                 │                                                                │         │    │    └── tuple
                 │                                                                │         │    └── projections
                 │                                                                │         │         └── plus [as=x:10]
-                │                                                                │         │              ├── variable: x:8
+                │                                                                │         │              ├── placeholder: $1
                 │                                                                │         │              └── const: 1
                 │                                                                │         └── projections
                 │                                                                │              └── plus [as=y:11]
-                │                                                                │                   ├── variable: y:9
+                │                                                                │                   ├── placeholder: $2
                 │                                                                │                   └── const: 1
                 │                                                                └── projections
                 │                                                                     └── udf: _stmt_raise_4 [as="_stmt_raise_4":16]
@@ -707,8 +707,8 @@ call
                 │              │                                  └── projections
                 │              │                                       └── cast: RECORD [as="_implicit_return":8]
                 │              │                                            └── tuple
-                │              │                                                 ├── variable: x:6
-                │              │                                                 └── variable: y:7
+                │              │                                                 ├── placeholder: $1
+                │              │                                                 └── placeholder: $2
                 │              └── subquery
                 │                   └── project
                 │                        ├── columns: stmt_if_1:11
@@ -729,8 +729,8 @@ call
                 │                                            └── projections
                 │                                                 └── cast: RECORD [as="_implicit_return":8]
                 │                                                      └── tuple
-                │                                                           ├── variable: x:6
-                │                                                           └── variable: y:7
+                │                                                           ├── placeholder: $1
+                │                                                           └── placeholder: $2
                 └── const: 1
 
 exec-ddl
@@ -857,7 +857,7 @@ call
                 │                        │    │                             │                                            └── projections
                 │                        │    │                             │                                                 └── cast: RECORD [as="_implicit_return":15]
                 │                        │    │                             │                                                      └── tuple
-                │                        │    │                             │                                                           └── variable: foo:14
+                │                        │    │                             │                                                           └── placeholder: $1
                 │                        │    │                             └── const: 1
                 │                        │    └── projections
                 │                        │         └── column-access: 0 [as=foo:19]

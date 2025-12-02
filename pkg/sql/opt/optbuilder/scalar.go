@@ -84,7 +84,7 @@ func (b *Builder) buildScalar(
 			// effectively constant) or it is part of a table and we are already
 			// grouping on the entire PK of that table.
 			g := inScope.groupby
-			if !inScope.isOuterColumn(t.id) {
+			if !inScope.isOuterColumn(t) {
 				if !b.allowImplicitGroupingColumn(t.id, g) {
 					panic(newGroupingError(t.name.ReferenceName()))
 				}

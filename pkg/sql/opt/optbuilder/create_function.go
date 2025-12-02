@@ -261,8 +261,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		// Add all input parameters to the base scope of the body.
 		if tree.IsInParamClass(param.Class) {
 			paramColName := funcParamColName(param.Name, i)
-			col := b.synthesizeColumn(bodyScope, paramColName, typ, nil /* expr */, nil /* scalar */)
-			col.setParamOrd(i)
+			_ = b.synthesizeParameterColumn(bodyScope, paramColName, typ, i, nil /* scalar */)
 		}
 
 		// Collect the user defined type dependencies.
@@ -440,10 +439,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			for i := range createTriggerFuncParams {
 				param := &createTriggerFuncParams[i]
 				paramColName := funcParamColName(param.name, i)
-				col := b.synthesizeColumn(
-					bodyScope, paramColName, param.typ, nil /* expr */, nil, /* scalar */
+				_ = b.synthesizeParameterColumn(
+					bodyScope, paramColName, param.typ, i, nil, /* scalar */
 				)
-				col.setParamOrd(i)
 			}
 			routineParams = createTriggerFuncParams
 

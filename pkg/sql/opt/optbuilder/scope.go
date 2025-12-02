@@ -506,21 +506,17 @@ func (s *scope) ensureNullType(texpr tree.TypedExpr, desired *types.T) tree.Type
 
 // isOuterColumn returns true if the given column is not present in the current
 // scope (it may or may not be present in an ancestor scope).
-func (s *scope) isOuterColumn(id opt.ColumnID) bool {
+func (s *scope) isOuterColumn(col *scopeColumn) bool {
 	for i := range s.cols {
-		col := &s.cols[i]
-		if col.id == id {
+		if s.cols[i].id == col.id {
 			return false
 		}
 	}
-
 	for i := range s.windows {
-		w := &s.windows[i]
-		if w.id == id {
+		if s.windows[i].id == col.id {
 			return false
 		}
 	}
-
 	return true
 }
 
@@ -529,7 +525,9 @@ func (s *scope) isOuterColumn(id opt.ColumnID) bool {
 func (s *scope) colSet() opt.ColSet {
 	var colSet opt.ColSet
 	for i := range s.cols {
-		colSet.Add(s.cols[i].id)
+		if s.cols[i].id != 0 {
+			colSet.Add(s.cols[i].id)
+		}
 	}
 	return colSet
 }
@@ -539,7 +537,9 @@ func (s *scope) colSet() opt.ColSet {
 func (s *scope) colSetWithExtraCols() opt.ColSet {
 	colSet := s.colSet()
 	for i := range s.extraCols {
-		colSet.Add(s.extraCols[i].id)
+		if s.extraCols[i].id != 0 {
+			colSet.Add(s.extraCols[i].id)
+		}
 	}
 	return colSet
 }
