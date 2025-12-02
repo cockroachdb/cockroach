@@ -262,6 +262,11 @@ jobs:
       - run: ./build/github/prepare-summarize-build.sh
       - name: run tests
         run: ./build/github/unit-tests.sh
+      - name: generate code
+        if: failure()
+        # NB: To correctly report test owners, we'll have to make sure all Go
+        # code is generated and hoisted into the workspace (#107885).
+        run: ./build/github/generate-go-code.sh
       - name: upload test results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
