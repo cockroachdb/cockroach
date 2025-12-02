@@ -307,6 +307,9 @@ func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
 		func(roachpb.NodeID) livenesspb.NodeLivenessStatus {
 			return livenesspb.NodeLivenessStatus_LIVE
 		},
+		func(roachpb.NodeID, roachpb.StoreID) (bool, hlc.ClockTimestamp) {
+			return false /* isDead */, hlc.ClockTimestamp{}
+		},
 		/* deterministic */ false,
 	)
 }
