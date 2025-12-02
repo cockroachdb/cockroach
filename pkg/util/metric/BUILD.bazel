@@ -40,6 +40,7 @@ go_library(
         "@com_github_prometheus_client_golang//prometheus/graphite",
         "@com_github_prometheus_client_model//go",
         "@com_github_prometheus_common//expfmt",
+        "@com_github_prometheus_common//model",
         "@com_github_prometheus_prometheus//promql/parser",
         "@in_yaml_go_yaml_v4//:yaml",
     ],
