@@ -6,37 +6,55 @@
 package storeliveness
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/base"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// NodeContainer is a container for a node's storeliveness state which is shared
-// across all per-store SupportManagers.
-//
-// The container currently serves as merely a convenient way to pass around
-// these dependencies and hand them to the SupportManagers upon construction,
-// but it could be made to be a more functional abstraction in the future. For
-// example, StoreManagers could be given a reference to the NodeContainer, and
-// it could be responsible for creating SupportManagers.
+
+// NodeContainer is a container for all StoreLiveness state on a single node. It
+// encapsulates all dependencies required to create per-store SupportManagers
+// and keeps track of them once created.
 type NodeContainer struct {
 	Options         Options
 	Transport       *Transport
 	Knobs           *TestingKnobs
 	HeartbeatTicker *timeutil.BroadcastTicker
+	stopper         *stop.Stopper
+	nodeID          *base.NodeIDContainer
+
+	mu struct {
+		syncutil.Mutex
+		supportManagers map[roachpb.StoreID]*SupportManager
+	}
 }
 
 // NewNodeContainer creates a new NodeContainer.
 func NewNodeContainer(
-	stopper *stop.Stopper, options Options, transport *Transport, knobs *TestingKnobs,
+	stopper *stop.Stopper,
+	nodeID *base.NodeIDContainer,
+	options Options,
+	transport *Transport,
+	knobs *TestingKnobs,
 ) *NodeContainer {
 	ticker := timeutil.NewBroadcastTicker(options.HeartbeatInterval)
 	stopper.AddCloser(stop.CloserFn(ticker.Stop))
-	return &NodeContainer{
+	nc := &NodeContainer{
 		Options:         options,
 		Transport:       transport,
 		Knobs:           knobs,
 		HeartbeatTicker: ticker,
+		stopper:         stopper,
+		nodeID:          nodeID,
 	}
+	nc.mu.supportManagers = make(map[roachpb.StoreID]*SupportManager)
+	return nc
 }
 
 // SupportManagerKnobs returns the SupportManagerKnobs from the TestingKnobs..
@@ -45,4 +63,23 @@ func (n *NodeContainer) SupportManagerKnobs() *SupportManagerKnobs {
 		return &n.Knobs.SupportManagerKnobs
 	}
 	return nil
+}
+
+// NewSupportManager constructs and returns a new SupportManager for the
+// provided store.
+func (n *NodeContainer) NewSupportManager(
+	storeID roachpb.StoreID,
+	engine storage.Engine,
+	settings *cluster.Settings,
+	clock *hlc.Clock,
+) *SupportManager {
+	storeIdent := slpb.StoreIdent{NodeID: n.nodeID.Get(), StoreID: storeID}
+	sm := NewSupportManager(
+		storeIdent, engine, n.Options, settings, n.stopper, clock,
+		n.HeartbeatTicker, n.Transport, n.SupportManagerKnobs(),
+	)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.mu.supportManagers[storeID] = sm
+	return sm
 }
