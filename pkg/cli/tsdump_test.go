@@ -8,6 +8,7 @@ package cli
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/gob"
 	"fmt"
 	"io"
@@ -16,19 +17,23 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -108,6 +113,168 @@ func TestDebugTimeSeriesDumpCmd(t *testing.T) {
 			tmpFile.Name(),
 		))
 		require.Contains(t, out, "--upload-workers is set to an invalid value. please select a value which between 1 and 100.")
+	})
+
+	t.Run("debug tsdump with --metrics-list flag", func(t *testing.T) {
+		// Create a temporary metrics list file with specific metrics
+		metricsListFile, err := os.CreateTemp("", "metrics_list_*.txt")
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, os.Remove(metricsListFile.Name()))
+		}()
+
+		// Write a metric that should exist in any CockroachDB cluster
+		// sql.mem.root.current is a gauge that always exists
+		metricsContent := `# Test metrics list file
+sql.mem.root.current
+`
+		_, err = metricsListFile.WriteString(metricsContent)
+		require.NoError(t, err)
+		require.NoError(t, metricsListFile.Close())
+
+		// Run tsdump with --metrics-list flag
+		out, err := c.RunWithCapture(fmt.Sprintf(
+			"debug tsdump --format=csv --metrics-list=%s --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+			metricsListFile.Name(),
+		))
+		require.NoError(t, err)
+
+		// Expected metrics: sql.mem.root.current is a gauge (not histogram),
+		// so it gets cr.node. and cr.store. prefixes without histogram suffixes
+		expectedMetrics := map[string]struct{}{
+			"cr.node.sql.mem.root.current":  {},
+			"cr.store.sql.mem.root.current": {},
+		}
+
+		// Extract unique metric names from output (CSV format: metric_name,timestamp,source,value)
+		// Output contains: command echo line, then CSV data lines starting with cr.node./cr.store.
+		actualMetrics := make(map[string]struct{})
+		for _, line := range strings.Split(out, "\n") {
+			// Skip non-CSV lines (command echo, empty lines)
+			if !strings.HasPrefix(line, "cr.node.") && !strings.HasPrefix(line, "cr.store.") {
+				continue
+			}
+			metricName := strings.Split(line, ",")[0]
+			actualMetrics[metricName] = struct{}{}
+		}
+
+		for metricName := range actualMetrics {
+			_, expected := expectedMetrics[metricName]
+			require.True(t, expected, "unexpected metric in output: %s", metricName)
+		}
+	})
+
+	t.Run("debug tsdump with --metrics-list flag using regex pattern", func(t *testing.T) {
+		// Create a temporary metrics list file with a regex pattern
+		metricsListFile, err := os.CreateTemp("", "metrics_list_regex_*.txt")
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, os.Remove(metricsListFile.Name()))
+		}()
+
+		// Write a regex pattern that should match multiple sql.mem metrics
+		// The pattern contains regex metacharacters (\. and .*) so it will be auto-detected as regex
+		metricsContent := `# Test regex pattern
+sql\.mem\..*
+`
+		_, err = metricsListFile.WriteString(metricsContent)
+		require.NoError(t, err)
+		require.NoError(t, metricsListFile.Close())
+
+		// Run tsdump with --metrics-list flag
+		out, err := c.RunWithCapture(fmt.Sprintf(
+			"debug tsdump --format=csv --metrics-list=%s --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+			metricsListFile.Name(),
+		))
+		require.NoError(t, err)
+
+		// Extract unique metric names from output
+		actualMetrics := make(map[string]struct{})
+		for _, line := range strings.Split(out, "\n") {
+			// Skip non-CSV lines (command echo, empty lines)
+			if !strings.HasPrefix(line, "cr.node.") && !strings.HasPrefix(line, "cr.store.") {
+				continue
+			}
+			metricName := strings.Split(line, ",")[0]
+			actualMetrics[metricName] = struct{}{}
+		}
+
+		for metricName := range actualMetrics {
+			// All metrics should match sql.mem.* pattern (with cr.node. or cr.store. prefix)
+			require.True(t,
+				strings.HasPrefix(metricName, "cr.node.sql.mem.") || strings.HasPrefix(metricName, "cr.store.sql.mem."),
+				"metric %s does not match expected pattern sql.mem.*", metricName)
+		}
+	})
+
+	t.Run("debug tsdump with --metrics-list flag and non-existent file", func(t *testing.T) {
+		out, _ := c.RunWithCapture(
+			"debug tsdump --format=csv --metrics-list=/nonexistent/path/metrics.txt --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+		)
+		// The command output should contain the error message
+		require.Contains(t, out, "failed to open metrics list file")
+	})
+
+	t.Run("debug tsdump with --metrics-list flag and empty file", func(t *testing.T) {
+		// Create an empty metrics list file
+		emptyFile, err := os.CreateTemp("", "empty_metrics_*.txt")
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, os.Remove(emptyFile.Name()))
+		}()
+		require.NoError(t, emptyFile.Close())
+
+		out, _ := c.RunWithCapture(fmt.Sprintf(
+			"debug tsdump --format=csv --metrics-list=%s --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+			emptyFile.Name(),
+		))
+		// The command output should contain the error message
+		require.Contains(t, out, "no valid metric names or patterns")
+	})
+
+	t.Run("debug tsdump with --metrics-list flag and invalid regex", func(t *testing.T) {
+		// Create a metrics list file with valid metrics and invalid regex patterns
+		invalidRegexFile, err := os.CreateTemp("", "invalid_regex_*.txt")
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, os.Remove(invalidRegexFile.Name()))
+		}()
+
+		// Write a mix of valid metrics and invalid regex patterns
+		// Invalid regex patterns should be skipped with warning, valid metrics should still work
+		metricsContent := `[invalid
+sql.query.count
+(unclosed_paren`
+		_, err = invalidRegexFile.WriteString(metricsContent)
+		require.NoError(t, err)
+		require.NoError(t, invalidRegexFile.Close())
+
+		out, _ := c.RunWithCapture(fmt.Sprintf(
+			"debug tsdump --format=csv --metrics-list=%s --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+			invalidRegexFile.Name(),
+		))
+
+		// Invalid regex patterns are skipped.
+		// Extract unique metric names from output
+		actualMetrics := make(map[string]struct{})
+		for _, line := range strings.Split(out, "\n") {
+			// Skip non-CSV lines (command echo, empty lines, warnings)
+			if !strings.HasPrefix(line, "cr.node.") && !strings.HasPrefix(line, "cr.store.") {
+				continue
+			}
+			metricName := strings.Split(line, ",")[0]
+			actualMetrics[metricName] = struct{}{}
+		}
+
+		// Verify valid metrics are present (with cr.node. prefix)
+		expectedMetrics := map[string]struct{}{
+			"cr.store.sql.query.count": {},
+			"cr.node.sql.query.count":  {},
+		}
+		for metric := range actualMetrics {
+			_, expected := expectedMetrics[metric]
+			require.True(t, expected, "unexpected metric in output: %s", metric)
+		}
 	})
 }
 
@@ -407,4 +574,335 @@ func TestTsDumpFormatsDataDriven(t *testing.T) {
 			}
 		})
 	})
+}
+
+// TestIsRegexPattern tests the automatic regex pattern detection.
+func TestIsRegexPattern(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		input    string
+		expected bool
+	}{
+		// Literal metric names (no regex metacharacters)
+		{"sql.query.count", false},
+		{"changefeed.commit_latency", false},
+		{"jobs.changefeed.currently_paused", false},
+		{"sql.mem.", false},
+
+		// Regex patterns (contain metacharacters)
+		{"sql\\..*", true},                   // contains \. and .*
+		{".*latency.*", true},                // contains .*
+		{"sql\\.query\\.(count|rate)", true}, // contains \. | ( )
+		{"^sql\\..*", true},                  // contains ^ \. .*
+		{"sql\\.query\\.count$", true},       // contains \. $
+		{"sql\\.(query|exec)\\..*", true},    // contains \. | ( ) .*
+		{"[a-z]+\\.count", true},             // contains [ ] + \.
+		{"sql\\.query\\.count{1,3}", true},   // contains \. { }
+		{"sql\\.query\\.count?", true},       // contains \. ?
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			result := isRegexPattern(tc.input)
+			require.Equal(t, tc.expected, result, "isRegexPattern(%q) = %v, want %v", tc.input, result, tc.expected)
+		})
+	}
+}
+
+// TestReadMetricsListFile tests the metrics list file parsing functionality.
+func TestReadMetricsListFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name           string
+		fileContent    string
+		expectedNames  []string
+		expectedRegex  []bool
+		expectedErrMsg string
+	}{
+		{
+			name: "basic literal metrics",
+			fileContent: `sql.query.count
+changefeed.emitted_bytes
+kv.dist_sender.rpc.sent`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes", "kv.dist_sender.rpc.sent"},
+			expectedRegex: []bool{false, false, false},
+		},
+		{
+			name: "comments and empty lines",
+			fileContent: `# This is a comment
+sql.query.count
+
+# Another comment
+changefeed.emitted_bytes
+
+`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "inline comments",
+			fileContent: `sql.query.count # this is the query counter
+changefeed.emitted_bytes  # bytes emitted`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "strip cr.node prefix",
+			fileContent: `cr.node.sql.query.count
+cr.node.changefeed.emitted_bytes`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "strip cr.store prefix",
+			fileContent: `cr.store.capacity
+cr.store.capacity.available`,
+			expectedNames: []string{"capacity", "capacity.available"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "strip cockroachdb prefix",
+			fileContent: `cockroachdb.sql.query.count
+cockroachdb.changefeed.emitted_bytes`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "deduplicate entries",
+			fileContent: `sql.query.count
+changefeed.emitted_bytes
+sql.query.count`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "whitespace trimming",
+			fileContent: `   sql.query.count   
+	changefeed.emitted_bytes	`,
+			expectedNames: []string{"sql.query.count", "changefeed.emitted_bytes"},
+			expectedRegex: []bool{false, false},
+		},
+		{
+			name: "regex patterns auto-detected",
+			fileContent: `sql.query.count
+sql\..*
+.*latency.*`,
+			expectedNames: []string{"sql.query.count", "sql\\..*", ".*latency.*"},
+			expectedRegex: []bool{false, true, true},
+		},
+		{
+			name: "mixed literals and regex",
+			fileContent: `# Literal metrics
+changefeed.emitted_bytes
+jobs.changefeed.currently_paused
+
+# Regex patterns
+distsender\.errors\..*
+.*capacity.*`,
+			expectedNames: []string{"changefeed.emitted_bytes", "jobs.changefeed.currently_paused", "distsender\\.errors\\..*", ".*capacity.*"},
+			expectedRegex: []bool{false, false, true, true},
+		},
+		{
+			name:           "empty file",
+			fileContent:    "",
+			expectedErrMsg: "no valid metric names or patterns",
+		},
+		{
+			name: "only comments",
+			fileContent: `# comment 1
+# comment 2`,
+			expectedErrMsg: "no valid metric names or patterns",
+		},
+		{
+			name: "invalid regex pattern is skipped with warning",
+			fileContent: `sql.query.count
+[invalid`,
+			// Invalid regex is skipped with warning, valid metric is still parsed
+			expectedNames: []string{"sql.query.count"},
+			expectedRegex: []bool{false},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create temporary file with test content
+			tmpFile, err := os.CreateTemp("", "metrics_list_*.txt")
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, os.Remove(tmpFile.Name()))
+			}()
+
+			_, err = tmpFile.WriteString(tc.fileContent)
+			require.NoError(t, err)
+			require.NoError(t, tmpFile.Close())
+
+			entries, err := readMetricsListFile(tmpFile.Name())
+
+			if tc.expectedErrMsg != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectedErrMsg)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, entries, len(tc.expectedNames))
+
+			for i, entry := range entries {
+				require.Equal(t, tc.expectedNames[i], entry.value, "entry[%d].value", i)
+				require.Equal(t, tc.expectedRegex[i], entry.isRegex, "entry[%d].isRegex", i)
+			}
+		})
+	}
+}
+
+// mockAdminClient is a mock implementation of serverpb.RPCAdminClient
+// that only implements AllMetricMetadata for testing purposes.
+type mockAdminClient struct {
+	serverpb.RPCAdminClient // Embed the interface
+	metadata                map[string]metric.Metadata
+}
+
+// AllMetricMetadata returns the mocked metadata.
+func (m *mockAdminClient) AllMetricMetadata(
+	ctx context.Context, req *serverpb.MetricMetadataRequest,
+) (*serverpb.MetricMetadataResponse, error) {
+	return &serverpb.MetricMetadataResponse{Metadata: m.metadata}, nil
+}
+
+// TestGetTimeseriesNamesFromMetricsList tests the full pipeline of reading metrics
+// from a file and expanding them to timeseries names with histogram suffixes.
+func TestGetTimeseriesNamesFromMetricsList(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create mock metadata - mostly counters/gauges for simpler exact-match testing
+	counterType := io_prometheus_client.MetricType_COUNTER
+	gaugeType := io_prometheus_client.MetricType_GAUGE
+	histogramType := io_prometheus_client.MetricType_HISTOGRAM
+
+	mockMetadata := map[string]metric.Metadata{
+		// Simple counters and gauges for most tests
+		"sql.query.count":                           {MetricType: counterType},
+		"sql.exec.count":                            {MetricType: counterType},
+		"changefeed.emitted_bytes":                  {MetricType: counterType},
+		"changefeed.running":                        {MetricType: gaugeType},
+		"distsender.errors.notleaseholder":          {MetricType: counterType},
+		"distsender.errors.inleasetransferbackoffs": {MetricType: counterType},
+		// One histogram for histogram expansion test
+		"request.latency": {MetricType: histogramType},
+	}
+
+	mockClient := &mockAdminClient{metadata: mockMetadata}
+
+	// Build expected histogram output for the histogram test
+	var histogramExpected []string
+	for _, q := range metric.HistogramMetricComputers {
+		histogramExpected = append(histogramExpected, "cr.node.request.latency"+q.Suffix)
+	}
+	for _, q := range metric.HistogramMetricComputers {
+		histogramExpected = append(histogramExpected, "cr.store.request.latency"+q.Suffix)
+	}
+	sort.Strings(histogramExpected)
+
+	testCases := []struct {
+		name           string
+		fileContent    string
+		expectedOutput []string // exact expected output (sorted)
+	}{
+		{
+			name:        "single counter metric",
+			fileContent: `sql.query.count`,
+			expectedOutput: []string{
+				"cr.node.sql.query.count",
+				"cr.store.sql.query.count",
+			},
+		},
+		{
+			name:        "single gauge metric",
+			fileContent: `changefeed.running`,
+			expectedOutput: []string{
+				"cr.node.changefeed.running",
+				"cr.store.changefeed.running",
+			},
+		},
+		{
+			name: "multiple literal metrics",
+			fileContent: `sql.query.count
+changefeed.running
+changefeed.emitted_bytes`,
+			expectedOutput: []string{
+				"cr.node.changefeed.emitted_bytes",
+				"cr.node.changefeed.running",
+				"cr.node.sql.query.count",
+				"cr.store.changefeed.emitted_bytes",
+				"cr.store.changefeed.running",
+				"cr.store.sql.query.count",
+			},
+		},
+		{
+			name:        "regex matches multiple counters",
+			fileContent: `distsender\.errors\..*`,
+			expectedOutput: []string{
+				"cr.node.distsender.errors.inleasetransferbackoffs",
+				"cr.node.distsender.errors.notleaseholder",
+				"cr.store.distsender.errors.inleasetransferbackoffs",
+				"cr.store.distsender.errors.notleaseholder",
+			},
+		},
+		{
+			name:        "regex matches sql metrics",
+			fileContent: `sql\..*`,
+			expectedOutput: []string{
+				"cr.node.sql.exec.count",
+				"cr.node.sql.query.count",
+				"cr.store.sql.exec.count",
+				"cr.store.sql.query.count",
+			},
+		},
+		{
+			name: "mixed literals and regex",
+			fileContent: `changefeed.running
+distsender\.errors\..*`,
+			expectedOutput: []string{
+				"cr.node.changefeed.running",
+				"cr.node.distsender.errors.inleasetransferbackoffs",
+				"cr.node.distsender.errors.notleaseholder",
+				"cr.store.changefeed.running",
+				"cr.store.distsender.errors.inleasetransferbackoffs",
+				"cr.store.distsender.errors.notleaseholder",
+			},
+		},
+		{
+			name:           "histogram metric expands to all suffixes",
+			fileContent:    `request.latency`,
+			expectedOutput: histogramExpected,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create temporary file
+			tmpFile, err := os.CreateTemp("", "metrics_list_*.txt")
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, os.Remove(tmpFile.Name()))
+			}()
+
+			_, err = tmpFile.WriteString(tc.fileContent)
+			require.NoError(t, err)
+			require.NoError(t, tmpFile.Close())
+
+			// Call getTimeseriesNamesFromMetricsList
+			ctx := context.Background()
+			names, err := getTimeseriesNamesFromMetricsList(ctx, mockClient, tmpFile.Name())
+			require.NoError(t, err)
+
+			// Exact match of output
+			require.Equal(t, tc.expectedOutput, names)
+		})
+	}
 }
