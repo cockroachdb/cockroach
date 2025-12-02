@@ -28,6 +28,8 @@ const gceDiskStartupScriptTemplate = `#!/usr/bin/env bash
 function setup_disks() {
 	first_setup=$1
 
+	echo "startup script disk setup starting: $(date -u)"
+
 {{ if .BootDiskOnly }}
 	mkdir -p /mnt/data1 && chmod 777 /mnt/data1
 	echo "VM has no disk attached other than the boot disk."
@@ -148,6 +150,8 @@ function setup_disks() {
 	chmod a+w /mnt/data1/cores
 
 	sudo touch {{ .DisksInitializedFile }}
+
+	echo "startup script disk setup ending: $(date -u)"
 }
 
 {{ template "head_utils" . }}
@@ -167,6 +171,7 @@ fi
 setup_disks true
 
 {{ template "ulimits" . }}
+{{ template "systemd_config" . }}
 {{ template "tcpdump" . }}
 {{ template "keepalives" . }}
 {{ template "cron_utils" . }}
@@ -178,8 +183,8 @@ setup_disks true
 {{ template "ssh_utils" . }}
 {{ template "node_exporter" . }}
 {{ template "ebpf_exporter" .}}
-
-sudo touch {{ .OSInitializedFile }}
+{{ template "touch_initialized_file" . }}
+{{ template "tail_utils" . }}
 `
 
 // writeStartupScript writes the startup script to a temp file.
@@ -195,6 +200,7 @@ func writeStartupScript(
 	enableFIPS bool,
 	enableCron bool,
 	bootDiskOnly bool,
+	startupScriptMode vm.StartupScriptMode,
 ) (string, error) {
 	type tmplParams struct {
 		vm.StartupArgs
@@ -216,6 +222,7 @@ func writeStartupScript(
 			vm.WithZfs(fileSystem == vm.Zfs),
 			vm.WithEnableFIPS(enableFIPS),
 			vm.WithChronyServers([]string{"metadata.google.internal"}),
+			vm.WithStartupScriptMode(startupScriptMode),
 		),
 		ExtraMountOpts:   extraMountOpts,
 		UseMultipleDisks: useMultiple,

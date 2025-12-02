@@ -183,6 +183,9 @@ var (
 	// MinBootstrapSupportedVersionS390x is the _minimum_ version for any supported upgrade path running on S390x.
 	MinBootstrapSupportedVersionS390x = clusterupgrade.MustParseVersion("v25.3.0")
 
+	// MinBootstrapSupportedVersionFIPS is the _minimum_ version for any supported upgrade path running with FIPS enabled.
+	MinBootstrapSupportedVersionFIPS = clusterupgrade.MustParseVersion("v26.1.0")
+
 	allDeploymentModes = []DeploymentMode{
 		SystemOnlyDeployment,
 		SharedProcessDeployment,
@@ -1870,9 +1873,12 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 
 	// If minimumBootstrapVersion is unspecified, set a default.
 	if test.options.minimumBootstrapVersion == nil {
-		if test.clusterArch() == vm.ArchS390x {
+		switch test.clusterArch() {
+		case vm.ArchS390x:
 			test.options.minimumBootstrapVersion = MinBootstrapSupportedVersionS390x
-		} else {
+		case vm.ArchFIPS:
+			test.options.minimumBootstrapVersion = MinBootstrapSupportedVersionFIPS
+		default:
 			test.options.minimumBootstrapVersion = MinBootstrapSupportedVersion
 		}
 	}

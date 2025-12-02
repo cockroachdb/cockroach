@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/utils/packer"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -38,13 +40,20 @@ import (
 
 const (
 	ProviderName = "gce"
-	DefaultImage = "ubuntu-2204-jammy-v20240319"
-	ARM64Image   = "ubuntu-2204-jammy-arm64-v20240319"
+
+	// Auto discovery of latest images based on image families.
+	DefaultImageFamilyAMD64  = "ubuntu-2404-lts-amd64"
+	DefaultImageFamilyARM64  = "ubuntu-2404-lts-arm64"
+	DefaultImageFamilyFIPS   = "ubuntu-pro-fips-updates-2204-lts"
+	DefaultImageProjectAMD64 = "ubuntu-os-cloud"
+	DefaultImageProjectARM64 = DefaultImageProjectAMD64
+	DefaultImageProjectFIPS  = "ubuntu-os-pro-cloud"
+
 	// TODO(DarrylWong): Upgrade FIPS to Ubuntu 22 when it is available.
-	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
-	defaultImageProject = "ubuntu-os-cloud"
-	FIPSImageProject    = "ubuntu-os-pro-cloud"
-	ManagedLabel        = "managed"
+	//FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
+	//defaultImageProject = "ubuntu-os-cloud"
+	//FIPSImageProject    = "ubuntu-os-pro-cloud"
+	ManagedLabel = "managed"
 
 	// These values limit concurrent `gcloud` CLI operations, and command
 	// length, to avoid overwhelming the API when managing large clusters. The
@@ -323,7 +332,8 @@ func DefaultProviderOpts() *ProviderOpts {
 		MachineType:          "n2-standard-4",
 		MinCPUPlatform:       "Intel Ice Lake",
 		Zones:                nil,
-		Image:                DefaultImage,
+		Image:                "",
+		ImageProject:         DefaultImageFamilyAMD64,
 		SSDCount:             1,
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
@@ -352,6 +362,7 @@ type ProviderOpts struct {
 	BootDiskType     string
 	Zones            []string
 	Image            string
+	ImageProject     string
 	SSDCount         int
 	PDVolumeType     string
 	PDVolumeSize     int
@@ -402,6 +413,15 @@ type Provider struct {
 
 	// The project that provides the core roachprod services.
 	defaultProject string
+
+	// Cache for image existence checks to avoid repeated gcloud API calls
+	imageCache struct {
+		syncutil.Mutex
+		// Key is either:
+		//   - "fam:project:imageFamily" -> name
+		//   - "img:project:imageName" -> name
+		images map[string]string
+	}
 }
 
 // LogEntry represents a single log entry from the gcloud logging(stack driver)
@@ -1132,10 +1152,12 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Type of the boot disk volume")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "Intel Ice Lake",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
-	flags.StringVar(&o.Image, ProviderName+"-image", DefaultImage,
+	flags.StringVar(&o.Image, ProviderName+"-image", "",
 		"Image to use to create the vm, "+
 			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images. "+
 			"Note: this option is ignored if --fips is passed.")
+	flags.StringVar(&o.ImageProject, ProviderName+"-image-project", DefaultImageProjectAMD64,
+		"Project to use for the image specified in "+ProviderName+"-image")
 
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
 		"Number of local SSDs to create, only used if local-ssd=true")
@@ -1400,8 +1422,10 @@ func (p *Provider) computeInstanceArgs(
 	project := p.GetProject()
 
 	// Fixed args.
-	image := providerOpts.Image
-	imageProject := defaultImageProject
+	if opts.Arch == "" {
+		// Default to AMD64.
+		opts.Arch = string(vm.ArchAMD64)
+	}
 
 	if opts.Arch == string(vm.ArchARM64) && !providerOpts.useArmAMI() {
 		return nil, cleanUpFn, errors.Errorf("Requested arch is arm64, but machine type is %s. Do specify a t2a VM", providerOpts.MachineType)
@@ -1413,20 +1437,39 @@ func (p *Provider) computeInstanceArgs(
 	if providerOpts.useArmAMI() && opts.SSDOpts.UseLocalSSD {
 		return nil, cleanUpFn, errors.New("local SSDs are not supported with T2A instances, use --local-ssd=false")
 	}
-	if providerOpts.useArmAMI() {
-		if providerOpts.MinCPUPlatform != "" {
-			l.Printf("WARNING: --gce-min-cpu-platform is ignored for T2A instances")
-			providerOpts.MinCPUPlatform = ""
+
+	// Check if an image was specified.
+	image := providerOpts.Image
+	imageProject := providerOpts.ImageProject
+
+	// By default, we use the startup script that contains both the image baking
+	// and runtime logics. This may be overridden if we end up using a pre-baked image.
+	runtimeOnlyStartupScript := vm.StartupScriptAll
+
+	// If no explicit image was specified, try to use a pre-baked image
+	// or the latest ubuntu image in the default family for the requested architecture.
+	if image == "" {
+		var err error
+		var preBaked bool
+		image, imageProject, preBaked, err = p.resolveImage(l, project, vm.ParseArch(opts.Arch))
+		if err != nil {
+			return nil, cleanUpFn, errors.Wrap(err, "unable to resolve image")
 		}
-		// TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
-		image = ARM64Image
-		l.Printf("Using ARM64 AMI: %s for machine type: %s", image, providerOpts.MachineType)
-	}
-	if opts.Arch == string(vm.ArchFIPS) {
-		// NB: if FIPS is enabled, it overrides the image passed via CLI (--gce-image)
-		image = FIPSImage
-		imageProject = FIPSImageProject
-		l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", image, providerOpts.MachineType)
+		if preBaked {
+			runtimeOnlyStartupScript = vm.StartupScriptRuntimeOnly
+			l.Printf(
+				"DEBUG: using pre-baked image %s in project %s\n",
+				image,
+				imageProject,
+			)
+		} else {
+			l.Printf(
+				"DEBUG: pre-baked image not found in project %s, using base image %s from project %s (startup will be slower)\n",
+				project,
+				image,
+				imageProject,
+			)
+		}
 	}
 
 	args = []string{
@@ -1518,7 +1561,7 @@ func (p *Provider) computeInstanceArgs(
 	filename, err := writeStartupScript(
 		extraMountOpts, opts.SSDOpts.FileSystem,
 		providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS),
-		providerOpts.EnableCron, providerOpts.BootDiskOnly,
+		providerOpts.EnableCron, providerOpts.BootDiskOnly, runtimeOnlyStartupScript,
 	)
 	if err != nil {
 		return nil, cleanUpFn, errors.Wrapf(err, "could not write GCE startup script to temp file")
@@ -3395,4 +3438,112 @@ func checkSDKVersion(minVersion, message string) error {
 		return errors.Errorf("gcloud version %s is below minimum required version %s: %s", v, minVersion, message)
 	}
 	return nil
+}
+
+func (p *Provider) resolveImage(
+	l *logger.Logger, project string, arch vm.CPUArch,
+) (image, imageProject string, preBaked bool, err error) {
+	imageFamily := DefaultImageFamilyAMD64
+	imageProject = DefaultImageProjectAMD64
+	switch arch {
+	case vm.ArchAMD64:
+		// Defaults are already set.
+		// Used to ensure that the switch is exhaustive.
+	case vm.ArchARM64:
+		imageFamily = DefaultImageFamilyARM64
+		imageProject = DefaultImageProjectARM64
+	case vm.ArchFIPS:
+		imageFamily = DefaultImageFamilyFIPS
+		imageProject = DefaultImageProjectFIPS
+	default:
+		return "", "", false, errors.Errorf("unknown architecture: %s", arch)
+	}
+
+	// Discover the latest image in the specified family.
+	image, err = p.discoverImageFromFamily(l, imageFamily, imageProject)
+	if err != nil {
+		return "", "", false, errors.Wrapf(err, "unable to discover latest image from family %s in project %s", imageFamily, imageProject)
+	}
+
+	// Check if a pre-baked image from the latest image exists.
+	preBakedImageName := fmt.Sprintf(
+		"%s-%s-%s",
+		image,
+		packer.RoachprodPreBakedImageIdentifier,
+		vm.ComputeStartupTemplateChecksum(gceDiskStartupScriptTemplate),
+	)
+
+	if p.imageExists(l, preBakedImageName, project) {
+		return preBakedImageName, project, true, nil
+	}
+
+	return image, imageProject, false, nil
+}
+
+// imageExists checks if a GCE image already exists, with caching to avoid repeated API calls.
+func (p *Provider) imageExists(l *logger.Logger, imageName, project string) bool {
+	// Check cache first
+	cacheKey := fmt.Sprintf("img:%s:%s", project, imageName)
+	p.imageCache.Lock()
+	defer p.imageCache.Unlock()
+	if p.imageCache.images == nil {
+		p.imageCache.images = make(map[string]string)
+	}
+	if name, ok := p.imageCache.images[cacheKey]; ok {
+		return name != ""
+	}
+
+	// Check if image exists via gcloud
+	cmd := exec.Command("gcloud", "compute", "images", "describe", imageName,
+		"--project", project,
+		"--format=value(name)")
+	// Discard output, we only care about the exit code
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+
+	exists := cmd.Run() == nil
+
+	// Cache the result
+	if !exists {
+		// If image doesn't exist, cache empty string
+		p.imageCache.images[cacheKey] = ""
+	} else {
+		// Else cache the image name
+		p.imageCache.images[cacheKey] = imageName
+	}
+
+	return exists
+}
+
+// discoverImageFromFamily discovers the latest image to use for the given project
+// and image family.
+func (p *Provider) discoverImageFromFamily(
+	l *logger.Logger, imageFamily, project string,
+) (string, error) {
+	cacheKey := fmt.Sprintf("fam:%s:%s", project, imageFamily)
+	p.imageCache.Lock()
+	defer p.imageCache.Unlock()
+	if p.imageCache.images == nil {
+		p.imageCache.images = make(map[string]string)
+	}
+	if name, ok := p.imageCache.images[cacheKey]; ok {
+		return name, nil
+	}
+
+	args := []string{
+		"compute", "images", "describe-from-family", imageFamily,
+		"--project", project,
+		"--format=value(name)",
+	}
+	cmd := exec.Command("gcloud", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+	}
+	imageName := strings.TrimSpace(string(output))
+
+	// Cache the result
+	p.imageCache.images[cacheKey] = imageName
+
+	return imageName, nil
 }

@@ -1748,6 +1748,7 @@ GO_TARGETS = [
     "//pkg/roachprod/vm/ibm:ibm_test",
     "//pkg/roachprod/vm/local:local",
     "//pkg/roachprod/vm/local:local_test",
+    "//pkg/roachprod/vm/utils/packer:packer",
     "//pkg/roachprod/vm:vm",
     "//pkg/roachprod/vm:vm_test",
     "//pkg/roachprod:roachprod",

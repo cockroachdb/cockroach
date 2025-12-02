@@ -159,6 +159,7 @@ function setup_disks() {
 setup_disks
 
 {{ template "ulimits" . }}
+{{ template "systemd_config" . }}
 {{ template "tcpdump" . }}
 {{ template "keepalives" . }}
 {{ template "cron_utils" . }}
@@ -170,8 +171,8 @@ setup_disks
 {{ template "ssh_utils" . }}
 {{ template "node_exporter" . }}
 {{ template "ebpf_exporter" . }}
-
-sudo touch {{ .OSInitializedFile }}
+{{ template "touch_initialized_file" . }}
+{{ template "tail_utils" . }}
 `
 
 // writeStartupScript writes the startup script to a temp file.
@@ -188,6 +189,7 @@ func writeStartupScript(
 	enableFips bool,
 	remoteUser string,
 	bootDiskOnly bool,
+	startupScriptMode vm.StartupScriptMode,
 ) (string, error) {
 	type tmplParams struct {
 		vm.StartupArgs
@@ -203,6 +205,7 @@ func writeStartupScript(
 			vm.WithZfs(fileSystem == vm.Zfs),
 			vm.WithEnableFIPS(enableFips),
 			vm.WithChronyServers([]string{"169.254.169.123"}),
+			vm.WithStartupScriptMode(startupScriptMode),
 		),
 		ExtraMountOpts:   extraMountOpts,
 		UseMultipleDisks: useMultiple,

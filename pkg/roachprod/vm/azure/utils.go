@@ -83,6 +83,7 @@ ts_dev_id=$(python3 lsvmbus -vv | grep -w "Time Synchronization" -A 3 | grep "De
 echo $ts_dev_id | sudo tee /sys/bus/vmbus/drivers/hv_utils/unbind
 
 {{ template "ulimits" . }}
+{{ template "systemd_config" . }}
 {{ template "tcpdump" . }}
 {{ template "keepalives" . }}
 {{ template "cron_utils" . }}
@@ -94,8 +95,8 @@ echo $ts_dev_id | sudo tee /sys/bus/vmbus/drivers/hv_utils/unbind
 {{ template "ssh_utils" . }}
 {{ template "node_exporter" . }}
 {{ template "ebpf_exporter" . }}
-
-sudo touch {{ .OSInitializedFile }}
+{{ template "touch_initialized_file" . }}
+{{ template "tail_utils" . }}
 `
 
 // evalStartupTemplate evaluates startup template defined above and returns

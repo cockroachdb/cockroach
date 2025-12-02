@@ -55,13 +55,14 @@ func (oi *offsetInjector) deploy(ctx context.Context) error {
 		return nil
 	}
 
-	if err := oi.c.Install(ctx, oi.t.L(), oi.c.All(), "ntp"); err != nil {
+	// Chrony should already be installed on the nodes, just making sure.
+	if err := oi.c.Install(ctx, oi.t.L(), oi.c.All(), "chrony"); err != nil {
 		return err
 	}
 	if err := oi.c.Install(ctx, oi.t.L(), oi.c.All(), "gcc"); err != nil {
 		return err
 	}
-	if err := oi.c.RunE(ctx, option.WithNodes(oi.c.All()), "sudo", "service", "ntp", "stop"); err != nil {
+	if err := oi.c.RunE(ctx, option.WithNodes(oi.c.All()), "sudo", "service", "chrony", "stop"); err != nil {
 		return err
 	}
 	if err := oi.c.RunE(ctx, option.WithNodes(oi.c.All()),
@@ -100,9 +101,7 @@ func (oi *offsetInjector) recover(ctx context.Context, nodeID int) {
 	}
 
 	syncCmds := [][]string{
-		{"sudo", "service", "ntp", "stop"},
-		{"sudo", "ntpdate", "-u", "time.google.com"},
-		{"sudo", "service", "ntp", "start"},
+		{"sudo", "chronyc", "-a", "makestep"},
 	}
 	for _, cmd := range syncCmds {
 		oi.c.Run(
