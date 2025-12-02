@@ -225,7 +225,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 			t.Fatal(err)
 		}
 		knobs := cfg.TestingKnobs.StoreLivenessKnobs
-		cfg.StoreLiveness = storeliveness.NewNodeContainer(ltc.stopper, options, transport, knobs)
+		cfg.StoreLiveness = storeliveness.NewNodeContainer(ltc.stopper, nc, options, transport, knobs)
 	}
 	nodeCountFn := func() int {
 		var count int
