@@ -843,7 +843,9 @@ func setAndVerifyZoneConfigs(
 							Key:    desc.StartKey.AsRawKey(),
 							EndKey: desc.EndKey.AsRawKey(),
 						}
-						if replicaSpan.Overlaps(dataSpan) || desc.RangeID <= 3 {
+						// Ranges 1-4 are the ranges we constrained above
+						// (1: meta1, 2: meta2, 3: liveness, 4: system).
+						if replicaSpan.Overlaps(dataSpan) || desc.RangeID <= 4 {
 							overlappingReplicas = append(overlappingReplicas, replica)
 						}
 						return true // continue
