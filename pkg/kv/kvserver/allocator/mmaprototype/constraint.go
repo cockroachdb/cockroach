@@ -579,7 +579,8 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 		// emptyVoterConstraintIndex, so its corresponding
 		// voterConstraints.numReplicas must be 0.
 		if voterConstraints[emptyVoterConstraintIndex].numReplicas != 0 {
-			panic("programming error: no voter constraints should be associated for emptyVoterConstraintIndex")
+			panic(errors.AssertionFailedf("programming error: voterConstraints[%d].numReplicas should be 0, but is %d",
+				emptyVoterConstraintIndex, voterConstraints[emptyVoterConstraintIndex]))
 		}
 		remainingSatisfiable := allReplicaConstraints[emptyConstraintIndex].remainingReplicas
 		if neededReplicas > 0 && remainingSatisfiable > 0 {
