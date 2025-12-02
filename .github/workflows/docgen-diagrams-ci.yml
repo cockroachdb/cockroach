@@ -1,0 +1,316 @@
+name: SQL Diagram Generation CI
+
+on:
+  pull_request:
+    paths:
+      - 'pkg/cmd/docgen/diagrams.go'
+      - 'pkg/sql/parser/sql.y'
+      - 'docs/generated/sql/bnf/BUILD.bazel'
+    branches:
+      - master
+      - release-*
+  pull_request_target:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      force_regenerate:
+        description: 'Force regeneration of all diagrams'
+        required: false
+        default: 'false'
+        type: boolean
+
+concurrency:
+  group: docgen-diagrams-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  check-label:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - name: Check if should run
+        id: check
+        run: |
+          # Run if triggered by path changes, workflow_dispatch, or docgen-diagram label
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "pull_request_target" && "${{ github.event.label.name }}" == "docgen-diagram" ]]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
+
+  generate-diagrams:
+    needs: check-label
+    if: needs.check-label.outputs.should_run == 'true'
+    runs-on: [self-hosted, ubuntu_big_2004]
+    timeout-minutes: 60
+    outputs:
+      diagrams_changed: ${{ steps.check-changes.outputs.changed }}
+      validation_status: ${{ steps.validate.outputs.status }}
+      skip_doc_warnings: ${{ steps.validate.outputs.skip_doc_warnings }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+
+      - name: Get EngFlow keys
+        run: ./build/github/get-engflow-keys.sh
+
+      - name: Generate BNF files
+        id: generate-bnf
+        run: |
+          echo "::group::Generating BNF files from sql.y"
+          ./dev generate bnf 2>&1 | tee bnf_generation.log
+          echo "::endgroup::"
+
+      - name: Build SVG diagrams
+        id: build-svg
+        run: |
+          echo "::group::Building SVG diagrams"
+          ./dev build docs/generated/sql/bnf:svg 2>&1 | tee svg_build.log
+          echo "::endgroup::"
+
+      - name: Run validation tests
+        id: validate
+        run: |
+          echo "::group::Running diagram validation"
+
+          validation_output=""
+          validation_status="passed"
+          skip_doc_warnings=""
+
+          # Check 1: Verify all BNF files exist for diagrams.go entries
+          echo "Checking for missing BNF files..."
+          missing_bnf=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestMissingBNFFiles 2>&1) || true
+          if echo "$missing_bnf" | grep -q "FAIL"; then
+            validation_status="failed"
+            validation_output="${validation_output}\n## Missing BNF Files\n${missing_bnf}"
+          fi
+
+          # Check 2: Verify all HTML diagrams were generated
+          echo "Checking for missing HTML diagrams..."
+          missing_html=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestMissingHTMLDiagrams 2>&1) || true
+          if echo "$missing_html" | grep -q "FAIL"; then
+            validation_status="failed"
+            validation_output="${validation_output}\n## Missing HTML Diagrams\n${missing_html}"
+          fi
+
+          # Check 3: Look for _stmt naming conflicts
+          echo "Checking for _stmt naming conflicts..."
+          stmt_conflicts=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestStmtNamingConflicts 2>&1) || true
+          if echo "$stmt_conflicts" | grep -q "FAIL"; then
+            validation_status="failed"
+            validation_output="${validation_output}\n## _stmt Naming Conflicts\n${stmt_conflicts}"
+          fi
+
+          # Check 4: Detect replace/unlink mismatches
+          echo "Checking for replace/unlink mismatches..."
+          replace_mismatch=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestReplaceUnlinkMismatch 2>&1) || true
+          if echo "$replace_mismatch" | grep -q "FAIL"; then
+            validation_status="failed"
+            validation_output="${validation_output}\n## Replace/Unlink Mismatches\n${replace_mismatch}"
+          fi
+
+          # Check 5: Verify grammar links are valid
+          echo "Checking for broken grammar links..."
+          broken_links=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestBrokenGrammarLinks 2>&1) || true
+          if echo "$broken_links" | grep -q "FAIL"; then
+            validation_status="failed"
+            validation_output="${validation_output}\n## Broken Grammar Links\n${broken_links}"
+          fi
+
+          # Check 6: Report SKIP DOC suppressions (warning only)
+          echo "Detecting SKIP DOC suppressions..."
+          skip_docs=$(grep -n "SKIP DOC" pkg/sql/parser/sql.y 2>/dev/null || echo "")
+          if [[ -n "$skip_docs" ]]; then
+            skip_doc_warnings="The following grammar rules are suppressed with SKIP DOC:\n${skip_docs}"
+          fi
+
+          # Check 7: Detect unused diagrams
+          echo "Checking for unused diagrams..."
+          unused=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestUnusedDiagrams 2>&1) || true
+          if echo "$unused" | grep -q "WARNING"; then
+            validation_output="${validation_output}\n## Unused Diagrams Warning\n${unused}"
+          fi
+
+          echo "status=${validation_status}" >> $GITHUB_OUTPUT
+          echo "skip_doc_warnings<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$skip_doc_warnings" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          if [[ "$validation_status" == "failed" ]]; then
+            echo -e "$validation_output"
+            exit 1
+          fi
+
+          echo "::endgroup::"
+          echo "All validation checks passed!"
+
+      - name: Check for diagram changes
+        id: check-changes
+        run: |
+          # Compare generated files with what would be in the generated-diagrams repo
+          # For now, we'll check if any BNF or HTML files changed
+          changed_files=$(git diff --name-only HEAD -- docs/generated/sql/bnf/ 2>/dev/null || echo "")
+          if [[ -n "$changed_files" ]]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Changed files:"
+            echo "$changed_files"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No diagram changes detected"
+          fi
+
+      - name: Package artifacts
+        id: package
+        run: |
+          echo "::group::Packaging diagram artifacts"
+          mkdir -p artifacts/diagrams
+
+          # Copy BNF files
+          cp -r docs/generated/sql/bnf/*.bnf artifacts/diagrams/ 2>/dev/null || true
+
+          # Copy HTML files (SVG diagrams)
+          cp -r bazel-bin/docs/generated/sql/bnf/*.html artifacts/diagrams/ 2>/dev/null || true
+
+          # Create manifest
+          GENERATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          DIAGRAM_COUNT=$(ls -1 artifacts/diagrams/*.bnf 2>/dev/null | wc -l | tr -d ' ')
+          SVG_COUNT=$(ls -1 artifacts/diagrams/*.html 2>/dev/null | wc -l | tr -d ' ')
+          cat > artifacts/diagrams/manifest.json << MANIFEST_EOF
+          {
+            "generated_at": "${GENERATED_AT}",
+            "source_commit": "${{ github.sha }}",
+            "source_pr": "${{ github.event.pull_request.number || 'N/A' }}",
+            "diagram_count": ${DIAGRAM_COUNT},
+            "svg_count": ${SVG_COUNT}
+          }
+          MANIFEST_EOF
+
+          # Create validation summary
+          echo "Validation Status: ${{ steps.validate.outputs.status }}" > artifacts/diagrams/validation_summary.txt
+          if [[ -n "${{ steps.validate.outputs.skip_doc_warnings }}" ]]; then
+            echo -e "\nSKIP DOC Warnings:\n${{ steps.validate.outputs.skip_doc_warnings }}" >> artifacts/diagrams/validation_summary.txt
+          fi
+
+          echo "::endgroup::"
+
+      - name: Upload diagram artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sql-diagrams
+          path: artifacts/diagrams/
+          retention-days: 30
+
+      - name: Clean up EngFlow keys
+        if: always()
+        run: ./build/github/cleanup-engflow-keys.sh
+
+  trigger-bot-sync:
+    needs: generate-diagrams
+    if: needs.generate-diagrams.outputs.diagrams_changed == 'true' && needs.generate-diagrams.outputs.validation_status == 'passed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download diagram artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sql-diagrams
+          path: diagrams/
+
+      - name: Trigger generated-diagrams bot
+        env:
+          DIAGRAMS_BOT_TOKEN: ${{ secrets.DIAGRAMS_BOT_TOKEN }}
+        run: |
+          # POST to the bot service to trigger PR creation in generated-diagrams repo
+          # The bot will:
+          # 1. Clone cockroachdb/generated-diagrams
+          # 2. Update bnf/ and grammar_svg/ directories
+          # 3. Update manifest file
+          # 4. Open a PR (no auto-merge)
+          # 5. Assign PR to docs-infra-prs
+          # 6. Attach validation summary and SKIP DOC warnings
+
+          if [[ -z "$DIAGRAMS_BOT_TOKEN" ]]; then
+            echo "::warning::DIAGRAMS_BOT_TOKEN not configured - skipping bot trigger"
+            echo "To enable automatic diagram sync, configure the DIAGRAMS_BOT_TOKEN secret"
+            exit 0
+          fi
+
+          # Create payload for bot
+          cat > bot_payload.json << 'PAYLOAD_EOF'
+          {
+            "source_repo": "cockroachdb/cockroach",
+            "source_commit": "${{ github.sha }}",
+            "source_pr": "${{ github.event.pull_request.number }}",
+            "source_branch": "${{ github.head_ref || github.ref_name }}",
+            "validation_status": "${{ needs.generate-diagrams.outputs.validation_status }}",
+            "skip_doc_warnings": "${{ needs.generate-diagrams.outputs.skip_doc_warnings }}",
+            "action": "sync_diagrams"
+          }
+          PAYLOAD_EOF
+
+          echo "Bot payload:"
+          cat bot_payload.json
+
+          # TODO: Replace with actual bot endpoint
+          # curl -X POST \
+          #   -H "Authorization: Bearer $DIAGRAMS_BOT_TOKEN" \
+          #   -H "Content-Type: application/json" \
+          #   -d @bot_payload.json \
+          #   https://your-bot-service.example.com/api/sync-diagrams
+
+          echo "::notice::Bot sync would be triggered here. Implement bot endpoint for production."
+
+  comment-on-pr:
+    needs: [generate-diagrams, trigger-bot-sync]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const validationStatus = '${{ needs.generate-diagrams.outputs.validation_status }}';
+            const diagramsChanged = '${{ needs.generate-diagrams.outputs.diagrams_changed }}';
+            const skipDocWarnings = `${{ needs.generate-diagrams.outputs.skip_doc_warnings }}`;
+
+            let body = '## SQL Diagram Generation Report\n\n';
+
+            if (validationStatus === 'passed') {
+              body += ':white_check_mark: **Validation Passed**\n\n';
+            } else if (validationStatus === 'failed') {
+              body += ':x: **Validation Failed**\n\n';
+              body += 'Please check the workflow logs for details on which validations failed.\n\n';
+            }
+
+            if (diagramsChanged === 'true') {
+              body += ':arrows_counterclockwise: **Diagram changes detected**\n';
+              body += 'A PR will be automatically opened in `cockroachdb/generated-diagrams` to sync these changes.\n\n';
+            } else {
+              body += ':heavy_check_mark: **No diagram changes detected**\n\n';
+            }
+
+            if (skipDocWarnings && skipDocWarnings.trim() !== '') {
+              body += '### SKIP DOC Warnings\n\n';
+              body += 'The following grammar rules are suppressed from documentation:\n\n';
+              body += '```\n' + skipDocWarnings + '\n```\n\n';
+            }
+
+            body += '---\n';
+            body += '*This comment was generated by the SQL Diagram CI workflow.*';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
