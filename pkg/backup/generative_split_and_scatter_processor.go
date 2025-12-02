@@ -7,7 +7,6 @@ package backup
 
 import (
 	"context"
-	"fmt"
 	"hash/fnv"
 	"math/rand"
 	"strings"
@@ -22,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -249,15 +248,6 @@ func (s dbSplitAndScatterer) findDestination(res *kvpb.AdminScatterResponse) roa
 	return roachpb.NodeID(0)
 }
 
-func routingDatumsForSQLInstance(
-	sqlInstanceID base.SQLInstanceID,
-) (rowenc.EncDatum, rowenc.EncDatum) {
-	routingBytes := roachpb.Key(fmt.Sprintf("node%d", sqlInstanceID))
-	startDatum := rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
-	endDatum := rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
-	return startDatum, endDatum
-}
-
 type entryNode struct {
 	entry execinfrapb.RestoreSpanEntry
 	node  roachpb.NodeID
@@ -393,7 +383,7 @@ func (gssp *generativeSplitAndScatterProcessor) Next() (
 		// The routing datums informs the router which output stream should be used.
 		routingDatum, ok := gssp.routingDatumCache.getRoutingDatum(scatteredEntry.node)
 		if !ok {
-			routingDatum, _ = routingDatumsForSQLInstance(base.SQLInstanceID(scatteredEntry.node))
+			routingDatum, _ = physicalplan.RoutingDatumsForSQLInstance(base.SQLInstanceID(scatteredEntry.node))
 			gssp.routingDatumCache.putRoutingDatum(scatteredEntry.node, routingDatum)
 		}
 
@@ -743,24 +733,6 @@ func newRoutingDatumCache() routingDatumCache {
 var splitAndScatterOutputTypes = []*types.T{
 	types.Bytes, // Span key for the range router
 	types.Bytes, // RestoreDataEntry bytes
-}
-
-// routingSpanForSQLInstance provides the mapping to be used during distsql planning
-// when setting up the output router.
-func routingSpanForSQLInstance(sqlInstanceID base.SQLInstanceID) ([]byte, []byte, error) {
-	var alloc tree.DatumAlloc
-	startDatum, endDatum := routingDatumsForSQLInstance(sqlInstanceID)
-
-	startBytes, endBytes := make([]byte, 0), make([]byte, 0)
-	startBytes, err := startDatum.Encode(splitAndScatterOutputTypes[0], &alloc, catenumpb.DatumEncoding_ASCENDING_KEY, startBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-	endBytes, err = endDatum.Encode(splitAndScatterOutputTypes[0], &alloc, catenumpb.DatumEncoding_ASCENDING_KEY, endBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-	return startBytes, endBytes, nil
 }
 
 func init() {
