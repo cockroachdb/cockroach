@@ -1370,6 +1370,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		} else if rs.localRangeOwner != msg.StoreID {
 			rs.localRangeOwner = msg.StoreID
 		}
+		rs.load = rangeMsg.RangeLoad
 		if !rangeMsg.MaybeSpanConfIsPopulated && len(rs.pendingChanges) == 0 {
 			// Common case: no pending changes, and span config not provided.
 			//
@@ -1404,9 +1405,6 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// Set the range state and store state to match the range message state
 		// initially. The pending changes which are not enacted in the range
 		// message are handled and added back below.
-		if rangeMsg.MaybeSpanConfIsPopulated {
-			rs.load = rangeMsg.RangeLoad
-		}
 		for _, replica := range rs.replicas {
 			ss := cs.stores[replica.StoreID]
 			if ss == nil {
