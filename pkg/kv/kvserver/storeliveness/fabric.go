@@ -16,6 +16,7 @@ import (
 // Fabric is a representation of the Store Liveness fabric. It provides
 // information about uninterrupted periods of "support" between stores.
 type Fabric interface {
+	SupportStatus
 	InspectFabric
 
 	// SupportFor returns the epoch of the current uninterrupted period of Store
@@ -75,4 +76,74 @@ type Fabric interface {
 type InspectFabric interface {
 	InspectSupportFrom() slpb.InspectSupportFromStatesPerStore
 	InspectSupportFor() slpb.InspectSupportForStatesPerStore
+}
+
+// SupportState represents the support state of a remote store.
+type SupportState int
+
+const (
+	// StateUnknown indicates that there has been no interaction with the remote
+	// store. Support was never provided, and therefore never withdrawn.
+	StateUnknown SupportState = iota
+	// StateSupporting indicates that support is currently being provided to the
+	// remote store.
+	StateSupporting
+	// StateNotSupporting indicates that support has been withdrawn from the
+	// remote store.
+	StateNotSupporting
+)
+
+// combine combines two SupportState values, updating the receiver based on the
+// precedence order:
+//   - StateUnknown doesn't change the combined state.
+//   - StateSupporting takes precedence over StateUnknown, that's all.
+//   - StateNotSupporting takes precedence over all other states.
+//
+// This may be used to aggregate the support state across all SupportManagers
+// running on a single node.
+func (s *SupportState) combine(o SupportState) {
+	switch o {
+	case StateUnknown:
+		// StateUnknown doesn't change the combined state.
+	case StateNotSupporting:
+		// StateNotSupporting takes precedence over all other states.
+		*s = StateNotSupporting
+	case StateSupporting:
+		// StateSupporting takes precedence over StateUnknown, that's all.
+		if *s == StateUnknown {
+			*s = StateSupporting
+		}
+	default:
+		panic("invalid state")
+	}
+}
+
+// SupportStatus is an interface that can be used to query the support state of
+// a remote node/store pair in the StoreLiveness fabric.
+//
+// Crucially, it may (but not necessarily) be used to collapse support state
+// across all per-store StoreLiveness instances running on a single node. This
+// is done by taking the most conservative view of things across them.
+type SupportStatus interface {
+	// SupportState returns the support state[1] for the supplied remote store.
+	// Additionally, the timestamp[2] at which support was last withdrawn for
+	// the store is also returned, if applicable[3].
+	//
+	// When aggregating across all per-store StoreLiveness instances, we have to
+	// contend with the fact that different StoreLiveness instances may withdraw
+	// support for remote stores independently. Moreover, some StoreLiveness
+	// intances may have never interacted with the remote store. As such:
+	//
+	// [1] The returned SupportState corresponds to the most conservative view
+	// of things. If any of the local stores do not support the remote store,
+	// StateNotSupporting is returned. If all local stores support the remote
+	// store, StateSupporting is returned.
+	//
+	// [2] If multiple instances have withdrawn support for the remote store,
+	// the returned timestamp corresponds to the most recent withdrawal across
+	// all of them.
+	//
+	// [3] If a store never provided support for a remote store, it is excluded
+	// from both the calculations above.
+	SupportState(id slpb.StoreIdent) (SupportState, hlc.ClockTimestamp)
 }
