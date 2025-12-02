@@ -243,7 +243,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		cfg.Clock,
 		nodeCountFn,
 		storepool.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
-		/* deterministic */ false,
+		storepool.MakeStoreLivenessFunc(cfg.StoreLiveness),
+		false, /* deterministic */
 	)
 	cfg.MMAllocator = mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
 		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
