@@ -135,10 +135,12 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 			if timeutil.Since(tStart) > 30*time.Second {
 				t.L().Printf("still waiting for leases to move")
 				// The leases have not moved yet, so display some progress.
-				dumpRangesCmd := roachtestutil.NewCommand("./cockroach sql -e 'TABLE crdb_internal.ranges'").
+				dumpRangesCmd := roachtestutil.NewCommand(
+					"./cockroach sql -e 'SET allow_unsafe_internals=true; TABLE crdb_internal.ranges'").
 					Flag("certs-dir", certsDir).
 					Flag("port", "{pgport:1}").
 					String()
+
 				t.L().Printf("SQL: %s", dumpRangesCmd)
 				err = c.RunE(ctx, option.WithNodes(c.Node(1)), dumpRangesCmd)
 				require.NoError(t, err)
