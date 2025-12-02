@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1901,6 +1902,154 @@ func TestUnsupportedGSSEnc(t *testing.T) {
 			t.Fatalf("expected 1 cancel request, got %d", count)
 		}
 	})
+}
+
+// TestNegotiateProtocolVersion tests protocol version negotiation behavior.
+// It verifies that:
+// - Version 3.0 without _pq_.* options: no negotiation message is sent
+// - Version 3.0 with _pq_.* options: negotiation message lists unrecognized options
+// - Version 3.2+ (PostgreSQL 18+): negotiation message indicates version 3.0 supported
+// See: https://github.com/cockroachdb/cockroach/issues/153163
+func TestNegotiateProtocolVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Test only in insecure mode since the protocol negotiation happens before
+	// SSL/TLS handshake and the behavior is the same regardless of security mode.
+	ctx := context.Background()
+	params := base.TestServerArgs{Insecure: true}
+	srv := serverutils.StartServerOnly(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	const version30 = (3 << 16) + 0
+	const version32 = (3 << 16) + 2
+
+	testCases := []struct {
+		name                        string
+		protocolVersion             uint32
+		parameters                  map[string]string
+		expectNegotiation           bool
+		expectedUnrecognizedOptions []string
+	}{
+		{
+			// Version 3.0 with no special options should proceed directly to
+			// authentication without any negotiation.
+			name:              "v3.0_no_options",
+			protocolVersion:   version30,
+			parameters:        map[string]string{"user": "root"},
+			expectNegotiation: false,
+		},
+		{
+			// Version 3.0 with _pq_.* parameters triggers negotiation to inform the
+			// client which protocol options are not recognized. This is per the
+			// PostgreSQL protocol spec which reserves _pq_.* for protocol extensions.
+			name:                        "v3.0_with_pq_options",
+			protocolVersion:             version30,
+			parameters:                  map[string]string{"user": "root", "_pq_.feature": "value"},
+			expectNegotiation:           true,
+			expectedUnrecognizedOptions: []string{"_pq_.feature"},
+		},
+		{
+			// Version 3.2 (PostgreSQL 18+) with no special options should trigger
+			// negotiation to indicate we only support version 3.0.
+			name:              "v3.2_no_options",
+			protocolVersion:   version32,
+			parameters:        map[string]string{"user": "root"},
+			expectNegotiation: true,
+		},
+		{
+			// Version 3.2 with _pq_.* parameters should trigger negotiation that
+			// includes both the version downgrade and the unrecognized options.
+			name:            "v3.2_with_pq_options",
+			protocolVersion: version32,
+			parameters: map[string]string{
+				"user":                  "root",
+				"_pq_.protocol_feature": "some_value",
+				"_pq_.another_option":   "another_value",
+			},
+			expectNegotiation:           true,
+			expectedUnrecognizedOptions: []string{"_pq_.another_option", "_pq_.protocol_feature"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var d net.Dialer
+			conn, err := d.DialContext(ctx, "tcp", s.AdvSQLAddr())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+
+			fe := pgproto3.NewFrontend(pgproto3.NewChunkReader(conn), conn)
+			if err := fe.Send(&pgproto3.StartupMessage{
+				ProtocolVersion: tc.protocolVersion,
+				Parameters:      tc.parameters,
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			if tc.expectNegotiation {
+				// Read the NegotiateProtocolVersion message.
+				// The format is:
+				//   - Byte1('v') - Message type
+				//   - Int32 - Length of message contents (including self)
+				//   - Int32 - Newest protocol version supported
+				//   - Int32 - Number of unrecognized protocol options
+				//   - For each unrecognized option: String - Option name
+				header := make([]byte, 5)
+				if _, err := io.ReadFull(conn, header); err != nil {
+					t.Fatalf("failed to read message header: %v", err)
+				}
+				msgType := header[0]
+				msgLen := binary.BigEndian.Uint32(header[1:5])
+
+				require.Equal(t, byte('v'), msgType, "expected NegotiateProtocolVersion message")
+
+				// Read the rest of the message.
+				body := make([]byte, msgLen-4) // -4 because length includes itself
+				if _, err := io.ReadFull(conn, body); err != nil {
+					t.Fatalf("failed to read message body: %v", err)
+				}
+
+				supportedVersion := binary.BigEndian.Uint32(body[0:4])
+				numUnrecognized := binary.BigEndian.Uint32(body[4:8])
+
+				require.Equal(t, uint32(version30), supportedVersion, "expected server to report protocol version 3.0")
+				require.Equal(t, uint32(len(tc.expectedUnrecognizedOptions)), numUnrecognized, "unexpected number of unrecognized options")
+
+				// Parse the unrecognized options from the message body.
+				var unrecognizedOptions []string
+				offset := 8
+				for i := 0; i < int(numUnrecognized); i++ {
+					// Find the null terminator for this string.
+					end := offset
+					for end < len(body) && body[end] != 0 {
+						end++
+					}
+					if end >= len(body) {
+						t.Fatalf("unterminated string in unrecognized options")
+					}
+					unrecognizedOptions = append(unrecognizedOptions, string(body[offset:end]))
+					offset = end + 1 // Skip the null terminator.
+				}
+
+				require.ElementsMatch(t, tc.expectedUnrecognizedOptions, unrecognizedOptions, "unexpected unrecognized options")
+			}
+
+			// After any negotiation (or immediately for v3.0 without options),
+			// the connection should proceed to authentication.
+			msg, err := fe.Receive()
+			if err != nil {
+				t.Fatalf("failed to receive message: %v", err)
+			}
+
+			// The server should proceed with authentication.
+			_, ok := msg.(*pgproto3.AuthenticationOk)
+			require.True(t, ok, "expected AuthenticationOk message, got %T", msg)
+		})
+	}
 }
 
 func TestFailPrepareFailsTxn(t *testing.T) {
