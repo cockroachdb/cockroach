@@ -1624,6 +1624,7 @@ func init() {
 	f.BoolVar(&debugTimeSeriesDumpOpts.disableDeltaProcessing, "disable-delta-processing", false, "disable delta calculation for counter metrics (enabled by default)")
 	f.Int64Var(&debugTimeSeriesDumpOpts.ddMetricInterval, "dd-metric-interval", debugTimeSeriesDumpOpts.ddMetricInterval, "interval in seconds for datadoginit format only (default 10). Regular datadog format uses actual intervals from tsdump.")
 	f.Lookup("dd-metric-interval").Hidden = true // this is for internal use only
+	f.StringVar(&debugTimeSeriesDumpOpts.metricsListFile, "metrics-list", "", "file containing an explicit list of metric names to dump (one per line, without cr.node./cr.store. prefix). When specified, only these metrics are dumped instead of all metrics.")
 
 	f = debugSendKVBatchCmd.Flags()
 	f.StringVar(&debugSendKVBatchContext.traceFormat, "trace", debugSendKVBatchContext.traceFormat,

@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -32,9 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/spf13/cobra"
 )
 
@@ -60,7 +63,8 @@ var debugTimeSeriesDumpOpts = struct {
 	noOfUploadWorkers      int
 	retryFailedRequests    bool
 	disableDeltaProcessing bool
-	ddMetricInterval       int64 // interval for datadoginit format only
+	ddMetricInterval       int64  // interval for datadoginit format only
+	metricsListFile        string // file containing explicit list of metrics to dump
 }{
 	format:                 tsDumpText,
 	from:                   timestampValue{},
@@ -199,9 +203,22 @@ will then convert it to the --format requested in the current invocation.
 
 			target, _ := addr.AddrWithDefaultLocalhost(serverCfg.AdvertiseAddr)
 			adminClient := conn.NewAdminClient()
-			names, err := serverpb.GetInternalTimeseriesNamesFromServer(ctx, adminClient)
-			if err != nil {
-				return err
+
+			var names []string
+			if debugTimeSeriesDumpOpts.metricsListFile != "" {
+				// Use explicit metrics list from file
+				names, err = getTimeseriesNamesFromFile(ctx, adminClient, debugTimeSeriesDumpOpts.metricsListFile)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(os.Stderr, "Using explicit metrics list with %d timeseries names from %s\n",
+					len(names), debugTimeSeriesDumpOpts.metricsListFile)
+			} else {
+				// Fetch all metric names from server
+				names, err = serverpb.GetInternalTimeseriesNamesFromServer(ctx, adminClient)
+				if err != nil {
+					return err
+				}
 			}
 			req := &tspb.DumpRequest{
 				StartNanos: time.Time(debugTimeSeriesDumpOpts.from).UnixNano(),
@@ -689,6 +706,176 @@ func (w defaultTSWriter) Emit(data *tspb.TimeSeriesData) error {
 		fmt.Fprintf(w.w, "%v %v\n", d.TimestampNanos, d.Value)
 	}
 	return nil
+}
+
+// metricsListEntry represents an entry from the metrics list file,
+// which can be either a literal metric name or a regex pattern.
+type metricsListEntry struct {
+	value   string
+	isRegex bool
+}
+
+// regexMetaChars contains characters that indicate a line is a regex pattern
+// rather than a literal metric name. Metric names only contain alphanumeric
+// characters, dots, underscores, and hyphens.
+var regexMetaChars = regexp.MustCompile(`[*+?^$|()\[\]{}\\]`)
+
+// isRegexPattern returns true if the line contains regex metacharacters,
+// indicating it should be treated as a regex pattern rather than a literal name.
+func isRegexPattern(line string) bool {
+	return regexMetaChars.MatchString(line)
+}
+
+// readMetricsListFile reads a file containing metric names or regex patterns (one per line).
+// Lines starting with # are treated as comments and skipped. Inline comments
+// (text after #) are also stripped. Empty lines are skipped. If metric names
+// include cr.node., cr.store., or cockroachdb. prefixes, they are stripped.
+// Lines containing regex metacharacters (*+?^$|()[]{}\) are automatically
+// detected and treated as regex patterns.
+// Duplicate entries are removed. Returns entries without any prefix.
+func readMetricsListFile(filePath string) ([]metricsListEntry, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to open metrics list file %s", filePath)
+	}
+	defer file.Close()
+
+	seen := make(map[string]struct{})
+	var entries []metricsListEntry
+	scanner := bufio.NewScanner(file)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		line := scanner.Text()
+
+		// Strip inline comments (anything after #)
+		if idx := strings.Index(line, "#"); idx >= 0 {
+			line = line[:idx]
+		}
+		line = strings.TrimSpace(line)
+
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+
+		// Auto-detect if this is a regex pattern based on metacharacters
+		isRegex := isRegexPattern(line)
+		if isRegex {
+			// Validate the regex
+			if _, err := regexp.Compile(line); err != nil {
+				return nil, errors.Wrapf(err, "invalid regex pattern on line %d: %s", lineNum, line)
+			}
+		} else {
+			// Strip common prefixes if present (cr.node., cr.store., cockroachdb.)
+			line = strings.TrimPrefix(line, "cr.node.")
+			line = strings.TrimPrefix(line, "cr.store.")
+			line = strings.TrimPrefix(line, "cockroachdb.")
+		}
+
+		// Skip duplicates
+		if _, exists := seen[line]; exists {
+			continue
+		}
+		seen[line] = struct{}{}
+		entries = append(entries, metricsListEntry{value: line, isRegex: isRegex})
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, errors.Wrapf(err, "error reading metrics list file %s", filePath)
+	}
+	if len(entries) == 0 {
+		return nil, errors.Newf("metrics list file %s contains no valid metric names or patterns", filePath)
+	}
+	return entries, nil
+}
+
+// getTimeseriesNamesFromFile reads metric names and regex patterns from a file
+// and expands them to internal timeseries names by:
+// 1. Querying server metadata to get all available metrics
+// 2. Matching regex patterns against all available metric names
+// 3. Expanding histogram metrics with quantile suffixes (e.g., -p99, -max)
+// 4. Adding cr.node. and cr.store. prefixes
+// This mirrors the behavior of serverpb.GetInternalTimeseriesNamesFromServer
+// but for an explicit subset of metrics.
+func getTimeseriesNamesFromFile(
+	ctx context.Context, ac serverpb.RPCAdminClient, filePath string,
+) ([]string, error) {
+	// Read metric names and patterns from file
+	entries, err := readMetricsListFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Query server for all metric metadata to determine types
+	resp, err := ac.AllMetricMetadata(ctx, &serverpb.MetricMetadataRequest{})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to query metric metadata from server")
+	}
+
+	// Build list of all available metric names for regex matching
+	allMetricNames := make([]string, 0, len(resp.Metadata))
+	for name := range resp.Metadata {
+		allMetricNames = append(allMetricNames, name)
+	}
+
+	// Resolve entries to actual metric names (expand regex patterns)
+	resolvedNames := make(map[string]struct{})
+	for _, entry := range entries {
+		if entry.isRegex {
+			// Compile and match against all available metrics
+			re, err := regexp.Compile(entry.value)
+			if err != nil {
+				return nil, errors.Wrapf(err, "invalid regex pattern: %s", entry.value)
+			}
+			matchCount := 0
+			for _, name := range allMetricNames {
+				if re.MatchString(name) {
+					resolvedNames[name] = struct{}{}
+					matchCount++
+				}
+			}
+			if matchCount > 0 {
+				fmt.Fprintf(os.Stderr, "Pattern '%s' matched %d metrics\n", entry.value, matchCount)
+			} else {
+				fmt.Fprintf(os.Stderr, "Warning: pattern '%s' matched no metrics\n", entry.value)
+			}
+		} else {
+			// Literal metric name
+			resolvedNames[entry.value] = struct{}{}
+		}
+	}
+
+	// Convert to sorted slice
+	requestedNames := make([]string, 0, len(resolvedNames))
+	for name := range resolvedNames {
+		requestedNames = append(requestedNames, name)
+	}
+	sort.Strings(requestedNames)
+
+	// Expand metrics: for histograms add quantile suffixes, otherwise use as-is
+	var expanded []string
+	for _, name := range requestedNames {
+		meta, exists := resp.Metadata[name]
+		if exists && meta.MetricType == io_prometheus_client.MetricType_HISTOGRAM {
+			// Histogram metric: add all quantile suffixes
+			for _, q := range metric.HistogramMetricComputers {
+				expanded = append(expanded, name+q.Suffix)
+			}
+		} else {
+			// Non-histogram: use as-is
+			expanded = append(expanded, name)
+		}
+	}
+
+	// Add cr.node. and cr.store. prefixes (both, since we don't know which applies)
+	out := make([]string, 0, 2*len(expanded))
+	for _, prefix := range []string{"cr.node.", "cr.store."} {
+		for _, name := range expanded {
+			out = append(out, prefix+name)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 type tsDumpFormat int
