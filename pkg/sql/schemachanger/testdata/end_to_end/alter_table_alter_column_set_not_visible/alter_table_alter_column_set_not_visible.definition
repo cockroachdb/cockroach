@@ -1,0 +1,16 @@
+setup
+CREATE TABLE t (a INT, b INT);
+----
+
+stage-exec phase=PostCommitPhase stage=1
+INSERT INTO t (a, b) VALUES (1, 2);
+----
+
+stage-query phase=PostCommitPhase stage=1
+SELECT * FROM t;
+----
+2
+
+test
+ALTER TABLE t ALTER COLUMN a SET NOT VISIBLE
+----
