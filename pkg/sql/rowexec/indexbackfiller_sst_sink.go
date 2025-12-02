@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -41,17 +40,18 @@ var _ indexBackfillSink = (*sstIndexBackfillSink)(nil)
 func newSSTIndexBackfillSink(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	spec execinfrapb.BackfillerSpec,
+	distributedMergeFilePrefix string,
+	writeAsOf hlc.Timestamp,
 	processorID int32,
 ) (indexBackfillSink, error) {
-	if spec.DistributedMergeFilePrefix == "" {
+	if distributedMergeFilePrefix == "" {
 		return nil, errors.AssertionFailedf("distributed merge sink requires file prefix")
 	}
 	if flowCtx.Cfg.ExternalStorageFromURI == nil {
 		return nil, errors.AssertionFailedf("external storage factory must be configured")
 	}
 
-	prefix := fmt.Sprintf("%s/proc-%d/", strings.TrimRight(spec.DistributedMergeFilePrefix, "/"), processorID)
+	prefix := fmt.Sprintf("%s/proc-%d/", strings.TrimRight(distributedMergeFilePrefix, "/"), processorID)
 
 	es, err := flowCtx.Cfg.ExternalStorageFromURI(ctx, prefix, username.NodeUserName())
 	if err != nil {
@@ -60,13 +60,13 @@ func newSSTIndexBackfillSink(
 
 	fileAllocator := bulksst.NewExternalFileAllocator(es, prefix, flowCtx.Cfg.DB.KV().Clock())
 	writer := bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, fileAllocator)
-	writer.SetWriteTS(spec.WriteAsOf)
+	writer.SetWriteTS(writeAsOf)
 
 	return &sstIndexBackfillSink{
 		writer:    writer,
 		allocator: fileAllocator,
 		es:        es,
-		writeTS:   spec.WriteAsOf,
+		writeTS:   writeAsOf,
 	}, nil
 }
 
