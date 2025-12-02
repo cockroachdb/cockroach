@@ -12,7 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // DefaultBytesAllowedBeforeAccounting are how many bytes we will read/written
@@ -68,8 +68,8 @@ func (a *readWriteAccounter) Writer(
 }
 
 func (a *readWriteAccounter) Reader(
-	_ context.Context, s cloud.ExternalStorage, r ioctx.ReadCloserCtx,
-) ioctx.ReadCloserCtx {
+	_ context.Context, s cloud.ExternalStorage, r cloud.ReadFile,
+) cloud.ReadFile {
 	if !s.RequiresExternalIOAccounting() {
 		return r
 	}
@@ -154,45 +154,113 @@ func (aw *accountingWriter) waitForRUs() error {
 	return nil
 }
 
-// accountingReader is an ioctx.ReadCloser that tracks how many total bytes have
+// accountingReader is a cloud.ReadFile that tracks how many total bytes have
 // been read. If limit is > 0, then the reader will record the read bytes and
 // wait for the associated RUs in a Read call if more than limit bytes have been
 // read. On Close, any previously unaccounted for RUs will be recorded.
 //
 // If limit <= 0 then we will wait for RUs only on Close().
 type accountingReader struct {
-	inner    ioctx.ReadCloserCtx
+	inner    cloud.ReadFile
 	recorder multitenant.TenantSideExternalIORecorder
 	limit    int64
-	count    int64
+
+	mu struct {
+		syncutil.Mutex
+		count int64
+	}
 }
 
-var _ ioctx.ReadCloserCtx = (*accountingReader)(nil)
+var _ cloud.ReadFile = (*accountingReader)(nil)
 
-// Read implements ioctx.ReadCloserCtx.
+// addCount adds n to the byte count. Thread-safe.
+func (ar *accountingReader) addCount(n int64) {
+	ar.mu.Lock()
+	defer ar.mu.Unlock()
+	ar.mu.count += n
+}
+
+// getAndResetCount returns the current count and resets it to 0. Thread-safe.
+func (ar *accountingReader) getAndResetCount() int64 {
+	ar.mu.Lock()
+	defer ar.mu.Unlock()
+	count := ar.mu.count
+	ar.mu.count = 0
+	return count
+}
+
+// Read implements cloud.ReadFile.
 func (ar *accountingReader) Read(ctx context.Context, d []byte) (int, error) {
 	// If past reads have pushed us past the limit, account for them before
 	// allowing this read.
-	if ar.limit > 0 && ar.count >= ar.limit {
-		usage := multitenant.ExternalIOUsage{IngressBytes: ar.count}
-		if err := ar.recorder.OnExternalIOWait(ctx, usage); err != nil {
-			return 0, err
-		}
-		ar.count = 0
+	if err := ar.maybeWaitForRUs(ctx); err != nil {
+		return 0, err
 	}
 
 	n, err := ar.inner.Read(ctx, d)
-	ar.count += int64(n)
+	ar.addCount(int64(n))
 	return n, err
 }
 
-// Close implements ioctx.ReadCloserCtx.
+// Close implements cloud.ReadFile.
 func (ar *accountingReader) Close(ctx context.Context) error {
-	usage := multitenant.ExternalIOUsage{IngressBytes: ar.count}
+	count := ar.getAndResetCount()
+	usage := multitenant.ExternalIOUsage{IngressBytes: count}
 	if err := ar.recorder.OnExternalIOWait(ctx, usage); err != nil {
 		_ = ar.inner.Close(ctx)
 		return err
 	}
-	ar.count = 0
 	return ar.inner.Close(ctx)
+}
+
+// maybeWaitForRUs checks if we've exceeded the limit and waits if necessary.
+// Must be called before reading. Thread-safe.
+//
+// Note: This method holds the mutex during the OnExternalIOWait call.
+// Once the rate limiter grants capacity, the lock is released, allowing
+// the next goroutine to proceed.
+func (ar *accountingReader) maybeWaitForRUs(ctx context.Context) error {
+	if ar.limit <= 0 {
+		return nil
+	}
+
+	ar.mu.Lock()
+	defer ar.mu.Unlock()
+
+	if ar.mu.count < ar.limit {
+		return nil
+	}
+
+	// Wait while holding the lock to serialize concurrent readers
+	usage := multitenant.ExternalIOUsage{IngressBytes: ar.mu.count}
+	if err := ar.recorder.OnExternalIOWait(ctx, usage); err != nil {
+		return err
+	}
+	ar.mu.count = 0
+	return nil
+}
+
+// ReadAt implements cloud.RandomReadFile by delegating to the underlying reader.
+// Thread-safe: ReadAt can be called concurrently from multiple goroutines.
+func (ar *accountingReader) ReadAt(ctx context.Context, p []byte, off int64) (n int, err error) {
+	if rf, ok := ar.inner.(cloud.RandomReadFile); ok {
+		// Check if we need to wait before reading
+		if err := ar.maybeWaitForRUs(ctx); err != nil {
+			return 0, err
+		}
+
+		// Perform the read
+		n, err = rf.ReadAt(ctx, p, off)
+		ar.addCount(int64(n))
+		return n, err
+	}
+	return 0, cloud.ErrRandomAccessNotSupported
+}
+
+// Seek implements cloud.RandomReadFile by delegating to the underlying reader.
+func (ar *accountingReader) Seek(ctx context.Context, offset int64, whence int) (int64, error) {
+	if rf, ok := ar.inner.(cloud.RandomReadFile); ok {
+		return rf.Seek(ctx, offset, whence)
+	}
+	return 0, cloud.ErrRandomAccessNotSupported
 }

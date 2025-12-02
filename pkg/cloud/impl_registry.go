@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -366,7 +365,7 @@ type esWrapper struct {
 	httpTracer *httptrace.ClientTrace
 }
 
-func (e *esWrapper) wrapReader(ctx context.Context, r ioctx.ReadCloserCtx) ioctx.ReadCloserCtx {
+func (e *esWrapper) wrapReader(ctx context.Context, r ReadFile) ReadFile {
 	if e.lim.read != nil {
 		r = &limitedReader{r: r, lim: e.lim.read}
 	}
@@ -392,7 +391,7 @@ func (e *esWrapper) wrapWriter(ctx context.Context, w io.WriteCloser) io.WriteCl
 
 func (e *esWrapper) ReadFile(
 	ctx context.Context, basename string, opts ReadOptions,
-) (ioctx.ReadCloserCtx, int64, error) {
+) (ReadFile, int64, error) {
 	if e.httpTracer != nil {
 		ctx = httptrace.WithClientTrace(ctx, e.httpTracer)
 	}
@@ -434,7 +433,7 @@ func (e *esWrapper) Writer(ctx context.Context, basename string) (io.WriteCloser
 }
 
 type limitedReader struct {
-	r    ioctx.ReadCloserCtx
+	r    ReadFile
 	lim  *quotapool.RateLimiter
 	pool int64 // used to pool small write calls into fewer bigger limiter calls.
 }
@@ -466,7 +465,7 @@ func (l *limitedReader) Close(ctx context.Context) error {
 // ReadAt implements ioctx.ReaderAtCtx by delegating to the underlying reader if it supports it.
 // This is needed for Parquet and other formats that require random access.
 func (l *limitedReader) ReadAt(ctx context.Context, p []byte, off int64) (n int, err error) {
-	if rf, ok := SupportsRandomAccess(l.r); ok {
+	if rf, ok := l.r.(RandomReadFile); ok {
 		n, err = rf.ReadAt(ctx, p, off)
 		if err := l.lim.WaitN(ctx, int64(n)); err != nil {
 			log.Dev.Warningf(ctx, "failed to throttle read: %+v", err)
@@ -479,7 +478,7 @@ func (l *limitedReader) ReadAt(ctx context.Context, p []byte, off int64) (n int,
 // Seek implements ioctx.SeekerCtx by delegating to the underlying reader if it supports it.
 // This is needed for Parquet and other formats that require random access.
 func (l *limitedReader) Seek(ctx context.Context, offset int64, whence int) (int64, error) {
-	if rf, ok := SupportsRandomAccess(l.r); ok {
+	if rf, ok := l.r.(RandomReadFile); ok {
 		return rf.Seek(ctx, offset, whence)
 	}
 	return 0, errors.New("Seek not supported by underlying reader")
@@ -519,7 +518,7 @@ func (l *limitedWriter) Close() error {
 // A ReadWriterInterceptor providers methods that construct Readers and Writers from given Readers
 // and Writers.
 type ReadWriterInterceptor interface {
-	Reader(context.Context, ExternalStorage, ioctx.ReadCloserCtx) ioctx.ReadCloserCtx
+	Reader(context.Context, ExternalStorage, ReadFile) ReadFile
 	Writer(context.Context, ExternalStorage, io.WriteCloser) io.WriteCloser
 }
 

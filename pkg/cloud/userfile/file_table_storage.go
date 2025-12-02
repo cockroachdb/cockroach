@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
@@ -217,7 +216,7 @@ func isNotExistErr(err error) bool {
 // the file stored in the user scoped FileToTableSystem.
 func (f *fileTableStorage) ReadFile(
 	ctx context.Context, basename string, opts cloud.ReadOptions,
-) (ioctx.ReadCloserCtx, int64, error) {
+) (cloud.ReadFile, int64, error) {
 	filepath, err := checkBaseAndJoinFilePath(f.prefix, basename)
 	if err != nil {
 		return nil, 0, err

@@ -11,7 +11,6 @@ go_library(
         "//pkg/cloud/cloudpb",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
-        "//pkg/util/ioctx",
     ],
 )
 

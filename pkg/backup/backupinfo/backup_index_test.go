@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -705,7 +704,7 @@ func (b *bytesReaderCtx) Close(_ context.Context) error {
 
 func (f *fakeExternalStorage) ReadFile(
 	ctx context.Context, filename string, _ cloud.ReadOptions,
-) (ioctx.ReadCloserCtx, int64, error) {
+) (cloud.ReadFile, int64, error) {
 	bytes, exists := f.files[filename]
 	if !exists {
 		return nil, 0, errors.Errorf("file %s does not exist", filename)

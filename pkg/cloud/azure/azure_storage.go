@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -415,7 +414,7 @@ func isNotFoundErr(err error) bool {
 
 func (s *azureStorage) ReadFile(
 	ctx context.Context, basename string, opts cloud.ReadOptions,
-) (_ ioctx.ReadCloserCtx, fileSize int64, _ error) {
+) (_ cloud.ReadFile, fileSize int64, _ error) {
 	object := path.Join(s.prefix, basename)
 
 	ctx, sp := tracing.ChildSpan(ctx, "azure.ReadFile")

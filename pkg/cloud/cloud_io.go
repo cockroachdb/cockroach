@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -250,7 +251,7 @@ type ResumingReader struct {
 	ErrFn func(error) time.Duration
 }
 
-var _ RandomAccessFile = &ResumingReader{}
+var _ RandomReadFile = &ResumingReader{}
 
 // NewResumingReader returns a ResumingReader instance. Reader does not have to
 // be provided, and will be created with the opener if it's not provided. Size
@@ -384,36 +385,31 @@ func (r *ResumingReader) ReadAt(ctx context.Context, p []byte, off int64) (n int
 		return 0, errors.New("ReadAt not supported: no Opener available")
 	}
 
-	originalLen := len(p)
-
-	// If we know the file size, check bounds before opening to avoid
-	// making an invalid range request to cloud storage.
-	if r.Size > 0 {
-		if off >= r.Size {
-			return 0, io.EOF
-		}
-		// Truncate read to available bytes
-		if off+int64(len(p)) > r.Size {
-			p = p[:r.Size-off]
-		}
-	}
-
 	reader, size, err := r.Opener(ctx, off)
 	if err != nil {
 		return 0, err
 	}
 	defer reader.Close()
 
-	// Update our size if we didn't know it before
-	if r.Size == 0 && size > 0 {
-		r.Size = size
+	// Update our cached size with the authoritative size from Opener.
+	// Use atomic store since ReadAt can be called concurrently.
+	atomic.StoreInt64(&r.Size, size)
+	if off >= size {
+		return 0, io.EOF
 	}
-
+	var truncated bool
+	// Truncate read to available bytes
+	if off+int64(len(p)) > size {
+		p = p[:size-off]
+		truncated = true
+	}
 	n, err = io.ReadFull(reader, p)
 	// If we truncated the buffer and successfully read those bytes,
-	// return ErrUnexpectedEOF to match io.ReaderAt semantics
-	if err == nil && len(p) < originalLen {
-		err = io.ErrUnexpectedEOF
+	// return EOF to match io.ReaderAt semantics: ReadAt must return a non-nil
+	// error when n < len(p), and io.EOF is the correct error when reaching
+	// end-of-file.
+	if err == nil && truncated {
+		err = io.EOF
 	}
 	return n, err
 }

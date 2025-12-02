@@ -302,7 +302,7 @@ func TestResumingReaderReadAt(t *testing.T) {
 		// Try to read more bytes than available
 		buf := make([]byte, 10)
 		n, err := reader.ReadAt(ctx, buf, 7)
-		require.Equal(t, io.ErrUnexpectedEOF, err)
+		require.Equal(t, io.EOF, err)
 		require.Equal(t, 4, n) // Should read "orld"
 		require.Equal(t, "orld", string(buf[:n]))
 	})

@@ -10,9 +10,7 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/errors"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
@@ -144,17 +142,16 @@ var _ metric.Struct = (*Metrics)(nil)
 func (m *Metrics) MetricStruct() {}
 
 // Reader implements the ReadWriterInterceptor interface.
-func (m *Metrics) Reader(
-	_ context.Context, _ ExternalStorage, r ioctx.ReadCloserCtx,
-) ioctx.ReadCloserCtx {
+func (m *Metrics) Reader(_ context.Context, _ ExternalStorage, r ReadFile) ReadFile {
 	if m == nil {
 		return r
 	}
 	m.CreatedReaders.Inc(1)
 	m.OpenReaders.Inc(1)
 	return &metricsReader{
-		ReadCloserCtx: r,
-		m:             m,
+		r:      r,
+		m:      m,
+		closed: false,
 	}
 }
 
@@ -172,37 +169,42 @@ func (m *Metrics) Writer(_ context.Context, _ ExternalStorage, w io.WriteCloser)
 }
 
 type metricsReader struct {
-	ioctx.ReadCloserCtx
+	r      ReadFile
 	m      *Metrics
 	closed bool
 }
 
-// Close implements the ioctx.ReadCloserCtx interface.
+// Read implements ReadFile.
+func (mr *metricsReader) Read(ctx context.Context, p []byte) (int, error) {
+	return mr.r.Read(ctx, p)
+}
+
+// Close implements ReadFile.
 func (mr *metricsReader) Close(ctx context.Context) error {
 	if !mr.closed {
 		mr.m.OpenReaders.Dec(1)
 		mr.closed = true
 	}
 
-	return mr.ReadCloserCtx.Close(ctx)
+	return mr.r.Close(ctx)
 }
 
-// ReadAt implements ioctx.ReaderAtCtx by delegating to the underlying reader if it supports it.
+// ReadAt implements RandomReadFile by delegating to the underlying reader if it supports it.
 // This allows Parquet and other formats that require random access to work with
 // cloud storage backends without buffering the entire file to disk.
 func (mr *metricsReader) ReadAt(ctx context.Context, p []byte, off int64) (n int, err error) {
-	if rf, ok := SupportsRandomAccess(mr.ReadCloserCtx); ok {
+	if rf, ok := mr.r.(RandomReadFile); ok {
 		return rf.ReadAt(ctx, p, off)
 	}
-	return 0, errors.New("ReadAt not supported by underlying reader")
+	return 0, ErrRandomAccessNotSupported
 }
 
-// Seek implements ioctx.SeekerCtx by delegating to the underlying reader if it supports it.
+// Seek implements RandomReadFile by delegating to the underlying reader if it supports it.
 func (mr *metricsReader) Seek(ctx context.Context, offset int64, whence int) (int64, error) {
-	if rf, ok := SupportsRandomAccess(mr.ReadCloserCtx); ok {
+	if rf, ok := mr.r.(RandomReadFile); ok {
 		return rf.Seek(ctx, offset, whence)
 	}
-	return 0, errors.New("Seek not supported by underlying reader")
+	return 0, ErrRandomAccessNotSupported
 }
 
 type metricsWriter struct {

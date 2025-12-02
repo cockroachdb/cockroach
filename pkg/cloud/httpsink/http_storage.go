@@ -137,7 +137,7 @@ func (h *httpStorage) openStreamAt(
 
 func (h *httpStorage) ReadFile(
 	ctx context.Context, basename string, opts cloud.ReadOptions,
-) (_ ioctx.ReadCloserCtx, fileSize int64, _ error) {
+) (_ cloud.ReadFile, fileSize int64, _ error) {
 	stream, err := h.openStreamAt(ctx, basename, opts.Offset)
 	if err != nil {
 		return nil, 0, err

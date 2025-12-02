@@ -27,33 +27,35 @@ import (
 // This file is for interfaces only and should not contain any implementation
 // code. All concrete implementations should be added to pkg/cloud/impl.
 
-// RandomAccessFile is the interface for readers that support random access
-// operations (ReadAt, Seek) in addition to sequential reads. This is required
-// by formats like Parquet that need random access to cloud storage files.
+// ReadFile is the base interface for all cloud storage readers, providing
+// sequential read operations.
+type ReadFile interface {
+	ioctx.ReadCloserCtx
+}
+
+// RandomReadFile extends ReadFile with random access operations (ReadAt, Seek).
+// This is required by formats like Parquet that need random access to cloud
+// storage files.
 //
-// Not all ExternalStorage implementations support random access. Use
-// SupportsRandomAccess to check if a reader supports random access:
+// Not all ExternalStorage implementations support random access. Callers should
+// use type assertion to check if a reader supports random access:
 //
 //	reader, size, err := storage.ReadFile(ctx, "file.parquet", cloud.ReadOptions{})
 //	if err != nil { return err }
-//	if rf, ok := cloud.SupportsRandomAccess(reader); ok {
+//	if rr, ok := reader.(cloud.RandomReadFile); ok {
 //	    // Can use ReadAt and Seek
 //	} else {
 //	    // Only sequential reads supported
 //	}
-type RandomAccessFile interface {
-	ioctx.ReadCloserCtx
+type RandomReadFile interface {
+	ReadFile
 	ioctx.ReaderAtCtx
 	ioctx.SeekerCtx
 }
 
-// SupportsRandomAccess checks if the given reader supports random access
-// operations (ReadAt and Seek). Returns the reader cast to RandomAccessFile
-// if supported, or (nil, false) if not.
-func SupportsRandomAccess(r ioctx.ReadCloserCtx) (RandomAccessFile, bool) {
-	rf, ok := r.(RandomAccessFile)
-	return rf, ok
-}
+// ErrRandomAccessNotSupported is returned by ReadAt and Seek when the underlying
+// reader does not support random access operations.
+var ErrRandomAccessNotSupported = errors.New("random access operations not supported")
 
 // ExternalStorage provides an API to read and write files in some storage,
 // namely various cloud storage providers, for example to store backups.
@@ -89,9 +91,12 @@ type ExternalStorage interface {
 	// ReadFile returns a Reader for requested name reading at opts.Offset, along
 	// with the total size of the file (unless opts.NoFileSize is true).
 	//
+	// The returned ReadFile may support random access operations. Callers can
+	// use type assertion to check: if rr, ok := reader.(RandomReadFile); ok { ... }
+	//
 	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
 	// This can be leveraged for an existence check.
-	ReadFile(ctx context.Context, basename string, opts ReadOptions) (_ ioctx.ReadCloserCtx, fileSize int64, _ error)
+	ReadFile(ctx context.Context, basename string, opts ReadOptions) (_ ReadFile, fileSize int64, _ error)
 
 	// Writer returns a writer for the requested name.
 	//

@@ -227,7 +227,7 @@ func (es *generatorExternalStorage) RequiresExternalIOAccounting() bool { return
 
 func (es *generatorExternalStorage) ReadFile(
 	ctx context.Context, basename string, opts cloud.ReadOptions,
-) (_ ioctx.ReadCloserCtx, fileSize int64, _ error) {
+) (_ cloud.ReadFile, fileSize int64, _ error) {
 	if opts.Offset != 0 || !opts.NoFileSize {
 		panic("unimplemented")
 	}

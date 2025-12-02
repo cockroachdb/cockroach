@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -989,7 +988,7 @@ func (n *mockSinkStorage) Settings() *cluster.Settings {
 
 func (n *mockSinkStorage) ReadFile(
 	_ context.Context, _ string, _ cloud.ReadOptions,
-) (ioctx.ReadCloserCtx, int64, error) {
+) (cloud.ReadFile, int64, error) {
 	return nil, 0, io.EOF
 }
 
