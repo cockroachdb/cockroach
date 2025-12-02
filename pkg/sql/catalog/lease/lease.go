@@ -2066,6 +2066,8 @@ func (m *Manager) resolveName(
 	parentSchemaID descpb.ID,
 	name string,
 ) (id descpb.ID, _ error) {
+	log.VEventf(ctx, 2, "resolving name %q with parentID=%d parentSchemaID=%d",
+		name, parentID, parentSchemaID)
 	req := []descpb.NameInfo{{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}}
 	if err := m.storage.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Run the name lookup as high-priority, thereby pushing any intents out of
@@ -2091,6 +2093,8 @@ func (m *Manager) resolveName(
 		return id, err
 	}
 	if id == descpb.InvalidID {
+		log.VEventf(ctx, 2, "name %q not found with parentID=%d parentSchemaID=%d",
+			name, parentID, parentSchemaID)
 		return id, errors.Wrapf(catalog.ErrDescriptorNotFound,
 			"resolving name %s with parentID %d and parentSchemaID %d",
 			name, parentID, parentSchemaID,
