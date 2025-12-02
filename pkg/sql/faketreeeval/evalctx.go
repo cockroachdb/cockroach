@@ -603,6 +603,16 @@ func (ep *DummyEvalPlanner) InsertStatementHint(
 	return 0, nil
 }
 
+// UsingHintInjection is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) UsingHintInjection() bool {
+	return false
+}
+
+// GetHintIDs is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) GetHintIDs() []int64 {
+	return nil
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 

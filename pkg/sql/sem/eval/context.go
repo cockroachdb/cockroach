@@ -573,6 +573,16 @@ func (p *fakePlannerWithMonitor) AutoCommit() bool {
 	return false
 }
 
+// UsingHintInjection is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) UsingHintInjection() bool {
+	return false
+}
+
+// GetHintIDs is part of the eval.Planner interface.
+func (o *fakePlannerWithMonitor) GetHintIDs() []int64 {
+	return nil
+}
+
 type fakeStreamManagerFactory struct {
 	StreamManagerFactory
 }

@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/bits"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -148,6 +149,9 @@ type Metadata struct {
 	// execution.
 	rlsMeta RowLevelSecurityMeta
 
+	// hintIDs are the external statement hints that match this statement.
+	hintIDs []int64
+
 	digest struct {
 		syncutil.Mutex
 		depDigest cat.DependencyDigest
@@ -254,7 +258,7 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 		len(md.sequences) != 0 || len(md.views) != 0 || len(md.userDefinedTypes) != 0 ||
 		len(md.userDefinedTypesSlice) != 0 || len(md.dataSourceDeps) != 0 ||
 		len(md.routineDeps) != 0 || len(md.objectRefsByName) != 0 || len(md.privileges) != 0 ||
-		len(md.builtinRefsByName) != 0 || md.rlsMeta.IsInitialized {
+		len(md.builtinRefsByName) != 0 || md.rlsMeta.IsInitialized || len(md.hintIDs) != 0 {
 		panic(errors.AssertionFailedf("CopyFrom requires empty destination"))
 	}
 	md.schemas = append(md.schemas, from.schemas...)
@@ -337,6 +341,8 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	md.withBindings = nil
 
 	md.rlsMeta = from.rlsMeta.Copy()
+
+	md.hintIDs = append(md.hintIDs, from.hintIDs...)
 }
 
 // MDDepName stores either the unresolved DataSourceName or the StableID from
@@ -600,6 +606,15 @@ func (md *Metadata) CheckDependencies(
 	// Check for staleness from a row-level security point of view.
 	if upToDate, err := md.checkRLSDependencies(ctx, evalCtx, optCatalog); err != nil || !upToDate {
 		return upToDate, err
+	}
+
+	// Check that external statement hints have not changed.
+	var hintIDs []int64
+	if evalCtx.Planner != nil {
+		hintIDs = evalCtx.Planner.GetHintIDs()
+	}
+	if !slices.Equal(md.hintIDs, hintIDs) {
+		return false, nil
 	}
 
 	// Update the digest after a full dependency check, since our fast
@@ -1279,4 +1294,9 @@ func (md *Metadata) checkRLSDependencies(
 	// a new version of the table descriptor is created. The metadata dependency
 	// check already accounts for changes in the table descriptor version.
 	return true, nil
+}
+
+// SetHintIDs copies the given matching hintIDs into the metadata.
+func (md *Metadata) SetHintIDs(hintIDs []int64) {
+	md.hintIDs = append(md.hintIDs, hintIDs...)
 }
