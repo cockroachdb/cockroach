@@ -524,7 +524,15 @@ func TestKVNemesisMultiNode_Partition_Liveness(t *testing.T) {
 			// Epoch leases can experience indefinite unavailability in the case of a
 			// leader-leaseholder split and a network partition. This test starts off
 			// with leader leases, and lease type changes are disallowed.
-			cfg.Ops.ChangeSetting = ChangeSettingConfig{}
+			cfg.Ops.ChangeSetting.SetLeaseType = 0
+			// Disallow lease transfers because they can lead to unavailability during
+			// the temporary period of using an expiration lease while transferring a
+			// leader lease. These manifest as poisoned latches held by the
+			// partitioned expiration-lease holder that can't upgrade the lease.
+			// See #157966 for a detailed example.
+			// TODO(mira): We can mitigate this in other ways too: client timeouts,
+			// lease transfers only among protected nodes (n1 and n2).
+			cfg.Ops.ChangeLease.TransferLease = 0
 		},
 	})
 }
