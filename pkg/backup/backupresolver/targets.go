@@ -677,7 +677,10 @@ func LoadAllDescs(
 // ResolveTargetsToDescriptors performs name resolution on a set of targets and
 // returns the resulting descriptors.
 //
-// TODO(ajwerner): adopt the collection here.
+// Deprecated: Use ResolveTargets instead, which uses Collection APIs to avoid
+// loading all descriptors into memory. This function loads all descriptors
+// (O(all_descriptors)) whereas ResolveTargets only loads necessary ones
+// (O(targets)).
 func ResolveTargetsToDescriptors(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.BackupTargetList,
 ) (

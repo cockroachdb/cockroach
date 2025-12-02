@@ -30,10 +30,25 @@ import (
 //
 // This implementation uses Collection methods to load only the necessary
 // descriptors, making it O(targets) instead of O(all_descriptors).
+//
+// Returns:
+//   - []catalog.Descriptor: All resolved descriptors
+//   - []descpb.ID: completeDBs - database IDs where all objects are included
+//   - []catalog.DatabaseDescriptor: requestedDBs - explicitly requested DATABASE targets
+//   - map[tree.TablePattern]catalog.Descriptor: descsByTablePattern - TABLE patterns to descriptors
 func ResolveTargets(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.BackupTargetList,
-) ([]catalog.Descriptor, error) {
+) (
+	[]catalog.Descriptor,
+	[]descpb.ID,
+	[]catalog.DatabaseDescriptor,
+	map[tree.TablePattern]catalog.Descriptor,
+	error,
+) {
 	var result []catalog.Descriptor
+	var completeDBs []descpb.ID
+	var requestedDBs []catalog.DatabaseDescriptor
+	descsByTablePattern := make(map[tree.TablePattern]catalog.Descriptor)
 	seenDescs := make(map[descpb.ID]struct{})
 
 	// Helper to add descriptor if not already seen.
@@ -140,6 +155,10 @@ func ResolveTargets(
 			}
 			addDesc(db)
 
+			// Track completeDBs and requestedDBs for DATABASE targets.
+			completeDBs = append(completeDBs, db.GetID())
+			requestedDBs = append(requestedDBs, db)
+
 			// For database backup, get all objects in the database.
 			allInDB, err := col.GetAllInDatabase(ctx, txn.KV(), db)
 			if err != nil {
@@ -185,8 +204,8 @@ func ResolveTargets(
 		}
 
 		// Process TABLE targets.
-		for _, pattern := range targets.Tables.TablePatterns {
-			pattern, err := pattern.NormalizeTablePattern()
+		for _, origPattern := range targets.Tables.TablePatterns {
+			pattern, err := origPattern.NormalizeTablePattern()
 			if err != nil {
 				return err
 			}
@@ -228,6 +247,11 @@ func ResolveTargets(
 					return err
 				}
 
+				// Track descsByTablePattern for TABLE patterns.
+				// Use the original pattern as the key, not the normalized one, to match
+				// the behavior of DescriptorsMatchingTargets.
+				descsByTablePattern[origPattern] = table
+
 			case *tree.AllTablesSelector:
 				// Resolve pattern like db.* or db.schema.*
 				// For 2-part patterns like "db.*", the parser treats the first part as a schema name.
@@ -268,6 +292,11 @@ func ResolveTargets(
 
 				// Add the database.
 				addDesc(db)
+
+				// Track completeDBs for db.* wildcards (all objects in DB are included).
+				if isDBWildcard {
+					completeDBs = append(completeDBs, db.GetID())
+				}
 
 				// Determine if we're scoped to a specific schema.
 				hasSchemaScope := p.ExplicitSchema && p.ExplicitCatalog
@@ -365,7 +394,7 @@ func ResolveTargets(
 		return nil
 	})
 
-	return result, err
+	return result, completeDBs, requestedDBs, descsByTablePattern, err
 }
 
 // simpleResolver implements the resolver interfaces needed for name resolution

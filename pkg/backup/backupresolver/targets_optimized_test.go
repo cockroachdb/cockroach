@@ -51,100 +51,121 @@ func TestResolveTargetsOptimized(t *testing.T) {
 	db.Exec(t, `CREATE TABLE other_db.public.other_table (id INT PRIMARY KEY)`)
 
 	testCases := []struct {
-		name           string
-		targets        string
-		expectedTables []string
-		expectedDBs    []string
-		expectedTypes  []string
-		expectedFuncs  []string
+		name                     string
+		targets                  string
+		expectedTables           []string
+		expectedDBs              []string
+		expectedTypes            []string
+		expectedFuncs            []string
+		expectedCompleteDBNames  []string // Database names that should be in completeDBs
+		expectedRequestedDBNames []string // Database names that should be in requestedDBs
+		expectedTablePatternCnt  int      // Number of entries in descsByTablePattern
 	}{
 		// Fully qualified table patterns: db.sch.tb
 		{
-			name:           "single table fully qualified",
-			targets:        "TABLE test_db.public.t1",
-			expectedTables: []string{"t1"},
-			expectedDBs:    []string{"test_db"},
+			name:                    "single table fully qualified",
+			targets:                 "TABLE test_db.public.t1",
+			expectedTables:          []string{"t1"},
+			expectedDBs:             []string{"test_db"},
+			expectedTablePatternCnt: 1,
 		},
 		{
-			name:           "table in custom schema",
-			targets:        "TABLE test_db.custom_schema.t3",
-			expectedTables: []string{"t3"},
-			expectedDBs:    []string{"test_db"},
+			name:                    "table in custom schema",
+			targets:                 "TABLE test_db.custom_schema.t3",
+			expectedTables:          []string{"t3"},
+			expectedDBs:             []string{"test_db"},
+			expectedTablePatternCnt: 1,
 		},
 		// Partially qualified table pattern: db.tb (assumes public schema)
 		{
-			name:           "table with db and implicit public schema",
-			targets:        "TABLE test_db.t1",
-			expectedTables: []string{"t1"},
-			expectedDBs:    []string{"test_db"},
+			name:                    "table with db and implicit public schema",
+			targets:                 "TABLE test_db.t1",
+			expectedTables:          []string{"t1"},
+			expectedDBs:             []string{"test_db"},
+			expectedTablePatternCnt: 1,
 		},
 		// Multiple tables
 		{
-			name:           "multiple tables",
-			targets:        "TABLE test_db.public.t1, test_db.public.t2",
-			expectedTables: []string{"t1", "t2"},
-			expectedDBs:    []string{"test_db"},
+			name:                    "multiple tables",
+			targets:                 "TABLE test_db.public.t1, test_db.public.t2",
+			expectedTables:          []string{"t1", "t2"},
+			expectedDBs:             []string{"test_db"},
+			expectedTablePatternCnt: 2,
 		},
 		{
-			name:           "tables from different schemas",
-			targets:        "TABLE test_db.public.t1, test_db.custom_schema.t3",
-			expectedTables: []string{"t1", "t3"},
-			expectedDBs:    []string{"test_db"},
+			name:                    "tables from different schemas",
+			targets:                 "TABLE test_db.public.t1, test_db.custom_schema.t3",
+			expectedTables:          []string{"t1", "t3"},
+			expectedDBs:             []string{"test_db"},
+			expectedTablePatternCnt: 2,
 		},
 		{
-			name:           "tables from different databases",
-			targets:        "TABLE test_db.public.t1, other_db.public.other_table",
-			expectedTables: []string{"t1", "other_table"},
-			expectedDBs:    []string{"test_db", "other_db"},
+			name:                    "tables from different databases",
+			targets:                 "TABLE test_db.public.t1, other_db.public.other_table",
+			expectedTables:          []string{"t1", "other_table"},
+			expectedDBs:             []string{"test_db", "other_db"},
+			expectedTablePatternCnt: 2,
 		},
-		// Database wildcard: db.*
+		// Database wildcard: db.* - adds to completeDBs but not requestedDBs
 		{
-			name:           "database wildcard",
-			targets:        "TABLE test_db.*",
-			expectedTables: []string{"t1", "t2", "t3", "t4", "t5"},
-			expectedDBs:    []string{"test_db"},
+			name:                    "database wildcard",
+			targets:                 "TABLE test_db.*",
+			expectedTables:          []string{"t1", "t2", "t3", "t4", "t5"},
+			expectedDBs:             []string{"test_db"},
+			expectedCompleteDBNames: []string{"test_db"},
+			expectedTablePatternCnt: 0, // Wildcards don't add to descsByTablePattern
 		},
-		// Schema wildcard: db.sch.*
+		// Schema wildcard: db.sch.* - does not add to completeDBs (only specific schema)
 		{
-			name:           "schema wildcard public",
-			targets:        "TABLE test_db.public.*",
-			expectedTables: []string{"t1", "t2", "t4", "t5"},
-			expectedDBs:    []string{"test_db"},
-		},
-		{
-			name:           "schema wildcard custom",
-			targets:        "TABLE test_db.custom_schema.*",
-			expectedTables: []string{"t3"},
-			expectedDBs:    []string{"test_db"},
-		},
-		// DATABASE target
-		{
-			name:           "database target",
-			targets:        "DATABASE test_db",
-			expectedTables: []string{"t1", "t2", "t3", "t4", "t5"},
-			expectedDBs:    []string{"test_db"},
+			name:                    "schema wildcard public",
+			targets:                 "TABLE test_db.public.*",
+			expectedTables:          []string{"t1", "t2", "t4", "t5"},
+			expectedDBs:             []string{"test_db"},
+			expectedTablePatternCnt: 0, // Wildcards don't add to descsByTablePattern
 		},
 		{
-			name:           "multiple databases",
-			targets:        "DATABASE test_db, other_db",
-			expectedTables: []string{"t1", "t2", "t3", "t4", "t5", "other_table"},
-			expectedDBs:    []string{"test_db", "other_db"},
+			name:                    "schema wildcard custom",
+			targets:                 "TABLE test_db.custom_schema.*",
+			expectedTables:          []string{"t3"},
+			expectedDBs:             []string{"test_db"},
+			expectedTablePatternCnt: 0, // Wildcards don't add to descsByTablePattern
+		},
+		// DATABASE target - adds to both completeDBs and requestedDBs
+		{
+			name:                     "database target",
+			targets:                  "DATABASE test_db",
+			expectedTables:           []string{"t1", "t2", "t3", "t4", "t5"},
+			expectedDBs:              []string{"test_db"},
+			expectedCompleteDBNames:  []string{"test_db"},
+			expectedRequestedDBNames: []string{"test_db"},
+			expectedTablePatternCnt:  0,
+		},
+		{
+			name:                     "multiple databases",
+			targets:                  "DATABASE test_db, other_db",
+			expectedTables:           []string{"t1", "t2", "t3", "t4", "t5", "other_table"},
+			expectedDBs:              []string{"test_db", "other_db"},
+			expectedCompleteDBNames:  []string{"test_db", "other_db"},
+			expectedRequestedDBNames: []string{"test_db", "other_db"},
+			expectedTablePatternCnt:  0,
 		},
 		// Table with type dependency
 		{
-			name:           "table with type dependency",
-			targets:        "TABLE test_db.public.t4",
-			expectedTables: []string{"t4"},
-			expectedDBs:    []string{"test_db"},
-			expectedTypes:  []string{"my_enum", "_my_enum"},
+			name:                    "table with type dependency",
+			targets:                 "TABLE test_db.public.t4",
+			expectedTables:          []string{"t4"},
+			expectedDBs:             []string{"test_db"},
+			expectedTypes:           []string{"my_enum", "_my_enum"},
+			expectedTablePatternCnt: 1,
 		},
 		// Table with function dependency
 		{
-			name:           "table with function dependency",
-			targets:        "TABLE test_db.public.t5",
-			expectedTables: []string{"t5"},
-			expectedDBs:    []string{"test_db"},
-			expectedFuncs:  []string{"my_func"},
+			name:                    "table with function dependency",
+			targets:                 "TABLE test_db.public.t5",
+			expectedTables:          []string{"t5"},
+			expectedDBs:             []string{"test_db"},
+			expectedFuncs:           []string{"my_func"},
+			expectedTablePatternCnt: 1,
 		},
 	}
 
@@ -171,7 +192,7 @@ func TestResolveTargetsOptimized(t *testing.T) {
 
 			// Use the optimized ResolveTargets function.
 			// Use the server's current clock timestamp to read data.
-			descriptors, err := ResolveTargets(ctx, planHook, s.Clock().Now(), backupStmt.Targets)
+			descriptors, completeDBs, requestedDBs, descsByTablePattern, err := ResolveTargets(ctx, planHook, s.Clock().Now(), backupStmt.Targets)
 			require.NoError(t, err)
 
 			// Verify we got the expected tables, databases, types, and functions.
@@ -216,6 +237,41 @@ func TestResolveTargetsOptimized(t *testing.T) {
 				require.ElementsMatch(t, tc.expectedFuncs, foundFuncs,
 					"Expected functions %v but got %v", tc.expectedFuncs, foundFuncs)
 			}
+
+			// Verify completeDBs contains expected database IDs.
+			if tc.expectedCompleteDBNames != nil {
+				var completeDBNames []string
+				for _, dbID := range completeDBs {
+					// Find the database descriptor with this ID.
+					for _, desc := range descriptors {
+						if db, ok := desc.(catalog.DatabaseDescriptor); ok && db.GetID() == dbID {
+							completeDBNames = append(completeDBNames, db.GetName())
+							break
+						}
+					}
+				}
+				require.ElementsMatch(t, tc.expectedCompleteDBNames, completeDBNames,
+					"Expected completeDBs %v but got %v", tc.expectedCompleteDBNames, completeDBNames)
+			} else {
+				require.Empty(t, completeDBs, "Expected completeDBs to be empty")
+			}
+
+			// Verify requestedDBs contains expected database descriptors.
+			if tc.expectedRequestedDBNames != nil {
+				var requestedDBNames []string
+				for _, db := range requestedDBs {
+					requestedDBNames = append(requestedDBNames, db.GetName())
+				}
+				require.ElementsMatch(t, tc.expectedRequestedDBNames, requestedDBNames,
+					"Expected requestedDBs %v but got %v", tc.expectedRequestedDBNames, requestedDBNames)
+			} else {
+				require.Empty(t, requestedDBs, "Expected requestedDBs to be empty")
+			}
+
+			// Verify descsByTablePattern has expected number of entries.
+			require.Equal(t, tc.expectedTablePatternCnt, len(descsByTablePattern),
+				"Expected %d entries in descsByTablePattern but got %d",
+				tc.expectedTablePatternCnt, len(descsByTablePattern))
 
 			// Verify we didn't load unnecessary descriptors (e.g., other_db when not needed).
 			// Skip this check for tests that explicitly include other_db.
@@ -302,7 +358,7 @@ func BenchmarkResolveTargets(b *testing.B) {
 				planHook := p.(sql.PlanHookState)
 
 				// Use the new optimized implementation.
-				_, err := ResolveTargets(ctx, planHook, s.Clock().Now(), backupStmt.Targets)
+				_, _, _, _, err := ResolveTargets(ctx, planHook, s.Clock().Now(), backupStmt.Targets)
 				require.NoError(b, err)
 			}()
 		}
