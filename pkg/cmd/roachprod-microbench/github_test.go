@@ -92,7 +92,7 @@ func TestCreateRegressionPostRequestBasic(t *testing.T) {
 	}
 	title := formatter.Title(data)
 	require.Contains(t, title, "pkg/sql")
-	require.Contains(t, title, "performance regression")
+	require.Contains(t, title, "BenchmarkScan")
 
 	// Verify message contains key information
 	require.Contains(t, req.Message, "pkg/sql")
@@ -199,9 +199,9 @@ func TestCreateRegressionPostRequestFormat(t *testing.T) {
 	}
 	title := formatter.Title(data)
 
-	// Verify title structure
+	// Verify title structure - title now contains the benchmark name for team resolution
 	require.Contains(t, title, "pkg/sql/exec")
-	require.Contains(t, title, "performance regression")
+	require.Contains(t, title, "BenchmarkScan/rows=1000")
 
 	// Verify formatted output contains all key elements
 	expectedElements := []string{
