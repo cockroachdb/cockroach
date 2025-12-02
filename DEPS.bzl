@@ -4316,6 +4316,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_grafana_alloy_syntax",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/grafana/alloy/syntax",
+        sha256 = "02003e32caf56c80da69a274906e4d1bcd1c6a41977167863df9890fbe5a6382",
+        strip_prefix = "github.com/grafana/alloy/syntax@v0.1.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/grafana/alloy/syntax/com_github_grafana_alloy_syntax-v0.1.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_grafana_grafana_openapi_client_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/grafana/grafana-openapi-client-go",
@@ -6832,6 +6842,16 @@ def go_deps():
         strip_prefix = "github.com/NYTimes/gziphandler@v0.0.0-20170623195520-56545f4a5d46",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/NYTimes/gziphandler/com_github_nytimes_gziphandler-v0.0.0-20170623195520-56545f4a5d46.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_ohler55_ojg",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/ohler55/ojg",
+        sha256 = "f7bf984acfbf6558626857345dda9626bb15b6a0e5354fd9919ab74d85ea229a",
+        strip_prefix = "github.com/ohler55/ojg@v1.20.1",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/ohler55/ojg/com_github_ohler55_ojg-v1.20.1.zip",
         ],
     )
     go_repository(
