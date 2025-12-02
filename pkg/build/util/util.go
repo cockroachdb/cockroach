@@ -61,6 +61,18 @@ type XMLMessage struct {
 	Contents string     `xml:",chardata"`
 }
 
+// AnyFailures returns true iff there are any errors/failures in the test.xml.
+func AnyFailures(suites TestSuites) bool {
+	for _, suite := range suites.Suites {
+		for _, testCase := range suite.TestCases {
+			if testCase.Failure != nil || testCase.Error != nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // OutputOfBinaryRule returns the path of the binary produced by the
 // given build target, relative to bazel-bin. That is,
 //
