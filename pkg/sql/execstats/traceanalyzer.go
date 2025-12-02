@@ -384,29 +384,26 @@ func (a *TraceAnalyzer) GetQueryLevelStats() QueryLevelStats {
 func getKVAndACStats(
 	trace []tracingpb.RecordedSpan,
 ) (contentionEvents []kvpb.ContentionEvent, acWaitTime time.Duration) {
-	var contentionEvent kvpb.ContentionEvent
-	var admissionStats admissionpb.AdmissionWorkQueueStats
-	var quorumEvent kvpb.QuorumReplicationFlowAdmissionEvent
 	for i := range trace {
 		trace[i].Structured(func(any *pbtypes.Any, _ time.Time) {
-			// Collect contention events.
-			if pbtypes.Is(any, &contentionEvent) {
-				if err := pbtypes.UnmarshalAny(any, &contentionEvent); err == nil {
-					contentionEvents = append(contentionEvents, contentionEvent)
+			if pbtypes.Is(any, (*kvpb.ContentionEvent)(nil)) {
+				var ce kvpb.ContentionEvent
+				if err := pbtypes.UnmarshalAny(any, &ce); err == nil {
+					contentionEvents = append(contentionEvents, ce)
 				}
 				return
 			}
-			// Accumulate wait duration from AdmissionWorkQueueStats.
-			if pbtypes.Is(any, &admissionStats) {
-				if err := pbtypes.UnmarshalAny(any, &admissionStats); err == nil {
-					acWaitTime += admissionStats.WaitDurationNanos
+			if pbtypes.Is(any, (*admissionpb.AdmissionWorkQueueStats)(nil)) {
+				var stats admissionpb.AdmissionWorkQueueStats
+				if err := pbtypes.UnmarshalAny(any, &stats); err == nil {
+					acWaitTime += stats.WaitDurationNanos
 				}
 				return
 			}
-			// Accumulate wait duration from QuorumReplicationFlowAdmissionEvent.
-			if pbtypes.Is(any, &quorumEvent) {
-				if err := pbtypes.UnmarshalAny(any, &quorumEvent); err == nil {
-					acWaitTime += quorumEvent.WaitDurationNanos
+			if pbtypes.Is(any, (*kvpb.QuorumReplicationFlowAdmissionEvent)(nil)) {
+				var event kvpb.QuorumReplicationFlowAdmissionEvent
+				if err := pbtypes.UnmarshalAny(any, &event); err == nil {
+					acWaitTime += event.WaitDurationNanos
 				}
 				return
 			}
