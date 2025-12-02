@@ -85,16 +85,20 @@ func TestPrepareSnapApply(t *testing.T) {
 		require.NoError(t, kvstorage.MakeStateLoader(rID).SetRaftReplicaID(ctx, eng, replicaID))
 	}
 
+	rangeDesc := desc(id.RangeID, "a", "k")
 	swb := snapWriteBuilder{
-		id:       id,
-		todoEng:  eng,
-		sl:       sl,
-		writeSST: writeSST,
+		id: id,
+		sl: sl,
+		wr: snapWriter{
+			todoEng:  eng,
+			writeSST: writeSST,
+			cleared:  rditer.MakeReplicatedKeySpans(rangeDesc),
+		},
 
 		truncState: kvserverpb.RaftTruncatedState{Index: 100, Term: 20},
 		hardState:  raftpb.HardState{Term: 20, Commit: 100},
-		desc:       desc(id.RangeID, "a", "k"),
-		origDesc:   desc(id.RangeID, "a", "k"),
+		desc:       rangeDesc,
+		origDesc:   rangeDesc,
 		subsume: []kvstorage.DestroyReplicaInfo{
 			{FullReplicaID: roachpb.FullReplicaID{RangeID: descA.RangeID, ReplicaID: replicaID}, Keys: descA.RSpan()},
 			{FullReplicaID: roachpb.FullReplicaID{RangeID: descB.RangeID, ReplicaID: replicaID}, Keys: descB.RSpan()},
@@ -104,10 +108,7 @@ func TestPrepareSnapApply(t *testing.T) {
 	err := swb.prepareSnapApply(ctx)
 	require.NoError(t, err)
 
-	for _, span := range rditer.MakeReplicatedKeySpans(swb.desc) {
-		sb.Printf(">> repl: %v\n", span)
-	}
-	for _, span := range swb.cleared {
+	for _, span := range swb.wr.cleared {
 		sb.Printf(">> cleared: %v\n", span)
 	}
 	sb.Printf(">> excise: %v\n", swb.desc.KeySpan().AsRawSpanWithNoLocals())

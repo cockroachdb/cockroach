@@ -17,6 +17,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// snapWriter encapsulates storage readers and writers needed for constructing a
+// snapshot ingestion.
+// TODO(sep-raft-log): support separated engines.
+type snapWriter struct {
+	todoEng  storage.Engine
+	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
+
+	// cleared contains the spans that this snapshot application clears before
+	// writing new state on top.
+	//
+	// TODO(pav-kv): get rid of it. With separated engines, it complicates the
+	// logic, since it will need to exclude the raft engine cleared spans. The
+	// draft is in #155532.
+	cleared []roachpb.Span
+}
+
 // snapWriteBuilder contains the data needed to prepare the on-disk state for a
 // snapshot.
 //
@@ -24,9 +40,8 @@ import (
 type snapWriteBuilder struct {
 	id roachpb.FullReplicaID
 
-	todoEng  storage.Engine
-	sl       kvstorage.StateLoader
-	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
+	sl kvstorage.StateLoader
+	wr snapWriter
 
 	truncState kvserverpb.RaftTruncatedState
 	hardState  raftpb.HardState
@@ -34,10 +49,6 @@ type snapWriteBuilder struct {
 	origDesc   *roachpb.RangeDescriptor // pre-snapshot range descriptor
 	// NB: subsume must be in sorted order by DestroyReplicaInfo start key.
 	subsume []kvstorage.DestroyReplicaInfo
-
-	// cleared contains the spans that this snapshot application clears before
-	// writing new state on top.
-	cleared []roachpb.Span
 }
 
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
@@ -47,7 +58,7 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	_ = applySnapshotTODO // 1.1 + 1.3 + 2.4 + 3.1
 	// TODO(sep-raft-log): rewriteRaftState now only touches raft engine keys, so
 	// it will be convenient to redirect it to a raft engine batch.
-	if err := s.writeSST(ctx, s.rewriteRaftState); err != nil {
+	if err := s.wr.writeSST(ctx, s.rewriteRaftState); err != nil {
 		return err
 	}
 	_ = applySnapshotTODO // 1.2 + 2.1 + 2.2 + 2.3 (diff) + 3.2
@@ -68,7 +79,7 @@ func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Write
 	if err != nil {
 		return err
 	}
-	s.cleared = append(s.cleared, cleared)
+	s.wr.cleared = append(s.wr.cleared, cleared)
 	return nil
 }
 
@@ -123,14 +134,14 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	// clearResidualDataOnNarrowSnapshot, not here.
 
 	// TODO(sep-raft-log): need different readers for raft and state engine.
-	reader := storage.Reader(s.todoEng)
+	reader := storage.Reader(s.wr.todoEng)
 	for _, sub := range s.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
-		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 			opts, err := kvstorage.SubsumeReplica(
 				ctx, kvstorage.TODOReaderWriter(reader, w), sub,
 			)
-			s.cleared = append(s.cleared, rditer.Select(sub.RangeID, opts)...)
+			s.wr.cleared = append(s.wr.cleared, rditer.Select(sub.RangeID, opts)...)
 			return err
 		}); err != nil {
 			return err
@@ -194,7 +205,7 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 	}
 
 	// TODO(sep-raft-log): read from the state machine engine here.
-	reader := storage.Reader(s.todoEng)
+	reader := storage.Reader(s.wr.todoEng)
 	for _, span := range rditer.Select(0, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
 			RSpan:      roachpb.RSpan{Key: s.desc.EndKey, EndKey: endKey},
@@ -203,14 +214,14 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 			UserKeys:   true,
 		},
 	}) {
-		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 			return storage.ClearRangeWithHeuristic(
 				ctx, reader, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys(),
 			)
 		}); err != nil {
 			return err
 		}
-		s.cleared = append(s.cleared, span)
+		s.wr.cleared = append(s.wr.cleared, span)
 	}
 
 	return nil
