@@ -1370,6 +1370,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		} else if rs.localRangeOwner != msg.StoreID {
 			rs.localRangeOwner = msg.StoreID
 		}
+		rs.load = rangeMsg.RangeLoad
 		if !rangeMsg.MaybeSpanConfIsPopulated && len(rs.pendingChanges) == 0 {
 			// Common case: no pending changes, and span config not provided.
 			//
@@ -1397,16 +1398,18 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				mayHaveDiverged = true
 			}
 			if !mayHaveDiverged {
+				// This is the common case where there were no pending changes, and no
+				// span config provided and no replicas changes. We don't need to do
+				// any more processing of this RangeMsg.
 				continue
 			}
 			// Else fall through and do the expensive work.
 		}
+		// Slow path, which reconstructs everything about the range.
+
 		// Set the range state and store state to match the range message state
 		// initially. The pending changes which are not enacted in the range
 		// message are handled and added back below.
-		if rangeMsg.MaybeSpanConfIsPopulated {
-			rs.load = rangeMsg.RangeLoad
-		}
 		for _, replica := range rs.replicas {
 			ss := cs.stores[replica.StoreID]
 			if ss == nil {
@@ -1548,10 +1551,10 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			}
 			rs.conf = normSpanConfig
 		}
-		// NB: Always recompute the analyzed range constraints for any range,
-		// assuming the leaseholder wouldn't have sent the message if there was no
-		// change, or we noticed a divergence in membership above and fell through
-		// here.
+		// Ensure (later) recomputation of the analyzed range constraints for the
+		// range, by clearing the existing analyzed constraints. This is done
+		// since in this slow path the span config or the replicas may have
+		// changed.
 		rs.clearAnalyzedConstraints()
 	}
 	// Remove ranges for which this is the localRangeOwner, but for which it is

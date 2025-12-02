@@ -51,19 +51,19 @@ store-load-msg
   store-id=2 node-id=2 load=[45,40,50] capacity=[100,100,50] secondary-load=1 load-time=0s
 ----
 
-# StoreLeaseholderMsg, with empty information, since the range states have not changed.
+# StoreLeaseholderMsg, with no span configs for the ranges.
 store-leaseholder-msg
 store-id=1
-  range-id=1 not-populated
+  range-id=1 load=[10,10,20] raft-cpu=5 span-config-not-populated
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
     store-id=2 replica-id=2 type=VOTER_FULL
-  range-id=2 not-populated
+  range-id=2 load=[20,10,15] raft-cpu=10 span-config-not-populated
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
     store-id=2 replica-id=2 type=VOTER_FULL
-  range-id=3 not-populated
+  range-id=3 load=[30,10,10] raft-cpu=25 span-config-not-populated
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
     store-id=2 replica-id=2 type=VOTER_FULL
-  range-id=4 not-populated
+  range-id=4 load=[40,10,5] raft-cpu=5 span-config-not-populated
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
     store-id=2 replica-id=2 type=VOTER_FULL
 ----
@@ -76,28 +76,32 @@ store-id=1 node-id=1 status=ok accepting all reported=[cpu:100, write-bandwidth:
 store-id=2 node-id=2 status=ok accepting all reported=[cpu:45, write-bandwidth:40, byte-size:50] adjusted=[cpu:45, write-bandwidth:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
   top-k-ranges (local-store-id=1) dim=ByteSize: r1 r2
 
-# StoreLeaseholderMsg not containing r1 and r4 since no longer the leaseholder.
+# StoreLeaseholderMsg not containing r1 and r4 since no longer the
+# leaseholder. Change the load of r2, while MaybeSpanConfIsPopulated=false,
+# to ensure that we notice it.
 store-leaseholder-msg
 store-id=1
-  range-id=2 not-populated
+  range-id=2 load=[40,20,5] raft-cpu=10 span-config-not-populated
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
     store-id=2 replica-id=2 type=VOTER_FULL
-  range-id=3 not-populated
+  range-id=3 load=[30,10,10] raft-cpu=25 span-config-not-populated
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
     store-id=2 replica-id=2 type=VOTER_FULL
 ----
 
-# r1 and r4 no longer mentioned in the top-k.
+# r1 and r4 no longer mentioned in the top-k. And the top-k ordering has
+# changed for both stores since r2 is now more than r3 in terms of CPU,
+# but less than r3 in terms of ByteSize.
 get-load-info
 ----
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:100, write-bandwidth:40, byte-size:50] adjusted=[cpu:100, write-bandwidth:40, byte-size:50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
-  top-k-ranges (local-store-id=1) dim=CPURate: r3 r2
+  top-k-ranges (local-store-id=1) dim=CPURate: r2 r3
 store-id=2 node-id=2 status=ok accepting all reported=[cpu:45, write-bandwidth:40, byte-size:50] adjusted=[cpu:45, write-bandwidth:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
-  top-k-ranges (local-store-id=1) dim=ByteSize: r2 r3
+  top-k-ranges (local-store-id=1) dim=ByteSize: r3 r2
 
 ranges
 ----
-range-id=2 local-store=1 load=[cpu:20, write-bandwidth:10, byte-size:15] raft-cpu=10
+range-id=2 local-store=1 load=[cpu:40, write-bandwidth:20, byte-size:5] raft-cpu=10
   store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
   store-id=2 replica-id=2 type=VOTER_FULL
 range-id=3 local-store=1 load=[cpu:30, write-bandwidth:10, byte-size:10] raft-cpu=25
@@ -109,9 +113,9 @@ range-id=3 local-store=1 load=[cpu:30, write-bandwidth:10, byte-size:10] raft-cp
 # of replicas, and the other the replica-id of one of the store's replicas.
 store-leaseholder-msg
 store-id=1
-  range-id=2 not-populated
+  range-id=2 load=[40,20,30] raft-cpu=10 span-config-not-populated
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
-  range-id=3 not-populated
+  range-id=3 load=[30,10,10] raft-cpu=25 span-config-not-populated
     store-id=2 replica-id=5 type=VOTER_FULL
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
 ----
@@ -119,7 +123,7 @@ store-id=1
 # The ranges reflect the latest state from the StoreLeaseholderMsg.
 ranges
 ----
-range-id=2 local-store=1 load=[cpu:20, write-bandwidth:10, byte-size:15] raft-cpu=10
+range-id=2 local-store=1 load=[cpu:40, write-bandwidth:20, byte-size:30] raft-cpu=10
   store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
 range-id=3 local-store=1 load=[cpu:30, write-bandwidth:10, byte-size:10] raft-cpu=25
   store-id=2 replica-id=5 type=VOTER_FULL
