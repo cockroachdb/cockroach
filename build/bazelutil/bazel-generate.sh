@@ -17,13 +17,24 @@ files_unchanged_from_upstream () {
   if [ "${COCKROACH_BAZEL_FORCE_GENERATE:-}" = 1 ]; then
     return 1
   fi
-  
-  if ! which git >/dev/null; then
-    return 1
-  fi
 
   # NB: This logic is duplicated in pkg/cmd/dev/test.go. Any changes to the git
   # commands here probably needs to be mirrored there.
+
+  # Check if we're in a jj workspace (non-colocated)
+  if [ -d ".jj" ] && [ ! -d ".git" ] && which jj >/dev/null 2>&1; then
+    # Using jj - check if files are changed from trunk
+    # Check if any of the files are changed from trunk to the current working copy
+    CHANGED=$(jj diff --summary -r 'trunk()..@' -- "$@" 2>/dev/null) || return 1
+    if [ -z "$CHANGED" ]; then
+      return 0
+    fi
+    return 1
+  fi
+
+  if ! which git >/dev/null; then
+    return 1
+  fi
 
   # First, figure out the correct remote.
   UPSTREAM=$(git remote -v | grep 'github.com[/:]cockroachdb/cockroach.*(fetch)' | awk '{print $1}') || return 1

@@ -1303,6 +1303,72 @@ message ProblemRangesRequest {
   string node_id = 1 [ (gogoproto.customname) = "NodeID" ];
 }
 
+// ProblemRangesLocalRequest is used to request problem ranges from the local
+// node only. This is a lightweight alternative to the Ranges RPC that returns
+// only range IDs with problems rather than full RangeInfo.
+message ProblemRangesLocalRequest {}
+
+// ProblemRangesLocalResponse contains the problem range IDs for the local node.
+// This reuses the same structure as ProblemRangesResponse.NodeProblems.
+message ProblemRangesLocalResponse {
+  string error_message = 1;
+  repeated int64 unavailable_range_ids = 2 [
+    (gogoproto.customname) = "UnavailableRangeIDs",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 raft_leader_not_lease_holder_range_ids = 3 [
+    (gogoproto.customname) = "RaftLeaderNotLeaseHolderRangeIDs",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 no_raft_leader_range_ids = 4 [
+    (gogoproto.customname) = "NoRaftLeaderRangeIDs",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 no_lease_range_ids = 5 [
+    (gogoproto.customname) = "NoLeaseRangeIDs",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 underreplicated_range_ids = 6 [
+    (gogoproto.customname) = "UnderreplicatedRangeIDs",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 overreplicated_range_ids = 9 [
+    (gogoproto.customname) = "OverreplicatedRangeIDs",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 quiescent_equals_ticking_range_ids = 7 [
+    (gogoproto.customname) = "QuiescentEqualsTickingRangeIDs",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 raft_log_too_large_range_ids = 8 [
+    (gogoproto.customname) = "RaftLogTooLargeRangeIDs",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 circuit_breaker_error_range_ids = 10 [
+    (gogoproto.customname) = "CircuitBreakerErrorRangeIDs",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 paused_replica_ids = 11 [
+    (gogoproto.customname) = "PausedReplicaIDs",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+  repeated int64 too_large_range_ids = 12 [
+    (gogoproto.customname) = "TooLargeRangeIds",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+  ];
+}
+
 message ProblemRangesResponse {
   message NodeProblems {
     string error_message = 1;
@@ -2562,12 +2628,17 @@ service Status {
     };
   }
 
-  // ProblemRanges retrieves the list of “problem ranges”.
+  // ProblemRanges retrieves the list of "problem ranges".
   rpc ProblemRanges(ProblemRangesRequest) returns (ProblemRangesResponse) {
     option (google.api.http) = {
       get : "/_status/problemranges"
     };
   }
+
+  // ProblemRangesLocal retrieves problem range IDs from the local node only.
+  // Used internally by ProblemRanges for efficient fan-out. Unlike the Ranges
+  // RPC which returns full RangeInfo, this only returns range IDs.
+  rpc ProblemRangesLocal(ProblemRangesLocalRequest) returns (ProblemRangesLocalResponse) {}
 
   rpc DownloadSpan(DownloadSpanRequest) returns (DownloadSpanResponse) {
     option (google.api.http) = {

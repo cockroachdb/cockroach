@@ -240,6 +240,19 @@ func sendBepDataToBeaverHubIfNeeded(bepFilepath string) error {
 
 // This function retrieves the merge-base hash between the current branch and master
 func (d *dev) getMergeBaseHash(ctx context.Context) (string, error) {
+	// Check if we're in a jj workspace (non-colocated)
+	jjExists, _ := d.os.Exists(".jj")
+	gitExists, _ := d.os.Exists(".git")
+	if jjExists && !gitExists {
+		// We're in a jj workspace without colocated git
+		// Use jj to get the trunk commit
+		trunkBytes, err := d.exec.CommandContextSilent(ctx, "jj", "log", "-r", "trunk()", "--limit", "1", "--no-graph", "-T", "commit_id")
+		if err != nil {
+			return "", fmt.Errorf("could not find jj trunk: %w", err)
+		}
+		return strings.TrimSpace(string(trunkBytes)), nil
+	}
+
 	// List files changed against `master`
 	remotes, err := d.exec.CommandContextSilent(ctx, "git", "remote", "-v")
 	if err != nil {
