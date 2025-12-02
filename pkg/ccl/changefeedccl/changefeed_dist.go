@@ -362,10 +362,12 @@ var rangeDistributionStrategyStrings = map[clusterSettingRangeDistributionType]s
 var RangeDistributionStrategy = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"changefeed.default_range_distribution_strategy",
-	"configures how work is distributed among nodes for a given changefeed. "+
-		"for the most balanced distribution, use `balanced_simple`. changing this setting "+
-		"will not override locality restrictions. this setting can be overridden by the "+
-		"changefeed option `range_distribution_strategy`",
+	"controls how changefeed work is distributed across nodes. "+
+		"'default' defers to DistSQL for node selection and work distribution. "+
+		"'balanced_simple' attempts to evenly distribute ranges across selected nodes "+
+		"for better load balancing. This setting does not override locality restrictions "+
+		"and can be overridden per-changefeed using the 'range_distribution_strategy' option. "+
+		"This setting replaces the deprecated 'changefeed.balance_range_distribution.enable'.",
 	metamorphic.ConstantWithTestChoice("default_range_distribution_strategy",
 		string(changefeedbase.ChangefeedRangeDistributionStrategyDefault),
 		string(changefeedbase.ChangefeedRangeDistributionStrategyBalancedSimple)),
