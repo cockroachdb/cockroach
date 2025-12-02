@@ -72,11 +72,10 @@ func createRegressionPostRequest(
 
 	sb.WriteString(fmt.Sprintf("\nDetailed comparison: %s\n", sheetLink))
 
-	// Create a failure object for the package with all regressions
-	title := fmt.Sprintf("%s: performance regression", pkgName)
+	benchmarkName := regressions[0].benchmarkName
 	f := githubpost.MicrobenchmarkFailure(
 		pkgName,
-		title,
+		benchmarkName,
 		sb.String(),
 	)
 
