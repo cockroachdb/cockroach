@@ -10,61 +10,92 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/require"
 )
 
-func TestMockLiveness(t *testing.T) {
+// TestStatusTrackerConversion verifies that StatusTracker correctly converts
+// asim's internal status representation (store-level liveness + node-level
+// membership/draining) into NodeVitality objects used by the single-metric
+// allocator. It checks that the resulting LivenessStatus and IsLive values
+// match expectations for various combinations of liveness, membership, and
+// draining states.
+func TestStatusTrackerConversion(t *testing.T) {
 	clock := &ManualSimClock{nanos: time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC).UnixNano()}
-	now := hlc.NewClockForTesting(clock).Now()
+	hlcClock := hlc.NewClockForTesting(clock)
+
 	testCases := []struct {
-		status           livenesspb.NodeLivenessStatus
-		IsAlive          bool
-		MembershipStatus livenesspb.MembershipStatus
+		desc           string
+		storeLiveness  LivenessState
+		membership     livenesspb.MembershipStatus
+		draining       bool
+		expectIsAlive  bool
+		expectedStatus livenesspb.NodeLivenessStatus
 	}{
 		{
-			status:           livenesspb.NodeLivenessStatus_UNKNOWN,
-			IsAlive:          false,
-			MembershipStatus: livenesspb.MembershipStatus_ACTIVE,
+			desc:           "live active",
+			storeLiveness:  LivenessLive,
+			membership:     livenesspb.MembershipStatus_ACTIVE,
+			expectIsAlive:  true,
+			expectedStatus: livenesspb.NodeLivenessStatus_LIVE,
 		},
 		{
-			status:           livenesspb.NodeLivenessStatus_DEAD,
-			IsAlive:          false,
-			MembershipStatus: livenesspb.MembershipStatus_ACTIVE,
+			desc:           "live draining",
+			storeLiveness:  LivenessLive,
+			membership:     livenesspb.MembershipStatus_ACTIVE,
+			draining:       true,
+			expectIsAlive:  true,
+			expectedStatus: livenesspb.NodeLivenessStatus_DRAINING,
 		},
 		{
-			status:           livenesspb.NodeLivenessStatus_UNAVAILABLE,
-			IsAlive:          false,
-			MembershipStatus: livenesspb.MembershipStatus_ACTIVE,
+			desc:           "live decommissioning",
+			storeLiveness:  LivenessLive,
+			membership:     livenesspb.MembershipStatus_DECOMMISSIONING,
+			expectIsAlive:  true,
+			expectedStatus: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 		},
 		{
-			status:           livenesspb.NodeLivenessStatus_DECOMMISSIONED,
-			IsAlive:          false,
-			MembershipStatus: livenesspb.MembershipStatus_DECOMMISSIONED,
+			desc:           "unavailable active",
+			storeLiveness:  LivenessUnavailable,
+			membership:     livenesspb.MembershipStatus_ACTIVE,
+			expectIsAlive:  false,
+			expectedStatus: livenesspb.NodeLivenessStatus_UNAVAILABLE,
 		},
 		{
-			status:           livenesspb.NodeLivenessStatus_DECOMMISSIONING,
-			IsAlive:          true,
-			MembershipStatus: livenesspb.MembershipStatus_DECOMMISSIONING,
+			desc:           "dead active",
+			storeLiveness:  LivenessDead,
+			membership:     livenesspb.MembershipStatus_ACTIVE,
+			expectIsAlive:  false,
+			expectedStatus: livenesspb.NodeLivenessStatus_DEAD,
 		},
 		{
-			status:           livenesspb.NodeLivenessStatus_LIVE,
-			IsAlive:          true,
-			MembershipStatus: livenesspb.MembershipStatus_ACTIVE,
+			desc:           "dead decommissioned",
+			storeLiveness:  LivenessDead,
+			membership:     livenesspb.MembershipStatus_DECOMMISSIONED,
+			expectIsAlive:  false,
+			expectedStatus: livenesspb.NodeLivenessStatus_DECOMMISSIONED,
 		},
 		{
-			status:           livenesspb.NodeLivenessStatus_DRAINING,
-			IsAlive:          true,
-			MembershipStatus: livenesspb.MembershipStatus_ACTIVE,
+			desc:           "dead decommissioning (returns DECOMMISSIONED)",
+			storeLiveness:  LivenessDead,
+			membership:     livenesspb.MembershipStatus_DECOMMISSIONING,
+			expectIsAlive:  false,
+			expectedStatus: livenesspb.NodeLivenessStatus_DECOMMISSIONED,
 		},
 	}
 	for _, tc := range testCases {
-		t.Run(tc.status.String(), func(t *testing.T) {
-			nv := convertNodeStatusToNodeVitality(roachpb.NodeID(1), tc.status, now)
-			require.Equal(t, tc.IsAlive, nv.IsLive(livenesspb.Rebalance))
-			require.Equal(t, tc.MembershipStatus, nv.MembershipStatus())
-			require.Equal(t, tc.status, nv.LivenessStatus())
+		t.Run(tc.desc, func(t *testing.T) {
+			// Create a StatusTracker with one node and one store.
+			m := StatusTracker{
+				clock:          hlcClock,
+				storeStatusMap: map[StoreID]StoreStatus{1: {Liveness: tc.storeLiveness}},
+				nodeStatusMap:  map[NodeID]NodeStatus{1: {Membership: tc.membership, Draining: tc.draining}},
+				storeToNode:    map[StoreID]NodeID{1: 1},
+			}
+			nv := m.convertToNodeVitality(1, hlcClock.Now())
+			require.Equal(t, tc.expectIsAlive, nv.IsLive(livenesspb.Rebalance))
+			require.Equal(t, tc.membership, nv.MembershipStatus())
+			require.Equal(t, tc.expectedStatus, nv.LivenessStatus())
 		})
 	}
 }
