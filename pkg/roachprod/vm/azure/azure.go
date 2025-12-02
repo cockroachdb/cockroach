@@ -956,22 +956,12 @@ func (p *Provider) createVM(
 		StartupArgs: vm.DefaultStartupArgs(
 			vm.WithVMName(name),
 			vm.WithSharedUser(remoteUser),
+			vm.WithFilesystem(opts.SSDOpts.FileSystem),
+			vm.WithUseMultipleDisks(providerOpts.UseMultipleDisks),
+			vm.WithBootDiskOnly(providerOpts.BootDiskOnly),
 		),
-		DiskControllerNVMe: false,
-		AttachedDiskLun:    nil,
 	}
 	useNVMe := MachineSupportsNVMe(providerOpts.MachineType)
-	if useNVMe {
-		startupArgs.DiskControllerNVMe = true
-	}
-	if !opts.SSDOpts.UseLocalSSD && !useNVMe {
-		// We define lun42 explicitly in the data disk request below.
-		lun := 42
-		startupArgs.AttachedDiskLun = &lun
-	}
-
-	// Check if we only require a boot disk (workload only machines).
-	startupArgs.BootDiskOnly = providerOpts.BootDiskOnly
 
 	startupScript, err := evalStartupTemplate(startupArgs)
 	if err != nil {
@@ -1101,8 +1091,8 @@ func (p *Provider) createVM(
 	}
 
 	if !opts.SSDOpts.UseLocalSSD && !providerOpts.BootDiskOnly {
-		caching := compute.CachingTypesNone
 
+		caching := compute.CachingTypesNone
 		switch providerOpts.DiskCaching {
 		case "read-only":
 			caching = compute.CachingTypesReadOnly
@@ -1114,46 +1104,66 @@ func (p *Provider) createVM(
 			err = errors.Newf("unsupported caching behavior: %s", providerOpts.DiskCaching)
 			return compute.VirtualMachine{}, err
 		}
-		dataDisks := []compute.DataDisk{
-			{
-				DiskSizeGB: to.Int32Ptr(providerOpts.NetworkDiskSize),
-				Caching:    caching,
-				Lun:        to.Int32Ptr(42),
-			},
-		}
+		// Create multiple data disks with sequential LUNs starting after any
+		// reserved LUNs (e.g. the resource disk on 'd' sizes).
+		dataDisks := make([]compute.DataDisk, providerOpts.NetworkDiskCount)
+		for i := range providerOpts.NetworkDiskCount {
+			disk := compute.DataDisk{
+				CreateOption: compute.DiskCreateOptionTypesEmpty,
+				DiskSizeGB:   to.Int32Ptr(providerOpts.NetworkDiskSize),
+				Caching:      caching,
+				// LUNs start at 0, but we reserve LUN 0 for the potential resource disk
+				// that is automatically created on machine types with 'd' flag.
+				Lun: to.Int32Ptr(int32(i) + 1),
+			}
 
-		switch providerOpts.NetworkDiskType {
-		case "ultra-disk":
-			var ultraDisk compute.Disk
-			ultraDisk, err = p.createUltraDisk(l, ctx, group, name+"-ultra-disk", zone, providerOpts)
-			if err != nil {
+			switch providerOpts.NetworkDiskType {
+			case "ultra-disk":
+				// Create multiple ultra disks
+				var ultraDisk compute.Disk
+				ultraDisk, err = p.createUltraDisk(l, ctx, group, fmt.Sprintf("%s-ultra-disk-%d", name, i), zone, providerOpts)
+				if err != nil {
+					return compute.VirtualMachine{}, err
+				}
+
+				// UltraSSD specific disk configurations.
+				disk.CreateOption = compute.DiskCreateOptionTypesAttach
+				disk.Name = ultraDisk.Name
+				disk.ManagedDisk = &compute.ManagedDiskParameters{
+					StorageAccountType: compute.StorageAccountTypesUltraSSDLRS,
+					ID:                 ultraDisk.ID,
+				}
+
+				// UltraSSDs must be enabled separately.
+				machine.AdditionalCapabilities = &compute.AdditionalCapabilities{
+					UltraSSDEnabled: to.BoolPtr(true),
+				}
+			case "standard-ssd":
+				// standard-ssd specific disk configurations.
+				disk.ManagedDisk = &compute.ManagedDiskParameters{
+					StorageAccountType: compute.StorageAccountTypesStandardLRS,
+				}
+			case "premium-disk", "premium-ssd":
+				// premium-ssd-lrs specific disk configurations.
+				disk.ManagedDisk = &compute.ManagedDiskParameters{
+					StorageAccountType: compute.StorageAccountTypesPremiumLRS,
+				}
+			case "premium-ssd-v2":
+				// premium-ssd-v2-lrs specific disk configurations.
+				disk.ManagedDisk = &compute.ManagedDiskParameters{
+					StorageAccountType: compute.StorageAccountTypesPremiumV2LRS,
+				}
+			default:
+				err = errors.Newf("unsupported network disk type: %s", providerOpts.NetworkDiskType)
 				return compute.VirtualMachine{}, err
 			}
-			// UltraSSD specific disk configurations.
-			dataDisks[0].CreateOption = compute.DiskCreateOptionTypesAttach
-			dataDisks[0].Name = ultraDisk.Name
-			dataDisks[0].ManagedDisk = &compute.ManagedDiskParameters{
-				StorageAccountType: compute.StorageAccountTypesUltraSSDLRS,
-				ID:                 ultraDisk.ID,
-			}
 
-			// UltraSSDs must be enabled separately.
-			machine.AdditionalCapabilities = &compute.AdditionalCapabilities{
-				UltraSSDEnabled: to.BoolPtr(true),
-			}
-		case "premium-disk":
-			// premium-disk specific disk configurations.
-			dataDisks[0].CreateOption = compute.DiskCreateOptionTypesEmpty
-			dataDisks[0].ManagedDisk = &compute.ManagedDiskParameters{
-				StorageAccountType: compute.StorageAccountTypesPremiumV2LRS,
-			}
-		default:
-			err = errors.Newf("unsupported network disk type: %s", providerOpts.NetworkDiskType)
-			return compute.VirtualMachine{}, err
+			dataDisks[i] = disk
+
 		}
-
 		machine.StorageProfile.DataDisks = &dataDisks
 	}
+
 	future, err := client.CreateOrUpdate(ctx, *group.Name, name, machine)
 	if err != nil {
 		return

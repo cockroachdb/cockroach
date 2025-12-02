@@ -25,13 +25,11 @@ import (
 type fileSystemType int
 
 const (
-	// Since ext4 is the default of 0, it isn't being
-	// used anywhere in the code. Therefore, it isn't
-	// added as a const here since it is unused, and
-	// leads to a lint error.
-
-	// Zfs file system.
-	Zfs fileSystemType = 1
+	Ext4 fileSystemType = iota
+	Zfs
+	Xfs
+	F2fs
+	Btrfs
 
 	// Extra labels added by roachtest
 	RoachtestBranch = "roachtest-branch"
@@ -205,6 +203,8 @@ type ClusterSpec struct {
 	SSDs                 int
 	RAID0                bool
 	VolumeSize           int
+	VolumeType           string
+	VolumeCount          int
 	LocalSSD             LocalSSDSetting
 	Geo                  bool
 	Lifetime             time.Duration
@@ -224,8 +224,6 @@ type ClusterSpec struct {
 	GCE struct {
 		MachineType    string
 		MinCPUPlatform string
-		VolumeType     string
-		VolumeCount    int // volume count is only supported for GCE. This can be moved up if we start supporting other clouds
 		Zones          string
 	} `cloud:"gce"`
 
@@ -242,13 +240,13 @@ type ClusterSpec struct {
 	// Azure-specific arguments. These values apply only on clusters instantiated on Azure.
 	Azure struct {
 		Zones string
+		// VolumeIOPS is the provisioned IOPS for ultra-disks.
+		VolumeIOPS int
 	} `cloud:"azure"`
 	// IBM-specific arguments. These values apply only on clusters instantiated on IBM.
 	IBM struct {
 		MachineType string
-		VolumeType  string
 		VolumeIOPS  int
-		VolumeCount int
 		Zones       string
 	} `cloud:"ibm"`
 }
@@ -319,15 +317,23 @@ func awsMachineSupportsSSD(machineType string) bool {
 
 func getAWSOpts(
 	machineType string,
-	volumeSize, ebsThroughput int,
+	volumeSize, volumeCount, ebsThroughput int,
+	volumeType string,
 	ebsIOPS int,
 	localSSD bool,
+	RAID0 bool,
 	useSpotVMs bool,
 	bootDiskOnly bool,
 ) vm.ProviderOpts {
 	opts := aws.DefaultProviderOpts()
 	if volumeSize != 0 {
 		opts.DefaultEBSVolume.Disk.VolumeSize = volumeSize
+	}
+	if volumeType != "" {
+		opts.DefaultEBSVolume.Disk.VolumeType = volumeType
+	}
+	if volumeCount != 0 {
+		opts.EBSVolumeCount = volumeCount
 	}
 	if ebsIOPS != 0 {
 		opts.DefaultEBSVolume.Disk.IOPs = ebsIOPS
@@ -340,6 +346,7 @@ func getAWSOpts(
 	} else {
 		opts.MachineType = machineType
 	}
+	opts.UseMultipleDisks = !RAID0
 	opts.UseSpot = useSpotVMs
 	opts.BootDiskOnly = bootDiskOnly
 	return opts
@@ -389,13 +396,31 @@ func getGCEOpts(
 	return opts
 }
 
-func getAzureOpts(machineType string, volumeSize int, bootDiskOnly bool) vm.ProviderOpts {
+func getAzureOpts(
+	machineType string,
+	volumeSize int,
+	volumeType string,
+	volumeCount int,
+	volumeIOPS int,
+	RAID0 bool,
+	bootDiskOnly bool,
+) vm.ProviderOpts {
 	opts := azure.DefaultProviderOpts()
 	opts.MachineType = machineType
 	if volumeSize != 0 {
 		opts.NetworkDiskSize = int32(volumeSize)
 	}
 	opts.BootDiskOnly = bootDiskOnly
+	if volumeType != "" {
+		opts.NetworkDiskType = volumeType
+	}
+	if volumeCount != 0 {
+		opts.NetworkDiskCount = volumeCount
+	}
+	if volumeIOPS != 0 {
+		opts.UltraDiskIOPS = int64(volumeIOPS)
+	}
+	opts.UseMultipleDisks = !RAID0
 	return opts
 }
 
@@ -405,7 +430,7 @@ func getIBMOpts(
 	volumeSize int,
 	volumeType string,
 	volumeIOPS int,
-	extraVolumeCount int,
+	volumeCount int,
 	RAID0 bool,
 	bootDiskOnly bool,
 ) vm.ProviderOpts {
@@ -424,17 +449,10 @@ func getIBMOpts(
 	}
 
 	// We reuse the parameters of the default data volume for extra volumes.
-	opts.AttachedVolumes = make(ibm.IbmVolumeList, 0)
-	if extraVolumeCount > 0 {
-		for i := 0; i < extraVolumeCount; i++ {
-			opts.AttachedVolumes = append(opts.AttachedVolumes, &ibm.IbmVolume{
-				VolumeType: opts.DefaultVolume.VolumeType,
-				VolumeSize: opts.DefaultVolume.VolumeSize,
-				IOPS:       opts.DefaultVolume.IOPS,
-			})
-		}
-		opts.UseMultipleDisks = !RAID0
+	if volumeCount != 0 {
+		opts.AttachedVolumesCount = volumeCount
 	}
+	opts.UseMultipleDisks = !RAID0
 	opts.BootDiskOnly = bootDiskOnly
 
 	return opts
@@ -594,18 +612,25 @@ func (s *ClusterSpec) RoachprodOpts(
 		}
 	}
 
-	if s.FileSystem == Zfs {
-		if cloud != GCE && cloud != IBM {
-			return vm.CreateOpts{}, nil, nil, "", errors.Errorf(
-				"node creation with zfs file system not yet supported on %s", cloud,
-			)
+	switch s.FileSystem {
+	case Ext4:
+		// ext4 is the default, do nothing unless we randomly want to use zfs
+		if s.RandomlyUseZfs {
+			rng, _ := randutil.NewPseudoRand()
+			if rng.Float64() <= 0.2 {
+				createVMOpts.SSDOpts.FileSystem = vm.Zfs
+			}
 		}
+	case Zfs:
 		createVMOpts.SSDOpts.FileSystem = vm.Zfs
-	} else if s.RandomlyUseZfs && (cloud == GCE || cloud == IBM) {
-		rng, _ := randutil.NewPseudoRand()
-		if rng.Float64() <= 0.2 {
-			createVMOpts.SSDOpts.FileSystem = vm.Zfs
-		}
+	case Xfs:
+		createVMOpts.SSDOpts.FileSystem = vm.Xfs
+	case F2fs:
+		createVMOpts.SSDOpts.FileSystem = vm.F2fs
+	case Btrfs:
+		createVMOpts.SSDOpts.FileSystem = vm.Btrfs
+	default:
+		return vm.CreateOpts{}, nil, nil, "", errors.Errorf("unknown file system type: %v", s.FileSystem)
 	}
 
 	var workloadMachineType string
@@ -633,30 +658,34 @@ func (s *ClusterSpec) RoachprodOpts(
 	var workloadProviderOpts vm.ProviderOpts
 	switch cloud {
 	case AWS:
-		providerOpts = getAWSOpts(machineType, s.VolumeSize, s.AWS.VolumeThroughput, s.AWS.VolumeIOPS,
-			createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs, false)
-		workloadProviderOpts = getAWSOpts(workloadMachineType, s.VolumeSize, s.AWS.VolumeThroughput, s.AWS.VolumeIOPS,
-			createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs, !s.WorkloadRequiresDisk)
+		providerOpts = getAWSOpts(machineType, s.VolumeSize, s.VolumeCount, s.AWS.VolumeThroughput, s.VolumeType, s.AWS.VolumeIOPS,
+			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.UseSpotVMs, false)
+		workloadProviderOpts = getAWSOpts(workloadMachineType, s.VolumeSize, s.VolumeCount, s.AWS.VolumeThroughput, s.VolumeType, s.AWS.VolumeIOPS,
+			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.UseSpotVMs, !s.WorkloadRequiresDisk)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType,
-			s.GCE.VolumeCount, s.UseSpotVMs, false,
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.VolumeType,
+			s.VolumeCount, s.UseSpotVMs, false,
 		)
 		workloadProviderOpts = getGCEOpts(workloadMachineType, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType,
-			s.GCE.VolumeCount, s.UseSpotVMs, !s.WorkloadRequiresDisk,
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.VolumeType,
+			s.VolumeCount, s.UseSpotVMs, !s.WorkloadRequiresDisk,
 		)
 	case Azure:
-		providerOpts = getAzureOpts(machineType, s.VolumeSize, false)
-		workloadProviderOpts = getAzureOpts(workloadMachineType, s.VolumeSize, true)
-	case IBM:
-		providerOpts = getIBMOpts(machineType, s.TerminateOnMigration, s.VolumeSize,
-			s.IBM.VolumeType, s.IBM.VolumeIOPS, s.IBM.VolumeCount, s.RAID0, false,
+		providerOpts = getAzureOpts(machineType,
+			s.VolumeSize, s.VolumeType, s.VolumeCount, s.Azure.VolumeIOPS, s.RAID0, false,
 		)
-		workloadProviderOpts = getIBMOpts(workloadMachineType, s.TerminateOnMigration, s.VolumeSize,
-			s.IBM.VolumeType, s.IBM.VolumeIOPS, s.IBM.VolumeCount, s.RAID0, true,
+		workloadProviderOpts = getAzureOpts(workloadMachineType,
+			s.VolumeSize, s.VolumeType, s.VolumeCount, s.Azure.VolumeIOPS, s.RAID0, true,
+		)
+	case IBM:
+		providerOpts = getIBMOpts(machineType, s.TerminateOnMigration,
+			s.VolumeSize, s.VolumeType, s.IBM.VolumeIOPS, s.VolumeCount, s.RAID0, false,
+		)
+		workloadProviderOpts = getIBMOpts(workloadMachineType, s.TerminateOnMigration,
+			s.VolumeSize, s.VolumeType, s.IBM.VolumeIOPS, s.VolumeCount, s.RAID0, true,
 		)
 	}
 
