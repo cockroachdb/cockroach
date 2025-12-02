@@ -273,7 +273,11 @@ const (
 	//
 	// See: https://www.postgresql.org/docs/current/protocol-message-formats.html
 
-	version30     = 196608   // (3 << 16) + 0
+	// Protocol version components.
+	versionMajor          = 3
+	versionSupportedMinor = 0
+	version30             = (versionMajor << 16) + versionSupportedMinor
+
 	versionCancel = 80877102 // (1234 << 16) + 5678
 	versionSSL    = 80877103 // (1234 << 16) + 5679
 	versionGSSENC = 80877104 // (1234 << 16) + 5680
