@@ -58,6 +58,7 @@ type SupportManager struct {
 }
 
 var _ Fabric = (*SupportManager)(nil)
+var _ SupportStatus = (*SupportManager)(nil)
 
 // NewSupportManager creates a new Store Liveness SupportManager. The main
 // goroutine that processes Store Liveness messages is initialized
@@ -115,9 +116,15 @@ var _ MessageHandler = (*SupportManager)(nil)
 // SupportFor implements the Fabric interface. It delegates the response to the
 // SupportManager's supporterStateHandler.
 func (sm *SupportManager) SupportFor(id slpb.StoreIdent) (slpb.Epoch, bool) {
-	ss := sm.supporterStateHandler.getSupportFor(id)
+	ss := sm.supporterStateHandler.getSupportFor(id).SupportState
 	// An empty expiration implies support has expired.
 	return ss.Epoch, !ss.Expiration.IsEmpty()
+}
+
+// IsSupporting implements the SupportStatus interface.
+func (sm *SupportManager) IsSupporting(id slpb.StoreIdent) (bool, hlc.Timestamp) {
+	ss := sm.supporterStateHandler.getSupportFor(id)
+	return !ss.Expiration.IsEmpty(), ss.lastSupportWithdrawnTime
 }
 
 // InspectSupportFrom implements the InspectFabric interface.

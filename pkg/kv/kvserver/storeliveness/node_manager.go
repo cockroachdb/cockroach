@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-
 // NodeContainer is a container for all StoreLiveness state on a single node. It
 // encapsulates all dependencies required to create per-store SupportManagers
 // and keeps track of them once created.
@@ -31,9 +30,11 @@ type NodeContainer struct {
 
 	mu struct {
 		syncutil.Mutex
-		supportManagers map[roachpb.StoreID]*SupportManager
+		supportManagers map[roachpb.StoreID]Fabric
 	}
 }
+
+var _ SupportStatus = (*NodeContainer)(nil)
 
 // NewNodeContainer creates a new NodeContainer.
 func NewNodeContainer(
@@ -53,7 +54,7 @@ func NewNodeContainer(
 		stopper:         stopper,
 		nodeID:          nodeID,
 	}
-	nc.mu.supportManagers = make(map[roachpb.StoreID]*SupportManager)
+	nc.mu.supportManagers = make(map[roachpb.StoreID]Fabric)
 	return nc
 }
 
@@ -82,4 +83,19 @@ func (n *NodeContainer) NewSupportManager(
 	defer n.mu.Unlock()
 	n.mu.supportManagers[storeID] = sm
 	return sm
+}
+
+// IsSupporting implements the SupportStatus interface.
+func (n *NodeContainer) IsSupporting(id slpb.StoreIdent) (bool, hlc.Timestamp) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	supporting := true
+	var maxWithdrawnTS hlc.Timestamp
+	for _, sm := range n.mu.supportManagers {
+		isSupporting, withdrawnTS := sm.IsSupporting(id)
+		supporting = supporting && isSupporting
+		maxWithdrawnTS.Forward(withdrawnTS)
+	}
+	return supporting, maxWithdrawnTS
 }

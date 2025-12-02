@@ -16,6 +16,7 @@ import (
 // Fabric is a representation of the Store Liveness fabric. It provides
 // information about uninterrupted periods of "support" between stores.
 type Fabric interface {
+	SupportStatus
 	InspectFabric
 
 	// SupportFor returns the epoch of the current uninterrupted period of Store
@@ -75,4 +76,38 @@ type Fabric interface {
 type InspectFabric interface {
 	InspectSupportFrom() slpb.InspectSupportFromStatesPerStore
 	InspectSupportFor() slpb.InspectSupportForStatesPerStore
+}
+
+// SupportStatus is a representation of a node's support for remote
+// nodes/stores in the StoreLiveness fabrics. Conceptually, if you consider the
+// StoreLiveness Fabric to be a 2D matrix of all stores in a cluster,
+// SupportStatus collapses this into a 1D vector by taking the most
+// conservative view of things.
+
+
+// SupportStatus is an interface that can be used to query the support status of
+// a remote node/store pair in the StoreLiveness fabric.
+//
+// Crucially, it may (but not necessarily) be used to collapse support status
+// across all per-store StoreLiveness instances running on a single node. This
+// is done by taking the most conservative view of things across them.
+type SupportStatus interface {
+	// IsSupporting returns whether the node is supporting[1] the supplied
+	// remote store. Additionally, the timestamp[2] at which support was last
+	// withdrawn for the store is also returned.
+	//
+	
+	// 
+	// When aggregating across all per-store StoreLiveness instances, we
+	// have to contend with the fact that different StoreLiveness instances may
+	// withdraw support for remote stores independently. As such:
+	//
+	// [1] The returned boolean corresponds to the most conservative view of
+	// things, so, if any of the local stores do not support the remote store,
+	// false is returned.
+	//
+	// [2] If multiple instances have withdrawn support for the remote store,
+	// the returned timestamp corresponds to the most recent withdrawal across
+	// all of them.
+	IsSupporting(id slpb.StoreIdent) (bool, hlc.Timestamp)
 }
