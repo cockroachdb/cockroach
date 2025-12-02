@@ -570,35 +570,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	nodeRegistry.AddMetricStruct(nodeLiveness.Metrics())
 
-	nodeLivenessFn := storepool.MakeStorePoolNodeLivenessFunc(nodeLiveness)
-	if nodeLivenessKnobs, ok := cfg.TestingKnobs.NodeLiveness.(kvserver.NodeLivenessTestingKnobs); ok {
-		if nodeLivenessKnobs.StorePoolNodeLivenessFn != nil {
-			nodeLivenessFn = nodeLivenessKnobs.StorePoolNodeLivenessFn
-		}
-
-		if nodeLivenessKnobs.IsLiveCallback != nil {
-			nodeLiveness.RegisterCallback(nodeLivenessKnobs.IsLiveCallback)
-		}
-	}
-	nodeLiveCountFn := func() int {
-		var count int
-		for _, nv := range nodeLiveness.ScanNodeVitalityFromCache() {
-			if !nv.IsDecommissioning() && !nv.IsDecommissioned() {
-				count++
-			}
-		}
-		return count
-	}
-	storePool := storepool.NewStorePool(
-		cfg.AmbientCtx,
-		st,
-		g,
-		clock,
-		nodeLiveCountFn,
-		nodeLivenessFn,
-		/* deterministic */ false,
-	)
-
 	storesForRACv2 := kvserver.MakeStoresForRACv2(stores)
 	admissionKnobs, ok := cfg.TestingKnobs.AdmissionControl.(*admission.TestingKnobs)
 	if !ok {
@@ -688,6 +659,37 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		}
 		storeLiveness = storeliveness.NewNodeContainer(stopper, nodeIDContainer, options, transport, knobs)
 	}
+
+	nodeLivenessFn := storepool.MakeStorePoolNodeLivenessFunc(nodeLiveness)
+	if nodeLivenessKnobs, ok := cfg.TestingKnobs.NodeLiveness.(kvserver.NodeLivenessTestingKnobs); ok {
+		if nodeLivenessKnobs.StorePoolNodeLivenessFn != nil {
+			nodeLivenessFn = nodeLivenessKnobs.StorePoolNodeLivenessFn
+		}
+
+		if nodeLivenessKnobs.IsLiveCallback != nil {
+			nodeLiveness.RegisterCallback(nodeLivenessKnobs.IsLiveCallback)
+		}
+	}
+	nodeLiveCountFn := func() int {
+		var count int
+		for _, nv := range nodeLiveness.ScanNodeVitalityFromCache() {
+			if !nv.IsDecommissioning() && !nv.IsDecommissioned() {
+				count++
+			}
+		}
+		return count
+	}
+	storeLivenessFn := storepool.MakeStoreLivenessFunc(storeLiveness)
+	storePool := storepool.NewStorePool(
+		cfg.AmbientCtx,
+		st,
+		g,
+		clock,
+		nodeLiveCountFn,
+		nodeLivenessFn,
+		storeLivenessFn,
+		false, /* deterministic */
+	)
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)

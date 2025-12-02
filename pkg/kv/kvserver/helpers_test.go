@@ -313,6 +313,7 @@ func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
 		func(roachpb.NodeID) livenesspb.NodeLivenessStatus {
 			return livenesspb.NodeLivenessStatus_LIVE
 		},
+		storepool.NewMockStoreLiveness().StoreLivenessFunc,
 		/* deterministic */ false,
 	)
 }

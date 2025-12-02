@@ -50,7 +50,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	stopper, g, _, sp, _ := CreateTestStorePool(ctx, st,
+	stopper, g, _, sp, _, _ := CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 0 }, /* NodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -116,7 +116,7 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	// We're going to manually mark stores dead in this test.
-	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
+	stopper, g, _, sp, mnl, _ := CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -418,7 +418,7 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	stopper, g, _, sp, _ := CreateTestStorePool(ctx, st,
+	stopper, g, _, sp, _, _ := CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -439,7 +439,7 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
+	stopper, g, _, sp, mnl, _ := CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -545,7 +545,7 @@ func TestStorePoolDefaultState(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	stopper, _, _, sp, _ := CreateTestStorePool(ctx, st,
+	stopper, _, _, sp, _, _ := CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -576,7 +576,7 @@ func TestStorePoolThrottle(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	stopper, g, _, sp, _ := CreateTestStorePool(ctx, st,
+	stopper, g, _, sp, _, _ := CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -604,7 +604,7 @@ func TestStorePoolSuspected(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
+	stopper, g, _, sp, mnl, msl := CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDeadOff, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -616,7 +616,7 @@ func TestStorePoolSuspected(t *testing.T) {
 
 	// Verify a store that we haven't seen yet is unknown status.
 	detail := sp.GetStoreDetail(0)
-	s := detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, timeAfterNodeSuspect)
+	s := detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
 	require.Equal(t, s, StoreStatusUnknown)
 	require.Equal(t, hlc.Timestamp{}, detail.LastUnavailable)
 
@@ -629,54 +629,79 @@ func TestStorePoolSuspected(t *testing.T) {
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
 	detail = sp.GetStoreDetail(store.StoreID)
 
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
 	require.Equal(t, s, StoreStatusAvailable)
 	require.Equal(t, hlc.Timestamp{}, detail.LastUnavailable)
 
 	// When the store transitions to unavailable, its status changes to temporarily unknown.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_UNAVAILABLE)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
 	require.Equal(t, s, StoreStatusUnknown)
 	require.NotEqual(t, hlc.Timestamp{}, detail.LastUnavailable)
 
 	// When the store transitions back to live, it passes through suspect for a period.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
 	require.Equal(t, s, StoreStatusSuspect)
 
 	// Once the window has passed, it will return to available.
 	now = now.AddDuration(timeAfterNodeSuspect).AddDuration(time.Millisecond)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
 	require.Equal(t, s, StoreStatusAvailable)
 
 	// Return a liveness of dead.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_DEAD)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
 	require.Equal(t, s, StoreStatusDead)
 
 	// When the store transitions back to live, it passes through suspect for a period.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
 	require.Equal(t, s, StoreStatusSuspect)
 
 	// Verify it also returns correctly to available after suspect time.
 	now = now.AddDuration(timeAfterNodeSuspect).AddDuration(time.Millisecond)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
 	require.Equal(t, s, StoreStatusAvailable)
 
 	// Verify that restart after draining also makes it temporarily suspect.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_DRAINING)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
 	require.Equal(t, s, StoreStatusDraining)
 
 	// Verify suspect when restarting after a drain.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
 	require.Equal(t, s, StoreStatusSuspect)
 
 	now = now.AddDuration(timeAfterNodeSuspect).AddDuration(time.Millisecond)
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	require.Equal(t, s, StoreStatusAvailable)
+
+	// Verify that if the store is considered unreachable in StoreLiveness, then
+	// the returned status is storeStatusDead.
+	msl.SetIsUnreachable(true)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	require.Equal(t, s, StoreStatusDead)
+
+	// Verify that the store is considered suspect by virtue of its last support
+	// withdrawn timestamp in StoreLiveness by setting the last withdrawn
+	// timestamp to within the suspect duration.
+	msl.SetIsUnreachable(false)
+	msl.SetLastSupportWithdrawnTime(hlc.ClockTimestamp(now.AddDuration(-timeAfterNodeSuspect).AddDuration(time.Millisecond)))
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	require.Equal(t, s, StoreStatusSuspect)
+
+	// Set the last withdrawn timestamp to now.
+	msl.SetLastSupportWithdrawnTime(hlc.ClockTimestamp(now))
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	require.Equal(t, s, StoreStatusSuspect)
+
+	// Verify the store returns to available after the suspect duration has
+	// passed.
+	now = now.AddDuration(timeAfterNodeSuspect).AddDuration(time.Millisecond)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
 	require.Equal(t, s, StoreStatusAvailable)
 }
 
@@ -685,7 +710,7 @@ func TestGetLocalities(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	stopper, g, _, sp, _ := CreateTestStorePool(ctx, st,
+	stopper, g, _, sp, _, _ := CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -767,7 +792,7 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
+	stopper, g, _, sp, mnl, _ := CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -867,7 +892,7 @@ func TestStorePoolString(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
+	stopper, g, _, sp, mnl, _ := CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return nodeCount },
 		livenesspb.NodeLivenessStatus_DEAD)
