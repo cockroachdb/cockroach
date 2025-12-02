@@ -1257,28 +1257,13 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 	// Note: we put o outside of the function so we allocate it only once.
 	var o xform.Optimizer
 	fromMemo := b.mem
-	planRightSideFn := func(ctx context.Context, ef exec.Factory, leftRow tree.Datums) (_ exec.Plan, err error) {
-		defer func() {
-			if r := recover(); r != nil {
-				// This code allows us to propagate internal errors without having to add
-				// error checks everywhere throughout the code. This is only possible
-				// because the code does not update shared state and does not manipulate
-				// locks.
-				//
-				// This is the same panic-catching logic that exists in
-				// o.Optimize() below. It's required here because it's possible
-				// for factory functions to panic below, like
-				// CopyAndReplaceDefault.
-				if ok, e := errorutil.ShouldCatch(r); ok {
-					err = e
-					log.VEventf(ctx, 1, "%v", err)
-				} else {
-					// Other panic objects can't be considered "safe" and thus are
-					// propagated as crashes that terminate the session.
-					panic(r)
-				}
-			}
-		}()
+	planRightSideFn := func(ctx context.Context, ef exec.Factory, leftRow tree.Datums) (_ exec.Plan, retErr error) {
+		// This is the same panic-catching logic that exists in o.Optimize()
+		// below. It's required here because it's possible for factory functions
+		// to panic below, like CopyAndReplaceDefault.
+		defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
+			log.VEventf(ctx, 1, "%v", caughtErr)
+		})
 
 		o.Init(ctx, b.evalCtx, b.catalog)
 		f := o.Factory()

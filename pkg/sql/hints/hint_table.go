@@ -108,27 +108,13 @@ func GetStatementHintsFromDB(
 
 func parseHint(
 	datums tree.Datums, fingerprintFlags tree.FmtFlags,
-) (hintID int64, fingerprint string, hint Hint, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// In the event of a "safe" panic, we only want to log the error and
-			// continue executing the query without this hint. This is only possible
-			// because the code does not update shared state and does not manipulate
-			// locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+) (hintID int64, fingerprint string, hint Hint, retErr error) {
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 	hintID = int64(tree.MustBeDInt(datums[0]))
 	fingerprint = string(tree.MustBeDString(datums[1]))
-	hint.StatementHintUnion, err = hintpb.FromBytes([]byte(tree.MustBeDBytes(datums[2])))
-	if err != nil {
-		return hintID, fingerprint, Hint{}, err
+	hint.StatementHintUnion, retErr = hintpb.FromBytes([]byte(tree.MustBeDBytes(datums[2])))
+	if retErr != nil {
+		return hintID, fingerprint, Hint{}, retErr
 	}
 	if hint.InjectHints != nil && hint.InjectHints.DonorSQL != "" {
 		donorStmt, err := parserutils.ParseOne(hint.InjectHints.DonorSQL)
