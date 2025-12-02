@@ -33,7 +33,7 @@ SELECT * FROM db.global WHERE k = 2
 LEAD_FOR_GLOBAL_READS
 
 trace-sql idx=1
-SELECT * FROM db.global WHERE k = 1
+SELECT * FROM db.global AS OF SYSTEM TIME follower_read_timestamp() WHERE k = 1
 ----
 served locally: true
 served via follower read: true
@@ -44,7 +44,7 @@ SELECT * FROM db.global WHERE k = 2
 LEAD_FOR_GLOBAL_READS
 
 trace-sql idx=2
-SELECT * FROM db.global WHERE k = 1
+SELECT * FROM db.global AS OF SYSTEM TIME follower_read_timestamp() WHERE k = 1
 ----
 served locally: true
 served via follower read: true
@@ -55,7 +55,7 @@ SELECT * FROM db.global WHERE k = 2
 LEAD_FOR_GLOBAL_READS
 
 trace-sql idx=3
-SELECT * FROM db.global WHERE k = 1
+SELECT * FROM db.global AS OF SYSTEM TIME follower_read_timestamp() WHERE k = 1
 ----
 served locally: true
 served via follower read: true
@@ -66,7 +66,7 @@ SELECT * FROM db.global WHERE k = 2
 LEAD_FOR_GLOBAL_READS
 
 trace-sql idx=4
-SELECT * FROM db.global WHERE k = 1
+SELECT * FROM db.global AS OF SYSTEM TIME follower_read_timestamp() WHERE k = 1
 ----
 served locally: true
 served via follower read: true
@@ -96,7 +96,7 @@ SELECT * FROM db.global WHERE k = 2
 LEAD_FOR_GLOBAL_READS
 
 trace-sql idx=5
-SELECT * FROM db.global WHERE k = 1
+SELECT * FROM db.global AS OF SYSTEM TIME follower_read_timestamp() WHERE k = 1
 ----
 served locally: true
 served via follower read: true
