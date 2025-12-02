@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -423,13 +424,27 @@ func (r *Registry) runJob(
 	}
 
 	r.maybeRecordExecutionFailure(ctx, err, job)
-	// NB: After this point, the job may no longer have the claim
-	// and further updates to the job record from this node may
-	// fail.
-	r.maybeClearLease(job, err)
 	r.maybeDumpTrace(ctx, resumer, job.ID())
+
 	if r.knobs.AfterJobStateMachine != nil {
 		r.knobs.AfterJobStateMachine(job.ID())
+	}
+
+	// NB: After this point, the job may no longer have the claim and further
+	// updates to the job record from this node may fail.
+	if err != nil {
+		// We delay clearing the lease to avoid situations where a job fast-fails
+		// and is immediately re-adopted by another node, causing a hot loop of job
+		// status changes. See #158597 for more info.
+		//
+		// NB: The node that holds this claim also will not rerun the job until
+		// this interval elapses and the job is removed from the list of currently
+		// running jobs.
+		select {
+		case <-ctx.Done():
+		case <-time.After(r.GetLoopInterval(adoptIntervalSetting, r.knobs.IntervalOverrides.ClaimTTLOnFailure)):
+		}
+		r.maybeClearLease(job, err)
 	}
 	return err
 }

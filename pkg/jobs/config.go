@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -177,18 +176,13 @@ type loopController struct {
 // at regular intervals. The structure's cleanup method should be deferred to
 // execute before destroying the instantiated structure.
 func makeLoopController(
-	st *cluster.Settings, s *settings.DurationSetting, overrideKnob *time.Duration,
+	r *Registry, s *settings.DurationSetting, overrideKnob *time.Duration,
 ) loopController {
 	lc := loopController{
 		lastRun: timeutil.Now(),
 		updated: make(chan struct{}, 1),
-		// getInterval returns the value of the associated cluster setting. If
-		// overrideKnob is not nil, it overrides the cluster setting.
 		getInterval: func() time.Duration {
-			if overrideKnob != nil {
-				return *overrideKnob
-			}
-			return time.Duration(intervalBaseSetting.Get(&st.SV) * float64(s.Get(&st.SV)))
+			return r.GetLoopInterval(s, overrideKnob)
 		},
 	}
 
@@ -202,8 +196,8 @@ func makeLoopController(
 	}
 
 	// register onChange() to get a notification when the cluster is updated.
-	s.SetOnChange(&st.SV, onChange)
-	intervalBaseSetting.SetOnChange(&st.SV, onChange)
+	s.SetOnChange(&r.settings.SV, onChange)
+	intervalBaseSetting.SetOnChange(&r.settings.SV, onChange)
 
 	lc.timer.Reset(jitter(lc.getInterval()))
 	return lc
