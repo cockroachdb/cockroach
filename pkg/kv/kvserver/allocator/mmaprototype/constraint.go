@@ -474,20 +474,36 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 		allIndex       int
 		voterAndAllRel conjunctionRelationship
 	}
+	// emptyConstraintIndex corresponds to the index of the empty constraint in
+	// conf.constraints. We expect only one empty constraint.
+	// Example:
+	// constraints: []: 2, [+region=a]: 2 => emptyConstraintIndex = 0
+	//
+	// TODO(wenyihu6): we should not allow user to specify empty constraints;
+	// there should only be one created by us during normalizeConstraints.
+	// Instead, we can also combine empty constraints into a single one in
+	// normalizeConstraints.
 	emptyConstraintIndex := -1
+	// emptyVoterConstraintIndex corresponds to the index of the empty voter
+	// constraint in conf.voterConstraints. We expect only one empty voter
+	// constraint.
+	// Example:
+	// voterConstraints: [+region=a]: 2, []: 2 => emptyVoterConstraintIndex = 1
 	emptyVoterConstraintIndex := -1
 	var rels []relationshipVoterAndAll
 	for i := range conf.voterConstraints {
 		if len(conf.voterConstraints[i].constraints) == 0 {
 			if emptyVoterConstraintIndex != -1 {
-				return errors.Errorf("invalid configurations with empty voter constraint")
+				return errors.Errorf("multiple empty voter constraints: %v and %v",
+					conf.voterConstraints[emptyVoterConstraintIndex], conf.voterConstraints[i])
 			}
 			emptyVoterConstraintIndex = i
 		}
 		for j := range conf.constraints {
 			if len(conf.constraints[j].constraints) == 0 {
 				if emptyConstraintIndex != -1 && emptyConstraintIndex != j {
-					return errors.Errorf("invalid configurations with empty constraint")
+					return errors.Errorf("multiple empty constraints: %v and %v",
+						conf.constraints[emptyConstraintIndex], conf.constraints[j])
 				}
 				emptyConstraintIndex = j
 			}
@@ -607,8 +623,12 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	// constraint will then be available for subsequent narrowing.
 	if emptyVoterConstraintIndex >= 0 && emptyConstraintIndex >= 0 {
 		neededReplicas := conf.voterConstraints[emptyVoterConstraintIndex].numReplicas
+		// While iterating over the previous relationships, we skipped over
+		// emptyVoterConstraintIndex, so its corresponding
+		// voterConstraints.numReplicas must be 0.
 		if voterConstraints[emptyVoterConstraintIndex].numReplicas != 0 {
-			panic("programming error")
+			panic(errors.AssertionFailedf("programming error: voterConstraints[%d].numReplicas should be 0, but is %d",
+				emptyVoterConstraintIndex, voterConstraints[emptyVoterConstraintIndex]))
 		}
 		remainingSatisfiable := allReplicaConstraints[emptyConstraintIndex].remainingReplicas
 		if neededReplicas > 0 && remainingSatisfiable > 0 {
