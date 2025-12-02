@@ -2751,6 +2751,80 @@ func (s *systemStatusServer) rangesHelper(
 	return &output, next, nil
 }
 
+// ProblemRangesLocal returns the list of problem range IDs for the local node.
+// This is a lightweight alternative to calling Ranges and filtering - it only
+// iterates over local replicas and returns range IDs with problems, not full
+// RangeInfo structs.
+func (s *systemStatusServer) ProblemRangesLocal(
+	ctx context.Context, _ *serverpb.ProblemRangesLocalRequest,
+) (*serverpb.ProblemRangesLocalResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	response := &serverpb.ProblemRangesLocalResponse{}
+
+	isLiveMap := s.nodeLiveness.ScanNodeVitalityFromCache()
+	clusterNodes := s.storePool.ClusterNodeCount()
+
+	err := s.stores.VisitStores(func(store *kvserver.Store) error {
+		now := store.Clock().NowAsClockTimestamp()
+		store.VisitReplicas(func(rep *kvserver.Replica) bool {
+			metrics := rep.Metrics(ctx, now, isLiveMap, clusterNodes)
+			raftStatus := rep.RaftStatus()
+			state := rep.State(ctx)
+			rangeID := rep.RangeID
+
+			quiescentOrAsleep := metrics.Quiescent || metrics.Asleep
+
+			// Check for each problem type and append to the appropriate list.
+			if metrics.Unavailable {
+				response.UnavailableRangeIDs = append(response.UnavailableRangeIDs, rangeID)
+			}
+			if metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder {
+				response.RaftLeaderNotLeaseHolderRangeIDs = append(response.RaftLeaderNotLeaseHolderRangeIDs, rangeID)
+			}
+			if !kvserver.HasRaftLeader(raftStatus) && !metrics.Quiescent {
+				response.NoRaftLeaderRangeIDs = append(response.NoRaftLeaderRangeIDs, rangeID)
+			}
+			if metrics.Underreplicated {
+				response.UnderreplicatedRangeIDs = append(response.UnderreplicatedRangeIDs, rangeID)
+			}
+			if metrics.Overreplicated {
+				response.OverreplicatedRangeIDs = append(response.OverreplicatedRangeIDs, rangeID)
+			}
+			if metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent {
+				response.NoLeaseRangeIDs = append(response.NoLeaseRangeIDs, rangeID)
+			}
+			if raftStatus != nil && quiescentOrAsleep == metrics.Ticking {
+				response.QuiescentEqualsTickingRangeIDs = append(response.QuiescentEqualsTickingRangeIDs, rangeID)
+			}
+			if metrics.RaftLogTooLarge {
+				response.RaftLogTooLargeRangeIDs = append(response.RaftLogTooLargeRangeIDs, rangeID)
+			}
+			if len(state.CircuitBreakerError) > 0 {
+				response.CircuitBreakerErrorRangeIDs = append(response.CircuitBreakerErrorRangeIDs, rangeID)
+			}
+			if metrics.PausedFollowerCount > 0 {
+				response.PausedReplicaIDs = append(response.PausedReplicaIDs, rangeID)
+			}
+			if metrics.RangeTooLarge {
+				response.TooLargeRangeIds = append(response.TooLargeRangeIds, rangeID)
+			}
+
+			return true // continue visiting
+		}, kvserver.WithReplicasInOrder())
+		return nil
+	})
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return response, nil
+}
+
 func (t *statusServer) TenantRanges(
 	ctx context.Context, req *serverpb.TenantRangesRequest,
 ) (*serverpb.TenantRangesResponse, error) {
