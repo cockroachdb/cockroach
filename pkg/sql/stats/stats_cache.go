@@ -858,12 +858,12 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 	forecast bool,
 	st *cluster.Settings,
 	typeResolver *descs.DistSQLTypeResolver,
-) (_ []*TableStatistic, _ map[descpb.ColumnID]*types.T, err error) {
-	it, err := sc.db.Executor().QueryIteratorEx(
+) (_ []*TableStatistic, _ map[descpb.ColumnID]*types.T, retErr error) {
+	it, queryErr := sc.db.Executor().QueryIteratorEx(
 		ctx, "get-table-statistics", nil /* txn */, sessiondata.NodeUserSessionDataOverride, getTableStatisticsStmt, tableID,
 	)
-	if err != nil {
-		return nil, nil, err
+	if queryErr != nil {
+		return nil, nil, queryErr
 	}
 
 	// Guard against crashes in the code below.
@@ -874,7 +874,7 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 			// possible because the code does not update shared state and does not
 			// manipulate locks.
 			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
+				retErr = e
 			} else {
 				// Other panic objects can't be considered "safe" and thus are
 				// propagated as crashes that terminate the session.
@@ -886,10 +886,10 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 	var statsList []*TableStatistic
 	var udts map[descpb.ColumnID]*types.T
 	var ok bool
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		stats, udt, err := sc.parseStats(ctx, it.Cur(), typeResolver)
-		if err != nil {
-			log.Dev.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
+	for ok, queryErr = it.Next(ctx); ok; ok, queryErr = it.Next(ctx) {
+		stats, udt, decodingErr := sc.parseStats(ctx, it.Cur(), typeResolver)
+		if decodingErr != nil {
+			log.Dev.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, decodingErr)
 			continue
 		}
 		statsList = append(statsList, stats)
@@ -909,8 +909,8 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 			}
 		}
 	}
-	if err != nil {
-		return nil, nil, err
+	if queryErr != nil {
+		return nil, nil, queryErr
 	}
 
 	merged := MergedStatistics(ctx, statsList, st)
@@ -936,12 +936,12 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 // user-defined type that doesn't exist) and returns the rest (with no error).
 func getTableStatsProtosFromDB(
 	ctx context.Context, tableID descpb.ID, executor isql.Executor,
-) (statsProtos []*TableStatisticProto, err error) {
-	it, err := executor.QueryIteratorEx(
+) (statsProtos []*TableStatisticProto, retErr error) {
+	it, queryErr := executor.QueryIteratorEx(
 		ctx, "get-table-statistics-protos", nil /* txn */, sessiondata.NodeUserSessionDataOverride, getTableStatisticsStmt, tableID,
 	)
-	if err != nil {
-		return nil, err
+	if queryErr != nil {
+		return nil, queryErr
 	}
 
 	// Guard against crashes in the code below.
@@ -952,7 +952,7 @@ func getTableStatsProtosFromDB(
 			// possible because the code does not update shared state and does not
 			// manipulate locks.
 			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
+				retErr = e
 			} else {
 				// Other panic objects can't be considered "safe" and thus are
 				// propagated as crashes that terminate the session.
@@ -962,14 +962,16 @@ func getTableStatsProtosFromDB(
 	}()
 
 	var ok bool
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		var tsp *TableStatisticProto
-		tsp, err = NewTableStatisticProto(it.Cur())
-		if err != nil {
-			log.Dev.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
+	for ok, queryErr = it.Next(ctx); ok; ok, queryErr = it.Next(ctx) {
+		tsp, decodingErr := NewTableStatisticProto(it.Cur())
+		if decodingErr != nil {
+			log.Dev.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, decodingErr)
 			continue
 		}
 		statsProtos = append(statsProtos, tsp)
+	}
+	if queryErr != nil {
+		return nil, queryErr
 	}
 	return statsProtos, nil
 }
