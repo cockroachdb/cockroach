@@ -51,9 +51,9 @@ debug-supporter-state
 meta:
 {MaxWithdrawn:0,0}
 support for:
-{Target:{NodeID:1 StoreID:2} Epoch:2 Expiration:102.000000000,0}
-{Target:{NodeID:2 StoreID:3} Epoch:3 Expiration:103.000000000,0}
-{Target:{NodeID:2 StoreID:4} Epoch:4 Expiration:104.000000000,0}
+{Target:{NodeID:1 StoreID:2} Epoch:2 Expiration:102.000000000,0} lastSupportWithdrawnTime:0,0
+{Target:{NodeID:2 StoreID:3} Epoch:3 Expiration:103.000000000,0} lastSupportWithdrawnTime:0,0
+{Target:{NodeID:2 StoreID:4} Epoch:4 Expiration:104.000000000,0} lastSupportWithdrawnTime:0,0
 
 withdraw-support now=103
 ----
@@ -72,9 +72,9 @@ debug-supporter-state
 meta:
 {MaxWithdrawn:103.000000000,0}
 support for:
-{Target:{NodeID:1 StoreID:2} Epoch:3 Expiration:0,0}
-{Target:{NodeID:2 StoreID:3} Epoch:4 Expiration:0,0}
-{Target:{NodeID:2 StoreID:4} Epoch:4 Expiration:104.000000000,0}
+{Target:{NodeID:1 StoreID:2} Epoch:3 Expiration:0,0} lastSupportWithdrawnTime:103.000000000,0
+{Target:{NodeID:2 StoreID:3} Epoch:4 Expiration:0,0} lastSupportWithdrawnTime:103.000000000,0
+{Target:{NodeID:2 StoreID:4} Epoch:4 Expiration:104.000000000,0} lastSupportWithdrawnTime:0,0
 
 
 # -------------------------------------------------------------
@@ -109,9 +109,9 @@ debug-supporter-state
 meta:
 {MaxWithdrawn:103.000000000,0}
 support for:
-{Target:{NodeID:1 StoreID:2} Epoch:3 Expiration:0,0}
-{Target:{NodeID:2 StoreID:3} Epoch:4 Expiration:0,0}
-{Target:{NodeID:2 StoreID:4} Epoch:4 Expiration:104.000000000,0}
+{Target:{NodeID:1 StoreID:2} Epoch:3 Expiration:0,0} lastSupportWithdrawnTime:103.000000000,0
+{Target:{NodeID:2 StoreID:3} Epoch:4 Expiration:0,0} lastSupportWithdrawnTime:103.000000000,0
+{Target:{NodeID:2 StoreID:4} Epoch:4 Expiration:104.000000000,0} lastSupportWithdrawnTime:0,0
 
 send-heartbeats now=200 support-duration=10s
 ----
