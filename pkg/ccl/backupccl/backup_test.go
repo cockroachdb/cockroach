@@ -7622,6 +7622,8 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDeadlock(t)
+
 	allowRequest := make(chan struct{})
 	defer close(allowRequest)
 
