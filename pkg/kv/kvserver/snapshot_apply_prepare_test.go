@@ -85,24 +85,26 @@ func TestPrepareSnapApply(t *testing.T) {
 		require.NoError(t, kvstorage.MakeStateLoader(rID).SetRaftReplicaID(ctx, eng, replicaID))
 	}
 
+	rangeDesc := desc(id.RangeID, "a", "k")
 	swb := snapWriteBuilder{
-		id:       id,
-		todoEng:  eng,
-		sl:       sl,
-		writeSST: writeSST,
+		id: id,
+		sl: sl,
+		wr: snapWriter{
+			todoEng:  eng,
+			writeSST: writeSST,
+		},
 
 		truncState: kvserverpb.RaftTruncatedState{Index: 100, Term: 20},
 		hardState:  raftpb.HardState{Term: 20, Commit: 100},
-		desc:       desc(id.RangeID, "a", "k"),
-		origDesc:   desc(id.RangeID, "a", "k"),
+		desc:       rangeDesc,
+		origDesc:   rangeDesc,
 		subsume: []kvstorage.DestroyReplicaInfo{
 			{FullReplicaID: roachpb.FullReplicaID{RangeID: descA.RangeID, ReplicaID: replicaID}, Keys: descA.RSpan()},
 			{FullReplicaID: roachpb.FullReplicaID{RangeID: descB.RangeID, ReplicaID: replicaID}, Keys: descB.RSpan()},
 		},
 	}
 
-	err := swb.prepareSnapApply(ctx)
-	require.NoError(t, err)
+	require.NoError(t, swb.prepareSnapApply(ctx))
 
 	// The snapshot construction code is spread across MultiSSTWriter and
 	// snapWriteBuilder. We only test the latter here, but for information also

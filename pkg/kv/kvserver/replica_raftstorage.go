@@ -629,9 +629,11 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	sb := snapWriteBuilder{
 		id: r.ID(),
 
-		todoEng:  r.store.TODOEngine(),
-		sl:       r.raftMu.stateLoader,
-		writeSST: writeSST,
+		sl: r.raftMu.stateLoader,
+		wr: snapWriter{
+			todoEng:  r.store.TODOEngine(),
+			writeSST: writeSST,
+		},
 
 		truncState: truncState,
 		hardState:  hs,

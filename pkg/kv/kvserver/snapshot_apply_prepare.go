@@ -17,6 +17,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// snapWriter encapsulates storage readers and writers needed for constructing a
+// snapshot ingestion.
+// TODO(sep-raft-log): support separated engines.
+type snapWriter struct {
+	todoEng storage.Engine
+
+	// writeSST provides a Writer which the caller uses to populate a subset of
+	// the pending snapshot write. One writeSST call corresponds to one keys
+	// subspace (such as replicated RangeID-local) and/or one range.
+	//
+	// Commonly, writeSST provides a Writer backed by a newly created SSTable
+	// which will be part of a Pebble ingestion. Less commonly, when the snapshot
+	// is simple/small and applying it as a batch is more efficient, the Writer is
+	// backed by a shared Pebble batch (one for the entire snapshot application).
+	//
+	// All writes within writeSST are sorted by key. Distinct writeSST invocations
+	// write into non-overlapping spans. Both requirements are dictated by the
+	// common case in which the snapshot is applied as a Pebble ingestion.
+	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
+}
+
 // snapWriteBuilder contains the data needed to prepare the on-disk state for a
 // snapshot.
 //
@@ -24,9 +45,8 @@ import (
 type snapWriteBuilder struct {
 	id roachpb.FullReplicaID
 
-	todoEng  storage.Engine
-	sl       kvstorage.StateLoader
-	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
+	sl kvstorage.StateLoader
+	wr snapWriter
 
 	truncState kvserverpb.RaftTruncatedState
 	hardState  raftpb.HardState
@@ -43,7 +63,7 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	_ = applySnapshotTODO // 1.1 + 1.3 + 2.4 + 3.1
 	// TODO(sep-raft-log): rewriteRaftState now only touches raft engine keys, so
 	// it will be convenient to redirect it to a raft engine batch.
-	if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+	if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(w), s.sl, s.hardState, s.truncState)
 	}); err != nil {
 		return err
@@ -108,10 +128,10 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	// clearResidualDataOnNarrowSnapshot, not here.
 
 	// TODO(sep-raft-log): need different readers for raft and state engine.
-	reader := storage.Reader(s.todoEng)
+	reader := storage.Reader(s.wr.todoEng)
 	for _, sub := range s.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
-		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 			return kvstorage.SubsumeReplica(ctx, kvstorage.TODOReaderWriter(reader, w), sub)
 		}); err != nil {
 			return err
@@ -175,7 +195,7 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 	}
 
 	// TODO(sep-raft-log): read from the state machine engine here.
-	reader := storage.Reader(s.todoEng)
+	reader := storage.Reader(s.wr.todoEng)
 	for _, span := range rditer.Select(0, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
 			RSpan:      roachpb.RSpan{Key: s.desc.EndKey, EndKey: endKey},
@@ -184,7 +204,7 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 			UserKeys:   true,
 		},
 	}) {
-		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 			return storage.ClearRangeWithHeuristic(
 				ctx, reader, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys(),
 			)
