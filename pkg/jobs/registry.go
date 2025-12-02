@@ -286,6 +286,11 @@ func (r *Registry) ID() base.SQLInstanceID {
 	return r.nodeID.SQLInstanceID()
 }
 
+// ClusterSettings returns the registry's cluster settings handle.
+func (r *Registry) ClusterSettings() *cluster.Settings {
+	return r.settings
+}
+
 // makeCtx returns a new context from r's ambient context and an associated
 // cancel func.
 func (r *Registry) makeCtx() (context.Context, func()) {
