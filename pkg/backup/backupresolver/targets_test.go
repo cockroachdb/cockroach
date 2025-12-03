@@ -40,6 +40,7 @@ func TestResolveTargets(t *testing.T) {
 	db.Exec(t, `CREATE TABLE test_db.public.t1 (id INT PRIMARY KEY)`)
 	db.Exec(t, `CREATE TABLE test_db.public.t2 (id INT PRIMARY KEY, val TEXT)`)
 	db.Exec(t, `CREATE TABLE test_db.custom_schema.t3 (id INT PRIMARY KEY)`)
+	db.Exec(t, `CREATE TYPE test_db.custom_schema.unused_enum AS ENUM ('x', 'y')`)
 	db.Exec(t, `CREATE TYPE test_db.public.my_enum AS ENUM ('a', 'b', 'c')`)
 	db.Exec(t, `CREATE TABLE test_db.public.t4 (id INT PRIMARY KEY, status test_db.public.my_enum)`)
 	db.Exec(t, `USE test_db`)
@@ -57,7 +58,7 @@ func TestResolveTargets(t *testing.T) {
 		expectedDBs              []string
 		expectedTypes            []string
 		expectedFuncs            []string
-		expectedCompleteDBNames  []string // Database names that should be in completeDBs
+		expectedExpandedDBNames  []string // Database names that should be in expandedDBs
 		expectedRequestedDBNames []string // Database names that should be in requestedDBs
 		expectedTablePatternCnt  int      // Number of entries in descsByTablePattern
 	}{
@@ -106,21 +107,24 @@ func TestResolveTargets(t *testing.T) {
 			expectedDBs:             []string{"test_db", "other_db"},
 			expectedTablePatternCnt: 2,
 		},
-		// Database wildcard: db.* - adds to completeDBs but not requestedDBs
+		// Database wildcard: db.* - adds to expandedDBs but not requestedDBs
 		{
 			name:                    "database wildcard",
 			targets:                 "TABLE test_db.*",
 			expectedTables:          []string{"t1", "t2", "t3", "t4", "t5"},
 			expectedDBs:             []string{"test_db"},
-			expectedCompleteDBNames: []string{"test_db"},
+			expectedTypes:           []string{"my_enum", "_my_enum", "unused_enum", "_unused_enum"},
+			expectedExpandedDBNames: []string{"test_db"},
 			expectedTablePatternCnt: 0, // Wildcards don't add to descsByTablePattern
 		},
-		// Schema wildcard: db.sch.* - does not add to completeDBs (only specific schema)
+		// Schema wildcard: db.sch.* - adds to expandedDBs.
 		{
 			name:                    "schema wildcard public",
 			targets:                 "TABLE test_db.public.*",
 			expectedTables:          []string{"t1", "t2", "t4", "t5"},
 			expectedDBs:             []string{"test_db"},
+			expectedTypes:           []string{"my_enum", "_my_enum"},
+			expectedExpandedDBNames: []string{"test_db"},
 			expectedTablePatternCnt: 0, // Wildcards don't add to descsByTablePattern
 		},
 		{
@@ -128,15 +132,18 @@ func TestResolveTargets(t *testing.T) {
 			targets:                 "TABLE test_db.custom_schema.*",
 			expectedTables:          []string{"t3"},
 			expectedDBs:             []string{"test_db"},
+			expectedTypes:           []string{"unused_enum", "_unused_enum"},
+			expectedExpandedDBNames: []string{"test_db"},
 			expectedTablePatternCnt: 0, // Wildcards don't add to descsByTablePattern
 		},
-		// DATABASE target - adds to both completeDBs and requestedDBs
+		// DATABASE target - adds to both expandedDBs and requestedDBs
 		{
 			name:                     "database target",
 			targets:                  "DATABASE test_db",
 			expectedTables:           []string{"t1", "t2", "t3", "t4", "t5"},
 			expectedDBs:              []string{"test_db"},
-			expectedCompleteDBNames:  []string{"test_db"},
+			expectedTypes:            []string{"my_enum", "_my_enum", "unused_enum", "_unused_enum"},
+			expectedExpandedDBNames:  []string{"test_db"},
 			expectedRequestedDBNames: []string{"test_db"},
 			expectedTablePatternCnt:  0,
 		},
@@ -145,7 +152,8 @@ func TestResolveTargets(t *testing.T) {
 			targets:                  "DATABASE test_db, other_db",
 			expectedTables:           []string{"t1", "t2", "t3", "t4", "t5", "other_table"},
 			expectedDBs:              []string{"test_db", "other_db"},
-			expectedCompleteDBNames:  []string{"test_db", "other_db"},
+			expectedTypes:            []string{"my_enum", "_my_enum", "unused_enum", "_unused_enum"},
+			expectedExpandedDBNames:  []string{"test_db", "other_db"},
 			expectedRequestedDBNames: []string{"test_db", "other_db"},
 			expectedTablePatternCnt:  0,
 		},
@@ -192,7 +200,7 @@ func TestResolveTargets(t *testing.T) {
 
 			// Use the optimized ResolveTargets function.
 			// Use the server's current clock timestamp to read data.
-			descriptors, completeDBs, requestedDBs, descsByTablePattern, err := ResolveTargets(ctx, planHook, s.Clock().Now(), backupStmt.Targets)
+			descriptors, expandedDBs, requestedDBs, descsByTablePattern, err := ResolveTargets(ctx, planHook, s.Clock().Now(), backupStmt.Targets)
 			require.NoError(t, err)
 
 			// Verify we got the expected tables, databases, types, and functions.
@@ -238,22 +246,22 @@ func TestResolveTargets(t *testing.T) {
 					"Expected functions %v but got %v", tc.expectedFuncs, foundFuncs)
 			}
 
-			// Verify completeDBs contains expected database IDs.
-			if tc.expectedCompleteDBNames != nil {
-				var completeDBNames []string
-				for _, dbID := range completeDBs {
+			// Verify expandedDBs contains expected database IDs.
+			if tc.expectedExpandedDBNames != nil {
+				var expandedDBNames []string
+				for _, dbID := range expandedDBs {
 					// Find the database descriptor with this ID.
 					for _, desc := range descriptors {
 						if db, ok := desc.(catalog.DatabaseDescriptor); ok && db.GetID() == dbID {
-							completeDBNames = append(completeDBNames, db.GetName())
+							expandedDBNames = append(expandedDBNames, db.GetName())
 							break
 						}
 					}
 				}
-				require.ElementsMatch(t, tc.expectedCompleteDBNames, completeDBNames,
-					"Expected completeDBs %v but got %v", tc.expectedCompleteDBNames, completeDBNames)
+				require.ElementsMatch(t, tc.expectedExpandedDBNames, expandedDBNames,
+					"Expected expandedDBs %v but got %v", tc.expectedExpandedDBNames, expandedDBNames)
 			} else {
-				require.Empty(t, completeDBs, "Expected completeDBs to be empty")
+				require.Empty(t, expandedDBs, "Expected expandedDBs to be empty")
 			}
 
 			// Verify requestedDBs contains expected database descriptors.
