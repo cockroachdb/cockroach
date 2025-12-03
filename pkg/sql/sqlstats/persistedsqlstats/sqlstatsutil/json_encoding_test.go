@@ -136,6 +136,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
+         "admissionWaitTime": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
          "mvccIteratorStats": {
            "stepCount": {
              "mean": {{.Float}},
@@ -324,6 +328,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
+         "admissionWaitTime": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
          "mvccIteratorStats": {
            "stepCount": {
              "mean": {{.Float}},
@@ -495,6 +503,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
       "sqDiff": {{.Float}}
     },
     "cpuSQLNanos": {
+      "mean": {{.Float}},
+      "sqDiff": {{.Float}}
+    },
+    "admissionWaitTime": {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
     },

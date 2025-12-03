@@ -12,7 +12,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the end-to-end lag between a committed change and that change applied at the destination.
-      essential: true
+      visibility: ESSENTIAL
     - name: changefeed.emitted_bytes
       exported_name: changefeed_emitted_bytes
       description: Bytes emitted by all feeds
@@ -22,7 +22,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the throughput bytes being streamed from the CockroachDB cluster.
-      essential: true
+      visibility: ESSENTIAL
     - name: changefeed.emitted_messages
       exported_name: changefeed_emitted_messages
       description: Messages emitted by all feeds
@@ -32,7 +32,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the rate of changes being streamed from the CockroachDB cluster.
-      essential: true
+      visibility: ESSENTIAL
     - name: changefeed.error_retries
       exported_name: changefeed_error_retries
       description: Total retryable errors encountered by all changefeeds
@@ -42,7 +42,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric tracks transient changefeed errors. Alert on "too many" errors, such as 50 retries in 15 minutes. For example, during a rolling upgrade this counter will increase because the changefeed jobs will restart following node restarts. There is an exponential backoff, up to 10 minutes. But if there is no rolling upgrade in process or other cluster maintenance, and the error rate is high, investigate the changefeed job.
-      essential: true
+      visibility: ESSENTIAL
     - name: changefeed.failures
       exported_name: changefeed_failures
       description: Total number of changefeed jobs which have failed
@@ -52,7 +52,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric tracks the permanent changefeed job failures that the jobs system will not try to restart. Any increase in this counter should be investigated. An alert on this metric is recommended.
-      essential: true
+      visibility: ESSENTIAL
     - name: changefeed.running
       exported_name: changefeed_running
       description: Number of currently running changefeeds, including sinkless
@@ -62,7 +62,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric tracks the total number of all running changefeeds.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.changefeed.currently_paused
       exported_name: jobs_changefeed_currently_paused
       labeled_name: 'jobs{name: changefeed, status: currently_paused}'
@@ -73,7 +73,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: Monitor and alert on this metric to safeguard against an inadvertent operational error of leaving a changefeed job in a paused state for an extended period of time. Changefeed jobs should not be paused for a long time because the protected timestamp prevents garbage collection.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.changefeed.protected_age_sec
       exported_name: jobs_changefeed_protected_age_sec
       labeled_name: 'jobs.protected_age_sec{type: changefeed}'
@@ -84,7 +84,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: Changefeeds use protected timestamps to protect the data from being garbage collected. Ensure the protected timestamp age does not significantly exceed the GC TTL zone configuration. Alert on this metric if the protected timestamp age is greater than 3 times the GC TTL.
-      essential: true
+      visibility: ESSENTIAL
   - name: CROSS_CLUSTER_REPLICATION
     metrics:
     - name: physical_replication.logical_bytes
@@ -96,7 +96,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Track PCR throughput
-      essential: true
+      visibility: ESSENTIAL
     - name: physical_replication.replicated_time_seconds
       exported_name: physical_replication_replicated_time_seconds
       description: The replicated time of the physical replication stream in seconds since the unix epoch.
@@ -106,7 +106,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: Track replication lag via current time - physical_replication.replicated_time_seconds
-      essential: true
+      visibility: ESSENTIAL
   - name: DISTRIBUTED
     metrics:
     - name: distsender.errors.notleaseholder
@@ -118,7 +118,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Errors of this type are normal during elastic cluster topology changes when leaseholders are actively rebalancing. They are automatically retried. However they may create occasional response time spikes. In that case, this metric may provide the explanation of the cause.
-      essential: true
+      visibility: ESSENTIAL
     - name: distsender.rpc.sent.nextreplicaerror
       exported_name: distsender_rpc_sent_nextreplicaerror
       description: Number of replica-addressed RPCs sent due to per-replica errors
@@ -128,7 +128,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: RPC errors do not necessarily indicate a problem. This metric tracks remote procedure calls that return a status value other than "success". A non-success status of an RPC should not be misconstrued as a network transport issue. It is database code logic executed on another cluster node. The non-success status is a result of an orderly execution of an RPC that reports a specific logical condition.
-      essential: true
+      visibility: ESSENTIAL
   - name: LOGICAL_DATA_REPLICATION
     metrics:
     - name: logical_replication.commit_latency
@@ -140,7 +140,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: track the latency of of applying events from source to destination
-      essential: true
+      visibility: ESSENTIAL
     - name: logical_replication.events_dlqed
       exported_name: logical_replication_events_dlqed
       description: Row update events sent to DLQ
@@ -150,7 +150,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: track events sent to the dead letter queue
-      essential: true
+      visibility: ESSENTIAL
     - name: logical_replication.events_ingested
       exported_name: logical_replication_events_ingested
       description: Events ingested by all replication jobs
@@ -160,7 +160,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: track events (e.g. updates, deletes, inserts) ingested
-      essential: true
+      visibility: ESSENTIAL
     - name: logical_replication.logical_bytes
       exported_name: logical_replication_logical_bytes
       description: Logical bytes (sum of keys + values) received by all replication jobs
@@ -170,7 +170,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: track logical data replication throughput
-      essential: true
+      visibility: ESSENTIAL
     - name: logical_replication.replicated_time_seconds
       exported_name: logical_replication_replicated_time_seconds
       description: The replicated time of the logical replication stream in seconds since the unix epoch.
@@ -180,7 +180,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: Track replication lag via current time - logical_replication.replicated_time_seconds
-      essential: true
+      visibility: ESSENTIAL
   - name: NETWORKING
     metrics:
     - name: clock-offset.meannanos
@@ -192,7 +192,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric gives the node's clock skew. In a well-configured environment, the actual clock skew would be in the sub-millisecond range. A skew exceeding 5 ms is likely due to a NTP service mis-configuration. Reducing the actual clock skew reduces the probability of uncertainty related conflicts and corresponding retires which has a positive impact on workload performance. Conversely, a larger actual clock skew increases the probability of retries due to uncertainty conflicts, with potentially measurable adverse effects on workload performance.
-      essential: true
+      visibility: ESSENTIAL
     - name: rpc.connection.avg_round_trip_latency
       exported_name: rpc_connection_avg_round_trip_latency
       description: |-
@@ -216,7 +216,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric is helpful in understanding general network issues outside of CockroachDB that could be impacting the user’s workload.
-      essential: true
+      visibility: ESSENTIAL
     - name: rpc.connection.failures
       exported_name: rpc_connection_failures
       description: |-
@@ -233,7 +233,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: See Description.
-      essential: true
+      visibility: ESSENTIAL
     - name: rpc.connection.healthy
       exported_name: rpc_connection_healthy
       description: Gauge of current connections in a healthy state (i.e. bidirectionally connected and heartbeating)
@@ -243,7 +243,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: See Description.
-      essential: true
+      visibility: ESSENTIAL
     - name: rpc.connection.healthy_nanos
       exported_name: rpc_connection_healthy_nanos
       description: |-
@@ -258,7 +258,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This can be useful for monitoring the stability and health of connections within your CockroachDB cluster.
-      essential: true
+      visibility: ESSENTIAL
     - name: rpc.connection.heartbeats
       exported_name: rpc_connection_heartbeats
       description: Counter of successful heartbeats.
@@ -268,7 +268,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: See Description.
-      essential: true
+      visibility: ESSENTIAL
     - name: rpc.connection.tcp_rtt
       exported_name: rpc_connection_tcp_rtt
       description: |-
@@ -285,7 +285,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: High TCP RTT values indicate network issues outside of CockroachDB that could be impacting the user's workload.
-      essential: true
+      visibility: ESSENTIAL
     - name: rpc.connection.tcp_rtt_var
       exported_name: rpc_connection_tcp_rtt_var
       description: |-
@@ -302,7 +302,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: High TCP RTT variance values indicate network stability issues outside of CockroachDB that could be impacting the user's workload.
-      essential: true
+      visibility: ESSENTIAL
     - name: rpc.connection.unhealthy
       exported_name: rpc_connection_unhealthy
       description: Gauge of current connections in an unhealthy state (not bidirectionally connected or heartbeating)
@@ -312,7 +312,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: If the value of this metric is greater than 0, this could indicate a network partition.
-      essential: true
+      visibility: ESSENTIAL
     - name: rpc.connection.unhealthy_nanos
       exported_name: rpc_connection_unhealthy_nanos
       description: |-
@@ -327,9 +327,79 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: If this duration is greater than 0, this could indicate how long a network partition has been occurring.
-      essential: true
+      visibility: ESSENTIAL
   - name: SQL
     metrics:
+    - name: auth.cert.conn.latency
+      exported_name: auth_cert_conn_latency
+      description: Latency to establish and authenticate a SQL connection using certificate
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      visibility: ESSENTIAL
+    - name: auth.gss.conn.latency
+      exported_name: auth_gss_conn_latency
+      description: Latency to establish and authenticate a SQL connection using GSS
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      visibility: ESSENTIAL
+    - name: auth.jwt.conn.latency
+      exported_name: auth_jwt_conn_latency
+      description: Latency to establish and authenticate a SQL connection using JWT Token
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      visibility: ESSENTIAL
+    - name: auth.ldap.conn.latency
+      exported_name: auth_ldap_conn_latency
+      description: Latency to establish and authenticate a SQL connection using LDAP
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      visibility: ESSENTIAL
+    - name: auth.ldap.conn.latency.internal
+      exported_name: auth_ldap_conn_latency_internal
+      description: Internal Auth Latency to establish and authenticate a SQL connection using LDAP(excludes external LDAP calls)
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      visibility: ESSENTIAL
+    - name: auth.password.conn.latency
+      exported_name: auth_password_conn_latency
+      description: Latency to establish and authenticate a SQL connection using password
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      visibility: ESSENTIAL
+    - name: auth.scram.conn.latency
+      exported_name: auth_scram_conn_latency
+      description: Latency to establish and authenticate a SQL connection using SCRAM
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      visibility: ESSENTIAL
     - name: jobs.auto_create_partial_stats.currently_paused
       exported_name: jobs_auto_create_partial_stats_currently_paused
       labeled_name: 'jobs{name: auto_create_partial_stats, status: currently_paused}'
@@ -340,7 +410,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric is a high-level indicator that automatically generated partial statistics jobs are paused which can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.auto_create_partial_stats.currently_running
       exported_name: jobs_auto_create_partial_stats_currently_running
       labeled_name: 'jobs{type: auto_create_partial_stats, status: currently_running}'
@@ -351,7 +421,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric tracks the number of active automatically generated partial statistics jobs that could also be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.auto_create_partial_stats.resume_failed
       exported_name: jobs_auto_create_partial_stats_resume_failed
       labeled_name: 'jobs.resume{name: auto_create_partial_stats, status: failed}'
@@ -362,7 +432,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is a high-level indicator that automatically generated partial table statistics is failing. Failed statistic creation can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.auto_create_stats.currently_paused
       exported_name: jobs_auto_create_stats_currently_paused
       labeled_name: 'jobs{name: auto_create_stats, status: currently_paused}'
@@ -373,7 +443,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric is a high-level indicator that automatically generated statistics jobs are paused which can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.auto_create_stats.currently_running
       exported_name: jobs_auto_create_stats_currently_running
       labeled_name: 'jobs{type: auto_create_stats, status: currently_running}'
@@ -384,7 +454,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric tracks the number of active automatically generated statistics jobs that could also be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.auto_create_stats.resume_failed
       exported_name: jobs_auto_create_stats_resume_failed
       labeled_name: 'jobs.resume{name: auto_create_stats, status: failed}'
@@ -395,7 +465,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is a high-level indicator that automatically generated table statistics is failing. Failed statistic creation can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.backup.currently_paused
       exported_name: jobs_backup_currently_paused
       labeled_name: 'jobs{name: backup, status: currently_paused}'
@@ -406,7 +476,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: Monitor and alert on this metric to safeguard against an inadvertent operational error of leaving a backup job in a paused state for an extended period of time. In functional areas, a paused job can hold resources or have concurrency impact or some other negative consequence. Paused backup may break the recovery point objective (RPO).
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.backup.currently_running
       exported_name: jobs_backup_currently_running
       labeled_name: 'jobs{type: backup, status: currently_running}'
@@ -417,7 +487,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: See Description.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.create_stats.currently_running
       exported_name: jobs_create_stats_currently_running
       labeled_name: 'jobs{type: create_stats, status: currently_running}'
@@ -428,7 +498,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric tracks the number of active create statistics jobs that could also be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.
-      essential: true
+      visibility: ESSENTIAL
     - name: schedules.BACKUP.failed
       exported_name: schedules_BACKUP_failed
       labeled_name: 'schedules{name: BACKUP, status: failed}'
@@ -439,7 +509,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Monitor this metric and investigate backup job failures.
-      essential: true
+      visibility: ESSENTIAL
     - name: schedules.BACKUP.last-completed-time
       exported_name: schedules_BACKUP_last_completed_time
       description: The unix timestamp of the most recently completed backup by a schedule specified as maintaining this metric
@@ -452,7 +522,7 @@ layers:
         Monitor this metric to ensure that backups are meeting the recovery point objective (RPO). Each node exports the time that it last completed a backup on behalf of the schedule. If a node is restarted, it will report 0 until it completes a backup. If all nodes are restarted, max() is 0 until a node completes a backup.
 
         To make use of this metric, first, from each node, take the maximum over a rolling window equal to or greater than the backup frequency, and then take the maximum of those values across nodes. For example with a backup frequency of 60 minutes, monitor time() - max_across_nodes(max_over_time(schedules_BACKUP_last_completed_time, 60min)).
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.conn.failures
       exported_name: sql_conn_failures
       description: Number of SQL connection failures
@@ -462,7 +532,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is incremented whenever a connection attempt fails for any reason, including timeouts.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.conn.latency
       exported_name: sql_conn_latency
       description: Latency to establish and authenticate a SQL connection
@@ -472,7 +542,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: These metrics characterize the database connection latency which can affect the application performance, for example, by having slow startup times. Connection failures are not recorded in these metrics.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.conns
       exported_name: sql_conns
       description: Number of open SQL connections
@@ -482,7 +552,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric shows the number of connections as well as the distribution, or balancing, of connections across cluster nodes. An imbalance can lead to nodes becoming overloaded. Review Connection Pooling.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.ddl.count
       exported_name: sql_ddl_count
       labeled_name: 'sql.count{query_type: ddl}'
@@ -493,7 +563,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.ddl.count.internal
       exported_name: sql_ddl_count_internal
       labeled_name: 'sql.count{query_type: ddl, query_internal: true}'
@@ -513,7 +583,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.delete.count.internal
       exported_name: sql_delete_count_internal
       labeled_name: 'sql.count{query_type: delete, query_internal: true}'
@@ -551,7 +621,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is incremented whenever there is a non-trivial amount of contention experienced by a statement whether read-write or write-write conflicts. Monitor this metric to correlate possible workload performance issues to contention conflicts.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.failure.count
       exported_name: sql_failure_count
       description: Number of statements resulting in a planning or runtime error
@@ -561,7 +631,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is a high-level indicator of workload and application degradation with query failures. Use the Insights page to find failed executions with their error code to troubleshoot or use application-level logs, if instrumented, to determine the cause of error.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.failure.count.internal
       exported_name: sql_failure_count_internal
       description: Number of statements resulting in a planning or runtime error (internal queries)
@@ -579,7 +649,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is a high-level indicator of potentially suboptimal query plans in the workload that may require index tuning and maintenance. To identify the statements with a full table scan, use SHOW FULL TABLE SCAN or the SQL Activity Statements page with the corresponding metric time frame. The Statements page also includes explain plans and index recommendations. Not all full scans are necessarily bad especially over smaller tables.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.full.scan.count.internal
       exported_name: sql_full_scan_count_internal
       description: Number of full table or index scans (internal queries)
@@ -598,7 +668,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.insert.count.internal
       exported_name: sql_insert_count_internal
       labeled_name: 'sql.count{query_type: insert, query_internal: true}'
@@ -636,7 +706,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric shows how memory set aside for temporary materializations, such as hash tables and intermediary result sets, is utilized. Use this metric to optimize memory allocations based on long term observations. The maximum amount is set with --max_sql_memory. If the utilization of sql memory is persistently low, perhaps some portion of this memory allocation can be shifted to --cache.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.new_conns
       exported_name: sql_new_conns
       description: Number of SQL connections created
@@ -646,7 +716,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: The rate of this metric shows how frequently new connections are being established. This can be useful in determining if a high rate of incoming new connections is causing additional load on the server due to a misconfigured application.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.routine.delete.count
       exported_name: sql_routine_delete_count
       labeled_name: 'sql.count{query_type: routine_delete}'
@@ -657,7 +727,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.routine.delete.count.internal
       exported_name: sql_routine_delete_count_internal
       labeled_name: 'sql.count{query_type: routine_delete, query_internal: true}'
@@ -696,7 +766,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.routine.insert.count.internal
       exported_name: sql_routine_insert_count_internal
       labeled_name: 'sql.count{query_type: routine_insert, query_internal: true}'
@@ -735,7 +805,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.routine.select.count.internal
       exported_name: sql_routine_select_count_internal
       labeled_name: 'sql.count{query_type: routine_select, query_internal: true}'
@@ -774,7 +844,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.routine.update.count.internal
       exported_name: sql_routine_update_count_internal
       labeled_name: 'sql.count{query_type: routine_update, query_internal: true}'
@@ -813,7 +883,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.select.count.internal
       exported_name: sql_select_count_internal
       labeled_name: 'sql.count{query_type: select, query_internal: true}'
@@ -851,7 +921,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: These high-level metrics reflect workload performance. Monitor these metrics to understand latency over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. The Statements page has P90 Latency and P99 latency columns to enable correlation with this metric.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.service.latency.internal
       exported_name: sql_service_latency_internal
       description: Latency of SQL request execution (internal queries)
@@ -869,7 +939,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This high-level metric reflects workload volume.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.statements.active.internal
       exported_name: sql_statements_active_internal
       description: Number of currently active user SQL statements (internal queries)
@@ -887,7 +957,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload performance. A persistently high number of SQL transaction abort errors may negatively impact the workload performance and needs to be investigated.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.txn.abort.count.internal
       exported_name: sql_txn_abort_count_internal
       description: Number of SQL transaction abort errors (internal queries)
@@ -906,7 +976,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reflects workload volume by counting explicit transactions. Use this metric to determine whether explicit transactions can be refactored as implicit transactions (individual statements).
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.txn.begin.count.internal
       exported_name: sql_txn_begin_count_internal
       labeled_name: 'sql.count{query_type: begin, query_internal: true}'
@@ -926,7 +996,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric shows the number of transactions that completed successfully. This metric can be used as a proxy to measure the number of successful explicit transactions.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.txn.commit.count.internal
       exported_name: sql_txn_commit_count_internal
       labeled_name: 'sql.count{query_type: commit, query_internal: true}'
@@ -945,7 +1015,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: These high-level metrics provide a latency histogram of all executed SQL transactions. These metrics provide an overview of the current SQL workload.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.txn.latency.internal
       exported_name: sql_txn_latency_internal
       description: Latency of SQL transactions (internal queries)
@@ -964,7 +1034,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric shows the number of orderly transaction rollbacks. A persistently high number of rollbacks may negatively impact the workload performance and needs to be investigated.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.txn.rollback.count.internal
       exported_name: sql_txn_rollback_count_internal
       labeled_name: 'sql.count{query_type: rollback, query_internal: true}'
@@ -983,7 +1053,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric should roughly correspond to the number of cores * 4. If this metric is consistently larger, scale out the cluster.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.txns.open.internal
       exported_name: sql_txns_open_internal
       description: Number of currently open user SQL transactions (internal queries)
@@ -1002,7 +1072,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
-      essential: true
+      visibility: ESSENTIAL
     - name: sql.update.count.internal
       exported_name: sql_update_count_internal
       labeled_name: 'sql.count{query_type: update, query_internal: true}'
@@ -1040,7 +1110,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.
-      essential: true
+      visibility: ESSENTIAL
     - name: txn.restarts.txnaborted
       exported_name: txn_restarts_txnaborted
       description: Number of restarts due to an abort by a concurrent transaction (usually due to deadlock)
@@ -1050,7 +1120,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: The errors tracked by this metric are generally due to deadlocks. Deadlocks can often be prevented with a considered transaction design. Identify the conflicting transactions involved in the deadlocks, then, if possible, redesign the business logic implementation prone to deadlocks.
-      essential: true
+      visibility: ESSENTIAL
     - name: txn.restarts.txnpush
       exported_name: txn_restarts_txnpush
       description: Number of restarts due to a transaction push failure
@@ -1060,7 +1130,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.
-      essential: true
+      visibility: ESSENTIAL
     - name: txn.restarts.unknown
       exported_name: txn_restarts_unknown
       description: Number of restarts due to a unknown reasons
@@ -1070,7 +1140,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.
-      essential: true
+      visibility: ESSENTIAL
     - name: txn.restarts.writetooold
       exported_name: txn_restarts_writetooold
       description: Number of restarts due to a concurrent writer committing first
@@ -1080,7 +1150,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.
-      essential: true
+      visibility: ESSENTIAL
   - name: TTL
     metrics:
     - name: jobs.row_level_ttl.currently_paused
@@ -1093,7 +1163,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: Monitor this metric to ensure the Row Level TTL job does not remain paused inadvertently for an extended period.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.row_level_ttl.currently_running
       exported_name: jobs_row_level_ttl_currently_running
       labeled_name: 'jobs{type: row_level_ttl, status: currently_running}'
@@ -1104,7 +1174,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: Monitor this metric to ensure there are not too many Row Level TTL jobs running at the same time. Generally, this metric should be in the low single digits.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.row_level_ttl.delete_duration
       exported_name: jobs_row_level_ttl_delete_duration
       description: Duration for delete requests during row level TTL.
@@ -1114,7 +1184,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: See Description.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.row_level_ttl.num_active_spans
       exported_name: jobs_row_level_ttl_num_active_spans
       description: Number of active spans the TTL job is deleting from.
@@ -1124,7 +1194,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: See Description.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.row_level_ttl.resume_completed
       exported_name: jobs_row_level_ttl_resume_completed
       labeled_name: 'jobs.resume{name: row_level_ttl, status: completed}'
@@ -1135,7 +1205,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: If Row Level TTL is enabled, this metric should be nonzero and correspond to the ttl_cron setting that was chosen. If this metric is zero, it means the job is not running
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.row_level_ttl.resume_failed
       exported_name: jobs_row_level_ttl_resume_failed
       labeled_name: 'jobs.resume{name: row_level_ttl, status: failed}'
@@ -1146,7 +1216,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric should remain at zero. Repeated errors means the Row Level TTL job is not deleting data.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.row_level_ttl.rows_deleted
       exported_name: jobs_row_level_ttl_rows_deleted
       description: Number of rows deleted by the row level TTL job.
@@ -1156,7 +1226,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Correlate this metric with the metric jobs.row_level_ttl.rows_selected to ensure all the rows that should be deleted are actually getting deleted.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.row_level_ttl.rows_selected
       exported_name: jobs_row_level_ttl_rows_selected
       description: Number of rows selected for deletion by the row level TTL job.
@@ -1166,7 +1236,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Correlate this metric with the metric jobs.row_level_ttl.rows_deleted to ensure all the rows that should be deleted are actually getting deleted.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.row_level_ttl.select_duration
       exported_name: jobs_row_level_ttl_select_duration
       description: Duration for select requests during row level TTL.
@@ -1176,7 +1246,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: See Description.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.row_level_ttl.span_total_duration
       exported_name: jobs_row_level_ttl_span_total_duration
       description: Duration for processing a span during row level TTL.
@@ -1186,7 +1256,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: See Description.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.row_level_ttl.total_expired_rows
       exported_name: jobs_row_level_ttl_total_expired_rows
       description: Approximate number of rows that have expired the TTL on the TTL table.
@@ -1196,7 +1266,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: See Description.
-      essential: true
+      visibility: ESSENTIAL
     - name: jobs.row_level_ttl.total_rows
       exported_name: jobs_row_level_ttl_total_rows
       description: Approximate number of rows on the TTL table.
@@ -1206,7 +1276,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: See Description.
-      essential: true
+      visibility: ESSENTIAL
     - name: schedules.scheduled-row-level-ttl-executor.failed
       exported_name: schedules_scheduled_row_level_ttl_executor_failed
       labeled_name: 'schedules{name: scheduled-row-level-ttl-executor, status: failed}'
@@ -1217,65 +1287,9 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Monitor this metric to ensure the Row Level TTL job is running. If it is non-zero, it means the job could not be created.
-      essential: true
+      visibility: ESSENTIAL
   - name: UNSET
     metrics:
-    - name: auth.cert.conn.latency
-      exported_name: auth_cert_conn_latency
-      description: Latency to establish and authenticate a SQL connection using certificate
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: auth.gss.conn.latency
-      exported_name: auth_gss_conn_latency
-      description: Latency to establish and authenticate a SQL connection using GSS
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: auth.jwt.conn.latency
-      exported_name: auth_jwt_conn_latency
-      description: Latency to establish and authenticate a SQL connection using JWT Token
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: auth.ldap.conn.latency
-      exported_name: auth_ldap_conn_latency
-      description: Latency to establish and authenticate a SQL connection using LDAP
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: auth.ldap.conn.latency.internal
-      exported_name: auth_ldap_conn_latency_internal
-      description: Internal Auth Latency to establish and authenticate a SQL connection using LDAP(excludes external LDAP calls)
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: auth.password.conn.latency
-      exported_name: auth_password_conn_latency
-      description: Latency to establish and authenticate a SQL connection using password
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: auth.scram.conn.latency
-      exported_name: auth_scram_conn_latency
-      description: Latency to establish and authenticate a SQL connection using SCRAM
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
     - name: backup.last-failed-time.kms-inaccessible
       exported_name: backup_last_failed_time_kms_inaccessible
       description: The unix timestamp of the most recent failure of backup due to errKMSInaccessible by a backup specified as maintaining this metric
@@ -1308,6 +1322,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: changefeed.backfill_pending_ranges
       exported_name: changefeed_backfill_pending_ranges
       description: Number of ranges in an ongoing backfill that are yet to be fully emitted
@@ -1634,6 +1649,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: changefeed.message_size_hist
       exported_name: changefeed_message_size_hist
       description: Message size histogram
@@ -6892,6 +6908,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: round-trip-raft-class-latency
       exported_name: round_trip_raft_class_latency
       description: |-
@@ -7563,6 +7580,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: sql.exec.latency.consistent
       exported_name: sql_exec_latency_consistent
       description: Latency of SQL statement execution of non-historical queries
@@ -8223,6 +8241,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: sql.query.count.internal
       exported_name: sql_query_count_internal
       description: Number of SQL operations started including queries, and transaction control statements (internal queries)
@@ -9401,6 +9420,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: txn.restarts.asyncwritefailure
       exported_name: txn_restarts_asyncwritefailure
       description: Number of restarts due to async consensus writes that failed to leave intents
@@ -9494,7 +9514,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: "This metric gives the CPU utilization percentage by the CockroachDB process. \n\t\tIf it is equal to 1 (or 100%), then the CPU is overloaded. The CockroachDB process should \n\t\tnot be running with over 80% utilization for extended periods of time (hours). This metric \n\t\tis used in the DB Console CPU Percent graph."
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.cpu.host.combined.percent-normalized
       exported_name: sys_cpu_host_combined_percent_normalized
       description: Current user+system cpu percentage across the whole machine, normalized 0-1 by number of cores
@@ -9504,7 +9524,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: "This metric gives the CPU utilization percentage of the\n\t\tunderlying server, virtual machine, or container hosting the\n\t\tCockroachDB process. It includes CPU usage from both CockroachDB\n\t\tand non-CockroachDB processes. It also accounts for time spent\n\t\tprocessing hardware (irq) and software (softirq) interrupts, as\n\t\twell as nice time, which represents low-priority user-mode\n\t\tactivity.\n\n    A value of 1 (or 100%) indicates that the CPU is overloaded. Avoid\n    running the CockroachDB process in an environment where the CPU\n    remains overloaded for extended periods (e.g. multiple hours). This\n    metric appears in the DB Console on the Host CPU Percent graph."
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.cpu.sys.percent
       exported_name: sys_cpu_sys_percent
       description: Current system cpu percentage consumed by the CRDB process
@@ -9514,7 +9534,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: "This metric gives the CPU usage percentage at the system\n\t\t(Linux kernel) level by the CockroachDB process only. This is\n\t\tsimilar to the Linux top command output. The metric value can be\n\t\tmore than 1 (or 100%) on multi-core systems. It is best to combine\n\t\tuser and system metrics."
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.cpu.user.percent
       exported_name: sys_cpu_user_percent
       description: Current user cpu percentage consumed by the CRDB process
@@ -9524,7 +9544,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: "This metric gives the CPU usage percentage at the user\n\t\tlevel by the CockroachDB process only. This is similar to the Linux\n\t\ttop command output. The metric value can be more than 1 (or 100%)\n\t\ton multi-core systems. It is best to combine user and system\n\t\tmetrics."
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.host.disk.iopsinprogress
       exported_name: sys_host_disk_iopsinprogress
       description: IO operations currently in progress on this host (as reported by the OS)
@@ -9534,7 +9554,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric gives the average queue length of the storage device. It characterizes the storage device's performance capability. All I/O performance metrics are Linux counters and correspond to the avgqu-sz in the Linux iostat command output. You need to view the device queue graph in the context of the actual read/write IOPS and MBPS metrics that show the actual device utilization. If the device is not keeping up, the queue will grow. Values over 10 are bad. Values around 5 mean the device is working hard trying to keep up. For internal (on chassis) NVMe devices, the queue values are typically 0. For network connected devices, such as AWS EBS volumes, the normal operating range of values is 1 to 2. Spikes in values are OK. They indicate an I/O spike where the device fell behind and then caught up. End users may experience inconsistent response times, but there should be no cluster stability issues. If the queue is greater than 5 for an extended period of time and IOPS or MBPS are low, then the storage is most likely not provisioned per Cockroach Labs guidance. In AWS EBS, it is commonly an EBS type, such as gp2, not suitable as database primary storage. If I/O is low and the queue is low, the most likely scenario is that the CPU is lacking and not driving I/O. One such case is a cluster with nodes with only 2 vcpus which is not supported sizing for production deployments. There are quite a few background processes in the database that take CPU away from the workload, so the workload is just not getting the CPU. Review storage and disk I/O.
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.host.disk.read.bytes
       exported_name: sys_host_disk_read_bytes
       description: Bytes read from all disks since this process started (as reported by the OS)
@@ -9544,7 +9564,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reports the effective storage device read throughput (MB/s) rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.host.disk.read.count
       exported_name: sys_host_disk_read_count
       description: Disk read operations across all disks since this process started (as reported by the OS)
@@ -9554,7 +9574,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reports the effective storage device read IOPS rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.host.disk.write.bytes
       exported_name: sys_host_disk_write_bytes
       description: Bytes written to all disks since this process started (as reported by the OS)
@@ -9564,7 +9584,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reports the effective storage device write throughput (MB/s) rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.host.disk.write.count
       exported_name: sys_host_disk_write_count
       description: Disk write operations across all disks since this process started (as reported by the OS)
@@ -9574,7 +9594,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reports the effective storage device write IOPS rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.host.net.recv.bytes
       exported_name: sys_host_net_recv_bytes
       description: Bytes received on all network interfaces since this process started (as reported by the OS)
@@ -9584,7 +9604,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric gives the node's ingress/egress network transfer rates for flat sections which may indicate insufficiently provisioned networking or high error rates. CockroachDB is using a reliable TCP/IP protocol, so errors result in delivery retries that create a "slow network" effect.
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.host.net.send.bytes
       exported_name: sys_host_net_send_bytes
       description: Bytes sent on all network interfaces since this process started (as reported by the OS)
@@ -9594,7 +9614,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric gives the node's ingress/egress network transfer rates for flat sections which may indicate insufficiently provisioned networking or high error rates. CockroachDB is using a reliable TCP/IP protocol, so errors result in delivery retries that create a "slow network" effect.
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.rss
       exported_name: sys_rss
       description: Current process RSS
@@ -9604,7 +9624,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: "This metric gives the amount of RAM used by the\n\t\tCockroachDB process. Persistently low values over an extended\n\t\tperiod of time suggest there is underutilized memory that can be\n\t\tput to work with adjusted settings for --cache or --max_sql_memory\n\t\tor both. Conversely, a high utilization, even if a temporary spike,\n\t\tindicates an increased risk of Out-of-memory (OOM) crash\n\t\t(particularly since the swap is generally disabled)."
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.runnable.goroutines.per.cpu
       exported_name: sys_runnable_goroutines_per_cpu
       description: Average number of goroutines that are waiting to run, normalized by number of cores
@@ -9614,7 +9634,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: If this metric has a value over 30, it indicates a CPU overload. If the condition lasts a short period of time (a few seconds), the database users are likely to experience inconsistent response times. If the condition persists for an extended period of time (tens of seconds, or minutes) the cluster may start developing stability issues. Review CPU planning.
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.uptime
       exported_name: sys_uptime
       description: Process uptime
@@ -9624,7 +9644,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric measures the length of time, in seconds, that the CockroachDB process has been running. Monitor this metric to detect events such as node restarts, which may require investigation or intervention.
-      essential: true
+      visibility: ESSENTIAL
   - name: NETWORKING
     metrics:
     - name: sys.host.net.send.tcp.fast_retrans_segs
@@ -9675,7 +9695,7 @@ layers:
         is worth checking the 'sys.host.net.send.drop' metric.
         Additionally, the 'sys.host.net.send.tcp.*' may provide more insight into the
         specific type of retransmission.
-      essential: true
+      visibility: ESSENTIAL
     - name: sys.host.net.send.tcp.slow_start_retrans
       exported_name: sys_host_net_send_tcp_slow_start_retrans
       description: |-
@@ -9718,6 +9738,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: log.buffered.messages.dropped
       exported_name: log_buffered_messages_dropped
       description: Count of log messages that are dropped by buffered log sinks. When CRDB attempts to buffer a log message in a buffered log sink whose buffer is already full, it drops the oldest buffered messages to make space for the new message
@@ -9798,6 +9819,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: sys.cgo.totalbytes
       exported_name: sys_cgo_totalbytes
       description: Total bytes of memory allocated by cgo, but not released
@@ -9806,6 +9828,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: sys.cgocalls
       exported_name: sys_cgocalls
       description: Total number of cgo calls
@@ -9830,6 +9853,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: sys.cpu.user.ns
       exported_name: sys_cpu_user_ns
       description: Total user cpu time consumed by the CRDB process
@@ -9838,6 +9862,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: sys.fd.open
       exported_name: sys_fd_open
       description: Process open file descriptors
@@ -9870,6 +9895,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: sys.gc.pause.ns
       exported_name: sys_gc_pause_ns
       description: Total GC pause
@@ -9878,6 +9904,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: sys.gc.pause.percent
       exported_name: sys_gc_pause_percent
       description: Current GC pause percentage
@@ -9886,6 +9913,7 @@ layers:
       unit: PERCENT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: sys.gc.stop.ns
       exported_name: sys_gc_stop_ns
       description: Estimated GC stop-the-world stopping latencies
@@ -9902,6 +9930,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: sys.go.heap.allocbytes
       exported_name: sys_go_heap_allocbytes
       description: Cumulative bytes allocated for heap objects.
@@ -9910,6 +9939,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: sys.go.heap.heapfragmentbytes
       exported_name: sys_go_heap_heapfragmentbytes
       description: Total heap fragmentation bytes, derived from bytes in in-use spans minus bytes allocated
@@ -9918,6 +9948,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: sys.go.heap.heapreleasedbytes
       exported_name: sys_go_heap_heapreleasedbytes
       description: Total bytes returned to the OS from heap.
@@ -9974,6 +10005,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: sys.goroutines
       exported_name: sys_goroutines
       description: Current number of goroutines
@@ -9982,6 +10014,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: sys.host.disk.io.time
       exported_name: sys_host_disk_io_time
       description: Time spent reading from or writing to all disks since this process started (as reported by the OS)
@@ -10070,6 +10103,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
 - name: STORAGE
   categories:
   - name: OVERLOAD
@@ -10083,7 +10117,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric shows if CPU utilization-based admission control feature is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
-      essential: true
+      visibility: ESSENTIAL
     - name: admission.wait_durations.kv-stores
       exported_name: admission_wait_durations_kv_stores
       description: Wait time durations for requests that waited
@@ -10093,7 +10127,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric shows if I/O utilization-based admission control feature is working effectively or potentially overaggressive. This is a latency histogram of how much delay was added to the workload due to throttling. If observing over 100ms waits for over 5 seconds while there was excess capacity available, then the admission control is overly aggressive.
-      essential: true
+      visibility: ESSENTIAL
   - name: REPLICATION
     metrics:
     - name: leases.transfers.success
@@ -10105,7 +10139,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: A high number of lease transfers is not a negative or positive signal, rather it is a reflection of the elastic cluster activities. For example, this metric is high during cluster topology changes. A high value is often the reason for NotLeaseHolderErrors which are normal and expected during rebalancing. Observing this metric may provide a confirmation of the cause of such errors.
-      essential: true
+      visibility: ESSENTIAL
     - name: liveness.heartbeatlatency
       exported_name: liveness_heartbeatlatency
       description: Node liveness heartbeat latency
@@ -10115,7 +10149,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: If this metric exceeds 1 second, it is a sign of cluster instability.
-      essential: true
+      visibility: ESSENTIAL
     - name: liveness.livenodes
       exported_name: liveness_livenodes
       description: Number of live nodes in the cluster (will be 0 if this node is not itself live)
@@ -10125,7 +10159,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This is a critical metric that tracks the live nodes in the cluster.
-      essential: true
+      visibility: ESSENTIAL
     - name: queue.replicate.replacedecommissioningreplica.error
       exported_name: queue_replicate_replacedecommissioningreplica_error
       description: Number of failed decommissioning replica replacements processed by the replicate queue
@@ -10135,7 +10169,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Refer to Decommission the node.
-      essential: true
+      visibility: ESSENTIAL
     - name: range.merges
       exported_name: range_merges
       description: Number of range merges
@@ -10145,7 +10179,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric indicates how fast a workload is scaling down. Merges are Cockroach's optimization for performance. This metric indicates that there have been deletes in the workload.
-      essential: true
+      visibility: ESSENTIAL
     - name: range.splits
       exported_name: range_splits
       description: Number of range splits
@@ -10155,7 +10189,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric indicates how fast a workload is scaling up. Spikes can indicate resource hotspots since the split heuristic is based on QPS. To understand whether hotspots are an issue and with which tables and indexes they are occurring, correlate this metric with other metrics such as CPU usage, such as sys.cpu.combined.percent-normalized, or use the Hot Ranges page.
-      essential: true
+      visibility: ESSENTIAL
     - name: ranges
       exported_name: ranges
       description: Number of ranges
@@ -10165,7 +10199,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric provides a measure of the scale of the data size.
-      essential: true
+      visibility: ESSENTIAL
     - name: ranges.unavailable
       exported_name: ranges_unavailable
       description: Number of ranges with fewer live replicas than needed for quorum
@@ -10175,7 +10209,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric is an indicator of replication issues. It shows whether the cluster is unhealthy and can impact workload. If an entire range is unavailable, then it will be unable to process queries.
-      essential: true
+      visibility: ESSENTIAL
     - name: ranges.underreplicated
       exported_name: ranges_underreplicated
       description: Number of ranges with fewer live replicas than the replication target
@@ -10185,7 +10219,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric is an indicator of replication issues. It shows whether the cluster has data that is not conforming to resilience goals. The next step is to determine the corresponding database object, such as the table or index, of these under-replicated ranges and whether the under-replication is temporarily expected. Use the statement SELECT table_name, index_name FROM [SHOW RANGES WITH INDEXES] WHERE range_id = {id of under-replicated range};
-      essential: true
+      visibility: ESSENTIAL
     - name: rebalancing.cpunanospersecond
       exported_name: rebalancing_cpunanospersecond
       description: Average CPU nanoseconds spent on processing replica operations in the last 30 minutes.
@@ -10195,7 +10229,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: A high value of this metric could indicate that one of the store's replicas is part of a hot range.
-      essential: true
+      visibility: ESSENTIAL
     - name: rebalancing.lease.transfers
       exported_name: rebalancing_lease_transfers
       description: Number of lease transfers motivated by store-level load imbalances
@@ -10205,7 +10239,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Used to identify when there has been more rebalancing activity triggered by imbalance between stores (of QPS or CPU). If this is high (when the count is rated), it indicates that more rebalancing activity is taking place due to load imbalance between stores.
-      essential: true
+      visibility: ESSENTIAL
     - name: rebalancing.queriespersecond
       exported_name: rebalancing_queriespersecond
       description: Number of kv-level requests received per second by the store, considering the last 30 minutes, as used in rebalancing decisions.
@@ -10215,7 +10249,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric shows hotspots along the queries per second (QPS) dimension. It provides insights into the ongoing rebalancing activities.
-      essential: true
+      visibility: ESSENTIAL
     - name: rebalancing.range.rebalances
       exported_name: rebalancing_range_rebalances
       description: Number of range rebalance operations motivated by store-level load imbalances
@@ -10225,7 +10259,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Used to identify when there has been more rebalancing activity triggered by imbalance between stores (of QPS or CPU). If this is high (when the count is rated), it indicates that more rebalancing activity is taking place due to load imbalance between stores.
-      essential: true
+      visibility: ESSENTIAL
     - name: rebalancing.replicas.cpunanospersecond
       exported_name: rebalancing_replicas_cpunanospersecond
       description: Histogram of average CPU nanoseconds spent on processing replica operations in the last 30 minutes.
@@ -10235,7 +10269,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: 'A high value of this metric could indicate that one of the store''s replicas is part of a hot range. See also the non-histogram variant: rebalancing.cpunanospersecond.'
-      essential: true
+      visibility: ESSENTIAL
     - name: rebalancing.replicas.queriespersecond
       exported_name: rebalancing_replicas_queriespersecond
       description: Histogram of average kv-level requests received per second by replicas on the store in the last 30 minutes.
@@ -10245,7 +10279,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: 'A high value of this metric could indicate that one of the store''s replicas is part of a hot range. See also: rebalancing_replicas_cpunanospersecond.'
-      essential: true
+      visibility: ESSENTIAL
     - name: replicas
       exported_name: replicas
       description: Number of replicas
@@ -10255,7 +10289,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric provides an essential characterization of the data distribution across cluster nodes.
-      essential: true
+      visibility: ESSENTIAL
     - name: replicas.leaseholders
       exported_name: replicas_leaseholders
       description: Number of lease holders
@@ -10265,7 +10299,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: This metric provides an essential characterization of the data processing points across cluster nodes.
-      essential: true
+      visibility: ESSENTIAL
   - name: SQL
     metrics:
     - name: txnwaitqueue.deadlocks_total
@@ -10277,7 +10311,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Alert on this metric if its value is greater than zero, especially if transaction throughput is lower than expected. Applications should be able to detect and recover from deadlock errors. However, transaction performance and throughput can be maximized if the application logic avoids deadlock conditions in the first place, for example, by keeping transactions as short as possible.
-      essential: true
+      visibility: ESSENTIAL
   - name: STORAGE
     metrics:
     - name: admission.io.overload
@@ -10289,7 +10323,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: If the value of this metric exceeds 1, then it indicates overload. You can also look at the metrics 'storage.l0-num-files', 'storage.l0-sublevels' or 'rocksdb.read-amplification' directly. A healthy LSM shape is defined as "read-amp < 20" and "L0-files < 1000", looking at cluster settings 'admission.l0_sub_level_count_overload_threshold' and 'admission.l0_file_count_overload_threshold' respectively.
-      essential: true
+      visibility: ESSENTIAL
     - name: capacity
       exported_name: capacity
       description: Total storage capacity
@@ -10299,7 +10333,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: 'This metric gives total storage capacity. Measurements should comply with the following rule: CockroachDB storage volumes should not be utilized more than 60% (40% free space).'
-      essential: true
+      visibility: ESSENTIAL
     - name: capacity.available
       exported_name: capacity_available
       description: Available storage capacity
@@ -10309,7 +10343,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: 'This metric gives available storage capacity. Measurements should comply with the following rule: CockroachDB storage volumes should not be utilized more than 60% (40% free space).'
-      essential: true
+      visibility: ESSENTIAL
     - name: capacity.used
       exported_name: capacity_used
       description: Used storage capacity
@@ -10319,7 +10353,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: 'This metric gives used storage capacity. Measurements should comply with the following rule: CockroachDB storage volumes should not be utilized more than 60% (40% free space).'
-      essential: true
+      visibility: ESSENTIAL
     - name: rocksdb.block.cache.hits
       exported_name: rocksdb_block_cache_hits
       description: Count of block cache hits
@@ -10329,7 +10363,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric gives hits to block cache which is reserved memory. It is allocated upon the start of a node process by the '--cache' flag and never shrinks. By observing block cache hits and misses, you can fine-tune memory allocations in the node process for the demands of the workload.
-      essential: true
+      visibility: ESSENTIAL
     - name: rocksdb.block.cache.misses
       exported_name: rocksdb_block_cache_misses
       description: Count of block cache misses
@@ -10339,7 +10373,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric gives misses to block cache which is reserved memory. It is allocated upon the start of a node process by the '--cache' flag and never shrinks. By observing block cache hits and misses, you can fine-tune memory allocations in the node process for the demands of the workload.
-      essential: true
+      visibility: ESSENTIAL
     - name: rocksdb.compactions
       exported_name: rocksdb_compactions
       description: Number of table compactions
@@ -10349,7 +10383,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reports the number of a node's LSM compactions. If the number of compactions remains elevated while the LSM health does not improve, compactions are not keeping up with the workload. If the condition persists for an extended period, the cluster will initially exhibit performance issues that will eventually escalate into stability issues.
-      essential: true
+      visibility: ESSENTIAL
     - name: storage.wal.failover.write_and_sync.latency
       exported_name: storage_wal_failover_write_and_sync_latency
       description: The observed latency for writing and syncing to the logical Write-Ahead Log.
@@ -10359,7 +10393,7 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: Only populated when WAL failover is configured. Without WAL failover, the relevant metric is storage.wal.fsync.latency.
-      essential: true
+      visibility: ESSENTIAL
     - name: storage.wal.fsync.latency
       exported_name: storage_wal_fsync_latency
       description: The fsync latency to the Write-Ahead Log device.
@@ -10369,7 +10403,16 @@ layers:
       aggregation: AVG
       derivative: NONE
       how_to_use: If this value is greater than 100ms, it is an indication of a disk stall. To mitigate the effects of disk stalls, consider deploying your cluster with WAL failover configured. When WAL failover is configured, the more relevant metric is storage.wal.failover_write_and_sync.latency, as this metric reflects the fsync latency of the primary and/or the secondary WAL device.
-      essential: true
+      visibility: ESSENTIAL
+    - name: storage.wal.secondary.file_op.latency
+      exported_name: storage_wal_secondary_file_op_latency
+      description: The latency of file operations on the secondary Write-Ahead Log device.
+      y_axis_label: File Op Latency
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Only populated when WAL failover is configured. This metric tracks file operation latency specifically on the secondary WAL device.
     - name: storage.write-stalls
       exported_name: storage_write_stalls
       description: Number of instances of intentional write stalls to backpressure incoming writes
@@ -10379,7 +10422,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reports actual disk stall events. Ideally, investigate all reports of disk stalls. As a pratical guideline, one stall per minute is not likely to have a material impact on workload beyond an occasional increase in response time. However one stall per second should be viewed as problematic and investigated actively. It is particularly problematic if the rate persists over an extended period of time, and worse, if it is increasing.
-      essential: true
+      visibility: ESSENTIAL
   - name: UNSET
     metrics:
     - name: abortspanbytes
@@ -10425,6 +10468,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: addsstable.proposals
       exported_name: addsstable_proposals
       description: Number of SSTable ingestions proposed (i.e. sent to Raft by lease holders)
@@ -10433,6 +10477,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: admission.admitted.elastic-cpu
       exported_name: admission_admitted_elastic_cpu
       description: Number of requests admitted
@@ -11584,6 +11629,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: exec.success
       exported_name: exec_success
       description: |-
@@ -11748,6 +11794,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: intentresolver.async.throttled
       exported_name: intentresolver_async_throttled
       description: Number of intent resolution attempts not run asynchronously due to throttling
@@ -12108,6 +12155,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: kv.concurrency.locks_shed_due_to_memory_limit
       exported_name: kv_concurrency_locks_shed_due_to_memory_limit
       description: The number of locks that were shed because the lock table ran into memory limits
@@ -12292,6 +12340,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: kv.rangefeed.closed_timestamp.slow_ranges
       exported_name: kv_rangefeed_closed_timestamp_slow_ranges
       description: Number of ranges that have a closed timestamp lagging by more than 5x target lag. Periodically re-calculated
@@ -12933,6 +12982,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: leases.error
       exported_name: leases_error
       description: Number of failed lease requests
@@ -12949,6 +12999,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: leases.leader
       exported_name: leases_leader
       description: Number of replica leaseholders using leader leases
@@ -12957,6 +13008,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: leases.liveness
       exported_name: leases_liveness
       description: Number of replica leaseholders for the liveness range(s)
@@ -12965,6 +13017,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: leases.preferences.less-preferred
       exported_name: leases_preferences_less_preferred
       description: Number of replica leaseholders which satisfy a lease preference which is not the most preferred
@@ -13005,6 +13058,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: leases.transfers.locks_written
       exported_name: leases_transfers_locks_written
       description: Number of locks written to storage during lease transfers
@@ -13021,6 +13075,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: livecount
       exported_name: livecount
       description: Count of live keys
@@ -13045,6 +13100,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: liveness.heartbeatsinflight
       exported_name: liveness_heartbeatsinflight
       description: Number of in-flight liveness heartbeats from this node
@@ -13293,6 +13349,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: queue.gc.process.failure
       exported_name: queue_gc_process_failure
       description: Number of replicas which failed processing in the MVCC GC queue
@@ -13301,6 +13358,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: queue.gc.process.success
       exported_name: queue_gc_process_success
       description: Number of replicas successfully processed by the MVCC GC queue
@@ -13325,6 +13383,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: queue.lease.process.failure
       exported_name: queue_lease_process_failure
       description: Number of replicas which failed processing in the replica lease queue
@@ -13365,6 +13424,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: queue.merge.process.failure
       exported_name: queue_merge_process_failure
       description: Number of replicas which failed processing in the merge queue
@@ -13373,6 +13433,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: queue.merge.process.success
       exported_name: queue_merge_process_success
       description: Number of replicas successfully processed by the merge queue
@@ -13381,6 +13442,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: queue.merge.processingnanos
       exported_name: queue_merge_processingnanos
       description: Nanoseconds spent processing replicas in the merge queue
@@ -13389,6 +13451,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: queue.merge.purgatory
       exported_name: queue_merge_purgatory
       description: Number of replicas in the merge queue's purgatory, waiting to become mergeable
@@ -13405,6 +13468,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: queue.raftlog.process.failure
       exported_name: queue_raftlog_process_failure
       description: Number of replicas which failed processing in the Raft log queue
@@ -13413,6 +13477,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: queue.raftlog.process.success
       exported_name: queue_raftlog_process_success
       description: Number of replicas successfully processed by the Raft log queue
@@ -13421,6 +13486,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: queue.raftlog.processingnanos
       exported_name: queue_raftlog_processingnanos
       description: Nanoseconds spent processing replicas in the Raft log queue
@@ -13429,6 +13495,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: queue.raftsnapshot.pending
       exported_name: queue_raftsnapshot_pending
       description: Number of pending replicas in the Raft repair queue
@@ -13469,6 +13536,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: queue.replicagc.process.failure
       exported_name: queue_replicagc_process_failure
       description: Number of replicas which failed processing in the replica GC queue
@@ -13477,6 +13545,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: queue.replicagc.process.success
       exported_name: queue_replicagc_process_success
       description: Number of replicas successfully processed by the replica GC queue
@@ -13485,6 +13554,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: queue.replicagc.processingnanos
       exported_name: queue_replicagc_processingnanos
       description: Nanoseconds spent processing replicas in the replica GC queue
@@ -13589,6 +13659,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: queue.replicate.priority_inversion.requeue
       exported_name: queue_replicate_priority_inversion_requeue
       description: Number of priority inversions in the replicate queue that resulted in requeuing of the replicas. A priority inversion occurs when the priority at processing time ends up being lower than at enqueue time. When the priority has changed from a high priority repair action to rebalance, the change is requeued to avoid unfairness.
@@ -13613,6 +13684,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: queue.replicate.process.success
       exported_name: queue_replicate_process_success
       description: Number of replicas successfully processed by the replicate queue
@@ -13621,6 +13693,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: queue.replicate.processingnanos
       exported_name: queue_replicate_processingnanos
       description: Nanoseconds spent processing replicas in the replicate queue
@@ -14426,6 +14499,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: raft.sent.bytes
       exported_name: raft_sent_bytes
       description: Number of bytes in Raft messages sent by this store. Note that this does not include raft snapshot sent.
@@ -14588,6 +14662,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: raftlog.size.max
       exported_name: raftlog_size_max
       description: Approximate size of the largest Raft log on the store.
@@ -14620,6 +14695,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: range.raftleaderremovals
       exported_name: range_raftleaderremovals
       description: Number of times the current Raft leader was removed from a range
@@ -14858,6 +14934,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: range.snapshots.send-queue-bytes
       exported_name: range_snapshots_send_queue_bytes
       description: Total size of all snapshots in the snapshot send queue
@@ -14938,6 +15015,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: ranges.decommissioning.nudger.enqueue
       exported_name: ranges_decommissioning_nudger_enqueue
       labeled_name: 'ranges.decommissioning.nudger.enqueue{status: enqueue}'
@@ -15160,6 +15238,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: requests.slow.lease
       exported_name: requests_slow_lease
       description: |-
@@ -15171,6 +15250,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: requests.slow.raft
       exported_name: requests_slow_raft
       description: |-
@@ -15184,6 +15264,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: rocksdb.block.cache.usage
       exported_name: rocksdb_block_cache_usage
       description: Bytes used by the block cache
@@ -15288,6 +15369,7 @@ layers:
       unit: CONST
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: rocksdb.table-readers-mem-estimate
       exported_name: rocksdb_table_readers_mem_estimate
       description: Memory used by index and filter blocks
@@ -16038,6 +16120,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: storage.disk-stalled
       exported_name: storage_disk_stalled
       description: Number of instances of disk operations taking longer than 20s
@@ -16046,6 +16129,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: storage.disk-unhealthy.duration
       exported_name: storage_disk_unhealthy_duration
       description: Total disk unhealthy duration in nanos
@@ -16070,6 +16154,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: storage.disk.read-max.bytespersecond
       exported_name: storage_disk_read_max_bytespersecond
       description: Maximum rate at which bytes were read from disk (as reported by the OS)
@@ -16078,6 +16163,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: storage.disk.read-max.iops
       exported_name: storage_disk_read_max_iops
       description: Maximum rate of read operations performed on the disk (as reported by the OS)
@@ -16094,6 +16180,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: storage.disk.read.count
       exported_name: storage_disk_read_count
       description: Disk read operations on the store's disk since this process started (as reported by the OS)
@@ -16102,6 +16189,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: storage.disk.read.time
       exported_name: storage_disk_read_time
       description: Time spent reading from the store's disk since this process started (as reported by the OS)
@@ -16126,6 +16214,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: storage.disk.write-max.iops
       exported_name: storage_disk_write_max_iops
       description: Maximum rate of write operations performed on the disk (as reported by the OS)
@@ -16142,6 +16231,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: storage.disk.write.count
       exported_name: storage_disk_write_count
       description: Disk write operations on the store's disk since this process started (as reported by the OS)
@@ -16150,6 +16240,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: storage.disk.write.time
       exported_name: storage_disk_write_time
       description: Time spent writing to the store's disks since this process started (as reported by the OS)
@@ -16672,6 +16763,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: storage.l0-bytes-flushed
       exported_name: storage_l0_bytes_flushed
       description: Number of bytes flushed (from memtables) into Level 0
@@ -16704,6 +16796,7 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      visibility: SUPPORT
     - name: storage.l0-num-files
       exported_name: storage_l0_num_files
       description: Number of SSTables in Level 0
@@ -17113,6 +17206,7 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: Only populated when WAL failover is configured. A high switch count indicates that many disk stalls were encountered.
+      visibility: SUPPORT
     - name: storage.write-amplification
       exported_name: storage_write_amplification
       description: |-
@@ -17132,6 +17226,7 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: storeliveness.callbacks.processing_duration
       exported_name: storeliveness_callbacks_processing_duration
       description: Duration of support withdrawal callback processing
@@ -17148,6 +17243,7 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      visibility: SUPPORT
     - name: storeliveness.heartbeat.successes
       exported_name: storeliveness_heartbeat_successes
       description: Number of Store Liveness heartbeats sent out by the Store Liveness Support Manager

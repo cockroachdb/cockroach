@@ -40,6 +40,7 @@ import {
   transactionsServiceLatencyBarChart,
   transactionsContentionBarChart,
   transactionsCPUBarChart,
+  transactionsAdmissionWaitTimeBarChart,
   transactionsMaxMemUsageBarChart,
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
@@ -128,6 +129,10 @@ export function makeTransactionsColumns(
     sampledExecStatsBarChartOptions,
   );
   const cpuBar = transactionsCPUBarChart(
+    transactions,
+    sampledExecStatsBarChartOptions,
+  );
+  const admissionWaitTimeBar = transactionsAdmissionWaitTimeBarChart(
     transactions,
     sampledExecStatsBarChartOptions,
   );
@@ -238,6 +243,16 @@ export function makeTransactionsColumns(
       className: cx("statements-table__col-cpu"),
       sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.exec_stats.cpu_sql_nanos?.mean)),
+    },
+    {
+      name: "admissionWaitTime",
+      title: statisticsTableTitles.admissionWaitTime(statType),
+      cell: admissionWaitTimeBar,
+      className: cx("statements-table__col-admission-wait-time"),
+      sort: (item: TransactionInfo) =>
+        FixLong(
+          Number(item.stats_data.stats.exec_stats.admission_wait_time?.mean),
+        ),
     },
     {
       name: "maxMemUsage",

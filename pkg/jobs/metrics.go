@@ -104,7 +104,7 @@ func makeMetaCurrentlyRunning(jt jobspb.Type) metric.Metadata {
 
 	switch jt {
 	case jobspb.TypeCreateStats, jobspb.TypeAutoCreateStats, jobspb.TypeAutoCreatePartialStats:
-		m.Essential = true
+		m.Visibility = metric.Metadata_ESSENTIAL
 		m.Category = metric.Metadata_SQL
 		var detail string
 		if jt == jobspb.TypeCreateStats {
@@ -116,11 +116,11 @@ func makeMetaCurrentlyRunning(jt jobspb.Type) metric.Metadata {
 		}
 		m.HowToUse = fmt.Sprintf(`This metric tracks the number of active %s statistics jobs that could also be consuming resources. Ensure that foreground SQL traffic is not impacted by correlating this metric with SQL latency and query volume metrics.`, detail)
 	case jobspb.TypeBackup:
-		m.Essential = true
+		m.Visibility = metric.Metadata_ESSENTIAL
 		m.Category = metric.Metadata_SQL
 		m.HowToUse = `See Description.`
 	case jobspb.TypeRowLevelTTL:
-		m.Essential = true
+		m.Visibility = metric.Metadata_ESSENTIAL
 		m.Category = metric.Metadata_TTL
 		m.HowToUse = `Monitor this metric to ensure there are not too many Row Level TTL jobs running at the same time. Generally, this metric should be in the low single digits.`
 	}
@@ -162,7 +162,7 @@ func makeMetaCurrentlyPaused(jt jobspb.Type) metric.Metadata {
 	}
 	switch jt {
 	case jobspb.TypeAutoCreateStats, jobspb.TypeAutoCreatePartialStats:
-		m.Essential = true
+		m.Visibility = metric.Metadata_ESSENTIAL
 		m.Category = metric.Metadata_SQL
 		var partialDetail string
 		if jt == jobspb.TypeAutoCreatePartialStats {
@@ -170,15 +170,15 @@ func makeMetaCurrentlyPaused(jt jobspb.Type) metric.Metadata {
 		}
 		m.HowToUse = fmt.Sprintf(`This metric is a high-level indicator that automatically generated %sstatistics jobs are paused which can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.`, partialDetail)
 	case jobspb.TypeBackup:
-		m.Essential = true
+		m.Visibility = metric.Metadata_ESSENTIAL
 		m.Category = metric.Metadata_SQL
 		m.HowToUse = `Monitor and alert on this metric to safeguard against an inadvertent operational error of leaving a backup job in a paused state for an extended period of time. In functional areas, a paused job can hold resources or have concurrency impact or some other negative consequence. Paused backup may break the recovery point objective (RPO).`
 	case jobspb.TypeChangefeed:
-		m.Essential = true
+		m.Visibility = metric.Metadata_ESSENTIAL
 		m.Category = metric.Metadata_CHANGEFEEDS
 		m.HowToUse = `Monitor and alert on this metric to safeguard against an inadvertent operational error of leaving a changefeed job in a paused state for an extended period of time. Changefeed jobs should not be paused for a long time because the protected timestamp prevents garbage collection.`
 	case jobspb.TypeRowLevelTTL:
-		m.Essential = true
+		m.Visibility = metric.Metadata_ESSENTIAL
 		m.Category = metric.Metadata_TTL
 		m.HowToUse = `Monitor this metric to ensure the Row Level TTL job does not remain paused inadvertently for an extended period.`
 	}
@@ -203,7 +203,7 @@ func makeMetaResumeCompeted(jt jobspb.Type) metric.Metadata {
 
 	switch jt {
 	case jobspb.TypeRowLevelTTL:
-		m.Essential = true
+		m.Visibility = metric.Metadata_ESSENTIAL
 		m.Category = metric.Metadata_TTL
 		m.HowToUse = `If Row Level TTL is enabled, this metric should be nonzero and correspond to the ttl_cron setting that was chosen. If this metric is zero, it means the job is not running`
 	}
@@ -245,7 +245,7 @@ func makeMetaResumeFailed(jt jobspb.Type) metric.Metadata {
 
 	switch jt {
 	case jobspb.TypeAutoCreateStats, jobspb.TypeAutoCreatePartialStats:
-		m.Essential = true
+		m.Visibility = metric.Metadata_ESSENTIAL
 		m.Category = metric.Metadata_SQL
 		var partialDetail string
 		if jt == jobspb.TypeAutoCreatePartialStats {
@@ -253,7 +253,7 @@ func makeMetaResumeFailed(jt jobspb.Type) metric.Metadata {
 		}
 		m.HowToUse = fmt.Sprintf(`This metric is a high-level indicator that automatically generated %stable statistics is failing. Failed statistic creation can lead to the query optimizer running with stale statistics. Stale statistics can cause suboptimal query plans to be selected leading to poor query performance.`, partialDetail)
 	case jobspb.TypeRowLevelTTL:
-		m.Essential = true
+		m.Visibility = metric.Metadata_ESSENTIAL
 		m.Category = metric.Metadata_TTL
 		m.HowToUse = `This metric should remain at zero. Repeated errors means the Row Level TTL job is not deleting data.`
 	}
@@ -327,7 +327,7 @@ func makeMetaProtectedAge(jt jobspb.Type) metric.Metadata {
 
 	switch jt {
 	case jobspb.TypeChangefeed:
-		m.Essential = true
+		m.Visibility = metric.Metadata_ESSENTIAL
 		m.Category = metric.Metadata_CHANGEFEEDS
 		m.HowToUse = `Changefeeds use protected timestamps to protect the data from being garbage collected. Ensure the protected timestamp age does not significantly exceed the GC TTL zone configuration. Alert on this metric if the protected timestamp age is greater than 3 times the GC TTL.`
 	}

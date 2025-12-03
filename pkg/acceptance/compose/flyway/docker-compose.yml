@@ -5,7 +5,7 @@ services:
     image: us-east1-docker.pkg.dev/crl-docker-sync/docker-io/library/ubuntu:xenial-20210804
     command: /cockroach/cockroach start-single-node --insecure --listen-addr cockroach
     environment:
-      - COCKROACH_ACCEPTANCE_ALLOW_UNSAFE=true
+      - COCKROACH_OVERRIDE_ALLOW_UNSAFE_INTERNALS=true
     volumes:
       - ${COCKROACH_BINARY:-../../../../cockroach-linux-2.6.32-gnu-amd64}:/cockroach/cockroach
   flyway:

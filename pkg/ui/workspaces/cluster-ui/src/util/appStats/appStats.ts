@@ -153,6 +153,12 @@ export function addExecStats(a: ExecStats, b: ExecStats): ExecStats {
       countA,
       countB,
     ),
+    admission_wait_time: addMaybeUnsetNumericStat(
+      a.admission_wait_time,
+      b.admission_wait_time,
+      countA,
+      countB,
+    ),
   };
 }
 

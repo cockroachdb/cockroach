@@ -838,6 +838,13 @@ export class StatementDetails extends React.Component<
                   )}
                 />
                 <SummaryCardItem
+                  label="Admission Wait Time"
+                  value={formatNumberForDisplay(
+                    stats?.exec_stats?.admission_wait_time?.mean,
+                    Duration,
+                  )}
+                />
+                <SummaryCardItem
                   label="Client Wait Time"
                   value={formatNumberForDisplay(stats?.idle_lat.mean, duration)}
                 />

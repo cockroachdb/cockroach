@@ -712,21 +712,41 @@ subtest end
 subtest distributed_merge_index_backfill_placeholder
 
 statement ok
-CREATE TABLE dist_merge_idx (a INT PRIMARY KEY, b INT)
+CREATE TABLE dist_merge_idx (a INT NOT NULL PRIMARY KEY, b INT NOT NULL, c INT NOT NULL UNIQUE)
 
 statement ok
-SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.enabled = true
+INSERT INTO dist_merge_idx VALUES (1,1,1), (2,2,2), (3,3,3)
 
+statement ok
+SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = enabled
+
+# TODO(158378): The end-to-end flow for create index using distributed
+# merge isn't implemented yet, so we get to the validation step and notice
+# we didn't ingest any rows. This is expected until the entire flow is
+# implemented.
 skipif config local-mixed-25.3 local-mixed-25.4
-statement error pq: .*index backfill distributed merge sink is not implemented yet.*
+statement error pgcode XX000 pq: .*validation of non-unique index dist_merge_idx_idx failed: expected 3 rows, found 0.*
 CREATE INDEX dist_merge_idx_idx ON dist_merge_idx (b)
 
 onlyif config local-mixed-25.3 local-mixed-25.4
 statement error pq: .*distributed merge requires cluster version 26.*
 CREATE INDEX dist_merge_idx_idx ON dist_merge_idx (b)
 
+# Try an operation that is implemented in the declarative schema changer.
+#
+# TODO(158378): Declarative schema change don't yet implement the full flow for
+# distributed merge. So, we end up with a similar situation as above where we
+# get to validation and notice no rows were ingested.
+skipif config local-mixed-25.3 local-mixed-25.4
+statement error pgcode 23505 pq: .*duplicate key value violates unique constraint.*
+ALTER TABLE dist_merge_idx ALTER PRIMARY KEY USING COLUMNS (b)
+
+onlyif config local-mixed-25.3 local-mixed-25.4
+statement error pq: .*distributed merge requires cluster version 26.*
+ALTER TABLE dist_merge_idx ALTER PRIMARY KEY USING COLUMNS (b)
+
 statement ok
-SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.enabled = false
+SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'disabled'
 
 statement ok
 DROP TABLE dist_merge_idx

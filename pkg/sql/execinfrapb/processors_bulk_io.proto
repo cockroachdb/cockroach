@@ -87,7 +87,11 @@ message BackfillerSpec {
 
   optional bool use_distributed_merge_sink = 17 [(gogoproto.nullable) = false];
 
-  // NEXTID: 18.
+  // distributed_merge_file_prefix is the ExternalStorage URI prefix to use when
+  // writing map outputs for the distributed merge pipeline.
+  optional string distributed_merge_file_prefix = 18 [(gogoproto.nullable) = false];
+
+  // NEXTID: 19.
 }
 
 // JobProgress identifies the job to report progress on. This reporting
@@ -178,6 +182,20 @@ message ReadImportDataSpec {
   optional int32 initial_splits = 18 [(gogoproto.nullable) = false];
 
   // NEXTID: 21.
+}
+
+message MergeCoordinatorSpec {
+  optional int64 task_count = 1 [(gogoproto.nullable) = false];
+  repeated bytes worker_sql_instance_ids = 2;
+  // NEXT ID: 3.
+}
+
+// MergeLoopback is scheduled on the same node as the MergeCoordinator.
+// MergeCoordinator is the final processor in the flow and MergeLoopback is the
+// first processor in the flow. Scheduling them on the same node allows the
+// MergeCoordinator to inject task rows into the process.
+message MergeLoopbackSpec {
+
 }
 
 message IngestStoppedSpec {
@@ -587,25 +605,36 @@ message CompactBackupsSpec {
 }
 
 message BulkMergeSpec {
-	// SST represents metadata about a single SST file to be merged.
-	message SST {
-		optional string uri = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "URI"];
-		// start_key is the first key in the SST.
-		optional bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
-		// end_key is the last key in the SST.
-		optional bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
-	}
+  // SST represents metadata about a single SST file to be merged.
+  message SST {
+    // uri is a fully qualifed URI to the SST file. It will look something like
+    // 'nodelocal://2/<job_id>/input/0.sst'
+    optional string uri = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "URI"];
+    // start_key is the first key in the SST.
+    optional bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+    // end_key is the last key in the SST.
+    optional bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  };
 
-	// ssts is the list of input SSTs to merge.
-	repeated SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
+  // ssts is the list of input SSTs to merge.
+  repeated SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
 
-	// spans are the key ranges that should be merged. Each merge processor
-	// will be assigned one or more spans to merge.
-	repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+  // spans are the merge tasks.  E.g.the merge task `n` is to merge all the input data that overlaps with
+  // [spans[n].Key, spans[n].EndKey)
+  repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
 
-	// output_uri is a URI prefix like 'nodelocal://1/<job_id>/merger'. The processor
-	// should use this as the base for all output files.
-	optional string output_uri = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "OutputURI"];
+  // output_storage is the external storage connection where the merged output should be stored.
+  optional cloud.cloudpb.ExternalStorage output_storage = 3 [(gogoproto.nullable) = false];
 
-	// NEXT ID: 4.
+  message Output {
+    // output_ssts is the list of output SSTs.
+    repeated SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
+  }
+  // NEXT ID: 4.
+}
+
+// IndexBackfillMapProgress is emitted by map-stage processors to describe newly
+// produced SST manifests.
+message IndexBackfillMapProgress {
+  repeated jobs.jobspb.IndexBackfillSSTManifest sst_manifests = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTManifests"];
 }

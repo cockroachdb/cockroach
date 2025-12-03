@@ -2496,11 +2496,12 @@ func (sc *SchemaChanger) updateJobForRollback(
 	u := sc.job.WithTxn(txn)
 	if err := u.SetDetails(
 		ctx, jobspb.SchemaChangeDetails{
-			DescID:          sc.descID,
-			TableMutationID: sc.mutationID,
-			ResumeSpanList:  spanList,
-			FormatVersion:   oldDetails.FormatVersion,
-			SessionData:     sc.sessionData,
+			DescID:               sc.descID,
+			TableMutationID:      sc.mutationID,
+			ResumeSpanList:       spanList,
+			FormatVersion:        oldDetails.FormatVersion,
+			SessionData:          sc.sessionData,
+			DistributedMergeMode: oldDetails.DistributedMergeMode,
 		},
 	); err != nil {
 		return err

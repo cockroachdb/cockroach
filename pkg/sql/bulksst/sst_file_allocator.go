@@ -53,10 +53,11 @@ func (f *fileAllocatorBase) addFile(
 	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64,
 ) {
 	f.fileInfo.SST = append(f.fileInfo.SST, &SSTFileInfo{
-		URI:      uri,
-		StartKey: span.Key,
-		EndKey:   span.EndKey,
-		FileSize: fileSize,
+		URI:       uri,
+		StartKey:  span.Key,
+		EndKey:    span.EndKey,
+		FileSize:  fileSize,
+		RowSample: rowSample,
 	})
 	f.fileInfo.TotalSize += fileSize
 	f.recordRowSample(rowSample)

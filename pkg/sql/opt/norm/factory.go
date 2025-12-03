@@ -340,20 +340,8 @@ func (f *Factory) CopyWithoutAssigningPlaceholders(e opt.Expr) opt.Expr {
 // assigned values. This can trigger additional normalization rules that can
 // substantially rewrite the tree. Once all placeholders are assigned, the
 // exploration phase can begin.
-func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate errors without adding lots of checks
-			// for `if err != nil` throughout the construction code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				panic(r)
-			}
-		}
-	}()
+func (f *Factory) AssignPlaceholders(from *memo.Memo) (retErr error) {
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 	// Copy the "from" memo to this memo, replacing any Placeholder operators as
 	// the copy proceeds.

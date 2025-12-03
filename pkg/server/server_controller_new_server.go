@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -83,6 +84,16 @@ func (s *topLevelServer) newTenantServer(
 
 	// Apply the TestTenantArgs, if any.
 	baseCfg.TestingKnobs = testArgs.Knobs
+
+	// If we're in a test environment (the parent server has testing knobs), apply unsafe override
+	// for dynamically started tenants to allow access to crdb_internal and system tables.
+	// This is needed because tests might start tenants via SQL (ALTER TENANT ... START SERVICE SHARED)
+	// without explicitly setting up test args.
+	if s.cfg.TestingKnobs != (base.TestingKnobs{}) && baseCfg.TestingKnobs == (base.TestingKnobs{}) {
+		// Only set unsafe override if no testing knobs were provided through testArgs.
+		// This ensures we don't override explicitly set test knobs.
+		serverutils.SetUnsafeOverride(&baseCfg.TestingKnobs)
+	}
 
 	tenantServer, err := newTenantServerInternal(ctx, baseCfg, sqlCfg, tenantStopper, tenantNameContainer, s.db.AdmissionPacerFactory)
 	if err != nil {

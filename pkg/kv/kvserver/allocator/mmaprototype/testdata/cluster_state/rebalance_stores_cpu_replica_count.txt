@@ -18,7 +18,7 @@ rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-thr
 [mmaid=2] attempting to shed replicas next
 [mmaid=2] excluding all stores on n3 due to overload/fd status
 [mmaid=2] considering replica-transfer r3 from s3: store load [cpu:1000, write-bandwidth:0, byte-size:0]
-[mmaid=2] sortTargetCandidateSetAndPick: candidates: s4(loadNormal), picked s4
+[mmaid=2] sortTargetCandidateSetAndPick: candidates: s4(SLS:loadNormal, overloadedDimLoadSummary:loadLow), overloadedDim:CPURate, picked s4
 [mmaid=2] can add load to n4s4: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))]
 [mmaid=2] result(success): rebalancing r3 from s3 to s4 [change: r3=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}] cids=1,2]] with resulting loads source: [cpu:900, write-bandwidth:0, byte-size:0] target: [cpu:210, write-bandwidth:0, byte-size:0]
 [mmaid=2] reached max range move count 1; done shedding

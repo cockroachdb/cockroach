@@ -20,16 +20,21 @@ func MakeStoreLoadMsg(
 	var load, capacity mmaprototype.LoadVector
 	load[mmaprototype.CPURate] = mmaprototype.LoadValue(desc.Capacity.CPUPerSecond)
 	if desc.NodeCapacity.NodeCPURateCapacity > 0 {
-		// CPU is a shared resource across all stores on a node, and furthermore
-		// there are consumers that we don't track on a per-replica (and thus
-		// per-store) level (anything in SQL, for example). So we generally
-		// expect the NodeCPURateCapacity to be higher than the sum of all
-		// StoresCPURate. We do not currently have a configured per-store
-		// capacity (there is no configuration setting that says "this store
-		// gets at most 4 vcpus", so we need to derive a sensible store-level
-		// capacity from the node-level capacity (roughly, vcpus*seconds).
+		// CPU is a shared resource across all stores on a node, and we choose to
+		// divide the CPU capacity evenly across stores on the node (any other
+		// choice would be arbitrary).
 		//
-		// We have
+		// Furthermore, there are CPU consumers that we don't track on a
+		// per-replica (and thus per-store) level. Examples include RPC work, Go
+		// GC, SQL work etc. Some of the distributed SQL work could be happening
+		// because of a local replica, so ideally we should improve our
+		// instrumentation to track it per replica. Due to these gaps, we expect
+		// the NodeCPURateCapacity to be higher than StoresCPURate. So simply
+		// using NodeCPURateCapacity/NumStores as the per-store capacity would
+		// lead to over-utilization.
+		//
+		// Our approach is to apply the CPU utilization to StoresCPURate to
+		// compute a capacity and divide that evenly across stores. Specifically,
 		//
 		//   cpuUtil = NodeCPURateUsage/NodeCPURateCapacity
 		//
@@ -48,14 +53,19 @@ func MakeStoreLoadMsg(
 		// CPU usage exactly when there is overload as measured by mean store
 		// CPU usage:
 		//
-		// mean = sum_i StoreCPURate_i / sum_i StoreCPURateCapacity_i
-		//      = 1/StoresCPURateCapacity * sum_i StoreCPURate_i
-		//      = StoresCPURate / StoresCPURateCapacity
-		//      = cpuUtil
+		// meanCPUUtil = sum_i StoreCPURate_i / sum_i StoreCPURateCapacity_i
+		//             = 1/StoresCPURateCapacity * sum_i StoreCPURate_i
+		//             = StoresCPURate / StoresCPURateCapacity
+		//             = cpuUtil
 		//
-		// and in particular, when the mean indicates overload, at least one
-		// store will be above the meaning, meaning it is overloaded as well
-		// and will induce load shedding.
+		// The above mathematical property is used to avoid having any explicit
+		// communication of node load to MMA. The
+		// NodeLoad.{ReportedCPU,CapacityCPU} is incrementally maintained as a sum
+		// of the load and capacity reported by each store (at different times).
+		//
+		// Additionally, when the meanCPUUtil indicates overload, at least one
+		// store will be above that mean, so it is overloaded as well and will
+		// induce load shedding.
 		//
 		// It's worth noting that this construction assumes that all load on the
 		// node is due to the stores. Take an extreme example in which there is
@@ -63,7 +73,7 @@ func MakeStoreLoadMsg(
 		// say, 16 vcpus). In this case, the node will be at 100%, and we will
 		// assign a capacity of 1 to the store, i.e. the store will also be at
 		// 100% utilization despite contributing only 1/16th of the node CPU
-		// utilization. The effect of the construction is that the stores will
+		// utilization. The effect of the construction is that the store will
 		// take on responsibility for shedding load to compensate for auxiliary
 		// consumption of CPU, which is generally sensible.
 		cpuUtil :=

@@ -840,7 +840,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 func waitForTruncationForTesting(t *testing.T, r *kvserver.Replica, compacted kvpb.RaftIndex) {
 	testutils.SucceedsSoon(t, func() error {
 		// Flush the engine to advance durability, which triggers truncation.
-		require.NoError(t, r.Store().TODOEngine().Flush())
+		require.NoError(t, r.Store().StateEngine().Flush())
 		if index := r.GetCompactedIndex(); index != compacted {
 			return errors.Errorf("expected compacted index == %d, got %d", compacted, index)
 		}
@@ -5248,8 +5248,8 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 // It may learn about a newer replica ID than the split without ever hearing
 // about the split replica. If it does not crash (3) it will know that the
 // split replica is too old and will not initialize it. If the node does
-// crash (4) it will forget it had learned about the higher replica ID and
-// will initialize the RHS as the split replica.
+// crash (4) it will not forget that it had learned about the higher replica ID
+// and will likewise not initialize the RHS as the split replica.
 //
 // Starting in 19.2 if a replica discovers from a raft message that it is an
 // old replica then it knows that it has been removed and re-added to the range.
@@ -5294,17 +5294,14 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 //     with a higher replica ID (but without a tombstone). This case is very
 //     similar to (1)
 //
-//     (4) s1 crashes still before processing the split, forgetting that it had
-//     known about r21/4. When it reboots r21/4 is totally partitioned and
-//     r20 becomes unpartitioned.
+//     (4) s1 crashes still before processing the split, and does not forget
+//     that it had known about r21/4. When it reboots r21/4 is totally
+//     partitioned and r20 becomes unpartitioned.
 //
-//   - r20 processes the split successfully and initialized r21/3.
+//   - r20 processes the split and does not initialize r21/3.
 //
-// In the 4th case we find that until we unpartition r21/4 (the RHS) and let it
-// learn about its removal with a ReplicaTooOldError that it will be initialized
-// with a CommitIndex at 10 as r21/3, the split's value. After r21/4 becomes
-// unpartitioned it will learn it is removed by either catching up on its
-// its log or receiving a ReplicaTooOldError which will lead to a tombstone.
+// In the 4th case when we unpartition r21/4 (the RHS), the replica will not be
+// resurrected because it has already been destroyed.
 func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -5675,9 +5672,9 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			tc.WaitForValues(t, keyB, []int64{6, 6, 6})
 		})
 
-		// This case is set up like the previous one except after the RHS learns about
-		// its higher replica ID the store crashes and forgets. The RHS replica gets
-		// initialized by the split.
+		// This case is set up like the previous one except after the RHS learns
+		// about its higher replica ID the store crashes. However, it doesn't forget
+		// this ID, so the RHS replica is still not initialized by the split.
 		t.Run("(4) initial replica RHS partition, with restart", func(t *testing.T) {
 			tc, db, keyA, keyB, _, lhsPartition := setup(t)
 			defer tc.Stopper().Stop(ctx)
@@ -5758,22 +5755,16 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			require.NoError(t, tc.RestartServer(0))
 
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
-			// In this case the store has forgotten that it knew the RHS of the split
-			// could not exist. We ensure that it has been initialized to the initial
-			// commit value, which is 10.
-			testutils.SucceedsSoon(t, func() error {
-				hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
-				if hs.Commit != uint64(10) {
-					return errors.Errorf("hard state not yet initialized: got %v, expected %v",
-						hs.Commit, uint64(10))
-				}
-				return nil
-			})
+			// The store has not forgotten that it knew the RHS of the split could not
+			// exist. Ensure that the RHS replica is not initialized.
+			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
+			require.Equal(t, uint64(0), hs.Commit)
+
 			log.KvExec.Infof(ctx, "deactivate RHS partition: %s", rhsPartition)
 			rhsPartition.deactivate()
 			log.KvExec.Infof(ctx, "adding voter: %v", target)
 			testutils.SucceedsSoon(t, func() error {
-				_, err := tc.AddVoters(keyB, tc.Target(0))
+				_, err := tc.AddVoters(keyB, target)
 				return err
 			})
 			tc.WaitForValues(t, keyB, []int64{curB, curB, curB})

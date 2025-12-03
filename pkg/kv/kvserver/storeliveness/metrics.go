@@ -149,6 +149,7 @@ var (
 			"Store Liveness Support Manager",
 		Measurement: "Heartbeats",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaMessageHandleSuccesses = metric.Metadata{
 		Name: "storeliveness.message_handle.successes",

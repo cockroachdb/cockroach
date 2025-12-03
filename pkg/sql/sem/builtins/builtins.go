@@ -9701,6 +9701,52 @@ WHERE object_id = table_descriptor_id
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				stmtFingerprint := string(tree.MustBeDString(args[0]))
 				donorSQL := string(tree.MustBeDString(args[1]))
+
+				// Validate that the donor statement matches the target statement
+				// without hints.
+				fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
+					&evalCtx.Settings.SV,
+				))
+				targetStmt, err := parserutils.ParseOne(stmtFingerprint)
+				if err != nil {
+					return nil, pgerror.Wrap(
+						err, pgcode.InvalidParameterValue, "could not parse statement fingerprint",
+					)
+				}
+				donorStmt, err := parserutils.ParseOne(donorSQL)
+				if err != nil {
+					return nil, pgerror.Wrap(
+						err, pgcode.InvalidParameterValue, "could not parse hint donor statement",
+					)
+				}
+				donor, err := tree.NewHintInjectionDonor(donorStmt.AST, fingerprintFlags)
+				if err != nil {
+					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error while creating donor")
+				}
+				if err := donor.Validate(targetStmt.AST, fingerprintFlags); err != nil {
+					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+				}
+
+				// Do a trial hint injection to validate that the target statement gets
+				// rewritten into the donor statement.
+				result, _, err := donor.InjectHints(targetStmt.AST)
+				if err != nil {
+					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+				}
+				// Either the target statement or the donor statement could be
+				// non-fingerprint or fingerprint, so for an apples-to-apples comparison
+				// we need to convert both to fingerprints.
+				resultFingerprint := tree.FormatStatementHideConstants(result, fingerprintFlags)
+				donorFingerprint := tree.FormatStatementHideConstants(donorStmt.AST, fingerprintFlags)
+				if resultFingerprint != donorFingerprint {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"could not validate that target statement is rewritten as donor statement (%s): %s",
+						donorFingerprint, resultFingerprint,
+					)
+				}
+
+				// Insert into statement_hints.
 				var hint hintpb.StatementHintUnion
 				hint.SetValue(&hintpb.InjectHints{DonorSQL: donorSQL})
 				hintID, err := evalCtx.Planner.InsertStatementHint(ctx, stmtFingerprint, hint)

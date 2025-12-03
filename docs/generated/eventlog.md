@@ -3342,6 +3342,7 @@ Fields in this struct should be updated in sync with apps_stats.proto.
 | `MaxDiskUsage` | MaxDiskUsage collects the maximum temporary disk usage that occurred. This is set in cases where a query had to spill to disk, e.g. when performing a large sort where not all of the tuples fit in memory. | no |
 | `CPUSQLNanos` | CPUSQLNanos collects the CPU time spent executing SQL operations in nanoseconds. Currently, it is only collected for statements without mutations that have a vectorized plan. | no |
 | `MVCCIteratorStats` | Internal storage iteration statistics. | yes |
+| `AdmissionWaitTime` | AdmissionWaitTime is the cumulative time spent in admission control queues. | no |
 
 
 

@@ -32,10 +32,12 @@ go_test(
     name = "backfiller_test",
     srcs = [
         "periodic_progress_flusher_test.go",
+        "progress_test.go",
         "tracker_test.go",
     ],
     embed = [":backfiller"],
     deps = [
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",

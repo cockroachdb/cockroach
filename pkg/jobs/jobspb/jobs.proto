@@ -788,6 +788,13 @@ message TypeSchemaChangeProgress {
 
 }
 
+// IndexBackfillDistributedMergeMode enumerates the per-job distributed merge
+// decision for index backfills.
+enum IndexBackfillDistributedMergeMode {
+  INDEX_BACKFILL_DISTRIBUTED_MERGE_MODE_DISABLED = 0 [(gogoproto.enumvalue_customname) = "Disabled"];
+  INDEX_BACKFILL_DISTRIBUTED_MERGE_MODE_ENABLED = 1 [(gogoproto.enumvalue_customname) = "Enabled"];
+}
+
 // NewSchemaChangeDetails is the job detail information for the new schema change job.
 message NewSchemaChangeDetails {
 
@@ -805,6 +812,11 @@ message NewSchemaChangeDetails {
     (gogoproto.customname) = "ProtectedTimestampRecord",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
+
+  // DistributedMergeMode captures the per-job distributed merge decision for
+  // index backfills managed by this job. This is ignored if the job doesn't
+  // perform an index backfill.
+  IndexBackfillDistributedMergeMode distributed_merge_mode = 8;
 
   reserved 1, 2, 3, 5;
 }
@@ -843,6 +855,19 @@ message BackfillProgress {
   // backfilled into the destination indexes. Note that this will never contain
   // tenant prefixes even if the data corresponds to a secondary tenant.
   repeated roachpb.Span completed_spans = 5 [(gogoproto.nullable) = false];
+
+  // SSTManifests contains metadata about SST files produced while backfilling
+  // via the distributed merge pipeline. Each entry corresponds to a flushed SST.
+  repeated IndexBackfillSSTManifest sst_manifests = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTManifests"];
+}
+
+// IndexBackfillSSTManifest describes an SST produced by the backfill map stage.
+message IndexBackfillSSTManifest {
+  string uri = 1 [(gogoproto.customname) = "URI"];
+  roachpb.Span span = 2;
+  uint64 file_size = 3;
+  bytes row_sample = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  util.hlc.Timestamp write_timestamp = 5;
 }
 
 // MergeProgress is used to track index merge progress in the declarative
@@ -1026,7 +1051,12 @@ message SchemaChangeDetails {
 
   sessiondatapb.SessionData session_data = 13;
 
-  // Next id 14.
+  // DistributedMergeMode captures the per-job distributed merge decision for
+  // index backfills managed by this job. This is ignored if the job doesn't
+  // perform an index backfill.
+  IndexBackfillDistributedMergeMode distributed_merge_mode = 14;
+
+  // Next id 15.
 }
 
 message SchemaChangeProgress {

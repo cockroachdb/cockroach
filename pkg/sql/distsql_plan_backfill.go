@@ -10,15 +10,11 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -83,26 +79,6 @@ var initialSplitsPerProcessor = settings.RegisterIntSetting(
 	3,
 	settings.NonNegativeInt,
 )
-
-var distributedMergeIndexBackfillEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"bulkio.index_backfill.distributed_merge.enabled",
-	"enable the distributed merge pipeline for index backfills",
-	false,
-)
-
-func maybeEnableDistributedMergeIndexBackfill(
-	ctx context.Context, st *cluster.Settings, spec *execinfrapb.BackfillerSpec,
-) error {
-	if !distributedMergeIndexBackfillEnabled.Get(&st.SV) {
-		return nil
-	}
-	if !st.Version.IsActive(ctx, clusterversion.V26_1) {
-		return pgerror.New(pgcode.FeatureNotSupported, "distributed merge requires cluster version 26.1")
-	}
-	spec.UseDistributedMergeSink = true
-	return nil
-}
 
 // createBackfiller generates a plan consisting of index/column backfiller
 // processors, one for each node that has spans that we are reading. The plan is

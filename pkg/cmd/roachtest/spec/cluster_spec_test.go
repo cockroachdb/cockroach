@@ -25,15 +25,22 @@ func TestClustersCompatible(t *testing.T) {
 	t.Run("spec has different GCE spec with cloud as GCE", func(t *testing.T) {
 		s1 := ClusterSpec{NodeCount: 5}
 		s2 := ClusterSpec{NodeCount: 5}
-		s1.GCE.VolumeType = "mock_volume1"
-		s2.GCE.VolumeType = "mock_volume2"
+		s1.VolumeType = "mock_volume1"
+		s2.VolumeType = "mock_volume2"
 		require.False(t, ClustersCompatible(s1, s2, GCE))
 	})
 	t.Run("spec has different GCE spec with cloud as AWS", func(t *testing.T) {
 		s1 := ClusterSpec{NodeCount: 5}
 		s2 := ClusterSpec{NodeCount: 5}
-		s1.GCE.VolumeType = "mock_volume1"
-		s2.GCE.VolumeType = "mock_volume2"
+		s1.VolumeType = "mock_volume1"
+		s2.VolumeType = "mock_volume2"
+		require.False(t, ClustersCompatible(s1, s2, AWS))
+	})
+	t.Run("spec has different spec with cloud as AWS", func(t *testing.T) {
+		s1 := ClusterSpec{NodeCount: 5}
+		s2 := ClusterSpec{NodeCount: 5}
+		s1.GCE.MinCPUPlatform = "mock_platform1"
+		s2.GCE.MinCPUPlatform = "mock_platform2"
 		require.True(t, ClustersCompatible(s1, s2, AWS))
 	})
 }

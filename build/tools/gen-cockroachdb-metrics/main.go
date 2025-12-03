@@ -59,7 +59,7 @@ type MetricInfo struct {
 	Aggregation  string `yaml:"aggregation"`
 	Derivative   string `yaml:"derivative"`
 	HowToUse     string `yaml:"how_to_use,omitempty"`
-	Essential    bool   `yaml:"essential,omitempty"`
+	Visibility   string `yaml:"visibility,omitempty"`
 }
 
 // Category represents a category of metrics

@@ -34,7 +34,7 @@ func registerIndexBackfill(r registry.Registry) {
 		spec.WorkloadRequiresDisk(),
 		spec.WorkloadNodeCPU(8),
 		spec.VolumeSize(500),
-		spec.GCEVolumeType("pd-ssd"),
+		spec.VolumeType("pd-ssd"),
 		spec.GCEMachineType("n2-standard-8"),
 		spec.GCEZones("us-east1-b"),
 	)

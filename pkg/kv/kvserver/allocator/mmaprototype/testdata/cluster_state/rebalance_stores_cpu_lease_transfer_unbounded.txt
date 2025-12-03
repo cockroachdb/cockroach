@@ -17,20 +17,20 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=10.0 max-lease-t
 [mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r4:[cpu:250, write-bandwidth:0, byte-size:0] r3:[cpu:250, write-bandwidth:0, byte-size:0] r2:[cpu:250, write-bandwidth:0, byte-size:0] r1:[cpu:250, write-bandwidth:0, byte-size:0]
 [mmaid=1] local store s1 is CPU overloaded (overloadUrgent >= overloadSlow), attempting lease transfers first
 [mmaid=1] considering lease-transfer r4 from s1: candidates are [1 2 3]
-[mmaid=1] sortTargetCandidateSetAndPick: candidates: s2(loadNormal) s3(loadNormal), picked s2
+[mmaid=1] sortTargetCandidateSetAndPick: candidates: s2(SLS:loadNormal, overloadedDimLoadSummary:loadLow) s3(SLS:loadNormal, overloadedDimLoadSummary:loadLow), overloadedDim:CPURate, picked s2
 [mmaid=1] can add load to n2s2: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))]
 [mmaid=1] result(success): shedding r4 lease from s1 to s2 [change:r4=[transfer_to=2 cids=1,2]] with resulting loads source:[cpu:770, write-bandwidth:0, byte-size:0] target:[cpu:353, write-bandwidth:0, byte-size:0] (means: [cpu:400, write-bandwidth:0, byte-size:0]) (frac_pending: (src:0.00,target:0.23) (src:2.53,target:0.00))
 [mmaid=1] considering lease-transfer r3 from s1: candidates are [1 2 3]
-[mmaid=1] sortTargetCandidateSetAndPick: candidates: s2(loadNormal) s3(loadNormal), picked s2
+[mmaid=1] sortTargetCandidateSetAndPick: candidates: s2(SLS:loadNormal, overloadedDimLoadSummary:loadLow) s3(SLS:loadNormal, overloadedDimLoadSummary:loadLow), overloadedDim:CPURate, picked s2
 [mmaid=1] cannot add load to n2s2: due to target_summary(overloadSlow)>=loadNoChange,targetSLS.frac_pending(2.53or0.00>=epsilon)
 [mmaid=1] [target_sls:(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow high_disk=false frac_pending=2.53,0.00(false)),src_sls:(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow high_disk=false frac_pending=0.00,0.23(false))]
 [mmaid=1] result(failed): cannot shed from s1 to s2 for r3: delta load [cpu:230, write-bandwidth:0, byte-size:0]
 [mmaid=1] considering lease-transfer r2 from s1: candidates are [1 2 3]
-[mmaid=1] sortTargetCandidateSetAndPick: candidates: s2(loadNormal) s3(loadNormal), picked s3
+[mmaid=1] sortTargetCandidateSetAndPick: candidates: s2(SLS:loadNormal, overloadedDimLoadSummary:loadLow) s3(SLS:loadNormal, overloadedDimLoadSummary:loadLow), overloadedDim:CPURate, picked s3
 [mmaid=1] can add load to n3s3: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow high_disk=false frac_pending=0.00,0.23(false))]
 [mmaid=1] result(success): shedding r2 lease from s1 to s3 [change:r2=[transfer_to=3 cids=3,4]] with resulting loads source:[cpu:540, write-bandwidth:0, byte-size:0] target:[cpu:353, write-bandwidth:0, byte-size:0] (means: [cpu:400, write-bandwidth:0, byte-size:0]) (frac_pending: (src:0.00,target:0.46) (src:2.53,target:0.00))
 [mmaid=1] considering lease-transfer r1 from s1: candidates are [1 2 3]
-[mmaid=1] sortTargetCandidateSetAndPick: candidates: s2(loadNormal) s3(loadNormal), picked s2
+[mmaid=1] sortTargetCandidateSetAndPick: candidates: s2(SLS:loadNormal, overloadedDimLoadSummary:loadLow) s3(SLS:loadNormal, overloadedDimLoadSummary:loadLow), overloadedDim:CPURate, picked s2
 [mmaid=1] cannot add load to n2s2: due to !overloadedDimPermitsChange,target_summary(overloadSlow)>=loadNoChange,targetSLS.frac_pending(2.53or0.00>=epsilon),target-store(overloadSlow)>src-store(loadNormal)
 [mmaid=1] [target_sls:(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow high_disk=false frac_pending=2.53,0.00(false)),src_sls:(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.46(false))]
 [mmaid=1] result(failed): cannot shed from s1 to s2 for r1: delta load [cpu:230, write-bandwidth:0, byte-size:0]

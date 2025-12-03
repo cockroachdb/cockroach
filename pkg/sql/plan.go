@@ -416,6 +416,7 @@ const (
 	planComponentTypeMainQuery
 	planComponentTypeSubquery
 	planComponentTypePostquery
+	planComponentTypeInner
 )
 
 func (t planComponentType) String() string {

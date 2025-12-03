@@ -112,6 +112,7 @@ understanding the health of the KV layer.
 `,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaExecSuccess = metric.Metadata{
 		Name: "exec.success",
@@ -1219,12 +1220,18 @@ func (n *Node) computeMetricsPeriodically(
 			} else {
 				storeToMetrics[store].FlushWriteThroughput = newMetrics.Flush.WriteThroughput
 			}
-			if err := newMetrics.LogWriter.FsyncLatency.Write(&storeToMetrics[store].WALFsyncLatency); err != nil {
+			if err := newMetrics.Metrics.WALMetrics.PrimaryFileOpLatency.Write(&storeToMetrics[store].WALFsyncLatency); err != nil {
 				return err
 			}
 			if newMetrics.WAL.Failover.FailoverWriteAndSyncLatency != nil {
 				if err := newMetrics.WAL.Failover.FailoverWriteAndSyncLatency.Write(
 					&storeToMetrics[store].WALFailoverWriteAndSyncLatency); err != nil {
+					return err
+				}
+			}
+			if newMetrics.Metrics.WALMetrics.SecondaryFileOpLatency != nil {
+				if err := newMetrics.Metrics.WALMetrics.SecondaryFileOpLatency.Write(
+					&storeToMetrics[store].WALSecondaryFileOpLatency); err != nil {
 					return err
 				}
 			}

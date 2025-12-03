@@ -25,10 +25,26 @@ import (
 //
 // NB: Inter-tenant fair sharing only works within a tier.
 //
-// TODO(josh): Move ths definition to admission.go. Export publicly.
+// TODO(josh): Move this definition to admission.go. Export publicly.
 type resourceTier uint8
 
-const numResourceTiers resourceTier = 2
+const (
+	// systemTenant is the tier associated with all system tenant work.
+	//
+	// Note that currently resourceTier is only used in CPU time token AC, which is
+	// only used in Serverless. So there is always both a system tenant and at least
+	// one app tenant, and customer SQL is run via one of the app tenants.
+	systemTenant resourceTier = iota
+	// appTenant is the tier associated with all app tenant work.
+	//
+	// Note that currently resourceTier is only used in CPU time token AC, which is
+	// only used in Serverless. So there is always both a system tenant and at least
+	// one app tenant, and customer SQL is run via one of the app tenants. All app
+	// tenant work, regardless of which app tenant is used, uses appTenant (that is, all
+	// Serverless customer SQL uses appTenant).
+	appTenant
+	numResourceTiers
+)
 
 // cpuTimeTokenChildGranter implements granter. It stores resourceTier and proxies
 // proxies to cpuTimeTokenGranter. See the declaration comment for cpuTimeTokenGranter
@@ -117,7 +133,8 @@ type cpuTimeTokenGranter struct {
 		// Since admission deducts from all buckets, these invariants are true, so long as token bucket
 		// replenishing respects it also. Token bucket replenishing is not yet implemented. See
 		// tryGrantLocked for a situation where invariant #1 is relied on.
-		buckets [numResourceTiers][numBurstQualifications]tokenBucket
+		buckets    [numResourceTiers][numBurstQualifications]tokenBucket
+		tokensUsed int64
 	}
 }
 
@@ -190,6 +207,7 @@ func (stg *cpuTimeTokenGranter) tookWithoutPermission(count int64) {
 }
 
 func (stg *cpuTimeTokenGranter) tookWithoutPermissionLocked(count int64) {
+	stg.mu.tokensUsed += count
 	for tier := range stg.mu.buckets {
 		for qual := range stg.mu.buckets[tier] {
 			stg.mu.buckets[tier][qual].tokens -= count
@@ -245,28 +263,41 @@ func (stg *cpuTimeTokenGranter) tryGrantLocked() bool {
 	return false
 }
 
-// refill adds delta tokens to the corresponding buckets, while respecting
-// the capacity info stored in bucketCapacity. That is, if a bucket is already
-// at capacity, no more tokens will be added. delta is always positive,
-// thus refill will always attempt to grant admission to waiting requests.
-func (stg *cpuTimeTokenGranter) refill(
-	delta [numResourceTiers][numBurstQualifications]int64,
-	bucketCapacity [numResourceTiers][numBurstQualifications]int64,
-) {
+// resetTokensUsedInInterval resets the tracked used tokens to zero. The previous
+// value is returned.
+func (stg *cpuTimeTokenGranter) resetTokensUsedInInterval() int64 {
+	stg.mu.Lock()
+	defer stg.mu.Unlock()
+	tokensUsed := stg.mu.tokensUsed
+	stg.mu.tokensUsed = 0
+	return tokensUsed
+}
+
+// refill adds toAdd tokens to the corresponding buckets, while respecting
+// the capacity info stored in bucketCapacities. That is, tokens that would
+// bring the bucket above capacity will be discarded instead. refill attempts
+// to grant admission to waiting requests in case where tokens are added to
+// some bucket.
+func (stg *cpuTimeTokenGranter) refill(toAdd tokenCounts, bucketCapacities capacities) {
 	stg.mu.Lock()
 	defer stg.mu.Unlock()
 
+	var shouldGrant bool
 	for wc := range stg.mu.buckets {
 		for kind := range stg.mu.buckets[wc] {
-			tokens := stg.mu.buckets[wc][kind].tokens + delta[wc][kind]
-			if tokens > bucketCapacity[wc][kind] {
-				tokens = bucketCapacity[wc][kind]
+			if toAdd[wc][kind] > 0 {
+				shouldGrant = true
 			}
-			stg.mu.buckets[wc][kind].tokens = tokens
+			newTokenCount := stg.mu.buckets[wc][kind].tokens + toAdd[wc][kind]
+			if newTokenCount > bucketCapacities[wc][kind] {
+				newTokenCount = bucketCapacities[wc][kind]
+			}
+			stg.mu.buckets[wc][kind].tokens = newTokenCount
 		}
 	}
 
-	// delta is always positive, thus refill should always attempt to grant
-	// admission to waiting requests.
-	stg.grantUntilNoWaitingRequestsLocked()
+	// Grant if tokens are added to any of the buckets.
+	if shouldGrant {
+		stg.grantUntilNoWaitingRequestsLocked()
+	}
 }

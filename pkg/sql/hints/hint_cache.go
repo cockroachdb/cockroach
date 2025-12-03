@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -406,8 +405,8 @@ func (c *StatementHintsCache) GetGeneration() int64 {
 // plans). It returns nil if the statement has no hints, or there was an error
 // retrieving them.
 func (c *StatementHintsCache) MaybeGetStatementHints(
-	ctx context.Context, statementFingerprint string,
-) (hints []hintpb.StatementHintUnion, ids []int64) {
+	ctx context.Context, statementFingerprint string, fingerprintFlags tree.FmtFlags,
+) (hints []Hint, ids []int64) {
 	hash := fnv.New64()
 	_, err := hash.Write([]byte(statementFingerprint))
 	if err != nil {
@@ -430,7 +429,7 @@ func (c *StatementHintsCache) MaybeGetStatementHints(
 	if !ok {
 		// The plan hints were evicted from the cache. Retrieve them from the
 		// database and add them to the cache.
-		return c.addCacheEntryLocked(ctx, statementHash, statementFingerprint)
+		return c.addCacheEntryLocked(ctx, statementHash, statementFingerprint, fingerprintFlags)
 	}
 	entry := e.(*cacheEntry)
 	c.maybeWaitForRefreshLocked(ctx, entry, statementHash)
@@ -464,8 +463,11 @@ func (c *StatementHintsCache) maybeWaitForRefreshLocked(
 // other queries to wait for the result via sync.Cond. Note that the lock is
 // released while reading from the db, and then reacquired.
 func (c *StatementHintsCache) addCacheEntryLocked(
-	ctx context.Context, statementHash int64, statementFingerprint string,
-) (hints []hintpb.StatementHintUnion, ids []int64) {
+	ctx context.Context,
+	statementHash int64,
+	statementFingerprint string,
+	fingerprintFlags tree.FmtFlags,
+) (hints []Hint, ids []int64) {
 	c.mu.AssertHeld()
 
 	// Add a cache entry that other queries can find and wait on until we have the
@@ -483,7 +485,7 @@ func (c *StatementHintsCache) addCacheEntryLocked(
 		defer c.mu.Lock()
 		log.VEventf(ctx, 1, "reading hints for query %s", statementFingerprint)
 		entry.ids, entry.fingerprints, entry.hints, err =
-			GetStatementHintsFromDB(ctx, c.db.Executor(), statementHash)
+			GetStatementHintsFromDB(ctx, c.db.Executor(), statementHash, fingerprintFlags)
 		log.VEventf(ctx, 1, "finished reading hints for query %s", statementFingerprint)
 	}()
 
@@ -517,16 +519,14 @@ type cacheEntry struct {
 	// be duplicate entries in the fingerprints slice.
 	// TODO(drewk): consider de-duplicating the fingerprint strings to reduce
 	// memory usage.
-	hints        []hintpb.StatementHintUnion
+	hints        []Hint
 	fingerprints []string
 	ids          []int64
 }
 
 // getMatchingHints returns the plan hints and row IDs for the given
 // fingerprint, or nil if they don't exist. The results are in order of row ID.
-func (entry *cacheEntry) getMatchingHints(
-	statementFingerprint string,
-) (hints []hintpb.StatementHintUnion, ids []int64) {
+func (entry *cacheEntry) getMatchingHints(statementFingerprint string) (hints []Hint, ids []int64) {
 	for i := range entry.hints {
 		if entry.fingerprints[i] == statementFingerprint {
 			hints = append(hints, entry.hints[i])

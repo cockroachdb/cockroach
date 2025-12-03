@@ -843,6 +843,7 @@ func (e *quorumRecoveryEnv) dumpRecoveryEvents(
 		if !ok {
 			t.Fatalf("store s%d doesn't exist, but event dump is requested for it", store)
 		}
+		// TODO(sep-raft-log): store.engine should be the log engine.
 		if _, err := RegisterOfflineRecoveryEvents(ctx, store.engine, logEvents); err != nil {
 			return "", err
 		}

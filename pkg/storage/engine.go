@@ -1337,6 +1337,7 @@ type MetricsForInterval struct {
 	WALFsyncLatency                prometheusgo.Metric
 	FlushWriteThroughput           pebble.ThroughputMetric
 	WALFailoverWriteAndSyncLatency prometheusgo.Metric
+	WALSecondaryFileOpLatency      prometheusgo.Metric
 }
 
 // NumSSTables returns the total number of SSTables in the LSM, aggregated

@@ -476,6 +476,14 @@ type Planner interface {
 	// the system.statement_hints table. It returns the hint ID of the newly
 	// created hint.
 	InsertStatementHint(ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion) (int64, error)
+
+	// UsingHintInjection returns whether we are planning with externally-injected
+	// hints.
+	UsingHintInjection() bool
+
+	// GetHintIDs returns the external statement hints we're using for this
+	// statement.
+	GetHintIDs() []int64
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

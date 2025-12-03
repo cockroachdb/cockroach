@@ -52,6 +52,7 @@ func TestTrace(t *testing.T) {
 		"local proposal",
 		"admissionWorkQueueWait",
 		"index recommendation",
+		"/cockroach.roachpb.KVBatch/Batch", // present with dRPC, absent with gRPC
 	}
 	// Depending on whether the data is local or not, we may not see these
 	// spans. Only applicable with distsql=on.

@@ -123,7 +123,7 @@ var (
 		Help:        "Number of open SQL connections",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric shows the number of connections as well as the distribution, or balancing, of connections across cluster nodes. An imbalance can lead to nodes becoming overloaded. Review Connection Pooling.`,
 	}
@@ -132,7 +132,7 @@ var (
 		Help:        "Number of SQL connections created",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `The rate of this metric shows how frequently new connections are being established. This can be useful in determining if a high rate of incoming new connections is causing additional load on the server due to a misconfigured application.`,
 	}
@@ -159,7 +159,7 @@ var (
 		Help:        "Latency to establish and authenticate a SQL connection",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "These metrics characterize the database connection latency which can affect the application performance, for example, by having slow startup times. Connection failures are not recorded in these metrics.",
 	}
@@ -168,7 +168,7 @@ var (
 		Help:        "Number of SQL connection failures",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "This metric is incremented whenever a connection attempt fails for any reason, including timeouts.",
 	}
@@ -202,42 +202,63 @@ var (
 		Help:        "Latency to establish and authenticate a SQL connection using JWT Token",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthCertConnLatency = metric.Metadata{
 		Name:        "auth.cert.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using certificate",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthPassConnLatency = metric.Metadata{
 		Name:        "auth.password.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using password",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthLDAPConnLatency = metric.Metadata{
 		Name:        "auth.ldap.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using LDAP",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthGSSConnLatency = metric.Metadata{
 		Name:        "auth.gss.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using GSS",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthScramConnLatency = metric.Metadata{
 		Name:        "auth.scram.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using SCRAM",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthLDAPConnLatencyInternal = metric.Metadata{
 		Name:        "auth.ldap.conn.latency.internal",
 		Help:        "Internal Auth Latency to establish and authenticate a SQL connection using LDAP(excludes external LDAP calls)",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 )
 

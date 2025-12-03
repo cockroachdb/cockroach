@@ -51,7 +51,7 @@ func handleSchemaChangeWorkloadError(err error) error {
 	// crash.
 	if err != nil {
 		flattenedErr := errors.FlattenDetails(err)
-		if strings.Contains(flattenedErr, "UNEXPECTED ERROR") || strings.Contains(flattenedErr, "UNEXPECTED COMMIT ERROR") {
+		if strings.Contains(flattenedErr, "workload run error: ***") || strings.Contains(flattenedErr, "UNEXPECTED ERROR") || strings.Contains(flattenedErr, "UNEXPECTED COMMIT ERROR") {
 			return registry.ErrorWithOwner(registry.OwnerSQLFoundations, errors.Wrapf(err, "schema change workload failed"))
 		}
 	}

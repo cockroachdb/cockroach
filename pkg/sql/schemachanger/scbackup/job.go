@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -29,6 +30,12 @@ import (
 func CreateDeclarativeSchemaChangeJobs(
 	ctx context.Context, registry *jobs.Registry, txn isql.Txn, allMut nstree.Catalog,
 ) ([]jobspb.JobID, error) {
+	mode, err := backfill.DetermineDistributedMergeMode(
+		ctx, registry.ClusterSettings(), backfill.DistributedMergeConsumerDeclarative,
+	)
+	if err != nil {
+		return nil, err
+	}
 	byJobID := make(map[catpb.JobID][]catalog.MutableDescriptor)
 	_ = allMut.ForEachDescriptor(func(d catalog.Descriptor) error {
 		if s := d.GetDeclarativeSchemaChangerState(); s != nil {
@@ -89,6 +96,7 @@ func CreateDeclarativeSchemaChangeJobs(
 			currentState.Authorization,
 			screl.AllTargetStateDescIDs(currentState.TargetState),
 			runningStatus,
+			mode,
 		))
 	}
 	jobIDs, err := registry.CreateJobsWithTxn(ctx, txn, records)

@@ -17,12 +17,12 @@ gen_ranges ranges=700
 
 # n7 is dead and remains dead forever. It will still have its initial (3000)
 # replicas.
-set_liveness node=7 liveness=dead
+set_status node=7 liveness=dead
 ----
 
 # n6 becomes decommissioning after 3 minutes and remains decommissioning
 # thereafter.
-set_liveness node=6 liveness=decommissioning delay=3m
+set_status node=6 membership=decommissioning delay=3m
 ----
 
 # The number of replicas on the dead and decommissioning stores should be 0,

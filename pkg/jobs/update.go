@@ -243,8 +243,12 @@ WHERE id = $1
 			return err
 		}
 		// If we are changing state, we should clear out the status, unless
-		// we are about to set it to something instead.
-		if progress == nil || progress.StatusMessage == "" {
+		// we are about to set it to something instead or if we are coming from a
+		// pause requested state, in which case we already cleared it out once when
+		// we entered the pause requested state and may have since set it to a pause
+		// reason which we now want to preserve.
+		noNewStatus := progress == nil || progress.StatusMessage == ""
+		if noNewStatus && ju.md.State != StatePauseRequested {
 			if err := j.StatusStorage().Clear(ctx, u.txn); err != nil {
 				return err
 			}
@@ -400,6 +404,11 @@ func (ju *JobUpdater) PauseRequestedWithFunc(
 	}
 	if fn != nil {
 		if err := fn(ctx, md, ju); err != nil {
+			return err
+		}
+	}
+	if reason != "" {
+		if err := StatusStorage(md.ID).Set(ctx, txn, fmt.Sprintf("pausing: %s", reason)); err != nil {
 			return err
 		}
 	}

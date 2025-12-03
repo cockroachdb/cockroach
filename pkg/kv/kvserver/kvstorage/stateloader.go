@@ -320,18 +320,20 @@ func (s StateLoader) SetForceFlushIndex(
 		hlc.Timestamp{}, ffIndex, storage.MVCCWriteOptions{Stats: ms})
 }
 
-// LoadRaftReplicaID loads the RaftReplicaID.
+// LoadRaftReplicaID loads the RaftReplicaID. Returns an empty RaftReplicaID if
+// the key is not found, which can only happen if the replica does not exist.
+// The caller must assert if they don't expect a missing replica.
 func (s StateLoader) LoadRaftReplicaID(
 	ctx context.Context, stateRO StateRO,
 ) (kvserverpb.RaftReplicaID, error) {
 	var replicaID kvserverpb.RaftReplicaID
-	if found, err := storage.MVCCGetProto(
+	if ok, err := storage.MVCCGetProto(
 		ctx, stateRO, s.RaftReplicaIDKey(), hlc.Timestamp{}, &replicaID,
 		storage.MVCCGetOptions{ReadCategory: fs.ReplicationReadCategory},
-	); err != nil {
+	); err != nil || !ok {
+		// NB: when err == nil && !ok, there is no RaftReplicaID. This can happen
+		// only if the replica does not exist.
 		return kvserverpb.RaftReplicaID{}, err
-	} else if !found {
-		return kvserverpb.RaftReplicaID{}, errors.AssertionFailedf("no replicaID persisted")
 	}
 	return replicaID, nil
 }

@@ -700,6 +700,7 @@ func (ts *testServer) setupTenantTestingKnobs(tenantKnobs *base.TestingKnobs) {
 		}
 		tenantKnobs.Server.(*TestingKnobs).StubTimeNow = ts.params.Knobs.Server.(*TestingKnobs).StubTimeNow
 	}
+	serverutils.SetUnsafeOverride(tenantKnobs)
 	if ts.params.Knobs.UpgradeManager != nil {
 		tenantKnobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps = ts.params.Knobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps
 	}
@@ -1394,6 +1395,10 @@ func (ts *testServer) StartSharedProcessTenant(
 		_, err := ie.ExecEx(ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride, stmt, qargs...)
 		return err
 	}
+
+	// Allow access to unsafe internals for the tenant server in test environments.
+	serverutils.SetUnsafeOverride(&args.Knobs)
+
 	// Save the args for use if the server needs to be created.
 	func() {
 		ts.topLevelServer.serverController.mu.Lock()
@@ -1777,6 +1782,9 @@ func (ts *testServer) StartTenant(
 		}
 		stopper.SetTracer(tr)
 	}
+
+	// Allow access to unsafe internals on this tenant.
+	serverutils.SetUnsafeOverride(&params.TestingKnobs)
 
 	baseCfg := makeTestBaseConfig(st, stopper.Tracer())
 	baseCfg.TestingKnobs = params.TestingKnobs

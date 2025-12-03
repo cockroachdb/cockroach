@@ -3023,7 +3023,7 @@ name                                                             setting        
 allow_create_trigger_function_with_argv_references               off                 NULL      NULL        NULL        string
 allow_ordinal_column_references                                  off                 NULL      NULL        NULL        string
 allow_role_memberships_to_change_during_transaction              off                 NULL      NULL        NULL        string
-allow_unsafe_internals                                           on                  NULL      NULL        NULL        string
+allow_unsafe_internals                                           off                 NULL      NULL        NULL        string
 alter_primary_region_super_region_override                       off                 NULL      NULL        NULL        string
 always_distribute_full_scans                                     off                 NULL      NULL        NULL        string
 application_name                                                 ·                   NULL      NULL        NULL        string
@@ -3272,7 +3272,7 @@ name                                                             setting        
 allow_create_trigger_function_with_argv_references               off                 NULL  user     NULL      off                 off
 allow_ordinal_column_references                                  off                 NULL  user     NULL      off                 off
 allow_role_memberships_to_change_during_transaction              off                 NULL  user     NULL      off                 off
-allow_unsafe_internals                                           on                  NULL  user     NULL      on                  on
+allow_unsafe_internals                                           off                 NULL  user     NULL      off                 off
 alter_primary_region_super_region_override                       off                 NULL  user     NULL      off                 off
 always_distribute_full_scans                                     off                 NULL  user     NULL      off                 off
 application_name                                                 ·                   NULL  user     NULL      ·                   ·

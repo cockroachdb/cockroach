@@ -9627,7 +9627,7 @@ CREATE TABLE crdb_internal.store_liveness_support_from (
 		if err != nil {
 			return err
 		}
-		return populateStoreLivenessSupportResponse(resp, addRow)
+		return populateStoreLivenessSupportFromResponse(resp, addRow)
 	},
 }
 
@@ -9635,12 +9635,13 @@ var crdbInternalStoreLivenessSupportForTable = virtualSchemaTable{
 	comment: `node-level view of store liveness support for other stores`,
 	schema: `
 CREATE TABLE crdb_internal.store_liveness_support_for (
-  node_id               INT NOT NULL,
-  store_id              INT NOT NULL,
-  support_for_node_id  INT NOT NULL,
-  support_for_store_id INT NOT NULL,
-  support_epoch         INT NOT NULL,
-  support_expiration    TIMESTAMP NOT NULL
+  node_id                        INT NOT NULL,
+  store_id                       INT NOT NULL,
+  support_for_node_id            INT NOT NULL,
+  support_for_store_id           INT NOT NULL,
+  support_epoch                  INT NOT NULL,
+  support_expiration             TIMESTAMP NOT NULL,
+  last_support_withdrawn_time    TIMESTAMP NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
@@ -9655,22 +9656,43 @@ CREATE TABLE crdb_internal.store_liveness_support_for (
 		if err != nil {
 			return err
 		}
-		return populateStoreLivenessSupportResponse(resp, addRow)
+		return populateStoreLivenessSupportForResponse(resp, addRow)
 	},
 }
 
-func populateStoreLivenessSupportResponse(
-	resp *slpb.InspectStoreLivenessResponse, addRow func(...tree.Datum) error,
+func populateStoreLivenessSupportFromResponse(
+	resp *slpb.InspectSupportFromResponse, addRow func(...tree.Datum) error,
 ) error {
-	for _, ssps := range resp.SupportStatesPerStore {
-		for _, ss := range ssps.SupportStates {
+	for _, sfsps := range resp.SupportFromStatesPerStore {
+		for _, sfs := range sfsps.SupportFromStates {
 			if err := addRow(
-				tree.NewDInt(tree.DInt(ssps.StoreID.NodeID)),
-				tree.NewDInt(tree.DInt(ssps.StoreID.StoreID)),
-				tree.NewDInt(tree.DInt(ss.Target.NodeID)),
-				tree.NewDInt(tree.DInt(ss.Target.StoreID)),
-				tree.NewDInt(tree.DInt(ss.Epoch)),
-				eval.TimestampToInexactDTimestamp(ss.Expiration),
+				tree.NewDInt(tree.DInt(sfsps.StoreID.NodeID)),
+				tree.NewDInt(tree.DInt(sfsps.StoreID.StoreID)),
+				tree.NewDInt(tree.DInt(sfs.Target.NodeID)),
+				tree.NewDInt(tree.DInt(sfs.Target.StoreID)),
+				tree.NewDInt(tree.DInt(sfs.Epoch)),
+				eval.TimestampToInexactDTimestamp(sfs.Expiration),
+			); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func populateStoreLivenessSupportForResponse(
+	resp *slpb.InspectSupportForResponse, addRow func(...tree.Datum) error,
+) error {
+	for _, sfsps := range resp.SupportForStatesPerStore {
+		for _, sfs := range sfsps.SupportForStates {
+			if err := addRow(
+				tree.NewDInt(tree.DInt(sfsps.StoreID.NodeID)),
+				tree.NewDInt(tree.DInt(sfsps.StoreID.StoreID)),
+				tree.NewDInt(tree.DInt(sfs.Target.NodeID)),
+				tree.NewDInt(tree.DInt(sfs.Target.StoreID)),
+				tree.NewDInt(tree.DInt(sfs.Epoch)),
+				eval.TimestampToInexactDTimestamp(sfs.Expiration),
+				eval.TimestampToInexactDTimestamp(sfs.LastSupportWithdrawnTime),
 			); err != nil {
 				return err
 			}

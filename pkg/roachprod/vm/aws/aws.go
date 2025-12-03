@@ -141,7 +141,7 @@ type ebsDisk struct {
 // ebsVolume represents a mounted volume: name + ebsDisk
 type ebsVolume struct {
 	DeviceName string  `json:"DeviceName"`
-	Disk       ebsDisk `json:"Ebs"`
+	Disk       ebsDisk `json:"Ebs,omitempty"`
 }
 
 const ebsDefaultVolumeSizeGB = 500
@@ -239,6 +239,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		SSDMachineType:   defaultSSDMachineType,
 		RemoteUserName:   "ubuntu",
 		DefaultEBSVolume: defaultEBSVolumeValue,
+		EBSVolumeCount:   1,
 		CreateRateLimit:  2,
 		IAMProfile:       "roachprod-testing",
 	}
@@ -258,6 +259,10 @@ type ProviderOpts struct {
 	DefaultEBSVolume ebsVolume
 	EBSVolumes       ebsVolumeList
 	UseMultipleDisks bool
+
+	// EBSVolumeCount is the number of additional EBS volumes to attach.
+	// Only used if local-ssd=false, and is superseded by EBSVolumes.
+	EBSVolumeCount int
 
 	// IAMProfile designates the name of the instance profile to use for created
 	// EC2 instances if non-empty.
@@ -520,6 +525,9 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		o.DefaultEBSVolume.Disk.IOPs, "Number of IOPs to provision for supported disk types (io1, io2, gp3)")
 	flags.IntVar(&o.DefaultEBSVolume.Disk.Throughput, ProviderName+"-ebs-throughput",
 		o.DefaultEBSVolume.Disk.Throughput, "Additional throughput to provision, in MiB/s")
+
+	flags.IntVar(&o.EBSVolumeCount, ProviderName+"-ebs-volume-count", 1,
+		"Number of EBS volumes to create, only used if local-ssd=false and superseded by --aws-ebs-volume")
 
 	flags.VarP(&o.EBSVolumes, ProviderName+"-ebs-volume", "",
 		`Additional EBS disk to attached, repeated for extra disks; specified as JSON: {"VolumeType":"io2","VolumeSize":213,"Iops":321}`)
@@ -1611,21 +1619,6 @@ func genDeviceMapping(ebsVolumes ebsVolumeList, args []string) ([]string, error)
 func assignEBSVolumes(opts *vm.CreateOpts, providerOpts *ProviderOpts) ebsVolumeList {
 	// Make a local copy of providerOpts.EBSVolumes to prevent data races
 	ebsVolumes := providerOpts.EBSVolumes
-	// The local NVMe devices are automatically mapped.  Otherwise, we need to map an EBS data volume.
-	if !opts.SSDOpts.UseLocalSSD && !providerOpts.BootDiskOnly {
-		if len(ebsVolumes) == 0 && providerOpts.DefaultEBSVolume.Disk.VolumeType == "" {
-			providerOpts.DefaultEBSVolume.Disk.VolumeType = defaultEBSVolumeType
-			providerOpts.DefaultEBSVolume.Disk.DeleteOnTermination = true
-		}
-
-		if providerOpts.DefaultEBSVolume.Disk.VolumeType != "" {
-			// Add default volume to the list of volumes we'll setup.
-			v := ebsVolumes.newVolume()
-			v.Disk = providerOpts.DefaultEBSVolume.Disk
-			v.Disk.DeleteOnTermination = true
-			ebsVolumes = append(ebsVolumes, v)
-		}
-	}
 
 	osDiskVolume := &ebsVolume{
 		DeviceName: "/dev/sda1",
@@ -1635,7 +1628,29 @@ func assignEBSVolumes(opts *vm.CreateOpts, providerOpts *ProviderOpts) ebsVolume
 			DeleteOnTermination: true,
 		},
 	}
-	return append(ebsVolumes, osDiskVolume)
+
+	// If local SSD or boot disk only is requested, return that immediately.
+	// Local SSDs cannot be configured and will be automatically mapped by AWS
+	// depending on the instance type.
+	if opts.SSDOpts.UseLocalSSD || providerOpts.BootDiskOnly {
+		return ebsVolumeList{osDiskVolume}
+	}
+
+	// aws-ebs-volume supersedes other volume settings, if none are provided,
+	// we build a list based on count and provided settings.
+	if len(ebsVolumes) == 0 {
+		for range providerOpts.EBSVolumeCount {
+			v := ebsVolumes.newVolume()
+			v.Disk = providerOpts.DefaultEBSVolume.Disk
+			v.Disk.DeleteOnTermination = true
+			ebsVolumes = append(ebsVolumes, v)
+		}
+	}
+
+	// Add the OS disk to the list of volumes to be created.
+	ebsVolumes = append(ebsVolumes, osDiskVolume)
+
+	return ebsVolumes
 }
 
 // Active is part of the vm.Provider interface.

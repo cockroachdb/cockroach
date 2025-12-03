@@ -2445,6 +2445,10 @@ storage_wal_fsync_latency: storage.wal.fsync.latency
 storage_wal_fsync_latency_bucket: storage.wal.fsync.latency.bucket
 storage_wal_fsync_latency_count: storage.wal.fsync.latency.count
 storage_wal_fsync_latency_sum: storage.wal.fsync.latency.sum
+storage_wal_secondary_file_op_latency: storage.wal.secondary.file_op.latency
+storage_wal_secondary_file_op_latency_bucket: storage.wal.secondary.file_op.latency.bucket
+storage_wal_secondary_file_op_latency_count: storage.wal.secondary.file_op.latency.count
+storage_wal_secondary_file_op_latency_sum: storage.wal.secondary.file_op.latency.sum
 storage_write_amplification: storage.write_amplification
 storage_write_stall_nanos: storage.write_stall_nanos
 storage_write_stalls: storage.write.stalls

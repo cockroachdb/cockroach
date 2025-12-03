@@ -895,7 +895,8 @@ func (b *Builder) constructUnary(
 var SupportedCRDBInternalBuiltins = map[string]struct{}{
 	// LOCKED: Do not add to this list.
 	// Supported builtins should now be added to information_schema.
-	`crdb_internal.datums_to_bytes`: {},
+	`crdb_internal.datums_to_bytes`:           {},
+	`crdb_internal.increment_feature_counter`: {},
 }
 
 // isUnsafeBuiltin returns true if the given function definition
@@ -970,20 +971,8 @@ func NewScalar(
 
 // Build a memo structure from a TypedExpr: the root group represents a scalar
 // expression equivalent to expr.
-func (sb *ScalarBuilder) Build(expr tree.Expr) (_ opt.ScalarExpr, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate errors without adding lots of checks
-			// for `if err != nil` throughout the construction code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				panic(r)
-			}
-		}
-	}()
+func (sb *ScalarBuilder) Build(expr tree.Expr) (_ opt.ScalarExpr, retErr error) {
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 	typedExpr := sb.scope.resolveType(expr, types.AnyElement)
 	scalar := sb.buildScalar(typedExpr, &sb.scope, nil, nil, nil)

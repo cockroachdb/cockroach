@@ -1033,14 +1033,20 @@ func Reformat(ctx context.Context, l *logger.Logger, clusterName string, fs stri
 	}
 
 	var fsCmd string
-	switch fs {
+	switch vm.Filesystem(fs) {
 	case vm.Zfs:
-		if err := install.Install(ctx, l, c, []string{vm.Zfs}); err != nil {
+		if err := install.Install(ctx, l, c, []string{string(vm.Zfs)}); err != nil {
 			return err
 		}
 		fsCmd = `sudo zpool create -f data1 -m /mnt/data1 /dev/sdb`
 	case vm.Ext4:
 		fsCmd = `sudo mkfs.ext4 -F /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
+	case vm.Xfs:
+		fsCmd = `sudo mkfs.xfs -f /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
+	case vm.F2fs:
+		fsCmd = `sudo mkfs.f2fs -f /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
+	case vm.Btrfs:
+		fsCmd = `sudo mkfs.btrfs -f /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
 	default:
 		return fmt.Errorf("unknown filesystem %q", fs)
 	}
@@ -1745,13 +1751,21 @@ func Create(
 	}
 
 	for _, o := range opts {
-		if o.CreateOpts.SSDOpts.FileSystem == vm.Zfs {
+		// Validate Filesystem option + check compatibility with providers.
+
+		fs, err := vm.ParseFileSystemOption(o.CreateOpts.SSDOpts.FileSystem)
+		if err != nil {
+			return err
+		}
+
+		if fs == vm.F2fs {
 			for _, provider := range o.CreateOpts.VMProviders {
-				// TODO(DarrylWong): support zfs on other providers, see: #123775.
-				// Once done, revisit all tests that set zfs to see if they can run on non GCE.
-				if !(provider == gce.ProviderName || provider == aws.ProviderName || provider == ibm.ProviderName) {
+				// TODO(golgeek): f2fs requires kernel 6+, which isn't available
+				// on IBM Cloud for Ubuntu 22.04 as of now. Remove this check when
+				// support is added.
+				if provider == ibm.ProviderName {
 					return fmt.Errorf(
-						"creating a node with --filesystem=zfs is currently not supported in %q", provider,
+						"creating a node with --filesystem=f2fs is currently not supported in %q", provider,
 					)
 				}
 			}

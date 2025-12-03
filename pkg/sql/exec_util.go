@@ -110,6 +110,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -794,6 +795,15 @@ var CreateTableWithSchemaLocked = settings.RegisterBoolSetting(
 		"if new created tables will have schema_locked set",
 	true)
 
+var defaultAllowUnsafeInternals = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.override.allow_unsafe_internals.enabled",
+	"overrides the allow_unsafe_internals session variable default settings"+
+		" as a failsafe in case of emergencies. This setting should not be"+
+		" externally visible.",
+	envutil.EnvOrDefaultBool("COCKROACH_OVERRIDE_ALLOW_UNSAFE_INTERNALS", false),
+	settings.WithUnsafe)
+
 // createTableWithSchemaLockedDefault override for the schema_locked
 var createTableWithSchemaLockedDefault = true
 
@@ -819,6 +829,7 @@ var (
 		Help:        "Latency of SQL statement execution",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	MetaSQLExecLatencyConsistent = metric.Metadata{
 		Name:        "sql.exec.latency.consistent",
@@ -844,7 +855,7 @@ var (
 		Help:        "Latency of SQL request execution",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "These high-level metrics reflect workload performance. Monitor these metrics to understand latency over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. The Statements page has P90 Latency and P99 latency columns to enable correlation with this metric.",
 	}
@@ -909,7 +920,7 @@ var (
 		Help:        "Number of SQL transaction abort errors",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This high-level metric reflects workload performance. A persistently high number of SQL transaction abort errors may negatively impact the workload performance and needs to be investigated.`,
 	}
@@ -918,7 +929,7 @@ var (
 		Help:        "Number of statements resulting in a planning or runtime error",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric is a high-level indicator of workload and application degradation with query failures. Use the Insights page to find failed executions with their error code to troubleshoot or use application-level logs, if instrumented, to determine the cause of error.`,
 	}
@@ -939,7 +950,7 @@ var (
 		Help:        "Latency of SQL transactions",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `These high-level metrics provide a latency histogram of all executed SQL transactions. These metrics provide an overview of the current SQL workload.`,
 	}
@@ -948,7 +959,7 @@ var (
 		Help:        "Number of currently open user SQL transactions",
 		Measurement: "Open SQL Transactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric should roughly correspond to the number of cores * 4. If this metric is consistently larger, scale out the cluster.`,
 	}
@@ -957,7 +968,7 @@ var (
 		Help:        "Number of currently active user SQL statements",
 		Measurement: "Active Statements",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This high-level metric reflects workload volume.`,
 	}
@@ -966,7 +977,7 @@ var (
 		Help:        "Number of full table or index scans",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric is a high-level indicator of potentially suboptimal query plans in the workload that may require index tuning and maintenance. To identify the statements with a full table scan, use SHOW FULL TABLE SCAN or the SQL Activity Statements page with the corresponding metric time frame. The Statements page also includes explain plans and index recommendations. Not all full scans are necessarily bad especially over smaller tables.`,
 	}
@@ -1205,6 +1216,7 @@ var (
 		Help:        "Number of SQL operations started including queries, and transaction control statements",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	MetaTxnBeginExecuted = metric.Metadata{
 		Name:         "sql.txn.begin.count",
@@ -1213,7 +1225,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "begin"),
-		Essential:    true,
+		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This metric reflects workload volume by counting explicit transactions. Use this metric to determine whether explicit transactions can be refactored as implicit transactions (individual statements).",
 	}
@@ -1224,7 +1236,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "commit"),
-		Essential:    true,
+		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This metric shows the number of transactions that completed successfully. This metric can be used as a proxy to measure the number of successful explicit transactions.",
 	}
@@ -1235,7 +1247,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "rollback"),
-		Essential:    true,
+		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This metric shows the number of orderly transaction rollbacks. A persistently high number of rollbacks may negatively impact the workload performance and needs to be investigated.",
 	}
@@ -1270,7 +1282,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "select"),
-		Essential:    true,
+		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
@@ -1281,7 +1293,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "update"),
-		Essential:    true,
+		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
@@ -1292,7 +1304,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "insert"),
-		Essential:    true,
+		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
@@ -1303,7 +1315,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "delete"),
-		Essential:    true,
+		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
@@ -1368,7 +1380,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "ddl"),
-		Essential:    true,
+		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
@@ -1409,7 +1421,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_select"),
-		Essential:    true,
+		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
@@ -1420,7 +1432,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_update"),
-		Essential:    true,
+		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
@@ -1431,7 +1443,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_insert"),
-		Essential:    true,
+		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
@@ -1442,7 +1454,7 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine_delete"),
-		Essential:    true,
+		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
@@ -1607,7 +1619,7 @@ func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
 		meta.Name += ".internal"
 		meta.Help += " (internal queries)"
 		meta.Measurement = "SQL Internal Statements"
-		meta.Essential = false
+		meta.Visibility = metric.Metadata_INTERNAL
 		meta.HowToUse = ""
 		if meta.LabeledName != "" {
 			meta.StaticLabels = append(meta.StaticLabels, metric.MakeLabelPairs(metric.LabelQueryInternal, "true")...)

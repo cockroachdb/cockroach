@@ -2601,7 +2601,7 @@ func getTestParameters(t *testImpl, c *clusterImpl, createOpts *vm.CreateOpts) m
 	// These params can be probabilistically set, so we pass them here to
 	// show what their actual values are in the posted issue.
 	if createOpts != nil {
-		clusterParams["fs"] = createOpts.SSDOpts.FileSystem
+		clusterParams["fs"] = string(createOpts.SSDOpts.FileSystem)
 		clusterParams["localSSD"] = fmt.Sprintf("%v", createOpts.SSDOpts.UseLocalSSD)
 	}
 

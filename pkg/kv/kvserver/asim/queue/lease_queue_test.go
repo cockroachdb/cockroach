@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
 )
@@ -50,7 +49,7 @@ func TestLeaseQueue(t *testing.T) {
 		replicaCounts       map[state.StoreID]int
 		spanConfig          roachpb.SpanConfig
 		initialRF           int
-		nonLiveNodes        map[state.NodeID]livenesspb.NodeLivenessStatus
+		nodeStatusOverrides map[state.NodeID]state.NodeStatus // membership, draining
 		nodeLocalities      map[state.NodeID]roachpb.Locality
 		ticks               []int64
 		expectedLeaseCounts map[int64]map[int]int
@@ -111,8 +110,8 @@ func TestLeaseQueue(t *testing.T) {
 				1: singleLocality("region", "a"),
 				2: singleLocality("region", "b"),
 			},
-			nonLiveNodes: map[state.NodeID]livenesspb.NodeLivenessStatus{
-				2: livenesspb.NodeLivenessStatus_DRAINING},
+			nodeStatusOverrides: map[state.NodeID]state.NodeStatus{
+				2: {Draining: true}},
 			ticks: []int64{5, 10, 15},
 			expectedLeaseCounts: map[int64]map[int]int{
 				5:  {1: 10, 2: 0},
@@ -150,8 +149,8 @@ func TestLeaseQueue(t *testing.T) {
 			)
 			s.TickClock(start)
 
-			for nodeID, livenessStatus := range tc.nonLiveNodes {
-				s.SetNodeLiveness(nodeID, livenessStatus)
+			for nodeID, status := range tc.nodeStatusOverrides {
+				s.SetNodeStatus(nodeID, status)
 			}
 
 			for nodeID, locality := range tc.nodeLocalities {

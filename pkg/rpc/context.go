@@ -425,6 +425,9 @@ type ContextOptions struct {
 
 	// Locality stores the locality of this node.
 	Locality roachpb.Locality
+
+	// UseDRPC indicates if DRPC must be used for internode communication.
+	UseDRPC bool
 }
 
 // DefaultContextOptions are mostly used in tests.
@@ -458,6 +461,7 @@ func ServerContextOptionsFromBaseConfig(cfg *base.Config) ContextOptions {
 		AdvertiseAddrH:                 &cfg.AdvertiseAddrH,
 		SQLAdvertiseAddrH:              &cfg.SQLAdvertiseAddrH,
 		DisableTLSForHTTP:              cfg.DisableTLSForHTTP,
+		UseDRPC:                        cfg.UseDRPC,
 	}
 }
 
@@ -1451,6 +1455,17 @@ func (rpcCtx *Context) GRPCDialOptions(
 	return rpcCtx.grpcDialOptionsInternal(ctx, target, class, transport, onNetworkDial)
 }
 
+// DRPCDialOptions is same as GRPCDialOptions but for drpc connections.
+func (rpcCtx *Context) DRPCDialOptions(
+	ctx context.Context, target string, class rpcbase.ConnectionClass,
+) ([]drpcclient.DialOption, error) {
+	transport := tcpTransport
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
+		transport = loopbackTransport
+	}
+	return rpcCtx.drpcDialOptionsInternal(ctx, target, class, transport)
+}
+
 // grpcDialOptions produces dial options suitable for connecting to the given target and class.
 func (rpcCtx *Context) grpcDialOptionsInternal(
 	ctx context.Context,
@@ -2100,6 +2115,34 @@ func (rpcCtx *Context) grpcDialRaw(
 	dialOpts = append(dialOpts, additionalOpts...)
 
 	return grpc.DialContext(ctx, target, dialOpts...)
+}
+
+// drpcDialRaw is similar to grpcDialRaw but for drpc connections.
+//
+//lint:ignore U1000 used in the future commits.
+func (rpcCtx *Context) drpcDialRaw(
+	ctx context.Context,
+	target string,
+	class rpcbase.ConnectionClass,
+	additionalOpts ...drpcclient.DialOption,
+) (*drpcclient.ClientConn, error) {
+	transport := tcpTransport
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
+		transport = loopbackTransport
+	}
+	drpcDialOpts, err := rpcCtx.drpcDialOptionsInternal(ctx, target, class, transport)
+	if err != nil {
+		return nil, err
+	}
+
+	drpcDialOpts = append(drpcDialOpts, additionalOpts...)
+
+	drpcConn, err := drpcclient.DialContext(ctx, target, drpcDialOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return drpcclient.NewClientConnWithOptions(ctx, drpcConn, drpcDialOpts...)
 }
 
 // GRPCUnvalidatedDial uses GRPCDialNode and disables validation of the
