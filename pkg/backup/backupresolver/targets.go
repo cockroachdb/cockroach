@@ -684,15 +684,15 @@ func LoadAllDescs(
 // descriptors, making it O(targets) instead of O(all_descriptors).
 //
 // Returns:
-//   - []catalog.Descriptor: All resolved descriptors
-//   - []descpb.ID: completeDBs - database IDs where all objects are included
-//   - []catalog.DatabaseDescriptor: requestedDBs - explicitly requested DATABASE targets
-//   - map[tree.TablePattern]catalog.Descriptor: descsByTablePattern - TABLE patterns to descriptors
+//   - []catalog.Descriptor: result - qll resolved descriptors.
+//   - []descpb.ID: expandedDBs - database IDs where we used a wildcard expansion.
+//   - []catalog.DatabaseDescriptor: requestedDBs - explicitly requested DATABASE targets.
+//   - map[tree.TablePattern]catalog.Descriptor: descsByTablePattern - TABLE patterns to descriptors.
 func ResolveTargets(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.BackupTargetList,
 ) (
 	result []catalog.Descriptor,
-	completeDBs []descpb.ID,
+	expandedDBs []descpb.ID,
 	requestedDBs []catalog.DatabaseDescriptor,
 	descsByTablePattern map[tree.TablePattern]catalog.Descriptor,
 	retErr error,
@@ -805,7 +805,7 @@ func ResolveTargets(
 			addDesc(db)
 
 			// Track completeDBs and requestedDBs for DATABASE targets.
-			completeDBs = append(completeDBs, db.GetID())
+			expandedDBs = append(expandedDBs, db.GetID())
 			requestedDBs = append(requestedDBs, db)
 
 			// For database backup, get all objects in the database.
@@ -951,10 +951,10 @@ func ResolveTargets(
 				// Add the database.
 				addDesc(db)
 
-				// Track completeDBs for db.* wildcards (all objects in DB are included).
-				if isDBWildcard {
-					completeDBs = append(completeDBs, db.GetID())
-				}
+				// Track completeDBs for all wildcard patterns (db.*, db.schema.*, schema.*).
+				// This matches the behavior of DescriptorsMatchingTargets which always
+				// adds to ExpandedDB for any wildcard pattern.
+				expandedDBs = append(expandedDBs, db.GetID())
 
 				// Determine if we're scoped to a specific schema.
 				hasSchemaScope := p.ExplicitSchema && p.ExplicitCatalog
@@ -1068,7 +1068,7 @@ func ResolveTargets(
 		return cmp.Compare(a.GetID(), b.GetID())
 	})
 
-	return result, completeDBs, requestedDBs, descsByTablePattern, err
+	return result, expandedDBs, requestedDBs, descsByTablePattern, err
 }
 
 // simpleResolver implements the resolver interfaces needed for name resolution
