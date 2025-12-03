@@ -90,7 +90,8 @@ func TestPrepareSnapApply(t *testing.T) {
 		id: id,
 		sl: sl,
 		wr: snapWriter{
-			todoEng:  eng,
+			stateRO:  eng,
+			raftRO:   eng,
 			writeSST: writeSST,
 			cleared:  rditer.MakeReplicatedKeySpans(rangeDesc),
 		},

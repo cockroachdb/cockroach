@@ -21,7 +21,8 @@ import (
 // snapshot ingestion.
 // TODO(sep-raft-log): support separated engines.
 type snapWriter struct {
-	todoEng  storage.Engine
+	stateRO  kvstorage.StateRO
+	raftRO   kvstorage.RaftRO
 	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
 
 	// cleared contains the spans that this snapshot application clears before
@@ -133,14 +134,14 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	// the span [b, sn). We do this in
 	// clearResidualDataOnNarrowSnapshot, not here.
 
-	// TODO(sep-raft-log): need different readers for raft and state engine.
-	reader := storage.Reader(s.wr.todoEng)
 	for _, sub := range s.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			opts, err := kvstorage.SubsumeReplica(
-				ctx, kvstorage.TODOReaderWriter(reader, w), sub,
-			)
+			// TODO(sep-raft-log): override RaftWO when engines are separated.
+			opts, err := kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
+				State: kvstorage.State{RO: s.wr.stateRO, WO: w},
+				Raft:  kvstorage.Raft{RO: s.wr.raftRO, WO: w},
+			}, sub)
 			s.wr.cleared = append(s.wr.cleared, rditer.Select(sub.RangeID, opts)...)
 			return err
 		}); err != nil {
@@ -204,8 +205,6 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 		return nil // we aren't narrowing anything; no-op
 	}
 
-	// TODO(sep-raft-log): read from the state machine engine here.
-	reader := storage.Reader(s.wr.todoEng)
 	for _, span := range rditer.Select(0, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
 			RSpan:      roachpb.RSpan{Key: s.desc.EndKey, EndKey: endKey},
@@ -216,7 +215,7 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 	}) {
 		if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 			return storage.ClearRangeWithHeuristic(
-				ctx, reader, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys(),
+				ctx, s.wr.stateRO, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys(),
 			)
 		}); err != nil {
 			return err
