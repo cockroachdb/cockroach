@@ -900,6 +900,22 @@ func getDefaultConfigListNames(name string) []string {
 	return DefaultConfigSets[name].ConfigNames()
 }
 
+// ConfigExists returns whether the given name matches either a config or an
+// alias.
+func ConfigExists(name string) bool {
+	for _, cfg := range LogicTestConfigs {
+		if cfg.Name == name {
+			return true
+		}
+	}
+	for alias := range DefaultConfigSets {
+		if alias == name {
+			return true
+		}
+	}
+	return false
+}
+
 // ConfigCalculator is used to enumerate a map of configuration -> file.
 type ConfigCalculator struct {
 	ConfigOverrides, ConfigFilterOverrides []string
