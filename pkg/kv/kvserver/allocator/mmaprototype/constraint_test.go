@@ -510,15 +510,14 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 		})
 }
 
-// TestVoterAndAllRelationshipTable tests the buildVoterAndAllRelationships
-// function which builds relationships between voter constraints and all replica
-// constraints.
-func TestVoterAndAllRelationshipTable(t *testing.T) {
+// TestNormalizedVoterAllRelationships verifies both normalization and the
+// building of relationships between voter and all replica constraints.
+func TestNormalizedVoterAllRelationships(t *testing.T) {
 	interner := newStringInterner()
-	datadriven.RunTest(t, "testdata/voter_and_all_relationship_table",
+	datadriven.RunTest(t, "testdata/normalized_voter_all_rels",
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "voter-and-all-relationship":
+			case "normalized-voter-all-rels":
 				conf := parseSpanConfig(t, d)
 				var b strings.Builder
 				fmt.Fprintf(&b, "input:\n")
