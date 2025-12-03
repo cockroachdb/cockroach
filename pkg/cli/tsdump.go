@@ -61,6 +61,7 @@ var debugTimeSeriesDumpOpts = struct {
 	retryFailedRequests    bool
 	disableDeltaProcessing bool
 	ddMetricInterval       int64 // interval for datadoginit format only
+	includeChildMetrics    bool
 }{
 	format:                 tsDumpText,
 	from:                   timestampValue{},
@@ -203,13 +204,19 @@ will then convert it to the --format requested in the current invocation.
 			if err != nil {
 				return err
 			}
+			resolutions := []tspb.TimeSeriesResolution{
+				tspb.TimeSeriesResolution_RESOLUTION_30M,
+				tspb.TimeSeriesResolution_RESOLUTION_10S,
+			}
+			if debugTimeSeriesDumpOpts.includeChildMetrics {
+				resolutions = append(resolutions, tspb.TimeSeriesResolution_RESOLUTION_1M)
+			}
 			req := &tspb.DumpRequest{
-				StartNanos: time.Time(debugTimeSeriesDumpOpts.from).UnixNano(),
-				EndNanos:   time.Time(debugTimeSeriesDumpOpts.to).UnixNano(),
-				Names:      names,
-				Resolutions: []tspb.TimeSeriesResolution{
-					tspb.TimeSeriesResolution_RESOLUTION_30M, tspb.TimeSeriesResolution_RESOLUTION_10S,
-				},
+				StartNanos:          time.Time(debugTimeSeriesDumpOpts.from).UnixNano(),
+				EndNanos:            time.Time(debugTimeSeriesDumpOpts.to).UnixNano(),
+				Names:               names,
+				IncludeChildMetrics: debugTimeSeriesDumpOpts.includeChildMetrics,
+				Resolutions:         resolutions,
 			}
 
 			tsClient := conn.NewTimeSeriesClient()
