@@ -554,7 +554,9 @@ after:
    +region=c:2
    +region=a:1
 
-# A voter constraint is promoted to a replica constraint.
+# A voter constraint that is missing from the replica constraints is promoted
+# to a replica constraint during normalization, since voters are a subset of
+# all replicas.
 normalize num-replicas=5 num-voters=3
 constraint num-replicas=1 +region=a +zone=a1
 constraint num-replicas=1 +region=a +zone=a3
@@ -584,7 +586,6 @@ after:
    +region=a,+zone=a1:1
    +region=a,+zone=a2:1
    :1
-err=intersecting conjunctions in constraints and voter constraints
 
 # Unable to promote one of the voter constraints that is missing in the
 # replica constraints, since the replica constraints are already full. An
