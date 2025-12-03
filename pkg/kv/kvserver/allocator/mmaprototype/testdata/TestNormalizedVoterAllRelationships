@@ -128,7 +128,8 @@ table:
 	relationships:
 	[idx=0][voter=+region=us-east:3] [all=+region=us-west:5] rel=nonIntersecting
 
-# Test error case: multiple empty voter constraints.
+# Test error case: multiple empty voter constraints (via normalization adding
+# empty constraint).
 normalized-voter-all-rels num-replicas=5 num-voters=3
 voter-constraint num-replicas=1
 ----
@@ -159,7 +160,8 @@ input:
    +region=us-west:2
 normalization error: constraint replicas add up to more than configured replicas
 
-# Test error case: multiple empty constraints.
+# Test error case: multiple empty constraints (via normalization adding empty
+# constraint).
 normalized-voter-all-rels num-replicas=8 num-voters=5
 constraint num-replicas=2
 voter-constraint num-replicas=1 +region=us-west
@@ -183,6 +185,57 @@ table:
 	emptyVoterConstraintIndex: -1
 	relationships:
 	err: multiple empty constraints: {2 []} and {6 []}
+
+# Test error case: multiple explicit empty constraints.
+normalized-voter-all-rels num-replicas=5 num-voters=3
+constraint num-replicas=2
+constraint num-replicas=3
+voter-constraint num-replicas=1 +region=us-west
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   :2
+   :3
+ voter-constraints:
+   +region=us-west:1
+normalized:
+ num-replicas=5 num-voters=3
+ constraints:
+   :2
+   :3
+ voter-constraints:
+   +region=us-west:1
+   :2
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+	err: multiple empty constraints: {2 []} and {3 []}
+
+# Test error case: voter constraint replicas add up to more than configured voters.
+normalized-voter-all-rels num-replicas=5 num-voters=1
+voter-constraint num-replicas=2 +region=us-west
+----
+input:
+ num-replicas=5 num-voters=1
+ voter-constraints:
+   +region=us-west:2
+normalization error: constraint replicas add up to more than configured replicas
+
+# Test error case: invalid mix of constraints (NumReplicas=0 and NumReplicas>0 together).
+# A constraint without num-replicas= defaults to 0 (applies to all), mixed with one that
+# specifies num-replicas>0 is invalid.
+normalized-voter-all-rels num-replicas=5 num-voters=3
+constraint +region=us-west
+constraint num-replicas=2 +region=us-east
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west
+   +region=us-east:2
+normalization error: invalid mix of constraints
 
 # Test with multiple relationships.
 normalized-voter-all-rels num-replicas=8 num-voters=5
