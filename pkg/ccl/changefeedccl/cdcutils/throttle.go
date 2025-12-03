@@ -150,6 +150,7 @@ func MakeMetrics(histogramWindow time.Duration) Metrics {
 			Help:        fmt.Sprintf("Total time spent throttled for %s quota", n),
 			Measurement: "Nanoseconds",
 			Unit:        metric.Unit_NANOSECONDS,
+			Category:    metric.Metadata_CHANGEFEEDS,
 		}
 	}
 
