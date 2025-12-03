@@ -114,7 +114,8 @@ func exceptConditionFailed(err error) bool {
 }
 
 func exceptReplicaUnavailable(err error) bool {
-	return errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil))
+	return errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil)) ||
+		strings.Contains(err.Error(), "replica unavailable")
 }
 
 func exceptContextCanceled(err error) bool {
