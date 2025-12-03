@@ -474,15 +474,37 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 		allIndex       int
 		voterAndAllRel conjunctionRelationship
 	}
+	// emptyConstraintIndex corresponds to the index of the empty constraint in
+	// conf.constraints. We expect only one empty constraint.
+	// Example:
+	// constraints: []: 2, [+region=a]: 2 => emptyConstraintIndex = 0
+	//
+	// TODO(wenyihu6): we should not allow user to specify empty constraints;
+	// there should only be one created by us during normalizeConstraints.
+	// Instead, we can also combine empty constraints into a single one in
+	// normalizeConstraints.
 	emptyConstraintIndex := -1
+	// emptyVoterConstraintIndex corresponds to the index of the empty voter
+	// constraint in conf.voterConstraints. We expect only one empty voter
+	// constraint.
+	// Example:
+	// voterConstraints: [+region=a]: 2, []: 2 => emptyVoterConstraintIndex = 1
 	emptyVoterConstraintIndex := -1
 	var rels []relationshipVoterAndAll
 	for i := range conf.voterConstraints {
 		if len(conf.voterConstraints[i].constraints) == 0 {
+			if emptyVoterConstraintIndex != -1 {
+				return errors.Errorf("multiple empty voter constraints: %v and %v",
+					conf.voterConstraints[emptyVoterConstraintIndex], conf.voterConstraints[i])
+			}
 			emptyVoterConstraintIndex = i
 		}
 		for j := range conf.constraints {
 			if len(conf.constraints[j].constraints) == 0 {
+				if emptyConstraintIndex != -1 && emptyConstraintIndex != j {
+					return errors.Errorf("multiple empty constraints: %v and %v",
+						conf.constraints[emptyConstraintIndex], conf.constraints[j])
+				}
 				emptyConstraintIndex = j
 			}
 			rels = append(rels, relationshipVoterAndAll{
@@ -577,10 +599,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 			voterConstraints[rel.voterIndex].numReplicas
 		if neededVoterReplicas > 0 && remainingAll > 0 {
 			// We can satisfy some voter replicas.
-			toAdd := remainingAll
-			if toAdd > neededVoterReplicas {
-				toAdd = neededVoterReplicas
-			}
+			toAdd := min(remainingAll, neededVoterReplicas)
 			voterConstraints[rel.voterIndex].numReplicas += toAdd
 			allReplicaConstraints[rel.allIndex].remainingReplicas -= toAdd
 		}
@@ -602,20 +621,20 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	// has some remainingReplicas, we take them here to satisfy the empty voter
 	// constraint as much as possible. Only what is remaining in the empty voter
 	// constraint will then be available for subsequent narrowing.
-	if emptyVoterConstraintIndex > 0 && emptyConstraintIndex > 0 {
+	if emptyVoterConstraintIndex >= 0 && emptyConstraintIndex >= 0 {
 		neededReplicas := conf.voterConstraints[emptyVoterConstraintIndex].numReplicas
-		actualReplicas := voterConstraints[emptyVoterConstraintIndex].numReplicas
-		remaining := neededReplicas - actualReplicas
-		if remaining > 0 {
-			remainingSatisfiable := allReplicaConstraints[emptyConstraintIndex].remainingReplicas
-			if remainingSatisfiable > 0 {
-				count := remainingSatisfiable
-				if count > remaining {
-					count = remaining
-				}
-				voterConstraints[emptyVoterConstraintIndex].numReplicas += count
-				allReplicaConstraints[emptyConstraintIndex].remainingReplicas -= count
-			}
+		// While iterating over the previous relationships, we skipped over
+		// emptyVoterConstraintIndex, so its corresponding
+		// voterConstraints.numReplicas must be 0.
+		if voterConstraints[emptyVoterConstraintIndex].numReplicas != 0 {
+			panic(errors.AssertionFailedf("programming error: voterConstraints[%d].numReplicas should be 0, but is %d",
+				emptyVoterConstraintIndex, voterConstraints[emptyVoterConstraintIndex]))
+		}
+		remainingSatisfiable := allReplicaConstraints[emptyConstraintIndex].remainingReplicas
+		if neededReplicas > 0 && remainingSatisfiable > 0 {
+			count := min(remainingSatisfiable, neededReplicas)
+			voterConstraints[emptyVoterConstraintIndex].numReplicas += count
+			allReplicaConstraints[emptyConstraintIndex].remainingReplicas -= count
 		}
 	}
 
@@ -761,19 +780,17 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 				// rel.voterIndex must be emptyVoterConstraintIndex.
 				continue
 			}
-			if conf.constraints[rel.allIndex].numReplicas < conf.voterConstraints[rel.voterIndex].numReplicas {
-				toAddCount := conf.voterConstraints[rel.voterIndex].numReplicas -
-					conf.constraints[rel.allIndex].numReplicas
-				availableCount := conf.constraints[emptyConstraintIndex].numReplicas
-				if availableCount < toAddCount {
-					// TODO(wenyihu6): this should also create an error, since we will
-					// end up with two identical constraint conjunctions in replica
-					// constraints and voter constraints, with the former having a lower
-					// count than the latter.
-					toAddCount = availableCount
-				}
-				conf.constraints[emptyConstraintIndex].numReplicas -= toAddCount
-				conf.constraints[rel.allIndex].numReplicas += toAddCount
+			toAddCount := conf.voterConstraints[rel.voterIndex].numReplicas -
+				conf.constraints[rel.allIndex].numReplicas
+			availableCount := conf.constraints[emptyConstraintIndex].numReplicas
+			if toAddCount > 0 && availableCount > 0 {
+				// TODO(wenyihu6): this should also create an error, since we will
+				// end up with two identical constraint conjunctions in replica
+				// constraints and voter constraints, with the former having a lower
+				// count than the latter.
+				add := min(toAddCount, availableCount)
+				conf.constraints[emptyConstraintIndex].numReplicas -= add
+				conf.constraints[rel.allIndex].numReplicas += add
 			}
 		}
 		// For conjStrictSubset, if the subset relationship is with
@@ -790,14 +807,12 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 				continue
 			}
 			availableCount := conf.constraints[emptyConstraintIndex].numReplicas
-			if availableCount > 0 {
-				toAddCount := conf.voterConstraints[rel.voterIndex].numReplicas
-				if toAddCount > availableCount {
-					toAddCount = availableCount
-				}
-				conf.constraints[emptyConstraintIndex].numReplicas -= toAddCount
+			toAddCount := conf.voterConstraints[rel.voterIndex].numReplicas
+			if availableCount > 0 && toAddCount > 0 {
+				add := min(availableCount, toAddCount)
+				conf.constraints[emptyConstraintIndex].numReplicas -= add
 				conf.constraints = append(conf.constraints, internedConstraintsConjunction{
-					numReplicas: toAddCount,
+					numReplicas: add,
 					constraints: conf.voterConstraints[rel.voterIndex].constraints,
 				})
 			}
