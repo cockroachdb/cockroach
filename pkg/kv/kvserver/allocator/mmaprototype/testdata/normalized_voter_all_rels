@@ -1,6 +1,6 @@
 # This test file tests the buildVoterAndAllRelationships function.
 # Test basic case with no constraints.
-voter-and-all-relationship num-replicas=3 num-voters=3
+normalized-voter-all-rels num-replicas=3 num-voters=3
 ----
 input:
  num-replicas=3 num-voters=3
@@ -10,7 +10,7 @@ table:
 	relationships:
 
 # Test with intersecting voter and all constraints.
-voter-and-all-relationship num-replicas=3 num-voters=3
+normalized-voter-all-rels num-replicas=3 num-voters=3
 constraint +zone=us-west-a +region=us-west 
 voter-constraint +zone=us-west-b +region=us-west 
 ----
@@ -27,7 +27,7 @@ table:
 	[idx=0][voter=+zone=us-west-b,+region=us-west:3] [all=+zone=us-west-a,+region=us-west:3] rel=possiblyIntersecting
 
 # Test with equal voter and all constraints.
-voter-and-all-relationship num-replicas=3 num-voters=3
+normalized-voter-all-rels num-replicas=3 num-voters=3
 constraint +region=us-west
 voter-constraint +region=us-west
 ----
@@ -44,7 +44,7 @@ table:
 	[idx=0][voter=+region=us-west:3] [all=+region=us-west:3] rel=equalSet
 
 # Test with voter constraint being a strict subset of all constraint.
-voter-and-all-relationship num-replicas=5 num-voters=3
+normalized-voter-all-rels num-replicas=5 num-voters=3
 constraint +region=us-west
 voter-constraint +region=us-west +zone=us-west-a
 ----
@@ -61,7 +61,7 @@ table:
 	[idx=0][voter=+zone=us-west-a,+region=us-west:3] [all=+region=us-west:5] rel=strictSubset
 
 # Test with voter constraint being a strict superset of all constraint.
-voter-and-all-relationship num-replicas=5 num-voters=3
+normalized-voter-all-rels num-replicas=5 num-voters=3
 constraint +region=us-west +zone=us-west-a
 voter-constraint +region=us-west
 ----
@@ -78,7 +78,7 @@ table:
 	[idx=0][voter=+region=us-west:3] [all=+zone=us-west-a,+region=us-west:5] rel=strictSuperset
 
 # Test with non-intersecting constraints.
-voter-and-all-relationship num-replicas=5 num-voters=3
+normalized-voter-all-rels num-replicas=5 num-voters=3
 constraint +region=us-west 
 voter-constraint +region=us-east
 ----
@@ -95,7 +95,7 @@ table:
 	[idx=0][voter=+region=us-east:3] [all=+region=us-west:5] rel=nonIntersecting
 
 # Test error case: multiple empty voter constraints.
-voter-and-all-relationship num-replicas=5 num-voters=3
+normalized-voter-all-rels num-replicas=5 num-voters=3
 voter-constraint num-replicas=1
 ----
 input:
@@ -109,7 +109,7 @@ table:
 	err: invalid configurations with empty voter constraint
 
 # Test error case: constraint replicas add up to more than configured replicas.
-voter-and-all-relationship num-replicas=1 num-voters=1
+normalized-voter-all-rels num-replicas=1 num-voters=1
 constraint num-replicas=2 +region=us-west
 ----
 input:
@@ -119,7 +119,7 @@ input:
 normalization error: constraint replicas add up to more than configured replicas
 
 # Test error case: multiple empty constraints.
-voter-and-all-relationship num-replicas=8 num-voters=5
+normalized-voter-all-rels num-replicas=8 num-voters=5
 constraint num-replicas=2
 voter-constraint num-replicas=1 +region=us-west
 ----
@@ -136,7 +136,7 @@ table:
 	err: invalid configurations with empty constraint
 
 # Test with multiple relationships.
-voter-and-all-relationship num-replicas=8 num-voters=5
+normalized-voter-all-rels num-replicas=8 num-voters=5
 constraint num-replicas=2 +region=us-west
 constraint num-replicas=2 +region=us-east +zone=us-east-a
 voter-constraint num-replicas=2 +region=us-west
@@ -168,3 +168,4 @@ table:
 	[idx=9][voter=+region=us-west:2] [all=+zone=us-east-a,+region=us-east:2] rel=nonIntersecting
 	[idx=10][voter=+zone=us-west-a,+region=us-west:1] [all=+zone=us-east-a,+region=us-east:2] rel=nonIntersecting
 	[idx=11][voter=+region=us-east:1] [all=+region=us-west:2] rel=nonIntersecting
+
