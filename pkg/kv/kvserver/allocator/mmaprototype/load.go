@@ -187,7 +187,23 @@ type NodeLoad struct {
 type meanStoreLoad struct {
 	load     LoadVector
 	capacity LoadVector
-	// Util is 0 for CPURate, WriteBandwidth. Non-zero for ByteSize.
+	// util is the capacity-weighted mean utilization, computed as
+	// sum(load)/sum(capacity), NOT the average of individual store utilizations.
+	//
+	// We use capacity-weighted mean because it answers: "Is this store carrying
+	// its fair share of load?" rather than "Is this store more utilized than
+	// typical stores?". This is the desired behavior for heterogeneous clusters
+	// where ideally all stores run at the same utilization regardless of size.
+	//
+	// Example: 3 stores with (load, capacity) = (10, 10), (10, 10), (10, 100)
+	//   - Average of individual utils: (100% + 100% + 10%) / 3 = 70%
+	//   - Capacity-weighted (sum/sum): 30 / 120 = 25%
+	// The capacity-weighted 25% is the true picture of resource availability,
+	// and comparing a store's utilization against this tells us if it's
+	// carrying more than its proportional share.
+	//
+	// Util is 0 for WriteBandwidth (since its Capacity is UnknownCapacity).
+	// Non-zero for CPURate, ByteSize.
 	util [NumLoadDimensions]float64
 
 	secondaryLoad SecondaryLoadVector
