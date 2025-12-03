@@ -898,6 +898,9 @@ func TestNormalizedVoterAllRelationships(t *testing.T) {
 					fmt.Fprintf(&b, "normalization error: %s\n", err.Error())
 					return b.String()
 				}
+				fmt.Fprintf(&b, "normalized:\n")
+				printSpanConfig(&b, nConf.uninternedConfig())
+
 				rels, emptyConstraintIndex, emptyVoterConstraintIndex, err := buildVoterAndAllRelationships(nConf)
 				fmt.Fprintf(&b, "table:\n")
 				fmt.Fprintf(&b, "\temptyConstraintIndex: %d\n", emptyConstraintIndex)

@@ -4,6 +4,10 @@ normalized-voter-all-rels num-replicas=3 num-voters=3
 ----
 input:
  num-replicas=3 num-voters=3
+normalized:
+ num-replicas=3 num-voters=3
+ constraints:
+   :3
 table:
 	emptyConstraintIndex: -1
 	emptyVoterConstraintIndex: -1
@@ -20,6 +24,12 @@ input:
    +zone=us-west-a,+region=us-west
  voter-constraints:
    +zone=us-west-b,+region=us-west
+normalized:
+ num-replicas=3 num-voters=3
+ constraints:
+   +zone=us-west-a,+region=us-west:3
+ voter-constraints:
+   +zone=us-west-b,+region=us-west:3
 table:
 	emptyConstraintIndex: -1
 	emptyVoterConstraintIndex: -1
@@ -37,6 +47,12 @@ input:
    +region=us-west
  voter-constraints:
    +region=us-west
+normalized:
+ num-replicas=3 num-voters=3
+ constraints:
+   +region=us-west:3
+ voter-constraints:
+   +region=us-west:3
 table:
 	emptyConstraintIndex: -1
 	emptyVoterConstraintIndex: -1
@@ -54,6 +70,12 @@ input:
    +region=us-west
  voter-constraints:
    +region=us-west,+zone=us-west-a
+normalized:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west:5
+ voter-constraints:
+   +zone=us-west-a,+region=us-west:3
 table:
 	emptyConstraintIndex: -1
 	emptyVoterConstraintIndex: -1
@@ -71,6 +93,12 @@ input:
    +region=us-west,+zone=us-west-a
  voter-constraints:
    +region=us-west
+normalized:
+ num-replicas=5 num-voters=3
+ constraints:
+   +zone=us-west-a,+region=us-west:5
+ voter-constraints:
+   +region=us-west:3
 table:
 	emptyConstraintIndex: -1
 	emptyVoterConstraintIndex: -1
@@ -88,6 +116,12 @@ input:
    +region=us-west
  voter-constraints:
    +region=us-east
+normalized:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west:5
+ voter-constraints:
+   +region=us-east:3
 table:
 	emptyConstraintIndex: -1
 	emptyVoterConstraintIndex: -1
@@ -102,11 +136,18 @@ input:
  num-replicas=5 num-voters=3
  voter-constraints:
    :1
+normalized:
+ num-replicas=5 num-voters=3
+ constraints:
+   :5
+ voter-constraints:
+   :1
+   :2
 table:
 	emptyConstraintIndex: -1
 	emptyVoterConstraintIndex: -1
 	relationships:
-	err: invalid configurations with empty voter constraint
+	err: multiple empty voter constraints: {1 []} and {2 []}
 
 # Test error case: constraint replicas add up to more than configured replicas.
 normalized-voter-all-rels num-replicas=1 num-voters=1
@@ -129,11 +170,19 @@ input:
    :2
  voter-constraints:
    +region=us-west:1
+normalized:
+ num-replicas=8 num-voters=5
+ constraints:
+   :2
+   :6
+ voter-constraints:
+   +region=us-west:1
+   :4
 table:
 	emptyConstraintIndex: -1
 	emptyVoterConstraintIndex: -1
 	relationships:
-	err: invalid configurations with empty constraint
+	err: multiple empty constraints: {2 []} and {6 []}
 
 # Test with multiple relationships.
 normalized-voter-all-rels num-replicas=8 num-voters=5
@@ -152,6 +201,17 @@ input:
    +region=us-west:2
    +region=us-west,+zone=us-west-a:1
    +region=us-east:1
+normalized:
+ num-replicas=8 num-voters=5
+ constraints:
+   +region=us-west:2
+   +zone=us-east-a,+region=us-east:2
+   :4
+ voter-constraints:
+   +region=us-west:2
+   +zone=us-west-a,+region=us-west:1
+   +region=us-east:1
+   :1
 table:
 	emptyConstraintIndex: 2
 	emptyVoterConstraintIndex: 3
@@ -168,4 +228,3 @@ table:
 	[idx=9][voter=+region=us-west:2] [all=+zone=us-east-a,+region=us-east:2] rel=nonIntersecting
 	[idx=10][voter=+zone=us-west-a,+region=us-west:1] [all=+zone=us-east-a,+region=us-east:2] rel=nonIntersecting
 	[idx=11][voter=+region=us-east:1] [all=+region=us-west:2] rel=nonIntersecting
-
