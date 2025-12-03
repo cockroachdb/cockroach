@@ -259,18 +259,20 @@ func (cc constraintsConj) relationship(b constraintsConj) conjunctionRelationshi
 			j++
 			continue
 		}
-
+		// If the type and key are the same but value differs,
+		// then these constraints are non-intersecting.
+		// Example: +zone=a1, +zone=a2 (disjoint)
+		//
+		if cc[i].typ == b[j].typ && cc[i].key == b[j].key {
+			// For example, +zone=a1, +zone=a2.
+			return conjNonIntersecting
+			// NB: +zone=a1 and -zone=a1 are also non-intersecting, but we will
+			// not detect this case. Finding this case requires searching through
+			// b, and not simply walking in order, since the typ field is the
+			// first in the sort order and differs between these two conjuncts.
+		}
 		// If cc[i] < b[j], we've found a conjunct unique to cc.
 		if cc[i].less(b[j]) {
-			// Found a conjunct that is not in b.
-			if cc[i].typ == b[j].typ && cc[i].key == b[j].key {
-				// For example, +zone=a1, +zone=a2.
-				return conjNonIntersecting
-				// NB: +zone=a1 and -zone=a1 are also non-intersecting, but we will
-				// not detect this case. Finding this case requires searching through
-				// b, and not simply walking in order, since the typ field is the
-				// first in the sort order and differs between these two conjuncts.
-			}
 			extraInCC++
 			i++
 			continue
