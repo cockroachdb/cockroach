@@ -762,6 +762,18 @@ func ResolveTargets(
 			return nil
 		}
 
+		// Helper to check if a schema should be skipped (dropped, virtual, or temporary).
+		shouldSkipSchema := func(schema catalog.SchemaDescriptor) bool {
+			if schema == nil {
+				return true
+			}
+			if schema.Dropped() {
+				return true
+			}
+			kind := schema.SchemaKind()
+			return kind == catalog.SchemaVirtual || kind == catalog.SchemaTemporary
+		}
+
 		// Helper to add schema descriptor.
 		addSchemaDesc := func(schemaID descpb.ID) error {
 			// Skip public schema placeholders.
@@ -776,18 +788,10 @@ func ResolveTargets(
 				}
 				return err
 			}
-			if !schema.Dropped() {
+			if !shouldSkipSchema(schema) {
 				addDesc(schema)
 			}
 			return nil
-		}
-
-		// Helper to check if a schema is virtual/system (should be skipped).
-		isVirtualSchema := func(schema catalog.SchemaDescriptor) bool {
-			if schema == nil {
-				return false
-			}
-			return schema.SchemaKind() == catalog.SchemaVirtual
 		}
 
 		// Process DATABASE targets.
@@ -815,13 +819,12 @@ func ResolveTargets(
 			}
 
 			err = allInDB.ForEachDescriptor(func(desc catalog.Descriptor) error {
-				if desc.Dropped() || (!desc.Public() && !desc.Offline()) {
-					return nil
-				}
-
-				// Skip virtual tables.
+				// Skip virtual tables and temp tables.
 				if table, ok := desc.(catalog.TableDescriptor); ok {
-					if table.IsVirtualTable() {
+					if !(desc.Public() || desc.Offline()) {
+						return nil
+					}
+					if table.IsVirtualTable() || table.IsTemporary() {
 						return nil
 					}
 					if err := getReferencedTypes(table, db); err != nil {
@@ -837,13 +840,19 @@ func ResolveTargets(
 					return nil
 				}
 
-				// Skip virtual schemas.
+				// For schemas, skip dropped, virtual, and temporary schemas.
+				// Include PUBLIC, OFFLINE, and ADD schemas.
 				if schema, ok := desc.(catalog.SchemaDescriptor); ok {
-					if isVirtualSchema(schema) {
-						return nil
+					if !shouldSkipSchema(schema) {
+						addDesc(schema)
 					}
+					return nil
 				}
 
+				// For other descriptors (types, functions), apply standard filter.
+				if !(desc.Public() || desc.Offline()) {
+					return nil
+				}
 				addDesc(desc)
 				return nil
 			})
@@ -865,7 +874,7 @@ func ResolveTargets(
 				un := p.ToUnresolvedObjectName()
 
 				found, prefix, desc, err := resolver.ResolveExisting(
-					ctx, un, r, tree.ObjectLookupFlags{}, currentDatabase, searchPath,
+					ctx, un, r, tree.ObjectLookupFlags{DesiredObjectKind: tree.TableObject}, currentDatabase, searchPath,
 				)
 				if err != nil {
 					return err
@@ -875,8 +884,11 @@ func ResolveTargets(
 				}
 
 				table, ok := desc.(catalog.TableDescriptor)
-				if !ok || !table.Public() {
+				if !ok {
 					return errors.Errorf("table %q does not exist", tree.ErrString(p))
+				}
+				if !table.Public() || table.IsTemporary() {
+					return errors.Errorf("table %q cannot be backed up", tree.ErrString(p))
 				}
 
 				// Add the table and its parent database.
@@ -955,9 +967,9 @@ func ResolveTargets(
 				}
 
 				if hasSchemaScope && targetSchema != nil {
-					// Skip virtual schemas.
-					if isVirtualSchema(targetSchema) {
-						continue
+					// Skip virtual and temporary schemas.
+					if shouldSkipSchema(targetSchema) {
+						return errors.Errorf("schema %q cannot be backed up", tree.ErrNameString(targetSchema.GetName()))
 					}
 
 					// Get all objects in the specific schema.
@@ -970,12 +982,12 @@ func ResolveTargets(
 					addDesc(targetSchema)
 
 					err = objects.ForEachDescriptor(func(desc catalog.Descriptor) error {
-						if desc.Dropped() || (!desc.Public() && !desc.Offline()) {
+						if !(desc.Public() || desc.Offline()) {
 							return nil
 						}
-						// Skip virtual tables.
+						// Skip virtual tables and temp tables.
 						if table, ok := desc.(catalog.TableDescriptor); ok {
-							if table.IsVirtualTable() {
+							if table.IsVirtualTable() || table.IsTemporary() {
 								return nil
 							}
 							if err := getReferencedTypes(table, db); err != nil {
@@ -987,6 +999,7 @@ func ResolveTargets(
 							addDesc(table)
 							return nil
 						}
+						// For non-table descriptors (types, functions), add them directly.
 						addDesc(desc)
 						return nil
 					})
@@ -1001,12 +1014,12 @@ func ResolveTargets(
 					}
 
 					err = allInDB.ForEachDescriptor(func(desc catalog.Descriptor) error {
-						if desc.Dropped() || (!desc.Public() && !desc.Offline()) {
-							return nil
-						}
-						// Skip virtual tables.
+						// Skip virtual tables and temp tables.
 						if table, ok := desc.(catalog.TableDescriptor); ok {
-							if table.IsVirtualTable() {
+							if !(desc.Public() || desc.Offline()) {
+								return nil
+							}
+							if table.IsVirtualTable() || table.IsTemporary() {
 								return nil
 							}
 							if err := getReferencedTypes(table, db); err != nil {
@@ -1021,11 +1034,17 @@ func ResolveTargets(
 							addDesc(table)
 							return nil
 						}
-						// Skip virtual schemas.
+						// For schemas, skip dropped, virtual, and temporary schemas.
+						// Include PUBLIC, OFFLINE, and ADD schemas.
 						if schema, ok := desc.(catalog.SchemaDescriptor); ok {
-							if isVirtualSchema(schema) {
-								return nil
+							if !shouldSkipSchema(schema) {
+								addDesc(schema)
 							}
+							return nil
+						}
+						// For other descriptors (types, functions), apply standard filter.
+						if !(desc.Public() || desc.Offline()) {
+							return nil
 						}
 						addDesc(desc)
 						return nil
@@ -1069,18 +1088,19 @@ func (r *simpleResolver) LookupSchema(
 	}
 
 	schema, err := r.col.ByName(r.txn).MaybeGet().Schema(ctx, db, scName)
-	if err != nil || schema == nil {
-		// Check for public schema.
-		if scName == catconstants.PublicSchemaName {
-			if !db.HasPublicSchemaWithDescriptor() {
-				// Return a synthetic public schema.
-				return true, catalog.ResolvedObjectPrefix{
-					Database: db,
-					Schema:   schemadesc.GetPublicSchema(),
-				}, nil
-			}
-		}
+	if err != nil {
 		return false, catalog.ResolvedObjectPrefix{}, err
+	}
+
+	// Handle synthetic public schema.
+	if schema == nil && scName == catconstants.PublicSchemaName {
+		if !db.HasPublicSchemaWithDescriptor() {
+			schema = schemadesc.GetPublicSchema()
+		}
+	}
+
+	if schema == nil {
+		return false, catalog.ResolvedObjectPrefix{}, nil
 	}
 
 	return true, catalog.ResolvedObjectPrefix{
@@ -1093,6 +1113,10 @@ func (r *simpleResolver) LookupSchema(
 func (r *simpleResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (bool, catalog.ResolvedObjectPrefix, catalog.Descriptor, error) {
+	if flags.DesiredObjectKind != tree.TableObject {
+		return false, catalog.ResolvedObjectPrefix{}, nil, errors.Newf("resolver can only lookup tables")
+	}
+
 	resolvedPrefix := catalog.ResolvedObjectPrefix{}
 
 	db, err := r.col.ByName(r.txn).MaybeGet().Database(ctx, dbName)
@@ -1118,22 +1142,12 @@ func (r *simpleResolver) LookupObject(
 	}
 	resolvedPrefix.Schema = schema
 
-	// Try to find the object (table or type).
 	table, err := r.col.ByName(r.txn).MaybeGet().Table(ctx, db, schema, obName)
 	if err != nil {
 		return false, resolvedPrefix, nil, err
 	}
 	if table != nil {
 		return true, resolvedPrefix, table, nil
-	}
-
-	// Try type if not a table.
-	typ, err := r.col.ByNameWithLeased(r.txn).MaybeGet().Type(ctx, db, schema, obName)
-	if err != nil {
-		return false, resolvedPrefix, nil, err
-	}
-	if typ != nil {
-		return true, resolvedPrefix, typ, nil
 	}
 
 	return false, resolvedPrefix, nil, nil

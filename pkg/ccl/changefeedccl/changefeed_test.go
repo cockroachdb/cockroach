@@ -7327,7 +7327,7 @@ func TestChangefeedErrors(t *testing.T) {
 
 	// Backup has the same bad error message #28170.
 	sqlDB.ExpectErrWithTimeout(
-		t, `"information_schema.tables" does not exist`,
+		t, `CHANGEFEED cannot target virtual tables: tables`,
 		`EXPERIMENTAL CHANGEFEED FOR information_schema.tables`,
 	)
 
