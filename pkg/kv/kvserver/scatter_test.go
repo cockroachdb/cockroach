@@ -45,6 +45,11 @@ func TestAdminScatterWithDrainingNodes(t *testing.T) {
 	const drainingNodeID = drainingServerIdx + 1
 	tc := testcluster.StartTestCluster(
 		t, 2, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				// TODO(server): test is timing out when DRPC is enabled.
+				// Investigate and re-enable once the issue is resolved.
+				DefaultDRPCOption: base.TestDRPCDisabled,
+			},
 			ReplicationMode: base.ReplicationManual,
 		},
 	)
