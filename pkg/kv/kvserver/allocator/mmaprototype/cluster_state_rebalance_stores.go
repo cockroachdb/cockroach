@@ -112,6 +112,9 @@ func newRebalanceEnv(
 
 type sheddingStore struct {
 	roachpb.StoreID
+	// storeLoadSummary is relative to the entire cluster (not a set of valid
+	// replacement stores for some particular replica), see the comment where
+	// sheddingStores are constructed.
 	storeLoadSummary
 }
 
@@ -242,6 +245,49 @@ func (re *rebalanceEnv) rebalanceStores(
 	return re.changes
 }
 
+// rebalanceStore attempts to shed load from a single overloaded store via lease
+// transfers and/or replica rebalances.
+//
+// # Candidate Filtering Strategy
+//
+// When selecting rebalance targets, we filter candidates in two phases. The key
+// consideration is which stores should be included when computing load means,
+// since the means determine whether a store looks "underloaded" (good target)
+// or "overloaded" (bad target).
+//
+// **Pre-means filtering** excludes stores with a non-OK disposition from the
+// mean. The disposition serves as the source of truth for "can this store
+// accept work?" — whether due to drain, maintenance, disk capacity, or any
+// other reason. Note that unhealthy stores always have non-OK disposition, so
+// disposition indirectly reflects health.
+//
+// Ill-disposed stores cannot participate as targets and it is correct to
+// exclude them from the mean, as the mean helps us answer the question "among
+// viable targets, who is underloaded?". If ill-disposed storeswere included in
+// the mean, they could skew it down, making viable targets look too overloaded
+// to be considered, and preventing resolution of a load imbalance. They could
+// also skew the mean up and make actually-overloaded targets look underloaded,
+// but this is less of an issue: since both source and target are evaluated
+// relative to the same mean before accepting a transfer, their relative
+// positions are preserved, and we wouldn't accept a transfer that leaves the
+// target worse off than the source.
+//
+// **Post-means filtering** prevents some of the remaining candidates from being
+// chosen as targets for tactical reasons:
+//   - Stores that would be worse off than the source (relative to the mean
+//     across the candidate set), to reduce thrashing. For example, if a store
+//     were overloaded due to a single very hot range, moving that range to
+//     another store would just shift the problem elsewhere and cause thrashing.
+//   - Stores with too much pending inflight work (reduced confidence in load arithmetic).
+//
+// NB: TestClusterState tests various scenarios and edge cases that demonstrate
+// filtering behavior and outcomes.
+//
+// TODO(tbg): The above describes the intended design. Lease transfers follow this
+// pattern (see retainReadyLeaseTargetStoresOnly). Replica transfers are still
+// being cleaned up: they currently compute means over all constraint-matching
+// stores and filter only afterward, which is not intentional.
+// Tracking issue: https://github.com/cockroachdb/cockroach/pull/158373
 func (re *rebalanceEnv) rebalanceStore(
 	ctx context.Context, store sheddingStore, localStoreID roachpb.StoreID,
 ) {
@@ -595,6 +641,9 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		if len(candsPL) <= 1 {
 			continue // leaseholder is the only candidate
 		}
+
+		candsPL = retainReadyLeaseTargetStoresOnly(ctx, candsPL, re.stores, rangeID)
+
 		clear(re.scratch.nodes)
 		means := computeMeansForStoreSet(re, candsPL, re.scratch.nodes, re.scratch.stores)
 		sls := re.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
@@ -607,12 +656,6 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 		var candsSet candidateSet
 		for _, cand := range cands {
-			if disp := re.stores[cand.storeID].adjusted.replicas[rangeID].LeaseDisposition; disp != LeaseDispositionOK {
-				// Don't transfer lease to a store that is lagging.
-				log.KvDistribution.Infof(ctx, "skipping store s%d for lease transfer: lease disposition %v",
-					cand.storeID, disp)
-				continue
-			}
 			candSls := re.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)
 			candsSet.candidates = append(candsSet.candidates, candidateInfo{
 				StoreID:              cand.storeID,
@@ -684,4 +727,27 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 	}
 	// We iterated through all top-K ranges without running into any limits.
 	return leaseTransferCount
+}
+
+// retainReadyLeaseTargetStoresOnly filters the input set to only those stores that
+// are ready to accept a lease for the given range. A store is not ready if it
+// is not healthy, or does not accept leases at either the store or replica level.
+//
+// The input storeSet is mutated (and used to for the returned result).
+func retainReadyLeaseTargetStoresOnly(
+	ctx context.Context, in storeSet, stores map[roachpb.StoreID]*storeState, rangeID roachpb.RangeID,
+) storeSet {
+	out := in[:0]
+	for _, storeID := range in {
+		s := stores[storeID].status
+		switch {
+		case s.Disposition.Lease != LeaseDispositionOK:
+			log.KvDistribution.VEventf(ctx, 2, "skipping s%d for lease transfer: lease disposition %v (health %v)", storeID, s.Disposition.Lease, s.Health)
+		case stores[storeID].adjusted.replicas[rangeID].LeaseDisposition != LeaseDispositionOK:
+			log.KvDistribution.VEventf(ctx, 2, "skipping s%d for lease transfer: replica lease disposition %v (health %v)", storeID, stores[storeID].adjusted.replicas[rangeID].LeaseDisposition, s.Health)
+		default:
+			out = append(out, storeID)
+		}
+	}
+	return out
 }

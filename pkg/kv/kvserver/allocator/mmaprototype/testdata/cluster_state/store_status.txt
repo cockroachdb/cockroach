@@ -16,6 +16,6 @@ get-load-info
 ----
 store-id=1 node-id=1 status=unhealthy shedding=leases,replicas reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
 
-set-store-status store-id=1 health=ok
+set-store-status store-id=1 health=ok replicas=ok leases=ok
 ----
 ok accepting all
