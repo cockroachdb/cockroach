@@ -727,3 +727,41 @@ RESET plan_cache_mode
 
 statement ok
 DEALLOCATE ALL
+
+# Test basic validation when calling crdb_internal.inject_hint.
+
+statement error could not parse statement fingerprint: at or near "foo": syntax error
+SELECT crdb_internal.inject_hint(
+  'foo',
+  'SELECT a FROM ab'
+)
+
+statement error could not parse hint donor statement: at or near "foo": syntax error
+SELECT crdb_internal.inject_hint(
+  'SELECT a FROM ab',
+  'foo'
+)
+
+statement error statement does not match hint donor statement: SELECT a FROM ab vs SELECT b FROM ab
+SELECT crdb_internal.inject_hint(
+  'SELECT a FROM ab',
+  'SELECT b FROM ab'
+)
+
+statement error hint injection donor statement AST node \$1 did not match AST node 5
+SELECT crdb_internal.inject_hint(
+  'SELECT a FROM ab WHERE b = 5',
+  'SELECT a FROM ab WHERE b = $1'
+)
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT a FROM ab WHERE b = 5',
+  'SELECT a FROM ab WHERE b = _'
+)
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT b FROM ab WHERE a = $1',
+  'SELECT b FROM ab WHERE a = _'
+)
