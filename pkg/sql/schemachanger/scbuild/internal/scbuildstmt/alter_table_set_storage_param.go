@@ -48,9 +48,9 @@ func AlterTableSetStorageParams(
 		if key == catpb.RBRUsingConstraintTableSettingName {
 			panic(scerrors.NotImplementedErrorf(t, "set rbr not implemented yet"))
 		}
-		if key == "schema_locked" {
-			// schema_locked has a dedicated element and will be handled differently
-			panic(scerrors.NotImplementedErrorf(t, "set schema locked not implemented yet"))
+		// schema_locked has a dedicated element and will be handled differently
+		if handleSetSchemaLockIfNeeded(b, tbl, key, val) {
+			return
 		}
 		// Do extra validation for exclude_data_from_backup
 		validateExcludeDataFromBackup(b, tbl, key)
@@ -108,4 +108,20 @@ func isTableReferencedByFK(b BuildCtx, tbl *scpb.Table) bool {
 		}
 	})
 	return hasInboundFK
+}
+
+func handleSetSchemaLockIfNeeded(b BuildCtx, tbl *scpb.Table, key, val string) bool {
+	if key != "schema_locked" {
+		return false
+	}
+	currElem := b.QueryByID(tbl.TableID).FilterTableSchemaLocked().MustGetZeroOrOneElement()
+	// Drop element if schema is currently locked
+	if currElem != nil && val == "false" {
+		b.Drop(currElem)
+	}
+	// Add element if schema is currently unlocked
+	if currElem == nil && val == "true" {
+		b.Add(&scpb.TableSchemaLocked{TableID: tbl.TableID})
+	}
+	return true
 }
