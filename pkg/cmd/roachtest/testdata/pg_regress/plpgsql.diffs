@@ -635,7 +635,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/plpgsql.out --lab
  	pslot_slotlink_view(PF.slotname) as patch
      from PSlot PF;
 +ERROR:  unknown function: pslot_backlink_view()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  --
  -- First we build the house - so we create the rooms
  --
