@@ -1906,8 +1906,6 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 		return dsp.alwaysUseGatewayWithReason(SpanPartitionReason_GATEWAY_NO_HEALTHY_INSTANCES), nil
 	}
 
-	rng, _ := randutil.NewPseudoRand()
-
 	instancesHaveLocality := false
 
 	var gatewayIsEligible bool
@@ -2006,7 +2004,7 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 				if !matched {
 					// The passed in node, which contains a replica for the span we are
 					// attempting to partition, does not satisfy the locality filters, so
-					// this plan should return an error. Return the gatewareInstanceID, as
+					// this plan should return an error. Return the gatewaySQLInstanceID, as
 					// opposed to 0, just in case some downstream caller does not handle
 					// NO_VALID_INSTANCE properly. We'd rather have a bad plan than a node
 					// panic.
@@ -2015,16 +2013,15 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 			}
 
 			// TODO(dt): Pre-compute / cache this result, e.g. in the instance reader.
-			if closest, _ := ClosestInstances(instances,
-				nodeDesc.Locality); len(closest) > 0 {
-				return closest[rng.Intn(len(closest))], SpanPartitionReason_CLOSEST_LOCALITY_MATCH
+			if closest, _ := ClosestInstances(instances, nodeDesc.Locality); len(closest) > 0 {
+				return closest[randutil.FastUint32n(uint32(len(closest)))], SpanPartitionReason_CLOSEST_LOCALITY_MATCH
 			}
 
 			// No instances had any locality tiers in common with the node locality.
 			// At this point we pick the gateway if it is eligible, otherwise we pick
 			// a random instance from the eligible instances.
 			if !gatewayIsEligible {
-				return instances[rng.Intn(len(instances))].InstanceID, SpanPartitionReason_LOCALITY_FILTERED_RANDOM
+				return instances[randutil.FastUint32n(uint32(len(instances)))].InstanceID, SpanPartitionReason_LOCALITY_FILTERED_RANDOM
 			}
 			if dsp.shouldPickGateway(planCtx, instances) {
 				return dsp.gatewaySQLInstanceID, SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH
@@ -2038,7 +2035,7 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 				// NB: This random selection may still pick the gateway but that is
 				// alright as we are more interested in a uniform distribution rather
 				// than avoiding the gateway.
-				id := instances[rng.Intn(len(instances))].InstanceID
+				id := instances[randutil.FastUint32n(uint32(len(instances)))].InstanceID
 				return id, SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED
 			}
 		}
@@ -2049,7 +2046,7 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 	// round-robin strategy that is completely locality-ignorant. Randomize the
 	// order in which we choose instances so that work is allocated fairly across
 	// queries.
-	rng.Shuffle(len(instances), func(i, j int) {
+	randutil.FastShuffle(uint32(len(instances)), func(i, j uint32) {
 		instances[i], instances[j] = instances[j], instances[i]
 	})
 	var i int
