@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
@@ -123,7 +123,7 @@ func ExternalSSTReader(
 		return newMemPebbleSSTReader(ctx, storeFiles, encryption, iterOpts)
 	}
 	remoteCacheSize := remoteSSTSuffixCacheSize.Get(&storeFiles[0].Store.Settings().SV)
-	openedReadersByLevel := make([][]sstable.ReadableFile, 0, len(storeFiles))
+	openedReadersByLevel := make([][]objstorage.ReadableFile, 0, len(storeFiles))
 
 	// Cleanup any files we've opened if we fail with an error.
 	defer func() {
@@ -153,7 +153,7 @@ func ExternalSSTReader(
 			},
 		}
 
-		var reader sstable.ReadableFile
+		var reader objstorage.ReadableFile
 
 		if encryption != nil {
 			r, err := decryptingReader(raw, encryption.Key)
@@ -171,7 +171,7 @@ func ExternalSSTReader(
 			}
 			reader = raw
 		}
-		openedReadersByLevel = append(openedReadersByLevel, []sstable.ReadableFile{reader})
+		openedReadersByLevel = append(openedReadersByLevel, []objstorage.ReadableFile{reader})
 	}
 
 	readerLevels := openedReadersByLevel

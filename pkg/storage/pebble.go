@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/cockroachdb/pebble/cockroachkvs"
 	"github.com/cockroachdb/pebble/metrics"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/rangekey"
@@ -2638,7 +2639,7 @@ func (p *Pebble) BufferedSize() int {
 func (p *Pebble) ConvertFilesToBatchAndCommit(
 	_ context.Context, paths []string, clearedSpans []roachpb.Span,
 ) error {
-	files := make([]sstable.ReadableFile, len(paths))
+	files := make([]objstorage.ReadableFile, len(paths))
 	closeFiles := func() {
 		for i := range files {
 			if files[i] != nil {
@@ -2655,7 +2656,7 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 		files[i] = f
 	}
 	iter, err := NewSSTEngineIterator(
-		[][]sstable.ReadableFile{files},
+		[][]objstorage.ReadableFile{files},
 		IterOptions{
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			LowerBound: roachpb.KeyMin,

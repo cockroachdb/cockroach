@@ -35,8 +35,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/rangekey"
-	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
@@ -385,7 +385,7 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 func buildIterForScratch(
 	t *testing.T, keySpans []roachpb.Span, scratch *SSTSnapshotStorageScratch,
 ) (storage.MVCCIterator, error) {
-	var openFiles []sstable.ReadableFile
+	var openFiles []objstorage.ReadableFile
 	for _, sstPath := range scratch.SSTs()[len(keySpans)-1:] {
 		f, err := vfs.Default.Open(sstPath)
 		require.NoError(t, err)
@@ -393,7 +393,7 @@ func buildIterForScratch(
 	}
 	mvccSpan := keySpans[len(keySpans)-1]
 
-	return storage.NewSSTIterator([][]sstable.ReadableFile{openFiles}, storage.IterOptions{
+	return storage.NewSSTIterator([][]objstorage.ReadableFile{openFiles}, storage.IterOptions{
 		LowerBound: mvccSpan.Key,
 		UpperBound: mvccSpan.EndKey,
 	})
