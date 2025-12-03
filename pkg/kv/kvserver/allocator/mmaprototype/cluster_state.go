@@ -36,6 +36,9 @@ const (
 	unknownReplicaID roachpb.ReplicaID = -1
 	// noReplicaID is used with a change that is removing a replica.
 	noReplicaID roachpb.ReplicaID = -2
+
+	nodeIDForLogging = 0
+	storeIDForLogging = 0
 )
 
 type ReplicaType struct {
@@ -2425,7 +2428,6 @@ func computeLoadSummary(
 	var dimSummary [NumLoadDimensions]loadSummary
 	var worstDim LoadDimension
 	for i := range msl.load {
-		const nodeIDForLogging = 0
 		ls := loadSummaryForDimension(ctx, ss.StoreID, nodeIDForLogging, LoadDimension(i), ss.adjusted.load[i], ss.capacity[i],
 			msl.load[i], msl.util[i])
 		if ls > sls {
@@ -2438,7 +2440,6 @@ func computeLoadSummary(
 			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i])
 		}
 	}
-	const storeIDForLogging = 0
 	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
 		worstDim:                   worstDim,
