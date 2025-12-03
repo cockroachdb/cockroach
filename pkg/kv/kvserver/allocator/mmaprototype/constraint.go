@@ -311,6 +311,11 @@ type internedLeasePreference struct {
 	constraints constraintsConj
 }
 
+// makeBasicNormalizedSpanConfig performs the first stage of normalization for
+// SpanConfigs: it interns constraints and ensures every conjunction has
+// numReplicas > 0 with the sum equaling the required number of replicas (adding
+// an empty constraint if needed). It does not perform structural normalization.
+// See makeNormalizedSpanConfig for more details.
 func makeBasicNormalizedSpanConfig(
 	conf *roachpb.SpanConfig, interner *stringInterner,
 ) (*normalizedSpanConfig, error) {
