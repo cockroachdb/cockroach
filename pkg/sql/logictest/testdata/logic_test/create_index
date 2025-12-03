@@ -724,11 +724,11 @@ SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = enabled
 # merge isn't implemented yet, so we get to the validation step and notice
 # we didn't ingest any rows. This is expected until the entire flow is
 # implemented.
-skipif config local-mixed-25.3 local-mixed-25.4
+skipif config local-mixed-25.4
 statement error pgcode XX000 pq: .*validation of non-unique index dist_merge_idx_idx failed: expected 3 rows, found 0.*
 CREATE INDEX dist_merge_idx_idx ON dist_merge_idx (b)
 
-onlyif config local-mixed-25.3 local-mixed-25.4
+onlyif config local-mixed-25.4
 statement error pq: .*distributed merge requires cluster version 26.*
 CREATE INDEX dist_merge_idx_idx ON dist_merge_idx (b)
 
@@ -737,11 +737,11 @@ CREATE INDEX dist_merge_idx_idx ON dist_merge_idx (b)
 # TODO(158378): Declarative schema change don't yet implement the full flow for
 # distributed merge. So, we end up with a similar situation as above where we
 # get to validation and notice no rows were ingested.
-skipif config local-mixed-25.3 local-mixed-25.4
+skipif config local-mixed-25.4
 statement error pgcode 23505 pq: .*duplicate key value violates unique constraint.*
 ALTER TABLE dist_merge_idx ALTER PRIMARY KEY USING COLUMNS (b)
 
-onlyif config local-mixed-25.3 local-mixed-25.4
+onlyif config local-mixed-25.4
 statement error pq: .*distributed merge requires cluster version 26.*
 ALTER TABLE dist_merge_idx ALTER PRIMARY KEY USING COLUMNS (b)
 

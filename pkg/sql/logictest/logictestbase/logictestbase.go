@@ -808,6 +808,9 @@ func processConfigs(
 		// config list.
 		names := getDefaultConfigListNames(blockedConfig)
 		if len(names) == 0 {
+			if !ConfigExists(blockedConfig) && blockedConfig != "metamorphic-batch-sizes" {
+				panic(fmt.Sprintf("attempted to block logic test config that doesn't exist: %s", blockedConfig))
+			}
 			blocklist[blockedConfig] = issueNo
 		} else {
 			for _, name := range names {
@@ -898,6 +901,22 @@ func ConfigIsInDefaultList(configName, defaultName string) bool {
 
 func getDefaultConfigListNames(name string) []string {
 	return DefaultConfigSets[name].ConfigNames()
+}
+
+var allConfigNames = make(map[string]struct{}, len(LogicTestConfigs))
+
+func init() {
+	for _, cfg := range LogicTestConfigs {
+		allConfigNames[cfg.Name] = struct{}{}
+	}
+}
+
+// ConfigExists returns whether the given name matches either a config or an
+// alias.
+func ConfigExists(name string) bool {
+	_, config := allConfigNames[name]
+	_, alias := DefaultConfigSets[name]
+	return config || alias
 }
 
 // ConfigCalculator is used to enumerate a map of configuration -> file.

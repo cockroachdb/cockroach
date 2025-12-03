@@ -1105,19 +1105,6 @@ t  CREATE TABLE public.t (
      FAMILY fam_0_x_y_rowid (x, y, rowid)
    );
 
-onlyif config local-schmema-locked
-query TT
-SHOW CREATE t
-----
-t  CREATE TABLE public.t (
-     x INT8 NOT NULL,
-     y INT8 NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT t_pkey PRIMARY KEY (x ASC),
-     INDEX t_y_idx (y ASC),
-     FAMILY fam_0_x_y_rowid (x, y, rowid)
-   ) WITH (schema_locked = true);
-
 # Ensure that index y got rewritten. If it was not rewritten,
 # it would have an id less than 3.
 query IT
