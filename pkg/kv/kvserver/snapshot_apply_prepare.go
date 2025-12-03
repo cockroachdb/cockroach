@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -21,8 +22,12 @@ import (
 // snapshot ingestion.
 // TODO(sep-raft-log): support separated engines.
 type snapWriter struct {
-	stateRO  kvstorage.StateRO
-	raftRO   kvstorage.RaftRO
+	stateRO kvstorage.StateRO
+	raftRO  kvstorage.RaftRO
+	// raftWO is the write batch into the raft engine. Not nil iff separated
+	// engines are enabled.
+	raftWO storage.WriteBatch
+
 	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
 
 	// cleared contains the spans that this snapshot application clears before
@@ -32,6 +37,23 @@ type snapWriter struct {
 	// logic, since it will need to exclude the raft engine cleared spans. The
 	// draft is in #155532.
 	cleared []roachpb.Span
+}
+
+// separateEngines sets up the snapWriter for separated state machine and raft
+// engines. Uses the provided log engine for creating a write batch into it.
+func (s *snapWriter) separateEngines(logEngine storage.Engine) {
+	if !buildutil.CrdbTestBuild {
+		panic("separated engines are not supported")
+	} else if s.raftWO != nil {
+		panic("separateEngines called twice")
+	}
+	s.raftWO = logEngine.NewWriteBatch()
+}
+
+func (s *snapWriter) close() {
+	if s.raftWO != nil {
+		s.raftWO.Close()
+	}
 }
 
 // snapWriteBuilder contains the data needed to prepare the on-disk state for a
@@ -57,16 +79,13 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	// TODO(pav-kv): assert that our replica already exists in storage. Note that
 	// it can be either uninitialized or initialized.
 	_ = applySnapshotTODO // 1.1 + 1.3 + 2.4 + 3.1
-	// TODO(sep-raft-log): rewriteRaftState now only touches raft engine keys, so
-	// it will be convenient to redirect it to a raft engine batch.
-	if err := s.wr.writeSST(ctx, s.rewriteRaftState); err != nil {
+	if err := s.rewriteRaftState(ctx); err != nil {
 		return err
 	}
 	_ = applySnapshotTODO // 1.2 + 2.1 + 2.2 + 2.3 (diff) + 3.2
 	if err := s.clearSubsumedReplicaDiskData(ctx); err != nil {
 		return err
 	}
-
 	_ = applySnapshotTODO // 2.3 (split)
 	return s.clearResidualDataOnNarrowSnapshot(ctx)
 }
@@ -74,14 +93,24 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 // rewriteRaftState rewrites the raft state of the given replica with the
 // provided state. Specifically, it rewrites HardState and RaftTruncatedState,
 // and clears the raft log. All writes are generated in the engine keys order.
-func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Writer) error {
-	cleared, err := kvstorage.RewriteRaftState(
-		ctx, kvstorage.RaftWO(w), s.sl, s.hardState, s.truncState)
-	if err != nil {
+func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context) error {
+	// With separated engines, update the raft engine batch directly.
+	if raftWO := s.wr.raftWO; raftWO != nil {
+		_, err := kvstorage.RewriteRaftState(
+			ctx, kvstorage.RaftWO(raftWO), s.sl, s.hardState, s.truncState)
 		return err
 	}
-	s.wr.cleared = append(s.wr.cleared, cleared)
-	return nil
+	// With a combined engine, create an SST and update it. Also take a note of
+	// the cleared span, which will be needed if this SST is converted to batch.
+	return s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		cleared, err := kvstorage.RewriteRaftState(
+			ctx, kvstorage.RaftWO(w), s.sl, s.hardState, s.truncState)
+		if err != nil {
+			return err
+		}
+		s.wr.cleared = append(s.wr.cleared, cleared)
+		return nil
+	})
 }
 
 // clearSubsumedReplicaDiskData clears the on disk data of the subsumed
@@ -137,13 +166,28 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	for _, sub := range s.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			// TODO(sep-raft-log): override RaftWO when engines are separated.
+			// Redirect the raft portion of replica destruction to the raft batch when
+			// engines are separated.
+			raftWO := kvstorage.RaftWO(s.wr.raftWO)
+			if raftWO == nil {
+				raftWO = w
+			}
 			opts, err := kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
 				State: kvstorage.State{RO: s.wr.stateRO, WO: w},
-				Raft:  kvstorage.Raft{RO: s.wr.raftRO, WO: w},
+				Raft:  kvstorage.Raft{RO: s.wr.raftRO, WO: raftWO},
 			}, sub)
+			if err != nil {
+				return err
+			}
+
+			// With separated engines, forget about the unreplicated span clearing.
+			// TODO(pav-kv): this is half-correct, get rid of the cleared spans
+			// tracking in the first place (see s.wr.cleared comment).
+			if s.wr.raftWO != nil {
+				opts.UnreplicatedByRangeID = false
+			}
 			s.wr.cleared = append(s.wr.cleared, rditer.Select(sub.RangeID, opts)...)
-			return err
+			return nil
 		}); err != nil {
 			return err
 		}
