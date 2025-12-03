@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -655,15 +656,24 @@ func DecodeDatum(
 				// is larger than our calculated dscale, truncate our buffer to match the
 				// desired dscale.
 				dscale := (alloc.pgNum.Ndigits - (alloc.pgNum.Weight + 1)) * PGDecDigits
+				
 				if overScale := dscale - alloc.pgNum.Dscale; overScale > 0 {
 					dscale -= overScale
 					decDigits = decDigits[:len(decDigits)-int(overScale)]
+				} else if overScale < 0 && dscale >= 0 {
+					// Negative overScale with positive dscale means that there are
+					// implicit trailing zeros after the decimal point, we need to add these.
+					dscale += -overScale
+					for i := int16(0); i < -overScale; i++ {
+						decDigits = append(decDigits, '0')
+					}
 				}
 
 				decString := encoding.UnsafeConvertBytesToString(decDigits)
 				if _, ok := alloc.dd.Coeff.SetString(decString, 10); !ok {
 					return nil, pgerror.Newf(pgcode.Syntax, "could not parse %q as type decimal", decString)
 				}
+
 				alloc.dd.Exponent = -int32(dscale)
 			}
 
