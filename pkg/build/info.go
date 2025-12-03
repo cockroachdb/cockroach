@@ -62,7 +62,7 @@ const (
 
 // IsRelease returns true if the binary was produced by a "release" build.
 func IsRelease() bool {
-	return typ == "release"
+	return typ == "vrelease"
 }
 
 // SeemsOfficial reports whether this binary is likely to have come from an
