@@ -1,11 +1,16 @@
-create-descriptor start=a end=d replicas=(1,2,3)
+create-descriptor start=a end=d replicas=(1,2,3) replica-id=3
 ----
-created descriptor: r1:{a-d} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+created descriptor: r1:{a-d} [(n1,s1):3, (n2,s2):4, (n3,s3):5, next=6, gen=0]
 
 create-replica range-id=1
 ----
-created replica: (n1,s1):1
-Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
+created replica: (n1,s1):3
+Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:3 
+
+# Make the uninitialized replica vote.
+update-hard-state range-id=1 term=10 vote=2
+----
+HardState {Term:10 Vote:2 Commit:0 Lead:0 LeadEpoch:0}
 
 # Create an initialized replica this time around.
 create-descriptor start=d end=k replicas=(1,2,3)
@@ -24,9 +29,21 @@ Put: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): replica_id:1
 Put: 0,0 /Local/RangeID/2/u/RaftHardState (0x01698a757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
 Put: 0,0 /Local/RangeID/2/u/RaftTruncatedState (0x01698a757266747400): index:10 term:5 
 
+# Replica for r1 is uninitialized, r2 is initialized.
 print-range-state
 ----
-range desc: r1:{a-d} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
-		replica (n1/s1): id=1 uninitialized
+range desc: r1:{a-d} [(n1,s1):3, (n2,s2):4, (n3,s3):5, next=6, gen=0]
+		replica (n1/s1): id=3 [uninitialized] HardState={Term:10,Vote:2,Commit:0}
+range desc: r2:{d-k} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=10
+
+restart
+----
+ok
+
+# After restart, the uninitialized replica for r1 is not loaded.
+print-range-state
+----
+range desc: r1:{a-d} [(n1,s1):3, (n2,s2):4, (n3,s3):5, next=6, gen=0]
 range desc: r2:{d-k} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
 		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=10

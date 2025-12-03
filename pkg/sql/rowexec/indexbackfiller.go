@@ -316,7 +316,8 @@ func (ib *indexBackfiller) makeIndexBackfillSink(ctx context.Context) (indexBack
 	if ib.spec.UseDistributedMergeSink {
 		// TODO(158378): We need to fully implement all stages of the distributed
 		// merge flow for index backfill.
-		return newSSTIndexBackfillSink(ctx, ib.flowCtx, ib.spec, ib.processorID)
+		return newSSTIndexBackfillSink(
+			ctx, ib.flowCtx, ib.spec.DistributedMergeFilePrefix, ib.spec.WriteAsOf, ib.processorID)
 	}
 
 	minBufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)

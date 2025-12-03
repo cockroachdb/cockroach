@@ -49,19 +49,25 @@ import (
 // The test has a single storage engine that corresponds to n1/s1, and all batch
 // operations to storage are printed out. It uses the following format:
 //
-// create-descriptor start=<key> end=<key> replicas=[<int>,<int>,...]
+// create-descriptor start=<key> end=<key> replicas=[<int>,<int>,...] [replica-id=<int>]
 // ----
 //
 //	Creates a range descriptor with the specified start and end keys and
 //	optional replica list. The range ID is auto-assigned. If provided,
-//	replicas specify NodeIDs for replicas of the range. Note that ReplicaIDs
-//	are assigned incrementally starting from 1.
+//	replicas specify NodeIDs for replicas of the range. ReplicaIDs are
+//	assigned incrementally starting from replica-id (default=1).
 //
 // create-replica range-id=<int> [initialized]
 // ----
 //
 // Creates a replica on n1/s1 for the specified range ID. The created replica
 // may be initialized or uninitialized.
+//
+// update-hard-state range-id=<int> [term=<int>] [vote=<int>]
+// ----
+//
+//	Updates the specified fields of the existing replica's HardState. Other
+//	fields of the HardState are retained.
 //
 // create-split range-id=<int> split-key=<key>
 // ----
@@ -113,6 +119,12 @@ import (
 // Prints the current range state in the test context. By default, ranges are
 // sorted by range ID. If sort-keys is set to true, ranges are sorted by their
 // descriptor's start key instead.
+//
+// restart
+// ----
+//
+//	Simulates the node restart. It causes all uninitialized replicas to be
+//	forgotten because we don't load them on server startup.
 func TestReplicaLifecycleDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -126,59 +138,28 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "create-descriptor":
-				startKey := dd.ScanArg[string](t, d, "start")
-				endKey := dd.ScanArg[string](t, d, "end")
-				replicaNodeIDs := dd.ScanArg[[]roachpb.NodeID](t, d, "replicas")
+				replicaID := dd.ScanArgOr[roachpb.ReplicaID](t, d, "replica-id", 1)
+				desc := tc.createRangeDesc(t, replicaID, roachpb.RSpan{
+					Key:    roachpb.RKey(dd.ScanArg[string](t, d, "start")),
+					EndKey: roachpb.RKey(dd.ScanArg[string](t, d, "end")),
+				}, dd.ScanArg[[]roachpb.NodeID](t, d, "replicas"))
 
-				// The test is written from the perspective of n1/s1, so not having n1
-				// in this list should return an error.
-				require.True(t, slices.Contains(replicaNodeIDs, 1), "replica list must contain n1")
-
-				rangeID := tc.nextRangeID
-				tc.nextRangeID++
-				var internalReplicas []roachpb.ReplicaDescriptor
-				for i, id := range replicaNodeIDs {
-					internalReplicas = append(internalReplicas, roachpb.ReplicaDescriptor{
-						ReplicaID: roachpb.ReplicaID(i + 1),
-						NodeID:    id,
-						StoreID:   roachpb.StoreID(id),
-						Type:      roachpb.VOTER_FULL,
-					})
-				}
-				desc := roachpb.RangeDescriptor{
-					RangeID:          rangeID,
-					StartKey:         roachpb.RKey(startKey),
-					EndKey:           roachpb.RKey(endKey),
-					InternalReplicas: internalReplicas,
-					NextReplicaID:    roachpb.ReplicaID(len(internalReplicas) + 1),
-				}
-				require.True(t, desc.StartKey.Compare(desc.EndKey) < 0)
-
-				// Ranges are expected to be non-overlapping. Before creating a
-				// new one, sanity check that we're not violating this property
-				// in the test context.
-				for existingRangeID, existingRS := range tc.ranges {
-					existingDesc := existingRS.desc
-					require.False(t, desc.StartKey.Compare(existingDesc.EndKey) < 0 &&
-						existingDesc.StartKey.Compare(desc.EndKey) < 0,
-						"descriptor overlaps with existing range %d [%s,%s)",
-						existingRangeID, existingDesc.StartKey, existingDesc.EndKey)
-				}
-
-				rs := newRangeState(desc)
-				tc.ranges[rangeID] = rs
 				return fmt.Sprintf("created descriptor: %v", desc)
 
 			case "create-replica":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				replicaID := dd.ScanArgOr[roachpb.ReplicaID](t, d, "replica-id", 0)
 				initialized := d.HasArg("initialized")
 
 				rs := tc.mustGetRangeState(t, rangeID)
-				if rs.replica != nil {
-					return errors.New("initialized replica already exists on n1/s1").Error()
+				require.Nil(t, rs.replica, "replica already exists on n1/s1")
+				repl := *rs.mustGetReplicaDescriptor(t, roachpb.NodeID(1))
+				if replicaID != 0 {
+					require.False(t, initialized, "custom ReplicaID not supported for initialized replicas")
+					repl.ReplicaID = replicaID
 				}
-				repl := rs.mustGetReplicaDescriptor(t, roachpb.NodeID(1))
 
+				var err error
 				output := tc.mutate(t, func(batch storage.Batch) {
 					if initialized {
 						require.NoError(t, kvstorage.WriteInitialRangeState(
@@ -186,15 +167,38 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 							rs.desc, repl.ReplicaID, rs.version,
 						))
 					} else {
-						require.NoError(t, kvstorage.CreateUninitializedReplica(
+						err = kvstorage.CreateUninitializedReplica(
 							ctx, kvstorage.TODOState(batch), batch, 1, /* StoreID */
 							roachpb.FullReplicaID{RangeID: rs.desc.RangeID, ReplicaID: repl.ReplicaID},
-						))
+						)
 					}
 					tc.updatePostReplicaCreateState(t, ctx, rs, batch)
 				})
+				// CreateUninitializedReplica can return an error if the replica is
+				// already destroyed.
+				if errors.HasType(err, &kvpb.RaftGroupDeletedError{}) {
+					return err.Error()
+				}
+				require.NoError(t, err)
 
 				return fmt.Sprintf("created replica: %v\n%s", repl, output)
+
+			case "update-hard-state":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				rs := tc.mustGetRangeState(t, rangeID)
+				require.NotNil(t, rs.replica, "replica does not exist")
+
+				if term, upd := dd.ScanArgOpt[uint64](t, d, "term"); upd {
+					rs.replica.hs.Term = term
+				}
+				if vote, upd := dd.ScanArgOpt[raftpb.PeerID](t, d, "vote"); upd {
+					rs.replica.hs.Vote = vote
+				}
+
+				require.NoError(t, kvstorage.MakeStateLoader(rangeID).SetHardState(
+					ctx, tc.storage, rs.replica.hs,
+				))
+				return fmt.Sprintf("HardState %+v", rs.replica.hs)
 
 			case "create-split":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
@@ -385,6 +389,10 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				}
 				return sb.String()
 
+			case "restart":
+				tc.restart()
+				return "ok"
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
@@ -411,6 +419,11 @@ type replicaInfo struct {
 	hs      raftpb.HardState
 	ts      kvserverpb.RaftTruncatedState
 	lastIdx kvpb.RaftIndex
+}
+
+// initialized returns true iff the replica is initialized.
+func (r *replicaInfo) initialized() bool {
+	return r.hs.Commit > 0 // NB: or r.ts.Index > 0
 }
 
 // testCtx is a single test's context. It tracks the state of all ranges and any
@@ -464,6 +477,46 @@ func (tc *testCtx) mutate(t *testing.T, write func(storage.Batch)) string {
 	// datadriven test driver. Until that TODO is addressed, we manually split
 	// things out here.
 	return strings.ReplaceAll(output, "\n\n", "\n")
+}
+
+// createRangeDesc creates a new RangeDescriptor for the given keys span and list
+// of replica locations, assigned to the next unused RangeID.
+func (tc *testCtx) createRangeDesc(
+	t *testing.T, replicaID roachpb.ReplicaID, span roachpb.RSpan, replicasOn []roachpb.NodeID,
+) roachpb.RangeDescriptor {
+	require.True(t, span.EndKey.Compare(span.Key) > 0)
+	require.True(t, slices.Contains(replicasOn, 1), "replica list must contain n1")
+
+	// Ranges are expected to be non-overlapping. Before creating a new one,
+	// sanity check that we're not violating this property in the test context.
+	for id, rs := range tc.ranges {
+		otherSpan := rs.desc.RSpan()
+		require.False(t,
+			span.Key.Compare(otherSpan.EndKey) < 0 &&
+				span.EndKey.Compare(otherSpan.Key) > 0,
+			"descriptor overlaps with existing range %d: %v", id, otherSpan,
+		)
+	}
+
+	desc := roachpb.RangeDescriptor{
+		RangeID:          tc.nextRangeID,
+		StartKey:         span.Key,
+		EndKey:           span.EndKey,
+		InternalReplicas: make([]roachpb.ReplicaDescriptor, len(replicasOn)),
+		NextReplicaID:    replicaID + roachpb.ReplicaID(len(replicasOn)),
+	}
+	tc.nextRangeID++
+	for i, id := range replicasOn {
+		desc.InternalReplicas[i] = roachpb.ReplicaDescriptor{
+			ReplicaID: replicaID + roachpb.ReplicaID(i),
+			NodeID:    id,
+			StoreID:   roachpb.StoreID(id),
+			Type:      roachpb.VOTER_FULL,
+		}
+	}
+
+	tc.ranges[desc.RangeID] = newRangeState(desc)
+	return desc
 }
 
 // newRangeState constructs a new rangeState for the supplied descriptor.
@@ -562,15 +615,29 @@ func (rs *rangeState) String() string {
 	return sb.String()
 }
 
+// restart imitates the node restart. It causes all uninitialized replicas to be
+// forgotten because we don't load them on server startup.
+func (tc *testCtx) restart() {
+	for _, rs := range tc.ranges {
+		if rs.replica != nil && !rs.replica.initialized() {
+			rs.replica = nil
+		}
+	}
+}
+
 func (r *replicaInfo) String() string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("id=%s ", r.FullReplicaID.ReplicaID))
-	if r.hs == (raftpb.HardState{}) {
-		sb.WriteString("uninitialized")
-	} else {
-		sb.WriteString(fmt.Sprintf("HardState={Term:%d,Vote:%d,Commit:%d}", r.hs.Term, r.hs.Vote, r.hs.Commit))
-		sb.WriteString(fmt.Sprintf(" TruncatedState={Index:%d,Term:%d}", r.ts.Index, r.ts.Term))
-		sb.WriteString(fmt.Sprintf(" LastIdx=%d", r.lastIdx))
+	hs := fmt.Sprintf("HardState={Term:%d,Vote:%d,Commit:%d}", r.hs.Term, r.hs.Vote, r.hs.Commit)
+
+	if !r.initialized() {
+		sb.WriteString("[uninitialized] ")
+		sb.WriteString(hs)
+		return sb.String()
 	}
+
+	sb.WriteString(hs)
+	sb.WriteString(fmt.Sprintf(" TruncatedState={Index:%d,Term:%d}", r.ts.Index, r.ts.Term))
+	sb.WriteString(fmt.Sprintf(" LastIdx=%d", r.lastIdx))
 	return sb.String()
 }
