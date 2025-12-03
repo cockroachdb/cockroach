@@ -359,7 +359,7 @@ SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT "cluste
 ----
 NULL
 
-onlyif config 3snode-tenant-default-config
+onlyif config 3node-tenant-default-configs
 query error SHOW CLUSTER SETTINGS FOR TENANT can only be called by system operators
 SHOW CLUSTER SETTINGS FOR TENANT [10]
 
