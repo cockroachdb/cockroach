@@ -631,7 +631,8 @@ func (r *Replica) applySnapshotRaftMuLocked(
 
 		sl: r.raftMu.stateLoader,
 		wr: snapWriter{
-			todoEng:  r.store.TODOEngine(),
+			stateRO:  r.store.StateEngine(),
+			raftRO:   r.store.LogEngine(),
 			writeSST: writeSST,
 		},
 

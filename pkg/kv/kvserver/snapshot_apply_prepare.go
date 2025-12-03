@@ -21,8 +21,10 @@ import (
 // snapshot ingestion.
 // TODO(sep-raft-log): support separated engines.
 type snapWriter struct {
-	todoEng storage.Engine
-
+	// stateRO reads the state machine state preceding the snapshot.
+	stateRO kvstorage.StateRO
+	// raftRO reads the raft engine state preceding the snapshot.
+	raftRO kvstorage.RaftRO
 	// writeSST provides a Writer which the caller uses to populate a subset of
 	// the pending snapshot write. One writeSST call corresponds to one keys
 	// subspace (such as replicated RangeID-local) and/or one range.
@@ -127,12 +129,14 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	// the span [b, sn). We do this in
 	// clearResidualDataOnNarrowSnapshot, not here.
 
-	// TODO(sep-raft-log): need different readers for raft and state engine.
-	reader := storage.Reader(s.wr.todoEng)
 	for _, sub := range s.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			return kvstorage.SubsumeReplica(ctx, kvstorage.TODOReaderWriter(reader, w), sub)
+			// TODO(sep-raft-log): override RaftWO when engines are separated.
+			return kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
+				State: kvstorage.State{RO: s.wr.stateRO, WO: w},
+				Raft:  kvstorage.Raft{RO: s.wr.raftRO, WO: w},
+			}, sub)
 		}); err != nil {
 			return err
 		}
@@ -194,8 +198,6 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 		return nil // we aren't narrowing anything; no-op
 	}
 
-	// TODO(sep-raft-log): read from the state machine engine here.
-	reader := storage.Reader(s.wr.todoEng)
 	for _, span := range rditer.Select(0, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
 			RSpan:      roachpb.RSpan{Key: s.desc.EndKey, EndKey: endKey},
@@ -206,7 +208,7 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 	}) {
 		if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 			return storage.ClearRangeWithHeuristic(
-				ctx, reader, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys(),
+				ctx, s.wr.stateRO, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys(),
 			)
 		}); err != nil {
 			return err
