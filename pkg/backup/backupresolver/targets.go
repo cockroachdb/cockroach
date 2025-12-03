@@ -782,10 +782,6 @@ func ResolveTargets(
 			}
 			schema, err := col.ByIDWithoutLeased(txn.KV()).Get().Schema(ctx, schemaID)
 			if err != nil {
-				// Schema might not exist or be dropped, skip it.
-				if errors.Is(err, catalog.ErrDescriptorNotFound) {
-					return nil
-				}
 				return err
 			}
 			if !shouldSkipSchema(schema) {
@@ -798,13 +794,10 @@ func ResolveTargets(
 		for _, dbName := range targets.Databases {
 			db, err := col.ByName(txn.KV()).Get().Database(ctx, string(dbName))
 			if err != nil {
-				if errors.Is(err, catalog.ErrDescriptorNotFound) {
-					return errors.Errorf("database %q does not exist", dbName)
-				}
 				return err
 			}
 			if !db.Public() {
-				return errors.Errorf("database %q does not exist", dbName)
+				return sqlerrors.NewUndefinedDatabaseError(tree.ErrString(&dbName))
 			}
 			addDesc(db)
 
