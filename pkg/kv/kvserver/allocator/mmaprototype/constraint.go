@@ -209,6 +209,8 @@ const (
 	// Example: A=[+region=a], B=[+zone=a1]
 	//   If zone=a1 happens to be in region=a, then the disjoint result is
 	//   not correct.
+	// Example: A=[+region=a, +zone=a1], B=[+region=a, +zone=a2]
+	//   Since a store cannot be in both zones, the sets are disjoint.
 	conjNonIntersecting
 )
 
@@ -237,6 +239,14 @@ func (cc constraintsConj) relationship(b constraintsConj) conjunctionRelationshi
 		}
 		if cc[i].less(b[j]) {
 			// Found a conjunct that is not in b.
+			if cc[i].typ == b[j].typ && cc[i].key == b[j].key {
+				// For example, +zone=a1, +zone=a2.
+				return conjNonIntersecting
+				// NB: +zone=a1 and -zone=a1 are also non-intersecting, but we will
+				// not detect this case. Finding this case requires searching through
+				// b, and not simply walking in order, since the typ field is the
+				// first in the sort order and differs between these two conjuncts.
+			}
 			extraInCC++
 			i++
 			continue
@@ -502,13 +512,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	// non-intersecting. When the conjunctions are intersecting, we cannot
 	// promote from one to the other to fill out the set of conjunctions.
 	//
-	// Example 1: +region=a,+zone=a1 and +region=a,+zone=a2 are classified as
-	// conjPossiblyIntersecting, but we could do better in knowing that the
-	// conjunctions are non-intersecting since zone=a1 and zone=a2 are disjoint.
-	//
-	// TODO(sumeer): improve the case of example 1.
-	//
-	// Example 2: +region=a,+zone=a1 and +region=a,-zone=a2 are classified as
+	// Example: +region=a,+zone=a1 and +region=a,-zone=a2 are classified as
 	// conjPossiblyIntersecting. And if there happens to be a zone=a3 in the
 	// region, they are actually intersecting. We cannot do better since we
 	// don't know the semantics of regions, zones or the universe of possible
@@ -560,6 +564,26 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 			internedConstraintsConjunction: constraint,
 		})
 	}
+	trySatisfyVoterWithAll := func(voterIndex, allIndex int) {
+		if voterConstraints[voterIndex].additionalReplicas != 0 {
+			panic("additionalReplicas should be 0 here")
+		}
+		remainingAll := allReplicaConstraints[allIndex].remainingReplicas
+		// NB: we don't bother subtracting
+		// voterConstraints[voterIndex].additionalReplicas since it is always 0 at
+		// this point in the code (asserted above).
+		neededVoterReplicas := conf.voterConstraints[voterIndex].numReplicas -
+			voterConstraints[voterIndex].numReplicas
+		if neededVoterReplicas > 0 && remainingAll > 0 {
+			// We can satisfy some voter replicas.
+			toAdd := remainingAll
+			if toAdd > neededVoterReplicas {
+				toAdd = neededVoterReplicas
+			}
+			voterConstraints[voterIndex].numReplicas += toAdd
+			allReplicaConstraints[allIndex].remainingReplicas -= toAdd
+		}
+	}
 	// Now resume iterating from index, and consume all relationships that are
 	// conjEqualSet and conjStrictSubset.
 	for ; index < len(rels) && rels[index].voterAndAllRel <= conjStrictSubset; index++ {
@@ -569,21 +593,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 			// constraint may need to be narrowed due to replica constraints.
 			continue
 		}
-		remainingAll := allReplicaConstraints[rel.allIndex].remainingReplicas
-		// NB: we don't bother subtracting
-		// voterConstraints[rel.voterIndex].additionalReplicas since it is always
-		// 0 at this point in the code.
-		neededVoterReplicas := conf.voterConstraints[rel.voterIndex].numReplicas -
-			voterConstraints[rel.voterIndex].numReplicas
-		if neededVoterReplicas > 0 && remainingAll > 0 {
-			// We can satisfy some voter replicas.
-			toAdd := remainingAll
-			if toAdd > neededVoterReplicas {
-				toAdd = neededVoterReplicas
-			}
-			voterConstraints[rel.voterIndex].numReplicas += toAdd
-			allReplicaConstraints[rel.allIndex].remainingReplicas -= toAdd
-		}
+		trySatisfyVoterWithAll(rel.voterIndex, rel.allIndex)
 	}
 	// The only relationships remaining are conjStrictSuperset and
 	// conjNonIntersecting. We don't care about the latter. conjStrictSuperset
@@ -603,20 +613,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	// constraint as much as possible. Only what is remaining in the empty voter
 	// constraint will then be available for subsequent narrowing.
 	if emptyVoterConstraintIndex > 0 && emptyConstraintIndex > 0 {
-		neededReplicas := conf.voterConstraints[emptyVoterConstraintIndex].numReplicas
-		actualReplicas := voterConstraints[emptyVoterConstraintIndex].numReplicas
-		remaining := neededReplicas - actualReplicas
-		if remaining > 0 {
-			remainingSatisfiable := allReplicaConstraints[emptyConstraintIndex].remainingReplicas
-			if remainingSatisfiable > 0 {
-				count := remainingSatisfiable
-				if count > remaining {
-					count = remaining
-				}
-				voterConstraints[emptyVoterConstraintIndex].numReplicas += count
-				allReplicaConstraints[emptyConstraintIndex].remainingReplicas -= count
-			}
-		}
+		trySatisfyVoterWithAll(emptyVoterConstraintIndex, emptyConstraintIndex)
 	}
 
 	// The aforementioned "load-balancing" of the satisfaction is why we need
