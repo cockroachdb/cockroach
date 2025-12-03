@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -514,7 +516,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 // building of relationships between voter and all replica constraints.
 func TestNormalizedVoterAllRelationships(t *testing.T) {
 	interner := newStringInterner()
-	datadriven.RunTest(t, "testdata/normalized_voter_all_rels",
+	datadriven.RunTest(t, filepath.Join(datapathutils.TestDataPath(t), t.Name()),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "normalized-voter-all-rels":
