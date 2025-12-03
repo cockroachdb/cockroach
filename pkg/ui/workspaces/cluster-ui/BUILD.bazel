@@ -47,14 +47,12 @@ webpack_bin.webpack_cli(
         "dist/js/main.js.map",
     ],
     args = [
-        "./src/index.ts",
         "--config",
         "webpack.config.js",
-        "--env.is_bazel_build",
+        "--env",
+        "is_bazel_build=true",
         "--mode",
         "production",
-        "-o ./dist/js/main.js",
-        "--env.output=./dist/js/main.js",
     ],
     chdir = package_name(),
 )
