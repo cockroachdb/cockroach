@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,13 +39,27 @@ import (
 func TestPrepareSnapApply(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
 	storage.DisableMetamorphicSimpleValueEncoding(t) // for deterministic output
+	testutils.RunTrueAndFalse(t, "sep-eng", testPrepareSnapApply)
+}
+
+// testPrepareSnapApply tests the snapshot application code, which prepares a
+// set of SSTs to be ingested together with the snapshot SSTs. It this test, the
+// snapshot [a,k) subsumes replicas [a,b) and [b,z). Note that the key span
+// covered by the subsumed replicas is wider than the snapshot's.
+//
+// If separateEngines is true, the raft engine write is separated from the rest.
+func testPrepareSnapApply(t *testing.T, separateEngines bool) {
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
 	var sb redact.StringBuilder
 
+	printBatch := func(b storage.WriteBatch) string {
+		str, err := print.DecodeWriteBatch(b.Repr())
+		require.NoError(t, err)
+		return str
+	}
 	writeSST := func(ctx context.Context, write func(context.Context, storage.Writer) error) error {
 		// Use WriteBatch so that we print the writes in exactly the order in which
 		// they are made. The real code creates an SST writer.
@@ -53,14 +68,13 @@ func TestPrepareSnapApply(t *testing.T) {
 		if err := write(ctx, b); err != nil {
 			return err
 		}
-		str, err := print.DecodeWriteBatch(b.Repr())
-		if err != nil {
-			return err
-		} else if str == "" {
+		str := printBatch(b)
+		if str == "" {
 			return nil
 		}
-		_, err = sb.WriteString(fmt.Sprintf(">> sst:\n%s", str))
-		return err
+		_, err := sb.WriteString(fmt.Sprintf(">> sst:\n%s", str))
+		require.NoError(t, err)
+		return nil
 	}
 
 	desc := func(id roachpb.RangeID, start, end string) *roachpb.RangeDescriptor {
@@ -105,16 +119,22 @@ func TestPrepareSnapApply(t *testing.T) {
 			{FullReplicaID: roachpb.FullReplicaID{RangeID: descB.RangeID, ReplicaID: replicaID}, Keys: descB.RSpan()},
 		},
 	}
+	if separateEngines {
+		swb.wr.separateEngines(eng)
+		defer swb.wr.close()
+	}
 
-	err := swb.prepareSnapApply(ctx)
-	require.NoError(t, err)
+	require.NoError(t, swb.prepareSnapApply(ctx))
 
 	for _, span := range swb.wr.cleared {
 		sb.Printf(">> cleared: %v\n", span)
 	}
 	sb.Printf(">> excise: %v\n", swb.desc.KeySpan().AsRawSpanWithNoLocals())
+	if separateEngines {
+		sb.Printf(">> raft:\n%s", printBatch(swb.wr.raftWO))
+	}
 
-	echotest.Require(t, sb.String(), filepath.Join("testdata", t.Name()+".txt"))
+	echotest.Require(t, sb.String(), filepath.Join("testdata", t.Name()))
 }
 
 func createRangeData(t *testing.T, eng storage.Engine, desc roachpb.RangeDescriptor) {
