@@ -7,6 +7,12 @@ package rttanalysis
 
 import "testing"
 
+// BenchmarkTriggerResolution benchmarks the KV round-trips taken to
+// execute statements with triggers.
+//
+// This benchmark can be run with the command:
+//
+//	./dev test pkg/bench/rttanalysis -f TestBenchmarkExpectation/TriggerResolution
 func BenchmarkTriggerResolution(b *testing.B) {
 	reg.Run(b)
 }
