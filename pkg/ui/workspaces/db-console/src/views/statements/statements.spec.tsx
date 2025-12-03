@@ -297,6 +297,7 @@ function makeStats(): Required<StatementStatistics> {
     failure_count: Long.fromNumber(0),
     generic_count: Long.fromNumber(0),
     stmt_hints_count: Long.fromNumber(0),
+    kv_cpu_time_nanos: makeStat(),
   };
 }
 

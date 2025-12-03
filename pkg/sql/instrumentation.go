@@ -903,7 +903,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		}
 
 		if grunning.Supported {
-			ob.AddKVCPUTime(ih.topLevelStats.kvCPUTime)
+			ob.AddKVCPUTime(ih.topLevelStats.kvCPUTimeNanos)
 		}
 		if !ih.containsMutation && ih.vectorized && grunning.Supported {
 			// Currently we cannot separate SQL CPU time from local KV CPU time for

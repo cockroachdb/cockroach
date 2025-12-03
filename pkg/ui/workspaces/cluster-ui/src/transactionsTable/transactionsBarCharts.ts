@@ -75,6 +75,15 @@ const cpuStdDev = bar(cx("cpu-dev"), (d: Transaction) =>
     d.stats_data.stats.exec_stats.count,
   ),
 );
+const kvCPUTimeBar = [
+  bar(
+    "kv-cpu-time",
+    (d: TransactionInfo) => d.stats_data.stats.kv_cpu_time_nanos?.mean,
+  ),
+];
+const kvCPUTimeStdDev = bar(cx("kv-cpu-time-dev"), (d: Transaction) =>
+  stdDevLong(d.stats_data.stats.kv_cpu_time_nanos, d.stats_data.stats.count),
+);
 const admissionWaitTimeBar = [
   bar(
     "admission-wait-time",
@@ -158,6 +167,12 @@ export const transactionsAdmissionWaitTimeBarChart = barChartFactory(
   admissionWaitTimeBar,
   v => Duration(v),
   admissionWaitTimeStdDev,
+);
+export const transactionsKVCPUTimeBarChart = barChartFactory(
+  "grey",
+  kvCPUTimeBar,
+  v => Duration(v),
+  kvCPUTimeStdDev,
 );
 export const transactionsMaxMemUsageBarChart = barChartFactory(
   "grey",
