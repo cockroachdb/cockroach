@@ -342,7 +342,7 @@ Replaces 'make ui-watch'.`,
 
 				// Add additional webpack args to copy cluster-ui output to external directories.
 				for _, dst := range clusterUiDestinations {
-					argv = append(argv, "--env.copy-to="+dst)
+					argv = append(argv, "--env", "copy-to="+dst)
 				}
 
 				err = nbExec.CommandContextInheritingStdStreams(ctx, "pnpm", argv...)
@@ -376,11 +376,9 @@ Replaces 'make ui-watch'.`,
 				"webpack-dev-server",
 				"--config", "webpack.config.js",
 				"--mode", "development",
-				// Polyfill WEBPACK_SERVE for webpack v4; it's set in webpack v5 via
-				// `webpack serve`.
-				"--env.WEBPACK_SERVE",
-				"--env.dist=ccl",
-				"--env.target=" + dbTarget,
+				"--env", "WEBPACK_SERVE",
+				"--env", "dist=ccl",
+				"--env", "target=" + dbTarget,
 				"--port", port,
 			}
 			if secure {

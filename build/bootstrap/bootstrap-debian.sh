@@ -30,7 +30,7 @@ sudo apt-get install -y --no-install-recommends \
   bison
 
 # pnpm doesn't provide a Debian repository, and supports either `curl | sh` or `npm install -g` installations.
-curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=8.6.6 sh -
+curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=9.15.5 sh -
 echo >> ~/.bashrc
 
 sudo adduser "${USER}" docker
