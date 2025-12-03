@@ -484,6 +484,7 @@ func loadSummaryForDimension(
 	meanUtil float64,
 ) (summary loadSummary) {
 	summ := loadLow
+	reason := ""
 	if dim == WriteBandwidth && capacity == UnknownCapacity {
 		// Ignore smaller than 1MiB differences in write bandwidth. This 1MiB
 		// value is somewhat arbitrary, but is based on EBS gp3 having a default
@@ -538,13 +539,23 @@ func loadSummaryForDimension(
 	)
 	if fractionAbove > meanFractionSlow {
 		summ = overloadSlow
+		reason = "load is >10% above mean"
 	} else if fractionAbove < meanFractionLow {
 		summ = loadLow
+		reason = "load is >10% below mean"
 	} else if fractionAbove >= meanFractionNoChange {
 		summ = loadNoChange
+		reason = "load is within 5-10% of mean"
 	} else {
 		summ = loadNormal
+		reason = "load is within 5% of mean"
 	}
+
+	defer func() {
+		log.KvDistribution.VEventf(ctx, 3,
+			"load summary for dim=%s (n%vs%v): %s, reason: %s [fractionUsed=%.2f%% meanUtil=%.2f%% capacity=%d load=%d]",
+			dim, nodeID, storeID, summary, reason, fractionUsed*100, meanUtil*100, capacity, load)
+	}()
 	if capacity != UnknownCapacity && meanUtil*1.1 < fractionUsed {
 		// Further tune the summary based on utilization.
 		//
@@ -553,19 +564,24 @@ func loadSummaryForDimension(
 		// overload due to heterogeneity, while we primarily still want to focus
 		// on balancing towards the mean usage.
 		if fractionUsed > 0.9 {
+			reason = "fractionUsed > 90%"
 			return min(summaryUpperBound, overloadUrgent)
 		}
 		// INVARIANT: fractionUsed <= 0.9
 		if fractionUsed > 0.75 {
 			if meanUtil*1.5 < fractionUsed {
+				reason = "fractionUsed > 75% and >1.5x meanUtil"
 				return min(summaryUpperBound, overloadUrgent)
 			}
+			reason = "fractionUsed > 75%"
 			return min(summaryUpperBound, overloadSlow)
 		}
 		// INVARIANT: fractionUsed <= 0.75
 		if meanUtil*1.75 < fractionUsed {
+			reason = "fractionUsed < 75% and >1.75x meanUtil"
 			return min(summaryUpperBound, overloadSlow)
 		}
+		reason = "fractionUsed < 75%"
 		return min(summaryUpperBound, max(summ, loadNoChange))
 	}
 	return min(summaryUpperBound, summ)
