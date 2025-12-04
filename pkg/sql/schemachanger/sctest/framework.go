@@ -1015,14 +1015,19 @@ func waitForSchemaChangesToFinish(t *testing.T, tdb *sqlutils.SQLRunner) {
 	)
 }
 
-func hasLatestSchemaChangeSucceededWithTimestamp(
-	t *testing.T, tdb *sqlutils.SQLRunner, startTime time.Time,
+// hasLatestSchemaChangeSucceededWithMaxJobID detects if the latest schema change
+// has changed. The function requires the last observed maximum job ID and takes
+// advantage of the increasing nature of the ID (since the upper bits encode
+// the current time). Note: We could have used `finished`, but it does not encode
+// enough precision.
+func hasLatestSchemaChangeSucceededWithMaxJobID(
+	t *testing.T, tdb *sqlutils.SQLRunner, maxJobID int64,
 ) (succeeded bool, jobExists bool) {
 	result := tdb.QueryStr(t, fmt.Sprintf(
-		`SELECT status FROM [SHOW JOBS] WHERE job_type IN ('%s') AND finished >= $1::timestamp ORDER BY finished DESC, job_id DESC LIMIT 1`,
+		`SELECT status FROM [SHOW JOBS] WHERE job_type IN ('%s') AND job_id > $1 ORDER BY finished DESC, job_id DESC LIMIT 1`,
 		jobspb.TypeNewSchemaChange,
 	),
-		startTime)
+		maxJobID)
 	return len(result) == 0 || result[0][0] == "succeeded", len(result) > 0
 }
 
