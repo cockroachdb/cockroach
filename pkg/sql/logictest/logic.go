@@ -1857,6 +1857,19 @@ func (t *logicTest) newCluster(
 				t.Fatal(err)
 			}
 		}
+
+		if cfg.UseDistributedMergeIndexBackfill {
+			mode := "declarative"
+			if cfg.DisableDeclarativeSchemaChanger {
+				mode = "legacy"
+			}
+			if _, err := conn.Exec(
+				fmt.Sprintf("SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = '%s'", mode),
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		// We disable the automatic stats collection in order to have
 		// deterministic tests.
 		//
