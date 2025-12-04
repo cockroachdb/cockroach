@@ -550,6 +550,82 @@ func (conf *normalizedSpanConfig) buildVoterAndAllRelationships() (
 	return rels, emptyConstraintIndex, emptyVoterConstraintIndex, nil /*err*/
 }
 
+type normalizedConstraintsEnv struct {
+	allReplicaConstraints []allReplicaConstraintsInfo
+	voterConstraints      []voterConstraintsAndAdditionalInfo
+	desiredVoterReplicas []internedConstraintsConjunction
+}
+
+// For each all-replica constraint, track how many replicas are remaining
+// (not already taken by a voter constraint). Additionally, when we find an
+// all replica constraint that is a subset of one or more voter constraints,
+// and create a new voter constraint, we record the index of that new voter
+// constraint in newVoterIndex.
+type allReplicaConstraintsInfo struct {
+	remainingReplicas int32
+	newVoterIndex     int
+}
+
+// For each voter replica constraint, we keep the current
+// internedConstraintsConjunction. The numReplicas start with 0 and build up
+// towards the desired number in the corresponding un-normalized voter
+// constraint. In addition, if the voter constraint had a superset
+// relationship with one or more all-replica constraint, we may take some of
+// its voter count and construct narrower voter constraints.
+// additionalReplicas tracks the total count of replicas in such narrower
+// voter constraints.
+type voterConstraintsAndAdditionalInfo struct {
+	internedConstraintsConjunction
+	additionalReplicas int32
+}
+
+func makeNormalizedConstraintsEnv(conf *normalizedSpanConfig) normalizedConstraintsEnv {
+	// For each voter constraint, we keep the current
+	// internedConstraintsConjunction.
+	// internedConstraintsConjunction.numReplicas start with 0 and build up
+	// towards the desired number in the corresponding un-normalized voter
+	// constraint. In addition, if the voter constraint had a superset
+	// relationship with one or more all-replica constraint, we may take some of
+	// its voter count and construct narrower voter constraints.
+	// additionalReplicas tracks the total count of replicas in such narrower
+	// voter constraints. len(voterConstraints) starts out as
+	// len(conf.voterConstraints) but may grow if we create new voter
+	// constraints to satisfy the strict superset relationships with all-replica
+	// constraints in phase 3.
+	var voterConstraints []voterConstraintsAndAdditionalInfo
+	for _, constraint := range conf.voterConstraints {
+		constraint.numReplicas = 0
+		voterConstraints = append(voterConstraints, voterConstraintsAndAdditionalInfo{
+			internedConstraintsConjunction: constraint,
+		})
+	}
+
+	// For each all-replica constraint, track how many replicas are remaining
+	// (not already taken by a voter constraint).
+	//
+	// allReplicaConstraintsInfo.remainingReplicas starts out as
+	// conf.constraints[i].numReplicas and decreases as we satisfy voter
+	// constraints with it. During the phase for conjStrictSubset, when we find
+	// an all replica constraint that is stricter than voter constraints
+	// (conjStrictSuperset), we create a new voter constraint and record the
+	// index of that new voter constraint in newVoterIndex.
+	// len(allReplicaConstraints) == len(conf.constraints).
+	var allReplicaConstraints []allReplicaConstraintsInfo
+	for i := range conf.constraints {
+		allReplicaConstraints = append(allReplicaConstraints,
+			allReplicaConstraintsInfo{
+				// Initially all of numReplicas are remaining.
+				remainingReplicas: conf.constraints[i].numReplicas,
+				newVoterIndex:     -1,
+			})
+	}
+	return normalizedConstraintsEnv{
+		voterConstraints:      voterConstraints,
+		allReplicaConstraints: allReplicaConstraints,
+		desiredVoterReplicas:  conf.voterConstraints,
+	}
+}
+
 func (conf *normalizedSpanConfig) narrowEmptyConstraints() {
 	// We are done with normalizing voter constraints. We also do some basic
 	// normalization for constraints: we have seen examples where the
@@ -859,6 +935,7 @@ func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
 		return err
 	}
 
+	ncEnv := makeNormalizedConstraintsEnv(conf)
 	// First are the intersecting constraints, which cause an error (though we
 	// proceed with normalization). This is because when there are both shared
 	// and non shared conjuncts, we cannot be certain that the conjunctions are
@@ -885,52 +962,6 @@ func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
 	}
 	// Even if there was an error, we will continue normalization.
 
-	// For each all-replica constraint, track how many replicas are remaining
-	// (not already taken by a voter constraint).
-	//
-	// allReplicaConstraintsInfo.remainingReplicas starts out as
-	// conf.constraints[i].numReplicas and decreases as we satisfy voter
-	// constraints with it. During the phase for conjStrictSubset, when we find
-	// an all replica constraint that is stricter than voter constraints
-	// (conjStrictSuperset), we create a new voter constraint and record the
-	// index of that new voter constraint in newVoterIndex.
-	// len(allReplicaConstraints) == len(conf.constraints).
-	type allReplicaConstraintsInfo struct {
-		remainingReplicas int32
-		newVoterIndex     int
-	}
-	var allReplicaConstraints []allReplicaConstraintsInfo
-	for i := range conf.constraints {
-		allReplicaConstraints = append(allReplicaConstraints,
-			allReplicaConstraintsInfo{
-				// Initially all of numReplicas are remaining.
-				remainingReplicas: conf.constraints[i].numReplicas,
-				newVoterIndex:     -1,
-			})
-	}
-	// For each voter constraint, we keep the current
-	// internedConstraintsConjunction.
-	// internedConstraintsConjunction.numReplicas start with 0 and build up
-	// towards the desired number in the corresponding un-normalized voter
-	// constraint. In addition, if the voter constraint had a superset
-	// relationship with one or more all-replica constraint, we may take some of
-	// its voter count and construct narrower voter constraints.
-	// additionalReplicas tracks the total count of replicas in such narrower
-	// voter constraints. len(voterConstraints) starts out as
-	// len(conf.voterConstraints) but may grow if we create new voter
-	// constraints to satisfy the strict superset relationships with all-replica
-	// constraints in phase 3.
-	type voterConstraintsAndAdditionalInfo struct {
-		internedConstraintsConjunction
-		additionalReplicas int32
-	}
-	var voterConstraints []voterConstraintsAndAdditionalInfo
-	for _, constraint := range conf.voterConstraints {
-		constraint.numReplicas = 0
-		voterConstraints = append(voterConstraints, voterConstraintsAndAdditionalInfo{
-			internedConstraintsConjunction: constraint,
-		})
-	}
 	// Now resume iterating from index, and consume all relationships that are
 	// conjEqualSet and conjStrictSubset.
 	for ; index < len(rels) && rels[index].voterAndAllRel <= conjStrictSubset; index++ {
@@ -940,17 +971,17 @@ func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
 			// constraint may need to be narrowed due to replica constraints.
 			continue
 		}
-		remainingAll := allReplicaConstraints[rel.allIndex].remainingReplicas
+		remainingAll := ncEnv.allReplicaConstraints[rel.allIndex].remainingReplicas
 		// NB: we don't bother subtracting
-		// voterConstraints[rel.voterIndex].additionalReplicas since it is always
+		// ncEnv.voterConstraints[rel.voterIndex].additionalReplicas since it is always
 		// 0 at this point in the code.
 		neededVoterReplicas := conf.voterConstraints[rel.voterIndex].numReplicas -
-			voterConstraints[rel.voterIndex].numReplicas
+			ncEnv.voterConstraints[rel.voterIndex].numReplicas
 		if neededVoterReplicas > 0 && remainingAll > 0 {
 			// We can satisfy some voter replicas.
 			toAdd := min(remainingAll, neededVoterReplicas)
-			voterConstraints[rel.voterIndex].numReplicas += toAdd
-			allReplicaConstraints[rel.allIndex].remainingReplicas -= toAdd
+			ncEnv.voterConstraints[rel.voterIndex].numReplicas += toAdd
+			ncEnv.allReplicaConstraints[rel.allIndex].remainingReplicas -= toAdd
 		}
 	}
 	// The only relationships remaining are conjStrictSuperset and
@@ -975,15 +1006,15 @@ func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
 		// While iterating over the previous relationships, we skipped over
 		// emptyVoterConstraintIndex, so its corresponding
 		// voterConstraints.numReplicas must be 0.
-		if voterConstraints[emptyVoterConstraintIndex].numReplicas != 0 {
+		if ncEnv.voterConstraints[emptyVoterConstraintIndex].numReplicas != 0 {
 			panic(errors.AssertionFailedf("programming error: voterConstraints[%d].numReplicas should be 0, but is %d",
-				emptyVoterConstraintIndex, voterConstraints[emptyVoterConstraintIndex].numReplicas))
+				emptyVoterConstraintIndex, ncEnv.voterConstraints[emptyVoterConstraintIndex].numReplicas))
 		}
-		remainingSatisfiable := allReplicaConstraints[emptyConstraintIndex].remainingReplicas
+		remainingSatisfiable := ncEnv.allReplicaConstraints[emptyConstraintIndex].remainingReplicas
 		if neededReplicas > 0 && remainingSatisfiable > 0 {
 			count := min(remainingSatisfiable, neededReplicas)
-			voterConstraints[emptyVoterConstraintIndex].numReplicas += count
-			allReplicaConstraints[emptyConstraintIndex].remainingReplicas -= count
+			ncEnv.voterConstraints[emptyVoterConstraintIndex].numReplicas += count
+			ncEnv.allReplicaConstraints[emptyConstraintIndex].remainingReplicas -= count
 		}
 	}
 
@@ -1002,20 +1033,20 @@ func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
 		added := false
 		for i := index; i < len(rels) && rels[i].voterAndAllRel == conjStrictSuperset; i++ {
 			rel := rels[i]
-			remainingAll := allReplicaConstraints[rel.allIndex].remainingReplicas
+			remainingAll := ncEnv.allReplicaConstraints[rel.allIndex].remainingReplicas
 			neededVoterReplicas := conf.voterConstraints[rel.voterIndex].numReplicas -
-				voterConstraints[rel.voterIndex].numReplicas -
-				voterConstraints[rel.voterIndex].additionalReplicas
+				ncEnv.voterConstraints[rel.voterIndex].numReplicas -
+				ncEnv.voterConstraints[rel.voterIndex].additionalReplicas
 			if neededVoterReplicas > 0 && remainingAll > 0 {
 				// Satisfy 1 replica.
-				voterConstraints[rel.voterIndex].additionalReplicas++
-				allReplicaConstraints[rel.allIndex].remainingReplicas--
-				newVoterIndex := allReplicaConstraints[rel.allIndex].newVoterIndex
+				ncEnv.voterConstraints[rel.voterIndex].additionalReplicas++
+				ncEnv.allReplicaConstraints[rel.allIndex].remainingReplicas--
+				newVoterIndex := ncEnv.allReplicaConstraints[rel.allIndex].newVoterIndex
 				if newVoterIndex == -1 {
 					// We haven't yet created a narrower voter constraint for this.
-					newVoterIndex = len(voterConstraints)
-					allReplicaConstraints[rel.allIndex].newVoterIndex = newVoterIndex
-					voterConstraints = append(voterConstraints, voterConstraintsAndAdditionalInfo{
+					newVoterIndex = len(ncEnv.voterConstraints)
+					ncEnv.allReplicaConstraints[rel.allIndex].newVoterIndex = newVoterIndex
+					ncEnv.voterConstraints = append(ncEnv.voterConstraints, voterConstraintsAndAdditionalInfo{
 						internedConstraintsConjunction: internedConstraintsConjunction{
 							numReplicas: 0,
 							constraints: conf.constraints[rel.allIndex].constraints,
@@ -1023,7 +1054,7 @@ func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
 						additionalReplicas: 0,
 					})
 				}
-				voterConstraints[newVoterIndex].numReplicas++
+				ncEnv.voterConstraints[newVoterIndex].numReplicas++
 				added = true
 			}
 		}
@@ -1036,7 +1067,7 @@ func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
 	// Does it make sense to surface an error here
 	for i := range conf.voterConstraints {
 		neededReplicas := conf.voterConstraints[i].numReplicas
-		actualReplicas := voterConstraints[i].numReplicas + voterConstraints[i].additionalReplicas
+		actualReplicas := ncEnv.voterConstraints[i].numReplicas + ncEnv.voterConstraints[i].additionalReplicas
 		if actualReplicas > neededReplicas {
 			panic("code bug")
 		}
@@ -1050,19 +1081,19 @@ func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
 			// NB: this is not the same as
 			// voterConstraints[i].numReplicas=neededReplicas, since we may have
 			// non-zero additionalReplicas.
-			voterConstraints[i].numReplicas += neededReplicas - actualReplicas
+			ncEnv.voterConstraints[i].numReplicas += neededReplicas - actualReplicas
 		}
 	}
-	n := len(voterConstraints) - 1
+	n := len(ncEnv.voterConstraints) - 1
 	if emptyVoterConstraintIndex >= 0 && emptyVoterConstraintIndex < n {
 		// Move it to the end, since it is the biggest set.
-		voterConstraints[emptyVoterConstraintIndex], voterConstraints[n] =
-			voterConstraints[n], voterConstraints[emptyVoterConstraintIndex]
+		ncEnv.voterConstraints[emptyVoterConstraintIndex], ncEnv.voterConstraints[n] =
+			ncEnv.voterConstraints[n], ncEnv.voterConstraints[emptyVoterConstraintIndex]
 	}
 	var vc []internedConstraintsConjunction
-	for i := range voterConstraints {
-		if voterConstraints[i].numReplicas > 0 {
-			vc = append(vc, voterConstraints[i].internedConstraintsConjunction)
+	for i := range ncEnv.voterConstraints {
+		if ncEnv.voterConstraints[i].numReplicas > 0 {
+			vc = append(vc, ncEnv.voterConstraints[i].internedConstraintsConjunction)
 		}
 		// Else, one of the original voterConstraints got completely narrowed and
 		// replaced by narrower conjunctions.
