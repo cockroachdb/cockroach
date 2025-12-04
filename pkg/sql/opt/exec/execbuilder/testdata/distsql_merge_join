@@ -107,29 +107,29 @@ query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE parent1 WITH DETAILS]
 ORDER BY 1
 ----
-start_key           end_key                    replicas  lease_holder
-<before:/Table/76>  …/1/8                      {1}       1
-…/1/16              …/1/24                     {1}       1
-…/1/24              …/1/32                     {1}       1
-…/1/32              <after:/Table/108/1/4/44>  {1}       1
-…/1/8               …/1/16                     {1}       1
+start_key           end_key                   replicas  lease_holder
+<before:/Table/XX>  …/1/8                     {1}       1
+…/1/16              …/1/24                    {1}       1
+…/1/24              …/1/32                    {1}       1
+…/1/32              <after:/Table/XX/1/4/44>  {1}       1
+…/1/8               …/1/16                    {1}       1
 
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE child1 WITH DETAILS]
 ----
-start_key                 end_key                        replicas  lease_holder
-<before:/Table/106/1/32>  …/1/4/44                       {1}       1
-…/1/4/44                  …/1/12/52                      {1}       1
-…/1/12/52                 …/1/20/60                      {1}       1
-…/1/20/60                 …/1/28/68                      {1}       1
-…/1/28/68                 …/1/36/76                      {1}       1
-…/1/36/76                 <after:/Table/111/1/2/42/2/2>  {1}       1
+start_key                 end_key                       replicas  lease_holder
+<before:/Table/106/1/32>  …/1/4/44                      {1}       1
+…/1/4/44                  …/1/12/52                     {1}       1
+…/1/12/52                 …/1/20/60                     {1}       1
+…/1/20/60                 …/1/28/68                     {1}       1
+…/1/28/68                 …/1/36/76                     {1}       1
+…/1/36/76                 <after:/Table/XX/1/2/42/2/2>  {1}       1
 
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE grandchild1 WITH DETAILS]
 ----
-start_key                    end_key                        replicas  lease_holder
-<before:/Table/108/1/36/76>  <after:/Table/111/1/2/42/2/2>  {1}       1
+start_key                    end_key                       replicas  lease_holder
+<before:/Table/108/1/36/76>  <after:/Table/XX/1/2/42/2/2>  {1}       1
 
 ###############
 # Merge joins #
