@@ -578,15 +578,8 @@ func narrowEmptyConstraints(conf *normalizedSpanConfig, rels []relationshipVoter
 	// will need to move that non-voter to us-central-1, which is wasteful.
 	if emptyConstraintIndex >= 0 {
 		// Recompute the relationship since voterConstraints have changed.
-		emptyVoterConstraintIndex := -1
 		rels = rels[:0]
 		for i := range conf.voterConstraints {
-			if len(conf.voterConstraints[i].constraints) == 0 {
-				// We don't actually use emptyVoterConstraintIndex later, but it is
-				// harmless to recompute, and will avoid subtle bugs if we change the
-				// logic below to start using it.
-				emptyVoterConstraintIndex = i
-			}
 			for j := range conf.constraints {
 				rels = append(rels, relationshipVoterAndAll{
 					voterIndex: i,
