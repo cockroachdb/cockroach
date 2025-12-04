@@ -517,7 +517,7 @@ func normalizeConstraints(
 // constraints:       [+region=a]: 1, []: 1
 //
 // Without this step, voter_constraints: []:1 would be unnecessarily narrowed to
-// [+zone=a]:1 where it can match with []: 1 in constraints.
+// [+zone=a]:1 but []: 1 in constraints can already satisfy it.
 //
 // - conjStrictSuperset: The voter constraint is more general than the
 // all-replica constraint, meaning it is under-specified. For voter constraints
@@ -547,9 +547,9 @@ func normalizeConstraints(
 // voterConstraints:  [+zone=a2]: 2
 //
 // The voter constraint [+zone=a2] has no overlap with [+zone=a1]. We skip this
-// relationship, leaving the voter unmatched. Note that in the end, we will
-// still return the original voter constraint despite it being unmatched with an
-// error.
+// relationship, leaving the voter unsatisfied. Note that in the end, we will
+// still return the original voter constraint despite it being unsatisfied, with
+// an error.
 //
 // To do this, we track two pieces of state:
 //
@@ -570,7 +570,7 @@ func normalizeConstraints(
 // Phase 2: Normalizing All-Replica Constraints
 // After Phase 1, voter constraints are normalized, but all-replica constraints
 // may be under-specified compared to them. Phase 2 borrows from the empty
-// all-replica constraint to top up specific constraints so they match voter
+// all-replica constraint to top up specific constraints so they satisfy voter
 // requirements.
 //
 // Example:
@@ -590,7 +590,7 @@ func normalizeConstraints(
 // might place it anywhere (using the []:2 pool). But ideally it should go in
 // us-east-1 where a voter is missing.
 //
-// After Phase 2 (borrow from [] to match voter requirements):
+// After Phase 2 (borrow from [] to satisfy voter requirements):
 //
 //	constraints:       [+region=us-west-1]: 2, [+region=us-east-1]: 2, []: 0
 //	voterConstraints:  [+region=us-west-1]: 2, [+region=us-east-1]: 2
@@ -820,7 +820,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 			err = errors.Errorf("could not satisfy all voter constraints due to " +
 				"non-intersecting conjunctions in voter and all replica constraints")
 			// Leave the original numReplicas in the output unchanged even though we couldn't
-			// match it to any all-replica constraint.
+			// satisfy it using any all-replica constraint.
 			voterConstraints[i].numReplicas += neededReplicas - actualReplicas
 		}
 	}
