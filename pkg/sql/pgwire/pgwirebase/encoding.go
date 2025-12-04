@@ -655,9 +655,19 @@ func DecodeDatum(
 				// is larger than our calculated dscale, truncate our buffer to match the
 				// desired dscale.
 				dscale := (alloc.pgNum.Ndigits - (alloc.pgNum.Weight + 1)) * PGDecDigits
+
 				if overScale := dscale - alloc.pgNum.Dscale; overScale > 0 {
 					dscale -= overScale
 					decDigits = decDigits[:len(decDigits)-int(overScale)]
+				} else if overScale < 0 {
+					z := -overScale
+					if dscale < 0 {
+						z = alloc.pgNum.Dscale
+					}
+					for i := int16(0); i < z; i++ {
+						decDigits = append(decDigits, '0')
+						dscale++
+					}
 				}
 
 				decString := encoding.UnsafeConvertBytesToString(decDigits)
