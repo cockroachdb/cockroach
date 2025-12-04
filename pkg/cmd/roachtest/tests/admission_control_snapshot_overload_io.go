@@ -47,6 +47,8 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 				spec.VolumeSize(cfg.volumeSize),
 				spec.ReuseNone(),
 				spec.DisableLocalSSD(),
+				spec.RandomizeVolumeType(),
+				spec.RandomlyUseXfs(),
 				// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
 				spec.Arch(spec.AllExceptFIPS),
 			),
