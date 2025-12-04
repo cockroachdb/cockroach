@@ -25,8 +25,6 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
-var delimiter = []byte{'_'}
-
 const (
 	dbLabel  = "database"
 	appLabel = "application_name"
@@ -36,6 +34,11 @@ const (
 	// defaultRetentionTimeTillEviction is the default duration after which unused
 	// label value combinations can be evicted from high cardinality metrics.
 	defaultRetentionTimeTillEviction = 20 * time.Second
+)
+
+var (
+	delimiter         = []byte{'_'}
+	evictedValueLabel = "evicted"
 )
 
 // This is a no-op context used during logging.
@@ -80,6 +83,25 @@ func (b Builder) CounterFloat64(metadata metric.Metadata) *AggCounterFloat64 {
 // Histogram constructs a new AggHistogram with the Builder's labels.
 func (b Builder) Histogram(opts metric.HistogramOptions) *AggHistogram {
 	return NewHistogram(opts, b.labels...)
+}
+
+// HighCardinalityCounter constructs a new HighCardinalityCounter with the Builder's labels.
+func (b Builder) HighCardinalityCounter(
+	opts metric.HighCardinalityMetricOptions,
+) *HighCardinalityCounter {
+	return NewHighCardinalityCounter(opts, b.labels...)
+}
+
+// HighCardinalityGauge constructs a new HighCardinalityGauge with the Builder's labels.
+func (b Builder) HighCardinalityGauge(
+	opts metric.HighCardinalityMetricOptions,
+) *HighCardinalityGauge {
+	return NewHighCardinalityGauge(opts, b.labels...)
+}
+
+// HighCardinalityHistogram constructs a new HighCardinalityHistogram with the Builder's labels.
+func (b Builder) HighCardinalityHistogram(opts metric.HistogramOptions) *HighCardinalityHistogram {
+	return NewHighCardinalityHistogram(opts, b.labels...)
 }
 
 type childSet struct {
@@ -151,9 +173,9 @@ func (cs *childSet) initWithCacheStorageType(
 					log.Dev.Infof(noOpCtx, "evicted child of metric %s with label values: %s\n",
 						redact.SafeString(metricName), redact.SafeString(strings.Join(labelValues, ",")))
 
-					// Invoke DecrementAndDeleteIfZero from ChildMetric which relies on LabelSliceCache
+					// Invoke UpdateLabelReference from ChildMetric which relies on LabelSliceCache
 					if boundedChild, ok := childMetric.(LabelSliceCachedChildMetric); ok {
-						boundedChild.DecrementLabelSliceCacheReference()
+						boundedChild.UpdateLabelReference()
 					}
 				}
 			},
@@ -451,7 +473,7 @@ type ChildMetric interface {
 type LabelSliceCachedChildMetric interface {
 	ChildMetric
 	CreatedAt() time.Time
-	DecrementLabelSliceCacheReference()
+	UpdateLabelReference()
 }
 
 type labelValuer interface {

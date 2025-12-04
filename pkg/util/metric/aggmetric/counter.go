@@ -401,7 +401,8 @@ func (s *SQLChildCounter) Inc(i int64) {
 // allowing for automatic eviction of less frequently used child metrics.
 // This is useful when dealing with high cardinality metrics that might exceed resource limits.
 type HighCardinalityCounter struct {
-	g metric.Counter
+	g              metric.Counter
+	evictedCounter metric.Counter
 	childSet
 	labelSliceCache *metric.LabelSliceCache
 }
@@ -479,6 +480,26 @@ func (c *HighCardinalityCounter) Inc(i int64, labelValues ...string) {
 func (c *HighCardinalityCounter) Each(
 	labels []*io_prometheus_client.LabelPair, f func(metric *io_prometheus_client.Metric),
 ) {
+	// Emit evicted value counter with "evicted" as label values
+	evictedLabels := make([]*io_prometheus_client.LabelPair, len(labels))
+	copy(evictedLabels, labels)
+
+	for i := range c.labels {
+		evictedLabels = append(evictedLabels, &io_prometheus_client.LabelPair{
+			Name:  &c.labels[i],
+			Value: &evictedValueLabel,
+		})
+	}
+
+	evictedMetric := &io_prometheus_client.Metric{
+		Counter: &io_prometheus_client.Counter{
+			Value: proto.Float64(float64(c.evictedCounter.Count())),
+		},
+		Label: evictedLabels,
+	}
+	f(evictedMetric)
+
+	// Then emit child metrics
 	c.EachWithLabels(labels, f, c.labelSliceCache)
 }
 
@@ -518,6 +539,7 @@ func (c *HighCardinalityCounter) createHighCardinalityChildCounter(
 		LabelSliceCacheKey: metric.LabelSliceCacheKey(key),
 		LabelSliceCache:    cache,
 		createdAt:          timeutil.Now(),
+		evictedCounter:     &c.evictedCounter,
 	}
 }
 
@@ -528,14 +550,16 @@ type HighCardinalityChildCounter struct {
 	metric.LabelSliceCacheKey
 	value metric.Counter
 	*metric.LabelSliceCache
-	createdAt time.Time
+	createdAt      time.Time
+	evictedCounter *metric.Counter
 }
 
 func (c *HighCardinalityChildCounter) CreatedAt() time.Time {
 	return c.createdAt
 }
 
-func (c *HighCardinalityChildCounter) DecrementLabelSliceCacheReference() {
+func (c *HighCardinalityChildCounter) UpdateLabelReference() {
+	c.evictedCounter.Inc(c.value.Count())
 	c.LabelSliceCache.DecrementAndDeleteIfZero(c.LabelSliceCacheKey)
 }
 
