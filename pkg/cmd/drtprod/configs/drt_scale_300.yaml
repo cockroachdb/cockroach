@@ -1,5 +1,7 @@
-# Yaml for creating and configuring the drt-scale cluster. This also configures Datadog.
-# Build the roachprod and roachtest binaries (using --cross) before running this script
+# YAML for creating and configuring the drt-scale cluster. This also configures Datadog.
+# Build the drtprod and roachtest binaries (using --cross=linux) before running this script
+#
+# Planned Execution Date: 2025-12
 environment:
   ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
   ROACHPROD_DNS: drt.crdb.io
@@ -9,20 +11,28 @@ environment:
   CLUSTER: drt-scale-300
   WORKLOAD_CLUSTER: workload-scale-300
   CLUSTER_NODES: 300
-  TOTAL_PARTITIONS: 15
+  RACKS: 300
+  NODES_PER_ZONE: 100
+  TOTAL_PARTITIONS: 300
+  PARTITION_TYPE: partitions
   WORKLOAD_NODES: 15
+  VERSION: v25.4.1
+  WAREHOUSES: 4000000
 
 dependent_file_locations:
+  - pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller
   - pkg/cmd/drtprod/scripts/setup_datadog_cluster
   - pkg/cmd/drtprod/scripts/setup_datadog_workload
   - pkg/cmd/drtprod/scripts/tpcc_init.sh
   - pkg/cmd/drtprod/scripts/generate_tpcc_run.sh
+  - pkg/cmd/drtprod/scripts/populate_workload_keys.sh
   - artifacts/roachtest
   - artifacts/drtprod
 
 targets:
   # crdb cluster specs
-  - target_name: $CLUSTER
+  - target_name: $CLUSTER initialisation
+    notify_progress: true
     steps:
       - command: create
         args:
@@ -31,7 +41,7 @@ targets:
           clouds: gce
           gce-managed: true
           gce-enable-multiple-stores: true
-          gce-zones: "us-central1-a:30,us-central1-b:30,us-central1-c:30"
+          gce-zones: "us-central1-a:$NODES_PER_ZONE,us-central1-b:$NODES_PER_ZONE,us-central1-c:$NODES_PER_ZONE"
           nodes: $CLUSTER_NODES
           gce-machine-type: n2-standard-16
           local-ssd: false
@@ -43,24 +53,30 @@ targets:
           lifetime: 8760h
           gce-image: "ubuntu-2204-jammy-v20250112"
       - command: sync
+        skip_notification: true
         flags:
           clouds: gce
+      - script: "pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller"
+        skip_notification: true
       - command: stage
+        skip_notification: true
         args:
           - $CLUSTER
           - release
-          - v25.2.0-rc.1 # for libgeos
-      - command: stage
-        args:
-          - $CLUSTER
-          - cockroach
-          - release-25.2.1-rc
+          - $VERSION
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
+        skip_notification: true
       - command: start
         args:
           - $CLUSTER
           - "--binary"
           - "./cockroach"
+          - "--env" # from defaults
+          - "COCKROACH_TESTING_FORCE_RELEASE_BRANCH=true"
+          - "--env" # from defaults
+          - "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true"
+          - "--env" # for MMA test case scenario
+          - "COCKROACH_ALLOW_MMA=true"
         flags:
           # add flag to set provisioned throughput on each store according to their cloud provider limits
           enable-fluent-sink: true
@@ -68,11 +84,7 @@ targets:
           args: --wal-failover=among-stores
           restart: false
           sql-port: 26257
-      - command: run
-        args:
-          - $CLUSTER
-          - --
-          - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
+          racks: $RACKS
       - command: sql
         args:
           - $CLUSTER:1
@@ -104,7 +116,8 @@ targets:
       - command: stage
         args:
           - $WORKLOAD_CLUSTER
-          - cockroach
+          - release
+          - $VERSION
       - command: put
         args:
           - $WORKLOAD_CLUSTER
@@ -116,42 +129,42 @@ targets:
           - artifacts/drtprod
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
   - target_name: post_tasks
+    notify_progress: true
     dependent_targets:
-      - $CLUSTER
+      - $CLUSTER initialisation
       - $WORKLOAD_CLUSTER
     steps:
       - script: rm
+        skip_notification: true
         args:
           - -rf
           - certs-$CLUSTER
-      - command: get
+      - command: fetch-certs
+        skip_notification: true
         args:
           - $CLUSTER:1
-          - certs
           - certs-$CLUSTER
       - command: put
+        skip_notification: true
         args:
           - $WORKLOAD_CLUSTER
           - certs-$CLUSTER
           - certs
-      - command: ssh
-        args:
-          - $WORKLOAD_CLUSTER
-          - --
-          - chmod
-          - 600
-          - './certs/*'
       - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
         args:
           - cct_tpcc
           - false
         flags:
-          warehouses: 4000000
+          partitions: $TOTAL_PARTITIONS
+          replicate-static-columns: true
+          partition-strategy: leases
+          warehouses: $WAREHOUSES
           db: cct_tpcc
       - script: pkg/cmd/drtprod/scripts/populate_workload_keys.sh
   - target_name: tpcc_run
+    notify_progress: true
     dependent_targets:
-      - $CLUSTER
+      - $CLUSTER initialisation
       - $WORKLOAD_CLUSTER
     steps:
       - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
@@ -160,12 +173,11 @@ targets:
           - false
         flags:
           db: cct_tpcc
-          warehouses: 4000000
-          active-warehouses: 500000
-          active-workers: 2000
+          warehouses:  $WAREHOUSES
+          active-warehouses: 266666
+          workers: 266666
           conns: 2000
-          max-rate: 2500
-          workers: 500000
+          active-workers: 2000
           duration: 12h
           ramp: 1h
           wait: 0
