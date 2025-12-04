@@ -680,7 +680,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	// conf.constraints[i].numReplicas and decreases as we satisfy voter
 	// constraints with it. During the phase for conjStrictSubset, when we find
 	// an all replica constraint that is stricter than voter constraints
-	// (conjStrictSuperset), we create a new voter constraint, we record the
+	// (conjStrictSuperset), we create a new voter constraint and record the
 	// index of that new voter constraint in newVoterIndex.
 	// len(allReplicaConstraints) == len(conf.constraints).
 	type allReplicaConstraintsInfo struct {
