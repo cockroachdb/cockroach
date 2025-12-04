@@ -49,9 +49,10 @@ func BuildStages(
 				return scJobID
 			}
 		}(),
-		targetState: init.TargetState,
-		initial:     init.Initial,
-		current:     init.Current,
+		targetState:          init.TargetState,
+		distributedMergeMode: init.DistributedMergeMode,
+		initial:              init.Initial,
+		current:              init.Current,
 		targetToIdx: func() map[*scpb.Target]int {
 			m := make(map[*scpb.Target]int, len(init.Targets))
 			for i := range init.Targets {
@@ -100,6 +101,7 @@ type buildContext struct {
 	g                      *scgraph.Graph
 	scJobID                func() jobspb.JobID
 	targetState            scpb.TargetState
+	distributedMergeMode   scpb.DistributedMergeMode
 	initial                []scpb.Status
 	current                []scpb.Status
 	targetToIdx            map[*scpb.Target]int
@@ -819,13 +821,23 @@ func (bc buildContext) createSchemaChangeJobOp(
 	descIDsPresentAfter catalog.DescriptorIDSet, next *Stage,
 ) scop.Op {
 	return &scop.CreateSchemaChangerJob{
-		JobID:         bc.scJobID(),
-		Statements:    bc.targetState.Statements,
-		Authorization: bc.targetState.Authorization,
-		DescriptorIDs: descIDsPresentAfter.Ordered(),
-		NonCancelable: !isRevertible(next),
-		RunningStatus: runningStatus(next),
+		JobID:                bc.scJobID(),
+		Statements:           bc.targetState.Statements,
+		Authorization:        bc.targetState.Authorization,
+		DescriptorIDs:        descIDsPresentAfter.Ordered(),
+		NonCancelable:        !isRevertible(next),
+		RunningStatus:        runningStatus(next),
+		DistributedMergeMode: stateModeToJobMode(bc.distributedMergeMode),
 	}
+}
+
+func stateModeToJobMode(
+	stateMode scpb.DistributedMergeMode,
+) jobspb.IndexBackfillDistributedMergeMode {
+	if stateMode == scpb.DistributedMergeModeEnabled {
+		return jobspb.IndexBackfillDistributedMergeMode_Enabled
+	}
+	return jobspb.IndexBackfillDistributedMergeMode_Disabled
 }
 
 func (bc buildContext) updateJobProgressOp(

@@ -30,7 +30,6 @@ type deferredState struct {
 	indexesToSplitAndScatter     []indexesToSplitAndScatter
 	ttlScheduleMetadataUpdates   []ttlScheduleMetadataUpdate
 	gcJobs
-	distributedMergeMode jobspb.IndexBackfillDistributedMergeMode
 }
 
 type databaseRoleSettingToDelete struct {
@@ -100,6 +99,7 @@ func (s *deferredState) AddNewSchemaChangerJob(
 	auth scpb.Authorization,
 	descriptorIDs catalog.DescriptorIDSet,
 	runningStatus redact.RedactableString,
+	distributedMergeMode jobspb.IndexBackfillDistributedMergeMode,
 ) error {
 	if s.schemaChangerJob != nil {
 		return errors.AssertionFailedf("cannot create more than one new schema change job")
@@ -111,7 +111,7 @@ func (s *deferredState) AddNewSchemaChangerJob(
 		auth,
 		descriptorIDs,
 		runningStatus,
-		s.distributedMergeMode,
+		distributedMergeMode,
 	)
 	return nil
 }
