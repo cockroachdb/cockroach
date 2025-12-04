@@ -626,6 +626,22 @@ func makeNormalizedConstraintsEnv(conf *normalizedSpanConfig) normalizedConstrai
 	}
 }
 
+// satisfyVoterWithAll satisfies the voter constraint with the all replica
+// constraint.
+func (ncEnv *normalizedConstraintsEnv) satisfyVoterWithAll(voterIndex int, allIndex int) {
+	remainingAll := ncEnv.allReplicaConstraints[allIndex].remainingReplicas
+	// NB: we don't bother subtracting
+	// ncEnv.voterConstraints[rel.voterIndex].additionalReplicas since it is always
+	// 0 at this point in the code.
+	neededVoterReplicas := ncEnv.requiredVoterReplicas[voterIndex].numReplicas - ncEnv.voterConstraints[voterIndex].numReplicas
+	if neededVoterReplicas > 0 && remainingAll > 0 {
+		// We can satisfy some voter replicas.
+		toAdd := min(remainingAll, neededVoterReplicas)
+		ncEnv.voterConstraints[voterIndex].numReplicas += toAdd
+		ncEnv.allReplicaConstraints[allIndex].remainingReplicas -= toAdd
+	}
+}
+
 func (conf *normalizedSpanConfig) narrowEmptyConstraints() {
 	// We are done with normalizing voter constraints. We also do some basic
 	// normalization for constraints: we have seen examples where the
@@ -971,18 +987,7 @@ func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
 			// constraint may need to be narrowed due to replica constraints.
 			continue
 		}
-		remainingAll := ncEnv.allReplicaConstraints[rel.allIndex].remainingReplicas
-		// NB: we don't bother subtracting
-		// ncEnv.voterConstraints[rel.voterIndex].additionalReplicas since it is always
-		// 0 at this point in the code.
-		neededVoterReplicas := conf.voterConstraints[rel.voterIndex].numReplicas -
-			ncEnv.voterConstraints[rel.voterIndex].numReplicas
-		if neededVoterReplicas > 0 && remainingAll > 0 {
-			// We can satisfy some voter replicas.
-			toAdd := min(remainingAll, neededVoterReplicas)
-			ncEnv.voterConstraints[rel.voterIndex].numReplicas += toAdd
-			ncEnv.allReplicaConstraints[rel.allIndex].remainingReplicas -= toAdd
-		}
+		ncEnv.satisfyVoterWithAll(rel.voterIndex, rel.allIndex)
 	}
 	// The only relationships remaining are conjStrictSuperset and
 	// conjNonIntersecting. We don't care about the latter. conjStrictSuperset
@@ -1006,16 +1011,13 @@ func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
 		// While iterating over the previous relationships, we skipped over
 		// emptyVoterConstraintIndex, so its corresponding
 		// voterConstraints.numReplicas must be 0.
-		if ncEnv.voterConstraints[emptyVoterConstraintIndex].numReplicas != 0 {
-			panic(errors.AssertionFailedf("programming error: voterConstraints[%d].numReplicas should be 0, but is %d",
-				emptyVoterConstraintIndex, ncEnv.voterConstraints[emptyVoterConstraintIndex].numReplicas))
-		}
 		remainingSatisfiable := ncEnv.allReplicaConstraints[emptyConstraintIndex].remainingReplicas
 		if neededReplicas > 0 && remainingSatisfiable > 0 {
 			count := min(remainingSatisfiable, neededReplicas)
 			ncEnv.voterConstraints[emptyVoterConstraintIndex].numReplicas += count
 			ncEnv.allReplicaConstraints[emptyConstraintIndex].remainingReplicas -= count
 		}
+		ncEnv.satisfyVoterWithAll(emptyVoterConstraintIndex, emptyConstraintIndex)
 	}
 
 	// The aforementioned "load-balancing" of the satisfaction is why we need
