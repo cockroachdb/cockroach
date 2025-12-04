@@ -554,7 +554,8 @@ var (
 		"the minimum size of a value that will be separated into a blob file given the value is "+
 			"likely not the latest version of a key",
 		int64(metamorphic.ConstantWithTestRange("storage.value_separation.mvcc_history_minimum_size",
-			32 /* 32 bytes (default) */, 25 /* 25 bytes (minimum) */, 512 /* 512 bytes (maximum) */)),
+			1<<10, /* 1 KiB (default) */
+			25 /* 25 bytes (minimum) */, 1<<20 /* 1 MiB (maximum) */)),
 		settings.IntWithMinimum(1),
 	)
 )
