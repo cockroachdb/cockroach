@@ -531,13 +531,16 @@ import (
 // - For troubleshooting / analysis: add -v -show-sql -error-summary.
 
 var (
-	resultsRE   = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
-	noticeRE    = regexp.MustCompile(`^statement\s+(?:async\s+[[:alnum:]]+\s+)?notice\s+(.*)$`)
-	errorRE     = regexp.MustCompile(`^(?:statement|query)\s+(?:async\s+[[:alnum:]]+\s+)?error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
-	varRE       = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
-	orderRE     = regexp.MustCompile(`(?i)ORDER\s+BY`)
-	explainRE   = regexp.MustCompile(`(?i)EXPLAIN\W+`)
-	showTraceRE = regexp.MustCompile(`(?i)SHOW\s+(KV\s+)?TRACE`)
+	resultsRE      = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
+	noticeRE       = regexp.MustCompile(`^statement\s+(?:async\s+[[:alnum:]]+\s+)?notice\s+(.*)$`)
+	errorRE        = regexp.MustCompile(`^(?:statement|query)\s+(?:async\s+[[:alnum:]]+\s+)?error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
+	varRE          = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
+	orderRE        = regexp.MustCompile(`(?i)ORDER\s+BY`)
+	explainRE      = regexp.MustCompile(`(?i)EXPLAIN\W+`)
+	showTraceRE    = regexp.MustCompile(`(?i)SHOW\s+(KV\s+)?TRACE`)
+	sendingBatchRE = regexp.MustCompile(`r\d+: (sending batch .*)`)
+	beforeTableRE  = regexp.MustCompile(`(<before:/Table/)\d+(>)`)
+	afterTableRE   = regexp.MustCompile(`(<after:/Table/)\d+(/.*>)`)
 
 	// Bigtest is a flag which should be set if the long-running sqlite logic tests should be run.
 	Bigtest = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
@@ -4075,6 +4078,21 @@ func (t *logicTest) finishExecQuery(query logicQuery, rowses []*gosql.Rows, exec
 						s := fmt.Sprint(val)
 						if query.roundFloatsInStringsSigFigs > 0 {
 							s = floatcmp.RoundFloatsInString(s, query.roundFloatsInStringsSigFigs)
+						}
+						if colT == 'T' {
+							// Remove the rangeID prefix from 'sending batch ...'
+							// message in the trace to reduce test churn when
+							// adding new system tables.
+							//
+							// Also replace tableIDs with a constant in messages like
+							// '<before:/Table/77>' and '<after:/Table/107/1>'.
+							if matches := sendingBatchRE.FindStringSubmatch(s); len(matches) > 1 {
+								s = matches[1]
+							} else if matches = beforeTableRE.FindStringSubmatch(s); len(matches) > 2 {
+								s = matches[1] + "XX" + matches[2]
+							} else if matches = afterTableRE.FindStringSubmatch(s); len(matches) > 2 {
+								s = matches[1] + "XX" + matches[2]
+							}
 						}
 						// Replace any \n character with an escaped new line. This will ensure that
 						// tests pass and the output remains relatively well formatted. This will
