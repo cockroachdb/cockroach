@@ -433,7 +433,7 @@ func readKeyValuesFromSST(t *testing.T, filename string) []storage.MVCCKeyValue 
 	t.Helper()
 	file, err := vfs.Default.Open(filename, vfs.SequentialReadsOption)
 	require.NoError(t, err)
-	readable, err := sstable.NewSimpleReadable(file)
+	readable, err := objstorage.NewSimpleReadable(file)
 	require.NoError(t, err)
 
 	reader, err := sstable.NewReader(
