@@ -36,6 +36,7 @@ var activeRecordIgnoreList = blocklist{
 	`AssociationCallbacksTest#test_has_many_callbacks_for_destroy_on_parent`:                                                                                   "flaky",
 	`BasicsTest#test_default_values_are_deeply_dupped`:                                                                                                         "flaky",
 	`CascadedEagerLoadingTest#test_eager_association_loading_with_cascaded_three_levels_by_ping_pong`:                                                          "flaky",
+	`CockroachDBReferentialIntegrityTest#test_should_reraise_invalid_foreign_key_exception_and_show_warning`:                                                   "affected by autocommit_before_ddl",
 	`CockroachDB::AdapterForeignKeyTest#test_foreign_key_violations_are_translated_to_specific_exception_with_validate_false`:                                  "flaky",
 	`CockroachDB::AdapterForeignKeyTest#test_foreign_key_violations_on_delete_are_translated_to_specific_exception`:                                            "flaky",
 	`CockroachDB::AdapterForeignKeyTest#test_foreign_key_violations_on_insert_are_translated_to_specific_exception`:                                            "flaky",
