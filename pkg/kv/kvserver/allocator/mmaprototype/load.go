@@ -37,11 +37,11 @@ const (
 func (dim LoadDimension) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch dim {
 	case CPURate:
-		w.Printf("CPURate")
+		w.SafeString("CPURate")
 	case WriteBandwidth:
-		w.Print("WriteBandwidth")
+		w.SafeString("WriteBandwidth")
 	case ByteSize:
-		w.Printf("ByteSize")
+		w.SafeString("ByteSize")
 	default:
 		panic("unknown LoadDimension")
 	}
@@ -53,6 +53,8 @@ func (dim LoadDimension) String() string {
 
 // LoadValue is the load on a resource.
 type LoadValue int64
+
+func (LoadValue) SafeValue() {}
 
 // LoadVector represents a vector of loads, with one element for each resource
 // dimension.
@@ -472,15 +474,15 @@ func (ls loadSummary) String() string {
 func (ls loadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch ls {
 	case loadLow:
-		w.Print("loadLow")
+		w.SafeString("loadLow")
 	case loadNormal:
-		w.Print("loadNormal")
+		w.SafeString("loadNormal")
 	case loadNoChange:
-		w.Print("loadNoChange")
+		w.SafeString("loadNoChange")
 	case overloadSlow:
-		w.Print("overloadSlow")
+		w.SafeString("overloadSlow")
 	case overloadUrgent:
-		w.Print("overloadUrgent")
+		w.SafeString("overloadUrgent")
 	default:
 		panic("unknown loadSummary")
 	}

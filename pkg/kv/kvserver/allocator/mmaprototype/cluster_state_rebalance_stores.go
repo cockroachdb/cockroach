@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 // rebalanceEnv tracks the state and outcomes of a rebalanceStores invocation.
@@ -311,7 +312,7 @@ func (re *rebalanceEnv) rebalanceStore(
 				_, _ = fmt.Fprintf(&b, " r%d:%v", rangeID, load)
 			}
 			log.KvDistribution.Infof(ctx, "top-K[%s] ranges for s%d with lease on local s%d:%s",
-				topKRanges.dim, store.StoreID, localStoreID, b.String())
+				topKRanges.dim, store.StoreID, localStoreID, redact.SafeString(b.String()))
 		} else {
 			log.KvDistribution.Infof(ctx, "no top-K[%s] ranges found for s%d with lease on local s%d",
 				topKRanges.dim, store.StoreID, localStoreID)
