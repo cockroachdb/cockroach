@@ -160,6 +160,12 @@ const TestUser = "testuser"
 // TestUserName is the SQLUsername for testuser.
 func TestUserName() SQLUsername { return SQLUsername{TestUser} }
 
+// DebugUser is used for collecting debug zip.
+const DebugUser = "debug_user"
+
+// DebugUserName is the SQLUsername for debug user.
+func DebugUserName() SQLUsername { return SQLUsername{DebugUser} }
+
 // MakeSQLUsernameFromUserInput normalizes a username string as
 // entered in an ambiguous context into a SQL username (performs case
 // folding and unicode normalization form C - NFC).
