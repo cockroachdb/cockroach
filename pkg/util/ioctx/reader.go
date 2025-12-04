@@ -98,6 +98,34 @@ func (r ioReadCloserAdapter) Close(context.Context) error {
 	return r.r.Close()
 }
 
+// ReadCloserCtxStdAdapter turns a ReadCloserCtx into an io.ReadCloser by capturing
+// a context at construction time and using it for all the Read and Close calls.
+func ReadCloserCtxStdAdapter(ctx context.Context, r ReadCloserCtx) io.ReadCloser {
+	return readCloserCtxStdAdapter{
+		ctx: ctx,
+		r:   r,
+	}
+}
+
+// readCloserCtxStdAdapter turns a ReadCloserCtx into an io.ReadCloser by capturing
+// a context at construction time and using it for all the Read and Close calls.
+type readCloserCtxStdAdapter struct {
+	ctx context.Context
+	r   ReadCloserCtx
+}
+
+var _ io.ReadCloser = readCloserCtxStdAdapter{}
+
+// Read implements io.ReadCloser.
+func (r readCloserCtxStdAdapter) Read(p []byte) (int, error) {
+	return r.r.Read(r.ctx, p)
+}
+
+// Close implements io.ReadCloser.
+func (r readCloserCtxStdAdapter) Close() error {
+	return r.r.Close(r.ctx)
+}
+
 // ReadAllWithScratch reads from r until an error or EOF and returns the data
 // it read. A successful call returns err == nil, not err == EOF. Because
 // ReadAllWithScratch is defined to read from r until EOF, it does not treat an

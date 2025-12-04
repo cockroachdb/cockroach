@@ -155,7 +155,7 @@ func joinRelativePath(filePath string, file string) string {
 // isNotFoundErr checks if the error indicates a file not found condition,
 // handling both local and remote nodelocal store cases.
 func isNotFoundErr(err error) bool {
-	return oserror.IsNotExist(err) || status.Code(err) == codes.NotFound
+	return oserror.IsNotExist(err) || status.Code(errors.UnwrapAll(err)) == codes.NotFound
 }
 
 func (l *localFileStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
@@ -165,14 +165,34 @@ func (l *localFileStorage) Writer(ctx context.Context, basename string) (io.Writ
 func (l *localFileStorage) ReadFile(
 	ctx context.Context, basename string, opts cloud.ReadOptions,
 ) (ioctx.ReadCloserCtx, int64, error) {
-	reader, size, err := l.blobClient.ReadFile(ctx, joinRelativePath(l.base, basename), opts.Offset)
-	if err != nil && isNotFoundErr(err) {
-		return nil, 0, cloud.WrapErrFileDoesNotExist(err, "nodelocal storage file does not exist")
+	filepath := joinRelativePath(l.base, basename)
+
+	opener := func(openerCtx context.Context, pos int64) (io.ReadCloser, int64, error) {
+		reader, size, err := l.blobClient.ReadFile(openerCtx, filepath, pos)
+		if err != nil {
+			return nil, 0, err
+		}
+		return ioctx.ReadCloserCtxStdAdapter(openerCtx, reader), size, nil
 	}
-	if err != nil {
+
+	r := cloud.NewResumingReader(ctx,
+		opener,
+		nil, // reader
+		opts.Offset,
+		0, // size
+		filepath,
+		cloud.ResumingReaderRetryOnErrFnForSettings(ctx, l.settings),
+		nil, // errFn
+	)
+
+	if err := r.Open(ctx); err != nil {
+		if isNotFoundErr(err) {
+			return nil, 0, cloud.WrapErrFileDoesNotExist(err, "nodelocal storage file does not exist")
+		}
 		return nil, 0, err
 	}
-	return reader, size, nil
+
+	return r, r.Size, nil
 }
 
 func (l *localFileStorage) List(

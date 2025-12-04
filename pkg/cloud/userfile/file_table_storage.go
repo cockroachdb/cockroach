@@ -227,11 +227,33 @@ func (f *fileTableStorage) ReadFile(
 	if err != nil {
 		return nil, 0, err
 	}
-	reader, size, err := f.fs.ReadFile(ctx, filepath, opts.Offset)
-	if err != nil && isNotExistErr(err) {
-		return nil, 0, cloud.WrapErrFileDoesNotExist(err, "file does not exist in the UserFileTableSystem")
+
+	opener := func(openerCtx context.Context, pos int64) (io.ReadCloser, int64, error) {
+		reader, size, err := f.fs.ReadFile(openerCtx, filepath, pos)
+		if err != nil {
+			return nil, 0, err
+		}
+		return ioctx.ReadCloserCtxStdAdapter(openerCtx, reader), size, nil
 	}
-	return reader, size, err
+
+	r := cloud.NewResumingReader(ctx,
+		opener,
+		nil, // reader
+		opts.Offset,
+		0, // size
+		filepath,
+		cloud.ResumingReaderRetryOnErrFnForSettings(ctx, f.settings),
+		nil, // errFn
+	)
+
+	if err := r.Open(ctx); err != nil {
+		if isNotExistErr(err) {
+			return nil, 0, cloud.WrapErrFileDoesNotExist(err, "file does not exist in the UserFileTableSystem")
+		}
+		return nil, 0, err
+	}
+
+	return r, r.Size, nil
 }
 
 // Writer implements the ExternalStorage interface and writes the file to the
