@@ -617,6 +617,12 @@ func parseDefaultTestDRPCOptionFromEnv() base.DefaultTestDRPCOption {
 func ShouldEnableDRPC(
 	ctx context.Context, t TestLogger, option base.DefaultTestDRPCOption,
 ) base.DefaultTestDRPCOption {
+	if skip.UnderBench() {
+		// Microbenchmarks exercise specific parts of the database and we
+		// want to remove any non-deterministic factors that could affect the
+		// numbers, so we disable the dRPC option until it becomes the default.
+		return base.TestDRPCDisabled
+	}
 	var logSuffix string
 
 	if option == base.TestDRPCUnset {

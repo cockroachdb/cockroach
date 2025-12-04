@@ -36,13 +36,13 @@ func registerSQLSmith(r registry.Registry) {
 		"tpch-sf1": func(r *rand.Rand) []string {
 			return []string{`
 RESTORE TABLE tpch.* FROM LATEST IN 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup_25_3?AUTH=implicit'
-WITH into_db = 'defaultdb';
+WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 `}
 		},
 		"tpcc": func(r *rand.Rand) []string {
 			return []string{`
 RESTORE TABLE tpcc.* FROM LATEST IN 'gs://cockroach-fixtures-us-east1/workload/tpcc/version=25.3,fks=true,seed=1,warehouses=1?AUTH=implicit'
-WITH into_db = 'defaultdb';
+WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 `}
 		},
 	}
