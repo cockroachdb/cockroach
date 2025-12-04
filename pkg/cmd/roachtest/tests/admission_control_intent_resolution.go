@@ -40,7 +40,13 @@ func registerIntentResolutionOverload(r registry.Registry) {
 		// TODO(sumeer): Reduce to weekly after working well.
 		// Tags:      registry.Tags(`weekly`),
 		// Second node is solely for Prometheus.
-		Cluster:          r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode()),
+		Cluster: r.MakeClusterSpec(
+			2,
+			spec.CPU(8),
+			spec.WorkloadNode(),
+			spec.RandomizeVolumeType(),
+			spec.RandomlyUseXfs(),
+		),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
