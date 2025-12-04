@@ -158,137 +158,115 @@ func (og *operationGenerator) tableHasDependencies(
 func (og *operationGenerator) columnDropViolatesFKIndexRequirements(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columName tree.Name,
 ) (bool, error) {
-	return og.scanBool(ctx, tx, fmt.Sprintf(`
-WITH
-	fk
-		AS (
-			SELECT
-				oid,
-				(
-					SELECT
-						r.relname
-					FROM
-						pg_class AS r
-					WHERE
-						r.oid = c.confrelid
-				)
-					AS base_table,
-				a.attname AS base_col,
-				array_position(c.confkey, a.attnum)
-					AS base_ordinal,
-				(
-					SELECT
-						r.relname
-					FROM
-						pg_class AS r
-					WHERE
-						r.oid = c.conrelid
-				)
-					AS referencing_table,
-				unnest(
-					(
-						SELECT
-							array_agg(attname)
-						FROM
-							pg_attribute
-						WHERE
-							attrelid = c.conrelid
-							AND ARRAY[attnum] <@ c.conkey
-							AND array_position(
-									c.confkey,
-									a.attnum
-								)
-								= array_position(
-										c.conkey,
-										attnum
-									)
-					)
-				)
-					AS referencing_col
-			FROM
-				pg_constraint AS c
-				JOIN pg_attribute AS a ON
-						c.confrelid = a.attrelid
-						AND ARRAY[attnum] <@ c.confkey
-			WHERE
-				c.confrelid = $1::REGCLASS::OID
-		),
-	valid_indexes
-		AS (
-			SELECT
-				*
-			FROM
-				[SHOW INDEXES FROM %s]
-			WHERE
-				index_name
-				NOT IN (
-						SELECT
-							DISTINCT index_name
-						FROM
-							[SHOW INDEXES FROM %s]
-						WHERE
-							column_name = $2
-							AND storing = 'f'
-							AND index_name
-								NOT LIKE '%%_pkey' -- renames would keep the old table name
-					)
-		),
-	fk_col_counts
-		AS (
-			SELECT
-				oid, count(*) AS num_cols
-			FROM
-				fk
-			GROUP BY
-				oid
-		),
-	index_col_counts
-		AS (
-			SELECT
-				index_name, count(*) AS num_cols
-			FROM
-				valid_indexes
-			WHERE
-				storing = 'f'
-			GROUP BY
-				index_name
-		),
-	matching_fks
-		AS (
-			SELECT
-				fk.oid
-			FROM
-				fk
-				JOIN valid_indexes
-					ON
-						fk.base_col = valid_indexes.column_name
-				JOIN fk_col_counts
-					ON
-						fk.oid = fk_col_counts.oid
-				JOIN index_col_counts
-					ON
-						valid_indexes.index_name = index_col_counts.index_name
-			WHERE
-				valid_indexes.storing = 'f'
-				AND valid_indexes.non_unique = 'f'
-				AND fk_col_counts.num_cols = index_col_counts.num_cols
-			GROUP BY
-				fk.oid,
-				valid_indexes.index_name,
-				fk_col_counts.num_cols
-			HAVING
-				count(*) = fk_col_counts.num_cols
-		)
-SELECT
-	EXISTS(
-		SELECT
-			*
-		FROM
-			fk
-		WHERE
-			oid NOT IN (SELECT DISTINCT oid FROM matching_fks)
-	);
-`, tableName.String(), tableName.String()), tableName.String(), columName)
+	return og.scanBool(ctx, tx, `
+WITH fk AS (
+            SELECT oid,
+                   (
+                    SELECT r.relname
+                      FROM pg_class AS r
+                     WHERE r.oid = c.confrelid
+                   ) AS base_table,
+                   a.attname AS base_col,
+                   array_position(
+                    c.confkey,
+                    a.attnum
+                   ) AS base_ordinal,
+                   (
+                    SELECT r.relname
+                      FROM pg_class AS r
+                     WHERE r.oid = c.conrelid
+                   ) AS referencing_table,
+                   unnest(
+                    (
+                        SELECT array_agg(attname)
+                          FROM pg_attribute
+                         WHERE attrelid = c.conrelid
+                               AND ARRAY[attnum] <@ c.conkey
+                               AND array_position(
+                                    c.confkey,
+                                    a.attnum
+                                )
+                                = array_position(
+                                        c.conkey,
+                                        attnum
+                                    )
+                    )
+                   ) AS referencing_col
+              FROM pg_constraint AS c
+                   JOIN pg_attribute AS a ON c.confrelid
+                                                     = a.attrelid
+                                                     AND ARRAY[
+                                                            attnum
+                                                        ]
+                                                        <@ c.conkey
+             WHERE c.confrelid = $1::REGCLASS::OID
+          ),
+       all_index_columns AS (
+                            SELECT
+                                i.indexrelid::REGCLASS::STRING
+                                    AS index_name,
+                                a.attname AS col_name,
+                                NOT
+                                    i.indisunique AS non_unique,
+                                a.attnum
+                                > i.indnkeyatts AS storing,
+                                a.attnum AS index_ordinal
+                            FROM
+                                pg_index AS i
+                                JOIN pg_attribute AS a ON
+                                        a.attrelid
+                                        = i.indexrelid
+                                        AND a.attnum > 0
+                            WHERE
+                                i.indrelid
+                                = $1::REGCLASS::OID
+                         ),
+       valid_indexes AS (
+                        SELECT *
+                          FROM all_index_columns
+                         WHERE index_name
+                               NOT IN (
+                                    SELECT DISTINCT
+                                           index_name
+                                      FROM all_index_columns
+                                     WHERE col_name = $2
+                                           AND index_name
+                                            NOT LIKE '%_pkey'
+                                )
+                     ),
+       fk_col_counts AS (
+                          SELECT oid, count(*) AS num_cols
+                            FROM fk
+                        GROUP BY oid
+                     ),
+       matching_fks AS (
+                          SELECT fk.oid
+                            FROM fk
+                                 JOIN valid_indexes ON
+                                        fk.base_col
+                                        = valid_indexes.col_name
+                                 JOIN fk_col_counts ON
+                                        fk.oid
+                                        = fk_col_counts.oid
+                           WHERE valid_indexes.storing
+                                 = false
+                                 AND valid_indexes.non_unique
+                                    = false
+                        GROUP BY fk.oid,
+                                 valid_indexes.index_name,
+                                 fk_col_counts.num_cols
+                          HAVING COUNT(DISTINCT fk.base_col)
+                                 = fk_col_counts.num_cols
+                                 AND COUNT(DISTINCT valid_indexes.col_name)
+                                    = fk_col_counts.num_cols
+                    )
+SELECT EXISTS(
+    SELECT *
+      FROM fk
+     WHERE oid NOT IN (SELECT DISTINCT oid FROM matching_fks)
+)
+`,
+		tableName.String(), columName)
 }
 
 func (og *operationGenerator) columnIsDependedOn(
