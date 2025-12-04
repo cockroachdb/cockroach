@@ -368,7 +368,7 @@ func WithOnlyVersionBump() WriteDescOption {
 
 type getAllOptions struct {
 	allowLeased  bool
-	withMetaData bool
+	withMetadata bool
 }
 
 // GetAllOption defines functional options for GetAll* methods.
@@ -385,7 +385,7 @@ func (c allowLeasedOption) apply(opts *getAllOptions) {
 type withMetaDataOption bool
 
 func (c withMetaDataOption) apply(opts *getAllOptions) {
-	opts.withMetaData = bool(c)
+	opts.withMetadata = bool(c)
 }
 
 // WithAllowLeased configures GetAll* methods to allow leased descriptors.
@@ -967,8 +967,8 @@ func (tc *Collection) GetAllComments(
 	if err != nil {
 		return nil, err
 	}
-	var allowLeased = getAllOptions{}
-	comments, err := tc.aggregateAllLayers(ctx, txn, allowLeased, kvComments)
+	var options = getAllOptions{}
+	comments, err := tc.aggregateAllLayers(ctx, txn, options, kvComments)
 	if err != nil {
 		return nil, err
 	}
@@ -1284,7 +1284,7 @@ func (tc *Collection) aggregateAllLayers(
 	if getAllOptions.allowLeased {
 		flags.layerFilters.withoutLeased = false
 	}
-	if getAllOptions.withMetaData {
+	if getAllOptions.withMetadata {
 		flags.layerFilters.withMetadata = true
 	}
 	if err := getDescriptorsByID(
