@@ -8,6 +8,7 @@ package fingerprint
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -15,14 +16,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -141,6 +141,77 @@ func TestKVFingerprinter(t *testing.T) {
 	require.Equal(t, uint64(0x2249712bb6b0388a), result.fingerprint)
 }
 
+func TestRangeSizedSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// Create a table with enough data to span multiple ranges.
+	runner.Exec(t, `CREATE TABLE r (i PRIMARY KEY, j) AS SELECT i, i::string FROM generate_series(1, 1000) i`)
+	runner.Exec(t, `ALTER TABLE r SPLIT AT SELECT i*10 FROM generate_series(1, 100) i`)
+	var tableID uint32
+	runner.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'r'`).Scan(&tableID)
+
+	// Use actual key encoding for the table.
+	tableSpan := roachpb.Span{
+		Key:    s.Codec().TablePrefix(tableID),
+		EndKey: s.Codec().TablePrefix(tableID).PrefixEnd(),
+	}
+
+	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
+	jobExecCtx, cleanup := sql.MakeJobExecContext(ctx, "test", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg)
+	defer cleanup()
+
+	parts := partitionSpans{JobExecContext: jobExecCtx}
+
+	g := gatherer{
+		spans: []roachpb.Span{tableSpan},
+		fn: kvFingerprinter{
+			sender:   s.DB().NonTransactionalSender(),
+			asOf:     s.Clock().Now(),
+			stripped: true,
+		}.fingerprintSpan,
+		partitioner: parts,
+		chkptFreq:   func() time.Duration { return time.Hour },
+		persister:   &testPersister{},
+	}
+
+	r1, err := g.run(ctx)
+	require.NoError(t, err)
+
+	spCount := func() int {
+		total := 0
+		for _, p := range g.mu.prog {
+			total += p.total
+		}
+		return total
+	}
+
+	// Reset g and run again to verify determinism.
+	g.persister, g.mu.done, g.mu.fingerprint, g.mu.prog = &testPersister{}, nil, 0, nil
+	r2, err := g.run(ctx)
+	require.NoError(t, err)
+	require.Equal(t, r1, r2)
+	// Single-node => partitionSpans just returned one span, so total spans = 1.
+	require.Equal(t, 1, spCount())
+
+	// Now reset g and run again, but this time with range-sized spans.
+	g.persister, g.mu.done, g.mu.fingerprint, g.mu.prog = &testPersister{}, nil, 0, nil
+	parts.rangeSized = true
+	g.partitioner = parts
+	r3, err := g.run(ctx)
+	require.NoError(t, err)
+	require.Equal(t, r2, r3)
+
+	// Verify that using range-sized spans resulted in an extra span per split.
+	require.Equal(t, 101, spCount())
+}
+
 // TestJobE2E tests that a fingerprint job can be created as adoptable and
 // successfully runs through the job system.
 func TestJobE2E(t *testing.T) {
@@ -183,21 +254,8 @@ func TestJobE2E(t *testing.T) {
 	job, err := registry.CreateAdoptableJobWithTxn(ctx, record, registry.MakeJobID(), nil /* txn */)
 	require.NoError(t, err)
 
-	// Wait for the job to be adopted and succeed.
-	testutils.SucceedsSoon(t, func() error {
-		// Nudge the adoption queue to pick up the job immediately.
-		registry.TestingNudgeAdoptionQueue()
-
-		var status string
-		runner.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, job.ID()).Scan(&status)
-		if status == string(jobs.StateSucceeded) {
-			return nil
-		}
-		if status == string(jobs.StateFailed) || status == string(jobs.StateCanceled) {
-			return errors.Errorf("job failed with status %s", status)
-		}
-		return errors.Errorf("job not yet succeeded, current status: %s", status)
-	})
+	registry.TestingNudgeAdoptionQueue()
+	jobutils.WaitForJobToSucceed(t, runner, job.ID())
 
 	// Verify that the job completed and has a fingerprint stored.
 	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
