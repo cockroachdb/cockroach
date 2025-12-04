@@ -126,7 +126,7 @@ var maxOpenTransactions = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"server.max_open_transactions_per_gateway",
 	"the maximum number of open SQL transactions per gateway allowed at a given time. "+
-		"Negative values result in unlimited number of connections. Superusers are not affected by this limit.",
+		"Negative values result in unlimited number of transactions. Superusers are not affected by this limit.",
 	-1,
 	settings.WithPublic)
 
