@@ -1357,7 +1357,8 @@ func (p *Provider) runInstance(
 	extraMountOpts := ""
 	// Dynamic args.
 	if opts.SSDOpts.UseLocalSSD {
-		if opts.SSDOpts.NoExt4Barrier {
+		// Disable ext4 barriers if specified and using ext4.
+		if opts.SSDOpts.NoExt4Barrier && opts.SSDOpts.FileSystem == vm.Ext4 {
 			extraMountOpts = "nobarrier"
 		}
 	}
@@ -1644,6 +1645,49 @@ func assignEBSVolumes(opts *vm.CreateOpts, providerOpts *ProviderOpts) ebsVolume
 			v := ebsVolumes.newVolume()
 			v.Disk = providerOpts.DefaultEBSVolume.Disk
 			v.Disk.DeleteOnTermination = true
+
+			// io2/io1 volumes require IOPS to be specified. If not already set,
+			// calculate based on volume size.
+			// We use 10 IOPS/GB to match Azure's ultra-disk default ratio.
+			// This ensures small volumes aren't over-provisioned and large volumes
+			// get adequate IOPS. For the default 500 GB volume, this gives 5,000 IOPS.
+			if v.Disk.IOPs == 0 && (v.Disk.VolumeType == "io1" || v.Disk.VolumeType == "io2") {
+				v.Disk.IOPs = v.Disk.VolumeSize * 10
+
+				// AWS enforces maximum IOPS-to-size ratios for provisioned IOPS volumes:
+				// - io1: 50 IOPS/GB (max 64,000 IOPS)
+				// - io2: 500 IOPS/GB for standard, 1000 IOPS/GB for Block Express (max 256,000 IOPS)
+				// We must respect these constraints when applying our 3,000 IOPS minimum.
+				var maxIOPSPerGB int
+				var absoluteMaxIOPS int
+				switch v.Disk.VolumeType {
+				case "io1":
+					maxIOPSPerGB = 50
+					absoluteMaxIOPS = 64000
+				case "io2":
+					// As of April 2025, all io2 volumes are Block Express with 1000 IOPS/GB.
+					// We use the more conservative 500 IOPS/GB for compatibility.
+					maxIOPSPerGB = 500
+					absoluteMaxIOPS = 64000 // Use 64k for compatibility; Block Express supports 256k
+				}
+
+				if v.Disk.IOPs < 3000 {
+
+					// Set a minimum of 3,000 IOPS (matching gp3 baseline)
+					v.Disk.IOPs = 3000
+
+					// But if that exceeds the maximum allowed IOPS for this volume size,
+					// set to the maximum allowed instead.
+					maxAllowedIOPS := v.Disk.VolumeSize * maxIOPSPerGB
+					if v.Disk.IOPs > maxAllowedIOPS {
+						v.Disk.IOPs = maxAllowedIOPS
+					}
+				} else if v.Disk.IOPs > absoluteMaxIOPS {
+
+					v.Disk.IOPs = absoluteMaxIOPS
+				}
+			}
+
 			ebsVolumes = append(ebsVolumes, v)
 		}
 	}
