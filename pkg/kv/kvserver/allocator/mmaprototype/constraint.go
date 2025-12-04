@@ -386,7 +386,7 @@ func makeNormalizedSpanConfig(
 	if err != nil {
 		return nil, err
 	}
-	err = doStructuralNormalization(nConf)
+	err = nConf.doStructuralNormalization()
 	return nConf, err
 }
 
@@ -496,9 +496,7 @@ type relationshipVoterAndAll struct {
 
 // TODO(wenyihu6): buildVoterAndAllRelationships should take in a scratch slice
 // to avoid repeated allocations.
-func buildVoterAndAllRelationships(
-	conf *normalizedSpanConfig,
-) (
+func (conf *normalizedSpanConfig) buildVoterAndAllRelationships() (
 	rels []relationshipVoterAndAll,
 	emptyConstraintIndex int,
 	emptyVoterConstraintIndex int,
@@ -552,7 +550,7 @@ func buildVoterAndAllRelationships(
 	return rels, emptyConstraintIndex, emptyVoterConstraintIndex, nil /*err*/
 }
 
-func narrowEmptyConstraints(conf *normalizedSpanConfig) {
+func (conf *normalizedSpanConfig) narrowEmptyConstraints() {
 	// We are done with normalizing voter constraints. We also do some basic
 	// normalization for constraints: we have seen examples where the
 	// constraints are under-specified and give freedom in the choice of
@@ -578,7 +576,7 @@ func narrowEmptyConstraints(conf *normalizedSpanConfig) {
 	// This is technically true, but once we have the required second voter in
 	// us-east-1, both places in that empty constraint will be consumed, and we
 	// will need to move that non-voter to us-central-1, which is wasteful.
-	rels, emptyConstraintIndex, _, _ := buildVoterAndAllRelationships(conf)
+	rels, emptyConstraintIndex, _, _ := conf.buildVoterAndAllRelationships()
 	if emptyConstraintIndex >= 0 {
 		// Ignore conjPossiblyIntersecting.
 		index := 0
@@ -853,13 +851,13 @@ func narrowEmptyConstraints(conf *normalizedSpanConfig) {
 // (TODO(wenyihu6): this is the one that I am still confused about. Sumeer
 // mentioned that it is unclear whether we truly need this. So lets revisit this
 // later.)
-func doStructuralNormalization(conf *normalizedSpanConfig) error {
+func (conf *normalizedSpanConfig) doStructuralNormalization() error {
 	if len(conf.constraints) == 0 || len(conf.voterConstraints) == 0 {
 		return nil
 	}
 	// Relationships between each voter constraint and each all replica
 	// constraint.
-	rels, emptyConstraintIndex, emptyVoterConstraintIndex, err := buildVoterAndAllRelationships(conf)
+	rels, emptyConstraintIndex, emptyVoterConstraintIndex, err := conf.buildVoterAndAllRelationships()
 	if err != nil {
 		return err
 	}
@@ -1074,7 +1072,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	}
 	conf.voterConstraints = vc
 
-	narrowEmptyConstraints(conf)
+	conf.narrowEmptyConstraints()
 	return err
 }
 
