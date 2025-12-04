@@ -550,6 +550,124 @@ func buildVoterAndAllRelationships(
 	return rels, emptyConstraintIndex, emptyVoterConstraintIndex, nil /*err*/
 }
 
+func narrowEmptyConstraints(conf *normalizedSpanConfig, rels []relationshipVoterAndAll, emptyConstraintIndex int) {
+	// We are done with normalizing voter constraints. We also do some basic
+	// normalization for constraints: we have seen examples where the
+	// constraints are under-specified and give freedom in the choice of
+	// constraintsForAddingNonVoter() that isn't actually there. Note that when
+	// all the voter constraints are satisfied (which we try to do before
+	// satisfying non-voter constraints), then the under-specification does not
+	// hurt the choice made in constraintsForAddingNonVoter(). However, we could
+	// have situations where an outage of some kind is preventing all the voter
+	// constraints from being satisfied, and now we need to place a non-voter --
+	// placing that non-voter correctly will avoid the need to move it later
+	// when the voter constraint does get satisfied.
+	//
+	// For example, see the config from #106559 in testdata/normalize_config.
+	// The constraints for us-west-1 and us-east-1 are under-specified in
+	// needing only 1 replica, while voter constraints specify we need 2
+	// replicas in each. Consider if it were left under-specified, and we had
+	// only 3 voters, 2 in us-west-1 and 1 in us-east-1 and we were temporarily
+	// unable to add a voter in us-east-1. Say we have a non-voter in
+	// us-central-1, and we lose that non-voter, and need to add one. With the
+	// under-specified constraint we could add the non-voter anywhere, since we
+	// think we are allowed 2 replicas with the empty constraint conjunction,
+	// and only one of those places is taken, by the second voter in us-west-1.
+	// This is technically true, but once we have the required second voter in
+	// us-east-1, both places in that empty constraint will be consumed, and we
+	// will need to move that non-voter to us-central-1, which is wasteful.
+	if emptyConstraintIndex >= 0 {
+		// Recompute the relationship since voterConstraints have changed.
+		emptyVoterConstraintIndex := -1
+		rels = rels[:0]
+		for i := range conf.voterConstraints {
+			if len(conf.voterConstraints[i].constraints) == 0 {
+				// We don't actually use emptyVoterConstraintIndex later, but it is
+				// harmless to recompute, and will avoid subtle bugs if we change the
+				// logic below to start using it.
+				emptyVoterConstraintIndex = i
+			}
+			for j := range conf.constraints {
+				rels = append(rels, relationshipVoterAndAll{
+					voterIndex: i,
+					allIndex:   j,
+					voterAndAllRel: conf.voterConstraints[i].constraints.relationship(
+						conf.constraints[j].constraints),
+				})
+			}
+		}
+		// Sort these relationships in the order we want to examine them.
+		slices.SortFunc(rels, func(a, b relationshipVoterAndAll) int {
+			return cmp.Compare(a.voterAndAllRel, b.voterAndAllRel)
+		})
+		// Ignore conjPossiblyIntersecting.
+		index := 0
+		for index < len(rels) && rels[index].voterAndAllRel == conjPossiblyIntersecting {
+			index++
+		}
+		voterConstraintHasEqualityWithConstraint := make([]bool, len(conf.voterConstraints))
+		// For conjEqualSet, except for the empty constraint, ensure that the
+		// numReplicas in the replica constraint is at least that of the voter
+		// constraint, since a voter is also a replica.
+		for ; index < len(rels) && rels[index].voterAndAllRel == conjEqualSet; index++ {
+			rel := rels[index]
+			voterConstraintHasEqualityWithConstraint[rel.voterIndex] = true
+			if rel.allIndex == emptyConstraintIndex {
+				// rel.voterIndex must be emptyVoterConstraintIndex.
+				continue
+			}
+			toAddCount := conf.voterConstraints[rel.voterIndex].numReplicas -
+				conf.constraints[rel.allIndex].numReplicas
+			availableCount := conf.constraints[emptyConstraintIndex].numReplicas
+			if toAddCount > 0 && availableCount > 0 {
+				// TODO(wenyihu6): this should also create an error, since we will
+				// end up with two identical constraint conjunctions in replica
+				// constraints and voter constraints, with the former having a lower
+				// count than the latter.
+				add := min(toAddCount, availableCount)
+				conf.constraints[emptyConstraintIndex].numReplicas -= add
+				conf.constraints[rel.allIndex].numReplicas += add
+			}
+		}
+		// For conjStrictSubset, if the subset relationship is with
+		// emptyConstraintIndex, grab from there, and create a new narrower
+		// replica constraint.
+		for ; index < len(rels) && rels[index].voterAndAllRel == conjStrictSubset; index++ {
+			rel := rels[index]
+			if rel.allIndex != emptyConstraintIndex {
+				continue
+			}
+			if voterConstraintHasEqualityWithConstraint[rel.voterIndex] {
+				// Already has a corresponding constraint, that we have considered in
+				// the previous loop.
+				continue
+			}
+			availableCount := conf.constraints[emptyConstraintIndex].numReplicas
+			toAddCount := conf.voterConstraints[rel.voterIndex].numReplicas
+			if availableCount > 0 && toAddCount > 0 {
+				add := min(availableCount, toAddCount)
+				conf.constraints[emptyConstraintIndex].numReplicas -= add
+				conf.constraints = append(conf.constraints, internedConstraintsConjunction{
+					numReplicas: add,
+					constraints: conf.voterConstraints[rel.voterIndex].constraints,
+				})
+			}
+		}
+		// We may have appended to conf.constraints in the previous loop. We like
+		// to keep the empty constraint as the last one, so do a swap if needed.
+		n := len(conf.constraints) - 1
+		if n != emptyConstraintIndex {
+			conf.constraints[n], conf.constraints[emptyConstraintIndex] =
+				conf.constraints[emptyConstraintIndex], conf.constraints[n]
+		}
+		// If the empty constraint does not have any replicas due to the
+		// normalization, discard it.
+		if conf.constraints[n].numReplicas == 0 {
+			conf.constraints = conf.constraints[:n]
+		}
+	}
+}
+
 // doStructuralNormalization mutates config.VoterConstraints and
 // config.Constraints in place by making under-specified voter and all-replica
 // constraints more explicit when possible.
@@ -976,122 +1094,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	}
 	conf.voterConstraints = vc
 
-	// We are done with normalizing voter constraints. We also do some basic
-	// normalization for constraints: we have seen examples where the
-	// constraints are under-specified and give freedom in the choice of
-	// constraintsForAddingNonVoter() that isn't actually there. Note that when
-	// all the voter constraints are satisfied (which we try to do before
-	// satisfying non-voter constraints), then the under-specification does not
-	// hurt the choice made in constraintsForAddingNonVoter(). However, we could
-	// have situations where an outage of some kind is preventing all the voter
-	// constraints from being satisfied, and now we need to place a non-voter --
-	// placing that non-voter correctly will avoid the need to move it later
-	// when the voter constraint does get satisfied.
-	//
-	// For example, see the config from #106559 in testdata/normalize_config.
-	// The constraints for us-west-1 and us-east-1 are under-specified in
-	// needing only 1 replica, while voter constraints specify we need 2
-	// replicas in each. Consider if it were left under-specified, and we had
-	// only 3 voters, 2 in us-west-1 and 1 in us-east-1 and we were temporarily
-	// unable to add a voter in us-east-1. Say we have a non-voter in
-	// us-central-1, and we lose that non-voter, and need to add one. With the
-	// under-specified constraint we could add the non-voter anywhere, since we
-	// think we are allowed 2 replicas with the empty constraint conjunction,
-	// and only one of those places is taken, by the second voter in us-west-1.
-	// This is technically true, but once we have the required second voter in
-	// us-east-1, both places in that empty constraint will be consumed, and we
-	// will need to move that non-voter to us-central-1, which is wasteful.
-	if emptyConstraintIndex >= 0 {
-		// Recompute the relationship since voterConstraints have changed.
-		emptyVoterConstraintIndex = -1
-		rels = rels[:0]
-		for i := range conf.voterConstraints {
-			if len(conf.voterConstraints[i].constraints) == 0 {
-				// We don't actually use emptyVoterConstraintIndex later, but it is
-				// harmless to recompute, and will avoid subtle bugs if we change the
-				// logic below to start using it.
-				emptyVoterConstraintIndex = i
-			}
-			for j := range conf.constraints {
-				rels = append(rels, relationshipVoterAndAll{
-					voterIndex: i,
-					allIndex:   j,
-					voterAndAllRel: conf.voterConstraints[i].constraints.relationship(
-						conf.constraints[j].constraints),
-				})
-			}
-		}
-		// Sort these relationships in the order we want to examine them.
-		slices.SortFunc(rels, func(a, b relationshipVoterAndAll) int {
-			return cmp.Compare(a.voterAndAllRel, b.voterAndAllRel)
-		})
-		// Ignore conjPossiblyIntersecting.
-		index = 0
-		for index < len(rels) && rels[index].voterAndAllRel == conjPossiblyIntersecting {
-			index++
-		}
-		voterConstraintHasEqualityWithConstraint := make([]bool, len(conf.voterConstraints))
-		// For conjEqualSet, except for the empty constraint, ensure that the
-		// numReplicas in the replica constraint is at least that of the voter
-		// constraint, since a voter is also a replica.
-		for ; index < len(rels) && rels[index].voterAndAllRel == conjEqualSet; index++ {
-			rel := rels[index]
-			voterConstraintHasEqualityWithConstraint[rel.voterIndex] = true
-			if rel.allIndex == emptyConstraintIndex {
-				// rel.voterIndex must be emptyVoterConstraintIndex.
-				continue
-			}
-			toAddCount := conf.voterConstraints[rel.voterIndex].numReplicas -
-				conf.constraints[rel.allIndex].numReplicas
-			availableCount := conf.constraints[emptyConstraintIndex].numReplicas
-			if toAddCount > 0 && availableCount > 0 {
-				// TODO(wenyihu6): this should also create an error, since we will
-				// end up with two identical constraint conjunctions in replica
-				// constraints and voter constraints, with the former having a lower
-				// count than the latter.
-				add := min(toAddCount, availableCount)
-				conf.constraints[emptyConstraintIndex].numReplicas -= add
-				conf.constraints[rel.allIndex].numReplicas += add
-			}
-		}
-		// For conjStrictSubset, if the subset relationship is with
-		// emptyConstraintIndex, grab from there, and create a new narrower
-		// replica constraint.
-		for ; index < len(rels) && rels[index].voterAndAllRel == conjStrictSubset; index++ {
-			rel := rels[index]
-			if rel.allIndex != emptyConstraintIndex {
-				continue
-			}
-			if voterConstraintHasEqualityWithConstraint[rel.voterIndex] {
-				// Already has a corresponding constraint, that we have considered in
-				// the previous loop.
-				continue
-			}
-			availableCount := conf.constraints[emptyConstraintIndex].numReplicas
-			toAddCount := conf.voterConstraints[rel.voterIndex].numReplicas
-			if availableCount > 0 && toAddCount > 0 {
-				add := min(availableCount, toAddCount)
-				conf.constraints[emptyConstraintIndex].numReplicas -= add
-				conf.constraints = append(conf.constraints, internedConstraintsConjunction{
-					numReplicas: add,
-					constraints: conf.voterConstraints[rel.voterIndex].constraints,
-				})
-			}
-		}
-		// We may have appended to conf.constraints in the previous loop. We like
-		// to keep the empty constraint as the last one, so do a swap if needed.
-		n := len(conf.constraints) - 1
-		if n != emptyConstraintIndex {
-			conf.constraints[n], conf.constraints[emptyConstraintIndex] =
-				conf.constraints[emptyConstraintIndex], conf.constraints[n]
-		}
-		// If the empty constraint does not have any replicas due to the
-		// normalization, discard it.
-		if conf.constraints[n].numReplicas == 0 {
-			conf.constraints = conf.constraints[:n]
-		}
-	}
-
+	narrowEmptyConstraints(conf, rels, emptyConstraintIndex)
 	return err
 }
 
