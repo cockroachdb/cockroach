@@ -23,6 +23,13 @@ import (
 type Hint struct {
 	hintpb.StatementHintUnion
 
+	// The hint should only be applied to statements if Enabled is true.
+	Enabled bool
+
+	// If Err is not nil it was an error encountered while loading the hint from
+	// system.statement_hints, and Enabled will be false.
+	Err error
+
 	// HintInjectionDonor is the fully parsed donor statement fingerprint used for
 	// hint injection.
 	HintInjectionDonor *tree.HintInjectionDonor
@@ -57,7 +64,7 @@ func CheckForStatementHintsInDB(
 // The returned slices (hints, fingerprints, and hintIDs) have the same length.
 // fingerprints[i] is the statement fingerprint to which hints[i] applies, while
 // hintIDs[i] uniquely identifies a hint in the system table. The results are in
-// order of hint ID.
+// order of creation time (descending), meaning the most recent hints are first.
 //
 // GetStatementHintsFromDB will return an error if the query returns an
 // error. If one of the hints cannot be unmarshalled, the hint (and associated
@@ -70,35 +77,53 @@ func GetStatementHintsFromDB(
     SELECT "row_id", "fingerprint", "hint"
     FROM system.statement_hints
     WHERE "hash" = $1
-    ORDER BY "row_id" ASC`
-	it, err := ex.QueryIteratorEx(
+    ORDER BY "created_at" DESC, "row_id" DESC`
+	it, queryErr := ex.QueryIteratorEx(
 		ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride,
 		getHintsStmt, statementHash,
 	)
-	if err != nil {
-		return nil, nil, nil, err
+	if queryErr != nil {
+		return nil, nil, nil, queryErr
 	}
 	defer func() {
 		retErr = errors.CombineErrors(retErr, it.Close())
 	}()
+
+	// To make hint injection more comprehensible, we only consider applying the
+	// newest hint-injection hint we find, which should be first, and ignore older
+	// hint-injection hints. This is true even if we are unable to decode or apply
+	// the newest hint-injection hint for some reason. seenHintInjection tracks
+	// whether we've seen a hint injection for a given fingerprint.
+	seenHintInjection := make(map[string]struct{})
+
 	for {
-		ok, err := it.Next(ctx)
-		if err != nil {
-			return nil, nil, nil, err
+		ok, queryErr := it.Next(ctx)
+		if queryErr != nil {
+			return nil, nil, nil, queryErr
 		}
 		if !ok {
 			break
 		}
-		hintID, fingerprint, hint, err := parseHint(it.Cur(), fingerprintFlags)
-		if err != nil {
+		hintID, fingerprint, hint := parseHint(it.Cur(), fingerprintFlags)
+		if hint.Err != nil {
 			log.Dev.Warningf(
 				ctx, "could not decode hint ID %v for statement hash %v fingerprint %v: %v",
-				hintID, statementHash, fingerprint, err,
+				hintID, statementHash, fingerprint, hint.Err,
 			)
 			// Do not return the error. Instead we'll simply execute the query without
-			// this hint.
-			continue
+			// this hint (which should already be disabled).
+			hint.Enabled = false
 		}
+
+		// Ignore hint injections that are not the newest hint injection.
+		if hint.InjectHints != nil {
+			if _, ok := seenHintInjection[fingerprint]; ok {
+				hint.Enabled = false
+			} else {
+				seenHintInjection[fingerprint] = struct{}{}
+			}
+		}
+
 		hintIDs = append(hintIDs, hintID)
 		fingerprints = append(fingerprints, fingerprint)
 		hints = append(hints, hint)
@@ -108,25 +133,27 @@ func GetStatementHintsFromDB(
 
 func parseHint(
 	datums tree.Datums, fingerprintFlags tree.FmtFlags,
-) (hintID int64, fingerprint string, hint Hint, retErr error) {
-	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
+) (hintID int64, fingerprint string, hint Hint) {
+	defer errorutil.MaybeCatchPanic(&hint.Err, nil /* errCallback */)
 	hintID = int64(tree.MustBeDInt(datums[0]))
 	fingerprint = string(tree.MustBeDString(datums[1]))
-	hint.StatementHintUnion, retErr = hintpb.FromBytes([]byte(tree.MustBeDBytes(datums[2])))
-	if retErr != nil {
-		return hintID, fingerprint, Hint{}, retErr
+	hint.StatementHintUnion, hint.Err = hintpb.FromBytes([]byte(tree.MustBeDBytes(datums[2])))
+	if hint.Err != nil {
+		return hintID, fingerprint, hint
 	}
 	if hint.InjectHints != nil && hint.InjectHints.DonorSQL != "" {
 		donorStmt, err := parserutils.ParseOne(hint.InjectHints.DonorSQL)
 		if err != nil {
-			return hintID, fingerprint, Hint{}, err
+			hint.Err = err
+			return hintID, fingerprint, hint
 		}
-		hint.HintInjectionDonor, err = tree.NewHintInjectionDonor(donorStmt.AST, fingerprintFlags)
-		if err != nil {
-			return hintID, fingerprint, Hint{}, err
+		hint.HintInjectionDonor, hint.Err = tree.NewHintInjectionDonor(donorStmt.AST, fingerprintFlags)
+		if hint.Err != nil {
+			return hintID, fingerprint, hint
 		}
 	}
-	return hintID, fingerprint, hint, nil
+	hint.Enabled = true
+	return hintID, fingerprint, hint
 }
 
 // InsertHintIntoDB inserts a statement hint into the system.statement_hints

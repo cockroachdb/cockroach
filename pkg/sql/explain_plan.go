@@ -121,7 +121,13 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		}
 
 		if len(params.p.stmt.Hints) > 0 {
-			ob.AddStmtHintCount(uint64(len(params.p.stmt.Hints)))
+			var hintCount uint64
+			for _, hint := range params.p.stmt.Hints {
+				if hint.Enabled && hint.Err == nil {
+					hintCount += 1
+				}
+			}
+			ob.AddStmtHintCount(hintCount)
 		}
 
 		if e.options.Flags[tree.ExplainFlagJSON] {

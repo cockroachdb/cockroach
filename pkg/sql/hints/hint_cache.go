@@ -404,6 +404,9 @@ func (c *StatementHintsCache) GetGeneration() int64 {
 // fingerprint, along with the unique ID of each hint (for invalidating cached
 // plans). It returns nil if the statement has no hints, or there was an error
 // retrieving them.
+//
+// Hints are returned in order of creation time (descending) with the most
+// recent hints first.
 func (c *StatementHintsCache) MaybeGetStatementHints(
 	ctx context.Context, statementFingerprint string, fingerprintFlags tree.FmtFlags,
 ) (hints []Hint, ids []int64) {
@@ -511,7 +514,8 @@ type cacheEntry struct {
 
 	// hints, fingerprints, and ids have the same length. fingerprints[i] is the
 	// statement fingerprint to which hints[i] applies, while ids[i] uniquely
-	// identifies a hint in the system table. They are kept in order of id.
+	// identifies a hint in the system table. They are kept in order of creation
+	// time (descending), meaning the most recent hints are first.
 	//
 	// We track the hint ID for invalidating cached query plans after a hint is
 	// added or removed. We track the fingerprint to resolve hash collisions. Note
