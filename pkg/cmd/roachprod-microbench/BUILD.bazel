@@ -53,7 +53,10 @@ go_test(
         "executor_test.go",
         "export_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "//:TEAMS.yaml",
+        "//.github:CODEOWNERS",
+    ],
     embed = [":roachprod-microbench_lib"],
     deps = [
         "//pkg/cmd/roachprod-microbench/model",
