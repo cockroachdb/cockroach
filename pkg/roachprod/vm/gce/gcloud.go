@@ -1545,9 +1545,12 @@ func (p *Provider) computeInstanceArgs(
 		// Add `discard` for Local SSDs on NVMe, as is advised in:
 		// https://cloud.google.com/compute/docs/disks/add-local-ssd
 		extraMountOpts = "discard"
-		if opts.SSDOpts.NoExt4Barrier {
+
+		// Disable ext4 barriers if specified and using ext4.
+		if opts.SSDOpts.NoExt4Barrier && opts.SSDOpts.FileSystem == vm.Ext4 {
 			extraMountOpts = fmt.Sprintf("%s,nobarrier", extraMountOpts)
 		}
+
 	} else {
 		// create the "PDVolumeCount" number of persistent disks with the same configuration
 		for i := 0; i < providerOpts.PDVolumeCount; i++ {
