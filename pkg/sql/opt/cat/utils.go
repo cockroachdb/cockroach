@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -403,4 +404,19 @@ func FindLatestStableStats(
 		}
 	}
 	return start
+}
+
+func FindLatestFullStatsWithCanary(
+	tab Table, evalCtx *eval.Context, statsCanaryWindow time.Duration,
+) int {
+	sd := evalCtx.SessionData()
+	asOfTs := hlc.Timestamp{WallTime: evalCtx.GetStmtTimestamp().UnixNano()}
+	if asOf := evalCtx.SessionData().StatsAsOf; !asOf.IsEmpty() {
+		asOfTs = asOf
+	}
+	res := FindLatestFullStat(0 /* start */, tab, evalCtx.SessionData(), asOfTs, true /* inclusive */)
+	if statsCanaryWindow > 0 && !evalCtx.UseCanaryStats && res < tab.StatisticCount() {
+		return FindLatestStableStats(res, tab, statsCanaryWindow, sd, asOfTs)
+	}
+	return res
 }

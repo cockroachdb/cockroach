@@ -681,22 +681,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 
 	// Make now and annotate the metadata table with it for next time.
 	stats = &props.Statistics{}
-
-	statsCanaryWindow := tabMeta.StatsCanaryWindow
-	sd := sb.evalCtx.SessionData()
-	asOfTs := hlc.Timestamp{WallTime: sb.evalCtx.GetStmtTimestamp().UnixNano()}
-	if asOf := sb.evalCtx.SessionData().StatsAsOf; !asOf.IsEmpty() {
-		asOfTs = asOf
-	}
-
-	first := cat.FindLatestFullStat(0 /* start */, tab, sd, asOfTs, true /* inclusive */)
-	// If we are going to select the stable stat and there are still more stats,
-	// try to see if we should skip the current full stats and look for the second
-	// most recent full stat.
-	if statsCanaryWindow > 0 && !sb.evalCtx.UseCanaryStats && first < tab.StatisticCount() {
-		first = cat.FindLatestStableStats(first, tab, statsCanaryWindow, sd, asOfTs)
-	}
-
+	first := cat.FindLatestFullStatsWithCanary(tab, sb.evalCtx, tabMeta.StatsCanaryWindow)
 	if first >= tab.StatisticCount() {
 		// No statistics.
 		stats.Available = false
@@ -709,6 +694,11 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		// Make sure the row count is at least 1. The stats may be stale, and we
 		// can end up with weird and inefficient plans if we estimate 0 rows.
 		stats.RowCount = max(stats.RowCount, 1)
+
+		asOfTs := hlc.Timestamp{WallTime: sb.evalCtx.GetStmtTimestamp().UnixNano()}
+		if asOf := sb.evalCtx.SessionData().StatsAsOf; !asOf.IsEmpty() {
+			asOfTs = asOf
+		}
 
 		// Add all the column statistics, using the most recent statistic for each
 		// column set. Stats are ordered with most recent first.

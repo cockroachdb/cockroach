@@ -419,6 +419,23 @@ const (
 	PolicyInfoID
 )
 
+// StatsState is to denote if a stats is a canary stats, stable stats or unset.
+// It is used to annotate the estimated stats in the output of EXPLAIN.
+type StatsState int
+
+const (
+	// UnsetState is for stats whose table doesn't have a canary window set.
+	UnsetState StatsState = iota
+	// CanaryState is for stats whose creation timestamp is within the
+	// canary window of the table.
+	CanaryState
+	// StableState is for stats whose creation timestamp is for stats that
+	// is second youngest to a canary stats, if exists; or the most recent
+	// stats if it is the only one or if it is older than the canary
+	// window of the table.
+	StableState
+)
+
 // EstimatedStats contains estimated statistics about a given operator.
 type EstimatedStats struct {
 	// TableStatsAvailable is true if all the tables involved by this operator
@@ -444,6 +461,8 @@ type EstimatedStats struct {
 	// ForecastAt is set only for scans with forecasted stats; it is the time the
 	// forecast was for (which could be in the past, present, or future).
 	ForecastAt time.Time
+
+	State StatsState
 }
 
 // ExecutionStats contain statistics about a given operator gathered from the

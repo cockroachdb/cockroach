@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -411,7 +410,15 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 		}
 		if scan, ok := e.(*memo.ScanExpr); ok {
 			tab := b.mem.Metadata().Table(scan.Table)
-			first := cat.FindLatestFullStat(0 /* start */, tab, b.evalCtx.SessionData(), hlc.MaxTimestamp, true /* inclusive */)
+			tabMeta := b.mem.Metadata().TableMeta(scan.Table)
+			first := cat.FindLatestFullStatsWithCanary(tab, b.evalCtx, tabMeta.StatsCanaryWindow)
+			if tabMeta.StatsCanaryWindow > 0 {
+				if b.evalCtx.UseCanaryStats {
+					val.State = exec.CanaryState
+				} else {
+					val.State = exec.StableState
+				}
+			}
 			if first < tab.StatisticCount() {
 				stat := tab.Statistic(first)
 				val.TableStatsRowCount = stat.RowCount()
@@ -818,6 +825,7 @@ func (b *Builder) scanParams(
 func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdMap, err error) {
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
+	tabMeta := md.TableMeta(scan.Table)
 
 	if !b.disableTelemetry && scan.PartialIndexPredicate(md) != nil {
 		telemetry.Inc(sqltelemetry.PartialIndexScanUseCounter)
@@ -890,7 +898,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 		b.ScanCounts[exec.ScanWithStatsCount]++
 
 		sd := b.evalCtx.SessionData()
-		first := cat.FindLatestFullStat(0 /* start */, tab, sd, hlc.MaxTimestamp, true /* inclusive */)
+		first := cat.FindLatestFullStatsWithCanary(tab, b.evalCtx, tabMeta.StatsCanaryWindow)
 		if first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
 			b.ScanCounts[exec.ScanWithStatsForecastCount]++
 
@@ -904,7 +912,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 			// forecasts must be enabled, so in order to find the first full
 			// non-forecast stat, we'll temporarily disable their usage.
 			sd.OptimizerUseForecasts = false
-			first = cat.FindLatestFullStat(0 /* start */, tab, sd, hlc.MaxTimestamp, true /* inclusive */)
+			first = cat.FindLatestFullStatsWithCanary(tab, b.evalCtx, tabMeta.StatsCanaryWindow)
 			sd.OptimizerUseForecasts = true
 		}
 
