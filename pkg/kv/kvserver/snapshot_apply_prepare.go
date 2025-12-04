@@ -43,7 +43,9 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	_ = applySnapshotTODO // 1.1 + 1.3 + 2.4 + 3.1
 	// TODO(sep-raft-log): rewriteRaftState now only touches raft engine keys, so
 	// it will be convenient to redirect it to a raft engine batch.
-	if err := s.writeSST(ctx, s.rewriteRaftState); err != nil {
+	if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(w), s.sl, s.hardState, s.truncState)
+	}); err != nil {
 		return err
 	}
 	_ = applySnapshotTODO // 1.2 + 2.1 + 2.2 + 2.3 (diff) + 3.2
@@ -53,15 +55,6 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 
 	_ = applySnapshotTODO // 2.3 (split)
 	return s.clearResidualDataOnNarrowSnapshot(ctx)
-}
-
-// rewriteRaftState rewrites the raft state of the given replica with the
-// provided state. Specifically, it rewrites HardState and RaftTruncatedState,
-// and clears the raft log. All writes are generated in the engine keys order.
-func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Writer) error {
-	_, err := kvstorage.RewriteRaftState(
-		ctx, kvstorage.RaftWO(w), s.sl, s.hardState, s.truncState)
-	return err
 }
 
 // clearSubsumedReplicaDiskData clears the on disk data of the subsumed
@@ -119,8 +112,7 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	for _, sub := range s.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			_, err := kvstorage.SubsumeReplica(ctx, kvstorage.TODOReaderWriter(reader, w), sub)
-			return err
+			return kvstorage.SubsumeReplica(ctx, kvstorage.TODOReaderWriter(reader, w), sub)
 		}); err != nil {
 			return err
 		}
