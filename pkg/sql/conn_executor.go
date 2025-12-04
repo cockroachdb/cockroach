@@ -1734,6 +1734,9 @@ type connExecutor struct {
 		// cluster setting.
 		transactionStatementFingerprintIDs []appstatspb.StmtFingerprintID
 
+		// transactionStatementCount tracks the number of statements executed in the transaction
+		transactionStatementCount int64
+
 		// transactionStatementsHash is the hashed accumulation of all statementFingerprintIDs
 		// that comprise the transaction. It is used to construct the key when
 		// recording transaction statistics. It's important to accumulate this hash
