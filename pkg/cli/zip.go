@@ -10,6 +10,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"io"
 	"net"
 	"os"
@@ -219,6 +220,11 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	timeout := 60 * time.Second
 	if cliCtx.cmdTimeout != 0 {
 		timeout = cliCtx.cmdTimeout
+	}
+
+	if zipCtx.useDebugUser {
+		serverCfg.User = username.DebugUserName()
+		cliCtx.User = username.DebugUserName()
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

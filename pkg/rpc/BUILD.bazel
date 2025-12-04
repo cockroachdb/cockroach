@@ -148,6 +148,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
+        "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",

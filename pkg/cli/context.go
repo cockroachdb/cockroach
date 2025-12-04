@@ -375,6 +375,9 @@ type zipContext struct {
 	// validateZipFile indicates whether the generated zip file should be validated
 	// post debug zip file generation.
 	validateZipFile bool
+
+	// useDebugUser indicates the debug user is used during debug.zip generation.
+	useDebugUser bool
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This
@@ -406,6 +409,8 @@ func setZipContextDefaults() {
 	now := timeutil.Now()
 	zipCtx.files.startTimestamp = timestampValue(now.Add(-48 * time.Hour))
 	zipCtx.files.endTimestamp = timestampValue(now.Add(24 * time.Hour))
+
+	zipCtx.useDebugUser = false
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.
@@ -488,6 +493,7 @@ var startCtx struct {
 	serverRootCertDN       string
 	serverNodeCertDN       string
 	serverTLSCipherSuites  []string
+	disallowRootLogin      bool
 
 	// The TLS auto-handshake parameters.
 	initToken             string
@@ -543,6 +549,7 @@ func setStartContextDefaults() {
 	startCtx.serverCertPrincipalMap = nil
 	startCtx.serverRootCertDN = ""
 	startCtx.serverNodeCertDN = ""
+	startCtx.disallowRootLogin = false
 	startCtx.serverListenAddr = ""
 	startCtx.unencryptedLocalhostHTTP = false
 	startCtx.tempDir = ""

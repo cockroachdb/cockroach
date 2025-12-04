@@ -950,6 +950,16 @@ provided for node user if this flag is set.
 `,
 	}
 
+	DisallowRootLogin = FlagInfo{
+		Name: "disallow-root-login",
+		Description: `
+When set, prevents authentication attempts by clients presenting certificates
+with "root" as one of the principals (CommonName or SubjectAlternativeName).
+This applies to both SQL client connections and RPC connections. Authentication
+attempts by root will be rejected with an error.
+`,
+	}
+
 	TLSCipherSuites = FlagInfo{
 		Name: "tls-cipher-suites",
 		Description: `
@@ -1832,6 +1842,13 @@ Can be set to 1 to ensure only one node is polled for data at a time.
 		Description: `
 Validate debug zip file after generation. This is a quick check to validate
 whether the generated zip file is valid and not corrupted.
+`,
+	}
+
+	ZipUseDebugUser = FlagInfo{
+		Name: "use-debug-user",
+		Description: `
+Use debug user during debug.zip generation.
 `,
 	}
 

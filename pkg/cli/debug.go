@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	gohex "encoding/hex"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"io"
 	"math"
 	"os"
@@ -1624,6 +1625,9 @@ func init() {
 	f.BoolVar(&debugTimeSeriesDumpOpts.disableDeltaProcessing, "disable-delta-processing", false, "disable delta calculation for counter metrics (enabled by default)")
 	f.Int64Var(&debugTimeSeriesDumpOpts.ddMetricInterval, "dd-metric-interval", debugTimeSeriesDumpOpts.ddMetricInterval, "interval in seconds for datadoginit format only (default 10). Regular datadog format uses actual intervals from tsdump.")
 	f.Lookup("dd-metric-interval").Hidden = true // this is for internal use only
+	cliflagcfg.BoolFlag(f, &zipCtx.useDebugUser, cliflags.ZipUseDebugUser)
+	// The following flag is planned to become non-experimental in 26.1.
+	_ = f.MarkHidden(cliflags.ZipUseDebugUser.Name)
 
 	f = debugSendKVBatchCmd.Flags()
 	f.StringVar(&debugSendKVBatchContext.traceFormat, "trace", debugSendKVBatchContext.traceFormat,
