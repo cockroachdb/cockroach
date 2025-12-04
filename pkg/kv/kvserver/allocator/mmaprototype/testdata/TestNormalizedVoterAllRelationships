@@ -311,7 +311,7 @@ input:
  constraints:
    +region=us-west
    +region=us-east:2
-normalization error: invalid mix of constraints
+normalization error: cannot have zero-replica constraints mixed with non-zero-replica constraints
 
 # Test with multiple relationships.
 normalized-voter-all-rels num-replicas=8 num-voters=5
