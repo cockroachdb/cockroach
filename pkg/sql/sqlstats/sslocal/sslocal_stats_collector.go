@@ -191,6 +191,14 @@ func (s *StatsCollector) RecordTransaction(_ctx context.Context, value *sqlstats
 	}
 }
 
+func (s *StatsCollector) Flush(sessionID clusterunique.ID) {
+	if !s.sendStats {
+		return
+	}
+
+	s.statsIngester.FlushBuffer(sessionID)
+}
+
 func (s *StatsCollector) EnabledForTransaction() bool {
 	return s.sendStats
 }
