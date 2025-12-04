@@ -7,7 +7,7 @@ DROP SEQUENCE defaultdb.SQ1
 ----
 StatementPhase stage 1 of 1 with 6 MutationType ops
   transitions:
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -36,7 +36,7 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
       User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -47,7 +47,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
       {}
 PreCommitPhase stage 2 of 2 with 8 MutationType ops
   transitions:
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -119,7 +119,7 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -166,7 +166,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
       User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -179,7 +179,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
       {}
 PreCommitPhase stage 2 of 2 with 14 MutationType ops
   transitions:
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -279,7 +279,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
 deps
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- from: [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 101}, ABSENT]
+- from: [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   to:   [Sequence:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -304,7 +304,7 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   kind: SameStagePrecedence
   rule: descriptor drop right before removing dependent with expr ref to sequence
 - from: [Sequence:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 101}, ABSENT]
+  to:   [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Sequence:{DescID: 104}, DROPPED]

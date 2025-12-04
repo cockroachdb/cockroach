@@ -12,7 +12,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 37 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
- │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │         │    ├── PUBLIC → ABSENT    Owner:{DescID: 106 (v3-)}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "root"}
@@ -100,7 +100,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 37 elements transitioning toward ABSENT
  │    │    │    ├── VALIDATED → PUBLIC SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
- │    │    │    ├── ABSENT    → PUBLIC Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 101 (public)}
+ │    │    │    ├── ABSENT    → PUBLIC Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │    │    │    ├── ABSENT    → PUBLIC Owner:{DescID: 106 (v3-)}
  │    │    │    ├── ABSENT    → PUBLIC UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
  │    │    │    ├── ABSENT    → PUBLIC UserPrivileges:{DescID: 106 (v3-), Name: "root"}
@@ -141,7 +141,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 37 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
- │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │         │    ├── PUBLIC → ABSENT    Owner:{DescID: 106 (v3-)}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "root"}
