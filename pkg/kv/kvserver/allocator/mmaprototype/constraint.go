@@ -494,6 +494,8 @@ type relationshipVoterAndAll struct {
 	voterAndAllRel conjunctionRelationship
 }
 
+// TODO(wenyihu6): buildVoterAndAllRelationships should take in a scratch slice
+// to avoid repeated allocations.
 func buildVoterAndAllRelationships(
 	conf *normalizedSpanConfig,
 ) (
@@ -550,7 +552,7 @@ func buildVoterAndAllRelationships(
 	return rels, emptyConstraintIndex, emptyVoterConstraintIndex, nil /*err*/
 }
 
-func narrowEmptyConstraints(conf *normalizedSpanConfig, rels []relationshipVoterAndAll, emptyConstraintIndex int) {
+func narrowEmptyConstraints(conf *normalizedSpanConfig) {
 	// We are done with normalizing voter constraints. We also do some basic
 	// normalization for constraints: we have seen examples where the
 	// constraints are under-specified and give freedom in the choice of
@@ -576,23 +578,8 @@ func narrowEmptyConstraints(conf *normalizedSpanConfig, rels []relationshipVoter
 	// This is technically true, but once we have the required second voter in
 	// us-east-1, both places in that empty constraint will be consumed, and we
 	// will need to move that non-voter to us-central-1, which is wasteful.
+	rels, emptyConstraintIndex, _, _ := buildVoterAndAllRelationships(conf)
 	if emptyConstraintIndex >= 0 {
-		// Recompute the relationship since voterConstraints have changed.
-		rels = rels[:0]
-		for i := range conf.voterConstraints {
-			for j := range conf.constraints {
-				rels = append(rels, relationshipVoterAndAll{
-					voterIndex: i,
-					allIndex:   j,
-					voterAndAllRel: conf.voterConstraints[i].constraints.relationship(
-						conf.constraints[j].constraints),
-				})
-			}
-		}
-		// Sort these relationships in the order we want to examine them.
-		slices.SortFunc(rels, func(a, b relationshipVoterAndAll) int {
-			return cmp.Compare(a.voterAndAllRel, b.voterAndAllRel)
-		})
 		// Ignore conjPossiblyIntersecting.
 		index := 0
 		for index < len(rels) && rels[index].voterAndAllRel == conjPossiblyIntersecting {
@@ -1087,7 +1074,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	}
 	conf.voterConstraints = vc
 
-	narrowEmptyConstraints(conf, rels, emptyConstraintIndex)
+	narrowEmptyConstraints(conf)
 	return err
 }
 
