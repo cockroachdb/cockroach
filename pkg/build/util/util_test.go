@@ -13,6 +13,48 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestAnyFailures(t *testing.T) {
+	xml1 := `<testsuites>
+	<testsuite errors="0" failures="0" skipped="0" tests="1" time="0.000" name="github.com/cockroachdb/cockroach/pkg/build/util.TestMergeXml" timestamp="2025-12-02T20:59:24.432Z">
+		<testcase classname="util" name="TestMergeXml" time="0.000"></testcase>
+	</testsuite>
+	<testsuite errors="0" failures="0" skipped="0" tests="1" time="0.000" name="github.com/cockroachdb/cockroach/pkg/build/util.TestMungeTestXML" timestamp="2025-12-02T20:59:24.433Z">
+		<testcase classname="util" name="TestMungeTestXML" time="0.000"></testcase>
+	</testsuite>
+	<testsuite errors="0" failures="0" skipped="0" tests="1" time="0.000" name="github.com/cockroachdb/cockroach/pkg/build/util.TestOutputOfBinaryRule" timestamp="2025-12-02T20:59:24.432Z">
+		<testcase classname="util" name="TestOutputOfBinaryRule" time="0.000"></testcase>
+	</testsuite>
+	<testsuite errors="0" failures="0" skipped="0" tests="1" time="0.000" name="github.com/cockroachdb/cockroach/pkg/build/util.TestOutputsOfGenrule" timestamp="2025-12-02T20:59:24.432Z">
+		<testcase classname="util" name="TestOutputsOfGenrule" time="0.000"></testcase>
+	</testsuite>
+</testsuites>`
+	xml2 := `<testsuites>
+	<testsuite errors="0" failures="1" skipped="0" tests="1" time="0.000" name="github.com/cockroachdb/cockroach/pkg/build/util.TestAnyFailures" timestamp="2025-12-02T21:01:33.393Z">
+		<testcase classname="util" name="TestAnyFailures" time="0.000">
+			<failure message="Failed" type="">=== RUN   TestAnyFailures&#xA;    util_test.go:33: &#xA;        &#x9;Error Trace:&#x9;pkg/build/util/util_test.go:33&#xA;        &#x9;Error:      &#x9;An error is expected but got nil.&#xA;        &#x9;Test:       &#x9;TestAnyFailures&#xA;--- FAIL: TestAnyFailures (0.00s)&#xA;</failure>
+		</testcase>
+	</testsuite>
+	<testsuite errors="0" failures="0" skipped="0" tests="1" time="0.000" name="github.com/cockroachdb/cockroach/pkg/build/util.TestMergeXml" timestamp="2025-12-02T21:01:33.393Z">
+		<testcase classname="util" name="TestMergeXml" time="0.000"></testcase>
+	</testsuite>
+	<testsuite errors="0" failures="0" skipped="0" tests="1" time="0.000" name="github.com/cockroachdb/cockroach/pkg/build/util.TestMungeTestXML" timestamp="2025-12-02T21:01:33.393Z">
+		<testcase classname="util" name="TestMungeTestXML" time="0.000"></testcase>
+	</testsuite>
+	<testsuite errors="0" failures="0" skipped="0" tests="1" time="0.000" name="github.com/cockroachdb/cockroach/pkg/build/util.TestOutputOfBinaryRule" timestamp="2025-12-02T21:01:33.393Z">
+		<testcase classname="util" name="TestOutputOfBinaryRule" time="0.000"></testcase>
+	</testsuite>
+	<testsuite errors="0" failures="0" skipped="0" tests="1" time="0.000" name="github.com/cockroachdb/cockroach/pkg/build/util.TestOutputsOfGenrule" timestamp="2025-12-02T21:01:33.393Z">
+		<testcase classname="util" name="TestOutputsOfGenrule" time="0.000"></testcase>
+	</testsuite>
+</testsuites>`
+
+	var suite1, suite2 TestSuites
+	require.NoError(t, xml.Unmarshal([]byte(xml1), &suite1))
+	require.False(t, AnyFailures(suite1))
+	require.NoError(t, xml.Unmarshal([]byte(xml2), &suite2))
+	require.True(t, AnyFailures(suite2))
+}
+
 func TestOutputOfBinaryRule(t *testing.T) {
 	require.Equal(t, OutputOfBinaryRule("//pkg/cmd/cockroach-short", false),
 		"pkg/cmd/cockroach-short/cockroach-short_/cockroach-short")
