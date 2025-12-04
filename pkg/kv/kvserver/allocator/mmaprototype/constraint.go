@@ -851,10 +851,7 @@ func (conf *normalizedSpanConfig) narrowEmptyConstraints() {
 // (TODO(wenyihu6): this is the one that I am still confused about. Sumeer
 // mentioned that it is unclear whether we truly need this. So lets revisit this
 // later.)
-func (conf *normalizedSpanConfig) doStructuralNormalization() error {
-	if len(conf.constraints) == 0 || len(conf.voterConstraints) == 0 {
-		return nil
-	}
+func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
 	// Relationships between each voter constraint and each all replica
 	// constraint.
 	rels, emptyConstraintIndex, emptyVoterConstraintIndex, err := conf.buildVoterAndAllRelationships()
@@ -1071,7 +1068,31 @@ func (conf *normalizedSpanConfig) doStructuralNormalization() error {
 		// replaced by narrower conjunctions.
 	}
 	conf.voterConstraints = vc
+	return err
+}
 
+// Structural normalization establishes relationships between every pair of
+// ConstraintsConjunctions in constraints and voterConstraints, and then tries
+// to map conjunctions in voterConstraints to narrower conjunctions in
+// constraints. This is done to handle configs which under-specify
+// conjunctions in voterConstraints under the assumption that one does not
+// need to repeat information provided in constraints (see the new
+// "strictness" comment in roachpb.SpanConfig which now requires users to
+// repeat the information).
+//
+// This function mutates the conf argument. It does some structural
+// normalization even when returning an error. See the under-specified voter
+// constraint examples in the datadriven test -- we sometimes see these in
+// production settings, and we want to fix ones that we can, and raise an
+// error for users to fix their configs.
+func (conf *normalizedSpanConfig) doStructuralNormalization() error {
+	if len(conf.constraints) == 0 || len(conf.voterConstraints) == 0 {
+		return nil
+	}
+
+	// Do not return early on error from narrowVoterConstraints since we want
+	// to continue with best-effort normalization for constraints.
+	err := conf.narrowVoterConstraints()
 	conf.narrowEmptyConstraints()
 	return err
 }
