@@ -528,7 +528,8 @@ func (scg *SQLChildGauge) Dec(i int64) {
 // allowing for automatic eviction of less frequently used child metrics.
 // This is useful when dealing with high cardinality metrics that might exceed resource limits.
 type HighCardinalityGauge struct {
-	g metric.Gauge
+	g            metric.Gauge
+	evictedGauge metric.Gauge
 	childSet
 	labelSliceCache *metric.LabelSliceCache
 }
@@ -638,6 +639,39 @@ func (g *HighCardinalityGauge) Update(val int64, labelValues ...string) {
 func (g *HighCardinalityGauge) Each(
 	labels []*io_prometheus_client.LabelPair, f func(metric *io_prometheus_client.Metric),
 ) {
+	// Emit parent value gauge with value_type="aggregated" label
+	parentLabels := make([]*io_prometheus_client.LabelPair, len(labels)+1)
+	copy(parentLabels, labels)
+	parentLabels[len(labels)] = &io_prometheus_client.LabelPair{
+		Name:  &valueTypeLabel,
+		Value: &aggregatedValueLabel,
+	}
+
+	parentMetric := &io_prometheus_client.Metric{
+		Gauge: &io_prometheus_client.Gauge{
+			Value: proto.Float64(float64(g.Value())),
+		},
+		Label: parentLabels,
+	}
+	f(parentMetric)
+
+	// Emit evicted value gauge with value_type="evicted" label
+	evictedLabels := make([]*io_prometheus_client.LabelPair, len(labels)+1)
+	copy(evictedLabels, labels)
+	evictedLabels[len(labels)] = &io_prometheus_client.LabelPair{
+		Name:  &valueTypeLabel,
+		Value: &evictedValueLabel,
+	}
+
+	evictedMetric := &io_prometheus_client.Metric{
+		Gauge: &io_prometheus_client.Gauge{
+			Value: proto.Float64(float64(g.evictedGauge.Value())),
+		},
+		Label: evictedLabels,
+	}
+	f(evictedMetric)
+
+	// Then emit child metrics
 	g.EachWithLabels(labels, f, g.labelSliceCache)
 }
 
@@ -677,6 +711,7 @@ func (g *HighCardinalityGauge) createHighCardinalityChildGauge(
 		LabelSliceCacheKey: metric.LabelSliceCacheKey(key),
 		LabelSliceCache:    cache,
 		createdAt:          timeutil.Now(),
+		evictedGauge:       &g.evictedGauge,
 	}
 }
 
@@ -687,14 +722,16 @@ type HighCardinalityChildGauge struct {
 	metric.LabelSliceCacheKey
 	value metric.Gauge
 	*metric.LabelSliceCache
-	createdAt time.Time
+	createdAt    time.Time
+	evictedGauge *metric.Gauge
 }
 
 func (g *HighCardinalityChildGauge) CreatedAt() time.Time {
 	return g.createdAt
 }
 
-func (g *HighCardinalityChildGauge) DecrementLabelSliceCacheReference() {
+func (g *HighCardinalityChildGauge) UpdateLabelReference() {
+	g.evictedGauge.Inc(g.value.Value())
 	g.LabelSliceCache.DecrementAndDeleteIfZero(g.LabelSliceCacheKey)
 }
 

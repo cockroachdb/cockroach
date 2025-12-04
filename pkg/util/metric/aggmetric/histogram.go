@@ -400,7 +400,7 @@ func NewHighCardinalityHistogram(
 		opts.Duration/metric.WindowedHistogramWrapNum,
 		func() {
 			// Atomically rotate the histogram window for the
-			// parent histogram, and all the child histograms.
+			// parent histogram and all the child histograms.
 			h.h.Tick()
 			h.childSet.apply(func(childItem MetricItem) {
 				childHist, ok := childItem.(*HighCardinalityChildHistogram)
@@ -487,6 +487,19 @@ func (h *HighCardinalityHistogram) RecordValue(v int64, labelValues ...string) {
 func (h *HighCardinalityHistogram) Each(
 	labels []*prometheusgo.LabelPair, f func(metric *prometheusgo.Metric),
 ) {
+	// Emit parent value histogram with value_type="aggregated" label
+	parentLabels := make([]*prometheusgo.LabelPair, len(labels)+1)
+	copy(parentLabels, labels)
+	parentLabels[len(labels)] = &prometheusgo.LabelPair{
+		Name:  &valueTypeLabel,
+		Value: &aggregatedValueLabel,
+	}
+
+	parentMetric := h.h.ToPrometheusMetric()
+	parentMetric.Label = parentLabels
+	f(parentMetric)
+
+	// Then emit child metrics
 	h.EachWithLabels(labels, f, h.labelSliceCache)
 }
 
@@ -545,7 +558,7 @@ func (h *HighCardinalityChildHistogram) CreatedAt() time.Time {
 	return h.createdAt
 }
 
-func (h *HighCardinalityChildHistogram) DecrementLabelSliceCacheReference() {
+func (h *HighCardinalityChildHistogram) UpdateLabelReference() {
 	h.LabelSliceCache.DecrementAndDeleteIfZero(h.LabelSliceCacheKey)
 }
 

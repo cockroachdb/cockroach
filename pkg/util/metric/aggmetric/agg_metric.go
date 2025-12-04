@@ -38,6 +38,12 @@ const (
 	defaultRetentionTimeTillEviction = 20 * time.Second
 )
 
+var (
+	valueTypeLabel       = "value_type"
+	aggregatedValueLabel = "aggregated"
+	evictedValueLabel    = "evicted"
+)
+
 // This is a no-op context used during logging.
 var noOpCtx = context.TODO()
 
@@ -151,9 +157,9 @@ func (cs *childSet) initWithCacheStorageType(
 					log.Dev.Infof(noOpCtx, "evicted child of metric %s with label values: %s\n",
 						redact.SafeString(metricName), redact.SafeString(strings.Join(labelValues, ",")))
 
-					// Invoke DecrementAndDeleteIfZero from ChildMetric which relies on LabelSliceCache
+					// Invoke UpdateLabelReference from ChildMetric which relies on LabelSliceCache
 					if boundedChild, ok := childMetric.(LabelSliceCachedChildMetric); ok {
-						boundedChild.DecrementLabelSliceCacheReference()
+						boundedChild.UpdateLabelReference()
 					}
 				}
 			},
@@ -451,7 +457,7 @@ type ChildMetric interface {
 type LabelSliceCachedChildMetric interface {
 	ChildMetric
 	CreatedAt() time.Time
-	DecrementLabelSliceCacheReference()
+	UpdateLabelReference()
 }
 
 type labelValuer interface {

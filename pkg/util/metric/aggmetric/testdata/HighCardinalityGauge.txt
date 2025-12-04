@@ -1,5 +1,6 @@
 echo
 ----
-foo_gauge 32
 foo_gauge{database="1",application_name="1"} 15
 foo_gauge{database="2",application_name="2"} 17
+foo_gauge{value_type="aggregated"} 32
+foo_gauge{value_type="evicted"} 0
