@@ -196,19 +196,9 @@ func destroyReplicaImpl(
 // SubsumeReplica is like DestroyReplica, but it does not delete the user keys
 // (and the corresponding system and lock table keys). The latter are inherited
 // by the subsuming range.
-//
-// Returns SelectOpts which can be used to reflect on the key spans that this
-// function clears.
-// TODO(pav-kv): get rid of SelectOpts.
-func SubsumeReplica(
-	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo,
-) (rditer.SelectOpts, error) {
-	// Forget about the user keys.
-	info.Keys = roachpb.RSpan{}
-	return rditer.SelectOpts{
-		ReplicatedByRangeID:   true,
-		UnreplicatedByRangeID: true,
-	}, destroyReplicaImpl(ctx, rw, info, MergedTombstoneReplicaID)
+func SubsumeReplica(ctx context.Context, rw ReadWriter, info DestroyReplicaInfo) error {
+	info.Keys = roachpb.RSpan{} // forget about the user keys
+	return destroyReplicaImpl(ctx, rw, info, MergedTombstoneReplicaID)
 }
 
 // RemoveStaleRHSFromSplit removes all replicated data for the RHS replica of a
