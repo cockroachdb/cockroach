@@ -15,7 +15,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -422,10 +421,10 @@ func backupRollbacks(t *testing.T, factory TestServerFactory, cs CumulativeTestC
 		// Fetch the state of the cluster before the schema change kicks off.
 		tdb.Exec(t, fmt.Sprintf("USE %q", cs.DatabaseName))
 		expected := parserRoundTrip(t, tdb.QueryStr(t, fetchDescriptorStateQuery))
-		// Store the start time, so we know which jobs are relevant.
-		ts := tdb.QueryRow(t, "SELECT current_timestamp(0)::timestamp")
-		var startTime time.Time
-		ts.Scan(&startTime)
+		// Store the highest job ID, so we know which jobs are relevant.
+		jobID := tdb.QueryRow(t, "SELECT COALESCE(max(job_id), 0) FROM [SHOW JOBS]")
+		var maxJobID int64
+		jobID.Scan(&maxJobID)
 		// Kick off the schema change, fail it at the prescribed stage,
 		// and perform the backups during the rollback via the BeforeStage hook.
 		require.Regexp(t, fmt.Sprintf("boom %d", cs.StageOrdinal),
@@ -437,7 +436,7 @@ func backupRollbacks(t *testing.T, factory TestServerFactory, cs CumulativeTestC
 		// Note: Depending on the state of the schema objects, no job may be created
 		// to finalize the rollback, since dependent objects were never backed
 		// up.
-		succeeded, jobExists := hasLatestSchemaChangeSucceededWithTimestamp(t, tdb, startTime)
+		succeeded, jobExists := hasLatestSchemaChangeSucceededWithMaxJobID(t, tdb, maxJobID)
 		require.False(t, succeeded && jobExists)
 		tdb.Exec(t, fmt.Sprintf("USE %q", cs.DatabaseName))
 		postRollback := parserRoundTrip(t, tdb.QueryStr(t, fetchDescriptorStateQuery))
@@ -579,10 +578,11 @@ func exerciseBackupRestore(
 				tdb.Exec(t, cs.CreateDatabaseStmt)
 			}
 
-			// Store the start time, so we know which jobs are relevant.
-			ts := tdb.QueryRow(t, "SELECT current_timestamp(0)::timestamp")
-			var startTime time.Time
-			ts.Scan(&startTime)
+			// Store the highest job ID, so we know which jobs are relevant.
+			tdb.Exec(t, "USE system")
+			jobID := tdb.QueryRow(t, "SELECT COALESCE(max(job_id), 0) FROM [SHOW JOBS]")
+			var maxJobID int64
+			jobID.Scan(&maxJobID)
 
 			// RESTORE.
 			pe.RequestPlan()
@@ -598,7 +598,7 @@ func exerciseBackupRestore(
 			skipComparison := false
 			// If the only thing left is to clean up then this restore may have no
 			// job so the startTime is important.
-			if succeeded, jobExists := hasLatestSchemaChangeSucceededWithTimestamp(t, tdb, startTime); (succeeded && jobExists) || (b.maySucceed && !jobExists) {
+			if succeeded, jobExists := hasLatestSchemaChangeSucceededWithMaxJobID(t, tdb, maxJobID); (succeeded && jobExists) || (b.maySucceed && !jobExists) {
 				expected = b.expectedOnSuccess
 				skipComparison = b.skipComparisonOnSuccess
 				if !b.maySucceed {
