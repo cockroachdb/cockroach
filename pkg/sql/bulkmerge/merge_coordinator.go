@@ -14,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,7 +33,63 @@ var mergeCoordinatorOutputTypes = []*types.T{
 
 type mergeCoordinator struct {
 	execinfra.ProcessorBase
+
 	input execinfra.RowSource
+	spec  execinfrapb.MergeCoordinatorSpec
+	tasks taskset.TaskSet
+
+	loopback chan rowenc.EncDatumRow
+	cleanup  func()
+
+	done    bool
+	results execinfrapb.BulkMergeSpec_Output
+}
+
+type mergeCoordinatorInput struct {
+	sqlInstanceID string
+	taskID        taskset.TaskID
+	outputSSTs    []execinfrapb.BulkMergeSpec_SST
+}
+
+// parseCoordinatorInput ensures each column has the correct type and unmarshals
+// the output SSTs.
+func parseCoordinatorInput(row rowenc.EncDatumRow) (mergeCoordinatorInput, error) {
+	if len(row) != 3 {
+		return mergeCoordinatorInput{}, errors.Newf("expected 3 columns, got %d", len(row))
+	}
+	if err := row[0].EnsureDecoded(types.Bytes, nil); err != nil {
+		return mergeCoordinatorInput{}, err
+	}
+	sqlInstanceID, ok := row[0].Datum.(*tree.DBytes)
+	if !ok {
+		return mergeCoordinatorInput{},
+			errors.Newf("expected bytes column for sqlInstanceID, got %s", row[0].Datum.String())
+	}
+	if err := row[1].EnsureDecoded(types.Int4, nil); err != nil {
+		return mergeCoordinatorInput{}, err
+	}
+	taskID, ok := row[1].Datum.(*tree.DInt)
+	if !ok {
+		return mergeCoordinatorInput{},
+			errors.Newf("expected int4 column for taskID, got %s", row[1].Datum.String())
+	}
+	if err := row[2].EnsureDecoded(types.Bytes, nil); err != nil {
+		return mergeCoordinatorInput{}, err
+	}
+	outputBytes, ok := row[2].Datum.(*tree.DBytes)
+	if !ok {
+		return mergeCoordinatorInput{},
+			errors.Newf("expected bytes column for outputSSTs, got %s", row[2].Datum.String())
+	}
+	results := execinfrapb.BulkMergeSpec_Output{}
+	if err := protoutil.Unmarshal([]byte(*outputBytes), &results); err != nil {
+		return mergeCoordinatorInput{}, err
+	}
+	return mergeCoordinatorInput{
+		sqlInstanceID: string(*sqlInstanceID),
+		taskID:        taskset.TaskID(*taskID),
+		outputSSTs:    results.SSTs,
+	}, nil
 }
 
 // Next implements execinfra.RowSource.
@@ -39,26 +97,88 @@ func (m *mergeCoordinator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMeta
 	for m.State == execinfra.StateRunning {
 		row, meta := m.input.Next()
 		switch {
-		case row == nil && meta == nil:
-			m.MoveToDraining(nil /* err */)
-		case meta != nil && meta.Err != nil:
-			m.MoveToDraining(meta.Err)
-		case meta != nil:
-			m.MoveToDraining(errors.Newf("unexpected meta: %v", meta))
 		case row != nil:
-			base := *row[2].Datum.(*tree.DBytes)
-			return rowenc.EncDatumRow{
-				rowenc.EncDatum{Datum: tree.NewDBytes(base + "->coordinator")},
-			}, nil
+			err := m.handleRow(row)
+			if err != nil {
+				m.MoveToDraining(err)
+			}
+		case meta == nil:
+			if m.done {
+				m.MoveToDraining(nil /* err */)
+				break
+			}
+			m.done = true
+			return m.emitResults()
+		case meta.Err != nil:
+			m.MoveToDraining(meta.Err)
+		default:
+			m.MoveToDraining(errors.Newf("unexpected meta: %v", meta))
 		}
 	}
 	return nil, m.DrainHelper()
+}
+
+func (m *mergeCoordinator) emitResults() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	marshaled, err := protoutil.Marshal(&m.results)
+	if err != nil {
+		m.MoveToDraining(errors.Wrap(err, "failed to marshal results"))
+		return nil, m.DrainHelper()
+	}
+	return rowenc.EncDatumRow{
+		rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(marshaled))},
+	}, nil
+}
+
+func (m *mergeCoordinator) publishInitialTasks() {
+	for _, sqlInstanceID := range m.spec.WorkerSqlInstanceIds {
+		taskID := m.tasks.ClaimFirst()
+		if taskID.IsDone() {
+			m.closeLoopback()
+			return
+		}
+		m.loopback <- rowenc.EncDatumRow{
+			rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(sqlInstanceID))},
+			rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(taskID))},
+		}
+	}
+}
+
+func (m *mergeCoordinator) closeLoopback() {
+	if m.cleanup != nil {
+		m.cleanup()
+		m.cleanup = nil
+	}
+}
+
+// handleRow accepts a row output by the merge processor, marks its task as
+// complete
+func (m *mergeCoordinator) handleRow(row rowenc.EncDatumRow) error {
+	input, err := parseCoordinatorInput(row)
+	if err != nil {
+		return err
+	}
+
+	m.results.SSTs = append(m.results.SSTs, input.outputSSTs...)
+
+	next := m.tasks.ClaimNext(input.taskID)
+	if next.IsDone() {
+		m.closeLoopback()
+		return nil
+	}
+
+	m.loopback <- rowenc.EncDatumRow{
+		rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(input.sqlInstanceID))},
+		rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(next))},
+	}
+
+	return nil
 }
 
 // Start implements execinfra.RowSource.
 func (m *mergeCoordinator) Start(ctx context.Context) {
 	m.StartInternal(ctx, "mergeCoordinator")
 	m.input.Start(ctx)
+	m.publishInitialTasks()
 }
 
 func init() {
@@ -70,8 +190,13 @@ func init() {
 		postSpec *execinfrapb.PostProcessSpec,
 		input execinfra.RowSource,
 	) (execinfra.Processor, error) {
+		channel, cleanup := loopback.create(flow)
 		mc := &mergeCoordinator{
-			input: input,
+			input:    input,
+			tasks:    taskset.MakeTaskSet(spec.TaskCount, int64(len(spec.WorkerSqlInstanceIds))),
+			loopback: channel,
+			cleanup:  cleanup,
+			spec:     spec,
 		}
 		err := mc.Init(
 			ctx, mc, postSpec, mergeCoordinatorOutputTypes, flow, flowID, nil,
