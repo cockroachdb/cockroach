@@ -78,7 +78,7 @@ func (r *resumer) Resume(ctx context.Context, execCtx interface{}) error {
 			id:      jobspb.JobID(*r),
 			execCtx: jobExecCtx,
 		},
-		partitioner: partitionSpans{jobExecCtx},
+		partitioner: partitionSpans{jobExecCtx, false},
 		fn: kvFingerprinter{
 			sender:   jobExecCtx.ExecCfg().DB.NonTransactionalSender(),
 			asOf:     details.AsOf,
@@ -225,6 +225,7 @@ func (p *persist) store(ctx context.Context, state checkpointState, frac float64
 
 type partitionSpans struct {
 	sql.JobExecContext
+	rangeSized bool
 }
 
 var _ partitioner = partitionSpans{}
@@ -248,6 +249,36 @@ func (p partitionSpans) partition(
 	spanPartitions, err := p.DistSQLPlanner().PartitionSpans(ctx, planCtx, spans, sql.PartitionSpansBoundDefault)
 	if err != nil {
 		return nil, err
+	}
+	if p.rangeSized {
+		// Sub-divide each partition into indivially range-aligned sub-spans.
+		for part := range spanPartitions {
+			subdivided := make([]roachpb.Span, 0, len(spanPartitions[part].Spans))
+			for _, sp := range spanPartitions[part].Spans {
+				rdi, err := p.JobExecContext.ExecCfg().RangeDescIteratorFactory.NewLazyIterator(ctx, sp, 64)
+				if err != nil {
+					return nil, err
+				}
+				remaining := sp
+				for ; rdi.Valid(); rdi.Next() {
+					rangeDesc := rdi.CurRangeDescriptor()
+					rangeSpan := roachpb.Span{Key: rangeDesc.StartKey.AsRawKey(), EndKey: rangeDesc.EndKey.AsRawKey()}
+					subspan := remaining.Intersect(rangeSpan)
+					if !subspan.Valid() {
+						return nil, errors.AssertionFailedf("%s not in %s of %s", rangeSpan, remaining, sp)
+					}
+					subdivided = append(subdivided, subspan)
+					remaining.Key = subspan.EndKey
+				}
+				if err := rdi.Error(); err != nil {
+					return nil, err
+				}
+				if remaining.Valid() {
+					subdivided = append(subdivided, remaining)
+				}
+			}
+			spanPartitions[part].Spans = subdivided
+		}
 	}
 	return spanPartitions, nil
 }
