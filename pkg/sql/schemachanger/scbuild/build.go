@@ -11,8 +11,10 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
@@ -120,10 +122,16 @@ func Build(
 		els.statements[currentStatementID].RedactedStatement = dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation)
 	}
 
+	mode, err := determineDistributedMergeModeForStatement(ctx, dependencies, incumbent, an.GetStatement())
+	if err != nil {
+		return scpb.CurrentState{}, stubLogSchemaChangerEventsFn, err
+	}
+
 	// Generate returned state.
 	ret, loggedTargets := makeState(dependencies.ClusterSettings().Version.ActiveVersion(ctx), bs)
 	ret.Statements = els.statements
 	ret.Authorization = els.authorization
+	ret.DistributedMergeMode = mode
 
 	// Update memory accounting.
 	if err := memAcc.Grow(ctx, ret.ByteSize()); err != nil {
@@ -133,6 +141,43 @@ func Build(
 	// Write to event log and return.
 	eventLogCallBack = makeEventLogCallback(b, ret.TargetState, loggedTargets)
 	return ret, eventLogCallBack, nil
+}
+
+func determineDistributedMergeModeForStatement(
+	ctx context.Context, deps Dependencies, incumbent scpb.CurrentState, stmt tree.Statement,
+) (scpb.DistributedMergeMode, error) {
+	baseJobMode, err := backfill.DetermineDistributedMergeMode(
+		ctx, deps.ClusterSettings(), backfill.DistributedMergeConsumerDeclarative,
+	)
+	if err != nil {
+		return scpb.DistributedMergeModeDisabled, err
+	}
+	baseMode := jobModeToStateMode(baseJobMode)
+	if baseMode == scpb.DistributedMergeModeDisabled {
+		return scpb.DistributedMergeModeDisabled, nil
+	}
+	mode := baseMode
+	if incumbent.DistributedMergeMode != scpb.DistributedMergeModeUnset {
+		mode = incumbent.DistributedMergeMode
+	}
+	if mode == scpb.DistributedMergeModeEnabled &&
+		stmt != nil && !backfill.StatementAllowsDistributedMerge(stmt) {
+		mode = scpb.DistributedMergeModeDisabled
+	}
+	return mode, nil
+}
+
+func jobModeToStateMode(
+	jobMode jobspb.IndexBackfillDistributedMergeMode,
+) scpb.DistributedMergeMode {
+	switch jobMode {
+	case jobspb.IndexBackfillDistributedMergeMode_Enabled:
+		return scpb.DistributedMergeModeEnabled
+	case jobspb.IndexBackfillDistributedMergeMode_Disabled:
+		return scpb.DistributedMergeModeDisabled
+	default:
+		return scpb.DistributedMergeModeDisabled
+	}
 }
 
 type loggedTarget struct {

@@ -69,6 +69,7 @@ go_test(
     name = "backfill_test",
     srcs = [
         "backfill_test.go",
+        "distributed_merge_mode_test.go",
         "index_backfiller_cols_test.go",
         "main_test.go",
         "mvcc_index_merger_test.go",
@@ -87,6 +88,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/execinfra",
+        "//pkg/sql/parser",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/testutils/serverutils",
