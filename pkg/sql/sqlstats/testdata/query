@@ -35,4 +35,4 @@ show-stats db=random_db app-name=transactions
 
 show-txn-stats db=random_db app-name=transactions
 ----
-{"commit_lat_not_zero": true, "statement_fingerprint_ids": ["5fe99858726d3688", "5fe99858726d3688"], "svc_lat_not_zero": true, "txn_fingerprint_id": "78d7c1c32632f05d"}
+{"commit_lat_not_zero": true, "count": "2", "statement_fingerprint_ids": ["5fe99858726d3688", "5fe99858726d3688"], "svc_lat_not_zero": true, "txn_fingerprint_id": "78d7c1c32632f05d"}
