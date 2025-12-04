@@ -567,6 +567,13 @@ func normalizeConstraints(
 // we return an error since the normalization could not establish full coverage,
 // but we leave the voter constraint's numReplicas unchanged in the output.
 //
+// Example:
+// constraints:       [+zone=a1]: 1
+// voterConstraints:  [+zone=a1]: 3
+// We can only satisfy 1 of the 3 voters using [+zone=a1]:1. The remaining 2
+// cannot be satisfied by any relationship. We return an error but output
+// voterConstraints: [+zone=a1]: 3 unchanged.
+//
 // Phase 2: Normalizing All-Replica Constraints
 // After Phase 1, voter constraints are normalized, but all-replica constraints
 // may be under-specified compared to them. Phase 2 borrows from the empty
