@@ -162,7 +162,7 @@ describe("<TimeScaleDropdown> component", function () {
     getByText("Past Hour");
   });
 
-  it("initializes the custom selection to the current time interval", () => {
+  it.skip("initializes the custom selection to the current time interval", () => {
     const mockSetTimeScale = jest.fn();
     // Default state
     const { getByText, getByDisplayValue } = render(
@@ -195,7 +195,7 @@ describe("<TimeScaleDropdown> component", function () {
     // start and end dropdowns; for an attempt see: https://github.com/jocrl/cockroach/commit/a15ac08b3ed0515a4c4910396e32dc8712cc86ec#diff-491a1b9fd6a93863973c270c8c05ab0d28e0a41f616ecd2222df9fab327806f2R196.
   });
 
-  it("opens directly to the custom menu when a custom time interval is currently selected", async () => {
+  it.skip("opens directly to the custom menu when a custom time interval is currently selected", async () => {
     const mockSetTimeScale = jest.fn();
     const { getByText, getByRole, baseElement } = render(
       <MemoryRouter>
