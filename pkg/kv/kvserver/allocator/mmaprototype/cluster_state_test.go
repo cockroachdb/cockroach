@@ -630,7 +630,8 @@ func TestClusterState(t *testing.T) {
 				case "retain-ready-lease-target-stores-only":
 					in := dd.ScanArg[[]roachpb.StoreID](t, d, "in")
 					rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
-					out := retainReadyLeaseTargetStoresOnly(ctx, storeSet(in), cs.stores, rangeID)
+					lh, _ := dd.ScanArgOpt[roachpb.StoreID](t, d, "leaseholder")
+					out := retainReadyLeaseTargetStoresOnly(ctx, storeSet(in), cs.stores, rangeID, lh)
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
