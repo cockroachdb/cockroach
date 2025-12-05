@@ -374,6 +374,9 @@ func runBackupProcessor(
 		if localitySinkURI != "" {
 			log.Dev.Infof(ctx, "backing up %d spans to destination specified by locality %s", totalSpans, destLocalityKV)
 			destURI = localitySinkURI
+		} else if spec.StrictLocality {
+			// This shouldn't happen unless there was a bug in distsql planning.
+			return errors.Errorf("sql processor locality %s does not match any of the backup localities %v: cannot proceed with strict locality", flowCtx.EvalCtx.Locality, spec.URIsByLocalityKV)
 		} else {
 			nodeLocalities := make([]string, 0, len(flowCtx.EvalCtx.Locality.Tiers))
 			for _, i := range flowCtx.EvalCtx.Locality.Tiers {

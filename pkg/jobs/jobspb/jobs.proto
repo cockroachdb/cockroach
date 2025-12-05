@@ -494,8 +494,14 @@ message BackupDetails {
   // NB: If Compact is set, the job is not a regular backup job and only a limited
   //  set of fields are set meaningfully.
   bool compact = 27;
+  
+  // StrictLocalityFiltering indicates that locality pairs in the backup URIs
+  // must match the replicas where the backup will scan data from. This will
+  // ensure that data in node with locality X will get backed up to a bucket
+  // with locality tag X.
+  bool strict_locality_filtering = 28;
 
-  // NEXT ID: 28;
+  // NEXT ID: 29;
 }
 
 message BackupProgress {

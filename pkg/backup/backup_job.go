@@ -156,11 +156,27 @@ func backup(
 	evalCtx := execCtx.ExtendedEvalContext()
 	dsp := execCtx.DistSQLPlanner()
 
+	if details.ExecutionLocality.NonEmpty() && details.StrictLocalityFiltering {
+		return roachpb.RowCount{}, 0, errors.AssertionFailedf("cannot set both ExecutionLocality and StrictLocalityFiltering")
+	}
+
+	locFilter := sql.SingleLocalityFilter(details.ExecutionLocality)
+	if details.StrictLocalityFiltering {
+		locFilter = make([]roachpb.Locality, 0, len(details.URIsByLocalityKV))
+		for kv := range details.URIsByLocalityKV {
+			kvLoc := roachpb.Locality{}
+			if err := kvLoc.Set(kv); err != nil {
+				return roachpb.RowCount{}, 0, errors.Wrapf(err, "parsing locality from key value %s", kv)
+			}
+			locFilter = append(locFilter, kvLoc)
+		}
+	}
+
 	oracle := physicalplan.DefaultReplicaChooser
 	if useBulkOracle.Get(&evalCtx.Settings.SV) {
 		oracle, err = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(
 			dsp.ReplicaOracleConfig(evalCtx.Locality),
-			sql.SingleLocalityFilter(details.ExecutionLocality),
+			locFilter,
 		)
 		if err != nil {
 			return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to create locality filtering bulk oracle")
@@ -170,7 +186,7 @@ func backup(
 	// We don't return the compatible nodes here since PartitionSpans will
 	// filter out incompatible nodes.
 	planCtx, _, err := dsp.SetupAllNodesPlanningWithOracle(
-		ctx, evalCtx, execCtx.ExecCfg(), oracle, sql.SingleLocalityFilter(details.ExecutionLocality), sql.NoStrictLocalityFiltering,
+		ctx, evalCtx, execCtx.ExecCfg(), oracle, locFilter, details.StrictLocalityFiltering,
 	)
 	if err != nil {
 		return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to determine nodes on which to run")
@@ -188,6 +204,7 @@ func backup(
 		pkIDs,
 		details.URI,
 		details.URIsByLocalityKV,
+		details.StrictLocalityFiltering,
 		encryption,
 		&kmsEnv,
 		kvpb.MVCCFilter(backupManifest.MVCCFilter),
