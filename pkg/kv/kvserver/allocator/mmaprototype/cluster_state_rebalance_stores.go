@@ -672,23 +672,47 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 				"store=%v range_id=%v should be leaseholder but isn't",
 				store.StoreID, rangeID))
 		}
+
+		// Get the stores from the replica set that are at least as good as the
+		// current leaseholder wrt satisfaction of lease preferences. This means
+		// that mma will never make lease preferences violations worse when
+		// moving the lease.
+		//
+		// Example:
+		// s1 and s2 in us-east, s3 in us-central, lease preference for us-east.
+		// - if s3 has the lease: candsPL = [s1, s2, s3]
+		// - if s1 has the lease: candsPL = [s2, s1] (s3 filtered out)
+		// - if s2 has the lease: candsPL = [s1, s2] (s3 filtered out)
+		//
+		// In effect, we interpret each replica whose store is worse than the current
+		// leaseholder as ill-disposed for the lease and (pre-means) filter then out.
 		cands, _ := rstate.constraints.candidatesToMoveLease()
-		var candsPL storeSet
+		// candsPL is the set of stores to consider the mean. This should
+		// include the current leaseholder, so we add it in, but only in a
+		// little while.
+		var candsPL storeSet // TODO(tbg): avoid allocation
 		for _, cand := range cands {
 			candsPL.insert(cand.storeID)
 		}
-		// Always consider the local store (which already holds the lease) as a
-		// candidate, so that we don't move the lease away if keeping it would be
-		// the better option overall.
-		// TODO(tbg): is this really needed? We intentionally exclude the leaseholder
-		// in candidatesToMoveLease, so why reinsert it now?
-		candsPL.insert(store.StoreID)
-		if len(candsPL) <= 1 {
+		if len(candsPL) == 0 {
+			// No candidates to move the lease to. We bail early to avoid some
+			// logging below that is not helpful if we didn't have any real
+			// candidates to begin with.
 			re.passObs.leaseShed(noCandidate)
-			continue // leaseholder is the only candidate
+			continue
 		}
+		// NB: intentionally log before re-adding the current leaseholder so
+		// we don't list it as a candidate.
+		log.KvDistribution.VEventf(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
+		// Now candsPL is ready for computing the means.
+		candsPL.insert(store.StoreID)
 
-		candsPL = retainReadyLeaseTargetStoresOnly(ctx, candsPL, re.stores, rangeID)
+		// Filter by disposition. Note that we pass the shedding store in to
+		// make sure that its disposition does not matter. In other words, the
+		// leaseholder is always going to include itself in the mean, even if it
+		// is ill-disposed towards leases.
+		candsPL = retainReadyLeaseTargetStoresOnly(ctx, candsPL, re.stores, rangeID, store.StoreID)
+
 		// INVARIANT: candsPL - {store.StoreID} \subset cands
 		if len(candsPL) == 0 || (len(candsPL) == 1 && candsPL[0] == store.StoreID) {
 			re.passObs.leaseShed(noHealthyCandidate)
@@ -703,7 +727,6 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		clear(re.scratch.nodes)
 		means := computeMeansForStoreSet(re, candsPL, re.scratch.nodes, re.scratch.stores)
 		sls := re.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
-		log.KvDistribution.VEventf(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
 		if sls.dimSummary[CPURate] < overloadSlow {
 			// This store is not cpu overloaded relative to these candidates for
 			// this range.
@@ -713,6 +736,9 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 		var candsSet candidateSet
 		for _, cand := range cands {
+			if cand.storeID == store.StoreID {
+				panic(errors.AssertionFailedf("current leaseholder can't be a candidate: %v", cand))
+			}
 			if !candsPL.contains(cand.storeID) {
 				// Skip candidates that are filtered out by
 				// retainReadyLeaseTargetStoresOnly.
@@ -794,10 +820,30 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 //
 // The input storeSet is mutated (and used to for the returned result).
 func retainReadyLeaseTargetStoresOnly(
-	ctx context.Context, in storeSet, stores map[roachpb.StoreID]*storeState, rangeID roachpb.RangeID,
+	ctx context.Context,
+	in storeSet,
+	stores map[roachpb.StoreID]*storeState,
+	rangeID roachpb.RangeID,
+	existingLeaseholder roachpb.StoreID,
 ) storeSet {
 	out := in[:0]
 	for _, storeID := range in {
+		if storeID == existingLeaseholder {
+			// The existing leaseholder is always included in the mean, even if
+			// it is ill-disposed towards leases. Because it is holding the lease,
+			// we know that its load is recent.
+			//
+			// Example: Consider a range with leaseholder on s1 and voters on s2
+			// and s3. All stores have CPU capacity of 100 units. s1 has load 40,
+			// s2 has load 80, s3 has load 80. The mean CPU utilization (total
+			// load / total capacity) is (40+80+80)/(100+100+100) = 66% if we
+			// include s1 and (80+80)/(100+100) = 80% if we don't.
+			// If we filtered out s1 just because it is ill-disposed towards
+			// leases, s2 and s3 would be exactly on the mean and we might
+			// consider transferring the lease to them, but we should not.
+			out = append(out, storeID)
+			continue
+		}
 		s := stores[storeID].status
 		switch {
 		case s.Disposition.Lease != LeaseDispositionOK:
