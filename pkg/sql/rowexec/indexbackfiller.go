@@ -84,8 +84,9 @@ func newIndexBackfiller(
 	processorID int32,
 	spec execinfrapb.BackfillerSpec,
 ) (*indexBackfiller, error) {
-	indexBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
-		mon.MakeName("index-backfill-mon"))
+	indexBackfillerMon := execinfra.NewMonitor(
+		ctx, flowCtx.Cfg.BackfillerMonitor, mon.MakeName("index-backfill-mon"),
+	)
 	ib := &indexBackfiller{
 		desc:        flowCtx.TableDescriptor(ctx, &spec.Table),
 		spec:        spec,
@@ -94,8 +95,9 @@ func newIndexBackfiller(
 		filter:      backfill.IndexMutationFilter,
 	}
 
-	if err := ib.IndexBackfiller.InitForDistributedUse(ctx, flowCtx, ib.desc,
-		ib.spec.IndexesToBackfill, ib.spec.SourceIndexID, indexBackfillerMon); err != nil {
+	if err := ib.IndexBackfiller.InitForDistributedUse(
+		ctx, flowCtx, ib.desc, ib.spec.IndexesToBackfill, ib.spec.SourceIndexID, indexBackfillerMon,
+	); err != nil {
 		return nil, err
 	}
 
