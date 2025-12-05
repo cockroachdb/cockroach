@@ -84,7 +84,7 @@ import SQLActivityPage from "src/views/sqlActivity/sqlActivityPage";
 import StatementDetails from "src/views/statements/statementDetails";
 import { SnapshotRouter } from "src/views/tracez_v2/snapshotRoutes";
 import TransactionDetails from "src/views/transactions/transactionDetails";
-import "styl/app.styl";
+import "styl/app.scss";
 
 import InsightsOverviewPage from "./views/insights/insightsOverview";
 import StatementInsightDetailsPage from "./views/insights/statementInsightDetailsPage";

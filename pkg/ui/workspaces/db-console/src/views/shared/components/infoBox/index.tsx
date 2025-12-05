@@ -5,7 +5,7 @@
 
 import React from "react";
 
-import "./infoBox.styl";
+import "./infoBox.scss";
 
 export default class InfoBox extends React.Component {
   render() {

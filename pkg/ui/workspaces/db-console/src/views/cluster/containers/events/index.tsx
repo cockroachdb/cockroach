@@ -32,7 +32,7 @@ import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { getEventDescription } from "src/util/events";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
-import "./events.styl";
+import "./events.scss";
 
 // Number of events to show in the sidebar.
 const EVENT_BOX_NUM_EVENTS = 5;

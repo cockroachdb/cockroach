@@ -21,7 +21,7 @@ import {
 } from "src/util/api";
 import { throttlingFaqs } from "src/util/docs";
 
-import styles from "./alertBar.module.styl";
+import styles from "./alertBar.module.scss";
 
 interface AlertBarProps {
   license: LicenseType;

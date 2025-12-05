@@ -6,7 +6,7 @@
 import classNames from "classnames";
 import * as React from "react";
 
-import "./userAvatar.styl";
+import "./userAvatar.scss";
 
 export interface UserAvatarProps {
   userName: string;

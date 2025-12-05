@@ -9,7 +9,7 @@ import React from "react";
 import heroBannerLp from "assets/heroBannerLp.png";
 import { Anchor, Button, Text, TextTypes } from "src/components";
 
-import styles from "./empty.module.styl";
+import styles from "./empty.module.scss";
 
 const cx = classnames.bind(styles);
 

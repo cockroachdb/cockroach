@@ -54,7 +54,7 @@ import {
 import { Latency } from "./latency";
 import { Legend } from "./legend";
 import Sort from "./sort";
-import "./network.styl";
+import "./network.scss";
 
 import NodeLivenessStatus = protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
 import IConnectivity = cockroach.server.serverpb.NetworkConnectivityResponse.IConnectivity;

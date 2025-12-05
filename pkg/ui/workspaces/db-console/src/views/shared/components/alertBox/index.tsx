@@ -14,7 +14,7 @@ import {
   informationIcon,
 } from "src/views/shared/components/icons";
 
-import "./alertbox.styl";
+import "./alertbox.scss";
 
 function alertIcon(level: AlertLevel) {
   switch (level) {
