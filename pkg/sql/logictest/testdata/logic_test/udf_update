@@ -386,3 +386,23 @@ statement error pgcode 2BP01 pq: cannot drop column "a" because function "f_upda
 ALTER TABLE table_drop DROP COLUMN a;
 
 subtest end
+
+# Prevent drop of column used in SET clause within a routine.
+subtest regression_158898
+
+statement ok
+CREATE TABLE t158898 (col1 INT8 NOT NULL);
+
+statement ok
+CREATE OR REPLACE PROCEDURE p158898() LANGUAGE PLpgSQL AS $proc$
+  BEGIN UPDATE t158898 SET col1 = 1; END;
+$proc$;
+
+statement error pgcode 2BP01 pq: cannot drop column "col1" because function "p158898" depends on it
+ALTER TABLE t158898 DROP COLUMN col1;
+
+statement ok
+DROP PROCEDURE p158898;
+DROP TABLE t158898;
+
+subtest end
