@@ -73,7 +73,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
 	)
-	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// There should not be any stats yet.
@@ -235,14 +235,13 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
 	)
-	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	r := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
-	// Exclude the 4 system tables which don't use autostats.
-	systemTablesWithStats := bootstrap.NumSystemTablesForSystemTenant - 4
+	// Exclude the 5 system tables which don't use autostats.
+	systemTablesWithStats := bootstrap.NumSystemTablesForSystemTenant - 5
 	numUserTablesWithStats := 2
 
-	// This now includes 36 system tables as well as the 2 created above.
 	if err := checkAllTablesCount(
 		ctx, true /* systemTables */, systemTablesWithStats+numUserTablesWithStats, r,
 	); err != nil {
@@ -338,7 +337,7 @@ func BenchmarkEnsureAllTables(b *testing.B) {
 				s.InternalDB().(descs.DB),
 				s.AppStopper(),
 			)
-			require.NoError(b, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory)))
+			require.NoError(b, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 			r := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 			b.ResetTimer()
@@ -412,7 +411,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
 	)
-	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// curTime is used as the current time throughout the test to ensure that the
@@ -662,7 +661,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
 	)
-	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, true)
@@ -718,7 +717,7 @@ func TestAutoStatsOnStartupClusterSettingOff(t *testing.T) {
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
 	)
-	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// Refresher start should trigger stats collection on t.a.
@@ -766,7 +765,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
 	)
-	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	r := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// Try to refresh stats on a table that doesn't exist.
@@ -884,7 +883,7 @@ func TestAnalyzeSystemTables(t *testing.T) {
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
 	)
-	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 
 	rows, err := executor.QueryBuffered(
 		ctx,
@@ -905,7 +904,7 @@ func TestAnalyzeSystemTables(t *testing.T) {
 	}
 	for _, row := range rows {
 		tableName := string(*tree.UnwrapDOidWrapper(row[0]).(*tree.DString))
-		if DisallowedOnSystemTable(getTableID(tableName)) {
+		if cache.DisallowedOnSystemTable(getTableID(tableName)) {
 			continue
 		}
 		sqlRun.Exec(t, fmt.Sprintf("ANALYZE system.%s", tableName))
@@ -1005,7 +1004,7 @@ func TestAutoStatsDisabledReadOnlyTenant(t *testing.T) {
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
 	)
-	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache,
 		time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 	readOnlyRefresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache,
@@ -1081,7 +1080,7 @@ func TestEstimateStaleness(t *testing.T) {
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
 	)
-	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 
 	// curTime is used as the current time throughout the test to ensure that the
 	// calculated staleness is consistent even if there are delays due to

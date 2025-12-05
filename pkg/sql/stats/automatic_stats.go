@@ -798,7 +798,7 @@ func (r *Refresher) getApplicableTables(
 			if !isTable {
 				return nil
 			}
-			if !autostatsCollectionAllowed(tableDesc, r.st) {
+			if !r.cache.autostatsCollectionAllowed(tableDesc) {
 				return nil
 			}
 			switch tableDesc.AutoStatsCollectionEnabled() {
@@ -845,7 +845,7 @@ func (r *Refresher) NotifyMutation(
 	if !r.autoStatsEnabled(table) {
 		return
 	}
-	if !autostatsCollectionAllowed(table, r.st) {
+	if !r.cache.autostatsCollectionAllowed(table) {
 		// Don't collect stats for virtual tables or views. System tables may be
 		// allowed if enabled in cluster settings.
 		return
@@ -902,7 +902,7 @@ func (r *Refresher) EstimateStaleness(ctx context.Context, tableID descpb.ID) (f
 	if desc == nil {
 		return 0, errors.New("could not access the table descriptor")
 	}
-	if !autostatsCollectionAllowed(desc, r.st) {
+	if !r.cache.autostatsCollectionAllowed(desc) {
 		return 0, errors.New("automatic stats collection is not allowed for this table")
 	}
 

@@ -263,7 +263,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		)
 	}
 
-	if stats.DisallowedOnSystemTable(tableDesc.GetID()) {
+	if n.p.execCfg.TableStatsCache.DisallowedOnSystemTable(tableDesc.GetID()) {
 		return nil, pgerror.Newf(
 			pgcode.WrongObjectType, "cannot create statistics on system.%s", tableDesc.GetName(),
 		)
