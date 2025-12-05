@@ -152,6 +152,42 @@ func TestNormalizedSpanConfig(t *testing.T) {
 		})
 }
 
+// TestNormalizeConstraints exercises the full constraint normalization pipeline
+// including both normalizeVoterConstraints and normalizeEmptyConstraints.
+// It tests relationship types: conjEqualSet, conjStrictSubset, conjStrictSuperset,
+// conjNonIntersecting, and conjPossiblyIntersecting, as well as empty constraint
+// handling across both normalization phases.
+func TestNormalizeConstraints(t *testing.T) {
+	interner := newStringInterner()
+	datadriven.RunTest(t, filepath.Join(datapathutils.TestDataPath(t), t.Name()),
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "normalize":
+				conf := parseSpanConfig(t, d)
+				var b strings.Builder
+				nConf, err := makeBasicNormalizedSpanConfig(&conf, interner)
+				if err != nil {
+					fmt.Fprintf(&b, "err=%s\n", err.Error())
+					return b.String()
+				}
+				fmt.Fprintf(&b, "input:\n")
+				printSpanConfig(&b, nConf.uninternedConfig())
+				err = nConf.normalizeVoterConstraints()
+				fmt.Fprintf(&b, "after normalizeVoterConstraints:\n")
+				printSpanConfig(&b, nConf.uninternedConfig())
+				nConf.normalizeEmptyConstraints()
+				fmt.Fprintf(&b, "after normalizeEmptyConstraints:\n")
+				printSpanConfig(&b, nConf.uninternedConfig())
+				if err != nil {
+					fmt.Fprintf(&b, "err=%s\n", err.Error())
+				}
+				return b.String()
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+}
+
 func printPostingList(b *strings.Builder, pl storeSet) {
 	for i := range pl {
 		prefix := ""
