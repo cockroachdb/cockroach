@@ -36,39 +36,6 @@ type IndexBackfillPlanner struct {
 	execCfg *ExecutorConfig
 }
 
-type sstManifestBuffer struct {
-	syncutil.Mutex
-	manifests []jobspb.IndexBackfillSSTManifest
-}
-
-func newSSTManifestBuffer(initial []jobspb.IndexBackfillSSTManifest) *sstManifestBuffer {
-	buf := &sstManifestBuffer{}
-	buf.manifests = append(buf.manifests, initial...)
-	return buf
-}
-
-func (b *sstManifestBuffer) snapshotLocked() []jobspb.IndexBackfillSSTManifest {
-	return append([]jobspb.IndexBackfillSSTManifest(nil), b.manifests...)
-}
-
-func (b *sstManifestBuffer) Snapshot() []jobspb.IndexBackfillSSTManifest {
-	b.Lock()
-	defer b.Unlock()
-	return b.snapshotLocked()
-}
-
-func (b *sstManifestBuffer) Append(
-	newManifests []jobspb.IndexBackfillSSTManifest,
-) []jobspb.IndexBackfillSSTManifest {
-	if len(newManifests) == 0 {
-		return b.Snapshot()
-	}
-	b.Lock()
-	defer b.Unlock()
-	b.manifests = append(b.manifests, newManifests...)
-	return b.snapshotLocked()
-}
-
 // NewIndexBackfiller creates a new IndexBackfillPlanner.
 func NewIndexBackfiller(execCfg *ExecutorConfig) *IndexBackfillPlanner {
 	return &IndexBackfillPlanner{execCfg: execCfg}
@@ -117,7 +84,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	}
 	// Add spans that were already completed before the job resumed.
 	addCompleted(progress.CompletedSpans...)
-	sstManifestBuf := newSSTManifestBuffer(progress.SSTManifests)
+	sstManifestBuf := backfill.NewSSTManifestBuffer(progress.SSTManifests)
 	progress.SSTManifests = sstManifestBuf.Snapshot()
 	updateSSTManifests := func(newManifests []jobspb.IndexBackfillSSTManifest) {
 		progress.SSTManifests = sstManifestBuf.Append(newManifests)

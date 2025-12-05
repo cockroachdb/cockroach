@@ -12,7 +12,9 @@ This document provides an overview of the quarterly release preparation tasks wi
 - [M.1: Bump Current Version](runbooks/M1_bump_current_version.md) - Advance master to next development version
 - [M.2: Enable Mixed-Cluster Logic Tests](runbooks/M2_enable_mixed_cluster_logic_tests.md) - Add bootstrap data and test configs
 - [M.3: Enable Upgrade Tests](runbooks/M3_enable_upgrade_tests.md) - Generate fixtures and enable roachtests
+  - [M.3 Quick Reference](runbooks/M3_enable_upgrade_tests_QUICK.md) - Streamlined checklist version
 - [M.4: Bump MinSupported Version](runbooks/M4_bump_minsupported_version.md) - Remove support for oldest version
+  - [M.4 Quick Reference](runbooks/M4_bump_minsupported_version_QUICK.md) - Streamlined checklist version
 
 ## For Claude Code AI
 
@@ -21,17 +23,25 @@ This document provides an overview of the quarterly release preparation tasks wi
 When the user asks you to perform a release task (e.g., "perform M.1", "do the M.2 task", "help with R.1"):
 
 1. **Read the appropriate runbook** from the `runbooks/` directory using the Read tool
+   - **Prefer QUICK versions when available** (e.g., `M4_bump_minsupported_version_QUICK.md`)
+   - Quick versions are streamlined checklists optimized for execution
+   - Full versions have detailed explanations and troubleshooting
 2. **Follow the runbook exactly** - it contains step-by-step instructions, expected files, and common errors
 3. **Use the TodoWrite tool** to track your progress through the runbook steps
 4. **Ask clarifying questions** if the runbook is unclear or doesn't match the current codebase state
+5. **Reference the full runbook** when you encounter errors or need deeper explanation
 
 **Adding new runbooks:**
 
 1. **Create a new file** in `pkg/clusterversion/runbooks/` following the naming pattern: `{R|M}N_descriptive_name.md`
-2. **Update this file** to add the new runbook to the Quick Navigation section
-3. **Update `pkg/clusterversion/README.md`** with a "Claude Prompt" section that references the new runbook
-4. **Follow the existing structure:** Use consistent header levels (# for title, ## for major sections, ### for subsections)
-5. **Include these sections:** Overview, Prerequisites, Step-by-Step Checklist, Expected Files Modified, Validation/Verification, Common Errors, Quick Reference Commands
+2. **Consider creating a QUICK version** for complex tasks (e.g., `{R|M}N_descriptive_name_QUICK.md`)
+   - Quick versions should be action-oriented checklists
+   - Use tables, bullet points, and minimal prose
+   - Focus on WHAT to do, not WHY
+3. **Update this file** to add the new runbook to the Quick Navigation section
+4. **Update `pkg/clusterversion/README.md`** with a "Claude Prompt" section that references the new runbook
+5. **Follow the existing structure:** Use consistent header levels (# for title, ## for major sections, ### for subsections)
+6. **Include these sections:** Overview, Prerequisites, Step-by-Step Checklist, Expected Files Modified, Validation/Verification, Common Errors, Quick Reference Commands
 
 ## Runbook Structure Guidelines
 

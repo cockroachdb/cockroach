@@ -2,6 +2,10 @@
 
 This section provides step-by-step instructions for the M.3 task: "Enable upgrade tests" on the master branch after the first RC is published. This task enables roachtest upgrade tests with the newly released version.
 
+**📋 Quick Reference:** For a streamlined checklist-style guide, see [`M3_enable_upgrade_tests_QUICK.md`](M3_enable_upgrade_tests_QUICK.md). This document provides detailed explanations and troubleshooting.
+
+---
+
 ### Overview
 
 **When to perform:** After the first RC (e.g., v25.4.0-rc.1) is published and available on the releases page.

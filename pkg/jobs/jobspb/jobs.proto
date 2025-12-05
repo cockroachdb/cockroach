@@ -930,6 +930,10 @@ message KeyVisualizerProgress {}
 
 message ResumeSpanList {
   repeated roachpb.Span resume_spans = 1 [(gogoproto.nullable) = false];
+  repeated IndexBackfillSSTManifest sst_manifests = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SSTManifests"
+  ];
 }
 
 enum Status {
