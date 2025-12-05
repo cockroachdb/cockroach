@@ -3508,6 +3508,7 @@ func (og *operationGenerator) inspect(ctx context.Context, tx pgx.Tx) (*opStmt, 
 	}
 	if isDetachedUnsupported {
 		stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
+		stmt.potentialExecErrors.add(pgcode.Syntax)
 	}
 	// Always run DETACHED as this allows us to use INSPECT inside of a
 	// transaction. We have post-processing at the end of the run to verify
