@@ -54,6 +54,43 @@ NULL   NULL  NULL
 statement error cannot drop type \"t\" because other objects .* still depend on it
 DROP TYPE t
 
+# Test array types within composite type definitions.
+statement ok
+CREATE TYPE arr_composite AS (a INT[], b TEXT[])
+
+query TTTT
+SELECT database_name, schema_name, descriptor_name, create_statement
+FROM crdb_internal.create_type_statements WHERE descriptor_name = 'arr_composite'
+----
+test  public  arr_composite  CREATE TYPE public.arr_composite AS (a INT8[], b STRING[])
+
+statement ok
+CREATE TABLE arr_composite_tab (x arr_composite)
+
+statement ok
+INSERT INTO arr_composite_tab VALUES ((ARRAY[1, 2, 3], ARRAY['a', 'b']))
+
+statement ok
+INSERT INTO arr_composite_tab VALUES (ROW(ARRAY[4, 5], ARRAY['c', 'd', 'e']))
+
+query T rowsort
+SELECT * FROM arr_composite_tab
+----
+("{1,2,3}","{a,b}")
+("{4,5}","{c,d,e}")
+
+query TT rowsort
+SELECT (x).a, (x).b FROM arr_composite_tab
+----
+{1,2,3}  {a,b}
+{4,5}    {c,d,e}
+
+statement ok
+DROP TABLE arr_composite_tab
+
+statement ok
+DROP TYPE arr_composite
+
 # Test arrays of composite types.
 statement disable-cf-mutator ok
 CREATE TABLE atyp(a t[])

@@ -3513,7 +3513,7 @@ enum_val_list ::=
 	( 'SCONST' ) ( ( ',' 'SCONST' ) )*
 
 composite_type_list ::=
-	( name simple_typename ) ( ( ',' name simple_typename ) )*
+	( name typename ) ( ( ',' name typename ) )*
 
 routine_param_with_default_list ::=
 	( routine_param_with_default ) ( ( ',' routine_param_with_default ) )*
