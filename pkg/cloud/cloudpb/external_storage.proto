@@ -180,8 +180,6 @@ message ExternalStorage {
   // URI is the string URI from which this encoded external storage config was
   // derived, if known. May be empty in most cases unless set explicitly by the
   // caller who created the config from a URI.
-  // TODO(dt): It would be nice if this were always set but we would need every
-  // implementation of ExternalStorage to do so in its Conf() method.
   string URI = 10;
 }
 
