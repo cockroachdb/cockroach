@@ -2625,6 +2625,7 @@ backup_options ::=
 	| include_all_clusters '=' a_expr
 	| 'UPDATES_CLUSTER_MONITORING_METRICS'
 	| 'UPDATES_CLUSTER_MONITORING_METRICS' '=' a_expr
+	| 'STRICT' 'STORAGE' 'LOCALITY'
 
 c_expr ::=
 	d_expr
