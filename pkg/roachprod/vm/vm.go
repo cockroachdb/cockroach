@@ -279,12 +279,35 @@ func (vl List) ProviderIDs() []string {
 	return ret
 }
 
+type Filesystem string
+
 const (
 	// Zfs refers to the zfs file system.
-	Zfs = "zfs"
+	Zfs Filesystem = "zfs"
 	// Ext4 refers to the ext4 file system.
-	Ext4 = "ext4"
+	Ext4 Filesystem = "ext4"
+	// Xfs refers to the xfs file system.
+	Xfs Filesystem = "xfs"
+	// F2fs refers to the f2fs file system.
+	F2fs Filesystem = "f2fs"
+	// Btrfs refers to the btrfs file system.
+	Btrfs Filesystem = "btrfs"
 )
+
+// ParseFilesystemString parses and validates a filesystem string.
+func ParseFilesystemString(s string) (Filesystem, error) {
+	return ParseFileSystemOption(Filesystem(s))
+}
+
+// ParseFileSystemOption parses and validates a Filesystem option.
+func ParseFileSystemOption(s Filesystem) (Filesystem, error) {
+	switch s {
+	case Zfs, Ext4, Xfs, F2fs, Btrfs:
+		return s, nil
+	default:
+		return "", errors.Newf("unsupported filesystem: %s", s)
+	}
+}
 
 // CreateOpts is the set of options when creating VMs.
 type CreateOpts struct {
@@ -301,7 +324,7 @@ type CreateOpts struct {
 		// mounting the SSD. Ignored if UseLocalSSD is not set.
 		NoExt4Barrier bool
 		// The file system to be used. This is set to "ext4" by default.
-		FileSystem string
+		FileSystem Filesystem
 	}
 	OsVolumeSize int
 }
