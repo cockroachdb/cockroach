@@ -626,6 +626,18 @@ func makeNormalizedConstraintsEnv(conf *normalizedSpanConfig) normalizedConstrai
 	}
 }
 
+func (ncEnv *normalizedConstraintsEnv) buildVoterConstraints() []internedConstraintsConjunction {
+	vc := make([]internedConstraintsConjunction, 0, len(ncEnv.voterConstraints))
+	for i := range ncEnv.voterConstraints {
+		if ncEnv.voterConstraints[i].numReplicas > 0 {
+			vc = append(vc, ncEnv.voterConstraints[i].internedConstraintsConjunction)
+		}
+		// Else, one of the original voterConstraints got completely narrowed and
+		// replaced by narrower conjunctions.
+	}
+	return vc
+}
+
 // satisfyVoterWithAll satisfies the voter constraint with the all replica
 // constraint.
 func (ncEnv *normalizedConstraintsEnv) satisfyVoterWithAll(voterIndex int, allIndex int) {
@@ -1092,15 +1104,7 @@ func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
 		ncEnv.voterConstraints[emptyVoterConstraintIndex], ncEnv.voterConstraints[n] =
 			ncEnv.voterConstraints[n], ncEnv.voterConstraints[emptyVoterConstraintIndex]
 	}
-	var vc []internedConstraintsConjunction
-	for i := range ncEnv.voterConstraints {
-		if ncEnv.voterConstraints[i].numReplicas > 0 {
-			vc = append(vc, ncEnv.voterConstraints[i].internedConstraintsConjunction)
-		}
-		// Else, one of the original voterConstraints got completely narrowed and
-		// replaced by narrower conjunctions.
-	}
-	conf.voterConstraints = vc
+	conf.voterConstraints = ncEnv.buildVoterConstraints()
 	return err
 }
 
