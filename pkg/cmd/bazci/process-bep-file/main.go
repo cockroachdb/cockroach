@@ -70,7 +70,7 @@ func process() error {
 	if *jsonOutFile != "" {
 		jsonReport, errs := engflow.ConstructJSONReport(invocation, *serverName)
 		for _, err := range errs {
-			fmt.Printf("error loading JSON test report: %+v", err)
+			fmt.Printf("error loading JSON test report: %+v\n", err)
 		}
 		jsonOut, err := json.Marshal(jsonReport)
 		if err != nil {
@@ -81,11 +81,11 @@ func process() error {
 			return err
 		}
 	} else {
-		fmt.Printf("no -jsonoutfile; skipping constructing JSON test report")
+		fmt.Println("no -jsonoutfile; skipping constructing JSON test report")
 	}
 
 	if githubApiToken == "" {
-		fmt.Printf("no GITHUB_API_TOKEN; skipping reporting to GitHub")
+		fmt.Println("no GITHUB_API_TOKEN; skipping reporting to GitHub")
 		return nil
 	}
 
@@ -99,12 +99,12 @@ func process() error {
 		for _, res := range results {
 			var seenNew bool
 			if res.Err != nil {
-				fmt.Printf("got error downloading test XML for result %+v; got error %+v", res, res.Err)
+				fmt.Printf("got error downloading test XML for result %+v; got error %+v\n", res, res.Err)
 				continue
 			}
 			var testXml bazelutil.TestSuites
 			if err := xml.Unmarshal([]byte(res.TestXml), &testXml); err != nil {
-				fmt.Printf("could not parse test.xml: got error %+v", err)
+				fmt.Printf("could not parse test.xml: got error %+v\n", err)
 				continue
 			}
 			for _, suite := range testXml.Suites {
@@ -138,7 +138,7 @@ func process() error {
 						GithubApiToken: githubApiToken,
 						ExtraParams:    extraParamsSlice,
 					}), testXml); err != nil {
-					fmt.Printf("could not post to GitHub: got error %+v", err)
+					fmt.Printf("could not post to GitHub: got error %+v\n", err)
 				}
 			}
 		}
@@ -166,7 +166,7 @@ func main() {
 		os.Exit(1)
 	}
 	if err := process(); err != nil {
-		fmt.Printf("ERROR: %+v", err)
+		fmt.Printf("ERROR: %+v\n", err)
 		os.Exit(1)
 	}
 }
