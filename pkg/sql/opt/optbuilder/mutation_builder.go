@@ -75,6 +75,13 @@ type mutationBuilder struct {
 	// targetColSet contains the same column IDs as targetColList, but as a set.
 	targetColSet opt.ColSet
 
+	// explicitTargetColOrds contains the ordinals of the columns in targetColSet
+	// that were explicitly specified by the user, e.g. in the target column list
+	// of an INSERT or the SET clause of an UPDATE. This is used to determine
+	// which columns to add to the list of dependencies if b.trackSchemaDeps is
+	// true.
+	explicitTargetColOrds intsets.Fast
+
 	// insertColIDs lists the input column IDs providing values to insert. Its
 	// length is always equal to the number of columns in the target table,
 	// including mutation columns. Table columns which will not have values
@@ -603,8 +610,18 @@ func (mb *mutationBuilder) addTargetCol(ord int) {
 			"multiple assignments to the same column %q", tabCol.ColName()))
 	}
 	mb.targetColSet.Add(colID)
-
 	mb.targetColList = append(mb.targetColList, colID)
+	mb.explicitTargetColOrds.Add(ord)
+}
+
+// trackTargetColDeps adds column dependencies for the target columns that were
+// explicitly specified by the user.
+func (mb *mutationBuilder) trackTargetColDeps() {
+	if mb.b.trackSchemaDeps && mb.b.evalCtx.SessionData().PreventUpdateSetColumnDrop {
+		dep := opt.SchemaDep{DataSource: mb.tab}
+		dep.ColumnOrdinals.CopyFrom(mb.explicitTargetColOrds)
+		mb.b.schemaDeps = append(mb.b.schemaDeps, dep)
+	}
 }
 
 // extractValuesInput tests whether the given input is a VALUES clause with no
