@@ -36,6 +36,7 @@ func TestBackupResolveOptionsForJobDescription(t *testing.T) {
 		IncrementalStorage:              []tree.Expr{tree.NewDString("test expr")},
 		ExecutionLocality:               tree.NewDString("test expr"),
 		UpdatesClusterMonitoringMetrics: tree.NewDString("test expr"),
+		Strict:                          true,
 	}
 
 	ensureAllStructFieldsSet := func(s tree.BackupOptions, name string) {
