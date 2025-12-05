@@ -7,6 +7,7 @@ package admission
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -23,7 +24,7 @@ var KVCPUTimeAppUtilGoal = settings.RegisterFloatSetting(
 	"the target CPU utilization for app tenant work if using the KV CPU time "+
 		"token system, value is in the interval [0,1] where 1 means all cores",
 	0.8,
-	settings.FloatWithMinimum(0.2))
+	settings.FloatWithMinimum(minTargetUtilFrac))
 
 var KVCPUTimeSystemUtilGoal = settings.RegisterFloatSetting(
 	settings.SystemOnly,
@@ -31,7 +32,7 @@ var KVCPUTimeSystemUtilGoal = settings.RegisterFloatSetting(
 	"the target CPU utilization for system tenant work if using the KV CPU "+
 		"time token system, value is in the interval [0,1] where 1 means all cores",
 	0.95,
-	settings.FloatWithMinimum(0.2))
+	settings.FloatWithMinimum(minTargetUtilFrac))
 
 // Burstable work is given this much CPU headroom above non-burstable. See
 // resetInterval for more.
@@ -57,7 +58,18 @@ var KVCPUTimeUtilBurstDelta = settings.RegisterFloatSetting(
 	// consume the remaining 50 tokens/s). Which will keep the smaller bucket at 0
 	// tokens, and the other bucket will slowly use the excess tokens to fill up
 	// to its full size of 85 tokens.
-	0.05)
+	0.05,
+	settings.PositiveFloat)
+
+const (
+	// See the extensive comments near isLowCPUUtil declaration for info
+	// regarding this constant.
+	lowCPUUtilFrac = 0.25
+	// minTargetUtilFrac is the lowest that the admission.cpu_time_tokens.target_util
+	// settings can be set to. < 50% CPU utilization is not a cost-effective choice,
+	// as it leads lots of hardware resources unused, even in case of short spikes.
+	minTargetUtilFrac = lowCPUUtilFrac + 0.25
+)
 
 // timePerTick is how frequently cpuTimeTokenFiller ticks its time.Ticker & adds
 // tokens to the buckets. Must be < 1s. Must divide 1s evenly.
@@ -456,7 +468,6 @@ func (m *cpuTimeTokenLinearModel) fit(targets targetUtilizations) rates {
 	intCPUTimeNanos := intCPUTimeMillis * 1e6
 
 	// Update multiplier.
-	const lowCPUUtilFrac = 0.25
 	isLowCPUUtil := intCPUTimeNanos < int64(float64(elapsedSinceLastFit.Nanoseconds())*cpuCapacity*lowCPUUtilFrac)
 	if isLowCPUUtil {
 		// With good integration with admission control, most foreground
@@ -506,9 +517,22 @@ func (m *cpuTimeTokenLinearModel) fit(targets targetUtilizations) rates {
 		//   multiple intervals because the multiplier may also have been correct
 		//   and load might pick up again soon.)
 		//
-		// TODO(josh): Stop hard-coding target utilization to 0.9 here.
-		// https://github.com/cockroachdb/cockroach/issues/158600
-		const upperBound = 0.9 / lowCPUUtilFrac // example: 3.6 for 25% threshold
+		// Note that there are multiple target utilizations, for different buckets
+		// in cpuTimeTokenGranter. We use the smallest one. This is in some sense
+		// the most conservative choice, since it leads to the lowest value for the
+		// right side of:
+		//  M > targetUtil/lowCPUUtilFrac
+		// Again, in the case of low CPU, we would rather give out too many tokens
+		// than not enough.
+		smallestTargetUtil := math.MaxFloat64
+		for tier := range targets {
+			for qual := range targets[tier] {
+				if targets[tier][qual] < smallestTargetUtil {
+					smallestTargetUtil = targets[tier][qual]
+				}
+			}
+		}
+		upperBound := smallestTargetUtil / lowCPUUtilFrac
 		if mult := m.tokenToCPUTimeMultiplier; mult > upperBound {
 			m.tokenToCPUTimeMultiplier = max(mult/1.5, upperBound)
 		}
