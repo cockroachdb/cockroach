@@ -281,6 +281,9 @@ func DisallowedOnSystemTable(tableID descpb.ID) bool {
 	// Disable stats on system.span_configurations since we've seen excessively
 	// many collections on it in some cases, and the stats are unlikely to
 	// provide any benefit on this table.
+	//
+	// TODO(yuzefovich): it probably doesn't make sense to collect stats on
+	// table_statistics_locks.
 	case keys.TableStatisticsTableID, keys.LeaseTableID, keys.ScheduledJobsTableID, keys.SpanConfigurationsTableID:
 		return true
 	}

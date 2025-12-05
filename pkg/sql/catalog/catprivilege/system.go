@@ -83,6 +83,7 @@ var (
 		catconstants.TransactionDiagnosticsTableName,
 		catconstants.StatementHintsTableName,
 		catconstants.InspectErrorsTableName,
+		catconstants.TableStatisticsLocksTableName,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{
