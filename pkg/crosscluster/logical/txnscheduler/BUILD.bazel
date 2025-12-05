@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "scheduler",
+    srcs = [
+        "lock_list.go",
+        "log.go",
+        "scheduler.go",
+        "transaction.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/scheduler",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/hlc"],
+)
+
+go_test(
+    name = "scheduler_test",
+    srcs = ["scheduler_test.go"],
+    embed = [":scheduler"],
+    deps = [
+        "//pkg/util/hlc",
+        "@com_github_stretchr_testify//require",
+    ],
+)
