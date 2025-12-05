@@ -1,0 +1,181 @@
+# Test retainReadyReplicaTargetStoresOnly which filters stores based on:
+# 1. Health (must be HealthOK)
+# 2. Store-level replica disposition (must be ReplicaDispositionOK)
+# 3. High disk space utilization (>90%)
+#
+# Note: constraint-based exclusions (e.g., to avoid multiple replicas per node)
+# are handled post-means at the caller level, not here.
+
+set-store
+  store-id=1 node-id=1 locality-tiers=region=us
+  store-id=2 node-id=2 locality-tiers=region=us
+  store-id=3 node-id=3 locality-tiers=region=us
+----
+node-id=1 locality-tiers=region=us,node=1
+  store-id=1 attrs=
+node-id=2 locality-tiers=region=us,node=2
+  store-id=2 attrs=
+node-id=3 locality-tiers=region=us,node=3
+  store-id=3 attrs=
+
+# Set up stores with normal disk usage (50% used).
+store-load-msg
+  store-id=1 node-id=1 load=[100,0,50] capacity=[200,100,100] load-time=0s
+  store-id=2 node-id=2 load=[50,0,50] capacity=[200,100,100] load-time=0s
+  store-id=3 node-id=3 load=[50,0,50] capacity=[200,100,100] load-time=0s
+----
+
+store-leaseholder-msg
+store-id=1
+  range-id=1 load=[10,0,0]
+  config=(num_replicas=3)
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL leaseholder=false
+    store-id=3 replica-id=3 type=VOTER_FULL leaseholder=false
+----
+
+# All stores healthy and accepting replicas - all retained.
+retain-ready-replica-target-stores-only in=(1,2,3)
+----
+[1 2 3]
+
+# Only input stores matter.
+retain-ready-replica-target-stores-only in=(1,3)
+----
+[1 3]
+
+# Mark s2 as shedding leases, which should have no effect
+# since we're looking at replicas.
+set-store-status store-id=2 leases=shedding
+----
+ok shedding=leases
+
+retain-ready-replica-target-stores-only in=(1,2,3)
+----
+[1 2 3]
+
+# Make store 2 unhealthy - but we rely only on the
+# disposition, so no filtering occurs.
+# This can't happen in production since unhealthy
+# stores can't have a green disposition.
+set-store-status store-id=2 health=unhealthy leases=ok
+----
+unhealthy accepting all
+
+retain-ready-replica-target-stores-only in=(1,2,3)
+----
+[1 2 3]
+
+# Different kind of unhealthy. Same result.
+set-store-status store-id=2 health=unknown
+----
+unknown accepting all
+
+retain-ready-replica-target-stores-only in=(1,2,3)
+----
+[1 2 3]
+
+# Restore store 2, make store 3 refuse replicas at store level.
+set-store-status store-id=2 health=ok
+----
+ok accepting all
+
+set-store-status store-id=3 replicas=refusing
+----
+ok refusing=replicas
+
+retain-ready-replica-target-stores-only in=(1,2,3)
+----
+skipping s3 for replica transfer: replica disposition refusing (health ok)
+[1 2]
+
+# Shedding and refusing are treated the same.
+set-store-status store-id=3 health=ok replicas=shedding
+----
+ok shedding=replicas
+
+retain-ready-replica-target-stores-only in=(1,2,3)
+----
+skipping s3 for replica transfer: replica disposition shedding (health ok)
+[1 2]
+
+# Restore store 3.
+set-store-status store-id=3 replicas=ok
+----
+ok accepting all
+
+# All stores ready again.
+retain-ready-replica-target-stores-only in=(1,2,3)
+----
+[1 2 3]
+
+# Test high disk utilization filtering.
+# Set store 2 to >90% disk usage.
+store-load-msg
+  store-id=2 node-id=2 load=[50,0,95] capacity=[200,100,100] load-time=0s
+----
+
+retain-ready-replica-target-stores-only in=(1,2,3)
+----
+skipping s2 for replica transfer: high disk utilization (health ok)
+[1 3]
+
+# Test combination of filters: s2 still high disk,
+# s3 refusing replicas.
+set-store-status store-id=3 replicas=refusing
+----
+ok refusing=replicas
+
+retain-ready-replica-target-stores-only in=(1,2,3)
+----
+skipping s2 for replica transfer: high disk utilization (health ok)
+skipping s3 for replica transfer: replica disposition refusing (health ok)
+[1]
+
+# Test with `replicas` parameter: stores in this set bypass disposition checks
+# since it already has the replica (their load should be in the mean regardless
+# of whether it's accepting new replicas).
+
+# Reset stores to healthy.
+set-store-status store-id=2 health=ok
+----
+ok accepting all
+
+# Reset high disk on s2.
+store-load-msg
+  store-id=2 node-id=2 load=[50,0,0] capacity=[200,100,100] load-time=0s
+----
+
+set-store-status store-id=3 replicas=ok
+----
+ok accepting all
+
+# Make store 1 refuse replicas.
+set-store-status store-id=1 replicas=refusing
+----
+ok refusing=replicas
+
+# When not specified to already have a replica, s1 is filtered out.
+retain-ready-replica-target-stores-only in=(1,2,3)
+----
+skipping s1 for replica transfer: replica disposition refusing (health ok)
+[2 3]
+
+# With existing replica on s1, s1 bypasses the disposition check and is retained.
+# (It already has a replica, so its disposition is irrelevant for mean computation.)
+retain-ready-replica-target-stores-only in=(1,2,3) replicas=(1)
+----
+[1 2 3]
+
+# Even if s1 is ill-disposed, it's not filtered out when it's the shedding store.
+#
+# TODO(tbg): this is an interesting case that I need to understand
+# better, especially if we also consider excluding ALL current replicas
+# from the check.
+set-store-status store-id=1 health=unhealthy replicas=refusing
+----
+unhealthy refusing=replicas
+
+retain-ready-replica-target-stores-only in=(1,2,3) replicas=(1)
+----
+[1 2 3]

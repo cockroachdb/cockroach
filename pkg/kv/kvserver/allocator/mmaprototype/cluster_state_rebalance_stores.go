@@ -61,12 +61,13 @@ type rebalanceEnv struct {
 	// rebalanceStores invocation.
 	now time.Time
 	// Scratch variables reused across iterations.
+	// TODO(tbg): these are a potential source of errors (imagine two nested
+	// calls using the same scratch variable). Just make a global variable
+	// that wraps a bunch of sync.Pools for the types we need.
 	scratch struct {
-		disj                    [1]constraintsConj
-		storesToExclude         storeSet
-		storesToExcludeForRange storeSet
-		nodes                   map[roachpb.NodeID]*NodeLoad
-		stores                  map[roachpb.StoreID]struct{}
+		postMeansExclusions storeSet
+		nodes               map[roachpb.NodeID]*NodeLoad
+		stores              map[roachpb.StoreID]struct{}
 	}
 }
 
@@ -367,22 +368,6 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		log.KvDistribution.VEventf(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
 		return
 	}
-	// If the node is cpu overloaded, or the store/node is not fdOK, exclude
-	// the other stores on this node from receiving replicas shed by this
-	// store.
-	excludeStoresOnNode := store.nls > overloadSlow
-	re.scratch.storesToExclude = re.scratch.storesToExclude[:0]
-	if excludeStoresOnNode {
-		nodeID := ss.NodeID
-		for _, storeID := range re.nodes[nodeID].stores {
-			re.scratch.storesToExclude.insert(storeID)
-		}
-		log.KvDistribution.VEventf(ctx, 2, "excluding all stores on n%d due to overload/fd status", nodeID)
-	} else {
-		// This store is excluded of course.
-		re.scratch.storesToExclude.insert(store.StoreID)
-	}
-
 	// Iterate over top-K ranges first and try to move them.
 	topKRanges := ss.adjusted.topKRanges[localStoreID]
 	n := topKRanges.len()
@@ -428,6 +413,8 @@ func (re *rebalanceEnv) rebalanceReplicas(
 				"rstate_replicas=%v rstate_constraints=%v",
 				store.StoreID, rangeID, rstate.pendingChanges, rstate.replicas, rstate.constraints))
 		}
+		// Get the constraint conjunction which will allow us to look up stores
+		// that could replace the shedding store.
 		var conj constraintsConj
 		var err error
 		if isVoter {
@@ -441,31 +428,43 @@ func (re *rebalanceEnv) rebalanceReplicas(
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: constraint violation needs fixing first: %v", rangeID, err)
 			continue
 		}
-		re.scratch.disj[0] = conj
-		re.scratch.storesToExcludeForRange = append(re.scratch.storesToExcludeForRange[:0], re.scratch.storesToExclude...)
-		// Also exclude all stores on nodes that have existing replicas.
+		// Build post-means exclusions: stores whose load is included in the mean
+		// (they're viable locations in principle) but aren't valid targets for
+		// this specific transfer.
+		//
+		// NB: to prevent placing replicas on multiple CRDB nodes sharing a
+		// host, we'd need to make changes here.
+		// See: https://github.com/cockroachdb/cockroach/issues/153863
+		re.scratch.postMeansExclusions = re.scratch.postMeansExclusions[:0]
+		existingReplicas := storeSet{} // TODO(tbg): avoid allocation
 		for _, replica := range rstate.replicas {
 			storeID := replica.StoreID
+			existingReplicas.insert(storeID)
 			if storeID == store.StoreID {
-				// We don't exclude other stores on this node, since we are allowed to
-				// transfer the range to them. If the node is overloaded or not fdOK,
-				// we have already excluded those stores above.
+				// Exclude the shedding store (we're moving away from it), but not
+				// other stores on its node (within-node rebalance is allowed).
+				re.scratch.postMeansExclusions.insert(storeID)
 				continue
 			}
+			// Exclude all stores on nodes with other existing replicas.
 			nodeID := re.stores[storeID].NodeID
 			for _, storeID := range re.nodes[nodeID].stores {
-				re.scratch.storesToExcludeForRange.insert(storeID)
+				re.scratch.postMeansExclusions.insert(storeID)
 			}
 		}
+
+		// Compute the candidates. These are already filtered down to only those stores
+		// that we'll actually be happy to transfer the range to.
+		// Note that existingReplicas is a subset of postMeansExclusions, so they'll
+		// be included in the mean, but are never considered as candidates.
+		//
 		// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
-		cands, ssSLS := re.computeCandidatesForRange(ctx, re.scratch.disj[:], re.scratch.storesToExcludeForRange, store.StoreID)
+		cands, ssSLS := re.computeCandidatesForReplicaTransfer(ctx, conj, existingReplicas, re.scratch.postMeansExclusions, store.StoreID)
 		log.KvDistribution.VEventf(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
 			rangeID, store.StoreID, ss.adjusted.load)
-		if log.V(2) {
-			log.KvDistribution.Infof(ctx, "candidates are:")
-			for _, c := range cands.candidates {
-				log.KvDistribution.Infof(ctx, " s%d: %s", c.StoreID, c.storeLoadSummary)
-			}
+		log.KvDistribution.VEventf(ctx, 3, "candidates are:")
+		for _, c := range cands.candidates {
+			log.KvDistribution.VEventf(ctx, 3, " s%d: %s", c.StoreID, c.storeLoadSummary)
 		}
 
 		if len(cands.candidates) == 0 {
@@ -628,27 +627,52 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 				"store=%v range_id=%v should be leaseholder but isn't",
 				store.StoreID, rangeID))
 		}
+
+		// Get the stores from the replica set that are at least as good as the
+		// current leaseholder wrt satisfaction of lease preferences. This means
+		// that mma will never make lease preferences violations worse when
+		// moving the lease.
+		// The local store (which is excluded from candidatesToMoveLease) is
+		// tacked on at the end because it should be included in the computation
+		// of the means.
+		//
+		// Example:
+		// s1 and s2 in us-east, s3 in us-central, lease preference for us-east.
+		// - if s3 has the lease: candsPL = [s1, s2, s3]
+		// - if s1 has the lease: candsPL = [s2, s1] (s3 filtered out)
+		// - if s2 has the lease: candsPL = [s1, s2] (s3 filtered out)
+		//
+		// In effect, we interpret each replica whose store is worse than the current
+		// leaseholder as ill-disposed for the lease and (pre-means) filter then out.
+		//
+		// TODO(tbg): we filter out the current leaseholder and then add it
+		// back. I don't understand why we do this. StoreSet doesn't care about
+		// ordering - it sorts by ID. Can't we just keep the leaseholder in
+		// candidatesToMoveLease()?
 		cands, _ := rstate.constraints.candidatesToMoveLease()
-		var candsPL storeSet
+		var candsPL storeSet // TODO(tbg): avoid allocation
 		for _, cand := range cands {
 			candsPL.insert(cand.storeID)
 		}
-		// Always consider the local store (which already holds the lease) as a
-		// candidate, so that we don't move the lease away if keeping it would be
-		// the better option overall.
-		// TODO(tbg): is this really needed? We intentionally exclude the leaseholder
-		// in candidatesToMoveLease, so why reinsert it now?
-		candsPL.insert(store.StoreID)
-		if len(candsPL) <= 1 {
-			continue // leaseholder is the only candidate
+		if len(candsPL) == 0 {
+			// No candidates to move the lease to. We bail early to avoid some
+			// logging below that is not helpful if we didn't have any real
+			// candidates to begin with.
+			continue
 		}
-
-		candsPL = retainReadyLeaseTargetStoresOnly(ctx, candsPL, re.stores, rangeID)
+		// NB: intentionally log before re-adding the current leaseholder so
+		// we don't list it as a candidate.
+		log.KvDistribution.VEventf(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
+		candsPL.insert(store.StoreID)
+		// Filter by disposition. Note that we pass the shedding store in to
+		// make sure that its disposition does not matter. In other words, the
+		// leaseholder is always going to include itself in the mean, even if it
+		// is ill-disposed towards leases.
+		candsPL = retainReadyLeaseTargetStoresOnly(ctx, candsPL, re.stores, rangeID, store.StoreID)
 
 		clear(re.scratch.nodes)
 		means := computeMeansForStoreSet(re, candsPL, re.scratch.nodes, re.scratch.stores)
 		sls := re.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
-		log.KvDistribution.VEventf(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
 		if sls.dimSummary[CPURate] < overloadSlow {
 			// This store is not cpu overloaded relative to these candidates for
 			// this range.
@@ -657,6 +681,11 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 		var candsSet candidateSet
 		for _, cand := range cands {
+			if cand.storeID == store.StoreID {
+				// Post-means filtering of the current leaseholder. We're trying
+				// to transfer the lease away to someone else.
+				continue
+			}
 			candSls := re.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)
 			candsSet.candidates = append(candsSet.candidates, candidateInfo{
 				StoreID:              cand.storeID,
@@ -736,10 +765,25 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 //
 // The input storeSet is mutated (and used to for the returned result).
 func retainReadyLeaseTargetStoresOnly(
-	ctx context.Context, in storeSet, stores map[roachpb.StoreID]*storeState, rangeID roachpb.RangeID,
+	ctx context.Context, in storeSet, stores map[roachpb.StoreID]*storeState, rangeID roachpb.RangeID, existingLeaseholder roachpb.StoreID,
 ) storeSet {
 	out := in[:0]
 	for _, storeID := range in {
+		if storeID == existingLeaseholder {
+			// The existing leaseholder is always included in the mean, even if
+			// it is ill-disposed towards leases. Because it is holding the lease,
+			// we know that its load is recent.
+			//
+			// Example: Consider a range with leaseholder on s1 and voters on s2
+			// and s3. s1 is the leaseholder and the store uses 40% of its CPU.
+			// If s2 and s3 are at 80% CPU, the mean CPU utilization is 66% if
+			// we include s1 and 80% if we don't.
+			// If we filtered out s1 just because it is ill-disposed towards
+			// leases, s2 and s3 would be exactly on the mean and we might
+			// consider transferring the lease to them, but we should not.
+			out = append(out, storeID)
+			continue
+		}
 		s := stores[storeID].status
 		switch {
 		case s.Disposition.Lease != LeaseDispositionOK:
