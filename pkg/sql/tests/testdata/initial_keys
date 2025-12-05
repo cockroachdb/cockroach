@@ -1,6 +1,6 @@
 initial-keys tenant=system
 ----
-151 keys:
+153 keys:
  /Table/3/1/1/2/1
  /Table/3/1/3/2/1
  /Table/3/1/4/2/1
@@ -68,6 +68,7 @@ initial-keys tenant=system
  /Table/3/1/74/2/1
  /Table/3/1/75/2/1
  /Table/3/1/76/2/1
+ /Table/3/1/77/2/1
  /Table/5/1/0/2/1
  /Table/5/1/1/2/1
  /Table/5/1/11/2/1
@@ -135,6 +136,7 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"statement_statistics"/4/1
  /NamespaceTable/30/1/1/29/"table_metadata"/4/1
  /NamespaceTable/30/1/1/29/"table_statistics"/4/1
+ /NamespaceTable/30/1/1/29/"table_statistics_locks"/4/1
  /NamespaceTable/30/1/1/29/"task_payloads"/4/1
  /NamespaceTable/30/1/1/29/"tenant_id_seq"/4/1
  /NamespaceTable/30/1/1/29/"tenant_settings"/4/1
@@ -152,7 +154,7 @@ initial-keys tenant=system
  /NamespaceTable/30/1/1/29/"zones"/4/1
  /Table/48/1/0/0
  /Table/63/1/0/0
-72 splits:
+73 splits:
  /Table/3
  /Table/4
  /Table/5
@@ -225,10 +227,11 @@ initial-keys tenant=system
  /Table/74
  /Table/75
  /Table/76
+ /Table/77
 
 initial-keys tenant=5
 ----
-142 keys:
+144 keys:
  /Tenant/5/Table/3/1/1/2/1
  /Tenant/5/Table/3/1/3/2/1
  /Tenant/5/Table/3/1/4/2/1
@@ -296,6 +299,7 @@ initial-keys tenant=5
  /Tenant/5/Table/3/1/74/2/1
  /Tenant/5/Table/3/1/75/2/1
  /Tenant/5/Table/3/1/76/2/1
+ /Tenant/5/Table/3/1/77/2/1
  /Tenant/5/Table/5/1/0/2/1
  /Tenant/5/Table/7/1/0/0
  /Tenant/5/Table/8/1/1/0
@@ -354,6 +358,7 @@ initial-keys tenant=5
  /Tenant/5/NamespaceTable/30/1/1/29/"statement_statistics"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"table_metadata"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"table_statistics"/4/1
+ /Tenant/5/NamespaceTable/30/1/1/29/"table_statistics_locks"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"task_payloads"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"tenant_id_seq"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"tenant_settings"/4/1
@@ -377,7 +382,7 @@ initial-keys tenant=5
 
 initial-keys tenant=5
 ----
-142 keys:
+144 keys:
  /Tenant/5/Table/3/1/1/2/1
  /Tenant/5/Table/3/1/3/2/1
  /Tenant/5/Table/3/1/4/2/1
@@ -445,6 +450,7 @@ initial-keys tenant=5
  /Tenant/5/Table/3/1/74/2/1
  /Tenant/5/Table/3/1/75/2/1
  /Tenant/5/Table/3/1/76/2/1
+ /Tenant/5/Table/3/1/77/2/1
  /Tenant/5/Table/5/1/0/2/1
  /Tenant/5/Table/7/1/0/0
  /Tenant/5/Table/8/1/1/0
@@ -503,6 +509,7 @@ initial-keys tenant=5
  /Tenant/5/NamespaceTable/30/1/1/29/"statement_statistics"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"table_metadata"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"table_statistics"/4/1
+ /Tenant/5/NamespaceTable/30/1/1/29/"table_statistics_locks"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"task_payloads"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"tenant_id_seq"/4/1
  /Tenant/5/NamespaceTable/30/1/1/29/"tenant_settings"/4/1
@@ -526,7 +533,7 @@ initial-keys tenant=5
 
 initial-keys tenant=999
 ----
-142 keys:
+144 keys:
  /Tenant/999/Table/3/1/1/2/1
  /Tenant/999/Table/3/1/3/2/1
  /Tenant/999/Table/3/1/4/2/1
@@ -594,6 +601,7 @@ initial-keys tenant=999
  /Tenant/999/Table/3/1/74/2/1
  /Tenant/999/Table/3/1/75/2/1
  /Tenant/999/Table/3/1/76/2/1
+ /Tenant/999/Table/3/1/77/2/1
  /Tenant/999/Table/5/1/0/2/1
  /Tenant/999/Table/7/1/0/0
  /Tenant/999/Table/8/1/1/0
@@ -652,6 +660,7 @@ initial-keys tenant=999
  /Tenant/999/NamespaceTable/30/1/1/29/"statement_statistics"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"table_metadata"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"table_statistics"/4/1
+ /Tenant/999/NamespaceTable/30/1/1/29/"table_statistics_locks"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"task_payloads"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"tenant_id_seq"/4/1
  /Tenant/999/NamespaceTable/30/1/1/29/"tenant_settings"/4/1

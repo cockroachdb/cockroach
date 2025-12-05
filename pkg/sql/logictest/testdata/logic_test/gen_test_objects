@@ -179,17 +179,17 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-%vui
-comments
-descriptor_id_se͌q
-job_progress_history
-ro le_options
-sett"ings
-statement_bundle_chunks
-statement_diagnost ics
+%qusers
+descriptor_id_seq
+job_status
+migrations
+privi 😢leges
+replication_constraint_stats
 sta😣tement_statistics
-task%q_payloads
-users
+tenant_settings
+transaction_diagno"stics
+transaction_statistics
+😖statem😐ent_bun🙁dle_chunks
 
 # Again, the column names are randomized.
 query TTT
@@ -198,26 +198,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-"%vui"                "\\U00105591ke😰y"  text
-"%vui"                "lastUpda͗ted"     timestamp without time zone
-"%vui"                rowid              bigint
-"%vui"                "v̮/alue'"         bytea
-comments              "%pobjec̏t_😫id"    bigint
-comments              "commen  t "       text
-comments              rowid              bigint
-comments              sub_id             bigint
-comments              "type'😡"           bigint
-descriptor_id_se͌q    rowid              bigint
-descriptor_id_se͌q    value              bigint
-job_progress_history  "fra""ction"       double precision
-job_progress_history  job_id             bigint
-job_progress_history  "resOlved%q"       numeric
-job_progress_history  rowid              bigint
-job_progress_history  "wRit́ten"         timestamp with time zone
-"ro le_options"       option             text
-"ro le_options"       rowid              bigint
-"ro le_options"       user_id            oid
-"ro le_options"       username           text
+"%qusers"          e😰stimated_last_login_time  timestamp with time zone
+"%qusers"          "hashedPassword"            bytea
+"%qusers"          "isRo le"                   boolean
+"%qusers"          rowid                       bigint
+"%qusers"          user_id                     oid
+"%qusers"          username                    text
+descriptor_id_seq  rowid                       bigint
+descriptor_id_seq  value                       bigint
+job_status         job_id                      bigint
+job_status         rowid                       bigint
+job_status         status                      text
+job_status         "wriTten"                   timestamp with time zone
+migrations         comp😺leted_at               timestamp with time zone
+migrations         internal                    bigint
+migrations         major                       bigint
+migrations         "min or"                    bigint
+migrations         "patc'h"                    bigint
+migrations         rowid                       bigint
+"privi 😢leges"     grant_options               ARRAY
+"privi 😢leges"     path                        text
 
 subtest templates/different_templates_in_each_db
 
@@ -235,15 +235,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt_1"  public  job_status
-"d%qbt_1"  public  sp😗an_stats_unique_keys
-"d%qbt_1"  public  statement_execution̫_insights
-"d%qbt_2"  public  role_options
-"d%qbt_2"  public  "table_metadat(a"
-"d%qbt_2"  public  ui
-dbt_3      public  protected_ts_meta
-dbt_3      public  statement_hints
-dbt_3      public  web_sessions
+"d%qbt_1"  public  " lo                     catio\nns"
+"d%qbt_1"  public  job_message
+"d%qbt_1"  public  transaction_activity
+"d%qbt_2"  public  "job\\xc4_progress"
+"d%qbt_2"  public  statement_activ🙂ity
+"d%qbt_2"  public  tenant_settings
+dbt_3      public  " job_progress_history"
+dbt_3      public  jobs
+dbt_3      public  "tenants%q"
 
 
 statement ok
