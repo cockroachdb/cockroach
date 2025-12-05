@@ -514,6 +514,23 @@ func sortTargetCandidateSetAndPick(
 	}
 	slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
 		if diversityScoresAlmostEqual(a.diversityScore, b.diversityScore) {
+			// Note: Consider the case where the current leaseholder's LPI is
+			// 3 (lower is better) and we have the following candidates:
+			// - LPI=1 SLS=normal
+			// - LPI=2 SLS=low
+			// Currently we consider the low-SLS candidate first. This is in
+			// contrast to the single-metric allocator, which only considers
+			// candidates in the lowest-SLS class (i.e. wouldn't even consider
+			// the low-SLS candidate since we have a candidate at LPI=1).  If we
+			// make the corresponding change in candidateToMoveLease, we would
+			// match the single-metric allocator's behavior, but it's unclear
+			// that that would be better. A good middle ground could be sorting
+			// here by LPI first, then SLS. That should result in mma preferring
+			// improving the lease preference, but if that is not possible, it
+			// would settle for not making it worse (than the current
+			// leaseholder), which the single-metric allocator won't.
+			//
+			// TODO(tbg): consider changing this to sort by LPI first, then SLS.
 			return cmp.Or(cmp.Compare(a.sls, b.sls),
 				cmp.Compare(a.leasePreferenceIndex, b.leasePreferenceIndex),
 				cmp.Compare(a.StoreID, b.StoreID))
