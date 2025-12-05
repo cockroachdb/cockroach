@@ -19,8 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 )
 
-func parseNullURL(_ cloud.ExternalStorageURIContext, _ *url.URL) (cloudpb.ExternalStorage, error) {
-	return cloudpb.ExternalStorage{Provider: cloudpb.ExternalStorageProvider_null}, nil
+func parseNullURL(
+	_ cloud.ExternalStorageURIContext, uri *url.URL,
+) (cloudpb.ExternalStorage, error) {
+	return cloudpb.ExternalStorage{
+		Provider: cloudpb.ExternalStorageProvider_null,
+		URI:      uri.String(),
+	}, nil
 }
 
 // NullRequiresExternalIOAccounting is the return falues for
@@ -33,15 +38,16 @@ func MakeNullSinkStorageURI(path string) string {
 }
 
 type nullSinkStorage struct {
+	uri string // original URI used to construct this storage
 }
 
 var _ cloud.ExternalStorage = &nullSinkStorage{}
 
 func makeNullSinkStorage(
-	_ context.Context, _ cloud.ExternalStorageContext, _ cloudpb.ExternalStorage,
+	_ context.Context, _ cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.nullsink")
-	return &nullSinkStorage{}, nil
+	return &nullSinkStorage{uri: dest.URI}, nil
 }
 
 func (n *nullSinkStorage) Close() error {
@@ -49,7 +55,10 @@ func (n *nullSinkStorage) Close() error {
 }
 
 func (n *nullSinkStorage) Conf() cloudpb.ExternalStorage {
-	return cloudpb.ExternalStorage{Provider: cloudpb.ExternalStorageProvider_null}
+	return cloudpb.ExternalStorage{
+		Provider: cloudpb.ExternalStorageProvider_null,
+		URI:      n.uri,
+	}
 }
 
 func (n *nullSinkStorage) ExternalIOConf() base.ExternalIODirConfig {

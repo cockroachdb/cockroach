@@ -58,6 +58,7 @@ func parseUserfileURL(
 	}
 
 	conf.Provider = cloudpb.ExternalStorageProvider_userfile
+	conf.URI = uri.String()
 	conf.FileTableConfig.User = normUser
 	conf.FileTableConfig.QualifiedTableName = qualifiedTableName
 	conf.FileTableConfig.Path = uri.Path
@@ -77,6 +78,7 @@ type fileTableStorage struct {
 	ioConf   base.ExternalIODirConfig
 	prefix   string // relative filepath
 	settings *cluster.Settings
+	uri      string // original URI used to construct this storage
 }
 
 var _ cloud.ExternalStorage = &fileTableStorage{}
@@ -126,6 +128,7 @@ func makeFileTableStorage(
 		ioConf:   args.IOConf,
 		prefix:   cfg.Path,
 		settings: args.Settings,
+		uri:      dest.URI,
 	}, nil
 }
 
@@ -156,6 +159,7 @@ func MakeSQLConnFileTableStorage(
 		ioConf:   base.ExternalIODirConfig{},
 		prefix:   prefix,
 		settings: nil,
+		uri:      "", // CLI path doesn't have access to original URI
 	}, nil
 }
 
@@ -176,6 +180,7 @@ func (f *fileTableStorage) Conf() cloudpb.ExternalStorage {
 	return cloudpb.ExternalStorage{
 		Provider:        cloudpb.ExternalStorageProvider_userfile,
 		FileTableConfig: f.cfg,
+		URI:             f.uri,
 	}
 }
 

@@ -143,6 +143,7 @@ func parseAzureURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	azureURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_azure
+	conf.URI = uri.String()
 	auth, err := azureAuthMethod(uri, &azureURL)
 	if err != nil {
 		return conf, err
@@ -221,6 +222,7 @@ type azureStorage struct {
 	container *container.Client
 	prefix    string
 	settings  *cluster.Settings
+	uri       string // original URI used to construct this storage
 }
 
 type azCacheKey struct {
@@ -304,6 +306,7 @@ func makeAzureStorage(
 				container: azClient.NewContainerClient(conf.Container),
 				prefix:    conf.Prefix,
 				settings:  args.Settings,
+				uri:       dest.URI,
 			}, nil
 		}
 	}
@@ -365,6 +368,7 @@ func makeAzureStorage(
 		container: azClient.NewContainerClient(conf.Container),
 		prefix:    conf.Prefix,
 		settings:  args.Settings,
+		uri:       dest.URI,
 	}, nil
 }
 
@@ -377,6 +381,7 @@ func (s *azureStorage) Conf() cloudpb.ExternalStorage {
 	return cloudpb.ExternalStorage{
 		Provider:    cloudpb.ExternalStorageProvider_azure,
 		AzureConfig: s.conf,
+		URI:         s.uri,
 	}
 }
 
