@@ -537,6 +537,9 @@ func sortTargetCandidateSetAndPick(
 			}
 		}
 		// Diversity is the same. Include if not reaching disk capacity.
+		// TODO(tbg): remove highDiskSpaceUtilization check here. These candidates
+		// should instead be filtered out by retainReadyLeaseTargetStoresOnly (which
+		// filters down the initial candidate set before computing the mean).
 		if !cand.highDiskSpaceUtilization {
 			cands.candidates[j] = cand
 			j++
