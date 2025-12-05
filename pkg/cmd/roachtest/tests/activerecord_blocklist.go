@@ -26,7 +26,6 @@ var activeRecordBlocklist = blocklist{
 	`ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_using_timestamp_with_timestamptz_as_default`: "unknown",
 	`ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_with_timestamptz`:                            "unknown",
 	`ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_with_timestamptz_as_default`:                 "unknown",
-	`ActiveRecord::InvertibleMigrationTest#test_migrate_revert_add_unique_constraint_with_invalid_option`:                               "drop UNIQUE constraint does not support CASCADE",
 	`CompatibilityTest4_2#test_datetime_doesnt_set_precision_on_change_column`:                                                          "unknown",
 	`CompatibilityTest4_2#test_options_are_not_validated`:                                                                               "unknown",
 	`CompatibilityTest5_0#test_datetime_doesnt_set_precision_on_change_column`:                                                          "unknown",
@@ -45,6 +44,7 @@ var activeRecordBlocklist = blocklist{
 }
 
 var activeRecordIgnoreList = blocklist{
+	`ActiveRecord::CockroachDBStructureDumpTest#test_schema_dump_with_dump_schemas_all`:                                                                        "flaky",
 	`ActiveRecord::CockroachDBStructureDumpTest#test_structure_dump`:                                                                                           "flaky",
 	`ActiveRecord::ConnectionAdapters::ConnectionPoolThreadTest#test_checkout_fairness_by_group`:                                                               "flaky",
 	`ActiveRecord::ConnectionAdapters::PostgreSQLAdapterTest#test_translate_no_connection_exception_to_not_established`:                                        "pg_terminate_backend not implemented",
@@ -54,6 +54,7 @@ var activeRecordIgnoreList = blocklist{
 	`ActiveRecord::Encryption::EncryptableRecordTest#test_by_default,_it's_case_sensitive`:                                                                     "flaky",
 	`ActiveRecord::Encryption::EncryptableRecordTest#test_forced_encoding_for_deterministic_attributes_will_replace_invalid_characters`:                        "flaky",
 	`ActiveRecord::Encryption::UniquenessValidationsTest#test_uniqueness_validations_work_when_using_old_encryption_schemes`:                                   "flaky",
+	`ActiveRecord::InvertibleMigrationTest#test_migrate_revert_add_unique_constraint_with_invalid_option`:                                                      "flaky",
 	`AssociationCallbacksTest#test_has_many_callbacks_for_destroy_on_parent`:                                                                                   "flaky",
 	`BasicsTest#test_default_values_are_deeply_dupped`:                                                                                                         "flaky",
 	`CascadedEagerLoadingTest#test_eager_association_loading_with_cascaded_three_levels_by_ping_pong`:                                                          "flaky",
