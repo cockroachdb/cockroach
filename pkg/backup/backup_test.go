@@ -4356,7 +4356,6 @@ func TestEncryptedBackup(t *testing.T) {
 			_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, 3, InitManualReplication, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-					DefaultDRPCOption: base.TestDRPCEnabledRandomly,
 				},
 			})
 			defer cleanupFn()
