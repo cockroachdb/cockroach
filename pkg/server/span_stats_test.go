@@ -36,34 +36,48 @@ func TestSpanStatsMetaScan(t *testing.T) {
 	defer testCluster.Stopper().Stop(context.Background())
 	s := testCluster.Server(0)
 
-	testSpans := []roachpb.Span{
+	type testCase struct {
+		span           roachpb.Span
+		expectedRanges int32
+	}
+
+	testSpans := []testCase{
 		{
-			Key:    keys.Meta1Prefix,
-			EndKey: keys.Meta1KeyMax,
+			span: roachpb.Span{
+				Key:    keys.Meta1Prefix,
+				EndKey: keys.Meta1KeyMax,
+			},
+			expectedRanges: 1,
 		},
 		{
-			Key:    keys.LocalMax,
-			EndKey: keys.Meta2KeyMax,
+			span: roachpb.Span{
+				Key:    keys.LocalMax,
+				EndKey: keys.Meta2KeyMax,
+			},
+			expectedRanges: 2,
 		},
 		{
-			Key:    keys.Meta2Prefix,
-			EndKey: keys.Meta2KeyMax,
+			span: roachpb.Span{
+				Key:    keys.Meta2Prefix,
+				EndKey: keys.Meta2KeyMax,
+			},
+			expectedRanges: 1,
 		},
 	}
 
 	// SpanStats should have no problem finding descriptors for
 	// spans up to and including Meta2KeyMax.
-	for _, span := range testSpans {
+	for _, tc := range testSpans {
 		res, err := s.StatusServer().(serverpb.StatusServer).SpanStats(ctx,
 			&roachpb.SpanStatsRequest{
 				NodeID: "0",
 				Spans: []roachpb.Span{
-					span,
+					tc.span,
 				},
 			},
 		)
 		require.NoError(t, err)
-		require.Equal(t, int32(1), res.SpanToStats[span.String()].RangeCount)
+		require.Equal(t, tc.expectedRanges, res.SpanToStats[tc.span.String()].RangeCount)
 	}
 }
 

@@ -751,7 +751,7 @@ func (cf *cFetcher) setNextKV(kv roachpb.KeyValue) {
 // rows, the Batch.Length is 0.
 func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 	for {
-		if err := cf.pacer.Pace(ctx); err != nil {
+		if _, err := cf.pacer.Pace(ctx); err != nil {
 			return nil, err
 		}
 		if debugState {

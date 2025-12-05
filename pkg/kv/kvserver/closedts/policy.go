@@ -22,7 +22,10 @@ const (
 // global reads. It accounts for network latency, clock offset, and both Raft
 // and side-transport propagation delays.
 func computeLeadTimeForGlobalReads(
-	networkRTT time.Duration, maxClockOffset time.Duration, sideTransportCloseInterval time.Duration,
+	networkRTT time.Duration,
+	maxClockOffset time.Duration,
+	sideTransportCloseInterval time.Duration,
+	sideTransportPacingInterval time.Duration,
 ) time.Duration {
 	// The LEAD_FOR_GLOBAL_READS calculation is more complex. Instead of the
 	// policy defining an offset from the publisher's perspective, the
@@ -61,10 +64,13 @@ func computeLeadTimeForGlobalReads(
 	//  # the worst-case.
 	//  side_propagation_time = max_network_rtt * 0.5 + side_transport_close_interval
 	//
+	//  # We pace sending side-transport updates up to side_transport_pacing_refresh_interval.
+	//  # We have to also include it into our calculation.
+	//
 	//  # Combine, we get the following result
 	//  closed_ts_at_sender = now + max_offset + max(
 	//    max_network_rtt * 1.5 + raft_overhead,
-	//    max_network_rtt * 0.5 + side_transport_close_interval,
+	//    max_network_rtt * 0.5 + side_transport_close_interval + side_transport_pacing_refresh_interval,
 	//  )
 	//
 	// By default, this leads to a closed timestamp target that leads the
@@ -86,7 +92,7 @@ func computeLeadTimeForGlobalReads(
 	raftTransportPropTime := (networkRTT*3)/2 + raftTransportOverhead
 
 	// See side_propagation_time.
-	sideTransportPropTime := networkRTT/2 + sideTransportCloseInterval
+	sideTransportPropTime := networkRTT/2 + sideTransportCloseInterval + sideTransportPacingInterval
 
 	// See propagation_time.
 	maxTransportPropTime := max(sideTransportPropTime, raftTransportPropTime)
@@ -106,6 +112,7 @@ func TargetForPolicy(
 	lagTargetDuration time.Duration,
 	leadTargetOverride time.Duration,
 	sideTransportCloseInterval time.Duration,
+	sideTransportPacingInterval time.Duration,
 	policy ctpb.RangeClosedTimestampPolicy,
 ) hlc.Timestamp {
 	var targetOffsetTime time.Duration
@@ -121,7 +128,7 @@ func TargetForPolicy(
 			break
 		}
 		targetOffsetTime = computeLeadTimeForGlobalReads(computeNetworkRTTBasedOnPolicy(policy),
-			maxClockOffset, sideTransportCloseInterval)
+			maxClockOffset, sideTransportCloseInterval, sideTransportPacingInterval)
 	default:
 		panic("unexpected RangeClosedTimestampPolicy")
 	}

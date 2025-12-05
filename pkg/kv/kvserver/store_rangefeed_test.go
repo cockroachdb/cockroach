@@ -95,7 +95,7 @@ func TestRangeFeedUpdaterConf(t *testing.T) {
 			if len(tc.updates) != 0 {
 				<-conf.changed // we must observe an update, otherwise the test times out
 			}
-			refresh, smear := conf.getRefresh(), conf.getSmear()
+			refresh, smear := conf.GetRefresh(), conf.GetSmear()
 			assert.Equal(t, tc.want, [...]time.Duration{refresh, smear})
 
 			ctx, cancel := context.WithTimeout(ctx, time.Millisecond)
@@ -105,7 +105,7 @@ func TestRangeFeedUpdaterConf(t *testing.T) {
 			if tc.waitErr != nil {
 				return
 			}
-			refresh, smear = conf.getRefresh(), conf.getSmear()
+			refresh, smear = conf.GetRefresh(), conf.GetSmear()
 			assert.Equal(t, tc.want, [...]time.Duration{refresh, smear})
 		})
 	}

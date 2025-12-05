@@ -1209,15 +1209,15 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		} else if rs.localRangeOwner != msg.StoreID {
 			rs.localRangeOwner = msg.StoreID
 		}
-		if !rangeMsg.MaybeSpanConfIsPopulated {
-			// When there are no pending changes, confirm that the membership state
-			// is consistent. If not, fall through and make it consistent. We have
-			// seen an example where AdjustPendingChangesDisposition lied about
-			// being successful, and have not been able to find the root cause. So
-			// we'd rather force eventual consistency here.
-			if len(rs.pendingChanges) > 0 {
-				continue
-			}
+		rs.load = rangeMsg.RangeLoad
+		if !rangeMsg.MaybeSpanConfIsPopulated && len(rs.pendingChanges) == 0 {
+			// Common case: no pending changes, and span config not provided.
+			//
+			// Confirm that the membership state is consistent. If not, fall through
+			// and make it consistent. We have seen an example where
+			// AdjustPendingChangesDisposition lied about being successful, and have
+			// not been able to find the root cause. So we'd rather force eventual
+			// consistency here.
 			mayHaveDiverged := false
 			if len(rs.replicas) == len(rangeMsg.Replicas) {
 				for i := range rs.replicas {
@@ -1237,15 +1237,17 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				mayHaveDiverged = true
 			}
 			if !mayHaveDiverged {
+				// This is the common case where there were no pending changes, and no
+				// span config provided and no replicas changes. We don't need to do
+				// any more processing of this RangeMsg.
 				continue
 			}
 		}
+		// Slow path, which reconstructs everything about the range.
+
 		// Set the range state and store state to match the range message state
 		// initially. The pending changes which are not enacted in the range
 		// message are handled and added back below.
-		if rangeMsg.MaybeSpanConfIsPopulated {
-			rs.load = rangeMsg.RangeLoad
-		}
 		for _, replica := range rs.replicas {
 			ss := cs.stores[replica.StoreID]
 			if ss == nil {
