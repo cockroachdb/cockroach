@@ -6507,34 +6507,34 @@ project
                      │                                                                                                        │    ├── columns: found:27
                      │                                                                                                        │    └── project
                      │                                                                                                        │         ├── columns: found:27
-                     │                                                                                                        │         ├── right-join (cross)
+                     │                                                                                                        │         ├── barrier
                      │                                                                                                        │         │    ├── columns: a:13
-                     │                                                                                                        │         │    ├── barrier
-                     │                                                                                                        │         │    │    ├── columns: a:13
-                     │                                                                                                        │         │    │    └── limit
-                     │                                                                                                        │         │    │         ├── columns: a:13
-                     │                                                                                                        │         │    │         ├── project
-                     │                                                                                                        │         │    │         │    ├── columns: a:13
-                     │                                                                                                        │         │    │         │    └── insert t114826
-                     │                                                                                                        │         │    │         │         ├── columns: a:13 rowid:14!null
-                     │                                                                                                        │         │    │         │         ├── insert-mapping:
-                     │                                                                                                        │         │    │         │         │    ├── a:17 => a:13
-                     │                                                                                                        │         │    │         │         │    └── rowid_default:21 => rowid:14
-                     │                                                                                                        │         │    │         │         ├── return-mapping:
-                     │                                                                                                        │         │    │         │         │    ├── a:17 => a:13
-                     │                                                                                                        │         │    │         │         │    └── rowid_default:21 => rowid:14
-                     │                                                                                                        │         │    │         │         └── project
-                     │                                                                                                        │         │    │         │              ├── columns: rowid_default:21 a:17
-                     │                                                                                                        │         │    │         │              ├── project
-                     │                                                                                                        │         │    │         │              │    ├── columns: a:17
-                     │                                                                                                        │         │    │         │              │    └── scan t114826
-                     │                                                                                                        │         │    │         │              │         └── columns: a:17 rowid:18!null crdb_internal_mvcc_timestamp:19 tableoid:20
-                     │                                                                                                        │         │    │         │              └── projections
-                     │                                                                                                        │         │    │         │                   └── function: unique_rowid [as=rowid_default:21]
-                     │                                                                                                        │         │    │         └── const: 1
-                     │                                                                                                        │         │    ├── values
-                     │                                                                                                        │         │    │    └── tuple
-                     │                                                                                                        │         │    └── filters (true)
+                     │                                                                                                        │         │    └── right-join (cross)
+                     │                                                                                                        │         │         ├── columns: a:13
+                     │                                                                                                        │         │         ├── limit
+                     │                                                                                                        │         │         │    ├── columns: a:13
+                     │                                                                                                        │         │         │    ├── project
+                     │                                                                                                        │         │         │    │    ├── columns: a:13
+                     │                                                                                                        │         │         │    │    └── insert t114826
+                     │                                                                                                        │         │         │    │         ├── columns: a:13 rowid:14!null
+                     │                                                                                                        │         │         │    │         ├── insert-mapping:
+                     │                                                                                                        │         │         │    │         │    ├── a:17 => a:13
+                     │                                                                                                        │         │         │    │         │    └── rowid_default:21 => rowid:14
+                     │                                                                                                        │         │         │    │         ├── return-mapping:
+                     │                                                                                                        │         │         │    │         │    ├── a:17 => a:13
+                     │                                                                                                        │         │         │    │         │    └── rowid_default:21 => rowid:14
+                     │                                                                                                        │         │         │    │         └── project
+                     │                                                                                                        │         │         │    │              ├── columns: rowid_default:21 a:17
+                     │                                                                                                        │         │         │    │              ├── project
+                     │                                                                                                        │         │         │    │              │    ├── columns: a:17
+                     │                                                                                                        │         │         │    │              │    └── scan t114826
+                     │                                                                                                        │         │         │    │              │         └── columns: a:17 rowid:18!null crdb_internal_mvcc_timestamp:19 tableoid:20
+                     │                                                                                                        │         │         │    │              └── projections
+                     │                                                                                                        │         │         │    │                   └── function: unique_rowid [as=rowid_default:21]
+                     │                                                                                                        │         │         │    └── const: 1
+                     │                                                                                                        │         │         ├── values
+                     │                                                                                                        │         │         │    └── tuple
+                     │                                                                                                        │         │         └── filters (true)
                      │                                                                                                        │         └── projections
                      │                                                                                                        │              └── variable: a:13 [as=found:27]
                      │                                                                                                        └── projections
@@ -8028,3 +8028,79 @@ project-set
                                                                                                      └── projections
                                                                                                           └── cast: VOID [as="_implicit_return":8]
                                                                                                                └── null
+
+# Regression test for #147269. Do not drop a SQL statement with an INTO clause
+# when the target variable is unused.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foo INT;
+  BEGIN
+    INSERT INTO xy VALUES (1, 1) ON CONFLICT DO NOTHING RETURNING x INTO foo;
+    RETURN 2;
+  END
+$$;
+----
+
+# Use "norm" to show that the barrier prevents join-elimination.
+norm format=show-scalars
+SELECT f();
+----
+values
+ ├── columns: f:21
+ └── tuple
+      └── udf: f
+           └── body
+                └── project
+                     ├── columns: "_stmt_exec_1":20
+                     ├── barrier
+                     │    ├── columns: foo:1
+                     │    └── values
+                     │         ├── columns: foo:1
+                     │         └── tuple
+                     │              └── null
+                     └── projections
+                          └── udf: _stmt_exec_1 [as="_stmt_exec_1":20]
+                               ├── tail-call
+                               ├── args
+                               │    └── variable: foo:1
+                               ├── params: foo:2
+                               └── body
+                                    └── project
+                                         ├── columns: "_stmt_exec_ret_2":19!null
+                                         ├── barrier
+                                         │    ├── columns: x:3
+                                         │    └── project
+                                         │         ├── columns: x:3
+                                         │         └── left-join (cross)
+                                         │              ├── columns: x:3 rowid:5
+                                         │              ├── values
+                                         │              │    └── tuple
+                                         │              ├── insert xy
+                                         │              │    ├── columns: x:3!null rowid:5!null
+                                         │              │    ├── arbiter indexes: xy_pkey
+                                         │              │    ├── insert-mapping:
+                                         │              │    │    ├── column1:8 => x:3
+                                         │              │    │    ├── column2:9 => y:4
+                                         │              │    │    └── rowid_default:10 => rowid:5
+                                         │              │    ├── return-mapping:
+                                         │              │    │    ├── column1:8 => x:3
+                                         │              │    │    └── rowid_default:10 => rowid:5
+                                         │              │    └── anti-join (hash)
+                                         │              │         ├── columns: column1:8!null column2:9!null rowid_default:10
+                                         │              │         ├── values
+                                         │              │         │    ├── columns: column1:8!null column2:9!null rowid_default:10
+                                         │              │         │    └── tuple
+                                         │              │         │         ├── const: 1
+                                         │              │         │         ├── const: 1
+                                         │              │         │         └── function: unique_rowid
+                                         │              │         ├── scan xy
+                                         │              │         │    ├── columns: rowid:13!null
+                                         │              │         │    └── flags: avoid-full-scan disabled not visible index feature
+                                         │              │         └── filters
+                                         │              │              └── eq
+                                         │              │                   ├── variable: rowid_default:10
+                                         │              │                   └── variable: rowid:13
+                                         │              └── filters (true)
+                                         └── projections
+                                              └── const: 2 [as="_stmt_exec_ret_2":19]
