@@ -19,7 +19,7 @@ help:
 .PHONY: build build%
 build:
 	./dev build $(TARGET)
-# Alias: buildshort -> build short; buildoss -> build oss; buildtests -> build tests etc.
+# Alias: buildshort -> build short; buildtests -> build tests etc.
 build%:
 	./dev build $(@:build%=%)
 
