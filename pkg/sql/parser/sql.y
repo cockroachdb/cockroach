@@ -12631,7 +12631,7 @@ opt_composite_type_list:
   }
 
 composite_type_list:
-  name simple_typename
+  name typename
   {
     $$.val = []tree.CompositeTypeElem{
         tree.CompositeTypeElem{
@@ -12640,7 +12640,7 @@ composite_type_list:
         },
     }
   }
-| composite_type_list ',' name simple_typename
+| composite_type_list ',' name typename
   {
     $$.val = append($1.compositeTypeList(),
         tree.CompositeTypeElem{
