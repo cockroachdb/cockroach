@@ -75,6 +75,7 @@ func resolveOptionsForBackupJobDescription(
 		Detached:                        opts.Detached,
 		ExecutionLocality:               opts.ExecutionLocality,
 		UpdatesClusterMonitoringMetrics: opts.UpdatesClusterMonitoringMetrics,
+		Strict:                          opts.Strict,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -611,6 +612,7 @@ func backupPlanHook(
 			ApplicationName:                 p.SessionData().ApplicationName,
 			ExecutionLocality:               executionLocality,
 			UpdatesClusterMonitoringMetrics: updatesClusterMonitoringMetrics,
+			StrictLocalityFiltering:         backupStmt.Options.Strict,
 		}
 		if backupStmt.CreatedByInfo != nil {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ScheduleID()

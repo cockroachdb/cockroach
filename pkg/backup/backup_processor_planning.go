@@ -38,6 +38,7 @@ func distBackupPlanSpecs(
 	pkIDs map[uint64]bool,
 	defaultURI string,
 	urisByLocalityKV map[string]string,
+	strictLocalityFiltering bool,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 	mvccFilter kvpb.MVCCFilter,
@@ -108,6 +109,7 @@ func distBackupPlanSpecs(
 			UserProto:              user.EncodeProto(),
 			ElidePrefix:            elide,
 			IncludeMVCCValueHeader: includeValueHeader,
+			StrictLocality:         strictLocalityFiltering,
 		}
 		sqlInstanceIDToSpec[partition.SQLInstanceID] = spec
 	}
@@ -131,6 +133,7 @@ func distBackupPlanSpecs(
 				BackupEndTime:          endTime,
 				UserProto:              user.EncodeProto(),
 				IncludeMVCCValueHeader: includeValueHeader,
+				StrictLocality:         strictLocalityFiltering,
 			}
 			sqlInstanceIDToSpec[partition.SQLInstanceID] = spec
 		}
