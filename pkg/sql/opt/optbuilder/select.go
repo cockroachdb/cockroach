@@ -351,13 +351,10 @@ func (b *Builder) buildView(
 		b.skipSelectPrivilegeChecks = true
 		defer func() { b.skipSelectPrivilegeChecks = false }()
 	}
-	trackDeps := b.trackSchemaDeps
-	if trackDeps {
-		// We are only interested in the direct dependency on this view descriptor.
-		// Any further dependency by the view's query should not be tracked.
-		b.trackSchemaDeps = false
-		defer func() { b.trackSchemaDeps = true }()
-	}
+	// We are only interested in the direct dependency on this view descriptor.
+	// Any further dependency by the view's query should not be tracked.
+	trackViewDep := b.trackSchemaDeps
+	defer b.DisableSchemaDepTracking()()
 
 	// We don't want the view to be able to refer to any outer scopes in the
 	// query. This shouldn't happen if the view is valid but there may be
@@ -380,7 +377,7 @@ func (b *Builder) buildView(
 		}
 	}
 
-	if trackDeps && !view.IsSystemView() {
+	if trackViewDep && !view.IsSystemView() {
 		dep := opt.SchemaDep{DataSource: view}
 		for i := range outScope.cols {
 			dep.ColumnOrdinals.Add(i)
@@ -805,12 +802,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 	// track view deps here, or else a view depending on a table with a
 	// column that is a UDT will result in a type dependency being added
 	// between the view and the UDT, even if the view does not use that column.
-	if b.trackSchemaDeps {
-		b.trackSchemaDeps = false
-		defer func() {
-			b.trackSchemaDeps = true
-		}()
-	}
+	defer b.DisableSchemaDepTracking()()
 	tab := tabMeta.Table
 
 	// Check if we have any validated check constraints. Only validated
@@ -896,16 +888,11 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 func (b *Builder) addComputedColsForTable(
 	tabMeta *opt.TableMeta, includeVirtualMutationColOrds intsets.Fast,
 ) {
-	// We do not want to track view deps here, otherwise a view depending
-	// on a table with a computed column of a UDT will result in a
-	// type dependency being added between the view and the UDT,
-	// even if the view does not use that column.
-	if b.trackSchemaDeps {
-		b.trackSchemaDeps = false
-		defer func() {
-			b.trackSchemaDeps = true
-		}()
-	}
+	// We do not want to track view/routine deps here, otherwise a view/routine
+	// depending on a table with a computed column of a UDT will result in a
+	// type dependency being added between the view/routine and the UDT,
+	// even if the view/routine does not use that column.
+	defer b.DisableSchemaDepTracking()()
 	var tableScope *scope
 	tab := tabMeta.Table
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
