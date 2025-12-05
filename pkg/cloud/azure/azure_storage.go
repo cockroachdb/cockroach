@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -47,6 +49,13 @@ var maxRetries = settings.RegisterIntSetting(
 	"cloudstorage.azure.max_retries",
 	"the maximum number of retries per Azure operation",
 	10)
+
+var reuseSession = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"cloudstorage.azure.session_reuse.enabled",
+	"persist the last opened azure client and re-use it when opening a new client with the same argument (some settings may take 2mins to take effect)",
+	false,
+)
 
 // A note on Azure authentication:
 //
@@ -207,6 +216,14 @@ type azureStorage struct {
 	settings  *cluster.Settings
 }
 
+var azClientCache struct {
+	syncutil.Mutex
+	// TODO(dt): make this an >1 item cache e.g. add a FIFO ring.
+	key    cloudpb.ExternalStorage_Azure
+	set    time.Time
+	client *service.Client
+}
+
 var _ cloud.ExternalStorage = &azureStorage{}
 
 func makeAzureStorage(
@@ -217,6 +234,7 @@ func makeAzureStorage(
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
 	}
+
 	env, err := azure.EnvironmentFromName(conf.Environment)
 	if err != nil {
 		return nil, errors.Wrap(err, "azure environment")
@@ -244,6 +262,29 @@ func makeAzureStorage(
 	opts.Retry.MaxRetries = int32(maxRetries.Get(&args.Settings.SV))
 
 	var azClient *service.Client
+
+	clientConf := *conf
+	clientConf.Prefix = "" // Prefix is not part of the client identity.
+
+	if reuseSession.Get(&args.Settings.SV) {
+		func() {
+			azClientCache.Lock()
+			defer azClientCache.Unlock()
+			if cached := azClientCache.client; cached != nil && azClientCache.key == clientConf && timeutil.Since(azClientCache.set) < 2*time.Minute {
+				azClient = cached
+			}
+		}()
+		if azClient != nil {
+			return &azureStorage{
+				conf:      conf,
+				ioConf:    args.IOConf,
+				container: azClient.NewContainerClient(conf.Container),
+				prefix:    conf.Prefix,
+				settings:  args.Settings,
+			}, nil
+		}
+	}
+
 	switch conf.Auth {
 	case cloudpb.AzureAuth_LEGACY:
 		credential, err := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
@@ -285,6 +326,14 @@ func makeAzureStorage(
 
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
+	}
+
+	if reuseSession.Get(&args.Settings.SV) {
+		azClientCache.Lock()
+		defer azClientCache.Unlock()
+		azClientCache.key = clientConf
+		azClientCache.client = azClient
+		azClientCache.set = timeutil.Now()
 	}
 
 	return &azureStorage{
