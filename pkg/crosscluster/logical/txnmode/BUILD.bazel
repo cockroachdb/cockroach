@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "txnmode",
+    srcs = [
+        "txn_coordinator.go",
+        "txnmode.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnmode",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/repstream/streampb",
+        "//pkg/util/hlc",
+    ],
+)
