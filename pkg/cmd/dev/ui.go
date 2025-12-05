@@ -51,8 +51,8 @@ type UIDirectories struct {
 	e2eTests string
 	// eslintPlugin is the absolute path to ./pkg/ui/workspaces/eslint-plugin-crdb.
 	eslintPlugin string
-	// protoOss is the absolute path to ./pkg/ui/workspaces/db-console/src/js/.
-	protoOss string
+	// protoBase is the absolute path to ./pkg/ui/workspaces/db-console/src/js/.
+	protoBase string
 	// protoCcl is the absolute path to ./pkg/ui/workspaces/db-console/ccl/src/js/.
 	protoCcl string
 	// crdbJsProto is the absolute path to ./pkg/ui/workspaces/crdb-js-proto/.
@@ -73,7 +73,7 @@ func getUIDirs(d *dev) (*UIDirectories, error) {
 		dbConsole:     filepath.Join(workspace, "./pkg/ui/workspaces/db-console"),
 		e2eTests:      filepath.Join(workspace, "./pkg/ui/workspaces/e2e-tests"),
 		eslintPlugin:  filepath.Join(workspace, "./pkg/ui/workspaces/eslint-plugin-crdb"),
-		protoOss:      filepath.Join(workspace, "./pkg/ui/workspaces/db-console/src/js"),
+		protoBase:     filepath.Join(workspace, "./pkg/ui/workspaces/db-console/src/js"),
 		protoCcl:      filepath.Join(workspace, "./pkg/ui/workspaces/db-console/ccl/src/js"),
 		crdbApiClient: filepath.Join(workspace, "./pkg/ui/workspaces/crdb-api-client"),
 	}, nil
@@ -112,7 +112,7 @@ func (d *dev) assertNoLinkedNpmDeps(targets []buildTarget) error {
 	jsPkgRoots := []string{
 		uiDirs.root,
 		uiDirs.eslintPlugin,
-		uiDirs.protoOss,
+		uiDirs.protoBase,
 		uiDirs.protoCcl,
 		uiDirs.clusterUI,
 		uiDirs.dbConsole,
@@ -745,8 +745,8 @@ func arrangeFilesForWatchers(d *dev) error {
 
 	// Recreate protobuf client files that were previously copied out of the sandbox
 	for _, relPath := range protoFiles {
-		ossDst := filepath.Join(dbConsoleDst, relPath)
-		if err := d.os.CopyFile(filepath.Join(dbConsoleSrc, relPath), ossDst); err != nil {
+		baseDst := filepath.Join(dbConsoleDst, relPath)
+		if err := d.os.CopyFile(filepath.Join(dbConsoleSrc, relPath), baseDst); err != nil {
 			return err
 		}
 

@@ -29,11 +29,8 @@ module.exports = (env, argv) => {
   env = env || {};
   const isBazelBuild = !!process.env.BAZEL_TARGET;
 
-  let localRoots = [path.resolve(__dirname)];
-  if (env.dist === "ccl") {
-    // CCL modules shadow OSS modules.
-    localRoots.unshift(path.resolve(__dirname, "ccl"));
-  }
+  // CCL modules shadow base modules.
+  let localRoots = [path.resolve(__dirname, "ccl"), path.resolve(__dirname)];
 
   let plugins = [
     new CopyWebpackPlugin({
@@ -79,7 +76,7 @@ module.exports = (env, argv) => {
     entry: [ "./src/index.tsx"],
     output: {
       filename: "bundle.js",
-      path: path.resolve(env.output || `../../dist${env.dist}`, "assets"),
+      path: path.resolve(env.output || "../../distccl", "assets"),
     },
     mode: argv.mode || "production",
 
@@ -259,7 +256,7 @@ module.exports = (env, argv) => {
 
     devServer: {
       static: {
-        directory: path.join(__dirname, `dist${env.dist}`),
+        directory: path.join(__dirname, "distccl"),
       },
       devMiddleware: {
         index: false,
