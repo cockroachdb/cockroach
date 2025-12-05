@@ -638,6 +638,15 @@ func (ncEnv *normalizedConstraintsEnv) buildVoterConstraints() []internedConstra
 	return vc
 }
 
+func (ncEnv *normalizedConstraintsEnv) moveToEnd(idx int) {
+	n := len(ncEnv.voterConstraints) - 1
+	if idx >= 0 && idx < n {
+		// Move it to the end, since it is the biggest set.
+		ncEnv.voterConstraints[idx], ncEnv.voterConstraints[n] =
+			ncEnv.voterConstraints[n], ncEnv.voterConstraints[idx]
+	}
+}
+
 // satisfyVoterWithAll satisfies the voter constraint with the all replica
 // constraint.
 func (ncEnv *normalizedConstraintsEnv) satisfyVoterWithAll(voterIndex int, allIndex int) {
@@ -1098,12 +1107,7 @@ func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
 			ncEnv.voterConstraints[i].numReplicas += neededReplicas - actualReplicas
 		}
 	}
-	n := len(ncEnv.voterConstraints) - 1
-	if emptyVoterConstraintIndex >= 0 && emptyVoterConstraintIndex < n {
-		// Move it to the end, since it is the biggest set.
-		ncEnv.voterConstraints[emptyVoterConstraintIndex], ncEnv.voterConstraints[n] =
-			ncEnv.voterConstraints[n], ncEnv.voterConstraints[emptyVoterConstraintIndex]
-	}
+	ncEnv.moveToEnd(emptyVoterConstraintIndex)
 	conf.voterConstraints = ncEnv.buildVoterConstraints()
 	return err
 }
