@@ -205,6 +205,7 @@ plan_cache_mode                                                  auto
 plpgsql_use_strict_into                                          off
 prefer_lookup_joins_for_fks                                      off
 prepared_statements_cache_size                                   0 B
+prevent_update_set_column_drop                                   off
 propagate_admission_header_to_leaf_transactions                  on
 propagate_input_ordering                                         off
 recursion_depth_limit                                            1000

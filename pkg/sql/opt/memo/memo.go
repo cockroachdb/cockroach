@@ -217,6 +217,7 @@ type Memo struct {
 	useMaxFrequencySelectivity                 bool
 	usingHintInjection                         bool
 	useSwapMutations                           bool
+	preventUpdateSetColumnDrop                 bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -334,6 +335,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useMaxFrequencySelectivity:                 evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity,
 		usingHintInjection:                         evalCtx.Planner != nil && evalCtx.Planner.UsingHintInjection(),
 		useSwapMutations:                           evalCtx.SessionData().UseSwapMutations,
+		preventUpdateSetColumnDrop:                 evalCtx.SessionData().PreventUpdateSetColumnDrop,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -515,6 +517,7 @@ func (m *Memo) IsStale(
 		m.useMaxFrequencySelectivity != evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity ||
 		m.usingHintInjection != (evalCtx.Planner != nil && evalCtx.Planner.UsingHintInjection()) ||
 		m.useSwapMutations != evalCtx.SessionData().UseSwapMutations ||
+		m.preventUpdateSetColumnDrop != evalCtx.SessionData().PreventUpdateSetColumnDrop ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}

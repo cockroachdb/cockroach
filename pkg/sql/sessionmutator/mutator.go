@@ -1114,3 +1114,7 @@ func (m *SessionDataMutator) SetCanaryStatsMode(val sessiondatapb.CanaryStatsMod
 func (m *SessionDataMutator) SetUseSwapMutations(val bool) {
 	m.Data.UseSwapMutations = val
 }
+
+func (m *SessionDataMutator) SetPreventUpdateSetColumnDrop(val bool) {
+	m.Data.PreventUpdateSetColumnDrop = val
+}

@@ -762,6 +762,10 @@ message LocalOnlySessionData {
   // UseSwapMutations, when true, enables use of the update swap and delete swap
   // operators.
   bool use_swap_mutations = 194;
+  // PreventUpdateSetColumnDrop, when true, enables a fix to ensure that columns
+  // referenced only as target columns in an UPDATE statement within a routine
+  // are correctly tracked, preventing a drop that breaks the routine.
+  bool prevent_update_set_column_drop = 195;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
