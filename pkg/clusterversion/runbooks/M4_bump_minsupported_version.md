@@ -2,6 +2,10 @@
 
 This section provides step-by-step instructions for the M.4 task: "Bump MinSupported version" on the master branch. This task removes support for the oldest version in the rolling upgrade window.
 
+**📋 Quick Reference:** For a streamlined checklist-style guide, see [`M4_bump_minsupported_version_QUICK.md`](M4_bump_minsupported_version_QUICK.md). This document provides detailed explanations and troubleshooting.
+
+---
+
 ### Overview
 
 **When to perform:** After the final release is published (e.g., after v25.2.0 is released, bump MinSupported from v25.2 to v25.4).
@@ -401,6 +405,45 @@ rm -rf pkg/sql/logictest/tests/local-mixed-25.2/
 rm -rf pkg/sql/sqlitelogictest/tests/local-mixed-25.2/
 ```
 
+**Update nightly build script:**
+
+**⚠️ CRITICAL:** This file is easy to miss but will break the nightly builds if not updated.
+
+**File:** `build/teamcity/cockroach/nightlies/sqllogic_corpus_nightly_impl.sh`
+
+This script runs nightly corpus generation for all mixed version configurations. Update the loop to remove the old version:
+
+```bash
+# Find the line (around line 84):
+for config in local-mixed-25.2 local-mixed-25.3; do
+
+# Update to remove local-mixed-25.2:
+for config in local-mixed-25.3; do
+```
+
+**Example for bumping from 25.2 to 25.3:**
+```bash
+# Before:
+for config in local-mixed-25.2 local-mixed-25.3; do
+
+# After:
+for config in local-mixed-25.3; do
+```
+
+**Example for bumping from 25.3 to 25.4:**
+```bash
+# Before:
+for config in local-mixed-25.3 local-mixed-25.4; do
+
+# After:
+for config in local-mixed-25.4; do
+```
+
+**Why this matters:**
+- If not updated, the nightly build will fail trying to reference a deleted `local-mixed-X.Y` directory
+- This broke the nightly in PR #158225, requiring follow-up fix in commit 4bc710b4667
+- The error will be: "references nonexistent local-mixed-X.Y logictest directory"
+
 **Remove references from test files:**
 
 **⚠️ CRITICAL: Understanding `onlyif` and `skipif` Directives**
@@ -599,18 +642,19 @@ A typical M.4 bump should modify approximately 70-80 files across the 6 commits:
 3. `pkg/sql/logictest/testdata/logic_test/mixed_version_ltree`
 4. `pkg/sql/logictest/testdata/logic_test/mixed_version_partial_stats`
 
-**Commit 7 (~64 files):**
+**Commit 7 (~65 files):**
 1. `pkg/sql/logictest/logictestbase/logictestbase.go` - Config removal
-2. `pkg/ccl/logictestccl/tests/local-mixed-25.2/BUILD.bazel` - Deleted
-3. `pkg/ccl/logictestccl/tests/local-mixed-25.2/generated_test.go` - Deleted
-4. `pkg/sql/logictest/tests/local-mixed-25.2/BUILD.bazel` - Deleted
-5. `pkg/sql/logictest/tests/local-mixed-25.2/generated_test.go` - Deleted
-6. `pkg/sql/sqlitelogictest/tests/local-mixed-25.2/BUILD.bazel` - Deleted
-7. `pkg/sql/sqlitelogictest/tests/local-mixed-25.2/generated_test.go` - Deleted
-8. ~34 logic test files with skipif/onlyif updates
-9. ~20 generated test files updated by `./dev gen bazel`
-10. `pkg/BUILD.bazel` - Binary file updated
-11. Various other files with version-gated logic
+2. `build/teamcity/cockroach/nightlies/sqllogic_corpus_nightly_impl.sh` - **CRITICAL: Update nightly build loop**
+3. `pkg/ccl/logictestccl/tests/local-mixed-25.2/BUILD.bazel` - Deleted
+4. `pkg/ccl/logictestccl/tests/local-mixed-25.2/generated_test.go` - Deleted
+5. `pkg/sql/logictest/tests/local-mixed-25.2/BUILD.bazel` - Deleted
+6. `pkg/sql/logictest/tests/local-mixed-25.2/generated_test.go` - Deleted
+7. `pkg/sql/sqlitelogictest/tests/local-mixed-25.2/BUILD.bazel` - Deleted
+8. `pkg/sql/sqlitelogictest/tests/local-mixed-25.2/generated_test.go` - Deleted
+9. ~34 logic test files with skipif/onlyif updates
+10. ~20 generated test files updated by `./dev gen bazel`
+11. `pkg/BUILD.bazel` - Binary file updated
+12. Various other files with version-gated logic
 
 ### Validation and Verification
 
@@ -736,7 +780,30 @@ grep -l "^# LogicTest:$" pkg/sql/logictest/testdata/logic_test/* \
 sed -i '' '/^# LogicTest:$/d' <files>
 ```
 
-#### Error 4: Committed local files accidentally
+#### Error 4: Nightly build failure - nonexistent local-mixed directory
+
+**Error:** Nightly build fails with: `references nonexistent local-mixed-X.Y logictest directory`
+
+**Cause:** Forgot to update `build/teamcity/cockroach/nightlies/sqllogic_corpus_nightly_impl.sh` to remove the old config from the loop.
+
+**Real-world occurrence:** This broke the nightly in PR #158225, requiring follow-up fix in commit 4bc710b4667 and issue #158741.
+
+**Fix:**
+```bash
+# Edit build/teamcity/cockroach/nightlies/sqllogic_corpus_nightly_impl.sh
+# Find the line (around line 84):
+for config in local-mixed-25.2 local-mixed-25.3; do
+
+# Update to:
+for config in local-mixed-25.3; do
+```
+
+**Prevention:**
+- Always check this file when removing a local-mixed config
+- Add it to your commit checklist
+- This file is in the runbook's "Expected Files Modified" section
+
+#### Error 5: Committed local files accidentally
 
 **Error:** Local files (`.claude/`, `PLAN_*.md`, etc.) appear in commit.
 
@@ -754,7 +821,7 @@ git reset HEAD .claude/settings.local.json PLAN_*.md *.local.md
 git commit -m "..."
 ```
 
-#### Error 5: Missing file deletions in commit
+#### Error 6: Missing file deletions in commit
 
 **Error:** Deleted directories don't appear in commit.
 
@@ -766,7 +833,7 @@ git commit -m "..."
 git add -A  # Adds modifications AND deletions
 ```
 
-#### Error 6: "relation already exists" or duplicate statement errors in logic tests
+#### Error 7: "relation already exists" or duplicate statement errors in logic tests
 
 **Error:** Test failures like:
 ```
@@ -816,7 +883,7 @@ git diff pkg/sql/logictest/testdata/logic_test/ | grep "^-onlyif config.*local-m
 - Manually review each file that had `onlyif` to check for guarded statements
 - Run tests early to catch duplicate statement errors: `./dev testlogic`
 
-#### Error 7: Incorrect pebble format version change during rebase
+#### Error 8: Incorrect pebble format version change during rebase
 
 **Error:** After rebasing against master, `pkg/storage/pebble.go` has the wrong pebble format version for V25_3.
 
@@ -909,7 +976,13 @@ git commit -m "logictest: update mixed_version tests to use 25.3 testserver..."
 
 **Commit 5 - Remove local-mixed config:**
 ```bash
-# Edit logictestbase.go
+# Edit logictestbase.go to remove the config definition and references
+
+# CRITICAL: Update nightly build script
+# Edit build/teamcity/cockroach/nightlies/sqllogic_corpus_nightly_impl.sh
+# Change: for config in local-mixed-25.2 local-mixed-25.3; do
+# To:     for config in local-mixed-25.3; do
+
 rm -rf pkg/ccl/logictestccl/tests/local-mixed-25.2/
 rm -rf pkg/sql/logictest/tests/local-mixed-25.2/
 rm -rf pkg/sql/sqlitelogictest/tests/local-mixed-25.2/
