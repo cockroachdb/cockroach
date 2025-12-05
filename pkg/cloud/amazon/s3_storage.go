@@ -833,7 +833,7 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 		}
 
 		_, err := uploader.Upload(ctx, input)
-		err = interpretAWSError(err)
+		err = s.interpretAWSError(err)
 		err = errors.Wrap(err, "upload failed")
 		// Mark with ctx's error for upstream code to not interpret this as
 		// corruption.
@@ -868,7 +868,7 @@ func (s *s3Storage) openStreamAt(
 
 	out, err := client.GetObject(ctx, req)
 	if err != nil {
-		err = interpretAWSError(err)
+		err = s.interpretAWSError(err)
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			// keep this string in case anyone is depending on it
 			err = errors.Wrap(err, "s3 object does not exist")
@@ -965,7 +965,7 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			err = interpretAWSError(err)
+			err = s.interpretAWSError(err)
 			err = errors.Wrap(err, `failed to list s3 bucket`)
 			// Mark with ctx's error for upstream code to not interpret this as
 			// corruption.
@@ -996,9 +996,16 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 // request.CanceledErrorCode, instead of doing it in the caller. But this
 // requires knowing something about the SDK implementation (that the request.*
 // error codes are relevant, in addition to the s3.* error codes).
-func interpretAWSError(err error) error {
+func (s *s3Storage) interpretAWSError(err error) error {
 	if err == nil {
 		return nil
+	}
+
+	if retry.IsErrorThrottles(retry.DefaultThrottles).IsErrorThrottle(err).Bool() {
+		if s.metrics != nil {
+			s.metrics.ThrottlingErrors.Inc(1)
+		}
+		err = errors.Wrap(err, "throttled")
 	}
 
 	if strings.Contains(err.Error(), "AssumeRole") {
@@ -1076,7 +1083,7 @@ func (s *s3Storage) Size(ctx context.Context, basename string) (int64, error) {
 			return err
 		})
 	if err != nil {
-		err = interpretAWSError(err)
+		err = s.interpretAWSError(err)
 		err = errors.Wrap(err, "failed to get s3 object headers")
 		// Mark with ctx's error for upstream code to not interpret this as
 		// corruption.
