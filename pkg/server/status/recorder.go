@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"math"
 	"os"
@@ -190,6 +191,10 @@ type MetricsRecorder struct {
 	// round-trip) that requires a mutex to be safe for concurrent usage. We
 	// therefore give it its own mutex to avoid blocking other methods.
 	writeSummaryMu syncutil.Mutex
+
+	// childMetricNameCache caches the encoded names for child metrics to avoid
+	// rebuilding them on every recording. Uses syncutil.Map for lock-free reads.
+	childMetricNameCache syncutil.Map[uint64, string]
 }
 
 // NewMetricsRecorder initializes a new MetricsRecorder object that uses the
@@ -468,7 +473,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData(childMetrics bool) []tspb.TimeSerie
 			source:         mr.mu.desc.NodeID.String(),
 			timestampNanos: now.UnixNano(),
 		}
-		recorder.recordChangefeedChildMetrics(&data)
+		recorder.recordChangefeedChildMetrics(&data, &mr.childMetricNameCache)
 
 		// Record child metrics from app-level registries for secondary tenants
 		for tenantID, r := range mr.mu.tenantRegistries {
@@ -478,7 +483,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData(childMetrics bool) []tspb.TimeSerie
 				source:         tsutil.MakeTenantSource(mr.mu.desc.NodeID.String(), tenantID.String()),
 				timestampNanos: now.UnixNano(),
 			}
-			tenantRecorder.recordChangefeedChildMetrics(&data)
+			tenantRecorder.recordChangefeedChildMetrics(&data, &mr.childMetricNameCache)
 		}
 
 		atomic.CompareAndSwapInt64(&mr.lastDataCount, lastDataCount, int64(len(data)))
@@ -949,10 +954,38 @@ func (rr registryRecorder) recordChild(
 	})
 }
 
+func hashLabels(labels []*prometheusgo.LabelPair) uint64 {
+	h := fnv.New64a()
+	for _, label := range labels {
+		h.Write([]byte(label.GetName()))
+		h.Write([]byte(label.GetValue()))
+	}
+	return h.Sum64()
+}
+
+// getOrComputeMetricName looks up the encoded metric name in the cache,
+// or computes it using the provided computeFn if not found.
+func getOrComputeMetricName(
+	cache *syncutil.Map[uint64, string], labels []*prometheusgo.LabelPair, computeFn func() string,
+) string {
+	if cache == nil {
+		return computeFn()
+	}
+	labelHash := hashLabels(labels)
+	if cached, ok := cache.Load(labelHash); ok {
+		return *cached
+	}
+	name := computeFn()
+	cache.Store(labelHash, &name)
+	return name
+}
+
 // recordChangefeedChildMetrics iterates through changefeed metrics in the registry and processes child metrics
 // for those that have TsdbRecordLabeled set to true in their metadata.
 // Records up to 1024 child metrics per metric to prevent unbounded memory usage and performance issues.
-func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesData) {
+func (rr registryRecorder) recordChangefeedChildMetrics(
+	dest *[]tspb.TimeSeriesData, cache *syncutil.Map[uint64, string],
+) {
 	maxChildMetricsPerMetric := 1024
 
 	labels := rr.registry.GetLabels()
@@ -1020,8 +1053,10 @@ func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesD
 					return
 				}
 
-				baseName := metadata.Name + metric.EncodeLabeledName(&prometheusgo.Metric{Label: childLabels})
-
+				// Check cache for encoded name
+				baseName := getOrComputeMetricName(cache, childLabels, func() string {
+					return metadata.Name + metric.EncodeLabeledName(&prometheusgo.Metric{Label: childLabels})
+				})
 				// Record all histogram computed metrics using child-specific snapshots
 				for _, c := range metric.HistogramMetricComputers {
 					var value float64
@@ -1063,7 +1098,13 @@ func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesD
 			} else {
 				return
 			}
-			recordMetric(prom.GetName(false /* useStaticLabels */)+metric.EncodeLabeledName(childMetric), value)
+
+			// Check cache for encoded name
+			metricName := getOrComputeMetricName(cache, childMetric.Label, func() string {
+				return prom.GetName(false /* useStaticLabels */) + metric.EncodeLabeledName(childMetric)
+			})
+
+			recordMetric(metricName, value)
 			childMetricsCount++
 		}
 		promIter.Each(m.Label, processChildMetric)
