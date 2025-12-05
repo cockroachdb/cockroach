@@ -1,0 +1,94 @@
+# LogicTest: !local-mixed-25.2 !local-mixed-25.3
+
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX (y));
+
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT, INDEX (b));
+
+query I
+SELECT count(*) FROM system.statement_hints;
+----
+0
+
+let $hint1
+SELECT crdb_internal.inject_hint(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@primary WHERE y = 10'
+);
+
+# Verify that the returned hint ID is in the table.
+query T
+SELECT fingerprint FROM system.statement_hints WHERE row_id = $hint1;
+----
+SELECT * FROM xy WHERE y = 10
+
+let $hint2
+SELECT crdb_internal.inject_hint(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@xy_y_idx WHERE y = 10'
+);
+
+# Verify that the returned hint ID is in the table.
+query T
+SELECT fingerprint FROM system.statement_hints WHERE row_id = $hint2;
+----
+SELECT * FROM xy WHERE y = 10
+
+let $hint3
+SELECT crdb_internal.inject_hint(
+  'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b',
+  'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b'
+);
+
+# Verify that the returned hint ID is in the table.
+query T
+SELECT fingerprint FROM system.statement_hints WHERE row_id = $hint3;
+----
+SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b
+
+query I
+SELECT count(*) FROM system.statement_hints;
+----
+3
+
+query I
+SELECT count(*) FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM xy WHERE y = 10';
+----
+2
+
+query I
+SELECT count(*) FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b';
+----
+1
+
+statement ok
+DELETE FROM system.statement_hints WHERE true;
+
+query I
+SELECT count(*) FROM system.statement_hints;
+----
+0
+
+# If the surrounding transaction is rolled back, no hint should be inserted.
+statement ok
+BEGIN;
+
+let $hint4
+SELECT crdb_internal.inject_hint(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@{NO_FULL_SCAN} WHERE y = 10'
+);
+
+query T
+SELECT fingerprint FROM system.statement_hints WHERE row_id = $hint4;
+----
+SELECT * FROM xy WHERE y = 10
+
+statement ok
+ROLLBACK;
+
+query I
+SELECT count(*) FROM system.statement_hints;
+----
+0
