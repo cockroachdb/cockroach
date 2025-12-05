@@ -7,7 +7,7 @@ import { Tooltip } from "antd";
 import classNames from "classnames/bind";
 import React from "react";
 
-import styles from "./tooltip.module.styl";
+import styles from "./tooltip.module.scss";
 
 import type { AbstractTooltipProps } from "antd/lib/tooltip";
 

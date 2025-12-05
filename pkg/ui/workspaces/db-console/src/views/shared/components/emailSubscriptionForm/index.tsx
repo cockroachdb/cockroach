@@ -8,7 +8,7 @@ import React from "react";
 import { TextInput, Button } from "src/components";
 import { isValidEmail } from "src/util/validation/isValidEmail";
 
-import "./emailSubscriptionForm.styl";
+import "./emailSubscriptionForm.scss";
 
 interface EmailSubscriptionFormState {
   emailAddress: string | undefined;

@@ -47,7 +47,7 @@ import { getNodeLocalityTiers } from "src/util/localities";
 import { INodeStatus, MetricConstants } from "src/util/proto";
 
 import TableSection from "./tableSection";
-import "./nodes.styl";
+import "./nodes.scss";
 import {
   CPUsTooltip,
   getNodeStatusDescription,

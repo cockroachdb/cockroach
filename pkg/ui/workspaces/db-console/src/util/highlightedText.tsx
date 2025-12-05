@@ -6,7 +6,7 @@
 import classNames from "classnames/bind";
 import React from "react";
 
-import styles from "./highlightedText.module.styl";
+import styles from "./highlightedText.module.scss";
 
 const cx = classNames.bind(styles);
 

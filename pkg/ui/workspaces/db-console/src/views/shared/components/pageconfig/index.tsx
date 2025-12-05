@@ -6,7 +6,7 @@
 import classnames from "classnames/bind";
 import React from "react";
 
-import styles from "./pageConfig.module.styl";
+import styles from "./pageConfig.module.scss";
 
 export interface PageConfigProps {
   layout?: "list" | "spread";

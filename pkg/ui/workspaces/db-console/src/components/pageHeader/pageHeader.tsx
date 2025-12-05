@@ -5,7 +5,7 @@
 
 import * as React from "react";
 
-import "./pageHeader.styl";
+import "./pageHeader.scss";
 
 export interface PageHeaderProps {
   children?: React.ReactNode;
