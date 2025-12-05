@@ -163,7 +163,7 @@ statement error pgcode 0A000 pq: cannot accept a value of type trigger
 CREATE TYPE udt AS (x INT, y TRIGGER, z TEXT);
 
 # Trigger array UDT field.
-statement error pgcode 42601 pq: at or near "\[": syntax error
+statement error pgcode 42704 pq: at or near ",": syntax error: type trigger\[\] does not exist
 CREATE TYPE udt AS (x INT, y TRIGGER[], z TEXT);
 
 # ==============================================================================
