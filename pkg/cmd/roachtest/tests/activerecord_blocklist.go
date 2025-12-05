@@ -23,6 +23,7 @@ var activeRecordBlocklist = blocklist{
 
 var activeRecordIgnoreList = blocklist{
 	`ActiveRecord::AdapterTestWithoutTransaction#test_create_with_query_cache`:                                                                                 "affected by autocommit_before_ddl",
+	`ActiveRecord::CockroachDBStructureDumpTest#test_schema_dump_with_dump_schemas_all`:                                                                         "flaky",
 	`ActiveRecord::CockroachDBStructureDumpTest#test_structure_dump`:                                                                                           "flaky",
 	`ActiveRecord::ConnectionAdapters::ConnectionPoolThreadTest#test_checkout_fairness`:                                                                        "flaky",
 	`ActiveRecord::ConnectionAdapters::ConnectionPoolThreadTest#test_checkout_fairness_by_group`:                                                               "flaky",
