@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "txnfeed",
+    srcs = ["ordered_feed.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnfeed",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/crosscluster",
+        "//pkg/crosscluster/streamclient",
+        "//pkg/repstream/streampb",
+        "//pkg/util/hlc",
+        "//pkg/util/span",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "txnfeed_test",
+    srcs = ["ordered_feed_test.go"],
+    embed = [":txnfeed"],
+    deps = [
+        "//pkg/crosscluster",
+        "//pkg/jobs/jobspb",
+        "//pkg/repstream/streampb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/span",
+        "@com_github_stretchr_testify//require",
+    ],
+)
