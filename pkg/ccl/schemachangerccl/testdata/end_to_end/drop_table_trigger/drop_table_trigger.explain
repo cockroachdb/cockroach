@@ -8,7 +8,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 46 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (t-), Name: "t", ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (t-), Name: "t", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (t-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (t-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (t-), Name: "root"}
@@ -115,7 +115,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 46 elements transitioning toward ABSENT
- │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 104 (t-), Name: "t", ReferencedDescID: 101 (public)}
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 104 (t-), Name: "t", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 104 (t-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 104 (t-), Name: "admin"}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 104 (t-), Name: "root"}
@@ -165,7 +165,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 46 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (t-), Name: "t", ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (t-), Name: "t", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (t-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (t-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (t-), Name: "root"}

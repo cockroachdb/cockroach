@@ -8,14 +8,14 @@ Schema change plan for DROP DATABASE ‹db›; following CREATE DATABASE ‹db�
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 14 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (db-), Name: "db"}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (db-), Name: "db", IntValue: 0}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (db-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (db-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (db-), Name: "public"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (db-), Name: "root"}
  │         │    ├── PUBLIC → DROPPED Database:{DescID: 104 (db-)}
  │         │    ├── PUBLIC → ABSENT  DatabaseRoleSetting:{DescID: 104 (db-), Name: "__placeholder_role_name__"}
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (public-), Name: "public"}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 105 (public-), Name: "public", ReferencedDescID: 104 (db-), IntValue: 0}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 105 (public-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (public-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (public-), Name: "public"}

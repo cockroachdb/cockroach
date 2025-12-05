@@ -125,8 +125,13 @@ const (
 	// It's value must be in catpb.GeneratedAsIdentityType.
 	GeneratedAsIdentityType
 
+	// IntValue A int64 used only for element uniqueness, and this can map out
+	// to any int64 attribute. It is currently used for:
+	// 1) SchemaID in the namespace element.
+	IntValue
+
 	// AttrMax is the largest possible Attr value.
-	// Note: add any new enum values before TargetStatus, leave these at the end.
+	// Note: add any new enum values before IntValue, leave these at the end.
 	AttrMax = iota - 1
 )
 
@@ -430,7 +435,8 @@ var elementSchemaOptions = []rel.SchemaOption{
 	// Common elements.
 	rel.EntityMapping(t((*scpb.Namespace)(nil)),
 		rel.EntityAttr(DescID, "DescriptorID"),
-		rel.EntityAttr(ReferencedDescID, "SchemaID"),
+		rel.EntityAttr(ReferencedDescID, "DatabaseID"),
+		rel.EntityAttr(IntValue, "SchemaID"),
 		rel.EntityAttr(Name, "Name"),
 	),
 	rel.EntityMapping(t((*scpb.Owner)(nil)),
