@@ -1768,13 +1768,12 @@ func (s *SQLServer) preStart(
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos, s.execCfg.Locality)
 
-	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
-		return err
-	}
-
 	stmtdiagnostics.StartPolling(ctx, s.txnDiagnosticsRegistry, s.stmtDiagnosticsRegistry, stopper)
 
-	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory); err != nil {
+	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory, s.execCfg.SystemTableIDResolver); err != nil {
+		return err
+	}
+	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
 	}
 	if err = s.execCfg.StatementHintsCache.Start(ctx, s.execCfg.SystemTableIDResolver); err != nil {
