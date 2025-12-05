@@ -38,6 +38,11 @@ import (
 func (mb *mutationBuilder) buildRowLevelBeforeTriggers(
 	eventType tree.TriggerEventType, cascade bool,
 ) bool {
+	if mb.b.evalCtx.SessionData().UseImprovedRoutineDependencyTracking {
+		// Avoid adding transitive dependencies that are already tracked in the
+		// trigger object.
+		defer mb.b.DisableSchemaDepTracking()()
+	}
 	var eventsToMatch tree.TriggerEventTypeSet
 	eventsToMatch.Add(eventType)
 	triggers := cat.GetRowLevelTriggers(mb.tab, tree.TriggerActionTimeBefore, eventsToMatch)

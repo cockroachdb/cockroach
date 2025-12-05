@@ -5121,6 +5121,59 @@ DROP TRIGGER tr1 ON sc_tr_tbl;
 
 subtest end
 
+# Regression test for unnecessary column dependencies added to a routine with a
+# mutation that involves a trigger.
+subtest regression_158154
+
+statement ok
+CREATE TABLE xy_158154 (x INT, y INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SELECT x, y FROM xy_158154;
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy_158154 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE PROCEDURE p(blah INT) LANGUAGE SQL AS $$
+  INSERT INTO xy_158154 (x) VALUES (blah);
+$$;
+
+statement ok
+CALL p(100)
+
+statement error pgcode 2BP01 pq: cannot drop column "y" because trigger "foo" on table "xy_158154" depends on it
+ALTER TABLE xy_158154 DROP COLUMN y;
+
+statement ok
+DROP TRIGGER foo ON xy_158154;
+DROP FUNCTION g();
+
+# The procedure should not prevent the column drop.
+statement ok
+ALTER TABLE xy_158154 DROP COLUMN y;
+
+statement ok
+CALL p(200)
+
+query I rowsort
+SELECT * FROM xy_158154;
+----
+100
+200
+
+statement ok
+DROP PROCEDURE p
+
+statement ok
+DROP TABLE xy_158154
+
 # ==============================================================================
 # End of regression tests. Add new features above the regression test section.
 # ==============================================================================

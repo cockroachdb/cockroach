@@ -601,6 +601,27 @@ func (b *Builder) DisableUnsafeInternalCheck() func() {
 	}
 }
 
+// DisableSchemaDepTracking is used to disable dependency tracking for views and
+// routines, so that users don't have to face unnecessary restrictions during
+// schema changes.
+//
+// For example, we must prevent dropping a column that is referenced in the
+// WHERE clause or SET clause of an UPDATE statement. However, adding or
+// dropping columns that are synthesized with default or computed values is
+// perfectly safe, because those columns are determined from the table schema
+// rather than being user specified. If such a column is dropped, its value will
+// simply not be synthesized in mutation statements going forward.
+func (b *Builder) DisableSchemaDepTracking() func() {
+	if !b.trackSchemaDeps {
+		return func() {}
+	}
+	originalTrackSchemaDeps := b.trackSchemaDeps
+	b.trackSchemaDeps = false
+	return func() {
+		b.trackSchemaDeps = originalTrackSchemaDeps
+	}
+}
+
 // optTrackingTypeResolver is a wrapper around a TypeReferenceResolver that
 // remembers all of the resolved types in the provided Metadata.
 type optTrackingTypeResolver struct {

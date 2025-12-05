@@ -93,6 +93,8 @@ type mutationBuilder struct {
 	// explicit values in the insert statement, if b.trackSchemaDeps is true.
 	// It does not include columns that were explicitly given the value of
 	// DEFAULT, e.g., INSERT INTO t VALUES (1, DEFAULT).
+	// TODO(drewk): Remove this once we make the improved dependency tracking
+	// unconditional and use_improved_routine_dependency_tracking becomes a no-op.
 	implicitInsertCols opt.ColSet
 
 	// fetchColIDs lists the input column IDs storing values which are fetched
@@ -827,6 +829,14 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 func (mb *mutationBuilder) addSynthesizedComputedCols(
 	colIDs opt.OptionalColList, targetColList *opt.ColList, targetColSet *opt.ColSet, restrict bool,
 ) {
+	if mb.b.evalCtx.SessionData().UseImprovedRoutineDependencyTracking {
+		// Avoid adding unnecessary dependencies on columns that are referenced by
+		// computed column expressions. We only need to track columns that were
+		// explicitly specified by the user, e.g. those in SET, WHERE or RETURNING
+		// clause, or the target columns of an INSERT.
+		defer mb.b.DisableSchemaDepTracking()()
+	}
+
 	// We will construct a new Project operator that will contain the newly
 	// synthesized column(s).
 	pb := makeProjectionBuilder(mb.b, mb.outScope)
@@ -945,6 +955,13 @@ func (mb *mutationBuilder) maybeAddRegionColLookup(op opt.Operator) {
 			return
 		}
 	}
+	if mb.b.evalCtx.SessionData().UseImprovedRoutineDependencyTracking {
+		// It is not necessary to add transitive dependencies on the objects
+		// resolved below, since the schema changer already ensures that they are
+		// not dropped if "infer_rbr_region_col_using_constraint" is set.
+		defer mb.b.DisableSchemaDepTracking()()
+	}
+
 	// Resolve the referenced table.
 	refTabDescID := int64(lookupFK.ReferencedTableID())
 	refTab := mb.b.resolveTableRef(&tree.TableRef{TableID: refTabDescID}, privilege.SELECT)
