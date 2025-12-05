@@ -417,8 +417,14 @@ func TestTenantCtx(t *testing.T) {
 						// context looks as expected, and signal their channels.
 
 						tenID, isTenantRequest := roachpb.ClientTenantFromContext(ctx)
-						keyRecognized := strings.Contains(ba.Requests[0].GetInner().Header().Key.String(), magicKey)
+						key := ba.Requests[0].GetInner().Header().Key
+						keyRecognized := strings.Contains(key.String(), magicKey)
 						if !keyRecognized {
+							return nil
+						}
+
+						// Skip meta2 range lookups as they don't carry tenant context.
+						if bytes.HasPrefix(key, keys.Meta2Prefix) {
 							return nil
 						}
 
@@ -430,6 +436,9 @@ func TestTenantCtx(t *testing.T) {
 						if isSinglePushTxn := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == kvpb.PushTxn; isSinglePushTxn {
 							pushReq = ba.Requests[0].GetInner().(*kvpb.PushTxnRequest)
 						}
+
+						t.Logf("received request with key: %s, isTenantRequest: %t, tenID: %d",
+							key.String(), isTenantRequest, tenID)
 
 						switch {
 						case scanReq != nil:
