@@ -515,6 +515,22 @@ func sortTargetCandidateSetAndPick(
 	}
 	slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
 		if diversityScoresAlmostEqual(a.diversityScore, b.diversityScore) {
+			// TODO(tbg): this sorts by sls, then leasePreferenceIndex. Not sure this is right.
+			// Example:
+			// - s1 is loadNormal and has the best lease preference.
+			// - s2 is loadLow and has a worse lease preference.
+			// This code will order s2 before s1, so we may pick s2, which is
+			// good from the point of view of balancing load but bad from the
+			// point of view of lease preferences. In the old allocator, we
+			// bias more heavily towards lease preferences. But note that the
+			// candidate list we are operating on is already filtered down to
+			// include only candidates that don't make the lease preference
+			// worse. Still, it seems like we ought to be flipping the order
+			// here and prioritize improving the lease preference and only if
+			// that is not possible from a load perspective, consider moving
+			// the load to a non-optimal lease preference target.
+			// This is related to a comment in candidatesToMoveLease about
+			// pre-means filtering to only the class of lowest lease preferences
 			return cmp.Or(cmp.Compare(a.sls, b.sls),
 				cmp.Compare(a.leasePreferenceIndex, b.leasePreferenceIndex),
 				cmp.Compare(a.StoreID, b.StoreID))
