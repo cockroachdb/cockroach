@@ -1118,3 +1118,7 @@ func (m *SessionDataMutator) SetUseSwapMutations(val bool) {
 func (m *SessionDataMutator) SetPreventUpdateSetColumnDrop(val bool) {
 	m.Data.PreventUpdateSetColumnDrop = val
 }
+
+func (m *SessionDataMutator) SetUseImprovedRoutineDepsTriggersAndComputedCols(val bool) {
+	m.Data.UseImprovedRoutineDepsTriggersAndComputedCols = val
+}
