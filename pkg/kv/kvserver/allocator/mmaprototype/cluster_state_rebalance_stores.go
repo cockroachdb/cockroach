@@ -644,6 +644,12 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 
 		candsPL = retainReadyLeaseTargetStoresOnly(ctx, candsPL, re.stores, rangeID)
+		if len(candsPL) == 0 {
+			log.KvDistribution.VEventf(ctx, 2,
+				"result(failed): no candidates to move lease from n%vs%v for r%v after retainReadyLeaseTargetStoresOnly",
+				ss.NodeID, ss.StoreID, rangeID)
+			continue
+		}
 
 		clear(re.scratch.nodes)
 		means := computeMeansForStoreSet(re, candsPL, re.scratch.nodes, re.scratch.stores)
