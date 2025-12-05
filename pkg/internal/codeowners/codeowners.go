@@ -169,19 +169,8 @@ func (co *CodeOwners) GetTestOwner(
 			panic("test-eng team could not be found in TEAMS.yaml")
 		}
 
-		// Workaround for #107885.
-		if strings.Contains(packageName, "backup") {
-			dr := co.GetTeamForAlias("cockroachdb/disaster-recovery")
-			if dr.Name() == "" {
-				panic("disaster-recovery team could not be found in TEAMS.yaml")
-			}
-
-			_logs = append(_logs, fmt.Sprintf("assigning %s.%s to 'disaster-recovery' due to #107885", packageName, testName))
-			_teams = []team.Team{dr}
-		} else {
-			_logs = append(_logs, fmt.Sprintf("assigning %s.%s to 'test-eng' as catch-all", packageName, testName))
-			_teams = []team.Team{testEng}
-		}
+		_logs = append(_logs, fmt.Sprintf("assigning %s.%s to 'test-eng' as catch-all", packageName, testName))
+		_teams = []team.Team{testEng}
 	}
 	return
 }
