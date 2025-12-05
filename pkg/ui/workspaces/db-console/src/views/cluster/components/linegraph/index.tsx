@@ -47,7 +47,7 @@ import {
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
 
-import "./linegraph.styl";
+import "./linegraph.scss";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 

@@ -7,7 +7,7 @@ import classnames from "classnames/bind";
 import React from "react";
 import { Link as LinkTo, LinkProps } from "react-router-dom";
 
-import styles from "./link.module.styl";
+import styles from "./link.module.scss";
 
 const cx = classnames.bind(styles);
 

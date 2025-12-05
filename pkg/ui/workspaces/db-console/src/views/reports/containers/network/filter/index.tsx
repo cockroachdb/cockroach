@@ -11,7 +11,7 @@ import { OutsideEventHandler } from "src/components/outsideEventHandler";
 import Dropdown, { arrowRenderer } from "src/views/shared/components/dropdown";
 
 import { NetworkFilter, NetworkSort } from "..";
-import "./filter.styl";
+import "./filter.scss";
 
 interface IFilterProps {
   onChangeFilter: (key: string, value: string) => void;

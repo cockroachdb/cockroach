@@ -13,7 +13,7 @@ import { Text, TextTypes } from "src/components";
 import { LocalSetting, setLocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 
-import "./tableSection.styl";
+import "./tableSection.scss";
 
 interface MapStateToProps {
   isCollapsed: boolean;

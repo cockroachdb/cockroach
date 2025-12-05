@@ -8,7 +8,7 @@ import { Link } from "react-router-dom";
 
 import { LOGOUT_PAGE } from "src/routes/login";
 
-import "./userMenu.styl";
+import "./userMenu.scss";
 
 export interface UserMenuProps {
   userName: string;

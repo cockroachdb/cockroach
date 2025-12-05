@@ -24,7 +24,7 @@ import {
 import NodeDescriptor$Properties = cockroach.roachpb.INodeDescriptor;
 import ITimestamp = google.protobuf.ITimestamp;
 
-import "./replicaMatrix.styl";
+import "./replicaMatrix.scss";
 
 const DOWN_ARROW = "▼";
 const SIDE_ARROW = "▶";
