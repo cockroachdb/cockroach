@@ -332,7 +332,7 @@ func ListSubdirsFromIndex(ctx context.Context, store cloud.ExternalStorage) ([]s
 		"/",
 		func(indexSubdir string) error {
 			indexSubdir = strings.TrimSuffix(indexSubdir, "/")
-			subdir, err := unflattenIndexSubdir(indexSubdir)
+			subdir, err := convertIndexSubdirToSubdir(indexSubdir)
 			if err != nil {
 				return err
 			}
@@ -342,6 +342,10 @@ func ListSubdirsFromIndex(ctx context.Context, store cloud.ExternalStorage) ([]s
 	); err != nil {
 		return nil, errors.Wrapf(err, "listing index subdirs")
 	}
+	// Index subdirs are in descending order and we want chronological order.
+	// TODO (kev-cao): In the new faster `SHOW BACKUP` effort, we will want
+	// the subdirs in descending order.
+	slices.Reverse(subdirs)
 	return subdirs, nil
 }
 
@@ -422,49 +426,71 @@ func getBackupIndexFileName(startTime, endTime hlc.Timestamp) string {
 // collection URI and does not contain a trailing slash. It assumes that subdir
 // has been resolved and is not `LATEST`.
 func indexSubdir(subdir string) (string, error) {
-	flattened, err := flattenSubdirForIndex(subdir)
+	flattened, err := convertSubdirToIndexSubdir(subdir)
 	if err != nil {
 		return "", err
 	}
 	return path.Join(backupbase.BackupIndexDirectoryPath, flattened), nil
 }
 
-// flattenSubdirForIndex flattens a full backup subdirectory to be used in the
-// index. Note that this path does not contain a trailing or leading slash.
+// convertSubdirToIndexSubdir flattens a full backup subdirectory to be used in
+// the index. Note that this path does not contain a trailing or leading slash.
 // It assumes subdir is not `LATEST` and has been resolved.
 // We flatten the subdir so that when listing from the index, we can list with
-// the `index/` prefix and delimit on `/`. e.g.:
+// the index prefix and delimit on `/`. e.g.:
 //
-// index/
+// metadata/index/
 //
-//	|_ 2025-08-13-120000.00/
+//	|_ <desc_end_time>_20250813-120000.00/
 //	|  |_ <index_meta>.pb
-//	|_ 2025-08-14-120000.00/
+//	|_ <desc_end_time>_20250814-120000.00/
 //	|  |_ <index_meta>.pb
-//	|_ 2025-08-14-120000.00/
+//	|_ <desc_end_time>_20250814-120000.00/
 //		 |_ <index_meta>.pb
 //
 // Listing on `index/` and delimiting on `/` will return the subdirectories
 // without listing the files in them.
-func flattenSubdirForIndex(subdir string) (string, error) {
+func convertSubdirToIndexSubdir(subdir string) (string, error) {
 	subdirTime, err := time.Parse(backupbase.DateBasedIntoFolderName, subdir)
 	if err != nil {
 		return "", errors.Wrapf(
-			err, "subdir does not match format '%s'", backupbase.DateBasedIntoFolderName,
+			err, "invalid subdir format: %s", subdir,
 		)
 	}
-	return subdirTime.Format(backupbase.BackupIndexFlattenedSubdir), nil
+	return fmt.Sprintf(
+		"%s_%s",
+		backuputils.EncodeDescendingTS(subdirTime),
+		subdirTime.Format(backupbase.BackupIndexFilenameTimestampFormat),
+	), nil
 }
 
-// unflattenIndexSubdir is the inverse of flattenSubdirForIndex. It converts a
-// flattened index subdir back to the original full backup subdir.
-func unflattenIndexSubdir(flattened string) (string, error) {
-	subdirTime, err := time.Parse(backupbase.BackupIndexFlattenedSubdir, flattened)
-	if err != nil {
-		return "", errors.Wrapf(
-			err, "index subdir does not match format %s", backupbase.BackupIndexFlattenedSubdir,
+// convertIndexSubdirToSubdir converts an index subdir back to the
+// original full backup subdir.
+func convertIndexSubdirToSubdir(flattened string) (string, error) {
+	parts := strings.Split(flattened, "_")
+	if len(parts) != 2 {
+		return "", errors.Newf(
+			"invalid index subdir format: %s", flattened,
 		)
 	}
-	unflattened := subdirTime.Format(backupbase.DateBasedIntoFolderName)
+	descSubdirTime, err := backuputils.DecodeDescendingTS(parts[0])
+	if err != nil {
+		return "", errors.Wrapf(
+			err, "index subdir %s could not be decoded", flattened,
+		)
+	}
+	// Validate that the two parts of the index subdir correspond to the same time.
+	subdirTime, err := time.Parse(backupbase.BackupIndexFilenameTimestampFormat, parts[1])
+	if err != nil {
+		return "", errors.Wrapf(
+			err, "index subdir %s could not be decoded", flattened,
+		)
+	}
+	if !descSubdirTime.Equal(subdirTime) {
+		return "", errors.Newf(
+			"index subdir %s has mismatched timestamps", flattened,
+		)
+	}
+	unflattened := descSubdirTime.Format(backupbase.DateBasedIntoFolderName)
 	return unflattened, nil
 }
