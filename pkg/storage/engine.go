@@ -988,6 +988,9 @@ type Engine interface {
 	//
 	// TODO(sumeer,jackson): Remove this method and force the caller to operate
 	// explicitly with a separate WriteBatch and Reader.
+	//
+	// There is exactly one remaining non-testing user of this method (log appends
+	// in raft storage) which should eventually migrate off. Do not add new uses.
 	NewUnindexedBatch() Batch
 	// NewWriteBatch returns a new write batch that will commit to the
 	// underlying Engine. The batch accumulates all mutations and applies them
