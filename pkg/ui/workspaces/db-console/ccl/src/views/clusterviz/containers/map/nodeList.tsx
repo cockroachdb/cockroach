@@ -9,7 +9,7 @@ import { RouteComponentProps } from "react-router-dom";
 import { Dropdown } from "src/components/dropdown";
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
 
-import "./nodesList.styl";
+import "./nodesList.scss";
 
 export default class NodeList extends React.Component<RouteComponentProps> {
   readonly items = [

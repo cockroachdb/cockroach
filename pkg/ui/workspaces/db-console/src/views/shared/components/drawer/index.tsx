@@ -8,7 +8,7 @@ import classNames from "classnames/bind";
 import React from "react";
 import { Link } from "react-router-dom";
 
-import styles from "./drawer.module.styl";
+import styles from "./drawer.module.scss";
 
 const cx = classNames.bind(styles);
 

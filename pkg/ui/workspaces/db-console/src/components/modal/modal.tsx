@@ -8,7 +8,7 @@ import React from "react";
 
 import "antd/lib/modal/style";
 import { Button, Text, TextTypes } from "src/components";
-import "./modal.styl";
+import "./modal.scss";
 
 export interface ModalProps {
   title?: string;

@@ -7,7 +7,7 @@ import * as React from "react";
 
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
-import "./infoTooltip.styl";
+import "./infoTooltip.scss";
 
 export const InfoTooltip = (props: { text: React.ReactNode }) => {
   const { text } = props;

@@ -13,7 +13,7 @@ import { CaretDown } from "src/components/icon/caretDown";
 import { trustIcon } from "src/util/trust";
 import { leftArrow, rightArrow } from "src/views/shared/components/icons";
 
-import styles from "./dropdown.module.styl";
+import styles from "./dropdown.module.scss";
 
 export interface DropdownOption {
   value: string;

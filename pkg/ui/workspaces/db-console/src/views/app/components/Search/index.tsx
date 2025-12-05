@@ -10,7 +10,7 @@ import React from "react";
 import CancelIcon from "assets/cancel.svg";
 import SearchIcon from "assets/search.svg";
 
-import styles from "./search.module.styl";
+import styles from "./search.module.scss";
 
 import type { InputProps } from "antd/lib/input";
 

@@ -8,7 +8,7 @@ import { connect } from "react-redux";
 import { Link, withRouter, RouteComponentProps } from "react-router-dom";
 
 import { SideNavigation } from "src/components";
-import "./navigation-bar.styl";
+import "./navigation-bar.scss";
 import { isSingleNodeCluster } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 

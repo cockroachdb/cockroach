@@ -6,7 +6,7 @@
 import { Modal, Button } from "antd";
 import React, { Fragment } from "react";
 
-import "./styles.styl";
+import "./styles.scss";
 import type { ModalProps } from "antd/lib/modal";
 
 interface ICustomModalProps extends ModalProps {

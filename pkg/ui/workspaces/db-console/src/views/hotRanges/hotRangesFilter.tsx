@@ -19,7 +19,7 @@ import { useSelector } from "react-redux";
 
 import { selectDatabases } from "../statements/statementsPage";
 
-import styles from "./hotRanges.module.styl";
+import styles from "./hotRanges.module.scss";
 import { Filters } from "./useFilters";
 
 const cx = classNames.bind(styles);
