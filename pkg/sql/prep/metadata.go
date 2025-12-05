@@ -43,11 +43,11 @@ type Metadata struct {
 
 	// Hints are any external statement hints from the system.statement_hints
 	// table that could apply to this statement, based on the statement
-	// fingerprint.
+	// fingerprint. Hints are ordered with the most recent first.
 	Hints []hints.Hint
 
 	// HintIDs are the IDs of any external statement hints, which are used for
-	// invalidation of cached plans.
+	// invalidation of cached plans. The order matches Hints.
 	HintIDs []int64
 
 	// HintsGeneration is the generation of the hints cache at the time the

@@ -765,3 +765,181 @@ SELECT crdb_internal.inject_hint(
   'SELECT b FROM ab WHERE a = $1',
   'SELECT b FROM ab WHERE a = _'
 )
+
+# If there are multiple hint injections for the same fingerprint, we should
+# always pick the newest one.
+
+onlyif config local
+query T
+EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: xy@xy_pkey
+│ equality: (b) = (x)
+│ equality cols are key
+│
+└── • scan
+      missing stats
+      table: abc@abc_pkey
+      spans: [/10 - /10]
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT y FROM abc JOIN xy ON x = b WHERE a = _',
+  'SELECT y FROM abc INNER HASH JOIN xy ON x = b WHERE a = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+onlyif config local
+query T
+EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
+----
+distribution: local
+vectorized: true
+statement hints count: 1
+·
+• hash join
+│ equality: (b) = (x)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     missing stats
+│     table: abc@abc_pkey
+│     spans: [/10 - /10]
+│
+└── • scan
+      missing stats
+      table: xy@xy_pkey
+      spans: FULL SCAN
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT y FROM abc JOIN xy ON x = b WHERE a = _',
+  'SELECT y FROM abc@abc_b_idx JOIN xy ON x = b WHERE a = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+onlyif config local
+query T
+EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
+----
+distribution: local
+vectorized: true
+statement hints count: 1
+·
+• lookup join
+│ table: xy@xy_pkey
+│ equality: (b) = (x)
+│ equality cols are key
+│
+└── • filter
+    │ filter: a = 10
+    │
+    └── • scan
+          missing stats
+          table: abc@abc_b_idx
+          spans: FULL SCAN
+
+# Even if the newest hint injection doesn't work for some reason, we should
+# still only consider that newest hint injection.
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT y FROM abc JOIN xy ON x = b WHERE a = _',
+  'SELECT y FROM abc JOIN xy@xy_z_idx ON x = b WHERE a = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SET tracing = on
+
+statement ok
+SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(split_part(message, ': SELECT', 1), E'\\d+', 'x')
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%injected hints%'
+----
+injected hints from external statement hint x
+trying planning with injected hints
+planning with injected hints failed with: index "xy_z_idx" not found
+falling back to planning without injected hints
+
+onlyif config local
+query T
+EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
+----
+distribution: local
+vectorized: true
+statement hints count: 1
+·
+• lookup join
+│ table: xy@xy_pkey
+│ equality: (b) = (x)
+│ equality cols are key
+│
+└── • scan
+      missing stats
+      table: abc@abc_pkey
+      spans: [/10 - /10]
+
+# If there are multiple hint injections for the same fingerprint added in the
+# same transaction, we should pick the last one added.
+
+statement ok
+BEGIN
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT y FROM abc JOIN xy ON x = b WHERE a = _',
+  'SELECT y FROM abc JOIN xy@xy_y_idx ON x = b WHERE a = _'
+)
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT y FROM abc JOIN xy ON x = b WHERE a = _',
+  'SELECT y FROM abc INNER MERGE JOIN xy ON x = b WHERE a = _'
+)
+
+statement ok
+COMMIT
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+onlyif config local
+query T
+EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
+----
+distribution: local
+vectorized: true
+statement hints count: 1
+·
+• merge join
+│ equality: (b) = (x)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     missing stats
+│     table: abc@abc_pkey
+│     spans: [/10 - /10]
+│
+└── • scan
+      missing stats
+      table: xy@xy_pkey
+      spans: FULL SCAN

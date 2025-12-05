@@ -288,19 +288,18 @@ func (r *replicationStreamManagerImpl) buildReplicationStreamSpec(
 
 	// Partition the spans with SQLPlanner
 	dsp := jobExecCtx.DistSQLPlanner()
-	noLoc := roachpb.Locality{}
 	var streaks kvfollowerreadsccl.StreakConfig
 	if useStreaks {
 		streaks = kvfollowerreadsccl.StreakConfig{
 			Min: 10, SmallPlanMin: 3, SmallPlanThreshold: 3, MaxSkew: 0.95,
 		}
 	}
-	oracle := kvfollowerreadsccl.NewBulkOracle(
-		dsp.ReplicaOracleConfig(evalCtx.Locality), noLoc, streaks,
+	oracle := kvfollowerreadsccl.NewStreakBulkOracle(
+		dsp.ReplicaOracleConfig(evalCtx.Locality), streaks,
 	)
 
 	planCtx := dsp.NewPlanningCtxWithOracle(
-		ctx, jobExecCtx.ExtendedEvalContext(), nil /* planner */, nil /* txn */, sql.FullDistribution, oracle, noLoc,
+		ctx, jobExecCtx.ExtendedEvalContext(), nil /* planner */, nil /* txn */, sql.FullDistribution, oracle, []roachpb.Locality{}, sql.NoStrictLocalityFiltering,
 	)
 
 	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, targetSpans, sql.PartitionSpansBoundDefault)

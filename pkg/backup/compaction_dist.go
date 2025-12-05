@@ -155,7 +155,7 @@ func createCompactionPlan(
 	// TODO (kev-cao): Add support for execution locality.
 	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
 		ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg(),
-		physicalplan.DefaultReplicaChooser, roachpb.Locality{},
+		physicalplan.DefaultReplicaChooser, []roachpb.Locality{}, sql.NoStrictLocalityFiltering,
 	)
 	if err != nil {
 		return nil, nil, err
