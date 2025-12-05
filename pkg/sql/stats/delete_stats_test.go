@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -45,7 +46,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		db,
 		s.AppStopper(),
 	)
-	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 
 	// The test data must be ordered by CreatedAt DESC so the calculated set of
 	// expected deleted stats is correct.
@@ -346,7 +347,7 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
 	)
-	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	testData := []TableStatisticProto{
 		{
 			TableID:       descpb.ID(100),
