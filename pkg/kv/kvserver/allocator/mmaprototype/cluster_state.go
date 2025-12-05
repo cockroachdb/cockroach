@@ -1619,6 +1619,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			topk.dim = WriteBandwidth
 		}
 		if sls.highDiskSpaceUtilization {
+			// If disk space is running out, shedding bytes becomes the top priority.
 			topk.dim = ByteSize
 		} else if sls.sls > loadNoChange {
 			// If multiple dimensions are contributing the same loadSummary, we will pick
@@ -2447,10 +2448,11 @@ func computeLoadSummary(
 	}
 	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
-		worstDim:                   worstDim,
-		sls:                        sls,
-		nls:                        nls,
-		dimSummary:                 dimSummary,
+		worstDim:   worstDim,
+		sls:        sls,
+		nls:        nls,
+		dimSummary: dimSummary,
+		// TODO(tbg): remove highDiskSpaceUtilization.
 		highDiskSpaceUtilization:   highDiskSpaceUtil,
 		maxFractionPendingIncrease: ss.maxFractionPendingIncrease,
 		maxFractionPendingDecrease: ss.maxFractionPendingDecrease,
