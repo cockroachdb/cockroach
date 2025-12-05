@@ -1085,6 +1085,9 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
+	// Increase the verbosity of the test to help investigate failures.
+	testutils.SetVModule(t, "replica_range_lease=3,raft=4,replica_raft_quiesce=3,verify=2")
+
 	testutils.RunTrueAndFalse(t, "symmetric", func(t *testing.T, symmetric bool) {
 		st := cluster.MakeTestingClusterSettings()
 		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
@@ -1218,6 +1221,21 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		//
 		// NB: This relies on RejectLeaseOnLeaderUnknown being set to true.
 		log.KvExec.Infof(ctx, "test: sending request to partitioned replica")
+
+		if !symmetric {
+			// In asymmetric partition, wait for the partitioned node to learn about
+			// the new leader before continuing. We do this because we expect it to
+			// reply with a speculative lease below.
+			testutils.SucceedsSoon(t, func() error {
+				status := partitionedReplica.RaftStatus()
+				if status.Lead != 2 && status.Lead != 3 {
+					return errors.Errorf("partitioned replica doesn't know about new leader yet: lead=%d",
+						status.Lead)
+				}
+				return nil
+			})
+		}
+
 		getRequest := getArgs(key)
 		_, pErr := kv.SendWrapped(timeoutCtx, partitionedStoreSender, getRequest)
 		require.Error(t, pErr.GoError(), "unexpected success")
