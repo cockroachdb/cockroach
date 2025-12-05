@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -298,6 +297,10 @@ func (t *ttlProcessor) work(ctx context.Context, output execinfra.RowReceiver) e
 		// Iterate over every span to feed work for the goroutine processors.
 		kvDB := db.KV()
 		var alloc tree.DatumAlloc
+		// Compute the AOST timestamp for SpanToQueryBounds. This aligns the bounds
+		// computation with the historical time used by the SELECT queries, reducing
+		// contention with foreground traffic.
+		aostTimestamp := kvDB.Clock().Now().AddDuration(ttlSpec.AOSTDuration)
 		for i, span := range ttlSpec.Spans {
 			if bounds, hasRows, err := spanutils.SpanToQueryBounds(
 				ctx,
@@ -309,7 +312,7 @@ func (t *ttlProcessor) work(ctx context.Context, output execinfra.RowReceiver) e
 				numFamilies,
 				span,
 				&alloc,
-				hlc.Timestamp{}, // Use current time bounds; TTL only deletes live rows.
+				aostTimestamp,
 			); err != nil {
 				return errors.Wrapf(err, "SpanToQueryBounds error index=%d span=%s", i, span)
 			} else if hasRows {
