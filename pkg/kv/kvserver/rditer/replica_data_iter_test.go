@@ -169,7 +169,7 @@ func verifyIterateReplicaKeySpans(
 	})
 
 	require.NoError(t, IterateReplicaKeySpans(
-		context.Background(), desc, readWriter, selOpts,
+		context.Background(), desc, readWriter, fs.UnknownReadCategory, selOpts,
 		func(iter storage.EngineIterator, span roachpb.Span) error {
 			var err error
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
@@ -497,7 +497,7 @@ func TestReplicaDataIteratorGlobalRangeKey(t *testing.T) {
 
 				var actualSpans []roachpb.Span
 				require.NoError(t, IterateReplicaKeySpans(
-					context.Background(), &desc, snapshot, selOpts,
+					context.Background(), &desc, snapshot, fs.UnknownReadCategory, selOpts,
 					func(iter storage.EngineIterator, span roachpb.Span) error {
 						// We should never see any point keys.
 						hasPoint, hasRange := iter.HasPointAndRange()
@@ -586,7 +586,7 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 	for _, desc := range descs {
 		var keyBuf roachpb.Key
 		keySpans := MakeAllKeySpans(&desc)
-		for i := 0; i < numKeysPerRange; i++ {
+		for i := range numKeysPerRange {
 			keyBuf = append(keyBuf[:0], keySpans[i%len(keySpans)].Key...)
 			keyBuf = append(keyBuf, 0, 0, 0, 0)
 			binary.BigEndian.PutUint32(keyBuf[len(keyBuf)-4:], uint32(i))
@@ -606,7 +606,7 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 
 	for i := 0; i < b.N; i++ {
 		for _, desc := range descs {
-			err := IterateReplicaKeySpans(context.Background(), &desc, snapshot,
+			err := IterateReplicaKeySpans(context.Background(), &desc, snapshot, fs.UnknownReadCategory,
 				SelectOpts{
 					Ranged: SelectRangedOptions{
 						RSpan:      desc.RSpan(),
