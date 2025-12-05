@@ -3601,6 +3601,10 @@ backup_options:
   {
     $$.val = &tree.BackupOptions{UpdatesClusterMonitoringMetrics: $3.expr()}
   }
+| STRICT
+  {
+    $$.val = &tree.BackupOptions{Strict: true}
+  }
 
 include_all_clusters:
   INCLUDE_ALL_SECONDARY_TENANTS { /* SKIP DOC */ }

@@ -327,13 +327,13 @@ BACKUP DATABASE foo INTO '_' IN ($1, $1) -- literals removed
 BACKUP DATABASE _ INTO 'baz' IN ($1, $2) -- identifiers removed
 
 parse
-BACKUP foo INTO 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', revision_history, execution locality = 'a=b'
+BACKUP foo INTO 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', revision_history, execution locality = 'a=b', strict
 ----
-BACKUP TABLE foo INTO '*****' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', execution locality = 'a=b') -- normalized!
-BACKUP TABLE (foo) INTO ('*****') WITH OPTIONS (revision_history = (true), encryption_passphrase = '*****', execution locality = ('a=b')) -- fully parenthesized
-BACKUP TABLE foo INTO '_' WITH OPTIONS (revision_history = _, encryption_passphrase = '*****', execution locality = '_') -- literals removed
-BACKUP TABLE _ INTO '*****' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', execution locality = 'a=b') -- identifiers removed
-BACKUP TABLE foo INTO 'bar' WITH OPTIONS (revision_history = true, encryption_passphrase = 'secret', execution locality = 'a=b') -- passwords exposed
+BACKUP TABLE foo INTO '*****' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', execution locality = 'a=b', strict) -- normalized!
+BACKUP TABLE (foo) INTO ('*****') WITH OPTIONS (revision_history = (true), encryption_passphrase = '*****', execution locality = ('a=b'), strict) -- fully parenthesized
+BACKUP TABLE foo INTO '_' WITH OPTIONS (revision_history = _, encryption_passphrase = '*****', execution locality = '_', strict) -- literals removed
+BACKUP TABLE _ INTO '*****' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', execution locality = 'a=b', strict) -- identifiers removed
+BACKUP TABLE foo INTO 'bar' WITH OPTIONS (revision_history = true, encryption_passphrase = 'secret', execution locality = 'a=b', strict) -- passwords exposed
 
 parse
 BACKUP foo INTO 'bar' WITH KMS = ('foo', 'bar'), revision_history
