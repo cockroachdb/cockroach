@@ -563,7 +563,7 @@ type voterConstraintsAndAdditionalInfo struct {
 }
 
 // normalizedConstraintsEnv is a helper struct created and used by
-// narrowVoterConstraints to track the state during voter constraint
+// normalizeVoterConstraints to track the state during voter constraint
 // normalization.
 type normalizedConstraintsEnv struct {
 	// allReplicaConstraints[i] corresponds to conf.constraints[i].
@@ -707,7 +707,7 @@ func (ncEnv *normalizedConstraintsEnv) satisfyVoterWithAll(voterIndex int, allIn
 // (TODO(wenyihu6): this is the one that I am still confused about. Sumeer
 // mentioned that it is unclear whether we truly need this. So lets revisit this
 // later.)
-func (conf *normalizedSpanConfig) narrowEmptyConstraints() {
+func (conf *normalizedSpanConfig) normalizeEmptyConstraints() {
 	// We are done with normalizing voter constraints. We also do some basic
 	// normalization for constraints: we have seen examples where the
 	// constraints are under-specified and give freedom in the choice of
@@ -834,7 +834,7 @@ func (conf *normalizedSpanConfig) narrowEmptyConstraints() {
 //     is too ambiguous for us to confidently determine coverage. In those cases,
 //     we continue with best-effort normalization and return an error. See
 //     example on conjPossiblyIntersecting for more details.
-func (conf *normalizedSpanConfig) narrowVoterConstraints() error {
+func (conf *normalizedSpanConfig) normalizeVoterConstraints() error {
 	// To narrow voter constraints, we "satisfy" each voter constraint by incrementally building
 	// up from 0 to its desired numReplicas. For each voter constraint, we try to
 	// associate its replicas with all-replica constraints that can cover them.
@@ -1085,10 +1085,10 @@ func (conf *normalizedSpanConfig) doStructuralNormalization() error {
 		return nil
 	}
 
-	// Do not return early on error from narrowVoterConstraints since we want
+	// Do not return early on error from normalizeVoterConstraints since we want
 	// to continue with best-effort normalization for constraints.
-	err := conf.narrowVoterConstraints()
-	conf.narrowEmptyConstraints()
+	err := conf.normalizeVoterConstraints()
+	conf.normalizeEmptyConstraints()
 	return err
 }
 
