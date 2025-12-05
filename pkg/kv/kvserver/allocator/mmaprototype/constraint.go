@@ -592,7 +592,8 @@ func makeNormalizedConstraintsEnv(conf *normalizedSpanConfig) normalizedConstrai
 	// len(conf.voterConstraints) but may grow if we create new voter
 	// constraints to satisfy the strict superset relationships with all-replica
 	// constraints in phase 3.
-	var voterConstraints []voterConstraintsAndAdditionalInfo
+	allReplicaConstraints := make([]allReplicaConstraintsInfo, 0, len(conf.constraints))
+	voterConstraints := make([]voterConstraintsAndAdditionalInfo, 0, len(conf.voterConstraints))
 	for _, constraint := range conf.voterConstraints {
 		constraint.numReplicas = 0
 		voterConstraints = append(voterConstraints, voterConstraintsAndAdditionalInfo{
@@ -610,7 +611,6 @@ func makeNormalizedConstraintsEnv(conf *normalizedSpanConfig) normalizedConstrai
 	// (conjStrictSuperset), we create a new voter constraint and record the
 	// index of that new voter constraint in newVoterIndex.
 	// len(allReplicaConstraints) == len(conf.constraints).
-	var allReplicaConstraints []allReplicaConstraintsInfo
 	for i := range conf.constraints {
 		allReplicaConstraints = append(allReplicaConstraints,
 			allReplicaConstraintsInfo{
