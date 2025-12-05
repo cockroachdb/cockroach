@@ -1016,14 +1016,20 @@ func Reformat(ctx context.Context, l *logger.Logger, clusterName string, fs stri
 	}
 
 	var fsCmd string
-	switch fs {
+	switch vm.Filesystem(fs) {
 	case vm.Zfs:
-		if err := install.Install(ctx, l, c, []string{vm.Zfs}); err != nil {
+		if err := install.Install(ctx, l, c, []string{string(vm.Zfs)}); err != nil {
 			return err
 		}
 		fsCmd = `sudo zpool create -f data1 -m /mnt/data1 /dev/sdb`
 	case vm.Ext4:
 		fsCmd = `sudo mkfs.ext4 -F /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
+	case vm.Xfs:
+		fsCmd = `sudo mkfs.xfs -f /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
+	case vm.F2fs:
+		fsCmd = `sudo mkfs.f2fs -f /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
+	case vm.Btrfs:
+		fsCmd = `sudo mkfs.btrfs -f /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
 	default:
 		return fmt.Errorf("unknown filesystem %q", fs)
 	}
@@ -1716,20 +1722,6 @@ func Create(
 		// If the local cluster is being created, force the local Provider to be used
 		for _, o := range opts {
 			o.CreateOpts.VMProviders = []string{local.ProviderName}
-		}
-	}
-
-	for _, o := range opts {
-		if o.CreateOpts.SSDOpts.FileSystem == vm.Zfs {
-			for _, provider := range o.CreateOpts.VMProviders {
-				// TODO(DarrylWong): support zfs on other providers, see: #123775.
-				// Once done, revisit all tests that set zfs to see if they can run on non GCE.
-				if !(provider == gce.ProviderName || provider == aws.ProviderName) {
-					return fmt.Errorf(
-						"creating a node with --filesystem=zfs is currently not supported in %q", provider,
-					)
-				}
-			}
 		}
 	}
 
