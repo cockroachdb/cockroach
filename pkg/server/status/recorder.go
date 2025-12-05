@@ -44,6 +44,7 @@ import (
 	// metrics functionality into pkg/util/log.
 	_ "github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
@@ -951,8 +952,6 @@ func (rr registryRecorder) recordChild(
 // recordChangefeedChildMetrics iterates through changefeed metrics in the registry and processes child metrics
 // for those that have TsdbRecordLabeled set to true in their metadata.
 // Records up to 1024 child metrics per metric to prevent unbounded memory usage and performance issues.
-//
-// NB: Only available for Counter and Gauge metrics.
 func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesData) {
 	maxChildMetricsPerMetric := 1024
 
@@ -962,15 +961,83 @@ func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesD
 			return
 		}
 		// Check if the metric has child collection enabled in its metadata
-		iterable, ok := v.(metric.Iterable)
-		if !ok {
-			// If we can't get metadata, skip child collection for safety
+		iterable, isIterable := v.(metric.Iterable)
+		if !isIterable {
 			return
 		}
 		metadata := iterable.GetMetadata()
 		if !metadata.GetTsdbRecordLabeled() {
 			return // Skip this metric if child collection is not enabled
 		}
+
+		recordMetric := func(name string, value float64) {
+			*dest = append(*dest, tspb.TimeSeriesData{
+				Name:   fmt.Sprintf(rr.format, name),
+				Source: rr.source,
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: rr.timestampNanos,
+						Value:          value,
+					},
+				},
+			})
+		}
+
+		// Handle AggHistogram - use direct child access for per-child snapshots
+		if aggHist, isAggHist := v.(*aggmetric.AggHistogram); isAggHist {
+			var childMetricsCount int
+			aggHist.EachChild(func(labelNames, labelVals []string, child *aggmetric.Histogram) {
+				if childMetricsCount >= maxChildMetricsPerMetric {
+					return
+				}
+
+				// Create label pairs for this child
+				childLabels := make([]*prometheusgo.LabelPair, len(labels), len(labels)+len(labelVals))
+				copy(childLabels, labels)
+
+				for i, val := range labelVals {
+					if i < len(labelNames) {
+						name := labelNames[i]
+						value := val
+						childLabels = append(childLabels, &prometheusgo.LabelPair{
+							Name:  &name,
+							Value: &value,
+						})
+					}
+				}
+
+				// Get per-child snapshots
+				cumulativeSnapshot := child.CumulativeSnapshot()
+				windowedSnapshot := child.WindowedSnapshot()
+
+				// Check if we got valid snapshots by checking the sample count
+				// Empty snapshots will have count=0, which is safe to record but may not be meaningful
+				// This check ensures we handle cases where the histogram isn't properly initialized
+				cumulativeCount, _ := cumulativeSnapshot.Total()
+				windowedCount, _ := windowedSnapshot.Total()
+				if cumulativeCount < 0 || windowedCount < 0 {
+					// Skip malformed snapshots to avoid recording bad data
+					return
+				}
+
+				baseName := metadata.Name + metric.EncodeLabeledName(&prometheusgo.Metric{Label: childLabels})
+
+				// Record all histogram computed metrics using child-specific snapshots
+				for _, c := range metric.HistogramMetricComputers {
+					var value float64
+					if c.IsSummaryMetric {
+						value = c.ComputedMetric(windowedSnapshot)
+					} else {
+						value = c.ComputedMetric(cumulativeSnapshot)
+					}
+					recordMetric(baseName+c.Suffix, value)
+				}
+				childMetricsCount++
+			})
+			return
+		}
+
+		// Handle Counter and Gauge metrics via Prometheus export
 		prom, ok := v.(metric.PrometheusExportable)
 		if !ok {
 			return
@@ -985,7 +1052,7 @@ func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesD
 		var childMetricsCount int
 		processChildMetric := func(childMetric *prometheusgo.Metric) {
 			if childMetricsCount >= maxChildMetricsPerMetric {
-				return // Stop processing once we hit the limit
+				return
 			}
 
 			var value float64
@@ -996,16 +1063,7 @@ func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesD
 			} else {
 				return
 			}
-			*dest = append(*dest, tspb.TimeSeriesData{
-				Name:   fmt.Sprintf(rr.format, prom.GetName(false /* useStaticLabels */)+metric.EncodeLabeledName(childMetric)),
-				Source: rr.source,
-				Datapoints: []tspb.TimeSeriesDatapoint{
-					{
-						TimestampNanos: rr.timestampNanos,
-						Value:          value,
-					},
-				},
-			})
+			recordMetric(prom.GetName(false /* useStaticLabels */)+metric.EncodeLabeledName(childMetric), value)
 			childMetricsCount++
 		}
 		promIter.Each(m.Label, processChildMetric)
