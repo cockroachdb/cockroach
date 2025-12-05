@@ -8,7 +8,7 @@ import * as hljs from "highlight.js";
 import React from "react";
 
 import { SqlBoxProps } from "./box";
-import styles from "./sqlhighlight.module.styl";
+import styles from "./sqlhighlight.module.scss";
 
 const cx = classNames.bind(styles);
 

@@ -85,7 +85,7 @@ module.exports = (env, argv) => {
 
     resolve: {
       // Add resolvable extensions.
-      extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
+      extensions: [".ts", ".tsx", ".js", ".json", ".scss", ".css"],
       modules: modules,
       alias: {
         oss: __dirname,
@@ -150,7 +150,7 @@ module.exports = (env, argv) => {
           test: /\.less$/,
         },
         {
-          test: /\.module\.styl$/,
+          test: /\.module\.scss$/,
           use: [
             "style-loader",
             {
@@ -161,29 +161,15 @@ module.exports = (env, argv) => {
                 },
               },
             },
-            {
-              loader: "stylus-loader",
-              options: {
-                stylusOptions: {
-                  use: [require("nib")()],
-                },
-              },
-            },
+            "sass-loader",
           ],
         },
         {
-          test: /(?<!\.module)\.styl$/,
+          test: /(?<!\.module)\.scss$/,
           use: [
             "style-loader",
             "css-loader",
-            {
-              loader: "stylus-loader",
-              options: {
-                stylusOptions: {
-                  use: [require("nib")()],
-                },
-              },
-            },
+            "sass-loader",
           ],
         },
         {
