@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,8 +31,14 @@ func TestSavepoints(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "savepoints"), func(t *testing.T, path string) {
 
 		params := base.TestServerArgs{}
-		s, origConn, _ := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(ctx)
+		srv, origConn, _ := serverutils.StartServer(t, params)
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
+
+		hostRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+		// If we have buffered writes enabled, we must have the split lock
+		// reliability enabled (which can be tweaked metamorphically).
+		hostRunner.Exec(t, "SET CLUSTER SETTING kv.lock_table.unreplicated_lock_reliability.split.enabled = true")
 
 		if _, err := origConn.Exec(`SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '2KiB';`); err != nil {
 			t.Fatal(err)
@@ -62,7 +69,7 @@ func TestSavepoints(t *testing.T) {
 					var ok bool
 					sqlConn, ok = sqlConns[connName]
 					if !ok {
-						sqlConn = s.ApplicationLayer().SQLConn(t, serverutils.DBName(params.UseDatabase))
+						sqlConn = s.SQLConn(t, serverutils.DBName(params.UseDatabase))
 						sqlConns[connName] = sqlConn
 					}
 				}
