@@ -120,3 +120,9 @@ func UserFromIncomingRPCContext(ctx context.Context) (res username.SQLUsername, 
 	username := username.MakeSQLUsernameFromPreNormalizedString(usernames[0])
 	return username, nil
 }
+
+// GetWebSessionID retrieves the web session ID from the context.
+func GetWebSessionID(ctx context.Context) (int64, bool) {
+	id, ok := ctx.Value(webSessionIDKey{}).(int64)
+	return id, ok
+}

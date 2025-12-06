@@ -485,7 +485,7 @@ func newTenantServer(
 		gw.RegisterService(args.grpc.Server)
 	}
 
-	for _, s := range []drpcServiceRegistrar{sAdmin, sStatus, sAuth, args.tenantTimeSeriesServer} {
+	for _, s := range []drpcServiceRegistrar{sAdmin, sStatus, args.tenantTimeSeriesServer} {
 		if err := s.RegisterDRPCService(args.drpc); err != nil {
 			return nil, err
 		}
@@ -825,7 +825,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	}
 
 	var apiInternalServer http.Handler
+	var DRPCEnabled = false
 	if rpcbase.TODODRPC && rpcbase.DRPCEnabled(ctx, s.cfg.Settings) {
+		DRPCEnabled = true
 		// Pass our own instance ID to connect to local RPC servers
 		apiInternalServer, err = apiinternal.NewAPIInternalServer(ctx,
 			s.sqlServer.sqlInstanceDialer,
@@ -850,7 +852,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */
-		gwMux,                        /* unauthenticatedGWMux */
 		apiInternalServer,            /* unauthenticatedAPIInternalServer */
 		s.debug,                      /* handleDebugUnauthenticated */
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -868,6 +869,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 				s.sqlServer.serviceMode == mtinfopb.ServiceModeShared,
 			DisableKvLevelAdvancedDebug: s.sqlServer.serviceMode != mtinfopb.ServiceModeShared,
 		},
+		DRPCEnabled,
 	); err != nil {
 		return err
 	}
