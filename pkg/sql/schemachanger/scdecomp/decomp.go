@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -485,6 +486,31 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		w.ev(scpb.Status_PUBLIC, &scpb.LDRJobIDs{
 			TableID: tbl.GetID(),
 			JobIDs:  tbl.TableDesc().LDRJobIDs,
+		})
+	}
+	w.walkStorageParams(tbl)
+}
+
+// walkStorageParams walks through table storage parameters and creates
+// TableStorageParam elements for each non-null parameter.
+func (w *walkCtx) walkStorageParams(tbl catalog.TableDescriptor) {
+	tableID := tbl.GetID()
+	storageParams, err := tbl.GetStorageParams(false)
+	if err != nil {
+		panic(err)
+	}
+	for _, param := range storageParams {
+		key, value, found := strings.Cut(param, "=")
+		if !found {
+			continue
+		}
+		if key == "schema_locked" {
+			continue
+		}
+		w.ev(scpb.Status_PUBLIC, &scpb.TableStorageParam{
+			TableID: tableID,
+			Name:    key,
+			Value:   value,
 		})
 	}
 }

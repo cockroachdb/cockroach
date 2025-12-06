@@ -95,6 +95,7 @@ message ElementProto {
     Policy policy = 137 [(gogoproto.moretags) = "parent:\"Table\""];
     RowLevelSecurityEnabled row_level_security_enabled = 138 [(gogoproto.moretags) = "parent:\"Table\""];
     RowLevelSecurityForced row_level_security_forced = 139 [(gogoproto.moretags) = "parent:\"Table\""];
+    TableStorageParam table_storage_param = 142 [(gogoproto.moretags) = "parent:\"Table\""];
 
     // Multi-region elements.
     TableLocalityGlobal table_locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -958,6 +959,13 @@ message TablePartitioning {
 // TableSchemaLocked models storage parameter `schema_locked` of a table.
 message TableSchemaLocked {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+// TableStorageParam models storage parameter `schema_locked` of a table.
+message TableStorageParam {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string name = 2;
+  string value = 3;
 }
 
 // LDRJobIDs models the field `ldr_job_ids` of a table descriptor.
