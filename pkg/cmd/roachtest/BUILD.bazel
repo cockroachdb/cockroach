@@ -31,6 +31,7 @@ go_library(
         "//pkg/cmd/bazci/githubpost/issues",
         "//pkg/cmd/roachprod/grafana",
         "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/datadog",
         "//pkg/cmd/roachtest/operation",
         "//pkg/cmd/roachtest/operations",
         "//pkg/cmd/roachtest/option",

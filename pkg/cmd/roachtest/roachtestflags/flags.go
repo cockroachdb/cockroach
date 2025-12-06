@@ -342,14 +342,26 @@ var (
 		Usage: `flag to pass custom labels to pass to openmetrics for performance metrics,`,
 	})
 
+	DatadogAlwaysUpload bool = false
+	_                        = registerRunFlag(&DatadogAlwaysUpload, FlagInfo{
+		Name: "datadog-always-upload",
+		Usage: `Always upload roachtest run log data to Datadog. Logs from master and release branches are uploaded by
+				default.`,
+	})
+
 	DatadogSite string = "us5.datadoghq.com"
 	_                  = registerRunOpsFlag(&DatadogSite, FlagInfo{
 		Name:  "datadog-site",
 		Usage: `Datadog site to communicate with (e.g., us5.datadoghq.com).`,
 	})
 
+	// TODO(wchoe): remove this flag, pass in api key via env var
 	DatadogAPIKey string = ""
-	_                    = registerRunOpsFlag(&DatadogAPIKey, FlagInfo{
+	_                    = registerRunFlag(&DatadogAPIKey, FlagInfo{
+		Name:  "datadog-api-key",
+		Usage: `Datadog API key to emit telemetry data to Datadog.`,
+	})
+	_ = registerRunOpsFlag(&DatadogAPIKey, FlagInfo{
 		Name:  "datadog-api-key",
 		Usage: `Datadog API key to emit telemetry data to Datadog.`,
 	})
