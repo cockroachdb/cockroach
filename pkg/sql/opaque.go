@@ -273,6 +273,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.SetSessionAuthorizationDefault()
 	case *tree.SetSessionCharacteristics:
 		return p.SetSessionCharacteristics(ctx, n)
+	case *tree.ShowChangefeedJobs:
+		return p.ShowChangefeedJob(ctx, n)
 	case *tree.ShowClusterSetting:
 		return p.ShowClusterSetting(ctx, n)
 	case *tree.ShowTenantClusterSetting:
@@ -429,6 +431,7 @@ func init() {
 		&tree.SetTransaction{},
 		&tree.SetSessionAuthorizationDefault{},
 		&tree.SetSessionCharacteristics{},
+		&tree.ShowChangefeedJobs{},
 		&tree.ShowClusterSetting{},
 		&tree.ShowTenantClusterSetting{},
 		&tree.ShowCreateSchedules{},
