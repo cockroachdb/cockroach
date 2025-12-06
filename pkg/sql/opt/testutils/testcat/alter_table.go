@@ -47,7 +47,12 @@ func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 			default:
 				panic(errors.AssertionFailedf("unsupported constraint type %v", d))
 			}
-
+		case *tree.AlterTableSetStorageParams:
+			if canaryWindowExpr := t.StorageParams.GetVal(canaryWindowStorageParamKey); canaryWindowExpr != nil {
+				tab.statsCanaryWindow = getDurationFromStrExpr(canaryWindowExpr)
+			} else {
+				panic(errors.AssertionFailedf("unsupported AlterTableSetStorageParams stmt with storage params: %v", t.StorageParams))
+			}
 		default:
 			panic(errors.AssertionFailedf("unsupported ALTER TABLE command %T", t))
 		}

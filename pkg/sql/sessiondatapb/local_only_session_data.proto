@@ -762,6 +762,10 @@ message LocalOnlySessionData {
   // UseSwapMutations, when true, enables use of the update swap and delete swap
   // operators.
   bool use_swap_mutations = 194;
+  // StatsAsOf is an optional timestamp that, when set, stats selection
+  // will be based on the age gap between the stats creation timestamp and
+  // the StatsAsOf timestamp, rather than the current time.
+  util.hlc.Timestamp stats_as_of = 195 [(gogoproto.nullable) = false];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

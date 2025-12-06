@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -270,6 +271,11 @@ type Flags struct {
 	// MaxStackBytes specifies the number of bytes to limit the stack size to.
 	// If it is zero, the stack size has the default Go limit.
 	MaxStackBytes int
+
+	// UseCanaryStats determines if the query will be planned with
+	// canary stats rather than the stable stats. Having this field makes test
+	// easier to optimize queries with deterministic stats.
+	UseCanaryStats bool
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -592,6 +598,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	ot.semaCtx.Placeholders = tree.PlaceholderInfo{}
 
+	ot.evalCtx.UseCanaryStats = ot.Flags.UseCanaryStats
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
 	ot.evalCtx.Placeholders = nil
@@ -1180,6 +1187,37 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 			return err
 		}
 		f.MaxStackBytes = int(bytes)
+
+	case "canary-stats":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("require one argument for canary-fraction")
+		}
+		useCanaryStatsVal, err := strconv.ParseBool(arg.Vals[0])
+		if err != nil {
+			return errors.Wrapf(err, "canary-stats requires a valid boolean value")
+		}
+		f.UseCanaryStats = useCanaryStatsVal
+
+	case "stats-as-of":
+		// We set the session variable directly here rather than using the
+		// conventional "set" command because stats_as_of only implements
+		// SetWithPlanner, not Set. In production, this variable behaves
+		// like AS OF SYSTEM TIME, where timestamp evaluation through the
+		// planner is more robust. For testing purposes, we can safely
+		// bypass this requirement.
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("require one argument for stats-as-of")
+		}
+		input := arg.Vals[0]
+		if input == "null" {
+			f.evalCtx.SessionData().StatsAsOf = hlc.Timestamp{}
+		} else {
+			asOfTs, err := asof.Eval(context.Background(), tree.AsOfClause{Expr: tree.NewStrVal(input)}, &tree.SemaContext{}, &f.evalCtx)
+			if err != nil {
+				return errors.Wrapf(err, "parse %s as timestamp for stats-as-of", input)
+			}
+			f.evalCtx.SessionData().StatsAsOf = asOfTs.Timestamp
+		}
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)

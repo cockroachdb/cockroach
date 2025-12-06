@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -659,6 +660,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	}
 
 	tab := sb.md.Table(tabID)
+	tabMeta := sb.md.TableMeta(tabID)
 	// Create a mapping from table column ordinals to inverted index column
 	// ordinals. This allows us to do a fast lookup while iterating over all
 	// stats from a statistic's column to any associated inverted columns.
@@ -680,7 +682,21 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	// Make now and annotate the metadata table with it for next time.
 	stats = &props.Statistics{}
 
-	first := cat.FindLatestFullStat(tab, sb.evalCtx.SessionData())
+	statsCanaryWindow := tabMeta.StatsCanaryWindow
+	sd := sb.evalCtx.SessionData()
+	asOfTs := hlc.Timestamp{WallTime: sb.evalCtx.GetStmtTimestamp().UnixNano()}
+	if asOf := sb.evalCtx.SessionData().StatsAsOf; !asOf.IsEmpty() {
+		asOfTs = asOf
+	}
+
+	first := cat.FindLatestFullStat(0 /* start */, tab, sd, asOfTs, true /* inclusive */)
+	// If we are going to select the stable stat and there are still more stats,
+	// try to see if we should skip the current full stats and look for the second
+	// most recent full stat.
+	if statsCanaryWindow > 0 && !sb.evalCtx.UseCanaryStats && first < tab.StatisticCount() {
+		first = cat.FindLatestStableStats(first, tab, statsCanaryWindow, sd, asOfTs)
+	}
+
 	if first >= tab.StatisticCount() {
 		// No statistics.
 		stats.Available = false
@@ -699,13 +715,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	EachStat:
 		for i := first; i < tab.StatisticCount(); i++ {
 			stat := tab.Statistic(i)
-			if stat.IsPartial() {
-				continue
-			}
-			if stat.IsMerged() && !sb.evalCtx.SessionData().OptimizerUseMergedPartialStatistics {
-				continue
-			}
-			if stat.IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts {
+			if !cat.IsEligibleFullStats(stat, sb.evalCtx.SessionData(), asOfTs, true /* inclusive */) {
 				continue
 			}
 			if stat.ColumnCount() > 1 && !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
