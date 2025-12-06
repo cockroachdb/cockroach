@@ -21,6 +21,7 @@ go_library(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvserver/storeliveness/storelivenesspb",
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/rpc/nodedialer",
         "//pkg/rpc/rpcbase",

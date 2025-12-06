@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	fmt "fmt"
 	"reflect"
 	"runtime/trace"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -140,7 +142,18 @@ func (r *Replica) SendWithWriteBytes(
 		defer reset()
 	}
 	if trace.IsEnabled() {
-		defer trace.StartRegion(ctx, r.rangeStr.String() /* cheap */).End()
+		regionTag := r.rangeStr.String() /* cheap */
+		if !ba.Header.TraceInfo.Empty() {
+			for i, l := range ba.ProfileLabels {
+				if i%2 == 0 {
+					// This label is set in conn_executor_exec if tracing is active
+					if l == workloadid.ProfileTag {
+						regionTag = fmt.Sprintf("w:%s r:%s", ba.ProfileLabels[i+1], regionTag)
+					}
+				}
+			}
+		}
+		defer trace.StartRegion(ctx, regionTag).End()
 	}
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
