@@ -1,0 +1,18 @@
+server:
+  http_listen_port: 4040
+
+storage:
+  backend: filesystem
+  filesystem:
+    dir: /var/lib/pyroscope/data
+
+limits:
+  ingestion_relabeling_rules:
+    - action: labelmap
+      regex: "(.*)-(.*)"
+      replacement: "${1}_${2}"
+    - action: labeldrop
+      regex: ".*-.*"
+
+self_profiling:
+  disable_push: true

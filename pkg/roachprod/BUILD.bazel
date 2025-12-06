@@ -26,6 +26,7 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",
         "//pkg/roachprod/promhelperclient",
+        "//pkg/roachprod/pyroscope",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/azure",

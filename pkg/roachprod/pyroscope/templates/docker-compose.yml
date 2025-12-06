@@ -1,0 +1,47 @@
+services:
+  pyroscope:
+    image: grafana/pyroscope:latest
+    container_name: pyroscope
+    command: ["-config.file=/etc/pyroscope/pyroscope.yml"]
+    ports:
+      - "4040:4040"
+    volumes:
+      - ./config/pyroscope.yml:/etc/pyroscope/pyroscope.yml:ro
+      - ./pyroscope-data:/var/lib/pyroscope/data
+    networks:
+      - observability
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
+    command: ["run", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+    networks:
+      - observability
+    depends_on:
+      - pyroscope
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: "roachprod"
+      GF_SECURITY_ADMIN_PASSWORD: "cockroachdb"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Editor"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_SECURITY_DISABLE_INITIAL_ADMIN_PASSWORD_CHANGE: "true"
+      GF_INSTALL_PLUGINS: "grafana-pyroscope-app,grafana-pyroscope-datasource,grafana-llm-app"
+    volumes:
+      - ./grafana-provisioning/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - observability
+    depends_on:
+      - pyroscope
+
+networks:
+  observability:
+    driver: bridge

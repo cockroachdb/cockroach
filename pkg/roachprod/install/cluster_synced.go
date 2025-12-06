@@ -1721,6 +1721,26 @@ func (c *SyncedCluster) PutString(
 	return errors.Wrap(c.Put(ctx, l, nodes, src, dest), "syncedCluster.PutString")
 }
 
+// GetString retrieves the contents of a file from a remote node.
+// Returns an error if the file does not exist.
+func (c *SyncedCluster) GetString(
+	ctx context.Context, l *logger.Logger, node Node, src string,
+) (string, error) {
+	opts := defaultCmdOpts("get-string")
+	opts.combinedOut = true
+
+	result, err := c.runCmdOnSingleNode(ctx, l, node, fmt.Sprintf("cat %s", src), opts)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to read file %s from node %d", src, node)
+	}
+
+	if result.Err != nil {
+		return "", errors.Wrapf(result.Err, "failed to read file %s from node %d", src, node)
+	}
+
+	return result.CombinedOut, nil
+}
+
 // Put TODO(peter): document
 func (c *SyncedCluster) Put(
 	ctx context.Context, l *logger.Logger, nodes Nodes, src string, dest string,
