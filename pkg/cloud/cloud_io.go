@@ -14,13 +14,13 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -251,7 +251,7 @@ type ResumingReader struct {
 	ErrFn func(error) time.Duration
 }
 
-var _ ioctx.ReadCloserCtx = &ResumingReader{}
+var _ RandomReadFile = &ResumingReader{}
 
 // NewResumingReader returns a ResumingReader instance. Reader does not have to
 // be provided, and will be created with the opener if it's not provided. Size
@@ -376,6 +376,77 @@ func (r *ResumingReader) Close(ctx context.Context) error {
 	r.ReaderSpan.Finish()
 	r.Reader = nil
 	return err
+}
+
+// ReadAt implements ioctx.ReaderAtCtx using the Opener to create a reader at the specified offset.
+// This allows formats like Parquet that require random access to work efficiently with cloud storage.
+func (r *ResumingReader) ReadAt(ctx context.Context, p []byte, off int64) (n int, err error) {
+	if r.Opener == nil {
+		return 0, errors.New("ReadAt not supported: no Opener available")
+	}
+
+	reader, size, err := r.Opener(ctx, off)
+	if err != nil {
+		return 0, err
+	}
+	defer reader.Close()
+
+	// Update our cached size with the authoritative size from Opener.
+	// Use atomic store since ReadAt can be called concurrently.
+	atomic.StoreInt64(&r.Size, size)
+	if off >= size {
+		return 0, io.EOF
+	}
+	var truncated bool
+	// Truncate read to available bytes
+	if off+int64(len(p)) > size {
+		p = p[:size-off]
+		truncated = true
+	}
+	n, err = io.ReadFull(reader, p)
+	// If we truncated the buffer and successfully read those bytes,
+	// return EOF to match io.ReaderAt semantics: ReadAt must return a non-nil
+	// error when n < len(p), and io.EOF is the correct error when reaching
+	// end-of-file.
+	if err == nil && truncated {
+		err = io.EOF
+	}
+	return n, err
+}
+
+// Seek implements ioctx.SeekerCtx by tracking position without actually seeking the underlying reader.
+// Actual repositioning happens via the Opener when Read is called.
+func (r *ResumingReader) Seek(ctx context.Context, offset int64, whence int) (int64, error) {
+	var newPos int64
+	switch whence {
+	case io.SeekStart:
+		newPos = offset
+	case io.SeekCurrent:
+		newPos = r.Pos + offset
+	case io.SeekEnd:
+		if r.Size == 0 {
+			return 0, errors.New("Seek from end not supported: size unknown")
+		}
+		newPos = r.Size + offset
+	default:
+		return 0, errors.Newf("invalid whence: %d", whence)
+	}
+
+	if newPos < 0 {
+		return 0, errors.New("negative position")
+	}
+
+	// Close current reader if position changed
+	if r.Reader != nil && newPos != r.Pos {
+		r.Reader.Close()
+		if r.ReaderSpan != nil {
+			r.ReaderSpan.Finish()
+		}
+		r.Reader = nil
+	}
+
+	r.Pos = newPos
+	return newPos, nil
 }
 
 // CheckHTTPContentRangeHeader parses Content-Range header and ensures that

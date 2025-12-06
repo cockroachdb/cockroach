@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -291,7 +290,7 @@ func isNotExistErr(err error) bool {
 
 func (g *gcsStorage) ReadFile(
 	ctx context.Context, basename string, opts cloud.ReadOptions,
-) (ioctx.ReadCloserCtx, int64, error) {
+) (cloud.ReadFile, int64, error) {
 	object := path.Join(g.prefix, basename)
 
 	ctx, sp := tracing.ChildSpan(ctx, "gcs.ReadFile")

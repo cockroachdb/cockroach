@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -887,7 +886,7 @@ func (s *s3Storage) openStreamAt(
 // ReadFile is part of the cloud.ExternalStorage interface.
 func (s *s3Storage) ReadFile(
 	ctx context.Context, basename string, opts cloud.ReadOptions,
-) (_ ioctx.ReadCloserCtx, fileSize int64, _ error) {
+) (_ cloud.ReadFile, fileSize int64, _ error) {
 	ctx, sp := tracing.ChildSpan(ctx, "s3.ReadFile")
 	defer sp.Finish()
 

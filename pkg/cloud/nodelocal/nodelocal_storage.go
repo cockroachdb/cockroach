@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"google.golang.org/grpc/codes"
@@ -155,7 +154,7 @@ func (l *localFileStorage) Writer(ctx context.Context, basename string) (io.Writ
 
 func (l *localFileStorage) ReadFile(
 	ctx context.Context, basename string, opts cloud.ReadOptions,
-) (ioctx.ReadCloserCtx, int64, error) {
+) (cloud.ReadFile, int64, error) {
 	reader, size, err := l.blobClient.ReadFile(ctx, joinRelativePath(l.base, basename), opts.Offset)
 	if err != nil && isNotFoundErr(err) {
 		return nil, 0, cloud.WrapErrFileDoesNotExist(err, "nodelocal storage file does not exist")

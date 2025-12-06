@@ -9,6 +9,6 @@ go_library(
         "//pkg/cloud",
         "//pkg/multitenant",
         "//pkg/settings",
-        "//pkg/util/ioctx",
+        "//pkg/util/syncutil",
     ],
 )

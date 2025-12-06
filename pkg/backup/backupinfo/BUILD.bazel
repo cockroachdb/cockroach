@@ -96,7 +96,6 @@ go_test(
         "//pkg/util",
         "//pkg/util/bulk",
         "//pkg/util/hlc",
-        "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/protoutil",
