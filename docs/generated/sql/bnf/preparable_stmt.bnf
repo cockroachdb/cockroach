@@ -8,6 +8,7 @@ preparable_stmt ::=
 	| drop_stmt
 	| explain_stmt
 	| import_stmt
+	| execute_schedules_stmt
 	| insert_stmt
 	| inspect_stmt
 	| pause_stmt

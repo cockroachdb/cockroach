@@ -153,6 +153,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:drop_trigger.bnf",
     "//docs/generated/sql/bnf:drop_type.bnf",
     "//docs/generated/sql/bnf:drop_view.bnf",
+    "//docs/generated/sql/bnf:execute_schedules_stmt.bnf",
     "//docs/generated/sql/bnf:execute_stmt.bnf",
     "//docs/generated/sql/bnf:experimental_audit.bnf",
     "//docs/generated/sql/bnf:explain_analyze_stmt.bnf",

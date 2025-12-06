@@ -349,6 +349,9 @@ func TestContextualHelp(t *testing.T) {
 		{`RESUME SCHEDULES ??`, `RESUME SCHEDULES`},
 		{`RESUME ALL ??`, `RESUME ALL JOBS`},
 
+		{`EXECUTE SCHEDULE ??`, `EXECUTE SCHEDULES`},
+		{`EXECUTE SCHEDULES ??`, `EXECUTE SCHEDULES`},
+
 		{`REVOKE ALL ??`, `REVOKE`},
 		{`REVOKE ALL ON foo FROM ??`, `REVOKE`},
 		{`REVOKE ALL ON foo FROM bar ??`, `REVOKE`},
