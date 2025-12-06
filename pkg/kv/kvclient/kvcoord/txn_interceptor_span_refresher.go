@@ -768,7 +768,7 @@ func (sr *txnSpanRefresher) epochBumpedLocked() {
 }
 
 // createSavepointLocked is part of the txnInterceptor interface.
-func (sr *txnSpanRefresher) createSavepointLocked(ctx context.Context, s *savepoint) {
+func (sr *txnSpanRefresher) createSavepointLocked(ctx context.Context, s *savepoint) error {
 	// TODO(nvanbenschoten): make sure this works correctly with ReadCommitted.
 	// The refresh spans should either be empty when captured into a savepoint or
 	// should be cleared when the savepoint is rolled back to.
@@ -778,18 +778,20 @@ func (sr *txnSpanRefresher) createSavepointLocked(ctx context.Context, s *savepo
 	s.refreshSpans = make([]roachpb.Span, len(sr.refreshFootprint.asSlice()))
 	copy(s.refreshSpans, sr.refreshFootprint.asSlice())
 	s.refreshInvalid = sr.refreshInvalid
+	return nil
 }
 
 // releaseSavepointLocked is part of the txnInterceptor interface.
 func (sr *txnSpanRefresher) releaseSavepointLocked(context.Context, *savepoint) {}
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
-func (sr *txnSpanRefresher) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
+func (sr *txnSpanRefresher) rollbackToSavepointLocked(ctx context.Context, s savepoint) error {
 	if !KeepRefreshSpansOnSavepointRollback.Get(&sr.st.SV) {
 		sr.refreshFootprint.clear()
 		sr.refreshFootprint.insert(s.refreshSpans...)
 		sr.refreshInvalid = s.refreshInvalid
 	}
+	return nil
 }
 
 // closeLocked implements the txnInterceptor interface.
