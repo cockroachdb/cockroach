@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -97,6 +99,31 @@ var automaticStatsJobAutoCleanup = settings.RegisterBoolSetting(
 	"set to true to enable automatic cleanup of completed AUTO CREATE STATISTICS jobs",
 	true)
 
+var automaticStatsJobUseLocksTable = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.stats.automatic_stats_job_use_locks_table.enabled",
+	"set to true to enable the new mechanism of concurrency limiting via the system.table_statistics_locks table",
+	true,
+)
+
+var automaticFullStatsConcurrencyLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stats.automatic_full_concurrency_limit",
+	"determines the maximum number of concurrent automatic full table statistics collection jobs",
+	1,
+	settings.WithPublic,
+	settings.IntWithMinimum(1),
+)
+
+var automaticExtremesStatsConcurrencyLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stats.automatic_extremes_concurrency_limit",
+	"determines the maximum number of concurrent automatic partial USING EXTREMES table statistics collection jobs",
+	128,
+	settings.WithPublic,
+	settings.IntWithMinimum(1),
+)
+
 const nonIndexColHistogramBuckets = 2
 
 // createStatsNode is a planNode implemented in terms of a function. The
@@ -140,6 +167,10 @@ func (n *createStatsNode) Next(params runParams) (bool, error) {
 func (*createStatsNode) Close(context.Context) {}
 func (*createStatsNode) Values() tree.Datums   { return nil }
 
+func (n *createStatsNode) isAuto() bool {
+	return n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName
+}
+
 // runJob starts a CreateStats job synchronously to plan and execute
 // statistics creation and then waits for the job to complete.
 func (n *createStatsNode) runJob(ctx context.Context) error {
@@ -150,8 +181,8 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 	details := record.Details.(jobspb.CreateStatsDetails)
 
 	jobCheckBefore := automaticJobCheckBeforeCreatingJob.Get(n.p.ExecCfg().SV())
-	if n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName {
-		if jobCheckBefore {
+	if n.isAuto() {
+		if !details.UseLocksTable && jobCheckBefore {
 			// Don't start the job if there is already a CREATE STATISTICS job running.
 			// (To handle race conditions we check this again after the job starts,
 			// but this check is used to prevent creating a large number of jobs that
@@ -174,7 +205,11 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 	var job *jobs.StartableJob
 	jobID := n.p.ExecCfg().JobRegistry.MakeJobID()
 	if err := n.p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		if (n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName) && !jobCheckBefore {
+		if details.UseLocksTable {
+			if err := n.checkConcurrencyLimit(ctx, txn, details.Table.ID, jobID); err != nil {
+				return err
+			}
+		} else if n.isAuto() && !jobCheckBefore {
 			// Don't start the job if there is already a CREATE STATISTICS job running.
 			if err := checkRunningJobsInTxn(
 				ctx, nil /* job */, n.p, n.Name == jobspb.AutoPartialStatsName, txn, n.p.ExecCfg().JobRegistry,
@@ -210,12 +245,129 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 			}
 		}
 	} else if automaticStatsJobAutoCleanup.Get(n.p.ExecCfg().SV()) {
-		if name := job.Details().(jobspb.CreateStatsDetails).Name; name == jobspb.AutoStatsName || name == jobspb.AutoPartialStatsName {
+		if n.isAuto() {
 			if err := n.p.ExecCfg().JobRegistry.DeleteTerminalJobByID(ctx, job.ID()); err != nil {
 				log.Dev.Warningf(ctx, "failed to auto-delete terminal automatic stats job: %v", err)
 			}
 		}
 	}
+	return err
+}
+
+// checkStatsJobsStillActive takes a list of job IDs and checks whether each job
+// is still active, returning the list of still active jobs.
+func checkStatsJobsStillActive(
+	ctx context.Context, txn isql.Txn, jobIDs tree.Datums,
+) (tree.Datums, error) {
+	var stillActive tree.Datums
+	for _, jobID := range jobIDs {
+		id, ok := jobID.(*tree.DInt)
+		if !ok {
+			return nil, errors.AssertionFailedf("unexpectedly jobID is not *tree.DInt, found %T", jobID)
+		}
+		r, err := txn.QueryRowEx(
+			ctx, "check-stats-job-still-active", txn.KV(), sessiondata.InternalExecutorOverride{},
+			"SELECT status IN "+jobs.NonTerminalStateTupleString+" FROM system.jobs WHERE id = $1", int64(*id),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if r != nil && r[0] == tree.DBoolTrue {
+			stillActive = append(stillActive, jobID)
+		}
+	}
+	return stillActive, nil
+}
+
+// checkConcurrencyLimit verifies that starting a new stats job will not exceed
+// the allowed concurrency limits. If no error is returned, then the passed-in
+// job ID should be used for the new stats job.
+func (n *createStatsNode) checkConcurrencyLimit(
+	ctx context.Context, txn isql.Txn, tableID descpb.ID, jobID jobspb.JobID,
+) error {
+	if !n.isAuto() {
+		// We don't apply any concurrency limits to manual stats jobs.
+		return nil
+	}
+	const (
+		fullKind     = 1
+		extremesKind = 2
+		// globalTableID is a fake table ID that we use for enforcing "global"
+		// (i.e. table-independent) concurrency limit.
+		globalTableID = 0
+	)
+	var kind, globalConcurrencyLimit int
+	switch n.Name {
+	case jobspb.AutoStatsName:
+		kind = fullKind
+		globalConcurrencyLimit = int(automaticFullStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
+	case jobspb.AutoPartialStatsName:
+		kind = extremesKind
+		globalConcurrencyLimit = int(automaticExtremesStatsConcurrencyLimit.Get(n.p.ExecCfg().SV()))
+	}
+
+	// First, limit the concurrency on the target table to at most one.
+	row, err := txn.QueryRowEx(
+		ctx, "create-stats-check-table-limit", txn.KV(), sessiondata.InternalExecutorOverride{},
+		"SELECT job_ids FROM system.table_statistics_locks WHERE kind = $1 AND table_id = $2 FOR UPDATE",
+		kind, tableID,
+	)
+	if err != nil {
+		return err
+	}
+	if row != nil && row[0] != tree.DNull {
+		// There already exists a lock on this table. We need to check whether
+		// the jobs are still active (we expect at most one job ID).
+		jobIDs := tree.MustBeDArray(row[0])
+		stillActive, err := checkStatsJobsStillActive(ctx, txn, jobIDs.Array)
+		if err != nil {
+			return err
+		}
+		if len(stillActive) > 0 {
+			return stats.ConcurrentCreateStatsError
+		}
+	}
+	// Now limit the global concurrency of the stats kind.
+	row, err = txn.QueryRowEx(
+		ctx, "create-stats-check-global-limit", txn.KV(), sessiondata.InternalExecutorOverride{},
+		"SELECT job_ids FROM system.table_statistics_locks WHERE kind = $1 AND table_id = $2 FOR UPDATE",
+		kind, globalTableID,
+	)
+	if err != nil {
+		return err
+	}
+	var globalJobIDs tree.Datums
+	if row != nil && row[0] != tree.DNull {
+		// Check how many stats jobs of the target kind are still active
+		// across all tables.
+		jobIDs := tree.MustBeDArray(row[0])
+		globalJobIDs, err = checkStatsJobsStillActive(ctx, txn, jobIDs.Array)
+		if err != nil {
+			return err
+		}
+		if len(globalJobIDs) >= globalConcurrencyLimit {
+			// TODO(yuzefovich): if we found some inactive jobIDs, we could
+			// consider updating the global row without claiming a slot
+			// ourselves.
+			return stats.ConcurrentCreateStatsError
+		}
+	}
+	// We can start this stats job, so claim the locks accordingly.
+	jobIDAsDatum := tree.DInt(jobID)
+	_, err = txn.ExecEx(
+		ctx, "create-stats-update-table-limit", txn.KV(), sessiondata.InternalExecutorOverride{},
+		"UPSERT INTO system.table_statistics_locks VALUES ($1, $2, $3)",
+		kind, tableID, tree.NewDArrayFromDatums(types.Int, tree.Datums{&jobIDAsDatum}),
+	)
+	if err != nil {
+		return err
+	}
+	globalJobIDs = append(globalJobIDs, &jobIDAsDatum)
+	_, err = txn.ExecEx(
+		ctx, "create-stats-update-global-limit", txn.KV(), sessiondata.InternalExecutorOverride{},
+		"UPSERT INTO system.table_statistics_locks VALUES ($1, $2, $3)",
+		kind, globalTableID, tree.NewDArrayFromDatums(types.Int, globalJobIDs),
+	)
 	return err
 }
 
@@ -263,7 +415,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		)
 	}
 
-	if stats.DisallowedOnSystemTable(tableDesc.GetID()) {
+	if n.p.execCfg.TableStatsCache.DisallowedOnSystemTable(tableDesc.GetID()) {
 		return nil, pgerror.Newf(
 			pgcode.WrongObjectType, "cannot create statistics on system.%s", tableDesc.GetName(),
 		)
@@ -392,6 +544,8 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		description = statement
 		statement = ""
 	}
+	useLocksTable := n.p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_1) &&
+		automaticStatsJobUseLocksTable.Get(n.p.execCfg.SV())
 	return &jobs.Record{
 		Description: description,
 		Statements:  []string{statement},
@@ -409,6 +563,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			WhereClause:      whereClause,
 			WhereSpans:       n.whereSpans,
 			WhereIndexID:     n.whereIndexID,
+			UseLocksTable:    useLocksTable,
 		},
 		Progress: jobspb.CreateStatsProgress{},
 	}, nil
@@ -758,7 +913,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	// associated txn.
 	jobsPlanner := execCtx.(JobExecContext)
 	details := r.job.Details().(jobspb.CreateStatsDetails)
-	if details.Name == jobspb.AutoStatsName || details.Name == jobspb.AutoPartialStatsName {
+	if !details.UseLocksTable && (details.Name == jobspb.AutoStatsName || details.Name == jobspb.AutoPartialStatsName) {
 		jobRegistry := jobsPlanner.ExecCfg().JobRegistry
 		// We want to make sure that an automatic CREATE STATISTICS job only runs if
 		// there are no other CREATE STATISTICS jobs running, automatic or manual.
@@ -877,10 +1032,6 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	// to use the transaction that inserted the new stats into the
 	// system.table_statistics table, but that would require calling
 	// logEvent() from the distsqlrun package.
-	//
-	// TODO(knz): figure out why this is not triggered for a regular
-	// CREATE STATISTICS statement.
-	// See: https://github.com/cockroachdb/cockroach/issues/57739
 	return evalCtx.ExecCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return logEventInternalForSQLStatements(ctx,
 			evalCtx.ExecCfg, txn,

@@ -218,8 +218,8 @@ func TestCreateStatisticsCanBeCancelled(t *testing.T) {
 }
 
 // TestAtMostOneRunningCreateStats tests that auto stat jobs (full or partial)
-// don't run when a full stats job is running. It also tests that manual stat
-// jobs (full or partial) are always allowed to run.
+// don't run when an auto full stats job is running. It also tests that manual
+// stat jobs (full or partial) are always allowed to run.
 func TestAtMostOneRunningCreateStats(t *testing.T) {
 	testAtMostOneRunningCreateStatsImpl(t, true /* errorOnConcurrentCreateStats */)
 }
@@ -257,6 +257,9 @@ func testAtMostOneRunningCreateStatsImpl(t *testing.T, errorOnConcurrentCreateSt
 	conn := tc.ApplicationLayer(0).SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
+	// Disable automatic cleanup of completed jobs since we might block on a job
+	// until it succeeds.
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_stats_job_auto_cleanup.enabled = false`)
 	sqlDB.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.stats.error_on_concurrent_create_stats.enabled = %t", errorOnConcurrentCreateStats))
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
@@ -280,30 +283,32 @@ func testAtMostOneRunningCreateStatsImpl(t *testing.T, errorOnConcurrentCreateSt
 		t.Fatalf("create stats job should have completed: %s", err)
 	}
 
-	// Start a manual full stat run and wait until it's done one scan. This will
+	// Start an auto full stat job and wait until it's done one scan. This will
 	// be the stat job that runs in the background as we test the behavior of new
 	// stat jobs.
 	allowRequest = make(chan struct{})
 	allowRequestOpen = true
-	runningManualFullStatErrCh := make(chan error)
+	runningAutoFullStatErrCh := make(chan error)
 	go func() {
-		_, err := conn.Exec(`CREATE STATISTICS s1 FROM d.t`)
-		runningManualFullStatErrCh <- err
+		_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
+		runningAutoFullStatErrCh <- err
 	}()
 	select {
 	case allowRequest <- struct{}{}:
-	case err := <-runningManualFullStatErrCh:
+	case err := <-runningAutoFullStatErrCh:
 		t.Fatal(err)
 	}
 
-	// Don't block on autostats jobs.
+	// Don't block the following autostats jobs.
 	setTableID(descpb.InvalidID)
 
 	// Attempt to start automatic full and partial stats runs.
 	runAutoStatsJob(t, sqlDB, "d.t", false /* partial */, errorOnConcurrentCreateStats)
 	runAutoStatsJob(t, sqlDB, "d.t", true /* partial */, errorOnConcurrentCreateStats)
 
-	jobID := getLastRunningCreateStatsJobID(t, sqlDB)
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, "SELECT id FROM system.jobs WHERE status = 'running' AND "+
+		"job_type = 'AUTO CREATE STATS' ORDER BY created DESC LIMIT 1").Scan(&jobID)
 	pauseJob := rng.Float64() < 0.5
 	if pauseJob {
 		// PAUSE JOB does not block until the job is paused but only requests it.
@@ -313,8 +318,8 @@ func testAtMostOneRunningCreateStatsImpl(t *testing.T, errorOnConcurrentCreateSt
 			MaxBackoff:     time.Second,
 			Multiplier:     2,
 		}
-		if err := retry.WithMaxAttempts(context.Background(), opts, 10, func() error {
-			_, err := sqlDB.DB.ExecContext(context.Background(), `PAUSE JOB $1`, jobID)
+		if err := retry.WithMaxAttempts(ctx, opts, 10, func() error {
+			_, err := sqlDB.DB.ExecContext(ctx, `PAUSE JOB $1`, jobID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -353,8 +358,10 @@ func testAtMostOneRunningCreateStatsImpl(t *testing.T, errorOnConcurrentCreateSt
 		t.Fatalf("create partial stats job should have completed: %s", err)
 	}
 
-	beforeCount := getNumberOfTableStats(t, sqlDB, "d.t", "s1")
-	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", jobID))
+	beforeCount := getNumberOfTableStats(t, sqlDB, "d.t", "__auto__")
+	if pauseJob {
+		sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", jobID))
+	}
 	close(allowRequest)
 	allowRequestOpen = false
 
@@ -363,17 +370,17 @@ func testAtMostOneRunningCreateStatsImpl(t *testing.T, errorOnConcurrentCreateSt
 	if pauseJob {
 		// If the job was paused, then we expect an error to be returned to us
 		// even though the stats were collected.
-		if err := <-runningManualFullStatErrCh; !testutils.IsError(err, "node liveness error: restarting in background") {
+		if err := <-runningAutoFullStatErrCh; !testutils.IsError(err, "node liveness error: restarting in background") {
 			t.Fatalf("expected 'node liveness error: restarting in background' error, found %v", err)
 		}
 	} else {
 		// If the job wasn't paused, then we expect no error.
-		if err := <-runningManualFullStatErrCh; err != nil {
+		if err := <-runningAutoFullStatErrCh; err != nil {
 			t.Fatalf("expected no error, found %v", err)
 		}
 	}
 	// Now ensure that the new statistic is present.
-	afterCount := getNumberOfTableStats(t, sqlDB, "d.t", "s1")
+	afterCount := getNumberOfTableStats(t, sqlDB, "d.t", "__auto__")
 	if beforeCount == afterCount {
 		t.Fatal("expected new statistic to have been collected")
 	}
@@ -429,7 +436,7 @@ func testBackgroundAutoPartialStatsImpl(t *testing.T, errorOnConcurrentCreateSta
 	setTableID(t1ID)
 
 	// Collect full stats on both tables so that future partial stats can be
-	// collected
+	// collected.
 	allowRequest = make(chan struct{})
 	close(allowRequest)
 	if _, err := conn.Exec(`CREATE STATISTICS full_statistic FROM d.t1`); err != nil {
@@ -499,29 +506,22 @@ func testBackgroundAutoPartialStatsImpl(t *testing.T, errorOnConcurrentCreateSta
 	// Attempt to start a simultaneous auto partial stat run on the same table.
 	runAutoStatsJob(t, sqlDB, "d.t1", true /* partial */, errorOnConcurrentCreateStats)
 
-	// Attempt to start a simultaneous auto partial stat run on a different table.
-	// It should succeed.
-	autoPartialStatErrCh := make(chan error)
-	go func() {
-		_, err := conn.Exec(`CREATE STATISTICS __auto_partial__ FROM d.t2 USING EXTREMES`)
-		autoPartialStatErrCh <- err
-	}()
-
-	select {
-	case allowRequest <- struct{}{}:
-	case err := <-runningAutoPartialStatErrCh:
-		t.Fatal(err)
-	case err := <-autoPartialStatErrCh:
+	// Start a simultaneous auto partial stat run on a different table. It
+	// should succeed.
+	_, err := conn.Exec(`CREATE STATISTICS __auto_partial__ FROM d.t2 USING EXTREMES`)
+	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Reduce the global concurrency limit and try collecting auto partial stats
+	// on a different table - it should fail now.
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_extremes_concurrency_limit = 1`)
+	runAutoStatsJob(t, sqlDB, "d.t2", true /* partial */, errorOnConcurrentCreateStats)
 
 	close(allowRequest)
 	allowRequestOpen = false
 
-	// Verify that both jobs completed successfully.
-	if err := <-autoPartialStatErrCh; err != nil {
-		t.Fatalf("create auto partial stats job should have completed: %s", err)
-	}
+	// Verify that the background job completed successfully.
 	if err := <-runningAutoPartialStatErrCh; err != nil {
 		t.Fatalf("create auto partial stats job should have completed: %s", err)
 	}

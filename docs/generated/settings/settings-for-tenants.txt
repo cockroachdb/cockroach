@@ -357,7 +357,9 @@ sql.stats.activity.persisted_rows.max	integer	200000	maximum number of rows of s
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode	application
 sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh	application
 sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh	application
+sql.stats.automatic_extremes_concurrency_limit	integer	128	determines the maximum number of concurrent automatic partial USING EXTREMES table statistics collection jobs	application
 sql.stats.automatic_full_collection.enabled	boolean	true	automatic full statistics collection mode	application
+sql.stats.automatic_full_concurrency_limit	integer	1	determines the maximum number of concurrent automatic full table statistics collection jobs	application
 sql.stats.automatic_partial_collection.enabled	boolean	true	automatic partial statistics collection mode	application
 sql.stats.automatic_partial_collection.fraction_stale_rows	float	0.05	target fraction of stale rows per table that will trigger a partial statistics refresh	application
 sql.stats.automatic_partial_collection.min_stale_rows	integer	100	target minimum number of stale rows per table that will trigger a partial statistics refresh	application
@@ -428,4 +430,4 @@ trace.zipkin.collector	string		the address of a Zipkin instance to receive trace
 ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
 ui.default_timezone	string		the default timezone used to format timestamps in the ui	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui. This setting is deprecatedand will be removed in a future version. Use the 'ui.default_timezone' setting instead. 'ui.default_timezone' takes precedence over this setting. [etc/utc = 0, america/new_york = 1]	application
-version	version	1000025.4-upgrading-to-1000026.1-step-004	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000025.4-upgrading-to-1000026.1-step-006	set the active cluster version in the format '<major>.<minor>'	application
