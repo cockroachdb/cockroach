@@ -7,11 +7,20 @@ package serverpb
 
 import (
 	context "context"
+	"fmt"
+	"regexp"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
+
+// MetricsFilterEntry represents a single filter criterion - either a literal
+// metric name or a regex pattern.
+type MetricsFilterEntry struct {
+	Value   string
+	IsRegex bool
+}
 
 // Add adds values from ots to ts.
 func (ts *TableStatsResponse) Add(ots *TableStatsResponse) {
@@ -74,30 +83,105 @@ func (r *RecoveryVerifyResponse_UnavailableRanges) Empty() bool {
 // can't tell what the true prefix for each metric is). Additionally, for histograms
 // we generate the names for the quantiles that are exported (internal TSDB does
 // not support full histograms).
+//
+// If filter is non-empty, only metrics matching the filter criteria are returned.
+// Filter entries can be literal metric names or regex patterns (indicated by
+// IsRegex=true). Literal names are matched exactly against the base metric name
+// (without cr.node./cr.store. prefix). Regex patterns are matched against all
+// available metric names.
+//
+// When a filter is provided, regexMatchCounts is returned containing the number
+// of metrics matched by each regex pattern. This can be used by the caller to
+// display match statistics. For literal entries, no count is returned.
 func GetInternalTimeseriesNamesFromServer(
-	ctx context.Context, ac RPCAdminClient,
-) ([]string, error) {
+	ctx context.Context, ac RPCAdminClient, filter []MetricsFilterEntry,
+) (names []string, regexMatchCounts map[string]int, err error) {
 	resp, err := ac.AllMetricMetadata(ctx, &MetricMetadataRequest{})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var sl []string
-	for name, meta := range resp.Metadata {
-		if meta.MetricType == io_prometheus_client.MetricType_HISTOGRAM {
-			// See usage of HistogramMetricComputers in pkg/server/status/recorder.go.
-			for _, q := range metric.HistogramMetricComputers {
-				sl = append(sl, name+q.Suffix)
-			}
-		} else {
-			sl = append(sl, name)
+
+	// Determine which metric names to process
+	var namesToProcess []string
+	if len(filter) > 0 {
+		// Apply filtering
+		namesToProcess, regexMatchCounts, err = applyMetricsFilter(resp.Metadata, filter)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		// No filter - use all metrics
+		namesToProcess = make([]string, 0, len(resp.Metadata))
+		for name := range resp.Metadata {
+			namesToProcess = append(namesToProcess, name)
 		}
 	}
-	out := make([]string, 0, 2*len(sl))
+
+	// Expand metrics: for histograms add quantile suffixes, otherwise use as-is
+	var expanded []string
+	for _, name := range namesToProcess {
+		meta, exists := resp.Metadata[name]
+		if exists && meta.MetricType == io_prometheus_client.MetricType_HISTOGRAM {
+			// See usage of HistogramMetricComputers in pkg/server/status/recorder.go.
+			for _, q := range metric.HistogramMetricComputers {
+				expanded = append(expanded, name+q.Suffix)
+			}
+		} else {
+			expanded = append(expanded, name)
+		}
+	}
+
+	out := make([]string, 0, 2*len(expanded))
 	for _, prefix := range []string{"cr.node.", "cr.store."} {
-		for _, name := range sl {
+		for _, name := range expanded {
 			out = append(out, prefix+name)
 		}
 	}
 	sort.Strings(out)
-	return out, nil
+	return out, regexMatchCounts, nil
+}
+
+// applyMetricsFilter filters the available metrics based on the provided filter.
+// Returns a list of base metric names (without prefixes) that match the filter criteria,
+// along with a map of regex pattern -> match count for regex entries.
+func applyMetricsFilter(
+	metadata map[string]metric.Metadata, filter []MetricsFilterEntry,
+) ([]string, map[string]int, error) {
+	// Build list of all available metric names for regex matching
+	allMetricNames := make([]string, 0, len(metadata))
+	for name := range metadata {
+		allMetricNames = append(allMetricNames, name)
+	}
+
+	// Resolve entries to actual metric names (expand regex patterns)
+	resolvedNames := make(map[string]struct{})
+	regexMatchCounts := make(map[string]int)
+
+	for _, entry := range filter {
+		if entry.IsRegex {
+			// Compile and match against all available metrics
+			re, err := regexp.Compile(entry.Value)
+			if err != nil {
+				return nil, nil, fmt.Errorf("invalid regex pattern: %s: %w", entry.Value, err)
+			}
+			matchCount := 0
+			for _, name := range allMetricNames {
+				if re.MatchString(name) {
+					resolvedNames[name] = struct{}{}
+					matchCount++
+				}
+			}
+			regexMatchCounts[entry.Value] = matchCount
+		} else {
+			// Literal metric name - add directly
+			resolvedNames[entry.Value] = struct{}{}
+		}
+	}
+
+	// Convert to slice
+	result := make([]string, 0, len(resolvedNames))
+	for name := range resolvedNames {
+		result = append(result, name)
+	}
+	return result, regexMatchCounts, nil
 }
