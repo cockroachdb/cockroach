@@ -84,6 +84,7 @@ type kv struct {
 	zipfian                              bool
 	sfuDelay                             time.Duration
 	longRunningTxn                       bool
+	longRunningTxnPriority               string
 	longRunningTxnNumWrites              int
 	splits                               int
 	scatter                              bool
@@ -196,6 +197,8 @@ var kvMeta = workload.Meta{
 				`--sfu-writes or --sel1-writes, it will use those writes in the long-running transaction; `+
 				`otherwise, it will use regular writes. Each long-running write transaction counts for a`+
 				`single write, as measured by --read-percent.`)
+		g.flags.StringVar(&g.longRunningTxnPriority, `long-running-txn-priority`, `normal`,
+			`Priority of the long-running transaction`)
 		g.flags.IntVar(&g.longRunningTxnNumWrites, `long-running-txn-num-writes`, 10,
 			`Number of writes in the long-running transaction when using --long-running-txn.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
@@ -723,7 +726,9 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		// that each run call makes 1 attempt, so that rate limiting in workerRun
 		// behaves as expected.
 		var tx pgx.Tx
-		tx, err := o.mcp.Get().BeginTx(ctx, pgx.TxOptions{})
+		txnOptions := pgx.TxOptions{}
+		txnOptions.BeginQuery = fmt.Sprintf("BEGIN PRIORITY %s", o.config.longRunningTxnPriority)
+		tx, err := o.mcp.Get().BeginTx(ctx, txnOptions)
 		if err != nil {
 			return err
 		}
