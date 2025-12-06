@@ -76,6 +76,7 @@ func parseLocalFileURI(
 	}
 
 	conf.Provider = cloudpb.ExternalStorageProvider_nodelocal
+	conf.URI = uri.String()
 	var err error
 	conf.LocalFileConfig, err = makeLocalFileConfig(uri)
 	return conf, err
@@ -87,6 +88,7 @@ type localFileStorage struct {
 	base       string                                  // relative filepath prefixed with externalIODir, for I/O ops on this node.
 	blobClient blobs.BlobClient                        // inter-node file sharing service
 	settings   *cluster.Settings                       // cluster settings for the ExternalStorage
+	uri        string                                  // original URI used to construct this storage
 }
 
 var _ cloud.ExternalStorage = &localFileStorage{}
@@ -114,14 +116,21 @@ func makeLocalFileStorage(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create blob client")
 	}
-	return &localFileStorage{base: cfg.Path, cfg: cfg, ioConf: args.IOConf, blobClient: client,
-		settings: args.Settings}, nil
+	return &localFileStorage{
+		base:       cfg.Path,
+		cfg:        cfg,
+		ioConf:     args.IOConf,
+		blobClient: client,
+		settings:   args.Settings,
+		uri:        dest.URI,
+	}, nil
 }
 
 func (l *localFileStorage) Conf() cloudpb.ExternalStorage {
 	return cloudpb.ExternalStorage{
 		Provider:        cloudpb.ExternalStorageProvider_nodelocal,
 		LocalFileConfig: l.cfg,
+		URI:             l.uri,
 	}
 }
 
