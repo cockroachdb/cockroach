@@ -15,7 +15,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN j 
       │    │    ├── PUBLIC        → ABSENT  UserPrivileges:{DescID: 105 (sq1-), Name: "admin"}
       │    │    ├── PUBLIC        → ABSENT  UserPrivileges:{DescID: 105 (sq1-), Name: "root"}
       │    │    ├── PUBLIC        → DROPPED Sequence:{DescID: 105 (sq1-)}
-      │    │    ├── PUBLIC        → ABSENT  SequenceOption:{DescID: 105 (sq1-), Name: "START"}
+      │    │    ├── PUBLIC        → ABSENT  SequenceOption:{DescID: 105 (sq1-), Name: "START", Value: "32"}
       │    │    ├── PUBLIC        → ABSENT  SchemaChild:{DescID: 105 (sq1-), ReferencedDescID: 101 (#101)}
       │    │    ├── PUBLIC        → ABSENT  Column:{DescID: 105 (sq1-), ColumnID: 1 (value-)}
       │    │    ├── PUBLIC        → ABSENT  ColumnType:{DescID: 105 (sq1-), ColumnFamilyID: 0, ColumnID: 1 (value-), TypeName: "INT8"}
@@ -44,7 +44,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN j 
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":104}
       │         ├── MarkDescriptorAsDropped {"DescriptorID":105}
-      │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.SequenceOpt..."}
+      │         ├── UnsetSequenceOption {"Key":"START","SequenceID":105}
       │         ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
       │         ├── RemoveColumnNotNull {"ColumnID":1,"TableID":105}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":105}

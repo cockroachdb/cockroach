@@ -24,11 +24,15 @@ func init() {
 				}),
 			),
 		),
+		toTransientAbsentLikePublic(),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.SequenceOption) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
+				emit(func(this *scpb.SequenceOption) *scop.UnsetSequenceOption {
+					return &scop.UnsetSequenceOption{
+						SequenceID: this.SequenceID,
+						Key:        this.Key,
+					}
 				}),
 			),
 		),

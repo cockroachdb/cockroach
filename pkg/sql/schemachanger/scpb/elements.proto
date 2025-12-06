@@ -117,6 +117,7 @@ message ElementProto {
 
     // Sequence elements.
     SequenceOption sequence_option = 37 [(gogoproto.moretags) = "parent:\"Sequence\""];
+    SequenceValue sequence_value = 38 [(gogoproto.moretags) = "parent:\"Sequence\""];
 
     // Index elements.
     IndexName index_name = 40 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
@@ -470,6 +471,17 @@ message SequenceOption {
   string value = 3;
 }
 
+message SequenceValue {
+  uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  int64 prev_increment = 2;
+  int64 updated_increment = 3;
+  int64 prev_min_value = 4;
+  int64 updated_min_value = 5;
+  int64 prev_max_value = 6;
+  int64 updated_max_value = 7;
+  int64 prev_start = 8;
+  int64 updated_start = 9;
+}
 
 message SequenceOwner {
   uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];

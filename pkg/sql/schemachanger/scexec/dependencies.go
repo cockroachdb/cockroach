@@ -120,6 +120,12 @@ type Catalog interface {
 	// InitializeSequence initializes the initial value for a sequence.
 	InitializeSequence(ctx context.Context, id descpb.ID, startVal int64) error
 
+	// SetSequence sets a sequence to the given value.
+	SetSequence(ctx context.Context, seq *SequenceToSet) error
+
+	// MaybeUpdateSequenceValue updates a sequence value if certain conditions are met.
+	MaybeUpdateSequenceValue(ctx context.Context, seq *SequenceToMaybeUpdate) error
+
 	// CheckMaxSchemaObjects checks if the number of schema objects in the
 	// cluster plus the new objects being created would exceed the configured
 	// limit. Returns an error if the limit would be exceeded.

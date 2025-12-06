@@ -79,6 +79,13 @@ type ImmediateMutationStateUpdater interface {
 	// InitSequence initializes a sequence.
 	InitSequence(id descpb.ID, startVal int64)
 
+	// SetSequence sets a sequence to the provided value.
+	SetSequence(id descpb.ID, val int64)
+
+	// MaybeUpdateSequenceValue updates the value of the sequence when changes to
+	// the sequence options demand it. It is best effort.
+	MaybeUpdateSequenceValue(id descpb.ID, opts scop.MaybeUpdateSequenceValue)
+
 	// UpdateZoneConfig upserts a zone config.
 	UpdateZoneConfig(id descpb.ID, zc *zonepb.ZoneConfig)
 

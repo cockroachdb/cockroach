@@ -1106,6 +1106,25 @@ type SetSequenceOption struct {
 	Value      string
 }
 
+type UnsetSequenceOption struct {
+	immediateMutationOp
+	SequenceID descpb.ID
+	Key        string
+}
+
+type MaybeUpdateSequenceValue struct {
+	immediateMutationOp
+	SequenceID       descpb.ID
+	PrevIncrement    int64
+	UpdatedIncrement int64
+	PrevMinValue     int64
+	UpdatedMinValue  int64
+	PrevMaxValue     int64
+	UpdatedMaxValue  int64
+	PrevStart        int64
+	UpdatedStart     int64
+}
+
 type InitSequence struct {
 	immediateMutationOp
 	SequenceID     descpb.ID

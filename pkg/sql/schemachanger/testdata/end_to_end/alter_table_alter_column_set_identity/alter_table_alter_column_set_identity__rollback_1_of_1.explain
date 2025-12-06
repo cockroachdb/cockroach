@@ -12,9 +12,9 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER COLUMN 
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 1 element transitioning toward PUBLIC
-      │    │    └── ABSENT → PUBLIC ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), GeneratedAsIdentityType: GENERATED_ALWAYS, Value: "START 2 INCREMENT 3"}
+      │    │    └── ABSENT → PUBLIC ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "START 2 INCREMENT 3", GeneratedAsIdentityType: GENERATED_ALWAYS}
       │    ├── 1 element transitioning toward ABSENT
-      │    │    └── PUBLIC → ABSENT ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), GeneratedAsIdentityType: GENERATED_BY_DEFAULT, Value: "START 2 INCREMENT 3"}
+      │    │    └── PUBLIC → ABSENT ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "START 2 INCREMENT 3", GeneratedAsIdentityType: GENERATED_BY_DEFAULT}
       │    └── 4 Mutation operations
       │         ├── RemoveColumnGeneratedAsIdentity {"ColumnID":2,"TableID":104}
       │         ├── AddColumnGeneratedAsIdentity {"GeneratedAsIdentity":{"ColumnID":2,"SequenceOption":"START 2 INCREMEN...","TableID":104,"Type":1}}

@@ -4422,7 +4422,7 @@ statement ok
 INSERT INTO t_alter_identity DEFAULT VALUES;
 
 statement ok
-ALTER TABLE t_alter_identity ALTER COLUMN b SET MAXVALUE 40 RESTART WITH 20 SET CACHE 5 SET INCREMENT BY 2
+ALTER TABLE t_alter_identity ALTER COLUMN b SET MAXVALUE 40 RESTART WITH 20 SET CACHE 5 SET INCREMENT BY 2;
 
 statement ok
 INSERT INTO t_alter_identity DEFAULT VALUES;
@@ -4443,29 +4443,39 @@ subtest issue-52552
 
 statement ok
 CREATE TABLE test_52552_asc (c1 int GENERATED ALWAYS AS IDENTITY);
+
+statement ok
 ALTER TABLE test_52552_asc ALTER COLUMN c1 SET INCREMENT BY 3 SET MINVALUE 1 SET MAXVALUE 12 RESTART;
+
+statement ok
 ALTER TABLE test_52552_asc ALTER COLUMN c1 SET INCREMENT BY 8;
-INSERT INTO test_52552_asc DEFAULT VALUES;
-INSERT INTO test_52552_asc DEFAULT VALUES;
 
-query I rowsort
-SELECT c1 FROM test_52552_asc
-----
-9
-1
-
-statement error pq: reached maximum value of sequence "test_52552_asc_c1_seq"
-INSERT INTO test_52552_asc DEFAULT VALUES;
-
-statement error pq: reached maximum value of sequence "test_52552_asc_c1_seq"
+statement ok
 INSERT INTO test_52552_asc DEFAULT VALUES;
 
 statement ok
-ALTER TABLE test_52552_asc ALTER COLUMN c1 SET NO MAXVALUE;
+INSERT INTO test_52552_asc DEFAULT VALUES;
+
+statement error pq: reached maximum value of sequence "test_52552_asc_c1_seq"
+INSERT INTO test_52552_asc DEFAULT VALUES;
+
+statement error pq: reached maximum value of sequence "test_52552_asc_c1_seq"
 INSERT INTO test_52552_asc DEFAULT VALUES;
 
 query I rowsort
-SELECT c1 FROM test_52552_asc
+SELECT c1 FROM test_52552_asc;
+----
+1
+9
+
+statement ok
+ALTER TABLE test_52552_asc ALTER COLUMN c1 SET NO MAXVALUE;
+
+statement ok
+INSERT INTO test_52552_asc DEFAULT VALUES;
+
+query I rowsort
+SELECT c1 FROM test_52552_asc;
 ----
 1
 9
@@ -4473,13 +4483,21 @@ SELECT c1 FROM test_52552_asc
 
 statement ok
 CREATE TABLE test_52552_desc (c1 int GENERATED ALWAYS AS IDENTITY);
+
+statement ok
 ALTER TABLE test_52552_desc ALTER COLUMN c1 SET INCREMENT BY -5 SET MINVALUE 1 SET MAXVALUE 12 SET START 12 RESTART;
+
+statement ok
 ALTER TABLE test_52552_desc ALTER COLUMN c1 SET INCREMENT BY -8;
+
+statement ok
 INSERT INTO test_52552_desc DEFAULT VALUES;
+
+statement ok
 INSERT INTO test_52552_desc DEFAULT VALUES;
 
 query I rowsort
-SELECT c1 FROM test_52552_desc
+SELECT c1 FROM test_52552_desc;
 ----
 12
 4
@@ -4492,10 +4510,12 @@ INSERT INTO test_52552_desc DEFAULT VALUES;
 
 statement ok
 ALTER TABLE test_52552_desc ALTER COLUMN c1 SET NO MINVALUE;
+
+statement ok
 INSERT INTO test_52552_desc DEFAULT VALUES;
 
 query I rowsort
-SELECT c1 FROM test_52552_desc
+SELECT c1 FROM test_52552_desc;
 ----
 12
 4
@@ -4503,8 +4523,14 @@ SELECT c1 FROM test_52552_desc
 
 statement ok
 CREATE TABLE test_52552_start (c1 int GENERATED ALWAYS AS IDENTITY);
+
+statement ok
 ALTER TABLE test_52552_start ALTER COLUMN c1 SET INCREMENT 3 SET MINVALUE 1 SET MAXVALUE 100 SET START 50;
+
+statement ok
 ALTER TABLE test_52552_start ALTER COLUMN c1 SET INCREMENT 8;
+
+statement ok
 INSERT INTO test_52552_start DEFAULT VALUES;
 
 query I

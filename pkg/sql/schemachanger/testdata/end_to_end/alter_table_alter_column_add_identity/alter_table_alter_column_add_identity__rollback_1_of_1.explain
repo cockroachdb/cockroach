@@ -27,7 +27,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER COLUMN 
       │    │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 105 (t_j_seq-), Name: "root"}
       │    │    ├── PUBLIC → ABSENT  SequenceOwner:{DescID: 104 (t), ColumnID: 2 (j), ReferencedDescID: 105 (t_j_seq-)}
       │    │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j), ReferencedSequenceIDs: [105 (t_j_seq-)], Expr: nextval(105:::REGCLASS)}
-      │    │    └── PUBLIC → ABSENT  ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), GeneratedAsIdentityType: GENERATED_ALWAYS, Value: ""}
+      │    │    └── PUBLIC → ABSENT  ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "", GeneratedAsIdentityType: GENERATED_ALWAYS}
       │    └── 25 Mutation operations
       │         ├── MarkDescriptorAsDropped {"DescriptorID":105}
       │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"t_j_seq","SchemaID":101}}

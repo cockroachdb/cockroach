@@ -44,7 +44,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (sq1+), Name: "admin"}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (sq1+), Name: "root"}
  │    │    │    ├── PUBLIC        → ABSENT Sequence:{DescID: 105 (sq1+)}
- │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 105 (sq1+), Name: "START"}
+ │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 105 (sq1+), Name: "START", Value: "32"}
  │    │    │    ├── PUBLIC        → ABSENT SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 101 (public)}
  │    │    │    ├── PUBLIC        → ABSENT TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
  │    │    │    ├── PUBLIC        → ABSENT Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
@@ -77,7 +77,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │         │    ├── ABSENT → PUBLIC        UserPrivileges:{DescID: 105 (sq1+), Name: "admin"}
  │         │    ├── ABSENT → PUBLIC        UserPrivileges:{DescID: 105 (sq1+), Name: "root"}
  │         │    ├── ABSENT → PUBLIC        Sequence:{DescID: 105 (sq1+)}
- │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 105 (sq1+), Name: "START"}
+ │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 105 (sq1+), Name: "START", Value: "32"}
  │         │    ├── ABSENT → PUBLIC        SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 101 (public)}
  │         │    ├── ABSENT → PUBLIC        TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
  │         │    ├── ABSENT → PUBLIC        Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
