@@ -57,15 +57,15 @@ const (
 	// of spans limit).
 	// See also maxStructuredBytesPerTrace.
 	maxStructuredBytesPerSpan = 10 * (1 << 10) // 10 KiB
-	// maxStructuredBytesPerTrace limits the total size of structured logs in a
+	// defaultMaxStructuredBytesPerTrace limits the total size of structured logs in a
 	// trace recording, across all spans. This limit is enforced at the time when
 	// a span is finished and its recording is copied to the parent, and at the
 	// time when an open span's recording is collected - which calls into all its
 	// open children. Thus, if there are multiple open spans that are part of the
 	// same trace, each one of them can temporarily have up to
-	// maxStructuredBytesPerTrace worth of messages under it. Each open span is
+	// defaultMaxStructuredBytesPerTrace worth of messages under it. Each open span is
 	// also subject to the maxStructuredBytesPerSpan limit.
-	maxStructuredBytesPerTrace = 1 << 20 // 1 MiB
+	defaultMaxStructuredBytesPerTrace = 1 << 20 // 1 MiB
 
 	// maxSpanRegistrySize limits the number of local root spans tracked in
 	// a Tracer's registry.
@@ -187,6 +187,13 @@ var periodicSnapshotInterval = settings.RegisterDurationSetting(
 	"trace.snapshot.rate",
 	"if non-zero, interval at which background trace snapshots are captured",
 	0,
+	settings.WithPublic)
+
+var structuredBytesLimit = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"trace.structured_bytes.limit",
+	"maximum size of structured log entries per trace recording",
+	defaultMaxStructuredBytesPerTrace,
 	settings.WithPublic)
 
 // panicOnUseAfterFinish, if set, causes use of a span after Finish() to panic
@@ -367,6 +374,11 @@ type Tracer struct {
 	spansCreated, spansAllocated int32 // atomics
 
 	testing TracerTestingKnobs
+
+	// maxStructuredBytesPerTrace limits the total size of structured logs in a
+	// trace recording. This value is configurable via the
+	// trace.structured_bytes.limit cluster setting.
+	_maxStructuredBytesPerTrace int64 // accessed atomically
 
 	// stack is populated in NewTracer and is printed in assertions related to
 	// mixing tracers.
@@ -588,6 +600,18 @@ func (t *Tracer) SetActiveSpansRegistryEnabled(to bool) {
 	atomic.StoreInt32(&t._activeSpansRegistryEnabled, n)
 }
 
+// SetMaxStructuredBytesPerTrace sets the maximum size of structured logs per
+// trace recording.
+func (t *Tracer) SetMaxStructuredBytesPerTrace(limit int64) {
+	atomic.StoreInt64(&t._maxStructuredBytesPerTrace, limit)
+}
+
+// MaxStructuredBytesPerTrace returns the maximum size of structured logs per
+// trace recording.
+func (t *Tracer) MaxStructuredBytesPerTrace() int64 {
+	return atomic.LoadInt64(&t._maxStructuredBytesPerTrace)
+}
+
 // ActiveSpansRegistryEnabled returns true if this tracer is configured
 // to register spans with the activeSpansRegistry
 func (t *Tracer) ActiveSpansRegistryEnabled() bool {
@@ -606,8 +630,9 @@ func NewTracer() *Tracer {
 	}
 
 	t := &Tracer{
-		stack:               debugutil.Stack(),
-		activeSpansRegistry: makeSpanRegistry(),
+		stack:                       debugutil.Stack(),
+		activeSpansRegistry:         makeSpanRegistry(),
+		_maxStructuredBytesPerTrace: defaultMaxStructuredBytesPerTrace,
 		// These might be overridden in NewTracerWithOpt.
 		panicOnUseAfterFinish: panicOnUseAfterFinish,
 		debugUseAfterFinish:   debugUseAfterFinish,
@@ -785,6 +810,9 @@ func (t *Tracer) configure(ctx context.Context, sv *settings.Values, tracingDefa
 		otlpCollectorAddr := openTelemetryCollector.Get(sv)
 		zipkinAddr := ZipkinCollector.Get(sv)
 		enableRedactable := enableTraceRedactable.Get(sv)
+		structuredBytesLimitVal := structuredBytesLimit.Get(sv)
+
+		t.SetMaxStructuredBytesPerTrace(structuredBytesLimitVal)
 
 		switch tracingDefault {
 		case TracingModeFromEnv:
@@ -872,6 +900,7 @@ func (t *Tracer) configure(ctx context.Context, sv *settings.Values, tracingDefa
 	openTelemetryCollector.SetOnChange(sv, reconfigure)
 	ZipkinCollector.SetOnChange(sv, reconfigure)
 	enableTraceRedactable.SetOnChange(sv, reconfigure)
+	structuredBytesLimit.SetOnChange(sv, reconfigure)
 }
 
 func createOTLPSpanProcessor(
