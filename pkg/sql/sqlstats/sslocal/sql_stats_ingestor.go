@@ -25,6 +25,8 @@ import (
 // will go before flushing its contents to the registry.
 const defaultFlushInterval = time.Millisecond * 500
 
+const forceFlushTransactionFingerprintId = appstatspb.TransactionFingerprintID(1)
+
 // Metrics holds running measurements of various ingester-related runtime stats.
 type Metrics struct {
 	// NumProcessed tracks how many items have been processed.
@@ -149,6 +151,7 @@ type event struct {
 	sessionID   clusterunique.ID
 	transaction *sqlstats.RecordedTxnStats
 	statement   *sqlstats.RecordedStmtStats
+	forceFlush  bool
 }
 
 type BufferOpt func(i *SQLStatsIngester)
@@ -250,14 +253,18 @@ func (i *SQLStatsIngester) ingest(ctx context.Context, events *eventBuffer) {
 			// the stmts with and the statement's txn id will be nil. In that case
 			// we can send immediately to the sinks.
 			if e.statement.UnderOuterTxn {
-				i.flushBuffer(ctx, e.statement.SessionID, nil)
+				i.flushBuffer(ctx, e.statement.SessionID, nil, 0)
 			}
 		} else if e.transaction != nil {
-			i.flushBuffer(ctx, e.transaction.SessionID, e.transaction)
+			i.flushBuffer(ctx, e.transaction.SessionID, e.transaction, e.transaction.FingerprintID)
 			i.metrics.NumProcessed.Inc(1)
 			i.metrics.QueueSize.Dec(1)
 		} else {
-			i.clearSession(e.sessionID)
+			if e.forceFlush {
+				i.flushBuffer(ctx, e.sessionID, nil, forceFlushTransactionFingerprintId)
+			} else {
+				i.clearSession(e.sessionID)
+			}
 			i.metrics.NumProcessed.Inc(1)
 			i.metrics.QueueSize.Dec(1)
 		}
@@ -318,6 +325,18 @@ func (i *SQLStatsIngester) ClearSession(sessionID clusterunique.ID) {
 	i.guard.AtomicWrite(func(writerIdx int64) {
 		i.guard.eventBuffer[writerIdx] = event{
 			sessionID: sessionID,
+		}
+		i.metrics.QueueSize.Inc(1)
+	})
+}
+
+// FlushBuffer sends a signal to the underlying registry to flush any cached
+// data associated with the given sessionID. This is an async operation.
+func (i *SQLStatsIngester) FlushBuffer(sessionID clusterunique.ID) {
+	i.guard.AtomicWrite(func(writerIdx int64) {
+		i.guard.eventBuffer[writerIdx] = event{
+			sessionID:  sessionID,
+			forceFlush: true,
 		}
 		i.metrics.QueueSize.Inc(1)
 	})
@@ -397,9 +416,12 @@ func (i *SQLStatsIngester) processStatement(statement *sqlstats.RecordedStmtStat
 // flushBuffer sends the buffered statementsBySessionID and provided transaction
 // to the registered sinks. The transaction may be nil.
 func (i *SQLStatsIngester) flushBuffer(
-	ctx context.Context, sessionID clusterunique.ID, transaction *sqlstats.RecordedTxnStats,
+	ctx context.Context,
+	sessionID clusterunique.ID,
+	transaction *sqlstats.RecordedTxnStats,
+	transactionFingerprintID appstatspb.TransactionFingerprintID,
 ) {
-	statements, ok := func() (*statementBuf, bool) {
+	sessionStatements, ok := func() (*statementBuf, bool) {
 		statements, ok := i.statementsBySessionID[sessionID]
 		if !ok {
 			return nil, false
@@ -407,35 +429,36 @@ func (i *SQLStatsIngester) flushBuffer(
 		delete(i.statementsBySessionID, sessionID)
 		return statements, true
 	}()
-	if !ok {
-		return
+	var statements statementBuf
+	if ok {
+		statements = *sessionStatements
+		defer sessionStatements.release()
+	} else {
+		if transaction == nil {
+			// Nothing to flush.
+			return
+		}
 	}
-	defer statements.release()
 
-	if len(*statements) == 0 {
-		return
-	}
-
-	if transaction != nil {
+	shouldAssociateWithTxn := AssociateStmtWithTxnFingerprint.Get(&i.settings.SV)
+	if shouldAssociateWithTxn && transactionFingerprintID != 0 {
 		// Here we'll set the transaction fingerprint ID for each statement if the
 		// below cluster setting is enabled.
-		shouldAssociateWithTxn := AssociateStmtWithTxnFingerprint.Get(&i.settings.SV)
 		// These values are only known at the time of the transaction.
-		for _, s := range *statements {
-			if shouldAssociateWithTxn {
-				s.TransactionFingerprintID = transaction.FingerprintID
-			}
-			if s.ImplicitTxn == transaction.ImplicitTxn {
+		for _, s := range statements {
+			s.TransactionFingerprintID = transactionFingerprintID
+			if transaction == nil || s.ImplicitTxn == transaction.ImplicitTxn {
 				continue
 			}
 			// We need to recompute the fingerprint ID.
 			s.ImplicitTxn = transaction.ImplicitTxn
 			s.FingerprintID = appstatspb.ConstructStatementFingerprintID(
 				s.Query, s.ImplicitTxn, s.Database)
+
 		}
 	}
 
 	for _, sink := range i.sinks {
-		sink.ObserveTransaction(ctx, transaction, *statements)
+		sink.ObserveTransaction(ctx, transaction, statements)
 	}
 }
