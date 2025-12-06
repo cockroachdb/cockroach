@@ -98,6 +98,9 @@ type TestClusterConfig struct {
 	// EnableLeasedDescriptorSupport enables leased descriptors for pg_catalog /
 	// crdb_internal and locked leasing behavior.
 	EnableLeasedDescriptorSupport bool
+	// UseDistributedMergeIndexBackfill enables the use of distributed
+	// merge when index backfills are preformed.
+	UseDistributedMergeIndexBackfill bool
 }
 
 // TenantMode is the type of the UseSecondaryTenant field in TestClusterConfig.
@@ -529,6 +532,20 @@ var LogicTestConfigs = []TestClusterConfig{
 		BootstrapVersion:         clusterversion.V25_4,
 		NumNodes:                 3,
 	},
+	{
+		Name:                             "local-dist-merge-backfill-declarative-schema-changer",
+		NumNodes:                         1,
+		OverrideDistSQLMode:              "on",
+		UseDistributedMergeIndexBackfill: true,
+	},
+	{
+		Name:                             "local-dist-merge-backfill-legacy-schema-changer",
+		NumNodes:                         1,
+		OverrideDistSQLMode:              "on",
+		UseDistributedMergeIndexBackfill: true,
+		DisableDeclarativeSchemaChanger:  true,
+		DisableSchemaLockedByDefault:     true,
+	},
 }
 
 // ConfigIdx is an index in the above slice.
@@ -654,6 +671,12 @@ var DefaultConfigSets = map[string]ConfigSet{
 	// Special alias for configs where schema locked is disabled.
 	"schema-locked-disabled": makeConfigSet(
 		"local-legacy-schema-changer",
+	),
+
+	// Alias for configs that uses distributed merge pipeline for index backfills.
+	"dist-merge-index-backfill": makeConfigSet(
+		"local-dist-merge-backfill-declarative-schema-changer",
+		"local-dist-merge-backfill-legacy-schema-changer",
 	),
 }
 
