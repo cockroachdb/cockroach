@@ -564,7 +564,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 	// bypass AC.
 	ba.AdmissionHeader = kvpb.AdmissionHeader{
 		Priority:   txn.AdmissionPriority,
-		CreateTime: timeutil.Now().UnixNano(),
+		CreateTime: h.clock.PhysicalTime().UnixNano(),
 		Source:     kvpb.AdmissionHeader_OTHER,
 	}
 

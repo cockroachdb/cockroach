@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/taskpacer"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -920,12 +921,12 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 	defer timer.Stop()
 	// waitUntil is used to wait between different tick batches to pace the
 	// ticking process over the entire tick interval.
-	waitUntil := func(until time.Time) {
-		now := timeutil.Now()
-		if !now.Before(until) {
+	waitUntil := func(until crtime.Mono) {
+		wait := until.Sub(crtime.NowMono())
+		if wait <= 0 {
 			return
 		}
-		timer.Reset(until.Sub(now))
+		timer.Reset(wait)
 		<-timer.C
 	}
 
@@ -937,7 +938,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			now := timeutil.Now()
+			now := crtime.NowMono()
 			pacer.StartTask(now)
 			// Update the liveness map.
 			if s.cfg.NodeLiveness != nil {
@@ -968,7 +969,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			// are ticked, which can lead to increased goroutine scheduling latency.
 			for startAt := now; len(rangeIDs) != 0; {
 				waitUntil(startAt)
-				todo, by := pacer.Pace(timeutil.Now(), len(rangeIDs))
+				todo, by := pacer.Pace(crtime.NowMono(), len(rangeIDs))
 				batch := s.scheduler.NewEnqueueBatch()
 				for _, id := range rangeIDs[:todo] {
 					batch.Add(id)

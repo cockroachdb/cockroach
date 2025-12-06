@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -198,7 +198,7 @@ func Start[E rangefeedbuffer.Event](
 
 		const aWhile = 5 * time.Minute // arbitrary but much longer than a retry
 		for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-			started := timeutil.Now()
+			started := crtime.NowMono()
 			if err := c.Run(ctx); err != nil {
 				if errors.Is(err, context.Canceled) {
 					return // we're done here
@@ -207,7 +207,7 @@ func Start[E rangefeedbuffer.Event](
 					onError(err)
 				}
 
-				if timeutil.Since(started) > aWhile {
+				if started.Elapsed() > aWhile {
 					r.Reset()
 				}
 
