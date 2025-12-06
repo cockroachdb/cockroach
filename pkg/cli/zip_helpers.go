@@ -556,3 +556,40 @@ func (t *timestampValue) Set(v string) error {
 	*t = timestampValue(tm)
 	return nil
 }
+
+// zipFormat specifies the output format for debug zip.
+type zipFormat int
+
+const (
+	// zipFormatJSON outputs data in JSON format (default, current behavior).
+	zipFormatJSON zipFormat = iota
+	// zipFormatParquet outputs data in parquet format for efficient analysis.
+	zipFormatParquet
+)
+
+// Type implements the pflag.Value interface.
+func (f *zipFormat) Type() string { return "string" }
+
+// String implements the pflag.Value interface.
+func (f *zipFormat) String() string {
+	switch *f {
+	case zipFormatJSON:
+		return "json"
+	case zipFormatParquet:
+		return "parquet"
+	}
+	return ""
+}
+
+// Set implements the pflag.Value interface.
+func (f *zipFormat) Set(s string) error {
+	switch s {
+	case "json":
+		*f = zipFormatJSON
+	case "parquet":
+		*f = zipFormatParquet
+	default:
+		return errors.Errorf("invalid value for --format: %s (valid: json, parquet)", s)
+	}
+	return nil
+}

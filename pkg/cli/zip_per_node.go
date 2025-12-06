@@ -13,6 +13,7 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -375,7 +376,7 @@ func (zc *debugZipContext) getRangeInformation(
 			})
 			s := nodePrinter.start("writing ranges")
 			name := fmt.Sprintf("%s/%s", prefix, rangesInfoFileName)
-			if err := zc.z.createJSON(s, name, ranges.Ranges); err != nil {
+			if err := zc.createJSON(s, name, ranges.Ranges); err != nil {
 				return err
 			}
 		}
@@ -452,8 +453,31 @@ func (zc *debugZipContext) getLogFiles(
 			sf = logPrinter.start("writing output")
 			warnRedactLeak := false
 			if err := func() error {
-				// Use a closure so that the zipper is only locked once per
-				// created log file.
+				// Handle redaction for all entries first.
+				for i := range entries.Entries {
+					e := &entries.Entries[i]
+					if zipCtx.redact && !e.Redactable {
+						e.Message = "REDACTEDBYZIP"
+						warnRedactLeak = true
+					}
+				}
+
+				// In parquet mode, collect entries for later bulk write.
+				if zc.parquetCollector != nil {
+					nodeIDInt, err := strconv.Atoi(id)
+					if err != nil {
+						return errors.Wrapf(err, "parsing node ID %s", id)
+					}
+					nodeID := roachpb.NodeID(nodeIDInt)
+					for _, e := range entries.Entries {
+						if err := zc.parquetCollector.AddLogEntry(nodeID, e); err != nil {
+							return err
+						}
+					}
+					return nil
+				}
+
+				// JSON mode: write to individual log files.
 				zc.z.Lock()
 				defer zc.z.Unlock()
 
@@ -462,21 +486,6 @@ func (zc *debugZipContext) getLogFiles(
 					return err
 				}
 				for _, e := range entries.Entries {
-					// If the user requests redaction, and some non-redactable
-					// data was found in the log, *despite KeepRedactable
-					// being set*, this means that this zip client is talking
-					// to a node that doesn't yet know how to redact. This
-					// also means that node may be leaking sensitive data.
-					//
-					// In that case, we do the redaction work ourselves in the
-					// most conservative way possible. (It's not great that
-					// possibly confidential data flew over the network, but
-					// at least it stops here.)
-					if zipCtx.redact && !e.Redactable {
-						e.Message = "REDACTEDBYZIP"
-						// We're also going to print a warning at the end.
-						warnRedactLeak = true
-					}
 					if err := log.FormatLegacyEntry(e, logOut); err != nil {
 						return err
 					}
@@ -683,11 +692,11 @@ func (zc *debugZipContext) getNodeStatus(
 	}
 	if nodeStatus != nil {
 		// Use nodeStatus to populate the status.json file as it contains more data for a KV node.
-		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/"+statusFileName, *nodeStatus); err != nil {
+		if err := zc.createJSON(nodePrinter.start("node status"), prefix+"/"+statusFileName, *nodeStatus); err != nil {
 			return err
 		}
 	} else {
-		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/"+statusFileName, redactedNodeDetails); err != nil {
+		if err := zc.createJSON(nodePrinter.start("node status"), prefix+"/"+statusFileName, redactedNodeDetails); err != nil {
 			return err
 		}
 	}

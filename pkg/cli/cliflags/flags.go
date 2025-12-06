@@ -1835,6 +1835,19 @@ whether the generated zip file is valid and not corrupted.
 `,
 	}
 
+	ZipFormat = FlagInfo{
+		Name: "format",
+		Description: `
+Output format for the debug zip contents. Valid options are:
+  - json: JSON format (default, current behavior)
+  - parquet: Parquet format for efficient storage and analysis
+
+When using parquet format, tabular data (logs, ranges, status, etc.) is stored
+in parquet files organized by data type rather than by node. Binary files like
+CPU profiles remain unchanged.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,
