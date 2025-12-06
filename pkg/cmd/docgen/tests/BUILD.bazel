@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "docgen_validation_test",
+    srcs = ["validation_test.go"],
+    data = [
+        "//docs/generated/sql/bnf:bnf",
+        "//pkg/cmd/docgen:diagrams.go",
+        "//pkg/sql/parser:sql.y",
+    ],
+    deps = [
+        "@com_github_stretchr_testify//require",
+    ],
+)
