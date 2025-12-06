@@ -44,7 +44,7 @@ store-id=1
 
 ranges
 ----
-range-id=1 local-store=1 load=[cpu:2, write-bandwidth:2, byte-size:2] raft-cpu=1
+range-id=1 local-store=1 load=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] raft-cpu=1
   store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
   store-id=3 replica-id=3 type=VOTER_FULL
 
@@ -53,10 +53,10 @@ make-pending-changes range-id=1
   rebalance-replica: remove-store-id=1 add-store-id=2
 ----
 pending(2)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s gc=5m0s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] start=0s gc=5m0s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2, write-bandwidth:-2, byte-size:-2] start=0s gc=5m0s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2ns/s, write-bandwidth:-2 B/s, byte-size:-2 B] start=0s gc=5m0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -64,19 +64,19 @@ change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2, write-bandwidth:
 # that the local-store representing the "range owner" is still s1.
 ranges
 ----
-range-id=1 local-store=1 load=[cpu:2, write-bandwidth:2, byte-size:2] raft-cpu=1
+range-id=1 local-store=1 load=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] raft-cpu=1
   store-id=2 replica-id=unknown type=VOTER_FULL leaseholder=true
   store-id=3 replica-id=3 type=VOTER_FULL
 
 # The adjusted load is post transfer.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:-2, write-bandwidth:-2, byte-size:-2] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:-2ns/s, write-bandwidth:-2 B/s, byte-size:-2 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r1
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:2, byte-size:2] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
-store-id=3 node-id=3 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
   top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
-store-id=4 node-id=4 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+store-id=4 node-id=4 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
 
 tick seconds=5
 ----
@@ -98,16 +98,16 @@ store-id=2
 get-pending-changes
 ----
 pending(2)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s gc=5m0s enacted=5s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] start=0s gc=5m0s enacted=5s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2, write-bandwidth:-2, byte-size:-2] start=0s gc=35s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2ns/s, write-bandwidth:-2 B/s, byte-size:-2 B] start=0s gc=35s
   prev=(replica-id=1 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
 ranges
 ----
-range-id=1 local-store=2 load=[cpu:3, write-bandwidth:3, byte-size:3] raft-cpu=2
+range-id=1 local-store=2 load=[cpu:3ns/s, write-bandwidth:3 B/s, byte-size:3 B] raft-cpu=2
   store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
   store-id=3 replica-id=3 type=VOTER_FULL
 
@@ -116,14 +116,14 @@ range-id=1 local-store=2 load=[cpu:3, write-bandwidth:3, byte-size:3] raft-cpu=2
 # no longer is the leaseholder for r1.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:-2, write-bandwidth:-2, byte-size:-2] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:-2ns/s, write-bandwidth:-2 B/s, byte-size:-2 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r1
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:2, byte-size:2] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
   top-k-ranges (local-store-id=2) dim=ByteSize: r1
-store-id=3 node-id=3 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
   top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
-store-id=4 node-id=4 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+store-id=4 node-id=4 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
 
 tick seconds=35
 ----
@@ -132,10 +132,10 @@ t=40s
 get-pending-changes
 ----
 pending(2)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s gc=5m0s enacted=5s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] start=0s gc=5m0s enacted=5s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2, write-bandwidth:-2, byte-size:-2] start=0s gc=35s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2ns/s, write-bandwidth:-2 B/s, byte-size:-2 B] start=0s gc=35s
   prev=(replica-id=1 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -153,7 +153,7 @@ store-id=2
 
 ranges
 ----
-range-id=1 local-store=2 load=[cpu:3, write-bandwidth:3, byte-size:3] raft-cpu=2
+range-id=1 local-store=2 load=[cpu:3ns/s, write-bandwidth:3 B/s, byte-size:3 B] raft-cpu=2
   store-id=1 replica-id=1 type=VOTER_FULL
   store-id=3 replica-id=3 type=VOTER_FULL
   store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
@@ -161,7 +161,7 @@ range-id=1 local-store=2 load=[cpu:3, write-bandwidth:3, byte-size:3] raft-cpu=2
 get-pending-changes
 ----
 pending(1)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s gc=5m0s enacted=5s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] start=0s gc=5m0s enacted=5s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
 
@@ -170,15 +170,15 @@ change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2
 # no longer is the leaseholder for r1.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
   top-k-ranges (local-store-id=1) dim=CPURate: r1
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:2, byte-size:2] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
   top-k-ranges (local-store-id=2) dim=ByteSize: r1
-store-id=3 node-id=3 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
   top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
-store-id=4 node-id=4 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+store-id=4 node-id=4 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
 
 # Store leaseholder msg from s1, indicating no leases.
 store-leaseholder-msg
@@ -188,26 +188,26 @@ store-id=1
 # No top-k ranges for local store s1 anymore.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:2, byte-size:2] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
   top-k-ranges (local-store-id=2) dim=ByteSize: r1
-store-id=3 node-id=3 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
-store-id=4 node-id=4 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+store-id=4 node-id=4 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
 
 # Make another pending change to transfer from s3 to s4.
 make-pending-changes range-id=1
   rebalance-replica: remove-store-id=3 add-store-id=4
 ----
 pending(3)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s gc=5m0s enacted=5s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] start=0s gc=5m0s enacted=5s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=3 store-id=4 node-id=4 range-id=1 load-delta=[cpu:2, write-bandwidth:3, byte-size:3] start=40s gc=5m40s
+change-id=3 store-id=4 node-id=4 range-id=1 load-delta=[cpu:2ns/s, write-bandwidth:3 B/s, byte-size:3 B] start=40s gc=5m40s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL)
-change-id=4 store-id=3 node-id=3 range-id=1 load-delta=[cpu:-2, write-bandwidth:-3, byte-size:-3] start=40s gc=5m40s
+change-id=4 store-id=3 node-id=3 range-id=1 load-delta=[cpu:-2ns/s, write-bandwidth:-3 B/s, byte-size:-3 B] start=40s gc=5m40s
   prev=(replica-id=3 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -217,13 +217,13 @@ t=45s
 
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:2, byte-size:2] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
   top-k-ranges (local-store-id=2) dim=ByteSize: r1
-store-id=3 node-id=3 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:-2, write-bandwidth:-3, byte-size:-3] node-reported-cpu=0 node-adjusted-cpu=-2 seq=1
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:-2ns/s, write-bandwidth:-3 B/s, byte-size:-3 B] node-reported-cpu=0 node-adjusted-cpu=-2 seq=1
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
-store-id=4 node-id=4 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:3, byte-size:3] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
+store-id=4 node-id=4 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:3 B/s, byte-size:3 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
 
 # Store leaseholder msg from s2, showing that s4 has the replica, and s3
 # replica has not been removed.
@@ -240,13 +240,13 @@ store-id=2
 get-pending-changes
 ----
 pending(3)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s gc=5m0s enacted=5s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] start=0s gc=5m0s enacted=5s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=3 store-id=4 node-id=4 range-id=1 load-delta=[cpu:2, write-bandwidth:3, byte-size:3] start=40s gc=5m40s enacted=45s
+change-id=3 store-id=4 node-id=4 range-id=1 load-delta=[cpu:2ns/s, write-bandwidth:3 B/s, byte-size:3 B] start=40s gc=5m40s enacted=45s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL)
-change-id=4 store-id=3 node-id=3 range-id=1 load-delta=[cpu:-2, write-bandwidth:-3, byte-size:-3] start=40s gc=1m15s
+change-id=4 store-id=3 node-id=3 range-id=1 load-delta=[cpu:-2ns/s, write-bandwidth:-3 B/s, byte-size:-3 B] start=40s gc=1m15s
   prev=(replica-id=3 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -257,13 +257,13 @@ t=1m20s
 get-pending-changes
 ----
 pending(3)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s gc=5m0s enacted=5s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] start=0s gc=5m0s enacted=5s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=3 store-id=4 node-id=4 range-id=1 load-delta=[cpu:2, write-bandwidth:3, byte-size:3] start=40s gc=5m40s enacted=45s
+change-id=3 store-id=4 node-id=4 range-id=1 load-delta=[cpu:2ns/s, write-bandwidth:3 B/s, byte-size:3 B] start=40s gc=5m40s enacted=45s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL)
-change-id=4 store-id=3 node-id=3 range-id=1 load-delta=[cpu:-2, write-bandwidth:-3, byte-size:-3] start=40s gc=1m15s
+change-id=4 store-id=3 node-id=3 range-id=1 load-delta=[cpu:-2ns/s, write-bandwidth:-3 B/s, byte-size:-3 B] start=40s gc=1m15s
   prev=(replica-id=3 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -271,16 +271,16 @@ change-id=4 store-id=3 node-id=3 range-id=1 load-delta=[cpu:-2, write-bandwidth:
 gc-pending-changes
 ----
 pending(2)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s gc=5m0s enacted=5s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] start=0s gc=5m0s enacted=5s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=3 store-id=4 node-id=4 range-id=1 load-delta=[cpu:2, write-bandwidth:3, byte-size:3] start=40s gc=5m40s enacted=45s
+change-id=3 store-id=4 node-id=4 range-id=1 load-delta=[cpu:2ns/s, write-bandwidth:3 B/s, byte-size:3 B] start=40s gc=5m40s enacted=45s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL)
 
 ranges
 ----
-range-id=1 local-store=2 load=[cpu:3, write-bandwidth:3, byte-size:3] raft-cpu=2
+range-id=1 local-store=2 load=[cpu:3ns/s, write-bandwidth:3 B/s, byte-size:3 B] raft-cpu=2
   store-id=1 replica-id=1 type=VOTER_FULL
   store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
   store-id=4 replica-id=4 type=VOTER_FULL
@@ -288,10 +288,10 @@ range-id=1 local-store=2 load=[cpu:3, write-bandwidth:3, byte-size:3] raft-cpu=2
 
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:2, byte-size:2] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
   top-k-ranges (local-store-id=2) dim=ByteSize: r1
-store-id=3 node-id=3 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=2
-store-id=4 node-id=4 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:3, byte-size:3] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=2
+store-id=4 node-id=4 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:3 B/s, byte-size:3 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
   top-k-ranges (local-store-id=2) dim=ByteSize: r1

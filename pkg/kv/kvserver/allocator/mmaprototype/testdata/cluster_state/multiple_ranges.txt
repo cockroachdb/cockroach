@@ -40,9 +40,9 @@ store-id=1
 # The top-k uses CPURate.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:100, write-bandwidth:40, byte-size:50] adjusted=[cpu:100, write-bandwidth:40, byte-size:50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:100ns/s, write-bandwidth:40 B/s, byte-size:50 B] adjusted=[cpu:100ns/s, write-bandwidth:40 B/s, byte-size:50 B] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r4 r3
-store-id=2 node-id=2 status=ok accepting all reported=[cpu:45, write-bandwidth:40, byte-size:50] adjusted=[cpu:45, write-bandwidth:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=1
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:45ns/s, write-bandwidth:40 B/s, byte-size:50 B] adjusted=[cpu:45ns/s, write-bandwidth:40 B/s, byte-size:50 B] node-reported-cpu=45 node-adjusted-cpu=45 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r3 r2
 
 
@@ -71,9 +71,9 @@ store-id=1
 # The top-2 ranges for store 2 are based on ByteSize.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:100, write-bandwidth:40, byte-size:50] adjusted=[cpu:100, write-bandwidth:40, byte-size:50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:100ns/s, write-bandwidth:40 B/s, byte-size:50 B] adjusted=[cpu:100ns/s, write-bandwidth:40 B/s, byte-size:50 B] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r4 r3
-store-id=2 node-id=2 status=ok accepting all reported=[cpu:45, write-bandwidth:40, byte-size:50] adjusted=[cpu:45, write-bandwidth:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:45ns/s, write-bandwidth:40 B/s, byte-size:50 B] adjusted=[cpu:45ns/s, write-bandwidth:40 B/s, byte-size:50 B] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
   top-k-ranges (local-store-id=1) dim=ByteSize: r1 r2
 
 # StoreLeaseholderMsg not containing r1 and r4 since no longer the
@@ -94,17 +94,17 @@ store-id=1
 # but less than r3 in terms of ByteSize.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:100, write-bandwidth:40, byte-size:50] adjusted=[cpu:100, write-bandwidth:40, byte-size:50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:100ns/s, write-bandwidth:40 B/s, byte-size:50 B] adjusted=[cpu:100ns/s, write-bandwidth:40 B/s, byte-size:50 B] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r2 r3
-store-id=2 node-id=2 status=ok accepting all reported=[cpu:45, write-bandwidth:40, byte-size:50] adjusted=[cpu:45, write-bandwidth:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:45ns/s, write-bandwidth:40 B/s, byte-size:50 B] adjusted=[cpu:45ns/s, write-bandwidth:40 B/s, byte-size:50 B] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
   top-k-ranges (local-store-id=1) dim=ByteSize: r3 r2
 
 ranges
 ----
-range-id=2 local-store=1 load=[cpu:40, write-bandwidth:20, byte-size:5] raft-cpu=10
+range-id=2 local-store=1 load=[cpu:40ns/s, write-bandwidth:20 B/s, byte-size:5 B] raft-cpu=10
   store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
   store-id=2 replica-id=2 type=VOTER_FULL
-range-id=3 local-store=1 load=[cpu:30, write-bandwidth:10, byte-size:10] raft-cpu=25
+range-id=3 local-store=1 load=[cpu:30ns/s, write-bandwidth:10 B/s, byte-size:10 B] raft-cpu=25
   store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
   store-id=2 replica-id=2 type=VOTER_FULL
 
@@ -123,8 +123,8 @@ store-id=1
 # The ranges reflect the latest state from the StoreLeaseholderMsg.
 ranges
 ----
-range-id=2 local-store=1 load=[cpu:40, write-bandwidth:20, byte-size:30] raft-cpu=10
+range-id=2 local-store=1 load=[cpu:40ns/s, write-bandwidth:20 B/s, byte-size:30 B] raft-cpu=10
   store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
-range-id=3 local-store=1 load=[cpu:30, write-bandwidth:10, byte-size:10] raft-cpu=25
+range-id=3 local-store=1 load=[cpu:30ns/s, write-bandwidth:10 B/s, byte-size:10 B] raft-cpu=25
   store-id=2 replica-id=5 type=VOTER_FULL
   store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
