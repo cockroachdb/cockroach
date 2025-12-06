@@ -346,7 +346,9 @@ func changefeedPlanHook(
 
 			// We do not yet have the progress config here, so we need to check the settings directly.
 			perTableTrackingEnabled := changefeedbase.TrackPerTableProgress.Get(&p.ExecCfg().Settings.SV)
-			perTableProtectedTimestampsEnabled := changefeedbase.PerTableProtectedTimestamps.Get(&p.ExecCfg().Settings.SV)
+			// TODO(#158779): Re-add per table protected timestamps setting and
+			// fetch this value from that cluster setting.
+			perTableProtectedTimestampsEnabled := false
 			usingPerTablePTS := perTableTrackingEnabled && perTableProtectedTimestampsEnabled
 			if usingPerTablePTS {
 				protectedTimestampRecords := make(map[descpb.ID]uuid.UUID)
