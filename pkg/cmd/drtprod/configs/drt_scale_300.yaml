@@ -62,6 +62,11 @@ targets:
         skip_notification: true
         args:
           - $CLUSTER
+          - lib # for libgeos
+      - command: stage
+        skip_notification: true
+        args:
+          - $CLUSTER
           - release
           - $VERSION
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
