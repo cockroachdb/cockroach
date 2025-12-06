@@ -4430,6 +4430,105 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.fingerprint.currently_idle
+      exported_name: jobs_fingerprint_currently_idle
+      labeled_name: 'jobs{type: fingerprint, status: currently_idle}'
+      description: Number of fingerprint jobs currently considered Idle and can be freely shut down
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.fingerprint.currently_paused
+      exported_name: jobs_fingerprint_currently_paused
+      labeled_name: 'jobs{name: fingerprint, status: currently_paused}'
+      description: Number of fingerprint jobs currently considered Paused
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.fingerprint.currently_running
+      exported_name: jobs_fingerprint_currently_running
+      labeled_name: 'jobs{type: fingerprint, status: currently_running}'
+      description: Number of fingerprint jobs currently running in Resume or OnFailOrCancel state
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.fingerprint.expired_pts_records
+      exported_name: jobs_fingerprint_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: fingerprint}'
+      description: Number of expired protected timestamp records owned by fingerprint jobs
+      y_axis_label: records
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.fingerprint.fail_or_cancel_completed
+      exported_name: jobs_fingerprint_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: fingerprint, status: completed}'
+      description: Number of fingerprint jobs which successfully completed their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.fingerprint.fail_or_cancel_retry_error
+      exported_name: jobs_fingerprint_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: fingerprint, status: retry_error}'
+      description: Number of fingerprint jobs which failed with a retriable error on their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.fingerprint.protected_age_sec
+      exported_name: jobs_fingerprint_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: fingerprint}'
+      description: The age of the oldest PTS record protected by fingerprint jobs
+      y_axis_label: seconds
+      type: GAUGE
+      unit: SECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.fingerprint.protected_record_count
+      exported_name: jobs_fingerprint_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: fingerprint}'
+      description: Number of protected timestamp records held by fingerprint jobs
+      y_axis_label: records
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.fingerprint.resume_completed
+      exported_name: jobs_fingerprint_resume_completed
+      labeled_name: 'jobs.resume{name: fingerprint, status: completed}'
+      description: Number of fingerprint jobs which successfully resumed to completion
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.fingerprint.resume_failed
+      exported_name: jobs_fingerprint_resume_failed
+      labeled_name: 'jobs.resume{name: fingerprint, status: failed}'
+      description: Number of fingerprint jobs which failed with a non-retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.fingerprint.resume_retry_error
+      exported_name: jobs_fingerprint_resume_retry_error
+      labeled_name: 'jobs.resume{name: fingerprint, status: retry_error}'
+      description: Number of fingerprint jobs which failed with a retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.history_retention.currently_idle
       exported_name: jobs_history_retention_currently_idle
       labeled_name: 'jobs{type: history_retention, status: currently_idle}'
