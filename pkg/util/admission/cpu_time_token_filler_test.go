@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -25,6 +25,11 @@ import (
 func TestCPUTimeTokenFiller(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	if time.Second%timePerTick != 0 || timePerTick > time.Second {
+		t.Errorf("timePerTick=%v must be < 1s & must divide 1s evenly", timePerTick)
+		return
+	}
 
 	// Fixed time for reproducibility.
 	unixNanos := int64(1758938600000000000) // 2025-09-24T14:30:00Z
@@ -141,10 +146,10 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 	}
 
 	model := &testModel{buf: &buf}
-	model.rates[testTier0][canBurst] = 5
-	model.rates[testTier0][noBurst] = 4
-	model.rates[testTier1][canBurst] = 3
-	model.rates[testTier1][noBurst] = 2
+	model.rates[testTier0][canBurst] = 5000
+	model.rates[testTier0][noBurst] = 4000
+	model.rates[testTier1][canBurst] = 3000
+	model.rates[testTier1][noBurst] = 2000
 	allocator := cpuTimeTokenAllocator{
 		granter:  granter,
 		settings: cluster.MakeClusterSettings(),

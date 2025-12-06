@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -123,6 +123,9 @@ func (f *cpuTimeTokenFiller) start() {
 			select {
 			case t := <-ticker.Ch():
 				var remainingTicks int64
+				// Note that time-measuring operations such as t.Sub use monotonic
+				// time. Thus, elapsedSinceIntervalStart should always be >= 0.
+				// https://pkg.go.dev/time#hdr-Monotonic_Clocks
 				elapsedSinceIntervalStart := t.Sub(intervalStart)
 				if elapsedSinceIntervalStart >= time.Second {
 					// INVARIANT: During each interval, allocateTokens(1) must be
