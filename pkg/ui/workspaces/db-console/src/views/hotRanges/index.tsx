@@ -39,7 +39,7 @@ import useFilters, { filterRanges } from "src/views/hotRanges/useFilters";
 
 import ErrorBoundary from "../app/components/errorMessage/errorBoundary";
 
-import styles from "./hotRanges.module.styl";
+import styles from "./hotRanges.module.scss";
 import HotRangesTable from "./hotRangesTable";
 
 const cx = classNames.bind(styles);

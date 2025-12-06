@@ -12,7 +12,7 @@ import { AdminUIState } from "src/redux/state";
 import { AlertBox } from "src/views/shared/components/alertBox";
 import { AlertMessage } from "src/views/shared/components/alertMessage";
 
-import "./alertbanner.styl";
+import "./alertbanner.scss";
 
 interface AlertBannerProps {
   /**
