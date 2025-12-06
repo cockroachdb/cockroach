@@ -71,6 +71,7 @@ var (
 const (
 	indexTypeForwardIndex  = "prefix"
 	indexTypeInvertedIndex = "inverted"
+	indexTypeVectorIndex   = "vector"
 )
 
 // Bitmasks for pg_index.indoption. Each column in the index has a bitfield
@@ -115,6 +116,7 @@ const (
 
 var forwardIndexOid = stringOid(indexTypeForwardIndex)
 var invertedIndexOid = stringOid(indexTypeInvertedIndex)
+var vectorIndexOid = stringOid(indexTypeVectorIndex)
 
 // pgCatalog contains a set of system tables mirroring PostgreSQL's pg_catalog schema.
 // This code attempts to comply as closely as possible to the system catalogs documented
@@ -349,6 +351,45 @@ https://www.postgresql.org/docs/9.5/catalog-pg-am.html`,
 			tree.DNull,                            // amoptions - < v9.6
 			tree.DNull,                            // amhandler - > v9.6
 			tree.NewDString("i"),                  // amtype - > v9.6
+		); err != nil {
+			return err
+		}
+
+		// add row for vector indexes
+		if err := addRow(
+			vectorIndexOid,                      // oid - assign a new OID constant
+			tree.NewDName(indexTypeVectorIndex), // amname = 'vector'
+			zeroVal,                             // amstrategies - < v9.6
+			zeroVal,                             // amsupport - < v9.6
+			tree.DBoolFalse,                     // amcanorder - < v9.6
+			tree.DBoolFalse,                     // amcanorderbyop - < v9.6
+			tree.DBoolFalse,                     // amcanbackward - < v9.6
+			tree.DBoolFalse,                     // amcanunique - < v9.6
+			tree.DBoolFalse,                     // amcanmulticol - < v9.6
+			tree.DBoolFalse,                     // amoptionalkey - < v9.6
+			tree.DBoolFalse,                     // amsearcharray - < v9.6
+			tree.DBoolFalse,                     // amsearchnulls - < v9.6
+			tree.DBoolFalse,                     // amstorage - < v9.6
+			tree.DBoolFalse,                     // amclusterable - < v9.6
+			tree.DBoolFalse,                     // ampredlocks - < v9.6
+			oidZero,                             // amkeytype - < v9.6
+			tree.DNull,                          // aminsert - < v9.6
+			tree.DNull,                          // ambeginscan - < v9.6
+			oidZero,                             // amgettuple - < v9.6
+			oidZero,                             // amgetbitmap - < v9.6
+			tree.DNull,                          // amrescan - < v9.6
+			tree.DNull,                          // amendscan - < v9.6
+			tree.DNull,                          // ammarkpos - < v9.6
+			tree.DNull,                          // amrestrpos - < v9.6
+			tree.DNull,                          // ambuild - < v9.6
+			tree.DNull,                          // ambuildempty - < v9.6
+			tree.DNull,                          // ambulkdelete - < v9.6
+			tree.DNull,                          // amvacuumcleanup - < v9.6
+			tree.DNull,                          // amcanreturn - < v9.6
+			tree.DNull,                          // amcostestimate - < v9.6
+			tree.DNull,                          // amoptions - < v9.6
+			tree.DNull,                          // amhandler - > v9.6
+			tree.NewDString("i"),                // amtype - > v9.6 (index)
 		); err != nil {
 			return err
 		}
@@ -854,6 +895,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			indexType := forwardIndexOid
 			if index.GetType() == idxtype.INVERTED {
 				indexType = invertedIndexOid
+			}
+			if index.GetType() == idxtype.VECTOR {
+				indexType = vectorIndexOid
 			}
 			ownerOid, err := getOwnerOID(ctx, p, table)
 			if err != nil {
