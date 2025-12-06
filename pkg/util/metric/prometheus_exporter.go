@@ -146,6 +146,21 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, options ...Scra
 				family.Metric = append(family.Metric, m)
 			}
 
+		case PrometheusEvictable:
+			m := prom.ToPrometheusMetric()
+			m.Label = append(labels, prom.GetLabels(o.useStaticLabels)...)
+			family := pm.findOrCreateFamily(prom, o)
+
+			promIter, ok := v.(PrometheusIterable)
+			if ok && o.includeChildMetrics {
+				promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
+					family.Metric = append(family.Metric, metric)
+				})
+				return
+			}
+			family.Metric = append(family.Metric, m)
+			return
+
 		case PrometheusExportable:
 			if _, ok := v.(PrometheusReinitialisable); ok && o.reinitialisableBugFixEnabled {
 				m := prom.ToPrometheusMetric()

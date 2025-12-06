@@ -400,7 +400,7 @@ func NewHighCardinalityHistogram(
 		opts.Duration/metric.WindowedHistogramWrapNum,
 		func() {
 			// Atomically rotate the histogram window for the
-			// parent histogram, and all the child histograms.
+			// parent histogram and all the child histograms.
 			h.h.Tick()
 			h.childSet.apply(func(childItem MetricItem) {
 				childHist, ok := childItem.(*HighCardinalityChildHistogram)
@@ -545,7 +545,7 @@ func (h *HighCardinalityChildHistogram) CreatedAt() time.Time {
 	return h.createdAt
 }
 
-func (h *HighCardinalityChildHistogram) DecrementLabelSliceCacheReference() {
+func (h *HighCardinalityChildHistogram) UpdateLabelReference() {
 	h.LabelSliceCache.DecrementAndDeleteIfZero(h.LabelSliceCacheKey)
 }
 

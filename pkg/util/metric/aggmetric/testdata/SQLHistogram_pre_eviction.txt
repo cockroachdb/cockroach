@@ -143,5 +143,3 @@ histo_gram_sum{database="1",application_name="6"} 1
 histo_gram_sum{database="1",application_name="7"} 1
 histo_gram_sum{database="1",application_name="8"} 1
 histo_gram_sum{database="1",application_name="9"} 1
-
-
