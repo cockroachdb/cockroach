@@ -8,6 +8,7 @@ package ts
 import (
 	"context"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
@@ -481,6 +482,7 @@ func dumpImpl(
 				ResolutionFromProto(res),
 				req.StartNanos,
 				req.EndNanos,
+				req.IncludeChildMetrics,
 				d,
 			); err != nil {
 				return err
@@ -536,6 +538,7 @@ func dumpTimeseriesAllSources(
 	seriesName string,
 	diskResolution Resolution,
 	startNanos, endNanos int64,
+	includeChildMetrics bool,
 	dump func(*roachpb.KeyValue) error,
 ) error {
 	if endNanos == 0 {
@@ -548,12 +551,20 @@ func dumpTimeseriesAllSources(
 		endNanos += delta
 	}
 
+	var endKeyName string
+	if includeChildMetrics {
+		// Create a span that covers the metric and all its children (with labels).
+		endKeyName = seriesName + string(rune(0x7C)) // '|' is the next char after '{'
+	} else {
+		endKeyName = seriesName
+	}
+
 	span := &roachpb.Span{
 		Key: MakeDataKey(
 			seriesName, "" /* source */, diskResolution, startNanos,
 		),
 		EndKey: MakeDataKey(
-			seriesName, "" /* source */, diskResolution, endNanos,
+			endKeyName, "" /* source */, diskResolution, endNanos,
 		),
 	}
 
@@ -569,8 +580,24 @@ func dumpTimeseriesAllSources(
 		resp := b.RawResponse().Responses[0].GetScan()
 		span = resp.ResumeSpan
 		for i := range resp.Rows {
-			if err := dump(&resp.Rows[i]); err != nil {
-				return err
+			// If includeChildMetrics is true, also dump child metrics (those with labels)
+			// Otherwise, only dump parent metrics (those without labels)
+			if includeChildMetrics {
+				// Dump everything for this metric prefix
+				if err := dump(&resp.Rows[i]); err != nil {
+					return err
+				}
+			} else {
+				// Only dump parent metrics (no labels)
+				name, _, _, _, err := DecodeDataKey(resp.Rows[i].Key)
+				if err != nil {
+					return err
+				}
+				if !strings.Contains(name, "{") {
+					if err := dump(&resp.Rows[i]); err != nil {
+						return err
+					}
+				}
 			}
 		}
 	}

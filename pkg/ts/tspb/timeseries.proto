@@ -167,6 +167,10 @@ message DumpRequest {
   // Resolutions of data to be dumped. When not provided, defaults to only
   // RESOLUTION_10S.
   repeated TimeSeriesResolution resolutions = 4;
+  // include_child_metrics indicates whether to include child metrics (metrics with dynamic labels)
+  // in the dump. When true, the server will automatically discover and dump all metrics with
+  // TsdbRecordLabeled=true in their metadata.
+  optional bool include_child_metrics = 5 [(gogoproto.nullable) = false];
 }
 
 // TimeSeries is the gRPC API for the time series server. Through grpc-gateway,
