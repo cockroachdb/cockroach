@@ -515,6 +515,15 @@ var getHttpResponse = func(
 	if err != nil {
 		return nil, err
 	}
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		bodySnippet := string(body)
+		if len(bodySnippet) > 200 {
+			bodySnippet = bodySnippet[:200] + "..."
+		}
+		return nil, errors.Newf("GET %s returned %s: %s", url, resp.Status, bodySnippet)
+	}
+
 	return body, nil
 }
 
