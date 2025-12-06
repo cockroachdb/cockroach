@@ -16,8 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// TODO(pmattis): The methods in this file needs tests.
-
 func marshalKey(k interface{}) (roachpb.Key, error) {
 	switch t := k.(type) {
 	case *roachpb.Key:
