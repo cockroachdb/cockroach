@@ -25,6 +25,7 @@ go_library(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
@@ -33,6 +34,7 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_redact//interfaces",
+        "@com_github_dustin_go_humanize//:go-humanize",
     ],
 )
 

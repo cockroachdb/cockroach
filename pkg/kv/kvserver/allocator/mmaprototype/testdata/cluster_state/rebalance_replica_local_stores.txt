@@ -35,8 +35,8 @@ store-load-msg
 
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=80 node-adjusted-cpu=80 seq=0
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=80 node-adjusted-cpu=80 seq=0
 
 # Store s1 has the single replica and lease for r1.
 store-leaseholder-msg 
@@ -48,25 +48,25 @@ store-id=1
 
 ranges
 ----
-range-id=1 local-store=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
+range-id=1 local-store=1 load=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] raft-cpu=20
   store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
 
 # The top-k uses CPURate, with r1 as the only range.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r1
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=80 node-adjusted-cpu=80 seq=0
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=80 node-adjusted-cpu=80 seq=0
 
 # Transfer the replica from s1 to s2. The lease will also be transferred.
 make-pending-changes range-id=1
   rebalance-replica: remove-store-id=1 add-store-id=2
 ----
 pending(2)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s gc=5m0s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] start=0s gc=5m0s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=5m0s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80ns/s, write-bandwidth:-80 B/s, byte-size:-80 B] start=0s gc=5m0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -74,15 +74,15 @@ change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth
 # that the local-store representing the "range owner" is still s1.
 ranges
 ----
-range-id=1 local-store=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
+range-id=1 local-store=1 load=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] raft-cpu=20
   store-id=2 replica-id=unknown type=VOTER_FULL leaseholder=true
 
 # The adjusted load is post transfer.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=80 node-adjusted-cpu=88 seq=2
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=80 node-adjusted-cpu=88 seq=2
   top-k-ranges (local-store-id=1) dim=CPURate: r1
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:88, write-bandwidth:88, byte-size:88] node-reported-cpu=80 node-adjusted-cpu=88 seq=1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] node-reported-cpu=80 node-adjusted-cpu=88 seq=1
 
 tick seconds=5
 ----
@@ -102,10 +102,10 @@ store-id=1
 get-pending-changes
 ----
 pending(2)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s gc=5m0s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] start=0s gc=5m0s
   prev=(replica-id=2 type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=5m0s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80ns/s, write-bandwidth:-80 B/s, byte-size:-80 B] start=0s gc=5m0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -121,7 +121,7 @@ store-id=2
 # The local-store representing the "range owner" is now s2.
 ranges
 ----
-range-id=1 local-store=2 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
+range-id=1 local-store=2 load=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] raft-cpu=20
   store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
 
 # The addition of replica and lease on s2 is considered enacted. The removal
@@ -131,17 +131,17 @@ range-id=1 local-store=2 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cp
 get-pending-changes
 ----
 pending(2)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s gc=5m0s enacted=5s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] start=0s gc=5m0s enacted=5s
   prev=(replica-id=2 type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=35s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80ns/s, write-bandwidth:-80 B/s, byte-size:-80 B] start=0s gc=35s
   prev=(replica-id=1 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=80 node-adjusted-cpu=88 seq=2
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:88, write-bandwidth:88, byte-size:88] node-reported-cpu=80 node-adjusted-cpu=88 seq=1
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=80 node-adjusted-cpu=88 seq=2
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] node-reported-cpu=80 node-adjusted-cpu=88 seq=1
   top-k-ranges (local-store-id=2) dim=ByteSize: r1
 
 tick seconds=5
@@ -152,10 +152,10 @@ t=10s
 reject-pending-changes change-ids=(1) expect-panic
 ----
 pending(2)
-change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s gc=5m0s enacted=5s
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] start=0s gc=5m0s enacted=5s
   prev=(replica-id=2 type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=35s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80ns/s, write-bandwidth:-80 B/s, byte-size:-80 B] start=0s gc=35s
   prev=(replica-id=1 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -169,8 +169,8 @@ store-load-msg
 # enactment time of change 1 (see lagForChangeReflectedInLoad).
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=160 node-adjusted-cpu=168 seq=2
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:168, write-bandwidth:168, byte-size:168] node-reported-cpu=160 node-adjusted-cpu=168 seq=3
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=160 node-adjusted-cpu=168 seq=2
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:168ns/s, write-bandwidth:168 B/s, byte-size:168 B] node-reported-cpu=160 node-adjusted-cpu=168 seq=3
   top-k-ranges (local-store-id=2) dim=ByteSize: r1
 
 # Store load msg from s2 at time 16s, which is 11s after the enactment of
@@ -183,7 +183,7 @@ store-load-msg
 get-pending-changes
 ----
 pending(1)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=35s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80ns/s, write-bandwidth:-80 B/s, byte-size:-80 B] start=0s gc=35s
   prev=(replica-id=1 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -192,8 +192,8 @@ change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth
 # change 1.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=160 node-adjusted-cpu=80 seq=2
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=160 node-adjusted-cpu=80 seq=4
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=160 node-adjusted-cpu=80 seq=2
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] node-reported-cpu=160 node-adjusted-cpu=80 seq=4
   top-k-ranges (local-store-id=2) dim=ByteSize: r1
 
 # Advance time, but not enough to GC change 2.
@@ -205,13 +205,13 @@ t=20s
 gc-pending-changes
 ----
 pending(1)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=35s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80ns/s, write-bandwidth:-80 B/s, byte-size:-80 B] start=0s gc=35s
   prev=(replica-id=1 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
 ranges
 ----
-range-id=1 local-store=2 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
+range-id=1 local-store=2 load=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] raft-cpu=20
   store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
 
 # Store leaseholder msg from s2, showing that s1 is no longer a replica, so
@@ -226,15 +226,15 @@ store-id=2
 get-pending-changes
 ----
 pending(1)
-change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s gc=35s enacted=20s
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80ns/s, write-bandwidth:-80 B/s, byte-size:-80 B] start=0s gc=35s enacted=20s
   prev=(replica-id=1 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
 # Change 2 is still serving the purpose of adjusting the load on s1.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=160 node-adjusted-cpu=80 seq=2
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=160 node-adjusted-cpu=80 seq=4
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=160 node-adjusted-cpu=80 seq=2
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] node-reported-cpu=160 node-adjusted-cpu=80 seq=4
   top-k-ranges (local-store-id=2) dim=CPURate: r1
 
 # Store load msg from s2, showing its new load.
@@ -244,8 +244,8 @@ store-load-msg
 
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=165 node-adjusted-cpu=85 seq=2
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:85, write-bandwidth:85, byte-size:85] adjusted=[cpu:85, write-bandwidth:85, byte-size:85] node-reported-cpu=165 node-adjusted-cpu=85 seq=5
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=165 node-adjusted-cpu=85 seq=2
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:85ns/s, write-bandwidth:85 B/s, byte-size:85 B] adjusted=[cpu:85ns/s, write-bandwidth:85 B/s, byte-size:85 B] node-reported-cpu=165 node-adjusted-cpu=85 seq=5
   top-k-ranges (local-store-id=2) dim=CPURate: r1
 
 tick seconds=20
@@ -266,8 +266,8 @@ pending(0)
 
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:5, write-bandwidth:5, byte-size:5] adjusted=[cpu:5, write-bandwidth:5, byte-size:5] node-reported-cpu=90 node-adjusted-cpu=90 seq=3
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:85, write-bandwidth:85, byte-size:85] adjusted=[cpu:85, write-bandwidth:85, byte-size:85] node-reported-cpu=90 node-adjusted-cpu=90 seq=5
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:5ns/s, write-bandwidth:5 B/s, byte-size:5 B] adjusted=[cpu:5ns/s, write-bandwidth:5 B/s, byte-size:5 B] node-reported-cpu=90 node-adjusted-cpu=90 seq=3
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:85ns/s, write-bandwidth:85 B/s, byte-size:85 B] adjusted=[cpu:85ns/s, write-bandwidth:85 B/s, byte-size:85 B] node-reported-cpu=90 node-adjusted-cpu=90 seq=5
   top-k-ranges (local-store-id=2) dim=CPURate: r1
 
 # Transfer the replica from s2 back to s1. The lease will also be transferred.
@@ -275,18 +275,18 @@ make-pending-changes range-id=1
   rebalance-replica: remove-store-id=2 add-store-id=1
 ----
 pending(2)
-change-id=3 store-id=1 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=40s gc=5m40s
+change-id=3 store-id=1 node-id=1 range-id=1 load-delta=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] start=40s gc=5m40s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=4 store-id=2 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=40s gc=5m40s
+change-id=4 store-id=2 node-id=1 range-id=1 load-delta=[cpu:-80ns/s, write-bandwidth:-80 B/s, byte-size:-80 B] start=40s gc=5m40s
   prev=(replica-id=2 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
 # Adjusted load shows the change.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:5, write-bandwidth:5, byte-size:5] adjusted=[cpu:93, write-bandwidth:93, byte-size:93] node-reported-cpu=90 node-adjusted-cpu=98 seq=4
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:85, write-bandwidth:85, byte-size:85] adjusted=[cpu:5, write-bandwidth:5, byte-size:5] node-reported-cpu=90 node-adjusted-cpu=98 seq=6
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:5ns/s, write-bandwidth:5 B/s, byte-size:5 B] adjusted=[cpu:93ns/s, write-bandwidth:93 B/s, byte-size:93 B] node-reported-cpu=90 node-adjusted-cpu=98 seq=4
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:85ns/s, write-bandwidth:85 B/s, byte-size:85 B] adjusted=[cpu:5ns/s, write-bandwidth:5 B/s, byte-size:5 B] node-reported-cpu=90 node-adjusted-cpu=98 seq=6
   top-k-ranges (local-store-id=2) dim=CPURate: r1
 
 # Enough time elapses to GC the changes.
@@ -306,8 +306,8 @@ pending(0)
 # Adjusted load no longer reflects the changes.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:5, write-bandwidth:5, byte-size:5] adjusted=[cpu:5, write-bandwidth:5, byte-size:5] node-reported-cpu=90 node-adjusted-cpu=90 seq=5
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:85, write-bandwidth:85, byte-size:85] adjusted=[cpu:85, write-bandwidth:85, byte-size:85] node-reported-cpu=90 node-adjusted-cpu=90 seq=7
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:5ns/s, write-bandwidth:5 B/s, byte-size:5 B] adjusted=[cpu:5ns/s, write-bandwidth:5 B/s, byte-size:5 B] node-reported-cpu=90 node-adjusted-cpu=90 seq=5
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:85ns/s, write-bandwidth:85 B/s, byte-size:85 B] adjusted=[cpu:85ns/s, write-bandwidth:85 B/s, byte-size:85 B] node-reported-cpu=90 node-adjusted-cpu=90 seq=7
   top-k-ranges (local-store-id=2) dim=CPURate: r1
 
 # Transfer the replica from s2 back to s1. The lease will also be transferred.
@@ -315,22 +315,22 @@ make-pending-changes range-id=1
   rebalance-replica: remove-store-id=2 add-store-id=1
 ----
 pending(2)
-change-id=5 store-id=1 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=5m50s gc=10m50s
+change-id=5 store-id=1 node-id=1 range-id=1 load-delta=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] start=5m50s gc=10m50s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=6 store-id=2 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=5m50s gc=10m50s
+change-id=6 store-id=2 node-id=1 range-id=1 load-delta=[cpu:-80ns/s, write-bandwidth:-80 B/s, byte-size:-80 B] start=5m50s gc=10m50s
   prev=(replica-id=2 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
 ranges
 ----
-range-id=1 local-store=2 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
+range-id=1 local-store=2 load=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] raft-cpu=20
   store-id=1 replica-id=unknown type=VOTER_FULL leaseholder=true
 
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:5, write-bandwidth:5, byte-size:5] adjusted=[cpu:93, write-bandwidth:93, byte-size:93] node-reported-cpu=90 node-adjusted-cpu=98 seq=6
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:85, write-bandwidth:85, byte-size:85] adjusted=[cpu:5, write-bandwidth:5, byte-size:5] node-reported-cpu=90 node-adjusted-cpu=98 seq=8
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:5ns/s, write-bandwidth:5 B/s, byte-size:5 B] adjusted=[cpu:93ns/s, write-bandwidth:93 B/s, byte-size:93 B] node-reported-cpu=90 node-adjusted-cpu=98 seq=6
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:85ns/s, write-bandwidth:85 B/s, byte-size:85 B] adjusted=[cpu:5ns/s, write-bandwidth:5 B/s, byte-size:5 B] node-reported-cpu=90 node-adjusted-cpu=98 seq=8
   top-k-ranges (local-store-id=2) dim=CPURate: r1
 
 # Store leaseholder msg from s1, showing that s1 is a replica and has the lease, so
@@ -348,16 +348,16 @@ store-id=1
 get-pending-changes
 ----
 pending(2)
-change-id=5 store-id=1 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=5m50s gc=10m50s enacted=5m50s
+change-id=5 store-id=1 node-id=1 range-id=1 load-delta=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] start=5m50s gc=10m50s enacted=5m50s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=6 store-id=2 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=5m50s gc=6m20s
+change-id=6 store-id=2 node-id=1 range-id=1 load-delta=[cpu:-80ns/s, write-bandwidth:-80 B/s, byte-size:-80 B] start=5m50s gc=6m20s
   prev=(replica-id=2 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
 ranges
 ----
-range-id=1 local-store=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
+range-id=1 local-store=1 load=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] raft-cpu=20
   store-id=1 replica-id=3 type=VOTER_FULL leaseholder=true
 
 # store-id=2 still has top-k-ranges for local store s2 populated, since we
@@ -365,19 +365,19 @@ range-id=1 local-store=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cp
 # is the leaseholder for r1.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:5, write-bandwidth:5, byte-size:5] adjusted=[cpu:93, write-bandwidth:93, byte-size:93] node-reported-cpu=90 node-adjusted-cpu=98 seq=6
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:5ns/s, write-bandwidth:5 B/s, byte-size:5 B] adjusted=[cpu:93ns/s, write-bandwidth:93 B/s, byte-size:93 B] node-reported-cpu=90 node-adjusted-cpu=98 seq=6
   top-k-ranges (local-store-id=1) dim=ByteSize: r1
-store-id=2 node-id=1 status=ok accepting all reported=[cpu:85, write-bandwidth:85, byte-size:85] adjusted=[cpu:5, write-bandwidth:5, byte-size:5] node-reported-cpu=90 node-adjusted-cpu=98 seq=8
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:85ns/s, write-bandwidth:85 B/s, byte-size:85 B] adjusted=[cpu:5ns/s, write-bandwidth:5 B/s, byte-size:5 B] node-reported-cpu=90 node-adjusted-cpu=98 seq=8
   top-k-ranges (local-store-id=2) dim=CPURate: r1
 
 # Change 6 is garbage collected since enough time has elapsed.
 gc-pending-changes
 ----
 pending(2)
-change-id=5 store-id=1 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=5m50s gc=10m50s enacted=5m50s
+change-id=5 store-id=1 node-id=1 range-id=1 load-delta=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] start=5m50s gc=10m50s enacted=5m50s
   prev=(replica-id=none type=VOTER_FULL)
   next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
-change-id=6 store-id=2 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=5m50s gc=6m20s
+change-id=6 store-id=2 node-id=1 range-id=1 load-delta=[cpu:-80ns/s, write-bandwidth:-80 B/s, byte-size:-80 B] start=5m50s gc=6m20s
   prev=(replica-id=2 type=VOTER_FULL)
   next=(replica-id=none type=VOTER_FULL)
 
@@ -385,5 +385,5 @@ change-id=6 store-id=2 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth
 # invariant is still satisfied.
 ranges
 ----
-range-id=1 local-store=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
+range-id=1 local-store=1 load=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] raft-cpu=20
   store-id=1 replica-id=3 type=VOTER_FULL leaseholder=true
