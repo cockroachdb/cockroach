@@ -54,9 +54,6 @@ const (
 	userManagedIdentityResourceGroup = "rp-roachtest"
 )
 
-// providerInstance is the instance to be registered into vm.Providers by Init.
-var providerInstance = &Provider{}
-
 // Init registers the Azure provider with vm.Providers.
 //
 // If the Azure CLI utilities are not installed, the provider is a stub.
@@ -65,9 +62,14 @@ func Init() error {
 		"(https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)"
 	const authErr = "unable to authenticate; please use `az login` or double check environment variables"
 
-	providerInstance = New()
-	providerInstance.OperationTimeout = 10 * time.Minute
-	providerInstance.SyncDelete = false
+	providerInstance, err := NewProvider(WithOperationTimeout(10*time.Minute), WithSyncDelete(false))
+	if err != nil {
+		vm.Providers[ProviderName] = flagstub.New(
+			&Provider{},
+			fmt.Sprintf("unable to init azure provider: %s", err),
+		)
+		return err
+	}
 
 	// If the appropriate environment variables are not set for api access,
 	// then the authenticated CLI must be installed.
@@ -96,6 +98,8 @@ type Provider struct {
 	// If left empty then falls back to env var then default subscription.
 	SubscriptionNames []string
 
+	dnsProvider vm.DNSProvider
+
 	mu struct {
 		syncutil.Mutex
 
@@ -107,7 +111,28 @@ type Provider struct {
 	}
 }
 
+// NewProvider returns a new Azure provider with the given options applied.
+func NewProvider(options ...Option) (*Provider, error) {
+
+	// Create a new provider with the default options.
+	p := &Provider{}
+	p.mu.resourceGroups = make(map[string]resources.Group)
+	p.mu.securityGroups = make(map[string]network.SecurityGroup)
+	p.mu.subnets = make(map[string]network.Subnet)
+
+	for _, option := range options {
+		option.apply(p)
+	}
+
+	return p, nil
+}
+
 func (p *Provider) SupportsSpotVMs() bool {
+	return false
+}
+
+// IsLocalProvider returns false because Azure is a remote provider.
+func (p *Provider) IsLocalProvider() bool {
 	return false
 }
 
@@ -307,15 +332,6 @@ func (p *Provider) DeleteLoadBalancer(*logger.Logger, vm.List, int) error {
 func (p *Provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddress, error) {
 	// This Provider has no concept of load balancers yet, return an empty list.
 	return nil, nil
-}
-
-// New constructs a new Provider instance.
-func New() *Provider {
-	p := &Provider{}
-	p.mu.resourceGroups = make(map[string]resources.Group)
-	p.mu.securityGroups = make(map[string]network.SecurityGroup)
-	p.mu.subnets = make(map[string]network.Subnet)
-	return p
 }
 
 // Active implements vm.Provider and always returns true.
@@ -585,8 +601,14 @@ func (p *Provider) computeVirtualMachineToVM(cvm compute.VirtualMachine) (*vm.VM
 		azureSubscription = strings.Split(strings.TrimPrefix(*cvm.ID, "/subscriptions/"), "/")[0]
 	}
 
+	// Get public DNS info from the DNS provider if it is configured.
+	publicDns, publicDnsZone, dnsProviderName := vm.GetVMDNSInfo(context.Background(), *cvm.Name, p.dnsProvider)
+
 	m := &vm.VM{
 		Name:              *cvm.Name,
+		PublicDNS:         publicDns,
+		PublicDNSZone:     publicDnsZone,
+		DNSProvider:       dnsProviderName,
 		Labels:            tags,
 		Provider:          ProviderName,
 		ProviderID:        *cvm.ID,
@@ -808,10 +830,11 @@ func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 	return username, nil
 }
 
-// List implements the vm.Provider interface. This will query all
-// Azure VMs in the subscription and select those with a roachprod tag.
-func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
+// List implements the vm.Provider interface.
+func (p *Provider) List(
+	ctx context.Context, l *logger.Logger, opts vm.ListOptions,
+) (vm.List, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.OperationTimeout)
 	defer cancel()
 
 	sub, err := p.getSubscription(ctx)
@@ -1862,10 +1885,23 @@ func (p *Provider) getSubscription(ctx context.Context) (string, error) {
 		return subscriptionId, nil
 	}
 
-	subscriptionId = os.Getenv(SubscriptionIDEnvVar)
-
-	// Fallback to retrieving the defaultSubscription.
-	if subscriptionId == "" {
+	// If no subscription ID has been set yet, we will try to determine it.
+	// The order of precedence is:
+	// 1. If there is one (and only one) subscription name configured in the provider, use it.
+	// 2. If the AZURE_SUBSCRIPTION_ID env var is set, use it.
+	// 3. Use the default subscription name configured in the provider.
+	switch {
+	case len(p.SubscriptionNames) == 1:
+		// If there is only one subscription name, use that.
+		var err error
+		subscriptionId, err = p.findSubscriptionID(ctx, p.SubscriptionNames[0])
+		if err != nil {
+			return "", errors.Wrapf(err, "Error finding Azure subscription. Check that you have permission to view the subscription or use a different subscription by specifying the %s env var", SubscriptionIDEnvVar)
+		}
+	case os.Getenv(SubscriptionIDEnvVar) != "":
+		// Next, check for the env var.
+		subscriptionId = os.Getenv(SubscriptionIDEnvVar)
+	default:
 		var err error
 		subscriptionId, err = p.findSubscriptionID(ctx, defaultSubscription)
 		if err != nil {
@@ -1955,4 +1991,9 @@ func MachineSupportsNVMe(machineType string) bool {
 		}
 	}
 	return false
+}
+
+// String returns a human-readable string representation of the Provider.
+func (p *Provider) String() string {
+	return fmt.Sprintf("%s-%s", ProviderName, strings.Join(p.SubscriptionNames, "_"))
 }

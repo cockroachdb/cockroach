@@ -61,21 +61,21 @@ func (p *Provider) CreateProviderOpts() vm.ProviderOpts {
 }
 
 // ConfigureProviderFlags implements vm.ProviderFlags and is a no-op.
-func (p *Provider) ConfigureProviderFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
+func (p *Provider) ConfigureProviderFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
+	flags.DurationVar(&p.OperationTimeout, ProviderName+"-timeout", p.OperationTimeout,
+		"The maximum amount of time for an Azure API operation to take")
+	flags.BoolVar(&p.SyncDelete, ProviderName+"-sync-delete", p.SyncDelete,
+		"Wait for deletions to finish before returning")
 }
 
 // ConfigureClusterCleanupFlags is part of ProviderOpts.
 func (o *Provider) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
-	flags.StringSliceVar(&providerInstance.SubscriptionNames, ProviderName+"-subscription-names", []string{},
+	flags.StringSliceVar(&o.SubscriptionNames, ProviderName+"-subscription-names", []string{},
 		"Azure subscription names as a comma-separated string")
 }
 
 // ConfigureCreateFlags implements vm.ProviderFlags.
 func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
-	flags.DurationVar(&providerInstance.OperationTimeout, ProviderName+"-timeout", providerInstance.OperationTimeout,
-		"The maximum amount of time for an Azure API operation to take")
-	flags.BoolVar(&providerInstance.SyncDelete, ProviderName+"-sync-delete", providerInstance.SyncDelete,
-		"Wait for deletions to finish before returning")
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type",
 		string(armcompute.VirtualMachineSizeTypesStandardD4V3),
 		"Machine type (see https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/)")

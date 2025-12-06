@@ -158,12 +158,12 @@ func writeStartupScript(
 
 // SyncDNS implements the InfraProvider interface.
 func (p *Provider) SyncDNS(l *logger.Logger, vms vm.List) error {
-	return p.dnsProvider.syncPublicDNS(l, vms)
+	return p.dnsProvider.SyncDNS(l, vms)
 }
 
 // DNSDomain implements the InfraProvider interface.
 func (p *Provider) DNSDomain() string {
-	return p.dnsProvider.publicDomain
+	return p.dnsProvider.PublicDomain()
 }
 
 type AuthorizedKey struct {
