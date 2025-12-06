@@ -1303,6 +1303,12 @@ func (s *GoodCandidateSelector) selectOne(cl candidateList) *candidate {
 	return cl.selectGood(s.randGen)
 }
 
+// ErrThrottledStores is returned when no suitable stores can be found, and
+// there are throttled stores. Store throttling is typically transient, so these
+// errors should be retried with appropriate backoff. It is currently retried by
+// the decommissioning pre-check.
+var ErrThrottledStores = errors.New("some stores are currently throttled")
+
 // AllocateTarget returns a suitable store for a new allocation of a voting or
 // non-voting replica with the required attributes. Nodes already accommodating
 // voting replicas are ruled out in the voter case, and nodes accommodating
@@ -1365,10 +1371,11 @@ func (a *Allocator) AllocateTarget(
 	}
 
 	// When there are throttled stores that do match, we shouldn't send
-	// the replica to purgatory.
+	// the replica to purgatory. For decommissioning pre-checks, we return a
+	// retryable error since throttling is transient.
 	if len(throttled) > 0 {
-		return roachpb.ReplicationTarget{}, "", errors.Errorf(
-			"%d matching stores are currently throttled: %v", len(throttled), throttled,
+		return roachpb.ReplicationTarget{}, "", errors.Wrapf(
+			ErrThrottledStores, "stores=%v", throttled,
 		)
 	}
 
