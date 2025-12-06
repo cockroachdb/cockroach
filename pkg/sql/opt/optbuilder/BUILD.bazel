@@ -122,6 +122,7 @@ go_test(
     srcs = [
         "builder_test.go",
         "name_resolution_test.go",
+        "scalar_test.go",
         "statement_tree_test.go",
         "union_test.go",
     ],

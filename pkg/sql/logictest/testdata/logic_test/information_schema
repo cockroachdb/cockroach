@@ -36,6 +36,7 @@ information_schema  columns                                table  node  NULL  NU
 information_schema  columns_extensions                     table  node  NULL  NULL
 information_schema  constraint_column_usage                table  node  NULL  NULL
 information_schema  constraint_table_usage                 table  node  NULL  NULL
+information_schema  crdb_index_usage_statistics            table  node  NULL  NULL
 information_schema  data_type_privileges                   table  node  NULL  NULL
 information_schema  domain_constraints                     table  node  NULL  NULL
 information_schema  domain_udt_usage                       table  node  NULL  NULL
@@ -251,6 +252,7 @@ information_schema  columns                                table  node  NULL  NU
 information_schema  columns_extensions                     table  node  NULL  NULL
 information_schema  constraint_column_usage                table  node  NULL  NULL
 information_schema  constraint_table_usage                 table  node  NULL  NULL
+information_schema  crdb_index_usage_statistics            table  node  NULL  NULL
 information_schema  data_type_privileges                   table  node  NULL  NULL
 information_schema  domain_constraints                     table  node  NULL  NULL
 information_schema  domain_udt_usage                       table  node  NULL  NULL
@@ -412,6 +414,7 @@ information_schema  columns
 information_schema  columns_extensions
 information_schema  constraint_column_usage
 information_schema  constraint_table_usage
+information_schema  crdb_index_usage_statistics
 information_schema  data_type_privileges
 information_schema  domain_constraints
 information_schema  domain_udt_usage
@@ -668,6 +671,7 @@ columns
 columns_extensions
 constraint_column_usage
 constraint_table_usage
+crdb_index_usage_statistics
 data_type_privileges
 domain_constraints
 domain_udt_usage
@@ -970,6 +974,7 @@ system         information_schema  columns                                SYSTEM
 system         information_schema  columns_extensions                     SYSTEM VIEW  NO
 system         information_schema  constraint_column_usage                SYSTEM VIEW  NO
 system         information_schema  constraint_table_usage                 SYSTEM VIEW  NO
+system         information_schema  crdb_index_usage_statistics            SYSTEM VIEW  NO
 system         information_schema  data_type_privileges                   SYSTEM VIEW  NO
 system         information_schema  domain_constraints                     SYSTEM VIEW  NO
 system         information_schema  domain_udt_usage                       SYSTEM VIEW  NO
@@ -2696,6 +2701,7 @@ NULL     public   system         information_schema  columns                    
 NULL     public   system         information_schema  columns_extensions                     SELECT          NO            YES
 NULL     public   system         information_schema  constraint_column_usage                SELECT          NO            YES
 NULL     public   system         information_schema  constraint_table_usage                 SELECT          NO            YES
+NULL     public   system         information_schema  crdb_index_usage_statistics            SELECT          NO            YES
 NULL     public   system         information_schema  data_type_privileges                   SELECT          NO            YES
 NULL     public   system         information_schema  domain_constraints                     SELECT          NO            YES
 NULL     public   system         information_schema  domain_udt_usage                       SELECT          NO            YES
@@ -2923,6 +2929,7 @@ NULL     public   system         information_schema  columns                    
 NULL     public   system         information_schema  columns_extensions                     SELECT          NO            YES
 NULL     public   system         information_schema  constraint_column_usage                SELECT          NO            YES
 NULL     public   system         information_schema  constraint_table_usage                 SELECT          NO            YES
+NULL     public   system         information_schema  crdb_index_usage_statistics            SELECT          NO            YES
 NULL     public   system         information_schema  data_type_privileges                   SELECT          NO            YES
 NULL     public   system         information_schema  domain_constraints                     SELECT          NO            YES
 NULL     public   system         information_schema  domain_udt_usage                       SELECT          NO            YES

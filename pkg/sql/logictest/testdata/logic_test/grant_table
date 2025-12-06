@@ -47,6 +47,7 @@ test           information_schema  columns                                table 
 test           information_schema  columns_extensions                     table        public   SELECT          false
 test           information_schema  constraint_column_usage                table        public   SELECT          false
 test           information_schema  constraint_table_usage                 table        public   SELECT          false
+test           information_schema  crdb_index_usage_statistics            table        public   SELECT          false
 test           information_schema  data_type_privileges                   table        public   SELECT          false
 test           information_schema  domain_constraints                     table        public   SELECT          false
 test           information_schema  domain_udt_usage                       table        public   SELECT          false

@@ -285,8 +285,8 @@ SELECT crdb_internal.decode_plan_gist('AgH8/f//nxkAAN6DgICAgDQAAAADAZz9//+fGQAAz
 query T nosort
 SELECT crdb_internal.decode_plan_gist('AgHk+v//3xoEAKAFAgAABQQGBA==');
 ----
-• virtual table
-  table: @?
+• scan
+  table: ?@?
   spans: 1+ spans
 
 # Regression tests for #154300. Gracefully handle invalid gists.
