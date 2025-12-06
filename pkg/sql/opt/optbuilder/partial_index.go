@@ -31,12 +31,7 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 	// depending on a table with a partial index predicate using an UDT will
 	// result in a type dependency being added between the view/function and the
 	// UDT.
-	if b.trackSchemaDeps {
-		b.trackSchemaDeps = false
-		defer func() {
-			b.trackSchemaDeps = true
-		}()
-	}
+	defer b.DisableSchemaDepTracking()()
 	tab := tabMeta.Table
 	numIndexes := tab.DeletableIndexCount()
 
