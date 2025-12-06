@@ -90,18 +90,18 @@ bazel clean --expunge
 ```
 though be warned your next build will take a while.
 
-## CCL Build
+## Module Resolution
 
-In CCL builds, code in `pkg/ui/ccl/src` overrides code in `pkg/ui/src` at build
-time, via a Webpack import resolution rule. E.g. if a file imports
-`src/views/shared/components/licenseType`, it'll resolve to
-`pkg/ui/src/views/shared/components/licenseType` in an OSS build, and
-`pkg/ui/ccl/src/views/shared/components/licenseType` in a CCL build.
+Code in `pkg/ui/ccl/src` overrides code in `pkg/ui/src` at build time, via a
+Webpack import resolution rule. E.g. if a file imports
+`src/views/shared/components/licenseType`, it'll first look for the file in
+`pkg/ui/ccl/src/views/shared/components/licenseType`, then fall back to
+`pkg/ui/src/views/shared/components/licenseType`.
 
-CCL code can import OSS code by prefixing paths with `oss/`, e.g.
-`import "oss/src/myComponent"`. By convention, this is only done by a CCL file
-importing the OSS version of itself, e.g. to render the OSS version of itself
-when the trial period has expired.
+CCL code can import base code by prefixing paths with `oss/`, e.g.
+`import "oss/src/myComponent"`. By convention, this is done by a CCL file
+importing the base version of itself, e.g. to render the base version when
+the license doesn't support a particular feature.
 
 ## Running tests
 

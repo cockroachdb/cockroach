@@ -33,8 +33,8 @@ import TimeWindowManager from "src/views/app/containers/metricsTimeManager";
 import RequireLogin from "src/views/login/requireLogin";
 import { ThrottleNotificationBar } from "src/views/shared/components/alertBar/alertBar";
 
-import "./layout.styl";
-import "./layoutPanel.styl";
+import "./layout.scss";
+import "./layoutPanel.scss";
 
 import TenantDropdown from "../../components/tenantDropdown/tenantDropdown";
 import { LicenseNotification } from "../licenseNotification/licenseNotification";

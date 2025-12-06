@@ -26,7 +26,7 @@ import { selectNodeRequestStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { findMostSpecificLocation, hasLocation } from "src/util/locations";
-import "./localities.styl";
+import "./localities.scss";
 
 import { BackToAdvanceDebug } from "../util";
 

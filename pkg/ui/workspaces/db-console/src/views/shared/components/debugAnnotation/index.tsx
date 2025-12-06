@@ -5,7 +5,7 @@
 
 import React from "react";
 
-import "./debugAnnotation.styl";
+import "./debugAnnotation.scss";
 
 export interface DebugAnnotationProps {
   label: string;

@@ -14,7 +14,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 
 import { AlertInfo, AlertLevel } from "src/redux/alerts";
-import "./alertMessage.styl";
+import "./alertMessage.scss";
 
 interface AlertMessageProps extends AlertInfo {
   autoClose: boolean;

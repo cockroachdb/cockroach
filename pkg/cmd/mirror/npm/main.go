@@ -51,12 +51,12 @@ func getUnmirroredUrls(
 
 		for key := range lf.Packages {
 			// Example key:
-			// /@ant-design/create-react-context@0.2.6(prop-types@15.8.1)(react@16.12.0)
+			// @ant-design/create-react-context@0.2.6(prop-types@15.8.1)(react@16.12.0)
 			//  ~~~~~~~~~~~ ~~~~~~~~~~~~~~~~~~~~ ~~~~~
 			//  [NPM scope] package name         version
 
-			// Remove the leading '/' and everything after the first '('.
-			scopedNameAtVersion, _, _ := strings.Cut(key[1:], "(")
+			// Remove everything after the first '('.
+			scopedNameAtVersion, _, _ := strings.Cut(key, "(")
 
 			// Split the scoped name and version apart.
 			lastAt := strings.LastIndex(scopedNameAtVersion, "@")
