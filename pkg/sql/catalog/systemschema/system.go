@@ -1412,6 +1412,7 @@ CREATE TABLE public.inspect_errors (
 	//   - 'fixMisestimate' uses value '2' and means that the collection was
 	//     triggered based on the execution feedback (which encountered a scan
 	//     misestimate).
+	// TODO: update this comment.
 	// (We didn't add an enum type for this column out of complexity. We also
 	// choose to not use a bool type to allow easy introduction of new kinds in
 	// the future.)
