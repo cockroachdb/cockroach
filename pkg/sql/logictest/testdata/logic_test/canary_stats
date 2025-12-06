@@ -172,7 +172,7 @@ statement ok
 DEALLOCATE ALL;
 
 statement ok
-SELECT crdb_internal.clear_query_plan_cache();
+SELECT information_schema.crdb_clear_query_plan_cache();
 
 statement ok
 SET TRACING = "on", cluster;

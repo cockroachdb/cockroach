@@ -88,7 +88,7 @@ SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 query cache hit
 
 statement ok
-SELECT crdb_internal.clear_query_plan_cache();
+SELECT information_schema.crdb_clear_query_plan_cache();
 
 statement ok
 SET TRACING = "on", cluster;
@@ -201,7 +201,7 @@ SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%reading statis
 ----
 
 statement ok
-SELECT crdb_internal.clear_table_stats_cache();
+SELECT information_schema.crdb_clear_table_stats_cache();
 
 statement ok
 SET TRACING = "on", cluster;

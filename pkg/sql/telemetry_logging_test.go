@@ -744,7 +744,7 @@ func TestTelemetryLoggingInternalEnabled(t *testing.T) {
 	// Since TRUNCATE is not a DML stmt, both should certainly get logged.
 	stubTime := timeutil.FromUnixMicros(int64(1e6))
 	st.SetTime(stubTime)
-	db.Exec(t, `SELECT crdb_internal.reset_sql_stats();`)
+	db.Exec(t, `SELECT information_schema.crdb_reset_sql_stats();`)
 
 	expectedQueries := []string{
 		`TRUNCATE TABLE system.public.statement_statistics`,
@@ -758,7 +758,7 @@ func TestTelemetryLoggingInternalEnabled(t *testing.T) {
 	}
 
 	for _, e := range entries {
-		if strings.Contains(e.Message, "SELECT crdb_internal.reset_sql_stats") {
+		if strings.Contains(e.Message, "SELECT information_schema.crdb_reset_sql_stats") {
 			t.Errorf("unexpected query log: %s", e.Message)
 		}
 	}

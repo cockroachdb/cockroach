@@ -616,8 +616,8 @@ func testResetSQLStatsRPCForTenant(
 		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
 			// Clears the SQL Stats at the end of each test via builtin.
 			defer func() {
-				testTenantConn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
-				controlCluster.TenantConn(serverccl.RandomServer).Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+				testTenantConn.Exec(t, "SELECT information_schema.crdb_reset_sql_stats()")
+				controlCluster.TenantConn(serverccl.RandomServer).Exec(t, "SELECT information_schema.crdb_reset_sql_stats()")
 			}()
 
 			for _, stmt := range stmts {
@@ -704,7 +704,7 @@ func testResetIndexUsageStatsRPCForTenant(
 			resetFn: func(helper serverccl.TenantTestHelper) {
 				// Reset index usage stats using SQL shell built-in.
 				testingCluster := helper.TestCluster()
-				testingCluster.TenantConn(0).Exec(t, "SELECT crdb_internal.reset_index_usage_stats()")
+				testingCluster.TenantConn(0).Exec(t, "SELECT information_schema.crdb_reset_index_usage_stats()")
 			},
 		},
 		{
