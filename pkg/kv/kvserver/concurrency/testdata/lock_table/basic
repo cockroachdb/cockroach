@@ -710,11 +710,11 @@ num locks: 3, bytes returned: 282, resume reason: RESUME_UNKNOWN, resume span: <
   range_id=3 key="b" holder=<nil> durability=Unreplicated duration=0s
    waiters:
     waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:2.65s
-    waiting_txn:00000000-0000-0000-0000-000000000001 active_waiter:true strength:Exclusive wait_duration:250ms
+    waiting_txn:00000000-0000-0000-0000-000000000001 active_waiter:true strength:Intent wait_duration:250ms
   range_id=3 key="c" holder=<nil> durability=Unreplicated duration=0s
    waiters:
     waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:2.65s
-    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Exclusive wait_duration:0s
+    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Intent wait_duration:0s
 
 # 100ms passes between before releasing a
 time-tick ms=100
@@ -872,11 +872,11 @@ num locks: 3, bytes returned: 258, resume reason: RESUME_UNKNOWN, resume span: <
   range_id=3 key="b" holder=<nil> durability=Unreplicated duration=0s
    waiters:
     waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:0s
-    waiting_txn:00000000-0000-0000-0000-000000000001 active_waiter:true strength:Exclusive wait_duration:350ms
+    waiting_txn:00000000-0000-0000-0000-000000000001 active_waiter:true strength:Intent wait_duration:350ms
   range_id=3 key="c" holder=<nil> durability=Unreplicated duration=0s
    waiters:
     waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:0s
-    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Exclusive wait_duration:100ms
+    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Intent wait_duration:100ms
   range_id=3 key="f" holder=00000000-0000-0000-0000-000000000003 durability=Replicated duration=2.75s
    waiters:
     waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:true strength:None wait_duration:0s
