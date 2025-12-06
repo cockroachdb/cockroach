@@ -209,59 +209,102 @@ const (
 	// Example: A=[+region=a], B=[+zone=a1]
 	//   If zone=a1 happens to be in region=a, then the disjoint result is
 	//   not correct.
+	// Example: A=[+region=a, +zone=a1], B=[+region=a, +zone=a2]
+	//   Since a store cannot be in both zones, the sets are disjoint.
 	conjNonIntersecting
 )
 
+// relationship returns the logical relationship between two sets of constraints
+// (represented as sorted, de-duplicated conjunctions).
 func (cc constraintsConj) relationship(b constraintsConj) conjunctionRelationship {
+	// n is the number of conjuncts in cc.
 	n := len(cc)
+	// m is the number of conjuncts in b.
 	m := len(b)
+	// extraInCC is the number of conjuncts present in cc but not in b.
 	extraInCC := 0
+	// extraInB is the number of conjuncts present in b but not in cc.
 	extraInB := 0
+	// inBoth is the number of conjuncts that are present in both.
 	inBoth := 0
+
+	// Example: cc = [A, C, E] and b = [B, D, E]:
+	//
+	// | Step | i | j | cc[i] | b[j] | Comparison | Action                      | extraInCC | extraInB | inBoth |
+	// |------|---|---|-------|------|------------|-----------------------------|-----------|----------|--------|
+	// | 1    | 0 | 0 | A     | B    | A < B      | extraInCC++, i++            | 1         | 0        | 0      |
+	// | 2    | 1 | 0 | C     | B    | C > B      | extraInB++, j++             | 1         | 1        | 0      |
+	// | 3    | 1 | 1 | C     | D    | C < D      | extraInCC++, i++            | 2         | 1        | 0      |
+	// | 4    | 2 | 1 | E     | D    | E > D      | extraInB++, j++             | 2         | 2        | 0      |
+	// | 5    | 2 | 2 | E     | E    | E == E     | inBoth++, i++, j++          | 2         | 2        | 1      |
+	//
+	// i and j are indices into cc and b respectively
 	for i, j := 0, 0; i < n || j < m; {
+		// If we've reached the end of cc, remaining items are only in b.
 		if i >= n {
 			extraInB++
 			j++
 			continue
 		}
+		// If we've reached the end of b, remaining items are only in cc.
 		if j >= m {
 			extraInCC++
 			i++
 			continue
 		}
+		// If both conjuncts are identical, increment inBoth.
 		if cc[i] == b[j] {
 			inBoth++
 			i++
 			j++
 			continue
 		}
+		// If the type and key are the same but value differs,
+		// then these constraints are non-intersecting.
+		// Example: +zone=a1, +zone=a2 (disjoint)
+		//
+		if cc[i].typ == b[j].typ && cc[i].key == b[j].key {
+			// For example, +zone=a1, +zone=a2.
+			return conjNonIntersecting
+			// NB: +zone=a1 and -zone=a1 are also non-intersecting, but we will
+			// not detect this case. Finding this case requires searching through
+			// b, and not simply walking in order, since the typ field is the
+			// first in the sort order and differs between these two conjuncts.
+		}
+		// If cc[i] < b[j], we've found a conjunct unique to cc.
 		if cc[i].less(b[j]) {
-			// Found a conjunct that is not in b.
 			extraInCC++
 			i++
 			continue
 		} else {
+			// Otherwise, found a conjunct unique to b.
 			extraInB++
 			j++
 			continue
 		}
 	}
+
+	// There are four possibilities:
+	// 1. extraInCC > 0 and extraInB == 0: cc is a strict subset of b.
 	if extraInCC > 0 && extraInB == 0 {
 		return conjStrictSubset
 	}
+	// 2. extraInB > 0 and extraInCC == 0: cc is a strict superset of b.
 	if extraInB > 0 && extraInCC == 0 {
 		return conjStrictSuperset
 	}
-	// (extraInCC == 0 || extraInB > 0) && (extraInB == 0 || extraInCC > 0)
-	// =>
-	// (extraInCC == 0 && extraInB == 0) || (extraInB > 0 && extraInCC > 0)
+
+	// 3. extraInCC == 0 and extraInB == 0: sets are equal.
 	if extraInCC == 0 && extraInB == 0 {
 		return conjEqualSet
 	}
-	// (extraInB > 0 && extraInCC > 0)
+
+	// 4. extraInCC > 0 and extraInB > 0:
+	//    a) if inBoth > 0, sets may possibly intersect.
 	if inBoth > 0 {
 		return conjPossiblyIntersecting
 	}
+	//    b) if inBoth == 0, sets are disjoint.
 	return conjNonIntersecting
 }
 
@@ -772,13 +815,7 @@ func doStructuralNormalization(conf *normalizedSpanConfig) error {
 	// non-intersecting. When the conjunctions are intersecting, we cannot
 	// promote from one to the other to fill out the set of conjunctions.
 	//
-	// Example 1: +region=a,+zone=a1 and +region=a,+zone=a2 are classified as
-	// conjPossiblyIntersecting, but we could do better in knowing that the
-	// conjunctions are non-intersecting since zone=a1 and zone=a2 are disjoint.
-	//
-	// TODO(sumeer): improve the case of example 1.
-	//
-	// Example 2: +region=a,+zone=a1 and +region=a,-zone=a2 are classified as
+	// Example: +region=a,+zone=a1 and +region=a,-zone=a2 are classified as
 	// conjPossiblyIntersecting. And if there happens to be a zone=a3 in the
 	// region, they are actually intersecting. We cannot do better since we
 	// don't know the semantics of regions, zones or the universe of possible
