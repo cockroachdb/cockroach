@@ -11,7 +11,7 @@ import { Button } from "src/components/button";
 
 import { OutsideEventHandler } from "../outsideEventHandler";
 
-import "./dropdown.styl";
+import "./dropdown.scss";
 
 export interface Item {
   value: string;

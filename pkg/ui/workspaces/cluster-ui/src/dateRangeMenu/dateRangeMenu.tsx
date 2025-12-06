@@ -19,7 +19,8 @@ import { TimezoneContext } from "../contexts";
 
 import styles from "./dateRangeMenu.module.scss";
 
-import type { PickerTimeProps } from "antd/es/date-picker/generatePicker";
+import type { PickerProps } from "antd/es/date-picker/generatePicker/interface";
+import type { SharedTimeProps } from "rc-picker/lib/panels/TimePanel";
 
 const cx = classNames.bind(styles);
 
@@ -27,10 +28,18 @@ const cx = classNames.bind(styles);
 // More details: https://ant.design/docs/react/use-custom-date-library#timepickertsx
 const DatePicker = AntDatePicker.generatePicker<Moment>(momentGenerateConfig);
 
-export type TimePickerProps = Omit<PickerTimeProps<Moment>, "picker">;
+// TimePickerProps extends PickerProps with time-specific props from rc-picker
+export type TimePickerProps = Omit<PickerProps<Moment>, "picker"> &
+  Pick<SharedTimeProps<Moment>, "showNow">;
 
-const TimePicker = React.forwardRef<any, TimePickerProps>((props, ref) => (
-  <DatePicker {...props} picker="time" mode={undefined} ref={ref} />
+// TimePicker wraps DatePicker with picker="time"
+const TimePicker = React.forwardRef<unknown, TimePickerProps>((props, ref) => (
+  <DatePicker
+    {...(props as React.ComponentProps<typeof DatePicker>)}
+    picker="time"
+    mode={undefined}
+    ref={ref}
+  />
 ));
 
 TimePicker.displayName = "TimePicker";
@@ -85,11 +94,11 @@ export function DateRangeMenu({
     endInit ? endInit.tz(timezone) : moment.tz(timezone),
   );
 
-  const onChangeStart = (m?: Moment) => {
+  const onChangeStart = (m: Moment | null) => {
     m && setStartMoment(m);
   };
 
-  const onChangeEnd = (m?: Moment) => {
+  const onChangeEnd = (m: Moment | null) => {
     m && setEndMoment(m);
   };
 

@@ -12,7 +12,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { AdminUIState } from "src/redux/state";
 
-import "./redux.styl";
+import "./redux.scss";
 import { BackToAdvanceDebug } from "../util";
 
 interface ReduxDebugProps extends RouteComponentProps {

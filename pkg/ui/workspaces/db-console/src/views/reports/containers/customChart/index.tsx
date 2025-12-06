@@ -55,7 +55,7 @@ import {
   CustomChartTable,
   CustomMetricState,
 } from "./customMetric";
-import "./customChart.styl";
+import "./customChart.scss";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;

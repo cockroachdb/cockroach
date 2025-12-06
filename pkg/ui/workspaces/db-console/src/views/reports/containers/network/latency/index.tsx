@@ -19,7 +19,7 @@ import { Chip } from "src/views/app/components/chip";
 
 import { getValueFromString, Identity, isHealthyLivenessStatus } from "..";
 
-import "./latency.styl";
+import "./latency.scss";
 
 import NodeLivenessStatus = cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
 import ConnectionStatus = cockroach.server.serverpb.NetworkConnectivityResponse.ConnectionStatus;
