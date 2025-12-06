@@ -99,7 +99,7 @@
 // intersection of time intervals obtained from inspecting MVCC history[^3].
 //
 // [Elle]: https://arxiv.org/pdf/2003.10554.pdf
-// [^1]: https://dl.acm.org/doi/10.1145/322154.322158
+// [^1]: https://publications.csail.mit.edu/lcs/pubs/pdf/MIT-LCS-TR-210.pdf
 // [^2]: there is currently concurrency within the atomic unit in kvnemesis. It
 // could in theory carry out multiple reads concurrently while not also writing,
 // such as DistSQL does, but this is not implemented today. See:

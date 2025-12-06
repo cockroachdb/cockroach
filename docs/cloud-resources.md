@@ -105,4 +105,4 @@ avoid paying for this egress bandwidth, we colocate storage accounts with the
 VMs running the acceptance tests, as we do for test fixtures.
 
 [azcopy]: https://docs.microsoft.com/en-us/azure/storage/storage-use-azcopy-linux
-[azure-blob-storage]: https://docs.microsoft.com/en-us/azure/storage/storage-introduction#blob-storage
+[azure-blob-storage]: https://web.archive.org/web/20250719125806/https://docs.microsoft.com/en-us/azure/storage/storage-introduction#blob-storage
