@@ -1353,6 +1353,8 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 		c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 		defer cleanup()
 
+		c.SrcSysSQL.Exec(t, "SET CLUSTER SETTING kv.rangefeed.lagging_closed_timestamp_cancel_min_lagging_duration = '5s';")
+
 		producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 		jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 		jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
