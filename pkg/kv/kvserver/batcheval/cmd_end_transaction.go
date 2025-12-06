@@ -1277,6 +1277,22 @@ func TestingSplitTrigger(
 var splitScansRightForStatsFirst = metamorphic.ConstantWithTestBool(
 	"split-scans-right-for-stats-first", false)
 
+// DisableMetamorphicSplitScansRightForStatsFirst disables the
+// splitScansRightForStatsFirst metamorphic bool for the duration of a test,
+// resetting it at the end.
+func DisableMetamorphicSplitScansRightForStatsFirst(t interface {
+	Helper()
+	Cleanup(func())
+}) {
+	t.Helper()
+	if splitScansRightForStatsFirst {
+		splitScansRightForStatsFirst = false
+		t.Cleanup(func() {
+			splitScansRightForStatsFirst = true
+		})
+	}
+}
+
 // makeScanStatsFn constructs a splitStatsScanFn for the provided post-split
 // range descriptor which computes the range's statistics.
 func makeScanStatsFn(
