@@ -6,7 +6,10 @@
 package randutil_test
 
 import (
+	"encoding/binary"
+	"math"
 	"testing"
+	"testing/quick"
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -75,5 +78,101 @@ func TestTestRand(t *testing.T) {
 		if !n2[k] {
 			t.Errorf("expected the same random numbers; got unique number %d", k)
 		}
+	}
+}
+
+func TestDeterministicChoice(t *testing.T) {
+	// Base config for quick checks.
+	cfg := &quick.Config{
+		MaxCount: 1000,
+	}
+	cfg.Rand, _ = randutil.NewTestRand()
+
+	// 1) Determinism: same (p,key,salt) -> same result, always.
+	propDeterministic := func(p float64, key []byte, salt uint64) bool {
+		if p < 0 {
+			p = 0
+		} else if p > 1 {
+			p = 1
+		}
+		a := randutil.DeterministicChoice(p, key, salt)
+		b := randutil.DeterministicChoice(p, key, salt)
+		return a == b
+	}
+	if err := quick.Check(propDeterministic, cfg); err != nil {
+		t.Fatalf("determinism failed: %v", err)
+	}
+	// 2) Edge behavior: p==0 always false; p==1 always true.
+	propEdges := func(key []byte, salt uint64) bool {
+		return !randutil.DeterministicChoice(0, key, salt) && randutil.DeterministicChoice(1, key, salt)
+	}
+	if err := quick.Check(propEdges, cfg); err != nil {
+		t.Fatalf("edge cases failed: %v", err)
+	}
+	// 3) Monotonicity in p: for p1 <= p2, true at p1 implies true at p2.
+	propMonotone := func(key []byte, salt uint64, p1, p2 float64) bool {
+		// clamp to [0,1]
+		if p1 < 0 {
+			p1 = 0
+		} else if p1 > 1 {
+			p1 = 1
+		}
+		if p2 < 0 {
+			p2 = 0
+		} else if p2 > 1 {
+			p2 = 1
+		}
+		if p1 > p2 {
+			p1, p2 = p2, p1
+		}
+		r1 := randutil.DeterministicChoice(p1, key, salt)
+		r2 := randutil.DeterministicChoice(p2, key, salt)
+		// If it was true at lower p, it cannot flip to false at higher p.
+		return !r1 || r2
+	}
+	if err := quick.Check(propMonotone, cfg); err != nil {
+		t.Fatalf("monotonicity failed: %v", err)
+	}
+	// 4) Approximate distribution: for many distinct keys and fixed salt,
+	// the observed true-rate is close to p (within a sigma-based margin).
+	cfgDist := *cfg
+	// Use a smaller MaxCount for this heavier check.
+	cfgDist.MaxCount = 50
+
+	propDistribution := func(salt uint64, rawP float64) bool {
+		// Keep p away from exact 0/1 for a meaningful variance.
+		p := rawP
+		if p < 0.02 {
+			p = 0.02
+		} else if p > 0.98 {
+			p = 0.98
+		} else if p > 1 || p < 0 {
+			// Map arbitrary float into [0.02,0.98] if outside range.
+			p = math.Mod(math.Abs(p), 1)
+			if p < 0.02 {
+				p = 0.02
+			}
+			if p > 0.98 {
+				p = 0.98
+			}
+		}
+
+		const N = 10000 // balanced for speed & reliability
+		var cnt int
+		var key [8]byte
+		for i := 0; i < N; i++ {
+			binary.LittleEndian.PutUint64(key[:], uint64(i))
+			if randutil.DeterministicChoice(p, key[:], salt) {
+				cnt++
+			}
+		}
+		frac := float64(cnt) / float64(N)
+		sigma := math.Sqrt(p * (1 - p) / float64(N))
+		// Allow the larger of an absolute 1.5% or 5σ—robust across platforms.
+		margin := math.Max(0.015, 5*sigma)
+		return math.Abs(frac-p) <= margin
+	}
+	if err := quick.Check(propDistribution, &cfgDist); err != nil {
+		t.Fatalf("distribution failed: %v", err)
 	}
 }

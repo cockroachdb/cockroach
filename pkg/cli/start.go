@@ -1526,8 +1526,11 @@ func setupAndInitializeLoggingAndProfiling(
 	initMutexProfile()
 
 	var gceContinuousProfilerEnabled = envutil.EnvOrDefaultBool("COCKROACH_GOOGLE_CONTINUOUS_PROFILER_ENABLED", false)
+	// N.B. service name must be globally unique since it's used for aggregating profiles.
+	// When using roachprod (with --cloud-profiler), this will typically correspond to the "cluster" VM label.
+	var serviceName = envutil.EnvOrDefaultString("COCKROACH_GOOGLE_CONTINUOUS_PROFILER_SERVICE_NAME", "")
 	if gceContinuousProfilerEnabled {
-		profiler.InitGoogleProfiler(ctx)
+		profiler.InitGoogleProfiler(ctx, serviceName)
 	}
 
 	log.Event(ctx, "initialized profiles")
