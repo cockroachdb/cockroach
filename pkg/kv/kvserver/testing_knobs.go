@@ -379,6 +379,9 @@ type StoreTestingKnobs struct {
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
 	BeforeSnapshotSSTIngestion func(IncomingSnapshot, []string) error
+	// AfterSplitApplication is called on the newly created replica's state after
+	// a split is applied. Called iff the RHS replica is not already destroyed.
+	AfterSplitApplication func(roachpb.ReplicaDescriptor, kvserverpb.ReplicaState)
 	// AfterSnapshotApplication is run after a snapshot is applied, before
 	// releasing the replica mutex.
 	AfterSnapshotApplication func(roachpb.ReplicaDescriptor, kvserverpb.ReplicaState, IncomingSnapshot)
