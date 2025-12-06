@@ -38,11 +38,8 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var params base.TestClusterArgs
-	params.ServerArgs.DefaultDRPCOption = base.TestDRPCDisabled
-
 	tc, _, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t,
-		backuptestutils.MultiNode, backuptestutils.WithParams(params))
+		backuptestutils.MultiNode)
 	defer cleanupFn()
 
 	ctx := context.Background()
