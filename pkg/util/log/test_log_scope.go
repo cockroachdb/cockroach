@@ -74,6 +74,7 @@ type tShim interface {
 // See the documentation of ScopeWithoutShowLogs() for API usage and
 // restrictions.
 func Scope(t tShim) *TestLogScope {
+	t.Logf("GOMAXPROCS: %d", runtime.GOMAXPROCS(0))
 	if logging.showLogs {
 		return newLogScope(t, true /* mostlyInline */)
 	}
