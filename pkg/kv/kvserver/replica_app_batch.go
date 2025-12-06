@@ -366,7 +366,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		rhsRepl.mu.Unlock()
 		rhsRepl.readOnlyCmdMu.Unlock()
 
-		if _, err := kvstorage.SubsumeReplica(
+		if err := kvstorage.SubsumeReplica(
 			ctx, kvstorage.TODOReadWriter(b.batch), rhsRepl.destroyInfoRaftMuLocked(),
 		); err != nil {
 			return errors.Wrapf(err, "unable to subsume replica before merge")
