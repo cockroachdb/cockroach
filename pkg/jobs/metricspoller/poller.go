@@ -59,14 +59,19 @@ func (mp *metricsPoller) Resume(ctx context.Context, execCtx interface{}) error 
 	var t timeutil.Timer
 	defer t.Stop()
 
-	runTask := func(name string, task func(ctx context.Context, execCtx sql.JobExecContext) error) error {
-		return task(logtags.AddTag(ctx, "task", name), exec)
+	runTask := func(name string, task func(ctx context.Context, execCtx sql.JobExecContext, exit bool) error) error {
+		return task(logtags.AddTag(ctx, "task", name), exec, false)
 	}
 
 	for {
 		t.Reset(jobs.PollJobsMetricsInterval.Get(&exec.ExecCfg().Settings.SV))
 		select {
 		case <-ctx.Done():
+			for name, task := range metricPollerTasks {
+				if err := task(ctx, exec, true); err != nil {
+					log.Dev.Errorf(ctx, "unexpected err from on-exit hook of task %s: %v", name, err)
+				}
+			}
 			return ctx.Err()
 		case <-t.C:
 			for name, task := range metricPollerTasks {
@@ -85,7 +90,7 @@ type pollerMetrics struct {
 
 // metricsPollerTasks lists the list of tasks performed on each iteration
 // of metrics poller.
-var metricPollerTasks = map[string]func(ctx context.Context, execCtx sql.JobExecContext) error{
+var metricPollerTasks = map[string]func(ctx context.Context, execCtx sql.JobExecContext, exiting bool) error{
 	"paused-jobs": updatePausedMetrics,
 	"manage-pts":  manageProtectedTimestamps,
 	"resolved-ts": updateTSMetrics,

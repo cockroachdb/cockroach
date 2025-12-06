@@ -32,7 +32,17 @@ const pausedJobsCountQuery = string(`
   GROUP BY job_type`)
 
 // updatePausedMetrics counts the number of paused jobs per job type.
-func updatePausedMetrics(ctx context.Context, execCtx sql.JobExecContext) error {
+func updatePausedMetrics(ctx context.Context, execCtx sql.JobExecContext, exit bool) error {
+	if exit {
+		metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct()
+		for _, v := range jobspb.Type_value {
+			if metrics.JobMetrics[v] != nil {
+				metrics.JobMetrics[v].CurrentlyPaused.Update(0)
+			}
+		}
+		return nil
+	}
+
 	var metricUpdates map[jobspb.Type]int
 	err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// In case of transaction retries, reset this map here.
@@ -85,7 +95,16 @@ const lowTSForTypeQuery = `SELECT min(high_water_timestamp) FROM crdb_internal.j
 
 // updateTSMetrics updates the metrics for jobs that have registered for ts
 // tracking.
-func updateTSMetrics(ctx context.Context, execCtx sql.JobExecContext) error {
+func updateTSMetrics(ctx context.Context, execCtx sql.JobExecContext, exit bool) error {
+	if exit {
+		for _, typ := range jobspb.Type_value {
+			if m := execCtx.ExecCfg().JobRegistry.MetricsStruct().ResolvedMetrics[typ]; m != nil {
+				m.Update(0)
+			}
+		}
+		return nil
+	}
+
 	for _, typ := range jobspb.Type_value {
 		m := execCtx.ExecCfg().JobRegistry.MetricsStruct().ResolvedMetrics[typ]
 		// If this job type does not register a resolved TS metric, skip it.
@@ -95,6 +114,7 @@ func updateTSMetrics(ctx context.Context, execCtx sql.JobExecContext) error {
 
 		var ts hlc.Timestamp
 		if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			ts = hlc.Timestamp{}
 			if err := txn.KV().SetUserPriority(roachpb.MinUserPriority); err != nil {
 				return err
 			}
@@ -136,7 +156,18 @@ const cancelJobTimeout = 60 * time.Second
 // collecting statistics related to job PTS records. It also detects PTS records
 // that are too old (as configured by the owner job) and requests job
 // cancellation for those jobs.
-func manageProtectedTimestamps(ctx context.Context, execCtx sql.JobExecContext) error {
+func manageProtectedTimestamps(ctx context.Context, execCtx sql.JobExecContext, exit bool) error {
+	if exit {
+		metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct()
+		for _, typ := range jobspb.Type_value {
+			m := metrics.JobPTSMetrics[typ]
+			if m != nil {
+				m.NumJobsWithPTS.Update(0)
+				m.ProtectedAge.Update(0)
+			}
+		}
+		return nil
+	}
 	var ptsStats map[jobspb.Type]*ptsStat
 	var schedulePtsStats map[string]*schedulePTSStat
 	var ptsState ptpb.State
