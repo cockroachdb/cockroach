@@ -1,0 +1,8 @@
+<h4 class="text-align:center">Summary</h4>
+<dl class="table rows" style="width: auto;">
+  <div><dt>Total Nodes (<a href="/future/overview">View nodes list</a>):</dt><dd>{{.TotalNodes}}</dd></div>
+  <div><dt>Capacity Usage: <p><small>You are using {{.CapacityUsedStr}} of {{.CapacityTotalStr}} disk capacity across all nodes.</small></p></dt><dd>{{formatPercent .CapacityPercent}}</dd></div>
+  <div><dt>Unavailable Ranges</dt><dd>{{.UnavailableRanges}}</dd></div>
+  <div><dt>Queries per second<p><small>Sum of Selects, Updates, Inserts, and Deletes across your entire cluster.</small></p></dt><dd>{{.QueriesPerSecond}}</dd></div>
+  <div><dt>P99 latency</dt><dd>{{formatTime .P99Latency}}</dd></div>
+</dl>

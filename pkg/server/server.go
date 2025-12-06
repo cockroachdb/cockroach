@@ -2167,6 +2167,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.sqlServer.ExecutorConfig(), /* execCfg */
 		s.authentication,             /* authnServer */
 		s.admin.adminServer,          /* adminServer */
+		s.status.statusServer,        /* statusServer */
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */
@@ -2185,6 +2186,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			CanViewKvMetricDashboards:   s.rpcContext.TenantID.Equal(roachpb.SystemTenantID),
 			DisableKvLevelAdvancedDebug: false,
 		},
+		s.kvNodeDialer,              /* nodeDialer */
+		s.rpcContext.NodeID.Get(),   /* localNodeID */
 	); err != nil {
 		return err
 	}

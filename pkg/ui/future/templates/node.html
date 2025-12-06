@@ -1,0 +1,58 @@
+{{ template "layout-start" .}}
+
+{{- $data := .Data -}}
+
+<nav class="breadcrumbs" aria-label="Breadcrumbs">
+  <ul>
+    <li class="<h1>">Overview</li>
+    <li class="<h2>">Node {{$data.NodeID}} / {{$data.Address}}</li>
+  </ul>
+</nav>
+
+<div class="box">
+	<h4>Node Summary</h4>
+	<dl class="table rows" style="width: auto;">
+		<div><dt>Health:</dt><dd>{{$data.Health}}</dd></div>
+		<div><dt>Last Update:</dt><dd>{{$data.LastUpdate.Format "Jan 02, 2006 at 15:04:05 MST"}}
+</dd></div>
+		<div><dt>Build:</dt><dd>{{$data.BuildVersion}}
+</dd></div>
+		<div><dt>Logs:</dt><dd><a href="/future/nodes/{{$data.NodeID}}/logs">View Logs</a></dd></div>
+	</dl>
+</div>
+
+<div class="box overflow-x:scroll">
+<table>
+	<thead>
+		<tr>
+			<th></th>
+			<th>Node {{$data.NodeID}}</th>
+			{{- range $data.Stores}}
+			<th>Store {{.StoreID}}</th>
+			{{- end}}
+		</tr>
+	</thead>
+	<tbody>
+		<tr><td>Live Bytes</td><td>{{formatBytes $data.NodeTotals.LiveBytes}}</td>{{- range $data.Stores}}<td>{{formatBytes .Totals.LiveBytes}}</td>{{- end}}</tr>
+		<tr><td>Key Bytes</td><td>{{formatBytes $data.NodeTotals.KeyBytes}}</td>{{- range $data.Stores}}<td>{{formatBytes .Totals.KeyBytes}}</td>{{- end}}</tr>
+		<tr><td>Value Bytes</td><td>{{formatBytes $data.NodeTotals.ValueBytes}}</td>{{- range $data.Stores}}<td>{{formatBytes .Totals.ValueBytes}}</td>{{- end}}</tr>
+		<tr><td>MVCC Range Key Bytes</td><td>{{formatBytes $data.NodeTotals.RangeKeyBytes}}</td>{{- range $data.Stores}}<td>{{formatBytes .Totals.RangeKeyBytes}}</td>{{- end}}</tr>
+		<tr><td>MVCC Range Value Bytes</td><td>{{formatBytes $data.NodeTotals.RangeValueBytes}}</td>{{- range $data.Stores}}<td>{{formatBytes .Totals.RangeValueBytes}}</td>{{- end}}</tr>
+		<tr><td>Intent Bytes</td><td>{{formatBytes $data.NodeTotals.IntentBytes}}</td>{{- range $data.Stores}}<td>{{formatBytes .Totals.IntentBytes}}</td>{{- end}}</tr>
+		<tr><td>System Bytes</td><td>{{formatBytes $data.NodeTotals.SystemBytes}}</td>{{- range $data.Stores}}<td>{{formatBytes .Totals.SystemBytes}}</td>{{- end}}</tr>
+		<tr><td>GC Bytes Age</td><td>{{$data.NodeTotals.GCBytesAge}}</td>{{- range $data.Stores}}<td>{{.Totals.GCBytesAge}}</td>{{- end}}</tr>
+		<tr><td>Total Replicas</td><td>{{$data.NodeTotals.TotalReplicas}}</td>{{- range $data.Stores}}<td>{{.Totals.TotalReplicas}}</td>{{- end}}</tr>
+		<tr><td>Raft Leaders</td><td>{{$data.NodeTotals.RaftLeaders}}</td>{{- range $data.Stores}}<td>{{.Totals.RaftLeaders}}</td>{{- end}}</tr>
+		<tr><td>Total Ranges</td><td>{{$data.NodeTotals.TotalRanges}}</td>{{- range $data.Stores}}<td>{{.Totals.TotalRanges}}</td>{{- end}}</tr>
+		<tr><td>Unavailable %</td><td>{{formatPercent $data.NodeTotals.UnavailablePercent}}</td>{{- range $data.Stores}}<td>{{formatPercent .Totals.UnavailablePercent}}</td>{{- end}}</tr>
+		<tr><td>Under Replicated %</td><td>{{formatPercent $data.NodeTotals.UnderRepPercent}}</td>{{- range $data.Stores}}<td>{{formatPercent .Totals.UnderRepPercent}}</td>{{- end}}</tr>
+		<tr><td>Used Capacity</td><td>{{formatBytes $data.NodeTotals.UsedCapacity}}</td>{{- range $data.Stores}}<td>{{formatBytes .Totals.UsedCapacity}}</td>{{- end}}</tr>
+		<tr><td>Available Capacity</td><td>{{formatBytes $data.NodeTotals.AvailableCapacity}}</td>{{- range $data.Stores}}<td>{{formatBytes .Totals.AvailableCapacity}}</td>{{- end}}</tr>
+		<tr><td>Maximum Capacity</td><td>{{formatBytes $data.NodeTotals.MaximumCapacity}}</td>{{- range $data.Stores}}<td>{{formatBytes .Totals.MaximumCapacity}}</td>{{- end}}</tr>
+	</tbody>
+</table>
+</div>
+
+
+{{ template "layout-end" .}}
+

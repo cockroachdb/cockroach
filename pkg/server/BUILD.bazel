@@ -304,6 +304,7 @@ go_library(
         "//pkg/ts/catalog",
         "//pkg/ts/tsdumpmeta",
         "//pkg/ui",
+        "//pkg/ui/future",
         "//pkg/upgrade",
         "//pkg/upgrade/upgradebase",
         "//pkg/upgrade/upgradecluster",

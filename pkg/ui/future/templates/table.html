@@ -1,0 +1,153 @@
+
+
+{{ template "layout-start" .}}
+
+
+<nav class="breadcrumbs" aria-label="Breadcrumbs">
+  <ul>
+    <li class="<h1>"><a href="/future/databases">Databases</a></li>
+    <li class="<h2>"><a href="/future/databases/{{ .Data.Table.DbID }}">Database: {{ .Data.DatabaseName }}</a></li>
+    <li class="<h3>">{{ .Data.Table.SchemaName }}.{{ .Data.Table.TableName }}</li>
+  </ul>
+</nav>
+
+<div role=tablist aria-label="Table">
+  <button role=tab aria-controls=overview aria-selected=true>Overview</button>
+  <button role=tab aria-controls=grants>Grants</button>
+  <button role=tab aria-controls=indexes>Indexes</button>
+</div>
+
+
+<div id=overview role=tabpanel>
+  <div class="box">
+    <pre><code class="language-sql">{{ .Data.CreateStatement }}</code></pre>
+  </div>
+
+  {{ if .Data.LastUpdated }}
+  <div class="flex-row justify-content:end">
+    <div>Last updated: {{ formatElapsedTime (timeSub timeNow .Data.LastUpdated) }}</div>
+  </div>
+  {{ end }}
+
+  <div class="flex-switch">
+    <div class="box">
+      <dl class="table rows" style="width: auto;">
+        <div><dt>Size:</dt><dd>{{ formatBytes .Data.Table.ReplicationSizeBytes }}</dd></div>
+        <div><dt>Ranges:</dt><dd>{{ .Data.Table.RangeCount }}</dd></div>
+        <div><dt>Replicas:</dt><dd>{{ .Data.Table.ReplicaCount }}</dd></div>
+        <div><dt>Regions/Nodes:</dt><dd>
+          {{ range $region, $nodes := .Data.RegionNodes }}
+            {{ range $nodes }}<chip>N{{ . }}</chip>{{ end }}
+          {{ end }}
+        </dd></div>
+      </dl>
+    </div>
+
+    <div class="box">
+      <dl class="table rows" style="width: auto;">
+        <div><dt>% of Live data:</dt><dd>
+          {{ if .Data.Table.PercentLiveData }}
+            {{ formatPercent .Data.Table.PercentLiveData }}<br>
+            {{ formatBytes .Data.Table.TotalLiveDataBytes }} live data / {{ formatBytes .Data.Table.TotalDataBytes }} total
+          {{ else }}
+            N/A
+          {{ end }}
+        </dd></div>
+        <div><dt>Auto stats collections:</dt><dd>
+          {{ if .Data.Table.AutoStatsEnabled }}
+            <chip class="ok">Enabled</chip>
+          {{ else }}
+            <chip class="warn">Disabled</chip>
+          {{ end }}
+        </dd></div>
+        <div><dt>Stats last updated:</dt><dd>
+          {{ if .Data.Table.StatsLastUpdated }}
+            {{ .Data.Table.StatsLastUpdated.Format "Jan 02, 2006 at 15:04:05 UTC" }}
+          {{ else }}
+            Never
+          {{ end }}
+        </dd></div>
+      </dl>
+    </div>
+  </div>
+
+</div>
+
+<div id=grants role=tabpanel hidden>
+  <table>
+    <thead>
+      <tr>
+        <th>Grantee</th>
+        <th>Privileges</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{ if eq (len .Data.Grants) 0 }}
+      <tr>
+        <td colspan="2" style="text-align: center; padding: 2rem;">
+          No grants found for this table
+        </td>
+      </tr>
+      {{ end }}
+      {{ range .Data.Grants }}
+      <tr>
+        <td>{{ .Grantee }}</td>
+        <td>{{ join .Privileges ", " }}</td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
+
+<div id=indexes role=tabpanel hidden>
+  <div id="index-stats-content">
+    <div class="flex-row justify-content:end width:100%">
+      <div>Last Reset:
+        {{ if .Data.IndexStatsReset }}
+          {{ formatElapsedTime (timeSub timeNow .Data.IndexStatsReset) }}
+        {{ else }}
+          Never
+        {{ end }}
+      </div>
+      <form method="post" action="/future/tables/{{ .Data.Table.TableID }}/reset-index-stats" style="display: inline;" hx-post="/future/tables/{{ .Data.Table.TableID }}/reset-index-stats" hx-target="#index-stats-content" hx-select="#index-stats-content" hx-swap="outerHTML">
+        <button type="submit" class="warn" onclick="return confirm('Are you sure you want to reset all index statistics for the entire cluster? This action cannot be undone.')">Reset all index stats</button>
+      </form>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Index Name</th>
+          <th>Last Read</th>
+          <th>Total Reads</th>
+          <th>Recommendations</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ if eq (len .Data.Indexes) 0 }}
+        <tr>
+          <td colspan="5" style="text-align: center; padding: 2rem;">
+            No index statistics found for this table
+          </td>
+        </tr>
+        {{ end }}
+        {{ range .Data.Indexes }}
+        <tr>
+          <td>{{ .IndexName }}</td>
+          <td>
+            {{ if .LastRead }}
+              {{ .LastRead.Format "Jan 02, 2006 at 15:04:05 UTC" }}
+            {{ else }}
+              Never
+            {{ end }}
+          </td>
+          <td>{{ .TotalReads }}</td>
+          <td>{{ .Recommendation }}</td>
+          <td></td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{ template "layout-end" .}}

@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/ui/future"
 	_ "github.com/cockroachdb/cockroach/pkg/ui/settings" // Import the settings package to register UI-related settings for doc generation.
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -73,25 +75,6 @@ var indexHTML = []byte(`<!DOCTYPE html>
 </html>
 `)
 
-type indexHTMLArgs struct {
-	// Insecure means disable auth entirely - anyone can use.
-	Insecure         bool
-	LoggedInUser     *string
-	Tag              string
-	Version          string
-	NodeID           string
-	OIDCAutoLogin    bool
-	OIDCLoginEnabled bool
-	OIDCButtonText   string
-	FeatureFlags     serverpb.FeatureFlags
-
-	OIDCGenerateJWTAuthTokenEnabled bool
-
-	LicenseType               string
-	SecondsUntilLicenseExpiry int64
-	IsManaged                 bool
-}
-
 // OIDCUIConf is a variable that stores data required by the
 // Admin UI to display and manage the OIDC login flow. It is
 // provided by the `oidcAuthenticationServer` at runtime
@@ -122,15 +105,21 @@ Binary built without web UI.
 
 // Config contains the configuration parameters for Handler.
 type Config struct {
-	Insecure bool
-	NodeID   *base.NodeIDContainer
-	GetUser  func(ctx context.Context) *string
-	OIDC     OIDCUI
-	Flags    serverpb.FeatureFlags
-	Settings *cluster.Settings
+	Insecure     bool
+	NodeID       *base.NodeIDContainer
+	GetUser      func(ctx context.Context) *string
+	GetClusterID func() string
+	OIDC         OIDCUI
+	Flags        serverpb.FeatureFlags
+	Settings     *cluster.Settings
+	Admin        serverpb.AdminClient
+	Status       serverpb.StatusClient
+	TS           tspb.TimeSeriesClient
 }
 
 var uiConfigPath = regexp.MustCompile("^/uiconfig$")
+
+var futurePath = regexp.MustCompile("^/future")
 
 // Handler returns an http.Handler that serves the UI,
 // including index.html, which has some login-related variables
@@ -163,7 +152,7 @@ func Handler(cfg Config) http.Handler {
 		licenseTTL := base.GetLicenseTTL(r.Context(), cfg.Settings, timeutil.DefaultTimeSource{})
 		oidcConf := cfg.OIDC.GetOIDCConf()
 		major, minor := build.BranchReleaseSeries()
-		args := indexHTMLArgs{
+		args := future.IndexHTMLArgs{
 			Insecure:         cfg.Insecure,
 			LoggedInUser:     cfg.GetUser(r.Context()),
 			Tag:              buildInfo.Tag,
@@ -180,9 +169,19 @@ func Handler(cfg Config) http.Handler {
 			// log.RedactionPolicyManaged is set to true only when cluster is running under
 			// managed service control.
 			IsManaged: log.RedactionPolicyManaged,
+			Admin:     cfg.Admin,
+			Status:    cfg.Status,
+			TS:        cfg.TS,
 		}
 		if cfg.NodeID != nil {
 			args.NodeID = cfg.NodeID.String()
+		}
+		if cfg.GetClusterID != nil {
+			args.ClusterID = cfg.GetClusterID()
+		}
+		if futurePath.MatchString(r.URL.Path) {
+			future.MakeFutureHandler(args).ServeHTTP(w, r)
+			return
 		}
 		if uiConfigPath.MatchString(r.URL.Path) {
 			argBytes, err := json.Marshal(args)

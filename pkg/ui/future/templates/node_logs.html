@@ -1,0 +1,35 @@
+{{ template "layout-start" .}}
+
+{{- $data := .Data -}}
+
+<nav class="breadcrumbs" aria-label="Breadcrumbs">
+  <ul>
+    <li class="<h1>">Overview</li>
+    <li class="<h2>">Node {{$data.NodeID}} / {{$data.Address}} - Logs</li>
+  </ul>
+</nav>
+
+<div class="box overflow-x:scroll">
+<table>
+	<thead>
+		<tr>
+			<th>Time</th>
+			<th>Severity</th>
+			<th>Message</th>
+			<th>File:Line</th>
+		</tr>
+	</thead>
+	<tbody>
+		{{- range $data.Entries}}
+		<tr>
+			<td>{{.FormattedTime}}</td>
+			<td>{{.SeverityName}}</td>
+			<td>{{.Message}}</td>
+			<td>{{.File}}:{{.Line}}</td>
+		</tr>
+		{{- end}}
+	</tbody>
+</table>
+</div>
+
+{{ template "layout-end" .}}

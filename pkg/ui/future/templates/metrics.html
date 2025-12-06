@@ -1,0 +1,180 @@
+{{template "layout-start" .}}
+<style>
+.u-tooltip {
+  position: absolute;
+  display: none;
+  background: var(--box-bg);
+  color: var(--fg);
+  border: 1px solid var(--muted-fg);
+  padding: var(--gap);
+  border-radius: var(--border-radius);
+  font-size: 0.8rem;
+  pointer-events: none;
+  z-index: 1000;
+}
+.u-time {
+  margin-bottom: var(--gap);
+  font-weight: bold;
+}
+.u-series {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+}
+.u-marker {
+  width: 1rem;
+  height: 1rem;
+}
+.u-label {
+  font-weight: 500;
+}
+.u-legend tbody {
+  max-height: 300px;
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: row;
+  align-items: flex-start;
+  align-content: flex-start;
+  overflow: auto;
+  border: 0;
+}
+.u-legend tbody > tr {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+}
+.u-legend tbody > tr:first-child {
+  flex-basis: 100%;
+  text-align: left;
+  color: var(--muted-fg);
+}
+.u-legend tbody > tr:first-child .u-marker {
+  display: none;
+}
+.u-legend .u-marker {
+  width: 1rem;
+  height: 1rem;
+  margin-right: var(--gap);
+  background-clip: padding-box !important;
+}
+.overflow-wrap\:break-word {
+  overflow-wrap: break-word;
+}
+</style>
+<nav class="breadcrumbs" aria-label="Breadcrumbs">
+  <ul>
+    <li class="<h1>">Metrics</li>
+    <li class="<h2>">{{.Data.DashboardDisplayName}}</li>
+  </ul>
+</nav>
+<div class="box flex-row overflow-x:auto">
+  <div>
+    <label for="dashboard">Dashboard:</label>
+    <select
+      name="dashboard"
+      id="dashboard"
+      hx-get="/future/metrics"
+      hx-target="body"
+      hx-push-url="true"
+      hx-include="[name='node']">
+      {{range .Data.AllDashboards}}
+      <option value="{{.Name}}" {{if eq .Name $.Data.DashboardName}}selected{{end}}>{{.DisplayName}}</option>
+      {{end}}
+    </select>
+  </div>
+  <div>
+    <label for="node">Node:</label>
+    <select
+      name="node"
+      id="node"
+      hx-get="/future/metrics"
+      hx-target="body"
+      hx-push-url="true"
+      hx-include="[name='dashboard']">
+      <option value="" {{if eq .Data.SelectedNode ""}}selected{{end}}>Cluster</option>
+      {{range .Data.Nodes}}
+      <option value="{{.NodeID}}" {{if eq .NodeID $.Data.SelectedNode}}selected{{end}}>{{.Address}} (n{{.NodeID}})</option>
+      {{end}}
+    </select>
+  </div>
+  <form class="flex-row" x-data>
+    <div>
+      <label for=category>Interval:</label>
+      <select
+        id=category
+        placeholder="Select a category..."
+        x-model="$store.timeRange.interval">
+        <option value="10m">Past 10m</option>
+        <option value="30m">Past 30m</option>
+        <option value="1h">Past Hour</option>
+        <option value="6h">Past 6 Hours</option>
+        <option value="1d">Past Day</option>
+        <option value="2d">Past 2 Days</option>
+        <option value="3d">Past 3 Days</option>
+        <option value="1w">Past Week</option>
+        <option value="2w">Past 2 Weeks</option>
+        <option value="1m">Past Month</option>
+        <option value="2m">Past 2 Months</option>
+        <hr>
+        <option value="custom">Custom time interval</option>
+      </select>
+    </div>
+    <div>
+      <label for="start-time">Start:</label>
+      <input
+        type="datetime-local"
+        id="start-time"
+        name="start-time"
+        x-model="$store.timeRange.startFormatted"
+        :disabled="$store.timeRange.interval !== 'custom'" >
+    </div>
+    <div>
+      <label for="end-time">End:</label>
+      <input
+        type="datetime-local"
+        id="end-time"
+        name="end-time"
+        x-model="$store.timeRange.endFormatted"
+        :disabled="$store.timeRange.interval !== 'custom'" >
+    </div>
+  </form>
+</div>
+<div class="grid overflow-x:auto">
+  <div data-cols="1 5">
+    {{range .Data.Graphs}}
+    <figure
+      x-data="metricGraph()"
+      data-metrics='{{.Metrics | json}}'
+      data-axis='{"units":"{{.Units}}","label":"{{.UnitsLabel}}"}'>
+      <figcaption x-data="{open: false}">
+        <div x-ref="caption" @mouseenter="open = true" @mouseleave="open = false" class="text-align:center">
+          {{.Title}}
+        </div>
+        {{if .Tooltip}}
+        <small role="tooltip" class="box crowded" x-show="open" x-anchor="$refs.caption" style="z-index: 1">
+          <p>{{.Tooltip}}</p>
+        </small>
+        {{end}}
+      </figcaption>
+      <div class="graph-container"></div>
+    </figure>
+    {{end}}
+  </div>
+  <div class="flex-column padding-block-start crowded" data-cols="6">
+    <div class="box info margin-block-start"><strong>New Version Available</strong>
+<p>A new version of CockroachDB is available.</p>
+<a href="https://www.cockroachlabs.com/docs/stable/upgrade-cockroach-version.html">Learn More</a></div>
+    <div class="box" hx-get="/future/metrics/summary" hx-trigger="load, every 10s" hx-swap="innerHTML">
+      <h4 class="text-align:center">Summary</h4>
+      <dl class="table rows" style="width: auto;">
+        <div><dt>Total Nodes (<a href="/future/overview">View nodes list</a>):</dt><dd>Loading...</dd></div>
+      </dl>
+    </div>
+    <div class="box" hx-get="/future/metrics/events" hx-trigger="load, every 10s" hx-swap="innerHTML">
+      <h4 class="text-align:center">Events</h4>
+      <p><small>Loading...</small></p>
+    </div>
+  </div>
+</div>
+
+{{template "layout-end" .}}

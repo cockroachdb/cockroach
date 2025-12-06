@@ -17,7 +17,9 @@ import (
 	"github.com/NYTimes/gziphandler"
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/inspectz"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
+	"github.com/cockroachdb/cockroach/pkg/ui/future"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -152,6 +155,7 @@ func (s *httpServer) setupRoutes(
 	execCfg *sql.ExecutorConfig,
 	authnServer authserver.Server,
 	adminServer *adminServer,
+	statusServer *statusServer,
 	adminAuthzCheck privchecker.CheckerForRPCHandlers,
 	metricSource metricMarshaler,
 	runtimeStatSampler *status.RuntimeStatSampler,
@@ -161,6 +165,8 @@ func (s *httpServer) setupRoutes(
 	handleInspectzUnauthenticated http.Handler,
 	apiServer http.Handler,
 	flags serverpb.FeatureFlags,
+	nodeDialer rpcbase.NodeDialer,
+	localNodeID roachpb.NodeID,
 ) error {
 	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
 	// the system settings initialized for it to pick up from the oidcAuthenticationServer.
@@ -168,6 +174,13 @@ func (s *httpServer) setupRoutes(
 		ctx, s.cfg.Settings, s.cfg.Locality,
 		s.mux.Handle, authnServer.UserLoginFromSSO, s.cfg.AmbientCtx, s.cfg.ClusterIDContainer.Get(), execCfg,
 	)
+	if err != nil {
+		return err
+	}
+
+	// Dial the local node to get client interfaces for the UI.
+	// This follows the same pattern as NewAPIInternalServer.
+	adminClient, statusClient, tsClient, err := future.DialNodeClients(ctx, nodeDialer, localNodeID, s.cfg.Settings)
 	if err != nil {
 		return err
 	}
@@ -184,8 +197,14 @@ func (s *httpServer) setupRoutes(
 			}
 			return nil
 		},
+		GetClusterID: func() string {
+			return s.cfg.ClusterIDContainer.Get().String()
+		},
 		Flags:    flags,
 		Settings: s.cfg.Settings,
+		Admin:    adminClient,
+		Status:   statusClient,
+		TS:       tsClient,
 	})
 
 	// The authentication mux used here is created in "allow anonymous" mode so that the UI
