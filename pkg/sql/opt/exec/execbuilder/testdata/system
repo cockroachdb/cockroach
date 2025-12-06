@@ -153,3 +153,36 @@ scan statement_hints@hash_idx
  ├── key: ()
  ├── fd: ()-->(2)
  └── distribution: test
+
+# Query used to enforce the global concurrency limit of auto stats collections.
+query T
+EXPLAIN
+SELECT array_agg(id)
+FROM (
+  SELECT unnest(job_ids) AS job_id
+  FROM system.table_statistics_locks
+  WHERE table_id = 0
+  AND kind = 1
+  FOR UPDATE OF table_statistics_locks
+)
+INNER LOOKUP JOIN system.jobs ON id = job_id
+WHERE status IN ('running', 'pending', 'cancel-requested', 'paused-requested', 'reverting', 'paused')
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • lookup join
+    │ table: jobs@primary
+    │ equality: (unnest) = (id)
+    │ equality cols are key
+    │ pred: status IN ('cancel-requested', 'paused', __more1_10__, 'running')
+    │
+    └── • project set
+        │
+        └── • scan
+              missing stats
+              table: table_statistics_locks@primary
+              spans: [/0/1 - /0/1]
+              locking strength: for update
