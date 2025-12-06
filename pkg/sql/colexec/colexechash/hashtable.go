@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -468,9 +469,12 @@ func (ht *HashTable) buildFromBufferedTuplesNoAccounting() {
 }
 
 // FullBuild executes the entirety of the hash table build phase using the input
-// as the build source. The input is entirely consumed in the process. Note that
-// the hash table is assumed to operate in HashTableFullBuildMode.
-func (ht *HashTable) FullBuild(input colexecop.Operator) {
+// as the build source. The input is entirely consumed in the process (unless
+// it's interrupted by the metadata - in which case FullBuild needs to be called
+// again to resume the build process).
+//
+// Note that the hash table is assumed to operate in HashTableFullBuildMode.
+func (ht *HashTable) FullBuild(input colexecop.Operator) *execinfrapb.ProducerMetadata {
 	if ht.BuildMode != HashTableFullBuildMode {
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"HashTable.FullBuild is called in unexpected build mode %d", ht.BuildMode,
@@ -482,13 +486,17 @@ func (ht *HashTable) FullBuild(input colexecop.Operator) {
 	// hash buckets for the target load factor (this is done in
 	// buildFromBufferedTuples()).
 	for {
-		batch := input.Next()
+		batch, meta := input.Next()
+		if meta != nil {
+			return meta
+		}
 		if batch.Length() == 0 {
 			break
 		}
 		ht.Vals.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 	}
 	ht.buildFromBufferedTuples()
+	return nil
 }
 
 // DistinctBuild appends all distinct tuples from batch to the hash table. Note

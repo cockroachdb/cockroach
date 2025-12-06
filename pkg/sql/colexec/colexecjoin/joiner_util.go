@@ -5,7 +5,12 @@
 
 package colexecjoin
 
-import "github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+import (
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+)
 
 // circularGroupsBuffer is a struct designed to store the groups' slices for a
 // given column. It starts out small and will grow dynamically if necessary
@@ -352,4 +357,60 @@ func (b *circularGroupsBuffer) getGroups() ([]group, []group) {
 	}
 
 	return leftGroups[startIdx:endIdx], rightGroups[startIdx:endIdx]
+}
+
+// metadataHelper is a utility struct that buffers metadata from the inputs in
+// order to mostly hide the complexity of dealing with metadata from its user.
+// The user is _still_ responsible for propagating the metadata further out, at
+// a convenient point in time.
+type metadataHelper struct {
+	colexecop.TwoInputInitHelper
+	bufferedMeta []execinfrapb.ProducerMetadata
+}
+
+// next calls Next() on the given input operator returning the first batch while
+// buffering any metadata. This should not be called directly - use
+// inputOneNext() or inputTwoNext() instead.
+func (h *metadataHelper) next(input colexecop.Operator) coldata.Batch {
+	for {
+		batch, meta := input.Next()
+		if meta != nil {
+			h.bufferedMeta = append(h.bufferedMeta, *meta)
+			continue
+		}
+		return batch
+	}
+}
+
+func (h *metadataHelper) inputOneNext() coldata.Batch {
+	return h.next(h.InputOne)
+}
+
+func (h *metadataHelper) inputTwoNext() coldata.Batch {
+	return h.next(h.InputTwo)
+}
+
+// maybeEmitMeta checks whether the helper has buffered any metadata and returns
+// one object if so.
+func (h *metadataHelper) maybeEmitMeta() *execinfrapb.ProducerMetadata {
+	if len(h.bufferedMeta) == 0 {
+		return nil
+	}
+	meta := h.bufferedMeta[0]
+	h.bufferedMeta[0] = execinfrapb.ProducerMetadata{}
+	h.bufferedMeta = h.bufferedMeta[1:]
+	return &meta
+}
+
+// DrainMeta implements the colexecop.MetadataSource interface.
+//
+// Note that we generally expect the joiners that use the metadataHelper to emit
+// _all_ metadata in the streaming fashion (perhaps except when there is a query
+// error that results in an ungraceful shutdown), but we choose to have this to
+// be safe, to ensure that all buffered metadata is emitted (even if not in the
+// streaming fashion).
+func (h *metadataHelper) DrainMeta() []execinfrapb.ProducerMetadata {
+	bufferedMeta := h.bufferedMeta
+	h.bufferedMeta = nil
+	return bufferedMeta
 }

@@ -44,6 +44,9 @@ type OrderedSynchronizer struct {
 	// to be merged by synchronizer.
 	tuplesToMerge int64
 
+	// heapInitalized, if set, indicates that we've fetched a batch from each
+	// input and initialized the heap over batches' first rows.
+	heapInitialized bool
 	// inputBatches stores the current batch for each input.
 	inputBatches []coldata.Batch
 	// inputIndices stores the current index into each input batch.
@@ -61,6 +64,11 @@ type OrderedSynchronizer struct {
 	comparators []vecComparator
 	output      coldata.Batch
 	outVecs     coldata.TypedVecs
+	// outputIdx tracks the next tuple to be added to the output batch.
+	outputIdx int
+	// continueBatch, if set, indicates that the current output batch should be
+	// continued.
+	continueBatch bool
 }
 
 var (
@@ -100,27 +108,45 @@ func NewOrderedSynchronizer(
 		typs:                  typs,
 		canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(typs),
 		tuplesToMerge:         tuplesToMerge,
+		inputBatches:          make([]coldata.Batch, len(inputs)),
+		heap:                  make([]int, 0, len(inputs)),
 	}
 	os.accountingHelper.Init(allocator, memoryLimit, typs, false /* alwaysReallocate */)
 	return os
 }
 
 // Next is part of the Operator interface.
-func (o *OrderedSynchronizer) Next() coldata.Batch {
-	if o.inputBatches == nil {
-		o.inputBatches = make([]coldata.Batch, len(o.inputs))
-		o.heap = make([]int, 0, len(o.inputs))
+func (o *OrderedSynchronizer) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	if !o.heapInitialized {
 		for i := range o.inputs {
-			o.inputBatches[i] = o.inputs[i].Root.Next()
+			if o.inputBatches[i] != nil {
+				// Already fetched from this input.
+				continue
+			}
+			var meta *execinfrapb.ProducerMetadata
+			o.inputBatches[i], meta = o.inputs[i].Root.Next()
+			if meta != nil {
+				return nil, meta
+			}
 			o.updateComparators(i)
 			if o.inputBatches[i].Length() > 0 {
 				o.heap = append(o.heap, i)
 			}
 		}
 		heap.Init(o)
+		o.heapInitialized = true
 	}
-	o.resetOutput()
-	outputIdx := 0
+	if !o.continueBatch {
+		var reallocated bool
+		o.output, reallocated = o.accountingHelper.ResetMaybeReallocate(
+			o.typs, o.output, int(o.tuplesToMerge), /* tuplesToBeSet */
+		)
+		if reallocated {
+			o.outVecs.SetBatch(o.output)
+		}
+		o.outputIdx = 0
+	}
+	o.continueBatch = false
 	for batchDone := false; !batchDone; {
 		if o.advanceMinBatch {
 			// Advance the minimum input batch, fetching a new batch if
@@ -129,7 +155,12 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
 				o.inputIndices[minBatch]++
 			} else {
-				o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next()
+				batch, meta := o.inputs[minBatch].Root.Next()
+				if meta != nil {
+					o.continueBatch = true
+					return nil, meta
+				}
+				o.inputBatches[minBatch] = batch
 				o.inputIndices[minBatch] = 0
 				o.updateComparators(minBatch)
 			}
@@ -156,7 +187,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 		for i := range o.typs {
 			vec := batch.ColVec(i)
 			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(srcRowIdx) {
-				o.outVecs.Nulls[i].SetNull(outputIdx)
+				o.outVecs.Nulls[i].SetNull(o.outputIdx)
 			} else {
 				switch o.canonicalTypeFamilies[i] {
 				case types.BoolFamily:
@@ -166,7 +197,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 						srcCol := vec.Bool()
 						outCol := o.outVecs.BoolCols[o.outVecs.ColsMap[i]]
 						v := srcCol.Get(srcRowIdx)
-						outCol.Set(outputIdx, v)
+						outCol.Set(o.outputIdx, v)
 					}
 				case types.BytesFamily:
 					switch o.typs[i].Width() {
@@ -174,7 +205,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 					default:
 						srcCol := vec.Bytes()
 						outCol := o.outVecs.BytesCols[o.outVecs.ColsMap[i]]
-						outCol.Copy(srcCol, outputIdx, srcRowIdx)
+						outCol.Copy(srcCol, o.outputIdx, srcRowIdx)
 					}
 				case types.DecimalFamily:
 					switch o.typs[i].Width() {
@@ -183,7 +214,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 						srcCol := vec.Decimal()
 						outCol := o.outVecs.DecimalCols[o.outVecs.ColsMap[i]]
 						v := srcCol.Get(srcRowIdx)
-						outCol.Set(outputIdx, v)
+						outCol.Set(o.outputIdx, v)
 					}
 				case types.IntFamily:
 					switch o.typs[i].Width() {
@@ -191,18 +222,18 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 						srcCol := vec.Int16()
 						outCol := o.outVecs.Int16Cols[o.outVecs.ColsMap[i]]
 						v := srcCol.Get(srcRowIdx)
-						outCol.Set(outputIdx, v)
+						outCol.Set(o.outputIdx, v)
 					case 32:
 						srcCol := vec.Int32()
 						outCol := o.outVecs.Int32Cols[o.outVecs.ColsMap[i]]
 						v := srcCol.Get(srcRowIdx)
-						outCol.Set(outputIdx, v)
+						outCol.Set(o.outputIdx, v)
 					case -1:
 					default:
 						srcCol := vec.Int64()
 						outCol := o.outVecs.Int64Cols[o.outVecs.ColsMap[i]]
 						v := srcCol.Get(srcRowIdx)
-						outCol.Set(outputIdx, v)
+						outCol.Set(o.outputIdx, v)
 					}
 				case types.FloatFamily:
 					switch o.typs[i].Width() {
@@ -211,7 +242,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 						srcCol := vec.Float64()
 						outCol := o.outVecs.Float64Cols[o.outVecs.ColsMap[i]]
 						v := srcCol.Get(srcRowIdx)
-						outCol.Set(outputIdx, v)
+						outCol.Set(o.outputIdx, v)
 					}
 				case types.TimestampTZFamily:
 					switch o.typs[i].Width() {
@@ -220,7 +251,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 						srcCol := vec.Timestamp()
 						outCol := o.outVecs.TimestampCols[o.outVecs.ColsMap[i]]
 						v := srcCol.Get(srcRowIdx)
-						outCol.Set(outputIdx, v)
+						outCol.Set(o.outputIdx, v)
 					}
 				case types.IntervalFamily:
 					switch o.typs[i].Width() {
@@ -229,7 +260,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 						srcCol := vec.Interval()
 						outCol := o.outVecs.IntervalCols[o.outVecs.ColsMap[i]]
 						v := srcCol.Get(srcRowIdx)
-						outCol.Set(outputIdx, v)
+						outCol.Set(o.outputIdx, v)
 					}
 				case types.JsonFamily:
 					switch o.typs[i].Width() {
@@ -237,7 +268,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 					default:
 						srcCol := vec.JSON()
 						outCol := o.outVecs.JSONCols[o.outVecs.ColsMap[i]]
-						outCol.Copy(srcCol, outputIdx, srcRowIdx)
+						outCol.Copy(srcCol, o.outputIdx, srcRowIdx)
 					}
 				case typeconv.DatumVecCanonicalTypeFamily:
 					switch o.typs[i].Width() {
@@ -246,7 +277,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 						srcCol := vec.Datum()
 						outCol := o.outVecs.DatumCols[o.outVecs.ColsMap[i]]
 						v := srcCol.Get(srcRowIdx)
-						outCol.Set(outputIdx, v)
+						outCol.Set(o.outputIdx, v)
 					}
 				default:
 					colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", o.typs[i].String()))
@@ -259,25 +290,15 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 		o.advanceMinBatch = true
 
 		// Account for the memory of the row we have just set.
-		batchDone = o.accountingHelper.AccountForSet(outputIdx)
-		outputIdx++
+		batchDone = o.accountingHelper.AccountForSet(o.outputIdx)
+		o.outputIdx++
 	}
 
-	o.output.SetLength(outputIdx)
+	o.output.SetLength(o.outputIdx)
 	// Note that it's ok if this number becomes negative - the accounting helper
 	// will ignore it.
-	o.tuplesToMerge -= int64(outputIdx)
-	return o.output
-}
-
-func (o *OrderedSynchronizer) resetOutput() {
-	var reallocated bool
-	o.output, reallocated = o.accountingHelper.ResetMaybeReallocate(
-		o.typs, o.output, int(o.tuplesToMerge), /* tuplesToBeSet */
-	)
-	if reallocated {
-		o.outVecs.SetBatch(o.output)
-	}
+	o.tuplesToMerge -= int64(o.outputIdx)
+	return o.output, nil
 }
 
 // Init is part of the Operator interface.
