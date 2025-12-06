@@ -54,11 +54,6 @@ type Coster interface {
 	// real-world metric, but does expect costs to be comparable to one another,
 	// as well as summable.
 	ComputeCost(candidate memo.RelExpr, required *physical.Required) memo.Cost
-
-	// MaybeGetBestCostRelation returns the best-cost relation for the given memo
-	// group if the group has been fully optimized for the `required` physical
-	// properties.
-	MaybeGetBestCostRelation(grp memo.RelExpr, required *physical.Required) (best memo.RelExpr, ok bool)
 }
 
 // coster encapsulates the default cost model for the optimizer. The coster
@@ -509,11 +504,8 @@ func (c *coster) Init(
 	}
 }
 
-// MaybeGetBestCostRelation is part of the xform.Coster interface.
-func (c *coster) MaybeGetBestCostRelation(
-	grp memo.RelExpr, required *physical.Required,
-) (best memo.RelExpr, ok bool) {
-	return c.o.MaybeGetBestCostRelation(grp, required)
+func (c *coster) maybeGetBestCostRelation(grp memo.RelExpr) (best memo.RelExpr, ok bool) {
+	return c.o.MaybeGetBestCostRelation(grp)
 }
 
 // ComputeCost calculates the estimated cost of the top-level operator in a
@@ -1176,7 +1168,7 @@ func (c *coster) computeLookupJoinCost(
 		join.LocalityOptimized,
 	)
 	_, provided := distribution.BuildLookupJoinLookupTableDistribution(
-		c.ctx, c.evalCtx, c.mem, join, required, c.MaybeGetBestCostRelation)
+		c.ctx, c.evalCtx, c.mem, join, c.maybeGetBestCostRelation)
 	extraCost := c.distributionCost(provided)
 	cost.Add(extraCost)
 	return cost

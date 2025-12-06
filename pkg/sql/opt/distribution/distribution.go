@@ -163,29 +163,28 @@ func getCRBDRegionColSetFromInput(
 	evalCtx *eval.Context,
 	mem *memo.Memo,
 	join *memo.LookupJoinExpr,
-	required *physical.Required,
-	maybeGetBestCostRelation func(grp memo.RelExpr, required *physical.Required) (best memo.RelExpr, ok bool),
+	maybeGetBestCostRelation func(grp memo.RelExpr) (best memo.RelExpr, ok bool),
 ) (crdbRegionColSet opt.ColSet, inputDistribution physical.Distribution) {
 	var needRemap bool
 	var setOpCols opt.ColSet
 
-	if bestCostInputRel, ok := maybeGetBestCostRelation(join.Input, required); ok {
+	if bestCostInputRel, ok := maybeGetBestCostRelation(join.Input); ok {
 		maybeScan := bestCostInputRel
 		var projectExpr *memo.ProjectExpr
 		if projectExpr, ok = maybeScan.(*memo.ProjectExpr); ok {
-			maybeScan, ok = maybeGetBestCostRelation(projectExpr.Input, required)
+			maybeScan, ok = maybeGetBestCostRelation(projectExpr.Input)
 			if !ok {
 				return crdbRegionColSet, physical.Distribution{}
 			}
 		}
 		if selectExpr, ok := maybeScan.(*memo.SelectExpr); ok {
-			maybeScan, ok = maybeGetBestCostRelation(selectExpr.Input, required)
+			maybeScan, ok = maybeGetBestCostRelation(selectExpr.Input)
 			if !ok {
 				return crdbRegionColSet, physical.Distribution{}
 			}
 		}
 		if indexJoinExpr, ok := maybeScan.(*memo.IndexJoinExpr); ok {
-			maybeScan, ok = maybeGetBestCostRelation(indexJoinExpr.Input, required)
+			maybeScan, ok = maybeGetBestCostRelation(indexJoinExpr.Input)
 			if !ok {
 				return crdbRegionColSet, physical.Distribution{}
 			}
@@ -193,7 +192,7 @@ func getCRBDRegionColSetFromInput(
 		if lookupJoinExpr, ok := maybeScan.(*memo.LookupJoinExpr); ok {
 			crdbRegionColSet, inputDistribution =
 				BuildLookupJoinLookupTableDistribution(
-					ctx, evalCtx, mem, lookupJoinExpr, required, maybeGetBestCostRelation)
+					ctx, evalCtx, mem, lookupJoinExpr, maybeGetBestCostRelation)
 			return crdbRegionColSet, inputDistribution
 		}
 		if localityOptimizedScan, ok := maybeScan.(*memo.LocalityOptimizedSearchExpr); ok {
@@ -210,7 +209,7 @@ func getCRBDRegionColSetFromInput(
 			return crdbRegionColSet, physical.Distribution{}
 		}
 		inputDistribution =
-			BuildProvided(ctx, evalCtx, mem, scanExpr, &required.Distribution)
+			BuildProvided(ctx, evalCtx, mem, scanExpr, &physical.Distribution{})
 		index := tab.Index(scanExpr.Index)
 		crdbRegionColID := scanExpr.Table.IndexColumnID(index, 0)
 		if needRemap {
@@ -253,11 +252,10 @@ func BuildLookupJoinLookupTableDistribution(
 	evalCtx *eval.Context,
 	mem *memo.Memo,
 	lookupJoin *memo.LookupJoinExpr,
-	required *physical.Required,
-	maybeGetBestCostRelation func(grp memo.RelExpr, required *physical.Required) (best memo.RelExpr, ok bool),
+	maybeGetBestCostRelation func(grp memo.RelExpr) (best memo.RelExpr, ok bool),
 ) (crdbRegionColSet opt.ColSet, provided physical.Distribution) {
 	localCrdbRegionColSet, inputDistribution :=
-		getCRBDRegionColSetFromInput(ctx, evalCtx, mem, lookupJoin, required, maybeGetBestCostRelation)
+		getCRBDRegionColSetFromInput(ctx, evalCtx, mem, lookupJoin, maybeGetBestCostRelation)
 
 	lookupTableMeta := mem.Metadata().TableMeta(lookupJoin.Table)
 	lookupTable := lookupTableMeta.Table
