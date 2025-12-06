@@ -153,3 +153,24 @@ scan statement_hints@hash_idx
  ├── key: ()
  ├── fd: ()-->(2)
  └── distribution: test
+
+# Query used to enforce the global concurrency limit of auto full stats
+# collections.
+query T
+EXPLAIN
+SELECT array_cat_agg(job_ids)
+FROM system.table_statistics_locks
+WHERE table_id = 0
+AND kind = 1
+FOR UPDATE OF table_statistics_locks
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│
+└── • scan
+      missing stats
+      table: table_statistics_locks@primary
+      spans: [/0/1 - /0/1]
+      locking strength: for update
