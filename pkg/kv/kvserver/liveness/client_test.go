@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,14 +20,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/kr/pretty"
@@ -452,6 +458,142 @@ func TestNodeConnectionStatusIsConnected(t *testing.T) {
 
 			// Subsequent calls should use the cached value (still the initial state).
 			require.Equal(t, tc.initialConnected, ncs.IsConnected())
+		})
+	}
+}
+
+type constantlatencyOracle time.Duration
+
+func (o constantlatencyOracle) GetLatency(_ string) time.Duration { return time.Duration(o) }
+
+func TestScanNodeVitalityFromKVLatencyImpact(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	rng, _ := randutil.NewLockedPseudoRand()
+
+	const (
+		updateThreadCount = 64
+		latency           = 10 * time.Millisecond
+	)
+	for _, scanThreadCount := range []int{0, 1, 64} {
+		t.Run(fmt.Sprintf("scanners=%d", scanThreadCount), func(t *testing.T) {
+			enableLatency := &atomic.Bool{}
+			ctx := context.Background()
+			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						Server: &server.TestingKnobs{
+							ContextTestingKnobs: rpc.ContextTestingKnobs{
+								InjectedLatencyOracle:  constantlatencyOracle(latency),
+								InjectedLatencyEnabled: enableLatency.Load,
+							},
+						},
+					},
+				},
+			})
+			defer tc.Stopper().Stop(ctx)
+
+			db := tc.Server(0).DB()
+			prefix := tc.ScratchRange(t)
+			nl := liveness.NewTestKVStorage(db, prefix)
+
+			enableLatency.Store(true)
+			var scanCount atomic.Int64
+			scansStarted := make(chan struct{})
+			stopScanners := make(chan struct{})
+			scanGroup := ctxgroup.WithContext(ctx)
+			scanRetryOpts := retry.Options{
+				InitialBackoff: 1 * time.Second,
+				MaxBackoff:     1 * time.Second,
+				Multiplier:     1.0,
+			}
+
+			for i := 0; i < scanThreadCount; i++ {
+				scanGroup.GoCtx(func(ctx context.Context) error {
+					jitter := rng.Intn(1000)
+					time.Sleep(time.Duration(jitter) * time.Millisecond)
+					r := retry.Start(scanRetryOpts)
+					scansStarted <- struct{}{}
+					for {
+						r.Next()
+						select {
+						case <-stopScanners:
+							return nil
+						default:
+							if _, err := nl.Scan(ctx); err != nil {
+								return err
+							}
+							scanCount.Add(1)
+						}
+					}
+				})
+			}
+			scanStartCount := 0
+			for scanThreadCount > scanStartCount {
+				<-scansStarted
+				scanStartCount++
+			}
+
+			// Update threads
+			updateGroup := ctxgroup.WithContext(ctx)
+			latencyChan := make(chan time.Duration, updateThreadCount*2)
+			for i := 0; i < updateThreadCount; i++ {
+				updateGroup.GoCtx(func(ctx context.Context) error {
+					nodeID := roachpb.NodeID(i)
+					if err := nl.Create(ctx, nodeID); err != nil {
+						return err
+					}
+					rec, err := nl.Get(ctx, nodeID)
+					if err != nil {
+						return err
+					}
+
+					exp := rec.Expiration.ToTimestamp()
+
+					for range 100 {
+						exp = exp.AddDuration(time.Nanosecond)
+
+						oldRec := rec
+						newLiveness := oldRec.Liveness
+						newLiveness.Expiration = exp.ToLegacyTimestamp()
+						update := liveness.MakeLivenessUpdate(oldRec, newLiveness)
+
+						updateStartTime := crtime.NowMono()
+						rec, err = nl.Update(ctx, update, func(liveness.Record) error {
+							return errors.New("unexpected error")
+						})
+						if err != nil {
+							return err
+						}
+
+						latencyChan <- updateStartTime.Elapsed()
+					}
+					return nil
+				})
+			}
+
+			count := 0
+			totalLatency := time.Duration(0)
+			maxLatency := time.Duration(0)
+			for count < 100*updateThreadCount {
+				obs := <-latencyChan
+				count++
+				if obs > maxLatency {
+					maxLatency = obs
+				}
+				totalLatency += obs
+			}
+
+			require.NoError(t, updateGroup.Wait())
+			close(stopScanners)
+			require.NoError(t, scanGroup.Wait())
+			t.Logf("update threads: %d, scan threads: %d, average latency: %s, max latency: %s",
+				updateThreadCount,
+				scanThreadCount,
+				totalLatency/time.Duration(count),
+				maxLatency,
+			)
+			t.Logf("injected latency: %s, scans performed: %d", latency, scanCount.Load())
 		})
 	}
 }
