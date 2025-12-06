@@ -61,6 +61,7 @@ var debugTimeSeriesDumpOpts = struct {
 	retryFailedRequests    bool
 	disableDeltaProcessing bool
 	ddMetricInterval       int64 // interval for datadoginit format only
+	nonVerbose             bool  // dump only essential and support metrics
 }{
 	format:                 tsDumpText,
 	from:                   timestampValue{},
@@ -69,6 +70,7 @@ var debugTimeSeriesDumpOpts = struct {
 	yaml:                   "/tmp/tsdump.yaml",
 	retryFailedRequests:    false,
 	disableDeltaProcessing: false, // delta processing enabled by default
+	nonVerbose:             false, // dump all metrics by default
 
 	// default to 10 seconds interval for datadoginit.
 	// This is based on the scrape interval that is currently set accross all managed clusters
@@ -199,7 +201,7 @@ will then convert it to the --format requested in the current invocation.
 
 			target, _ := addr.AddrWithDefaultLocalhost(serverCfg.AdvertiseAddr)
 			adminClient := conn.NewAdminClient()
-			names, err := serverpb.GetInternalTimeseriesNamesFromServer(ctx, adminClient)
+			names, err := serverpb.GetInternalTimeseriesNamesFromServer(ctx, adminClient, debugTimeSeriesDumpOpts.nonVerbose)
 			if err != nil {
 				return err
 			}
