@@ -33,6 +33,11 @@ type ChangefeedFilterOption struct {
 	FilterType FilterType
 }
 
+// IsEmpty returns true if the filter corresponds to the default state.
+func (c ChangefeedFilterOption) IsEmpty() bool {
+	return c.FilterType == ExcludeFilter && len(c.Tables) == 0
+}
+
 func (l ChangefeedLevel) String() string {
 	return []string{"TABLE", "DATABASE"}[l]
 }
