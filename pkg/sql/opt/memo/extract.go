@@ -206,7 +206,7 @@ func ExtractJoinConditionFilterOrds(
 		if !ok {
 			continue
 		}
-		if seenCols.Contains(left) || seenCols.Contains(right) {
+		if !inequality && (seenCols.Contains(left) || seenCols.Contains(right)) {
 			// Don't allow any column to show up twice.
 			// TODO(radu): need to figure out the right thing to do in cases
 			//  like: left.a = right.a AND left.a = right.b
