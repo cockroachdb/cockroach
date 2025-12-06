@@ -245,7 +245,7 @@ func newKVEventToRowConsumer(
 ) (_ *kvEventToRowConsumer, err error) {
 	includeVirtual := details.Opts.IncludeVirtual()
 	keyOnly := details.Opts.KeyOnly()
-	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details.Targets, includeVirtual, keyOnly)
+	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details.Targets, includeVirtual, keyOnly, cdcevent.DecoderOptions{SkipOffline: true})
 	if err != nil {
 		return nil, err
 	}
@@ -362,6 +362,15 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		// Column families are stored contiguously, so we'll get
 		// events for each one even if we're not watching them all.
 		if errors.Is(err, cdcevent.ErrUnwatchedFamily) {
+			// Release the event's allocation since we're not processing it.
+			a := ev.DetachAlloc()
+			a.Release(ctx)
+			return nil
+		}
+		if errors.Is(err, cdcevent.ErrTableOffline) {
+			// An event on an offline table should be silently dropped for db
+			// level changefeeds. Since the descriptor is offline, we can't
+			// safely decode the event.
 			// Release the event's allocation since we're not processing it.
 			a := ev.DetachAlloc()
 			a.Release(ctx)

@@ -113,7 +113,7 @@ func newCdcEventDecoder(
 		return nil, err
 	}
 
-	return cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false), nil
+	return cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false, cdcevent.DecoderOptions{}), nil
 }
 
 var originID1Options = &kvpb.WriteOptions{OriginID: 1}

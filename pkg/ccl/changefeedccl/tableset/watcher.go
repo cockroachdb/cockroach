@@ -172,7 +172,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 		StatementTimeName: changefeedbase.StatementTimeName(systemschema.NamespaceTable.GetName()),
 		Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
 	})
-	dec, err := cdcevent.NewEventDecoder(ctx, w.execCfg, cfTargets, false, false)
+	dec, err := cdcevent.NewEventDecoder(ctx, w.execCfg, cfTargets, false, false, cdcevent.DecoderOptions{})
 	if err != nil {
 		return err
 	}
