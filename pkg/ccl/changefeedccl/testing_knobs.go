@@ -133,6 +133,8 @@ type TestingKnobs struct {
 	// the initial timestamps are computed and before the changefeed targets'
 	// descriptors are fetched.
 	AfterComputeDistChangefeedTimestamps func(context.Context)
+
+	KafkaSinkV2Knobs kafkaSinkV2Knobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

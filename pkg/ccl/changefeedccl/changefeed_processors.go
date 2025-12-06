@@ -401,7 +401,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		initialInclusiveLowerBound: feed.ScanTime,
 	}
 
-	if cfKnobs, ok := ca.FlowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
+	if cfKnobs, ok := ca.FlowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok && cfKnobs != nil {
 		ca.knobs = *cfKnobs
 	}
 
@@ -429,7 +429,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	}
 
 	ca.sink, err = getEventSink(ctx, ca.FlowCtx.Cfg, ca.spec.Feed, timestampOracle,
-		ca.spec.User(), ca.spec.JobID, recorder, ca.targets)
+		ca.spec.User(), ca.spec.JobID, recorder, ca.targets, ca.knobs)
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
 		log.Changefeed.Warningf(ca.Ctx(), "moving to draining due to error getting sink: %v", err)
@@ -1274,7 +1274,7 @@ func newChangeFrontierProcessor(
 		}
 	}()
 
-	if cfKnobs, ok := flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
+	if cfKnobs, ok := flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok && cfKnobs != nil {
 		cf.knobs = *cfKnobs
 	}
 
@@ -1412,7 +1412,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	}
 	cf.sliMetrics = sli
 	cf.sink, err = getResolvedTimestampSink(ctx, cf.FlowCtx.Cfg, cf.spec.Feed, nilOracle,
-		cf.spec.User(), cf.spec.JobID, sli, cf.targets)
+		cf.spec.User(), cf.spec.JobID, sli, cf.targets, cf.knobs)
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
 		log.Changefeed.Warningf(cf.Ctx(), "moving to draining due to error getting sink: %v", err)
