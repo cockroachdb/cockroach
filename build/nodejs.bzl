@@ -2,7 +2,7 @@ load("@aspect_bazel_lib//lib/private:copy_directory_toolchain.bzl", "copy_direct
 load("@aspect_bazel_lib//lib/private:copy_to_directory_toolchain.bzl", "copy_to_directory_toolchains_repo")
 load("@rules_nodejs//nodejs:repositories.bzl", "node_repositories")
 load("@rules_nodejs//nodejs/private:nodejs_repo_host_os_alias.bzl", "nodejs_repo_host_os_alias")
-load("@rules_nodejs//nodejs/private:toolchains_repo.bzl", "toolchains_repo")
+load("@rules_nodejs//nodejs/private:nodejs_toolchains_repo.bzl", "nodejs_toolchains_repo")
 
 _NODE_VERSION = "16.14.2"
 _NODE_VERSIONS = {
@@ -113,7 +113,7 @@ def declare_nodejs_repos():
         )
     nodejs_repo_host_os_alias(name = "nodejs", user_node_repository_name = "nodejs")
     nodejs_repo_host_os_alias(name = "nodejs_host", user_node_repository_name = "nodejs")
-    toolchains_repo(name = "nodejs_toolchains", user_node_repository_name = "nodejs")
+    nodejs_toolchains_repo(name = "nodejs_toolchains", user_node_repository_name = "nodejs")
     # NB: npm_import has weird behavior where it transparently makes these
     # copy_directory/copy_to_directory repos for you if you do not set up the
     # repositories beforehand. This is weird behavior that will hopefully be

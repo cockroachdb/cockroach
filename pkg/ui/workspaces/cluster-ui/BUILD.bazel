@@ -29,7 +29,7 @@ ts_project(
     emit_declaration_only = True,
     out_dir = "dist/types",
     root_dir = "src",
-    supports_workers = False,
+    supports_workers = 0,
     tsconfig = "tsconfig.json",
     validate = False,
     deps = [":node_modules"],
@@ -168,5 +168,12 @@ npm_package(
         ":cluster-ui-lib",
     ],
     package = "@cockroachlabs/cluster-ui",
+    visibility = ["//visibility:public"],
+)
+
+# rules_js 2.x expects npm_package targets to be named 'pkg' by default
+alias(
+    name = "pkg",
+    actual = ":cluster-ui",
     visibility = ["//visibility:public"],
 )
