@@ -10,6 +10,7 @@ import {
   DatabasesPageV2,
   DatabaseDetailsPageV2,
   TableDetailsPageV2,
+  FingerprintsPage,
 } from "@cockroachlabs/cluster-ui";
 import { ConfigProvider } from "antd";
 import { ConnectedRouter } from "connected-react-router";
@@ -220,6 +221,13 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         <Redirect
                           from={`/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
                           to={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
+                        />
+
+                        {/* statement fingerprints */}
+                        <Route
+                          exact
+                          path="/fingerprints"
+                          component={FingerprintsPage}
                         />
 
                         <Redirect exact from="/database" to="/databases" />

@@ -217,16 +217,17 @@ func getStatementDetailsQueryClausesAndArgs(
 func (rb *statementDetailsRespBuilder) getTotalStatementDetails(
 	ctx context.Context,
 ) (serverpb.StatementDetailsResponse_CollectedStatementSummary, error) {
-	const expectedNumDatums = 4
+	const expectedNumDatums = 5
 	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
 	const queryFormat = `
 SELECT merge_stats_metadata(metadata)    AS metadata,
        array_agg(app_name)               AS app_names,
        merge_statement_stats(statistics) AS statistics,
-       encode(fingerprint_id, 'hex')     AS fingerprint_id
+       encode(fingerprint_id, 'hex')     AS fingerprint_id,
+       query														 AS query
 FROM %s %s
 GROUP BY
-    fingerprint_id
+    fingerprint_id, query
 LIMIT 1`
 
 	var row tree.Datums
@@ -238,10 +239,11 @@ LIMIT 1`
 SELECT %s                                  AS metadata,
        array_agg(app_name)                 AS app_names,
        merge_statement_stats(statistics)   AS statistics,
-       encode(fingerprint_id, 'hex')       AS fingerprint_id
+       encode(fingerprint_id, 'hex')       AS fingerprint_id,
+  		query																 AS query
 FROM crdb_internal.statement_activity %s
 GROUP BY
-    fingerprint_id
+    fingerprint_id, query
 LIMIT 1`, rb.mergeAggStmtMetadataColExpr, rb.whereClause), rb.qargs...)
 		if err != nil {
 			return statement, srverrors.ServerError(ctx, err)
@@ -300,7 +302,7 @@ LIMIT 1`, rb.mergeAggStmtMetadataColExpr, rb.whereClause), rb.qargs...)
 		return statement, srverrors.ServerError(ctx, err)
 	}
 
-	aggregatedMetadata.FormattedQuery = aggregatedMetadata.Query
+	aggregatedMetadata.FormattedQuery = string(tree.MustBeDString(row[4]))
 	aggregatedMetadata.FingerprintID = string(tree.MustBeDString(row[3]))
 
 	statement = serverpb.StatementDetailsResponse_CollectedStatementSummary{

@@ -9,7 +9,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -79,6 +81,8 @@ type instrumentationHelper struct {
 	fingerprint string
 
 	fingerprintId appstatspb.StmtFingerprintID
+	// fingerprintRowId is the row ID in the system.statement_fingerprints table.
+	fingerprintRowId int64
 
 	// Transaction information.
 	implicitTxn bool
@@ -446,9 +450,9 @@ func (ih *instrumentationHelper) Setup(
 	ih.isTenant = execinfra.IncludeRUEstimateInExplainAnalyze.Get(cfg.SV()) && cfg.DistSQLSrv != nil &&
 		cfg.DistSQLSrv.TenantCostController != nil
 	ih.topLevelStats = topLevelQueryStats{}
-	stmtFingerprintId := appstatspb.ConstructStatementFingerprintID(
-		stmt.StmtNoConstants, implicitTxn, p.SessionData().Database)
+	stmtFingerprintId, rowId := p.extendedEvalCtx.SQLStatsController.CreateStatementFingerprint(ctx, p.SessionData().Database, stmt.StmtNoConstants, implicitTxn)
 	ih.fingerprintId = stmtFingerprintId
+	ih.fingerprintRowId = rowId
 	ih.stmtDiagnosticsRecorder = stmtDiagnosticsRecorder
 	ih.withStatementTrace = cfg.TestingKnobs.WithStatementTrace
 	defer func() { ih.finalizeSetup(newCtx, cfg) }()
@@ -537,6 +541,11 @@ func (ih *instrumentationHelper) Setup(
 				tracing.WithRecording(tracingpb.RecordingStructured))
 			ih.shouldFinishSpan = true
 			ih.needFinish = true
+			// Set the statement fingerprint row ID on the span now that it exists.
+			if ih.fingerprintRowId != 0 {
+				qq(stmt.StmtNoConstants, ih.fingerprintRowId)
+				ih.sp.SetStatementFingerprint(ih.fingerprintRowId)
+			}
 			return newCtx
 		}
 		return ctx
@@ -556,7 +565,30 @@ func (ih *instrumentationHelper) Setup(
 	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(recType))
 	ih.shouldFinishSpan = true
 	ih.needFinish = true
+	// Set the statement fingerprint row ID on the span now that it exists.
+	if ih.fingerprintRowId != 0 {
+		ih.sp.SetStatementFingerprint(ih.fingerprintRowId)
+	}
 	return newCtx
+}
+
+func qq(args ...any) {
+	tempDir := os.TempDir()
+	file, err := os.OpenFile(tempDir+"/q", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	templateArr := []string{}
+	for range args {
+		templateArr = append(templateArr, "%v")
+	}
+	template := strings.Join(templateArr, " ") + "\n"
+	text := fmt.Sprintf(template, args...)
+	_, err = file.WriteString(text)
+	if err != nil {
+		panic(err)
+	}
 }
 
 // setupWithPlanGist checks whether the bundle should be collected for the

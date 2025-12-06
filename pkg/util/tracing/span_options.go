@@ -102,6 +102,17 @@ func (opts *spanOptions) parentSpanID() tracingpb.SpanID {
 	return 0
 }
 
+func (opts *spanOptions) parentStatementFingerprint() int64 {
+	if !opts.Parent.empty() && opts.Parent.i.crdb != nil {
+		opts.Parent.i.crdb.mu.Lock()
+		defer opts.Parent.i.crdb.mu.Unlock()
+		return opts.Parent.i.crdb.mu.statementFingerprint
+	} else if !opts.RemoteParent.Empty() {
+		return opts.RemoteParent.statementFingerprint
+	}
+	return 0
+}
+
 // recordingType computes the resulting recording type of the span
 // based on various settings. Please note that some of this logic is
 // partially duplicates in `Tracer.startSpanFast` which is used for

@@ -98,6 +98,7 @@ const (
 	SystemPrivilegeTableName                SystemTableName = "privileges"
 	SystemExternalConnectionsTableName      SystemTableName = "external_connections"
 	RoleIDSequenceName                      SystemTableName = "role_id_seq"
+	StatementFingerprintIDSequenceName      SystemTableName = "statement_fingerprint_id_seq"
 	SystemJobInfoTableName                  SystemTableName = "job_info"
 	SpanStatsUniqueKeys                     SystemTableName = "span_stats_unique_keys"
 	SpanStatsBuckets                        SystemTableName = "span_stats_buckets"
@@ -111,6 +112,7 @@ const (
 	PreparedTransactionsTableName           SystemTableName = "prepared_transactions"
 	InspectErrorsTableName                  SystemTableName = "inspect_errors"
 	StatementHintsTableName                 SystemTableName = "statement_hints"
+	StatementFingerprintsTableName          SystemTableName = "statement_fingerprints"
 )
 
 // Oid for virtual database and table.

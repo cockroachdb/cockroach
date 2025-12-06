@@ -53,6 +53,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/appstatspb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/hintpb",

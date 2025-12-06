@@ -160,11 +160,16 @@ func (s *spanInner) Meta() SpanMeta {
 	var spanID tracingpb.SpanID
 	var recordingType tracingpb.RecordingType
 	var sterile bool
+	var statementFingerprint int64
 
 	if s.crdb != nil {
 		traceID, spanID = s.crdb.traceID, s.crdb.spanID
 		recordingType = s.crdb.mu.recording.recordingType.load()
 		sterile = s.isSterile()
+		// Get the statement fingerprint while holding the lock
+		s.crdb.mu.Lock()
+		statementFingerprint = s.crdb.mu.statementFingerprint
+		s.crdb.mu.Unlock()
 	}
 
 	var otelCtx oteltrace.SpanContext
@@ -176,15 +181,17 @@ func (s *spanInner) Meta() SpanMeta {
 		spanID == 0 &&
 		!otelCtx.TraceID().IsValid() &&
 		recordingType == 0 &&
-		!sterile {
+		!sterile &&
+		statementFingerprint == 0 {
 		return SpanMeta{}
 	}
 	return SpanMeta{
-		traceID:       traceID,
-		spanID:        spanID,
-		otelCtx:       otelCtx,
-		recordingType: recordingType,
-		sterile:       sterile,
+		traceID:              traceID,
+		spanID:               spanID,
+		otelCtx:              otelCtx,
+		recordingType:        recordingType,
+		sterile:              sterile,
+		statementFingerprint: statementFingerprint,
 	}
 }
 
@@ -289,4 +296,23 @@ func (s *spanInner) hasVerboseSink() bool {
 // Tracer exports the tracer this span was created using.
 func (s *spanInner) Tracer() *Tracer {
 	return s.tracer
+}
+
+// SetStatementFingerprint sets the SQL statement fingerprint for this span.
+func (s *spanInner) SetStatementFingerprint(fingerprint int64) {
+	if s.crdb != nil {
+		s.crdb.mu.Lock()
+		defer s.crdb.mu.Unlock()
+		s.crdb.mu.statementFingerprint = fingerprint
+	}
+}
+
+// GetStatementFingerprint returns the SQL statement fingerprint for this span.
+func (s *spanInner) GetStatementFingerprint() int64 {
+	if s.crdb != nil {
+		s.crdb.mu.Lock()
+		defer s.crdb.mu.Unlock()
+		return s.crdb.mu.statementFingerprint
+	}
+	return 0
 }

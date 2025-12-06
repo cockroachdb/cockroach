@@ -83,10 +83,12 @@ var (
 		catconstants.TransactionDiagnosticsTableName,
 		catconstants.StatementHintsTableName,
 		catconstants.InspectErrorsTableName,
+		catconstants.StatementFingerprintsTableName,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{
 		catconstants.RoleIDSequenceName,
+		catconstants.StatementFingerprintIDSequenceName,
 	}
 
 	systemSuperuserPrivileges = func() map[descpb.NameInfo]privilege.List {

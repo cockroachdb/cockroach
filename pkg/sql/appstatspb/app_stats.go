@@ -57,6 +57,26 @@ func (t TransactionFingerprintID) Size() int64 {
 	return 8
 }
 
+type TransactionFingerprintBuilder struct {
+	stmtFingerprintIDs []StmtFingerprintID
+	hash               util.FNV64
+}
+
+func NewTransactionFingerprintBuilder() *TransactionFingerprintBuilder {
+	return &TransactionFingerprintBuilder{
+		hash: util.MakeFNV64(),
+	}
+}
+
+func (b *TransactionFingerprintBuilder) AddStatement(id StmtFingerprintID) {
+	b.stmtFingerprintIDs = append(b.stmtFingerprintIDs, id)
+	b.hash.Add(uint64(id))
+}
+
+func (b *TransactionFingerprintBuilder) Build() (TransactionFingerprintID, []StmtFingerprintID) {
+	return TransactionFingerprintID(b.hash.Sum()), b.stmtFingerprintIDs
+}
+
 // GetVariance retrieves the variance of the values.
 func (l *NumericStat) GetVariance(count int64) float64 {
 	return l.SquaredDiffs / (float64(count) - 1)

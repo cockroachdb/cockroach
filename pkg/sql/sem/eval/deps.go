@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -750,12 +751,15 @@ type GossipOperator interface {
 }
 
 // SQLStatsController is an interface embedded in EvalCtx which can be used by
-// the builtins to reset SQL stats in the cluster. This interface is introduced
+// the builtins to perform SQL stats operations. This interface is introduced
 // to avoid circular dependency.
 type SQLStatsController interface {
 	ResetClusterSQLStats(ctx context.Context) error
 	ResetActivityTables(ctx context.Context) error
 	CreateSQLStatsCompactionSchedule(ctx context.Context) error
+	CreateStatementFingerprint(
+		ctx context.Context, dbName string, query string, implicitTxn bool,
+	) (appstatspb.StmtFingerprintID, int64)
 }
 
 // SchemaTelemetryController is an interface embedded in EvalCtx which can be

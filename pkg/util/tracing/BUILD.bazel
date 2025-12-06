@@ -61,6 +61,7 @@ go_test(
     size = "small",
     srcs = [
         "bench_test.go",
+        "fingerprint_test.go",
         "main_test.go",
         "span_test.go",
         "tags_test.go",

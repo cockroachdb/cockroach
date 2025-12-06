@@ -205,6 +205,7 @@ func registerRoutes(
 		{"table_metadata/updatejob/", a.TableMetadataJob, true, authserver.RegularRole, true},
 		{fmt.Sprintf("grants/databases/{%s:[0-9]+}/", dbIdPathVar), a.getDatabaseGrants, true, authserver.RegularRole, true},
 		{fmt.Sprintf("grants/tables/{%s:[0-9]+}/", tableIdPathVar), a.getTableGrants, true, authserver.RegularRole, true},
+		{"fingerprints/", a.GetStatementFingerprints, true, authserver.RegularRole, true},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)

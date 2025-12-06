@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -102,6 +102,8 @@ type SQLStatsIngester struct {
 	settings *cluster.Settings
 
 	testingKnobs *sqlstats.TestingKnobs
+
+	sqlStatsController eval.SQLStatsController
 
 	metrics Metrics
 }
@@ -324,7 +326,11 @@ func (i *SQLStatsIngester) ClearSession(sessionID clusterunique.ID) {
 }
 
 func NewSQLStatsIngester(
-	st *cluster.Settings, knobs *sqlstats.TestingKnobs, metrics Metrics, sinks ...SQLStatsSink,
+	st *cluster.Settings,
+	knobs *sqlstats.TestingKnobs,
+	metrics Metrics,
+	sqlStatsController eval.SQLStatsController,
+	sinks ...SQLStatsSink,
 ) *SQLStatsIngester {
 	i := &SQLStatsIngester{
 		// A channel size of 1 is sufficient to avoid unnecessarily
@@ -430,8 +436,8 @@ func (i *SQLStatsIngester) flushBuffer(
 			}
 			// We need to recompute the fingerprint ID.
 			s.ImplicitTxn = transaction.ImplicitTxn
-			s.FingerprintID = appstatspb.ConstructStatementFingerprintID(
-				s.Query, s.ImplicitTxn, s.Database)
+			s.FingerprintID, _ = i.sqlStatsController.CreateStatementFingerprint(ctx,
+				s.Query, s.Database, s.ImplicitTxn)
 		}
 	}
 
