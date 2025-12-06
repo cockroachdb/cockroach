@@ -943,6 +943,9 @@ type optTable struct {
 	rlsForced  bool
 	policies   cat.Policies
 
+	// Canary statistics rollout duration.
+	statsCanaryWindow time.Duration
+
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
 	colMap catalog.TableColMap
@@ -1225,6 +1228,9 @@ func newOptTable(
 	ot.rlsEnabled = desc.IsRowLevelSecurityEnabled()
 	ot.rlsForced = desc.IsRowLevelSecurityForced()
 	ot.policies = getOptPolicies(desc.GetPolicies())
+
+	// Store canary stats rollout duration.
+	ot.statsCanaryWindow = desc.GetStatsCanaryWindow()
 
 	// Synthesize any check constraints for user defined types.
 	var synthesizedChecks []optCheckConstraint
@@ -1631,6 +1637,11 @@ func (ot *optTable) IsRowLevelSecurityEnabled() bool { return ot.rlsEnabled }
 
 // IsRowLevelSecurityForced is part of the cat.Table interface.
 func (ot *optTable) IsRowLevelSecurityForced() bool { return ot.rlsForced }
+
+// StatsCanaryWindow is part of the cat.Table interface.
+func (ot *optTable) StatsCanaryWindow() time.Duration {
+	return ot.statsCanaryWindow
+}
 
 // Policies is part of the cat.Table interface.
 func (ot *optTable) Policies() *cat.Policies {
@@ -2778,6 +2789,11 @@ func (ot *optVirtualTable) IsRowLevelSecurityEnabled() bool { return false }
 
 // IsRowLevelSecurityForced is part of the cat.Table interface.
 func (ot *optVirtualTable) IsRowLevelSecurityForced() bool { return false }
+
+// StatsCanaryWindow is part of the cat.Table interface.
+func (ot *optVirtualTable) StatsCanaryWindow() time.Duration {
+	return 0
+}
 
 // Policies is part of the cat.Table interface.
 func (ot *optVirtualTable) Policies() *cat.Policies { return nil }

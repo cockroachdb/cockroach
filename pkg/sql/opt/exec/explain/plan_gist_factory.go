@@ -10,6 +10,7 @@ import (
 	"context"
 	b64 "encoding/base64"
 	"encoding/binary"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -667,6 +668,9 @@ func (u *unknownTable) IsRowLevelSecurityEnabled() bool { return false }
 
 // IsRowLevelSecurityForced is part of the cat.Table interface
 func (u *unknownTable) IsRowLevelSecurityForced() bool { return false }
+
+// StatsCanaryWindow is part of the cat.Table interface
+func (u *unknownTable) StatsCanaryWindow() time.Duration { return 0 }
 
 // Policies is part of the cat.Table interface.
 func (u *unknownTable) Policies() *cat.Policies { return nil }

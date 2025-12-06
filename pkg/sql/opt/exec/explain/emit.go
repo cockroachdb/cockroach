@@ -594,6 +594,7 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 	var inaccurateEstimate bool
 	const inaccurateFactor = 2
 	const inaccurateAdditive = 100
+	const hiddenTag = "<hideen>"
 	if stats, ok := n.annotations[exec.EstimatedStatsID]; ok && !omitStats(n) {
 		s := stats.(*exec.EstimatedStats)
 
@@ -639,9 +640,12 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 					}
 
 					var duration string
+					var createdAt string
 					if e.ob.flags.Deflake.HasAny(DeflakeVolatile) {
-						duration = "<hidden>"
+						duration = hiddenTag
+						createdAt = hiddenTag
 					} else {
+						createdAt = s.TableStatsCreatedAt.String()
 						timeSinceStats := timeutil.Since(s.TableStatsCreatedAt)
 						if timeSinceStats < 0 {
 							timeSinceStats = 0
@@ -669,11 +673,19 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 						}
 					}
 
-					e.ob.AddField("estimated row count", fmt.Sprintf(
+					statsInfo := fmt.Sprintf(
 						"%s (%s%% of the table; stats collected %s ago%s)",
 						estimatedRowCountString, percentageStr,
 						duration, forecastStr,
-					))
+					)
+					switch s.State {
+					case exec.CanaryState:
+						statsInfo = statsInfo + fmt.Sprintf(", canary statistics created at %s", createdAt)
+					case exec.StableState:
+						statsInfo = statsInfo + fmt.Sprintf(", stable statistics created at %s", createdAt)
+					default:
+					}
+					e.ob.AddField("estimated row count", statsInfo)
 				} else {
 					e.ob.AddField("estimated row count", estimatedRowCountString)
 				}

@@ -13,6 +13,7 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/util/duration",
+        "//pkg/util/hlc",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
         "@com_github_cockroachdb_redact//:redact",
