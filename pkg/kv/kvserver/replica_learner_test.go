@@ -928,8 +928,7 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 	tc := testcluster.StartTestCluster(
 		t, 2, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultDRPCOption: base.TestDRPCDisabled,
-				Knobs:             knobs,
+				Knobs: knobs,
 			},
 			ReplicationMode: base.ReplicationManual,
 		},
