@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
@@ -1013,4 +1015,77 @@ func TestChangefeedConsistentPartitioning(t *testing.T) {
 		require.Equal(t, expected, actual)
 	}
 
+}
+
+func TestNumSinkIOWorkers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	defaultValue := min(runtime.GOMAXPROCS(0), 32)
+
+	tests := []struct {
+		name             string
+		clusterSetting   int64
+		changefeedOption string
+		expectedWorkers  int
+		expectError      bool
+	}{
+		{
+			name:             "option not set, cluster positive - use cluster",
+			clusterSetting:   10,
+			changefeedOption: "",
+			expectedWorkers:  10,
+		},
+		{
+			name:             "option not set, cluster non-positive - use default",
+			clusterSetting:   0,
+			changefeedOption: "",
+			expectedWorkers:  defaultValue,
+		},
+		{
+			name:             "option set positive - use option",
+			clusterSetting:   10,
+			changefeedOption: "15",
+			expectedWorkers:  15,
+		},
+		{
+			name:             "option set non-positive - use default",
+			clusterSetting:   10,
+			changefeedOption: "0",
+			expectedWorkers:  defaultValue,
+		},
+		{
+			name:             "invalid option - error",
+			clusterSetting:   10,
+			changefeedOption: "invalid",
+			expectError:      true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			changefeedbase.SinkIOWorkers.Override(ctx, &execCfg.Settings.SV, test.clusterSetting)
+
+			optsMap := make(map[string]string)
+			if test.changefeedOption != "" {
+				optsMap[changefeedbase.OptSinkIOWorkers] = test.changefeedOption
+			}
+			opts := changefeedbase.MakeStatementOptions(optsMap)
+
+			result, err := numSinkIOWorkers(&execCfg.DistSQLSrv.ServerConfig, opts)
+
+			if test.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, test.expectedWorkers, result)
+			}
+		})
+	}
 }
