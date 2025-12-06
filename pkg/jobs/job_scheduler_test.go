@@ -538,10 +538,6 @@ func TestJobSchedulerRetriesFailed(t *testing.T) {
 
 	daemon := newJobScheduler(h.cfg, h.env, metric.NewRegistry())
 
-	schedule := h.newScheduledJobForExecutor("schedule", executorName, nil)
-	schedules := ScheduledJobDB(h.cfg.DB)
-	require.NoError(t, schedules.Create(ctx, schedule))
-
 	startTime := h.env.Now()
 	execTime := startTime.Add(time.Hour).Add(time.Second)
 
@@ -556,6 +552,10 @@ func TestJobSchedulerRetriesFailed(t *testing.T) {
 		{jobspb.ScheduleDetails_RETRY_SCHED, cron.Next(execTime).Round(time.Microsecond)},
 	} {
 		t.Run(tc.onError.String(), func(t *testing.T) {
+			schedule := h.newScheduledJobForExecutor("schedule", executorName, nil)
+			schedules := ScheduledJobDB(h.cfg.DB)
+			require.NoError(t, schedules.Create(ctx, schedule))
+
 			h.env.SetTime(startTime)
 			schedule.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{OnError: tc.onError}))
 			require.NoError(t, schedule.SetScheduleAndNextRun("@hourly"))

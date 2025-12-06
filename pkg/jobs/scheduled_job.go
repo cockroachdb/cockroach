@@ -174,6 +174,9 @@ func (j *ScheduledJob) ExecutionArgs() *jobspb.ExecutionArguments {
 // SetScheduleAndNextRun updates periodicity of this schedule, and updates this schedules
 // next run time.
 func (j *ScheduledJob) SetScheduleAndNextRun(scheduleExpr string) error {
+	if j.rec.ScheduleExpr == scheduleExpr {
+		return nil
+	}
 	j.rec.ScheduleExpr = scheduleExpr
 	j.markDirty("schedule_expr")
 	return j.ScheduleNextRun()
