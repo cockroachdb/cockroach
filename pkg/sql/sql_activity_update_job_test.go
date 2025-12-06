@@ -610,7 +610,7 @@ func TestTransactionActivityMetadata(t *testing.T) {
 	require.NotEmpty(t, metadata.StmtFingerprintIDs)
 
 	// Do the same but testing transferTopStats.
-	db.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+	db.Exec(t, "SELECT information_schema.crdb_reset_sql_stats()")
 	db.Exec(t, "SELECT 1")
 
 	sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, obsConn, 1)

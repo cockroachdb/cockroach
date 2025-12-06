@@ -149,7 +149,7 @@ WHERE feature_name = 'sql.session.statement-hints'
 5
 
 statement ok
-SELECT crdb_internal.clear_statement_hints_cache()
+SELECT information_schema.crdb_clear_statement_hints_cache()
 
 statement ok
 SELECT * FROM xy WHERE x > y

@@ -7823,58 +7823,10 @@ table's zone configuration this will return NULL.`,
 			volatility.Stable,
 		),
 	),
-	"crdb_internal.reset_index_usage_stats": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
-		tree.Overload{
-			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
-				); err != nil {
-					return nil, err
-				}
-				if evalCtx.IndexUsageStatsController == nil {
-					return nil, errors.AssertionFailedf("index usage stats controller not set")
-				}
-				if err := evalCtx.IndexUsageStatsController.ResetIndexUsageStats(ctx); err != nil {
-					return nil, err
-				}
-				return tree.MakeDBool(true), nil
-			},
-			Info:       `This function is used to clear the collected index usage statistics.`,
-			Volatility: volatility.Volatile,
-		},
-	),
-	"crdb_internal.reset_sql_stats": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
-		tree.Overload{
-			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
-				); err != nil {
-					return nil, err
-				}
-				if evalCtx.SQLStatsController == nil {
-					return nil, errors.AssertionFailedf("sql stats controller not set")
-				}
-				if err := evalCtx.SQLStatsController.ResetClusterSQLStats(ctx); err != nil {
-					return nil, err
-				}
-				return tree.MakeDBool(true), nil
-			},
-			Info:       `This function is used to clear the collected SQL statistics.`,
-			Volatility: volatility.Volatile,
-		},
-	),
+	"crdb_internal.reset_index_usage_stats":           resetIndexUsageStats,
+	"information_schema.crdb_reset_index_usage_stats": resetIndexUsageStatsInformationSchema,
+	"crdb_internal.reset_sql_stats":                   resetSQLStats,
+	"information_schema.crdb_reset_sql_stats":         resetSQLStatsInformationSchema,
 	"crdb_internal.reset_activity_tables": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemInfo,
@@ -9288,40 +9240,10 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Volatility: volatility.Volatile,
 		},
 	),
-	"crdb_internal.clear_query_plan_cache": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemRepair,
-			Undocumented:     true,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
-		tree.Overload{
-			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.Void),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				evalCtx.Planner.ClearQueryPlanCache()
-				return tree.DVoidDatum, nil
-			},
-			Info:       `This function is used to clear the query plan cache on the gateway node`,
-			Volatility: volatility.Volatile,
-		},
-	),
-	"crdb_internal.clear_table_stats_cache": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemRepair,
-			Undocumented:     true,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
-		tree.Overload{
-			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.Void),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				evalCtx.Planner.ClearTableStatsCache()
-				return tree.DVoidDatum, nil
-			},
-			Info:       `This function is used to clear the table statistics cache on the gateway node`,
-			Volatility: volatility.Volatile,
-		},
-	),
+	"crdb_internal.clear_query_plan_cache":            clearQueryPlanCache,
+	"information_schema.crdb_clear_query_plan_cache":  clearQueryPlanCacheInformationSchema,
+	"crdb_internal.clear_table_stats_cache":           clearTableStatsCache,
+	"information_schema.crdb_clear_table_stats_cache": clearTableStatsCacheInformationSchema,
 	"crdb_internal.get_fully_qualified_table_name": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
@@ -9731,23 +9653,8 @@ WHERE object_id = table_descriptor_id
 			Volatility: volatility.Volatile,
 		},
 	),
-	"crdb_internal.clear_statement_hints_cache": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemRepair,
-			Undocumented:     true,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
-		tree.Overload{
-			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.Void),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				evalCtx.Planner.ClearStatementHintsCache()
-				return tree.DVoidDatum, nil
-			},
-			Info:       `This function is used to clear the statement hints cache on the gateway node`,
-			Volatility: volatility.Volatile,
-		},
-	),
+	"crdb_internal.clear_statement_hints_cache":           clearStatementHintsCache,
+	"information_schema.crdb_clear_statement_hints_cache": clearStatementHintsCacheInformationSchema,
 	"crdb_internal.await_statement_hints_cache": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemRepair,
@@ -12892,6 +12799,177 @@ var datumsToBytes = makeBuiltin(
 		Volatility:        volatility.Immutable,
 		CalledOnNullInput: true,
 	},
+)
+
+func makeResetIndexUsageStatsBuiltin() tree.Overload {
+	return tree.Overload{
+		Types:      tree.ParamTypes{},
+		ReturnType: tree.FixedReturnType(types.Bool),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			if err := evalCtx.SessionAccessor.CheckPrivilege(
+				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+			); err != nil {
+				return nil, err
+			}
+			if evalCtx.IndexUsageStatsController == nil {
+				return nil, errors.AssertionFailedf("index usage stats controller not set")
+			}
+			if err := evalCtx.IndexUsageStatsController.ResetIndexUsageStats(ctx); err != nil {
+				return nil, err
+			}
+			return tree.MakeDBool(true), nil
+		},
+		Info:       `This function is used to clear the collected index usage statistics.`,
+		Volatility: volatility.Volatile,
+	}
+}
+
+var resetIndexUsageStats = makeBuiltin(
+	tree.FunctionProperties{
+		Category:         builtinconstants.CategorySystemInfo,
+		DistsqlBlocklist: true, // applicable only on the gateway
+	},
+	makeResetIndexUsageStatsBuiltin(),
+)
+
+var resetIndexUsageStatsInformationSchema = makeBuiltin(
+	tree.FunctionProperties{
+		Category:         builtinconstants.CategorySystemInfo,
+		DistsqlBlocklist: true, // applicable only on the gateway
+	},
+	makeResetIndexUsageStatsBuiltin(),
+)
+
+func makeResetSQLStatsBuiltin() tree.Overload {
+	return tree.Overload{
+		Types:      tree.ParamTypes{},
+		ReturnType: tree.FixedReturnType(types.Bool),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			if err := evalCtx.SessionAccessor.CheckPrivilege(
+				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+			); err != nil {
+				return nil, err
+			}
+			if evalCtx.SQLStatsController == nil {
+				return nil, errors.AssertionFailedf("sql stats controller not set")
+			}
+			if err := evalCtx.SQLStatsController.ResetClusterSQLStats(ctx); err != nil {
+				return nil, err
+			}
+			return tree.MakeDBool(true), nil
+		},
+		Info:       `This function is used to clear the collected SQL statistics.`,
+		Volatility: volatility.Volatile,
+	}
+}
+
+var resetSQLStats = makeBuiltin(
+	tree.FunctionProperties{
+		Category:         builtinconstants.CategorySystemInfo,
+		DistsqlBlocklist: true, // applicable only on the gateway
+	},
+	makeResetSQLStatsBuiltin(),
+)
+
+var resetSQLStatsInformationSchema = makeBuiltin(
+	tree.FunctionProperties{
+		Category:         builtinconstants.CategorySystemInfo,
+		DistsqlBlocklist: true, // applicable only on the gateway
+	},
+	makeResetSQLStatsBuiltin(),
+)
+
+func makeClearQueryPlanCacheBuiltin() tree.Overload {
+	return tree.Overload{
+		Types:      tree.ParamTypes{},
+		ReturnType: tree.FixedReturnType(types.Void),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			evalCtx.Planner.ClearQueryPlanCache()
+			return tree.DVoidDatum, nil
+		},
+		Info:       `This function is used to clear the query plan cache on the gateway node`,
+		Volatility: volatility.Volatile,
+	}
+}
+
+var clearQueryPlanCache = makeBuiltin(
+	tree.FunctionProperties{
+		Category:         builtinconstants.CategorySystemRepair,
+		Undocumented:     true,
+		DistsqlBlocklist: true, // applicable only on the gateway
+	},
+	makeClearQueryPlanCacheBuiltin(),
+)
+
+var clearQueryPlanCacheInformationSchema = makeBuiltin(
+	tree.FunctionProperties{
+		Category:         builtinconstants.CategorySystemRepair,
+		Undocumented:     true,
+		DistsqlBlocklist: true, // applicable only on the gateway
+	},
+	makeClearQueryPlanCacheBuiltin(),
+)
+
+func makeClearTableStatsCacheBuiltin() tree.Overload {
+	return tree.Overload{
+		Types:      tree.ParamTypes{},
+		ReturnType: tree.FixedReturnType(types.Void),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			evalCtx.Planner.ClearTableStatsCache()
+			return tree.DVoidDatum, nil
+		},
+		Info:       `This function is used to clear the table statistics cache on the gateway node`,
+		Volatility: volatility.Volatile,
+	}
+}
+
+var clearTableStatsCache = makeBuiltin(
+	tree.FunctionProperties{
+		Category:         builtinconstants.CategorySystemRepair,
+		Undocumented:     true,
+		DistsqlBlocklist: true, // applicable only on the gateway
+	},
+	makeClearTableStatsCacheBuiltin(),
+)
+
+var clearTableStatsCacheInformationSchema = makeBuiltin(
+	tree.FunctionProperties{
+		Category:         builtinconstants.CategorySystemRepair,
+		Undocumented:     true,
+		DistsqlBlocklist: true, // applicable only on the gateway
+	},
+	makeClearTableStatsCacheBuiltin(),
+)
+
+func makeClearStatementHintsCacheBuiltin() tree.Overload {
+	return tree.Overload{
+		Types:      tree.ParamTypes{},
+		ReturnType: tree.FixedReturnType(types.Void),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			evalCtx.Planner.ClearStatementHintsCache()
+			return tree.DVoidDatum, nil
+		},
+		Info:       `This function is used to clear the statement hints cache on the gateway node`,
+		Volatility: volatility.Volatile,
+	}
+}
+
+var clearStatementHintsCache = makeBuiltin(
+	tree.FunctionProperties{
+		Category:         builtinconstants.CategorySystemRepair,
+		Undocumented:     true,
+		DistsqlBlocklist: true, // applicable only on the gateway
+	},
+	makeClearStatementHintsCacheBuiltin(),
+)
+
+var clearStatementHintsCacheInformationSchema = makeBuiltin(
+	tree.FunctionProperties{
+		Category:         builtinconstants.CategorySystemRepair,
+		Undocumented:     true,
+		DistsqlBlocklist: true, // applicable only on the gateway
+	},
+	makeClearStatementHintsCacheBuiltin(),
 )
 
 var nilRegionsError = errors.AssertionFailedf("evalCtx.Regions is nil")

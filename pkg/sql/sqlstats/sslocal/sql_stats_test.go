@@ -701,7 +701,7 @@ func TestUnprivilegedUserReset(t *testing.T) {
 		sessiondata.InternalExecutorOverride{
 			User: username.MakeSQLUsernameFromPreNormalizedString("non_admin_user"),
 		},
-		"SELECT crdb_internal.reset_sql_stats()",
+		"SELECT information_schema.crdb_reset_sql_stats()",
 	)
 
 	require.Contains(t, err.Error(), "user non_admin_user does not have REPAIRCLUSTER system privilege")

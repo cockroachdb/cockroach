@@ -93,7 +93,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 
 	// Clear the stat cache to ensure that upcoming partial stat collections see
 	// the latest full statistic.
-	sqlRun.Exec(t, `SELECT crdb_internal.clear_table_stats_cache();`)
+	sqlRun.Exec(t, `SELECT information_schema.crdb_clear_table_stats_cache();`)
 
 	// Try to refresh again. With rowsAffected=0, the probability of a refresh
 	// is 0, so refreshing will not succeed.

@@ -3349,6 +3349,10 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="current_user"></a><code>current_user() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current user. This function is provided for compatibility with PostgreSQL.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="information_schema.crdb_reset_index_usage_stats"></a><code>information_schema.crdb_reset_index_usage_stats() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the collected index usage statistics.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="information_schema.crdb_reset_sql_stats"></a><code>information_schema.crdb_reset_sql_stats() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the collected SQL statistics.</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="session_user"></a><code>session_user() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the session user. This function is provided for compatibility with PostgreSQL.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="to_regclass"></a><code>to_regclass(text: <a href="string.html">string</a>) &rarr; regtype</code></td><td><span class="funcdesc"><p>Translates a textual relation name to its OID</p>

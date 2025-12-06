@@ -122,7 +122,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsllFvo0YQx9_7K
 # Clear the stat cache so that creating partial statistics has access to the
 # latest full statistic.
 statement ok
-SELECT crdb_internal.clear_table_stats_cache();
+SELECT information_schema.crdb_clear_table_stats_cache();
 
 query T
 EXPLAIN (DISTSQL) CREATE STATISTICS s1_constrained ON a FROM data WHERE a > 5
