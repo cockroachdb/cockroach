@@ -65,7 +65,7 @@ func TestTableRollback(t *testing.T) {
 
 	predicates := kvpb.DeleteRangePredicates{StartTime: targetTime}
 	require.NoError(t, sql.DeleteTableWithPredicate(
-		ctx, kv, codec, &tt.ClusterSettings().SV, execCfg.DistSender, desc.GetID(), predicates, 10))
+		ctx, kv, codec, tt.ClusterSettings(), execCfg.DistSender, desc.GetID(), predicates, 10))
 
 	db.CheckQueryResults(t, `SELECT count(*) FROM test`, beforeNumRows)
 }
@@ -112,7 +112,7 @@ func TestRollbackRandomTable(t *testing.T) {
 
 	execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)
 	require.NoError(t, sql.DeleteTableWithPredicate(
-		ctx, kv, codec, &tt.ClusterSettings().SV, execCfg.DistSender, desc.GetID(), predicates, 10))
+		ctx, kv, codec, tt.ClusterSettings(), execCfg.DistSender, desc.GetID(), predicates, 10))
 
 	afterFingerprint := db.QueryStr(t, fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE test.%s", tableName))
 	require.Equal(t, fingerprint, afterFingerprint)
