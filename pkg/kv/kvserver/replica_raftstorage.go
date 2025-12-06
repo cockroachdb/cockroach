@@ -599,17 +599,19 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	sb := snapWriteBuilder{
 		id: r.ID(),
 
-		todoEng:  r.store.TODOEngine(),
-		sl:       r.raftMu.stateLoader,
-		writeSST: inSnap.SSTStorageScratch.WriteSST,
+		sl: r.raftMu.stateLoader,
+		wr: snapWriter{
+			stateRO:  r.store.StateEngine(),
+			raftRO:   r.store.LogEngine(),
+			writeSST: inSnap.SSTStorageScratch.WriteSST,
+			cleared:  inSnap.clearedSpans,
+		},
 
 		truncState: truncState,
 		hardState:  hs,
 		desc:       desc,
 		origDesc:   r.shMu.state.Desc,
 		subsume:    subsume,
-
-		cleared: inSnap.clearedSpans,
 	}
 	_ = applySnapshotTODO // 2.3 (this) + 2.5 is written, the rest is handled below
 	if err := sb.prepareSnapApply(ctx); err != nil {
@@ -648,7 +650,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	} else {
 		_ = applySnapshotTODO // all atomic
 		err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
-			ctx, inSnap.SSTStorageScratch.SSTs(), sb.cleared)
+			ctx, inSnap.SSTStorageScratch.SSTs(), sb.wr.cleared)
 		if err != nil {
 			return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
 		}

@@ -8,25 +8,63 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
+
+// snapWriter encapsulates storage readers and writers needed for constructing a
+// snapshot ingestion.
+// TODO(sep-raft-log): support separated engines.
+type snapWriter struct {
+	stateRO kvstorage.StateRO
+	raftRO  kvstorage.RaftRO
+	// raftWO is the write batch into the raft engine. Not nil iff separated
+	// engines are enabled.
+	raftWO storage.WriteBatch
+
+	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
+
+	// cleared contains the spans that this snapshot application clears before
+	// writing new state on top.
+	//
+	// TODO(pav-kv): get rid of it. With separated engines, it complicates the
+	// logic, since it will need to exclude the raft engine cleared spans. The
+	// draft is in #155532.
+	cleared []roachpb.Span
+}
+
+// separateEngines sets up the snapWriter for separated state machine and raft
+// engines. Uses the provided log engine for creating a write batch into it.
+func (s *snapWriter) separateEngines(logEngine storage.Engine) {
+	if !buildutil.CrdbTestBuild {
+		panic("separated engines are not supported")
+	} else if s.raftWO != nil {
+		panic("separateEngines called twice")
+	}
+	s.raftWO = logEngine.NewWriteBatch()
+}
+
+func (s *snapWriter) close() {
+	if s.raftWO != nil {
+		s.raftWO.Close()
+	}
+}
 
 // snapWriteBuilder contains the data needed to prepare the on-disk state for a
 // snapshot.
+//
+// TODO(pav-kv): move this struct to kvstorage package.
 type snapWriteBuilder struct {
 	id roachpb.FullReplicaID
 
-	todoEng  storage.Engine
-	sl       kvstorage.StateLoader
-	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
+	sl kvstorage.StateLoader
+	wr snapWriter
 
 	truncState kvserverpb.RaftTruncatedState
 	hardState  raftpb.HardState
@@ -34,64 +72,45 @@ type snapWriteBuilder struct {
 	origDesc   *roachpb.RangeDescriptor // pre-snapshot range descriptor
 	// NB: subsume must be in sorted order by DestroyReplicaInfo start key.
 	subsume []kvstorage.DestroyReplicaInfo
-
-	// cleared contains the spans that this snapshot application clears before
-	// writing new state on top.
-	cleared []roachpb.Span
 }
 
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
 func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
+	// TODO(pav-kv): assert that our replica already exists in storage. Note that
+	// it can be either uninitialized or initialized.
 	_ = applySnapshotTODO // 1.1 + 1.3 + 2.4 + 3.1
-	if err := s.writeSST(ctx, s.rewriteRaftState); err != nil {
+	if err := s.rewriteRaftState(ctx); err != nil {
 		return err
 	}
 	_ = applySnapshotTODO // 1.2 + 2.1 + 2.2 + 2.3 (diff) + 3.2
 	if err := s.clearSubsumedReplicaDiskData(ctx); err != nil {
 		return err
 	}
-
 	_ = applySnapshotTODO // 2.3 (split)
 	return s.clearResidualDataOnNarrowSnapshot(ctx)
 }
 
-// rewriteRaftState clears and rewrites the unreplicated rangeID-local key space
-// of the given replica with the provided raft state. Note that it also clears
-// the raft log contents.
-//
-// The caller must make sure the log does not have entries newer than the
-// snapshot entry ID, and that clearing the log is applied atomically with the
-// snapshot write, or after the latter is synced.
-func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Writer) error {
-	// Clearing the unreplicated state.
-	//
-	// NB: We do not expect to see range keys in the unreplicated state, so
-	// we don't drop a range tombstone across the range key space.
-	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(s.id.RangeID)
-	unreplicatedStart := unreplicatedPrefixKey
-	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
-	if err := w.ClearRawRange(
-		unreplicatedStart, unreplicatedEnd, true /* pointKeys */, false, /* rangeKeys */
-	); err != nil {
-		return errors.Wrapf(err, "error clearing the unreplicated space")
+// rewriteRaftState rewrites the raft state of the given replica with the
+// provided state. Specifically, it rewrites HardState and RaftTruncatedState,
+// and clears the raft log. All writes are generated in the engine keys order.
+func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context) error {
+	// With separated engines, update the raft engine batch directly.
+	if raftWO := s.wr.raftWO; raftWO != nil {
+		_, err := kvstorage.RewriteRaftState(
+			ctx, kvstorage.RaftWO(raftWO), s.sl, s.hardState, s.truncState)
+		return err
 	}
-
-	// Update HardState.
-	if err := s.sl.SetHardState(ctx, w, s.hardState); err != nil {
-		return errors.Wrapf(err, "unable to write HardState")
-	}
-	// We've cleared all the raft state above, so we are forced to write the
-	// RaftReplicaID again here.
-	if err := s.sl.SetRaftReplicaID(ctx, w, s.id.ReplicaID); err != nil {
-		return errors.Wrapf(err, "unable to write RaftReplicaID")
-	}
-	// Update the log truncation state.
-	if err := s.sl.SetRaftTruncatedState(ctx, w, &s.truncState); err != nil {
-		return errors.Wrapf(err, "unable to write RaftTruncatedState")
-	}
-
-	s.cleared = append(s.cleared, roachpb.Span{Key: unreplicatedStart, EndKey: unreplicatedEnd})
-	return nil
+	// With a combined engine, create an SST and update it. Also take a note of
+	// the cleared span, which will be needed if this SST is converted to batch.
+	return s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		cleared, err := kvstorage.RewriteRaftState(
+			ctx, kvstorage.RaftWO(w), s.sl, s.hardState, s.truncState)
+		if err != nil {
+			return err
+		}
+		s.wr.cleared = append(s.wr.cleared, cleared)
+		return nil
+	})
 }
 
 // clearSubsumedReplicaDiskData clears the on disk data of the subsumed
@@ -144,16 +163,31 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	// the span [b, sn). We do this in
 	// clearResidualDataOnNarrowSnapshot, not here.
 
-	// TODO(sep-raft-log): need different readers for raft and state engine.
-	reader := storage.Reader(s.todoEng)
 	for _, sub := range s.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
-		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			opts, err := kvstorage.SubsumeReplica(
-				ctx, kvstorage.TODOReaderWriter(reader, w), sub,
-			)
-			s.cleared = append(s.cleared, rditer.Select(sub.RangeID, opts)...)
-			return err
+		if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+			// Redirect the raft portion of replica destruction to the raft batch when
+			// engines are separated.
+			raftWO := kvstorage.RaftWO(s.wr.raftWO)
+			if raftWO == nil {
+				raftWO = w
+			}
+			opts, err := kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
+				State: kvstorage.State{RO: s.wr.stateRO, WO: w},
+				Raft:  kvstorage.Raft{RO: s.wr.raftRO, WO: raftWO},
+			}, sub)
+			if err != nil {
+				return err
+			}
+
+			// With separated engines, forget about the unreplicated span clearing.
+			// TODO(pav-kv): this is half-correct, get rid of the cleared spans
+			// tracking in the first place (see s.wr.cleared comment).
+			if s.wr.raftWO != nil {
+				opts.UnreplicatedByRangeID = false
+			}
+			s.wr.cleared = append(s.wr.cleared, rditer.Select(sub.RangeID, opts)...)
+			return nil
 		}); err != nil {
 			return err
 		}
@@ -215,8 +249,6 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 		return nil // we aren't narrowing anything; no-op
 	}
 
-	// TODO(sep-raft-log): read from the state machine engine here.
-	reader := storage.Reader(s.todoEng)
 	for _, span := range rditer.Select(0, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
 			RSpan:      roachpb.RSpan{Key: s.desc.EndKey, EndKey: endKey},
@@ -225,14 +257,14 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 			UserKeys:   true,
 		},
 	}) {
-		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 			return storage.ClearRangeWithHeuristic(
-				ctx, reader, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys(),
+				ctx, s.wr.stateRO, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys(),
 			)
 		}); err != nil {
 			return err
 		}
-		s.cleared = append(s.cleared, span)
+		s.wr.cleared = append(s.wr.cleared, span)
 	}
 
 	return nil

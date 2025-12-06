@@ -3259,15 +3259,18 @@ func TestRaftRemoveRace(t *testing.T) {
 	}
 	tc.AddVotersOrFatal(t, key, targets...)
 
+	sl := kvstorage.MakeStateLoader(desc.RangeID)
+	s2 := tc.GetFirstStoreFromServer(t, 2)
 	for i := 0; i < 10; i++ {
 		tc.RemoveVotersOrFatal(t, key, tc.Target(2))
 		tc.AddVotersOrFatal(t, key, tc.Target(2))
 
-		// Verify the tombstone key does not exist. See #12130.
-		ts, err := kvstorage.MakeStateLoader(desc.RangeID).LoadRangeTombstone(
-			ctx, tc.GetFirstStoreFromServer(t, 2).StateEngine())
+		replID, err := sl.LoadRaftReplicaID(ctx, s2.StateEngine())
 		require.NoError(t, err)
-		require.Equal(t, kvserverpb.RangeTombstone{}, ts)
+		ts, err := sl.LoadRangeTombstone(ctx, s2.StateEngine())
+		require.NoError(t, err)
+		// ReplicaID leads the RangeTombstone, which means a replica exists.
+		require.GreaterOrEqual(t, replID.ReplicaID, ts.NextReplicaID)
 	}
 }
 
