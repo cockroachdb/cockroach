@@ -295,7 +295,7 @@ func TestFailedInsights(t *testing.T) {
 	rootConn.Exec(t, "SET SESSION application_name=$1", appName)
 
 	testutils.RunTrueAndFalse(t, "with_redaction", func(t *testing.T, testRedacted bool) {
-		rootConn.Exec(t, `select crdb_internal.reset_sql_stats()`)
+		rootConn.Exec(t, `select information_schema.crdb_reset_sql_stats()`)
 		conn := s.SQLConn(t)
 		if testRedacted {
 			conn = s.SQLConn(t, serverutils.User("testuser"))

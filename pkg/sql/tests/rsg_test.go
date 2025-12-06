@@ -438,6 +438,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					// arguments.
 					continue
 				case "crdb_internal.reset_sql_stats",
+					"information_schema.crdb_reset_sql_stats",
 					"crdb_internal.check_consistency",
 					"crdb_internal.request_statement_bundle",
 					"crdb_internal.reset_activity_tables",

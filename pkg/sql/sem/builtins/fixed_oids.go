@@ -2863,6 +2863,11 @@ var builtinOidsArray = []string{
 	2908: `crdb_internal.inject_hint(statement_fingerprint: string, donor_sql: string) -> int`,
 	2909: `crdb_internal.clear_statement_hints_cache() -> void`,
 	2910: `crdb_internal.await_statement_hints_cache() -> void`,
+	2911: `information_schema.crdb_reset_index_usage_stats() -> bool`,
+	2912: `information_schema.crdb_reset_sql_stats() -> bool`,
+	2913: `information_schema.crdb_clear_query_plan_cache() -> void`,
+	2914: `information_schema.crdb_clear_table_stats_cache() -> void`,
+	2915: `information_schema.crdb_clear_statement_hints_cache() -> void`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
