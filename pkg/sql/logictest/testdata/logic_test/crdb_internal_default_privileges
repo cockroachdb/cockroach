@@ -554,7 +554,6 @@ test           NULL         root      false          tables       bar       ZONE
 test           NULL         root      false          tables       bar       TRIGGER            false
 test           NULL         root      false          tables       bar       REPLICATIONDEST    false
 test           NULL         root      false          tables       bar       REPLICATIONSOURCE  false
-test           NULL         root      false          tables       bar       INSPECT            false
 test           NULL         root      false          tables       foo       BACKUP             false
 test           NULL         root      false          tables       foo       CHANGEFEED         false
 test           NULL         root      false          tables       foo       CREATE             false
@@ -566,7 +565,6 @@ test           NULL         root      false          tables       foo       ZONE
 test           NULL         root      false          tables       foo       TRIGGER            false
 test           NULL         root      false          tables       foo       REPLICATIONDEST    false
 test           NULL         root      false          tables       foo       REPLICATIONSOURCE  false
-test           NULL         root      false          tables       foo       INSPECT            false
 test           NULL         root      false          tables       root      ALL                true
 test           NULL         root      false          sequences    root      ALL                true
 test           NULL         root      false          types        root      ALL                true

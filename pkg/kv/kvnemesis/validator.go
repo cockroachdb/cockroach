@@ -433,6 +433,9 @@ func (v *validator) processOp(op Operation) {
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break
 		}
+		if t.Result.ResumeSpan != nil {
+			break
+		}
 		read := &observedRead{
 			Key:        t.Key,
 			SkipLocked: t.SkipLocked,
@@ -464,6 +467,9 @@ func (v *validator) processOp(op Operation) {
 		if v.checkNonAmbError(op, t.Result) {
 			break
 		}
+		if t.Result.ResumeSpan != nil {
+			break
+		}
 		// Accumulate all the writes for this transaction.
 		write := &observedWrite{
 			Key:   t.Key,
@@ -478,8 +484,66 @@ func (v *validator) processOp(op Operation) {
 		if v.buffering == bufferingSingle {
 			v.checkAtomic(`put`, t.Result)
 		}
+	case *CPutOperation:
+		if v.checkNonAmbError(op, t.Result) {
+			break
+		}
+		readObservation := &observedRead{Key: t.Key}
+		var shouldObserveRead bool
+		writeObservation := &observedWrite{
+			Key:   t.Key,
+			Seq:   t.Seq,
+			Value: roachpb.MakeValueFromString(t.Value()),
+		}
+		var shouldObserveWrite bool
+		// Consider two cases based on whether the CPut hit a ConditionFailedError.
+		err := errorFromResult(t.Result)
+		if e := (*kvpb.ConditionFailedError)(nil); errors.As(err, &e) {
+			// If the CPut failed, the actual value (in the ConditionFailedError) is
+			// observed, and the CPut's write is not observed.
+			observedVal := roachpb.Value{}
+			if e.ActualValue != nil {
+				observedVal.RawBytes = e.ActualValue.RawBytes
+			}
+			readObservation.Value = observedVal
+			shouldObserveRead = true
+		} else {
+			// If the CPut succeeded, the expected value is observed, and the CPut's
+			// write is also observed.
+			if !t.AllowIfDoesNotExist {
+				// If AllowIfDoesNotExist == true, we don't know if the read found the
+				// expected value or no value, so we can't add a read observation.
+				// Otherwise, it must have observed the expected value.
+				observedVal := roachpb.Value{}
+				if t.ExpVal != nil {
+					observedVal = roachpb.MakeValueFromBytes(t.ExpVal)
+				}
+				readObservation.Value = observedVal
+				shouldObserveRead = true
+			}
+			if sv, ok := v.tryConsumeWrite(t.Key, t.Seq); ok {
+				writeObservation.Timestamp = sv.Timestamp
+			}
+			shouldObserveWrite = true
+		}
+		// The read observation should be added before the write observation, since
+		// that's the order in which the CPut executed. Moreover, the CPut read is
+		// always non-locking, so if the observation filter is observeLocking, we
+		// won't be adding it.
+		if shouldObserveRead && v.observationFilter != observeLocking {
+			v.curObservations = append(v.curObservations, readObservation)
+		}
+		if shouldObserveWrite {
+			v.curObservations = append(v.curObservations, writeObservation)
+		}
+		if v.buffering == bufferingSingle {
+			v.checkAtomic(`cput`, t.Result)
+		}
 	case *DeleteOperation:
 		if v.checkNonAmbError(op, t.Result) {
+			break
+		}
+		if t.Result.ResumeSpan != nil {
 			break
 		}
 		sv, _ := v.tryConsumeWrite(t.Key, t.Seq)
@@ -524,6 +588,9 @@ func (v *validator) processOp(op Operation) {
 			deleteOps[i] = write
 		}
 		v.curObservations = append(v.curObservations, deleteOps...)
+		// Adding the scan to the current observations should follow the same
+		// conditions as a regular scan: add it ony if there are no errors.
+		_, isErr := v.checkError(op, t.Result)
 		// The span ought to be empty right after the DeleteRange.
 		//
 		// However, we do not add this observation if the observation filter is
@@ -531,11 +598,15 @@ func (v *validator) processOp(op Operation) {
 		// that for isolation levels that permit write skew, the DeleteRange does
 		// not prevent new keys from being inserted in the deletion span between the
 		// transaction's read and write timestamps.
-		if v.observationFilter != observeLocking {
+		if v.observationFilter != observeLocking && !isErr {
+			endKey := t.EndKey
+			if t.Result.ResumeSpan != nil {
+				endKey = t.Result.ResumeSpan.Key
+			}
 			v.curObservations = append(v.curObservations, &observedScan{
 				Span: roachpb.Span{
 					Key:    t.Key,
-					EndKey: t.EndKey,
+					EndKey: endKey,
 				},
 				IsDeleteRange: true, // just for printing
 				KVs:           nil,
@@ -609,12 +680,15 @@ func (v *validator) processOp(op Operation) {
 			v.curObservations = append(v.curObservations, write)
 		}
 
+		// Adding the scan to the current observations should follow the same
+		// conditions as a regular scan: add it ony if there are no errors.
+		_, isErr := v.checkError(op, t.Result)
 		// The span ought to be empty right after the DeleteRange, even if parts of
 		// the DeleteRange that didn't materialize due to a shadowing operation.
 		//
 		// See above for why we do not add this observation if the observation
 		// filter is observeLocking.
-		if v.observationFilter != observeLocking {
+		if v.observationFilter != observeLocking && !isErr {
 			v.curObservations = append(v.curObservations, &observedScan{
 				Span: roachpb.Span{
 					Key:    t.Key,
@@ -747,13 +821,24 @@ func (v *validator) processOp(op Operation) {
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break
 		}
+		readSpan := roachpb.Span{Key: t.Key, EndKey: t.EndKey}
+		// If the ResumeSpan equals the original request span, the scan wasn't
+		// processed at all.
+		if t.Result.ResumeSpan != nil && t.Result.ResumeSpan.Equal(readSpan) {
+			break
+		}
+
 		switch v.observationFilter {
 		case observeAll:
+			if t.Result.ResumeSpan != nil {
+				if op.Scan.Reverse {
+					readSpan.Key = t.Result.ResumeSpan.EndKey
+				} else {
+					readSpan.EndKey = t.Result.ResumeSpan.Key
+				}
+			}
 			scan := &observedScan{
-				Span: roachpb.Span{
-					Key:    t.Key,
-					EndKey: t.EndKey,
-				},
+				Span:       readSpan,
 				Reverse:    t.Reverse,
 				SkipLocked: t.SkipLocked,
 				KVs:        make([]roachpb.KeyValue, len(t.Result.Values)),
@@ -926,6 +1011,19 @@ func (v *validator) processOp(op Operation) {
 		// Don't fail on all errors because savepoints can be labeled with
 		// errOmitted if a previous op in the txn failed.
 		v.checkError(op, t.Result)
+	case *MutateBatchHeaderOperation:
+		execTimestampStrictlyOptional = true
+		v.checkError(op, t.Result)
+	case *AddNetworkPartitionOperation, *RemoveNetworkPartitionOperation:
+		execTimestampStrictlyOptional = true
+		// Ignore any errors due to the generator trying to add/remove a partition
+		// that doesn't exist or from a node to itself.
+	case *StopNodeOperation:
+		execTimestampStrictlyOptional = true
+		v.checkError(op, t.Result)
+	case *RestartNodeOperation:
+		execTimestampStrictlyOptional = true
+		v.checkError(op, t.Result)
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
 	}
@@ -953,14 +1051,14 @@ func (v *validator) checkAtomic(atomicType string, result Result) {
 		// of writing, checkAtomicCommitted doesn't capitalize on this unconditional
 		// presence yet, and most unit tests don't specify it for reads.
 		if !result.OptionalTimestamp.IsSet() {
-			err := errors.AssertionFailedf("operation has no execution timestamp: %s", result)
+			err := errors.AssertionFailedf("operation has no execution timestamp: %v", result)
 			v.failures = append(v.failures, err)
 		}
 		v.checkAtomicCommitted(`committed `+atomicType, observations, result.OptionalTimestamp)
 	} else if resultIsAmbiguous(result) {
 		// An ambiguous result shouldn't have an execution timestamp.
 		if result.OptionalTimestamp.IsSet() {
-			err := errors.AssertionFailedf("OptionalTimestamp set for ambiguous result: %s", result)
+			err := errors.AssertionFailedf("OptionalTimestamp set for ambiguous result: %v", result)
 			v.failures = append(v.failures, err)
 		}
 		v.checkAtomicAmbiguous(`ambiguous `+atomicType, observations)

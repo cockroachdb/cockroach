@@ -49,6 +49,7 @@ preparable_stmt ::=
 	| explain_stmt
 	| import_stmt
 	| insert_stmt
+	| inspect_stmt
 	| pause_stmt
 	| reset_stmt
 	| restore_stmt
@@ -170,7 +171,7 @@ close_cursor_stmt ::=
 	| 'CLOSE' cursor_name
 
 declare_cursor_stmt ::=
-	'DECLARE' cursor_name opt_binary opt_sensitivity opt_scroll 'CURSOR' opt_hold 'FOR' select_stmt
+	'DECLARE' cursor_name opt_binary opt_sensitivity opt_scroll 'CURSOR' opt_hold for_with_lookahead_variants select_stmt
 
 fetch_cursor_stmt ::=
 	'FETCH' cursor_movement_specifier
@@ -245,6 +246,10 @@ import_stmt ::=
 insert_stmt ::=
 	opt_with_clause 'INSERT' 'INTO' insert_target insert_rest returning_clause
 	| opt_with_clause 'INSERT' 'INTO' insert_target insert_rest on_conflict returning_clause
+
+inspect_stmt ::=
+	inspect_table_stmt
+	| inspect_database_stmt
 
 pause_stmt ::=
 	pause_jobs_stmt
@@ -323,6 +328,7 @@ show_stmt ::=
 	| show_zone_stmt
 	| show_full_scans_stmt
 	| show_default_privileges_stmt
+	| show_inspect_errors_stmt
 
 truncate_stmt ::=
 	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
@@ -522,6 +528,10 @@ opt_hold ::=
 	| 'WITHOUT' 'HOLD'
 	| 
 
+for_with_lookahead_variants ::=
+	'FOR'
+	| 'FOR_TABLE'
+
 cursor_movement_specifier ::=
 	cursor_name
 	| from_or_in cursor_name
@@ -637,8 +647,8 @@ create_stats_stmt ::=
 	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options
 
 create_changefeed_stmt ::=
-	'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_targets opt_changefeed_sink opt_with_options
-	| 'CREATE_CHANGEFEED_FOR_DATABASE' 'CHANGEFEED' 'FOR' 'DATABASE' database_name opt_changefeed_sink opt_with_options
+	'CREATE' 'CHANGEFEED' for_with_lookahead_variants changefeed_table_targets opt_changefeed_sink opt_with_options
+	| 'CREATE_CHANGEFEED_FOR_DATABASE' 'CHANGEFEED' 'FOR' 'DATABASE' database_name optional_db_level_changefeed_filter_option opt_changefeed_sink opt_with_options
 	| 'CREATE' 'CHANGEFEED' opt_changefeed_sink opt_with_options 'AS' 'SELECT' target_list 'FROM' changefeed_target_expr opt_where_clause
 
 create_extension_stmt ::=
@@ -753,6 +763,12 @@ on_conflict ::=
 	| 'ON' 'CONFLICT' 'ON' 'CONSTRAINT' constraint_name 'DO' 'NOTHING'
 	| 'ON' 'CONFLICT' 'ON' 'CONSTRAINT' constraint_name 'DO' 'UPDATE' 'SET' set_clause_list opt_where_clause
 
+inspect_table_stmt ::=
+	'INSPECT' 'TABLE' table_name opt_as_of_clause opt_inspect_options_clause
+
+inspect_database_stmt ::=
+	'INSPECT' 'DATABASE' db_name opt_as_of_clause opt_inspect_options_clause
+
 pause_jobs_stmt ::=
 	'PAUSE' 'JOB' a_expr
 	| 'PAUSE' 'JOB' a_expr 'WITH' 'REASON' '=' string_or_placeholder
@@ -840,7 +856,7 @@ use_stmt ::=
 	'USE' var_value
 
 show_backup_stmt ::=
-	'SHOW' 'BACKUPS' 'IN' string_or_placeholder_opt_list
+	'SHOW' 'BACKUPS' 'IN' string_or_placeholder_opt_list opt_with_show_backups_options
 	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
 	| 'SHOW' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
 
@@ -918,14 +934,17 @@ show_jobs_stmt ::=
 	| 'SHOW' 'JOBS'
 	| 'SHOW' 'JOBS' 'WITH' show_job_options_list
 	| 'SHOW' 'CHANGEFEED' 'JOBS'
+	| 'SHOW' 'CHANGEFEED' 'JOBS' 'WITH' 'WATCHED_TABLES'
 	| 'SHOW' 'JOBS' select_stmt
 	| 'SHOW' 'JOBS' select_stmt 'WITH' show_job_options_list
 	| 'SHOW' 'JOBS' 'WHEN' 'COMPLETE' select_stmt
 	| 'SHOW' 'JOBS' for_schedules_clause
 	| 'SHOW' 'CHANGEFEED' 'JOBS' select_stmt
+	| 'SHOW' 'CHANGEFEED' 'JOBS' select_stmt 'WITH' 'WATCHED_TABLES'
 	| 'SHOW' 'JOB' a_expr
 	| 'SHOW' 'JOB' a_expr 'WITH' show_job_options_list
 	| 'SHOW' 'CHANGEFEED' 'JOB' a_expr
+	| 'SHOW' 'CHANGEFEED' 'JOB' a_expr 'WITH' 'WATCHED_TABLES'
 	| 'SHOW' 'JOB' 'WHEN' 'COMPLETE' a_expr
 
 show_locality_stmt ::=
@@ -987,7 +1006,7 @@ show_sessions_stmt ::=
 	| 'SHOW' 'ALL' opt_cluster 'SESSIONS'
 
 show_stats_stmt ::=
-	'SHOW' 'STATISTICS' 'FOR' 'TABLE' table_name opt_with_options
+	'SHOW' 'STATISTICS' 'FOR_TABLE' 'TABLE' table_name opt_with_options
 
 show_tables_stmt ::=
 	'SHOW' 'TABLES' 'FROM' name '.' name with_comment
@@ -1031,6 +1050,9 @@ show_default_privileges_stmt ::=
 	'SHOW' 'DEFAULT' 'PRIVILEGES' opt_for_roles opt_in_schema
 	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'GRANTEE' role_spec_list opt_in_schema
 	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schema
+
+show_inspect_errors_stmt ::=
+	'SHOW' 'INSPECT' 'ERRORS' opt_for_table_clause opt_for_job_clause opt_with_details
 
 opt_table ::=
 	'TABLE'
@@ -1190,6 +1212,7 @@ unreserved_keyword ::=
 	| 'ENCRYPTION_INFO_DIR'
 	| 'ENUM'
 	| 'ENUMS'
+	| 'ERRORS'
 	| 'ESCAPE'
 	| 'EXCLUDE'
 	| 'EXCLUDING'
@@ -1209,6 +1232,7 @@ unreserved_keyword ::=
 	| 'FAILURE'
 	| 'FILES'
 	| 'FILTER'
+	| 'FINGERPRINTS'
 	| 'FIRST'
 	| 'FOLLOWING'
 	| 'FORMAT'
@@ -1260,6 +1284,7 @@ unreserved_keyword ::=
 	| 'INJECT'
 	| 'INPUT'
 	| 'INSERT'
+	| 'INSPECT'
 	| 'INSTEAD'
 	| 'INTO_DB'
 	| 'INVERTED'
@@ -1447,6 +1472,7 @@ unreserved_keyword ::=
 	| 'ROUTINES'
 	| 'ROWS'
 	| 'RULE'
+	| 'RUN'
 	| 'RUNNING'
 	| 'SCHEDULE'
 	| 'SCHEDULES'
@@ -1571,6 +1597,7 @@ unreserved_keyword ::=
 	| 'VISIBILITY'
 	| 'VOLATILE'
 	| 'VOTERS'
+	| 'WATCHED_TABLES'
 	| 'WITHIN'
 	| 'WITHOUT'
 	| 'WRITE'
@@ -1939,6 +1966,10 @@ changefeed_table_targets ::=
 opt_changefeed_sink ::=
 	'INTO' string_or_placeholder
 
+optional_db_level_changefeed_filter_option ::=
+	db_level_changefeed_filter_option
+	| 
+
 target_list ::=
 	( target_elem ) ( ( ',' target_elem ) )*
 
@@ -2044,6 +2075,13 @@ insert_column_item ::=
 kv_option_list ::=
 	( kv_option ) ( ( ',' kv_option ) )*
 
+opt_inspect_options_clause ::=
+	'WITH' 'OPTIONS' inspect_option_list
+	| 
+
+db_name ::=
+	db_object_name
+
 session_var ::=
 	'identifier'
 	| 'identifier' session_var_parts
@@ -2113,6 +2151,11 @@ to_or_eq ::=
 var_value ::=
 	a_expr
 	| extra_var_value
+
+opt_with_show_backups_options ::=
+	'WITH' show_backups_options_list
+	| 'WITH' 'OPTIONS' '(' show_backups_options_list ')'
+	| 
 
 show_backup_details ::=
 	'SCHEMAS'
@@ -2184,6 +2227,18 @@ opt_for_roles ::=
 
 opt_in_schema ::=
 	'IN' 'SCHEMA' schema_name
+	| 
+
+opt_for_table_clause ::=
+	'FOR_TABLE' 'TABLE' table_name
+	| 
+
+opt_for_job_clause ::=
+	'FOR_JOB' 'JOB' iconst64
+	| 
+
+opt_with_details ::=
+	'WITH' 'DETAILS'
 	| 
 
 relation_expr ::=
@@ -2832,6 +2887,10 @@ create_stats_option_list ::=
 changefeed_table_target ::=
 	opt_table_prefix table_name opt_changefeed_family
 
+db_level_changefeed_filter_option ::=
+	'EXCLUDE' 'TABLES' table_name_list
+	| 'INCLUDE' 'TABLES' table_name_list
+
 target_elem ::=
 	a_expr 'AS' target_name
 	| a_expr bare_col_label
@@ -2940,6 +2999,9 @@ kv_option ::=
 	| 'SCONST' '=' string_or_placeholder
 	| 'SCONST'
 
+inspect_option_list ::=
+	( inspect_option ) ( ( ',' inspect_option ) )*
+
 session_var_parts ::=
 	( '.' 'identifier' ) ( ( '.' 'identifier' ) )*
 
@@ -3002,6 +3064,9 @@ extra_var_value ::=
 	'ON'
 	| 'NONE'
 	| cockroachdb_extra_reserved_keyword
+
+show_backups_options_list ::=
+	( show_backups_options ) ( ( ',' show_backups_options ) )*
 
 show_backup_options_list ::=
 	( show_backup_options ) ( ( ',' show_backup_options ) )*
@@ -3238,6 +3303,8 @@ alter_changefeed_cmd ::=
 	| 'DROP' changefeed_table_targets
 	| 'SET' kv_option_list
 	| 'UNSET' name_list
+	| 'SET' db_level_changefeed_filter_option
+	| 'UNSET' include_or_exclude 'TABLES'
 
 alter_backup_cmd ::=
 	'ADD' backup_kms
@@ -3446,7 +3513,7 @@ enum_val_list ::=
 	( 'SCONST' ) ( ( ',' 'SCONST' ) )*
 
 composite_type_list ::=
-	( name simple_typename ) ( ( ',' name simple_typename ) )*
+	( name typename ) ( ( ',' name typename ) )*
 
 routine_param_with_default_list ::=
 	( routine_param_with_default ) ( ( ',' routine_param_with_default ) )*
@@ -3579,6 +3646,13 @@ only_signed_fconst ::=
 db_object_name_list ::=
 	( db_object_name ) ( ( ',' db_object_name ) )*
 
+inspect_option ::=
+	'INDEX' 'ALL'
+	| 'INDEX' '(' table_index_name_list ')'
+	| 'DETACHED'
+	| 'DETACHED' '=' 'TRUE'
+	| 'DETACHED' '=' 'FALSE'
+
 virtual_cluster_name ::=
 	'VIRTUAL_CLUSTER_NAME'
 
@@ -3632,6 +3706,9 @@ for_locking_item ::=
 
 var_list ::=
 	( var_value ) ( ( ',' var_value ) )*
+
+show_backups_options ::=
+	'INDEX'
 
 show_backup_options ::=
 	'AS_JSON'
@@ -3767,6 +3844,10 @@ sequence_option_elem ::=
 	| 'RESTART' signed_iconst64
 	| 'RESTART' 'WITH' signed_iconst64
 	| 'VIRTUAL'
+
+include_or_exclude ::=
+	'INCLUDE'
+	| 'EXCLUDE'
 
 backup_kms ::=
 	'NEW_KMS' '=' string_or_placeholder_opt_list 'WITH' 'OLD_KMS' '=' string_or_placeholder_opt_list
@@ -4070,6 +4151,7 @@ bare_label_keywords ::=
 	| 'END'
 	| 'ENUM'
 	| 'ENUMS'
+	| 'ERRORS'
 	| 'ESCAPE'
 	| 'EXCLUDE'
 	| 'EXCLUDING'
@@ -4093,6 +4175,7 @@ bare_label_keywords ::=
 	| 'FALSE'
 	| 'FAMILY'
 	| 'FILES'
+	| 'FINGERPRINTS'
 	| 'FIRST'
 	| 'FLOAT'
 	| 'FOLLOWING'
@@ -4163,6 +4246,7 @@ bare_label_keywords ::=
 	| 'INPUT'
 	| 'INSENSITIVE'
 	| 'INSERT'
+	| 'INSPECT'
 	| 'INSTEAD'
 	| 'INT'
 	| 'INTEGER'
@@ -4379,6 +4463,7 @@ bare_label_keywords ::=
 	| 'ROW'
 	| 'ROWS'
 	| 'RULE'
+	| 'RUN'
 	| 'RUNNING'
 	| 'SAVEPOINT'
 	| 'SCANS'
@@ -4529,6 +4614,7 @@ bare_label_keywords ::=
 	| 'VISIBILITY'
 	| 'VOLATILE'
 	| 'VOTERS'
+	| 'WATCHED_TABLES'
 	| 'WHEN'
 	| 'WORK'
 	| 'WRITE'

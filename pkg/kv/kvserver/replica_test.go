@@ -39,13 +39,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -151,7 +152,8 @@ type testContext struct {
 	repl        *Replica
 	rangeID     roachpb.RangeID
 	gossip      *gossip.Gossip
-	engine      storage.Engine
+	stateEng    storage.Engine
+	raftEng     storage.Engine
 	manualClock *timeutil.ManualTime
 }
 
@@ -191,7 +193,8 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	tc.TB = t
 	require.Nil(t, tc.gossip)
 	require.Nil(t, tc.transport)
-	require.Nil(t, tc.engine)
+	require.Nil(t, tc.stateEng)
+	require.Nil(t, tc.raftEng)
 	require.Nil(t, tc.store)
 	require.Nil(t, tc.repl)
 
@@ -222,9 +225,8 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	tc.rangeID = repl.RangeID
 	tc.gossip = store.cfg.Gossip
 	tc.transport = store.cfg.Transport
-	// TODO(sep-raft-log): may need to update our various test harnesses to
-	// support two engines, do metamorphic stuff, etc.
-	tc.engine = store.TODOEngine()
+	tc.stateEng = store.StateEngine()
+	tc.raftEng = store.LogEngine()
 	tc.store = store
 }
 
@@ -305,7 +307,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 	tc.repl.raftMu.Lock()
 	tc.repl.setDescRaftMuLocked(ctx, &newDesc)
 	tc.repl.mu.RLock()
-	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.engine)
+	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.stateEng, tc.raftEng)
 	tc.repl.mu.RUnlock()
 	tc.repl.raftMu.Unlock()
 	return newReplica, nil
@@ -939,7 +941,7 @@ func TestReplicaLease(t *testing.T) {
 	for _, lease := range []roachpb.Lease{
 		{Start: start, Expiration: &hlc.Timestamp{}},
 	} {
-		if _, err := batcheval.RequestLease(ctx, tc.store.TODOEngine(),
+		if _, err := batcheval.RequestLease(ctx, tc.store.StateEngine(),
 			batcheval.CommandArgs{
 				EvalCtx: NewReplicaEvalContext(
 					ctx, tc.repl, allSpans(), false, /* requiresClosedTSOlderThanStorageSnap */
@@ -1058,7 +1060,7 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 func TestReplicaLeaseCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer EnableLeaseHistoryForTesting(100)()
+	defer TestingEnableLeaseHistory(100)()
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -1781,10 +1783,10 @@ func TestOptimizePuts(t *testing.T) {
 
 	for i, c := range testCases {
 		if c.exEndKey != nil {
-			require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, tc.engine, nil,
+			require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, tc.stateEng, nil,
 				c.exKey, c.exEndKey, hlc.MinTimestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, 0, nil))
 		} else if c.exKey != nil {
-			_, err := storage.MVCCPut(ctx, tc.engine, c.exKey,
+			_, err := storage.MVCCPut(ctx, tc.stateEng, c.exKey,
 				hlc.Timestamp{}, roachpb.MakeValueFromString("foo"), storage.MVCCWriteOptions{})
 			require.NoError(t, err)
 		}
@@ -1804,7 +1806,7 @@ func TestOptimizePuts(t *testing.T) {
 		// change when it is passed to optimizePuts.
 		oldRequests := batch.Requests
 		var err error
-		batch.Requests, err = optimizePuts(ctx, tc.engine, batch.Requests, false)
+		batch.Requests, err = optimizePuts(ctx, tc.stateEng, batch.Requests, false)
 		require.NoError(t, err)
 		if !reflect.DeepEqual(goldenRequests, oldRequests) {
 			t.Fatalf("%d: optimizePuts mutated the original request slice: %s",
@@ -1829,10 +1831,10 @@ func TestOptimizePuts(t *testing.T) {
 			t.Errorf("%d: expected %+v; got %+v", i, c.expBlind, blind)
 		}
 		if c.exEndKey != nil {
-			require.NoError(t, tc.engine.ClearMVCCRangeKey(storage.MVCCRangeKey{
+			require.NoError(t, tc.stateEng.ClearMVCCRangeKey(storage.MVCCRangeKey{
 				StartKey: c.exKey, EndKey: c.exEndKey, Timestamp: hlc.MinTimestamp}))
 		} else if c.exKey != nil {
-			require.NoError(t, tc.engine.ClearUnversioned(c.exKey, storage.ClearOptions{}))
+			require.NoError(t, tc.stateEng.ClearUnversioned(c.exKey, storage.ClearOptions{}))
 		}
 	}
 }
@@ -1950,7 +1952,7 @@ func TestLeaseConcurrent(t *testing.T) {
 				// Morally speaking, this is an error, but reproposals can
 				// happen and so we warn (in case this trips the test up
 				// in more unexpected ways).
-				log.Dev.Infof(ctx, "reproposal of %+v", ll)
+				log.KvExec.Infof(ctx, "reproposal of %+v", ll)
 			}
 			// Wait for all lease requests to join the same LeaseRequest command.
 			wg.Wait()
@@ -2732,7 +2734,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 		{spanset.SpanReadWrite, roachpb.Key("b"), false},
 		{spanset.SpanReadWrite, roachpb.Key("d"), true},
 	} {
-		err := spans.CheckAllowed(tc.access, roachpb.Span{Key: tc.key})
+		err := spans.CheckAllowed(tc.access, spanset.TrickySpan{Key: tc.key})
 		if tc.expectAccess {
 			require.NoError(t, err)
 		} else {
@@ -3095,7 +3097,7 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 			if _, pErr := tc.SendWrappedWith(kvpb.Header{Txn: txnOld}, &pArgs); pErr != nil {
 				t.Fatal(pErr)
 			}
-			iter, err := tc.engine.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
+			iter, err := tc.stateEng.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -3403,7 +3405,7 @@ func TestReplicaAbortSpanReadError(t *testing.T) {
 
 	// Overwrite Abort span entry with garbage for the last op.
 	key := keys.AbortSpanKey(tc.repl.RangeID, txn.ID)
-	_, err := storage.MVCCPut(ctx, tc.engine, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), storage.MVCCWriteOptions{})
+	_, err := storage.MVCCPut(ctx, tc.stateEng, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), storage.MVCCWriteOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3439,7 +3441,7 @@ func TestReplicaAbortSpanOnlyWithIntent(t *testing.T) {
 		Timestamp: txn.WriteTimestamp,
 		Priority:  0,
 	}
-	if err := tc.repl.abortSpan.Put(ctx, tc.engine, nil, txn.ID, &entry); err != nil {
+	if err := tc.repl.abortSpan.Put(ctx, tc.stateEng, nil, txn.ID, &entry); err != nil {
 		t.Fatal(err)
 	}
 
@@ -4462,7 +4464,7 @@ func TestEndTxnWithErrors(t *testing.T) {
 			existTxnRecord := existTxn.AsRecord()
 			txnKey := keys.TransactionKey(test.key, txn.ID)
 			if err := storage.MVCCPutProto(
-				ctx, tc.repl.store.TODOEngine(), txnKey, hlc.Timestamp{}, &existTxnRecord, storage.MVCCWriteOptions{},
+				ctx, tc.repl.store.StateEngine(), txnKey, hlc.Timestamp{}, &existTxnRecord, storage.MVCCWriteOptions{},
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -4505,7 +4507,7 @@ func TestEndTxnWithErrorAndSyncIntentResolution(t *testing.T) {
 	existTxn.Status = roachpb.ABORTED
 	existTxnRec := existTxn.AsRecord()
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	err := storage.MVCCPutProto(ctx, tc.repl.store.TODOEngine(), txnKey, hlc.Timestamp{}, &existTxnRec, storage.MVCCWriteOptions{})
+	err := storage.MVCCPutProto(ctx, tc.repl.store.StateEngine(), txnKey, hlc.Timestamp{}, &existTxnRec, storage.MVCCWriteOptions{})
 	require.NoError(t, err)
 
 	// End the transaction, verify expected error, shouldn't deadlock.
@@ -4571,7 +4573,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 			var txnRecord roachpb.Transaction
 			txnKey := keys.TransactionKey(txn.Key, txn.ID)
 			if ok, err := storage.MVCCGetProto(
-				ctx, tc.repl.store.TODOEngine(),
+				ctx, tc.repl.store.StateEngine(),
 				txnKey, hlc.Timestamp{}, &txnRecord, storage.MVCCGetOptions{},
 			); err != nil {
 				t.Fatal(err)
@@ -4723,7 +4725,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	// Verify txn record is cleaned.
 	var readTxn roachpb.Transaction
 	txnKey := keys.TransactionKey(txn.Key, txn.ID)
-	ok, err := storage.MVCCGetProto(ctx, tc.repl.store.TODOEngine(), txnKey,
+	ok, err := storage.MVCCGetProto(ctx, tc.repl.store.StateEngine(), txnKey,
 		hlc.Timestamp{}, &readTxn, storage.MVCCGetOptions{})
 	if err != nil || ok {
 		t.Errorf("expected transaction record to be cleared (%t): %+v", ok, err)
@@ -4820,7 +4822,7 @@ func TestEndTxnLocalGC(t *testing.T) {
 		}
 		var readTxn roachpb.Transaction
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
-		ok, err := storage.MVCCGetProto(ctx, tc.repl.store.TODOEngine(), txnKey, hlc.Timestamp{},
+		ok, err := storage.MVCCGetProto(ctx, tc.repl.store.StateEngine(), txnKey, hlc.Timestamp{},
 			&readTxn, storage.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
@@ -4956,7 +4958,7 @@ func TestEndTxnDirectGC(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
 				var gr kvpb.GetResponse
 				if _, err := batcheval.Get(
-					ctx, tc.engine, batcheval.CommandArgs{
+					ctx, tc.stateEng, batcheval.CommandArgs{
 						EvalCtx: NewReplicaEvalContext(
 							ctx, tc.repl, allSpans(), false, /* requiresClosedTSOlderThanStorageSnap */
 							kvpb.AdmissionHeader{},
@@ -4973,12 +4975,12 @@ func TestEndTxnDirectGC(t *testing.T) {
 				}
 
 				var entry roachpb.AbortSpanEntry
-				if aborted, err := tc.repl.abortSpan.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
+				if aborted, err := tc.repl.abortSpan.Get(ctx, tc.stateEng, txn.ID, &entry); err != nil {
 					t.Fatal(err)
 				} else if aborted {
 					return errors.Errorf("%d: AbortSpan still populated: %v", i, entry)
 				}
-				if aborted, err := rightRepl.abortSpan.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
+				if aborted, err := rightRepl.abortSpan.Get(ctx, tc.stateEng, txn.ID, &entry); err != nil {
 					t.Fatal(err)
 				} else if aborted {
 					t.Fatalf("%d: right-hand side AbortSpan still populated: %v", i, entry)
@@ -5067,7 +5069,7 @@ func TestEndTxnDirectGC_1PC(t *testing.T) {
 			}
 
 			var entry roachpb.AbortSpanEntry
-			if aborted, err := tc.repl.abortSpan.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
+			if aborted, err := tc.repl.abortSpan.Get(ctx, tc.stateEng, txn.ID, &entry); err != nil {
 				t.Fatal(err)
 			} else if aborted {
 				t.Fatalf("commit=%t: AbortSpan still populated: %v", commit, entry)
@@ -5339,13 +5341,13 @@ func TestAbortSpanError(t *testing.T) {
 		Timestamp: ts,
 		Priority:  priority,
 	}
-	if err := tc.repl.abortSpan.Put(ctx, tc.engine, nil, txn.ID, &entry); err != nil {
+	if err := tc.repl.abortSpan.Put(ctx, tc.stateEng, nil, txn.ID, &entry); err != nil {
 		t.Fatal(err)
 	}
 
 	ec := newEvalContextImpl(ctx, tc.repl, false /* requireClosedTS */, kvpb.AdmissionHeader{})
 	rec := &SpanSetReplicaEvalContext{ec, *allSpans()}
-	pErr := checkIfTxnAborted(ctx, rec, tc.engine, txn)
+	pErr := checkIfTxnAborted(ctx, rec, tc.stateEng, txn)
 	if _, ok := pErr.GetDetail().(*kvpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
 		expected.WriteTimestamp = txn.WriteTimestamp
@@ -5727,7 +5729,7 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
 
-	b := tc.engine.NewBatch()
+	b := tc.stateEng.NewBatch()
 	defer b.Close()
 
 	txn := newTransaction("test", roachpb.Key("test"), 1, tc.Clock())
@@ -6196,7 +6198,7 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 func verifyRangeStats(
 	reader storage.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats,
 ) error {
-	ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), reader)
+	ms, err := kvstorage.MakeStateLoader(rangeID).LoadMVCCStats(context.Background(), reader)
 	if err != nil {
 		return err
 	}
@@ -6227,7 +6229,7 @@ func TestRangeStatsComputation(t *testing.T) {
 
 	baseStats := tc.repl.GetMVCCStats()
 
-	require.NoError(t, verifyRangeStats(tc.engine, tc.repl.RangeID, baseStats))
+	require.NoError(t, verifyRangeStats(tc.stateEng, tc.repl.RangeID, baseStats))
 
 	// Put a value.
 	pArgs := putArgs([]byte("a"), []byte("value1"))
@@ -6245,7 +6247,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		ValCount:  1,
 	})
 
-	if err := verifyRangeStats(tc.engine, tc.repl.RangeID, expMS); err != nil {
+	if err := verifyRangeStats(tc.stateEng, tc.repl.RangeID, expMS); err != nil {
 		t.Fatal(err)
 	}
 
@@ -6279,7 +6281,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		IntentCount: 1,
 		LockCount:   1,
 	})
-	if err := verifyRangeStats(tc.engine, tc.repl.RangeID, expMS); err != nil {
+	if err := verifyRangeStats(tc.stateEng, tc.repl.RangeID, expMS); err != nil {
 		t.Fatal(err)
 	}
 
@@ -6305,7 +6307,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		KeyCount:  2,
 		ValCount:  2,
 	})
-	if err := verifyRangeStats(tc.engine, tc.repl.RangeID, expMS); err != nil {
+	if err := verifyRangeStats(tc.stateEng, tc.repl.RangeID, expMS); err != nil {
 		t.Fatal(err)
 	}
 
@@ -6324,7 +6326,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		KeyCount:  2,
 		ValCount:  3,
 	})
-	if err := verifyRangeStats(tc.engine, tc.repl.RangeID, expMS); err != nil {
+	if err := verifyRangeStats(tc.stateEng, tc.repl.RangeID, expMS); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -6532,7 +6534,7 @@ func TestReplicaCorruption(t *testing.T) {
 	}
 
 	// Should have laid down marker file to prevent startup.
-	_, err := tc.engine.Env().Stat(base.PreventedStartupFile(tc.engine.GetAuxiliaryDir()))
+	_, err := tc.raftEng.Env().Stat(base.PreventedStartupFile(tc.raftEng.GetAuxiliaryDir()))
 	require.NoError(t, err)
 
 	// Should have triggered fatal error.
@@ -7000,6 +7002,8 @@ func TestReplicaDestroy(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
+	// TODO(sep-raft-log): iterate the engines separately here. The state engine
+	// should have only the tombstone, and the log engine should have no keys.
 	engSnapshot := tc.repl.store.TODOEngine().NewSnapshot()
 	defer engSnapshot.Close()
 
@@ -7017,7 +7021,7 @@ func TestReplicaDestroy(t *testing.T) {
 		UnreplicatedByRangeID: true,
 	}
 	require.NoError(t, rditer.IterateReplicaKeySpans(
-		ctx, tc.repl.Desc(), engSnapshot, selOpts,
+		ctx, tc.repl.Desc(), engSnapshot, fs.ReplicationReadCategory, selOpts,
 		func(iter storage.EngineIterator, _ roachpb.Span) error {
 			var err error
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
@@ -7747,7 +7751,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	}
 	tc.repl.mu.RUnlock()
 
-	log.Dev.Infof(ctx, "test begins")
+	log.KvExec.Infof(ctx, "test begins")
 
 	ba := &kvpb.BatchRequest{}
 	ba.RangeID = 1
@@ -7823,7 +7827,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 	abandoned := make(map[kvserverbase.CmdIDKey]struct{}) // protected by repl.mu
 	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
 		if _, ok := abandoned[p.idKey]; ok {
-			log.Dev.Infof(p.Context(), "abandoning command")
+			log.KvExec.Infof(p.Context(), "abandoning command")
 			return true, nil
 		}
 		return false, nil
@@ -7856,7 +7860,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 		repl.mu.Unlock()
 	}
 
-	log.Dev.Infof(ctx, "waiting on %d chans", len(chs))
+	log.KvExec.Infof(ctx, "waiting on %d chans", len(chs))
 	for _, ch := range chs {
 		if rwe := <-ch; rwe.Err != nil {
 			t.Fatal(rwe.Err)
@@ -10260,8 +10264,8 @@ func TestReplicaRecomputeStats(t *testing.T) {
 	disturbMS := enginepb.NewPopulatedMVCCStats(rnd, false)
 	disturbMS.ContainsEstimates = 0
 	ms.Add(*disturbMS)
-	err := repl.raftMu.stateLoader.SetMVCCStats(ctx, tc.engine, ms)
-	repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.engine)
+	err := repl.raftMu.stateLoader.SetMVCCStats(ctx, tc.stateEng, ms)
+	repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.stateEng, tc.raftEng)
 	repl.mu.Unlock()
 	repl.raftMu.Unlock()
 
@@ -10351,9 +10355,9 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 
 		// Check that we didn't mess up the stats.
 		// Regression test for #31870.
-		snap := tc.engine.NewSnapshot()
+		snap := tc.stateEng.NewSnapshot()
 		defer snap.Close()
-		res, err := CalcReplicaDigest(ctx, *tc.repl.Desc(), tc.engine, kvpb.ChecksumMode_CHECK_FULL,
+		res, err := CalcReplicaDigest(ctx, *tc.repl.Desc(), snap, kvpb.ChecksumMode_CHECK_FULL,
 			quotapool.NewRateLimiter("test", quotapool.Inf(), 0), nil /* settings */)
 		if err != nil {
 			return hlc.Timestamp{}, err
@@ -10962,7 +10966,7 @@ func TestReplicaPushed1PC(t *testing.T) {
 	// Write a value outside the transaction.
 	tc.manualClock.Advance(10)
 	ts2 := tc.Clock().Now()
-	if _, err := storage.MVCCPut(ctx, tc.engine, k, ts2, roachpb.MakeValueFromString("one"), storage.MVCCWriteOptions{}); err != nil {
+	if _, err := storage.MVCCPut(ctx, tc.stateEng, k, ts2, roachpb.MakeValueFromString("one"), storage.MVCCWriteOptions{}); err != nil {
 		t.Fatalf("writing interfering value: %+v", err)
 	}
 
@@ -13569,7 +13573,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 
 				var foundRecord roachpb.TransactionRecord
 				if found, err := storage.MVCCGetProto(
-					ctx, tc.repl.store.TODOEngine(), keys.TransactionKey(txn.Key, txn.ID),
+					ctx, tc.repl.store.StateEngine(), keys.TransactionKey(txn.Key, txn.ID),
 					hlc.Timestamp{}, &foundRecord, storage.MVCCGetOptions{},
 				); err != nil {
 					t.Fatal(err)
@@ -13781,9 +13785,13 @@ func TestAdminScatterDestroyedReplica(t *testing.T) {
 	tc.Start(ctx, t, stopper)
 
 	errBoom := errors.New("boom")
-	tc.repl.mu.Lock()
-	tc.repl.mu.destroyStatus.Set(errBoom, destroyReasonMergePending)
-	tc.repl.mu.Unlock()
+	func() {
+		tc.repl.readOnlyCmdMu.Lock()
+		defer tc.repl.readOnlyCmdMu.Unlock()
+		tc.repl.mu.Lock()
+		defer tc.repl.mu.Unlock()
+		tc.repl.shMu.destroyStatus.Set(errBoom, destroyReasonMergePending)
+	}()
 
 	desc := tc.repl.Desc()
 	resp, err := tc.repl.adminScatter(ctx, kvpb.AdminScatterRequest{
@@ -15191,5 +15199,130 @@ func TestLeaderlessWatcherInit(t *testing.T) {
 		// Channel is closed, which is expected
 	default:
 		t.Fatalf("expected LeaderlessWatcher channel to be closed")
+	}
+}
+
+// TestOverlapsUnreplicatedRangeIDLocalKeys verifies that the function
+// overlapsUnreplicatedRangeIDLocalKeys() successfully catches any overlap with
+// unreplicated rangeID local keys.
+func TestOverlapsUnreplicatedRangeIDLocalKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := func(start, end roachpb.Key) roachpb.Span {
+		return roachpb.Span{Key: start, EndKey: end}
+	}
+	testCases := []struct {
+		span  roachpb.Span
+		notOk bool
+	}{
+		// Full spans not overlapping with unreplicated local RangeID spans.
+		{span: s(roachpb.KeyMin, keys.LocalRangeIDPrefix.AsRawKey())},
+		{span: s(keys.RangeForceFlushKey(1), keys.RangeLeaseKey(1))},
+		{span: s(keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd(), roachpb.KeyMax)},
+
+		// Full spans overlapping with unreplicated local RangeID spans.
+		{span: s(roachpb.KeyMin, keys.MakeRangeIDUnreplicatedPrefix(1)), notOk: true}, // partial overlap
+		{span: s(roachpb.KeyMin, keys.RaftTruncatedStateKey(1)), notOk: true},
+		{span: s(keys.LocalRangeIDPrefix.AsRawKey(), keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd()),
+			notOk: true},
+		{span: s(keys.RaftTruncatedStateKey(1), keys.RaftTruncatedStateKey(2)), notOk: true},
+		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd(), roachpb.KeyMax), notOk: true}, // partial overlap
+		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1),
+			keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd()), notOk: true},
+		{span: s(keys.RaftTruncatedStateKey(1), roachpb.KeyMax), notOk: true},
+
+		// Point spans not overlapping with unreplicated local RangeID spans.
+		{span: s(roachpb.KeyMin, nil)},
+		{span: s(keys.LocalRangeIDPrefix.AsRawKey().Prevish(1), nil)},
+		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1).Prevish(1), nil)},
+		{span: s(keys.RangeForceFlushKey(1), nil)},
+		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd(), nil)},
+		{span: s(keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd(), nil)},
+		{span: s(roachpb.KeyMax, nil)},
+
+		// Point spans overlapping with unreplicated local RangeID spans.
+		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1), nil), notOk: true},
+		{span: s(keys.RangeTombstoneKey(1), nil), notOk: true},
+		{span: s(keys.RaftTruncatedStateKey(1), nil), notOk: true},
+		{span: s(keys.RaftTruncatedStateKey(2), nil), notOk: true},
+		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd().Prevish(1), nil), notOk: true},
+
+		// Tricky spans not overlapping with unreplicated local RangeID spans.
+		{span: s(nil, keys.LocalRangeIDPrefix.AsRawKey())},
+		{span: s(nil, keys.MakeRangeIDUnreplicatedPrefix(1))},
+		{span: s(nil, keys.RangeForceFlushKey(1))},
+		{span: s(nil, keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd().Next())},
+		{span: s(nil, keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd().Next())},
+
+		// Tricky spans overlapping with unreplicated local RangeID spans.
+		{span: s(nil, keys.MakeRangeIDUnreplicatedPrefix(1).Next()), notOk: true},
+		{span: s(nil, keys.RangeTombstoneKey(1).Next()), notOk: true},
+		{span: s(nil, keys.RaftTruncatedStateKey(1).Next()), notOk: true},
+		{span: s(nil, keys.RaftTruncatedStateKey(2).Next()), notOk: true},
+		{span: s(nil, keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd()), notOk: true},
+		{span: s(nil, keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd()), notOk: true}, // can't decode RangeID.
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			err := overlapsUnreplicatedRangeIDLocalKeys(spanset.TrickySpan(tc.span))
+			require.Equal(t, tc.notOk, err != nil, tc.span)
+		})
+	}
+}
+
+// TestOverlapsStoreLocalKeys verifies that the function
+// overlapsStoreLocalKeys() successfully catches any overlap with
+// store local keys.
+func TestOverlapsStoreLocalKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := func(start, end roachpb.Key) roachpb.Span {
+		return roachpb.Span{Key: start, EndKey: end}
+	}
+
+	testCases := []struct {
+		span  roachpb.Span
+		notOK bool
+	}{
+		// Full spans not overlapping with Store-local span.
+		{span: s(roachpb.KeyMin, keys.LocalStorePrefix)},
+		{span: s(keys.LocalStoreMax, roachpb.KeyMax)},
+
+		// Full spans overlapping with Store-local span.
+		{span: s(roachpb.KeyMin, roachpb.Key(keys.LocalStorePrefix).Next()), notOK: true},
+		{span: s(keys.LocalStorePrefix, keys.LocalStoreMax), notOK: true},
+		{span: s(keys.StoreGossipKey(), keys.StoreIdentKey()), notOK: true},
+		{span: s(keys.LocalStoreMax.Prevish(1), roachpb.KeyMax), notOK: true},
+
+		// Point spans not overlapping with Store-local span.
+		{span: s(roachpb.KeyMin, nil)},
+		{span: s(roachpb.Key(keys.LocalStorePrefix).Prevish(1), nil)},
+		{span: s(keys.LocalStoreMax, nil)},
+		{span: s(keys.LocalStoreMax.Next(), nil)},
+		{span: s(roachpb.KeyMax, nil)},
+
+		// Point spans overlapping with Store-local span.
+		{span: s(keys.LocalStorePrefix, nil), notOK: true},
+		{span: s(keys.StoreGossipKey(), nil), notOK: true},
+		{span: s(keys.LocalStoreMax.Prevish(1), nil), notOK: true},
+
+		// Tricky spans with nil StartKey not overlapping with Store-local span.
+		{span: s(nil, keys.LocalStorePrefix)},
+		{span: s(nil, keys.LocalStoreMax.Next())},
+
+		// Tricky spans with nil StartKey overlapping with Store-local span.
+		{span: s(nil, roachpb.Key(keys.LocalStorePrefix).Next()), notOK: true},
+		{span: s(nil, keys.StoreGossipKey()), notOK: true},
+		{span: s(nil, keys.LocalStoreMax), notOK: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			err := overlapsStoreLocalKeys(spanset.TrickySpan(tc.span))
+			require.Equal(t, tc.notOK, err != nil, tc.span)
+		})
 	}
 }

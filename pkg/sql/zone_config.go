@@ -512,6 +512,5 @@ func deleteRemovedPartitionZoneConfigs(
 	if update == nil || err != nil {
 		return err
 	}
-	_, err = writeZoneConfigUpdate(ctx, txn, kvTrace, update)
-	return err
+	return writeZoneConfigUpdate(ctx, txn, kvTrace, update)
 }

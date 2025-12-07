@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 )
 
 // Throttler is a changefeed IO throttler.
@@ -113,7 +113,7 @@ func NodeLevelThrottler(sv *settings.Values, metrics *Metrics) *Throttler {
 		configStr := changefeedbase.NodeSinkThrottleConfig.Get(sv)
 		if configStr != "" {
 			if err := json.Unmarshal([]byte(configStr), &config); err != nil {
-				log.Dev.Errorf(context.Background(),
+				log.Changefeed.Errorf(context.Background(),
 					"failed to parse node throttle config %q: err=%v; throttling disabled", configStr, err)
 			}
 		}
@@ -150,6 +150,7 @@ func MakeMetrics(histogramWindow time.Duration) Metrics {
 			Help:        fmt.Sprintf("Total time spent throttled for %s quota", n),
 			Measurement: "Nanoseconds",
 			Unit:        metric.Unit_NANOSECONDS,
+			Category:    metric.Metadata_CHANGEFEEDS,
 		}
 	}
 
@@ -168,9 +169,9 @@ func (m Metrics) MetricStruct() {}
 func waitQuota(
 	ctx context.Context, n int64, limit *quotapool.RateLimiter, c *metric.Counter,
 ) error {
-	start := timeutil.Now()
+	start := crtime.NowMono()
 	defer func() {
-		c.Inc(int64(timeutil.Since(start)))
+		c.Inc(start.Elapsed().Nanoseconds())
 	}()
 	return limit.WaitN(ctx, n)
 }

@@ -17,6 +17,7 @@ import (
 
 const (
 	PathSeparator = "."
+	minCharacter  = "-"
 	// Postgres imposes a 65535 limit on the number of labels in a ltree.
 	maxNumOfLabels = 65535
 	// Postgres docs mention labels must be less than 256 bytes, but in practice,
@@ -297,44 +298,17 @@ func LCA(ltrees []T) (_ T, isNull bool) { // lint: uppercase function OK
 }
 
 // NextSibling returns a LTree with a lexicographically incremented last label.
-// This is different from the next lexicographic LTree. This is mainly used for
-// defining a key-encoded span for ancestry operators.
-// Note that this could produce a LTREE with more labels than the maximum
-// allowed.
-// Example: 'A.B' -> 'A.C'
-func (lt T) NextSibling() T {
+// If the LTree is empty, it returns ok=false. An empty LTree represents the
+// root of the tree, so it has no siblings.
+//
+// This is mainly used for defining a key-encoded span for ancestry operators.
+//
+// Example: 'A.B' -> 'A.B-'
+func (lt T) NextSibling() (_ T, ok bool) {
 	if lt.Len() == 0 {
-		return Empty
+		return T{}, false
 	}
-	lastLabel := lt.path[len(lt.path)-1]
-	nextLabel := incrementLabel(lastLabel)
-
-	newLTree := lt.Copy()
-	newLTree.path[newLTree.Len()-1] = nextLabel
-	return newLTree
-}
-
-var nextCharMap = map[byte]byte{
-	'-': '0',
-	'9': 'A',
-	'Z': '_',
-	'_': 'a',
-	'z': 0,
-}
-
-func incrementLabel(label string) string {
-	nextLabel := []byte(label)
-	nextChar, ok := nextCharMap[nextLabel[len(nextLabel)-1]]
-
-	if ok && nextChar == 0 {
-		// Technically, this could mean exceeding the length of the label.
-		return string(append(nextLabel, '-'))
-	}
-
-	if !ok {
-		nextChar = nextLabel[len(nextLabel)-1] + 1
-	}
-
-	nextLabel[len(nextLabel)-1] = nextChar
-	return string(nextLabel)
+	newLT := lt.Copy()
+	newLT.path[newLT.Len()-1] = newLT.path[newLT.Len()-1] + minCharacter
+	return newLT, true
 }

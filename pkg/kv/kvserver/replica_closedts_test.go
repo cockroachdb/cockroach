@@ -1055,7 +1055,7 @@ func TestSideTransportLeaseholder(t *testing.T) {
 			case <-time.After(10 * time.Millisecond):
 				pArgs := putArgs(scratchKey, []byte("value"))
 				if _, pErr := kv.SendWrapped(ctx, store.DB().NonTransactionalSender(), pArgs); pErr != nil {
-					log.Dev.Errorf(ctx, "failed to put value: %s", pErr)
+					log.KvExec.Errorf(ctx, "failed to put value: %s", pErr)
 				}
 			case <-tc.Stopper().ShouldQuiesce():
 				return
@@ -1112,7 +1112,7 @@ func TestClosedTimestampPolicyRefreshIntervalOnLeaseTransfers(t *testing.T) {
 	})
 
 	// Force repl2 policy to be LAG_BY_CLUSTER_SETTING.
-	repl2.SetCachedClosedTimestampPolicyForTesting(ctpb.LAG_BY_CLUSTER_SETTING)
+	repl2.TestingSetCachedClosedTimestampPolicy(ctpb.LAG_BY_CLUSTER_SETTING)
 	require.Equal(t, roachpb.LAG_BY_CLUSTER_SETTING, repl2.GetRangeInfo(ctx).ClosedTimestampPolicy)
 
 	// Ensure that transferring the lease to repl2 does trigger a lease refresh.
@@ -1227,7 +1227,7 @@ func TestRefreshPolicyWithVariousLatencies(t *testing.T) {
 			repl.RefreshPolicy(tc.latencies)
 
 			// Verify the policy is set correctly.
-			actualPolicy := repl.GetCachedClosedTimestampPolicyForTesting()
+			actualPolicy := repl.TestingGetCachedClosedTimestampPolicy()
 			require.Equal(t, tc.expectedPolicy, actualPolicy, "expected policy %v, got %v", tc.expectedPolicy, actualPolicy)
 		})
 	}

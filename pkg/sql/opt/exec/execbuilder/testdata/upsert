@@ -1060,7 +1060,6 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 Put (locking) /Table/117/1/1/0 -> /TUPLE/
 Del (locking) /Table/117/1/1/1/1
 Del (locking) /Table/117/1/1/2/1
-fast path completed
 rows affected: 1
 
 # KV operations.
@@ -1079,9 +1078,8 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
   AND operation NOT LIKE 'kv.DistSender: sending pre-commit query intents%'
 ----
 colbatchscan  Scan /Table/120/1/2/0 lock Exclusive (Block, Unreplicated)
-count         CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
-count         CPut /Table/120/2/3/0 -> /BYTES/0x8a
-count         fast path completed
+upsert        CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
+upsert        CPut /Table/120/2/3/0 -> /BYTES/0x8a
 sql query     rows affected: 1
 
 statement ok
@@ -1092,9 +1090,8 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
 colbatchscan  Scan /Table/120/1/1/0 lock Exclusive (Block, Unreplicated)
-count         CPut /Table/120/1/1/0 -> /TUPLE/2:2:Int/2
-count         CPut /Table/120/2/2/0 -> /BYTES/0x89
-count         fast path completed
+upsert        CPut /Table/120/1/1/0 -> /TUPLE/2:2:Int/2
+upsert        CPut /Table/120/2/2/0 -> /BYTES/0x89
 sql query     rows affected: 1
 
 statement error duplicate key value
@@ -1107,9 +1104,9 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
 colbatchscan  Scan /Table/120/1/2/0 lock Exclusive (Block, Unreplicated)
 colbatchscan  fetched: /kv/kv_pkey/2/v -> /3
-count         Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
-count         Del (locking) /Table/120/2/3/0
-count         CPut /Table/120/2/2/0 -> /BYTES/0x8a
+upsert        Put /Table/120/1/2/0 -> /TUPLE/2:2:Int/2
+upsert        Del (locking) /Table/120/2/3/0
+upsert        CPut /Table/120/2/2/0 -> /BYTES/0x8a
 sql query     execution failed after 0 rows: duplicate key value violates unique constraint "woo"
 
 # Test that implicit SELECT FOR UPDATE doesn't spread to subqueries.

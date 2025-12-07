@@ -10,6 +10,7 @@ go_library(
         "kv_writer.go",
         "lease.go",
         "lease_test_utils.go",
+        "lease_timestamp.go",
         "name_cache.go",
         "storage.go",
         "testutils.go",
@@ -68,6 +69,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_google_btree//:btree",
     ],
 )
 
@@ -75,6 +77,7 @@ go_test(
     name = "lease_test",
     size = "large",
     srcs = [
+        "count_test.go",
         "helpers_test.go",
         "ie_writer_test.go",
         "kv_writer_test.go",
@@ -98,6 +101,8 @@ go_test(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
+        "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -122,6 +127,7 @@ go_test(
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scplan",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlinstance/instancestorage",

@@ -140,6 +140,32 @@ func DecodeStoreLivenessSupportForKey(key roachpb.Key) (roachpb.NodeID, roachpb.
 	return nodeID, storeID, nil
 }
 
+// StoreWAGPrefix returns the key prefix for WAG nodes.
+func StoreWAGPrefix() roachpb.Key {
+	return MakeStoreKey(localStoreWAGNodeSuffix, nil)
+}
+
+// StoreWAGNodeKey returns the key for a WAG node at the given index.
+func StoreWAGNodeKey(index uint64) roachpb.Key {
+	return MakeStoreKey(localStoreWAGNodeSuffix, encoding.EncodeUint64Ascending(nil, index))
+}
+
+// DecodeWAGNodeKey returns the index of the WAG node from its key.
+func DecodeWAGNodeKey(key roachpb.Key) (uint64, error) {
+	suffix, detail, err := DecodeStoreKey(key)
+	if err != nil {
+		return 0, err
+	}
+	if !suffix.Equal(localStoreWAGNodeSuffix) {
+		return 0, errors.Errorf("key with suffix %q != %q", suffix, localStoreWAGNodeSuffix)
+	}
+	detail, index, err := encoding.DecodeUint64Ascending(detail)
+	if len(detail) != 0 {
+		return 0, errors.Errorf("invalid key has trailing garbage: %q", detail)
+	}
+	return index, err
+}
+
 // StoreCachedSettingsKey returns a store-local key for store's cached settings.
 func StoreCachedSettingsKey(settingKey roachpb.Key) roachpb.Key {
 	return MakeStoreKey(localStoreCachedSettingsSuffix, encoding.EncodeBytesAscending(nil, settingKey))
@@ -280,6 +306,17 @@ func DecodeRangeIDKey(
 	b = b[localSuffixLength:]
 
 	return roachpb.RangeID(rangeInt), infix, suffix, b, nil
+}
+
+// DecodeRangeIDPrefix parses a local range ID prefix into range ID.
+func DecodeRangeIDPrefix(key roachpb.Key) (roachpb.RangeID, error) {
+	if !bytes.HasPrefix(key, LocalRangeIDPrefix) {
+		return 0, errors.Errorf("key %s does not have %s prefix", key, LocalRangeIDPrefix)
+	}
+	// Cut the prefix, the Range ID, and the infix specifier.
+	b := key[len(LocalRangeIDPrefix):]
+	_, rangeInt, err := encoding.DecodeUvarintAscending(b)
+	return roachpb.RangeID(rangeInt), err
 }
 
 // AbortSpanKey returns a range-local key by Range ID for an

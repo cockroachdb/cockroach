@@ -79,7 +79,7 @@ func (t *Tracker) Track(
 		// span the leader losing leadership and regaining it. So the entry IDs must
 		// advance.
 		if id.index <= last.index || id.term < last.term {
-			log.Dev.Fatalf(ctx, "expected in order tracked log entries: last=%+v, entry=%+v", last, id)
+			log.KvDistribution.Fatalf(ctx, "expected in order tracked log entries: last=%+v, entry=%+v", last, id)
 			return false
 		}
 	}
@@ -87,7 +87,7 @@ func (t *Tracker) Track(
 	t.deducted[pri] += tokens
 
 	if log.V(1) {
-		log.Dev.Infof(ctx, "tracking %v flow control tokens for pri=%s stream=%s log-position=%d/%d",
+		log.KvDistribution.Infof(ctx, "tracking %v flow control tokens for pri=%s stream=%s log-position=%d/%d",
 			tokens, pri, t.stream, id.term, id.index)
 	}
 	return true

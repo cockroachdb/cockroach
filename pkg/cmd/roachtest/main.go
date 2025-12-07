@@ -56,6 +56,10 @@ const (
 	// runnerLogsDir is the dir under the artifacts root where the test runner log
 	// and other runner-related logs (i.e. cluster creation logs) will be written.
 	runnerLogsDir = "_runner-logs"
+
+	// clusterCreateDir is the dir under runnerLogsDir where cluster creation
+	// related logs will be written
+	clusterCreateDir = "cluster-create"
 )
 
 func main() {
@@ -581,8 +585,4 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 		printErrAndExit(fmt.Errorf("--cockroach and --cockroach-stage are mutually exclusive. Use one or the other"))
 	}
 
-	// Normalize "latest" to empty string for staging system
-	if roachtestflags.CockroachStage == "latest" {
-		roachtestflags.CockroachStage = ""
-	}
 }

@@ -8,11 +8,9 @@ package logical
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
@@ -89,9 +87,31 @@ type logicalReplicationResumer struct {
 
 var _ jobs.Resumer = (*logicalReplicationResumer)(nil)
 
+func (r *logicalReplicationResumer) jobUsesUDF() bool {
+	payload := r.job.Details().(jobspb.LogicalReplicationDetails)
+
+	if payload.DefaultConflictResolution.FunctionId != 0 {
+		return true
+	}
+
+	for _, pair := range payload.ReplicationPairs {
+		if pair.DstFunctionID != 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r *logicalReplicationResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	jobExecCtx := execCtx.(sql.JobExecContext)
+
+	if r.jobUsesUDF() && !crosscluster.LogicalReplicationUDFWriterEnabled.Get(&jobExecCtx.ExecCfg().Settings.SV) {
+		r.updateStatusMessage(ctx, "job paused because UDF-based logical replication writer is disabled")
+		return jobs.MarkPauseRequestError(errors.Newf("UDF-based logical replication writer is disabled and will be deleted in a future CockroachDB release"))
+	}
+
 	return r.handleResumeError(ctx, jobExecCtx, r.ingestWithRetries(ctx, jobExecCtx))
 }
 
@@ -291,8 +311,10 @@ func (r *logicalReplicationResumer) ingest(
 			settings:              &execCfg.Settings.SV,
 			job:                   r.job,
 			frontierUpdates:       heartbeatSender.FrontierUpdates,
-			rangeStats:            newRangeStatsCollector(planInfo.writeProcessorCount),
-			r:                     r,
+			rangeStats: replicationutils.NewAggregateRangeStatsCollector(
+				planInfo.writeProcessorCount,
+			),
+			r: r,
 		}
 		rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
 		distSQLReceiver := sql.MakeDistSQLReceiver(
@@ -326,35 +348,13 @@ func (r *logicalReplicationResumer) ingest(
 		return err
 	}
 
-	refreshConn := func(ctx context.Context) error {
-		ingestionJob := r.job
-		details := ingestionJob.Details().(jobspb.LogicalReplicationDetails)
-		resolvedDest, err := resolveDest(ctx, jobExecCtx.ExecCfg(), details.SourceClusterConnUri)
-		if err != nil {
-			return err
-		}
-		pollingInterval := 2 * time.Minute
-		if knobs := jobExecCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.ExternalConnectionPollingInterval != nil {
-			pollingInterval = *knobs.ExternalConnectionPollingInterval
-		}
-		t := time.NewTicker(pollingInterval)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-confPoller:
-				return nil
-			case <-t.C:
-				newDest, err := reloadDest(ctx, ingestionJob.ID(), jobExecCtx.ExecCfg())
-				if err != nil {
-					log.Warningf(ctx, "failed to check for updated configuration: %v", err)
-				} else if newDest != resolvedDest {
-					return errors.Mark(errors.Newf("replan due to detail change: old=%s, new=%s", resolvedDest, newDest), sql.ErrPlanChanged)
-				}
-			}
-		}
-	}
+	refreshConn := replicationutils.GetAlterConnectionChecker(
+		r.job.ID(),
+		uris[0].Serialize(),
+		geURIFromLoadedJobDetails,
+		execCfg,
+		confPoller,
+	)
 
 	defer func() {
 		if l := payload.MetricsLabel; l != "" {
@@ -478,9 +478,11 @@ type logicalReplicationPlanner struct {
 }
 
 type logicalReplicationPlanInfo struct {
-	sourceSpans         []roachpb.Span
-	partitionPgUrls     []string
-	destTableBySrcID    map[descpb.ID]dstTableMetadata
+	sourceSpans      []roachpb.Span
+	partitionPgUrls  []string
+	destTableBySrcID map[descpb.ID]dstTableMetadata
+	// Number of processors writing data on the destination cluster (offline or
+	// otherwise).
 	writeProcessorCount int
 }
 
@@ -760,6 +762,7 @@ func (p *logicalReplicationPlanner) planOfflineInitialScan(
 				SQLInstanceID: instanceID,
 				Core:          execinfrapb.ProcessorCoreUnion{LogicalReplicationOfflineScan: &spec},
 			})
+			info.writeProcessorCount++
 		}
 	}
 
@@ -787,7 +790,7 @@ type rowHandler struct {
 	job                   *jobs.Job
 	frontierUpdates       chan hlc.Timestamp
 
-	rangeStats rangeStatsByProcessorID
+	rangeStats replicationutils.AggregateRangeStatsCollector
 
 	lastPartitionUpdate time.Time
 
@@ -1089,33 +1092,8 @@ func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
 	}
 }
 
-func resolveDest(
-	ctx context.Context, execCfg *sql.ExecutorConfig, sourceURI string,
-) (string, error) {
-	u, err := url.Parse(sourceURI)
-	if err != nil {
-		return "", err
-	}
-
-	resolved := ""
-	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		conn, err := externalconn.LoadExternalConnection(ctx, u.Host, txn)
-		if err != nil {
-			return err
-		}
-		resolved = conn.UnredactedConnectionStatement()
-		return nil
-	})
-	return resolved, err
-}
-
-func reloadDest(ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfig) (string, error) {
-	reloadedJob, err := execCfg.JobRegistry.LoadJob(ctx, id)
-	if err != nil {
-		return "", err
-	}
-	newDetails := reloadedJob.Details().(jobspb.LogicalReplicationDetails)
-	return resolveDest(ctx, execCfg, newDetails.SourceClusterConnUri)
+func geURIFromLoadedJobDetails(details jobspb.Details) string {
+	return details.(jobspb.LogicalReplicationDetails).SourceClusterConnUri
 }
 
 func init() {

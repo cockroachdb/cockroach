@@ -11,9 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -199,8 +197,9 @@ func TestInvertedJoiner(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	aFn := func(row int) tree.Datum {
 		return tree.NewDInt(tree.DInt(row))
@@ -242,7 +241,7 @@ func TestInvertedJoiner(t *testing.T) {
 	const dciIndex = 4
 	const daciIndex = 5
 
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 
 	type testCase struct {
 		description           string
@@ -624,15 +623,15 @@ func TestInvertedJoiner(t *testing.T) {
 		testCases[i] = initCommonFields(c)
 	}
 
-	st := cluster.MakeTestingClusterSettings()
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	st := s.ClusterSettings()
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tempEngine.Close()
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	evalCtx := eval.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -641,7 +640,7 @@ func TestInvertedJoiner(t *testing.T) {
 			Settings:    st,
 			TempStorage: tempEngine,
 		},
-		Txn:         kv.NewTxn(ctx, s.DB(), s.NodeID()),
+		Txn:         kv.NewTxn(ctx, s.DB(), srv.NodeID()),
 		DiskMonitor: diskMonitor,
 	}
 	for _, c := range testCases {
@@ -654,7 +653,7 @@ func TestInvertedJoiner(t *testing.T) {
 				for rowIdx, row := range c.input {
 					encRow := make(rowenc.EncDatumRow, len(row))
 					for i, d := range row {
-						encRow[i] = rowenc.DatumToEncDatum(c.inputTypes[i], d)
+						encRow[i] = rowenc.DatumToEncDatumUnsafe(c.inputTypes[i], d)
 					}
 					encRows[rowIdx] = encRow
 				}
@@ -673,7 +672,7 @@ func TestInvertedJoiner(t *testing.T) {
 				var fetchSpec fetchpb.IndexFetchSpec
 				if err := rowenc.InitIndexFetchSpec(
 					&fetchSpec,
-					keys.SystemSQLCodec,
+					s.Codec(),
 					td, index, fetchColIDs,
 				); err != nil {
 					t.Fatal(err)
@@ -742,8 +741,9 @@ func TestInvertedJoinerDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	aFn := func(row int) tree.Datum {
 		return tree.NewDInt(tree.DInt(row))
@@ -758,25 +758,25 @@ func TestInvertedJoinerDrain(t *testing.T) {
 		invertedJoinerNumRows,
 		sqlutils.ToRowFn(aFn, bFn))
 	const biIndex = 1
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 
 	tracer := s.TracerI().(*tracing.Tracer)
 	ctx, sp := tracer.StartSpanCtx(context.Background(), "test flow ctx", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
-	st := cluster.MakeTestingClusterSettings()
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	st := s.ClusterSettings()
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tempEngine.Close()
-	evalCtx := eval.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 	defer evalCtx.Stop(context.Background())
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
+	rootTxn := kv.NewTxn(ctx, s.DB(), srv.NodeID())
 	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	require.NoError(t, err)
-	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState, nil /* header */)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), srv.NodeID(), leafInputState, nil /* header */)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
@@ -793,7 +793,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 		var fetchSpec fetchpb.IndexFetchSpec
 		if err := rowenc.InitIndexFetchSpec(
 			&fetchSpec,
-			keys.SystemSQLCodec,
+			s.Codec(),
 			td, td.ActiveIndexes()[biIndex],
 			[]descpb.ColumnID{1, 2},
 		); err != nil {

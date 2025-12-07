@@ -1747,9 +1747,6 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 		case SeqOptStart:
 			ctx.WriteString(option.Name)
 			ctx.WriteByte(' ')
-			if option.OptionalWord {
-				ctx.WriteString("WITH ")
-			}
 			// TODO(knz): replace all this with ctx.FormatNode if/when
 			// the start option supports expressions.
 			if ctx.flags.HasFlags(FmtHideConstants) {
@@ -1761,9 +1758,6 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 			ctx.WriteString(option.Name)
 			if option.IntVal != nil {
 				ctx.WriteByte(' ')
-				if option.OptionalWord {
-					ctx.WriteString("WITH ")
-				}
 				if ctx.flags.HasFlags(FmtHideConstants) {
 					ctx.WriteByte('0')
 				} else {
@@ -1773,9 +1767,6 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 		case SeqOptIncrement:
 			ctx.WriteString(option.Name)
 			ctx.WriteByte(' ')
-			if option.OptionalWord {
-				ctx.WriteString("BY ")
-			}
 			// TODO(knz): replace all this with ctx.FormatNode if/when
 			// the increment option supports expressions.
 			if ctx.flags.HasFlags(FmtHideConstants) {
@@ -1808,8 +1799,6 @@ type SequenceOption struct {
 	AsIntegerType *types.T
 
 	IntVal *int64
-
-	OptionalWord bool
 
 	ColumnItemVal *ColumnItem
 }
@@ -2369,9 +2358,9 @@ func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) 
 	if o.EnableReaderTenant != nil {
 		if other.EnableReaderTenant != nil {
 			return errors.New("READ VIRTUAL CLUSTER option specified multiple times")
-		} else {
-			o.EnableReaderTenant = other.EnableReaderTenant
 		}
+	} else {
+		o.EnableReaderTenant = other.EnableReaderTenant
 	}
 
 	return nil

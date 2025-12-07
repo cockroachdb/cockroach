@@ -154,7 +154,7 @@ func newSamplerProcessor(
 
 	s.sr.Init(int(spec.SampleSize), int(spec.MinSampleSize), inTypes, &s.memAcc, sampleCols)
 
-	outTypes := make([]*types.T, 0, len(inTypes)+7)
+	outTypes := make([]*types.T, 0, len(inTypes)+8)
 
 	// First columns are the same as the input.
 	outTypes = append(outTypes, inTypes...)
@@ -303,13 +303,13 @@ func (s *samplerProcessor) mainLoop(
 			}
 		}
 
+		if earlyExit, err = s.sampleRow(ctx, output, &s.sr, row, rng); earlyExit || err != nil {
+			return earlyExit, err
+		}
 		for i := range s.sketches {
 			if err := s.sketches[i].addRow(ctx, row, s.outTypes, &buf); err != nil {
 				return false, err
 			}
-		}
-		if earlyExit, err = s.sampleRow(ctx, output, &s.sr, row, rng); earlyExit || err != nil {
-			return earlyExit, err
 		}
 
 		for col, invSr := range s.invSr {
@@ -335,11 +335,11 @@ func (s *samplerProcessor) mainLoop(
 			for _, key := range invKeys {
 				d := tree.DBytes(key)
 				invRow[0].Datum = &d
-				if err := s.invSketch[col].addRow(ctx, invRow, bytesRowType, &buf); err != nil {
-					return false, err
-				}
 				if earlyExit, err = s.sampleRow(ctx, output, invSr, invRow, rng); earlyExit || err != nil {
 					return earlyExit, err
+				}
+				if err := s.invSketch[col].addRow(ctx, invRow, bytesRowType, &buf); err != nil {
+					return false, err
 				}
 			}
 		}

@@ -134,7 +134,7 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 	testutils.SucceedsWithin(t, func() error {
 		for nodeID := 2; nodeID <= numNodes; nodeID++ {
 			if err := c.RunE(ctx, option.WithNodes(c.Node(nodeID)),
-				fmt.Sprintf("grep -q '%s' logs/cockroach.log", verboseStoreLogRe),
+				fmt.Sprintf("grep -q '%s' logs/cockroach-kv-distribution.log", verboseStoreLogRe),
 			); err == nil {
 				return nil
 			}

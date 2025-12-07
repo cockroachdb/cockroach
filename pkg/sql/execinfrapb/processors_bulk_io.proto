@@ -85,7 +85,13 @@ message BackfillerSpec {
   // the value of 0 is specified then the primary index will be used implicitly.
   optional uint32 source_index_id = 16 [(gogoproto.nullable) = false, (gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
 
-  // NEXTID: 17.
+  optional bool use_distributed_merge_sink = 17 [(gogoproto.nullable) = false];
+
+  // distributed_merge_file_prefix is the ExternalStorage URI prefix to use when
+  // writing map outputs for the distributed merge pipeline.
+  optional string distributed_merge_file_prefix = 18 [(gogoproto.nullable) = false];
+
+  // NEXTID: 19.
 }
 
 // JobProgress identifies the job to report progress on. This reporting
@@ -120,6 +126,9 @@ message ReadImportDataSpec {
     repeated string targetCols = 2 [(gogoproto.nullable) = true];
   }
 
+  optional ImportTable table = 20;
+  // TODO(yuzefovich): remove Tables field once compatibility with 25.3 is no
+  // longer needed.
   // tables supports input formats that can read multiple tables. If it is
   // non-empty, the keys specify the names of tables for which the processor
   // should read and emit data (ignoring data for any other tables that is
@@ -131,7 +140,7 @@ message ReadImportDataSpec {
   // TableDescriptor with the corresponding descriptor ID key. If tables is
   // empty (and table_desc above is not specified), the processor should read
   // all tables in the input, determining their schemas on the fly.
-  map<string, ImportTable> tables = 9 [(gogoproto.nullable) = true];
+  map<string, ImportTable> tables = 9 [(gogoproto.nullable) = true, deprecated = true];
 
   // uri is a cloud.ExternalStorage URI pointing to the CSV files to be
   // read. The map key must be unique across the entire IMPORT job.
@@ -172,7 +181,21 @@ message ReadImportDataSpec {
 
   optional int32 initial_splits = 18 [(gogoproto.nullable) = false];
 
-  // NEXTID: 20.
+  // NEXTID: 21.
+}
+
+message MergeCoordinatorSpec {
+  optional int64 task_count = 1 [(gogoproto.nullable) = false];
+  repeated bytes worker_sql_instance_ids = 2;
+  // NEXT ID: 3.
+}
+
+// MergeLoopback is scheduled on the same node as the MergeCoordinator.
+// MergeCoordinator is the final processor in the flow and MergeLoopback is the
+// first processor in the flow. Scheduling them on the same node allows the
+// MergeCoordinator to inject task rows into the process.
+message MergeLoopbackSpec {
+
 }
 
 message IngestStoppedSpec {
@@ -279,6 +302,9 @@ message StreamIngestionFrontierSpec {
 
   // PartitionSpecs contains the topology of the physical replication stream.
   optional StreamIngestionPartitionSpecs partition_specs = 9 [(gogoproto.nullable) = false];
+
+  // NumIngestionProcessors is the number of ingestion processors in the job.
+  optional int32 num_ingestion_processors = 10 [(gogoproto.nullable) = false];
 }
 
 enum ElidePrefix {
@@ -565,7 +591,7 @@ message CompactBackupsSpec {
 	// if it is only provided the assigned spans, so to be safe we send the entire
 	// set of spans.
   repeated roachpb.Span spans = 8 [(gogoproto.nullable) = false];
-  // assigned_spans represents the spans assigned to this particular processor 
+  // assigned_spans represents the spans assigned to this particular processor
   // to compact.
   repeated roachpb.Span assigned_spans = 9 [(gogoproto.nullable) = false];
   optional string user_proto = 10 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
@@ -576,4 +602,45 @@ message CompactBackupsSpec {
 	optional int64 target_size = 11 [(gogoproto.nullable) = false];
 	optional int64 max_files = 12 [(gogoproto.nullable) = false];
 	// NEXT ID: 13.
+}
+
+message BulkMergeSpec {
+  // SST represents metadata about a single SST file to be merged.
+  message SST {
+    // uri is a fully qualifed URI to the SST file. It will look something like
+    // 'nodelocal://2/<job_id>/input/0.sst'
+    optional string uri = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "URI"];
+    // start_key is the first key in the SST.
+    optional bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+    // end_key is the last key in the SST.
+    optional bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  };
+
+  // ssts is the list of input SSTs to merge.
+  repeated SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
+
+  // spans are the merge tasks.  E.g.the merge task `n` is to merge all the input data that overlaps with
+  // [spans[n].Key, spans[n].EndKey)
+  repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+
+  // output_storage is the external storage connection where the merged output should be stored.
+  optional cloud.cloudpb.ExternalStorage output_storage = 3 [(gogoproto.nullable) = false];
+
+  message Output {
+    // output_ssts is the list of output SSTs.
+    repeated SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
+  }
+  // NEXT ID: 4.
+}
+
+// IndexBackfillMapProgress is emitted by map-stage processors to describe newly
+// produced SST manifests.
+message IndexBackfillMapProgress {
+	repeated jobs.jobspb.IndexBackfillSSTManifest sst_manifests = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTManifests"];
+}
+
+// IngestFileSpec describes the set of SSTs to be ingested by an ingest
+// processor. Each SST is expected to be range-aligned and non-overlapping.
+message IngestFileSpec {
+	repeated BulkMergeSpec.SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
 }

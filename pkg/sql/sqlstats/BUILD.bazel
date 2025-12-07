@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "sqlstats",
@@ -22,12 +22,37 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlcommenter",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+        "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "sqlstats_test",
+    srcs = [
+        "main_test.go",
+        "sqlstats_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":sqlstats",
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )

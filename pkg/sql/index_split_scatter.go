@@ -8,7 +8,6 @@ package sql
 import (
 	"bytes"
 	"context"
-	"math/rand"
 	"sort"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/errors"
 )
@@ -189,19 +189,26 @@ func (is *indexSplitAndScatter) getSplitPointsWithStats(
 	// we generated any split points above
 	if len(splitPoints) > 0 {
 		splitPoints = append(splitPoints, is.codec.IndexPrefix(uint32(table.GetID()), uint32(indexToBackfill.GetID())))
-		log.Infof(ctx, "generated %d split points from statistics for tableId=%d index=%d", len(splitPoints), table.GetID(), indexToBackfill.GetID())
+		log.Dev.Infof(ctx, "generated %d split points from statistics for tableId=%d index=%d", len(splitPoints), table.GetID(), indexToBackfill.GetID())
 	}
 	return splitPoints, nil
 }
 
 // MaybeSplitIndexSpans implements the scexec.IndexSpanSplitter interface.
 func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
-	ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index,
+	ctx context.Context,
+	table catalog.TableDescriptor,
+	indexToBackfill catalog.Index,
+	copyIndexSource catalog.Index,
 ) error {
-	// We will always pre-split index spans if there is partitioning.
-	err := is.MaybeSplitIndexSpansForPartitioning(ctx, table, indexToBackfill)
-	if err != nil {
-		return err
+	// If we are asked to copy a source indexes splits, then there is
+	// no need split along partitioning.
+	if copyIndexSource == nil {
+		// We will always pre-split index spans if there is partitioning.
+		err := is.MaybeSplitIndexSpansForPartitioning(ctx, table, indexToBackfill)
+		if err != nil {
+			return err
+		}
 	}
 
 	const backfillSplitExpiration = time.Hour
@@ -210,7 +217,11 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	nNodes := is.nodeDescs.GetNodeDescriptorCount()
 	nSplits := preservedSplitsMultiple * nNodes
 	var copySplitsFromIndexID descpb.IndexID
-	for _, idx := range table.ActiveIndexes() {
+	indexesToConsider := table.ActiveIndexes()
+	if copyIndexSource != nil {
+		indexesToConsider = []catalog.Index{copyIndexSource}
+	}
+	for _, idx := range indexesToConsider {
 		if idx.GetID() != indexToBackfill.GetID() &&
 			idx.CollectKeyColumnIDs().Equals(indexToBackfill.CollectKeyColumnIDs()) {
 			copySplitsFromIndexID = idx.GetID()
@@ -272,7 +283,7 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	if len(splitPoints) == 0 {
 		splitPoints, err = is.getSplitPointsWithStats(ctx, table, indexToBackfill, nSplits)
 		if err != nil {
-			log.Warningf(ctx, "unable to get split points for stats for tableID=%d index=%d due to %v", tableID, indexToBackfill.GetID(), err)
+			log.Dev.Warningf(ctx, "unable to get split points for stats for tableID=%d index=%d due to %v", tableID, indexToBackfill.GetID(), err)
 		}
 	}
 
@@ -306,6 +317,7 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	if is.testingKnobs.BeforeIndexSplitAndScatter != nil {
 		is.testingKnobs.BeforeIndexSplitAndScatter(splitPoints)
 	}
+	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < nSplits; i++ {
 		// Evenly space out the ranges that we select from the ranges that are
 		// returned.
@@ -317,7 +329,7 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 
 		// Jitter the expiration time by 20% up or down from the default.
 		maxJitter := backfillSplitExpiration.Nanoseconds() / 5
-		jitter := rand.Int63n(maxJitter*2) - maxJitter
+		jitter := rng.Int63n(maxJitter*2) - maxJitter
 		expirationTime := backfillSplitExpiration.Nanoseconds() + jitter
 
 		b.AddRawRequest(&kvpb.AdminSplitRequest{

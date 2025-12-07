@@ -65,6 +65,8 @@ func _() {
 	_ = x[dropTable-49]
 	_ = x[dropTrigger-50]
 	_ = x[dropView-51]
+	_ = x[truncateTable-52]
+	_ = x[inspect-53]
 }
 
 func (i opType) String() string {
@@ -173,6 +175,10 @@ func (i opType) String() string {
 		return "dropTrigger"
 	case dropView:
 		return "dropView"
+	case truncateTable:
+		return "truncateTable"
+	case inspect:
+		return "inspect"
 	default:
 		return "opType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

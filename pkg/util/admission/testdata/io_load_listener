@@ -684,8 +684,12 @@ prep-admission-stats admitted=10 write-bytes=10
 ----
 {workCount:10 writeAccountedBytes:10 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:10 writeAccountedBytes:10 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
-# Set provisioned bandwidth and some disk reads and writes.
-# setAvailableTokens should show ((provisioned-bandwidth * adjustment-interval) - bytes-read) / num ticks. ((100*15) - 30) / 60 = 25.
+# Set provisioned bandwidth and some disk reads and writes. Provisione rate is
+# 100 B/s, so over the 15s adjustment interval there are 1500 byte tokens.
+# Since we observed 60 read bytes at the disk, those are reserved for reads,
+# leaving 1440 for writes. These are distributed over 60 ticks in
+# setAvailableTokens, so 1440/60=24 write tokens per tick, and 1 read token
+# per tick (60/60=1).
 set-state l0-bytes=10 l0-added-write=10 bytes-read=60 bytes-written=50 provisioned-bandwidth=100 disk-write-tokens-used=(100,100) l0-files=1 l0-sublevels=1 print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 10 B (write 0 B (ignored 0 B) ingest 0 B (ignored 0 B)): requests 0 (0 bypassed) with 0 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + 0 B adjusted-LSM-writes + 0 B adjusted-disk-writes + write-model 0.00x+0 B (smoothed 1.75x+1 B) + l0-ingest-model 0.00x+0 B (smoothed 0.75x+1 B) + ingest-model 0.00x+0 B (smoothed 1.00x+1 B) + write-amp-model 0.00x+0 B (smoothed 50.50x+1 B) + at-admission-tokens 1 B, compacted 0 B [≈0 B], flushed 150 B [≈0 B] (mult 1.35); admitting all (used total: 0 B elastic 0 B); write stalls 0
@@ -699,6 +703,9 @@ prep-admission-stats admitted=20 write-bytes=20
 ----
 {workCount:20 writeAccountedBytes:20 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:20 writeAccountedBytes:20 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 
+# The bytes-written for the interval are 400-350=50 and the bytes-read are
+# 120-60=60. We again have 1440 disk write tokens and 60 disk read tokens for
+# the 15s interval.
 set-state l0-bytes=40 l0-added-write=40 bytes-read=120 bytes-written=400 provisioned-bandwidth=100 disk-write-tokens-used=(200,200) l0-files=1 l0-sublevels=1 print-only-first-tick=true
 ----
 compaction score 0.050 (1 ssts, 1 sub-levels), L0 growth 30 B (write 30 B (ignored 0 B) ingest 0 B (ignored 0 B)): requests 10 (0 bypassed) with 10 B acc-write (0 B bypassed) + 0 B acc-ingest (0 B bypassed) + 30 B adjusted-LSM-writes + 350 B adjusted-disk-writes + write-model 2.00x+1 B (smoothed 1.88x+1 B) + l0-ingest-model 0.00x+0 B (smoothed 0.75x+1 B) + ingest-model 0.00x+0 B (smoothed 1.00x+1 B) + write-amp-model 11.33x+1 B (smoothed 30.92x+1 B) + at-admission-tokens 2 B, compacted 0 B [≈0 B], flushed 435 B [≈0 B] (mult 1.35); admitting all (used total: 0 B elastic 0 B); write stalls 0

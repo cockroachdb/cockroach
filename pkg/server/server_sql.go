@@ -83,6 +83,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -172,6 +173,7 @@ type SQLServer struct {
 	statsRefresher                 *stats.Refresher
 	temporaryObjectCleaner         *sql.TemporaryObjectCleaner
 	stmtDiagnosticsRegistry        *stmtdiagnostics.Registry
+	txnDiagnosticsRegistry         *stmtdiagnostics.TxnRegistry
 	sqlLivenessSessionID           sqlliveness.SessionID
 	sqlLivenessProvider            sqlliveness.Provider
 	sqlInstanceReader              *instancestorage.Reader
@@ -724,8 +726,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Set up the DistSQL temp engine.
 
-	useStoreSpec := cfg.TempStorageConfig.Spec
-	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.TempStorageConfig, useStoreSpec, cfg.DiskWriteStats)
+	tempEngine, tempFS, err := storage.NewTempEngine(ctx, cfg.TempStorageConfig, cfg.DiskWriteStats)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating temp storage")
 	}
@@ -1039,7 +1040,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.stopper,
 		),
 
-		QueryCache:                 querycache.New(cfg.QueryCacheSize),
+		QueryCache: querycache.New(cfg.QueryCacheSize),
+		StatementHintsCache: hints.NewStatementHintsCache(
+			cfg.clock, cfg.rangeFeedFactory, cfg.stopper, codec, cfg.internalDB, cfg.Settings,
+		),
 		VecIndexManager:            vecIndexManager,
 		RowMetrics:                 &rowMetrics,
 		InternalRowMetrics:         &internalRowMetrics,
@@ -1256,13 +1260,16 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.Settings,
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
+	txnDiagnosticsRegistry := stmtdiagnostics.NewTxnRegistry(
+		cfg.internalDB, cfg.Settings, stmtDiagnosticsRegistry, timeutil.DefaultTimeSource{},
+	)
+	execCfg.TxnDiagnosticsRecorder = txnDiagnosticsRegistry
 
 	var upgradeMgr *upgrademanager.Manager
 	{
 		var c upgrade.Cluster
 		var systemDeps upgrade.SystemDeps
 		keyVisKnobs, _ := cfg.TestingKnobs.KeyVisualizer.(*keyvisualizer.TestingKnobs)
-		sqlStatsKnobs, _ := cfg.TestingKnobs.SQLStatsKnobs.(*sqlstats.TestingKnobs)
 		upgradeKnobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgradebase.TestingKnobs)
 		if codec.ForSystemTenant() {
 			c = upgradecluster.New(upgradecluster.ClusterConfig{
@@ -1270,6 +1277,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				Dialer:           cfg.kvNodeDialer,
 				RangeDescScanner: rangedesc.NewScanner(cfg.db),
 				DB:               cfg.db,
+				Settings:         cfg.Settings,
 			})
 		} else {
 			c = upgradecluster.NewTenantCluster(
@@ -1277,6 +1285,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 					Dialer:         cfg.sqlInstanceDialer,
 					InstanceReader: cfg.sqlInstanceReader,
 					DB:             cfg.db,
+					Settings:       cfg.Settings,
 				})
 		}
 		systemDeps = upgrade.SystemDeps{
@@ -1286,7 +1295,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			JobRegistry:        jobRegistry,
 			Stopper:            cfg.stopper,
 			KeyVisKnobs:        keyVisKnobs,
-			SQLStatsKnobs:      sqlStatsKnobs,
 			TenantInfoAccessor: cfg.tenantConnect,
 			TestingKnobs:       upgradeKnobs,
 		}
@@ -1302,7 +1310,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Instantiate a span config manager.
 	spanConfig.sqlTranslatorFactory = spanconfigsqltranslator.NewFactory(
-		execCfg.ProtectedTimestampProvider, codec, spanConfigKnobs,
+		execCfg.ProtectedTimestampProvider, codec, cfg.Settings, spanConfigKnobs,
 	)
 	spanConfig.sqlWatcher = spanconfigsqlwatcher.New(
 		codec,
@@ -1432,6 +1440,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		statsRefresher:                 statsRefresher,
 		temporaryObjectCleaner:         temporaryObjectCleaner,
 		stmtDiagnosticsRegistry:        stmtDiagnosticsRegistry,
+		txnDiagnosticsRegistry:         txnDiagnosticsRegistry,
 		sqlLivenessProvider:            cfg.sqlLivenessProvider,
 		sqlInstanceStorage:             cfg.sqlInstanceStorage,
 		sqlInstanceReader:              cfg.sqlInstanceReader,
@@ -1762,8 +1771,13 @@ func (s *SQLServer) preStart(
 	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
 	}
-	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
+
+	stmtdiagnostics.StartPolling(ctx, s.txnDiagnosticsRegistry, s.stmtDiagnosticsRegistry, stopper)
+
 	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory); err != nil {
+		return err
+	}
+	if err = s.execCfg.StatementHintsCache.Start(ctx, s.execCfg.SystemTableIDResolver); err != nil {
 		return err
 	}
 

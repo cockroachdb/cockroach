@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "schemaobjectlimit",
+    srcs = ["check.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemaobjectlimit",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/isql",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sqlclustersettings",
+        "//pkg/sql/stats",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

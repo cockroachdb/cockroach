@@ -153,6 +153,12 @@ export function addExecStats(a: ExecStats, b: ExecStats): ExecStats {
       countA,
       countB,
     ),
+    admission_wait_time: addMaybeUnsetNumericStat(
+      a.admission_wait_time,
+      b.admission_wait_time,
+      countA,
+      countB,
+    ),
   };
 }
 
@@ -203,6 +209,7 @@ export function addStatementStats(
     count: a.count.add(b.count),
     failure_count: a.failure_count.add(b.failure_count),
     generic_count: a.generic_count.add(b.generic_count),
+    stmt_hints_count: a.stmt_hints_count.add(b.stmt_hints_count),
     first_attempt_count: a.first_attempt_count.add(b.first_attempt_count),
     max_retries: a.max_retries.greaterThan(b.max_retries)
       ? a.max_retries
@@ -227,6 +234,12 @@ export function addStatementStats(
     bytes_read: aggregateNumericStats(
       a.bytes_read,
       b.bytes_read,
+      countA,
+      countB,
+    ),
+    kv_cpu_time_nanos: aggregateNumericStats(
+      a.kv_cpu_time_nanos,
+      b.kv_cpu_time_nanos,
       countA,
       countB,
     ),

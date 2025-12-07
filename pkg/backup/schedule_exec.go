@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crstrings"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -97,6 +98,21 @@ func (e *scheduledBackupExecutor) executeBackup(
 		return err
 	}
 	backupStmt.AsOf = tree.AsOfClause{Expr: endTime}
+
+	// We currently set two different options that control whether two different
+	// backup metrics are updated:
+	// 1. updates_last_backup_metric on the schedule
+	// 2. updates_cluster_monitoring_metrics on the backup statement
+	// We should probably consolidate these two options int one, but for now we
+	// will ensure that setting updates_last_backup_metric on the schedule also
+	// sets updates_cluster_monitoring_metrics on the backup statement.
+	args := &backuppb.ScheduledBackupExecutionArgs{}
+	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
+		return errors.Wrap(err, "un-marshaling args")
+	}
+	if args.UpdatesLastBackupMetric {
+		backupStmt.Options.UpdatesClusterMonitoringMetrics = tree.DBoolTrue
+	}
 
 	// Invoke backup plan hook.
 	hook, cleanup := cfg.PlanHookMaker(ctx, "exec-backup", txn.KV(), sj.Owner())
@@ -544,12 +560,12 @@ func getBackupFnTelemetry(
 			return jobspb.BackupDetails{}, errors.New("expected job ID as first column of result")
 		}
 
-		jobID, ok := tree.AsDInt(jobIDDatum)
+		jobID, ok := jobIDDatum.(*tree.DInt)
 		if !ok {
 			return jobspb.BackupDetails{}, errors.New("expected job ID as first column of result")
 		}
 
-		job, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(jobID), txn)
+		job, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(*jobID), txn)
 		if err != nil {
 			return jobspb.BackupDetails{}, errors.Wrap(err, "failed to load dry-run backup job")
 		}
@@ -581,29 +597,35 @@ func init() {
 					ExecutorMetrics:    &m,
 					ExecutorPTSMetrics: &pm,
 					RpoMetric: metric.NewGauge(metric.Metadata{
-						Name:        "schedules.BACKUP.last-completed-time",
-						Help:        "The unix timestamp of the most recently completed backup by a schedule specified as maintaining this metric",
+						Name: "schedules.BACKUP.last-completed-time",
+						Help: crstrings.UnwrapText(`
+							The unix timestamp of the most recently completed backup by a
+							schedule specified as maintaining this metric
+						`),
 						Measurement: "Jobs",
 						Unit:        metric.Unit_TIMESTAMP_SEC,
-						Essential:   true,
+						Visibility:  metric.Metadata_ESSENTIAL,
 						Category:    metric.Metadata_SQL,
-						HowToUse: `Monitor this metric to ensure that backups are
-						meeting the recovery point objective (RPO). Each node
-						exports the time that it last completed a backup on behalf
-						of the schedule. If a node is restarted, it will report 0
-						until it completes a backup. If all nodes are restarted,
-						max() is 0 until a node completes a backup.
+						HowToUse: crstrings.UnwrapText(`
+							Monitor this metric to ensure that backups are meeting the
+							recovery point objective (RPO). Each node exports the time that it
+							last completed a backup on behalf of the schedule. If a node is
+							restarted, it will report 0 until it completes a backup. If all
+							nodes are restarted, max() is 0 until a node completes a backup.
 
-						To make use of this metric, first, from each node, take the maximum
-						over a rolling window equal to or greater than the backup frequency,
-						and then take the maximum of those values across nodes. For example
-						with a backup frequency of 60 minutes, monitor time() -
-						max_across_nodes(max_over_time(schedules_BACKUP_last_completed_time,
-						60min)).`,
+							To make use of this metric, first, from each node, take the
+							maximum over a rolling window equal to or greater than the backup
+							frequency, and then take the maximum of those values across nodes.
+							For example with a backup frequency of 60 minutes, monitor
+							time() - max_across_nodes(max_over_time(schedules_BACKUP_last_completed_time, 60min)).
+						`),
 					}),
 					RpoTenantMetric: metric.NewExportedGaugeVec(metric.Metadata{
-						Name:        "schedules.BACKUP.last-completed-time-by-virtual_cluster",
-						Help:        "The unix timestamp of the most recently completed host scheduled backup by virtual cluster specified as maintaining this metric",
+						Name: "schedules.BACKUP.last-completed-time-by-virtual_cluster",
+						Help: crstrings.UnwrapText(`
+							The unix timestamp of the most recently completed host scheduled
+							backup by virtual cluster specified as maintaining this metric
+						`),
 						Measurement: "Jobs",
 						Unit:        metric.Unit_TIMESTAMP_SEC,
 					}, []string{"tenant_id"}),

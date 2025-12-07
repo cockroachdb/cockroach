@@ -43,6 +43,7 @@ func LogStateChangeStructured(
 
 		if payload.Error != "" {
 			out.Error = payload.Error
+			out.User = payload.UsernameProto.Decode().Normalized()
 		}
 	}
 

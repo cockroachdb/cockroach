@@ -33,10 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/taskpacer"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"google.golang.org/grpc"
-	"storj.io/drpc"
 )
 
 // Sender represents the sending-side of the closed timestamps "side-transport".
@@ -116,6 +115,21 @@ type streamState struct {
 type connTestingKnobs struct {
 	beforeSend         func(destNodeID roachpb.NodeID, msg *ctpb.Update)
 	sleepOnErrOverride time.Duration
+}
+
+// pacerConfig implements taskpacer.Config using cluster settings.
+type pacerConfig struct {
+	st *cluster.Settings
+}
+
+// GetRefresh implements the taskpacer.Config interface
+func (c *pacerConfig) GetRefresh() time.Duration {
+	return closedts.SideTransportPacingRefreshInterval.Get(&c.st.SV)
+}
+
+// GetSmear implements the taskpacer.Config interface
+func (c *pacerConfig) GetSmear() time.Duration {
+	return closedts.SideTransportPacingSmearInterval.Get(&c.st.SV)
 }
 
 // trackedRange contains the information that the side-transport last published
@@ -214,7 +228,7 @@ func newSenderWithConnFactory(
 		st:          st,
 		clock:       clock,
 		connFactory: connFactory,
-		buf:         newUpdatesBuf(),
+		buf:         newUpdatesBuf(st),
 	}
 	s.trackedMu.tracked = make(map[roachpb.RangeID]trackedRange)
 	s.trackedMu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp)
@@ -238,6 +252,12 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 		}
 	}
 	closedts.SideTransportCloseInterval.SetOnChange(&s.st.SV, confChanged)
+
+	// Set up callback for pacing refresh interval changes.
+	pacingConfChanged := func(ctx context.Context) {
+		s.buf.updatePacer(s.st)
+	}
+	closedts.SideTransportPacingRefreshInterval.SetOnChange(&s.st.SV, pacingConfChanged)
 
 	_ /* err */ = s.stopper.RunAsyncTask(ctx, "closedts side-transport publisher",
 		func(ctx context.Context) {
@@ -348,6 +368,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	lagTargetDuration := closedts.TargetDuration.Get(&s.st.SV)
 	leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(&s.st.SV)
 	sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(&s.st.SV)
+	sideTransportPacingInterval := closedts.SideTransportPacingRefreshInterval.Get(&s.st.SV)
 	for pol := ctpb.RangeClosedTimestampPolicy(0); pol < ctpb.RangeClosedTimestampPolicy(numPolicies); pol++ {
 		target := closedts.TargetForPolicy(
 			now,
@@ -355,6 +376,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 			lagTargetDuration,
 			leadTargetOverride,
 			sideTransportCloseInterval,
+			sideTransportPacingInterval,
 			pol,
 		)
 		s.trackedMu.lastClosed[pol] = target
@@ -541,8 +563,33 @@ func (s *Sender) GetSnapshot() *ctpb.Update {
 type updatesBuf struct {
 	mu struct {
 		syncutil.Mutex
-		// updated is signaled when a new item is inserted.
-		updated sync.Cond
+
+		// pacer controls the timing of broadcast updates to avoid overloading the
+		// system.
+		pacer *taskpacer.Pacer
+
+		// We use two condition variables that we atomically swap to avoid signaling
+		// the same goroutine multiple times. Without this, a goroutine could:
+		// 1. Wake up from a signal.
+		// 2. Process its message.
+		// 3. Start waiting again on the same condition variable.
+		// 4. Get signaled again before other waiting goroutines get a chance.
+		//
+		// By swapping to a new condition variable when publishing a message, we
+		// ensure that goroutines can only wait on the new one. This lets us safely
+		// signal all waiters on the old condition variable without racing against
+		// goroutines re-queuing on it.
+		updated1    sync.Cond
+		numWaiters1 int
+
+		// updated2 is signaled when a new item is inserted.
+		updated2    sync.Cond
+		numWaiters2 int
+
+		// activeCondVar is 0 or 1, indicating which conditional variable new
+		// goroutines should be waiting on. This is flipped after each push.
+		activeCondVar int
+
 		// data contains pointers to the Updates.
 		data []*ctpb.Update
 		// head points to the earliest update in the buffer. If the buffer is empty,
@@ -561,23 +608,52 @@ type updatesBuf struct {
 // little while and not have to send a snapshot when it resumes.
 const updatesBufSize = 50
 
-func newUpdatesBuf() *updatesBuf {
+func newUpdatesBuf(st *cluster.Settings) *updatesBuf {
 	buf := &updatesBuf{}
-	buf.mu.updated.L = &buf.mu
+	buf.mu.updated1.L = &buf.mu
+	buf.mu.updated2.L = &buf.mu
 	buf.mu.data = make([]*ctpb.Update, updatesBufSize)
+	buf.mu.pacer = taskpacer.New(&pacerConfig{st: st})
 	return buf
+}
+
+// updatePacer atomically replaces the task pacer with a new one using the current cluster settings.
+func (b *updatesBuf) updatePacer(st *cluster.Settings) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.mu.pacer = taskpacer.New(&pacerConfig{st: st})
 }
 
 // Push adds a new update to the back of the buffer.
 func (b *updatesBuf) Push(ctx context.Context, update *ctpb.Update) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
+
+	// The goal here is that we want to signal all goroutines who were waiting
+	// for the next update. We know that the goroutine that we will signal will
+	// wake up, and then perform some work and wait again for the next update. We
+	// want to avoid the race condition where we can't differentiate between a
+	// goroutine that is waiting for the next update and a goroutine that was
+	// waiting, got woken up, performed some work, and is then waiting for the
+	// next update.
+	var condVar *sync.Cond
+	var numWaiters *int
+	if b.mu.activeCondVar == 0 {
+		condVar = &b.mu.updated1
+		numWaiters = &b.mu.numWaiters1
+	} else {
+		condVar = &b.mu.updated2
+		numWaiters = &b.mu.numWaiters2
+	}
+
+	// At this point, we know that any goroutine that we wake up will wait on the
+	// next conditional variable.
+	b.mu.activeCondVar = (b.mu.activeCondVar + 1) % 2
 
 	// If the buffer is not empty, sanity check the seq num.
 	if b.sizeLocked() != 0 {
 		lastIdx := b.lastIdxLocked()
 		if prevSeq := b.mu.data[lastIdx].SeqNum; prevSeq != update.SeqNum-1 {
-			log.Dev.Fatalf(ctx, "bad sequence number; expected %d, got %d", prevSeq+1, update.SeqNum)
+			log.KvExec.Fatalf(ctx, "bad sequence number; expected %d, got %d", prevSeq+1, update.SeqNum)
 		}
 	}
 
@@ -591,7 +667,42 @@ func (b *updatesBuf) Push(ctx context.Context, update *ctpb.Update) {
 
 	// Notify everybody who might have been waiting for this message - we expect
 	// all the connections to be blocked waiting.
-	b.mu.updated.Broadcast()
+	b.mu.Unlock()
+	b.PaceBroadcastUpdate(ctx, condVar, numWaiters)
+}
+
+// PaceBroadcastUpdate paces the conditional variable signaling to avoid overloading the system.
+func (b *updatesBuf) PaceBroadcastUpdate(ctx context.Context, condVar *sync.Cond, numWaiters *int) {
+	b.mu.Lock()
+	originalNumWaiters := *numWaiters
+	if originalNumWaiters <= 0 {
+		b.mu.Unlock()
+		return
+	}
+
+	// Get the current pacer (which uses the cluster setting refresh interval).
+	pacer := b.mu.pacer
+	b.mu.Unlock()
+
+	pacer.StartTask(timeutil.Now())
+
+	workLeft := originalNumWaiters
+	for workLeft > 0 {
+		todo, by := pacer.Pace(timeutil.Now(), workLeft)
+
+		b.mu.Lock()
+		for i := 0; i < todo && workLeft > 0; i++ {
+			condVar.Signal()
+			workLeft--
+		}
+		b.mu.Unlock()
+
+		if workLeft > 0 {
+			if wait := timeutil.Until(by); wait > 0 {
+				time.Sleep(wait)
+			}
+		}
+	}
 }
 
 func (b *updatesBuf) lastIdxLocked() int {
@@ -614,6 +725,23 @@ func (b *updatesBuf) GetBySeq(ctx context.Context, seqNum ctpb.SeqNum) (*ctpb.Up
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	var condVar *sync.Cond
+	var numWaiters *int
+	if b.mu.activeCondVar == 0 {
+		condVar = &b.mu.updated1
+		numWaiters = &b.mu.numWaiters1
+	} else {
+		condVar = &b.mu.updated2
+		numWaiters = &b.mu.numWaiters2
+	}
+
+	// Increment the number of waiters on the active conditional variable, and
+	// decrement the same counter when we return.
+	*numWaiters++
+	defer func() {
+		*numWaiters--
+	}()
+
 	// Loop until the requested seqNum is added to the buffer.
 	for {
 		if b.mu.closed {
@@ -632,11 +760,11 @@ func (b *updatesBuf) GetBySeq(ctx context.Context, seqNum ctpb.SeqNum) (*ctpb.Up
 		}
 		// If the requested msg has not been produced yet, block.
 		if seqNum == lastSeq+1 {
-			b.mu.updated.Wait()
+			condVar.Wait()
 			continue
 		}
 		if seqNum > lastSeq+1 {
-			log.Dev.Fatalf(ctx, "skipping sequence numbers; requested: %d, last: %d", seqNum, lastSeq)
+			log.KvExec.Fatalf(ctx, "skipping sequence numbers; requested: %d, last: %d", seqNum, lastSeq)
 		}
 		idx := (b.mu.head + (int)(seqNum-firstSeq)) % len(b.mu.data)
 		return b.mu.data[idx], true
@@ -668,7 +796,16 @@ func (b *updatesBuf) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.mu.closed = true
-	b.mu.updated.Broadcast()
+	b.mu.updated1.Broadcast()
+	b.mu.updated2.Broadcast()
+}
+
+// TestingGetTotalNumWaiters returns the total number of goroutines waiting
+// on the buffer. For testing purposes only.
+func (b *updatesBuf) TestingGetTotalNumWaiters() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.mu.numWaiters1 + b.mu.numWaiters2
 }
 
 // connFactory is capable of creating new connections to specific nodes.
@@ -687,11 +824,11 @@ type conn interface {
 // rpcConnFactory is an implementation of connFactory that establishes
 // connections to other nodes using gRPC.
 type rpcConnFactory struct {
-	dialer       nodeDialer
+	dialer       rpcbase.NodeDialer
 	testingKnobs connTestingKnobs
 }
 
-func newRPCConnFactory(dialer nodeDialer, testingKnobs connTestingKnobs) connFactory {
+func newRPCConnFactory(dialer rpcbase.NodeDialer, testingKnobs connTestingKnobs) connFactory {
 	return &rpcConnFactory{
 		dialer:       dialer,
 		testingKnobs: testingKnobs,
@@ -701,12 +838,6 @@ func newRPCConnFactory(dialer nodeDialer, testingKnobs connTestingKnobs) connFac
 // new implements the connFactory interface.
 func (f *rpcConnFactory) new(s *Sender, nodeID roachpb.NodeID) conn {
 	return newRPCConn(f.dialer, s, nodeID, f.testingKnobs)
-}
-
-// nodeDialer abstracts *nodedialer.Dialer.
-type nodeDialer interface {
-	Dial(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (_ *grpc.ClientConn, err error)
-	DRPCDial(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (_ drpc.Conn, err error)
 }
 
 // On sending errors, we sleep a bit as to not spin on a tripped
@@ -720,7 +851,7 @@ const sleepOnErr = time.Second
 // snapshot before we can resume sending regular messages.
 type rpcConn struct {
 	log.AmbientContext
-	dialer       nodeDialer
+	dialer       rpcbase.NodeDialer
 	producer     *Sender
 	nodeID       roachpb.NodeID
 	testingKnobs connTestingKnobs
@@ -739,7 +870,7 @@ type rpcConn struct {
 }
 
 func newRPCConn(
-	dialer nodeDialer, producer *Sender, nodeID roachpb.NodeID, testingKnobs connTestingKnobs,
+	dialer rpcbase.NodeDialer, producer *Sender, nodeID roachpb.NodeID, testingKnobs connTestingKnobs,
 ) conn {
 	r := &rpcConn{
 		dialer:       dialer,
@@ -791,7 +922,7 @@ func (r *rpcConn) maybeConnect(ctx context.Context, _ *stop.Stopper) error {
 		return nil
 	}
 
-	client, err := ctpb.DialSideTransportClient(r.dialer, ctx, r.nodeID, rpcbase.SystemClass)
+	client, err := ctpb.DialSideTransportClient(r.dialer, ctx, r.nodeID, rpcbase.SystemClass, r.producer.st)
 	if err != nil {
 		return err
 	}
@@ -834,7 +965,7 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 				}
 				if err := r.maybeConnect(ctx, stopper); err != nil {
 					if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) && everyN.ShouldLog() {
-						log.Dev.Infof(ctx, "side-transport failed to connect to n%d: %s", r.nodeID, err)
+						log.KvExec.Infof(ctx, "side-transport failed to connect to n%d: %s", r.nodeID, err)
 					}
 					time.Sleep(errSleepTime)
 					continue
@@ -864,7 +995,7 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 				}
 				if err := r.stream.Send(msg); err != nil {
 					if err != io.EOF && everyN.ShouldLog() {
-						log.Dev.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
+						log.KvExec.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
 							r.lastSent, r.nodeID, err)
 					}
 					// Keep track of the fact that we need a new connection.

@@ -60,6 +60,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"SettingName": {},
 						"ValueOrigin": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent": {
+						"bufferType": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/crosscluster/logical": {
 						"processorType": {},
 					},
@@ -106,6 +109,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool": {
 						"storeStatus": {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype": {
+						"LoadValue": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb": {
 						"SeqNum": {},
@@ -242,8 +248,15 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"PolicyType":     {},
 						"TableRLSMode":   {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp": {
+						"ComparisonOperator":       {},
+						"ComparisonOperatorSymbol": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness": {
 						"SessionID": {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/sql/types": {
+						"T": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/storage/enginepb": {
 						"MVCCStats":      {},

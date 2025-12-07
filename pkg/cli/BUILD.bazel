@@ -2,6 +2,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
+genrule(
+    name = "cockroachdb_datadog_metrics",
+    srcs = ["@datadog_cockroachdb_metrics//:metrics.py"],
+    outs = ["files/cockroachdb_datadog_metrics.yaml"],
+    cmd = "$(location //build/tools/gen-cockroachdb-metrics) --datadog-only $(location @datadog_cockroachdb_metrics//:metrics.py) $@",
+    tools = ["//build/tools/gen-cockroachdb-metrics"],
+    visibility = ["//pkg/gen:__pkg__"],
+)
+
 go_library(
     name = "cli",
     srcs = [
@@ -97,6 +106,10 @@ go_library(
     cppopts = [
         "-DJEMALLOC_NO_DEMANGLE",
     ],
+    embedsrcs = [
+        "files/cockroachdb_metrics_base.yaml",
+        "files/cockroachdb_datadog_metrics.yaml",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cli",
     visibility = ["//visibility:public"],
     deps = [
@@ -137,7 +150,6 @@ go_library(
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/kv/kvserver/print",
         "//pkg/kv/kvserver/rditer",
-        "//pkg/kv/kvserver/stateloader",
         "//pkg/multitenant/mtinfopb",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
@@ -232,6 +244,7 @@ go_library(
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/tracing/zipper",
         "//pkg/util/uuid",
+        "//pkg/util/yamlutil",
         "//pkg/workload",
         "//pkg/workload/bank",
         "//pkg/workload/bulkingest",
@@ -277,7 +290,7 @@ go_library(
         "@com_github_spf13_pflag//:pflag",
         "@com_google_cloud_go_storage//:storage",
         "@in_gopkg_yaml_v2//:yaml_v2",
-        "@in_gopkg_yaml_v3//:yaml_v3",
+        "@in_yaml_go_yaml_v4//:yaml",
         "@io_storj_drpc//:drpc",
         "@org_golang_google_api//option",
         "@org_golang_google_grpc//:grpc",
@@ -421,11 +434,11 @@ go_test(
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/loqrecovery",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
-        "//pkg/kv/kvserver/stateloader",
         "//pkg/roachpb",
         "//pkg/security/clientsecopts",
         "//pkg/security/securityassets",
@@ -458,6 +471,7 @@ go_test(
         "//pkg/ts/tspb",
         "//pkg/util",
         "//pkg/util/envutil",
+        "//pkg/util/humanizeutil",
         "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/log",
@@ -471,6 +485,7 @@ go_test(
         "//pkg/util/tracing",
         "//pkg/util/uuid",
         "//pkg/workload/examples",
+        "@com_github_cockroachdb_crlib//crstrings",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",

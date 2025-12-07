@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 const (
@@ -83,6 +84,8 @@ type streamIngestionFrontier struct {
 	// replicatedTimeAtLastPositiveLagNodeCheck records the replicated time the
 	// last time the lagging node checker detected a lagging node.
 	replicatedTimeAtLastPositiveLagNodeCheck hlc.Timestamp
+
+	rangeStats replicationutils.AggregateRangeStatsCollector
 }
 
 var _ execinfra.Processor = &streamIngestionFrontier{}
@@ -138,6 +141,9 @@ func newStreamIngestionFrontierProcessor(
 			return crosscluster.StreamReplicationConsumerHeartbeatFrequency.Get(&flowCtx.Cfg.Settings.SV)
 		}),
 		persistedReplicatedTime: spec.ReplicatedTimeAtStart,
+		rangeStats: replicationutils.NewAggregateRangeStatsCollector(
+			int(spec.NumIngestionProcessors),
+		),
 	}
 	if err := sf.Init(
 		ctx,
@@ -183,6 +189,10 @@ func (sf *streamIngestionFrontier) Next() (
 		if meta != nil {
 			if meta.Err != nil {
 				sf.MoveToDrainingAndLogError(nil /* err */)
+			}
+			if err := sf.maybeCollectRangeStats(sf.Ctx(), meta); err != nil {
+				sf.MoveToDrainingAndLogError(err)
+				break
 			}
 			return nil, meta
 		}
@@ -328,6 +338,9 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	replicatedTime := f.Frontier()
 	sf.lastPartitionUpdate = timeutil.Now()
 	log.Dev.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime)
+
+	sf.aggregateAndUpdateRangeMetrics()
+
 	if err := registry.UpdateJobWithTxn(ctx, jobID, nil /* txn */, func(
 		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
@@ -406,6 +419,33 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	sf.persistedReplicatedTime = f.Frontier()
 	sf.metrics.ReplicatedTimeSeconds.Update(sf.persistedReplicatedTime.GoTime().Unix())
 	return nil
+}
+
+func (sf *streamIngestionFrontier) maybeCollectRangeStats(
+	ctx context.Context, meta *execinfrapb.ProducerMetadata,
+) error {
+	if meta.BulkProcessorProgress == nil {
+		log.Dev.VInfof(ctx, 2, "received non-progress producer meta: %v", meta)
+		return nil
+	}
+
+	var stats streampb.StreamEvent_RangeStats
+	if err := pbtypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &stats); err != nil {
+		return errors.Wrap(err, "unable to unmarshal progress details")
+	}
+
+	sf.rangeStats.Add(meta.BulkProcessorProgress.ProcessorID, &stats)
+	return nil
+}
+
+// aggregateAndUpdateRangeMetrics aggregates the range stats collected from each
+// of the ingestion processors and updates the corresponding metrics.
+func (sf *streamIngestionFrontier) aggregateAndUpdateRangeMetrics() {
+	aggRangeStats, _, _ := sf.rangeStats.RollupStats()
+	if aggRangeStats.RangeCount != 0 {
+		sf.metrics.ScanningRanges.Update(aggRangeStats.ScanningRangeCount)
+		sf.metrics.CatchupRanges.Update(aggRangeStats.LaggingRangeCount)
+	}
 }
 
 // maybePersistFrontierEntries periodically persists the current state of the

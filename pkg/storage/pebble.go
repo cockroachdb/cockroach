@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/crlib/fifo"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -50,6 +51,8 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/cockroachdb/pebble/cockroachkvs"
+	"github.com/cockroachdb/pebble/metrics"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/rangekey"
@@ -175,6 +178,71 @@ var enableMultiLevelWriteAmpHeuristic = settings.RegisterBoolSetting(
 	true,
 )
 
+// UnhealthyWriteDuration is a threshold above which a DiskSlowInfo.Duration
+// event will result in reporting true from Engine.GetDiskUnhealthy. This
+// considers all disk write operations: creation, write, sync etc.
+//
+// The default of 20s equals the default for storage.max_sync_duration, which
+// is typically used when WAL failover is not configured. In that case, this
+// setting has no effect, since a 20s stall will cause the node to crash, and
+// there isn't any action a higher layer can take when Engine.GetDiskUnhealthy
+// returns true. However, when WAL failover is configured, a higher
+// storage.max_sync_duration is used (see
+// https://www.cockroachlabs.com/docs/stable/wal-failover for the latest
+// recommendation), in which case a higher layer has some time to take action.
+//
+// The cumulative duration for some disk underlying this store is unhealthy is
+// captured in the metric storage.disk-unhealthy.duration.
+var UnhealthyWriteDuration = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"storage.unhealthy_write_duration",
+	"duration for disk write operations, beyond which the disk will be reported as "+
+		"unhealthy for higher layer actions",
+	20*time.Second,
+	settings.WithPublic)
+
+// useDeprecatedCompensatedScore is a temporary setting that provides a
+// mechanism for reverting Pebble's compaction picking heuristic to the previous
+// (25.3 and earlier) behavior for deciding when a level is eligible for
+// compaction. See the pebble.Options Experimental UseDeprecatedCompensatedScore
+// setting for details.
+//
+// We anticipate not needing to use this setting, but it's provided as an escape
+// hatch in case the heuristic change has an unforeseen impact on some
+// workloads.
+var useDeprecatedCompensatedScore = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"storage.deprecated_compensated_score.enabled",
+	"if enabled, this setting reverts the storage engine's compaction picking heuristic",
+	false,
+)
+
+const defaultRecreateDuration = int(20 * time.Second)
+
+// SnapshotRecreateIterDuration controls how often a storage iterator over a
+// snapshot should be recreated. An iterator pins the memtables it references,
+// and if those memtables are subsequently flushed, but the iterator is still
+// open, they cannot be discarded and are considered zombie memtables. Memory
+// usage via zombie memtables steals capacity from the block cache, and in
+// extreme cases can cause OOMs (see
+// https://github.com/cockroachdb/cockroach/issues/133851). Closing and
+// creating a new iterator over the snapshot prevents accumulation of zombie
+// memtable memory. There is a small cost to recreating the iterator, which
+// should be amortized over the duration (default 20s).
+//
+// An alternative to using a duration would be to query the zombie memtable
+// bytes pinned by the iterator, and recreate when it exceeds some byte
+// threshold. However, the local knowledge of zombie bytes due to an iterator
+// is insufficient, since there can be 100s of iterators each only pinning
+// disjoint sets of 2 memtables each, but resulting in a high aggregate
+// memory. The simpler duration based approach does not have this limitation.
+var SnapshotRecreateIterDuration = settings.RegisterDurationSetting(settings.SystemOnly,
+	"storage.snapshot.recreate_iter_duration",
+	"the interval after which a storage iterator over a snapshot should be recreated, "+
+		"to reduce memory usage caused by zombie memtables",
+	time.Duration(metamorphic.ConstantWithTestRange("storage.snapshot.recreate_iter_duration",
+		defaultRecreateDuration, 1, defaultRecreateDuration)))
+
 // SSTableCompressionProfile is an enumeration of compression algorithms
 // available for compressing SSTables (e.g. for backup or transport).
 type SSTableCompressionProfile int64
@@ -260,6 +328,9 @@ const (
 
 	// StoreCompressionGood uses pebble.DBCompressionGood.
 	StoreCompressionGood StoreCompressionSetting = 7
+
+	// StoreCompressionFast uses pebble.DBCompressionFast.
+	StoreCompressionFast StoreCompressionSetting = 8
 )
 
 var storeCompressionSettingToString = map[StoreCompressionSetting]string{
@@ -268,6 +339,7 @@ var storeCompressionSettingToString = map[StoreCompressionSetting]string{
 	StoreCompressionNone:   "none",
 	StoreCompressionZstd:   "zstd",
 
+	StoreCompressionFast:     "fast",
 	StoreCompressionFastest:  "fastest",
 	StoreCompressionBalanced: "balanced",
 	StoreCompressionGood:     "good",
@@ -282,6 +354,7 @@ var storeCompressionSettings = map[StoreCompressionSetting]pebble.DBCompressionS
 	StoreCompressionFastest:  pebble.DBCompressionFastest,
 	StoreCompressionBalanced: pebble.DBCompressionBalanced,
 	StoreCompressionGood:     pebble.DBCompressionGood,
+	StoreCompressionFast:     pebble.DBCompressionFast,
 }
 
 // String implements fmt.Stringer for StoreCompressionSetting.
@@ -315,7 +388,7 @@ const compressionSettingClass = settings.SystemVisible
 var CompressionAlgorithmStorage = settings.RegisterEnumSetting[StoreCompressionSetting](
 	compressionSettingClass,
 	"storage.sstable.compression_algorithm",
-	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store (balanced,good are experimental);`,
+	`determines the compression algorithm to use for Pebble stores`,
 	// TODO(radu,jackson): use a metamorphic constant.
 	StoreCompressionFastest.String(),
 	storeCompressionSettingToString,
@@ -430,7 +503,7 @@ var (
 		"storage.value_separation.minimum_size",
 		"the minimum size of a value that will be separated into a blob file",
 		int64(metamorphic.ConstantWithTestRange("storage.value_separation.minimum_size",
-			1<<10 /* 1 KiB (default) */, 25 /* 25 bytes (minimum) */, 1<<20 /* 1 MiB (maximum) */)),
+			256 /* 256 bytes (default) */, 25 /* 25 bytes (minimum) */, 1<<20 /* 1 MiB (maximum) */)),
 		settings.IntWithMinimum(1),
 	)
 	valueSeparationMaxReferenceDepth = settings.RegisterIntSetting(
@@ -452,12 +525,59 @@ var (
 		settings.SystemVisible,
 		"storage.value_separation.compaction_garbage_threshold",
 		"the max garbage threshold configures the percentage of unreferenced value "+
-			"bytes that trigger blob-file rewrite compactions; 100 disables these compactions",
+			"bytes that begin to trigger blob-file rewrite compactions; 100 disables these compactions",
 		int64(metamorphic.ConstantWithTestRange("storage.value_separation.compaction_garbage_threshold",
 			10, /* default */
 			1 /* min */, 80 /* max */)),
 		settings.IntInRange(1, 100),
 	)
+	valueSeparationCompactionGarbageThresholdHighPriority = settings.RegisterIntSetting(
+		settings.SystemVisible,
+		"storage.value_separation.compaction_garbage_threshold_high_priority",
+		"configures the percentage of unreferenced value bytes that trigger high-priority blob-file rewrite compactions",
+		int64(metamorphic.ConstantWithTestRange("storage.value_separation.compaction_garbage_threshold",
+			20, /* default */
+			1 /* min */, 80 /* max */)),
+		settings.IntInRange(1, 100),
+	)
+	valueSeparationLatencyTolerantMinimumSize = settings.RegisterIntSetting(
+		settings.SystemVisible,
+		"storage.value_separation.latency_tolerant_minimum_size",
+		"the minimum size of a value that will be separated into a blob file given the value is "+
+			"latency tolerant (in the range local keyspace)",
+		int64(metamorphic.ConstantWithTestRange("storage.value_separation.latency_tolerant_minimum_size",
+			32 /* 32 bytes (default) */, 25 /* 25 bytes (minimum) */, 512 /* 512 bytes (maximum) */)),
+		settings.IntWithMinimum(1),
+	)
+	valueSeparationMVCCGarbageMinimumSize = settings.RegisterIntSetting(
+		settings.SystemVisible,
+		"storage.value_separation.mvcc_history_minimum_size",
+		"the minimum size of a value that will be separated into a blob file given the value is "+
+			"likely not the latest version of a key",
+		int64(metamorphic.ConstantWithTestRange("storage.value_separation.mvcc_history_minimum_size",
+			1<<10, /* 1 KiB (default) */
+			25 /* 25 bytes (minimum) */, 1<<20 /* 1 MiB (maximum) */)),
+		settings.IntWithMinimum(1),
+	)
+)
+
+// This setting controls deletion pacing. This helps prevent disk slowness
+// events on some SSDs, that kick off an expensive GC if a lot of files are
+// deleted at once.
+var baselineDeletionRate = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.baseline_deletion_rate",
+	"the baseline allowed rate of bytes deleted per second by each store",
+	128*1024*1024, // 128 MB/s
+	settings.NonNegativeInt,
+)
+
+var tombstoneDenseCompactionThreshold = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.tombstone_dense_compaction_threshold",
+	"percentage of tombstone-dense data blocks that trigger a compaction (0 = disabled)",
+	10, // 10%
+	settings.IntInRange(0, 100),
 )
 
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
@@ -510,10 +630,12 @@ var MVCCMerger = &pebble.Merger{
 	},
 }
 
+// DefaultMemtableSize is the default size of a memtable.
+const DefaultMemtableSize = 64 << 20 // 64 MB
+
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
 
-// DefaultPebbleOptions returns the default pebble options.
-func DefaultPebbleOptions() *pebble.Options {
+func defaultPebbleOptions(sv *settings.Values) *pebble.Options {
 	opts := &pebble.Options{
 		Comparer:   &EngineComparer,
 		FS:         vfs.Default,
@@ -523,7 +645,7 @@ func DefaultPebbleOptions() *pebble.Options {
 		L0CompactionThreshold:       2,
 		L0StopWritesThreshold:       1000,
 		LBaseMaxBytes:               64 << 20, // 64 MB
-		MemTableSize:                64 << 20, // 64 MB
+		MemTableSize:                DefaultMemtableSize,
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
 		BlockPropertyCollectors:     cockroachkvs.BlockPropertyCollectors,
@@ -538,14 +660,14 @@ func DefaultPebbleOptions() *pebble.Options {
 	// This ensures that range keys are quickly flushed, allowing use of lazy
 	// combined iteration within Pebble.
 	opts.FlushDelayRangeKey = 10 * time.Second
-	// Enable deletion pacing. This helps prevent disk slowness events on some
-	// SSDs, that kick off an expensive GC if a lot of files are deleted at
-	// once.
-	opts.TargetByteDeletionRate = 128 << 20 // 128 MB
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
 
-	opts.Experimental.SpanPolicyFunc = spanPolicyFunc
+	opts.Experimental.SpanPolicyFunc = spanPolicyFuncFactory(sv)
 	opts.Experimental.UserKeyCategories = userKeyCategories
+
+	// Every 5 minutes, log iterators that have been open for more than 1 minute.
+	opts.Experimental.IteratorTracking.PollInterval = 5 * time.Minute
+	opts.Experimental.IteratorTracking.MaxAge = time.Minute
 
 	opts.Levels[0] = pebble.LevelOptions{
 		BlockSize:      32 << 10,  // 32 KB
@@ -581,6 +703,20 @@ func DefaultPebbleOptions() *pebble.Options {
 	return opts
 }
 
+// DefaultPebbleOptions returns the default pebble options for general use
+// (e.g., SST writers, external iterators, tests). This does not use cluster
+// settings and should not be used when opening a production Pebble engine.
+func DefaultPebbleOptions() *pebble.Options {
+	return defaultPebbleOptions(nil /* sv */)
+}
+
+// DefaultPebbleOptionsForOpen returns the default pebble options for opening
+// a production Pebble engine. It uses cluster settings to configure value
+// storage policies.
+func DefaultPebbleOptionsForOpen(sv *settings.Values) *pebble.Options {
+	return defaultPebbleOptions(sv)
+}
+
 var (
 	spanPolicyLocalRangeIDEndKey = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd()})
 	spanPolicyLockTableStartKey  = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix})
@@ -588,46 +724,53 @@ var (
 	spanPolicyLocalEndKey        = EncodeMVCCKey(MVCCKey{Key: keys.LocalPrefix.PrefixEnd()})
 )
 
-// spanPolicyFunc is a pebble.SpanPolicyFunc that applies special policies for
+// spanPolicyFuncFactory returns a pebble.SpanPolicyFunc that applies special policies for
 // the CockroachDB keyspace.
-func spanPolicyFunc(startKey []byte) (policy pebble.SpanPolicy, endKey []byte, _ error) {
-	// There's no special policy for non-local keys.
-	if !bytes.HasPrefix(startKey, keys.LocalPrefix) {
-		return pebble.SpanPolicy{}, nil, nil
-	}
-	// Prefer fast compression for all local keys, since they shouldn't take up
-	// a significant part of the space.
-	policy.PreferFastCompression = true
-
-	// The first section of the local keyspace is the Range-ID keyspace. It
-	// extends from the beginning of the keyspace to the Range Local keys. The
-	// Range-ID keyspace includes the raft log, which is rarely read and
-	// receives ~half the writes.
-	if cockroachkvs.Compare(startKey, spanPolicyLocalRangeIDEndKey) < 0 {
-		if !bytes.HasPrefix(startKey, keys.LocalRangeIDPrefix) {
-			return pebble.SpanPolicy{}, nil, errors.AssertionFailedf("startKey %s is not a Range-ID key", startKey)
+func spanPolicyFuncFactory(sv *settings.Values) func([]byte) (pebble.SpanPolicy, []byte, error) {
+	return func(startKey []byte) (policy pebble.SpanPolicy, endKey []byte, _ error) {
+		// There's no special policy for non-local keys.
+		if !bytes.HasPrefix(startKey, keys.LocalPrefix) {
+			return pebble.SpanPolicy{}, nil, nil
 		}
-		policy.ValueStoragePolicy = pebble.ValueStorageLatencyTolerant
-		return policy, spanPolicyLocalRangeIDEndKey, nil
-	}
+		// Prefer fast compression for all local keys, since they shouldn't take up
+		// a significant part of the space.
+		policy.PreferFastCompression = true
 
-	// We also disable value separation for lock keys.
-	if cockroachkvs.Compare(startKey, spanPolicyLockTableEndKey) >= 0 {
-		// Not a lock key, so use default value separation within sstable (by
-		// suffix) and into blob files.
-		// NB: there won't actually be a suffix in these local keys.
-		return policy, spanPolicyLocalEndKey, nil
+		// The first section of the local keyspace is the Range-ID keyspace. It
+		// extends from the beginning of the keyspace to the Range Local keys. The
+		// Range-ID keyspace includes the raft log, which is rarely read and
+		// receives ~half the writes.
+		if cockroachkvs.Compare(startKey, spanPolicyLocalRangeIDEndKey) < 0 {
+			if !bytes.HasPrefix(startKey, keys.LocalRangeIDPrefix) {
+				return pebble.SpanPolicy{}, nil, errors.AssertionFailedf("startKey %s is not a Range-ID key", startKey)
+			}
+			if sv != nil {
+				policy.ValueStoragePolicy = pebble.ValueStoragePolicyAdjustment{
+					OverrideBlobSeparationMinimumSize: int(valueSeparationLatencyTolerantMinimumSize.Get(sv)),
+				}
+			} else {
+				policy.ValueStoragePolicy = pebble.ValueStorageLatencyTolerant
+			}
+			return policy, spanPolicyLocalRangeIDEndKey, nil
+		}
+
+		// We also disable value separation for lock keys.
+		if cockroachkvs.Compare(startKey, spanPolicyLockTableEndKey) >= 0 {
+			// Not a lock key, so use default value separation within sstable (by
+			// suffix) and into blob files.
+			// NB: there won't actually be a suffix in these local keys.
+			return policy, spanPolicyLocalEndKey, nil
+		}
+		if cockroachkvs.Compare(startKey, spanPolicyLockTableStartKey) < 0 {
+			// Not a lock key, so use default value separation within sstable (by
+			// suffix) and into blob files.
+			// NB: there won't actually be a suffix in these local keys.
+			return policy, spanPolicyLockTableStartKey, nil
+		}
+		// Lock key. Disable value separation.
+		policy.ValueStoragePolicy = pebble.ValueStorageLowReadLatency
+		return policy, spanPolicyLockTableEndKey, nil
 	}
-	if cockroachkvs.Compare(startKey, spanPolicyLockTableStartKey) < 0 {
-		// Not a lock key, so use default value separation within sstable (by
-		// suffix) and into blob files.
-		// NB: there won't actually be a suffix in these local keys.
-		return policy, spanPolicyLockTableStartKey, nil
-	}
-	// Lock key. Disable value separation.
-	policy.DisableValueSeparationBySuffix = true
-	policy.ValueStoragePolicy = pebble.ValueStorageLowReadLatency
-	return policy, spanPolicyLockTableEndKey, nil
 }
 
 func shortAttributeExtractorForValues(
@@ -702,10 +845,15 @@ type engineConfig struct {
 
 // Pebble is a wrapper around a Pebble database instance.
 type Pebble struct {
-	cfg         engineConfig
-	db          *pebble.DB
-	closed      bool
-	auxDir      string
+	cfg           engineConfig
+	db            *pebble.DB
+	closed        atomic.Bool
+	auxDir        string
+	auxiliarySize struct {
+		mu         syncutil.Mutex
+		computedAt crtime.Mono
+		size       int64
+	}
 	ballastPath string
 	properties  roachpb.StoreProperties
 
@@ -749,6 +897,8 @@ type Pebble struct {
 	replayer         *replay.WorkloadCollector
 	diskSlowFunc     atomic.Pointer[func(vfs.DiskSlowInfo)]
 	lowDiskSpaceFunc atomic.Pointer[func(pebble.LowDiskSpaceInfo)]
+
+	diskUnhealthyTracker diskUnhealthyTracker
 
 	singleDelLogEvery log.EveryN
 }
@@ -848,10 +998,6 @@ func (r remoteStorageAdaptor) CreateStorage(locator remote.Locator) (remote.Stor
 	return &externalStorageWrapper{p: r.p, ctx: r.ctx, es: es}, err
 }
 
-// ConfigureForSharedStorage is used to configure a pebble Options for shared
-// storage.
-var ConfigureForSharedStorage func(opts *pebble.Options, storage remote.Storage) error
-
 // newPebble creates a new Pebble instance, at the specified path.
 // Do not use directly (except in test); use Open instead.
 //
@@ -894,6 +1040,17 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
 		}
 	}
+	cfg.opts.DeletionPacing.BaselineRate = func() uint64 {
+		return uint64(baselineDeletionRate.Get(&cfg.settings.SV))
+	}
+	cfg.opts.Experimental.TombstoneDenseCompactionThreshold = func() float64 {
+		return 0.01 * float64(tombstoneDenseCompactionThreshold.Get(&cfg.settings.SV))
+	}
+	if cfg.opts.Experimental.UseDeprecatedCompensatedScore == nil {
+		cfg.opts.Experimental.UseDeprecatedCompensatedScore = func() bool {
+			return useDeprecatedCompensatedScore.Get(&cfg.settings.SV)
+		}
+	}
 
 	cfg.opts.EnsureDefaults()
 
@@ -902,9 +1059,11 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	logCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
 	// The store id, could not necessarily be determined when this function
 	// is called. Therefore, we use a container for the store id.
+	tags := logtags.BuildBuffer()
 	storeIDContainer := &base.StoreIDContainer{}
-	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
-	logCtx = logtags.AddTag(logCtx, "pebble", nil)
+	tags.Add("s", storeIDContainer)
+	tags.Add("pebble", nil)
+	logCtx = logtags.AddTags(logCtx, tags.Finish())
 
 	cfg.opts.Local.ReadaheadConfig = objstorageprovider.NewReadaheadConfig()
 	updateReadaheadFn := func(ctx context.Context) {
@@ -940,12 +1099,19 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		if !valueSeparationEnabled.Get(&cfg.settings.SV) {
 			return pebble.ValueSeparationPolicy{}
 		}
+		lowPri := float64(valueSeparationCompactionGarbageThreshold.Get(&cfg.settings.SV)) / 100.0
+		highPri := float64(valueSeparationCompactionGarbageThresholdHighPriority.Get(&cfg.settings.SV)) / 100.0
+		highPri = max(highPri, lowPri)
+		// TODO(annie): Make MinimumMVCCGarbageSize tunable via a cluster
+		// setting.
 		return pebble.ValueSeparationPolicy{
-			Enabled:               true,
-			MinimumSize:           int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
-			MaxBlobReferenceDepth: int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
-			RewriteMinimumAge:     valueSeparationRewriteMinimumAge.Get(&cfg.settings.SV),
-			TargetGarbageRatio:    float64(valueSeparationCompactionGarbageThreshold.Get(&cfg.settings.SV)) / 100.0,
+			Enabled:                  true,
+			MinimumSize:              int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
+			MinimumMVCCGarbageSize:   int(valueSeparationMVCCGarbageMinimumSize.Get(&cfg.settings.SV)),
+			MaxBlobReferenceDepth:    int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
+			RewriteMinimumAge:        valueSeparationRewriteMinimumAge.Get(&cfg.settings.SV),
+			GarbageRatioLowPriority:  lowPri,
+			GarbageRatioHighPriority: highPri,
 		}
 	}
 	cfg.opts.Experimental.MultiLevelCompactionHeuristic = func() pebble.MultiLevelHeuristic {
@@ -1020,6 +1186,12 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	// and upper values at runtime through Engine.SetCompactionConcurrency.
 	cfg.opts.CompactionConcurrencyRange = p.cco.Wrap(cfg.opts.CompactionConcurrencyRange)
 
+	p.diskUnhealthyTracker = diskUnhealthyTracker{
+		st:       cfg.settings,
+		isClosed: p.Closed,
+		runAsync: p.asyncDone.Go,
+		ts:       timeutil.DefaultTimeSource{},
+	}
 	// NB: The ordering of the event listeners passed to TeeEventListener is
 	// deliberate. The listener returned by makeMetricEtcEventListener is
 	// responsible for crashing the process if a DiskSlow event indicates the
@@ -1042,7 +1214,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	// confusing.
 	cfg.env.RegisterOnDiskSlow(func(info pebble.DiskSlowInfo) {
 		el := cfg.opts.EventListener
-		p.async(func() { el.DiskSlow(info) })
+		p.asyncDone.Go(func() { el.DiskSlow(info) })
 	})
 	el := pebble.TeeEventListener(
 		p.makeMetricEtcEventListener(logCtx),
@@ -1064,9 +1236,6 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	// in it is needed for CRDB to function properly.
 	if cfg.sharedStorage != nil {
 		esWrapper := &externalStorageWrapper{p: p, es: cfg.sharedStorage, ctx: logCtx}
-		if ConfigureForSharedStorage == nil {
-			return nil, errors.New("shared storage requires CCL features")
-		}
 		if err := ConfigureForSharedStorage(cfg.opts, esWrapper); err != nil {
 			return nil, errors.Wrap(err, "error when configuring shared storage")
 		}
@@ -1171,17 +1340,6 @@ func category(name string, upperBound roachpb.Key) pebble.UserKeyCategory {
 	return pebble.UserKeyCategory{Name: name, UpperBound: ek.Encode()}
 }
 
-// async launches the provided function in a new goroutine. It uses a wait group
-// to synchronize with (*Pebble).Close to ensure all launched goroutines have
-// exited before Close returns.
-func (p *Pebble) async(fn func()) {
-	p.asyncDone.Add(1)
-	go func() {
-		defer p.asyncDone.Done()
-		fn()
-	}()
-}
-
 // writePreventStartupFile creates a file that will prevent nodes from automatically restarting after
 // experiencing sstable corruption.
 func (p *Pebble) writePreventStartupFile(ctx context.Context, corruptionError error) {
@@ -1239,6 +1397,7 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			atomic.AddInt64((*int64)(&p.writeStallDuration), stallDuration)
 		},
 		DiskSlow: func(info pebble.DiskSlowInfo) {
+			p.diskUnhealthyTracker.onDiskSlow(info)
 			maxSyncDuration := fs.MaxSyncDuration.Get(&p.cfg.settings.SV)
 			fatalOnExceeded := fs.MaxSyncDurationFatalOnExceeded.Get(&p.cfg.settings.SV)
 			if info.Duration.Seconds() >= maxSyncDuration.Seconds() {
@@ -1267,11 +1426,11 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 					}
 				} else {
 					if p.cfg.diskMonitor != nil {
-						p.async(func() {
+						p.asyncDone.Go(func() {
 							log.Dev.Errorf(ctx, "disk stall detected: %s\n%s", info, p.cfg.diskMonitor.LogTrace())
 						})
 					} else {
-						p.async(func() { log.Dev.Errorf(ctx, "disk stall detected: %s", info) })
+						p.asyncDone.Go(func() { log.Dev.Errorf(ctx, "disk stall detected: %s", info) })
 					}
 				}
 				return
@@ -1333,7 +1492,7 @@ func (p *Pebble) String() string {
 
 // Close implements the Engine interface.
 func (p *Pebble) Close() {
-	if p.closed {
+	if p.closed.Load() {
 		p.logger.Infof("closing unopened pebble instance")
 		return
 	}
@@ -1341,7 +1500,7 @@ func (p *Pebble) Close() {
 		closeFunc(p)
 	}
 
-	p.closed = true
+	p.closed.Store(true)
 
 	// Wait for any asynchronous goroutines to exit.
 	p.asyncDone.Wait()
@@ -1411,7 +1570,7 @@ func (p *Pebble) aggregateBatchCommitStats(stats BatchCommitStats) {
 
 // Closed implements the Engine interface.
 func (p *Pebble) Closed() bool {
-	return p.closed
+	return p.closed.Load()
 }
 
 // MVCCIterate implements the Engine interface.
@@ -1810,37 +1969,11 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	m := p.db.Metrics()
 	totalUsedBytes := int64(m.DiskSpaceUsage())
 
-	// We don't have incremental accounting of the disk space usage of files
-	// in the auxiliary directory. Walk the auxiliary directory and all its
-	// subdirectories, adding to the total used bytes.
-	if errOuter := filepath.Walk(p.auxDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			// This can happen if CockroachDB removes files out from under us -
-			// just keep going to get the best estimate we can.
-			if oserror.IsNotExist(err) {
-				return nil
-			}
-			// Special-case: if the store-dir is configured using the root of some fs,
-			// e.g. "/mnt/db", we might have special fs-created files like lost+found
-			// that we can't read, so just ignore them rather than crashing.
-			if oserror.IsPermission(err) && filepath.Base(path) == "lost+found" {
-				return nil
-			}
-			return err
-		}
-		if path == p.ballastPath {
-			// Skip the ballast. Counting it as used is likely to confuse
-			// users, and it's more akin to space that is just unavailable
-			// like disk space often restricted to a root user.
-			return nil
-		}
-		if info.Mode().IsRegular() {
-			totalUsedBytes += info.Size()
-		}
-		return nil
-	}); errOuter != nil {
-		return roachpb.StoreCapacity{}, errOuter
+	auxiliarySize, err := p.auxiliaryDirSize()
+	if err != nil {
+		return roachpb.StoreCapacity{}, err
 	}
+	totalUsedBytes += auxiliarySize
 
 	// If no size limitation have been placed on the store size or if the
 	// limitation is greater than what's available, just return the actual
@@ -1873,6 +2006,57 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	}, nil
 }
 
+// auxiliaryDirSize computes the size of the auxiliary directory. There are
+// multiple Cockroach subsystems that write into the auxiliary directory, and
+// they don't incrementally account for their disk space usage. This function
+// walks the auxiliary directory and all its subdirectories, summing the file
+// sizes. This walk can be expensive, so we cache the result and only recompute
+// if it's over 1 minute stale.
+//
+// TODO(jackson): Eventually we should update the various subsystems writing
+// into the auxiliary directory to incrementally account for their disk space
+// usage.  See #96344.
+func (p *Pebble) auxiliaryDirSize() (int64, error) {
+	p.auxiliarySize.mu.Lock()
+	defer p.auxiliarySize.mu.Unlock()
+	if crtime.NowMono().Sub(p.auxiliarySize.computedAt) < time.Minute {
+		return p.auxiliarySize.size, nil
+	}
+
+	p.auxiliarySize.size = 0
+	err := filepath.Walk(p.auxDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			// This can happen if CockroachDB removes files out from under us -
+			// just keep going to get the best estimate we can.
+			if oserror.IsNotExist(err) {
+				return nil
+			}
+			// Special-case: if the store-dir is configured using the root of some fs,
+			// e.g. "/mnt/db", we might have special fs-created files like lost+found
+			// that we can't read, so just ignore them rather than erroring out.
+			if oserror.IsPermission(err) && filepath.Base(path) == "lost+found" {
+				return nil
+			}
+			return err
+		}
+		if path == p.ballastPath {
+			// Skip the ballast. Counting it as used is likely to confuse
+			// users, and it's more akin to space that is just unavailable
+			// like disk space often restricted to a root user.
+			return nil
+		}
+		if info.Mode().IsRegular() {
+			p.auxiliarySize.size += info.Size()
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	p.auxiliarySize.computedAt = crtime.NowMono()
+	return p.auxiliarySize.size, err
+}
+
 // Flush implements the Engine interface.
 func (p *Pebble) Flush() error {
 	return p.db.Flush()
@@ -1884,6 +2068,7 @@ func (p *Pebble) GetMetrics() Metrics {
 		Metrics:                          p.db.Metrics(),
 		WriteStallCount:                  atomic.LoadInt64(&p.writeStallCount),
 		WriteStallDuration:               time.Duration(atomic.LoadInt64((*int64)(&p.writeStallDuration))),
+		DiskUnhealthyDuration:            p.diskUnhealthyTracker.getUnhealthyDuration(),
 		DiskSlowCount:                    atomic.LoadInt64(&p.diskSlowCount),
 		DiskStallCount:                   atomic.LoadInt64(&p.diskStallCount),
 		SingleDelInvariantViolationCount: atomic.LoadInt64(&p.singleDelInvariantViolationCount),
@@ -1954,13 +2139,18 @@ func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 	}
 
 	m := p.db.Metrics()
-	stats.TotalFiles = 3 /* CURRENT, MANIFEST, OPTIONS */
-	stats.TotalFiles += uint64(m.WAL.Files + m.Table.ZombieCount + m.WAL.ObsoleteFiles + m.Table.ObsoleteCount)
-	stats.TotalBytes = m.WAL.Size + m.Table.ZombieSize + m.Table.ObsoleteSize
-	for _, l := range m.Levels {
-		stats.TotalFiles += uint64(l.TablesCount)
-		stats.TotalBytes += uint64(l.TablesSize)
-	}
+	var cs metrics.CountAndSize
+	cs.Count += 3 /* CURRENT, MANIFEST, OPTIONS */
+	cs.Count += uint64(m.WAL.Files + m.WAL.ObsoleteFiles)
+	cs.Bytes += m.WAL.Size
+	cs.Accumulate(m.Table.Physical.Live.Total())
+	cs.Accumulate(m.Table.Physical.Zombie.Total())
+	cs.Accumulate(m.Table.Physical.Obsolete.Total())
+	cs.Accumulate(m.BlobFiles.Live.Total())
+	cs.Accumulate(m.BlobFiles.Zombie.Total())
+	cs.Accumulate(m.BlobFiles.Obsolete.Total())
+	stats.TotalFiles = cs.Count
+	stats.TotalBytes = cs.Bytes
 
 	sstSizes := make(map[pebble.TableNum]uint64)
 	sstInfos, err := p.db.SSTables()
@@ -2009,6 +2199,19 @@ func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 	}
 
 	return stats, nil
+}
+
+// ProfileSeparatedValueRetrievals collects a profile of the engine's
+// separated value retrievals. It stops when the context is done.
+func (p *Pebble) ProfileSeparatedValueRetrievals(
+	ctx context.Context,
+) (*metrics.ValueRetrievalProfile, error) {
+	stop, err := p.db.RecordSeparatedValueRetrievals()
+	if err != nil {
+		return nil, err
+	}
+	<-ctx.Done()
+	return stop(), nil
 }
 
 // GetAuxiliaryDir implements the Engine interface.
@@ -2122,11 +2325,6 @@ func (p *Pebble) IngestExternalFiles(
 	ctx context.Context, external []pebble.ExternalFile,
 ) (pebble.IngestOperationStats, error) {
 	return p.db.IngestExternalFiles(ctx, external)
-}
-
-// PreIngestDelay implements the Engine interface.
-func (p *Pebble) PreIngestDelay(ctx context.Context) {
-	preIngestDelay(ctx, p, p.cfg.settings)
 }
 
 // GetTableMetrics implements the Engine interface.
@@ -2310,16 +2508,14 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // named version, it can be assumed all *nodes* have ratcheted to the pebble
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
-	clusterversion.V25_4_PebbleFormatV2BlobFiles: pebble.FormatV2BlobFiles,
-	clusterversion.V25_3:                         pebble.FormatValueSeparation,
-	clusterversion.V25_2:                         pebble.FormatTableFormatV6,
+	clusterversion.V25_4: pebble.FormatV2BlobFiles,
 }
 
 // MinimumSupportedFormatVersion is the version that provides features that the
 // Cockroach code relies on unconditionally (like range keys). New stores are by
 // default created with this version. It should correspond to the minimum
 // supported binary version.
-const MinimumSupportedFormatVersion = pebble.FormatTableFormatV6
+const MinimumSupportedFormatVersion = pebble.FormatV2BlobFiles
 
 // pebbleFormatVersionKeys contains the keys in the map above, in descending order.
 var pebbleFormatVersionKeys = slices.SortedFunc(maps.Keys(pebbleFormatVersionMap), func(a, b clusterversion.Key) int {
@@ -2444,7 +2640,7 @@ func (p *Pebble) BufferedSize() int {
 func (p *Pebble) ConvertFilesToBatchAndCommit(
 	_ context.Context, paths []string, clearedSpans []roachpb.Span,
 ) error {
-	files := make([]sstable.ReadableFile, len(paths))
+	files := make([]objstorage.ReadableFile, len(paths))
 	closeFiles := func() {
 		for i := range files {
 			if files[i] != nil {
@@ -2461,7 +2657,7 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 		files[i] = f
 	}
 	iter, err := NewSSTEngineIterator(
-		[][]sstable.ReadableFile{files},
+		[][]objstorage.ReadableFile{files},
 		IterOptions{
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			LowerBound: roachpb.KeyMin,
@@ -2527,6 +2723,10 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 		return err
 	}
 	return batch.Commit(true)
+}
+
+func (p *Pebble) GetDiskUnhealthy() bool {
+	return p.diskUnhealthyTracker.getUnhealthy()
 }
 
 type pebbleReadOnly struct {
@@ -2735,11 +2935,8 @@ func (p *pebbleReadOnly) ConsistentIterators() bool {
 // PinEngineStateForIterators implements the Engine interface.
 func (p *pebbleReadOnly) PinEngineStateForIterators(readCategory fs.ReadCategory) error {
 	if p.iter == nil {
-		o := &pebble.IterOptions{Category: readCategory.PebbleCategory()}
-		if p.durability == GuaranteedDurability {
-			o.OnlyReadGuaranteedDurable = true
-		}
-		iter, err := p.parent.db.NewIter(o)
+		o := makeIterOptions(readCategory, p.durability)
+		iter, err := p.parent.db.NewIter(&o)
 		if err != nil {
 			return err
 		}
@@ -3034,4 +3231,90 @@ func (cco *compactionConcurrencyOverride) Wrap(
 		}
 		return compactionConcurrencyRange()
 	}
+}
+
+// NB: vfs.defaultTickInterval is 2s, so DiskSlowInfo events are generated for
+// the same slow operation repeatedly, every 2s. So we pick a longer interval
+// here to consider the disk no longer unhealthy.
+//
+// TODO(sumeer): export vfs.defaultTickInterval, so we can set this a multiple
+// explicitly.
+const diskUnhealthyResetInterval = 5 * time.Second
+
+type diskUnhealthyTracker struct {
+	st       *cluster.Settings
+	isClosed func() bool
+	runAsync func(fn func())
+	ts       timeutil.TimeSource
+	mu       struct {
+		syncutil.Mutex
+		lastUnhealthyEventTime      time.Time
+		currentlyUnhealthy          bool
+		cumulativeUnhealthyDuration time.Duration
+		// lastUnhealthySampleTime is the last time currentlyUnhealthy was true,
+		// and the time up to which we have accounted for in
+		// cumulativeUnhealthyDuration. Set on the transition of
+		// currentlyUnhealthy from false to true, and updated by the goroutine
+		// that attempts the transition from true to false.
+		lastUnhealthySampleTime time.Time
+	}
+	testingTickReceivedCh chan<- time.Time
+}
+
+func (dut *diskUnhealthyTracker) onDiskSlow(info pebble.DiskSlowInfo) {
+	if info.Duration < UnhealthyWriteDuration.Get(&dut.st.SV) {
+		return
+	}
+	dut.mu.Lock()
+	defer dut.mu.Unlock()
+	now := dut.ts.Now()
+	dut.mu.lastUnhealthyEventTime = now
+	if !dut.mu.currentlyUnhealthy {
+		dut.mu.currentlyUnhealthy = true
+		dut.mu.lastUnhealthySampleTime = now
+		dut.runAsync(func() {
+			// Reset the unhealthy status after a while.
+			ticker := dut.ts.NewTicker(diskUnhealthyResetInterval)
+			defer ticker.Stop()
+			tickReceivedForTesting := func(t time.Time) {
+				if dut.testingTickReceivedCh != nil {
+					dut.testingTickReceivedCh <- t
+				}
+			}
+			// Indicate that started.
+			tickReceivedForTesting(now)
+			for {
+				now := <-ticker.Ch()
+				isClosed := dut.isClosed()
+				dut.mu.Lock()
+				if !dut.mu.currentlyUnhealthy {
+					panic(errors.AssertionFailedf("unexpected currentlyUnhealthy=false"))
+				}
+				dut.mu.cumulativeUnhealthyDuration += now.Sub(dut.mu.lastUnhealthySampleTime)
+				dut.mu.lastUnhealthySampleTime = now
+				if isClosed || dut.ts.Since(dut.mu.lastUnhealthyEventTime) >= diskUnhealthyResetInterval {
+					dut.mu.currentlyUnhealthy = false
+					dut.mu.Unlock()
+					tickReceivedForTesting(now)
+					return
+				}
+				dut.mu.Unlock()
+				tickReceivedForTesting(now)
+			}
+		})
+	} else {
+		dut.mu.lastUnhealthyEventTime = dut.ts.Now()
+	}
+}
+
+func (dut *diskUnhealthyTracker) getUnhealthy() bool {
+	dut.mu.Lock()
+	defer dut.mu.Unlock()
+	return dut.mu.currentlyUnhealthy
+}
+
+func (dut *diskUnhealthyTracker) getUnhealthyDuration() time.Duration {
+	dut.mu.Lock()
+	defer dut.mu.Unlock()
+	return dut.mu.cumulativeUnhealthyDuration
 }

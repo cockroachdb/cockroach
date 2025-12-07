@@ -48,9 +48,7 @@ func (i *immediateVisitor) CreateSequenceDescriptor(
 	return nil
 }
 
-func (i *immediateVisitor) SetSequenceOptions(
-	ctx context.Context, op scop.SetSequenceOptions,
-) error {
+func (i *immediateVisitor) SetSequenceOption(ctx context.Context, op scop.SetSequenceOption) error {
 	sc, err := i.checkOutTable(ctx, op.SequenceID)
 	if err != nil {
 		return err

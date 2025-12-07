@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/changefeeds"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -104,6 +105,20 @@ var secure = securityFlags.Bool("secure", false,
 		"For example when using root, certs/client.root.crt certs/client.root.key should exist.")
 var user = securityFlags.String("user", "root", "Specify a user to run the workload as")
 var password = securityFlags.String("password", "", "Optionally specify a password for the user")
+
+// Options relating to the optional changefeed.
+var (
+	changefeed = runFlags.Bool("changefeed", false,
+		"Optionally run a changefeed over the tables")
+	changefeedStartDelay = runFlags.Duration("changefeed-start-delay", 0*time.Second,
+		"How long to wait before starting the changefeed")
+	changefeedMaxRate = runFlags.Float64(
+		"changefeed-max-rate", 0, "Maximum frequency of changefeed ingestion. If 0, no limit.")
+	changefeedResolvedTarget = runFlags.Duration("changefeed-resolved-target", 5*time.Second,
+		"The target frequency of resolved messages. O to disable resolved reporting and accept server defaults.")
+	changefeedCursor = runFlags.String("changefeed-cursor", "",
+		"The cursor to start the changefeed from. If empty, the changefeed will start from the current cluster logical timestamp.")
+)
 
 func init() {
 
@@ -424,6 +439,12 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		// with allowed burst of 1 at the maximum allowed rate.
 		limiter = rate.NewLimiter(rate.Limit(*maxRate), 1)
 	}
+	var changefeedLimiter *rate.Limiter
+	if *changefeedMaxRate > 0 {
+		ratePerSecond := *changefeedMaxRate
+		burst := max(int(ratePerSecond), 1)
+		changefeedLimiter = rate.NewLimiter(rate.Limit(ratePerSecond), burst)
+	}
 
 	maybeLogRandomSeed(ctx, gen)
 	o, ok := gen.(workload.Opser)
@@ -484,12 +505,19 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				log.Dev.Warningf(ctx, "retrying after error while creating load: %v", err)
 			}
 			ops, err = o.Ops(ctx, urls, reg)
+			if err != nil && !*tolerateErrors {
+				return errors.Wrapf(err, "failed to initialize the load generator")
+			}
+
+			if *changefeed {
+				log.Dev.Infof(ctx, "adding changefeed to query load...")
+				err = changefeeds.AddChangefeedToQueryLoad(ctx, gen.(workload.ConnFlagser), dbName, *changefeedResolvedTarget, *changefeedCursor, urls, reg, &ops)
+				if err != nil && !*tolerateErrors {
+					return errors.Wrapf(err, "failed to initialize changefeed")
+				}
+			}
 			if err == nil {
 				return nil
-			}
-			err = errors.Wrapf(err, "failed to initialize the load generator")
-			if !*tolerateErrors {
-				return err
 			}
 		}
 		if ctx.Err() != nil {
@@ -527,8 +555,17 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	workersCtx, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
 	var wg sync.WaitGroup
-	wg.Add(len(ops.WorkerFns))
+	wg.Add(len(ops.WorkerFns) + len(ops.ChangefeedFns))
 	go func() {
+		for _, workFn := range ops.ChangefeedFns {
+			go func(workFn func(context.Context) error) {
+				if *changefeedStartDelay > 0 {
+					time.Sleep(*changefeedStartDelay)
+				}
+				workerRun(workersCtx, errCh, &wg, changefeedLimiter, workFn)
+			}(workFn)
+		}
+
 		// If a ramp period was specified, start all the workers gradually
 		// with a new context.
 		var rampCtx context.Context
@@ -598,6 +635,13 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 					if err := t.Exporter.SnapshotAndWrite(t.Hist, t.Now, t.Elapsed, &t.Name); err != nil {
 						log.Dev.Warningf(ctx, "histogram: %v", err)
 					}
+				}
+				// TODO(ssd): Ugly hack. Until we support something other than
+				// histograms here, for this particular metric, if we reset the
+				// histogram. We don't reset the Cumulative histogram which lets us see
+				// pMax.
+				if t.Name == "changefeed-resolved" {
+					t.Hist.Reset()
 				}
 			})
 

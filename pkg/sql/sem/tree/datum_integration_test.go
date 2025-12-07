@@ -1242,7 +1242,7 @@ func TestNewDefaultDatum(t *testing.T) {
 		{t: types.MakeTuple([]*types.T{types.Int, types.MakeChar(1)}), expected: "(0:::INT8, '':::STRING)"},
 		{t: types.MakeTuple([]*types.T{types.OidVector, types.MakeTuple([]*types.T{types.Float})}), expected: "(ARRAY[]:::OID[], (0.0:::FLOAT8,))"},
 		{t: types.VarBit, expected: "B''"},
-		{t: types.MakeBit(5), expected: "B''"},
+		{t: types.MakeBit(5), expected: "B'00000'"},
 	}
 
 	for i, tc := range testCases {

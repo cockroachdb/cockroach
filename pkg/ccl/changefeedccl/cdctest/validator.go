@@ -321,14 +321,13 @@ func (v *beforeAfterValidator) checkRowAt(
 				stmtBuf.WriteString(` AND `)
 			}
 			jsonCol, err := rowDatums.FetchValKey(col)
-
+			if err != nil {
+				return err
+			}
 			if jsonCol == nil || jsonCol.Type() == json.NullJSONType {
 				fmt.Fprintf(&stmtBuf, `%s IS NULL`, col)
 			} else {
 				fmt.Fprintf(&stmtBuf, `to_json(%s)::TEXT = $%d`, col, i+1)
-				if err != nil {
-					return err
-				}
 				args = append(args, jsonCol.String())
 			}
 		}

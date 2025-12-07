@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "gomock")
+
+gomock(
+    name = "mock_cluster",
+    testonly = True,
+    out = "mock_cluster_generated.go",
+    interfaces = ["Cluster"],
+    library = "//pkg/cmd/roachtest/cluster",
+    package = "mockcluster",
+    self_package = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster/mock",
+    visibility = [
+        "//pkg/cmd/roachtest/clusterstats:__pkg__",
+        "//pkg/cmd/roachtest/roachtestutil/mixedversion:__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+go_library(
+    name = "mockcluster",
+    srcs = ["mock_cluster_generated.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster/mock",
+    visibility = [
+        "//pkg/cmd/roachtest/clusterstats:__pkg__",
+        "//pkg/cmd/roachtest/roachtestutil/mixedversion:__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/grafana",
+        "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/spec",
+        "//pkg/roachprod",
+        "//pkg/roachprod/failureinjection/failures",
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/prometheus",
+        "//pkg/roachprod/vm",
+        "@com_github_golang_mock//gomock",
+    ],
+)

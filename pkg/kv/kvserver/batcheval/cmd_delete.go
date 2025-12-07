@@ -58,7 +58,7 @@ func Delete(
 	// If requested, replace point tombstones with range tombstones.
 	if cArgs.EvalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes && h.Txn == nil {
 		if err := storage.ReplacePointTombstonesWithRangeTombstones(
-			ctx, spanset.DisableReadWriterAssertions(readWriter),
+			ctx, spanset.DisableUndeclaredSpanAssertions(readWriter),
 			cArgs.Stats, args.Key, args.EndKey); err != nil {
 			return result.Result{}, err
 		}

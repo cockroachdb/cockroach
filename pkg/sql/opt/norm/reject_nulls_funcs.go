@@ -35,7 +35,8 @@ func (c *CustomFuncs) HasNullRejectingFilter(
 			continue
 		}
 
-		notNullFilterCols := constraints.ExtractNotNullCols(c.f.ctx, c.f.evalCtx)
+		var notNullFilterCols opt.ColSet
+		constraints.ExtractNotNullCols(c.f.ctx, c.f.evalCtx, &notNullFilterCols)
 		if notNullFilterCols.Intersects(nullRejectCols) {
 			return true
 		}
@@ -286,7 +287,7 @@ func (c *CustomFuncs) GetNullRejectedCols(filters memo.FiltersExpr) opt.ColSet {
 			continue
 		}
 
-		nullRejectedCols.UnionWith(constraints.ExtractNotNullCols(c.f.ctx, c.f.evalCtx))
+		constraints.ExtractNotNullCols(c.f.ctx, c.f.evalCtx, &nullRejectedCols)
 	}
 	return nullRejectedCols
 }

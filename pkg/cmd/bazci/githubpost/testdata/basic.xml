@@ -1,25 +1,68 @@
 <testsuites>
-	<testsuite errors="0" failures="2" skipped="0" tests="1284" time="0.208" name="github.com/cockroachdb/cockroach/pkg/util/json">
-		<testcase classname="json" name="TestJSONEncodeRoundTrip" time="0.000"></testcase>
-		<testcase classname="json" name="TestJSONEncodeStrictRoundTrip" time="0.000"></testcase>
+	<testsuite errors="0" failures="2" skipped="0" tests="60" time="0.002" name="github.com/cockroachdb/cockroach/pkg/util/json.TestJSONErrors" timestamp="2025-11-05T20:51:03.644Z">
 		<testcase classname="json" name="TestJSONErrors" time="0.000">
 			<failure message="Failed" type="">=== RUN   TestJSONErrors&#xA;--- FAIL: TestJSONErrors (0.00s)&#xA;</failure>
 		</testcase>
-		<testcase classname="json" name="TestJSONErrors/&#34;\b&#34;" time="0.000"></testcase>
-		<testcase classname="json" name="TestJSONErrors/&#34;\v&#34;" time="0.000"></testcase>
-		<testcase classname="json" name="TestJSONErrors/&#34;\x00&#34;" time="0.000"></testcase>
-		<testcase classname="json" name="TestJSONErrors/&#34;_&#34;" time="0.000"></testcase>
-		<testcase classname="json" name="TestJSONErrors/01" time="0.000"></testcase>
-		<testcase classname="json" name="TestJSONErrors/1_2_3" time="0.000"></testcase>
-		<testcase classname="json" name="TestJSONErrors/[1,_2,_3]]" time="0.000"></testcase>
-		<testcase classname="json" name="TestJSONErrors/[1,_2,_3]}_do_not_ignore" time="0.000"></testcase>
-		<testcase classname="json" name="TestJSONErrors/frues" time="0.000">
-			<failure message="Failed" type="">=== RUN   TestJSONErrors/frues&#xA;    json_test.go:278: expected error message to be &#39;trailing characters after JSON document&#39;, but was &#39;unable to decode JSON: invalid character &#39;r&#39; in literal false (expecting &#39;a&#39;)&#39;&#xA;    --- FAIL: TestJSONErrors/frues (0.00s)&#xA;</failure>
+		<testcase classname="json" name="TestJSONErrors/gostd/&#34;\b&#34;" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/&#34;\v&#34;" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/&#34;\x00&#34;" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/&#34;_&#34;" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/-" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/--01" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/01" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/1_2_3" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/[,]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/[1,]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/[1,_2,_3]]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/[1,_2,_3]___}___" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/[1,_[2,]]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/[1,_[2,_3],]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/[1,_{&#34;a&#34;:&#34;b&#34;,}]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/[1,_{&#34;a&#34;:&#34;b&#34;},]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/\u" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/\u1" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/\u111z" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/frues" time="0.000">
+			<failure message="Failed" type="">=== RUN   TestJSONErrors/gostd/frues&#xA;    json_test.go:404: &#xA;        &#x9;Error Trace:&#x9;pkg/util/json/json_test.go:404&#xA;        &#x9;Error:      &#x9;Expect &#34;unable to decode JSON: invalid character &#39;r&#39; in literal false (expecting &#39;a&#39;)&#34; to match &#34;trailing characters after JSON document&#34;&#xA;        &#x9;Test:       &#x9;TestJSONErrors/gostd/frues&#xA;--- FAIL: TestJSONErrors/gostd/frues (0.00s)&#xA;</failure>
 		</testcase>
-		<testcase classname="json" name="TestJSONErrors/true_false" time="0.000"></testcase>
-		<testcase classname="json" name="TestJSONErrors/{" time="0.000"></testcase>
-		<testcase classname="json" name="TestJSONErrors/{&#34;foo&#34;:_01}" time="0.000"></testcase>
-		<testcase classname="json" name="TestJSONErrors/{&#39;foo&#39;:_1}" time="0.000"></testcase>
-		<testcase classname="json" name="TestJSONErrors/{foo:_1}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/true_false" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/trues" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/{" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/{&#34;a&#34;:[&#34;b&#34;,&#34;c&#34;]}]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/{&#34;b&#34;:_false,_}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/{&#34;foo&#34;:_01}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/{&#34;k&#34;:,}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/{&#34;k&#34;:_[1,]}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/{&#39;foo&#39;:_1}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/gostd/{foo:_1}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/&#34;\b&#34;" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/&#34;\v&#34;" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/&#34;\x00&#34;" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/&#34;_&#34;" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/-" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/--01" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/01" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/1_2_3" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/[,]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/[1,]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/[1,_2,_3]]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/[1,_2,_3]___}___" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/[1,_[2,]]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/[1,_[2,_3],]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/[1,_{&#34;a&#34;:&#34;b&#34;,}]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/[1,_{&#34;a&#34;:&#34;b&#34;},]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/\u" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/\u1" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/\u111z" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/true_false" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/trues" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/{" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/{&#34;a&#34;:[&#34;b&#34;,&#34;c&#34;]}]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/{&#34;b&#34;:_false,_}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/{&#34;foo&#34;:_01}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/{&#34;k&#34;:,}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/{&#34;k&#34;:_[1,]}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/{&#39;foo&#39;:_1}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/lexer/{foo:_1}" time="0.000"></testcase>
 	</testsuite>
 </testsuites>

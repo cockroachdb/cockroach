@@ -483,6 +483,12 @@ type StoreTestingKnobs struct {
 	// EnqueueReplicaInterceptor intercepts calls to `store.Enqueue()`.
 	EnqueueReplicaInterceptor func(queueName string, replica *Replica)
 
+	// AllocatorCheckRangeInterceptor intercepts calls to
+	// `Store.AllocatorCheckRange()` and can be used to inject errors for testing.
+	// If returns non-nil error, the error is returned instead of calling the
+	// actual AllocatorCheckRange logic.
+	AllocatorCheckRangeInterceptor func() error
+
 	// GlobalMVCCRangeTombstone will write a global MVCC range tombstone across
 	// the entire user keyspace during cluster bootstrapping. This will be written
 	// below all other data, and thus won't affect query results, but it does
@@ -534,6 +540,10 @@ type StoreTestingKnobs struct {
 	// BaseQueueDisabledBypassFilter checks whether the replica for the given
 	// rangeID should ignore the queue being disabled, and be processed anyway.
 	BaseQueueDisabledBypassFilter func(rangeID roachpb.RangeID) bool
+
+	// BaseQueuePostEnqueueInterceptor is called with the storeID and rangeID of
+	// the replica right after a replica is enqueued (before it is processed)
+	BaseQueuePostEnqueueInterceptor func(storeID roachpb.StoreID, rangeID roachpb.RangeID)
 
 	// InjectReproposalError injects an error in tryReproposeWithNewLeaseIndexRaftMuLocked.
 	// If nil is returned, reproposal will be attempted.

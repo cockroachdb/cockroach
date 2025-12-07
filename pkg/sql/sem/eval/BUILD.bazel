@@ -55,9 +55,10 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/hintpb",
         "//pkg/sql/lex",
         "//pkg/sql/oidext",
-        "//pkg/sql/parser",
+        "//pkg/sql/parserutils",
         "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -115,6 +116,7 @@ go_test(
     name = "eval_test",
     srcs = [
         "cast_map_test.go",
+        "cast_rand_test.go",
         "cast_test.go",
         "compare_test.go",
         "eval_internal_test.go",
@@ -170,5 +172,6 @@ disallowed_imports_test(
     src = "eval",
     disallowed_list = [
         "//pkg/sql/catalog",
+        "//pkg/sql/parser",
     ],
 )

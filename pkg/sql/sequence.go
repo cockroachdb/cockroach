@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -129,8 +130,8 @@ func incrementSequenceHelper(
 		return 0, err
 	}
 
-	p.sessionDataMutatorIterator.applyOnEachMutator(
-		func(m sessionDataMutator) {
+	p.sessionDataMutatorIterator.ApplyOnEachMutator(
+		func(m sessionmutator.SessionDataMutator) {
 			m.RecordLatestSequenceVal(uint32(descriptor.GetID()), val)
 		},
 	)
@@ -346,8 +347,8 @@ func (p *planner) SetSequenceValueByID(
 	}
 
 	// Clear out the cache and update the last value if needed.
-	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-		m.initSequenceCache()
+	p.sessionDataMutatorIterator.ApplyOnEachMutator(func(m sessionmutator.SessionDataMutator) {
+		m.InitSequenceCache()
 		if isCalled {
 			m.RecordLatestSequenceVal(seqID, newVal)
 		}

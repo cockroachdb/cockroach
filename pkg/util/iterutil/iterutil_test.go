@@ -95,3 +95,35 @@ func TestMinFunc(t *testing.T) {
 		})
 	}
 }
+
+func TestMaxFunc(t *testing.T) {
+	intCmp := func(a, b int) int {
+		return a - b
+	}
+
+	for name, tc := range map[string]struct {
+		input []int
+	}{
+		"empty": {
+			input: nil,
+		},
+		"one element": {
+			input: []int{1},
+		},
+		"multiple elements": {
+			input: []int{1, 3, 2},
+		},
+		"multiple elements with zero value": {
+			input: []int{1, 0, 3, 2},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := iterutil.MaxFunc(slices.Values(tc.input), intCmp)
+			if len(tc.input) == 0 {
+				require.Equal(t, 0, m)
+			} else {
+				require.Equal(t, slices.MaxFunc(tc.input, intCmp), m)
+			}
+		})
+	}
+}

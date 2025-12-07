@@ -1,0 +1,22 @@
+[Unit]
+Description=Parca Agent
+Documentation=https://www.parca.dev/docs/systemd
+Requires=network.target
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+ExecStart=/opt/parca/parca-agent --remote-store-bearer-token-file=/opt/parca/parca.token --remote-store-address=grpc.polarsignals.com:443 --http-address=:7071
+
+Restart=on-failure
+RestartSec=10
+
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=parcaagent
+
+[Install]
+WantedBy=multi-user.target

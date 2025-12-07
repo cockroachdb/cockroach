@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -47,7 +47,7 @@ func (r *raftTruncatorReplica) sideloadedStats(
 	return r.logStorage.ls.Sideload.Stats(ctx, span)
 }
 
-func (r *raftTruncatorReplica) getStateLoader() stateloader.StateLoader {
+func (r *raftTruncatorReplica) getStateLoader() kvstorage.StateLoader {
 	// NB: the replicaForTruncator contract says that Replica.raftMu is held for
 	// the duration of the existence of replicaForTruncator, so we return the
 	// r.raftMu.stateloader (and not r.mu.stateLoader).

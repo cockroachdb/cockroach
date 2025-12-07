@@ -21,10 +21,7 @@ func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
-	)()
+	serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabledRandomly)
 
 	os.Exit(m.Run())
 }

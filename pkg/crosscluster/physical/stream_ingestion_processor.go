@@ -291,6 +291,9 @@ type streamIngestionProcessor struct {
 	// backupDataProcessors' trace recording.
 	agg      *tracing.TracingAggregator
 	aggTimer timeutil.Timer
+
+	// Pipelines to report range stats down to frontier processor.
+	rangeStatsCh chan *streampb.StreamEvent_RangeStats
 }
 
 // PartitionEvent augments a normal event with the partition it came from.
@@ -347,6 +350,7 @@ func newStreamIngestionDataProcessor(
 		flushCh:          make(chan flushableBuffer),
 		checkpointCh:     make(chan *jobspb.ResolvedSpans),
 		errCh:            make(chan error, 1),
+		rangeStatsCh:     make(chan *streampb.StreamEvent_RangeStats),
 		rekeyer:          rekeyer,
 		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
 		logBufferEvery:   log.Every(30 * time.Second),
@@ -392,8 +396,10 @@ func newStreamIngestionDataProcessor(
 //
 // Start implements the RowSource interface.
 func (sip *streamIngestionProcessor) Start(ctx context.Context) {
-	ctx = logtags.AddTag(ctx, "job", sip.spec.JobID)
-	ctx = logtags.AddTag(ctx, "proc", sip.ProcessorID)
+	tags := logtags.BuildBuffer()
+	tags.Add("job", sip.spec.JobID)
+	tags.Add("proc", sip.ProcessorID)
+	ctx = logtags.AddTags(ctx, tags.Finish())
 	log.Dev.Infof(ctx, "starting ingest proc")
 	sip.agg = tracing.TracingAggregatorForContext(ctx)
 
@@ -526,7 +532,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 				return nil, sip.DrainHelper()
 			}
 			row := rowenc.EncDatumRow{
-				rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(progressBytes))),
+				rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes(progressBytes))),
 			}
 			return row, nil
 		}
@@ -534,6 +540,13 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		sip.aggTimer.Reset(15 * time.Second)
 		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(sip.Ctx(),
 			sip.FlowCtx.NodeID.SQLInstanceID(), sip.FlowCtx.ID, sip.agg)
+	case stats := <-sip.rangeStatsCh:
+		meta, err := replicationutils.StreamRangeStatsToProgressMeta(sip.FlowCtx, sip.ProcessorID, stats)
+		if err != nil {
+			sip.MoveToDrainingAndLogError(err)
+			return nil, sip.DrainHelper()
+		}
+		return nil, meta
 	case err := <-sip.errCh:
 		sip.MoveToDrainingAndLogError(err)
 		return nil, sip.DrainHelper()
@@ -771,7 +784,7 @@ func (sip *streamIngestionProcessor) handleEvent(event PartitionEvent) error {
 	}
 
 	if sip.logBufferEvery.ShouldLog() {
-		log.Dev.Infof(sip.Ctx(), "current KV batch size %d (%d items)", sip.buffer.curKVBatchSize, len(sip.buffer.curKVBatch))
+		log.VEventf(sip.Ctx(), 2, "current KV batch size %d (%d items)", sip.buffer.curKVBatchSize, len(sip.buffer.curKVBatch))
 	}
 
 	if sip.buffer.shouldFlushOnSize(sip.Ctx(), sv) {
@@ -927,7 +940,8 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event PartitionEvent) erro
 		}
 	}
 
-	resolvedSpans := event.GetCheckpoint().ResolvedSpans
+	checkpointEvent := event.GetCheckpoint()
+	resolvedSpans := checkpointEvent.ResolvedSpans
 	if resolvedSpans == nil {
 		return errors.New("checkpoint event expected to have resolved spans")
 	}
@@ -957,6 +971,13 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event PartitionEvent) erro
 		}
 	}
 	sip.metrics.ResolvedEvents.Inc(1)
+
+	if checkpointEvent.RangeStats != nil {
+		select {
+		case <-sip.stopCh:
+		case sip.rangeStatsCh <- checkpointEvent.RangeStats:
+		}
+	}
 	return nil
 }
 

@@ -240,23 +240,12 @@ func New(
 //
 // If any subroutines panic with a non-runtime error as part of the build
 // process, the panic is caught here and returned as an error.
-func (b *Builder) Build() (err error) {
+func (b *Builder) Build() (retErr error) {
 	log.VEventf(b.ctx, 1, "optbuilder start")
 	defer log.VEventf(b.ctx, 1, "optbuilder finish")
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate errors without adding lots of checks
-			// for `if err != nil` throughout the construction code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-				log.VEventf(b.ctx, 1, "%v", err)
-			} else {
-				panic(r)
-			}
-		}
-	}()
+	defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
+		log.VEventf(b.ctx, 1, "%v", caughtErr)
+	})
 
 	// TODO (rohany): We shouldn't be modifying the semaCtx passed to the builder
 	//  but we unfortunately rely on mutation to the semaCtx. We modify the input
@@ -504,7 +493,7 @@ func (b *Builder) buildStmt(
 			// invalidation). We don't care about caching plans for these statements.
 			b.DisableMemoReuse = true
 			// It's considered acceptable when we delegate to unsafe internals.
-			defer b.disableUnsafeInternalCheck()()
+			defer b.DisableUnsafeInternalCheck()()
 			return b.buildStmt(newStmt, desiredTypes, inScope)
 		}
 
@@ -590,15 +579,25 @@ func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
 	}
 }
 
-// disableUnsafeInternalCheck is used to disable the check that the
+// DisableUnsafeInternalCheck is used to disable the check that the
 // prevents external users from accessing unsafe internals.
-func (b *Builder) disableUnsafeInternalCheck() func() {
+func (b *Builder) DisableUnsafeInternalCheck() func() {
+	// Already in the middle of a disabled section.
+	if b.skipUnsafeInternalsCheck {
+		return func() {}
+	}
+
 	b.skipUnsafeInternalsCheck = true
-	cleanup := b.catalog.DisableUnsafeInternalCheck()
+	var cleanup func()
+	if b.catalog != nil {
+		cleanup = b.catalog.DisableUnsafeInternalCheck()
+	}
 
 	return func() {
 		b.skipUnsafeInternalsCheck = false
-		cleanup()
+		if cleanup != nil {
+			cleanup()
+		}
 	}
 }
 

@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	gogotypes "github.com/gogo/protobuf/types"
 )
 
 const (
@@ -943,12 +944,15 @@ func (sc *SchemaChanger) distIndexBackfill(
 ) error {
 	// Gather the initial resume spans for the table.
 	var todoSpans []roachpb.Span
+	var resumeManifests []jobspb.IndexBackfillSSTManifest
 	var mutationIdx int
+	jobDetails := sc.job.Details().(jobspb.SchemaChangeDetails)
+	useDistributedMerge := jobDetails.DistributedMergeMode == jobspb.IndexBackfillDistributedMergeMode_Enabled
 
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) (err error) {
-		todoSpans, _, mutationIdx, err = rowexec.GetResumeSpans(
+		todoSpans, resumeManifests, _, mutationIdx, err = rowexec.GetResumeSpansAndSSTManifests(
 			ctx, sc.jobRegistry, txn, sc.execCfg.Codec, txn.Descriptors(), sc.descID,
 			sc.mutationID, filter,
 		)
@@ -963,7 +967,9 @@ func (sc *SchemaChanger) distIndexBackfill(
 		return nil
 	}
 
-	writeAsOf := sc.job.Details().(jobspb.SchemaChangeDetails).WriteTimestamp
+	manifestBuf := backfill.NewSSTManifestBuffer(resumeManifests)
+
+	writeAsOf := jobDetails.WriteTimestamp
 	if writeAsOf.IsEmpty() {
 		status := jobs.StatusMessage("scanning target index for in-progress transactions")
 		if err := sc.job.NoTxn().UpdateStatusMessage(ctx, status); err != nil {
@@ -1044,6 +1050,9 @@ func (sc *SchemaChanger) distIndexBackfill(
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
 		spec := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes, 0)
+		if useDistributedMerge {
+			backfill.EnableDistributedMergeIndexBackfillSink(sc.execCfg.NodeInfo.NodeID.SQLInstanceID(), &spec)
+		}
 		p, err = sc.distSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, todoSpans)
 		return err
 	}); err != nil {
@@ -1071,6 +1080,18 @@ func (sc *SchemaChanger) distIndexBackfill(
 				mu.updatedTodoSpans = make([]roachpb.Span, len(todoSpans))
 				copy(mu.updatedTodoSpans, todoSpans)
 			}()
+
+			if useDistributedMerge {
+				var mapProgress execinfrapb.IndexBackfillMapProgress
+				if gogotypes.Is(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress) {
+					if err := gogotypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress); err != nil {
+						return err
+					}
+					if len(mapProgress.SSTManifests) > 0 {
+						manifestBuf.Append(mapProgress.SSTManifests)
+					}
+				}
+			}
 
 			if sc.testingKnobs.AlwaysUpdateIndexBackfillDetails {
 				if err := updateJobDetails(); err != nil {
@@ -1152,15 +1173,28 @@ func (sc *SchemaChanger) distIndexBackfill(
 	var updateJobMu syncutil.Mutex
 	updateJobDetails = func() error {
 		updatedTodoSpans := getTodoSpansForUpdate()
+		manifestDirty := manifestBuf.Dirty()
 		return sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			updateJobMu.Lock()
 			defer updateJobMu.Unlock()
-			// No processor has returned completed spans yet.
-			if updatedTodoSpans == nil {
+			// No processor has returned completed spans yet and no new manifests.
+			if updatedTodoSpans == nil && !manifestDirty {
 				return nil
 			}
-			log.VEventf(ctx, 2, "writing todo spans to job details: %+v", updatedTodoSpans)
-			return rowexec.SetResumeSpansInJob(ctx, updatedTodoSpans, mutationIdx, txn, sc.job)
+			spansToPersist := updatedTodoSpans
+			if spansToPersist == nil {
+				spansToPersist = todoSpans
+			}
+			var manifestSnapshot []jobspb.IndexBackfillSSTManifest
+			if manifestDirty {
+				manifestSnapshot = manifestBuf.SnapshotAndMarkClean()
+			} else {
+				manifestSnapshot = manifestBuf.Snapshot()
+			}
+			log.VEventf(ctx, 2, "writing todo spans to job details: %+v", spansToPersist)
+			return rowexec.SetResumeSpansAndSSTManifestsInJob(
+				ctx, &sc.execCfg.Codec, spansToPersist, manifestSnapshot, mutationIdx, txn, sc.job,
+			)
 		})
 	}
 
@@ -1541,6 +1575,10 @@ func ValidateConstraint(
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (err error) {
+	// Validation queries use full table scans which we always want to distribute.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride.AlwaysDistributeFullScans = true
+
 	tableDesc, err = tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
 	if err != nil {
 		return err
@@ -1666,6 +1704,10 @@ func ValidateInvertedIndexes(
 	execOverride sessiondata.InternalExecutorOverride,
 	protectedTSManager scexec.ProtectedTimestampManager,
 ) (err error) {
+	// Validation queries use full table scans which we always want to distribute.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride.AlwaysDistributeFullScans = true
+
 	grp := ctxgroup.WithContext(ctx)
 	invalid := make(chan descpb.IndexID, len(indexes))
 
@@ -1769,11 +1811,18 @@ func countExpectedRowsForInvertedIndex(
 ) (int64, error) {
 	desc := tableDesc
 	start := timeutil.Now()
+
+	// Validation queries use full table scans which we always want to distribute.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride.AlwaysDistributeFullScans = true
+
 	if withFirstMutationPublic {
 		// Make the mutations public in an in-memory copy of the descriptor and
 		// add it to the Collection's synthetic descriptors, so that we can use
-		// SQL below to perform the validation.
-		fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints, catalog.RetainDroppingColumns)
+		// SQL below to perform the validation. Avoid making PK swaps public, otherwise
+		// in the declarative schema changer we can select incomplete primary indexes
+		// for validation.
+		fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints, catalog.RetainDroppingColumns, catalog.IgnorePKSwaps)
 		if err != nil {
 			return 0, err
 		}
@@ -1867,6 +1916,10 @@ func ValidateForwardIndexes(
 	execOverride sessiondata.InternalExecutorOverride,
 	protectedTSManager scexec.ProtectedTimestampManager,
 ) (err error) {
+	// Validation queries use full table scans which we always want to distribute.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride.AlwaysDistributeFullScans = true
+
 	grp := ctxgroup.WithContext(ctx)
 
 	invalid := make(chan descpb.IndexID, len(indexes))
@@ -1983,6 +2036,10 @@ func populateExpectedCounts(
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (int64, error) {
+	// Validation queries use full table scans which we always want to distribute.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride.AlwaysDistributeFullScans = true
+
 	desc := tableDesc
 	if withFirstMutationPublic {
 		// The query to count the expected number of rows can reference columns
@@ -2049,6 +2106,10 @@ func countIndexRowsAndMaybeCheckUniqueness(
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (int64, error) {
+	// Validation queries use full table scans which we always want to distribute.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride.AlwaysDistributeFullScans = true
+
 	// If we are doing a REGIONAL BY ROW locality change, we can
 	// bypass the uniqueness check below as we are only adding or
 	// removing an implicit partitioning column.  Scan the
@@ -2994,12 +3055,11 @@ func indexTruncateInTxn(
 // the next resume, a mergeTimestamp newer than the GC time will be picked and
 // the job can continue.
 func getMergeTimestamp(ctx context.Context, clock *hlc.Clock) hlc.Timestamp {
-	// Use the current timestamp plus the maximum allowed offset to account for
-	// potential clock skew across nodes. The chosen timestamp must be greater
-	// than all commit timestamps used so far. This may result in seeing rows
-	// that are already present in the index being merged, but that’s fine as
-	// they will be treated as no-ops.
-	ts := clock.Now().AddDuration(clock.MaxOffset())
+	// Use the current timestamp since by this point we only have one descriptor
+	// version and no one can commit with the old version due to transaction
+	// deadlines from the lease manager. Anything after that version will write to
+	// both the backfilled and temporary index.
+	ts := clock.Now()
 	log.Dev.Infof(ctx, "merging all keys in temporary index before time %v", ts)
 	return ts
 }

@@ -96,7 +96,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 		t.Fatal("queue already exists")
 	}
 	timeout := time.Duration(rand.Int63n(int64(5 * time.Millisecond)))
-	log.Dev.Infof(ctx, "running test with a ctx cancellation of %s", timeout)
+	log.KvExec.Infof(ctx, "running test with a ctx cancellation of %s", timeout)
 	ctxBoom, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 

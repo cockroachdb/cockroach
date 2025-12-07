@@ -131,6 +131,9 @@ func (l InsertsDataLoader) InitialDataLoad(
 				var numRows int
 				flush := func() error {
 					if len(params) > 0 {
+						if table.InitialRows.MayContainDuplicates {
+							fmt.Fprint(&insertStmtBuf, ` ON CONFLICT DO NOTHING`)
+						}
 						insertStmt := insertStmtBuf.String()
 						if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
 							return errors.Wrapf(err, "failed insert into %s", tableName.String())

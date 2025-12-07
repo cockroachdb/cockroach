@@ -7,6 +7,7 @@ package backup
 
 import (
 	"context"
+	gosql "database/sql"
 	"syscall"
 	"testing"
 	"time"
@@ -106,7 +107,7 @@ func TestRestoreRetryFastFails(t *testing.T) {
 	// runtime does not exceed the max duration of the retry policy, or
 	// else very few attempts will be made.
 	maxDuration := 500 * time.Millisecond
-	if skip.Stress() {
+	if skip.DevStress() {
 		// Under stress, the restore will take longer to complete, so we need to
 		// increase max duration accordingly.
 		maxDuration = 1500 * time.Millisecond
@@ -270,4 +271,102 @@ func TestRestoreJobMessages(t *testing.T) {
 		require.Greater(t, mu.retryCount, numErrMessages)
 		return nil
 	})
+}
+
+func TestRestoreDuplicateTempTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This is a regression test for #153722. It verifies that restoring a backup
+	// that contains two temporary tables with the same name does not cause the
+	// restore to fail with an error of the form: "restoring 17 TableDescriptors
+	// from 4 databases: restoring table desc and namespace entries: table
+	// already exists"
+
+	clusterSize := 1
+	tc, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t, clusterSize)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `SET experimental_enable_temp_tables=true`)
+	sqlDB.Exec(t, `CREATE DATABASE test_db`)
+	sqlDB.Exec(t, `USE test_db`)
+	sqlDB.Exec(t, `CREATE TABLE permanent_table (id INT PRIMARY KEY, name TEXT)`)
+
+	sessions := make([]*gosql.DB, 2)
+	for i := range sessions {
+		sessions[i] = tc.Servers[0].SQLConn(t)
+		sql := sqlutils.MakeSQLRunner(sessions[i])
+		sql.Exec(t, `SET experimental_enable_temp_tables=true`)
+		sql.Exec(t, `USE test_db`)
+		sql.Exec(t, `CREATE TEMP TABLE duplicate_temp (id INT PRIMARY KEY, value TEXT)`)
+		sql.Exec(t, `INSERT INTO duplicate_temp VALUES (1, 'value')`)
+	}
+
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/duplicate_temp_backup'`)
+
+	for _, session := range sessions {
+		require.NoError(t, session.Close())
+	}
+
+	// The cluster must be empty for a full cluster restore.
+	sqlDB.Exec(t, `DROP DATABASE test_db CASCADE`)
+	sqlDB.Exec(t, `RESTORE FROM LATEST IN 'nodelocal://1/duplicate_temp_backup'`)
+
+	sqlDB.Exec(t, `DROP DATABASE test_db CASCADE`)
+	sqlDB.Exec(t, `RESTORE DATABASE test_db FROM LATEST IN 'nodelocal://1/duplicate_temp_backup'`)
+
+	result := sqlDB.QueryStr(t, `SELECT table_name FROM [SHOW TABLES] ORDER BY table_name`)
+	require.Equal(t, [][]string{{"permanent_table"}}, result)
+}
+
+func TestRestoreRetryRevert(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	droppedDescs := make(chan struct{})
+	jobPaused := make(chan struct{})
+	testKnobs := &sql.BackupRestoreTestingKnobs{
+		AfterRevertRestoreDropDescriptors: func() error {
+			close(droppedDescs)
+			<-jobPaused
+			return nil
+		},
+	}
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs.BackupRestore = testKnobs
+
+	_, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(
+		t, singleNode, backuptestutils.WithParams(params),
+	)
+	defer cleanupFn()
+
+	// We create a variety of descriptors to ensure that missing descriptors
+	// during drop do not break revert.
+	sqlDB.Exec(t, "CREATE DATABASE foo")
+	sqlDB.Exec(t, "USE foo")
+	sqlDB.Exec(t, "CREATE OR REPLACE FUNCTION bar(a INT) RETURNS INT AS 'SELECT a*a' LANGUAGE SQL;")
+	sqlDB.Exec(t, "CREATE TYPE baz AS ENUM ('a', 'b', 'c')")
+	sqlDB.Exec(t, "CREATE TABLE qux (x INT)")
+	sqlDB.Exec(t, "BACKUP DATABASE foo INTO 'nodelocal://1/backup'")
+
+	// We need restore to publish descriptors so that they will be cleaned up
+	// during restore.
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_publishing_descriptors'")
+
+	var restoreID jobspb.JobID
+	sqlDB.QueryRow(
+		t, "RESTORE DATABASE foo FROM LATEST IN 'nodelocal://1/backup' WITH detached, new_db_name='foo_restored'",
+	).Scan(&restoreID)
+
+	jobutils.WaitForJobToPause(t, sqlDB, restoreID)
+
+	sqlDB.Exec(t, "CANCEL JOB $1", restoreID)
+	<-droppedDescs
+	sqlDB.Exec(t, "PAUSE JOB $1", restoreID)
+	jobutils.WaitForJobToPause(t, sqlDB, restoreID)
+	close(jobPaused)
+	testKnobs.AfterRevertRestoreDropDescriptors = nil
+
+	sqlDB.Exec(t, "RESUME JOB $1", restoreID)
+	jobutils.WaitForJobToCancel(t, sqlDB, restoreID)
 }

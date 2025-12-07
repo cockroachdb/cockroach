@@ -73,6 +73,9 @@ translate database=system
 /Table/7{1-2}                              database system (host)
 /Table/7{2-3}                              database system (host)
 /Table/7{3-4}                              database system (host)
+/Table/7{4-5}                              database system (host)
+/Table/7{5-6}                              database system (host)
+/Table/7{6-7}                              database system (host)
 
 # Alter zone config fields on the database to ensure the effects cascade.
 exec-sql
@@ -150,6 +153,9 @@ translate database=system
 /Table/7{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/7{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/7{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/7{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/7{5-6}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/7{6-7}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 
 # Alter a named range that maps to a pseudo table ID, ensuring that its effects
 # are independent.
@@ -159,7 +165,8 @@ ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 5
 
 full-translate
 ----
-/{Min-System/NodeLiveness}                 ttl_seconds=3600 num_replicas=5
+/M{in-eta2}                                ttl_seconds=3600 num_replicas=5
+/{Meta2-System/NodeLiveness}               ttl_seconds=3600 num_replicas=5
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
 /System/{NodeLivenessMax-tsd}              range system
 /System{/tsd-tse}                          range default
@@ -233,3 +240,6 @@ full-translate
 /Table/7{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/7{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/7{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/7{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/7{5-6}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/7{6-7}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true

@@ -162,7 +162,9 @@ func TestTLSCipherRestrict(t *testing.T) {
 			})()
 			ctx := context.Background()
 
-			s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+			s := serverutils.StartServerOnly(t, base.TestServerArgs{
+				DefaultDRPCOption: base.TestDRPCDisabled,
+			})
 			defer s.Stopper().Stop(ctx)
 
 			// set the custom test ciphers

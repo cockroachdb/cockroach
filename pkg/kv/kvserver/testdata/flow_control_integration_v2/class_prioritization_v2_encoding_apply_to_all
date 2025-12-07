@@ -7,12 +7,12 @@ echo
 -- Flow token metrics from n1 after issuing 1x1MiB elastic 3x replicated write
 -- that's not admitted. We see 1*1MiB*3=3MiB deductions of elastic tokens with
 -- no corresponding returns.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -48,12 +48,12 @@ ORDER BY
 -- Flow token metrics from n1 after issuing 1x1MiB 3x replicated write
 -- that's not admitted. We see 1*1MiB*3=3MiB deductions of {regular,elastic}
 -- tokens with no corresponding returns.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -88,12 +88,12 @@ ORDER BY
 
 -- Flow token metrics from n1 after work gets admitted. All {regular,elastic}
 -- tokens deducted are returned.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;

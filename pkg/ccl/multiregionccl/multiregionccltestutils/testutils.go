@@ -135,8 +135,8 @@ func TestingCreateMultiRegionClusterWithRegionList(
 			// is used to create the MR cluster for all test cases. For
 			// bonus points, the code to re-enable this should also provide more
 			// flexibility in disabling the default test tenant by callers of this
-			// function. Re-enablement is tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			// function.
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156308),
 		},
 	})
 

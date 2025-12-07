@@ -320,6 +320,9 @@ func sendBepDataToBeaverHub(bepFilepath string) error {
 }
 
 func bazciImpl(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return errors.Newf("must provide some subcommand (`build`, `run`, `test`, `coverage`, `merge-test-xmls`, or `munge-test-xml`)")
+	}
 	if args[0] != buildSubcmd && args[0] != runSubcmd && args[0] != coverageSubcmd &&
 		args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
 		return errors.Newf("First argument must be `build`, `run`, `test`, `coverage`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
@@ -481,6 +484,9 @@ func removeEmergencyBallasts() {
 }
 
 func processTestXmls(testXmls []string) error {
+	// If any tests failed, we'll have to make sure that all generated code
+	// exists in the workspace (see #107885).
+	var generateCode sync.Once
 	if doPost() {
 		var postErrors []string
 		for _, testXml := range testXmls {
@@ -494,6 +500,17 @@ func processTestXmls(testXmls []string) error {
 			if err != nil {
 				postErrors = append(postErrors, fmt.Sprintf("Failed to parse test.xml file with the following error: %+v", err))
 				continue
+			}
+			if bazelutil.AnyFailures(testSuites) {
+				generateCode.Do(func() {
+					genCmd := exec.Command("bazel", "run", "//pkg/gen:code")
+					genCmd.Stdout = os.Stdout
+					genCmd.Stderr = os.Stderr
+					err := genCmd.Run()
+					if err != nil {
+						fmt.Printf("got error %+v from bazel run //pkg/gen:code; continuing", err)
+					}
+				})
 			}
 			if err := githubpost.PostFromTestXMLWithFormatterName(githubPostFormatterName, testSuites, extraLabels); err != nil {
 				postErrors = append(postErrors, fmt.Sprintf("Failed to process %s with the following error: %+v", testXml, err))

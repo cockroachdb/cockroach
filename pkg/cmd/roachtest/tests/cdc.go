@@ -20,6 +20,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"maps"
 	"math/big"
 	"math/rand"
 	"net"
@@ -31,6 +32,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -57,8 +59,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	roachprodaws "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -782,11 +784,17 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster, opts ...o
 	settings.ClusterSettings["changefeed.slow_span_log_threshold"] = "30s"
 	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
 
-	// Randomly set a quantization interval since metamorphic settings
-	// don't extend to roachtests.
-	quantization := fmt.Sprintf("%ds", rand.Intn(30))
-	settings.ClusterSettings["changefeed.resolved_timestamp.granularity"] = quantization
-	t.Status(fmt.Sprintf("changefeed.resolved_timestamp.granularity: %s", quantization))
+	// Set cluster settings that we want to test metamorphically to random values
+	// since metamorphic settings don't extend to roachtests.
+	{
+		quantization := fmt.Sprintf("%ds", rand.Intn(30))
+		settings.ClusterSettings["changefeed.resolved_timestamp.granularity"] = quantization
+		t.Status(fmt.Sprintf("changefeed.resolved_timestamp.granularity: %s", quantization))
+
+		perTableTracking := fmt.Sprintf("%t", rand.Intn(2) == 0)
+		settings.ClusterSettings["changefeed.progress.per_table_tracking.enabled"] = perTableTracking
+		t.Status(fmt.Sprintf("changefeed.progress.per_table_tracking.enabled: %s", perTableTracking))
+	}
 
 	settings.Env = append(settings.Env, envVars...)
 
@@ -1039,6 +1047,7 @@ type cdcCheckpointType int
 const (
 	cdcNormalCheckpoint cdcCheckpointType = iota
 	cdcShutdownCheckpoint
+	cdcFrontierPersistence
 )
 
 // runCDCInitialScanRollingRestart runs multiple initial-scan-only changefeeds
@@ -1086,8 +1095,9 @@ func runCDCInitialScanRollingRestart(
 	// Setup a large table with 1M rows and a small table with 5 rows.
 	// Keep ranges off n1 so that our plans use 2, 3, and 4.
 	const (
-		largeRowCount = 1000000
-		smallRowCount = 5
+		largeRowCount   = 1000000
+		largeSplitCount = 500
+		smallRowCount   = 5
 	)
 	t.L().Printf("setting up test data...")
 	setupStmts := []string{
@@ -1096,24 +1106,31 @@ func runCDCInitialScanRollingRestart(
 		`ALTER TABLE large SCATTER`,
 		fmt.Sprintf(`CREATE TABLE small (id PRIMARY KEY) AS SELECT generate_series(%d, %d)`, largeRowCount+1, largeRowCount+smallRowCount),
 		`ALTER TABLE small SCATTER`,
+		// Split some bigger chunks up to scatter it a bit more.
+		fmt.Sprintf(`ALTER TABLE large SPLIT AT SELECT id FROM large ORDER BY random() LIMIT %d`, largeSplitCount/4),
+		`ALTER TABLE large SCATTER`,
+		// Finish splitting, so that drained ranges spread out evenly.
+		fmt.Sprintf(`ALTER TABLE large SPLIT AT SELECT id FROM large ORDER BY random() LIMIT %d`, largeSplitCount),
+		`ALTER TABLE large SCATTER`,
 	}
 	switch checkpointType {
 	case cdcNormalCheckpoint:
 		setupStmts = append(setupStmts,
-			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '1s'`,
+			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '5s'`,
 			`SET CLUSTER SETTING changefeed.shutdown_checkpoint.enabled = 'false'`,
+			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '10m'`,
 		)
 	case cdcShutdownCheckpoint:
-		const largeSplitCount = 5
 		setupStmts = append(setupStmts,
 			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '0'`,
 			`SET CLUSTER SETTING changefeed.shutdown_checkpoint.enabled = 'true'`,
-			// Split some bigger chunks up to scatter it a bit more.
-			fmt.Sprintf(`ALTER TABLE large SPLIT AT SELECT id FROM large ORDER BY random() LIMIT %d`, largeSplitCount/4),
-			`ALTER TABLE large SCATTER`,
-			// Finish splitting, so that drained ranges spread out evenly.
-			fmt.Sprintf(`ALTER TABLE large SPLIT AT SELECT id FROM large ORDER BY random() LIMIT %d`, largeSplitCount),
-			`ALTER TABLE large SCATTER`,
+			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '10m'`,
+		)
+	case cdcFrontierPersistence:
+		setupStmts = append(setupStmts,
+			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '0'`,
+			`SET CLUSTER SETTING changefeed.shutdown_checkpoint.enabled = 'false'`,
+			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '5s'`,
 		)
 	}
 	for _, s := range setupStmts {
@@ -1179,7 +1196,9 @@ func runCDCInitialScanRollingRestart(
 			t.L().Printf("starting changefeed %d...", i)
 			var job int
 			if err := db.QueryRow(
-				fmt.Sprintf("CREATE CHANGEFEED FOR TABLE large, small INTO 'webhook-%s/?insecure_tls_skip_verify=true' WITH initial_scan='only'", sinkURL),
+				fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE large, small
+INTO 'webhook-%s/?insecure_tls_skip_verify=true'
+WITH initial_scan='only', min_checkpoint_frequency='1s'`, sinkURL),
 			).Scan(&job); err != nil {
 				t.Fatal(err)
 			}
@@ -1786,9 +1805,11 @@ func runMessageTooLarge(ctx context.Context, t test.Test, c cluster.Cluster) {
 }
 
 type multiTablePTSBenchmarkParams struct {
-	numTables int
-	numRows   int
-	duration  string
+	numTables   int
+	numRanges   int
+	numRows     int
+	duration    string
+	perTablePTS bool
 }
 
 // runCDCMultiTablePTSBenchmark is a benchmark for changefeeds with multiple tables,
@@ -1812,8 +1833,17 @@ func runCDCMultiTablePTSBenchmark(
 		t.Fatalf("failed to set cluster settings: %v", err)
 	}
 
-	initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --num-tables=%d {pgurl%s}",
-		params.numRows, params.numTables, ct.crdbNodes.RandNode())
+	numRanges := 10
+	if params.numRanges > 0 {
+		numRanges = params.numRanges
+	}
+
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp.per_table.enabled = $1", params.perTablePTS); err != nil {
+		t.Fatalf("failed to set per-table protected timestamps: %v", err)
+	}
+
+	initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --ranges=%d --tables=%d {pgurl%s}",
+		params.numRows, numRanges, params.numTables, ct.crdbNodes.RandNode())
 	if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), initCmd); err != nil {
 		t.Fatalf("failed to initialize bank tables: %v", err)
 	}
@@ -1821,7 +1851,7 @@ func runCDCMultiTablePTSBenchmark(
 	ct.workloadWg.Add(1)
 	ct.mon.Go(func(ctx context.Context) error {
 		defer ct.workloadWg.Done()
-		workloadCmd := fmt.Sprintf("./cockroach workload run bank --rows=%d --duration=%s --num-tables=%d {pgurl%s}",
+		workloadCmd := fmt.Sprintf("./cockroach workload run bank --rows=%d --duration=%s --tables=%d {pgurl%s}",
 			params.numRows, params.duration, params.numTables, ct.crdbNodes)
 		return c.RunE(ctx, option.WithNodes(ct.workloadNode), workloadCmd)
 	})
@@ -1852,19 +1882,19 @@ func runCDCMultiTablePTSBenchmark(
 
 	ct.waitForWorkload()
 
-	t.Status("workload finished, verifying metrics")
-
-	// These metrics are in nanoseconds, so we are asserting that both
-	// of these latency metrics are less than 10 milliseconds.
-	ct.verifyMetrics(ctx, verifyMetricsUnderThreshold([]string{
-		"changefeed_stage_pts_manage_latency",
-		"changefeed_stage_pts_create_latency",
-	}, float64(10*time.Millisecond)))
+	// TODO(#154447): Send values of changefeed_stage_pts_manage_latency and
+	// changefeed_stage_pts_manage_error_latency metrics to RoachPerf.
 
 	t.Status("multi-table PTS benchmark finished")
 }
 
 func configureDBForMultiTablePTSBenchmark(db *gosql.DB) error {
+	// Multi-table PTS benchmarking should be able to test with more tables
+	// than the default limit set here. Setting this to 0 disables the limit.
+	if _, err := db.Exec("SET CLUSTER SETTING sql.schema.approx_max_object_count = 0"); err != nil {
+		return err
+	}
+
 	// This is used to trigger frequent garbage collection and
 	// protected timestamp updates.
 	if _, err := db.Exec("ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1"); err != nil {
@@ -1899,12 +1929,172 @@ func configureDBForMultiTablePTSBenchmark(db *gosql.DB) error {
 	return nil
 }
 
+func getDiagramProcessors(ctx context.Context, db *gosql.DB) ([]any, error) {
+	var diagramURL string
+	diagramQuery := `SELECT value 
+	FROM system.job_info ji
+	INNER JOIN system.jobs j ON ji.job_id = j.id
+	WHERE j.job_type = 'CHANGEFEED' AND ji.info_key LIKE '~dsp-diag-url-%'`
+	if err := db.QueryRowContext(ctx, diagramQuery).Scan(&diagramURL); err != nil {
+		return nil, err
+	}
+	diagram, err := execinfrapb.FromURL(diagramURL)
+	if err != nil {
+		return nil, err
+	}
+	diagramJSON, err := json.Marshal(diagram)
+	if err != nil {
+		return nil, err
+	}
+	var flow map[string]any
+	if err := json.Unmarshal(diagramJSON, &flow); err != nil {
+		return nil, err
+	}
+	processors, ok := flow["processors"].([]any)
+	if !ok {
+		return nil, fmt.Errorf("processors not found in flow")
+	}
+	return processors, nil
+}
+
+type ChangefeedDistribution struct {
+	ZoneToSpansWatched map[string]int
+	TotalSpansWatched  int
+	TotalAggregators   int
+}
+
+func getChangefeedDistribution(
+	processors []any, nodeToZone map[int]string, t test.Test,
+) ChangefeedDistribution {
+	changefeedDistribution := ChangefeedDistribution{
+		ZoneToSpansWatched: make(map[string]int),
+		TotalSpansWatched:  0,
+		TotalAggregators:   0,
+	}
+	for _, p := range processors {
+		procMap, ok := p.(map[string]any)
+		if !ok {
+			t.Fatalf("processor not a map")
+		}
+		nodeIdx, ok := procMap["nodeIdx"].(float64)
+		require.True(t, ok, "node idx not found in processor")
+		core, ok := procMap["core"].(map[string]any)
+		require.True(t, ok, "core not found in processor")
+		title, ok := core["title"].(string)
+		require.True(t, ok, "title not found in core")
+		if strings.HasPrefix(title, "ChangeAggregator") {
+			changefeedDistribution.TotalAggregators++
+			details := core["details"].([]any)
+			for _, detail := range details {
+				if strings.HasPrefix(detail.(string), "Watches") {
+					re := regexp.MustCompile(`Watches \[(\d+)\]:`)
+					matches := re.FindStringSubmatch(detail.(string))
+					if len(matches) > 1 {
+						numWatches, err := strconv.Atoi(matches[1])
+						require.NoError(t, err)
+						changefeedDistribution.TotalSpansWatched += numWatches
+						changefeedDistribution.ZoneToSpansWatched[nodeToZone[int(nodeIdx)]] += numWatches
+					}
+				}
+			}
+		}
+	}
+	return changefeedDistribution
+}
+
+func verifyLeaseHolderLocality(db *gosql.DB, t test.Test, primaryRegion string) {
+	leaseHolderQuery := `SELECT NOT EXISTS (
+	SELECT 1
+	FROM [SHOW CLUSTER RANGES WITH TABLES, DETAILS]
+	WHERE database_name = 'tpcc'
+		AND (lease_holder_locality IS DISTINCT FROM $1::STRING OR lease_holder_locality IS NULL)
+)`
+	t.L().Printf("Waiting for all lease holders to be in region %s", primaryRegion)
+	start := timeutil.Now()
+	ok := false
+	for {
+		if timeutil.Since(start) > 5*time.Minute {
+			t.Fatalf("Timeout waiting for lease holders to be in region %s; waited for %s", primaryRegion, timeutil.Since(start))
+		}
+		require.NoError(t, db.QueryRow(leaseHolderQuery, primaryRegion).Scan(&ok))
+		if ok {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+}
+
 func registerCDC(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		// This test
+		// 1. Creates a cluster with 3 nodes each in us-east and us-west;
+		// 2. Runs a tpcc workload, then congigures tpcc database to have lease holders in region us-west;
+		// 3. Creates a changefeed with execution locality set to us-east;
+		// 4. Gets the changefeed diagram and creates mappings;
+		// 5. Verifies that spans are assigned to multiple change aggregators in region us-east.
+
+		// This test is used to verify that ranges are evenly distributed across
+		// change aggregators in the execution_locality region while targeting tables
+		// whose primary region is different. In issue #2955, in that scenario,
+		// a single change aggregator (on the gateway node) would watch all the ranges.
+		// The above scenario occured with the older bin-packing oracle rather than
+		// the bulk oracle.
+		Name:             "cdc/multi-region-execution-locality-tpcc",
+		Owner:            registry.OwnerCDC,
+		Cluster:          r.MakeClusterSpec(7, spec.Geo(), spec.GatherCores(), spec.GCEZones("us-east1-b,us-west1-b")),
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			nodeToZone := map[int]string{
+				0: "us-east1-b",
+				1: "us-east1-b",
+				2: "us-east1-b",
+				3: "us-west1-b",
+				4: "us-west1-b",
+				5: "us-west1-b",
+			}
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 20})
+
+			var err error
+			_, err = ct.DB().Exec(`ALTER DATABASE tpcc 
+CONFIGURE ZONE USING 
+	constraints = '{+region=us-west1: 1, +region=us-east1: 1}', 
+	lease_preferences = '[[+region=us-west1]]', num_replicas = 3`)
+			require.NoError(t, err)
+
+			// Verify lease holders are in us-west1-b.
+			verifyLeaseHolderLocality(ct.DB(), t, "cloud=gce,region=us-west1,zone=us-west1-b")
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: cloudStorageSink,
+				targets:  allTpccTargets,
+				opts: map[string]string{
+					"execution_locality": "'region=us-east1'",
+					"initial_scan":       "'only'",
+				},
+			})
+			ct.waitForWorkload()
+			feed.waitForCompletion()
+
+			processors, err := getDiagramProcessors(ctx, ct.DB())
+			require.NoError(t, err)
+
+			// Verify changefeed aggregators are distributed across nodes in region us-east.
+			changefeedDistribution := getChangefeedDistribution(processors, nodeToZone, t)
+			require.Greater(t, changefeedDistribution.TotalAggregators, 1)
+			require.ElementsMatch(t, []string{"us-east1-b"}, slices.Collect(maps.Keys(changefeedDistribution.ZoneToSpansWatched)))
+			require.Equal(t, changefeedDistribution.ZoneToSpansWatched["us-east1-b"], changefeedDistribution.TotalSpansWatched)
+			require.Greater(t, changefeedDistribution.TotalSpansWatched, 0)
+		},
+	})
 	r.Add(registry.TestSpec{
 		Name:      "cdc/initial-scan-only",
 		Owner:     registry.OwnerCDC,
 		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
 		// This test uses google cloudStorageSink because it is the fastest,
 		// but it is not a requirement for this test. The sink could be
 		// chosen on a per cloud basis if we want to run this on other clouds.
@@ -1951,6 +2141,20 @@ func registerCDC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCInitialScanRollingRestart(ctx, t, c, cdcShutdownCheckpoint)
 		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/initial-scan-rolling-restart/frontier-persistence",
+		Owner:            registry.OwnerCDC,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          30 * time.Minute,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runCDCInitialScanRollingRestart(ctx, t, c, cdcFrontierPersistence)
+		},
+		// TODO(#155015): Unskip this test.
+		Skip: "frontier persistence will not happen during an initial-scan only changefeed " +
+			"without periodic aggregator frontier flushes",
 	})
 	r.Add(registry.TestSpec{
 		Name:             "cdc/fine-grained-checkpointing",
@@ -2074,7 +2278,7 @@ func registerCDC(r registry.Registry) {
 		Name:      "cdc/initial-scan-only/parquet",
 		Owner:     registry.OwnerCDC,
 		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		Cluster:   r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
 		// This test uses google cloudStorageSink because it is the fastest,
 		// but it is not a requirement for this test. The sink could be
 		// chosen on a per cloud basis if we want to run this on other clouds.
@@ -2103,7 +2307,7 @@ func registerCDC(r registry.Registry) {
 		Skip:             "#119295",
 		Owner:            registry.OwnerCDC,
 		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -2370,7 +2574,7 @@ func registerCDC(r registry.Registry) {
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 10 * time.Minute,
-				steadyLatency:      time.Minute,
+				steadyLatency:      3 * time.Minute,
 			})
 			ct.waitForWorkload()
 		},
@@ -2565,7 +2769,7 @@ func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "cdc/kafka-auth-msk",
 		Owner:            registry.OwnerCDC,
-		Cluster:          r.MakeClusterSpec(1, spec.Arch(vm.ArchAMD64)),
+		Cluster:          r.MakeClusterSpec(1, spec.Arch(spec.OnlyAMD64)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.OnlyAWS,
 		Suites:           registry.Suites(registry.Nightly),
@@ -2600,7 +2804,7 @@ func registerCDC(r registry.Registry) {
 		Owner:     `cdc`,
 		Benchmark: true,
 		// Only Kafka 3 supports Arm64, but the broker setup for Oauth used only works with Kafka 2
-		Cluster: r.MakeClusterSpec(4, spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		Cluster: r.MakeClusterSpec(4, spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
 		Leases:  registry.MetamorphicLeases,
 		// Disabled on IBM due to lack of Kafka support on s390x.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
@@ -2647,7 +2851,7 @@ func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "cdc/kafka-topics",
 		Owner:   `cdc`,
-		Cluster: r.MakeClusterSpec(4, spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		Cluster: r.MakeClusterSpec(4, spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
 		Leases:  registry.MetamorphicLeases,
 		// Disabled on IBM due to lack of Kafka support on s390x.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
@@ -2709,7 +2913,7 @@ func registerCDC(r registry.Registry) {
 				logSearchStr := `(client/metadata fetching metadata for|updating kafka metadata for topics|fetching metadata to learn its partitions|waiting for metadata for new topic)`
 				results, checkLogsErr := ct.cluster.RunWithDetails(ct.ctx, t.L(),
 					option.WithNodes(ct.cluster.Range(1, c.Spec().NodeCount-1)),
-					fmt.Sprintf(`grep -E "%s" logs/cockroach.log`, logSearchStr))
+					fmt.Sprintf(`grep -E "%s" logs/cockroach-changefeed.log`, logSearchStr))
 				if checkLogsErr != nil {
 					t.Fatal(checkLogsErr)
 				}
@@ -2777,7 +2981,7 @@ func registerCDC(r registry.Registry) {
 		Owner:            `cdc`,
 		CompatibleClouds: registry.OnlyAzure,
 		// The Azure CLI only packages AMD64 binaries in its deb installer, so lock to AMD64.
-		Cluster: r.MakeClusterSpec(2, spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
+		Cluster: r.MakeClusterSpec(2, spec.WorkloadNode(), spec.Arch(spec.OnlyAMD64)),
 		Leases:  registry.MetamorphicLeases,
 		Suites:  registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -2844,12 +3048,13 @@ func registerCDC(r registry.Registry) {
 		Run:              runCDCMultipleSchemaChanges,
 	})
 	r.Add(registry.TestSpec{
-		Name:             "cdc/tpcc-100/10min/sink=kafka/envelope=enriched",
-		Owner:            registry.OwnerCDC,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(16)),
-		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllClouds,
+		Name:      "cdc/tpcc-100/10min/sink=kafka/envelope=enriched",
+		Owner:     registry.OwnerCDC,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(16)),
+		Leases:    registry.MetamorphicLeases,
+		// Disabled on IBM due to lack of Kafka support on s390x.
+		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -2896,23 +3101,132 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptIBM,
 		Run:              runMessageTooLarge,
 	})
-	r.Add(registry.TestSpec{
-		Name:             "cdc/multi-table-pts-benchmark",
-		Owner:            registry.OwnerCDC,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
-		CompatibleClouds: registry.AllClouds,
-		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          1 * time.Hour,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			params := multiTablePTSBenchmarkParams{
-				numTables: 500,
-				numRows:   100,
-				duration:  "20m",
-			}
-			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
-		},
-	})
+	for _, perTablePTS := range []bool{false, true} {
+		for _, config := range []struct {
+			numTables    int
+			numRanges    int
+			timeoutHours int
+		}{
+			{numTables: 500, numRanges: 10, timeoutHours: 1},
+			{numTables: 5000, numRanges: 10, timeoutHours: 1},
+			{numTables: 50000, numRanges: 1, timeoutHours: 2}, // Splitting tables into ranges slows down test setup at this scale
+		} {
+			r.Add(registry.TestSpec{
+				Name:             fmt.Sprintf("cdc/multi-table-pts-benchmark/per-table-pts=%t/num-tables=%d/num-ranges=%d", perTablePTS, config.numTables, config.numRanges),
+				Owner:            registry.OwnerCDC,
+				Benchmark:        true,
+				Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+				CompatibleClouds: registry.AllClouds,
+				Suites:           registry.Suites(registry.Nightly),
+				Timeout:          time.Duration(config.timeoutHours) * time.Hour,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					params := multiTablePTSBenchmarkParams{
+						numTables:   config.numTables,
+						numRanges:   config.numRanges,
+						numRows:     100,
+						duration:    "20m",
+						perTablePTS: perTablePTS,
+					}
+					runCDCMultiTablePTSBenchmark(ctx, t, c, params)
+				},
+			})
+		}
+	}
+	for _, interval := range []string{
+		"5s",  // min interval
+		"30s", // default interval
+		"10m", // max interval
+	} {
+		for _, cfg := range []struct {
+			tables int
+			ranges int
+		}{
+			{tables: 1, ranges: 10_000},
+			{tables: 10, ranges: 1_000},
+			{tables: 100, ranges: 100},
+			{tables: 1_000, ranges: 10},
+			{tables: 10_000, ranges: 1},
+		} {
+			r.Add(registry.TestSpec{
+				Name: "cdc/frontier-persistence-benchmark" +
+					fmt.Sprintf("/interval=%s/tables=%d/ranges=%d", interval, cfg.tables, cfg.ranges),
+				Owner:            registry.OwnerCDC,
+				Benchmark:        true,
+				Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+				CompatibleClouds: registry.AllClouds,
+				Suites:           registry.Suites(registry.Nightly),
+				Timeout:          2 * time.Hour,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					ct := newCDCTester(ctx, t, c)
+					defer ct.Close()
+
+					db := ct.DB()
+
+					// Configure various cluster settings.
+					for name, value := range map[string]string{
+						"changefeed.progress.frontier_persistence.interval": fmt.Sprintf("'%s'", interval),
+						// Disable span-level checkpointing since it's not necessary
+						// when frontier persistence is on.
+						"changefeed.span_checkpoint.interval": "'0'",
+						// Disable per-table PTS to avoid impact on results.
+						"changefeed.protect_timestamp.per_table.enabled": "false",
+					} {
+						stmt := fmt.Sprintf(`SET CLUSTER SETTING %s = %s`, name, value)
+						if _, err := db.ExecContext(ctx, stmt); err != nil {
+							t.Fatalf("failed to run %q: %v", stmt, err)
+						}
+					}
+
+					// Initialize bank workload with multiple tables with multiple ranges.
+					// Each range will have a single row (or 2 when there's a single range)
+					// to maximize the likelihood of unmerged spans in the span frontier.
+					rows := max(cfg.ranges, 2)
+					initCmd := fmt.Sprintf(
+						"./cockroach workload init bank --tables=%d --ranges=%d --rows=%d {pgurl%s}",
+						cfg.tables, cfg.ranges, rows, ct.crdbNodes.RandNode())
+					if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), initCmd); err != nil {
+						t.Fatalf("failed to initialize bank tables: %v", err)
+					}
+
+					// Run bank workload.
+					ct.workloadWg.Add(1)
+					ct.mon.Go(func(ctx context.Context) error {
+						defer ct.workloadWg.Done()
+						workloadCmd := fmt.Sprintf(
+							"./cockroach workload run bank --tables=%d --ranges=%d --rows=%d --duration=30m {pgurl%s}",
+							cfg.tables, cfg.ranges, rows, ct.crdbNodes)
+						return c.RunE(ctx, option.WithNodes(ct.workloadNode), workloadCmd)
+					})
+
+					// Create changefeed targeting all the bank tables.
+					targets := make([]string, cfg.tables)
+					if cfg.tables == 1 {
+						targets[0] = "bank.bank"
+					} else {
+						for i := range targets {
+							targets[i] = fmt.Sprintf("bank.bank_%d", i)
+						}
+					}
+
+					feed := ct.newChangefeed(feedArgs{
+						sinkType: nullSink,
+						targets:  targets,
+						opts: map[string]string{
+							"initial_scan":             "'no'",
+							"resolved":                 "'3s'",
+							"min_checkpoint_frequency": "'30s'",
+						},
+					})
+
+					ct.runFeedLatencyVerifier(feed, latencyTargets{
+						steadyLatency: 2 * time.Minute,
+					})
+
+					ct.waitForWorkload()
+				},
+			})
+		}
+	}
 }
 
 const (
@@ -4399,7 +4713,7 @@ const createMSKTopicBinPath = "/tmp/create-msk-topic"
 var setupMskTopicScript = fmt.Sprintf(`
 #!/bin/bash
 set -e -o pipefail
-wget https://go.dev/dl/go1.23.12.linux-amd64.tar.gz -O /tmp/go.tar.gz
+wget https://go.dev/dl/go1.25.3.linux-amd64.tar.gz -O /tmp/go.tar.gz
 sudo rm -rf /usr/local/go
 sudo tar -C /usr/local -xzf /tmp/go.tar.gz
 echo export PATH=$PATH:/usr/local/go/bin >> ~/.profile
@@ -4586,41 +4900,6 @@ func verifyMetricsNonZero(names ...string) func(metrics map[string]*prompb.Metri
 
 			for _, m := range fam.Metric {
 				if m.Counter.GetValue() > 0 {
-					found[name] = struct{}{}
-				}
-			}
-
-			if len(found) == len(names) {
-				return true
-			}
-		}
-		return false
-	}
-}
-
-func verifyMetricsUnderThreshold(
-	names []string, threshold float64,
-) func(metrics map[string]*prompb.MetricFamily) (ok bool) {
-	namesMap := make(map[string]struct{}, len(names))
-	for _, name := range names {
-		namesMap[name] = struct{}{}
-	}
-
-	return func(metrics map[string]*prompb.MetricFamily) (ok bool) {
-		found := map[string]struct{}{}
-
-		for name, fam := range metrics {
-			if _, ok := namesMap[name]; !ok {
-				continue
-			}
-
-			for _, m := range fam.Metric {
-				if m.Histogram.GetSampleCount() == 0 {
-					continue
-				}
-
-				observedValue := m.Histogram.GetSampleSum() / float64(m.Histogram.GetSampleCount())
-				if observedValue < threshold {
 					found[name] = struct{}{}
 				}
 			}

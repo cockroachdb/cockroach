@@ -58,10 +58,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		// Note that we delay adding the annotation about the distribution until
 		// after the plan is finalized (when the physical plan is successfully
 		// created).
-		distribution, _ := getPlanDistribution(
-			params.ctx, params.p.Descriptors().HasUncommittedTypes(),
-			params.extendedEvalCtx.SessionData(), plan.main, &params.p.distSQLVisitor,
-		)
+		distribution, _ := params.p.getPlanDistribution(params.ctx, plan.main)
 
 		outerSubqueries := params.p.curPlan.subqueryPlans
 		distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
@@ -121,6 +118,16 @@ func (e *explainPlanNode) startExec(params runParams) error {
 					return err
 				}
 			}
+		}
+
+		if len(params.p.stmt.Hints) > 0 {
+			var hintCount uint64
+			for _, hint := range params.p.stmt.Hints {
+				if hint.Enabled && hint.Err == nil {
+					hintCount += 1
+				}
+			}
+			ob.AddStmtHintCount(hintCount)
 		}
 
 		if e.options.Flags[tree.ExplainFlagJSON] {
@@ -189,25 +196,15 @@ func emitExplain(
 	codec keys.SQLCodec,
 	explainPlan *explain.Plan,
 	createPostQueryPlanIfMissing bool,
-) (err error) {
+) (retErr error) {
 	// Guard against bugs in the explain code.
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal and runtime errors without
-			// having to add error checks everywhere throughout the code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			// Note that we don't catch anything in debug builds, so that failures are
-			// more visible.
-			if ok, e := errorutil.ShouldCatch(r); ok && !buildutil.CrdbTestBuild {
-				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
+	defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
+		if buildutil.CrdbTestBuild && caughtErr != nil {
+			// Don't catch anything in debug builds, so that failures are more
+			// visible.
+			panic(caughtErr)
 		}
-	}()
+	})
 
 	if explainPlan == nil {
 		return errors.AssertionFailedf("no plan")

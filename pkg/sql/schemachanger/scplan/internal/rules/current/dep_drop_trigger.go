@@ -28,4 +28,36 @@ func init() {
 			}
 		},
 	)
+
+	// Ensure that trigger dependencies are cleared before any external table
+	// references.
+	registerDepRuleForDrop("trigger references cleaned before columns",
+		scgraph.Precedence,
+		"trigger dependency", "column",
+		scpb.Status_ABSENT, scpb.Status_WRITE_ONLY,
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.TriggerDeps)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				FilterElements("trigger refers to column", from, to, func(trigger *scpb.TriggerDeps, column *scpb.Column) bool {
+					// Note: This rule is fairly expensive since it needs to join on
+					// all columns in a plan. Sadly, the current embedding makes this
+					// suboptimal so we can only use a filter here.
+					for _, colRef := range trigger.UsesRelations {
+						// Check if it refers to this table.
+						if colRef.ID != column.TableID {
+							continue
+						}
+						// Check if it refers to this column.
+						for _, columnID := range colRef.ColumnIDs {
+							if columnID == column.ColumnID {
+								return true
+							}
+						}
+					}
+					// Otherwise, no references exist.
+					return false
+				}),
+			}
+		})
 }

@@ -239,10 +239,10 @@ func newRootTxnCoordSender(
 	txn.AssertInitialized(context.TODO())
 
 	if txn.Status != roachpb.PENDING {
-		log.Dev.Fatalf(context.TODO(), "unexpected non-pending txn in RootTransactionalSender: %s", txn)
+		log.KvExec.Fatalf(context.TODO(), "unexpected non-pending txn in RootTransactionalSender: %s", txn)
 	}
 	if txn.Sequence != 0 {
-		log.Dev.Fatalf(context.TODO(), "cannot initialize root txn with seq != 0: %s", txn)
+		log.KvExec.Fatalf(context.TODO(), "cannot initialize root txn with seq != 0: %s", txn)
 	}
 
 	tcs := &TxnCoordSender{
@@ -281,9 +281,6 @@ func newRootTxnCoordSender(
 		timeSource: timeutil.DefaultTimeSource{},
 		txn:        &tcs.mu.txn,
 	}
-	tcs.interceptorAlloc.txnWriteBuffer.init(
-		&tcs.interceptorAlloc.txnPipeliner,
-	)
 
 	tcs.initCommonInterceptors(tcf, txn, kv.RootTxn)
 
@@ -363,6 +360,7 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		allowConcurrentRequests: typ == kv.LeafTxn,
 	}
 	tc.interceptorAlloc.txnSeqNumAllocator.writeSeq = txn.Sequence
+	tc.interceptorAlloc.txnWriteBuffer.init(&tc.interceptorAlloc.txnPipeliner)
 }
 
 func (tc *TxnCoordSender) connectInterceptors() {
@@ -382,7 +380,7 @@ func newLeafTxnCoordSender(
 	txn.AssertInitialized(context.TODO())
 
 	if txn.Status != roachpb.PENDING {
-		log.Dev.Fatalf(context.TODO(), "unexpected non-pending txn in LeafTransactionalSender: %s", tis)
+		log.KvExec.Fatalf(context.TODO(), "unexpected non-pending txn in LeafTransactionalSender: %s", tis)
 	}
 
 	tcs := &TxnCoordSender{
@@ -529,8 +527,7 @@ func (tc *TxnCoordSender) Send(
 		return nil, pErr
 	}
 
-	if ba.IsSingleEndTxnRequest() && !tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() &&
-		!tc.interceptorAlloc.txnWriteBuffer.hasBufferedWrites() {
+	if ba.IsSingleEndTxnRequest() && !tc.hasAcquiredLocksOrBufferedWritesLocked() {
 		return nil, tc.finalizeNonLockingTxnLocked(ctx, ba)
 	}
 
@@ -539,7 +536,7 @@ func (tc *TxnCoordSender) Send(
 
 	// Associate the txnID with the trace.
 	if tc.mu.txn.ID == (uuid.UUID{}) {
-		log.Dev.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
+		log.KvExec.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
 	}
 	if sp.IsVerbose() {
 		sp.SetTag("txnID", attribute.StringValue(tc.mu.txn.ID.String()))
@@ -676,7 +673,7 @@ func (tc *TxnCoordSender) Send(
 // docs/RFCS/20200811_non_blocking_txns.md.
 func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) error {
 	if tc.mu.txn.Status != roachpb.PREPARED && tc.mu.txn.Status != roachpb.COMMITTED {
-		log.Dev.Fatalf(ctx, "maybeCommitWait called when not prepared/committed")
+		log.KvExec.Fatalf(ctx, "maybeCommitWait called when not prepared/committed")
 	}
 	if tc.mu.commitWaitDeferred && !deferred {
 		// If this is an automatic commit-wait call and the user of this
@@ -789,7 +786,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			// unexpected for it to find the transaction already in a txnFinalized
 			// state. This may be a bug, so log a stack trace.
 			stack := debugutil.Stack()
-			log.Dev.Errorf(ctx, "%s. stack:\n%s", msg, stack)
+			log.KvExec.Errorf(ctx, "%s. stack:\n%s", msg, stack)
 		}
 		reason := kvpb.TransactionStatusError_REASON_UNKNOWN
 		if tc.mu.txn.Status == roachpb.COMMITTED {
@@ -1030,7 +1027,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 		if errTxnID != txnID {
 			// KV should not return errors for transactions other than the one in
 			// the BatchRequest.
-			log.Dev.Fatalf(ctx, "retryable error for the wrong txn. ba.Txn: %s. pErr: %s",
+			log.KvExec.Fatalf(ctx, "retryable error for the wrong txn. ba.Txn: %s. pErr: %s",
 				ba.Txn, pErr)
 		}
 		return kvpb.NewError(tc.handleRetryableErrLocked(ctx, pErr))
@@ -1097,7 +1094,7 @@ func sanityCheckErrWithTxn(
 			Detail: "you have encountered a known bug in CockroachDB, please consider " +
 				"reporting on the Github issue or reach out via Support.",
 		}))
-	log.Dev.Warningf(ctx, "%v", err)
+	log.KvExec.Warningf(ctx, "%v", err)
 	return err
 }
 
@@ -1481,7 +1478,7 @@ func (tc *TxnCoordSender) UpdateRootWithLeafFinalState(
 	defer tc.mu.Unlock()
 
 	if tc.mu.txn.ID == (uuid.UUID{}) {
-		log.Dev.Fatalf(ctx, "cannot UpdateRootWithLeafFinalState on unbound TxnCoordSender. input id: %s", tfs.Txn.ID)
+		log.KvExec.Fatalf(ctx, "cannot UpdateRootWithLeafFinalState on unbound TxnCoordSender. input id: %s", tfs.Txn.ID)
 	}
 
 	// Sanity check: don't combine if the tfs is for a different txn ID.
@@ -1528,11 +1525,6 @@ func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
 
 // Step is part of the TxnSender interface.
 func (tc *TxnCoordSender) Step(ctx context.Context, allowReadTimestampStep bool) error {
-	// TODO(nvanbenschoten): it should be possible to make this assertion, but
-	// the API is currently misused by the connExecutor. See #86162.
-	// if tc.typ != kv.RootTxn {
-	//	return errors.AssertionFailedf("cannot step in non-root txn")
-	// }
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if allowReadTimestampStep && tc.shouldStepReadTimestampLocked() {
@@ -1691,6 +1683,13 @@ func (tc *TxnCoordSender) HasPerformedWrites() bool {
 	return tc.hasPerformedWritesLocked()
 }
 
+// HasBufferedWrites is part of the TxnSender interface.
+func (tc *TxnCoordSender) HasBufferedWrites() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.hasBufferedWritesLocked()
+}
+
 // TestingShouldRetry is part of the TxnSender interface.
 func (tc *TxnCoordSender) TestingShouldRetry() bool {
 	tc.mu.Lock()
@@ -1714,4 +1713,12 @@ func (tc *TxnCoordSender) hasPerformedReadsLocked() bool {
 
 func (tc *TxnCoordSender) hasPerformedWritesLocked() bool {
 	return tc.mu.txn.Sequence != 0
+}
+
+func (tc *TxnCoordSender) hasBufferedWritesLocked() bool {
+	return tc.interceptorAlloc.txnWriteBuffer.hasBufferedWrites()
+}
+
+func (tc *TxnCoordSender) hasAcquiredLocksOrBufferedWritesLocked() bool {
+	return tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() || tc.interceptorAlloc.txnWriteBuffer.hasBufferedWrites()
 }

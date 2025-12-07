@@ -45,9 +45,9 @@ sudo tar -C /usr --strip-components=1 -zxf /tmp/cmake.tgz && rm /tmp/cmake.tgz
 
 # Install Go.
 trap 'rm -f /tmp/go.tgz' EXIT
-curl -fsSL https://dl.google.com/go/go1.23.12.linux-amd64.tar.gz >/tmp/go.tgz
+curl -fsSL https://dl.google.com/go/go1.25.3.linux-amd64.tar.gz >/tmp/go.tgz
 sha256sum -c - <<EOF
-d3847fef834e9db11bf64e3fb34db9c04db14e068eeb064f49af747010454f90  /tmp/go.tgz
+0335f314b6e7bfe08c3d0cfaa7c19db961b7b99fb20be62b0a826c992ad14e0f  /tmp/go.tgz
 EOF
 sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
 
@@ -69,9 +69,6 @@ curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.10.1/baze
 echo '4cb534c52cdd47a6223d4596d530e7c9c785438ab3b0a49ff347e991c210b2cd /tmp/bazelisk' | sha256sum -c -
 chmod +x /tmp/bazelisk
 sudo mv /tmp/bazelisk /usr/bin/bazel
-
-# Install the Unison file-syncer.
-. bootstrap/bootstrap-unison.sh
 
 # Configure environment variables for CockroachDB
 echo 'export PATH="${PATH}:${HOME}/go/src/github.com/cockroachdb/cockroach/bin:/usr/local/go/bin"' >> ~/.bashrc_bootstrap

@@ -63,11 +63,17 @@ func validateCheckExpr(
 		queryStr = fmt.Sprintf(`SELECT %s FROM [%d AS t]@[%d] WHERE NOT (%s) LIMIT 1`, columns, tableDesc.GetID(), indexIDForValidation, exprStr)
 	}
 	log.Dev.Infof(ctx, "validating check constraint %q with query %q", formattedCkExpr, queryStr)
+
+	// Validation queries use full table scans which we always want to distribute.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride := sessiondata.NodeUserSessionDataOverride
+	execOverride.AlwaysDistributeFullScans = true
+
 	violatingRow, err = txn.QueryRowEx(
 		ctx,
 		"validate check constraint",
 		txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
+		execOverride,
 		queryStr)
 	if err != nil {
 		return nil, formattedCkExpr, err

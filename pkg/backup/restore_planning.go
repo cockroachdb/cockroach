@@ -1686,9 +1686,14 @@ func doRestorePlan(
 
 	var fullyResolvedSubdir string
 
+	defaultCollectionURI, _, err := backupdest.GetURIsByLocalityKV(from, "")
+	if err != nil {
+		return err
+	}
+
 	if strings.EqualFold(subdir, backupbase.LatestFileName) {
 		// set subdir to content of latest file
-		latest, err := backupdest.ReadLatestFile(ctx, from[0],
+		latest, err := backupdest.ReadLatestFile(ctx, defaultCollectionURI,
 			p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
 		if err != nil {
 			return err
@@ -1733,18 +1738,7 @@ func doRestorePlan(
 	}
 	defer func() {
 		if err := cleanupFn(); err != nil {
-			log.Dev.Warningf(ctx, "failed to close incremental store: %+v", err)
-		}
-	}()
-
-	incStores, cleanupFn, err := backupdest.MakeBackupDestinationStores(ctx, p.User(), mkStore,
-		fullyResolvedIncrementalsDirectory)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := cleanupFn(); err != nil {
-			log.Dev.Warningf(ctx, "failed to close incremental store: %+v", err)
+			log.Dev.Warningf(ctx, "failed to close base store: %+v", err)
 		}
 	}()
 
@@ -1800,9 +1794,9 @@ func doRestorePlan(
 	// directories, return the URIs and manifests of all backup layers in all
 	// localities. Incrementals will be searched for automatically.
 	defaultURIs, mainBackupManifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
-		ctx, &mem, baseStores, incStores, mkStore, fullyResolvedBaseDirectory,
-		fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv,
-		p.User(), false, includeCompacted,
+		ctx, p.ExecCfg(), &mem, defaultCollectionURI, from, mkStore,
+		fullyResolvedSubdir, fullyResolvedBaseDirectory, fullyResolvedIncrementalsDirectory, endTime,
+		encryption, &kmsEnv, p.User(), false, includeCompacted, len(incFrom) > 0,
 	)
 	if err != nil {
 		return err
@@ -1957,11 +1951,6 @@ func doRestorePlan(
 		if err := checkClusterRegions(ctx, p, typesByID); err != nil {
 			return err
 		}
-	}
-
-	var asOfInterval int64
-	if !endTime.IsEmpty() {
-		asOfInterval = endTime.WallTime - p.ExtendedEvalContext().StmtTimestamp.UnixNano()
 	}
 
 	filteredTablesByID, err := maybeFilterMissingViews(
@@ -2139,7 +2128,7 @@ func doRestorePlan(
 		}
 		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
 		collectRestoreTelemetry(ctx, jobID, restoreDetails, intoDB, newDBName, subdir, restoreStmt,
-			descsByTablePattern, restoreDBs, asOfInterval, p.SessionData().ApplicationName)
+			descsByTablePattern, restoreDBs, p.SessionData().ApplicationName)
 		return nil
 	}
 
@@ -2186,7 +2175,7 @@ func doRestorePlan(
 	// execution.
 	p.InternalSQLTxn().Descriptors().ReleaseAll(ctx)
 	collectRestoreTelemetry(ctx, sj.ID(), restoreDetails, intoDB, newDBName, subdir, restoreStmt,
-		descsByTablePattern, restoreDBs, asOfInterval, p.SessionData().ApplicationName)
+		descsByTablePattern, restoreDBs, p.SessionData().ApplicationName)
 	if err := sj.Start(ctx); err != nil {
 		return err
 	}
@@ -2206,20 +2195,13 @@ func collectRestoreTelemetry(
 	restoreStmt *tree.Restore,
 	descsByTablePattern map[tree.TablePattern]catalog.Descriptor,
 	restoreDBs []catalog.DatabaseDescriptor,
-	asOfInterval int64,
 	applicationName string,
 ) {
 	telemetry.Count("restore.total.started")
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 		telemetry.Count("restore.full-cluster")
 	}
-	if restoreStmt.Subdir == nil {
-		telemetry.Count("restore.deprecated-subdir-syntax")
-	} else {
-		telemetry.Count("restore.collection")
-	}
-
-	logRestoreTelemetry(ctx, jobID, details, intoDB, newDBName, subdir, asOfInterval, restoreStmt.Options,
+	logRestoreTelemetry(ctx, jobID, details, intoDB, newDBName, subdir, restoreStmt.Options,
 		descsByTablePattern, restoreDBs, applicationName)
 }
 

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,8 +35,12 @@ func TestUserLoginAfterGC(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// ForceTableGC is only available for the system tenant.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Create a user.
 	_, err := db.Exec(`CREATE USER newuser WITH password '123'`)
@@ -50,13 +53,11 @@ func TestUserLoginAfterGC(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Force a table GC with a threshold of 500ms in the past.
-	err = s.ForceTableGC(ctx, "system", "role_members", s.Clock().Now().Add(-int64(500*time.Millisecond), 0))
+	err = srv.ForceTableGC(ctx, "system", "role_members", s.Clock().Now().Add(-int64(500*time.Millisecond), 0))
 	require.NoError(t, err)
 
 	// Verify that newuser can still log in.
-	newUserURL, cleanup := pgurlutils.PGUrlWithOptionalClientCerts(
-		t, s.AdvSQLAddr(), t.Name(), url.UserPassword("newuser", "123"), false, /* withClientCerts */
-		"")
+	newUserURL, cleanup := s.PGUrl(t, serverutils.UserPassword("newuser", "123"), serverutils.ClientCerts(false))
 	defer cleanup()
 
 	newUserConn, err := sqltestutils.PGXConn(t, newUserURL)
@@ -96,8 +97,9 @@ func TestGetUserTimeout(t *testing.T) {
 		},
 	}
 	params := base.TestServerArgs{Knobs: base.TestingKnobs{Store: knobs}}
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Make a user that must use a password to authenticate.
 	// Default privileges on defaultdb are needed to run simple queries.
@@ -109,14 +111,11 @@ GRANT admin TO foo`); err != nil {
 	}
 
 	// We'll attempt connections on gateway node 0.
-	fooURL, fooCleanupFn := pgurlutils.PGUrlWithOptionalClientCerts(t,
-		s.AdvSQLAddr(), t.Name(), url.UserPassword("foo", "testabc"), false, "" /* withClientCerts */)
+	fooURL, fooCleanupFn := s.PGUrl(t, serverutils.UserPassword("foo", "testabc"), serverutils.ClientCerts(false))
 	defer fooCleanupFn()
-	barURL, barCleanupFn := pgurlutils.PGUrlWithOptionalClientCerts(t,
-		s.AdvSQLAddr(), t.Name(), url.UserPassword("bar", "testabc"), false, "" /* withClientCerts */)
+	barURL, barCleanupFn := s.PGUrl(t, serverutils.UserPassword("bar", "testabc"), serverutils.ClientCerts(false))
 	defer barCleanupFn()
-	rootURL, rootCleanupFn := pgurlutils.PGUrl(t,
-		s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	rootURL, rootCleanupFn := s.PGUrl(t, serverutils.User(username.RootUser))
 	defer rootCleanupFn()
 
 	// Override the timeout built into pgx so we are only subject to

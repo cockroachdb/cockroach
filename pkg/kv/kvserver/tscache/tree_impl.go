@@ -77,7 +77,7 @@ var _ Cache = &treeImpl{}
 // newTreeImpl returns a new treeImpl with the supplied hybrid clock.
 func newTreeImpl(clock *hlc.Clock) *treeImpl {
 	tc := &treeImpl{
-		cache:    cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}, log.Dev.Errorf),
+		cache:    cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}, log.KvExec.Errorf),
 		maxBytes: uint64(defaultTreeImplSize),
 		metrics:  makeMetrics(),
 	}

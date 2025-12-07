@@ -221,7 +221,7 @@ vectorized: true
 
 # Tracing tests for fast delete.
 statement ok
-CREATE TABLE a (a INT PRIMARY KEY)
+CREATE TABLE a (a DECIMAL PRIMARY KEY)
 
 # Delete range operates in chunks of 600 (defined by row.TableTruncateChunkSize).
 statement ok
@@ -236,9 +236,9 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%DelRange%' OR message LIKE '%DelRng%'
 ----
 delete range      DelRange /Table/110/1 - /Table/110/2
-dist sender send  r75: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r79: sending batch 1 DelRng to (n1,s1):1
 delete range      DelRange /Table/110/1/601/0 - /Table/110/2
-dist sender send  r75: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r79: sending batch 1 DelRng to (n1,s1):1
 
 # Ensure that DelRange requests are autocommitted when DELETE FROM happens on a
 # chunk of fewer than 600 keys.
@@ -257,7 +257,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%Del%' OR message LIKE '%sending batch%'
 ----
 delete range      Del (locking) /Table/110/1/5/0
-dist sender send  r75: sending batch 1 Del, 1 EndTxn to (n1,s1):1
+dist sender send  r79: sending batch 1 Del, 1 EndTxn to (n1,s1):1
 
 # Ensure that we send DelRanges when doing a point delete operation on a table
 # that has multiple column families.
@@ -276,7 +276,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%Del%' OR message LIKE '%sending batch%'
 ----
 delete range      DelRange /Table/111/1/5 - /Table/111/1/6
-dist sender send  r75: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r79: sending batch 1 DelRng to (n1,s1):1
 
 statement ok
 CREATE TABLE xyz (
@@ -427,28 +427,28 @@ distribution: local
 vectorized: true
 ·
 • render
-│ columns: (a int, b int, "?column?" unknown)
+│ columns: (a decimal, b int, "?column?" unknown)
 │ render ?column?: (NULL)[unknown]
-│ render a: (a)[int]
+│ render a: (a)[decimal]
 │ render b: (b)[int]
 │
 └── • delete
-    │ columns: (a int, b int)
+    │ columns: (a decimal, b int)
     │ estimated row count: 1,000 (missing stats)
     │ from: a
     │ auto commit
     │
     └── • distinct
-        │ columns: (a int, b int)
+        │ columns: (a decimal, b int)
         │ estimated row count: 1,000 (missing stats)
         │ distinct on: a
         │
         └── • cross join (inner)
-            │ columns: (a int, b int)
+            │ columns: (a decimal, b int)
             │ estimated row count: 333,333 (missing stats)
             │
             ├── • scan
-            │     columns: (a int)
+            │     columns: (a decimal)
             │     estimated row count: 1,000 (missing stats)
             │     table: a@a_pkey
             │     spans: FULL SCAN

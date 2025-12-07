@@ -92,9 +92,8 @@ ALTER TABLE users RENAME COLUMN id TO uid
 statement error cannot rename column "username" because view "v1" depends on it
 ALTER TABLE users RENAME COLUMN username TO name
 
-# TODO(knz): restore test after #17269 / #10083 is fixed.
-#statement ok
-#ALTER TABLE users RENAME COLUMN species TO title
+statement ok
+ALTER TABLE users RENAME COLUMN species TO title
 
 statement ok
 CREATE VIEW v2 AS SELECT id from users
@@ -105,9 +104,8 @@ DROP VIEW v1
 statement error cannot rename column "id" because view "v2" depends on it
 ALTER TABLE users RENAME COLUMN id TO uid
 
-# TODO(knz): restore test after #17269 / #10083 is fixed.
-# statement ok
-# ALTER TABLE users RENAME COLUMN username TO name
+statement ok
+ALTER TABLE users RENAME COLUMN username TO name
 
 statement ok
 DROP VIEW v2
@@ -116,14 +114,14 @@ query T
 SELECT column_name FROM [SHOW COLUMNS FROM users] ORDER BY column_name
 ----
 id
-species
-username
+name
+title
 
 statement ok
 SET vectorize=on
 
 query T
-EXPLAIN ALTER TABLE users RENAME COLUMN species TO woo
+EXPLAIN ALTER TABLE users RENAME COLUMN title TO woo
 ----
 distribution: local
 vectorized: true
@@ -138,8 +136,8 @@ query T
 SELECT column_name FROM [SHOW COLUMNS FROM users] ORDER BY column_name
 ----
 id
-species
-username
+name
+title
 
 skipif config schema-locked-disabled
 statement ok
@@ -147,15 +145,15 @@ ALTER TABLE users SET (schema_locked=false);
 
 # Check that a column can be added and renamed in the same statement
 statement ok
-ALTER TABLE users RENAME COLUMN species TO species_old,
-                  ADD COLUMN species STRING AS (species_old || ' woo') STORED
+ALTER TABLE users RENAME COLUMN title TO title_old,
+                  ADD COLUMN title STRING AS (title_old || ' woo') STORED
 
 skipif config schema-locked-disabled
 statement ok
 ALTER TABLE users SET (schema_locked=true);
 
 query T rowsort
-SELECT species FROM users
+SELECT title FROM users
 ----
 cat woo
 rat woo
@@ -199,3 +197,164 @@ query II
 SELECT j, k FROM foo;
 ----
 1  2
+
+# Test that mixed-case column names are handled correctly for rename operations.
+statement ok
+CREATE TABLE mixed_case_table (
+    "CamelCase" INT PRIMARY KEY,
+    "snake_case" TEXT,
+    "UPPERCASE" DECIMAL
+);
+
+statement error column "UPPERCASE" of relation "mixed_case_table" already exists
+ALTER TABLE mixed_case_table RENAME COLUMN "CamelCase" TO "UPPERCASE";
+
+statement ok
+ALTER TABLE mixed_case_table RENAME COLUMN "CamelCase" TO "CamelCase";
+
+statement ok
+ALTER TABLE mixed_case_table RENAME COLUMN "CamelCase" TO "NewCamelCase";
+
+statement ok
+ALTER TABLE mixed_case_table RENAME COLUMN "snake_case" TO "SnakeCase";
+
+statement ok
+ALTER TABLE mixed_case_table RENAME COLUMN "UPPERCASE" TO "decimal_value";
+
+query T colnames
+SELECT column_name FROM [SHOW COLUMNS FROM mixed_case_table] ORDER BY column_name;
+----
+column_name
+NewCamelCase
+SnakeCase
+decimal_value
+
+# Test renaming a column, adding a new column with the old name, and altering
+# the primary key to use the renamed column in a single statement.
+subtest rename_add_alter_primary_key
+
+statement ok
+CREATE TABLE rename_add_alter_pk_tbl (a INT PRIMARY KEY, b INT, FAMILY f (a, b));
+
+statement ok
+INSERT INTO rename_add_alter_pk_tbl VALUES (1, 10), (2, 20);
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+statement ok
+ALTER TABLE rename_add_alter_pk_tbl RENAME COLUMN a TO b_old,
+              ADD COLUMN a INT NOT NULL DEFAULT 0,
+              ALTER PRIMARY KEY USING COLUMNS (b_old);
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+query III colnames,rowsort
+SELECT b_old, b, a FROM rename_add_alter_pk_tbl;
+----
+b_old  b   a
+1      10  0
+2      20  0
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM rename_add_alter_pk_tbl;
+----
+table_name             index_name                  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+rename_add_alter_pk_tbl  rename_add_alter_pk_tbl_pkey  false       1             b_old        b_old       ASC        false    false     true     1
+rename_add_alter_pk_tbl  rename_add_alter_pk_tbl_pkey  false       2             b            b           N/A        true     false     true     1
+rename_add_alter_pk_tbl  rename_add_alter_pk_tbl_pkey  false       3             a            a           N/A        true     false     true     1
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE rename_add_alter_pk_tbl];
+----
+CREATE TABLE public.rename_add_alter_pk_tbl (
+  b_old INT8 NOT NULL,
+  b INT8 NULL,
+  a INT8 NOT NULL DEFAULT 0:::INT8,
+  CONSTRAINT rename_add_alter_pk_tbl_pkey PRIMARY KEY (b_old ASC),
+  FAMILY f (b_old, b, a)
+) WITH (schema_locked = true);
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+statement ok
+UPDATE rename_add_alter_pk_tbl SET a = 10 WHERE b_old = 2;
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+statement ok
+ALTER TABLE rename_add_alter_pk_tbl RENAME COLUMN b_old TO b_orig,
+              ADD COLUMN b_old INT NOT NULL DEFAULT 100,
+              ALTER PRIMARY KEY USING COLUMNS (a);
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+query IIII colnames,rowsort
+SELECT b_old, b_orig, a, b FROM rename_add_alter_pk_tbl;
+----
+b_old  b_orig  a   b
+100    1       0   10
+100    2       10  20
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE rename_add_alter_pk_tbl];
+----
+CREATE TABLE public.rename_add_alter_pk_tbl (
+  b_orig INT8 NOT NULL,
+  b INT8 NULL,
+  a INT8 NOT NULL DEFAULT 0:::INT8,
+  b_old INT8 NOT NULL DEFAULT 100:::INT8,
+  CONSTRAINT rename_add_alter_pk_tbl_pkey PRIMARY KEY (a ASC),
+  UNIQUE INDEX rename_add_alter_pk_tbl_b_orig_key (b_orig ASC),
+  FAMILY f (b_orig, b, a, b_old)
+) WITH (schema_locked = true);
+
+subtest rename_multipl_shard_col
+
+statement ok
+DROP TABLE IF EXISTS tab1
+
+# Create a table that has more than 1 shard column.
+statement ok
+CREATE TABLE tab1 (
+    a INT NOT NULL,
+    b DATE NOT NULL,
+    c INT NOT NULL,
+    d INT NOT NULL,
+    PRIMARY KEY (d, b, a) USING HASH WITH BUCKET_COUNT = 16,
+    UNIQUE INDEX (d, b, a, c) USING HASH WITH BUCKET_COUNT = 16,
+    FAMILY f1 (a,b,c,d)
+) WITH (schema_locked = false);
+
+query TT
+SHOW CREATE TABLE tab1;
+----
+tab1  CREATE TABLE public.tab1 (
+        a INT8 NOT NULL,
+        b DATE NOT NULL,
+        c INT8 NOT NULL,
+        d INT8 NOT NULL,
+        crdb_internal_a_b_d_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, d))), 16:::INT8)) VIRTUAL,
+        crdb_internal_a_b_c_d_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, c, d))), 16:::INT8)) VIRTUAL,
+        CONSTRAINT tab1_pkey PRIMARY KEY (d ASC, b ASC, a ASC) USING HASH WITH (bucket_count=16),
+        UNIQUE INDEX tab1_d_b_a_c_key (d ASC, b ASC, a ASC, c ASC) USING HASH WITH (bucket_count=16),
+        FAMILY f1 (a, b, c, d)
+      );
+
+statement ok
+ALTER TABLE tab1 RENAME COLUMN d TO rename_d
+
+# Ensure rename handled both shard columns.
+query TT
+SHOW CREATE TABLE tab1;
+----
+tab1  CREATE TABLE public.tab1 (
+        a INT8 NOT NULL,
+        b DATE NOT NULL,
+        c INT8 NOT NULL,
+        rename_d INT8 NOT NULL,
+        crdb_internal_a_b_rename_d_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, rename_d))), 16:::INT8)) VIRTUAL,
+        crdb_internal_a_b_c_rename_d_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, c, rename_d))), 16:::INT8)) VIRTUAL,
+        CONSTRAINT tab1_pkey PRIMARY KEY (rename_d ASC, b ASC, a ASC) USING HASH WITH (bucket_count=16),
+        UNIQUE INDEX tab1_d_b_a_c_key (rename_d ASC, b ASC, a ASC, c ASC) USING HASH WITH (bucket_count=16),
+        FAMILY f1 (a, b, c, rename_d)
+      );
+
+subtest end

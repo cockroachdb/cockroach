@@ -45,6 +45,10 @@ func TestDatadrivenVecIndex(t *testing.T) {
 
 	skip.UnderRace(t, "test is too slow under race")
 
+	// Skip on s390x due to floating point precision differences.
+	// See: https://github.com/cockroachdb/cockroach/issues/151766
+	skip.OnArch(t, "s390x", "data driven vector index tests disabled on s390x due to issue #151766")
+
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		if !strings.HasSuffix(path, ".ddt") {
 			// Skip files that are not data-driven tests.
@@ -61,8 +65,7 @@ func TestDatadrivenVecIndex(t *testing.T) {
 		runner := sqlutils.MakeSQLRunner(sqlDB)
 		mgr := srv.ExecutorConfig().(sql.ExecutorConfig).VecIndexManager
 
-		// Enable vector indexes and make them deterministic.
-		runner.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
+		// Make vector indexes deterministic.
 		runner.Exec(t, `SET CLUSTER SETTING sql.vecindex.deterministic_fixups.enabled = true`)
 
 		ti := &testIndex{ctx: ctx, runner: runner, mgr: mgr}
@@ -224,9 +227,6 @@ func TestVecIndexConcurrency(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	mgr := srv.ExecutorConfig().(sql.ExecutorConfig).VecIndexManager
 
-	// Enable vector indexes.
-	runner.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
-
 	// Load 512d image embedding dataset.
 	dataset := testutils.LoadDataset(t, testutils.ImagesDataset)
 
@@ -365,9 +365,6 @@ func TestVecIndexStandbyReader(t *testing.T) {
 	srcRunner := sqlutils.MakeSQLRunner(srcDB)
 	dstRunner := sqlutils.MakeSQLRunner(dstDB)
 
-	// Enable vector indexes.
-	srcRunner.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
-
 	// Construct the table.
 	srcRunner.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v VECTOR(512), VECTOR INDEX foo (v))")
 
@@ -422,9 +419,6 @@ func TestVecIndexDeletion(t *testing.T) {
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	defer srv.Stopper().Stop(ctx)
-
-	// Enable vector indexes.
-	runner.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
 
 	// Construct the table.
 	runner.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v VECTOR(512), VECTOR INDEX (v))")

@@ -11,7 +11,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -406,7 +404,7 @@ func (txn *Txn) TestingSetPriority(priority enginepb.TxnPriority) {
 	// non-randomized, priority for the transaction.
 	txn.mu.userPriority = roachpb.UserPriority(-priority)
 	if err := txn.mu.sender.SetUserPriority(txn.mu.userPriority); err != nil {
-		log.Dev.Fatalf(context.TODO(), "%+v", err)
+		log.KvExec.Fatalf(context.TODO(), "%+v", err)
 	}
 	txn.mu.Unlock()
 }
@@ -443,9 +441,18 @@ func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
+// SetBufferedWritesEnabled toggles whether the writes are buffered on the
+// gateway node until the commit time. Buffered writes cannot be enabled on a
+// txn that performed any requests. When disabling buffered writes, if there are
+// any writes in the buffer, they are flushed with the next BatchRequest.
+//
+// Only allowed on the RootTxn.
 func (txn *Txn) SetBufferedWritesEnabled(enabled bool) {
 	if txn.typ != RootTxn {
-		panic(errors.AssertionFailedf("SetBufferedWritesEnabled() called on leaf txn"))
+		panic(errors.AssertionFailedf(
+			"SetBufferedWritesEnabled(%t) called on leaf txn (buffer empty? %t)",
+			enabled, txn.HasBufferedWrites(),
+		))
 	}
 
 	txn.mu.Lock()
@@ -960,12 +967,14 @@ func (txn *Txn) DeadlineLikelySufficient() bool {
 		lagTargetDuration := closedts.TargetDuration.Get(sv)
 		leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(sv)
 		sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(sv)
+		sideTransportPacingInterval := closedts.SideTransportPacingRefreshInterval.Get(sv)
+
 		// Pass the DefaultMaxNetworkRTT regardless of leadTargetAutoTune because we
 		// don't have a good way to estimate the network RTT here. We choose to be
 		// more conservative as this is just for an optimization if the deadline is
 		// far in the future. Missing the optimization is not a big deal.
 		return closedts.TargetForPolicy(now, maxClockOffset,
-			lagTargetDuration, leadTargetOverride, sideTransportCloseInterval,
+			lagTargetDuration, leadTargetOverride, sideTransportCloseInterval, sideTransportPacingInterval,
 			ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO).Add(int64(time.Second), 0)
 	}
 
@@ -1045,7 +1054,7 @@ func (txn *Txn) rollback(ctx context.Context) *kvpb.Error {
 						// already committed. We don't spam the logs with those.
 						log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
 					} else {
-						log.Dev.Infof(ctx, "async rollback failed: %s", pErr)
+						log.KvExec.Infof(ctx, "async rollback failed: %s", pErr)
 					}
 				}
 				return nil
@@ -1123,10 +1132,7 @@ func (e *AutoCommitError) Error() string {
 func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
-	retryOpts := base.DefaultRetryOptions()
-	retryOpts.InitialBackoff = 20 * time.Millisecond
-	retryOpts.MaxBackoff = 200 * time.Millisecond
-	for r := retry.Start(retryOpts); r.Next(); {
+	for attempt := 1; ; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return errors.Wrap(err, "txn exec")
 		}
@@ -1161,7 +1167,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 					// We sent transactional requests, so the TxnCoordSender was supposed to
 					// turn retryable errors into TransactionRetryWithProtoRefreshError. Note that this
 					// applies only in the case where this is the root transaction.
-					log.Dev.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
+					log.KvExec.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
 				}
 			} else if t := (*kvpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
 				if txn.ID() != t.PrevTxnID {
@@ -1192,8 +1198,6 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 		// cluster setting to be changed while a transaction is stuck in a retry
 		// loop.
 		maxRetries := txn.MaxAutoRetries()
-		// Add 1 because r.CurrentAttempt() starts at 0.
-		attempt := r.CurrentAttempt() + 1
 		if attempt > maxRetries {
 			// If the retries limit has been exceeded, rollback and return an error.
 			rollbackErr := txn.Rollback(ctx)
@@ -1208,13 +1212,13 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 					txn.DebugName(), attempt, err, maxRetries, rollbackErr,
 				),
 				ErrAutoRetryLimitExhausted)
-			log.Dev.Warningf(ctx, "%v", err)
+			log.KvExec.Warningf(ctx, "%v", err)
 			break
 		}
 
 		const warnEvery = 10
 		if attempt%warnEvery == 0 {
-			log.Dev.Warningf(ctx, "have retried transaction: %s %d times, most recently because of the "+
+			log.KvExec.Warningf(ctx, "have retried transaction: %s %d times, most recently because of the "+
 				"retryable error: %s. Is the transaction stuck in a retry loop?", txn.DebugName(), attempt, err)
 		}
 
@@ -1384,7 +1388,7 @@ func (txn *Txn) Send(
 		if requestTxnID != retryErr.PrevTxnID {
 			// KV should not return errors for transactions other than the one that sent
 			// the request.
-			log.Dev.Fatalf(ctx, "retryable error for the wrong txn. "+
+			log.KvExec.Fatalf(ctx, "retryable error for the wrong txn. "+
 				"requestTxnID: %s, retryErr.PrevTxnID: %s. retryErr: %s",
 				requestTxnID, retryErr.PrevTxnID, retryErr)
 		}
@@ -1618,7 +1622,7 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *kvpb.
 	defer txn.mu.Unlock()
 
 	if pErr.TransactionRestart() == kvpb.TransactionRestart_NONE {
-		log.Dev.Fatalf(ctx, "unexpected non-retryable error: %s", pErr)
+		log.KvExec.Fatalf(ctx, "unexpected non-retryable error: %s", pErr)
 	}
 
 	// If the transaction has been reset since this request was sent,
@@ -1814,6 +1818,9 @@ func (txn *Txn) CreateSavepoint(ctx context.Context) (SavepointToken, error) {
 // and can be reused later (e.g. to release or roll back again).
 //
 // This method is only valid when called on RootTxns.
+//
+// NB: after calling RollbackToSavepoint, the transaction's read sequence number
+// must be stepped by calling Step() before any further requests are performed.
 func (txn *Txn) RollbackToSavepoint(ctx context.Context, s SavepointToken) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
@@ -1860,6 +1867,14 @@ func (txn *Txn) HasPerformedWrites() bool {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.HasPerformedWrites()
+}
+
+// HasBufferedWrites returns true if a write has been buffered for the
+// transaction's current epoch.
+func (txn *Txn) HasBufferedWrites() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.HasBufferedWrites()
 }
 
 // AdmissionHeader returns the admission header for work done in the context

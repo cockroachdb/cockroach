@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -120,14 +121,22 @@ func TestInvertedFilterer(t *testing.T) {
 	}
 	// Setup test environment.
 	ctx := context.Background()
-	server := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer server.Stopper().Stop(ctx)
-	testConfig := DefaultProcessorTestConfig()
-	diskMonitor := execinfra.NewTestDiskMonitor(ctx, testConfig.FlowCtx.Cfg.Settings)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	st := s.ClusterSettings()
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
+	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	testConfig.FlowCtx.DiskMonitor = diskMonitor
-	testConfig.FlowCtx.Txn = kv.NewTxn(ctx, server.DB(), server.NodeID())
-	test := MakeProcessorTest(testConfig)
+	test := MakeProcessorTest(ProcessorTestConfig{
+		FlowCtx: &execinfra.FlowCtx{
+			Cfg:         &execinfra.ServerConfig{Settings: st},
+			EvalCtx:     &evalCtx,
+			Mon:         evalCtx.TestingMon,
+			DiskMonitor: diskMonitor,
+			Txn:         kv.NewTxn(ctx, s.DB(), srv.NodeID()),
+		},
+	})
 	defer test.Close(ctx)
 
 	// Run test.

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -359,7 +358,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	var val roachpb.Value
 	val.SetInt(42)
 	// Put an inconsistent key "e" to s2, and have s1 and s3 still agree.
-	_, err := storage.MVCCPut(context.Background(), s2.TODOEngine(),
+	_, err := storage.MVCCPut(context.Background(), s2.StateEngine(),
 		roachpb.Key("e"), tc.Server(0).Clock().Now(), val, storage.MVCCWriteOptions{})
 	require.NoError(t, err)
 
@@ -419,13 +418,14 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 		// Find the problematic range in the storage.
 		var desc *roachpb.RangeDescriptor
-		require.NoError(t, kvstorage.IterateRangeDescriptorsFromDisk(context.Background(), cpEng,
+		require.NoError(t, kvstorage.IterateRangeDescriptorsFromCheckpoint(context.Background(), cpEng,
 			func(rd roachpb.RangeDescriptor) error {
 				if rd.RangeID == resp.Result[0].RangeID {
 					desc = &rd
 				}
 				return nil
-			}))
+			},
+		))
 		require.NotNil(t, desc)
 
 		// Compute a checksum over the content of the problematic range.
@@ -558,7 +558,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 		require.NoError(t, err)
 		defer eng.Close()
 
-		rsl := stateloader.Make(rangeID)
+		rsl := kvstorage.MakeStateLoader(rangeID)
 		ms, err := rsl.LoadMVCCStats(ctx, eng)
 		require.NoError(t, err)
 

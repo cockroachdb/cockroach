@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 	prometheusgo "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/model"
 )
 
 var AppNameLabelEnabled = settings.RegisterBoolSetting(
@@ -50,7 +51,8 @@ type Registry struct {
 	// computedLabels get filled in by GetLabels().
 	// We hold onto the slice to avoid a re-allocation every
 	// time the metrics get scraped.
-	computedLabels []*prometheusgo.LabelPair
+	computedLabels  []*prometheusgo.LabelPair
+	labelSliceCache *LabelSliceCache
 }
 
 type labelPair struct {
@@ -67,9 +69,10 @@ type Struct interface {
 // NewRegistry creates a new Registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		labels:         []labelPair{},
-		computedLabels: []*prometheusgo.LabelPair{},
-		tracked:        map[string]Iterable{},
+		labels:          []labelPair{},
+		computedLabels:  []*prometheusgo.LabelPair{},
+		tracked:         map[string]Iterable{},
+		labelSliceCache: NewLabelSliceCache(),
 	}
 }
 
@@ -77,7 +80,7 @@ func NewRegistry() *Registry {
 func (r *Registry) AddLabel(name string, value interface{}) {
 	r.Lock()
 	defer r.Unlock()
-	r.labels = append(r.labels, labelPair{name: exportedLabel(name), value: value})
+	r.labels = append(r.labels, labelPair{name: ExportedLabel(name), value: value})
 	r.computedLabels = append(r.computedLabels, &prometheusgo.LabelPair{})
 }
 
@@ -96,6 +99,9 @@ func (r *Registry) AddMetric(metric Iterable) {
 	r.Lock()
 	defer r.Unlock()
 	r.tracked[metric.GetName(false /* useStaticLabels */)] = metric
+	if m, ok := metric.(PrometheusEvictable); ok {
+		m.InitializeMetrics(r.labelSliceCache)
+	}
 	if log.V(2) {
 		log.Dev.Infof(context.TODO(), "added metric: %s (%T)", metric.GetName(false /* useStaticLabels */), metric)
 	}
@@ -283,9 +289,21 @@ func ExportedName(name string) string {
 	return prometheusNameReplaceRE.ReplaceAllString(name, "_")
 }
 
-// exportedLabel takes a metric name and generates a valid prometheus name.
-func exportedLabel(name string) string {
+// ExportedLabel takes a metric label and generates a valid prometheus label name.
+func ExportedLabel(name string) string {
 	return prometheusLabelReplaceRE.ReplaceAllString(name, "_")
+}
+
+// EncodeLabeledName formats a metric name with labels in Prometheus format.
+// The labels are sanitized, sorted by key, and encoded as key="value" pairs
+// within curly braces. Example: metric_name{label1="value1", label2="value2"}
+func EncodeLabeledName(m *prometheusgo.Metric) string {
+	labels := make(model.LabelSet)
+	for _, l := range m.Label {
+		labels[model.LabelName(ExportedLabel(l.GetName()))] = model.LabelValue(l.GetValue())
+	}
+
+	return labels.String()
 }
 
 var panicHandler = log.Dev.Fatalf

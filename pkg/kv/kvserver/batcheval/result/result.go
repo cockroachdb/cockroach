@@ -100,12 +100,12 @@ func (lResult *LocalResult) String() string {
 		return "LocalResult: nil"
 	}
 	return fmt.Sprintf("LocalResult (reply: %v, "+
-		"#encountered intents: %d, #acquired locks: %d, #resolved locks: %d"+
+		"#encountered intents: %d, #acquired locks: %d, #resolved locks: %d "+
 		"#updated txns: %d #end txns: %d, "+
 		"PopulateBarrierResponse:%t RepopulateSubsumeResponse:%t "+
 		"GossipFirstRange:%t MaybeGossipSystemConfig:%t "+
 		"MaybeGossipSystemConfigIfHaveFailure:%t MaybeAddToSplitQueue:%t "+
-		"MaybeGossipNodeLiveness:%s ",
+		"MaybeGossipNodeLiveness:%s",
 		lResult.Reply,
 		len(lResult.EncounteredIntents), len(lResult.AcquiredLocks), len(lResult.ResolvedLocks),
 		len(lResult.UpdatedTxns), len(lResult.EndTxns),
@@ -304,7 +304,7 @@ func (p *Result) MergeAndDestroy(q Result) error {
 			return errors.AssertionFailedf("must not specify ForceFlushIndex")
 		}
 		if (*q.Replicated.State != kvserverpb.ReplicaState{}) {
-			log.Dev.Fatalf(context.TODO(), "unhandled EvalResult: %s",
+			log.KvExec.Fatalf(context.TODO(), "unhandled EvalResult: %s",
 				pretty.Diff(*q.Replicated.State, kvserverpb.ReplicaState{}))
 		}
 		q.Replicated.State = nil
@@ -499,7 +499,7 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	q.LogicalOpLog = nil
 
 	if !q.IsZero() {
-		log.Dev.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, Result{}))
+		log.KvExec.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, Result{}))
 	}
 
 	return nil

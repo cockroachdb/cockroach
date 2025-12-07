@@ -166,7 +166,7 @@ be fairly distributed across the zones of the cluster).
 `,
 		Args: cobra.ExactArgs(2),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
-			count, err := strconv.ParseInt(args[1], 10, 8)
+			count, err := strconv.ParseInt(args[1], 10, 16)
 			if err != nil || count < 1 {
 				return errors.Wrapf(err, "invalid num-nodes argument")
 			}
@@ -689,7 +689,7 @@ The "status" command outputs the binary and PID for the specified nodes:
 			}
 			for _, status := range statuses {
 				if status.Err != nil {
-					config.Logger.Printf("  %2d: %s %s\n", status.NodeID, status.Err.Error())
+					config.Logger.Printf("  %2d: %s\n", status.NodeID, status.Err.Error())
 				} else if !status.Running {
 					// TODO(irfansharif): Surface the staged version here?
 					config.Logger.Printf("  %2d: not running\n", status.NodeID)
@@ -1723,9 +1723,9 @@ func (cr *commandRegistry) buildGrafanaAnnotationCmd() *cobra.Command {
 		Long: fmt.Sprintf(`Adds an annotation to the specified grafana instance
 
 By default, we assume the grafana instance needs an authentication token to connect
-to. A service account json and audience will be read in from the environment
-variables %s and %s to attempt authentication through google IDP. Use the --insecure
-option when a token is not necessary.
+to. Unless the %s environment variable exists, the default Google Application Credentials
+will be used to derive an Access Token to authenticate against Google Identity-Aware Proxy.
+Use the --insecure option when a token is not necessary.
 
 --tags specifies the tags the annotation should have.
 
@@ -1740,7 +1740,7 @@ creates an annotation over time range.
 Example:
 # Create an annotation over time range 1-100 on the centralized grafana instance, which needs authentication.
 roachprod grafana-annotation grafana.testeng.crdb.io example-annotation-event --tags my-cluster --tags test-run-1 --dashboard-uid overview --time-range 1,100
-`, roachprodutil.ServiceAccountJson, roachprodutil.ServiceAccountAudience),
+`, roachprodutil.CredentialsEnvironmentVariable),
 		Args: cobra.ExactArgs(2),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
 			req := grafana.AddAnnotationRequest{
@@ -2143,6 +2143,32 @@ func (cr *commandRegistry) buildOpentelemetryStopCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
 			return roachprod.StopOpenTelemetry(context.Background(), config.Logger, args[0])
+		}),
+	}
+}
+
+func (cr *commandRegistry) buildParcaAgentStartCmd() *cobra.Command {
+	parcaAgentStartCmd := &cobra.Command{
+		Use:   "parca-agent-start <cluster>",
+		Short: "Install and start the Parca Agent",
+		Long:  "Install and start the Parca Agent",
+		Args:  cobra.ExactArgs(1),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.StartParcaAgent(context.Background(), config.Logger, args[0], parcaAgentConfig)
+		}),
+	}
+	initParcaAgentStartCmdFlags(parcaAgentStartCmd)
+	return parcaAgentStartCmd
+}
+
+func (cr *commandRegistry) buildParcaAgentStopCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "parca-agent-stop <cluster>",
+		Short: "Stop the Parca Agent",
+		Long:  "Stop the Parca Agent",
+		Args:  cobra.ExactArgs(1),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.StopParcaAgent(context.Background(), config.Logger, args[0])
 		}),
 	}
 }

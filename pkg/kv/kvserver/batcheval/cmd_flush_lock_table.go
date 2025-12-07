@@ -44,13 +44,34 @@ func declareKeysFlushLockTable(
 func FlushLockTable(
 	ctx context.Context, rw storage.ReadWriter, cArgs CommandArgs, response kvpb.Response,
 ) (result.Result, error) {
+	header := cArgs.Header
 	args := cArgs.Args.(*kvpb.FlushLockTableRequest)
 	resp := response.(*kvpb.FlushLockTableResponse)
 
-	// TODO(ssd): Allow the caller to limit how many locks we write out.
-	locksToFlush := make([]roachpb.LockAcquisition, 0)
-	cArgs.EvalCtx.GetConcurrencyManager().ExportUnreplicatedLocks(args.Span(), func(l *roachpb.LockAcquisition) {
+	var (
+		resumeSpan   *roachpb.Span
+		resumeReason kvpb.ResumeReason
+		currentSize  int64
+
+		locksToFlush = make([]roachpb.LockAcquisition, 0)
+	)
+	cArgs.EvalCtx.GetConcurrencyManager().ExportUnreplicatedLocks(args.Span(), func(l *roachpb.LockAcquisition) bool {
+		if max := header.MaxSpanRequestKeys; max > 0 && int64(len(locksToFlush)) >= max {
+			resumeReason = kvpb.RESUME_KEY_LIMIT
+			resumeSpan = &roachpb.Span{Key: args.Key, EndKey: l.Key}
+			return false
+		}
+		if maxSize := header.TargetBytes; maxSize > 0 {
+			sz := storage.ApproximateLockTableSize(l)
+			if currentSize+sz > maxSize {
+				resumeReason = kvpb.RESUME_KEY_LIMIT
+				resumeSpan = &roachpb.Span{Key: args.Key, EndKey: l.Key}
+				return false
+			}
+			currentSize += sz
+		}
 		locksToFlush = append(locksToFlush, *l)
+		return true
 	})
 
 	for i, l := range locksToFlush {
@@ -61,6 +82,9 @@ func FlushLockTable(
 			return result.Result{}, err
 		}
 	}
+
+	resp.ResumeReason = resumeReason
+	resp.ResumeSpan = resumeSpan
 	resp.LocksWritten = uint64(len(locksToFlush))
 
 	// NOTE: The locks still exist in the in-memory lock table. They are not

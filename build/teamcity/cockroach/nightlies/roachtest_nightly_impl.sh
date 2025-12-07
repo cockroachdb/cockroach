@@ -19,15 +19,26 @@ if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-nightly-bazel $(date)" -N "" -f ~/.ssh/id_rsa
 fi
 
+arm_probability="${ARM_PROBABILITY:-0.5}"
+fips_probability="${FIPS_PROBABILITY:-0.02}"
+
 arch=amd64
 if [[ ${CLOUD} == "ibm" ]]; then
   arch=s390x
-elif [[ ${FIPS_ENABLED:-0} == 1 ]]; then
-  arch=amd64-fips
 fi
 $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh $arch
 if [[ $arch != "s390x" ]]; then
-  $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh arm64
+  # Do not build arm64 if the probability is 0.
+  # Using `awk` because bash only supports integer comparison, and `bc` is not installed.
+  if awk -v n="$arm_probability" 'BEGIN { exit (n+0 > 0) ? 0 : 1 }'; then
+    $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh arm64
+  fi
+  # N.B. FIPS is metamoprhically always on as of PR#139510
+  # Do not build fips if the probability is 0.
+  # Using `awk` because bash only supports integer comparison, and `bc` is not installed.
+  if awk -v n="$fips_probability" 'BEGIN { exit (n+0 > 0) ? 0 : 1 }'; then
+    $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh amd64-fips
+  fi
 fi
 
 artifacts=/artifacts
@@ -83,10 +94,14 @@ if [[ "${selective_tests}" == "true" && "${select_probability:-}" != "" ]]; then
   echo "SELECTIVE_TESTS=true and SELECT_PROBABILITY are incompatible. Disable one of them."
   exit 1
 fi
-
+#
+# N.B. Recall, the conditional probability of FIPS is P(fips) * (1 - P(arm64)).
+# Hence, with the given defaults, FIPS is effectively enabled with probability 0.01 (= 0.02 * 0.5)
+#
 build/teamcity-roachtest-invoke.sh \
   --metamorphic-encryption-probability=0.5 \
-  --metamorphic-arm64-probability="${ARM_PROBABILITY:-0.5}" \
+  --metamorphic-arm64-probability="$arm_probability" \
+  --metamorphic-fips-probability="$fips_probability" \
   --metamorphic-cockroach-ea-probability="${COCKROACH_EA_PROBABILITY:-0.2}" \
   ${select_probability:-} \
   --always-collect-artifacts="${ALWAYS_COLLECT_ARTIFACTS:-false}" \

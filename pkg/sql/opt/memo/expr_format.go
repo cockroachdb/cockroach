@@ -885,11 +885,19 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if relational.HasPlaceholder {
 			writeFlag("has-placeholder")
 		}
+		if p, ok := e.Private().(*JoinPrivate); ok {
+			if !p.ParameterizedCols.Empty() {
+				tp.Childf("parameterized columns: %s", p.ParameterizedCols)
+			}
+		}
 		if lookupJoin, ok := e.(*LookupJoinExpr); ok {
 			// For lookup joins, indicate whether reverse scans are required to
 			// satisfy the ordering.
 			if lookupJoinMustUseReverseScans(md, lookupJoin, &required.Ordering) {
 				writeFlag("reverse-scans")
+			}
+			if !lookupJoin.ParameterizedCols.Empty() {
+				tp.Childf("parameterized columns: %s", lookupJoin.ParameterizedCols)
 			}
 		}
 
@@ -911,16 +919,16 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if cost.C != 0 {
 			tp.Childf("cost: %.9g", cost.C)
 		}
-		if !cost.Flags.Empty() {
+		if cost.Penalties != NoPenalties {
 			var b strings.Builder
 			b.WriteString("cost-flags:")
-			if cost.Flags.FullScanPenalty {
+			if cost.Penalties&FullScanPenalty != 0 {
 				b.WriteString(" full-scan-penalty")
 			}
-			if cost.Flags.HugeCostPenalty {
+			if cost.Penalties&HugeCostPenalty != 0 {
 				b.WriteString(" huge-cost-penalty")
 			}
-			if cost.Flags.UnboundedCardinality {
+			if cost.Penalties&UnboundedCardinalityPenalty != 0 {
 				b.WriteString(" unbounded-cardinality")
 			}
 			tp.Child(b.String())
@@ -1910,6 +1918,9 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		fmt.Fprintf(f.Buffer, " %s", seq.Name())
 
 	case *MutationPrivate:
+		if t.Swap {
+			fmt.Fprint(f.Buffer, " (swap)")
+		}
 		f.formatIndex(t.Table, cat.PrimaryIndex, false /* reverse */)
 
 	case *LockPrivate:

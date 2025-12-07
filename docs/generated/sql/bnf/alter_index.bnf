@@ -19,6 +19,7 @@ alter_index_stmt ::=
 	| 'ALTER' 'INDEX' index_name 'UNSPLIT' 'AT' select_stmt
 	| 'ALTER' 'INDEX' table_name '@' index_name 'UNSPLIT' 'ALL'
 	| 'ALTER' 'INDEX' index_name 'UNSPLIT' 'ALL'
+	| alter_scatter_index_stmt
 	| 'ALTER' 'INDEX' table_name '@' index_name 'RENAME' 'TO' index_new_name
 	| 'ALTER' 'INDEX' index_name 'RENAME' 'TO' index_new_name
 	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_name '@' index_name 'RENAME' 'TO' index_new_name

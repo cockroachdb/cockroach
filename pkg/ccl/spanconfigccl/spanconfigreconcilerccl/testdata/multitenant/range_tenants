@@ -35,7 +35,7 @@ initialize tenant=11
 # We should observe placeholder entries for both tenants (installed when
 # creating tenant records). tenant=11 should start off with whatever RANGE
 # TENANT was at the time.
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -65,6 +65,9 @@ state offset=47
 /Table/7{1-2}                              database system (host)
 /Table/7{2-3}                              database system (host)
 /Table/7{3-4}                              database system (host)
+/Table/7{4-5}                              database system (host)
+/Table/7{5-6}                              database system (host)
+/Table/7{6-7}                              database system (host)
 /Tenant/10{-\x00}                          database system (tenant)
 /Tenant/11{-\x00}                          ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 /Tenant/12{-\x00}                          ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
@@ -78,7 +81,7 @@ reconcile tenant=10
 mutations discard tenant=10
 ----
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -108,6 +111,9 @@ state offset=47
 /Table/7{1-2}                              database system (host)
 /Table/7{2-3}                              database system (host)
 /Table/7{3-4}                              database system (host)
+/Table/7{4-5}                              database system (host)
+/Table/7{5-6}                              database system (host)
+/Table/7{6-7}                              database system (host)
 /Tenant/10{-/Table/4}                      database system (tenant)
 /Tenant/10/Table/{4-5}                     database system (tenant)
 /Tenant/10/Table/{5-6}                     database system (tenant)
@@ -171,6 +177,9 @@ state offset=47
 /Tenant/10/Table/7{1-2}                    database system (tenant)
 /Tenant/10/Table/7{2-3}                    database system (tenant)
 /Tenant/10/Table/7{3-4}                    database system (tenant)
+/Tenant/10/Table/7{4-5}                    database system (tenant)
+/Tenant/10/Table/7{5-6}                    database system (tenant)
+/Tenant/10/Table/7{6-7}                    database system (tenant)
 /Tenant/11{-\x00}                          ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 /Tenant/12{-\x00}                          ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 
@@ -205,9 +214,12 @@ reconcile tenant=11
 mutations discard tenant=11
 ----
 
-state offset=81
+state offset=82
 ----
 ...
+/Tenant/10/Table/{7-8}                     database system (tenant)
+/Tenant/10/Table/{8-9}                     database system (tenant)
+/Tenant/10/Table/{9-10}                    database system (tenant)
 /Tenant/10/Table/1{1-2}                    ignore_strict_gc=true rangefeed_enabled=true exclude_data_from_backup=true
 /Tenant/10/Table/1{2-3}                    database system (tenant)
 /Tenant/10/Table/1{3-4}                    database system (tenant)
@@ -264,6 +276,9 @@ state offset=81
 /Tenant/10/Table/7{1-2}                    database system (tenant)
 /Tenant/10/Table/7{2-3}                    database system (tenant)
 /Tenant/10/Table/7{3-4}                    database system (tenant)
+/Tenant/10/Table/7{4-5}                    database system (tenant)
+/Tenant/10/Table/7{5-6}                    database system (tenant)
+/Tenant/10/Table/7{6-7}                    database system (tenant)
 /Tenant/10/Table/10{6-7}                   rangefeed_enabled=true
 /Tenant/10/Table/10{7-8}                   rangefeed_enabled=true
 /Tenant/11{-/Table/4}                      ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
@@ -329,6 +344,9 @@ state offset=81
 /Tenant/11/Table/7{1-2}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 /Tenant/11/Table/7{2-3}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 /Tenant/11/Table/7{3-4}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/7{4-5}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/7{5-6}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11/Table/7{6-7}                    ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 /Tenant/12{-\x00}                          ttl_seconds=18000 ignore_strict_gc=true rangefeed_enabled=true
 
 query-sql tenant=11

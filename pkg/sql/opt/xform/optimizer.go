@@ -247,25 +247,12 @@ func (o *Optimizer) Memo() *memo.Memo {
 // properties at the lowest possible execution cost, but is still logically
 // equivalent to the given expression. If there is a cost "tie", then any one
 // of the qualifying lowest cost expressions may be selected by the optimizer.
-func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
+func (o *Optimizer) Optimize() (_ opt.Expr, retErr error) {
 	log.VEventf(o.ctx, 1, "optimize start")
 	defer log.VEventf(o.ctx, 1, "optimize finish")
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal errors without having to add
-			// error checks everywhere throughout the code. This is only possible
-			// because the code does not update shared state and does not manipulate
-			// locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-				log.VEventf(o.ctx, 1, "%v", err)
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+	defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
+		log.VEventf(o.ctx, 1, "%v", caughtErr)
+	})
 
 	if o.mem.IsOptimized() {
 		return nil, errors.AssertionFailedf("cannot optimize a memo multiple times")
@@ -618,21 +605,7 @@ func (o *Optimizer) optimizeGroupMember(
 			childCost, childOptimized := o.optimizeExpr(member.Child(i), childRequired)
 
 			// Accumulate cost of children.
-			if member.Op() == opt.LocalityOptimizedSearchOp && i > 0 {
-				// If the child ops are locality optimized, distribution costs are added
-				// to the remote branch, but not the local branch. Scale the remote
-				// branch costs by a factor reflecting the likelihood of executing that
-				// branch. Right now this probability is not estimated, so just use a
-				// default probability of 1/10.
-				// TODO(msirek): Add an estimation of the probability of executing the
-				//               remote branch, e.g., compare the size of the limit hint
-				//               with the expected row count of the local branch.
-				//               Is there a better approach?
-				childCost.C /= 10
-				cost.Add(childCost)
-			} else {
-				cost.Add(childCost)
-			}
+			cost.Add(childCost)
 
 			// If any child expression is not fully optimized, then the parent
 			// expression is also not fully optimized.

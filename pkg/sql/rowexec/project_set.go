@@ -342,7 +342,7 @@ func (ps *projectSetProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) (rowenc.EncDatum, error) {
 	generatedColIdx := colIdx - len(ps.input.OutputTypes())
 	ctyp := ps.spec.GeneratedColumns[generatedColIdx]
-	return rowenc.DatumToEncDatumEx(ctyp, d)
+	return rowenc.DatumToEncDatum(ctyp, d)
 }
 
 func (ps *projectSetProcessor) close() {

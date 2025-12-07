@@ -8,16 +8,18 @@ package upgrades
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -56,9 +58,29 @@ func FirstUpgradeFromRelease(
 	}
 	var descsToUpdate catalog.DescriptorIDSet
 	if err := all.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		// SKip virtual and synthetic descriptors.
+		switch d := desc.(type) {
+		case catalog.SchemaDescriptor:
+			switch d.SchemaKind() {
+			case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
+				return nil
+			}
+		case catalog.TableDescriptor:
+			if d.IsVirtualTable() {
+				return nil
+			}
+		}
 		changes := desc.GetPostDeserializationChanges()
 		if !changes.HasChanges() || (changes.Len() == 1 && changes.Contains(catalog.SetModTimeToMVCCTimestamp)) {
-			return nil
+			// In the upgrade to 25.4 (in between 25.3 and 25.4), we do a one-time
+			// rewrite of all descriptors in order to upgrade them to use the new type
+			// serialization format. Skip the unconditional rewrite if this is a
+			// database descriptor, as those never reference types.
+			// See https://github.com/cockroachdb/cockroach/issues/152629.
+			duringUpgradeTo25_4 := d.Settings.Version.IsActive(ctx, clusterversion.V25_3) && !d.Settings.Version.IsActive(ctx, clusterversion.V25_4)
+			if !duringUpgradeTo25_4 || desc.DescriptorType() == catalog.Database {
+				return nil
+			}
 		}
 		descsToUpdate.Add(desc.GetID())
 		return nil
@@ -79,9 +101,13 @@ func upgradeDescriptors(
 	batchSize := 100
 	// Any batch size below this will use high priority.
 	const HighPriBatchSize = 25
-	repairBatchTimeLimit := lease.LeaseDuration.Get(&d.Settings.SV)
+	repairBatchTimeLimit := 1 * time.Minute
 	currentIdx := 0
 	idsToRewrite := ids.Ordered()
+	totalDescs := len(idsToRewrite)
+	every := log.Every(time.Minute)
+	log.Dev.Infof(ctx, "upgrading format of %d descriptors for first upgrade from release", totalDescs)
+
 	for currentIdx <= len(idsToRewrite) {
 		descBatch := idsToRewrite[currentIdx:min(currentIdx+batchSize, len(idsToRewrite))]
 		err := timeutil.RunWithTimeout(ctx, "repair-post-deserialization", repairBatchTimeLimit, func(ctx context.Context) error {
@@ -101,10 +127,21 @@ func upgradeDescriptors(
 				}
 				b := txn.KV().NewBatch()
 				for _, mut := range muts {
-					if !mut.GetPostDeserializationChanges().HasChanges() {
-						continue
+					// Both newly created and altered descriptors never write the modification time
+					// to storage. This post-deserialization change is always expected now.
+					changes := mut.GetPostDeserializationChanges()
+					hasChanges := changes.Len() > 1 || !changes.Contains(catalog.SetModTimeToMVCCTimestamp)
+					if !hasChanges {
+						// In the upgrade to 25.4, we do a one-time rewrite of all
+						// descriptors in order to upgrade them to use the new type
+						// serialization format.
+						// See https://github.com/cockroachdb/cockroach/issues/152629.
+						if d.Settings.Version.IsActive(ctx, clusterversion.V25_4) {
+							continue
+						}
 					}
 					key := catalogkeys.MakeDescMetadataKey(d.Codec, mut.GetID())
+					mut.MaybeIncrementVersion()
 					b.CPut(key, mut.DescriptorProto(), mut.GetRawBytesInStorage())
 				}
 				return txn.KV().Run(ctx, b)
@@ -124,6 +161,19 @@ func upgradeDescriptors(
 			return err
 		}
 		currentIdx += batchSize
+
+		if every.ShouldLog() {
+			completedDescs := min(currentIdx, totalDescs)
+			log.Dev.Infof(ctx, "upgraded %d of %d descriptors so far", completedDescs, totalDescs)
+			if jobID := d.OptionalJobID; jobID != 0 {
+				frac := float32(completedDescs) / float32(totalDescs)
+				if err := d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					return jobs.ProgressStorage(jobID).Set(ctx, txn, float64(frac), txn.KV().ReadTimestamp())
+				}); err != nil {
+					log.Dev.Warningf(ctx, "failed to update progress for job %d: %v", jobID, err)
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -160,7 +210,7 @@ func FirstUpgradeFromReleasePrecondition(
 	// there are no corruptions now. Otherwise, we retry and do everything
 	// without an AOST clause henceforth.
 	withAOST := firstUpgradePreconditionUsesAOST
-	diagnose := func(tbl redact.SafeString) (hasRows bool, err error) {
+	diagnose := func(tbl redact.SafeString) (count int, err error) {
 		withAOST := withAOST
 		for {
 			q := fmt.Sprintf("SELECT count(*) FROM \"\".crdb_internal.%s", tbl)
@@ -168,8 +218,8 @@ func FirstUpgradeFromReleasePrecondition(
 				q = q + " AS OF SYSTEM TIME '-10s'"
 			}
 			row, err := d.InternalExecutor.QueryRow(ctx, redact.Sprintf("query-%s", tbl), nil /* txn */, q)
-			if err == nil && row[0].String() != "0" {
-				hasRows = true
+			if err == nil {
+				count = int(tree.MustBeDInt(row[0]))
 			}
 			// In tests like "declarative_schema_changer/job-compatibility-mixed-version", its
 			// possible to hit BatchTimestampBeforeGCError, because the GC interval is
@@ -180,24 +230,25 @@ func FirstUpgradeFromReleasePrecondition(
 				withAOST = false
 				continue
 			}
-			return hasRows, err
+			return count, err
 		}
 	}
 	// Check for possibility of time travel.
-	if hasRows, err := diagnose("databases"); err != nil {
+	if count, err := diagnose("databases"); err != nil {
 		return err
-	} else if !hasRows {
+	} else if count == 0 {
 		// We're looking back in time to before the cluster was bootstrapped
 		// and no databases exist at that point. Disable time-travel henceforth.
 		withAOST = false
 	}
 	// Check for repairable catalog corruptions.
-	if hasRows, err := diagnose("kv_repairable_catalog_corruptions"); err != nil {
+	if totalCorruptions, err := diagnose("kv_repairable_catalog_corruptions"); err != nil {
 		return err
-	} else if hasRows {
+	} else if totalCorruptions > 0 {
 		// Attempt to repair catalog corruptions in batches.
-		log.Dev.Info(ctx, "auto-repairing catalog corruptions detected during upgrade attempt")
-		var n int
+		log.Dev.Infof(ctx, "beginning auto-repair of %d catalog corruptions detected during upgrade attempt", totalCorruptions)
+
+		var repairedCount int
 		const repairQuery = `
 SELECT
 	count(*)
@@ -215,7 +266,7 @@ WHERE
 		batchSize := 100
 		// Any batch size below this will use high priority.
 		const HighPriBatchSize = 25
-		repairBatchTimeLimit := lease.LeaseDuration.Get(&d.Settings.SV)
+		repairBatchTimeLimit := 1 * time.Minute
 		for {
 			var rowsUpdated tree.DInt
 			err := timeutil.RunWithTimeout(ctx, "descriptor-repair", repairBatchTimeLimit, func(ctx context.Context) error {
@@ -245,7 +296,7 @@ WHERE
 				if kv.IsAutoRetryLimitExhaustedError(err) ||
 					errors.HasType(err, (*timeutil.TimeoutError)(nil)) {
 					batchSize = max(batchSize/2, 1)
-					log.Dev.Infof(ctx, "reducing batch size of invalid_object repair query to %d (hipri=%t)",
+					log.Dev.Infof(ctx, "reducing batch size of repair query to %d (hipri=%t)",
 						batchSize,
 						batchSize <= HighPriBatchSize)
 					continue
@@ -256,21 +307,19 @@ WHERE
 			if rowsUpdated == 0 {
 				break
 			}
-			n += int(rowsUpdated)
+			repairedCount += int(rowsUpdated)
 			log.Dev.Infof(ctx, "repaired %d catalog corruptions", rowsUpdated)
 		}
-		if n == 0 {
-			log.Dev.Info(ctx, "no catalog corruptions found to repair during upgrade attempt")
-		} else {
+		if repairedCount > 0 {
 			// Repairs have actually been performed: stop all time travel henceforth.
 			withAOST = false
-			log.Dev.Infof(ctx, "%d catalog corruptions have been repaired in total", n)
+			log.Dev.Infof(ctx, "%d catalog corruptions have been repaired in total", repairedCount)
 		}
 	}
 	// Check for all known catalog corruptions.
-	if hasRows, err := diagnose("invalid_objects"); err != nil {
+	if invalidObjectCount, err := diagnose("invalid_objects"); err != nil {
 		return err
-	} else if !hasRows {
+	} else if invalidObjectCount == 0 {
 		return nil
 	}
 	if !withAOST {
@@ -280,9 +329,9 @@ WHERE
 	// Re-run the diagnosis without the clause, because we might not be seeing
 	// repairs which might have taken place recently.
 	withAOST = false
-	if hasRows, err := diagnose("invalid_objects"); err != nil {
+	if invalidObjectCount, err := diagnose("invalid_objects"); err != nil {
 		return err
-	} else if !hasRows {
+	} else if invalidObjectCount == 0 {
 		return nil
 	}
 	return errors.AssertionFailedf("\"\".crdb_internal.invalid_objects is not empty")

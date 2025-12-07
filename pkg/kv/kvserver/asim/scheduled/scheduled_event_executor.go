@@ -31,7 +31,7 @@ type EventExecutor interface {
 	TickEvents(context.Context, time.Time, state.State, history.History) bool
 	// PrintEventSummary returns a string summarizing the executed mutation and
 	// assertion events.
-	PrintEventSummary() string
+	PrintEventSummary(tag string) string
 	// PrintEventsExecuted returns a detailed string representation of executed
 	// events including details of mutation events, assertion checks, and assertion
 	// results.
@@ -68,17 +68,22 @@ func newExecutorWithNoEvents() *eventExecutor {
 
 // PrintEventSummary returns a string summarizing the executed mutation and
 // assertion events.
-func (e *eventExecutor) PrintEventSummary() string {
+func (e *eventExecutor) PrintEventSummary(tag string) string {
 	mutationEvents, assertionEvents := 0, 0
-	for _, e := range e.scheduledEvents {
-		if e.IsMutationEvent() {
+	var buf strings.Builder
+	sort.Sort(e.scheduledEvents)
+	for i, ev := range e.scheduledEvents {
+		_, _ = fmt.Fprintf(&buf, "%v", ev.StringWithTag(tag))
+		if i != len(e.scheduledEvents)-1 {
+			_, _ = fmt.Fprintf(&buf, "\n")
+		}
+		if ev.IsMutationEvent() {
 			mutationEvents++
 		} else {
 			assertionEvents++
 		}
 	}
-	return fmt.Sprintf(
-		"number of mutation events=%d, number of assertion events=%d", mutationEvents, assertionEvents)
+	return buf.String()
 }
 
 // PrintEventsExecuted returns a detailed string representation of executed
@@ -100,12 +105,15 @@ func (e *eventExecutor) PrintEventsExecuted() string {
 		panic("unexpected")
 	}
 	if len(e.scheduledEvents) == 0 {
-		return fmt.Sprintln("no events were scheduled")
+		return "no events were scheduled"
 	} else {
 		buf := strings.Builder{}
 		buf.WriteString(fmt.Sprintf("%d events executed:\n", len(e.scheduledEvents)))
-		for _, event := range e.scheduledEvents {
-			buf.WriteString(fmt.Sprintln(event.String()))
+		for i, event := range e.scheduledEvents {
+			_, _ = fmt.Fprintf(&buf, "%v", event.StringWithTag(""))
+			if i != len(e.scheduledEvents)-1 {
+				_, _ = fmt.Fprintf(&buf, "\n")
+			}
 		}
 		return buf.String()
 	}
@@ -126,7 +134,7 @@ func (e *eventExecutor) TickEvents(
 	// to.
 	for e.nextEventIndex < len(e.scheduledEvents) {
 		if !tick.Before(e.scheduledEvents[e.nextEventIndex].At) {
-			log.Dev.Infof(ctx, "applying event (scheduled=%s tick=%s)", e.scheduledEvents[e.nextEventIndex].At, tick)
+			log.KvDistribution.Infof(ctx, "applying event (scheduled=%s tick=%s)", e.scheduledEvents[e.nextEventIndex].At, tick)
 			scheduledEvent := e.scheduledEvents[e.nextEventIndex]
 			fn := scheduledEvent.TargetEvent.Func()
 			if scheduledEvent.IsMutationEvent() {

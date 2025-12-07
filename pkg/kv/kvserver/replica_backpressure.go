@@ -88,9 +88,11 @@ var backpressureByteTolerance = settings.RegisterByteSizeSetting(
 // to be backpressured.
 var backpressurableSpans = []roachpb.Span{
 	{Key: keys.TimeseriesPrefix, EndKey: keys.TimeseriesKeyMax},
-	// Backpressure from the end of the system config forward instead of
-	// over all table data to avoid backpressuring unsplittable ranges.
-	{Key: keys.SystemConfigTableDataMax, EndKey: keys.TableDataMax},
+	// Exclude the span_configurations table to avoid
+	// catch-22 situations where protected timestamp updates or garbage
+	// collection TTL updates are blocked by backpressure.
+	{Key: keys.SystemConfigTableDataMax, EndKey: keys.SpanConfigTableMin},
+	{Key: keys.SpanConfigTableMax, EndKey: keys.TableDataMax},
 }
 
 // canBackpressureBatch returns whether the provided BatchRequest is eligible
@@ -201,14 +203,23 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 			defer r.store.metrics.BackpressuredOnSplitRequests.Dec(1) //nolint:deferloop
 
 			if backpressureLogLimiter.ShouldLog() {
-				log.Dev.Warningf(ctx, "applying backpressure to limit range growth on batch %s", ba)
+				log.KvExec.Warningf(ctx, "applying backpressure to limit range growth on batch %s", ba)
 			}
 		}
 
 		// Register a callback on an ongoing split for this range in the splitQueue.
 		splitC := make(chan error, 1)
-		if !r.store.splitQueue.MaybeAddCallback(r.RangeID, func(err error) {
-			splitC <- err
+		if !r.store.splitQueue.MaybeAddCallback(r.RangeID, processCallback{
+			onEnqueueResult: func(rank int, err error) {},
+			onProcessResult: func(err error) {
+				select {
+				case splitC <- err:
+				default:
+					// Drop the error if the channel is already full. This prevents
+					// blocking if the callback is invoked multiple times.
+					return
+				}
+			},
 		}) {
 			// No split ongoing. We may have raced with its completion. There's
 			// no good way to prevent this race, so we conservatively allow the

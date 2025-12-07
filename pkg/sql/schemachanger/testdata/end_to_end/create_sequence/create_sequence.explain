@@ -8,7 +8,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 15 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Sequence:{DescID: 104 (sq1+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 104 (sq1+), ReferencedDescID: 101 (public)}
  │         │    ├── ABSENT → PUBLIC TableData:{DescID: 104 (sq1+), ReferencedDescID: 100 (defaultdb)}
  │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "START"}
@@ -27,7 +27,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
  │              ├── SetNameInDescriptor {"DescriptorID":104,"Name":"sq1"}
  │              ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sq1","SchemaID":101}}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":104,"SchemaID":101}}
- │              ├── SetSequenceOptions {"Key":"START","SequenceID":104,"Value":"32"}
+ │              ├── SetSequenceOption {"Key":"START","SequenceID":104,"Value":"32"}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":104}}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":104}
@@ -51,7 +51,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 15 elements transitioning toward PUBLIC
       │    │    ├── PUBLIC → ABSENT Sequence:{DescID: 104 (sq1+)}
-      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb), IntValue: 101}
       │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 104 (sq1+), ReferencedDescID: 101 (public)}
       │    │    ├── PUBLIC → ABSENT TableData:{DescID: 104 (sq1+), ReferencedDescID: 100 (defaultdb)}
       │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 104 (sq1+), Name: "START"}
@@ -70,7 +70,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
       └── Stage 2 of 2 in PreCommitPhase
            ├── 15 elements transitioning toward PUBLIC
            │    ├── ABSENT → PUBLIC Sequence:{DescID: 104 (sq1+)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb), IntValue: 101}
            │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 104 (sq1+), ReferencedDescID: 101 (public)}
            │    ├── ABSENT → PUBLIC TableData:{DescID: 104 (sq1+), ReferencedDescID: 100 (defaultdb)}
            │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 104 (sq1+), Name: "START"}
@@ -84,12 +84,13 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
            │    ├── ABSENT → PUBLIC Owner:{DescID: 104 (sq1+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "admin"}
            │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 104 (sq1+), Name: "root"}
-           └── 24 Mutation operations
+           └── 25 Mutation operations
                 ├── CreateSequenceDescriptor {"SequenceID":104}
                 ├── SetNameInDescriptor {"DescriptorID":104,"Name":"sq1"}
                 ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sq1","SchemaID":101}}
+                ├── UpdateTTLScheduleMetadata {"NewName":"sq1","TableID":104}
                 ├── SetObjectParentID {"ObjParent":{"ChildObjectID":104,"SchemaID":101}}
-                ├── SetSequenceOptions {"Key":"START","SequenceID":104,"Value":"32"}
+                ├── SetSequenceOption {"Key":"START","SequenceID":104,"Value":"32"}
                 ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":104}}
                 ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":104}}
                 ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":104}

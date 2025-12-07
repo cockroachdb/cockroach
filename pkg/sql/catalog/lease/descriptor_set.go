@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // descriptorSet maintains an ordered set of descriptorVersionState objects
@@ -43,7 +44,7 @@ func (l *descriptorSet) String() string {
 func (l *descriptorSet) insert(s *descriptorVersionState) {
 	i, match := l.findIndex(s.GetVersion())
 	if match {
-		panic("unable to insert duplicate lease")
+		panic(redact.Sprintf("unable to insert duplicate lease for id=%d", s.GetID()))
 	}
 	if i == len(l.data) {
 		l.data = append(l.data, s)
@@ -83,11 +84,25 @@ func (l *descriptorSet) findIndex(version descpb.DescriptorVersion) (int, bool) 
 	return i, false
 }
 
+func (l *descriptorSet) findOldest() *descriptorVersionState {
+	if len(l.data) == 0 {
+		return nil
+	}
+	return l.data[0]
+}
+
 func (l *descriptorSet) findNewest() *descriptorVersionState {
 	if len(l.data) == 0 {
 		return nil
 	}
 	return l.data[len(l.data)-1]
+}
+
+func (l *descriptorSet) findPrevious() *descriptorVersionState {
+	if len(l.data) < 2 {
+		return nil
+	}
+	return l.data[len(l.data)-2]
 }
 
 func (l *descriptorSet) findPreviousToExpire(dropped bool) *descriptorVersionState {

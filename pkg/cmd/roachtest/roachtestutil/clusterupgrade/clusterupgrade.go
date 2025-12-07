@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -54,15 +55,15 @@ type Version struct {
 // tested, we print the branch name being tested if the test is
 // running on TeamCity, to make it clearer (instead of "<current>").
 func (v *Version) String() string {
+	suffix := ""
 	if v.IsCurrent() {
 		if currentBranch != "" {
-			return currentBranch
+			suffix = fmt.Sprintf(" (%s)", currentBranch)
+		} else {
+			suffix = fmt.Sprintf(" (%s)", CurrentVersionString)
 		}
-
-		return CurrentVersionString
 	}
-
-	return v.Version.String()
+	return v.Version.String() + suffix
 }
 
 // IsCurrent returns whether this version corresponds to the current
@@ -156,10 +157,22 @@ func LatestPatchRelease(series string) (*Version, error) {
 // associated with the given database connection.
 // NB: version means major.minor[-internal]; the patch level isn't
 // returned. For example, a binary of version 19.2.4 will return 19.2.
-func BinaryVersion(ctx context.Context, db *gosql.DB) (roachpb.Version, error) {
+func BinaryVersion(ctx context.Context, l *logger.Logger, db *gosql.DB) (roachpb.Version, error) {
 	zero := roachpb.Version{}
 	var sv string
-	if err := db.QueryRowContext(ctx, `SELECT crdb_internal.node_executable_version();`).Scan(&sv); err != nil {
+	rows, err := roachtestutil.QueryWithRetry(
+		ctx, l, db, roachtestutil.ClusterSettingRetryOpts, `SELECT crdb_internal.node_executable_version();`,
+	)
+	if err != nil {
+		return zero, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return zero, fmt.Errorf("no rows returned")
+	}
+
+	if err := rows.Scan(&sv); err != nil {
 		return zero, err
 	}
 
@@ -176,10 +189,22 @@ func BinaryVersion(ctx context.Context, db *gosql.DB) (roachpb.Version, error) {
 // in the background plus gossip asynchronicity.
 // NB: cluster versions are always major.minor[-internal]; there isn't
 // a patch level.
-func ClusterVersion(ctx context.Context, db *gosql.DB) (roachpb.Version, error) {
+func ClusterVersion(ctx context.Context, l *logger.Logger, db *gosql.DB) (roachpb.Version, error) {
 	zero := roachpb.Version{}
 	var sv string
-	if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&sv); err != nil {
+	rows, err := roachtestutil.QueryWithRetry(
+		ctx, l, db, roachtestutil.ClusterSettingRetryOpts, `SHOW CLUSTER SETTING version`,
+	)
+	if err != nil {
+		return zero, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return zero, fmt.Errorf("no rows returned")
+	}
+
+	if err := rows.Scan(&sv); err != nil {
 		return zero, err
 	}
 
@@ -228,7 +253,6 @@ func UploadWorkload(
 	default:
 		minWorkloadBinaryVersion = MustParseVersion("v22.2.0")
 	}
-
 	// If we are uploading the `current` version, skip version checking,
 	// as the binary used is the one passed via command line flags.
 	if !v.IsCurrent() && !v.AtLeast(minWorkloadBinaryVersion) {
@@ -239,9 +263,15 @@ func UploadWorkload(
 	return path, err == nil, err
 }
 
-// uploadBinaryVersion uploads the specified binary associated with
-// the given version to the given nodes. It returns the path of the
-// uploaded binaries on the nodes.
+// uploadBinaryVersion attempts to upload the specified binary associated with
+// the given version to the given nodes. If the destination binary path already
+// exists, assume the binary has already been uploaded previously. Returns the
+// path of the uploaded binaries on the nodes.
+//
+// If cockroach is the target binary and if --versions-binary-override option
+// is set and if version v is contained in the override map, use that version's
+// value, which is a local binary path as the source binary to upload instead
+// of using roachprod to stage.
 func uploadBinaryVersion(
 	ctx context.Context,
 	t test.Test,
@@ -256,6 +286,8 @@ func uploadBinaryVersion(
 	var isOverridden bool
 	switch binary {
 	case "cockroach":
+		// If the --versions-binary-override option is set and version v is in the
+		// argument map, then use that version's value as the path to the binary
 		defaultBinary, isOverridden = t.VersionsBinaryOverride()[v.String()]
 		if isOverridden {
 			l.Printf("using cockroach binary override for version %s: %s", v, defaultBinary)
@@ -305,7 +337,6 @@ func uploadBinaryVersion(
 			return "", err
 		}
 	}
-
 	return dstBinary, nil
 }
 
@@ -477,7 +508,7 @@ func WaitForClusterUpgrade(
 	timeout time.Duration,
 ) error {
 	firstNode := nodes[0]
-	newVersion, err := BinaryVersion(ctx, dbFunc(firstNode))
+	newVersion, err := BinaryVersion(ctx, l, dbFunc(firstNode))
 	if err != nil {
 		return err
 	}
@@ -490,7 +521,7 @@ func WaitForClusterUpgrade(
 		retryCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 		err := opts.Do(retryCtx, func(ctx context.Context) error {
-			currentVersion, err := ClusterVersion(ctx, dbFunc(node))
+			currentVersion, err := ClusterVersion(ctx, l, dbFunc(node))
 			if err != nil {
 				return err
 			}

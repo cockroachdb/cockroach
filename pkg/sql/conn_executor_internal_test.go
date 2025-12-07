@@ -6,6 +6,7 @@ package sql
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,7 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/require"
 )
 
@@ -269,6 +274,7 @@ func startConnExecutor(
 ) {
 	// A lot of boilerplate for creating a connExecutor.
 	stopper := stop.NewStopper()
+	codec := keys.SystemSQLCodec
 	clock := hlc.NewClockForTesting(nil)
 	factory := kv.MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, *kvpb.BatchRequest,
@@ -280,7 +286,7 @@ func startConnExecutor(
 	nodeID := base.TestingIDContainer
 	distSQLMetrics := execinfra.MakeDistSQLMetrics(time.Hour /* histogramWindow */)
 	gw := gossip.MakeOptionalGossip(nil)
-	tempEngine, tempFS, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, tempFS, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
@@ -292,7 +298,8 @@ func startConnExecutor(
 	})
 	// This pool should never be Stop()ed because, if the test is failing, memory
 	// is not properly released.
-	collectionFactory := descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec)
+	collectionFactory := descs.NewBareBonesCollectionFactory(st, codec)
+	registry := stmtdiagnostics.NewRegistry(nil, st)
 	cfg := &ExecutorConfig{
 		AmbientCtx: ambientCtx,
 		Settings:   st,
@@ -307,7 +314,7 @@ func startConnExecutor(
 			NodeID:           nodeID,
 			LogicalClusterID: func() uuid.UUID { return uuid.UUID{} },
 		},
-		Codec: keys.SystemSQLCodec,
+		Codec: codec,
 		DistSQLPlanner: NewDistSQLPlanner(
 			ctx, st, 1, /* sqlInstanceID */
 			nil, /* rpcCtx */
@@ -333,13 +340,14 @@ func startConnExecutor(
 			nil, /* connHealthCheckerSystem */
 			nil, /* instanceConnHealthChecker */
 			nil, /* sqlInstanceDialer */
-			keys.SystemSQLCodec,
+			codec,
 			nil, /* sqlAddressResolver */
 			clock,
 		),
 		QueryCache:              querycache.New(0),
 		TestingKnobs:            ExecutorTestingKnobs{},
-		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, st),
+		StmtDiagnosticsRecorder: registry,
+		TxnDiagnosticsRecorder:  stmtdiagnostics.NewTxnRegistry(nil, st, registry, timeutil.DefaultTimeSource{}),
 		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
 		CollectionFactory:       collectionFactory,
 		LicenseEnforcer:         license.NewEnforcer(nil),
@@ -454,5 +462,58 @@ CREATE TEMPORARY TABLE foo();
 		t.Fatal("session close timed out; connExecutor deadlocked?")
 	case err = <-done:
 		require.NoError(t, err)
+	}
+}
+
+func TestAnonymizeStatementAndGistForReporting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := cluster.MakeTestingClusterSettings()
+	vt, err := NewVirtualSchemaHolder(context.Background(), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const stmt1s = `
+INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
+`
+	stmt1, err := parser.ParseOne(stmt1s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Make a dummy connExecutor.
+	var ex connExecutor
+	ex.curStmtAST = stmt1.AST
+	ex.curStmtPlanGist = "foobargist"
+	ex.planner.extendedEvalCtx.VirtualSchemas = vt
+
+	rUnsafe := errors.New("some error")
+	safeErr := ex.WithAnonymizedStatementAndGist(rUnsafe)
+
+	const expMessage = "some error"
+	actMessage := safeErr.Error()
+	if actMessage != expMessage {
+		t.Errorf("wanted: %s\ngot: %s", expMessage, actMessage)
+	}
+
+	const expSafeRedactedMsgPrefix = `some error
+(1) plan gist: foobargist
+Wraps: (2) while executing: INSERT INTO _(_, _) VALUES ('_', '_', __more1_10__)`
+
+	actSafeRedactedMessage := string(redact.Sprintf("%+v", safeErr))
+
+	if !strings.HasPrefix(actSafeRedactedMessage, expSafeRedactedMsgPrefix) {
+		diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+			A:        difflib.SplitLines(expSafeRedactedMsgPrefix),
+			B:        difflib.SplitLines(actSafeRedactedMessage[:len(expSafeRedactedMsgPrefix)]),
+			FromFile: "Expected Message Prefix",
+			FromDate: "",
+			ToFile:   "Actual Message Prefix",
+			ToDate:   "",
+			Context:  1,
+		})
+		t.Errorf("Diff:\n%s", diff)
 	}
 }

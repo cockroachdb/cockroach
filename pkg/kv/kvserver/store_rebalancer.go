@@ -32,7 +32,7 @@ var (
 		Help:        "Number of lease transfers motivated by store-level load imbalances",
 		Measurement: "Lease Transfers",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `Used to identify when there has been more rebalancing activity triggered by imbalance between stores (of QPS or CPU). If this is high (when the count is rated), it indicates that more rebalancing activity is taking place due to load imbalance between stores.`,
 	}
@@ -41,7 +41,7 @@ var (
 		Help:        "Number of range rebalance operations motivated by store-level load imbalances",
 		Measurement: "Range Rebalances",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `Used to identify when there has been more rebalancing activity triggered by imbalance between stores (of QPS or CPU). If this is high (when the count is rated), it indicates that more rebalancing activity is taking place due to load imbalance between stores.`,
 	}
@@ -169,7 +169,7 @@ func NewStoreRebalancer(
 		},
 		disabled: func() bool {
 			mode := kvserverbase.LoadBasedRebalancingMode.Get(&st.SV)
-			return mode == kvserverbase.LBRebalancingOff || mode == kvserverbase.LBRebalancingMultiMetric ||
+			return mode == kvserverbase.LBRebalancingOff || kvserverbase.LoadBasedRebalancingModeIsMMA(&st.SV) ||
 				rq.store.cfg.TestingKnobs.DisableStoreRebalancer
 		},
 	}
@@ -319,9 +319,11 @@ func (sr *StoreRebalancer) scorerOptions(
 	ctx context.Context, lbDimension load.Dimension,
 ) *allocatorimpl.LoadScorerOptions {
 	return &allocatorimpl.LoadScorerOptions{
-		IOOverloadOptions:            sr.allocator.IOOverloadOptions(),
-		DiskOptions:                  sr.allocator.DiskOptions(),
-		Deterministic:                sr.storePool.IsDeterministic(),
+		BaseScorerOptions: allocatorimpl.BaseScorerOptions{
+			IOOverload:    sr.allocator.IOOverloadOptions(),
+			DiskCapacity:  sr.allocator.DiskOptions(),
+			Deterministic: sr.storePool.IsDeterministic(),
+		},
 		LoadDims:                     []load.Dimension{lbDimension},
 		LoadThreshold:                allocatorimpl.LoadThresholds(&sr.st.SV, lbDimension),
 		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(lbDimension),
@@ -812,7 +814,6 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			candidates,
 			candidateReplica,
 			candidateReplica.RangeUsageInfo(),
-			true, /* forceDecisionWithoutStats */
 			allocator.TransferLeaseOptions{
 				Goal:             allocator.LoadConvergence,
 				ExcludeLeaseRepl: false,

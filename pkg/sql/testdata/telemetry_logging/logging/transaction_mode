@@ -19,7 +19,7 @@ SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;
 ----
 
 exec-sql
-CREATE TABLE t()
+CREATE TABLE t() WITH (schema_locked=false)
 ----
 
 spy-sql unixSecs=0.1

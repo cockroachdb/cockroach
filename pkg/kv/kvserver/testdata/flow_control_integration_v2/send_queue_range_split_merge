@@ -21,12 +21,12 @@ echo
 
 
 -- Send queue metrics from n1, n3's send queue should have 1 MiB for s3.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%send_queue%'
   AND name != 'kvflowcontrol.send_queue.count'
 ORDER BY
@@ -59,7 +59,7 @@ ORDER BY
   a        | 3        | 4.0 MiB               
 
 
--- Per-store tokens available from n1, these should reflect the lack of tokens 
+-- Per-store tokens available from n1, these should reflect the lack of tokens
 -- for s3.
 SELECT
   store_id,
@@ -101,12 +101,12 @@ ORDER BY
 
 -- Send queue and flow token metrics from n1, post-split.
 -- We expect to see a force flush of the send queue for s3.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%send_queue%'
   AND name != 'kvflowcontrol.send_queue.count'
 ORDER BY
@@ -151,12 +151,12 @@ ORDER BY
 
 -- Send queue and flow token metrics from n1, post-split and 1 MiB put on
 -- each side.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%send_queue%'
   AND name != 'kvflowcontrol.send_queue.count'
 ORDER BY
@@ -192,12 +192,12 @@ ORDER BY
 
 -- Send queue and flow token metrics from n1, post-split-merge.
 -- We expect to see a force flush of the send queue for s3 again.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%send_queue%'
   AND name != 'kvflowcontrol.send_queue.count'
 ORDER BY
@@ -236,12 +236,12 @@ ORDER BY
 
 -- Send queue and flow token metrics from n1, post-split-merge and 1 MiB put.
 -- We expect to see the send queue develop for s3 again.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%send_queue%'
   AND name != 'kvflowcontrol.send_queue.count'
 ORDER BY
@@ -276,12 +276,12 @@ ORDER BY
 
 
 -- Send queue and flow token metrics from n1, all tokens should be returned.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%send_queue%'
   AND name != 'kvflowcontrol.send_queue.count'
 ORDER BY

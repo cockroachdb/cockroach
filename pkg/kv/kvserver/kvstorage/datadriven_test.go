@@ -8,17 +8,19 @@ package kvstorage
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -64,7 +66,7 @@ func (e *env) handleNewReplica(
 	skipRaftReplicaID bool,
 	k, ek roachpb.RKey,
 ) *roachpb.RangeDescriptor {
-	sl := stateloader.Make(id.RangeID)
+	sl := MakeStateLoader(id.RangeID)
 	require.NoError(t, sl.SetHardState(ctx, e.eng, raftpb.HardState{}))
 	if !skipRaftReplicaID && id.ReplicaID != 0 {
 		require.NoError(t, sl.SetRaftReplicaID(ctx, e.eng, id.ReplicaID))
@@ -93,6 +95,14 @@ func (e *env) handleNewReplica(
 	return desc
 }
 
+func (e *env) handleRangeTombstone(
+	t *testing.T, ctx context.Context, rangeID roachpb.RangeID, next roachpb.ReplicaID,
+) {
+	require.NoError(t, MakeStateLoader(rangeID).SetRangeTombstone(
+		ctx, e.eng, kvserverpb.RangeTombstone{NextReplicaID: next},
+	))
+}
+
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -100,17 +110,15 @@ func TestDataDriven(t *testing.T) {
 	// Scan stats (shown after loading the range descriptors) can be non-deterministic.
 	reStripScanStats := regexp.MustCompile(`stats: .*$`)
 
-	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+	dir := filepath.Join(datapathutils.TestDataPath(t), t.Name())
+	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		e := newEnv(t)
 		defer e.close()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) (output string) {
 			ctx, finishAndGet := tracing.ContextWithRecordingSpan(context.Background(), e.tr, path)
 			// This method prints all output to `buf`.
 			var buf strings.Builder
-			var printTrace bool // if true, trace printed to buf on return
-			if d.HasArg("trace") {
-				d.ScanArgs(t, "trace", &printTrace)
-			}
+			printTrace := dd.ScanArgOr(t, d, "trace", false) // if true, print trace to buf
 
 			defer func() {
 				if r := recover(); r != nil {
@@ -135,30 +143,24 @@ func TestDataDriven(t *testing.T) {
 
 			switch d.Cmd {
 			case "new-replica":
-				var rangeID int
-				d.ScanArgs(t, "range-id", &rangeID)
-				var replicaID int
-				if d.HasArg("replica-id") { // optional to allow making incomplete state
-					d.ScanArgs(t, "replica-id", &replicaID)
-				}
-				var k string
-				if d.HasArg("k") {
-					d.ScanArgs(t, "k", &k)
-				}
-				var ek string
-				if d.HasArg("ek") {
-					d.ScanArgs(t, "ek", &ek)
-				}
-				var skipRaftReplicaID bool
-				if d.HasArg("skip-raft-replica-id") {
-					d.ScanArgs(t, "skip-raft-replica-id", &skipRaftReplicaID)
-				}
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				replicaID := dd.ScanArgOr[roachpb.ReplicaID](t, d, "replica-id", 0)
+				k := dd.ScanArgOr(t, d, "k", "")
+				ek := dd.ScanArgOr(t, d, "ek", "")
+				skipRaftReplicaID := dd.ScanArgOr(t, d, "skip-raft-replica-id", false)
+
 				if desc := e.handleNewReplica(t, ctx,
-					roachpb.FullReplicaID{RangeID: roachpb.RangeID(rangeID), ReplicaID: roachpb.ReplicaID(replicaID)},
+					roachpb.FullReplicaID{RangeID: rangeID, ReplicaID: replicaID},
 					skipRaftReplicaID, keys.MustAddr(roachpb.Key(k)), keys.MustAddr(roachpb.Key(ek)),
 				); desc != nil {
 					fmt.Fprintln(&buf, desc)
 				}
+
+			case "range-tombstone":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				nextID := dd.ScanArg[roachpb.ReplicaID](t, d, "next-replica-id")
+				e.handleRangeTombstone(t, ctx, rangeID, nextID)
+
 			case "load-and-reconcile":
 				replicas, err := LoadAndReconcileReplicas(ctx, e.eng)
 				if err != nil {

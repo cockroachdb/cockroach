@@ -88,7 +88,7 @@ import {
   getValidOption,
   TimeScale,
   timeScale1hMinOptions,
-  toDateRange,
+  toRoundedDateRange,
 } from "../timeScaleDropdown";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
@@ -175,7 +175,7 @@ type RequestParams = Pick<
 >;
 
 function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
-  const [start, end] = toDateRange(params.timeScale);
+  const [start, end] = toRoundedDateRange(params.timeScale);
   return createCombinedStmtsRequest({
     start,
     end,

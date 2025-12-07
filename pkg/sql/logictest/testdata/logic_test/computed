@@ -280,7 +280,13 @@ SELECT a, b, c, d FROM x
 1 2 3 1
 
 statement ok
+ALTER TABLE x SET (schema_locked=false)
+
+statement ok
 TRUNCATE x
+
+statement ok
+ALTER TABLE x RESET (schema_locked)
 
 # statement ok
 # INSERT INTO x VALUES (2, 3) ON CONFLICT (a) DO UPDATE SET a = 2, b = 3
@@ -294,7 +300,13 @@ SELECT a, b, c, d FROM x
 2 3 4 2
 
 statement ok
+ALTER TABLE x SET (schema_locked=false)
+
+statement ok
 TRUNCATE x
+
+statement ok
+ALTER TABLE x RESET (schema_locked)
 
 statement error cannot write directly to computed column "c"
 UPSERT INTO x VALUES (2, 3, 12)
@@ -771,7 +783,13 @@ SELECT d FROM x
 {1,2,3}
 
 statement ok
+ALTER TABLE x SET (schema_locked=false)
+
+statement ok
 TRUNCATE x
+
+statement ok
+ALTER TABLE x RESET (schema_locked)
 
 # Make sure we get the permutation on the inserts correct.
 
@@ -1005,7 +1023,7 @@ ALTER TABLE x
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE x SET (schema_locked=true);
+ALTER TABLE x RESET (schema_locked);
 
 # Verify a bad statement fails.
 statement error pq: could not parse "a" as type int
@@ -1319,7 +1337,7 @@ SELECT * FROM t69327
 f  f
 
 # Regression test for #72881. Computed columns can't have a DEFAULT expr.
-statement error pgcode 42601 computed column "v" cannot also have a DEFAULT expression
+statement error pgcode 42601 computed column "v" cannot also have a DEFAULT or ON UPDATE expression
 ALTER TABLE t69327 ALTER COLUMN v SET DEFAULT 'foo'
 
 # Regression test for #69665.Computed columns should be evaluated after
@@ -1379,10 +1397,13 @@ CREATE TABLE foooooo (
     gen INT AS (x + y) STORED
 );
 
-statement error pgcode 42601 computed column "gen" cannot also have a DEFAULT expression
+statement error pgcode 42601 computed column "gen" cannot also have a DEFAULT or ON UPDATE expression
 ALTER TABLE foooooo ALTER COLUMN gen SET DEFAULT 1;
 
-statement error pgcode 42601 computed column "gen" cannot also have a DEFAULT expression
+statement error pgcode 42601 computed column "gen" cannot also have a DEFAULT or ON UPDATE expression
+ALTER TABLE foooooo ALTER COLUMN gen SET ON UPDATE 1;
+
+statement error pgcode 42601 computed column "gen" cannot also have a DEFAULT or ON UPDATE expression
 ALTER TABLE foooooo ALTER COLUMN gen SET DEFAULT NULL;
 
 statement error pgcode 42601 column "gen" of relation "foooooo" is a computed column
@@ -1405,5 +1426,108 @@ ALTER TABLE t81698 ADD COLUMN s VARCHAR(2) AS (i || 'stored') STORED;
 skipif config local-legacy-schema-changer
 statement error pgcode 22001 validate check constraint: value too long for type VARCHAR\(2\)
 ALTER TABLE t81698 ADD COLUMN v VARCHAR(2) AS (i || 'virtual') VIRTUAL;
+
+subtest end
+
+subtest drop_column_cascade_stored_computed
+
+statement ok
+CREATE TABLE test_table (
+    id INT PRIMARY KEY,
+    col_to_drop STRING,
+    other_col INT
+)
+
+statement ok
+CREATE INDEX secondary_idx ON test_table (col_to_drop) STORING (other_col)
+
+statement ok
+ALTER TABLE test_table ADD COLUMN computed_col STRING AS (col_to_drop) STORED
+
+statement ok
+INSERT INTO test_table (id, col_to_drop, other_col) VALUES (1, 'test1', 100), (2, 'test2', 200)
+
+query ITT colnames,rowsort
+SELECT id, col_to_drop, computed_col FROM test_table
+----
+id  col_to_drop  computed_col
+1   test1        test1
+2   test2        test2
+
+# Dropping a column that has a dependent computed column is not supported in
+# the legacy schema changer.
+#
+# In versions older than 25.4, we cannot drop 'col_to_drop' and 'computed_col'
+# (as a cascade) in the same statement. We drop them separately. Newer versions
+# can do this due to a change in the dep rules.
+onlyif config local-legacy-schema-changer
+statement ok
+ALTER TABLE test_table DROP COLUMN computed_col
+
+statement ok
+ALTER TABLE test_table DROP COLUMN col_to_drop CASCADE
+
+query T rowsort
+SELECT column_name FROM [SHOW COLUMNS FROM test_table] WHERE column_name != 'rowid'
+----
+id
+other_col
+
+# Verify the secondary index was also dropped via CASCADE
+query T
+SELECT index_name FROM [SHOW INDEXES FROM test_table] WHERE index_name != 'test_table_pkey'
+----
+
+query II colnames,rowsort
+SELECT * FROM test_table
+----
+id  other_col
+1   100
+2   200
+
+statement ok
+DROP TABLE test_table
+
+subtest end
+
+subtest drop_column_cascade_virtual_computed
+
+statement ok
+CREATE TABLE test_virtual (
+    id INT PRIMARY KEY,
+    col_to_drop STRING,
+    other_col INT
+)
+
+statement ok
+CREATE INDEX secondary_idx_virtual ON test_virtual (col_to_drop) STORING (other_col)
+
+statement ok
+ALTER TABLE test_virtual ADD COLUMN computed_col STRING AS (col_to_drop) VIRTUAL
+
+statement ok
+INSERT INTO test_virtual (id, col_to_drop, other_col) VALUES (1, 'virtual1', 300), (2, 'virtual2', 400)
+
+# Dropping a column that has a dependent computed column is not supported in
+# the legacy schema changer.
+#
+# In versions older than 25.4, we cannot drop 'col_to_drop' and 'computed_col'
+# (as a cascade) in the same statement. We drop them separately. Newer versions
+# can do this due to a change in the dep rules.
+onlyif config local-legacy-schema-changer
+statement ok
+ALTER TABLE test_virtual DROP COLUMN computed_col
+
+statement ok
+ALTER TABLE test_virtual DROP COLUMN col_to_drop CASCADE
+
+query T rowsort
+SELECT column_name FROM [SHOW COLUMNS FROM test_virtual] WHERE column_name != 'rowid'
+----
+id
+other_col
+
+statement ok
+DROP TABLE test_virtual
 
 subtest end

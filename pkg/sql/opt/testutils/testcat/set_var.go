@@ -11,24 +11,32 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// SetVar implements the 'SET ...' SQL statement. Currently, it supports only
-// statements that set the current role (e.g., SET ROLE <user>).
+// SetVar implements the 'SET ...' SQL statement.
 func (tc *Catalog) SetVar(n *tree.SetVar) {
-	if n.Name != "role" {
-		panic(errors.Newf("SET only supports SET ROLE: %q", n.Name))
-	}
 	if len(n.Values) != 1 {
 		panic(errors.Newf("Only support 1 value with SET"))
 	}
 	if n.ResetAll {
 		panic(errors.Newf("RESET ALL is not supported with SET"))
 	}
-	newUser, err := username.MakeSQLUsernameFromUserInput(n.Values[0].String(), username.PurposeValidation)
-	if err != nil {
-		panic(err)
+	if n.Name == "role" {
+		newUser, err := username.MakeSQLUsernameFromUserInput(n.Values[0].String(), username.PurposeValidation)
+		if err != nil {
+			panic(err)
+		}
+		if _, found := tc.users[newUser]; !found {
+			panic(errors.Newf("User %q does not exist", newUser.Normalized()))
+		}
+		tc.currentUser = newUser
+	} else if _, isReset := n.Values[0].(tree.DefaultVal); isReset {
+		// "SET var = DEFAULT" means RESET.
+		if tc.sessionVars != nil {
+			delete(tc.sessionVars, n.Name)
+		}
+	} else {
+		if tc.sessionVars == nil {
+			tc.sessionVars = make(map[string]string)
+		}
+		tc.sessionVars[n.Name] = n.Values[0].String()
 	}
-	if _, found := tc.users[newUser]; !found {
-		panic(errors.Newf("User %q does not exist", newUser.Normalized()))
-	}
-	tc.currentUser = newUser
 }

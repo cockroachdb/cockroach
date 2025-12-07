@@ -378,7 +378,9 @@ func TestStatusLogRedaction(t *testing.T) {
 			// Apply the redactable log boolean for this test.
 			defer log.TestingSetRedactable(redactableLogs)()
 
-			srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+			srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+				DefaultDRPCOption: base.TestDRPCDisabled,
+			})
 			defer srv.Stopper().Stop(context.Background())
 			ts := srv.ApplicationLayer()
 

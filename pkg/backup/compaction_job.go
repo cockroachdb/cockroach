@@ -161,11 +161,11 @@ func maybeStartCompactionJob(
 		if err != nil {
 			return err
 		}
-		idDatum, ok := tree.AsDInt(datums[0])
+		idDatum, ok := datums[0].(*tree.DInt)
 		if !ok {
 			return errors.Newf("expected job ID: unexpected result type %T", datums[0])
 		}
-		jobID = jobspb.JobID(idDatum)
+		jobID = jobspb.JobID(*idDatum)
 
 		scheduledJob := jobs.ScheduledJobTxn(txn)
 		backupSchedule, args, err := getScheduledBackupExecutionArgsFromSchedule(
@@ -677,20 +677,16 @@ func resolveBackupSubdir(
 
 // resolveBackupDirs resolves the sub-directory, base backup directory, and
 // incremental backup directories for a backup collection. incrementalURIs may
-// be empty if an incremental location is not specified. subdir can be a resolved
-// sub-directory or the string "LATEST" to resolve the latest sub-directory.
+// be empty if an incremental location is not specified. subdir must be a
+// resolved subdirectory and not `LATEST`.
 func resolveBackupDirs(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
 	collectionURIs []string,
 	incrementalURIs []string,
-	subdir string,
+	resolvedSubdir string,
 ) ([]string, []string, string, error) {
-	resolvedSubdir, err := resolveBackupSubdir(ctx, execCfg, user, collectionURIs[0], subdir)
-	if err != nil {
-		return nil, nil, "", err
-	}
 	resolvedBaseDirs, err := backuputils.AppendPaths(collectionURIs[:], resolvedSubdir)
 	if err != nil {
 		return nil, nil, "", err
@@ -721,8 +717,18 @@ func getBackupChain(
 	map[int]*backupinfo.IterFactory,
 	error,
 ) {
+	defaultCollectionURI, _, err := backupdest.GetURIsByLocalityKV(dest.To, "")
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	resolvedSubdir, err := resolveBackupSubdir(
+		ctx, execCfg, user, defaultCollectionURI, dest.Subdir,
+	)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 	resolvedBaseDirs, resolvedIncDirs, _, err := resolveBackupDirs(
-		ctx, execCfg, user, dest.To, dest.IncrementalStorage, dest.Subdir,
+		ctx, execCfg, user, dest.To, dest.IncrementalStorage, resolvedSubdir,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -739,17 +745,6 @@ func getBackupChain(
 			log.Dev.Warningf(ctx, "failed to cleanup base backup stores: %+v", err)
 		}
 	}()
-	incStores, incCleanup, err := backupdest.MakeBackupDestinationStores(
-		ctx, user, mkStore, resolvedIncDirs,
-	)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	defer func() {
-		if err := incCleanup(); err != nil {
-			log.Dev.Warningf(ctx, "failed to cleanup incremental backup stores: %+v", err)
-		}
-	}()
 	baseEncryptionInfo := encryptionOpts
 	if encryptionOpts != nil && !encryptionOpts.HasKey() {
 		baseEncryptionInfo, err = backupencryption.GetEncryptionFromBaseStore(
@@ -764,9 +759,9 @@ func getBackupChain(
 	defer mem.Close(ctx)
 
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
-		ctx, &mem, baseStores, incStores, mkStore, resolvedBaseDirs,
-		resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
-		user, false /*includeSkipped */, true, /*includeCompacted */
+		ctx, execCfg, &mem, defaultCollectionURI, dest.To, mkStore, resolvedSubdir,
+		resolvedBaseDirs, resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
+		user, false /*includeSkipped */, true /*includeCompacted */, len(dest.IncrementalStorage) > 0,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -781,51 +776,6 @@ func getBackupChain(
 		return nil, nil, nil, nil, err
 	}
 	return manifests, localityInfo, baseEncryptionInfo, allIters, nil
-}
-
-// concludeBackupCompaction completes the backup compaction process after the backup has been
-// completed by writing the manifest and associated metadata to the backup destination.
-//
-// TODO (kev-cao): Can move this helper to the backup code at some point.
-func concludeBackupCompaction(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	store cloud.ExternalStorage,
-	details jobspb.BackupDetails,
-	kmsEnv cloud.KMSEnv,
-	backupManifest *backuppb.BackupManifest,
-) error {
-	backupID := uuid.MakeV4()
-	backupManifest.ID = backupID
-
-	if err := backupinfo.WriteBackupManifest(ctx, store, backupbase.BackupManifestName,
-		details.EncryptionOptions, kmsEnv, backupManifest); err != nil {
-		return err
-	}
-	if backupinfo.WriteMetadataWithExternalSSTsEnabled.Get(&execCtx.ExecCfg().Settings.SV) {
-		if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, store, details.EncryptionOptions,
-			kmsEnv, backupManifest); err != nil {
-			return err
-		}
-	}
-
-	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), backupManifest.Descriptors)
-	if err := backupinfo.WriteTableStatistics(
-		ctx, store, details.EncryptionOptions, kmsEnv, &statsTable,
-	); err != nil {
-		return errors.Wrapf(err, "writing table statistics")
-	}
-
-	return errors.Wrapf(
-		backupdest.WriteBackupIndexMetadata(
-			ctx,
-			execCtx.ExecCfg(),
-			execCtx.User(),
-			execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
-			details,
-		),
-		"writing backup index metadata",
-	)
 }
 
 // processProgress processes progress updates from the bulk processor for a backup and updates
@@ -928,9 +878,9 @@ func doCompaction(
 	); err != nil {
 		return err
 	}
-
-	return concludeBackupCompaction(
-		ctx, execCtx, defaultStore, details, kmsEnv, manifest,
+	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), manifest.Descriptors)
+	return backupinfo.WriteBackupMetadata(
+		ctx, execCtx, defaultStore, details, kmsEnv, manifest, statsTable,
 	)
 }
 

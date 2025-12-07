@@ -1,9 +1,24 @@
 # LogicTest: 5node-default-configs
 
+skip under race
+
 subtest setup
 
 statement ok
-SET enable_scrub_job = true;
+SET enable_inspect_command = true;
+
+statement ok
+SET enable_inspect_command = true;
+
+statement ok
+CREATE VIEW last_inspect_job AS
+SELECT status, COALESCE(jsonb_array_length(
+    crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->'inspectDetails'->'checks'
+  ), 0) AS num_checks
+FROM crdb_internal.system_jobs
+WHERE job_type = 'INSPECT'
+ORDER BY created DESC
+LIMIT 1
 
 statement ok
 CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, e BOOL, PRIMARY KEY (a, b, c, d), INDEX c_idx (c, d))
@@ -31,7 +46,7 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data WITH DETAILS] ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/73>  …/1/1         {1}       1
+<before:/Table/76>  …/1/1         {1}       1
 …/1/1               …/1/2         {2}       2
 …/1/2               …/1/3         {3}       3
 …/1/3               …/1/4         {4}       4
@@ -44,15 +59,58 @@ start_key           end_key       replicas  lease_holder
 
 subtest end
 
-subtest scrub_job_implicit_txn
+subtest inspect_job_implicit_txn
 
 statement ok
-EXPERIMENTAL SCRUB TABLE data;
+INSPECT TABLE data AS OF SYSTEM TIME '-1us';
 
 query TTB
 SELECT description, status, finished IS NOT NULL AS finished FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY created DESC LIMIT 1
 ----
-EXPERIMENTAL SCRUB TABLE data  succeeded  true
+INSPECT TABLE data AS OF SYSTEM TIME '-1us'  succeeded  true
+
+subtest end
+
+subtest ltree_array_pk_column
+
+statement ok
+CREATE TABLE table_ltree_array_leading (
+    pk_ltree_array LTREE[] NOT NULL,
+    pk_name NAME NOT NULL,
+    val INT,
+    PRIMARY KEY (pk_ltree_array, pk_name),
+    INDEX idx_val (val)
+);
+
+statement ok
+INSERT INTO table_ltree_array_leading VALUES
+    (ARRAY['a.b.c']::LTREE[], 'key1', 1),
+    (ARRAY['d.e.f']::LTREE[], 'key2', 2),
+    (ARRAY['g.h.i']::LTREE[], 'key3', 3),
+    (ARRAY['j.k.l']::LTREE[], 'key4', 4),
+    (ARRAY['m.n.o']::LTREE[], 'key5', 5),
+    (ARRAY['p.q.r']::LTREE[], 'key6', 6);
+
+# Split the table into multiple ranges to force distributed INSPECT queries.
+statement ok
+ALTER TABLE table_ltree_array_leading SPLIT AT VALUES (ARRAY['d.e.f']::LTREE[], 'key2');
+
+statement ok
+ALTER TABLE table_ltree_array_leading SPLIT AT VALUES (ARRAY['j.k.l']::LTREE[], 'key4');
+
+statement ok
+ALTER TABLE table_ltree_array_leading SCATTER;
+
+statement ok
+INSPECT TABLE table_ltree_array_leading;
+
+query TI allowunsafe
+SELECT * FROM last_inspect_job;
+----
+succeeded 1
+
+statement ok
+DROP TABLE table_ltree_array_leading;
 
 subtest end
 

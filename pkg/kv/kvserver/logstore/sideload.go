@@ -102,7 +102,7 @@ func MaybeSideloadEntries(
 			// Still no AddSSTable; someone must've proposed a v2 command
 			// but not because it contains an inlined SSTable. Strange, but
 			// let's be future proof.
-			log.Dev.Warning(ctx, "encountered sideloaded Raft command without inlined payload")
+			log.KvExec.Warning(ctx, "encountered sideloaded Raft command without inlined payload")
 			continue
 		}
 
@@ -215,7 +215,7 @@ func MaybeInlineSideloadedRaftCommand(
 func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) {
 	typ, _, err := raftlog.EncodingOf(*ent)
 	if err != nil {
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 	if !typ.IsSideloaded() {
 		return
@@ -223,12 +223,12 @@ func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 
 	e, err := raftlog.NewEntry(*ent)
 	if err != nil {
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 
 	if len(e.Cmd.ReplicatedEvalResult.AddSSTable.Data) == 0 {
 		// The entry is "thin", which is what this assertion is checking for.
-		log.Dev.Fatalf(ctx, "found thin sideloaded raft command: %+v", e.Cmd)
+		log.KvExec.Fatalf(ctx, "found thin sideloaded raft command: %+v", e.Cmd)
 	}
 }
 

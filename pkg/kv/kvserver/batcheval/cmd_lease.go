@@ -74,14 +74,16 @@ func evalNewLease(
 			// If this is a lease transfer, we write out all unreplicated leases to
 			// storage, so that any waiters will discover them on the new leaseholder.
 			acquisitions, approxSize := rec.GetConcurrencyManager().OnRangeLeaseTransferEval()
-			log.VEventf(ctx, 2, "upgrading durability of %d locks", len(acquisitions))
 			if approxSize > durabilityUpgradeLimit {
-				log.Dev.Warningf(ctx,
+				log.KvExec.Warningf(ctx,
 					"refusing to upgrade lock durability of %d locks since approximate lock size of %d byte exceeds %d bytes",
 					len(acquisitions),
 					approxSize,
 					durabilityUpgradeLimit)
 			} else {
+				if len(acquisitions) > 0 {
+					log.KvExec.Infof(ctx, "upgrading durability of %d locks during lease transfer", len(acquisitions))
+				}
 				for _, acq := range acquisitions {
 					if err := storage.MVCCAcquireLock(ctx, readWriter,
 						&acq.Txn, acq.IgnoredSeqNums, acq.Strength, acq.Key, ms, 0, 0, true /* allowSequenceNumberRegression */); err != nil {

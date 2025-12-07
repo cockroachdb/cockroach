@@ -3,12 +3,15 @@ show_jobs_stmt ::=
 	| 'SHOW' 'JOBS'
 	| 'SHOW' 'JOBS' 'WITH' show_job_options_list
 	| 'SHOW' 'CHANGEFEED' 'JOBS'
+	| 'SHOW' 'CHANGEFEED' 'JOBS' 'WITH' 'WATCHED_TABLES'
 	| 'SHOW' 'JOBS' select_stmt
 	| 'SHOW' 'JOBS' select_stmt 'WITH' show_job_options_list
 	| 'SHOW' 'JOBS' 'WHEN' 'COMPLETE' select_stmt
 	| 'SHOW' 'JOBS' for_schedules_clause
 	| 'SHOW' 'CHANGEFEED' 'JOBS' select_stmt
+	| 'SHOW' 'CHANGEFEED' 'JOBS' select_stmt 'WITH' 'WATCHED_TABLES'
 	| 'SHOW' 'JOB' job_id
 	| 'SHOW' 'JOB' job_id 'WITH' show_job_options_list
 	| 'SHOW' 'CHANGEFEED' 'JOB' job_id
+	| 'SHOW' 'CHANGEFEED' 'JOB' job_id 'WITH' 'WATCHED_TABLES'
 	| 'SHOW' 'JOB' 'WHEN' 'COMPLETE' job_id

@@ -8,7 +8,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
@@ -56,14 +55,6 @@ func (s destroyStatus) Removed() bool {
 	return s.reason == destroyReasonRemoved
 }
 
-// mergedTombstoneReplicaID is the replica ID written into the tombstone
-// for replicas which are part of a range which is known to have been merged.
-// This value should prevent any messages from stale replicas of that range from
-// ever resurrecting merged replicas. Whenever merging or subsuming a replica we
-// know new replicas can never be created so this value is used even if we
-// don't know the current replica ID.
-const mergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
-
 // postDestroyRaftMuLocked is called after the replica destruction is durably
 // written to Pebble.
 func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) error {
@@ -97,21 +88,12 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	ms := r.GetMVCCStats()
 	batch := r.store.TODOEngine().NewWriteBatch()
 	defer batch.Close()
-	desc := r.Desc()
-	inited := desc.IsInitialized()
 
-	opts := kvstorage.ClearRangeDataOptions{
-		ClearReplicatedBySpan: desc.RSpan(), // zero if !inited
-		// TODO(tbg): if it's uninitialized, we might as well clear
-		// the replicated state because there isn't any. This seems
-		// like it would be simpler, but needs a code audit to ensure
-		// callers don't call this in in-between states where the above
-		// assumption doesn't hold.
-		ClearReplicatedByRangeID:   inited,
-		ClearUnreplicatedByRangeID: true,
-	}
 	// TODO(sep-raft-log): need both engines separately here.
-	if err := kvstorage.DestroyReplica(ctx, r.RangeID, r.store.TODOEngine(), batch, nextReplicaID, opts); err != nil {
+	if err := kvstorage.DestroyReplica(
+		ctx, kvstorage.TODOReaderWriter(r.store.TODOEngine(), batch),
+		r.destroyInfoRaftMuLocked(), nextReplicaID,
+	); err != nil {
 		return err
 	}
 	preTime := timeutil.Now()
@@ -130,13 +112,13 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 		return err
 	}
 	if r.IsInitialized() {
-		log.Dev.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
+		log.KvDistribution.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
 			ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
 			commitTime.Sub(startTime).Seconds()*1000,
 			preTime.Sub(startTime).Seconds()*1000,
 			commitTime.Sub(preTime).Seconds()*1000)
 	} else {
-		log.Dev.Infof(ctx, "removed uninitialized range in %0.0fms [clear=%0.0fms commit=%0.0fms]",
+		log.KvDistribution.Infof(ctx, "removed uninitialized range in %0.0fms [clear=%0.0fms commit=%0.0fms]",
 			commitTime.Sub(startTime).Seconds()*1000,
 			preTime.Sub(startTime).Seconds()*1000,
 			commitTime.Sub(preTime).Seconds()*1000)
@@ -167,8 +149,8 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 		p.finishApplication(ctx, makeProposalResultErr(kvpb.NewAmbiguousResultError(apply.ErrRemoved)))
 	}
 
-	if !r.mu.destroyStatus.Removed() {
-		log.Dev.Fatalf(ctx, "removing raft group before destroying replica %s", r)
+	if !r.shMu.destroyStatus.Removed() {
+		log.KvDistribution.Fatalf(ctx, "removing raft group before destroying replica %s", r)
 	}
 	r.mu.internalRaftGroup = nil
 	r.mu.raftTracer.Close()

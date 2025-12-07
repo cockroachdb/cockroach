@@ -1,0 +1,3 @@
+inspect_stmt ::=
+	inspect_table_stmt
+	| inspect_database_stmt

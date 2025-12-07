@@ -6,6 +6,7 @@
 package state
 
 import (
+	"context"
 	"sort"
 	"testing"
 	"time"
@@ -321,11 +322,12 @@ func TestReplicaChange(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			ctx := context.Background()
 			state := testMakeRangeState(tc.stores, tc.initVoters, tc.initNonVoters)
 			r, _ := state.Range(1)
 			state.TransferLease(r.RangeID(), StoreID(1))
 			change := tc.change(state)
-			change.Apply(state)
+			change.Apply(ctx, state)
 			voters := testGetReplLocations(state, r, roachpb.VOTER_FULL)
 			nonVoters := testGetReplLocations(state, r, roachpb.NON_VOTER)
 			leaseholder := StoreID(-1)
@@ -686,8 +688,9 @@ func TestReplicaStateChanger(t *testing.T) {
 			tsResults := make([]int64, 0, 1)
 			resultLeaseholders := make(map[int64]map[int64]StoreID)
 
+			ctx := context.Background()
 			for _, tick := range tc.ticks {
-				changer.Tick(OffsetTick(start, tick), state)
+				changer.Tick(ctx, OffsetTick(start, tick), state)
 				if change, ok := tc.pushes[tick]; ok {
 					if ts, ok := changer.Push(OffsetTick(start, tick), change(state)); ok {
 						tsResults = append(tsResults, ReverseOffsetTick(start, ts))

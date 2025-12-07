@@ -49,6 +49,9 @@ echo ""
 
 if patch -p1 < "$PATCH_FILE"; then
   echo "Patch applied successfully."
+  echo ""
+  echo "If you get an error applying the patch when building: comment out the patch in DEPS.bzl,"
+  echo "build cockroach, then inspect the relevant files in _bazel/cockroach/external/<repo>".
 else
   echo "Failed to apply patch."
   echo "Make sure the repository is at the proper commit."

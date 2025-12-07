@@ -71,7 +71,7 @@ CREATE TABLE nation (
 	n_regionkey INT8 NOT NULL,
 	n_comment VARCHAR(152) NULL,
 	CONSTRAINT "primary" PRIMARY KEY (n_nationkey ASC),
-	CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) REFERENCES region(r_regionkey) NOT VALID,
+	CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) REFERENCES region(r_regionkey),
 	INDEX n_rk (n_regionkey ASC),
 	FAMILY "primary" (n_nationkey, n_name, n_regionkey, n_comment)
 );
@@ -133,7 +133,7 @@ CREATE TABLE customer (
 	c_mktsegment CHAR(10) NOT NULL,
 	c_comment VARCHAR(117) NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (c_custkey ASC),
-	CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) REFERENCES nation(n_nationkey) NOT VALID,
+	CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) REFERENCES nation(n_nationkey),
 	INDEX c_nk (c_nationkey ASC),
 	FAMILY "primary" (c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment)
 );
@@ -240,7 +240,7 @@ CREATE TABLE orders (
 	o_shippriority INT8 NOT NULL,
 	o_comment VARCHAR(79) NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (o_orderkey ASC),
-	CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) REFERENCES customer(c_custkey) NOT VALID,
+	CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) REFERENCES customer(c_custkey),
 	INDEX o_ck (o_custkey ASC),
 	INDEX o_od (o_orderdate ASC),
 	FAMILY "primary" (o_orderkey, o_custkey, o_orderstatus, o_totalprice, o_orderdate, o_orderpriority, o_clerk, o_shippriority, o_comment)
@@ -473,7 +473,7 @@ CREATE TABLE supplier (
 	s_acctbal FLOAT8 NOT NULL,
 	s_comment VARCHAR(101) NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (s_suppkey ASC),
-	CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) REFERENCES nation(n_nationkey) NOT VALID,
+	CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) REFERENCES nation(n_nationkey),
 	INDEX s_nk (s_nationkey ASC),
 	FAMILY "primary" (s_suppkey, s_name, s_address, s_nationkey, s_phone, s_acctbal, s_comment)
 );
@@ -565,8 +565,8 @@ CREATE TABLE partsupp (
 	ps_supplycost FLOAT8 NOT NULL,
 	ps_comment VARCHAR(199) NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (ps_partkey ASC, ps_suppkey ASC),
-	CONSTRAINT partsupp_fkey_part FOREIGN KEY (ps_partkey) REFERENCES part(p_partkey) NOT VALID,
-	CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) REFERENCES supplier(s_suppkey) NOT VALID,
+	CONSTRAINT partsupp_fkey_part FOREIGN KEY (ps_partkey) REFERENCES part(p_partkey),
+	CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) REFERENCES supplier(s_suppkey),
 	INDEX ps_sk (ps_suppkey ASC),
 	FAMILY "primary" (ps_partkey, ps_suppkey, ps_availqty, ps_supplycost, ps_comment)
 );
@@ -659,9 +659,10 @@ CREATE TABLE lineitem (
 	l_shipmode CHAR(10) NOT NULL,
 	l_comment VARCHAR(44) NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (l_orderkey ASC, l_linenumber ASC),
-	CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) REFERENCES orders(o_orderkey) NOT VALID,
-	CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) REFERENCES part(p_partkey) NOT VALID,
-	CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) REFERENCES supplier(s_suppkey) NOT VALID,
+	CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) REFERENCES orders(o_orderkey),
+	CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) REFERENCES part(p_partkey),
+	CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) REFERENCES supplier(s_suppkey),
+	CONSTRAINT lineitem_fkey_partsupp FOREIGN KEY (l_partkey, l_suppkey) references partsupp (ps_partkey, ps_suppkey),
 	INDEX l_ok (l_orderkey ASC),
 	INDEX l_pk (l_partkey ASC),
 	INDEX l_sk (l_suppkey ASC),

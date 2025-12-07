@@ -655,7 +655,7 @@ subtest holdable
 
 statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT);
-INSERT INTO t (SELECT t, t%123 FROM generate_series(1, 10000) g(t));
+INSERT INTO t (SELECT t, t%7 FROM generate_series(1, 10) g(t));
 
 # A holdable cursor can be declared in an implicit transaction.
 statement ok

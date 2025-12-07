@@ -49,7 +49,8 @@ SELECT id FROM system.zones
 
 full-translate
 ----
-/{Min-System/NodeLiveness}                 range default
+/M{in-eta2}                                range default
+/{Meta2-System/NodeLiveness}               range default
 /System/NodeLiveness{-Max}                 range default
 /System/{NodeLivenessMax-tsd}              range default
 /System{/tsd-tse}                          range default
@@ -123,3 +124,6 @@ full-translate
 /Table/7{1-2}                              database system (host)
 /Table/7{2-3}                              database system (host)
 /Table/7{3-4}                              database system (host)
+/Table/7{4-5}                              database system (host)
+/Table/7{5-6}                              database system (host)
+/Table/7{6-7}                              database system (host)

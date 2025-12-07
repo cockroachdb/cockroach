@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,9 +39,7 @@ func TestBlockedStreamLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := log.ScopeWithoutShowLogs(t)
 	// Causes every call to update the gauges to log.
-	prevVModule := log.GetVModule()
-	_ = log.SetVModule("store_stream=2")
-	defer func() { _ = log.SetVModule(prevVModule) }()
+	testutils.SetVModule(t, "store_stream=2")
 	defer s.Close(t)
 
 	ctx := context.Background()
@@ -77,7 +77,7 @@ func TestBlockedStreamLogging(t *testing.T) {
 	}
 	// 25th stream will also be blocked. The detailed stats will only cover an
 	// arbitrary subset of 20 streams.
-	log.Dev.Infof(ctx, "creating stream id %d", id)
+	log.KvDistribution.Infof(ctx, "creating stream id %d", id)
 	createStreamAndExhaustTokens(id, true)
 
 	// Total 104 streams are blocked.
@@ -86,7 +86,7 @@ func TestBlockedStreamLogging(t *testing.T) {
 	}
 	// 105th stream will also be blocked. The blocked stream names will only
 	// list 100 streams.
-	log.Dev.Infof(ctx, "creating stream id %d", id)
+	log.KvDistribution.Infof(ctx, "creating stream id %d", id)
 	createStreamAndExhaustTokens(id, true)
 
 	log.FlushFiles()
@@ -441,8 +441,7 @@ func TestSendTokenWatcher(t *testing.T) {
 				return makeStateString()
 
 			case "cancel":
-				var name string
-				d.ScanArgs(t, "name", &name)
+				name := dd.ScanArg[string](t, d, "name")
 				handle, ok := notifications[name]
 				require.True(t, ok)
 				watcher.CancelHandle(ctx, handle.handle)
@@ -450,8 +449,7 @@ func TestSendTokenWatcher(t *testing.T) {
 				return makeStateString()
 
 			case "tick":
-				var seconds int
-				d.ScanArgs(t, "seconds", &seconds)
+				seconds := dd.ScanArg[int](t, d, "seconds")
 				clock.Advance(time.Duration(seconds) * time.Second)
 				// Sleep to ensure that the tick is processed before proceeding.
 				time.Sleep(20 * time.Millisecond)

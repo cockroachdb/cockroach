@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -26,6 +27,7 @@ func (p *planner) CheckExternalConnection(
 
 type checkExternalConnectionNode struct {
 	zeroInputPlanNode
+	execGrp ctxgroup.Group
 	node    *tree.CheckExternalConnection
 	loc     string
 	params  CloudCheckParams
@@ -48,7 +50,7 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 		return err
 	}
 
-	ctx, span := tracing.ChildSpan(params.ctx, "CheckExternalConnection")
+	ctx, span := tracing.ChildSpan(params.ctx, "CheckExternalConnection-planning")
 	defer span.Finish()
 
 	store, err := params.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, n.loc, params.p.User())
@@ -88,7 +90,7 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 			time.Duration(tree.MustBeDInt(nanos)),
 		))
 	}
-	n.rows = make(chan tree.Datums, int64(len(sqlInstanceIDs))*n.params.Concurrency)
+	n.rows = make(chan tree.Datums, len(sqlInstanceIDs)*getCloudCheckConcurrency(n.params))
 	rowWriter := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		// collapse the two pairs of bytes+time to a single string rate each.
 		res := make(tree.Datums, len(row)-1)
@@ -101,7 +103,16 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 		return nil
 	})
 
-	go func() {
+	workerStarted := make(chan struct{})
+	n.execGrp = ctxgroup.WithContext(params.ctx)
+	n.execGrp.GoCtx(func(ctx context.Context) error {
+		// Derive a separate tracing span since the planning one will be
+		// finished when the main goroutine exits from startExec.
+		ctx, span := tracing.ChildSpan(ctx, "CheckExternalConnection-execution")
+		defer span.Finish()
+		// Unblock the main goroutine after having created the tracing span.
+		close(workerStarted)
+
 		recv := MakeDistSQLReceiver(
 			ctx,
 			rowWriter,
@@ -117,20 +128,26 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 		// Copy the eval.Context, as dsp.Run() might change it.
 		evalCtxCopy := params.extendedEvalCtx.Context.Copy()
 		dsp.Run(ctx, planCtx, nil, plan, recv, evalCtxCopy, nil /* finishedSetupFn */)
-	}()
+		return nil
+	})
+
+	// Block until the worker goroutine has started. This allows us to guarantee
+	// that params.ctx contains a tracing span that hasn't been finished.
+	// TODO(yuzefovich): this is a bit hacky. The issue is that
+	// planNodeToRowSource has already created a new tracing span for this
+	// checkExternalConnectionNode and has updated params.ctx accordingly; then,
+	// if the query is canceled before the worker goroutine starts, the tracing
+	// span is finished, yet it will have already been captured by the ctxgroup.
+	<-workerStarted
 	return nil
 }
 
 func (n *checkExternalConnectionNode) Next(params runParams) (bool, error) {
-	if n.rows == nil {
-		return false, nil
-	}
 	select {
 	case <-params.ctx.Done():
 		return false, params.ctx.Err()
 	case row, more := <-n.rows:
 		if !more {
-			n.rows = nil
 			return false, nil
 		}
 		n.row = row
@@ -143,10 +160,7 @@ func (n *checkExternalConnectionNode) Values() tree.Datums {
 }
 
 func (n *checkExternalConnectionNode) Close(_ context.Context) {
-	if n.rows != nil {
-		close(n.rows)
-		n.rows = nil
-	}
+	_ = n.execGrp.Wait()
 }
 
 func (n *checkExternalConnectionNode) parseParams(params runParams) error {

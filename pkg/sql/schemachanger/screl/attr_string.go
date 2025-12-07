@@ -20,26 +20,29 @@ func _() {
 	_ = x[ConstraintID-5]
 	_ = x[Name-6]
 	_ = x[ReferencedDescID-7]
-	_ = x[Comment-8]
+	_ = x[Value-8]
 	_ = x[TemporaryIndexID-9]
 	_ = x[SourceIndexID-10]
 	_ = x[RecreateSourceIndexID-11]
-	_ = x[SeqNum-12]
-	_ = x[TriggerID-13]
-	_ = x[TargetStatus-14]
-	_ = x[CurrentStatus-15]
-	_ = x[Element-16]
-	_ = x[Target-17]
-	_ = x[ReferencedTypeIDs-18]
-	_ = x[ReferencedSequenceIDs-19]
-	_ = x[ReferencedFunctionIDs-20]
-	_ = x[ReferencedColumnIDs-21]
-	_ = x[Expr-22]
-	_ = x[TypeName-23]
-	_ = x[PartitionName-24]
-	_ = x[Usage-25]
-	_ = x[PolicyID-26]
-	_ = x[AttrMax-26]
+	_ = x[RecreateTargetIndexID-12]
+	_ = x[SeqNum-13]
+	_ = x[TriggerID-14]
+	_ = x[TargetStatus-15]
+	_ = x[CurrentStatus-16]
+	_ = x[Element-17]
+	_ = x[Target-18]
+	_ = x[ReferencedTypeIDs-19]
+	_ = x[ReferencedSequenceIDs-20]
+	_ = x[ReferencedFunctionIDs-21]
+	_ = x[ReferencedColumnIDs-22]
+	_ = x[Expr-23]
+	_ = x[TypeName-24]
+	_ = x[PartitionName-25]
+	_ = x[Usage-26]
+	_ = x[PolicyID-27]
+	_ = x[GeneratedAsIdentityType-28]
+	_ = x[IntValue-29]
+	_ = x[AttrMax-29]
 }
 
 func (i Attr) String() string {
@@ -58,14 +61,16 @@ func (i Attr) String() string {
 		return "Name"
 	case ReferencedDescID:
 		return "ReferencedDescID"
-	case Comment:
-		return "Comment"
+	case Value:
+		return "Value"
 	case TemporaryIndexID:
 		return "TemporaryIndexID"
 	case SourceIndexID:
 		return "SourceIndexID"
 	case RecreateSourceIndexID:
 		return "RecreateSourceIndexID"
+	case RecreateTargetIndexID:
+		return "RecreateTargetIndexID"
 	case SeqNum:
 		return "SeqNum"
 	case TriggerID:
@@ -96,6 +101,10 @@ func (i Attr) String() string {
 		return "Usage"
 	case PolicyID:
 		return "PolicyID"
+	case GeneratedAsIdentityType:
+		return "GeneratedAsIdentityType"
+	case IntValue:
+		return "IntValue"
 	default:
 		return "Attr(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

@@ -15,6 +15,7 @@ import (
 	"math"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -167,7 +168,7 @@ func csvServerPaths(
 	// so our "integer multiple" is picked to be 1 to minimize this effect. Too
 	// bad about the progress tracking granularity.
 	numFiles := numNodes
-	rowStep := table.InitialRows.NumBatches / numFiles
+	rowStep := table.InitialRows.NumBatches / max(numFiles, 1)
 	if rowStep == 0 {
 		rowStep = 1
 	}
@@ -310,6 +311,12 @@ func (l ImportDataLoader) InitialDataLoad(
 	if l.FilesPerNode == 0 {
 		l.FilesPerNode = 1
 	}
+	mayContainDuplicates := slices.ContainsFunc(gen.Tables(), func(tbl workload.Table) bool {
+		return tbl.InitialRows.MayContainDuplicates
+	})
+	if mayContainDuplicates {
+		log.Dev.Warningf(ctx, "importing fixture using a key generator that may contain duplicates; IMPORT may abort with a key uniqueness violation at higher row counts")
+	}
 
 	log.Dev.Infof(ctx, "starting import of %d tables", len(gen.Tables()))
 	start := timeutil.Now()
@@ -329,10 +336,15 @@ func (l ImportDataLoader) InitialDataLoad(
 // the database we're connected to does not exist.
 const numNodesQuery = `SELECT count(1) FROM system.sql_instances WHERE addr IS NOT NULL`
 
+// getNodeCount returns the number of nodes in the cluster by querying a system table.
+// Ensures err != nil => res > 0.
 func getNodeCount(ctx context.Context, sqlDB *gosql.DB) (int, error) {
 	var numNodes int
-	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
+	if err := sqlDB.QueryRowContext(ctx, numNodesQuery).Scan(&numNodes); err != nil {
 		return 0, err
+	}
+	if numNodes == 0 {
+		return 0, errors.New("no SQL nodes available")
 	}
 	return numNodes, nil
 }
@@ -411,11 +423,12 @@ func ImportFixture(
 	for _, t := range tables {
 		table := t
 		paths := csvServerPaths(pathPrefix, gen, table, numNodes*filesPerNode)
+		// Wait for there to be a slot ready.
+		res, err := concurrentImportLimit.Begin(ctx)
+		if err != nil {
+			return 0, err
+		}
 		g.GoCtx(func(ctx context.Context) error {
-			res, err := concurrentImportLimit.Begin(ctx)
-			if err != nil {
-				return err
-			}
 			defer res.Release()
 			tableBytes, err := importFixtureTable(
 				ctx, sqlDB, dbName, table, paths, `` /* output */, injectStats)
@@ -588,14 +601,19 @@ func injectStatistics(qualifiedTableName string, table *workload.Table, sqlDB *g
 // makeQualifiedTableName constructs a qualified table name from the specified
 // database name and table.
 func makeQualifiedTableName(dbName string, table *workload.Table) string {
-	if dbName == "" {
+	// If a table prefix is specified, use it.
+	if table.ObjectPrefix != nil {
 		name := table.GetResolvedName()
 		if name.ObjectNamePrefix.ExplicitCatalog ||
 			name.ObjectNamePrefix.ExplicitSchema {
 			return name.FQString()
 		}
-		return fmt.Sprintf(`"%s"`, name.ObjectName)
 	}
+	// If no database name is specified, use the name directly.
+	if dbName == "" {
+		return fmt.Sprintf(`"%s"`, table.Name)
+	}
+	// Otherwise, use the database name and the table name directly.
 	return fmt.Sprintf(`"%s"."%s"`, dbName, table.Name)
 }
 

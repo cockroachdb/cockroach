@@ -19,12 +19,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insightspb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 // Return a new stmt with the added values.
-func newStmtWithProblemAndCauses(stmt *Statement, problem Problem, causes []Cause) *Statement {
+func newStmtWithProblemAndCauses(
+	stmt *insightspb.Statement, problem insightspb.Problem, causes []insightspb.Cause,
+) *insightspb.Statement {
 	newStmt := *stmt
 	newStmt.Problem = problem
 	newStmt.Causes = causes
@@ -33,7 +36,7 @@ func newStmtWithProblemAndCauses(stmt *Statement, problem Problem, causes []Caus
 
 func TestRegistry(t *testing.T) {
 	ctx := context.Background()
-	session := Session{ID: clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))}
+	session := insightspb.Session{ID: clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))}
 
 	type rawSQLStats struct {
 		sessionID clusterunique.ID
@@ -60,12 +63,12 @@ func TestRegistry(t *testing.T) {
 				},
 			},
 		}
-		expectedStatement := &Statement{
+		expectedStatement := &insightspb.Statement{
 			ID:               txns[0].stmts[0].StatementID,
 			FingerprintID:    txns[0].stmts[0].FingerprintID,
 			LatencyInSeconds: 2,
-			Status:           Statement_Completed,
-			Problem:          Problem_SlowExecution,
+			Status:           insightspb.Statement_Completed,
+			Problem:          insightspb.Problem_SlowExecution,
 		}
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
@@ -74,14 +77,14 @@ func TestRegistry(t *testing.T) {
 
 		registry.observeTransaction(txns[0].txn, txns[0].stmts)
 
-		expected := []*Insight{{
+		expected := []*insightspb.Insight{{
 			Session:     session,
 			Transaction: makeCompletedTxn(txns[0].txn),
-			Statements:  []*Statement{expectedStatement},
+			Statements:  []*insightspb.Statement{expectedStatement},
 		}}
 
-		var actual []*Insight
-		store.IterateInsights(ctx, func(ctx context.Context, o *Insight) {
+		var actual []*insightspb.Insight
+		store.IterateInsights(ctx, func(ctx context.Context, o *insightspb.Insight) {
 			actual = append(actual, o)
 		},
 		)
@@ -101,20 +104,20 @@ func TestRegistry(t *testing.T) {
 			Failed:            true,
 			StatementError:    pgerror.New(pgcode.DivisionByZero, "division by zero"),
 		}
-		expectedTxnInsight := &Transaction{
+		expectedTxnInsight := &insightspb.Transaction{
 			ID:            txn.TransactionID,
-			Status:        Transaction_Failed,
+			Status:        insightspb.Transaction_Failed,
 			LastErrorCode: pgcode.DivisionByZero.String(),
 			LastErrorMsg:  "division by zero",
 		}
-		expectedStmtInsight := &Statement{
+		expectedStmtInsight := &insightspb.Statement{
 			ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 			FingerprintID:    appstatspb.StmtFingerprintID(100),
 			LatencyInSeconds: 2,
-			Status:           Statement_Failed,
+			Status:           insightspb.Statement_Failed,
 			ErrorCode:        "22012",
 			ErrorMsg:         "division by zero",
-			Problem:          Problem_FailedExecution,
+			Problem:          insightspb.Problem_FailedExecution,
 		}
 
 		st := cluster.MakeTestingClusterSettings()
@@ -127,16 +130,16 @@ func TestRegistry(t *testing.T) {
 		// field is set properly.
 		registry.observeTransaction(txn, []*sqlstats.RecordedStmtStats{stmt})
 
-		expected := []*Insight{{
+		expected := []*insightspb.Insight{{
 			Session:     session,
 			Transaction: expectedTxnInsight,
-			Statements: []*Statement{
+			Statements: []*insightspb.Statement{
 				expectedStmtInsight,
 			},
 		}}
 
-		var actual []*Insight
-		store.IterateInsights(ctx, func(ctx context.Context, o *Insight) {
+		var actual []*insightspb.Insight
+		store.IterateInsights(ctx, func(ctx context.Context, o *insightspb.Insight) {
 			actual = append(actual, o)
 		},
 		)
@@ -158,10 +161,10 @@ func TestRegistry(t *testing.T) {
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.observeTransaction(transaction, []*sqlstats.RecordedStmtStats{statement})
 
-		var actual []*Insight
+		var actual []*insightspb.Insight
 		store.IterateInsights(
 			context.Background(),
-			func(ctx context.Context, o *Insight) {
+			func(ctx context.Context, o *insightspb.Insight) {
 				actual = append(actual, o)
 			},
 		)
@@ -182,8 +185,8 @@ func TestRegistry(t *testing.T) {
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.observeTransaction(transaction, []*sqlstats.RecordedStmtStats{stmt})
 
-		var actual []*Insight
-		store.IterateInsights(ctx, func(ctx context.Context, o *Insight) {
+		var actual []*insightspb.Insight
+		store.IterateInsights(ctx, func(ctx context.Context, o *insightspb.Insight) {
 			actual = append(actual, o)
 		},
 		)
@@ -191,7 +194,7 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("buffering statements per session", func(t *testing.T) {
-		otherSession := Session{ID: clusterunique.IDFromBytes([]byte("cccccccccccccccccccccccccccccccc"))}
+		otherSession := insightspb.Session{ID: clusterunique.IDFromBytes([]byte("cccccccccccccccccccccccccccccccc"))}
 
 		// 2 transactions with 1 statement each. Both will create an insight,
 		// as both statements are over the latency threshold.
@@ -235,28 +238,28 @@ func TestRegistry(t *testing.T) {
 		store := newStore(st)
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 
-		expected := []*Insight{{
+		expected := []*insightspb.Insight{{
 			Session:     session,
 			Transaction: makeCompletedTxn(txns[0].txn),
-			Statements: []*Statement{
+			Statements: []*insightspb.Statement{
 				{
 					ID:               txns[0].stmts[0].StatementID,
 					FingerprintID:    txns[0].stmts[0].FingerprintID,
 					LatencyInSeconds: txns[0].stmts[0].ServiceLatencySec,
-					Status:           Statement_Completed,
-					Problem:          Problem_SlowExecution,
+					Status:           insightspb.Statement_Completed,
+					Problem:          insightspb.Problem_SlowExecution,
 				},
 			},
 		}, {
 			Session:     otherSession,
 			Transaction: makeCompletedTxn(txns[1].txn),
-			Statements: []*Statement{
+			Statements: []*insightspb.Statement{
 				{
 					ID:               txns[1].stmts[0].StatementID,
 					FingerprintID:    txns[1].stmts[0].FingerprintID,
 					LatencyInSeconds: txns[1].stmts[0].ServiceLatencySec,
-					Status:           Statement_Completed,
-					Problem:          Problem_SlowExecution,
+					Status:           insightspb.Statement_Completed,
+					Problem:          insightspb.Problem_SlowExecution,
 				},
 			},
 		}}
@@ -265,8 +268,8 @@ func TestRegistry(t *testing.T) {
 			registry.observeTransaction(txn.txn, txn.stmts)
 		}
 
-		var actual []*Insight
-		store.IterateInsights(ctx, func(ctx context.Context, o *Insight) {
+		var actual []*insightspb.Insight
+		store.IterateInsights(ctx, func(ctx context.Context, o *insightspb.Insight) {
 			actual = append(actual, o)
 		},
 		)
@@ -293,21 +296,21 @@ func TestRegistry(t *testing.T) {
 			FingerprintID: appstatspb.StmtFingerprintID(101),
 		}
 
-		expected := []*Insight{
+		expected := []*insightspb.Insight{
 			{
 				Session:     session,
-				Transaction: &Transaction{ID: transaction.TransactionID},
-				Statements: []*Statement{
+				Transaction: &insightspb.Transaction{ID: transaction.TransactionID},
+				Statements: []*insightspb.Statement{
 					{
 						ID:            statement.StatementID,
 						FingerprintID: statement.FingerprintID,
-						Status:        Statement_Completed,
-						Problem:       Problem_SlowExecution,
+						Status:        insightspb.Statement_Completed,
+						Problem:       insightspb.Problem_SlowExecution,
 					},
 					{
 						ID:            siblingStatement.StatementID,
 						FingerprintID: siblingStatement.FingerprintID,
-						Status:        Statement_Completed,
+						Status:        insightspb.Statement_Completed,
 					},
 				},
 			},
@@ -322,8 +325,8 @@ func TestRegistry(t *testing.T) {
 			statement, siblingStatement,
 		})
 
-		var actual []*Insight
-		store.IterateInsights(ctx, func(ctx context.Context, o *Insight) {
+		var actual []*insightspb.Insight
+		store.IterateInsights(ctx, func(ctx context.Context, o *insightspb.Insight) {
 			actual = append(actual, o)
 		},
 		)
@@ -358,17 +361,17 @@ func TestRegistry(t *testing.T) {
 			},
 		}
 
-		expected := []*Insight{
+		expected := []*insightspb.Insight{
 			{
 				Session: session,
-				Transaction: &Transaction{
+				Transaction: &insightspb.Transaction{
 					ID:         txnHighContention.TransactionID,
 					Contention: &contentionDuration,
-					Problems:   []Problem{Problem_SlowExecution},
-					Causes:     []Cause{Cause_HighContention}},
-				Statements: []*Statement{
+					Problems:   []insightspb.Problem{insightspb.Problem_SlowExecution},
+					Causes:     []insightspb.Cause{insightspb.Cause_HighContention}},
+				Statements: []*insightspb.Statement{
 					{
-						Status:           Statement_Completed,
+						Status:           insightspb.Statement_Completed,
 						ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 						FingerprintID:    appstatspb.StmtFingerprintID(100),
 						LatencyInSeconds: 0.00001,
@@ -379,8 +382,8 @@ func TestRegistry(t *testing.T) {
 
 		registry.observeTransaction(txnHighContention, []*sqlstats.RecordedStmtStats{statement})
 
-		var actual []*Insight
-		store.IterateInsights(ctx, func(ctx context.Context, o *Insight) {
+		var actual []*insightspb.Insight
+		store.IterateInsights(ctx, func(ctx context.Context, o *insightspb.Insight) {
 			actual = append(actual, o)
 		},
 		)
@@ -415,20 +418,20 @@ func TestRegistry(t *testing.T) {
 			},
 		}
 
-		statementNotIgnored := &Statement{
-			Status:           Statement_Completed,
+		statementNotIgnored := &insightspb.Statement{
+			Status:           insightspb.Statement_Completed,
 			ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
 			FingerprintID:    appstatspb.StmtFingerprintID(100),
 			LatencyInSeconds: 2,
 			Query:            "SELECT * FROM users",
 		}
-		statementIgnoredSet := &Statement{
+		statementIgnoredSet := &insightspb.Statement{
 			ID:               clusterunique.IDFromBytes([]byte("dddddddddddddddddddddddddddddddd")),
 			FingerprintID:    appstatspb.StmtFingerprintID(101),
 			LatencyInSeconds: 2,
 			Query:            "SET vectorize = '_'",
 		}
-		statementIgnoredExplain := &Statement{
+		statementIgnoredExplain := &insightspb.Statement{
 			ID:               clusterunique.IDFromBytes([]byte("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")),
 			FingerprintID:    appstatspb.StmtFingerprintID(102),
 			LatencyInSeconds: 2,
@@ -441,19 +444,19 @@ func TestRegistry(t *testing.T) {
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.observeTransaction(transaction, stmts)
 
-		expected := []*Insight{
+		expected := []*insightspb.Insight{
 			{
 				Session:     session,
-				Transaction: &Transaction{ID: transaction.TransactionID},
-				Statements: []*Statement{
-					newStmtWithProblemAndCauses(statementNotIgnored, Problem_SlowExecution, nil),
+				Transaction: &insightspb.Transaction{ID: transaction.TransactionID},
+				Statements: []*insightspb.Statement{
+					newStmtWithProblemAndCauses(statementNotIgnored, insightspb.Problem_SlowExecution, nil),
 					statementIgnoredSet,
 					statementIgnoredExplain,
 				},
 			},
 		}
-		var actual []*Insight
-		store.IterateInsights(ctx, func(ctx context.Context, o *Insight) {
+		var actual []*insightspb.Insight
+		store.IterateInsights(ctx, func(ctx context.Context, o *insightspb.Insight) {
 			actual = append(actual, o)
 		},
 		)
@@ -462,7 +465,9 @@ func TestRegistry(t *testing.T) {
 	})
 }
 
-func assertInsightsEqual(t *testing.T, actual []*Insight, expected []*Insight) {
+func assertInsightsEqual(
+	t *testing.T, actual []*insightspb.Insight, expected []*insightspb.Insight,
+) {
 	require.Equal(t, len(expected), len(actual))
 
 	for i, insight := range actual {
@@ -480,12 +485,12 @@ func assertInsightsEqual(t *testing.T, actual []*Insight, expected []*Insight) {
 	}
 }
 
-func makeCompletedTxn(txn *sqlstats.RecordedTxnStats) *Transaction {
-	status := Transaction_Failed
+func makeCompletedTxn(txn *sqlstats.RecordedTxnStats) *insightspb.Transaction {
+	status := insightspb.Transaction_Failed
 	if txn.Committed {
-		status = Transaction_Completed
+		status = insightspb.Transaction_Completed
 	}
-	return &Transaction{
+	return &insightspb.Transaction{
 		ID:     txn.TransactionID,
 		Status: status,
 	}

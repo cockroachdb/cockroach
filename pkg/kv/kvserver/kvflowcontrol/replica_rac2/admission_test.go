@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -47,15 +48,11 @@ func TestLowPriOverrideState(t *testing.T) {
 				//
 				// Provides side-channel info for the the interval [5, 10] for the given
 				// leader-term and with the specific override.
-				var leaderTerm uint64
-				d.ScanArgs(t, "leader-term", &leaderTerm)
-				var first, last uint64
-				d.ScanArgs(t, "first", &first)
-				d.ScanArgs(t, "last", &last)
-				var lowPriOverride bool
-				if d.HasArg("low-pri") {
-					lowPriOverride = true
-				}
+				leaderTerm := dd.ScanArg[uint64](t, d, "leader-term")
+				first := dd.ScanArg[uint64](t, d, "first")
+				last := dd.ScanArg[uint64](t, d, "last")
+				lowPriOverride := d.HasArg("low-pri")
+
 				notStaleTerm := lpos.sideChannelForLowPriOverride(leaderTerm, first, last, lowPriOverride)
 				return fmt.Sprintf("not-stale-term: %t\n%s", notStaleTerm, lposString())
 
@@ -64,9 +61,8 @@ func TestLowPriOverrideState(t *testing.T) {
 				//  get-effective-priority index=4 pri=HighPri
 				// Gets the effective priority for index 4, where the original
 				// priority is HighPri
-				var index uint64
-				d.ScanArgs(t, "index", &index)
-				pri := readPriority(t, d)
+				index := dd.ScanArg[uint64](t, d, "index")
+				pri := parsePriority(t, dd.ScanArg[string](t, d, "pri"))
 				effectivePri := lpos.getEffectivePriority(index, pri)
 				return fmt.Sprintf("pri: %s\n%s", effectivePri, lposString())
 
@@ -76,10 +72,8 @@ func TestLowPriOverrideState(t *testing.T) {
 		})
 }
 
-func readPriority(t *testing.T, d *datadriven.TestData) raftpb.Priority {
-	var priStr string
-	d.ScanArgs(t, "pri", &priStr)
-	switch priStr {
+func parsePriority(t *testing.T, str string) raftpb.Priority {
+	switch str {
 	case "LowPri":
 		return raftpb.LowPri
 	case "NormalPri":
@@ -89,7 +83,7 @@ func readPriority(t *testing.T, d *datadriven.TestData) raftpb.Priority {
 	case "HighPri":
 		return raftpb.HighPri
 	default:
-		t.Fatalf("unknown pri %s", priStr)
+		t.Fatalf("unknown pri %s", str)
 	}
 	return 0
 }

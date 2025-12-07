@@ -45,6 +45,7 @@ func pgURL(
 	insecure bool,
 	clientCerts bool,
 	prefix string,
+	certName string,
 ) (pgURL url.URL, cleanupFn func(), err error) {
 	opts := url.Values{}
 	if tenantName != "" && !strings.HasPrefix(dbName, "cluster:") {
@@ -65,7 +66,7 @@ func pgURL(
 	}
 
 	// No LoopbackListener
-	pgURL, cleanupFn, err = pgurlutils.PGUrlWithOptionalClientCertsE(sqlAddr, prefix, user, clientCerts, "")
+	pgURL, cleanupFn, err = pgurlutils.PGUrlWithOptionalClientCertsE(sqlAddr, prefix, user, clientCerts, certName)
 	if err != nil {
 		return pgURL, cleanupFn, err
 	}
@@ -95,9 +96,10 @@ func openTestSQLConn(
 	insecure bool,
 	clientCerts bool,
 	prefix string,
+	certName string,
 ) (*gosql.DB, error) {
 	var goDB *gosql.DB
-	u, cleanupFn, err := pgURL(dbName, user, tenantName, sqlAddr, insecure, clientCerts, prefix)
+	u, cleanupFn, err := pgURL(dbName, user, tenantName, sqlAddr, insecure, clientCerts, prefix, certName)
 	if err != nil {
 		return nil, err
 	}

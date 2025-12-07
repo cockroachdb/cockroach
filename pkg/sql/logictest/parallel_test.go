@@ -75,6 +75,7 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 		verbose: testing.Verbose() || log.V(1),
 		rng:     rng,
 	}
+	l.allowUnsafe.Store(true)
 	if err := l.processTestFile(path, logictest.TestClusterConfig{}); err != nil {
 		log.Dev.Errorf(context.Background(), "error processing %s: %s", path, err)
 		t.Error(err)

@@ -44,6 +44,7 @@ type latencyVerifier struct {
 	catchupScanEveryN roachtestutil.EveryN
 
 	maxSeenSteadyLatency time.Duration
+	tooLargeEveryN       roachtestutil.EveryN
 	maxSeenSteadyEveryN  roachtestutil.EveryN
 	latencyBecameSteady  bool
 
@@ -74,8 +75,9 @@ func makeLatencyVerifier(
 		setTestStatus:            setTestStatus,
 		latencyHist:              hist,
 		tolerateErrors:           tolerateErrors,
-		maxSeenSteadyEveryN:      roachtestutil.Every(10 * time.Second),
-		catchupScanEveryN:        roachtestutil.Every(2 * time.Second),
+		tooLargeEveryN:           roachtestutil.Every(120 * time.Second),
+		maxSeenSteadyEveryN:      roachtestutil.Every(30 * time.Second),
+		catchupScanEveryN:        roachtestutil.Every(10 * time.Second),
 	}
 }
 
@@ -113,8 +115,11 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		}
 		return
 	}
-
-	if lv.targetSteadyLatency == 0 || latency < lv.targetSteadyLatency/2 {
+	justSwitchedToSteadyState := false
+	if lv.targetSteadyLatency == 0 || latency < lv.targetSteadyLatency {
+		if !lv.latencyBecameSteady {
+			justSwitchedToSteadyState = true
+		}
 		lv.latencyBecameSteady = true
 	}
 	if !lv.latencyBecameSteady {
@@ -132,7 +137,9 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		return
 	}
 	if err := lv.latencyHist.RecordValue(latency.Nanoseconds()); err != nil {
-		lv.logger.Printf("%s: could not record value %s: %s\n", lv.name, latency, err)
+		if lv.tooLargeEveryN.ShouldLog() {
+			lv.logger.Printf("%s: could not record value %s: %s\n", lv.name, latency, err)
+		}
 	}
 	if latency > lv.maxSeenSteadyLatency {
 		lv.maxSeenSteadyLatency = latency
@@ -142,6 +149,10 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 			"%s: end-to-end steady latency %s; max steady latency so far %s; highwater %s",
 			lv.name, latency.Truncate(time.Millisecond), lv.maxSeenSteadyLatency.Truncate(time.Millisecond), highwaterTime)
 		lv.setTestStatus(update)
+	}
+	if justSwitchedToSteadyState {
+		lv.logger.Printf("just reached steady state, sleeping for 2 minutes to ensure no temporary latency regressions")
+		time.Sleep(2 * time.Minute)
 	}
 }
 

@@ -582,7 +582,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 			// of snapshots, in order to avoid mocking out a fake raft group for the
 			// `replicaMayNeedSnapshot` checks inside `TransferLeaseTarget`.
 			AllowLeaseTransfersToReplicasNeedingSnapshots: true,
-		},
+		}, nil, /*allocSyncKnobs*/
 	)
 	defer stopper.Stop(context.Background())
 	objectiveProvider := &testRebalanceObjectiveProvider{}
@@ -833,7 +833,7 @@ func logSummary(
 		summary.WriteString("\n")
 	}
 	summary.WriteString(fmt.Sprintf("overall-mean: %s", mean))
-	log.Dev.Infof(ctx, "generated random store list:\n%s", summary.String())
+	log.KvDistribution.Infof(ctx, "generated random store list:\n%s", summary.String())
 }
 
 func TestChooseRangeToRebalanceRandom(t *testing.T) {
@@ -932,7 +932,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
+			rctx.options.IOOverload = allocatorimpl.IOOverloadOptions{ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(rebalanceThreshold)
 
 			_, voterTargets, nonVoterTargets := sr.chooseRangeToRebalance(ctx, rctx)
@@ -943,7 +943,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			for _, target := range nonVoterTargets {
 				rebalancedNonVoterStores = append(rebalancedNonVoterStores, target.StoreID)
 			}
-			log.Dev.Infof(
+			log.KvExec.Infof(
 				ctx,
 				"rebalanced voters from %v to %v: %s -> %s",
 				voterStores,
@@ -951,7 +951,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 				meanLoad(voterStores),
 				meanLoad(rebalancedVoterStores),
 			)
-			log.Dev.Infof(
+			log.KvExec.Infof(
 				ctx,
 				"rebalanced non-voters from %v to %v: %s -> %s",
 				nonVoterStores,
@@ -964,7 +964,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			}
 			previousMean := meanLoad(append(voterStores, nonVoterStores...))
 			newMean := meanLoad(append(rebalancedVoterStores, rebalancedNonVoterStores...))
-			log.Dev.Infof(
+			log.KvExec.Infof(
 				ctx,
 				"rebalanced range from stores with %s average load to %s average load",
 				previousMean,
@@ -1230,7 +1230,8 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 		t.Run(tc.name, withQPSCPU(t, objectiveProvider, func(t *testing.T) {
 			// Boilerplate for test setup.
 			testingKnobs := allocator.TestingKnobs{RaftStatusFn: TestingRaftStatusFn}
-			stopper, g, sp, a, _ := allocatorimpl.CreateTestAllocatorWithKnobs(ctx, 10, false /* deterministic */, &testingKnobs)
+			stopper, g, sp, a, _ := allocatorimpl.CreateTestAllocatorWithKnobs(
+				ctx, 10, false /* deterministic */, &testingKnobs, nil /*allocSyncKnobs*/)
 			defer stopper.Stop(context.Background())
 			gossiputil.NewStoreGossiper(g).GossipStores(multiRegionStores, t)
 
@@ -1273,7 +1274,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, kvserverbase.LBRebalancingLeasesAndReplicas)
-			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+			rctx.options.IOOverload = allocatorimpl.IOOverloadOptions{
 				ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdBlockTransfers,
 				UseIOThresholdMax:       true,
 			}
@@ -1329,6 +1330,7 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 		10,
 		false, /* deterministic */
 		&allocator.TestingKnobs{AllowLeaseTransfersToReplicasNeedingSnapshots: true},
+		nil, /*allocSyncKnobs*/
 	)
 	defer stopper.Stop(context.Background())
 
@@ -1363,7 +1365,7 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 		hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 		options := sr.scorerOptions(ctx, lbRebalanceDimension)
 		rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-		rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+		rctx.options.IOOverload = allocatorimpl.IOOverloadOptions{
 			ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
 		rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 
@@ -1530,7 +1532,7 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 			hottestRanges := sr.replicaRankings.TopLoad(lbRebalanceDimension)
 			options := sr.scorerOptions(ctx, lbRebalanceDimension)
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+			rctx.options.IOOverload = allocatorimpl.IOOverloadOptions{
 				ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(tc.rebalanceThreshold)
 
@@ -1592,6 +1594,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 			AllowLeaseTransfersToReplicasNeedingSnapshots: false,
 			RaftStatusFn: behindTestingRaftStatusFn,
 		},
+		nil, /*allocSyncKnobs*/
 	)
 	defer stopper.Stop(context.Background())
 
@@ -1637,7 +1640,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		hottestRanges = sr.replicaRankings.TopLoad(lbRebalanceDimension)
 		options = sr.scorerOptions(ctx, lbRebalanceDimension)
 		rctx = sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-		rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+		rctx.options.IOOverload = allocatorimpl.IOOverloadOptions{
 			ReplicaEnforcementLevel: allocatorimpl.IOOverloadThresholdIgnore}
 		rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 		rctx.options.Deterministic = true
@@ -1799,7 +1802,7 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 			require.Greater(t, len(rctx.hottestRanges), 0)
 
-			rctx.options.IOOverloadOptions = allocatorimpl.IOOverloadOptions{
+			rctx.options.IOOverload = allocatorimpl.IOOverloadOptions{
 				ReplicaEnforcementLevel: test.enforcement, ReplicaIOOverloadThreshold: allocatorimpl.DefaultReplicaIOOverloadThreshold}
 			rctx.options.LoadThreshold = allocatorimpl.WithAllDims(0.05)
 
@@ -1863,4 +1866,68 @@ func TestingRaftStatusFn(desc *roachpb.RangeDescriptor, storeID roachpb.StoreID)
 		}
 	}
 	return status
+}
+
+// TestReplicateQueueMaxSize tests the max size of the replicate queue and
+// verifies that replicas are dropped when the max size is exceeded. It also
+// checks that the metric ReplicateQueueDroppedDueToSize is updated correctly.
+func TestReplicateQueueMaxSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	r, err := tc.store.GetReplica(1)
+	require.NoError(t, err)
+
+	stopper, _, _, a, _ := allocatorimpl.CreateTestAllocator(ctx, 10, true /* deterministic */)
+	defer stopper.Stop(ctx)
+	ReplicateQueueMaxSize.Override(ctx, &tc.store.cfg.Settings.SV, 1)
+	replicateQueue := newReplicateQueue(tc.store, a)
+
+	// Helper function to add a replica and verify queue state.
+	verify := func(expectedLength int, expectedDropped int64) {
+		require.Equal(t, expectedLength, replicateQueue.Length())
+		require.Equal(t, expectedDropped, replicateQueue.full.Count())
+		require.Equal(t, expectedDropped, tc.store.metrics.ReplicateQueueFull.Count())
+	}
+
+	addReplicaAndVerify := func(rangeID roachpb.RangeID, expectedLength int, expectedDropped int64) {
+		r.Desc().RangeID = rangeID
+		enqueued, err := replicateQueue.testingAdd(context.Background(), r, 0.0)
+		require.NoError(t, err)
+		require.True(t, enqueued)
+		verify(expectedLength, expectedDropped)
+	}
+
+	// First replica should be added.
+	addReplicaAndVerify(1 /* rangeID */, 1 /* expectedLength */, 0 /* expectedDropped */)
+	// Second replica should be dropped.
+	addReplicaAndVerify(2 /* rangeID */, 1 /* expectedLength */, 1 /* expectedDropped */)
+	// Third replica should be dropped.
+	addReplicaAndVerify(3 /* rangeID */, 1 /* expectedLength */, 2 /* expectedDropped */)
+
+	// Increase the max size to 100 and add more replicas
+	ReplicateQueueMaxSize.Override(ctx, &tc.store.cfg.Settings.SV, 100)
+	for i := 2; i <= 100; i++ {
+		// Should be added.
+		addReplicaAndVerify(roachpb.RangeID(i+1 /* rangeID */), i /* expectedLength */, 2 /* expectedDropped */)
+	}
+
+	// Add one more to exceed the max size. Should be dropped.
+	addReplicaAndVerify(102 /* rangeID */, 100 /* expectedLength */, 3 /* expectedDropped */)
+
+	// Reset to the same size should not change the queue length.
+	ReplicateQueueMaxSize.Override(ctx, &tc.store.cfg.Settings.SV, 100)
+	verify(100 /* expectedLength */, 3 /* expectedDropped */)
+
+	// Decrease the max size to 10 which should drop 90 replicas.
+	ReplicateQueueMaxSize.Override(ctx, &tc.store.cfg.Settings.SV, 10)
+	verify(10 /* expectedLength */, 93 /* expectedDropped: 3 + 90 */)
+
+	// Should drop another one now that max size is 10.
+	addReplicaAndVerify(103 /* rangeID */, 10 /* expectedLength */, 94 /* expectedDropped: 3 + 90 + 1 */)
 }

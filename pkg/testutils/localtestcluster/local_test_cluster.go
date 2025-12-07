@@ -219,7 +219,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
 		transport, err := storeliveness.NewTransport(
 			cfg.AmbientCtx, ltc.stopper, ltc.Clock,
-			nil /* dialer */, nil /* grpcServer */, nil /* drpcServer */, nil, /* knobs */
+			nil /* dialer */, nil /* grpcServer */, nil /* drpcServer */, cfg.Settings, nil, /* knobs */
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -288,7 +288,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	var splits []roachpb.RKey
 	if !ltc.DontCreateSystemRanges {
 		schema := bootstrap.MakeMetadataSchema(
-			keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+			keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), bootstrap.NoOffset,
 		)
 		var tableSplits []roachpb.RKey
 		initialValues, tableSplits = schema.GetInitialValues()

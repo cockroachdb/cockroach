@@ -35,6 +35,9 @@ type testServerStream struct {
 	eventsSent int
 	// streamEvents is a map of streamID to a list of events sent to that stream.
 	streamEvents map[int64][]*kvpb.MuxRangeFeedEvent
+
+	// t can optionally set for additional logging.
+	t *testing.T
 }
 
 var _ ServerStreamSender = &testServerStream{}
@@ -94,22 +97,7 @@ func (s *testServerStream) String() string {
 	for streamID, eventList := range s.streamEvents {
 		fmt.Fprintf(&str, "\tStreamID:%d, Len:%d", streamID, len(eventList))
 		for _, ev := range eventList {
-			switch {
-			case ev.Val != nil:
-				fmt.Fprintf(&str, "\t\tvalue")
-			case ev.Checkpoint != nil:
-				fmt.Fprintf(&str, "\t\tcheckpoint")
-			case ev.SST != nil:
-				fmt.Fprintf(&str, "\t\tsst")
-			case ev.DeleteRange != nil:
-				fmt.Fprintf(&str, "\t\tdelete")
-			case ev.Metadata != nil:
-				fmt.Fprintf(&str, "\t\tmetadata")
-			case ev.Error != nil:
-				fmt.Fprintf(&str, "\t\terror")
-			default:
-				panic("unknown event type")
-			}
+			fmt.Fprintf(&str, "\t\t%s", ev.EventType())
 		}
 		fmt.Fprintf(&str, "\n")
 	}
@@ -121,6 +109,9 @@ func (s *testServerStream) SendIsThreadSafe() {}
 // Send mocks grpc.ServerStream Send method. It only counts events and stores
 // events by streamID in streamEvents.
 func (s *testServerStream) Send(e *kvpb.MuxRangeFeedEvent) error {
+	if s.t != nil {
+		s.t.Logf("Sending event for StreamID %d: %v", e.StreamID, e)
+	}
 	s.Lock()
 	defer s.Unlock()
 	s.eventsSent++
@@ -202,3 +193,5 @@ func (c *cancelCtxDisconnector) IsDisconnected() bool {
 	defer c.mu.Unlock()
 	return c.mu.disconnected
 }
+
+func (c *cancelCtxDisconnector) Unregister() {}

@@ -336,28 +336,23 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			info        backupInfo
 			memReserved int64
 		)
-		info.collectionURI = dest[0]
+		defaultCollectionURI, _, err := backupdest.GetURIsByLocalityKV(dest, "")
+		if err != nil {
+			return err
+		}
+		info.collectionURI = defaultCollectionURI
 		info.subdir = computedSubdir
 		info.kmsEnv = &kmsEnv
 		info.enc = encryption
 
 		mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
-		incStores, cleanupFn, err := backupdest.MakeBackupDestinationStores(ctx, p.User(), mkStore,
-			fullyResolvedIncrementalsDirectory)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			if err := cleanupFn(); err != nil {
-				log.Dev.Warningf(ctx, "failed to close incremental store: %+v", err)
-			}
-		}()
 
 		info.defaultURIs, info.manifests, info.localityInfo, memReserved,
 			err = backupdest.ResolveBackupManifests(
-			ctx, &mem, baseStores, incStores, mkStore, fullyResolvedDest,
-			fullyResolvedIncrementalsDirectory, hlc.Timestamp{}, encryption, &kmsEnv, p.User(),
-			true /* includeSkipped */, true, /* includeCompacted */
+			ctx, p.ExecCfg(), &mem, defaultCollectionURI, dest, mkStore, subdir,
+			fullyResolvedDest, fullyResolvedIncrementalsDirectory, hlc.Timestamp{},
+			encryption, &kmsEnv, p.User(), true /* includeSkipped */, true, /* includeCompacted */
+			len(explicitIncPaths) > 0,
 		)
 		defer func() {
 			mem.Shrink(ctx, memReserved)
@@ -481,7 +476,7 @@ func checkBackupFiles(
 		// Check metadata files. Note: we do not check locality aware backup
 		// metadata files ( prefixed with `backupPartitionDescriptorPrefix`) , as
 		// they're validated in resolveBackupManifests.
-		metaFile := backupbase.BackupManifestName + backupinfo.BackupManifestChecksumSuffix
+		metaFile := backupbase.DeprecatedBackupManifestName + backupinfo.BackupManifestChecksumSuffix
 		if _, err := defaultStore.Size(ctx, metaFile); err != nil {
 			return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
 				info.defaultURIs[layer], metaFile)
@@ -741,11 +736,16 @@ func backupShowerDefault(
 					case catalog.DatabaseDescriptor:
 						descriptorType = "database"
 						if desc.IsMultiRegion() {
-							regions, err := showRegions(typeIDToTypeDescriptor[desc.GetRegionConfig().RegionEnumID], desc.GetName())
-							if err != nil {
-								return nil, errors.Wrapf(err, "cannot generate regions column")
+							if mrEnum := typeIDToTypeDescriptor[desc.GetRegionConfig().RegionEnumID]; mrEnum != nil {
+								// The enum may not be in the backup, for example in a table
+								// level backup. Jury is out for whether databases should be
+								// shown in table level backups.
+								regions, err := showRegions(mrEnum, desc.GetName())
+								if err != nil {
+									return nil, errors.Wrapf(err, "cannot generate regions column")
+								}
+								regionsDatum = nullIfEmpty(regions)
 							}
-							regionsDatum = nullIfEmpty(regions)
 						}
 					case catalog.SchemaDescriptor:
 						descriptorType = "schema"
@@ -1392,7 +1392,7 @@ func showBackupsInCollectionPlanHook(
 			return errors.Wrapf(err, "connect to external storage")
 		}
 		defer store.Close()
-		res, err := backupdest.ListFullBackupsInCollection(ctx, store)
+		res, err := backupdest.ListFullBackupsInCollection(ctx, store, showStmt.Options.Index)
 		if err != nil {
 			return err
 		}

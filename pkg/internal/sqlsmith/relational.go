@@ -110,9 +110,11 @@ var (
 		{1, makeImport},
 		{1, makeCreateStats},
 		{1, makeSetSessionCharacteristics},
+		{1, makeDoBlock},
 	}
 	nonMutatingStatements = []statementWeight{
 		{10, makeSelect},
+		{1, makeDoBlock},
 	}
 	allStatements = append(mutatingStatements, nonMutatingStatements...)
 
@@ -199,6 +201,17 @@ func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRe
 		JoinType: joinTypes[s.rnd.Intn(maxJoinType)],
 		Left:     left,
 		Right:    right,
+	}
+	switch s.rnd.Intn(10) {
+	// INVERTED is unlikely to work unless we get very lucky, so skip it for now.
+	case 0:
+		joinExpr.Hint = "HASH"
+	case 1:
+		joinExpr.Hint = "LOOKUP"
+	case 2:
+		joinExpr.Hint = "MERGE"
+	case 3:
+		joinExpr.Hint = "STRAIGHT"
 	}
 
 	if s.disableCrossJoins {
@@ -915,6 +928,10 @@ func makeCreateFunc(s *Smither) (tree.Statement, bool) {
 		return nil, false
 	}
 	return s.makeCreateFunc()
+}
+
+func makeDoBlock(s *Smither) (tree.Statement, bool) {
+	return s.makeDoBlockTreeStmt()
 }
 
 func makeDropFunc(s *Smither) (tree.Statement, bool) {
@@ -1940,7 +1957,9 @@ func makeCreateStats(s *Smither) (tree.Statement, bool) {
 		s.rnd.Shuffle(len(columns), func(i, j int) {
 			columns[i], columns[j] = columns[j], columns[i]
 		})
-		columns = columns[0:s.rnd.Intn(len(columns))]
+		if len(columns) > 0 {
+			columns = columns[0 : s.rnd.Intn(len(columns))+1]
+		}
 	}
 
 	var options tree.CreateStatsOptions

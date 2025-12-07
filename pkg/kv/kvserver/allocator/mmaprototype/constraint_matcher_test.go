@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -31,8 +32,15 @@ func parseStoreAttributedAndLocality(t *testing.T, in string) StoreAttributesAnd
 				sal.StoreAttrs.Attrs,
 				strings.Split(parts[1], ",")...,
 			)
+		case "node-attrs":
+			sal.NodeAttrs.Attrs = append(
+				sal.NodeAttrs.Attrs,
+				strings.Split(parts[1], ",")...,
+			)
 		case "locality-tiers":
 			sal.NodeLocality = parseLocalityTiers(t, parts[1])
+		default:
+			t.Fatalf("unknown argument: %s", parts[0])
 		}
 	}
 	return sal
@@ -76,15 +84,15 @@ func TestConstraintMatcher(t *testing.T) {
 						Value: interner.toString(c.value),
 					}
 					sepStr := ""
-					if len(pl.storeIDPostingList) > 0 {
+					if len(pl.storeSet) > 0 {
 						sepStr = " "
 					}
 					fmt.Fprintf(b, "%s:%s", rc.String(), sepStr)
-					printPostingList(b, pl.storeIDPostingList)
+					printPostingList(b, pl.storeSet)
 					fmt.Fprintf(b, "\n")
 				}
 				fmt.Fprintf(b, "all-stores: ")
-				printPostingList(b, cm.allStores.storeIDPostingList)
+				printPostingList(b, cm.allStores.storeSet)
 				fmt.Fprintf(b, "\n")
 				err := cm.checkConsistency()
 				require.NoError(t, err)
@@ -93,29 +101,27 @@ func TestConstraintMatcher(t *testing.T) {
 			switch d.Cmd {
 			case "store":
 				sal := parseStoreAttributedAndLocality(t, d.Input)
-				cm.setStore(sal)
+				cm.setStore(sal.withNodeTier())
 				var b strings.Builder
 				printMatcher(&b)
 				return b.String()
 
 			case "remove-store":
-				var storeID int
-				d.ScanArgs(t, "store-id", &storeID)
-				cm.removeStore(roachpb.StoreID(storeID))
+				storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
+				cm.removeStore(storeID)
 				var b strings.Builder
 				printMatcher(&b)
 				return b.String()
 
 			case "store-matches":
-				var storeID int
-				d.ScanArgs(t, "store-id", &storeID)
+				storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
 				lines := strings.Split(d.Input, "\n")
 				require.Greater(t, 2, len(lines))
 				var cc []roachpb.Constraint
 				if len(lines) == 1 {
 					cc = parseConstraints(t, strings.Fields(strings.TrimSpace(lines[0])))
 				}
-				matches := cm.storeMatches(roachpb.StoreID(storeID), interner.internConstraintsConj(cc))
+				matches := cm.storeMatches(storeID, interner.internConstraintsConj(cc))
 				return fmt.Sprintf("%t", matches)
 
 			case "match-stores":
@@ -130,7 +136,7 @@ func TestConstraintMatcher(t *testing.T) {
 						disj = append(disj, interner.internConstraintsConj(cc))
 					}
 				}
-				var pl storeIDPostingList
+				var pl storeSet
 				if len(disj) <= 1 {
 					if randutil.FastUint32()%2 == 0 {
 						var conj []internedConstraint

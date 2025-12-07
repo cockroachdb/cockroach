@@ -94,7 +94,6 @@ func countLeasesWithDetail(
 ) (countDetail, error) {
 	var whereClause []string
 	forceMultiRegionQuery := false
-	useBytesOnRetry := false
 	for _, t := range versions {
 		versionClause := ""
 		if !forAnyVersion {
@@ -120,19 +119,13 @@ func countLeasesWithDetail(
 		// entire table.
 		if (cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion()) ||
 			forceMultiRegionQuery {
-			// If we are injecting a raw leases descriptors, that will not have the enum
-			// type set, so convert the region to byte equivalent physical representation.
-			detail, err = countLeasesByRegion(ctx, txn, prober, regionMap, cachedDatabaseRegions,
-				useBytesOnRetry, at, whereClause)
+			detail, err = countLeasesByRegion(ctx, txn, prober, regionMap, at, whereClause)
 		} else {
 			detail, err = countLeasesNonMultiRegion(ctx, txn, at, whereClause)
 		}
 		// If any transient region column errors occur then we should retry the count query.
 		if isTransientRegionColumnError(err) {
 			forceMultiRegionQuery = true
-			// If the query was already multi-region aware, then the system database is MR,
-			// but our lease descriptor has not been upgraded yet.
-			useBytesOnRetry = cachedDatabaseRegions != nil && cachedDatabaseRegions.IsMultiRegion()
 			return txn.KV().GenerateForcedRetryableErr(ctx, "forcing retry once with MR columns")
 		}
 
@@ -187,15 +180,10 @@ func countLeasesByRegion(
 	txn isql.Txn,
 	prober regionliveness.Prober,
 	regionMap regionliveness.LiveRegions,
-	cachedDBRegions regionliveness.CachedDatabaseRegions,
-	convertRegionsToBytes bool,
 	at hlc.Timestamp,
 	whereClauses []string,
 ) (countDetail, error) {
 	regionClause := "crdb_region=$2::system.crdb_internal_region"
-	if convertRegionsToBytes {
-		regionClause = "crdb_region=$2"
-	}
 	stmt := fmt.Sprintf(
 		`SELECT %[1]s FROM system.public.lease AS OF SYSTEM TIME '%[2]s' WHERE %[3]s `,
 		getCountLeaseColumns(),
@@ -204,28 +192,13 @@ func countLeasesByRegion(
 	)
 	var detail countDetail
 	if err := regionMap.ForEach(func(region string) error {
-		regionEnumValue := region
-		// The leases table descriptor injected does not have the type of the column
-		// set to the region enum type. So, instead convert the logical value to
-		// the physical one for comparison.
-		// TODO(fqazi): In 24.2 when this table format is default we can stop using
-		// synthetic descriptors and use the first code path.
-		if convertRegionsToBytes {
-			regionTypeDesc := cachedDBRegions.GetRegionEnumTypeDesc().AsRegionEnumTypeDescriptor()
-			for i := 0; i < regionTypeDesc.NumEnumMembers(); i++ {
-				if regionTypeDesc.GetMemberLogicalRepresentation(i) == region {
-					regionEnumValue = string(regionTypeDesc.GetMemberPhysicalRepresentation(i))
-					break
-				}
-			}
-		}
 		var values tree.Datums
 		queryRegionRows := func(countCtx context.Context) error {
 			var err error
 			values, err = txn.QueryRowEx(
 				countCtx, "count-leases", txn.KV(),
 				sessiondata.NodeUserSessionDataOverride,
-				stmt, at.GoTime(), regionEnumValue,
+				stmt, at.GoTime(), region,
 			)
 			return err
 		}
@@ -235,8 +208,12 @@ func countLeasesByRegion(
 		} else {
 			err = queryRegionRows(ctx)
 		}
-		if err := handleRegionLivenessErrors(ctx, prober, region, err); err != nil {
+		skipRegion, err := handleRegionLivenessErrors(ctx, prober, region, err)
+		if err != nil {
 			return err
+		}
+		if skipRegion {
+			return nil
 		}
 		if values == nil {
 			return errors.New("failed to count leases")
@@ -258,27 +235,27 @@ func getCountLeaseColumns() string {
 }
 
 // handleRegionLivenessErrors handles errors that are linked to region liveness
-// timeouts.
+// timeouts. Return true if the region should be skipped.
 func handleRegionLivenessErrors(
 	ctx context.Context, prober regionliveness.Prober, region string, err error,
-) error {
+) (bool, error) {
 	if err != nil {
 		if regionliveness.IsQueryTimeoutErr(err) {
 			// Probe and mark the region potentially.
 			probeErr := prober.ProbeLiveness(ctx, region)
 			if probeErr != nil {
 				err = errors.WithSecondaryError(err, probeErr)
-				return err
+				return false, err
 			}
-			return errors.Wrapf(err, "count-lease timed out reading from a region")
+			return false, errors.Wrapf(err, "count-lease timed out reading from a region")
 		} else if regionliveness.IsMissingRegionEnumErr(err) {
 			// Skip this region because we were unable to find region in
 			// type descriptor. Since the database regions are cached, they
 			// may be stale and have dropped regions.
 			log.Dev.Infof(ctx, "count-lease skipping region %s due to error: %v", region, err)
-			return nil
+			return true, nil
 		}
-		return err
+		return false, err
 	}
-	return err
+	return false, err
 }

@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crstrings"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -72,35 +73,43 @@ var (
 	}
 	metaDistSenderCrossRegionBatchRequestBytes = metric.Metadata{
 		Name: "distsender.batch_requests.cross_region.bytes",
-		Help: `Total byte count of replica-addressed batch requests processed cross
-		region when region tiers are configured`,
+		Help: crstrings.UnwrapText(`
+			Total byte count of replica-addressed batch requests processed cross
+			region when region tiers are configured
+		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaDistSenderCrossRegionBatchResponseBytes = metric.Metadata{
 		Name: "distsender.batch_responses.cross_region.bytes",
-		Help: `Total byte count of replica-addressed batch responses received cross
-		region when region tiers are configured`,
+		Help: crstrings.UnwrapText(`
+			Total byte count of replica-addressed batch responses received cross
+			region when region tiers are configured
+		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaDistSenderCrossZoneBatchRequestBytes = metric.Metadata{
 		Name: "distsender.batch_requests.cross_zone.bytes",
-		Help: `Total byte count of replica-addressed batch requests processed cross
-		zone within the same region when zone tiers are configured. If region tiers
-		are not set, it is assumed to be within the same region. To ensure accurate
-		monitoring of cross-zone data transfer, region and zone tiers should be
-		consistently configured across all nodes.`,
+		Help: crstrings.UnwrapText(`
+			Total byte count of replica-addressed batch requests processed cross zone
+			within the same region when zone tiers are configured. If region tiers are
+			not set, it is assumed to be within the same region. To ensure accurate
+			monitoring of cross-zone data transfer, region and zone tiers should be
+			consistently configured across all nodes.
+		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaDistSenderCrossZoneBatchResponseBytes = metric.Metadata{
 		Name: "distsender.batch_responses.cross_zone.bytes",
-		Help: `Total byte count of replica-addressed batch responses received cross
-		zone within the same region when zone tiers are configured. If region tiers
-		are not set, it is assumed to be within the same region. To ensure accurate
-		monitoring of cross-zone data transfer, region and zone tiers should be
-		consistently configured across all nodes.`,
+		Help: crstrings.UnwrapText(`
+			Total byte count of replica-addressed batch responses received cross zone
+			within the same region when zone tiers are configured. If region tiers are
+			not set, it is assumed to be within the same region. To ensure accurate
+			monitoring of cross-zone data transfer, region and zone tiers should be
+			consistently configured across all nodes.
+		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
@@ -145,18 +154,30 @@ var (
 		Help:        "Number of replica-addressed RPCs sent due to per-replica errors",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_DISTRIBUTED,
-		HowToUse:    `RPC errors do not necessarily indicate a problem. This metric tracks remote procedure calls that return a status value other than "success". A non-success status of an RPC should not be misconstrued as a network transport issue. It is database code logic executed on another cluster node. The non-success status is a result of an orderly execution of an RPC that reports a specific logical condition.`,
+		HowToUse: crstrings.UnwrapText(`
+			RPC errors do not necessarily indicate a problem. This metric tracks
+			remote procedure calls that return a status value other than "success". A
+			non-success status of an RPC should not be misconstrued as a network
+			transport issue. It is database code logic executed on another cluster
+			node. The non-success status is a result of an orderly execution of an RPC
+			that reports a specific logical condition.
+		`),
 	}
 	metaDistSenderNotLeaseHolderErrCount = metric.Metadata{
 		Name:        "distsender.errors.notleaseholder",
 		Help:        "Number of NotLeaseHolderErrors encountered from replica-addressed RPCs",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_DISTRIBUTED,
-		HowToUse:    `Errors of this type are normal during elastic cluster topology changes when leaseholders are actively rebalancing. They are automatically retried. However they may create occasional response time spikes. In that case, this metric may provide the explanation of the cause.`,
+		HowToUse: crstrings.UnwrapText(`
+			Errors of this type are normal during elastic cluster topology changes
+			when leaseholders are actively rebalancing. They are automatically
+			retried. However they may create occasional response time spikes. In that
+			case, this metric may provide the explanation of the cause.
+		`),
 	}
 	metaDistSenderInLeaseTransferBackoffsCount = metric.Metadata{
 		Name:        "distsender.errors.inleasetransferbackoffs",
@@ -172,46 +193,53 @@ var (
 	}
 	metaDistSenderSlowRPCs = metric.Metadata{
 		Name: "requests.slow.distsender",
-		Help: `Number of range-bound RPCs currently stuck or retrying for a long time.
+		Help: crstrings.UnwrapText(`
+			Number of range-bound RPCs currently stuck or retrying for a long time.
 
-Note that this is not a good signal for KV health. The remote side of the
-RPCs tracked here may experience contention, so an end user can easily
-cause values for this metric to be emitted by leaving a transaction open
-for a long time and contending with it using a second transaction.`,
+			Note that this is not a good signal for KV health. The remote side of the
+			RPCs tracked here may experience contention, so an end user can easily
+			cause values for this metric to be emitted by leaving a transaction open
+			for a long time and contending with it using a second transaction.
+		`),
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDistSenderSlowReplicaRPCs = metric.Metadata{
 		Name: "distsender.slow.replicarpcs",
-		Help: `Number of slow replica-bound RPCs.
+		Help: crstrings.UnwrapText(`
+			Number of slow replica-bound RPCs.
 
-Note that this is not a good signal for KV health. The remote side of the
-RPCs tracked here may experience contention, so an end user can easily
-cause values for this metric to be emitted by leaving a transaction open
-for a long time and contending with it using a second transaction.`,
+			Note that this is not a good signal for KV health. The remote side of the
+			RPCs tracked here may experience contention, so an end user can easily
+			cause values for this metric to be emitted by leaving a transaction open
+			for a long time and contending with it using a second transaction.
+		`),
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDistSenderMethodCountTmpl = metric.Metadata{
 		Name: "distsender.rpc.%s.sent",
-		Help: `Number of %s requests processed.
+		Help: crstrings.UnwrapText(`
+			Number of %s requests processed.
 
-This counts the requests in batches handed to DistSender, not the RPCs
-sent to individual Ranges as a result.`,
+			This counts the requests in batches handed to DistSender, not the RPCs
+			sent to individual Ranges as a result.
+		`),
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDistSenderErrCountTmpl = metric.Metadata{
-		Name: "distsender.rpc.err.%s",
-		Help: `Number of %s errors received replica-bound RPCs
-
-This counts how often error of the specified type was received back from replicas
-as part of executing possibly range-spanning requests. Failures to reach the target
-replica will be accounted for as 'roachpb.CommunicationErrType' and unclassified
-errors as 'roachpb.InternalErrType'.
-`,
+		Name:        "distsender.rpc.err.%s",
+		Help:        "Number of %s errors received replica-bound RPCs.",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
+		HowToUse: crstrings.UnwrapText(`
+			This counts how often an error of the specified type was received back
+			from replicas as part of executing possibly range-spanning requests.
+			Failures to reach the target replica will be accounted for as
+			'roachpb.CommunicationErrType' and unclassified errors as
+			'roachpb.InternalErrType'.
+		`),
 	}
 	metaDistSenderProxySentCount = metric.Metadata{
 		Name:        "distsender.rpc.proxy.sent",
@@ -239,19 +267,15 @@ errors as 'roachpb.InternalErrType'.
 	}
 	metaDistSenderRangefeedTotalRanges = metric.Metadata{
 		Name: "distsender.rangefeed.total_ranges",
-		Help: `Number of ranges executing rangefeed
-
-This counts the number of ranges with an active rangefeed.
-`,
+		Help: crstrings.UnwrapText(`
+			Number of ranges with an active rangefeed.
+		`),
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDistSenderRangefeedCatchupRanges = metric.Metadata{
-		Name: "distsender.rangefeed.catchup_ranges",
-		Help: `Number of ranges in catchup mode
-
-This counts the number of ranges with an active rangefeed that are performing catchup scan.
-`,
+		Name:        "distsender.rangefeed.catchup_ranges",
+		Help:        "Number of ranges with an active rangefeed that are performing a catchup scan.",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -370,6 +394,9 @@ const (
 	// The maximum number of times a replica is retried when it repeatedly returns
 	// stale lease info.
 	sameReplicaRetryLimit = 10
+	// InLeaseTransferBackoffTraceMessage is traced when DistSender backs off as a
+	// result of a NotLeaseholderError. It is exported for testing.
+	InLeaseTransferBackoffTraceMessage = "backing off due to NotLeaseHolderErr with stale info"
 )
 
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(
@@ -419,6 +446,20 @@ var ProxyBatchRequest = settings.RegisterBoolSetting(
 	true,
 )
 
+// NonTransactionalWritesNotIdempotent controls whether non-transactional writes
+// are considered idempotent or not. When this setting is true, a
+// non-transactional write that experiences an RPC error is not retried, and
+// returns an ambiguous error. This is the same behavior as commit batches (or
+// batched issued concurrently with a commit batch). This is arguably the
+// correct behavior for non-transactional writes, but it's behind a default-off
+// cluster setting to get some kvnemesis mileage first.
+var NonTransactionalWritesNotIdempotent = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.dist_sender.non_transactional_writes_not_idempotent.enabled",
+	"when true, non-transactional writes are not retried and may return an ambiguous error",
+	false,
+)
+
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
 	BatchCount                         *metric.Counter
@@ -446,8 +487,9 @@ type DistSenderMetrics struct {
 	ProxyForwardSentCount              *metric.Counter
 	ProxyForwardErrCount               *metric.Counter
 	MethodCounts                       [kvpb.NumMethods]*metric.Counter
-	ErrCounts                          [kvpb.NumErrors]*metric.Counter
-	CircuitBreaker                     DistSenderCircuitBreakerMetrics
+	// ErrCounts[i] can be nil if i'th error has been deprecated.
+	ErrCounts      [kvpb.NumErrors]*metric.Counter
+	CircuitBreaker DistSenderCircuitBreakerMetrics
 	DistSenderRangeFeedMetrics
 }
 
@@ -512,6 +554,10 @@ func MakeDistSenderMetrics(locality roachpb.Locality) DistSenderMetrics {
 	}
 	for i := range m.ErrCounts {
 		errType := kvpb.ErrorDetailType(i).String()
+		if strings.HasPrefix(errType, "ErrorDetailType") {
+			// This error index has been deprecated.
+			continue
+		}
 		meta := metaDistSenderErrCountTmpl
 		meta.Name = fmt.Sprintf(meta.Name, strings.ToLower(errType))
 		meta.Help = fmt.Sprintf(meta.Help, errType)
@@ -1049,7 +1095,7 @@ func (ds *DistSender) getRoutingInfo(
 			containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
 		}
 		if !containsFn(returnToken.Desc(), descKey) {
-			log.Dev.Fatalf(ctx, "programming error: range resolution returning non-matching descriptor: "+
+			log.KvExec.Fatalf(ctx, "programming error: range resolution returning non-matching descriptor: "+
 				"desc: %s, key: %s, reverse: %t", returnToken.Desc(), descKey, redact.Safe(useReverseScan))
 		}
 	}
@@ -1101,7 +1147,9 @@ func (ds *DistSender) initAndVerifyBatch(ctx context.Context, ba *kvpb.BatchRequ
 			*kvpb.GetRequest, *kvpb.ResolveIntentRequest, *kvpb.DeleteRequest, *kvpb.PutRequest:
 			// Accepted point requests that can be in batches with limit. No
 			// need to set disallowedReq.
-
+		case *kvpb.FlushLockTableRequest:
+			// FlushLockTableRequest handles limits itself. It is also an isAlone request so
+			// most of these checks should not be relevant.
 		default:
 			disallowedReq = inner.Method().String()
 		}
@@ -1284,7 +1332,7 @@ func (ds *DistSender) Send(
 			if len(parts) != 1 {
 				panic("EndTxn not in last chunk of batch")
 			} else if require1PC {
-				log.Dev.Fatalf(ctx, "required 1PC transaction cannot be split: %s", ba)
+				log.KvExec.Fatalf(ctx, "required 1PC transaction cannot be split: %s", ba)
 			}
 			parts = splitBatchAndCheckForRefreshSpans(ba, true /* split ET */)
 			onePart = false
@@ -1897,8 +1945,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 	}()
 
-	canParallelize := ba.Header.MaxSpanRequestKeys == 0 && ba.Header.TargetBytes == 0 &&
-		!ba.Header.ReturnElasticCPUResumeSpans
+	canParallelize := !ba.MightStopEarly()
 	if ba.IsSingleCheckConsistencyRequest() {
 		// Don't parallelize full checksum requests as they have to touch the
 		// entirety of each replica of each range they touch.
@@ -2002,9 +2049,8 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				ba.UpdateTxn(resp.reply.Txn)
 			}
 
-			mightStopEarly := ba.MaxSpanRequestKeys > 0 || ba.TargetBytes > 0 || ba.ReturnElasticCPUResumeSpans
 			// Check whether we've received enough responses to exit query loop.
-			if mightStopEarly {
+			if ba.MightStopEarly() {
 				var replyKeys int64
 				var replyBytes int64
 				for _, r := range resp.reply.Responses {
@@ -2230,7 +2276,7 @@ func (ds *DistSender) sendPartialBatch(
 			{
 				var s redact.StringBuilder
 				slowRangeRPCWarningStr(&s, ba, dur, attempts, routingTok.Desc(), err, reply)
-				log.Dev.Warningf(ctx, "slow range RPC: %v", &s)
+				log.KvExec.Warningf(ctx, "slow range RPC: %v", &s)
 			}
 			// If the RPC wasn't successful, defer the logging of a message once the
 			// RPC is not retried any more.
@@ -2242,7 +2288,7 @@ func (ds *DistSender) sendPartialBatch(
 					ds.metrics.SlowRPCs.Dec(1)
 					var s redact.StringBuilder
 					slowRangeRPCReturnWarningStr(&s, tBegin.Elapsed(), attempts)
-					log.Dev.Warningf(ctx, "slow RPC response: %v", &s)
+					log.KvExec.Warningf(ctx, "slow RPC response: %v", &s)
 				}(tBegin, attempts)
 			}
 			tBegin = 0 // prevent reentering branch for this RPC
@@ -2335,7 +2381,7 @@ func (ds *DistSender) sendPartialBatch(
 	}
 
 	if pErr == nil {
-		log.Dev.Fatal(ctx, "exited retry loop without an error or early exit")
+		log.KvExec.Fatal(ctx, "exited retry loop without an error or early exit")
 	}
 
 	return response{pErr: pErr}
@@ -2413,8 +2459,8 @@ func fillSkippedResponses(
 func maybeSetResumeSpan(
 	req kvpb.Request, hdr *kvpb.ResponseHeader, nextKey roachpb.RKey, isReverse bool,
 ) {
-	if _, ok := req.(*kvpb.GetRequest); ok {
-		// This is a Get request. There are three possibilities:
+	if !kvpb.IsRange(req) {
+		// This is a point request. There are three possibilities:
 		//
 		//  1. The request was completed. In this case we don't want a ResumeSpan.
 		//
@@ -2442,10 +2488,6 @@ func maybeSetResumeSpan(
 				hdr.ResumeSpan = &roachpb.Span{Key: key}
 			}
 		}
-		return
-	}
-
-	if !kvpb.IsRange(req) {
 		return
 	}
 
@@ -2545,7 +2587,13 @@ const slowDistSenderReplicaThreshold = 10 * time.Second
 func (ds *DistSender) sendToReplicas(
 	ctx context.Context, ba *kvpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
 ) (*kvpb.BatchResponse, error) {
-
+	// In addition to batches where withCommit is true, non-transactional write
+	// batches are also not safe to be retried as they are not guaranteed to be
+	// idempotent. Returning ambiguous errors for those batches is controlled by a
+	// cluster setting for now.
+	nonIdempotentWrite :=
+		ba.Txn == nil && ba.IsWrite() && NonTransactionalWritesNotIdempotent.Get(&ds.st.SV)
+	nonIdempotent := withCommit || nonIdempotentWrite
 	// If this request can be sent to a follower to perform a consistent follower
 	// read under the closed timestamp, promote its routing policy to NEAREST.
 	// If we don't know the closed timestamp policy, we ought to optimistically
@@ -2569,7 +2617,7 @@ func (ds *DistSender) sendToReplicas(
 	case kvpb.RoutingPolicy_NEAREST:
 		replicaFilter = AllExtantReplicas
 	default:
-		log.Dev.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
+		log.KvExec.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
 	}
 	desc := routing.Desc()
 	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, routing.Leaseholder(), replicaFilter)
@@ -2609,7 +2657,7 @@ func (ds *DistSender) sendToReplicas(
 		log.VEventf(ctx, 2, "routing to nearest replica; leaseholder not required order=%v", replicas)
 
 	default:
-		log.Dev.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
+		log.KvExec.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
 	}
 
 	// NB: upgrade the connection class to SYSTEM, for critical ranges. Set it to
@@ -2743,7 +2791,7 @@ func (ds *DistSender) sendToReplicas(
 		} else if routing.Leaseholder() == nil {
 			// NB: Normally we don't have both routeToLeaseholder and a nil
 			// leaseholder. This could be changed to an assertion.
-			log.Dev.Errorf(ctx, "attempting %v to route to leaseholder, but the leaseholder is unknown %v", ba, routing)
+			log.KvExec.Errorf(ctx, "attempting %v to route to leaseholder, but the leaseholder is unknown %v", ba, routing)
 		} else if ba.Replica.NodeID == routing.Leaseholder().NodeID {
 			// We are sending this request to the leaseholder, so it doesn't
 			// make sense to attempt to proxy it.
@@ -2763,7 +2811,9 @@ func (ds *DistSender) sendToReplicas(
 		}
 
 		tBegin := crtime.NowMono() // for slow log message
-		sendCtx, cbToken, cbErr := ds.circuitBreakers.ForReplica(desc, &curReplica).Track(ctx, ba, withCommit, tBegin)
+		sendCtx, cbToken, cbErr := ds.circuitBreakers.ForReplica(desc, &curReplica).Track(
+			ctx, ba, nonIdempotent, tBegin,
+		)
 		if cbErr != nil {
 			// Circuit breaker is tripped. err will be handled below.
 			err = cbErr
@@ -2786,7 +2836,7 @@ func (ds *DistSender) sendToReplicas(
 				if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
 					// Note that these RPC may or may not have succeeded. Errors are counted separately below.
 					ds.metrics.SlowReplicaRPCs.Inc(1)
-					log.Dev.Warningf(ctx, "slow replica RPC: %v", &s)
+					log.KvExec.Warningf(ctx, "slow replica RPC: %v", &s)
 				} else {
 					log.Eventf(ctx, "slow replica RPC: %v", &s)
 				}
@@ -2865,17 +2915,18 @@ func (ds *DistSender) sendToReplicas(
 			// prevents them from double evaluation. This can result in, for example,
 			// an increment applying twice, or more subtle problems like a blind write
 			// evaluating twice, overwriting another unrelated write that fell
-			// in-between.
+			// in-between. This is fixed under the cluster setting
+			// NonTransactionalWritesNotIdempotent. Consider enabling it by default.
 			//
-			// NB: If this partial batch does not contain the EndTxn request but the
-			// batch contains a commit, the ambiguous error should be caught on
-			// retrying the writes, should it need to be propagated.
-			if withCommit && !grpcutil.RequestDidNotStart(err) {
+			// NB: If this partial batch is not idempotent, the ambiguous error should
+			// be caught on retrying the writes, should it need to be propagated.
+			if nonIdempotent && !grpcutil.RequestDidNotStart(err) {
 				ambiguousError = err
 			}
 			// If we get a gRPC error against the leaseholder, we don't want to
 			// backoff and keep trying the request against the same leaseholder.
 			if lh := routing.Leaseholder(); lh != nil && lh.IsSame(curReplica) {
+				log.VEventf(ctx, 2, "RPC error and lh %s != curReplica %s; marking leaseholder as unavailable", lh, curReplica)
 				leaseholderUnavailable = true
 			}
 		} else {
@@ -2985,15 +3036,16 @@ func (ds *DistSender) sendToReplicas(
 					// error out when the transport is exhausted even if multiple replicas
 					// return NLHEs to different replicas all returning RUEs.
 					replicaUnavailableError = br.Error.GoError()
+					log.VEventf(ctx, 2, "got RUE from lh and lh equals curReplica; marking as leaseholderUnavailable")
 					leaseholderUnavailable = true
 				} else if replicaUnavailableError == nil {
 					// This is the first time we see a RUE. Record it, such that we'll
 					// return it if all other replicas fail (regardless of error).
 					replicaUnavailableError = br.Error.GoError()
 				}
-				// The circuit breaker may have tripped while a commit proposal was in
-				// flight, so we have to mark it as ambiguous as well.
-				if withCommit && ambiguousError == nil {
+				// The circuit breaker may have tripped while a non-idempotent request
+				// was in flight, so we have to mark it as ambiguous as well.
+				if nonIdempotent && ambiguousError == nil {
 					ambiguousError = br.Error.GoError()
 				}
 			case *kvpb.NotLeaseHolderError:
@@ -3031,6 +3083,8 @@ func (ds *DistSender) sendToReplicas(
 					// prevents accidentally returning a replica unavailable
 					// error too aggressively.
 					if updatedLeaseholder {
+						log.VEventf(ctx, 2,
+							"updated leaseholder; resetting leaseholderUnavailable and routing to leaseholder")
 						leaseholderUnavailable = false
 						routeToLeaseholder = true
 						// If we changed the leaseholder, reset the transport to try all the
@@ -3107,7 +3161,10 @@ func (ds *DistSender) sendToReplicas(
 					shouldBackoff := !updatedLeaseholder && !intentionallySentToFollower && !leaseholderUnavailable
 					if shouldBackoff {
 						ds.metrics.InLeaseTransferBackoffs.Inc(1)
-						log.VErrEventf(ctx, 2, "backing off due to NotLeaseHolderErr with stale info")
+						log.VErrEventf(ctx, 2,
+							InLeaseTransferBackoffTraceMessage+
+								" (updatedLH=%t intentionallySentToFollower=%t leaseholderUnavailable=%t)",
+							updatedLeaseholder, intentionallySentToFollower, leaseholderUnavailable)
 					} else {
 						inTransferRetry.Reset() // The following Next() call will not block.
 					}
@@ -3169,14 +3226,18 @@ func (ds *DistSender) maybeIncrementErrCounters(br *kvpb.BatchResponse, err erro
 	if err == nil && br.Error == nil {
 		return
 	}
+	var counter *metric.Counter
 	if err != nil {
-		ds.metrics.ErrCounts[kvpb.CommunicationErrType].Inc(1)
+		counter = ds.metrics.ErrCounts[kvpb.CommunicationErrType]
 	} else {
 		typ := kvpb.InternalErrType
 		if detail := br.Error.GetDetail(); detail != nil {
 			typ = detail.Type()
 		}
-		ds.metrics.ErrCounts[typ].Inc(1)
+		counter = ds.metrics.ErrCounts[typ]
+	}
+	if counter != nil {
+		counter.Inc(1)
 	}
 }
 

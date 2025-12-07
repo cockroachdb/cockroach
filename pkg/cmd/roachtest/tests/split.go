@@ -208,9 +208,10 @@ func registerLoadSplits(r registry.Registry) {
 				maxSize:      10 << 30,               // 10 GB
 				cpuThreshold: 100 * time.Millisecond, // 1/10th of a CPU per second.
 				// There should be at least 13 splits, in practice there are on average
-				// 20.
+				// 20 we never see 60 splits here, but we've seen as high as 36 and don't
+				// want to see flakes.
 				minimumRanges: 14,
-				maximumRanges: 25,
+				maximumRanges: 60,
 				load: kvSplitLoad{
 					concurrency:  64, // 64 concurrent workers
 					readPercent:  95, // 95% reads
@@ -334,9 +335,9 @@ func registerLoadSplits(r registry.Registry) {
 				maxSize:      10 << 30,               // 10 GB
 				cpuThreshold: 100 * time.Millisecond, // 1/10th of a CPU per second.
 				// YCSB/A has a zipfian distribution with 50% inserts and 50% updates.
-				// The number of splits should be between 18-38 after 10 minutes with
+				// The number of splits should be between 13-38 after 10 minutes with
 				// 100ms threshold on 8vCPU machines.
-				minimumRanges:     18,
+				minimumRanges:     15,
 				maximumRanges:     40,
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
@@ -361,7 +362,7 @@ func registerLoadSplits(r registry.Registry) {
 				// The number of splits should be similar to YCSB/A.
 				cpuThreshold:      100 * time.Millisecond, // 1/10th of a CPU per second.
 				minimumRanges:     15,
-				maximumRanges:     35,
+				maximumRanges:     60, // see #156261
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
 					workload:     "b",
@@ -385,8 +386,10 @@ func registerLoadSplits(r registry.Registry) {
 				// YCSB/D has a latest distribution i.e. moving hotkey. The inserts are
 				// hashed - this will lead to many hotspots over the keyspace that
 				// move. Expect a few less splits than A and B.
-				minimumRanges:     15,
-				maximumRanges:     30,
+				minimumRanges: 15,
+				// We never see 60 splits here, but we've seen as high as 36 and are
+				// tired of flakes related to a strict limit here.
+				maximumRanges:     60,
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
 					workload:     "d",
@@ -410,7 +413,7 @@ func registerLoadSplits(r registry.Registry) {
 				// YCSB/E has a zipfian distribution with 95% scans (limit 1k) and 5%
 				// inserts.
 				minimumRanges:     5,
-				maximumRanges:     32,
+				maximumRanges:     33,
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
 					workload:     "e",

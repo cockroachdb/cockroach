@@ -16,6 +16,7 @@ BACKUP INTO 'nodelocal://1/full' WITH encryption_passphrase='123';
 exec-sql
 BACKUP INTO 'nodelocal://1/full2' WITH encryption_passphrase='456', incremental_location='nodelocal://1/inc';
 ----
+NOTICE: the incremental_location option is deprecated and will be removed in a future release
 
 exec-sql
 BACKUP INTO 'nodelocal://1/full3' WITH kms='testkms:///cmk?AUTH=implicit';
@@ -92,6 +93,7 @@ BACKUP INTO LATEST IN 'nodelocal://1/full' WITH encryption_passphrase='123';
 exec-sql
 BACKUP INTO LATEST IN 'nodelocal://1/full2' WITH encryption_passphrase='456', incremental_location='nodelocal://1/inc';
 ----
+NOTICE: the incremental_location option is deprecated and will be removed in a future release
 
 exec-sql
 BACKUP INTO LATEST IN 'nodelocal://1/full3' WITH kms='testkms:///cmk?AUTH=implicit';

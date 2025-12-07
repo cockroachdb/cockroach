@@ -17,9 +17,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -47,6 +49,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func makeKey(codec keys.SQLCodec, key string) roachpb.Key {
+	return append(append(roachpb.Key(nil), codec.TenantPrefix()...), roachpb.Key(key)...)
+}
+
 // Test that we don't attempt to create flows in an aborted transaction.
 // Instead, a retryable error is created on the gateway. The point is to
 // simulate a race where the heartbeat loop finds out that the txn is aborted
@@ -63,21 +69,22 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	if _, err := sqlDB.ExecContext(
 		ctx, "create database test; create table test.t(a int)"); err != nil {
 		t.Fatal(err)
 	}
-	key := roachpb.Key("a")
+	key := makeKey(s.Codec(), "a")
 
 	// Plan a statement.
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
 	internalPlanner, cleanup := NewInternalPlanner(
 		"test",
-		kv.NewTxn(ctx, db, s.NodeID()),
+		kv.NewTxn(ctx, db, srv.NodeID()),
 		username.NodeUserName(),
 		&MemoryMetrics{},
 		&execCfg,
@@ -118,11 +125,11 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			HeartbeatInterval: time.Millisecond,
 			Settings:          s.ClusterSettings(),
 			Clock:             s.Clock(),
-			Stopper:           s.Stopper(),
+			Stopper:           s.AppStopper(),
 		},
 		s.DistSenderI().(*kvcoord.DistSender),
 	)
-	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
+	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.AppStopper())
 
 	iter := 0
 	// We'll trace to make sure the test isn't fooling itself.
@@ -167,8 +174,11 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 		// We need to re-plan every time, since the plan is closed automatically
 		// by PlanAndRun() below making it unusable across retries.
-		p.stmt = makeStatement(stmt, clusterunique.ID{},
-			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&execCfg.Settings.SV)))
+		p.stmt = makeStatement(
+			ctx, stmt, clusterunique.ID{},
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&execCfg.Settings.SV)),
+			nil, /* statementHintsCache */
+		)
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -215,7 +225,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 		abortTxn func(uuid uuid.UUID)
 	}{}
 
-	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{
+	srv, conn, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				RunBeforeCascadesAndChecks: func(txnID uuid.UUID) {
@@ -228,7 +238,8 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Set up schemas for the test. We want a construction that results in 2 FK
@@ -240,7 +251,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 		t,
 		"create table test.child(a INT, b INT, FOREIGN KEY (a) REFERENCES test.parent1(a), FOREIGN KEY (b) REFERENCES test.parent2(b))",
 	)
-	key := roachpb.Key("a")
+	key := makeKey(s.Codec(), "a")
 
 	setupQueries := []string{
 		"insert into test.parent1 VALUES(1)",
@@ -285,8 +296,11 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			p.ExtendedEvalContext().Tracing,
 		)
 
-		p.stmt = makeStatement(stmt, clusterunique.ID{},
-			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&s.ClusterSettings().SV)))
+		p.stmt = makeStatement(
+			ctx, stmt, clusterunique.ID{},
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&s.ClusterSettings().SV)),
+			nil, /* statementHintsCache */
+		)
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -335,11 +349,11 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			HeartbeatInterval: time.Millisecond,
 			Settings:          s.ClusterSettings(),
 			Clock:             s.Clock(),
-			Stopper:           s.Stopper(),
+			Stopper:           s.AppStopper(),
 		},
 		s.DistSenderI().(*kvcoord.DistSender),
 	)
-	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
+	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.AppStopper())
 
 	iter := 0
 	// We'll trace to make sure the test isn't fooling itself.
@@ -604,13 +618,15 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 					},
 				},
 			},
-			Insecure: true,
+			Insecure:          true,
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(112960),
 		}})
 	defer tc.Stopper().Stop(ctx)
+	s := tc.ApplicationLayer(0)
 
 	// Create a table with 30 rows, split them into 3 ranges with each node
 	// having one.
-	db := tc.ServerConn(0 /* idx */)
+	db := s.SQLConn(t, serverutils.DBName("test"))
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlutils.CreateTable(
 		t, db, "foo",
@@ -629,7 +645,7 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 	)
 
 	// Connect to the cluster via the PGWire client.
-	p, err := pgtest.NewPGTest(ctx, tc.Server(0).AdvSQLAddr(), username.RootUser)
+	p, err := pgtest.NewPGTest(ctx, s.AdvSQLAddr(), username.RootUser)
 	require.NoError(t, err)
 
 	// We disable multiple active portals here as it only supports local-only plan.
@@ -833,6 +849,11 @@ func TestSetupFlowRPCError(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
 	// Create a table with 30 rows, split them into 3 ranges with each node
 	// having one.
 	db := tc.ServerConn(0)
@@ -1006,7 +1027,8 @@ func TestDistributedQueryErrorIsRetriedLocally(t *testing.T) {
 					},
 				},
 			},
-			Insecure: true,
+			Insecure:          true,
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(155944),
 		},
 	})
 	defer tc.Stopper().Stop(context.Background())
@@ -1151,6 +1173,11 @@ SELECT id, details FROM jobs AS j INNER JOIN cte1 ON id = job_id WHERE id = 1;
 		}})
 	defer tc.Stopper().Stop(context.Background())
 
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
 	db := tc.ServerConn(0 /* idx */)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, "CREATE TABLE job_info(job_id INT, info_key INT, details INT, PRIMARY KEY (job_id, info_key));")
@@ -1213,4 +1240,169 @@ SELECT id, details FROM jobs AS j INNER JOIN cte1 ON id = job_id WHERE id = 1;
 	r.Scan(&id, &details)
 	require.Equal(t, 1, id)
 	require.Equal(t, 1, details)
+}
+
+// TestTopLevelQueryStats verifies that top-level query stats are collected
+// correctly, including when the query executes "plans inside plans".
+func TestTopLevelQueryStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	// testQuery will be updated throughout the test to the current target.
+	var testQuery atomic.Value
+	rowsReadCh, rowsWrittenCh, indexRowsWrittenCh, kvCPUTimeCh := make(chan int64), make(chan int64), make(chan int64), make(chan int64)
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &ExecutorTestingKnobs{
+				DistSQLReceiverPushCallbackFactory: func(_ context.Context, query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+					if target := testQuery.Load(); target == nil || target.(string) != query {
+						return nil
+					}
+					return func(row rowenc.EncDatumRow, batch coldata.Batch, meta *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+						if meta != nil && meta.Metrics != nil {
+							rowsReadCh <- meta.Metrics.RowsRead
+							rowsWrittenCh <- meta.Metrics.RowsWritten
+							indexRowsWrittenCh <- meta.Metrics.IndexRowsWritten
+							kvCPUTimeCh <- meta.Metrics.KVCPUTime
+						}
+						return row, batch, meta
+					}
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	conn, err := sqlDB.Conn(ctx)
+	require.NoError(t, err)
+
+	if _, err := sqlDB.Exec(`
+CREATE TABLE t (k INT PRIMARY KEY, i INT, v INT, INDEX(i));
+INSERT INTO t SELECT i, 1, 1 FROM generate_series(1, 10) AS g(i);
+CREATE FUNCTION no_reads() RETURNS INT AS 'SELECT 1' LANGUAGE SQL;
+CREATE FUNCTION reads() RETURNS INT AS 'SELECT count(*) FROM t' LANGUAGE SQL;
+CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT x' LANGUAGE SQL;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name                string
+		query               string
+		setup, cleanup      string // optional
+		expRowsRead         int64
+		expRowsWritten      int64
+		expIndexRowsWritten int64
+	}{
+		{
+			name:                "simple read",
+			query:               "SELECT k FROM t",
+			expRowsRead:         10,
+			expRowsWritten:      0,
+			expIndexRowsWritten: 0,
+		},
+		{
+			name:    "routine and index join (used to be powered by streamer)",
+			query:   "SELECT v FROM t@t_i_idx WHERE reads() > 0",
+			setup:   "SET distsql=off",
+			cleanup: "RESET distsql",
+			// 10 rows for secondary index, 10 for index join into primary, and
+			// then for each row do ten-row-scan in the routine.
+			expRowsRead:         120,
+			expRowsWritten:      0,
+			expIndexRowsWritten: 0,
+		},
+		{
+			name:                "simple write",
+			query:               "INSERT INTO t SELECT generate_series(11, 42)",
+			expRowsRead:         0,
+			expRowsWritten:      32,
+			expIndexRowsWritten: 64,
+		},
+		{
+			name: "read with apply join",
+			query: `SELECT (
+    WITH foo AS MATERIALIZED (SELECT k FROM t AS x WHERE x.k = y.k)
+    SELECT * FROM foo
+  ) FROM t AS y`,
+			expRowsRead:         84, // scanning the table twice
+			expRowsWritten:      0,
+			expIndexRowsWritten: 0,
+		},
+		{
+			name:                "routine, no reads",
+			query:               "SELECT no_reads()",
+			expRowsRead:         0,
+			expRowsWritten:      0,
+			expIndexRowsWritten: 0,
+		},
+		{
+			name:                "routine, reads",
+			query:               "SELECT reads()",
+			expRowsRead:         42,
+			expRowsWritten:      0,
+			expIndexRowsWritten: 0,
+		},
+		{
+			name:                "routine, write",
+			query:               "SELECT write(43)",
+			expRowsRead:         0,
+			expRowsWritten:      1,
+			expIndexRowsWritten: 2,
+		},
+		{
+			name:                "routine, multiple reads and writes",
+			query:               "SELECT reads(), write(44), reads(), write(45), write(46), reads()",
+			expRowsRead:         133, // first read is 43 rows, second is 44, third is 46
+			expRowsWritten:      3,
+			expIndexRowsWritten: 6,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.setup != "" {
+				_, err := conn.ExecContext(ctx, tc.setup)
+				require.NoError(t, err)
+			}
+			if tc.cleanup != "" {
+				defer func() {
+					_, err := conn.ExecContext(ctx, tc.cleanup)
+					require.NoError(t, err)
+				}()
+			}
+			testQuery.Store(tc.query)
+			errCh := make(chan error)
+			// Spin up the worker goroutine which will actually execute the
+			// query.
+			go func() {
+				defer close(errCh)
+				_, err := conn.ExecContext(ctx, tc.query)
+				errCh <- err
+			}()
+			// In the main goroutine, loop until the query is completed while
+			// accumulating the top-level query stats.
+			var rowsRead, rowsWritten, indexRowsWritten, kvCPUTime int64
+		LOOP:
+			for {
+				select {
+				case read := <-rowsReadCh:
+					rowsRead += read
+				case written := <-rowsWrittenCh:
+					rowsWritten += written
+				case written := <-indexRowsWrittenCh:
+					indexRowsWritten += written
+				case cpuTime := <-kvCPUTimeCh:
+					kvCPUTime += cpuTime
+				case err := <-errCh:
+					require.NoError(t, err)
+					break LOOP
+				}
+			}
+			require.Equal(t, tc.expRowsRead, rowsRead)
+			require.Equal(t, tc.expRowsWritten, rowsWritten)
+			require.Equal(t, tc.expIndexRowsWritten, indexRowsWritten)
+			if rowsWritten > 0 || rowsRead > 0 {
+				require.Positive(t, kvCPUTime, "KVCPUTime should be positive")
+			}
+		})
+	}
 }

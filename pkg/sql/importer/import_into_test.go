@@ -54,12 +54,7 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	args := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(107141),
-		},
-	}
-	tc := testcluster.StartTestCluster(t, 1, args)
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0).ApplicationLayer()
 	tenantSettings := s.ClusterSettings()

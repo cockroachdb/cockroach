@@ -9,6 +9,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -105,6 +106,7 @@ func TestProjectSet(t *testing.T) {
 		t.Run(c.description, func(t *testing.T) {
 			runProcessorTest(
 				t,
+				keys.SystemSQLCodec,
 				execinfrapb.ProcessorCoreUnion{ProjectSet: &c.spec},
 				execinfrapb.PostProcessSpec{},
 				c.inputTypes,
@@ -166,7 +168,7 @@ func BenchmarkProjectSet(b *testing.B) {
 				in := distsqlutils.NewRowBuffer(c.inputTypes, c.input, distsqlutils.RowBufferArgs{})
 				out := &distsqlutils.RowBuffer{}
 				p, err := NewProcessor(
-					context.Background(), &flowCtx, 0, /* processorID */
+					context.Background(), &flowCtx, 0 /* processorID */, 0, /* stageID */
 					&execinfrapb.ProcessorCoreUnion{ProjectSet: &c.spec}, &execinfrapb.PostProcessSpec{},
 					[]execinfra.RowSource{in}, []execinfra.LocalProcessor{})
 				if err != nil {

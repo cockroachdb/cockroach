@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/drpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -287,6 +288,9 @@ type Context struct {
 	// the gRPC protocol over an in-memory pipe.
 	loopbackDialFn func(context.Context) (net.Conn, error)
 
+	// This is similar to the loopbackDialFn above, but for DRPC connections.
+	loopbackDRPCDialFn func(context.Context) (net.Conn, error)
+
 	// clientCreds is used to pass additional headers to called RPCs.
 	clientCreds credentials.PerRPCCredentials
 
@@ -295,7 +299,7 @@ type Context struct {
 	windowSizeSettings
 }
 
-// SetLoopbackDialer configures the loopback dialer function.
+// SetLoopbackDialer configures the loopback dialer function to dial gRPC connections.
 func (c *Context) SetLoopbackDialer(loopbackDialFn func(context.Context) (net.Conn, error)) {
 	if c.ContextOptions.Knobs.NoLoopbackDialer {
 		// A test has decided it is opting out of the special loopback
@@ -304,6 +308,17 @@ func (c *Context) SetLoopbackDialer(loopbackDialFn func(context.Context) (net.Co
 		return
 	}
 	c.loopbackDialFn = loopbackDialFn
+}
+
+// SetLoopbackDRPCDialer configures the loopback dialer function to dial DRPC connections.
+func (c *Context) SetLoopbackDRPCDialer(loopbackDialFn func(context.Context) (net.Conn, error)) {
+	if c.ContextOptions.Knobs.NoLoopbackDialer {
+		// A test has decided it is opting out of the special loopback
+		// dialing mechanism. Obey it. We already have defined
+		// loopbackDialFn in that case in NewContext().
+		return
+	}
+	c.loopbackDRPCDialFn = loopbackDialFn
 }
 
 // StoreLivenessGracePeriod computes the grace period after a store restarts before which it will
@@ -410,6 +425,9 @@ type ContextOptions struct {
 
 	// Locality stores the locality of this node.
 	Locality roachpb.Locality
+
+	// UseDRPC indicates if DRPC must be used for internode communication.
+	UseDRPC bool
 }
 
 // DefaultContextOptions are mostly used in tests.
@@ -443,6 +461,7 @@ func ServerContextOptionsFromBaseConfig(cfg *base.Config) ContextOptions {
 		AdvertiseAddrH:                 &cfg.AdvertiseAddrH,
 		SQLAdvertiseAddrH:              &cfg.SQLAdvertiseAddrH,
 		DisableTLSForHTTP:              cfg.DisableTLSForHTTP,
+		UseDRPC:                        cfg.UseDRPC,
 	}
 }
 
@@ -592,9 +611,12 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	if opts.Knobs.NoLoopbackDialer {
 		// The test has decided it doesn't need/want a loopback dialer.
 		// Ensure we still have a working dial function in that case.
+		var errAttemptToLoopbackDial = errors.AssertionFailedf("loopback dialer called but NoLoopbackDialer was set")
 		rpcCtx.loopbackDialFn = func(ctx context.Context) (net.Conn, error) {
-			d := onlyOnceDialer{}
-			return d.dial(ctx, opts.AdvertiseAddr)
+			return nil, errAttemptToLoopbackDial
+		}
+		rpcCtx.loopbackDRPCDialFn = func(ctx context.Context) (net.Conn, error) {
+			return nil, errAttemptToLoopbackDial
 		}
 	}
 
@@ -633,7 +655,17 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 			grpcinterceptor.ClientInterceptor(tracer, tagger))
 		rpcCtx.clientStreamInterceptors = append(rpcCtx.clientStreamInterceptors,
 			grpcinterceptor.StreamClientInterceptor(tracer, tagger))
+		rpcCtx.clientUnaryInterceptorsDRPC = append(rpcCtx.clientUnaryInterceptorsDRPC,
+			drpcinterceptor.ClientInterceptor(tracer, tagger))
+		rpcCtx.clientStreamInterceptorsDRPC = append(rpcCtx.clientStreamInterceptorsDRPC,
+			drpcinterceptor.StreamClientInterceptor(tracer, tagger))
 	}
+
+	// Add the DRPC gateway request counter interceptor to track telemetry for
+	// HTTP gateway requests.
+	rpcCtx.clientUnaryInterceptorsDRPC = append(rpcCtx.clientUnaryInterceptorsDRPC,
+		drpcGatewayRequestCounterInterceptor)
+
 	// Note that we do not consult rpcCtx.Knobs.StreamClientInterceptor. That knob
 	// can add another interceptor, but it can only do it dynamically, based on
 	// a connection class. Only calls going over an actual gRPC connection will
@@ -1364,7 +1396,26 @@ func (rpcCtx *Context) ConnHealth(
 	if rpcCtx.GetLocalInternalClientForAddr(nodeID) != nil {
 		return nil
 	}
+
+	if !rpcbase.DRPCEnabled(context.Background(), rpcCtx.Settings) {
+		return rpcCtx.grpcConnHealth(target, nodeID, class)
+	}
+	return rpcCtx.drpcConnHealth(target, nodeID, class)
+}
+
+func (rpcCtx *Context) grpcConnHealth(
+	target string, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) error {
 	if p, ok := rpcCtx.peers.get(peerKey{target, nodeID, class}); ok {
+		return p.c.Health()
+	}
+	return ErrNotHeartbeated
+}
+
+func (rpcCtx *Context) drpcConnHealth(
+	target string, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) error {
+	if p, ok := rpcCtx.drpcPeers.get(peerKey{target, nodeID, class}); ok {
 		return p.c.Health()
 	}
 	return ErrNotHeartbeated
@@ -1380,13 +1431,17 @@ const (
 	tcpTransport transportType = true
 )
 
+func (rpcCtx *Context) canLoopbackDial() bool {
+	return !rpcCtx.ClientOnly && !rpcCtx.Knobs.NoLoopbackDialer
+}
+
 // GRPCDialOptions returns the minimal `grpc.DialOption`s necessary to connect
 // to a server.
 func (rpcCtx *Context) GRPCDialOptions(
 	ctx context.Context, target string, class rpcbase.ConnectionClass,
 ) ([]grpc.DialOption, error) {
 	transport := tcpTransport
-	if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
 		// See the explanation on loopbackDialFn for an explanation about this.
 		transport = loopbackTransport
 	}
@@ -1398,6 +1453,17 @@ func (rpcCtx *Context) GRPCDialOptions(
 	// backing a gRPC channel so onNetworkDial is a no-op.
 	onNetworkDial := func(conn net.Conn) {}
 	return rpcCtx.grpcDialOptionsInternal(ctx, target, class, transport, onNetworkDial)
+}
+
+// DRPCDialOptions is same as GRPCDialOptions but for drpc connections.
+func (rpcCtx *Context) DRPCDialOptions(
+	ctx context.Context, target string, class rpcbase.ConnectionClass,
+) ([]drpcclient.DialOption, error) {
+	transport := tcpTransport
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
+		transport = loopbackTransport
+	}
+	return rpcCtx.drpcDialOptionsInternal(ctx, target, class, transport)
 }
 
 // grpcDialOptions produces dial options suitable for connecting to the given target and class.
@@ -1467,14 +1533,32 @@ func (rpcCtx *Context) dialOptsLocal() ([]grpc.DialOption, error) {
 func (rpcCtx *Context) GetBreakerForAddr(
 	nodeID roachpb.NodeID, class rpcbase.ConnectionClass, addr net.Addr,
 ) (*circuitbreaker.Breaker, bool) {
-	sAddr := addr.String()
-	rpcCtx.peers.mu.RLock()
-	defer rpcCtx.peers.mu.RUnlock()
-	p, ok := rpcCtx.peers.mu.m[peerKey{
-		TargetAddr: sAddr,
+	k := peerKey{
+		TargetAddr: addr.String(),
 		NodeID:     nodeID,
 		Class:      class,
-	}]
+	}
+
+	if !rpcbase.DRPCEnabled(context.Background(), rpcCtx.Settings) {
+		return rpcCtx.grpcGetBreakerForAddr(k)
+	}
+	return rpcCtx.drpcGetBreakerForAddr(k)
+}
+
+func (rpcCtx *Context) grpcGetBreakerForAddr(k peerKey) (*circuitbreaker.Breaker, bool) {
+	rpcCtx.peers.mu.RLock()
+	defer rpcCtx.peers.mu.RUnlock()
+	p, ok := rpcCtx.peers.mu.m[k]
+	if !ok {
+		return nil, false
+	}
+	return p.b, true
+}
+
+func (rpcCtx *Context) drpcGetBreakerForAddr(k peerKey) (*circuitbreaker.Breaker, bool) {
+	rpcCtx.drpcPeers.mu.RLock()
+	defer rpcCtx.drpcPeers.mu.RUnlock()
+	p, ok := rpcCtx.drpcPeers.mu.m[k]
 	if !ok {
 		return nil, false
 	}
@@ -2000,12 +2084,12 @@ func (rpcCtx *Context) wrapCtx(
 	if remoteNodeID == 0 {
 		rnodeID = redact.SafeString("?")
 	}
-	l := &logtags.Buffer{}
-	l = l.Add(RemoteNodeTag, rnodeID)
-	l = l.Add(RemoteAddressTag, target)
-	l = l.Add(Class, class)
-	l = l.Add(RpcTag, nil)
-	return logtags.AddTags(ctx, l)
+	l := logtags.BuildBuffer()
+	l.Add(RemoteNodeTag, rnodeID)
+	l.Add(RemoteAddressTag, target)
+	l.Add(Class, class)
+	l.Add(RpcTag, nil)
+	return logtags.AddTags(ctx, l.Finish())
 }
 
 // grpcDialRaw connects to the remote node.
@@ -2019,7 +2103,7 @@ func (rpcCtx *Context) grpcDialRaw(
 	additionalOpts ...grpc.DialOption,
 ) (*grpc.ClientConn, error) {
 	transport := tcpTransport
-	if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
 		// See the explanation on loopbackDialFn for an explanation about this.
 		transport = loopbackTransport
 	}
@@ -2031,6 +2115,34 @@ func (rpcCtx *Context) grpcDialRaw(
 	dialOpts = append(dialOpts, additionalOpts...)
 
 	return grpc.DialContext(ctx, target, dialOpts...)
+}
+
+// drpcDialRaw is similar to grpcDialRaw but for drpc connections.
+//
+//lint:ignore U1000 used in the future commits.
+func (rpcCtx *Context) drpcDialRaw(
+	ctx context.Context,
+	target string,
+	class rpcbase.ConnectionClass,
+	additionalOpts ...drpcclient.DialOption,
+) (*drpcclient.ClientConn, error) {
+	transport := tcpTransport
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
+		transport = loopbackTransport
+	}
+	drpcDialOpts, err := rpcCtx.drpcDialOptionsInternal(ctx, target, class, transport)
+	if err != nil {
+		return nil, err
+	}
+
+	drpcDialOpts = append(drpcDialOpts, additionalOpts...)
+
+	drpcConn, err := drpcclient.DialContext(ctx, target, drpcDialOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return drpcclient.NewClientConnWithOptions(ctx, drpcConn, drpcDialOpts...)
 }
 
 // GRPCUnvalidatedDial uses GRPCDialNode and disables validation of the

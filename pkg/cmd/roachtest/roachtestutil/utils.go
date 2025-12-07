@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -58,7 +59,7 @@ func SetDefaultAdminUIPort(c cluster.Cluster, opts *install.StartOpts) {
 // recently a given log message has been emitted so that it can determine
 // whether it's worth logging again.
 type EveryN struct {
-	util.EveryN
+	util.EveryN[time.Time]
 }
 
 // Every is a convenience constructor for an EveryN object that allows a log
@@ -198,7 +199,7 @@ func GetMeanOverLastN(n int, items []float64) float64 {
 // Usage: ROACHTEST_PERF_WORKLOAD_DURATION="5m".
 const EnvWorkloadDurationFlag = "ROACHTEST_PERF_WORKLOAD_DURATION"
 
-var workloadDurationRegex = regexp.MustCompile(`^\d+[mhsMHS]$`)
+var workloadDurationRegex = regexp.MustCompile(`^\d+[mhs]$`)
 
 // GetEnvWorkloadDurationValueOrDefault validates EnvWorkloadDurationFlag and
 // returns value set if valid else returns default duration.
@@ -335,4 +336,101 @@ func SimulateMultiRegionCluster(
 	}
 
 	return cleanupFunc, nil
+}
+
+// ExecWithRetry executes the given SQL statement with the specified retry logic.
+func ExecWithRetry(
+	ctx context.Context,
+	l *logger.Logger,
+	db *gosql.DB,
+	retryOpts retry.Options,
+	query string,
+	args ...any,
+) (gosql.Result, error) {
+	var result gosql.Result
+	err := retryOpts.Do(ctx, func(ctx context.Context) error {
+		var err error
+		result, err = db.ExecContext(ctx, query, args...)
+		if err != nil {
+			l.Printf("%s failed (retrying): %v", query, err)
+			return err
+		}
+		return nil
+	})
+
+	return result, err
+}
+
+// QueryWithRetry queries the given SQL statement with the specified retry logic.
+func QueryWithRetry(
+	ctx context.Context,
+	l *logger.Logger,
+	db *gosql.DB,
+	retryOpts retry.Options,
+	query string,
+	args ...any,
+) (*gosql.Rows, error) {
+	var rows *gosql.Rows
+	err := retryOpts.Do(ctx, func(ctx context.Context) error {
+		var err error
+		rows, err = db.QueryContext(ctx, query, args...)
+		if err != nil {
+			l.Printf("%s failed (retrying): %v", query, err)
+			return err
+		}
+		return nil
+	})
+
+	return rows, err
+}
+
+// ClusterSettingRetryOpts are retry options intended for cluster setting operations.
+//
+// We use relatively high backoff parameters with the assumption that:
+//  1. If we fail, it's likely due to cluster overload, and we want to give
+//     the cluster adequate time to recover.
+//  2. Setting a cluster setting in roachtest is not latency sensitive.
+var ClusterSettingRetryOpts = retry.Options{
+	InitialBackoff: 3 * time.Second,
+	MaxBackoff:     5 * time.Second,
+	MaxRetries:     5,
+}
+
+var (
+	errEmptyTableData = errors.New("empty table data")
+	errMismatchedCols = errors.New("row has mismatched number of columns")
+)
+
+// ToMarkdownTable renders a 2D list of strings as a Markdown table. Assumes
+// header is the first entry.
+//
+// Example:
+//
+//	| Name    | Age | City          |
+//	| ---     | --- | ---           |
+//	| Alice   | 30  | New York      |
+//	| Bob     | 25  | San Francisco |
+//	| Charlie | 35  | Chicago       |
+func ToMarkdownTable(data [][]string) (string, error) {
+	if len(data) == 0 || len(data[0]) == 0 {
+		return "", errEmptyTableData
+	}
+	var sb strings.Builder
+	// Write header row
+	sb.WriteString("| " + strings.Join(data[0], " | ") + " |\n")
+	// Write separator row (--- under each header)
+	separators := make([]string, len(data[0]))
+	for i := range separators {
+		separators[i] = "---"
+	}
+	sb.WriteString("| " + strings.Join(separators, " | ") + " |\n")
+	// Write remaining rows
+	for i, row := range data[1:] {
+		if len(data[0]) != len(row) {
+			return "", fmt.Errorf("%w: row %d has %d columns, expected %d",
+				errMismatchedCols, i, len(row), len(data[0]))
+		}
+		sb.WriteString("| " + strings.Join(row, " | ") + " |\n")
+	}
+	return sb.String(), nil
 }

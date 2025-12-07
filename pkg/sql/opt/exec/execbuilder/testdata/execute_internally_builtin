@@ -24,8 +24,15 @@ SELECT crdb_internal.execute_internally('SELECT k FROM t;', true);
 3
 5
 
+
+statement ok
+ALTER TABLE t SET (schema_locked=false)
+
 statement ok
 SELECT crdb_internal.execute_internally('TRUNCATE t;', true);
+
+statement ok
+ALTER TABLE t SET (schema_locked=true)
 
 query empty
 SELECT crdb_internal.execute_internally('SELECT k FROM t;', true);
@@ -291,3 +298,6 @@ subtest end
 # Regression test for crashing with SHOW COMMIT TIMESTAMP.
 statement error this statement is disallowed
 SELECT crdb_internal.execute_internally('SHOW COMMIT TIMESTAMP;', true);
+
+statement error COPY cannot be run via the internal executor
+SELECT crdb_internal.execute_internally('COPY t FROM STDIN');

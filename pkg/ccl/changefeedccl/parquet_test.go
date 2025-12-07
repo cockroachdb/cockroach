@@ -48,17 +48,16 @@ func TestParquetRows(t *testing.T) {
 	skip.UnderStress(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// TODO(#98816): cdctest.GetHydratedTableDescriptor does not work with tenant dbs.
-		// Once it is fixed, this flag can be removed.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	sysDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	sysDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 
 	maxRowGroupSize := int64(4)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 
 	newDecimal := func(s string) *tree.DDecimal {
 		d, _, _ := apd.NewFromString(s)
@@ -264,7 +263,7 @@ func TestParquetRows(t *testing.T) {
 }
 
 func makeRangefeedReaderAndDecoder(
-	t *testing.T, s serverutils.TestServerInterface,
+	t *testing.T, s serverutils.ApplicationLayerInterface,
 ) (func(t testing.TB) *kvpb.RangeFeedValue, func(), cdcevent.Decoder) {
 	tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, s.ExecutorConfig(), tableDesc)

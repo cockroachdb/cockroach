@@ -117,11 +117,6 @@ func TestVectorManager(t *testing.T) {
 	}).BuildCreatedMutable()
 
 	err := internalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) (err error) {
-		defer func() {
-			if err == nil {
-				err = txn.KV().Commit(ctx)
-			}
-		}()
 		b := txn.KV().NewBatch()
 
 		err = txn.Descriptors().WriteDescToBatch(ctx, false, newDB, b)

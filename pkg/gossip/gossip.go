@@ -62,10 +62,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -1359,9 +1361,10 @@ func (g *Gossip) manage(rpcContext *rpc.Context) {
 		var cullTimer, stallTimer timeutil.Timer
 		defer cullTimer.Stop()
 		defer stallTimer.Stop()
+		rng, _ := randutil.NewPseudoRand()
 
-		cullTimer.Reset(jitteredInterval(g.cullInterval))
-		stallTimer.Reset(jitteredInterval(g.stallInterval))
+		cullTimer.Reset(jitteredInterval(g.cullInterval, rng))
+		stallTimer.Reset(jitteredInterval(g.stallInterval, rng))
 		for {
 			select {
 			case <-g.server.stopper.ShouldQuiesce():
@@ -1371,7 +1374,7 @@ func (g *Gossip) manage(rpcContext *rpc.Context) {
 			case <-g.tighten:
 				g.tightenNetwork(ctx, rpcContext)
 			case <-cullTimer.C:
-				cullTimer.Reset(jitteredInterval(g.cullInterval))
+				cullTimer.Reset(jitteredInterval(g.cullInterval, rng))
 				func() {
 					g.mu.Lock()
 					if !g.outgoing.hasSpace() {
@@ -1401,7 +1404,7 @@ func (g *Gossip) manage(rpcContext *rpc.Context) {
 					g.mu.Unlock()
 				}()
 			case <-stallTimer.C:
-				stallTimer.Reset(jitteredInterval(g.stallInterval))
+				stallTimer.Reset(jitteredInterval(g.stallInterval, rng))
 				func() {
 					g.mu.Lock()
 					defer g.mu.Unlock()
@@ -1414,8 +1417,8 @@ func (g *Gossip) manage(rpcContext *rpc.Context) {
 
 // jitteredInterval returns a randomly jittered (+/-25%) duration
 // from checkInterval.
-func jitteredInterval(interval time.Duration) time.Duration {
-	return time.Duration(float64(interval) * (0.75 + 0.5*rand.Float64()))
+func jitteredInterval(interval time.Duration, rng *rand.Rand) time.Duration {
+	return time.Duration(float64(interval) * (0.75 + 0.5*rng.Float64()))
 }
 
 // tightenNetwork "tightens" the network by starting a new gossip client to the
@@ -1620,7 +1623,7 @@ func (g *Gossip) TestingAddInfoProtoAndWaitForAllCallbacks(
 				method: func(_ string, _ roachpb.Value, _ int64) {
 					wg.Done()
 				},
-				schedulingTime: timeutil.Now(),
+				schedulingTime: crtime.NowMono(),
 			})
 			cb.cw.mu.Unlock()
 		}

@@ -29,9 +29,9 @@ func TestDistinct(t *testing.T) {
 
 	v := [15]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
-	vNull := rowenc.DatumToEncDatum(types.Unknown, tree.DNull)
+	vNull := rowenc.DatumToEncDatumUnsafe(types.Unknown, tree.DNull)
 
 	testCases := []struct {
 		spec     execinfrapb.DistinctSpec

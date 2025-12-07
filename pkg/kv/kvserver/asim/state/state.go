@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -63,6 +62,8 @@ type State interface {
 	Node(NodeID) Node
 	// Nodes returns all nodes that exist in this state.
 	Nodes() []Node
+	// NodesString returns a string representation of all nodes.
+	NodesStringWithTag(tag string) string
 	// RangeFor returns the range containing Key in [StartKey, EndKey). This
 	// cannot fail.
 	RangeFor(Key) Range
@@ -83,7 +84,7 @@ type State interface {
 	LeaseholderStore(RangeID) (Store, bool)
 	// AddNode modifies the state to include one additional node. This cannot
 	// fail. The new Node is returned.
-	AddNode() Node
+	AddNode(nodeCPUCapacity int64, locality roachpb.Locality) Node
 	// SetNodeLocality sets the locality of the node with ID NodeID to be the
 	// locality given.
 	SetNodeLocality(NodeID, roachpb.Locality)
@@ -161,11 +162,21 @@ type State interface {
 	// NextReplicasFn returns a function, that when called will return the current
 	// replicas that exist on the store.
 	NextReplicasFn(StoreID) func() []Replica
-	// SetNodeLiveness sets the liveness status of the node with ID NodeID to be
-	// the status given.
-	SetNodeLiveness(NodeID, livenesspb.NodeLivenessStatus)
+	// SetStoreStatus sets the liveness for a store directly.
+	SetStoreStatus(storeID StoreID, status StoreStatus)
+	// StoreStatus returns the liveness status for a store.
+	StoreStatus(StoreID) StoreStatus
+	// SetNodeStatus sets the membership and draining signals for a node.
+	SetNodeStatus(nodeID NodeID, status NodeStatus)
+	// NodeStatus returns the membership and draining signals for a node.
+	NodeStatus(NodeID) NodeStatus
+	// SetAllStoresLiveness sets the liveness for all stores on a node at once.
+	// This is useful for DSL commands that operate at the node level.
+	SetAllStoresLiveness(nodeID NodeID, liveness LivenessState)
 	// NodeLivenessFn returns a function, that when called will return the
 	// liveness of the Node with ID NodeID.
+	// This is used by the store pool, which is used only by the single-metric
+	// allocator (not mma).
 	// TODO(kvoli): Find a better home for this method, required by the
 	// storepool.
 	NodeLivenessFn() storepool.NodeLivenessFunc

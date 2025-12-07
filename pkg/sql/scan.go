@@ -8,11 +8,14 @@ package sql
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -52,7 +55,7 @@ type scanNode struct {
 	// if non-zero, softLimit is an estimation that only this many rows might be
 	// needed. It is a (potentially optimistic) "hint". If hardLimit is set
 	// (non-zero), softLimit must be unset (zero).
-	softLimit int64
+	softLimit uint64
 
 	// See exec.Factory.ConstructScan.
 	parallelize bool
@@ -64,6 +67,9 @@ type scanNode struct {
 	// output. When there are no statistics to make the estimation, it will be
 	// set to zero.
 	estimatedRowCount uint64
+
+	// statsCreatedAt is the time when the latest table statistics were collected.
+	statsCreatedAt time.Time
 
 	// localityOptimized is true if this scan is part of a locality optimized
 	// search strategy, which uses a limited UNION ALL operator to try to find a
@@ -80,12 +86,7 @@ type fetchPlanningInfo struct {
 	index catalog.Index
 
 	colCfg scanColumnsConfig
-	// The table columns, possibly including ones currently in schema changes.
-	// TODO(radu/knz): currently we always load the entire row from KV and only
-	// skip unnecessary decodes to Datum. Investigate whether performance is to
-	// be gained (e.g. for tables with wide rows) by reading only certain
-	// columns from KV using point lookups instead of a single range lookup for
-	// the entire row.
+	// catalogCols contains only the columns that need to be fetched.
 	catalogCols []catalog.Column
 	// There is a 1-1 correspondence between catalogCols and columns.
 	columns colinfo.ResultColumns
@@ -234,4 +235,81 @@ func (n *scanNode) initDescSpecificCol(colCfg scanColumnsConfig, prefixCol catal
 	// Set up the rest of the scanNode.
 	n.columns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.catalogCols)
 	return nil
+}
+
+// initDescSpecificIndex initializes the column structures with the provided
+// index that must have prefixCol as the prefix column.
+func (n *scanNode) initDescSpecificIndex(
+	colCfg scanColumnsConfig, prefixCol catalog.Column, indexID descpb.IndexID,
+) error {
+	n.colCfg = colCfg
+	indexes := n.desc.ActiveIndexes()
+	prefixColID := prefixCol.GetID()
+
+	foundIndex := false
+	for _, idx := range indexes {
+		if idx.GetID() == indexID {
+			columns := n.desc.IndexKeyColumns(idx)
+			if len(columns) > 0 && columns[0].GetID() == prefixColID {
+				n.index = idx
+				foundIndex = true
+				break
+			}
+		}
+	}
+	if !foundIndex {
+		return pgerror.Newf(pgcode.InvalidColumnReference,
+			"table %s does not contain an index with ID %d and with %s as a prefix column",
+			n.desc.GetName(),
+			indexID,
+			prefixCol.GetName())
+	}
+	var err error
+	n.catalogCols, err = initColsForScan(n.desc, n.colCfg)
+	if err != nil {
+		return err
+	}
+	// Set up the rest of the scanNode.
+	n.columns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.catalogCols)
+	return nil
+}
+
+// columnIDRequiresMVCCDecoding returns whether the given columnID corresponds
+// to a system column that requires MVCC decoding to be populated.
+func columnIDRequiresMVCCDecoding(columnID descpb.ColumnID) bool {
+	if !colinfo.IsColIDSystemColumn(columnID) {
+		return false
+	}
+	switch colinfo.GetSystemColumnKindFromColumnID(columnID) {
+	case catpb.SystemColumnKind_MVCCTIMESTAMP,
+		catpb.SystemColumnKind_ORIGINID,
+		catpb.SystemColumnKind_ORIGINTIMESTAMP:
+		return true
+	case catpb.SystemColumnKind_TABLEOID:
+		return false
+	default:
+		panic(errors.AssertionFailedf("unexpected system column: %d", columnID))
+	}
+}
+
+// requiresMVCCDecoding returns true if at least one system column that requires
+// MVCC decoding is fetched.
+func (n *fetchPlanningInfo) requiresMVCCDecoding() bool {
+	for _, col := range n.catalogCols {
+		if columnIDRequiresMVCCDecoding(col.GetID()) {
+			return true
+		}
+	}
+	return false
+}
+
+// fetchSpecRequiresMVCCDecoding returns true if at least one system column that
+// requires MVCC decoding is fetched according to the spec.
+func fetchSpecRequiresMVCCDecoding(fetchSpec fetchpb.IndexFetchSpec) bool {
+	for _, col := range fetchSpec.FetchedColumns {
+		if columnIDRequiresMVCCDecoding(col.ColumnID) {
+			return true
+		}
+	}
+	return false
 }

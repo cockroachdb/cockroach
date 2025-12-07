@@ -58,6 +58,20 @@ func (mr *MockCatalogMockRecorder) AddName(arg0, arg1, arg2 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddName", reflect.TypeOf((*MockCatalog)(nil).AddName), arg0, arg1, arg2)
 }
 
+// CheckMaxSchemaObjects mocks base method.
+func (m *MockCatalog) CheckMaxSchemaObjects(arg0 context.Context, arg1 int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckMaxSchemaObjects", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CheckMaxSchemaObjects indicates an expected call of CheckMaxSchemaObjects.
+func (mr *MockCatalogMockRecorder) CheckMaxSchemaObjects(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckMaxSchemaObjects", reflect.TypeOf((*MockCatalog)(nil).CheckMaxSchemaObjects), arg0, arg1)
+}
+
 // CreateOrUpdateDescriptor mocks base method.
 func (m *MockCatalog) CreateOrUpdateDescriptor(arg0 context.Context, arg1 catalog.MutableDescriptor) error {
 	m.ctrl.T.Helper()
@@ -173,15 +187,17 @@ func (mr *MockCatalogMockRecorder) GetZoneConfig(arg0, arg1 interface{}) *gomock
 }
 
 // InitializeSequence mocks base method.
-func (m *MockCatalog) InitializeSequence(arg0 catid.DescID, arg1 int64) {
+func (m *MockCatalog) InitializeSequence(arg0 context.Context, arg1 catid.DescID, arg2 int64) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "InitializeSequence", arg0, arg1)
+	ret := m.ctrl.Call(m, "InitializeSequence", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // InitializeSequence indicates an expected call of InitializeSequence.
-func (mr *MockCatalogMockRecorder) InitializeSequence(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockCatalogMockRecorder) InitializeSequence(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitializeSequence", reflect.TypeOf((*MockCatalog)(nil).InitializeSequence), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitializeSequence", reflect.TypeOf((*MockCatalog)(nil).InitializeSequence), arg0, arg1, arg2)
 }
 
 // InsertTemporarySchema mocks base method.
@@ -799,17 +815,17 @@ func (m *MockIndexSpanSplitter) EXPECT() *MockIndexSpanSplitterMockRecorder {
 }
 
 // MaybeSplitIndexSpans mocks base method.
-func (m *MockIndexSpanSplitter) MaybeSplitIndexSpans(arg0 context.Context, arg1 catalog.TableDescriptor, arg2 catalog.Index) error {
+func (m *MockIndexSpanSplitter) MaybeSplitIndexSpans(arg0 context.Context, arg1 catalog.TableDescriptor, arg2, arg3 catalog.Index) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MaybeSplitIndexSpans", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "MaybeSplitIndexSpans", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // MaybeSplitIndexSpans indicates an expected call of MaybeSplitIndexSpans.
-func (mr *MockIndexSpanSplitterMockRecorder) MaybeSplitIndexSpans(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockIndexSpanSplitterMockRecorder) MaybeSplitIndexSpans(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeSplitIndexSpans", reflect.TypeOf((*MockIndexSpanSplitter)(nil).MaybeSplitIndexSpans), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeSplitIndexSpans", reflect.TypeOf((*MockIndexSpanSplitter)(nil).MaybeSplitIndexSpans), arg0, arg1, arg2, arg3)
 }
 
 // MaybeSplitIndexSpansForPartitioning mocks base method.

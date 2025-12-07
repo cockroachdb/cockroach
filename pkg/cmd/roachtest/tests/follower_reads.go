@@ -43,6 +43,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func followerReadsVerboseRaftStartOpts() option.StartOpts {
+	opts := option.DefaultStartOpts()
+	// This verbose logging can help us reason about failures that seem related
+	// to an unusually long failover process, such as #153245.
+	opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs,
+		"--vmodule=raft=2,support_manager=2,replica_range_lease=2,requester_state=3,supporter_state=3")
+	return opts
+}
+
 func registerFollowerReads(r registry.Registry) {
 	register := func(
 		survival survivalGoal, locality localitySetting, rc readConsistency, insufficientQuorum bool,
@@ -64,10 +73,10 @@ func registerFollowerReads(r registry.Registry) {
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Cloud() == spec.GCE && c.Spec().Arch == vm.ArchARM64 {
+				if c.Cloud() == spec.GCE && c.Architecture() == vm.ArchARM64 {
 					t.Skip("arm64 in GCE is available only in us-central1")
 				}
-				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+				c.Start(ctx, t.L(), followerReadsVerboseRaftStartOpts(), install.MakeClusterSettings())
 				topology := topologySpec{
 					multiRegion:       true,
 					locality:          locality,
@@ -783,7 +792,8 @@ func verifySQLLatency(
 		}
 	}
 	if permitted := int(.2 * float64(len(perTenSeconds))); len(above) > permitted {
-		t.Fatalf("%d latency values (%v) are above target latency %v, %d permitted",
+		t.Fatalf("%d latency values (%v) are above target latency %v, %d permitted "+
+			`(search the cluster logs for 'SELECT v FROM "".mr_db.test WHERE k = $1' to look at the traces)`,
 			len(above), above, targetLatency, permitted)
 	}
 }
@@ -1053,9 +1063,11 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		//
 		// TODO(darrylwong): Once #137625 is complete, we can switch to querying prometheus using
 		// `clusterstats` instead and re-enable separate process.
+		//
+		// This test is flaky in shared process mode, so it is temporarily disabled to reduce noise.
+		// TODO(server):  #157164 is the tracking issue to re-enable this.
 		mixedversion.EnabledDeploymentModes(
 			mixedversion.SystemOnlyDeployment,
-			mixedversion.SharedProcessDeployment,
 		),
 	)
 }

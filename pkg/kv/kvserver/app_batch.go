@@ -84,7 +84,7 @@ func (b *appBatch) assertAndCheckCommand(
 	ctx context.Context, cmd *raftlog.ReplicatedCmd, state *kvserverpb.ReplicaState, isLocal bool,
 ) (kvserverbase.ForcedErrResult, error) {
 	if log.V(4) {
-		log.Dev.Infof(ctx, "processing command %x: raftIndex=%d maxLeaseIndex=%d closedts=%s",
+		log.KvExec.Infof(ctx, "processing command %x: raftIndex=%d maxLeaseIndex=%d closedts=%s",
 			cmd.ID, cmd.Index(), cmd.Cmd.MaxLeaseIndex, cmd.Cmd.ClosedTimestamp)
 	}
 
@@ -138,7 +138,7 @@ func (b *appBatch) addWriteBatch(
 		return nil
 	}
 	if mutations, err := storage.BatchCount(wb.Data); err != nil {
-		log.Dev.Errorf(ctx, "unable to read header of committed WriteBatch: %+v", err)
+		log.KvExec.Errorf(ctx, "unable to read header of committed WriteBatch: %+v", err)
 	} else {
 		b.numMutations += mutations
 	}

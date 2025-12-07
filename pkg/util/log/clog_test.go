@@ -130,7 +130,7 @@ func TestInfo(t *testing.T) {
 	defer ScopeWithoutShowLogs(t).Close(t)
 
 	defer capture()()
-	Info(context.Background(), "test")
+	Dev.Info(context.Background(), "test")
 	if !contains("I", t) {
 		t.Errorf("Info has wrong character: %q", contents())
 	}
@@ -146,7 +146,7 @@ func TestUnstructuredEntryEmbedsErrorHints(t *testing.T) {
 
 	defer capture()()
 	err := errors.WithHint(errors.New("hello"), "world")
-	Infof(context.Background(), "hello %v", err)
+	Dev.Infof(context.Background(), "hello %v", err)
 	t.Logf("log contents:\n%s", contents())
 	if !contains("HINT: "+startRedactable+"world"+endRedactable, t) {
 		t.Error("hint failed")
@@ -190,7 +190,7 @@ func TestError(t *testing.T) {
 
 	defer capture()()
 
-	Error(context.Background(), "test")
+	Dev.Error(context.Background(), "test")
 	if !contains("E", t) {
 		t.Errorf("Error has wrong character: %q", contents())
 	}
@@ -208,7 +208,7 @@ func TestWarning(t *testing.T) {
 
 	defer capture()()
 
-	Warning(context.Background(), "test")
+	Dev.Warning(context.Background(), "test")
 	if !contains("W", t) {
 		t.Errorf("Warning has wrong character: %q", contents())
 	}
@@ -326,7 +326,7 @@ func TestListLogFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer ScopeWithoutShowLogs(t).Close(t)
 
-	Info(context.Background(), "x")
+	Dev.Info(context.Background(), "x")
 
 	fileName := getDebugLogFileName(t)
 
@@ -358,7 +358,7 @@ func TestFilePermissions(t *testing.T) {
 	defer func(p os.FileMode) { fs.filePermissions = p }(fs.filePermissions)
 	fs.filePermissions = fileMode
 
-	Info(context.Background(), "x")
+	Dev.Info(context.Background(), "x")
 
 	fileName := fs.getFileName(t)
 
@@ -413,7 +413,7 @@ func TestGetLogReader(t *testing.T) {
 		strings.TrimSpace(strings.ReplaceAll(DescribeAppliedConfig(), "\n", "\n  ")))
 
 	// Force creation of a file on the default sink.
-	Info(context.Background(), "x")
+	Dev.Info(context.Background(), "x")
 	fileName := getDebugLogFileName(t)
 	infoName := filepath.Base(fileName)
 
@@ -523,12 +523,12 @@ func TestRollover(t *testing.T) {
 	defer func(previous int64) { debugFileSink.logFileMaxSize = previous }(debugFileSink.logFileMaxSize)
 	debugFileSink.logFileMaxSize = 2048
 
-	Info(context.Background(), "x") // Be sure we have a file.
+	Dev.Info(context.Background(), "x") // Be sure we have a file.
 	if err != nil {
 		t.Fatalf("info has initial error: %v", err)
 	}
 	fname0 := debugFileSink.getFileName(t)
-	Infof(context.Background(), "%s", strings.Repeat("x", int(debugFileSink.logFileMaxSize))) // force a rollover
+	Dev.Infof(context.Background(), "%s", strings.Repeat("x", int(debugFileSink.logFileMaxSize))) // force a rollover
 	if err != nil {
 		t.Fatalf("info has error after big write: %v", err)
 	}
@@ -536,7 +536,7 @@ func TestRollover(t *testing.T) {
 	// Make sure the next log file gets a file name with a different
 	// time stamp.
 
-	Info(context.Background(), "x") // create a new file
+	Dev.Info(context.Background(), "x") // create a new file
 	if err != nil {
 		t.Fatalf("error after rotation: %v", err)
 	}
@@ -573,7 +573,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 			defer capture()()
 
 			traceback = level
-			Fatalf(context.Background(), "cinap")
+			Dev.Fatalf(context.Background(), "cinap")
 			cont := contents()
 			if !strings.Contains(cont, " cinap") {
 				t.Fatalf("panic output does not contain cinap:\n%s", cont)
@@ -623,7 +623,7 @@ func TestFd2Capture(t *testing.T) {
 	}
 	defer cleanupFn()
 
-	Infof(context.Background(), "test")
+	Dev.Infof(context.Background(), "test")
 
 	const stderrText = "hello stderr"
 	fmt.Fprint(os.Stderr, stderrText)
@@ -649,8 +649,8 @@ func TestFileSeverityFilter(t *testing.T) {
 		}
 	}
 
-	Infof(context.Background(), "test1")
-	Errorf(context.Background(), "test2")
+	Dev.Infof(context.Background(), "test1")
+	Dev.Errorf(context.Background(), "test2")
 
 	FlushFiles()
 
@@ -766,7 +766,7 @@ func TestLogEntryPropagation(t *testing.T) {
 	// failure to write on stderr is graceful and the message gets
 	// printed on the file output (and can be picked up by the contains
 	// function). If it is not, the test runner will stop abruptly.
-	Error(context.Background(), specialMessage)
+	Dev.Error(context.Background(), specialMessage)
 
 	if !contains(specialMessage, t) {
 		t.Fatalf("expected special message in file, got:\n%s", contents())

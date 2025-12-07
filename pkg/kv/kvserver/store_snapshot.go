@@ -14,8 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -296,7 +296,7 @@ func (s *Store) throttleSnapshot(
 	// NB: this log message is skipped in test builds as many tests do not mock
 	// all of the objects being logged.
 	if elapsed > snapshotReservationWaitWarnThreshold && !buildutil.CrdbTestBuild {
-		log.Dev.Infof(
+		log.KvDistribution.Infof(
 			ctx,
 			"waited for %.1fs to acquire snapshot reservation to r%d",
 			elapsed.Seconds(),
@@ -349,7 +349,7 @@ func (s *Store) canAcceptSnapshotLocked(
 	existingRepl.mu.RLock()
 	existingDesc := existingRepl.shMu.state.Desc
 	existingIsInitialized := existingDesc.IsInitialized()
-	existingDestroyStatus := existingRepl.mu.destroyStatus
+	existingDestroyStatus := existingRepl.shMu.destroyStatus
 	existingRepl.mu.RUnlock()
 
 	if existingIsInitialized {
@@ -410,7 +410,7 @@ func (s *Store) checkSnapshotOverlapLocked(
 		exReplica, err := s.GetReplica(it.Desc().RangeID)
 		msg := IntersectingSnapshotMsg
 		if err != nil {
-			log.Dev.Warningf(ctx, "unable to look up overlapping replica on %s: %v", exReplica, err)
+			log.KvDistribution.Warningf(ctx, "unable to look up overlapping replica on %s: %v", exReplica, err)
 		} else {
 			inactive := func(r *Replica) bool {
 				if r.RaftStatus() == nil {
@@ -531,7 +531,7 @@ func (s *Store) receiveSnapshot(
 			}
 			return nil
 		}); pErr != nil {
-		log.Dev.Infof(ctx, "cannot accept snapshot: %s", pErr)
+		log.KvDistribution.Infof(ctx, "cannot accept snapshot: %s", pErr)
 		return sendSnapshotError(ctx, s, stream, pErr.GoError())
 	}
 
@@ -540,7 +540,7 @@ func (s *Store) receiveSnapshot(
 			// Remove the placeholder, if it's still there. Most of the time it will
 			// have been filled and this is a no-op.
 			if _, err := s.removePlaceholder(ctx, placeholder, removePlaceholderFailed); err != nil {
-				log.Dev.Fatalf(ctx, "unable to remove placeholder: %s", err)
+				log.KvDistribution.Fatalf(ctx, "unable to remove placeholder: %s", err)
 			}
 		}
 	}()
@@ -563,7 +563,7 @@ func (s *Store) receiveSnapshot(
 		return err
 	}
 	if log.V(2) {
-		log.Dev.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
+		log.KvDistribution.Infof(ctx, "accepted snapshot reservation for r%d", header.State.Desc.RangeID)
 	}
 
 	comparisonResult := s.getLocalityComparison(header.RaftMessageRequest.FromReplica.NodeID,
@@ -693,7 +693,7 @@ func SendEmptySnapshot(
 		return err
 	}
 
-	ms, err = stateloader.WriteInitialReplicaState(
+	ms, err = kvstorage.WriteInitialReplicaState(
 		ctx,
 		eng,
 		ms,
@@ -708,7 +708,7 @@ func SendEmptySnapshot(
 	}
 
 	// Use stateloader to load state out of memory from the previously created engine.
-	sl := stateloader.Make(desc.RangeID)
+	sl := kvstorage.MakeStateLoader(desc.RangeID)
 	state, err := sl.Load(ctx, eng, &desc)
 	if err != nil {
 		return err
@@ -775,7 +775,7 @@ func SendEmptySnapshot(
 
 	defer func() {
 		if err := stream.CloseSend(); err != nil {
-			log.Dev.Warningf(ctx, "failed to close snapshot stream: %+v", err)
+			log.KvDistribution.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
 

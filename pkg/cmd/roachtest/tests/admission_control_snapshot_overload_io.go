@@ -47,6 +47,8 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 				spec.VolumeSize(cfg.volumeSize),
 				spec.ReuseNone(),
 				spec.DisableLocalSSD(),
+				// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
+				spec.Arch(spec.AllExceptFIPS),
 			),
 			Leases:  registry.MetamorphicLeases,
 			Timeout: 12 * time.Hour,
@@ -172,15 +174,15 @@ func runAdmissionControlSnapshotOverloadIO(
 
 	// Now set disk bandwidth limits
 	if cfg.limitDiskBandwidth {
-		const bandwidthLimit = 128 << 20 // 128 MiB
-		t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s", bandwidthLimit))
+		const bandwidthLimitMbs = 128
+		t.Status(fmt.Sprintf("limiting disk bandwidth to %d MB/s", bandwidthLimitMbs))
 		staller := roachtestutil.MakeCgroupDiskStaller(t, c,
 			false /* readsToo */, false /* logsToo */, false /* disableStateValidation */)
 		staller.Setup(ctx)
-		staller.Slow(ctx, c.CRDBNodes(), bandwidthLimit)
+		staller.Slow(ctx, c.CRDBNodes(), bandwidthLimitMbs<<20 /* bytesPerSecond */)
 
 		if _, err := db.ExecContext(
-			ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimit)); err != nil {
+			ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimitMbs)); err != nil {
 			t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
 		}
 		if _, err := db.ExecContext(

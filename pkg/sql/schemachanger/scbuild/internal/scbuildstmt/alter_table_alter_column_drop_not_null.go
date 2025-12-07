@@ -6,7 +6,6 @@
 package scbuildstmt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -23,7 +22,7 @@ func alterTableDropNotNull(
 	alterColumnPreChecks(b, tn, tbl, t.Column)
 	columnID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /*required */)
 	// Block alters on system columns.
-	panicIfSystemColumn(mustRetrieveColumnElem(b, tbl.TableID, columnID), t.Column.String())
+	panicIfSystemColumn(mustRetrieveColumnElem(b, tbl.TableID, columnID), t.Column)
 	// Ensure that this column is not in the primary indexes key.
 	primaryIdx := getLatestPrimaryIndex(b, tbl.TableID)
 	idxColumns := mustRetrieveIndexColumnElements(b, tbl.TableID, primaryIdx.IndexID)
@@ -37,8 +36,7 @@ func alterTableDropNotNull(
 			`column "%s" is in a primary index`, colName.Name))
 	}
 	// Ensure that we are not dropping not-null on a generated column.
-	colEl := mustRetrieveColumnElem(b, tbl.TableID, columnID)
-	if colEl.GeneratedAsIdentityType != catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN {
+	if isColumnGeneratedAsIdentity(b, tbl.TableID, columnID) {
 		colName := mustRetrieveColumnName(b, tbl.TableID, columnID)
 		panic(pgerror.Newf(pgcode.Syntax,
 			`column "%s" of relation "%s" is an identity column`, colName.Name, tn.ObjectName))

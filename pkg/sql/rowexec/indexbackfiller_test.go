@@ -8,11 +8,24 @@ package rowexec
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -21,12 +34,58 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func TestIndexBackfillSinkSelection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	fakeAdder := &testIndexBackfillBulkAdder{}
+
+	t.Run("bulk-adder sink selected", func(t *testing.T) {
+		settings := cluster.MakeTestingClusterSettings()
+		ib := makeTestIndexBackfiller(settings, fakeAdder)
+		srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
+
+		ib.spec.UseDistributedMergeSink = false
+		sink, err := ib.makeIndexBackfillSink(ctx)
+		require.NoError(t, err)
+		require.IsType(t, &bulkAdderIndexBackfillSink{}, sink)
+		sink.Close(ctx)
+
+		tempDir := t.TempDir()
+		ib.spec.UseDistributedMergeSink = true
+		ib.spec.DistributedMergeFilePrefix = "nodelocal://0/index-backfill/test"
+		ib.flowCtx.Cfg.DB = srv.SystemLayer().InternalDB().(descs.DB)
+		ib.flowCtx.Cfg.ExternalStorageFromURI = func(
+			ctx context.Context, uri string, _ username.SQLUsername, opts ...cloud.ExternalStorageOption,
+		) (cloud.ExternalStorage, error) {
+			if !strings.HasPrefix(uri, "nodelocal://") {
+				return nil, errors.New("unexpected URI")
+			}
+			es := nodelocal.TestingMakeNodelocalStorage(
+				tempDir,
+				settings,
+				cloudpb.ExternalStorage{},
+			)
+			t.Cleanup(func() { es.Close() })
+			return es, nil
+		}
+
+		sink, err = ib.makeIndexBackfillSink(ctx)
+		require.NoError(t, err)
+		require.IsType(t, &sstIndexBackfillSink{}, sink)
+		sink.Close(ctx)
+	})
+}
 
 func TestRetryOfIndexEntryBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -189,4 +248,63 @@ func BenchmarkIndexBackfill(b *testing.B) {
 			}
 		})
 	}
+}
+
+type testIndexBackfillBulkAdder struct {
+	onFlush func(kvpb.BulkOpSummary)
+}
+
+var _ kvserverbase.BulkAdder = (*testIndexBackfillBulkAdder)(nil)
+
+func (t *testIndexBackfillBulkAdder) Add(ctx context.Context, key roachpb.Key, value []byte) error {
+	return nil
+}
+
+func (t *testIndexBackfillBulkAdder) Flush(ctx context.Context) error {
+	if t.onFlush != nil {
+		t.onFlush(kvpb.BulkOpSummary{})
+	}
+	return nil
+}
+
+func (t *testIndexBackfillBulkAdder) IsEmpty() bool {
+	return true
+}
+
+func (t *testIndexBackfillBulkAdder) CurrentBufferFill() float32 {
+	return 0
+}
+
+func (t *testIndexBackfillBulkAdder) GetSummary() kvpb.BulkOpSummary {
+	return kvpb.BulkOpSummary{}
+}
+
+func (t *testIndexBackfillBulkAdder) Close(ctx context.Context) {}
+
+func (t *testIndexBackfillBulkAdder) SetOnFlush(f func(summary kvpb.BulkOpSummary)) {
+	t.onFlush = f
+}
+
+func makeTestIndexBackfiller(
+	settings *cluster.Settings, adder kvserverbase.BulkAdder,
+) *indexBackfiller {
+	ib := &indexBackfiller{
+		spec: execinfrapb.BackfillerSpec{},
+		flowCtx: &execinfra.FlowCtx{
+			Cfg: &execinfra.ServerConfig{
+				Settings: settings,
+			},
+		},
+	}
+
+	ib.desc = tabledesc.NewBuilder(&descpb.TableDescriptor{
+		ID:   1,
+		Name: "t",
+	}).BuildImmutableTable()
+	ib.bulkAdderFactory = func(
+		ctx context.Context, writeAsOf hlc.Timestamp, opts kvserverbase.BulkAdderOptions,
+	) (kvserverbase.BulkAdder, error) {
+		return adder, nil
+	}
+	return ib
 }

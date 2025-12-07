@@ -33,9 +33,10 @@ import (
 // survives a temporary disk stall through failing over to a secondary disk.
 func registerDiskStalledWALFailover(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:                "disk-stalled/wal-failover/among-stores",
-		Owner:               registry.OwnerStorage,
-		Cluster:             r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.ReuseNone(), spec.SSD(2)),
+		Name:  "disk-stalled/wal-failover/among-stores",
+		Owner: registry.OwnerStorage,
+		// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and lsblk outputs in the same format.
+		Cluster:             r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.ReuseNone(), spec.SSD(2), spec.Arch(spec.AllExceptFIPS)),
 		CompatibleClouds:    registry.OnlyGCE,
 		Suites:              registry.Suites(registry.Nightly),
 		Timeout:             3 * time.Hour,
@@ -209,7 +210,8 @@ func registerDiskStalledDetection(r registry.Registry) {
 			Owner: registry.OwnerStorage,
 			// Use PDs in an attempt to work around flakes encountered when using SSDs.
 			// See #97968.
-			Cluster:             r.MakeClusterSpec(4, spec.WorkloadNode(), spec.ReuseNone(), spec.DisableLocalSSD()),
+			// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
+			Cluster:             r.MakeClusterSpec(4, spec.WorkloadNode(), spec.ReuseNone(), spec.DisableLocalSSD(), spec.Arch(spec.AllExceptFIPS)),
 			CompatibleClouds:    registry.OnlyGCE,
 			Suites:              registry.Suites(registry.Nightly),
 			Timeout:             30 * time.Minute,
@@ -252,7 +254,7 @@ func runDiskStalledDetection(
 	// the disk stalled will prevent artifact collection, making debugging
 	// difficult.
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		s.Cleanup(ctx)
 	}()
@@ -434,9 +436,11 @@ func registerDiskStalledWALFailoverWithProgress(r registry.Registry) {
 			spec.WorkloadNode(),
 			spec.ReuseNone(),
 			spec.DisableLocalSSD(),
-			spec.GCEVolumeCount(2),
-			spec.GCEVolumeType("pd-ssd"),
+			spec.VolumeCount(2),
+			spec.VolumeType("pd-ssd"),
 			spec.VolumeSize(100),
+			// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
+			spec.Arch(spec.AllExceptFIPS),
 		),
 		CompatibleClouds:    registry.OnlyGCE,
 		Suites:              registry.Suites(registry.Nightly),
@@ -463,7 +467,7 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 		operationDur      = 3 * time.Minute
 		// QPS sampling parameters.
 		sampleInterval = 10 * time.Second
-		errorTolerance = 0.2 // 20% tolerance for throughput variation.
+		errorTolerance = 0.25 // 25% tolerance for throughput variation.
 	)
 
 	t.Status("setting up disk staller")
@@ -562,19 +566,20 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 				t.Fatalf("context done before workload started: %s", ctx.Err())
 			case <-workloadStarted:
 			}
+			// Wait 30s after workload starts before beginning sampling.
+			const workloadStartDelay = 30 * time.Second
+			// Calculate approximate how many samples to take. We want to account
+			// for the time waited for workload startup and we should also stop
+			// sampling ~15s before the workload starts shutting down.
+			samplingDuration := operationDur - workloadStartDelay - 15*time.Second
+			sampleCount := int(samplingDuration / sampleInterval)
 
-			// Wait 20s after workload starts before beginning sampling.
 			select {
 			case <-ctx.Done():
 				t.Fatalf("context done before workload started: %s", ctx.Err())
-			case <-time.After(30 * time.Second):
+			case <-time.After(workloadStartDelay):
 				t.Status("starting QPS sampling")
 			}
-
-			// We want to stop sampling 10s before workload ends to avoid sampling during shutdown.
-			// We'll take approx. 14 samples with this configuration.
-			samplingDuration := operationDur - 40*time.Second // 30s initial wait + 10s buffer at workload end
-			sampleCount := int(samplingDuration / sampleInterval)
 
 			sampleTimer := time.NewTicker(sampleInterval)
 			defer sampleTimer.Stop()
@@ -644,12 +649,22 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 		// Wait for all goroutines to complete.
 		g.Wait()
 
+		if len(samples) == 0 {
+			t.Fatalf("no throughput samples collected for iteration %d", iteration)
+		}
+
 		// Validate throughput samples are within tolerance.
+		// Drop the last one if it is 0, since we can't fully sync the sampling
+		// with workload startup/shutdown, it may have been taken while the workload
+		// was shutting down.
+		if samples[len(samples)-1] == 0 {
+			samples = samples[:len(samples)-1]
+		}
 		meanThroughput := roachtestutil.GetMeanOverLastN(len(samples), samples)
 		t.Status("mean throughput for iteration", iteration, ": ", meanThroughput)
 		for _, sample := range samples {
 			require.InEpsilonf(t, meanThroughput, sample, errorTolerance,
-				"sample %f is not within tolerance of mean %f", sample, meanThroughput)
+				"sample %f is not within tolerance of mean %f\nsamples:%v", sample, meanThroughput, samples)
 		}
 		iterationMeans = append(iterationMeans, meanThroughput)
 		iteration++
@@ -667,7 +682,8 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 	overallMean := roachtestutil.GetMeanOverLastN(len(iterationMeans), iterationMeans)
 	for _, mean := range iterationMeans {
 		require.InEpsilonf(t, overallMean, mean, errorTolerance,
-			"iteration mean %f is not within tolerance of overall mean %f", mean, overallMean)
+			"iteration mean %f is not within tolerance of overall mean %f\niteration means:%v", mean,
+			overallMean, iterationMeans)
 	}
 
 	data := mustGetMetrics(ctx, c, t, adminURL, install.SystemInterfaceName,

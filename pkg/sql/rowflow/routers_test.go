@@ -355,9 +355,9 @@ func TestConsumerStatus(t *testing.T) {
 			case *rangeRouter:
 				// Use 0 and MaxInt32 to route rows based on testRangeRouterSpec's spans.
 				d := tree.NewDInt(0)
-				row0 = rowenc.EncDatumRow{rowenc.DatumToEncDatum(colTypes[0], d)}
+				row0 = rowenc.EncDatumRow{rowenc.DatumToEncDatumUnsafe(colTypes[0], d)}
 				d = tree.NewDInt(math.MaxInt32)
-				row1 = rowenc.EncDatumRow{rowenc.DatumToEncDatum(colTypes[0], d)}
+				row1 = rowenc.EncDatumRow{rowenc.DatumToEncDatumUnsafe(colTypes[0], d)}
 			default:
 				rng, _ := randutil.NewTestRand()
 				vals := randgen.RandEncDatumRowsOfTypes(rng, 1 /* numRows */, colTypes)
@@ -773,7 +773,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -789,7 +789,7 @@ func TestRouterDiskSpill(t *testing.T) {
 		Increment: 1,
 		Settings:  st,
 	})
-	evalCtx := eval.MakeTestingEvalContextWithMon(st, monitor)
+	evalCtx := eval.MakeTestingEvalContextWithMon(keys.SystemSQLCodec, st, monitor)
 	defer evalCtx.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,

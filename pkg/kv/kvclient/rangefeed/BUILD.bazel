@@ -26,10 +26,11 @@ go_library(
         "//pkg/util/limit",
         "//pkg/util/log",
         "//pkg/util/mon",
+        "//pkg/util/pprofutil",
         "//pkg/util/retry",
         "//pkg/util/span",
         "//pkg/util/stop",
-        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
@@ -60,6 +61,10 @@ go_test(
         ":mock_rangefeed",  # keep
     ],
     embed = [":rangefeed"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        "//conditions:default": {"test.Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
         "//pkg/keys",

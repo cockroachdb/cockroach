@@ -68,7 +68,7 @@ func (rq *raftSnapshotQueue) shouldQueue(
 		for _, p := range status.Progress {
 			if p.State == tracker.StateSnapshot {
 				if log.V(2) {
-					log.Dev.Infof(ctx, "raft snapshot needed, enqueuing")
+					log.KvDistribution.Infof(ctx, "raft snapshot needed, enqueuing")
 				}
 				return true, raftSnapshotPriority
 			}
@@ -86,7 +86,7 @@ func (rq *raftSnapshotQueue) process(
 		for id, p := range status.Progress {
 			if p.State == tracker.StateSnapshot {
 				if log.V(1) {
-					log.Dev.Infof(ctx, "sending raft snapshot")
+					log.KvDistribution.Infof(ctx, "sending raft snapshot")
 				}
 				if processed, err := rq.processRaftSnapshot(ctx, repl, roachpb.ReplicaID(id)); err != nil {
 					return false, err

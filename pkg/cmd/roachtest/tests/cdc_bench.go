@@ -78,6 +78,9 @@ func registerCDCBench(r registry.Registry) {
 		if len(histograms.Summaries) != 1 {
 			return nil, errors.Errorf("expected exactly 1 histogram summary, got %d", len(histograms.Summaries))
 		}
+		// CDC scan tests export the scan rate (rows per second) as a single
+		// duration value in nanoseconds, set as the upper bound of the histogram.
+		// This convoluted scheme was cargo-culted from the restore test.
 		scanRate = float64(histograms.Summaries[0].HighestTrackableValue) / float64(time.Second)
 
 		// Add scan rate metric (higher is better)

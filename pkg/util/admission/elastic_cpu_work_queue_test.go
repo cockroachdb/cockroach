@@ -126,11 +126,7 @@ type testElasticCPUGranter struct {
 
 var _ granter = &testElasticCPUGranter{}
 
-func (t *testElasticCPUGranter) grantKind() grantKind {
-	return token
-}
-
-func (t *testElasticCPUGranter) tryGet(count int64) (granted bool) {
+func (t *testElasticCPUGranter) tryGet(_ burstQualification, count int64) (granted bool) {
 	panic("unimplemented")
 }
 
@@ -175,7 +171,7 @@ func (t *testElasticCPUInternalWorkQueue) adjustTenantUsed(
 	}
 }
 
-func (t *testElasticCPUInternalWorkQueue) hasWaitingRequests() bool {
+func (t *testElasticCPUInternalWorkQueue) hasWaitingRequests() (bool, burstQualification) {
 	panic("unimplemented")
 }
 

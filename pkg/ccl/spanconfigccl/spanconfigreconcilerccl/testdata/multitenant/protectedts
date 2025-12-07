@@ -16,7 +16,7 @@ mutations
 
 # We should observe placeholder entries for both tenants (installed when
 # creating tenant records).
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -46,6 +46,9 @@ state offset=47
 /Table/7{1-2}                              database system (host)
 /Table/7{2-3}                              database system (host)
 /Table/7{3-4}                              database system (host)
+/Table/7{4-5}                              database system (host)
+/Table/7{5-6}                              database system (host)
+/Table/7{6-7}                              database system (host)
 /Tenant/10{-\x00}                          database system (tenant)
 /Tenant/11{-\x00}                          database system (tenant)
 
@@ -139,6 +142,9 @@ upsert /Tenant/10/Table/7{0-1}             database system (tenant)
 upsert /Tenant/10/Table/7{1-2}             database system (tenant)
 upsert /Tenant/10/Table/7{2-3}             database system (tenant)
 upsert /Tenant/10/Table/7{3-4}             database system (tenant)
+upsert /Tenant/10/Table/7{4-5}             database system (tenant)
+upsert /Tenant/10/Table/7{5-6}             database system (tenant)
+upsert /Tenant/10/Table/7{6-7}             database system (tenant)
 
 exec-sql tenant=10
 CREATE DATABASE db;
@@ -198,9 +204,10 @@ mutations tenant=10
 delete {source=10,target=10}
 
 # All system span config targets should have been removed at this point.
-state limit=4
+state limit=5
 ----
-/{Min-System/NodeLiveness}                 ttl_seconds=3600 num_replicas=5
+/M{in-eta2}                                ttl_seconds=3600 num_replicas=5
+/{Meta2-System/NodeLiveness}               ttl_seconds=3600 num_replicas=5
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
 /System/{NodeLivenessMax-tsd}              range system
 /System{/tsd-tse}                          range default

@@ -38,13 +38,17 @@ type lexer struct {
 	lastError error
 }
 
-func (l *lexer) init(sql string, tokens []sqlSymType, nakedIntType *types.T) {
+// numAnnotations indicates the number of annotations that have already been
+// claimed.
+func (l *lexer) init(
+	sql string, tokens []sqlSymType, nakedIntType *types.T, numAnnotations tree.AnnotationIdx,
+) {
 	l.in = sql
 	l.tokens = tokens
 	l.lastPos = -1
 	l.stmt = nil
 	l.numPlaceholders = 0
-	l.numAnnotations = 0
+	l.numAnnotations = numAnnotations
 	l.lastError = nil
 
 	l.nakedIntType = nakedIntType
@@ -207,7 +211,7 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 			}
 		}
 
-	case NOT, WITH, AS, GENERATED, NULLS, RESET, ROLE, USER, ON, TENANT, CLUSTER, SET, CREATE:
+	case NOT, WITH, AS, GENERATED, NULLS, RESET, ROLE, USER, ON, TENANT, CLUSTER, SET, CREATE, FOR:
 		nextToken := sqlSymType{}
 		if l.lastPos+1 < len(l.tokens) {
 			nextToken = l.tokens[l.lastPos+1]
@@ -221,7 +225,7 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 			thirdToken = l.tokens[l.lastPos+3]
 		}
 
-		// If you update these cases, update lex.lookaheadKeywords.
+		// If you update these cases, update lexbase.lookaheadKeywords.
 		switch lval.id {
 		case AS:
 			switch nextToken.id {
@@ -315,6 +319,13 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 						lval.id = SET_TRACING
 					}
 				}
+			}
+		case FOR:
+			switch nextToken.id {
+			case TABLE:
+				lval.id = FOR_TABLE
+			case JOB:
+				lval.id = FOR_JOB
 			}
 		}
 	}

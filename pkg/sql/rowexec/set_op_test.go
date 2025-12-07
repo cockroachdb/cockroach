@@ -77,7 +77,7 @@ func intersectAllTestCases() []setOpTestCase {
 	null := rowenc.EncDatum{Datum: tree.DNull}
 	var v = [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	return []setOpTestCase{
@@ -210,7 +210,7 @@ func exceptAllTestCases() []setOpTestCase {
 	null := rowenc.EncDatum{Datum: tree.DNull}
 	var v = [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	return []setOpTestCase{

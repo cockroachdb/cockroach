@@ -2679,7 +2679,7 @@ quality of service: regular
 │       ├── • update
 │       │   │ sql nodes: <hidden>
 │       │   │ regions: <hidden>
-│       │   │ actual row count: 0
+│       │   │ actual row count: 2
 │       │   │ execution time: 0µs
 │       │   │ table: uniq_fk_child
 │       │   │ set: b, c

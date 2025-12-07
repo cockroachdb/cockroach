@@ -126,6 +126,9 @@ func TestManualTime(t *testing.T) {
 		advanceTo := func(d time.Duration) {
 			mt.AdvanceTo(t0.Add(d))
 		}
+		advanceToInOneTick := func(d time.Duration) {
+			mt.AdvanceToInOneTick(t0.Add(d))
+		}
 		t1 := mt.NewTicker(1 * time.Second)
 		t2 := mt.NewTicker(5 * time.Second)
 
@@ -149,6 +152,11 @@ func TestManualTime(t *testing.T) {
 		ensureSend(t, t1.Ch(), 6*time.Second)
 
 		ensureSend(t, t2.Ch(), 5*time.Second)
+
+		// 7s tick will be dropped.
+		advanceToInOneTick(8 * time.Second)
+		ensureSend(t, t1.Ch(), 8*time.Second)
+		ensureNoSend(t, t1.Ch())
 
 		t1.Stop()
 		advanceTo(12 * time.Second)

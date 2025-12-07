@@ -41,6 +41,7 @@ export let jobsResume: string;
 export let jobsCancel: string;
 export let statementsTable: string;
 export let statementDiagnostics: string;
+export let transactionDiagnostics: string;
 export let statementsSql: string;
 export let statementsRetries: string;
 export let transactionRetryErrorReference: string;
@@ -102,6 +103,7 @@ export const recomputeDocsURLs = () => {
   jobsCancel = docsURL("cancel-job");
   statementsTable = docsURL("ui-statements-page.html");
   statementDiagnostics = docsURL("ui-statements-page.html#diagnostics");
+  transactionDiagnostics = docsURL("transaction-diagnostics.html");
   statementsSql = docsURL("ui-statements-page.html#sql-statement-fingerprints");
   statementsRetries = docsURL("transactions.html#transaction-retries");
   transactionRetryErrorReference = docsURL(

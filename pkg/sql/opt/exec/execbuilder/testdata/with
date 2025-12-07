@@ -213,10 +213,20 @@ vectorized: true
     │
     └── • apply join (left outer)
         │
-        └── • scan
-              missing stats
-              table: y@y_pkey
-              spans: FULL SCAN
+        ├── • scan
+        │     missing stats
+        │     table: y@y_pkey
+        │     spans: FULL SCAN
+        │
+        └── • inner loop (unoptimized)
+            │
+            └── • with &1 (foo)
+                   ├── materialized
+                   ├── select
+                   │    ├── scan x
+                   │    └── filters
+                   │         └── x.a = y.a
+                   └── with-scan &1 (foo)
 
 query T
 EXPLAIN
@@ -229,8 +239,18 @@ vectorized: true
 ·
 • apply join
 │
-└── • values
-      size: 1 column, 3 rows
+├── • values
+│     size: 1 column, 3 rows
+│
+└── • inner loop (unoptimized)
+    │
+    └── • with &1 (foo)
+           ├── materialized
+           ├── select
+           │    ├── scan y
+           │    └── filters
+           │         └── y.a <= column1
+           └── with-scan &1 (foo)
 
 # Regression tests for #93370. Do not convert a non-recursive CTE
 # that uses UNION ALL and WITH RECURSIVE to UNION.

@@ -49,7 +49,6 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 	asyncNotification := make(chan struct{})
 
 	var params base.TestServerArgs
-	params.DefaultTestTenant = base.TODOTestTenantDisabled
 	params.Knobs = base.TestingKnobs{
 		GCJob: &sql.GCJobTestingKnobs{
 			RunBeforeResume: func(_ jobspb.JobID) error {
@@ -202,8 +201,7 @@ SELECT job_id
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TODOTestTenantDisabled,
-				Knobs:             knobs,
+				Knobs: knobs,
 			},
 		})
 		defer tc.Stopper().Stop(ctx)
@@ -248,8 +246,7 @@ range_max_bytes = 654321000`)
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TODOTestTenantDisabled,
-				Knobs:             knobs,
+				Knobs: knobs,
 			},
 		})
 		defer tc.Stopper().Stop(ctx)

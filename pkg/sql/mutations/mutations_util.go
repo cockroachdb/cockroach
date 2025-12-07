@@ -29,10 +29,9 @@ var testingMaxBatchByteSize = metamorphic.ConstantWithTestRange(
 	32<<20, /* max */
 )
 
-// MaxBatchSize returns the max number of entries in the KV batch for a
-// mutation operation (delete, insert, update, upsert) - including secondary
-// index updates, FK cascading updates, etc - before the current KV batch is
-// executed and a new batch is started.
+// MaxBatchSize returns the max number of rows in the SQL-level batch for a
+// mutation operation (delete, insert, update, upsert). This only includes
+// modified rows from the primary index, not any secondary index rows.
 //
 // If forceProductionMaxBatchSize is true, then the "production" value will be
 // returned regardless of whether the build is metamorphic or not. This should

@@ -4413,7 +4413,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security TO ON;
  SELECT * FROM t1;
   a | b 
-@@ -3571,221 +2594,158 @@
+@@ -3571,221 +2594,161 @@
  (0 rows)
  
  EXPLAIN (COSTS OFF) SELECT * FROM t1;
@@ -4496,6 +4496,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security TO OFF;
  COPY (SELECT * FROM copy_t ORDER BY a ASC) TO STDOUT WITH DELIMITER ','; --fail - would be affected by RLS
 -ERROR:  query would be affected by row-level security policy for table "copy_t"
++ERROR:  COPY (SELECT * FROM copy_t ORDER BY a ASC) TO STDOUT WITH (DELIMITER ','): query would be affected by row-level security policy for table "copy_t"
  SET row_security TO ON;
  COPY (SELECT * FROM copy_t ORDER BY a ASC) TO STDOUT WITH DELIMITER ','; --ok
 -0,5feceb66ffc86f38d952786c6d696c79
@@ -4569,6 +4570,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security TO OFF;
  COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --fail - would be affected by RLS
 -ERROR:  query would be affected by row-level security policy for table "copy_rel_to"
++ERROR:  COPY copy_rel_to TO STDOUT WITH (DELIMITER ','): query would be affected by row-level security policy for table "copy_rel_to"
  SET row_security TO ON;
  COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --ok
  -- Check COPY TO as user with permissions and BYPASSRLS
@@ -4619,6 +4621,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security TO OFF;
  COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --fail - would be affected by RLS
 -ERROR:  query would be affected by row-level security policy for table "copy_rel_to"
++ERROR:  COPY copy_rel_to TO STDOUT WITH (DELIMITER ','): query would be affected by row-level security policy for table "copy_rel_to"
  SET row_security TO ON;
  COPY copy_rel_to TO STDOUT WITH DELIMITER ','; --ok
  -- Check COPY TO as user with permissions and BYPASSRLS
@@ -4685,7 +4688,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE current_check (currentid int, payload text, rlsuser text);
  GRANT ALL ON current_check TO PUBLIC;
  INSERT INTO current_check VALUES
-@@ -3797,7 +2757,7 @@
+@@ -3797,7 +2760,7 @@
  CREATE POLICY p2 ON current_check FOR DELETE USING (currentid = 4 AND rlsuser = current_user);
  CREATE POLICY p3 ON current_check FOR UPDATE USING (currentid = 4) WITH CHECK (rlsuser = current_user);
  ALTER TABLE current_check ENABLE ROW LEVEL SECURITY;
@@ -4694,7 +4697,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Can SELECT even rows
  SELECT * FROM current_check;
   currentid | payload |     rlsuser     
-@@ -3814,112 +2774,74 @@
+@@ -3814,112 +2777,74 @@
  
  BEGIN;
  DECLARE current_check_cursor SCROLL CURSOR FOR SELECT * FROM current_check;
@@ -4844,7 +4847,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT attname, most_common_vals FROM pg_stats
    WHERE tablename = 'current_check'
    ORDER BY 1;
-@@ -3932,16 +2854,18 @@
+@@ -3932,16 +2857,18 @@
  --
  BEGIN;
  CREATE TABLE coll_t (c) AS VALUES ('bar'::text);
@@ -4867,7 +4870,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT * FROM coll_t;
    c  
  -----
-@@ -3949,14 +2873,17 @@
+@@ -3949,14 +2876,17 @@
  (1 row)
  
  ROLLBACK;
@@ -4886,7 +4889,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  GRANT SELECT ON TABLE tbl1 TO regress_rls_eve;
  CREATE POLICY P ON tbl1 TO regress_rls_eve, regress_rls_frank USING (true);
  SELECT refclassid::regclass, deptype
-@@ -3965,8 +2892,7 @@
+@@ -3965,8 +2895,7 @@
    AND refobjid = 'tbl1'::regclass;
   refclassid | deptype 
  ------------+---------
@@ -4896,7 +4899,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  SELECT refclassid::regclass, deptype
    FROM pg_shdepend
-@@ -3974,48 +2900,58 @@
+@@ -3974,48 +2903,58 @@
    AND refobjid IN ('regress_rls_eve'::regrole, 'regress_rls_frank'::regrole);
   refclassid | deptype 
  ------------+---------
@@ -4965,7 +4968,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE r1 (a int);
  CREATE TABLE r2 (a int);
  INSERT INTO r1 VALUES (10), (20);
-@@ -4028,7 +2964,7 @@
+@@ -4028,7 +2967,7 @@
  CREATE POLICY p3 ON r2 FOR UPDATE USING (false);
  CREATE POLICY p4 ON r2 FOR DELETE USING (false);
  ALTER TABLE r2 ENABLE ROW LEVEL SECURITY;
@@ -4974,7 +4977,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT * FROM r1;
   a  
  ----
-@@ -4092,13 +3028,13 @@
+@@ -4092,13 +3031,13 @@
   20
  (2 rows)
  
@@ -4990,21 +4993,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  CREATE TABLE r1 (a int);
  INSERT INTO r1 VALUES (10), (20);
-@@ -4131,19 +3067,17 @@
- SET row_security = off;
+@@ -4132,18 +3071,15 @@
  -- these all fail, would be affected by RLS
  TABLE r1;
--ERROR:  query would be affected by row-level security policy for table "r1"
+ ERROR:  query would be affected by row-level security policy for table "r1"
 -HINT:  To disable the policy for the table's owner, use ALTER TABLE NO FORCE ROW LEVEL SECURITY.
-+ a 
-+---
-+(0 rows)
-+
  UPDATE r1 SET a = 1;
--ERROR:  query would be affected by row-level security policy for table "r1"
+ ERROR:  query would be affected by row-level security policy for table "r1"
 -HINT:  To disable the policy for the table's owner, use ALTER TABLE NO FORCE ROW LEVEL SECURITY.
  DELETE FROM r1;
--ERROR:  query would be affected by row-level security policy for table "r1"
+ ERROR:  query would be affected by row-level security policy for table "r1"
 -HINT:  To disable the policy for the table's owner, use ALTER TABLE NO FORCE ROW LEVEL SECURITY.
  DROP TABLE r1;
  --
@@ -5015,7 +5013,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  CREATE TABLE r1 (a int PRIMARY KEY);
  CREATE TABLE r2 (a int REFERENCES r1);
-@@ -4157,7 +3091,7 @@
+@@ -4157,7 +3093,7 @@
  ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
  -- Errors due to rows in r2
  DELETE FROM r1;
@@ -5024,7 +5022,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  DETAIL:  Key (a)=(10) is still referenced from table "r2".
  -- Reset r2 to no-RLS
  DROP POLICY p1 ON r2;
-@@ -4233,7 +3167,7 @@
+@@ -4233,7 +3169,7 @@
  -- Test INSERT+RETURNING applies SELECT policies as
  -- WithCheckOptions (meaning an error is thrown)
  --
@@ -5033,20 +5031,15 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  CREATE TABLE r1 (a int);
  CREATE POLICY p1 ON r1 FOR SELECT USING (false);
-@@ -4251,8 +3185,10 @@
- SET row_security = off;
+@@ -4252,7 +3188,6 @@
  -- fail, would be affected by RLS
  TABLE r1;
--ERROR:  query would be affected by row-level security policy for table "r1"
+ ERROR:  query would be affected by row-level security policy for table "r1"
 -HINT:  To disable the policy for the table's owner, use ALTER TABLE NO FORCE ROW LEVEL SECURITY.
-+ a 
-+---
-+(0 rows)
-+
  SET row_security = on;
  -- Error
  INSERT INTO r1 VALUES (10), (20) RETURNING *;
-@@ -4262,7 +3198,7 @@
+@@ -4262,7 +3197,7 @@
  -- Test UPDATE+RETURNING applies SELECT policies as
  -- WithCheckOptions (meaning an error is thrown)
  --
@@ -5055,7 +5048,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  CREATE TABLE r1 (a int PRIMARY KEY);
  CREATE POLICY p1 ON r1 FOR SELECT USING (a < 20);
-@@ -4308,28 +3244,31 @@
+@@ -4308,28 +3243,31 @@
  ERROR:  new row violates row-level security policy for table "r1"
  DROP TABLE r1;
  -- Check dependency handling
@@ -5090,7 +5083,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  (1 row)
  
  -- Should return one
-@@ -4338,7 +3277,7 @@
+@@ -4338,7 +3276,7 @@
  					 AND refobjid = (SELECT oid FROM pg_authid WHERE rolname = 'regress_rls_carol');
   ?column? 
  ----------
@@ -5099,7 +5092,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  (1 row)
  
  -- Should return zero
-@@ -4351,15 +3290,19 @@
+@@ -4351,15 +3289,19 @@
  (1 row)
  
  -- DROP OWNED BY testing
@@ -5121,7 +5114,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE POLICY p1 ON dob_t1 TO regress_rls_dob_role1,regress_rls_dob_role2 USING (true);
  DROP OWNED BY regress_rls_dob_role1;
  DROP POLICY p1 ON dob_t1; -- should succeed
-@@ -4367,14 +3310,15 @@
+@@ -4367,14 +3309,15 @@
  CREATE POLICY p1 ON dob_t1 TO regress_rls_dob_role1,regress_rls_dob_role1 USING (true);
  DROP OWNED BY regress_rls_dob_role1;
  DROP POLICY p1 ON dob_t1; -- should fail, already gone
@@ -5138,7 +5131,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  DROP USER regress_rls_dob_role1;
  DROP USER regress_rls_dob_role2;
  -- Bug #15708: view + table with RLS should check policies as view owner
-@@ -4384,81 +3328,97 @@
+@@ -4384,81 +3327,97 @@
  INSERT INTO rls_tbl VALUES (10);
  ALTER TABLE rls_tbl ENABLE ROW LEVEL SECURITY;
  CREATE POLICY p1 ON rls_tbl USING (EXISTS (SELECT 1 FROM ref_tbl));
@@ -5270,7 +5263,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- CVE-2023-2455: inlining an SRF may introduce an RLS dependency
  create table rls_t (c text);
  insert into rls_t values ('invisible to bob');
-@@ -4489,39 +3449,8 @@
+@@ -4489,39 +3448,8 @@
  --
  -- Clean up objects
  --

@@ -25,7 +25,7 @@ import (
 
 func TestStateUpdates(t *testing.T) {
 	s := NewState(config.DefaultSimulationSettings())
-	node := s.AddNode()
+	node := s.AddNode(-1, roachpb.Locality{})
 	s.AddStore(node.NodeID())
 	require.Equal(t, 1, len(s.Nodes()))
 	require.Equal(t, 1, len(s.Stores()))
@@ -39,7 +39,7 @@ func TestRangeSplit(t *testing.T) {
 	k1 := MinKey
 	r1 := s.rangeFor(k1)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 
 	repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
@@ -126,7 +126,7 @@ func TestValidTransfer(t *testing.T) {
 
 	_, r1, _ := s.SplitRange(1)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 
@@ -159,7 +159,7 @@ func TestTransferLease(t *testing.T) {
 
 	_, r1, _ := s.SplitRange(1)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 
@@ -187,7 +187,7 @@ func TestValidReplicaTarget(t *testing.T) {
 
 	_, r1, _ := s.SplitRange(1)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 
@@ -227,7 +227,7 @@ func TestAddReplica(t *testing.T) {
 	_, r1, _ := s.SplitRange(1)
 	_, r2, _ := s.SplitRange(2)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 
@@ -249,7 +249,7 @@ func TestAddReplica(t *testing.T) {
 func TestWorkloadApply(t *testing.T) {
 	s := NewState(config.DefaultSimulationSettings())
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 	s3, _ := s.AddStore(n1.NodeID())
@@ -299,9 +299,9 @@ func TestReplicaLoadRangeUsageInfo(t *testing.T) {
 	s := NewState(settings)
 	start := settings.StartTime
 
-	n1 := s.AddNode()
-	n2 := s.AddNode()
-	n3 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
+	n2 := s.AddNode(-1, roachpb.Locality{})
+	n3 := s.AddNode(-1, roachpb.Locality{})
 	k1 := Key(100)
 	qps := 1000
 	s1, _ := s.AddStore(n1.NodeID())
@@ -532,7 +532,7 @@ func TestSetSpanConfig(t *testing.T) {
 
 	setupState := func() State {
 		s := newState(settings)
-		node := s.AddNode()
+		node := s.AddNode(-1, roachpb.Locality{})
 		_, ok := s.AddStore(node.NodeID())
 		require.True(t, ok)
 
@@ -664,7 +664,11 @@ func TestSetSpanConfig(t *testing.T) {
 	}
 }
 
-func TestSetNodeLiveness(t *testing.T) {
+// TestNodeAndStoreStatus verifies the status tracking APIs: NodeLivenessFn
+// (combining store liveness with node membership), NodeCountFn (counting only
+// ACTIVE members), and store-level liveness aggregation (node takes the worst
+// liveness of its stores).
+func TestNodeAndStoreStatus(t *testing.T) {
 	t.Run("liveness func", func(t *testing.T) {
 		s := LoadClusterInfo(
 			ClusterInfoWithStoreCount(3, 1),
@@ -673,12 +677,14 @@ func TestSetNodeLiveness(t *testing.T) {
 
 		liveFn := s.NodeLivenessFn()
 
-		s.SetNodeLiveness(1, livenesspb.NodeLivenessStatus_LIVE)
-		s.SetNodeLiveness(2, livenesspb.NodeLivenessStatus_DEAD)
-		s.SetNodeLiveness(3, livenesspb.NodeLivenessStatus_DECOMMISSIONED)
+		// Set node liveness via SetAllStoresLiveness (sets all stores on the node).
+		// Node 1: live, Node 2: dead, Node 3: dead + decommissioned.
+		s.SetAllStoresLiveness(1, LivenessLive)
+		s.SetAllStoresLiveness(2, LivenessDead)
+		s.SetAllStoresLiveness(3, LivenessDead)
+		s.SetNodeStatus(3, NodeStatus{Membership: livenesspb.MembershipStatus_DECOMMISSIONED})
 
-		// Liveness status returend should ignore time till store dead or the
-		// timestamp given.
+		// Liveness status returned should combine store liveness and node membership.
 		require.Equal(t, livenesspb.NodeLivenessStatus_LIVE, liveFn(1))
 		require.Equal(t, livenesspb.NodeLivenessStatus_DEAD, liveFn(2))
 		require.Equal(t, livenesspb.NodeLivenessStatus_DECOMMISSIONED, liveFn(3))
@@ -693,14 +699,31 @@ func TestSetNodeLiveness(t *testing.T) {
 		countFn := s.NodeCountFn()
 
 		// Set node 1-5 as decommissioned and nodes 6-10 as dead. There should be a
-		// node count of 5.
+		// node count of 5 (dead nodes with ACTIVE membership are still counted).
 		for i := 1; i <= 5; i++ {
-			s.SetNodeLiveness(NodeID(i), livenesspb.NodeLivenessStatus_DECOMMISSIONED)
+			s.SetNodeStatus(NodeID(i), NodeStatus{Membership: livenesspb.MembershipStatus_DECOMMISSIONED})
 		}
-		for i := 6; i <= 10; i++ {
-			s.SetNodeLiveness(NodeID(i), livenesspb.NodeLivenessStatus_DEAD)
-		}
+		// Nodes 6-10 are already dead by default if not set, but we can set them
+		// explicitly. Their membership remains ACTIVE by default.
 		require.Equal(t, 5, countFn())
+	})
+
+	t.Run("store-level liveness", func(t *testing.T) {
+		s := LoadClusterInfo(
+			ClusterInfoWithStoreCount(1, 3), // 1 node with 3 stores
+			config.DefaultSimulationSettings(),
+		).(*state)
+
+		// All stores start live.
+		require.Equal(t, LivenessLive, s.NodeLiveness(1))
+
+		// Set one store to unavailable - node becomes unavailable.
+		s.SetStoreStatus(2, StoreStatus{Liveness: LivenessUnavailable})
+		require.Equal(t, LivenessUnavailable, s.NodeLiveness(1))
+
+		// Set another store to dead - node becomes dead.
+		s.SetStoreStatus(3, StoreStatus{Liveness: LivenessDead})
+		require.Equal(t, LivenessDead, s.NodeLiveness(1))
 	})
 }
 
@@ -755,7 +778,9 @@ US_East
   US_East_2
   │ └── [2 3]
   US_East_3
-  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+  │ └── [4 5 6]
+  US_East_4
+  │ └── [7 8 9 10 11 12 13 14 15 16]
 US_West
   US_West_1
     └── [17 18]

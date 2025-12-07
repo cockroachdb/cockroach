@@ -37,7 +37,7 @@ func PGUrl(t testing.TB, servingAddr, prefix string, user *url.Userinfo) (url.UR
 //
 //	prefix: A prefix to be prepended to the temp file names generated, for debugging.
 func PGUrlE(servingAddr, prefix string, user *url.Userinfo) (url.URL, func(), error) {
-	return PGUrlWithOptionalClientCertsE(servingAddr, prefix, user, true, "" /* withCerts */)
+	return PGUrlWithOptionalClientCertsE(servingAddr, prefix, user, true /* withClientCerts */, "" /* certName */)
 }
 
 // PGUrlWithOptionalClientCerts is like PGUrlWithOptionalClientCertsE, but uses t.Fatal to handle

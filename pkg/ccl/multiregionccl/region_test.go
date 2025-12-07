@@ -28,11 +28,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// startTestCluster starts a 3 node cluster.
-//
-// Note, if a testfeed depends on particular testing knobs, those may
-// need to be applied to each of the servers in the test cluster
-// returned from this function.
 func TestMultiRegionDatabaseStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

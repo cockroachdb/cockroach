@@ -15,12 +15,14 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -152,11 +154,27 @@ func (s *Service) ExecWithGateway(
 	return err
 }
 
+func (s *Service) ExecWithRetry(
+	rng *rand.Rand,
+	nodes option.NodeListOption,
+	retryOpts retry.Options,
+	query string,
+	args ...interface{},
+) error {
+	db, err := s.prepareQuery(rng, nodes, query, args...)
+	if err != nil {
+		return err
+	}
+
+	_, err = roachtestutil.ExecWithRetry(s.ctx, s.stepLogger, db, retryOpts, query, args...)
+	return err
+}
+
 func (s *Service) ClusterVersion(rng *rand.Rand) (roachpb.Version, error) {
 	if s.Finalizing {
 		n, db := s.RandomDB(rng)
 		s.stepLogger.Printf("querying cluster version through node %d", n)
-		cv, err := clusterupgrade.ClusterVersion(s.ctx, db)
+		cv, err := clusterupgrade.ClusterVersion(s.ctx, s.stepLogger, db)
 		if err != nil {
 			return roachpb.Version{}, fmt.Errorf("failed to query cluster version: %w", err)
 		}
@@ -247,6 +265,18 @@ func (h *Helper) ExecWithGateway(
 	rng *rand.Rand, nodes option.NodeListOption, query string, args ...interface{},
 ) error {
 	return h.DefaultService().ExecWithGateway(rng, nodes, query, args...)
+}
+
+// ExecWithRetry is like ExecWithGateway, but retries the execution of
+// the statement on errors, using the retry options provided.
+func (h *Helper) ExecWithRetry(
+	rng *rand.Rand,
+	nodes option.NodeListOption,
+	retryOpts retry.Options,
+	query string,
+	args ...interface{},
+) error {
+	return h.DefaultService().ExecWithRetry(rng, nodes, retryOpts, query, args...)
 }
 
 // defaultTaskOptions returns the default options that are passed to all tasks
@@ -353,6 +383,14 @@ func (h *Helper) IsSkipVersionUpgrade() bool {
 	// used when upgrading: we keep release data starting from 21.2.
 	numReleases, _ := release.MajorReleasesBetween(&h.testContext.FromVersion().Version, &h.testContext.ToVersion().Version)
 	return numReleases > 1
+}
+
+// VersionedCockroachPath returns the correct binary path to use when
+// executing workload commands in user-defined hooks that will match the
+// current cluster's version e.g., v25.3.1/cockroach
+func (h *Helper) VersionedCockroachPath(rt test.Test) string {
+	return clusterupgrade.BinaryPathForVersion(
+		rt, h.System.FromVersion, "cockroach")
 }
 
 // logSQL standardizes the logging when a SQL statement or query is

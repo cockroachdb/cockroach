@@ -26,8 +26,8 @@ import (
 
 type controlSchedulesNode struct {
 	singleInputPlanNode
+	rowsAffectedOutputHelper
 	command tree.ScheduleCommand
-	numRows int
 }
 
 func collectTelemetry(command tree.ScheduleCommand) {
@@ -39,11 +39,6 @@ func collectTelemetry(command tree.ScheduleCommand) {
 	case tree.DropSchedule:
 		telemetry.Inc(sqltelemetry.ScheduledBackupControlCounter("drop"))
 	}
-}
-
-// FastPathResults implements the planNodeFastPath interface.
-func (n *controlSchedulesNode) FastPathResults() (int, bool) {
-	return n.numRows, true
 }
 
 // JobSchedulerEnv returns JobSchedulerEnv.
@@ -175,7 +170,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 				if err != nil {
 					return errors.Wrap(err, "failed to run OnDrop")
 				}
-				n.numRows += additionalDroppedSchedules
+				n.addAffectedRows(additionalDroppedSchedules)
 			}
 			err = DeleteSchedule(
 				params.ctx, params.ExecCfg(), params.p.InternalSQLTxn(),
@@ -189,17 +184,21 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		n.numRows++
+		n.incAffectedRows()
 	}
 
 	return nil
 }
 
-// Next implements planNode interface.
-func (*controlSchedulesNode) Next(runParams) (bool, error) { return false, nil }
+// Next implements the planNode interface.
+func (n *controlSchedulesNode) Next(_ runParams) (bool, error) {
+	return n.next(), nil
+}
 
-// Values implements planNode interface.
-func (*controlSchedulesNode) Values() tree.Datums { return nil }
+// Values implements the planNode interface.
+func (n *controlSchedulesNode) Values() tree.Datums {
+	return n.values()
+}
 
 // Close implements planNode interface.
 func (n *controlSchedulesNode) Close(ctx context.Context) {

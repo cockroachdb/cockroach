@@ -147,7 +147,7 @@ func reduceSQL(
 	chunkReductions int,
 	multiRegion bool,
 	tlp, costfuzz, unoptimizedOracle bool,
-) (string, error) {
+) (out string, retErr error) {
 	var settings string
 	if devLicense, ok := envutil.EnvString("COCKROACH_DEV_LICENSE", 0); ok {
 		settings += "SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';\n"
@@ -173,6 +173,20 @@ func reduceSQL(
 
 	inputString := string(input)
 	var queryComparisonCheck string
+	// removedLines, if set, indicates the lines from the end of input that were
+	// removed from the input string (and were incorporated into
+	// queryComparisonCheck).
+	var removedLines []string
+	defer func() {
+		if retErr == nil && len(removedLines) > 0 {
+			inputTail, err := reducesql.Pretty(strings.Join(removedLines, "\n"))
+			if err != nil {
+				retErr = errors.Wrapf(err, "when pretty-printing tail")
+			} else {
+				out = out + "\n" + inputTail
+			}
+		}
+	}()
 
 	// If TLP check is requested, then we remove the last two queries from the
 	// input (each query is expected to be delimited by empty lines) which we
@@ -187,6 +201,7 @@ func reduceSQL(
 		lineIdx := len(lines) - 1
 		partitioned, lineIdx := findPreviousQuery(lines, lineIdx)
 		unpartitioned, lineIdx := findPreviousQuery(lines, lineIdx)
+		removedLines = lines[lineIdx:]
 		inputString = strings.Join(lines[:lineIdx], "\n")
 		// We make queryComparisonCheck a query that will result in an error with
 		// tlpFailureError error message when unpartitioned and partitioned queries
@@ -213,6 +228,7 @@ SELECT CASE
 		setting2, lineIdx := findPreviousQuery(lines, lineIdx)
 		setting1, lineIdx := findPreviousQuery(lines, lineIdx)
 		control, lineIdx := findPreviousQuery(lines, lineIdx)
+		removedLines = lines[lineIdx:]
 		inputString = strings.Join(lines[:lineIdx], "\n")
 		// We make queryComparisonCheck the original control / settings / perturbed
 		// statements, surrounded by sentinel statements.
@@ -247,6 +263,7 @@ SELECT '%[1]s';
 		settings2, lineIdx := findPreviousSetStatements(lines, lineIdx)
 		unoptimized, lineIdx := findPreviousQuery(lines, lineIdx)
 		settings1, lineIdx := findPreviousSetStatements(lines, lineIdx)
+		removedLines = lines[lineIdx:]
 		inputString = strings.Join(lines[:lineIdx], "\n")
 		// We make queryComparisonCheck the original unoptimized / settings /
 		// optimized statements, surrounded by sentinel statements.
@@ -372,7 +389,7 @@ SELECT '%[1]s';
 		return containsRE.Match(out), logOriginalHint
 	}
 
-	out, err := reduce.Reduce(
+	return reduce.Reduce(
 		logger,
 		inputSQL,
 		isInteresting,
@@ -381,7 +398,6 @@ SELECT '%[1]s';
 		chunkReducer,
 		reducesql.SQLPasses...,
 	)
-	return out, err
 }
 
 // findPreviousQuery return the query preceding lineIdx without a semicolon.

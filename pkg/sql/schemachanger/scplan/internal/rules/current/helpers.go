@@ -16,11 +16,11 @@ import (
 
 const (
 	// rulesVersion version of elements that can be appended to rel rule names.
-	rulesVersion = "-25.4"
+	rulesVersion = "-26.1"
 )
 
 // rulesVersionKey version of elements used by this rule set.
-var rulesVersionKey = clusterversion.V25_4
+var rulesVersionKey = clusterversion.V26_1
 
 // descriptorIsNotBeingDropped creates a clause which leads to the outer clause
 // failing to unify if the passed element is part of a descriptor and
@@ -146,6 +146,19 @@ func isWithTypeT(element scpb.Element) bool {
 	return err == nil
 }
 
+// isWithExpressionOrHasReferences returns true if `element` has an embedded
+// type or has references to types inside.
+func isWithTypeTOrHasReferences(element scpb.Element) bool {
+	if isWithTypeT(element) {
+		return true
+	}
+	switch element.(type) {
+	case *scpb.TriggerDeps:
+		return true
+	}
+	return false
+}
+
 func getExpression(element scpb.Element) (*scpb.Expression, error) {
 	switch e := element.(type) {
 	case *scpb.ColumnType:
@@ -212,6 +225,19 @@ func isWithExpression(element scpb.Element) bool {
 	return err == nil
 }
 
+// isWithExpressionOrHasReferences returns true if `element` has an embedded
+// expression or has references to either types, functions or relations.
+func isWithExpressionOrHasReferences(element scpb.Element) bool {
+	if isWithExpression(element) {
+		return true
+	}
+	switch element.(type) {
+	case *scpb.TriggerDeps:
+		return true
+	}
+	return false
+}
+
 func isTypeDescriptor(element scpb.Element) bool {
 	switch element.(type) {
 	case *scpb.EnumType, *scpb.AliasType, *scpb.CompositeType:
@@ -225,7 +251,9 @@ func isColumnDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ColumnType, *scpb.ColumnNotNull:
 		return true
-	case *scpb.ColumnName, *scpb.ColumnComment, *scpb.IndexColumn:
+	case *scpb.ColumnName, *scpb.ColumnComment, *scpb.IndexColumn, *scpb.ColumnHidden:
+		return true
+	case *scpb.ColumnGeneratedAsIdentity:
 		return true
 	}
 	return isColumnTypeDependent(e)
@@ -246,6 +274,7 @@ func isColumnNotNull(e scpb.Element) bool {
 	}
 	return false
 }
+
 func isColumnTypeDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.SequenceOwner, *scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression, *scpb.ColumnComputeExpression:

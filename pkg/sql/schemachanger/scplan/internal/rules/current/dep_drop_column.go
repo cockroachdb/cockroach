@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
 // These rules ensure that column-dependent elements, like a column's name, its
@@ -127,45 +128,74 @@ func init() {
 		},
 	)
 
-	// This rule ensures that a column is dropped only after any computed column
-	// dependent on it is dropped. For example, if column B is a computed column
-	// using column A in its compute expression, this rule ensures that the
-	// compute expression of B is dropped before column A is dropped. The rules
-	// above ensure that column B is dropped before the expression is dropped,
-	// so this rule also implicitly implies that column B is dropped before column
-	// A. This is relevant for expression and hash indexes which create an
-	// internal, virtual column that computes the hash/expression key for the index.
+	// These rules ensure that computed column expressions are dropped before
+	// the columns they depend on. Originally, a single rule applied to all
+	// computed columns, but this caused deadlocks during DROP COLUMN CASCADE
+	// operations with STORED computed columns. The rules are now split by type:
 	//
-	// N.B. Originally, this rule was specific only to virtual, computed columns.
-	// The rationale was that it was needed due to an edge case within the
-	// optimizer. The optimizer allows the compute expression of virtual computed
-	// columns to be evaluated during an active schema change. Without this rule,
-	// the optimizer cannot read the dependent column as the dependent column
-	// moves to the WRITE_ONLY stage before the computed column is fully dropped.
+	// 1. VIRTUAL computed columns need this rule due to an optimizer edge case.
+	//    The optimizer can evaluate virtual computed expressions during schema
+	//    changes, so the dependent column must remain accessible until the
+	//    expression is fully dropped.
 	//
-	// However, it is now needed for all compute expressions. When altering a
-	// column's type such that a backfill is required, a new version of the column
-	// is added, and the old version is dropped. A temporary compute expression is
-	// set to map the old rows to the new column type. This expression is dropped
-	// *before* dropping the old column, which this rule helps to enforce.
+	// 2. STORED computed columns only need this rule during ALTER COLUMN TYPE
+	//    operations, where temporary expressions map old rows to new column types.
+	//    For regular DROP COLUMN operations, applying this rule creates deadlocks
+	//    as the optimizer doesn't evaluate stored expressions during drops.
 	registerDepRuleForDrop(
-		"Computed column expression is dropped before the column it depends on",
+		"Virtual computed column expression is dropped before the column it depends on",
 		scgraph.Precedence,
-		"column-expr", "column",
+		"virtual-column-expr", "column",
 		scpb.Status_ABSENT, scpb.Status_WRITE_ONLY,
 		func(from, to NodeVars) rel.Clauses {
+			colType := MkNodeVars("column-type")
+			colID := rel.Var("col-id")
 			return rel.Clauses{
 				from.Type((*scpb.ColumnComputeExpression)(nil)),
 				to.Type((*scpb.Column)(nil)),
+				colType.Type((*scpb.ColumnType)(nil)),
 				JoinOnDescID(from, to, "table-id"),
-				FilterElements("computedColumnTypeReferencesColumn", from, to,
-					func(computeExpression *scpb.ColumnComputeExpression, column *scpb.Column) bool {
-						for _, refColumns := range computeExpression.ReferencedColumnIDs {
-							if refColumns == column.ColumnID {
-								return true
-							}
-						}
-						return false
+				JoinOnColumnID(from, colType, "table-id", "target-col-id"),
+				to.El.AttrEqVar(screl.ColumnID, colID),
+				from.ReferencedColumnIDsContains(colID),
+				FilterElements("columnTypeIsVirtual", colType, from,
+					func(columnType *scpb.ColumnType, computeExpression *scpb.ColumnComputeExpression) bool {
+						return columnType.IsVirtual
+					}),
+			}
+		},
+	)
+
+	// This rule handles STORED computed column expressions specifically during
+	// ALTER COLUMN TYPE operations. When altering a column's type such that a
+	// backfill is required, a new version of the column is added, and the old
+	// version is dropped. A temporary compute expression is set to map the old
+	// rows to the new column type. This expression must be dropped *before*
+	// dropping the old column.
+	//
+	// This rule is intentionally limited to ALTER COLUMN TYPE operations only
+	// to avoid the deadlock issues that occur with STORED computed columns
+	// during regular DROP COLUMN CASCADE operations.
+	registerDepRuleForDrop(
+		"Stored computed column expression for alter type is dropped before the column it depends on",
+		scgraph.Precedence,
+		"stored-column-expr", "column",
+		scpb.Status_ABSENT, scpb.Status_WRITE_ONLY,
+		func(from, to NodeVars) rel.Clauses {
+			colType := MkNodeVars("column-type")
+			colID := rel.Var("col-id")
+			return rel.Clauses{
+				from.Type((*scpb.ColumnComputeExpression)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				colType.Type((*scpb.ColumnType)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				JoinOnColumnID(from, colType, "table-id", "target-col-id"),
+				rel.And(IsAlterColumnTypeOp("table-id", "target-col-id")...),
+				to.El.AttrEqVar(screl.ColumnID, colID),
+				from.ReferencedColumnIDsContains(colID),
+				FilterElements("columnTypeIsStored", colType, from,
+					func(columnType *scpb.ColumnType, computeExpression *scpb.ColumnComputeExpression) bool {
+						return !columnType.IsVirtual
 					}),
 			}
 		},

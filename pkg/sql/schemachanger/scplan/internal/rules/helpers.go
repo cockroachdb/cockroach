@@ -244,11 +244,11 @@ func IsDroppedColumnPartOfAlterColumnTypeOp(tableIDVar, oldColumnIDVar rel.Var) 
 	}
 }
 
-// IsPotentialSecondaryIndexSwap determines if a secondary index recreate is
+// IsPotentialSecondaryIndexSwapWithNodeVars determines if a secondary index recreate is
 // occurring because of a primary key alter.
-func IsPotentialSecondaryIndexSwap(indexIdVar rel.Var, tableIDVar rel.Var) rel.Clauses {
-	oldIndex := MkNodeVars("old-index")
-	newIndex := MkNodeVars("new-index")
+func IsPotentialSecondaryIndexSwapWithNodeVars(
+	oldIndex NodeVars, newIndex NodeVars, indexIdVar rel.Var, tableIDVar rel.Var,
+) rel.Clauses {
 	// This rule detects secondary indexes recreated during a primary index swap,
 	// by doing the following. It will check if the re-create source index
 	// and index ID matches up between an old and new index
@@ -267,6 +267,14 @@ func IsPotentialSecondaryIndexSwap(indexIdVar rel.Var, tableIDVar rel.Var) rel.C
 		oldIndex.JoinTargetNode(),
 		newIndex.JoinTargetNode(),
 	}
+}
+
+// IsPotentialSecondaryIndexSwap determines if a secondary index recreate is
+// occurring because of a primary key alter.
+func IsPotentialSecondaryIndexSwap(indexIdVar rel.Var, tableIDVar rel.Var) rel.Clauses {
+	oldIndex := MkNodeVars("old-index")
+	newIndex := MkNodeVars("new-index")
+	return IsPotentialSecondaryIndexSwapWithNodeVars(oldIndex, newIndex, indexIdVar, tableIDVar)
 }
 
 var (

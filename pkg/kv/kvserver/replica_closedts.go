@@ -155,6 +155,7 @@ func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
 		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
 		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
+		closedts.SideTransportPacingRefreshInterval.Get(&r.ClusterSettings().SV),
 		closedTimestampPolicy(r.descRLocked(), *r.cachedClosedTimestampPolicy.Load()),
 	)
 }
@@ -292,7 +293,7 @@ func (st *sidetransportAccess) forward(
 
 func (st *sidetransportAccess) assertNoRegression(ctx context.Context, cur, up closedTimestamp) {
 	if cur.regression(up) {
-		log.Dev.Fatalf(ctx, "side-transport update saw closed timestamp regression on r%d: "+
+		log.KvExec.Fatalf(ctx, "side-transport update saw closed timestamp regression on r%d: "+
 			"(lai=%d, ts=%s) -> (lai=%d, ts=%s)", st.rangeID, cur.lai, cur.ts, up.lai, up.ts)
 	}
 }

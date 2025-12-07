@@ -44,7 +44,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +223,7 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -531,7 +531,7 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{InMemory: true, Settings: st}, base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{InMemory: true, Settings: st}, nil /* statsCollector */)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -552,7 +552,7 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 	for i := 0; i < numRows; i++ {
 		rows[i] = make([]rowenc.EncDatum, len(typs))
 		for j := range typs {
-			rows[i][j] = rowenc.DatumToEncDatum(typs[j], randgen.RandDatum(rng, typs[j], false))
+			rows[i][j] = rowenc.DatumToEncDatumUnsafe(typs[j], randgen.RandDatum(rng, typs[j], false))
 		}
 	}
 

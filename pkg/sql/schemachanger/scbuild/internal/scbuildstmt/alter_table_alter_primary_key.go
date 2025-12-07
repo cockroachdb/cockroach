@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -63,18 +62,9 @@ func alterPrimaryKey(
 ) {
 	// Check if sql_safe_updates is enabled and the table has a vector index
 	tableElts := b.QueryByID(tbl.TableID).Filter(notFilter(absentTargetFilter))
-	noticeSent := false
 	scpb.ForEachSecondaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
-		if idx.Type == idxtype.VECTOR {
-			if !b.EvalCtx().Settings.Version.ActiveVersion(b).AtLeast(clusterversion.V25_2.Version()) {
-				panic(pgerror.Newf(pgcode.FeatureNotSupported, "cannot alter primary key on a table with vector indexes until finalizing on 25.2"))
-			} else if b.EvalCtx().SessionData().SafeUpdates {
-				panic(pgerror.DangerousStatementf("ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt"))
-			} else if !noticeSent {
-				noticeSender := b.EvalCtx().ClientNoticeSender
-				noticeSender.BufferClientNotice(b, pgnotice.Newf("ALTER PRIMARY KEY on a table with vector indexes will disable writes to the table while the index is being rebuilt"))
-				noticeSent = true
-			}
+		if idx.Type == idxtype.VECTOR && !b.EvalCtx().Settings.Version.ActiveVersion(b).AtLeast(clusterversion.V25_2.Version()) {
+			panic(pgerror.Newf(pgcode.FeatureNotSupported, "cannot alter primary key on a table with vector indexes until finalizing on 25.2"))
 		}
 	})
 
@@ -120,7 +110,13 @@ func alterPrimaryKey(
 	b.LogEventForExistingTarget(inflatedChain.finalSpec.primary)
 
 	// Recreate all secondary indexes.
-	recreateAllSecondaryIndexes(b, t, tbl, inflatedChain.finalSpec.primary, inflatedChain.inter2Spec.primary)
+	// inter1Spec has all the required columns for any new primary key, so it will
+	// be used as the source for the new secondary indexes.
+	// inter2Spec will have the new key columns, so the index will be fully usable
+	// once this index publishes.
+	// finalSpec is the final state of the primary index, which will have any
+	// added / dropped columns applied and the new primary key.
+	recreateAllSecondaryIndexes(b, t, tbl, inflatedChain.finalSpec.primary, inflatedChain.inter2Spec.primary, inflatedChain.inter1Spec.primary)
 
 	// Drop the rowid column, if applicable.
 	rowidToDrop := getPrimaryIndexDefaultRowIDColumn(b, tbl.TableID, inflatedChain.oldSpec.primary.IndexID)
@@ -595,19 +591,23 @@ func checkIfConstraintNameAlreadyExists(b BuildCtx, tbl *scpb.Table, t alterPrim
 
 // recreateAllSecondaryIndexes recreates all secondary indexes. While the key
 // columns remain the same in the face of a primary key change, the key suffix
-// columns or the stored columns may not.
+// columns or the stored columns may not. newPrimaryIndex is the final primary
+// index of this ALTER PRIMARY KEY, and the key columns will be determined by
+// this. usablePrimaryIndex is the first primary index that has matching key
+// columns to the final primary index. sourcePrimaryIndex is the first primary
+// index with all columns required for the backfill.
 func recreateAllSecondaryIndexes(
 	b BuildCtx,
 	t alterPrimaryKeySpec,
 	tbl *scpb.Table,
-	newPrimaryIndex, sourcePrimaryIndex *scpb.PrimaryIndex,
+	finalPrimaryIndex, primaryIndexWithNewKey, sourcePrimaryIndex *scpb.PrimaryIndex,
 ) {
 	publicTableElts := b.QueryByID(tbl.TableID).Filter(publicTargetFilter)
 	// Generate all possible key suffix columns.
 	var newKeySuffix []indexColumnSpec
 	{
 		scpb.ForEachIndexColumn(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
-			if ic.IndexID == newPrimaryIndex.IndexID && ic.Kind == scpb.IndexColumn_KEY {
+			if ic.IndexID == finalPrimaryIndex.IndexID && ic.Kind == scpb.IndexColumn_KEY {
 				newKeySuffix = append(newKeySuffix, indexColumnSpec{
 					columnID:  ic.ColumnID,
 					kind:      scpb.IndexColumn_KEY_SUFFIX,
@@ -617,7 +617,7 @@ func recreateAllSecondaryIndexes(
 		})
 	}
 	// Recreate each secondary index.
-	scpb.ForEachSecondaryIndex(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
+	scpb.ForEachSecondaryIndex(publicTableElts, func(currentStatus scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
 		out := makeIndexSpec(b, idx.TableID, idx.IndexID)
 		// If this index is referenced by any other objects, then we will
 		// block the primary key swap, since we don't have a mechanism to
@@ -719,8 +719,20 @@ func recreateAllSecondaryIndexes(
 			}
 		}
 		in, temp := makeSwapIndexSpec(b, out, sourcePrimaryIndex.IndexID, inColumns, false /* inUseTempIDs */)
-		in.secondary.RecreateSourceIndexID = out.indexID()
-		in.secondary.RecreateTargetIndexID = newPrimaryIndex.IndexID
+		// Set RecreateSourceIndexID only if the original index is already public.
+		// This enables index swapping: the new index will replace the old one when
+		// the old index becomes non-public.
+		//
+		// If the original index is not public (e.g., still being created), then we're
+		// in a concurrent scenario where both the index creation and primary key swap
+		// are happening in the same transaction. In this case, we don't set
+		// RecreateSourceIndexID because the "source" index will never become public
+		// and thus doesn't need to be replaced.
+		if currentStatus == scpb.Status_PUBLIC {
+			in.secondary.RecreateSourceIndexID = out.indexID()
+		}
+		in.secondary.HideForPrimaryKeyRecreated = b.ClusterSettings().Version.IsActive(b, clusterversion.V25_4)
+		in.secondary.RecreateTargetIndexID = primaryIndexWithNewKey.IndexID
 		out.apply(b.Drop)
 		in.apply(b.Add)
 		temp.apply(b.AddTransient)
@@ -1051,7 +1063,7 @@ func getPrimaryIndexDefaultRowIDColumn(
 
 	// That one column should be hidden.
 	column = mustRetrieveColumnElem(b, tableID, columnID)
-	if !column.IsHidden {
+	if !(column.IsHidden || retrieveColumnHidden(b, tableID, column.ColumnID) != nil) {
 		return nil
 	}
 
@@ -1149,7 +1161,7 @@ func checkIfColumnCanBeDropped(b BuildCtx, columnToDrop *scpb.Column) bool {
 				canBeDropped = false
 			}
 		}
-	})
+	}, false /* allowPartialIdxPredicateRef */)
 	return canBeDropped
 }
 

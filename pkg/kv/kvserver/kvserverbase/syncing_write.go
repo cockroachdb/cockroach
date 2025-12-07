@@ -52,7 +52,7 @@ func LimitBulkIOWrite(ctx context.Context, limiter *rate.Limiter, cost int) erro
 	}
 
 	if d := timeutil.Since(begin); d > bulkIOWriteLimiterLongWait {
-		log.Dev.Warningf(ctx, "bulk io write limiter took %s (>%s):\n%s",
+		log.KvExec.Warningf(ctx, "bulk io write limiter took %s (>%s):\n%s",
 			d, bulkIOWriteLimiterLongWait, debugutil.Stack())
 	}
 	return nil

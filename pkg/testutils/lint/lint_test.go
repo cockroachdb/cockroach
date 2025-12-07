@@ -1150,6 +1150,35 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// Forbid direct use of pprof.Do and pprof.SetGoroutineLabels in favor of pprofutil.
+	t.Run("TestPprofDirect", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`\bpprof\.(Do|SetGoroutineLabels)\(`,
+			"--",
+			"*.go",
+			":!util/pprofutil/labels.go",
+		)
+		require.NoError(t, err)
+		require.NoError(t, cmd.Start())
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use 'pprofutil.Do' or 'pprofutil.SetProfilerLabels' instead", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestOsErrorIs", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
@@ -1457,6 +1486,7 @@ func TestLint(t *testing.T) {
 		if err := stream.ForEach(stream.Sequence(
 			filter,
 			stream.GrepNot(`(json|jsonpb|yaml|protoutil|xml|\.Field|ewkb|wkb|wkt|asn1)\.Marshal\(`),
+			stream.GrepNot(`nolint:protomarshal`),
 		), func(s string) {
 			t.Errorf("\n%s <- forbidden; use 'protoutil.Marshal' instead", s)
 		}); err != nil {
@@ -1673,7 +1703,7 @@ func TestLint(t *testing.T) {
 			filter,
 			stream.GrepNot(`nolint:yaml`),
 		), func(s string) {
-			t.Errorf("\n%s <- forbidden; use 'yaml.UnmarshalStrict' instead", s)
+			t.Errorf("\n%s <- forbidden; use 'yamlutil.UnmarshalStrict' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -2505,98 +2535,6 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	// TODO(yuzefovich): remove this linter when #76378 is resolved.
-	t.Run("TestTODOTestTenantDisabled", func(t *testing.T) {
-		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(
-			pkgDir,
-			"git",
-			"grep",
-			"-nE",
-			`base\.TODOTestTenantDisabled`,
-			"--",
-			"*",
-			":!backup/backup_test.go",
-			":!backup/backuprand/backup_rand_test.go",
-			":!backup/backuptestutils/testutils.go",
-			":!backup/create_scheduled_backup_test.go",
-			":!backup/datadriven_test.go",
-			":!backup/full_cluster_backup_restore_test.go",
-			":!backup/restore_old_versions_test.go",
-			":!backup/utils_test.go",
-			":!ccl/changefeedccl/alter_changefeed_test.go",
-			":!ccl/changefeedccl/changefeed_test.go",
-			":!ccl/changefeedccl/helpers_test.go",
-			":!ccl/changefeedccl/parquet_test.go",
-			":!ccl/changefeedccl/scheduled_changefeed_test.go",
-			":!ccl/importerccl/ccl_test.go",
-			":!ccl/kvccl/kvfollowerreadsccl/boundedstaleness_test.go",
-			":!ccl/kvccl/kvfollowerreadsccl/followerreads_test.go",
-			":!ccl/kvccl/kvtenantccl/upgradeccl/tenant_upgrade_test.go",
-			":!ccl/multiregionccl/cold_start_latency_test.go",
-			":!ccl/multiregionccl/datadriven_test.go",
-			":!ccl/multiregionccl/multiregionccltestutils/testutils.go",
-			":!ccl/multiregionccl/regional_by_row_test.go",
-			":!ccl/multiregionccl/unique_test.go",
-			":!ccl/partitionccl/drop_test.go",
-			":!ccl/partitionccl/partition_test.go",
-			":!ccl/partitionccl/zone_test.go",
-			":!ccl/serverccl/admin_test.go",
-			":!crosscluster/replicationtestutils/testutils.go",
-			":!crosscluster/streamclient/partitioned_stream_client_test.go",
-			":!crosscluster/physical/replication_random_client_test.go",
-			":!crosscluster/physical/stream_ingestion_job_test.go",
-			":!crosscluster/physical/stream_ingestion_processor_test.go",
-			":!crosscluster/producer/producer_job_test.go",
-			":!crosscluster/producer/replication_stream_test.go",
-			":!ccl/workloadccl/allccl/all_test.go",
-			":!cli/democluster/demo_cluster.go",
-			":!cli/democluster/demo_cluster_test.go",
-			":!server/application_api/config_test.go",
-			":!server/application_api/dbconsole_test.go",
-			":!server/application_api/events_test.go",
-			":!server/application_api/insights_test.go",
-			":!server/application_api/jobs_test.go",
-			":!server/application_api/query_plan_test.go",
-			":!server/application_api/security_test.go",
-			":!server/application_api/zcfg_test.go",
-			":!server/grpc_gateway_test.go",
-			":!server/multi_store_test.go",
-			":!server/storage_api/decommission_test.go",
-			":!server/storage_api/health_test.go",
-			":!server/storage_api/rangelog_test.go",
-			":!server/testserver.go",
-			":!sql/importer/import_processor_test.go",
-			":!sql/importer/import_stmt_test.go",
-			":!sql/importer/read_import_mysql_test.go",
-			":!sql/schemachanger/sctest/test_server_factory.go",
-			":!sql/server_params_test.go",
-			":!sql/ttl/ttljob/ttljob_test.go",
-			":!testutils/lint/lint_test.go",
-			":!ts/server_test.go",
-			":!upgrade/upgrademanager/manager_external_test.go",
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- new usages of base.TODOTestTenantDisabled are forbidden", s)
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
 	// This linter prohibits ignoring the context.CancelFunc that is returned on
 	// stop.Stopper.WithCancelOnQuiesce call (which can result in a memory
 	// leak).
@@ -2878,8 +2816,9 @@ func TestLint(t *testing.T) {
 			"--",
 			"**testdata**",
 			"**/*_test.go",
-			":!testutils/lint/lint_test.go",     // false-positive: the lint itself.
-			":!sql/tests/testdata/initial_keys", // exempt: deliberate test of bootstrap catalog
+			":!testutils/lint/lint_test.go", // false-positive: the lint itself.
+			":!sql/logictest/testdata/logic_test/gen_test_objects", // exempt: randomly generated table names.
+			":!sql/tests/testdata/initial_keys",                    // exempt: deliberate test of bootstrap catalog
 			":!sql/catalog/systemschema_test/testdata/bootstrap*",  // exempt: deliberate test of bootstrap catalog.
 			":!sql/catalog/internal/catkv/testdata/",               // TODO(foundations): #137029.
 			":!cli/testdata/doctor/",                               // TODO(foundations): #137030.

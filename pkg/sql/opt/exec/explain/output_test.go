@@ -231,6 +231,8 @@ func TestContentionTimeOnWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDuress(t, "see issue #153394")
+
 	ctx := context.Background()
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)

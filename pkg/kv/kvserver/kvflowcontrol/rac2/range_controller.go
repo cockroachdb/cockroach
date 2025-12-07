@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -320,6 +322,8 @@ func (q *RangeSendQueueStats) Clear() {
 // ReplicaSendStreamStats contains the stats for a replica send stream that may
 // be used to inform placement decisions pertaining to the replica.
 type ReplicaSendStreamStats struct {
+	// Stream is the flow control stream for the replica.
+	Stream kvflowcontrol.Stream
 	// IsStateReplicate is true iff the replica is being sent entries.
 	IsStateReplicate bool
 	// HasSendQueue is true when a replica has a non-zero amount of queued
@@ -708,7 +712,7 @@ func NewRangeController(
 	ctx context.Context, o RangeControllerOptions, init RangeControllerInitState,
 ) *rangeController {
 	if log.V(1) {
-		log.Dev.VInfof(ctx, 1, "r%v creating range controller", o.RangeID)
+		log.KvDistribution.VInfof(ctx, 1, "r%v creating range controller", o.RangeID)
 	}
 	if o.RaftMaxInflightBytes == 0 {
 		o.RaftMaxInflightBytes = math.MaxUint64
@@ -888,6 +892,14 @@ retry:
 		}
 	}
 	waitDuration := rc.opts.Clock.PhysicalTime().Sub(start)
+	// TODO(alyshan): We should have an API to log and additionally record
+	// structured events on the span. Currently this duplicates some info
+	// on the trace since logging calls will record to the span (in verbose mode).
+	if span := tracing.SpanFromContext(ctx); span != nil {
+		span.RecordStructured(&kvpb.QuorumReplicationFlowAdmissionEvent{
+			WaitDurationNanos: waitDuration,
+		})
+	}
 	if expensiveLoggingEnabled {
 		log.VEventf(ctx, 2, "r%v/%v admitted request (pri=%v wait-duration=%v wait-for-all=%v)",
 			rc.opts.RangeID, rc.opts.LocalReplicaID, pri, waitDuration, waitForAllReplicateHandles)
@@ -1563,7 +1575,7 @@ func (rc *rangeController) SetLeaseholderRaftMuLocked(
 		return
 	}
 	if log.V(1) {
-		log.Dev.VInfof(ctx, 1, "r%v setting range leaseholder replica_id=%v", rc.opts.RangeID, replica)
+		log.KvDistribution.VInfof(ctx, 1, "r%v setting range leaseholder replica_id=%v", rc.opts.RangeID, replica)
 	}
 	rc.leaseholder = replica
 	rc.updateWaiterSetsRaftMuLocked()
@@ -1582,7 +1594,7 @@ func (rc *rangeController) ForceFlushIndexChangedLocked(ctx context.Context, ind
 func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
 	rc.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	if log.V(1) {
-		log.Dev.VInfof(ctx, 1, "r%v closing range controller", rc.opts.RangeID)
+		log.KvDistribution.VInfof(ctx, 1, "r%v closing range controller", rc.opts.RangeID)
 	}
 	func() {
 		rc.mu.Lock()
@@ -1721,6 +1733,7 @@ func (rc *rangeController) SendStreamStats(statsToSet *RangeSendStreamStats) {
 		// end up overwriting the same state at most twice, not a big issue.
 		for _, vs := range vss {
 			stats := ReplicaSendStreamStats{
+				Stream:           vs.stateForWaiters.evalTokenCounter.stream,
 				IsStateReplicate: vs.isStateReplicate,
 				HasSendQueue:     vs.hasSendQ,
 			}
@@ -1731,6 +1744,7 @@ func (rc *rangeController) SendStreamStats(statsToSet *RangeSendStreamStats) {
 	// Now handle the non-voters.
 	for _, nv := range rc.mu.nonVoterSet {
 		stats := ReplicaSendStreamStats{
+			Stream:           nv.evalTokenCounter.stream,
 			IsStateReplicate: nv.isStateReplicate,
 			HasSendQueue:     nv.hasSendQ,
 		}
@@ -2273,7 +2287,7 @@ func (rss *replicaSendStream) admitRaftMuLocked(ctx context.Context, av Admitted
 			}
 			printReturned("send", returnedSend)
 			printReturned(" eval", returnedEval)
-			log.Dev.VInfof(ctx, 2, "r%v:%v stream %v admit %v returned %s",
+			log.KvDistribution.VInfof(ctx, 2, "r%v:%v stream %v admit %v returned %s",
 				rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream, av,
 				redact.SafeString(b.String()))
 		}
@@ -2366,7 +2380,7 @@ type entryFCState struct {
 func getEntryFCStateOrFatal(ctx context.Context, entry raftpb.Entry) entryFCState {
 	enc, pri, err := raftlog.EncodingOf(entry)
 	if err != nil {
-		log.Dev.Fatalf(ctx, "error getting encoding of entry: %v", err)
+		log.KvDistribution.Fatalf(ctx, "error getting encoding of entry: %v", err)
 	}
 
 	if enc == raftlog.EntryEncodingStandardWithAC || enc == raftlog.EntryEncodingSideloadedWithAC {
@@ -2682,7 +2696,7 @@ func (rs *replicaState) scheduledRaftMuLocked(
 		// knowledge will become known in the next
 		// rangeController.HandleRaftEventRaftMuLocked, which will happen at the
 		// next tick. We accept a latency hiccup in this case for now.
-		rss.mu.sendQueue.forceFlushStopIndex = 0
+		rss.setForceFlushStopIndexRaftMuAndStreamLocked(0)
 	}
 	forceFlushNeedsToPause := forceFlushActiveAndPaused()
 	watchForTokens :=
@@ -2768,7 +2782,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 				rss.startForceFlushRaftMuAndStreamLocked(ctx, directive.forceFlushStopIndex)
 			} else {
 				if rss.mu.sendQueue.forceFlushStopIndex != directive.forceFlushStopIndex {
-					rss.mu.sendQueue.forceFlushStopIndex = directive.forceFlushStopIndex
+					rss.setForceFlushStopIndexRaftMuAndStreamLocked(directive.forceFlushStopIndex)
 				}
 				if wasExceedingInflightBytesThreshold &&
 					!rss.reachedInflightBytesThresholdRaftMuAndStreamLocked() {
@@ -2780,8 +2794,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 			if rss.mu.sendQueue.forceFlushStopIndex.active() {
 				// Must have a send-queue, so sendingEntries should stay empty (these
 				// will be queued).
-				rss.mu.sendQueue.forceFlushStopIndex = 0
-				rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Dec(1)
+				rss.setForceFlushStopIndexRaftMuAndStreamLocked(0)
 				rss.startAttemptingToEmptySendQueueViaWatcherStreamLocked(ctx)
 				if directive.hasSendTokens {
 					panic(errors.AssertionFailedf("hasSendTokens true despite send-queue"))
@@ -2998,8 +3011,7 @@ func (rss *replicaSendStream) startForceFlushRaftMuAndStreamLocked(
 ) {
 	rss.parent.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	rss.mu.AssertHeld()
-	rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Inc(1)
-	rss.mu.sendQueue.forceFlushStopIndex = forceFlushStopIndex
+	rss.setForceFlushStopIndexRaftMuAndStreamLocked(forceFlushStopIndex)
 	if !rss.reachedInflightBytesThresholdRaftMuAndStreamLocked() {
 		rss.parent.parent.scheduleReplica(rss.parent.replicaID)
 	}
@@ -3136,8 +3148,7 @@ func (rss *replicaSendStream) stopAttemptingToEmptySendQueueRaftMuAndStreamLocke
 	rss.parent.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	rss.mu.AssertHeld()
 	if rss.mu.sendQueue.forceFlushStopIndex.active() {
-		rss.mu.sendQueue.forceFlushStopIndex = 0
-		rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Dec(1)
+		rss.setForceFlushStopIndexRaftMuAndStreamLocked(0)
 	}
 	rss.stopAttemptingToEmptySendQueueViaWatcherRaftMuAndStreamLocked(ctx, disconnect)
 }
@@ -3165,6 +3176,21 @@ func (rss *replicaSendStream) stopAttemptingToEmptySendQueueViaWatcherRaftMuAndS
 		rss.parent.parent.opts.SendTokenWatcher.CancelHandle(ctx, handle)
 		rss.mu.sendQueue.tokenWatcherHandle = SendTokenWatcherHandle{}
 	}
+}
+
+func (rss *replicaSendStream) setForceFlushStopIndexRaftMuAndStreamLocked(
+	index forceFlushStopIndex,
+) {
+	rss.parent.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
+	rss.mu.AssertHeld()
+	nextIsActive := index.active()
+	prevIsActive := rss.mu.sendQueue.forceFlushStopIndex.active()
+	if !prevIsActive && nextIsActive {
+		rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Inc(1)
+	} else if prevIsActive && !nextIsActive {
+		rss.parent.parent.opts.RangeControllerMetrics.SendQueue.ForceFlushedScheduledCount.Dec(1)
+	}
+	rss.mu.sendQueue.forceFlushStopIndex = index
 }
 
 // Requires that send-queue is non-empty. Note that it is possible that all
@@ -3464,7 +3490,7 @@ func (a *entryTokensApproximator) meanTokensPerEntry() kvflowcontrol.Tokens {
 // stop. When set to infinityEntryIndex, force-flush must continue until the
 // send-queue is empty. The zero value implies no force-flush, even though
 // this index is inclusive, since index 0 is never used in CockroachDB's use
-// of Raft (see stateloader.RaftInitialLogIndex).
+// of Raft (see kvstorage.RaftInitialLogIndex).
 type forceFlushStopIndex uint64
 
 // active returns whether the stream is force-flushing.

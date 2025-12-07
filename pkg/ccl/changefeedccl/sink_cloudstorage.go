@@ -34,8 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	// Placeholder for pgzip and zdstd.
 	_ "github.com/klauspost/compress/zstd"
@@ -89,7 +89,7 @@ func (b *byteBufferWithTrackedLength) Len() int {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	created       time.Time
+	created       crtime.Mono
 	codec         io.WriteCloser
 	rawSize       int
 	numMessages   int
@@ -545,7 +545,7 @@ func (s *cloudStorageSink) getOrCreateFile(
 		return f, nil
 	}
 	f := &cloudStorageSinkFile{
-		created:             timeutil.Now(),
+		created:             crtime.NowMono(),
 		cloudStorageSinkKey: key,
 		oldestMVCC:          eventMVCC,
 		allocCallback:       s.metrics.makeCloudstorageFileAllocCallback(),
@@ -644,7 +644,7 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	part := resolved.GoTime().Format(s.partitionFormat)
 	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolved))
 	if log.V(1) {
-		log.Dev.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
+		log.Changefeed.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
 	}
 	return cloud.WriteFile(ctx, s.es, filepath.Join(part, filename), bytes.NewReader(payload))
 }
@@ -833,7 +833,7 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 		return nil
 	default:
 		if logQueueDepth.ShouldLog() {
-			log.Dev.Infof(ctx, "changefeed flush queue is full; ~%d bytes to flush",
+			log.Changefeed.Infof(ctx, "changefeed flush queue is full; ~%d bytes to flush",
 				flushQueueDepth*s.targetMaxFileSize)
 		}
 	}
@@ -879,7 +879,7 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 			flushDone()
 
 			if err != nil {
-				log.Dev.Errorf(ctx, "error flushing file to storage: %s", err)
+				log.Changefeed.Errorf(ctx, "error flushing file to storage: %s", err)
 				s.asyncFlushErr = err
 				return err
 			}
@@ -892,7 +892,7 @@ func (f *cloudStorageSinkFile) flushToStorage(
 	ctx context.Context, es cloud.ExternalStorage, dest string, m metricsRecorder,
 ) error {
 	defer f.releaseAlloc(ctx)
-	defer m.timers().DownstreamClientSend.Start()()
+	defer m.timers().DownstreamClientSend.Start().End()
 
 	if f.rawSize == 0 {
 		// This method shouldn't be called with an empty file, but be defensive

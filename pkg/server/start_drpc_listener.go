@@ -44,23 +44,3 @@ func (ln *dropDRPCHeaderListener) Close() error {
 func (ln *dropDRPCHeaderListener) Addr() net.Addr {
 	return ln.wrapped.Addr()
 }
-
-type noopListener struct{ done chan struct{} }
-
-func (l *noopListener) Accept() (net.Conn, error) {
-	<-l.done
-	return nil, net.ErrClosed
-}
-
-func (l *noopListener) Close() error {
-	if l.done == nil {
-		return nil
-	}
-	close(l.done)
-	l.done = nil
-	return nil
-}
-
-func (l *noopListener) Addr() net.Addr {
-	return nil
-}

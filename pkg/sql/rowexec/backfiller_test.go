@@ -7,6 +7,7 @@ package rowexec_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -49,7 +50,7 @@ func TestingWriteResumeSpan(
 	ctx, traceSpan := tracing.ChildSpan(ctx, "checkpoint")
 	defer traceSpan.Finish()
 
-	resumeSpans, job, mutationIdx, err := rowexec.GetResumeSpans(
+	resumeSpans, manifests, job, mutationIdx, err := rowexec.GetResumeSpansAndSSTManifests(
 		ctx, jobsRegistry, txn, codec, col, id, mutationID, filter,
 	)
 	if err != nil {
@@ -57,7 +58,7 @@ func TestingWriteResumeSpan(
 	}
 
 	resumeSpans = roachpb.SubtractSpans(resumeSpans, finished)
-	return rowexec.SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, job)
+	return rowexec.SetResumeSpansAndSSTManifestsInJob(ctx, &codec, resumeSpans, manifests, mutationIdx, txn, job)
 }
 
 func TestWriteResumeSpan(t *testing.T) {
@@ -66,7 +67,7 @@ func TestWriteResumeSpan(t *testing.T) {
 
 	ctx := context.Background()
 
-	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			// Disable all schema change execution.
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -75,8 +76,10 @@ func TestWriteResumeSpan(t *testing.T) {
 				},
 			},
 		},
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156127),
 	})
-	defer server.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRunner.Exec(t, `SET create_table_with_schema_locked=false`)
@@ -97,13 +100,13 @@ func TestWriteResumeSpan(t *testing.T) {
 		{Key: roachpb.Key("q"), EndKey: roachpb.Key("r")},
 	}
 
-	registry := server.JobRegistry().(*jobs.Registry)
+	registry := s.JobRegistry().(*jobs.Registry)
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, keys.SystemSQLCodec, "t", "test")
+		kvDB, s.Codec(), "t", "test")
 
 	if err := kvDB.Put(
 		ctx,
-		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID),
+		catalogkeys.MakeDescMetadataKey(s.Codec(), tableDesc.ID),
 		tableDesc.DescriptorProto(),
 	); err != nil {
 		t.Fatal(err)
@@ -175,11 +178,11 @@ func TestWriteResumeSpan(t *testing.T) {
 		if test.resume.Key != nil {
 			finished.EndKey = test.resume.Key
 		}
-		if err := sqltestutils.TestingDescsTxn(ctx, server, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			return TestingWriteResumeSpan(
 				ctx,
 				txn,
-				keys.SystemSQLCodec,
+				s.Codec(),
 				col,
 				tableDesc.ID,
 				mutationID,
@@ -215,9 +218,9 @@ func TestWriteResumeSpan(t *testing.T) {
 	}
 
 	var got []roachpb.Span
-	if err := sqltestutils.TestingDescsTxn(ctx, server, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+	if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		got, _, _, err = rowexec.GetResumeSpans(
-			ctx, registry, txn, keys.SystemSQLCodec, col, tableDesc.ID, mutationID, backfill.IndexMutationFilter)
+			ctx, registry, txn, s.Codec(), col, tableDesc.ID, mutationID, backfill.IndexMutationFilter)
 		return err
 	}); err != nil {
 		t.Error(err)
@@ -229,5 +232,96 @@ func TestWriteResumeSpan(t *testing.T) {
 		if !e.EqualValue(got[i]) {
 			t.Fatalf("expected = %+v, got = %+v", e, got[i])
 		}
+	}
+}
+
+func TestResumeSpanSSTManifestRoundTrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				SchemaChangeJobNoOp: func() bool {
+					// Disable schema change execution. This way all mutations never leave the descriptor.
+					return true
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, `SET create_table_with_schema_locked=false`)
+	sqlRunner.Exec(t, `SET use_declarative_schema_changer='off'`)
+	sqlRunner.Exec(t, `CREATE DATABASE t;`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT);`)
+	sqlRunner.Exec(t, `CREATE UNIQUE INDEX vidx ON t.test (v);`)
+
+	registry := s.JobRegistry().(*jobs.Registry)
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
+		kvDB, s.Codec(), "t", "test")
+
+	// Pick up the index we created above. Note: there is a schema change knob
+	// that no-ops the schema change leaving the mutation in place.
+	require.Equal(t, 2, len(tableDesc.AllMutations()))
+	mutationID := tableDesc.AllMutations()[0].MutationID()
+
+	// The job is marked as completed since we made it a no-op. But since we want
+	// to update the job progress, lets change it back to running.
+	require.Equal(t, 1, len(tableDesc.MutationJobs))
+	jobID := tableDesc.MutationJobs[0].JobID
+	require.NotZero(t, jobID)
+	sqlRunner.Exec(t, fmt.Sprintf("UPDATE system.jobs SET status = 'running' WHERE id = %d", jobID))
+
+	var expected jobspb.IndexBackfillSSTManifest
+	ts := s.Clock().Now()
+	expected.URI = "nodelocal://1/index-backfill/test"
+	prefix := s.Codec().TenantPrefix()
+	prefix = prefix[:len(prefix):len(prefix)]
+	makeKey := func(s string) roachpb.Key {
+		key := make(roachpb.Key, 0, len(prefix)+len(s))
+		key = append(key, prefix...)
+		key = append(key, s...)
+		return key
+	}
+	span := roachpb.Span{
+		Key:    makeKey("sst-start"),
+		EndKey: makeKey("sst-end"),
+	}
+	expected.Span = &span
+	expected.FileSize = 12345
+	expected.RowSample = makeKey("sample")
+	expected.WriteTimestamp = &ts
+
+	if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		spans, _, job, mutationIdx, err := rowexec.GetResumeSpansAndSSTManifests(
+			ctx, registry, txn, s.Codec(), col, tableDesc.ID, mutationID, backfill.IndexMutationFilter,
+		)
+		if err != nil {
+			return err
+		}
+		codec := s.Codec()
+		return rowexec.SetResumeSpansAndSSTManifestsInJob(
+			ctx, &codec, spans, []jobspb.IndexBackfillSSTManifest{expected}, mutationIdx, txn, job,
+		)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		_, manifests, _, _, err := rowexec.GetResumeSpansAndSSTManifests(
+			ctx, registry, txn, s.Codec(), col, tableDesc.ID, mutationID, backfill.IndexMutationFilter,
+		)
+		if err != nil {
+			return err
+		}
+		require.Equal(t, []jobspb.IndexBackfillSSTManifest{expected}, manifests)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

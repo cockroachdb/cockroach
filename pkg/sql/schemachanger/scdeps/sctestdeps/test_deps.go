@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -88,6 +87,9 @@ func (s *TestState) SessionData() *sessiondata.SessionData {
 
 // ClusterSettings implements the scbuild.Dependencies interface.
 func (s *TestState) ClusterSettings() *cluster.Settings {
+	if s.clusterSettings != nil {
+		return s.clusterSettings
+	}
 	return cluster.MakeTestingClusterSettings()
 }
 
@@ -692,6 +694,8 @@ func (s *TestState) mustReadImmutableDescriptor(id descpb.ID) (catalog.Descripto
 // mustReadMutableDescriptor looks up a descriptor and returns a mutable
 // deep copy.
 func (s *TestState) mustReadMutableDescriptor(id descpb.ID) (catalog.MutableDescriptor, error) {
+	//
+
 	u := s.uncommittedInMemory.LookupDescriptor(id)
 	if u == nil {
 		return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading mutable descriptor #%d", id)
@@ -1332,8 +1336,8 @@ func (s *TestState) DeleteSchedule(ctx context.Context, id jobspb.ScheduleID) er
 }
 
 // UpdateTTLScheduleLabel implements scexec.DescriptorMetadataUpdater
-func (s *TestState) UpdateTTLScheduleLabel(ctx context.Context, tbl *tabledesc.Mutable) error {
-	s.LogSideEffectf("update ttl schedule label #%d", tbl.ID)
+func (s *TestState) UpdateTTLScheduleLabel(ctx context.Context, tbl catalog.TableDescriptor) error {
+	s.LogSideEffectf("update ttl schedule label #%d", tbl.GetID())
 	return nil
 }
 
@@ -1389,10 +1393,7 @@ func (s *TestState) ResolveFunction(
 	if err != nil {
 		return nil, err
 	}
-	fd, err := tree.GetBuiltinFuncDefinition(fnName, path)
-	if err != nil {
-		return nil, err
-	}
+	fd := tree.GetBuiltinFuncDefinition(fnName, path)
 	if fd != nil {
 		return fd, nil
 	}
@@ -1542,8 +1543,15 @@ func getNameEntryDescriptorType(parentID, parentSchemaID descpb.ID) string {
 }
 
 // InitializeSequence is part of the scexec.Catalog interface.
-func (s *TestState) InitializeSequence(id descpb.ID, startVal int64) {
+func (s *TestState) InitializeSequence(ctx context.Context, id descpb.ID, startVal int64) error {
 	s.LogSideEffectf("initializing sequence %d with starting value of %d", id, startVal)
+	return nil
+}
+
+// CheckMaxSchemaObjects is part of the scexec.Catalog interface.
+func (s *TestState) CheckMaxSchemaObjects(ctx context.Context, numNewObjects int) error {
+	// In tests, we don't enforce the limit.
+	return nil
 }
 
 // TemporarySchemaName is part of scbuild.TemporarySchemaProvider interface.

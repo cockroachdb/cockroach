@@ -408,7 +408,7 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(sc.GetName())
 			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
-			privDesc, err := p.getPrivilegeDescriptor(ctx, table)
+			privDesc, err := p.getImmutablePrivilegeDescriptor(ctx, table)
 			if err != nil {
 				return err
 			}
@@ -997,11 +997,11 @@ https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
 				}
 				// Note: Cross DB references are deprecated, but this should be
 				// a cached look up when they don't exist.
-				refDB, err := p.Descriptors().ByIDWithLeased(p.Txn()).Get().Database(ctx, refTable.GetParentID())
+				refDB, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).Get().Database(ctx, refTable.GetParentID())
 				if err != nil {
 					return err
 				}
-				refSchema, err := p.Descriptors().ByIDWithLeased(p.Txn()).Get().Schema(ctx, refTable.GetParentSchemaID())
+				refSchema, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).Get().Schema(ctx, refTable.GetParentSchemaID())
 				if err != nil {
 					return err
 				}
@@ -1139,7 +1139,7 @@ https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(ctx context.Context, db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, true /* requiresPrivileges */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
+				return forEachSchema(ctx, p, db, true /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
 					return addRow(
 						tree.NewDString(db.GetName()), // catalog_name
 						tree.NewDString(sc.GetName()), // schema_name
@@ -1191,7 +1191,7 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 				}
 
 				// And for all user defined types.
-				return forEachTypeDesc(ctx, p, db, func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typeDesc catalog.TypeDescriptor) error {
+				return forEachTypeDesc(ctx, p, db, false /* includeMetadata */, func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typeDesc catalog.TypeDescriptor) error {
 					scNameStr := tree.NewDString(sc.GetName())
 					typeNameStr := tree.NewDString(typeDesc.GetName())
 					// TODO(knz): This should filter for the current user, see
@@ -1237,7 +1237,7 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(ctx context.Context, db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, true /* requiresPrivileges */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
+				return forEachSchema(ctx, p, db, true /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
 					privs, err := sc.GetPrivileges().Show(privilege.Schema, true /* showImplicitOwnerPrivs */)
 					if err != nil {
 						return err
@@ -1610,7 +1610,7 @@ func populateTablePrivileges(
 			// TODO(knz): This should filter for the current user, see
 			// https://github.com/cockroachdb/cockroach/issues/35572
 			tableType := table.GetObjectType()
-			desc, err := p.getPrivilegeDescriptor(ctx, table)
+			desc, err := p.getImmutablePrivilegeDescriptor(ctx, table)
 			if err != nil {
 				return err
 			}
@@ -1623,7 +1623,7 @@ func populateTablePrivileges(
 				for _, priv := range u.Privileges {
 					// We use this function to check for the grant option so that the
 					// object owner also gets is_grantable=true.
-					privs, err := p.getPrivilegeDescriptor(ctx, table)
+					privs, err := p.getImmutablePrivilegeDescriptor(ctx, table)
 					if err != nil {
 						return err
 					}
@@ -1832,7 +1832,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 		var dbDescs []catalog.DatabaseDescriptor
 		if db == nil {
 			var err error
-			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn())
+			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn(), descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 			if err != nil {
 				return err
 			}
@@ -1890,7 +1890,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 			}
 
 			err := db.ForEachSchema(func(id descpb.ID, name string) error {
-				sc, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Schema(ctx, id)
+				sc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).Get().Schema(ctx, id)
 				if err != nil {
 					return err
 				}
@@ -2450,7 +2450,7 @@ https://www.postgresql.org/docs/current/infoschema-triggers.html`,
 						}
 
 						// Build the action statement.
-						funcDesc, err := p.Descriptors().ByIDWithLeased(p.Txn()).Get().Function(ctx, trigger.FuncID)
+						funcDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).Get().Function(ctx, trigger.FuncID)
 						if err != nil {
 							return err
 						}
@@ -2547,10 +2547,15 @@ func forEachSchema(
 	p *planner,
 	dbContext catalog.DatabaseDescriptor,
 	requiresPrivileges bool,
+	includeMetadata bool,
 	fn func(ctx context.Context, sc catalog.SchemaDescriptor) error,
 ) error {
 	forEachDatabase := func(db catalog.DatabaseDescriptor) error {
-		c, err := p.Descriptors().GetAllSchemasInDatabase(ctx, p.txn, db)
+		opts := descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)
+		if includeMetadata {
+			opts = append(opts, descs.WithMetaData())
+		}
+		c, err := p.Descriptors().GetAllSchemasInDatabase(ctx, p.txn, db, opts...)
 		if err != nil {
 			return err
 		}
@@ -2586,7 +2591,7 @@ func forEachSchema(
 	if dbContext != nil {
 		return iterutil.Map(forEachDatabase(dbContext))
 	}
-	c, err := p.Descriptors().GetAllDatabases(ctx, p.txn)
+	c, err := p.Descriptors().GetAllDatabases(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 	if err != nil {
 		return err
 	}
@@ -2612,7 +2617,7 @@ func forEachDatabaseDesc(
 ) error {
 	var dbDescs []catalog.DatabaseDescriptor
 	if dbContext == nil {
-		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
+		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 		if err != nil {
 			return err
 		}
@@ -2653,14 +2658,19 @@ func forEachTypeDesc(
 	ctx context.Context,
 	p *planner,
 	dbContext catalog.DatabaseDescriptor,
+	includeMetadata bool,
 	fn func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typ catalog.TypeDescriptor) error,
 ) (err error) {
 	var all nstree.Catalog
+	opts := descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)
+	if includeMetadata {
+		opts = append(opts, descs.WithMetaData())
+	}
 	if dbContext != nil &&
 		useIndexLookupForDescriptorsInDatabase.Get(&p.EvalContext().Settings.SV) {
-		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext)
+		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext, opts...)
 	} else {
-		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn, opts...)
 	}
 	if err != nil {
 		return err
@@ -2740,9 +2750,9 @@ func forEachTableDesc(
 ) (err error) {
 	var all nstree.Catalog
 	if dbContext != nil && useIndexLookupForDescriptorsInDatabase.Get(&p.EvalContext().Settings.SV) {
-		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext)
+		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 	} else {
-		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
 	}
 	if err != nil {
 		return err
@@ -2825,7 +2835,7 @@ func forEachTableDescFromDescriptors(
 				// missing temporary schema name. Temporary schemas have namespace
 				// entries. The below code will go and lookup schema names from the
 				// namespace table if needed to qualify the name of a temporary table.
-				if err := forEachSchema(ctx, p, dbDesc, false /* requiresPrivileges*/, func(ctx context.Context, schema catalog.SchemaDescriptor) error {
+				if err := forEachSchema(ctx, p, dbDesc, false /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, schema catalog.SchemaDescriptor) error {
 					if schema.GetID() != table.GetParentSchemaID() {
 						return nil
 					}

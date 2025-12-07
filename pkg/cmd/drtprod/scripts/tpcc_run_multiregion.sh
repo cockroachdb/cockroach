@@ -29,6 +29,7 @@ for var in "${env_vars[@]}"; do
 done
 
 export ROACHPROD_DISABLED_PROVIDERS=IBM
+export COCKROACH_ROACHPROD_INSECURE="${COCKROACH_ROACHPROD_INSECURE:-false}"
 
 for NODE in $(seq 1 $NUM_REGIONS)
 do
@@ -49,11 +50,12 @@ do
 
 export ROACHPROD_DISABLED_PROVIDERS=IBM
 export ROACHPROD_GCE_DEFAULT_PROJECT=$ROACHPROD_GCE_DEFAULT_PROJECT
-./roachprod sync
-PGURLS=\$(./roachprod load-balancer pgurl $CLUSTER | sed s/\'//g)
+export COCKROACH_ROACHPROD_INSECURE="${COCKROACH_ROACHPROD_INSECURE:-false}"
+./drtprod sync
+PGURLS=\$(./drtprod load-balancer pgurl $CLUSTER | sed s/\'//g)
 if [ -z "\$PGURLS" ]; then
     echo ">> No load-balancer configured; falling back to direct pgurl"
-    PGURLS=\$(./roachprod pgurl $CLUSTER | sed s/\'//g)
+    PGURLS=\$(./drtprod pgurl $CLUSTER | sed s/\'//g)
 fi
 read -r -a PGURLS_REGION <<< "\$PGURLS"
 

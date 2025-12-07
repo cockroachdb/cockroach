@@ -9,6 +9,7 @@ import (
 	context "context"
 
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 )
 
@@ -16,18 +17,7 @@ import (
 // it falls back to gRPC. The established connection is used to create a
 // RPCKeyVisualizerClient.
 func DialKeyVisualizerClient(
-	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+	nd *nodedialer.Dialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCKeyVisualizerClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCKeyVisualizerClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDial(ctx, nodeID, class)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCKeyVisualizerClientAdapter(conn), nil
+	return nodedialer.DialRPCClient(nd, ctx, nodeID, class, NewGRPCKeyVisualizerClientAdapter, NewDRPCKeyVisualizerClientAdapter)
 }

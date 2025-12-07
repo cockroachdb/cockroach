@@ -23,14 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
-
-// Default upper bound on the number of locks in a lockTable.
-const defaultLockTableSize = 10000
 
 // The kind of waiting that the request is subject to.
 type waitKind int
@@ -181,10 +179,6 @@ type treeMu struct {
 	// primarily used for constraining memory consumption. Ideally, we should be
 	// doing better memory accounting than this.
 	numKeysLocked atomic.Int64
-
-	// For dampening the frequency with which we enforce
-	// lockTableImpl.maxKeysLocked.
-	lockAddMaxLocksCheckInterval uint64
 }
 
 // lockTableImpl is an implementation of lockTable.
@@ -265,15 +259,21 @@ type lockTableImpl struct {
 	// table. Locks on both Global and Local keys are stored in the same btree.
 	locks treeMu
 
-	// maxKeysLocked is a soft maximum on amount of per-key lock information
-	// tracking[1]. When it is exceeded, and subject to the dampening in
-	// lockAddMaxLocksCheckInterval, locks will be cleared.
-	//
-	// [1] Simply put, the number of keyLocks objects in the lockTable btree.
-	maxKeysLocked int64
-	// When maxKeysLocked is exceeded, will attempt to clear down to minKeysLocked,
-	// instead of clearing everything.
-	minKeysLocked int64
+	// lockTableLimitsMu contains the lock table limit fields protected by a mutex.
+	lockTableLimitsMu struct {
+		syncutil.Mutex
+		// maxKeysLocked is a soft maximum on amount of per-key lock information
+		// tracking[1]. When it is exceeded, and subject to the dampening in
+		// lockAddMaxLocksCheckInterval, locks will be cleared.
+		//
+		// [1] Simply put, the number of keyLocks objects in the lockTable btree.
+		maxKeysLocked int64
+		// When maxKeysLocked is exceeded, will attempt to clear down to minKeysLocked,
+		// instead of clearing everything.
+		minKeysLocked int64
+		// For dampening the frequency with which we enforce maxKeysLocked.
+		lockAddMaxLocksCheckInterval uint64
+	}
 
 	// txnStatusCache is a small LRU cache that tracks the status of
 	// transactions that have been successfully pushed.
@@ -289,31 +289,58 @@ type lockTableImpl struct {
 
 	// settings provides a handle to cluster settings.
 	settings *cluster.Settings
+
+	// The number of locks that are shed due to the lock table running into memory
+	// limits.
+	locksShedDueToMemoryLimit *metric.Counter
+	// The number of times the lock table ran into memory limits and shed locks as
+	// a result.
+	numLockShedDueToMemoryLimitEvents *metric.Counter
 }
 
 var _ lockTable = &lockTableImpl{}
 
 func newLockTable(
-	maxLocks int64, rangeID roachpb.RangeID, clock *hlc.Clock, settings *cluster.Settings,
+	maxLocks int64,
+	rangeID roachpb.RangeID,
+	clock *hlc.Clock,
+	settings *cluster.Settings,
+	locksShedDueToMemoryLimit *metric.Counter,
+	numLockShedDueToMemoryLimitEvents *metric.Counter,
 ) *lockTableImpl {
 	lt := &lockTableImpl{
-		rID:      rangeID,
-		clock:    clock,
-		settings: settings,
+		rID:                               rangeID,
+		clock:                             clock,
+		settings:                          settings,
+		locksShedDueToMemoryLimit:         locksShedDueToMemoryLimit,
+		numLockShedDueToMemoryLimitEvents: numLockShedDueToMemoryLimitEvents,
 	}
 	lt.setMaxKeysLocked(maxLocks)
 	return lt
 }
 
 func (t *lockTableImpl) setMaxKeysLocked(maxKeysLocked int64) {
+	t.lockTableLimitsMu.Lock()
+	defer t.lockTableLimitsMu.Unlock()
+
 	// Check at 5% intervals of the max count.
 	lockAddMaxLocksCheckInterval := maxKeysLocked / int64(20)
 	if lockAddMaxLocksCheckInterval == 0 {
 		lockAddMaxLocksCheckInterval = 1
 	}
-	t.maxKeysLocked = maxKeysLocked
-	t.minKeysLocked = maxKeysLocked / 2
-	t.locks.lockAddMaxLocksCheckInterval = uint64(lockAddMaxLocksCheckInterval)
+	t.lockTableLimitsMu.maxKeysLocked = maxKeysLocked
+	t.lockTableLimitsMu.minKeysLocked = maxKeysLocked / 2
+	t.lockTableLimitsMu.lockAddMaxLocksCheckInterval = uint64(lockAddMaxLocksCheckInterval)
+}
+
+// shouldCheckMaxLocks returns true if allocating the supplied sequence number
+// implies that we should check whether the lock table has exceeded its max
+// locks limit or not. We dampen how often the check is performed.
+func (t *lockTableImpl) shouldCheckMaxLocks(seqNum uint64) bool {
+	t.lockTableLimitsMu.Lock()
+	defer t.lockTableLimitsMu.Unlock()
+	interval := t.lockTableLimitsMu.lockAddMaxLocksCheckInterval
+	return seqNum%interval == 0
 }
 
 // lockTableGuardImpl is an implementation of lockTableGuard.
@@ -2042,7 +2069,7 @@ func (kl *keyLocks) lockStateInfo(now time.Time, rangeID roachpb.RangeID) []roac
 		lockWaiters = append(lockWaiters, lock.Waiter{
 			WaitingTxn:   g.txnMeta(),
 			ActiveWaiter: qg.active,
-			Strength:     lock.Exclusive,
+			Strength:     qg.mode.Strength,
 			WaitDuration: now.Sub(g.mu.curLockWaitStart),
 		})
 		g.mu.Unlock()
@@ -3132,6 +3159,7 @@ func (kl *keyLocks) discoveredLock(
 	accessStrength lock.Strength,
 	notRemovable bool,
 	clock *hlc.Clock,
+	st *cluster.Settings,
 ) error {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
@@ -3144,7 +3172,14 @@ func (kl *keyLocks) discoveredLock(
 	if kl.isLockedBy(foundLock.Txn.ID) {
 		e := kl.heldBy[foundLock.Txn.ID]
 		tl = e.Value
+
+		beforeTs := tl.writeTS()
+
 		tl.replicatedInfo.acquire(foundLock.Strength, foundLock.Txn.WriteTimestamp)
+
+		if beforeTs.Less(tl.writeTS()) {
+			kl.recomputeWaitQueues(st)
+		}
 		// TODO(arul): If the discovered lock indicates a newer epoch than what's
 		// being tracked, should we clear out unreplicatedLockInfo here?
 	} else {
@@ -4138,10 +4173,9 @@ func (t *treeMu) Reset() {
 	t.btree.Reset()
 }
 
-func (t *treeMu) nextLockSeqNum() (seqNum uint64, checkMaxLocks bool) {
+func (t *treeMu) nextLockSeqNum() uint64 {
 	t.lockIDSeqNum++
-	checkMaxLocks = t.lockIDSeqNum%t.lockAddMaxLocksCheckInterval == 0
-	return t.lockIDSeqNum, checkMaxLocks
+	return t.lockIDSeqNum
 }
 
 func (t *lockTableImpl) ScanOptimistic(req Request) lockTableGuard {
@@ -4329,10 +4363,9 @@ func (t *lockTableImpl) AddDiscoveredLock(
 	t.locks.mu.Lock()
 	iter := t.locks.MakeIter()
 	iter.FirstOverlap(&keyLocks{key: key})
-	checkMaxLocks := false
+	var lockSeqNum uint64
 	if !iter.Valid() {
-		var lockSeqNum uint64
-		lockSeqNum, checkMaxLocks = t.locks.nextLockSeqNum()
+		lockSeqNum = t.locks.nextLockSeqNum()
 		l = &keyLocks{id: lockSeqNum, key: key}
 		l.queuedLockingRequests.Init()
 		l.waitingReaders.Init()
@@ -4352,11 +4385,11 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		g.notRemovableLock = l
 		notRemovableLock = true
 	}
-	err = l.discoveredLock(foundLock, g, str, notRemovableLock, g.lt.clock)
+	err = l.discoveredLock(foundLock, g, str, notRemovableLock, g.lt.clock, g.lt.settings)
 	// Can't release tree.mu until call l.discoveredLock() since someone may
 	// find an empty lock and remove it from the tree.
 	t.locks.mu.Unlock()
-	if checkMaxLocks {
+	if t.shouldCheckMaxLocks(lockSeqNum) {
 		t.checkMaxKeysLockedAndTryClear()
 	}
 	if err != nil {
@@ -4393,7 +4426,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	// tree.mu.RLock().
 	iter := t.locks.MakeIter()
 	iter.FirstOverlap(&keyLocks{key: acq.Key})
-	checkMaxLocks := false
+	var lockSeqNum uint64
 	if !iter.Valid() {
 		if acq.Durability == lock.Replicated {
 			// Don't remember uncontended replicated locks. The downside is that
@@ -4405,8 +4438,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 			t.locks.mu.Unlock()
 			return nil
 		}
-		var lockSeqNum uint64
-		lockSeqNum, checkMaxLocks = t.locks.nextLockSeqNum()
+		lockSeqNum = t.locks.nextLockSeqNum()
 		kl = &keyLocks{id: lockSeqNum, key: acq.Key}
 		kl.queuedLockingRequests.Init()
 		kl.waitingReaders.Init()
@@ -4439,7 +4471,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	err := kl.acquireLock(acq, t.clock, t.settings)
 	t.locks.mu.Unlock()
 
-	if checkMaxLocks {
+	if t.shouldCheckMaxLocks(lockSeqNum) {
 		t.checkMaxKeysLockedAndTryClear()
 	}
 	if err != nil {
@@ -4483,10 +4515,18 @@ func (t *lockTableImpl) MarkIneligibleForExport(acq *roachpb.LockAcquisition) er
 // method relieves memory pressure by clearing as much per-key tracking as it
 // can to bring things under budget.
 func (t *lockTableImpl) checkMaxKeysLockedAndTryClear() {
+	t.lockTableLimitsMu.Lock()
+	defer t.lockTableLimitsMu.Unlock()
+
 	totalLocks := t.locks.numKeysLocked.Load()
-	if totalLocks > t.maxKeysLocked {
-		numToClear := totalLocks - t.minKeysLocked
-		t.tryClearLocks(false /* force */, int(numToClear))
+	if totalLocks > t.lockTableLimitsMu.maxKeysLocked {
+		numToClear := totalLocks - t.lockTableLimitsMu.minKeysLocked
+		numCleared := t.tryClearLocks(false /* force */, int(numToClear))
+		// Update metrics if we successfully cleared any number of locks.
+		if numCleared != 0 {
+			t.locksShedDueToMemoryLimit.Inc(numCleared)
+			t.numLockShedDueToMemoryLimitEvents.Inc(1)
+		}
 	}
 }
 
@@ -4501,9 +4541,10 @@ func (t *lockTableImpl) lockCountForTesting() int64 {
 //
 // Waiters of removed locks are told to wait elsewhere or that they are done
 // waiting.
-func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
-	clearCount := 0
+func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) int64 {
+	var clearCount int64
 	t.locks.mu.Lock()
+	defer t.locks.mu.Unlock()
 	var locksToClear []*keyLocks
 	iter := t.locks.MakeIter()
 	for iter.First(); iter.Valid(); iter.Next() {
@@ -4511,13 +4552,13 @@ func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
 		if l.tryClearLock(force) {
 			locksToClear = append(locksToClear, l)
 			clearCount++
-			if !force && clearCount >= numToClear {
+			if !force && clearCount >= int64(numToClear) {
 				break
 			}
 		}
 	}
 	t.clearLocksMuLocked(locksToClear)
-	t.locks.mu.Unlock()
+	return clearCount
 }
 
 // tryClearLockGE attempts to clear all locks greater or equal to given key.
@@ -4746,7 +4787,7 @@ func (t *lockTableImpl) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
 // TODO(ssd): Once we have the full set of functions we need for lock flushing, we
 // should do a refactoring pass to reduce some of the duplication.
 func (t *lockTableImpl) ExportUnreplicatedLocks(
-	span roachpb.Span, exporter func(*roachpb.LockAcquisition),
+	span roachpb.Span, exporter func(*roachpb.LockAcquisition) bool,
 ) {
 	t.enabledMu.RLock()
 	defer t.enabledMu.RUnlock()
@@ -4757,12 +4798,12 @@ func (t *lockTableImpl) ExportUnreplicatedLocks(
 	t.locks.mu.RLock()
 	defer t.locks.mu.RUnlock()
 
-	exportKeyLocks := func(l *keyLocks) {
+	exportKeyLocks := func(l *keyLocks) bool {
 		l.mu.Lock()
 		defer l.mu.Unlock()
 
 		if !l.key.Less(span.EndKey) {
-			return
+			return false
 		}
 
 		for hl := l.holders.Front(); hl != nil; hl = hl.Next() {
@@ -4777,7 +4818,7 @@ func (t *lockTableImpl) ExportUnreplicatedLocks(
 
 			for _, str := range unreplicatedHolderStrengths {
 				if tl.unreplicatedInfo.held(str) {
-					exporter(&roachpb.LockAcquisition{
+					keepGoing := exporter(&roachpb.LockAcquisition{
 						Span: roachpb.Span{
 							Key: l.key,
 						},
@@ -4786,14 +4827,20 @@ func (t *lockTableImpl) ExportUnreplicatedLocks(
 						Strength:       str,
 						IgnoredSeqNums: tl.unreplicatedInfo.ignoredSeqNums,
 					})
+					if !keepGoing {
+						return false
+					}
 				}
 			}
 		}
+		return true
 	}
 
 	iter := t.locks.MakeIter()
 	for iter.SeekGE(&keyLocks{key: span.Key}); iter.Valid(); iter.Next() {
-		exportKeyLocks(iter.Cur())
+		if !exportKeyLocks(iter.Cur()) {
+			break
+		}
 	}
 }
 
@@ -4913,8 +4960,8 @@ func (t *lockTableImpl) stringRLocked() string {
 	return sb.String()
 }
 
-// TestingSetMaxLocks implements the lockTable interface.
-func (t *lockTableImpl) TestingSetMaxLocks(maxKeysLocked int64) {
+// SetMaxLockTableSize implements the lockTable interface.
+func (t *lockTableImpl) SetMaxLockTableSize(maxKeysLocked int64) {
 	t.setMaxKeysLocked(maxKeysLocked)
 }
 

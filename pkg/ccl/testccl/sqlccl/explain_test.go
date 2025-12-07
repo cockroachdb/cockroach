@@ -200,7 +200,9 @@ func TestExplainGist(t *testing.T) {
 				// Ignore all errors except the internal ones.
 				for _, knownErr := range []string{
 					"expected equivalence dependants to be its closure",                  // #119045
+					"type check failed while initializing stat",                          // #125620
 					"argument expression has type RECORD, need type USER DEFINED RECORD", // #139910
+					"invalid datum type given: RECORD, expected RECORD",                  // #140773
 					"not in index", // #148405
 				} {
 					if strings.Contains(err.Error(), knownErr) {

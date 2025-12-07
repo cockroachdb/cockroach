@@ -248,7 +248,9 @@ var _ SafeFormatterRequest = (*EndTxnRequest)(nil)
 func (etr *EndTxnRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 	s.Printf("%s(", etr.Method())
 	if etr.Commit {
-		if etr.IsParallelCommit() {
+		if etr.Prepare {
+			s.Printf("prepare")
+		} else if etr.IsParallelCommit() {
 			s.Printf("parallel commit")
 		} else {
 			s.Printf("commit")
@@ -752,6 +754,7 @@ func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
 	h.Now.Forward(o.Now)
 	h.RangeInfos = append(h.RangeInfos, o.RangeInfos...)
 	h.CollectedSpans = append(h.CollectedSpans, o.CollectedSpans...)
+	h.CPUTime += o.CPUTime
 	return nil
 }
 
@@ -2131,6 +2134,21 @@ func (b *BulkOpSummary) Add(other BulkOpSummary) {
 	}
 }
 
+// DeepCopy returns a deep copy of the original BulkOpSummary.
+func (b *BulkOpSummary) DeepCopy() BulkOpSummary {
+	cpy := BulkOpSummary{
+		DataSize:    b.DataSize,
+		SSTDataSize: b.SSTDataSize,
+	}
+	if b.EntryCounts != nil {
+		cpy.EntryCounts = make(map[uint64]int64, len(b.EntryCounts))
+		for k, v := range b.EntryCounts {
+			cpy.EntryCounts[k] = v
+		}
+	}
+	return cpy
+}
+
 // MustSetValue is like SetValue, except it resets the enum and panics if the
 // provided value is not a valid variant type.
 func (e *RangeFeedEvent) MustSetValue(value interface{}) {
@@ -2166,6 +2184,28 @@ func (e *RangeFeedEvent) ShallowCopy() *RangeFeedEvent {
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
 	}
 	return &cpy
+}
+
+// EventType returns a string description of the type of event..
+func (e *RangeFeedEvent) EventType() string {
+	switch {
+	case e.Val != nil:
+		return "Value"
+	case e.Checkpoint != nil:
+		return "Checkpoint"
+	case e.SST != nil:
+		return "SST"
+	case e.DeleteRange != nil:
+		return "DeleteRange"
+	case e.Metadata != nil:
+		return "Metadata"
+	case e.Error != nil:
+		return "Error"
+	case e.BulkEvents != nil:
+		return "BulkEvents"
+	default:
+		return "Unknown"
+	}
 }
 
 // Timestamp is part of rangefeedbuffer.Event.

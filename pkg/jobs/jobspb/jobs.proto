@@ -22,6 +22,7 @@ import "clusterversion/cluster_version.proto";
 import "google/protobuf/timestamp.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
 import "sql/catalog/externalcatalog/externalpb/external.proto";
+import "google/protobuf/empty.proto";
 
 enum EncryptionMode {
   Passphrase = 0;
@@ -690,9 +691,10 @@ message ImportDetails {
   message Type {
     sqlbase.TypeDescriptor desc = 1;
   }
-  // TODO(yuzefovich): we now can only support importing into a single table via
-  // a single IMPORT job, so we could change this field.
-  repeated Table tables = 1 [(gogoproto.nullable) = false];
+  Table table = 28 [(gogoproto.nullable) = false];
+  // TODO(yuzefovich): remove Tables field once compatibility with 25.3 is no
+  // longer needed.
+  repeated Table tables = 1 [(gogoproto.nullable) = false, deprecated = true];
   repeated Type types = 26 [(gogoproto.nullable) = false];
 
   repeated string uris = 2 [(gogoproto.customname) = "URIs"];
@@ -706,7 +708,7 @@ message ImportDetails {
   ];
 
   bool prepare_complete = 12;
-  bool tables_published = 13;
+  bool table_published = 13;
 
   // If the database being imported into is a multi-region database, then this
   // field stores the databases' primary region.
@@ -716,7 +718,7 @@ message ImportDetails {
 
   reserved 4, 7, 8, 9, 10, 11, 14, 22, 23, 24, 25;
 
-  // next val: 28
+  // next val: 29
 }
 
 // SequenceValChunks represents a single chunk of sequence values allocated
@@ -786,6 +788,13 @@ message TypeSchemaChangeProgress {
 
 }
 
+// IndexBackfillDistributedMergeMode enumerates the per-job distributed merge
+// decision for index backfills.
+enum IndexBackfillDistributedMergeMode {
+  INDEX_BACKFILL_DISTRIBUTED_MERGE_MODE_DISABLED = 0 [(gogoproto.enumvalue_customname) = "Disabled"];
+  INDEX_BACKFILL_DISTRIBUTED_MERGE_MODE_ENABLED = 1 [(gogoproto.enumvalue_customname) = "Enabled"];
+}
+
 // NewSchemaChangeDetails is the job detail information for the new schema change job.
 message NewSchemaChangeDetails {
 
@@ -803,6 +812,11 @@ message NewSchemaChangeDetails {
     (gogoproto.customname) = "ProtectedTimestampRecord",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
+
+  // DistributedMergeMode captures the per-job distributed merge decision for
+  // index backfills managed by this job. This is ignored if the job doesn't
+  // perform an index backfill.
+  IndexBackfillDistributedMergeMode distributed_merge_mode = 8;
 
   reserved 1, 2, 3, 5;
 }
@@ -841,6 +855,19 @@ message BackfillProgress {
   // backfilled into the destination indexes. Note that this will never contain
   // tenant prefixes even if the data corresponds to a secondary tenant.
   repeated roachpb.Span completed_spans = 5 [(gogoproto.nullable) = false];
+
+  // SSTManifests contains metadata about SST files produced while backfilling
+  // via the distributed merge pipeline. Each entry corresponds to a flushed SST.
+  repeated IndexBackfillSSTManifest sst_manifests = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTManifests"];
+}
+
+// IndexBackfillSSTManifest describes an SST produced by the backfill map stage.
+message IndexBackfillSSTManifest {
+  string uri = 1 [(gogoproto.customname) = "URI"];
+  roachpb.Span span = 2;
+  uint64 file_size = 3;
+  bytes row_sample = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  util.hlc.Timestamp write_timestamp = 5;
 }
 
 // MergeProgress is used to track index merge progress in the declarative
@@ -903,6 +930,10 @@ message KeyVisualizerProgress {}
 
 message ResumeSpanList {
   repeated roachpb.Span resume_spans = 1 [(gogoproto.nullable) = false];
+  repeated IndexBackfillSSTManifest sst_manifests = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SSTManifests"
+  ];
 }
 
 enum Status {
@@ -1024,7 +1055,12 @@ message SchemaChangeDetails {
 
   sessiondatapb.SessionData session_data = 13;
 
-  // Next id 14.
+  // DistributedMergeMode captures the per-job distributed merge decision for
+  // index backfills managed by this job. This is ignored if the job doesn't
+  // perform an index backfill.
+  IndexBackfillDistributedMergeMode distributed_merge_mode = 14;
+
+  // Next id 15.
 }
 
 message SchemaChangeProgress {
@@ -1107,7 +1143,12 @@ message ChangefeedTargetSpecification {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   string family_name = 3;
   string statement_time_name = 4;
+  FilterList filter_list = 5;
+}
 
+message FilterList {
+  uint32 filter_type = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.FilterType"];
+  map<string, google.protobuf.Empty> tables = 2 [(gogoproto.nullable) = false];
 }
 
 message ChangefeedDetails {
@@ -1264,6 +1305,21 @@ message CreateStatsDetails {
 
   // If true, will collect partial table statistics at extreme values.
   bool using_extremes = 9;
+
+  // WHERE clause for partial statistics collection. This field is only used
+  // to populate the predicate in the system.table_statistics table and to
+  // determine if this is a constrained stats collection. The actual constrained
+  // scan is done over the spans in the where_spans field.
+  string where_clause = 10;
+
+  // Spans over which to collect partial statistics with a WHERE clause.
+  repeated roachpb.Span where_spans = 11 [(gogoproto.nullable) = false];
+
+  // The ID of the index used to collect partial statistics with a WHERE clause.
+  int64 where_index_id = 12 [
+    (gogoproto.customname) = "WhereIndexID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
+  ];
 }
 
 message CreateStatsProgress {
@@ -1306,8 +1362,10 @@ message RowLevelTTLDetails {
 }
 
 message RowLevelTTLProgress {
-
-  // JobDeletedRowCount is the number of rows deleted by TTL job so far.
+  // JobDeletedRowCount is the number of rows deleted by TTL job so far. If
+  // UseCheckpointing is true, then this is the deleted row count across all
+  // restarts of the job. If that is false, this is the delete row count in
+  // the current running of the job.
   int64 job_deleted_row_count = 1;
 
   // ProcessorProgresses is the progress per DistSQL processor.
@@ -1316,12 +1374,18 @@ message RowLevelTTLProgress {
   // UseDistSQL is no longer used in v23.1+ as all TTL jobs are using DistSQL.
   reserved 3;
 
-  // JobTotalSpanCount is the number of spans for the entire TTL job.
-  int64 job_total_span_count = 4;
+  // JobTotalSpanCount is the number of spans for the entire TTL job. This is
+  // deprecated and not used if UseCheckpointing is true.
+  int64 job_total_span_count = 4 [deprecated = true];
 
   // JobProcessedSpanCount is the number of spans that have been processed by
-  // the TTL job so far.
-  int64 job_processed_span_count = 5;
+  // the TTL job so far. This is deprecated and not used if UseCheckpointing is
+  // true.
+  int64 job_processed_span_count = 5 [deprecated = true];
+
+  // UseCheckpointing is true if the TTL job will use checkpointing for progress
+  // tracking.
+  bool use_checkpointing = 6;
 }
 
 message RowLevelTTLProcessorProgress {
@@ -1339,11 +1403,13 @@ message RowLevelTTLProcessorProgress {
   // DeletedRowCount is the number of rows deleted by this DistSQL processor.
   int64 deleted_row_count = 3;
 
-  // TotalSpanCount is the total number of spans assigned to the DistSQL processor.
-  int64 total_span_count = 4;
+  // TotalSpanCount is the total number of spans assigned to the DistSQL
+  // processor. This is deprecated and not used if using checkpointing.
+  int64 total_span_count = 4 [deprecated = true];
 
-  // ProcessedSpanCount is the number of spans already processed.
-  int64 processed_span_count = 6;
+  // ProcessedSpanCount is the number of spans already processed. This is
+  // deprecated when using checkpointing.
+  int64 processed_span_count = 6 [deprecated = true];
 
   // ProcessorConcurrency is the number parallel tasks the processor will do at once.
   int64 processor_concurrency = 5;
@@ -1416,7 +1482,7 @@ message InspectDetails {
   message Check {
     enum InspectCheckType {
       option (gogoproto.goproto_enum_prefix) = false;
-      option (gogoproto.goproto_enum_stringer) = false;
+      option (gogoproto.goproto_enum_stringer) = true;
 
       // UNSPECIFIED indicates an unset check type. This is invalid.
       INSPECT_CHECK_UNSPECIFIED = 0 [(gogoproto.enumvalue_customname) = "InspectCheckUnspecified"];
@@ -1442,10 +1508,30 @@ message InspectDetails {
       (gogoproto.customname) = "IndexID",
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
     ];
+
+    // TableVersion records the descriptor version observed when the check was
+    // planned. It is used at execution time to detect concurrent schema changes
+    // and abort the job before running inconsistent checks.
+    uint64 table_version = 4 [
+      (gogoproto.customname) = "TableVersion",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.DescriptorVersion"
+    ];
   }
 
   // Checks is the list of individual checks this job will perform.
   repeated Check checks = 1;
+
+  // AsOf specifies the timestamp at which the inspect checks should be performed.
+  // If empty, the current timestamp will be used for each span processed.
+  util.hlc.Timestamp as_of = 2 [(gogoproto.nullable) = false];
+
+  // ProtectedTimestampRecord is the id of the protected timestamp record that
+  // prevents garbage collection of data at the AsOf timestamp. This is only
+  // set if a fixed timestamp was used for INSPECT (e.g. AsOf timestamp is non-empty).
+  bytes protected_timestamp_record = 3 [
+    (gogoproto.customname) = "ProtectedTimestampRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
 }
 
 message UpdateTableMetadataCacheDetails {}
@@ -1491,7 +1577,13 @@ message HotRangesLoggerProgress {
 }
 
 message InspectProgress {
+  int64 job_total_check_count = 1;
+  int64 job_completed_check_count = 2;
+}
 
+message InspectProcessorProgress {
+  int64 checks_completed = 1;  // Number of checks completed since last update.
+  bool finished = 2;           // Processor finished all checks.
 }
 
 message ImportRollbackProgress {}

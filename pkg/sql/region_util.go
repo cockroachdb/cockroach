@@ -534,8 +534,7 @@ func ApplyZoneConfigForMultiRegionTable(
 	if update == nil || err != nil {
 		return err
 	}
-	_, err = writeZoneConfigUpdate(ctx, txn, kvTrace, update)
-	return err
+	return writeZoneConfigUpdate(ctx, txn, kvTrace, update)
 }
 
 // generateAndValidateZoneConfigForMultiRegionDatabase returns a validated
@@ -654,15 +653,14 @@ func applyZoneConfigForMultiRegionDatabase(
 	)
 	// If the new zone config is the same as a blank zone config, delete it.
 	if newZoneConfig.Equal(zonepb.NewZoneConfig()) {
-		_, err = writeZoneConfigUpdate(
+		return writeZoneConfigUpdate(
 			ctx,
 			txn,
 			kvTrace,
 			&zoneConfigUpdate{id: dbID, zoneConfig: nil},
 		)
-		return err
 	}
-	if _, err := writeZoneConfig(
+	return writeZoneConfig(
 		ctx,
 		txn,
 		dbID,
@@ -672,10 +670,7 @@ func applyZoneConfigForMultiRegionDatabase(
 		execConfig,
 		false, /* hasNewSubzones */
 		kvTrace,
-	); err != nil {
-		return err
-	}
-	return nil
+	)
 }
 
 type refreshZoneConfigOptions struct {
@@ -787,7 +782,7 @@ func (p *planner) refreshZoneConfigsForTablesWithValidation(
 	// TODO(janexing): if any write failed, do we roll back? Same question to the
 	// original p.forEachMutableTableInDatabase().
 	for _, update := range zoneConfigUpdates {
-		if _, err := writeZoneConfigUpdate(
+		if err = writeZoneConfigUpdate(
 			ctx,
 			p.InternalSQLTxn(),
 			p.ExtendedEvalContext().Tracing.KVTracingEnabled(),

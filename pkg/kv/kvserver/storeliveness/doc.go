@@ -205,6 +205,10 @@
 //   process is also aided by synchronizing the sending of heartbeats across all
 //   stores on a given node.
 //
+// - Heartbeat smearing (enabled by default). The sending of heartbeats across
+//   all nodes is synchronized and paced to avoid goroutine spikes. See
+//   Configuration section for more details.
+//
 // 5.3. Configuration
 //
 // Store liveness can be enabled/disabled using the `kv.store_liveness.enabled`
@@ -212,6 +216,18 @@
 // heartbeats, but will still respond to support requests by other stores, as
 // well as calls to `SupportFor` and `SupportFrom`. This is required for
 // correctness.
+//
+// The behaviour of heartbeat sends is governed by the
+// `kv.store_liveness.heartbeat_smearing.enabled` cluster setting (enabled by
+// default). When enabled, heartbeat sends are distributed over a certain
+// duration heartbeat (configured via the
+// `kv.store_liveness.heartbeat_smearing.refresh` cluster setting), with
+// messages being sent at a certain interval (configured via the
+// `kv.store_liveness.heartbeat_smearing.smear` cluster setting) to avoid
+// spiking the number of runnable goroutines (the per-node send queue
+// processors, and the per-node gRPC connections). When disabled, heartbeat
+// sends are sent immediately upon enqueueing, bypassing the smearing mechanism.
+// Note: the smearing applies to both heartbeat responses and requests.
 //
 // Additionally, `config.go` defines tunable configuration parameters for the
 // various timeouts and intervals that store liveness uses. Other intervals

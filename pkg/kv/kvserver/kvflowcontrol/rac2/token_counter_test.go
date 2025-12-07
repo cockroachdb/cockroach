@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -90,16 +91,14 @@ func TestTokenAdjustment(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				var stream int
-				d.ScanArgs(t, "stream", &stream)
-				evalCounter = provider.Eval(kvflowcontrol.Stream{StoreID: roachpb.StoreID(stream)})
-				sendCounter = provider.Send(kvflowcontrol.Stream{StoreID: roachpb.StoreID(stream)})
+				store := dd.ScanArg[roachpb.StoreID](t, d, "stream")
+				evalCounter = provider.Eval(kvflowcontrol.Stream{StoreID: store})
+				sendCounter = provider.Send(kvflowcontrol.Stream{StoreID: store})
 				adjustments = nil
 				return ""
 
 			case "adjust":
-				typ := "eval"
-				d.MaybeScanArgs(t, "type", &typ)
+				typ := dd.ScanArgOr(t, d, "type", "eval")
 				var counter *tokenCounter
 				switch typ {
 				case "eval":
@@ -192,9 +191,7 @@ func TestTokenAdjustment(t *testing.T) {
 				return b.String()
 
 			case "history":
-				typ := "eval"
-				d.MaybeScanArgs(t, "type", &typ)
-
+				typ := dd.ScanArgOr(t, d, "type", "eval")
 				var counter *tokenCounter
 				switch typ {
 				case "eval":
@@ -220,8 +217,7 @@ func TestTokenAdjustment(t *testing.T) {
 				return buf.String()
 
 			case "metrics":
-				typ := "eval"
-				d.MaybeScanArgs(t, "type", &typ)
+				typ := dd.ScanArgOr(t, d, "type", "eval")
 
 				provider.UpdateMetricGauges()
 				var buf strings.Builder
@@ -609,12 +605,10 @@ func TestWaitForEval(t *testing.T) {
 	datadriven.RunTest(t, "testdata/wait_for_eval", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "wait_for_eval":
-			var name string
-			var quorum int
+			name := dd.ScanArg[string](t, d, "name")
+			quorum := dd.ScanArg[int](t, d, "quorum")
 			var handles []tokenWaitingHandleInfo
 
-			d.ScanArgs(t, "name", &name)
-			d.ScanArgs(t, "quorum", &quorum)
 			for _, line := range strings.Split(d.Input, "\n") {
 				require.True(t, strings.HasPrefix(line, "handle:"))
 				line = strings.TrimPrefix(line, "handle:")
@@ -654,8 +648,7 @@ func TestWaitForEval(t *testing.T) {
 			return ts.evalStatesString()
 
 		case "cancel":
-			var name string
-			d.ScanArgs(t, "name", &name)
+			name := dd.ScanArg[string](t, d, "name")
 			func() {
 				ts.mu.Lock()
 				defer ts.mu.Unlock()
@@ -668,10 +661,8 @@ func TestWaitForEval(t *testing.T) {
 			return ts.evalStatesString()
 
 		case "refresh":
-			var name string
-			d.ScanArgs(t, "name", &name)
-			var kind string
-			d.ScanArgs(t, "kind", &kind)
+			name := dd.ScanArg[string](t, d, "name")
+			kind := dd.ScanArg[string](t, d, "kind")
 			func() {
 				ts.mu.Lock()
 				defer ts.mu.Unlock()

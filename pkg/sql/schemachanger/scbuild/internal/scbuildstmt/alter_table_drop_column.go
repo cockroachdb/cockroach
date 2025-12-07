@@ -109,7 +109,7 @@ func resolveColumnForDropColumn(
 		return nil, nil, true
 	}
 	// Block drops on system columns.
-	panicIfSystemColumn(col, n.Column.String())
+	panicIfSystemColumn(col, n.Column)
 	return col, elts, false
 }
 
@@ -161,6 +161,14 @@ func dropColumn(
 				_, _, computedColName := scpb.FindColumnName(elts.Filter(publicTargetFilter))
 				panic(sqlerrors.NewColumnReferencedByComputedColumnError(cn.Name, computedColName.Name))
 			}
+			// Generate CASCADE notice for computed column
+			_, _, computedColName := scpb.FindColumnName(elts.Filter(publicTargetFilter))
+			_, _, tableName := scpb.FindNamespace(b.QueryByID(e.TableID))
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b, pgnotice.Newf(
+				"drop cascades to column %s of table %s",
+				computedColName.Name,
+				tableName.Name,
+			))
 			dropColumn(b, tn, tbl, stmt, n, e, elts, behavior)
 		case *scpb.PrimaryIndex:
 			// Nothing needs to be done. Primary index related drops (bc of column
@@ -266,7 +274,7 @@ func dropColumn(
 		default:
 			b.Drop(e)
 		}
-	})
+	}, false /* allowPartialIdxPredicateRef */)
 	// TODO(ajwerner): Track the undropped backrefs to populate a detail
 	// message like postgres does. For example:
 	//  SET serial_normalization = sql_sequence;
@@ -290,7 +298,12 @@ func dropColumn(
 }
 
 func walkColumnDependencies(
-	b BuildCtx, col *scpb.Column, op, objType string, fn func(e scpb.Element, op, objType string),
+	b BuildCtx,
+	col *scpb.Column,
+	op string,
+	objType string,
+	fn func(e scpb.Element, op string, objType string),
+	allowPartialIdxPredicateRef bool,
 ) {
 	var sequenceDeps catalog.DescriptorIDSet
 	var indexDeps catid.IndexSet
@@ -300,7 +313,9 @@ func walkColumnDependencies(
 	// Panic if `col` is referenced in a predicate of an index or
 	// unique without index constraint.
 	// TODO (xiang): Remove this restriction when #97813 is fixed.
-	panicIfColReferencedInPredicate(b, col, tblElts, op, objType)
+	if !allowPartialIdxPredicateRef {
+		panicIfColReferencedInPredicate(b, col, tblElts, op, objType)
+	}
 
 	tblElts.
 		Filter(referencesColumnIDFilter(col.ColumnID)).
@@ -311,7 +326,7 @@ func walkColumnDependencies(
 				*scpb.UniqueWithoutIndexConstraint, *scpb.CheckConstraint,
 				*scpb.UniqueWithoutIndexConstraintUnvalidated, *scpb.CheckConstraintUnvalidated,
 				*scpb.RowLevelTTL, *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr,
-				*scpb.TriggerDeps:
+				*scpb.TriggerDeps, *scpb.ColumnGeneratedAsIdentity, *scpb.ColumnHidden:
 				fn(e, op, objType)
 			case *scpb.ColumnType:
 				if elt.ColumnID == col.ColumnID {

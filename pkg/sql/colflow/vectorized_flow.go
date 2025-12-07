@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -718,6 +719,7 @@ func (s *vectorizedFlowCreator) accumulateAsyncComponent(run runFn) {
 		flowinfra.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) {
 			wg.Add(1)
 			go func() {
+				growstack.Grow()
 				defer wg.Done()
 				run(ctx, flowCtxCancel)
 			}()

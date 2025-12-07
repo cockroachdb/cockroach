@@ -1085,7 +1085,10 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			res := &RunResultDetails{Node: node}
 			var err error
-			cmd := fmt.Sprintf("test -e %s -a -e %s", vm.DisksInitializedFile, vm.OSInitializedFile)
+			// Only the `vm.OSInitializedFile` file is checked and not the
+			// `vm.DisksInitializedFile`, because it's possible to create VMs without
+			// any attached disks other than the boot disk.
+			cmd := fmt.Sprintf("test -e %s", vm.OSInitializedFile)
 			// N.B. we disable ssh debug output capture, lest we end up with _thousands_ of useless .log files.
 			opts := cmdOptsWithDebugDisabled()
 			for j := 0; j < 600; j++ {
@@ -2301,7 +2304,7 @@ func (c *SyncedCluster) pgurls(
 		if err != nil {
 			return nil, err
 		}
-		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode, DefaultAuthMode(), "" /* database */)
+		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode, DefaultAuthMode(), "" /* database */, false /* disallowUnsafeInternals */)
 	}
 	return m, nil
 }
@@ -2344,7 +2347,7 @@ func (c *SyncedCluster) loadBalancerURL(
 	if err != nil {
 		return "", err
 	}
-	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, descs[0].ServiceMode, auth, "" /* database */)
+	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, descs[0].ServiceMode, auth, "" /* database */, false /* disallowUnsafeInternals */)
 	return loadBalancerURL, nil
 }
 

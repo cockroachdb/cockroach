@@ -10,24 +10,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 // DialSideTransportClient establishes a DRPC connection if enabled; otherwise,
 // it falls back to gRPC. The established connection is used to create a
 // RPCSideTransportClient.
 func DialSideTransportClient(
-	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+	nd rpcbase.NodeDialer,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	class rpcbase.ConnectionClass,
+	cs *cluster.Settings,
 ) (RPCSideTransportClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCSideTransportClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDial(ctx, nodeID, class)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCSideTransportClientAdapter(conn), nil
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, class, NewGRPCSideTransportClientAdapter, NewDRPCSideTransportClientAdapter, cs)
 }

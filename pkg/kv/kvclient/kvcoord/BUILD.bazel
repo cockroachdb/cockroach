@@ -95,6 +95,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_crlib//crstrings",
         "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//errorspb",
@@ -121,10 +122,6 @@ gomock(
         "//pkg/gen:__pkg__",
     ],
 )
-
-# This noop target is a workaround for https://github.com/bazelbuild/bazel-gazelle/issues/1078.
-#
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord //build/bazelutil:noop
 
 go_test(
     name = "kvcoord_test",
@@ -174,7 +171,6 @@ go_test(
     }),
     shard_count = 16,
     deps = [
-        "//build/bazelutil:noop",
         "//pkg/base",
         "//pkg/config",
         "//pkg/config/zonepb",

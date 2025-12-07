@@ -7,6 +7,7 @@ package spanconfigreconciler
 
 import (
 	"context"
+	"runtime/trace"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -139,6 +140,7 @@ func (r *Reconciler) Reconcile(
 	session sqlliveness.Session,
 	onCheckpoint func() error,
 ) error {
+	defer trace.StartRegion(ctx, "spanconfig.Reconciler.Reconcile").End()
 	// TODO(irfansharif): Avoid the full reconciliation pass if the startTS
 	// provided is visible to the rangefeed. Right now we're doing a full
 	// reconciliation pass every time the reconciliation job kicks us off.
@@ -185,6 +187,9 @@ func (r *Reconciler) Reconcile(
 		r.mu.lastCheckpoint = reconciledUpUntil
 		r.mu.Unlock()
 
+		if log.V(3) {
+			log.Dev.Infof(ctx, "reconciled up until %s", reconciledUpUntil)
+		}
 		return onCheckpoint()
 	})
 }
@@ -501,6 +506,9 @@ func (r *incrementalReconciler) reconcile(
 		func(ctx context.Context, sqlUpdates []spanconfig.SQLUpdate, checkpoint hlc.Timestamp) error {
 			if len(sqlUpdates) == 0 {
 				return callback(checkpoint) // nothing to do; propagate the checkpoint
+			}
+			if log.V(3) {
+				log.Dev.Infof(ctx, "processing %d SQL updates", len(sqlUpdates))
 			}
 
 			// Process the SQLUpdates and identify all descriptor IDs that require

@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -42,6 +44,17 @@ var indexBackfillMergeBatchSize = settings.RegisterIntSetting(
 	"bulkio.index_backfill.merge_batch_size",
 	"the number of rows we merge between temporary and adding indexes in a single batch",
 	1000,
+	settings.NonNegativeInt, /* validateFn */
+)
+
+// indexBackfillVectorMergeBatchSize is the maximum number of vectors we attempt to merge
+// in a single transaction during the merging process. This is a much smaller number because
+// fixups create a lot of conflicts with big batches.
+var indexBackfillVectorMergeBatchSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.vector_merge_batch_size",
+	"the number of vectors we merge between temporary and adding indexes in a single batch",
+	3,
 	settings.NonNegativeInt, /* validateFn */
 )
 
@@ -100,6 +113,7 @@ type IndexBackfillMerger struct {
 	skipNewerTimestamps bool
 	flowCtx             *execinfra.FlowCtx
 	muBoundAccount      muBoundAccount
+	VectorIndexes       map[descpb.IndexID]*VectorIndexMergeHelper
 }
 
 // OutputTypes is always nil.
@@ -137,6 +151,31 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 	}()
 	defer output.ProducerDone()
 	defer execinfra.SendTraceData(ctx, ibm.flowCtx, output)
+
+	for i, idx := range ibm.spec.AddedIndexes {
+		idxDesc, err := catalog.MustFindIndexByID(ibm.desc, idx)
+		if err != nil {
+			panic(err)
+		}
+		if idxDesc.GetType() != idxtype.VECTOR {
+			continue
+		}
+		tmpIdx, err := catalog.MustFindIndexByID(ibm.desc, ibm.spec.TemporaryIndexes[i])
+		if err != nil {
+			panic(err)
+		}
+		// Initialize the vector index merge helper.
+		if ibm.VectorIndexes == nil {
+			ibm.VectorIndexes = make(map[descpb.IndexID]*VectorIndexMergeHelper)
+		}
+
+		var vim VectorIndexMergeHelper
+		if err := vim.Init(ctx, ibm.flowCtx.EvalCtx, ibm.desc, ibm.flowCtx.Cfg.VecIndexManager.(*vecindex.Manager), idxDesc, tmpIdx); err != nil {
+			panic(err)
+		}
+
+		ibm.VectorIndexes[idx] = &vim
+	}
 
 	mu := struct {
 		syncutil.Mutex
@@ -287,7 +326,12 @@ func (ibm *IndexBackfillMerger) scan(
 			}
 		}
 	}
-	chunkSize := indexBackfillMergeBatchSize.Get(&ibm.flowCtx.Cfg.Settings.SV)
+	var chunkSize int64
+	if _, ok := ibm.VectorIndexes[ibm.spec.AddedIndexes[spanIdx]]; ok {
+		chunkSize = indexBackfillVectorMergeBatchSize.Get(&ibm.flowCtx.Cfg.Settings.SV)
+	} else {
+		chunkSize = indexBackfillMergeBatchSize.Get(&ibm.flowCtx.Cfg.Settings.SV)
+	}
 	chunkBytes := indexBackfillMergeBatchBytes.Get(&ibm.flowCtx.Cfg.Settings.SV)
 
 	var br *kvpb.BatchResponse
@@ -404,8 +448,37 @@ func (ibm *IndexBackfillMerger) merge(
 					return nil
 				}
 
+				var entryMerger func(
+					ctx context.Context,
+					sourceKV *kv.KeyValue,
+					destKey roachpb.Key,
+				) (*kv.KeyValue, bool, error)
+				vim, ok := ibm.VectorIndexes[destinationID]
+				if ok {
+					vm, err := vim.NewVectorIndexMergerTxn(ctx, ibm.flowCtx.EvalCtx, txn.KV())
+					if err != nil {
+						return err
+					}
+					defer vm.Close(ctx)
+					entryMerger = func(
+						ctx context.Context,
+						sourceKV *kv.KeyValue,
+						destKey roachpb.Key,
+					) (*kv.KeyValue, bool, error) {
+						return vm.MergeVector(ctx, sourceKV, destKey)
+					}
+				} else {
+					entryMerger = func(
+						ctx context.Context,
+						sourceKV *kv.KeyValue,
+						destKey roachpb.Key,
+					) (*kv.KeyValue, bool, error) {
+						return mergeEntry(sourceKV, destKey)
+					}
+				}
+
 				wb, memUsedInMerge, deletedKeys, keysToSkip, err := ibm.constructMergeBatch(
-					ctx, txn.KV(), keys, sourcePrefix, destPrefix, batch,
+					ctx, txn.KV(), keys, sourcePrefix, destPrefix, batch, entryMerger,
 				)
 				if err != nil || wb == nil {
 					return err
@@ -439,6 +512,7 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 	sourcePrefix []byte,
 	destPrefix []byte,
 	batch *keyBatch,
+	entryMerger func(ctx context.Context, sourceKV *kv.KeyValue, destKey roachpb.Key) (*kv.KeyValue, bool, error),
 ) (*kv.Batch, int64, int, int, error) {
 	var keysToSkip int
 	var keysAdded int
@@ -460,28 +534,32 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 		return nil, 0, 0, 0, err
 	}
 
-	// We acquire the bound account lock for the entirety of the merge batch
-	// construction so that we don't have to acquire the lock every time we want
-	// to grow the account.
 	var memUsedInMerge int64
-	ibm.muBoundAccount.Lock()
-	defer ibm.muBoundAccount.Unlock()
-	for i := range rb.Results {
-		// Since the source index is delete-preserving, reading the latest value for
-		// a key that has existed in the past should always return a value.
-		if rb.Results[i].Rows[0].Value == nil {
-			return nil, 0, 0, 0, errors.AssertionFailedf("expected value to be present in temp index for key=%s", rb.Results[i].Rows[0].Key)
+	err := func() error {
+		ibm.muBoundAccount.Lock()
+		defer ibm.muBoundAccount.Unlock()
+		for i := range rb.Results {
+			// Since the source index is delete-preserving, reading the latest value for
+			// a key that has existed in the past should always return a value.
+			if rb.Results[i].Rows[0].Value == nil {
+				return errors.AssertionFailedf("expected value to be present in temp index for key=%s", rb.Results[i].Rows[0].Key)
+			}
+			rowMem := int64(len(rb.Results[i].Rows[0].Key)) + int64(len(rb.Results[i].Rows[0].Value.RawBytes))
+			if err := ibm.muBoundAccount.boundAccount.Grow(ctx, rowMem); err != nil {
+				return errors.Wrap(err, "failed to allocate space to read latest keys from temp index")
+			}
+			memUsedInMerge += rowMem
 		}
-		rowMem := int64(len(rb.Results[i].Rows[0].Key)) + int64(len(rb.Results[i].Rows[0].Value.RawBytes))
-		if err := ibm.muBoundAccount.boundAccount.Grow(ctx, rowMem); err != nil {
-			return nil, 0, 0, 0, errors.Wrap(err, "failed to allocate space to read latest keys from temp index")
-		}
-		memUsedInMerge += rowMem
+		return nil
+	}()
+	if err != nil {
+		return nil, 0, 0, 0, err
 	}
 
 	prefixLen := len(sourcePrefix)
 	destKey := make([]byte, len(destPrefix))
 	var deletedCount int
+	var totalEntryBytes int64
 	wb := txn.NewBatch()
 	resultOffset := 0
 	for sourceOffset := range sourceKeys {
@@ -506,16 +584,14 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 		destKey = append(destKey, destPrefix...)
 		destKey = append(destKey, sourceKV.Key[prefixLen:]...)
 
-		mergedEntry, deleted, err := mergeEntry(sourceKV, destKey)
+		mergedEntry, deleted, err := entryMerger(ctx, sourceKV, destKey)
 		if err != nil {
 			return nil, 0, 0, 0, err
+		} else if mergedEntry == nil {
+			continue
 		}
 
-		entryBytes := mergedEntryBytes(mergedEntry, deleted)
-		if err := ibm.muBoundAccount.boundAccount.Grow(ctx, entryBytes); err != nil {
-			return nil, 0, 0, 0, errors.Wrap(err, "failed to allocate space to merge entry from temp index")
-		}
-		memUsedInMerge += entryBytes
+		totalEntryBytes += mergedEntryBytes(mergedEntry, deleted)
 		if deleted {
 			deletedCount++
 			wb.Del(mergedEntry.Key)
@@ -523,6 +599,18 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 			wb.Put(mergedEntry.Key, mergedEntry.Value)
 		}
 	}
+	err = func() error {
+		ibm.muBoundAccount.Lock()
+		defer ibm.muBoundAccount.Unlock()
+		if err := ibm.muBoundAccount.boundAccount.Grow(ctx, totalEntryBytes); err != nil {
+			return errors.Wrap(err, "failed to allocate space to merge entry from temp index")
+		}
+		return nil
+	}()
+	if err != nil {
+		return nil, 0, 0, 0, err
+	}
+	memUsedInMerge += totalEntryBytes
 
 	return wb, memUsedInMerge, deletedCount, keysToSkip, nil
 }

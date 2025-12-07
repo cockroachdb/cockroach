@@ -47,13 +47,10 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) (numE
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		func() {
-			iter, err := rangefeed.NewCatchUpIterator(ctx, eng, span, opts.ts, nil, nil)
-			if err != nil {
-				b.Fatal(err)
-			}
-			defer iter.Close()
+			snap := rangefeed.NewCatchUpSnapshot(eng, span, opts.ts, nil, nil, 0)
+			defer snap.Close()
 			counter := 0
-			err = iter.CatchUpScan(ctx, func(*kvpb.RangeFeedEvent) error {
+			err := snap.CatchUpScan(ctx, func(*kvpb.RangeFeedEvent) error {
 				counter++
 				return nil
 			}, opts.withDiff, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery)
@@ -255,13 +252,13 @@ func setupData(
 		absPath = loc
 	}
 	if exists {
-		log.Dev.Infof(ctx, "using existing refresh range benchmark data: %s", absPath)
+		log.KvExec.Infof(ctx, "using existing refresh range benchmark data: %s", absPath)
 		testutils.ReadAllFiles(filepath.Join(loc, "*"))
 		return emk(b, loc, opts.lBaseMaxBytes, opts.rwMode), loc
 	}
 
 	eng := emk(b, loc, opts.lBaseMaxBytes, fs.ReadWrite)
-	log.Dev.Infof(ctx, "creating rangefeed benchmark data: %s", absPath)
+	log.KvExec.Infof(ctx, "creating rangefeed benchmark data: %s", absPath)
 
 	// Generate the same data every time.
 	rng := rand.New(rand.NewSource(1449168817))
@@ -322,7 +319,7 @@ func setupData(
 		// optimizations which change the data size result in the same number of
 		// sstables.
 		if scaled := len(order) / 20; i > 0 && (i%scaled) == 0 {
-			log.Dev.Infof(ctx, "committing (%d/~%d) (%d/%d)", i/scaled, 20, i, len(order))
+			log.KvExec.Infof(ctx, "committing (%d/~%d) (%d/%d)", i/scaled, 20, i, len(order))
 			if err := batch.Commit(false /* sync */); err != nil {
 				b.Fatal(err)
 			}

@@ -34,11 +34,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
-	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -64,12 +64,12 @@ func NewInternalSessionData(
 
 	sd := &sessiondata.SessionData{}
 	sds := sessiondata.NewStack(sd)
-	defaults := SessionDefaults(map[string]string{
+	defaults := sessionmutator.SessionDefaults(map[string]string{
 		"application_name": appName,
 	})
-	sdMutIterator := makeSessionDataMutatorIterator(sds, defaults, settings)
+	sdMutIterator := sessionmutator.MakeSessionDataMutatorIterator(sds, defaults, settings)
 
-	sdMutIterator.applyOnEachMutator(func(m sessionDataMutator) {
+	sdMutIterator.ApplyOnEachMutator(func(m sessionmutator.SessionDataMutator) {
 		for varName, v := range varGen {
 			if varName == "optimizer_use_histograms" {
 				// Do not use histograms when optimizing internal executor
@@ -78,7 +78,7 @@ func NewInternalSessionData(
 				continue
 			}
 			if v.Set != nil {
-				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
+				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.SessionDataMutatorBase)
 				if hasDefault {
 					if err := v.Set(ctx, m, defVal); err != nil {
 						log.Dev.Warningf(ctx, "error setting default for %s: %v", varName, err)
@@ -222,7 +222,6 @@ func (ie *InternalExecutor) runWithEx(
 	syncCallback func([]*streamingCommandResult),
 	errCallback func(error),
 	attributeToUser bool,
-	growStackSize bool,
 ) error {
 	ex, err := ie.initConnEx(ctx, txn, w, mode, sd, stmtBuf, syncCallback, attributeToUser)
 	if err != nil {
@@ -250,11 +249,6 @@ func (ie *InternalExecutor) runWithEx(
 	go func() {
 		defer hdl.Activate(ctx).Release(ctx)
 		defer cleanup(ctx)
-		// TODO(yuzefovich): benchmark whether we should be growing the
-		// stack size unconditionally.
-		if growStackSize {
-			growstack.Grow()
-		}
 		if err := ex.run(
 			ctx,
 			ie.mon,
@@ -304,10 +298,10 @@ func (ie *InternalExecutor) initConnEx(
 
 	applicationStats := ie.s.localSqlStats.GetApplicationStats(sd.ApplicationName)
 	sds := sessiondata.NewStack(sd)
-	defaults := SessionDefaults(map[string]string{
+	defaults := sessionmutator.SessionDefaults(map[string]string{
 		"application_name": sd.ApplicationName,
 	})
-	sdMutIterator := makeSessionDataMutatorIterator(sds, defaults, ie.s.cfg.Settings)
+	sdMutIterator := sessionmutator.MakeSessionDataMutatorIterator(sds, defaults, ie.s.cfg.Settings)
 	var ex *connExecutor
 	var err error
 	if txn == nil {
@@ -380,7 +374,7 @@ func (ie *InternalExecutor) initConnEx(
 func (ie *InternalExecutor) newConnExecutorWithTxn(
 	ctx context.Context,
 	txn *kv.Txn,
-	sdMutIterator *sessionDataMutatorIterator,
+	sdMutIterator *sessionmutator.SessionDataMutatorIterator,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	applicationStats *ssmemstorage.Container,
@@ -439,7 +433,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
 		// sanity, set read only on the session.
-		if err := ex.dataMutatorIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
+		if err := ex.dataMutatorIterator.ApplyOnEachMutatorError(func(m sessionmutator.SessionDataMutator) error {
 			return m.SetReadOnly(true)
 		}); err != nil {
 			return nil, err
@@ -965,6 +959,9 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.BufferedWritesEnabled != nil {
 		sd.BufferedWritesEnabled = *o.BufferedWritesEnabled
 	}
+	if o.AlwaysDistributeFullScans {
+		sd.AlwaysDistributeFullScans = true
+	}
 	// For 25.2, we're being conservative and explicitly disabling buffered
 	// writes for the internal executor.
 	// TODO(yuzefovich): remove this for 25.3.
@@ -1170,7 +1167,7 @@ func (ie *InternalExecutor) execInternal(
 		// TODO(andrei): Properly clone (deep copy) ie.sessionData.
 		sd = ie.sessionDataStack.Top().Clone()
 	} else {
-		sd = NewInternalSessionData(context.Background(), ie.s.cfg.Settings, "" /* opName */)
+		sd = NewInternalSessionData(ctx, ie.s.cfg.Settings, "" /* opName */)
 	}
 	if globalOverride := ieMultiOverride.Get(&ie.s.cfg.Settings.SV); globalOverride != "" {
 		globalOverride = strings.TrimSpace(globalOverride)
@@ -1192,7 +1189,6 @@ func (ie *InternalExecutor) execInternal(
 		txn.SetBufferedWritesEnabled(false)
 	}
 	attributeToUser := sessionDataOverride.AttributeToUser && attributeToUserEnabled.Get(&ie.s.cfg.Settings.SV)
-	growStackSize := sessionDataOverride.GrowStackSize
 	if !rw.async() && (txn != nil && txn.Type() == kv.RootTxn) {
 		// If the "outer" query uses the RootTxn and the sync result channel is
 		// requested, then we must disable both DistSQL and Streamer to ensure
@@ -1249,14 +1245,14 @@ func (ie *InternalExecutor) execInternal(
 		// into a type safe for reporting.
 		if retErr != nil || r == nil {
 			// Both retErr and r can be nil in case of panic.
-			if retErr != nil && !errIsRetryable(retErr) {
+			if retErr != nil && !ErrIsRetryable(retErr) {
 				retErr = errors.Wrapf(retErr, "%s", opName)
 			}
 			stmtBuf.Close()
 			wg.Wait()
 		} else {
 			r.errCallback = func(err error) error {
-				if err != nil && !errIsRetryable(err) {
+				if err != nil && !ErrIsRetryable(err) {
 					err = errors.Wrapf(err, "%s", opName)
 				}
 				return err
@@ -1304,7 +1300,7 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	err = ie.runWithEx(ctx, opName, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback, attributeToUser, growStackSize)
+	err = ie.runWithEx(ctx, opName, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback, attributeToUser)
 	if err != nil {
 		return nil, err
 	}
@@ -1351,7 +1347,7 @@ func (ie *InternalExecutor) execInternal(
 			return nil, err
 		}
 
-		if err := stmtBuf.Push(ctx, BindStmt{internalArgs: datums}); err != nil {
+		if err := stmtBuf.Push(ctx, BindStmt{InternalArgs: datums}); err != nil {
 			return nil, err
 		}
 
@@ -1468,14 +1464,16 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	return ex.commitSQLTransactionInternal(ctx)
 }
 
-// checkIfStmtIsAllowed returns an error if the internal executor is not bound
-// with the outer-txn-related info but is used to run DDL statements within an
-// outer txn.
-// TODO (janexing): this will be deprecate soon since it's not a good idea
-// to have `extraTxnState` to store the info from a outer txn.
+// checkIfStmtIsAllowed returns an error if the internal executor cannot execute
+// the given stmt.
 func (ie *InternalExecutor) checkIfStmtIsAllowed(stmt tree.Statement, txn *kv.Txn) error {
 	if stmt == nil {
 		return nil
+	}
+	if _, ok := stmt.(*tree.CopyFrom); ok {
+		// COPY FROM has special handling in the connExecutor, so we can't run
+		// it via the internal executor.
+		return errors.New("COPY cannot be run via the internal executor")
 	}
 	if tree.CanModifySchema(stmt) && txn != nil && ie.extraTxnState == nil {
 		return errors.New("DDL statement is disallowed if internal " +
@@ -1758,6 +1756,19 @@ type InternalDB struct {
 	lm         *lease.Manager
 	memMetrics MemoryMetrics
 	monitor    *mon.BytesMonitor
+}
+
+// Session implements isql.DB.
+func (ief *InternalDB) Session(
+	ctx context.Context, name string, options ...isql.ExecutorOption,
+) (isql.Session, error) {
+	var cfg isql.ExecutorConfig
+	cfg.Init(options...)
+	sd := cfg.GetSessionData()
+	if sd == nil {
+		sd = NewInternalSessionData(ctx, ief.server.cfg.Settings, redact.SafeString(name))
+	}
+	return ief.server.NewInternalSession(ctx, name, sd, ief.memMetrics, ief.monitor)
 }
 
 // NewShimInternalDB is used to bootstrap the server which needs access to
@@ -2046,6 +2057,9 @@ func (ief *InternalDB) txn(
 			if err != nil {
 				return err
 			}
+			if err := descsCol.EmitDescriptorUpdatesKey(ctx, kvTxn); err != nil {
+				return err
+			}
 			// We check this testing condition here since a retry cannot be generated
 			// after a successful commit. Since we commit below, this is our last
 			// chance to generate a retry for users of (*InternalDB).Txn.
@@ -2053,7 +2067,7 @@ func (ief *InternalDB) txn(
 				return kvTxn.GenerateForcedRetryableErr(ctx, "injected retryable error")
 			}
 			return commitTxnFn(ctx)
-		}); errIsRetryable(err) {
+		}); ErrIsRetryable(err) {
 			continue
 		} else {
 			if err == nil {
@@ -2129,4 +2143,10 @@ func (db *internalDBWithOverrides) Executor(opts ...isql.ExecutorOption) isql.Ex
 		o(sd)
 	}
 	return db.baseDB.Executor(isql.WithSessionData(sd))
+}
+
+func (db *internalDBWithOverrides) Session(
+	ctx context.Context, name string, opts ...isql.ExecutorOption,
+) (isql.Session, error) {
+	return nil, errors.New("internalDBWithOverrides has not implemented Session()")
 }

@@ -341,6 +341,14 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 	case core.VectorMutationSearch != nil:
 	case core.CompactBackups != nil:
 		return errCoreNotWorthWrapping
+	case core.BulkMerge != nil:
+		return errCoreNotWorthWrapping
+	case core.MergeCoordinator != nil:
+		return errCoreNotWorthWrapping
+	case core.MergeLoopback != nil:
+		return errCoreNotWorthWrapping
+	case core.IngestFile != nil:
+		return errCoreNotWorthWrapping
 	default:
 		err := errors.AssertionFailedf("unexpected processor core %q", core)
 		if buildutil.CrdbTestBuild {
@@ -566,6 +574,7 @@ func (r opResult) createAndWrapRowSource(
 	core *execinfrapb.ProcessorCoreUnion,
 	post *execinfrapb.PostProcessSpec,
 	processorID int32,
+	stageID int32,
 	factory coldata.ColumnFactory,
 	causeToWrap error,
 ) error {
@@ -592,7 +601,7 @@ func (r opResult) createAndWrapRowSource(
 			// here because when wrapping the processor, the materializer will
 			// be its output, and it will be set up in wrapRowSources.
 			proc, err := args.ProcessorConstructor(
-				ctx, flowCtx, processorID, core, post, inputs, args.LocalProcessors,
+				ctx, flowCtx, processorID, stageID, core, post, inputs, args.LocalProcessors,
 			)
 			if err != nil {
 				return nil, err
@@ -819,7 +828,7 @@ func NewColOperator(
 		post = &newPosts[1]
 		err = result.createAndWrapRowSource(
 			ctx, flowCtx, args, inputs, inputTypes, core,
-			wrappingPost, spec.ProcessorID, factory, err,
+			wrappingPost, spec.ProcessorID, spec.StageID, factory, err,
 		)
 	} else {
 		switch {
@@ -969,7 +978,8 @@ func NewColOperator(
 				if canUseDirectScan() {
 					scanOp, resultTypes, err = colfetcher.NewColBatchDirectScan(
 						ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
-						flowCtx, spec.ProcessorID, core.TableReader, post, args.TypeResolver,
+						flowCtx, spec.ProcessorID, spec.StageID, core.TableReader, post,
+						args.TypeResolver,
 					)
 					if err != nil {
 						return r, err
@@ -979,7 +989,8 @@ func NewColOperator(
 			if scanOp == nil {
 				scanOp, resultTypes, err = colfetcher.NewColBatchScan(
 					ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
-					flowCtx, spec.ProcessorID, core.TableReader, post, estimatedRowCount, args.TypeResolver,
+					flowCtx, spec.ProcessorID, spec.StageID, core.TableReader, post,
+					estimatedRowCount, args.TypeResolver,
 				)
 				if err != nil {
 					return r, err
@@ -1027,7 +1038,7 @@ func NewColOperator(
 			result.ColumnTypes = spec.Input[0].ColumnTypes
 			result.Root = inputs[0].Root
 			if err := result.planAndMaybeWrapFilter(
-				ctx, flowCtx, args, spec.ProcessorID, core.Filterer.Filter, factory,
+				ctx, flowCtx, args, spec.ProcessorID, spec.StageID, core.Filterer.Filter, factory,
 			); err != nil {
 				return r, err
 			}
@@ -1309,7 +1320,7 @@ func NewColOperator(
 
 			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == descpb.InnerJoin {
 				if err = result.planAndMaybeWrapFilter(
-					ctx, flowCtx, args, spec.ProcessorID, core.HashJoiner.OnExpr, factory,
+					ctx, flowCtx, args, spec.ProcessorID, spec.StageID, core.HashJoiner.OnExpr, factory,
 				); err != nil {
 					return r, err
 				}
@@ -1354,7 +1365,7 @@ func NewColOperator(
 
 			if onExpr != nil {
 				if err = result.planAndMaybeWrapFilter(
-					ctx, flowCtx, args, spec.ProcessorID, *onExpr, factory,
+					ctx, flowCtx, args, spec.ProcessorID, spec.StageID, *onExpr, factory,
 				); err != nil {
 					return r, err
 				}
@@ -1797,7 +1808,8 @@ func NewColOperator(
 	}
 	err = ppr.planPostProcessSpec(ctx, flowCtx, args, post, factory, &r.Releasables, args.Spec.EstimatedRowCount)
 	if err != nil {
-		err = result.wrapPostProcessSpec(ctx, flowCtx, args, post, spec.ProcessorID, factory, err)
+		err = result.wrapPostProcessSpec(ctx, flowCtx, args, post,
+			spec.ProcessorID, spec.StageID, factory, err)
 	} else {
 		// The result can be updated with the post process result.
 		r.Root = ppr.Op
@@ -1845,7 +1857,8 @@ func NewColOperator(
 				post.RenderExprs[i].LocalExpr = tree.NewTypedOrdinalReference(i, args.Spec.ResultTypes[i])
 			}
 		}
-		if err = result.wrapPostProcessSpec(ctx, flowCtx, args, post, spec.ProcessorID, factory, errWrappedCast); err != nil {
+		if err = result.wrapPostProcessSpec(ctx, flowCtx, args, post,
+			spec.ProcessorID, spec.StageID, factory, errWrappedCast); err != nil {
 			return r, err
 		}
 	} else if numMismatchedTypes > 0 {
@@ -1909,6 +1922,7 @@ func (r opResult) planAndMaybeWrapFilter(
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
 	processorID int32,
+	stageID int32,
 	filter execinfrapb.Expression,
 	factory coldata.ColumnFactory,
 ) error {
@@ -1928,7 +1942,7 @@ func (r opResult) planAndMaybeWrapFilter(
 		return r.createAndWrapRowSource(
 			ctx, flowCtx, args, []colexecargs.OpWithMetaInfo{inputToMaterializer},
 			[][]*types.T{r.ColumnTypes}, filtererCore, &execinfrapb.PostProcessSpec{},
-			processorID, factory, err,
+			processorID, stageID, factory, err,
 		)
 	}
 	return nil
@@ -1945,6 +1959,7 @@ func (r opResult) wrapPostProcessSpec(
 	args *colexecargs.NewColOperatorArgs,
 	post *execinfrapb.PostProcessSpec,
 	processorID int32,
+	stageID int32,
 	factory coldata.ColumnFactory,
 	causeToWrap error,
 ) error {
@@ -1956,7 +1971,8 @@ func (r opResult) wrapPostProcessSpec(
 	// createAndWrapRowSource updates r.ColumnTypes accordingly.
 	return r.createAndWrapRowSource(
 		ctx, flowCtx, args, []colexecargs.OpWithMetaInfo{inputToMaterializer},
-		[][]*types.T{r.ColumnTypes}, noopCore, post, processorID, factory, causeToWrap,
+		[][]*types.T{r.ColumnTypes}, noopCore, post, processorID, stageID, factory,
+		causeToWrap,
 	)
 }
 
@@ -2229,7 +2245,7 @@ func planSelectionOperators(
 				}
 			case treecmp.In, treecmp.NotIn:
 				negate := cmpOp.Symbol == treecmp.NotIn
-				datumTuple, ok := tree.AsDTuple(constArg)
+				datumTuple, ok := constArg.(*tree.DTuple)
 				if !ok || useDefaultCmpOpForIn(datumTuple) {
 					break
 				}
@@ -2820,11 +2836,16 @@ func planProjectionExpr(
 		resultIdx = len(typs)
 		// The projection result will be outputted to a new column which is
 		// appended to the input batch.
-		// TODO(#127814): We may need to handle the case when the left is DNull.
-		op, err = colexecprojconst.GetProjectionLConstOperator(
-			allocator, typs, left.ResolvedType(), outputType, projOp, input,
-			rightIdx, lConstArg, resultIdx, evalCtx, binOp, cmpExpr, calledOnNullInput,
-		)
+		if !calledOnNullInput && (left == tree.DNull || right == tree.DNull) {
+			// If the left or right is NULL and the operator is not called on
+			// NULL, simply project NULL.
+			op = colexecbase.NewConstNullOp(allocator, outputType, input, resultIdx)
+		} else {
+			op, err = colexecprojconst.GetProjectionLConstOperator(
+				allocator, typs, left.ResolvedType(), outputType, projOp, input,
+				rightIdx, lConstArg, resultIdx, evalCtx, binOp, cmpExpr, calledOnNullInput,
+			)
+		}
 	} else {
 		var leftIdx int
 		input, leftIdx, typs, err = planProjectionOperators(
@@ -2882,7 +2903,7 @@ func planProjectionExpr(
 					}
 				case treecmp.In, treecmp.NotIn:
 					negate := cmpProjOp.Symbol == treecmp.NotIn
-					datumTuple, ok := tree.AsDTuple(rConstArg)
+					datumTuple, ok := rConstArg.(*tree.DTuple)
 					if !ok || useDefaultCmpOpForIn(datumTuple) {
 						break
 					}

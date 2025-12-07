@@ -104,26 +104,53 @@ func VisitFKReferenceTables(
 	}
 }
 
-// GetAllFKsAmongTables returns a list of ALTER statements that corresponds to
-// all FOREIGN KEY constraints where both the origin and the referenced tables
-// are present in the given set of tables. List of the given tables is assumed
-// to be unique.
-func GetAllFKsAmongTables(
-	tables []cat.Table, fullyQualifiedName func(cat.Table) (tree.TableName, error),
-) []*tree.AlterTable {
+// GetAllFKs returns a list of ALTER statements that corresponds to all FOREIGN
+// KEY constraints where both the origin and the referenced tables are present
+// in the given set of tables as well as a list of ALTER statements for all
+// FOREIGN KEY constraints where the origin table is in the given set while the
+// referenced one isn't.
+//
+// List of the given tables is assumed to be unique.
+func GetAllFKs(
+	ctx context.Context,
+	catalog cat.Catalog,
+	tables []cat.Table,
+	fullyQualifiedName func(cat.Table) (tree.TableName, error),
+) (addFKs, skipFKs []*tree.AlterTable) {
 	idToTable := make(map[cat.StableID]cat.Table)
 	for _, table := range tables {
 		idToTable[table.ID()] = table
 	}
-	var addFKs []*tree.AlterTable
+	skippedIDToTable := make(map[cat.StableID]cat.Table)
+	resolveSkippedTable := func(tabID cat.StableID) cat.Table {
+		if table, ok := skippedIDToTable[tabID]; ok {
+			return table
+		}
+		ds, _, err := catalog.ResolveDataSourceByID(ctx, cat.Flags{}, tabID)
+		if err != nil {
+			return nil
+		}
+		t, ok := ds.(cat.Table)
+		if !ok {
+			return nil
+		}
+		skippedIDToTable[tabID] = t
+		return t
+	}
 	for _, origTable := range tables {
 		for i := 0; i < origTable.OutboundForeignKeyCount(); i++ {
+			includeInto := &addFKs
 			fk := origTable.OutboundForeignKey(i)
 			refTable, ok := idToTable[fk.ReferencedTableID()]
 			if !ok {
-				// The referenced table is not in the given list, so we skip
-				// this FK constraint.
-				continue
+				// The referenced table is not in the given list, so we include
+				// this FK into the skipped list.
+				includeInto = &skipFKs
+				refTable = resolveSkippedTable(fk.ReferencedTableID())
+				if refTable == nil {
+					// This is a best-effort attempt to get skipped FKs.
+					continue
+				}
 			}
 			fromCols, toCols := make(tree.NameList, fk.ColumnCount()), make(tree.NameList, fk.ColumnCount())
 			for j := range fromCols {
@@ -138,7 +165,7 @@ func GetAllFKsAmongTables(
 			if err != nil {
 				continue
 			}
-			addFKs = append(addFKs, &tree.AlterTable{
+			*includeInto = append(*includeInto, &tree.AlterTable{
 				Table: origTableName.ToUnresolvedObjectName(),
 				Cmds: []tree.AlterTableCmd{
 					&tree.AlterTableAddConstraint{
@@ -158,7 +185,7 @@ func GetAllFKsAmongTables(
 			})
 		}
 	}
-	return addFKs
+	return addFKs, skipFKs
 }
 
 // FamiliesForCols returns the set of column families for the set of cols.

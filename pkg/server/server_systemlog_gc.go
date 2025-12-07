@@ -8,7 +8,7 @@ package server
 import (
 	"context"
 	"fmt"
-	math_rand "math/rand"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -288,5 +288,5 @@ func startSystemLogsGC(ctx context.Context, sqlServer *SQLServer) error {
 // jitteredInterval returns a randomly jittered (+/-25%) duration
 // from the interval.
 func jitteredInterval(interval time.Duration) time.Duration {
-	return time.Duration(float64(interval) * (0.75 + 0.5*math_rand.Float64()))
+	return time.Duration(float64(interval) * (0.75 + 0.5*rand.Float64()))
 }

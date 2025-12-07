@@ -8,9 +8,10 @@ package event
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -29,12 +30,29 @@ type AddNodeEvent struct {
 	LocalityString string
 }
 
-// SetNodeLivenessEvent represents a mutation event responsible for setting
-// liveness status of a node identified by the NodeID to the specified
-// LivenessStatus.
+// SetStoreStatusEvent represents a mutation event for setting the liveness
+// of a single store.
+type SetStoreStatusEvent struct {
+	StoreID state.StoreID
+	Status  state.StoreStatus
+}
+
+// SetNodeStatusEvent represents a mutation event for setting the membership
+// and draining signals of a node.
+type SetNodeStatusEvent struct {
+	NodeID state.NodeID
+	Status state.NodeStatus
+}
+
+// SetNodeLivenessEvent represents a mutation event for setting the liveness
+// of all stores on a node at once. This exists because DSL commands are parsed
+// before the simulation runs, at which point we don't yet know which stores
+// exist on each node - that's determined when the cluster is built. So we
+// can't expand "node=X liveness=Y" into individual store events at parse time;
+// we must defer to runtime when the state knows the node's stores.
 type SetNodeLivenessEvent struct {
-	NodeId         state.NodeID
-	LivenessStatus livenesspb.NodeLivenessStatus
+	NodeID   state.NodeID
+	Liveness state.LivenessState
 }
 
 // SetCapacityOverrideEvent represents a mutation event responsible for updating
@@ -61,6 +79,8 @@ type SetSimulationSettingsEvent struct {
 
 var _ Event = &SetSpanConfigEvent{}
 var _ Event = &AddNodeEvent{}
+var _ Event = &SetStoreStatusEvent{}
+var _ Event = &SetNodeStatusEvent{}
 var _ Event = &SetNodeLivenessEvent{}
 var _ Event = &SetCapacityOverrideEvent{}
 var _ Event = &SetNodeLocalityEvent{}
@@ -73,19 +93,63 @@ func (se SetSpanConfigEvent) Func() EventFunc {
 }
 
 func (se SetSpanConfigEvent) String() string {
-	return fmt.Sprintf("set span config event with span=%v, config=%v", se.Span, &se.Config)
+	var buf strings.Builder
+	voter, nonvoter := se.Config.GetNumVoters(), se.Config.GetNumNonVoters()
+	var nonvoterStr string
+	if nonvoter != 0 {
+		nonvoterStr = fmt.Sprintf(",%dnonvoters", nonvoter)
+	}
+	_, _ = fmt.Fprintf(&buf, "[%s,%s): %dvoters%s", se.Span.Key, se.Span.EndKey, voter, nonvoterStr)
+
+	printConstraint := func(tag string, constraints []roachpb.ConstraintsConjunction) {
+		if len(constraints) != 0 {
+			_, _ = fmt.Fprintf(&buf, "%s", tag)
+			for _, c := range constraints {
+				_, _ = fmt.Fprintf(&buf, "{%d:", c.NumReplicas)
+				for j, constraint := range c.Constraints {
+					_, _ = fmt.Fprintf(&buf, "%s=%s", constraint.Key, constraint.Value)
+					if j != len(c.Constraints)-1 {
+						_, _ = fmt.Fprintf(&buf, ",")
+					}
+				}
+				_, _ = fmt.Fprintf(&buf, "}")
+			}
+			_, _ = fmt.Fprintf(&buf, "]")
+		}
+	}
+	printConstraint(" [replicas:", se.Config.Constraints)
+	printConstraint(" [voters:", se.Config.VoterConstraints)
+	if len(se.Config.LeasePreferences) != 0 {
+		_, _ = fmt.Fprint(&buf, " [lease:")
+		for i, lp := range se.Config.LeasePreferences {
+			_, _ = fmt.Fprint(&buf, "{")
+			for j, c := range lp.Constraints {
+				_, _ = fmt.Fprintf(&buf, "%s=%s", c.Key, c.Value)
+				if j != len(lp.Constraints)-1 {
+					_, _ = fmt.Fprintf(&buf, ",")
+				}
+			}
+			_, _ = fmt.Fprintf(&buf, "}")
+			if i != len(se.Config.LeasePreferences)-1 {
+				_, _ = fmt.Fprintf(&buf, ">")
+			}
+		}
+		_, _ = fmt.Fprint(&buf, "]")
+	}
+	noQuotesBuf := strings.ReplaceAll(buf.String(), "\"", "")
+	return noQuotesBuf
 }
 
 func (ae AddNodeEvent) Func() EventFunc {
 	return MutationFunc(func(ctx context.Context, s state.State) {
-		node := s.AddNode()
+		// TDOO(wenyihu6): should we change AddNode to take in
+		var locality roachpb.Locality
 		if ae.LocalityString != "" {
-			var locality roachpb.Locality
 			if err := locality.Set(ae.LocalityString); err != nil {
 				panic(fmt.Sprintf("unable to set node locality %s", err.Error()))
 			}
-			s.SetNodeLocality(node.NodeID(), locality)
 		}
+		node := s.AddNode(config.DefaultNodeCPURateCapacityNanos, locality)
 		for i := 0; i < ae.NumStores; i++ {
 			if _, ok := s.AddStore(node.NodeID()); !ok {
 				panic(fmt.Sprintf("adding store to node=%d failed", node))
@@ -95,36 +159,59 @@ func (ae AddNodeEvent) Func() EventFunc {
 }
 
 func (ae AddNodeEvent) String() string {
-	return fmt.Sprintf("add node event with num_of_stores=%d, locality_string=%s", ae.NumStores, ae.LocalityString)
+	var buf strings.Builder
+	_, _ = fmt.Fprintf(&buf, "add node with %d stores", ae.NumStores)
+	if ae.LocalityString != "" {
+		_, _ = fmt.Fprintf(&buf, ", locality_string=%s", ae.LocalityString)
+	}
+	return buf.String()
 }
 
-func (sne SetNodeLivenessEvent) Func() EventFunc {
+func (ssse SetStoreStatusEvent) Func() EventFunc {
 	return MutationFunc(func(ctx context.Context, s state.State) {
-		s.SetNodeLiveness(
-			sne.NodeId,
-			sne.LivenessStatus,
-		)
+		s.SetStoreStatus(ssse.StoreID, ssse.Status)
 	})
 }
 
-func (sne SetNodeLivenessEvent) String() string {
-	return fmt.Sprintf("set node liveness event with nodeID=%d, liveness_status=%v", sne.NodeId, sne.LivenessStatus)
+func (ssse SetStoreStatusEvent) String() string {
+	return fmt.Sprintf("set s%d liveness=%v", ssse.StoreID, ssse.Status.Liveness)
+}
+
+func (snse SetNodeStatusEvent) Func() EventFunc {
+	return MutationFunc(func(ctx context.Context, s state.State) {
+		s.SetNodeStatus(snse.NodeID, snse.Status)
+	})
+}
+
+func (snse SetNodeStatusEvent) String() string {
+	return fmt.Sprintf("set n%d membership=%v, draining=%t",
+		snse.NodeID, snse.Status.Membership, snse.Status.Draining)
+}
+
+func (snle SetNodeLivenessEvent) Func() EventFunc {
+	return MutationFunc(func(ctx context.Context, s state.State) {
+		s.SetAllStoresLiveness(snle.NodeID, snle.Liveness)
+	})
+}
+
+func (snle SetNodeLivenessEvent) String() string {
+	return fmt.Sprintf("set n%d liveness=%v (all stores)", snle.NodeID, snle.Liveness)
 }
 
 func (sce SetCapacityOverrideEvent) Func() EventFunc {
 	return MutationFunc(func(ctx context.Context, s state.State) {
-		log.Dev.Infof(ctx, "setting capacity override %v", sce.CapacityOverride)
+		log.KvDistribution.Infof(ctx, "setting capacity override %v", sce.CapacityOverride)
 		s.SetCapacityOverride(sce.StoreID, sce.CapacityOverride)
 	})
 }
 
 func (sce SetCapacityOverrideEvent) String() string {
-	return fmt.Sprintf("set capacity override event with storeID=%d, capacity_override=%v", sce.StoreID, sce.CapacityOverride)
+	return fmt.Sprintf("override s%d capacity to %v", sce.StoreID, sce.CapacityOverride)
 }
 
 func (sne SetNodeLocalityEvent) Func() EventFunc {
 	return MutationFunc(func(ctx context.Context, s state.State) {
-		log.Dev.Infof(ctx, "setting node locality %v", sne.LocalityString)
+		log.KvDistribution.Infof(ctx, "setting node locality %v", sne.LocalityString)
 		if sne.LocalityString != "" {
 			var locality roachpb.Locality
 			if err := locality.Set(sne.LocalityString); err != nil {
@@ -150,5 +237,5 @@ func (se SetSimulationSettingsEvent) Func() EventFunc {
 }
 
 func (se SetSimulationSettingsEvent) String() string {
-	return fmt.Sprintf("set simulation settings event with key=%s, value=%v", se.Key, se.Value)
+	return fmt.Sprintf("set %s to %v", se.Key, se.Value)
 }

@@ -23,8 +23,8 @@ const (
 )
 
 const (
-	// resolvedTablesFilename: ~changefeed/resolved_tables.binpb
-	resolvedTablesFilename = jobInfoFilenamePrefix + "resolved_tables" + jobInfoFilenameExtension
+	// perTableProtectedTimestampsFilename: ~changefeed/per-table-protected-timestamps.binpb
+	perTableProtectedTimestampsFilename = jobInfoFilenamePrefix + "per-table-protected-timestamps" + jobInfoFilenameExtension
 )
 
 // writeChangefeedJobInfo writes a changefeed job info protobuf to the
@@ -45,9 +45,22 @@ func writeChangefeedJobInfo(
 	return jobs.WriteChunkedFileToJobInfo(ctx, filename, data, txn, jobID)
 }
 
+// deleteChangefeedJobInfo deletes a changefeed job info protobuf from the
+// job_info table. A changefeed-specific filename is required.
+func deleteChangefeedJobInfo(
+	ctx context.Context, filename string, txn isql.Txn, jobID jobspb.JobID,
+) error {
+	if !strings.HasPrefix(filename, jobInfoFilenamePrefix) {
+		return errors.AssertionFailedf("filename %q must start with prefix %q", filename, jobInfoFilenamePrefix)
+	}
+	if !strings.HasSuffix(filename, jobInfoFilenameExtension) {
+		return errors.AssertionFailedf("filename %q must end with extension %q", filename, jobInfoFilenameExtension)
+	}
+	return jobs.WriteChunkedFileToJobInfo(ctx, filename, nil, txn, jobID)
+}
+
 // readChangefeedJobInfo reads a changefeed job info protobuf from the
 // job_info table. A changefeed-specific filename is required.
-// TODO(#148119): Use this function to read.
 func readChangefeedJobInfo(
 	ctx context.Context, filename string, info protoutil.Message, txn isql.Txn, jobID jobspb.JobID,
 ) error {

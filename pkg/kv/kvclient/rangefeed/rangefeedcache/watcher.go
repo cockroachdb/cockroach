@@ -312,7 +312,7 @@ func (s *Watcher[E]) Run(ctx context.Context) error {
 		rangefeed.WithDiff(s.withPrevValue),
 		rangefeed.WithRowTimestampInInitialScan(s.withRowTSInInitialScan),
 		rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
-			log.VInfof(ctx, 1, "initial scan error: %s", err)
+			log.Dev.VInfof(ctx, 1, "initial scan error: %s", err)
 			// TODO(irfansharif): Consider if there are other errors which we
 			// want to treat as permanent. This was cargo culted from the
 			// settings watcher.

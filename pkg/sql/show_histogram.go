@@ -38,7 +38,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 		name:    fmt.Sprintf("SHOW HISTOGRAM %d", n.HistogramID),
 		columns: showHistogramColumns,
 
-		constructor: func(ctx context.Context, p *planner) (_ planNode, err error) {
+		constructor: func(ctx context.Context, p *planner) (_ planNode, retErr error) {
 			row, err := p.InternalSQLTxn().QueryRowEx(
 				ctx,
 				"read-histogram",
@@ -63,21 +63,8 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 				return nil, fmt.Errorf("histogram %d not found", n.HistogramID)
 			}
 
-			// Guard against crashes in the code below .
-			defer func() {
-				if r := recover(); r != nil {
-					// Avoid crashing the process in case of a "safe" panic. This is only
-					// possible because the code does not update shared state and does not
-					// manipulate locks.
-					if ok, e := errorutil.ShouldCatch(r); ok {
-						err = e
-					} else {
-						// Other panic objects can't be considered "safe" and thus are
-						// propagated as crashes that terminate the session.
-						panic(r)
-					}
-				}
-			}()
+			// Guard against crashes in the code below.
+			defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 			histogram := &stats.HistogramData{}
 			histData := *row[0].(*tree.DBytes)
@@ -90,20 +77,17 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 			if err := typedesc.EnsureTypeIsHydrated(ctx, histogram.ColumnType, &resolver); err != nil {
 				return nil, err
 			}
-			var a tree.DatumAlloc
-			for _, b := range histogram.Buckets {
-				var upperBound string
-				datum, err := stats.DecodeUpperBound(histogram.Version, histogram.ColumnType, &a, b.UpperBound)
-				if err != nil {
-					upperBound = fmt.Sprintf("<error: %v>", err)
-				} else {
-					upperBound = datum.String()
-				}
+			decodedBuckets, _, err := histogram.DecodeBuckets(ctx)
+			if err != nil {
+				return nil, err
+			}
+			for _, b := range decodedBuckets {
+				upperBound := b.UpperBound.String()
 				row := tree.Datums{
 					tree.NewDString(upperBound),
-					tree.NewDInt(tree.DInt(b.NumRange)),
+					tree.NewDInt(tree.DInt(int64(b.NumRange))),
 					tree.NewDFloat(tree.DFloat(b.DistinctRange)),
-					tree.NewDInt(tree.DInt(b.NumEq)),
+					tree.NewDInt(tree.DInt(int64(b.NumEq))),
 				}
 				if _, err := v.rows.AddRow(ctx, row); err != nil {
 					v.Close(ctx)

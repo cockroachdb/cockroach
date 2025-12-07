@@ -37,6 +37,11 @@ func TestStandbyReadTSPollerJob(t *testing.T) {
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
+	c.SrcTenantSQL.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY)`)
+	c.SrcTenantSQL.Exec(t, `CREATE TABLE bar (i INT PRIMARY KEY)`)
+
+	offset, offsetChecksInReaderTenant := maybeOffsetReaderTenantSystemTables(t, c)
+
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
@@ -70,6 +75,11 @@ INSERT INTO a VALUES (1);
 
 	observeValueInReaderTenant(t, c.ReaderTenantSQL)
 	waitForPollerTimeToAdvance(t, c.ReaderTenantSQL, pollerResolvedTime)
+
+	var idWithOffsetCount int
+	c.ReaderTenantSQL.QueryRow(t, fmt.Sprintf("SELECT count(*) FROM system.namespace where id = %d", 50+offset)).Scan(&idWithOffsetCount)
+	require.Equal(t, 1, idWithOffsetCount, "expected to find namespace entry for table a with offset applied")
+	offsetChecksInReaderTenant(c.ReaderTenantSQL)
 
 	// Failback and setup stanby reader tenant on the og source.
 	{
@@ -105,7 +115,113 @@ INSERT INTO a VALUES (1);
 		var numTables int
 		srcReaderSQL.QueryRow(t, `SELECT count(*) FROM [SHOW TABLES]`).Scan(&numTables)
 		observeValueInReaderTenant(t, srcReaderSQL)
+		offsetChecksInReaderTenant(srcReaderSQL)
 	}
+}
+
+func maybeOffsetReaderTenantSystemTables(
+	t *testing.T, c *replicationtestutils.TenantStreamingClusters,
+) (int, func(sql *sqlutils.SQLRunner)) {
+	if c.Rng.Intn(2) == 0 {
+		return 0, func(sql *sqlutils.SQLRunner) {}
+	}
+	offset := 100000
+	c.DestSysSQL.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING physical_cluster_replication.reader_system_table_id_offset = %d`, offset))
+	// Set on source to ensure failback works well too.
+	c.SrcSysSQL.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING physical_cluster_replication.reader_system_table_id_offset = %d`, offset))
+
+	// swap a system table ID and a user table ID to simulate a cluster that has interleaving user and system table ids.
+	scaryTableIDRemapFunc := `
+	CREATE OR REPLACE FUNCTION renumber_desc(oldID INT, newID INT) RETURNS BOOL AS
+$$
+BEGIN
+-- Rewrite the ID within the descriptor
+SELECT crdb_internal.unsafe_upsert_descriptor(
+        newid,
+        crdb_internal.json_to_pb(
+            'cockroach.sql.sqlbase.Descriptor',
+            d
+        ),
+        true
+       )
+  FROM (
+        SELECT id,
+               json_set(
+                json_set(
+                    crdb_internal.pb_to_json(
+                        'cockroach.sql.sqlbase.Descriptor',
+                        descriptor,
+                        false
+                    ),
+                    ARRAY['table', 'id'],
+                    newid::STRING::JSONB
+                ),
+                ARRAY['table', 'modificationTime'],
+                json_build_object(
+                    'wallTime',
+                    (
+                        (
+                            extract('epoch', now())
+                            * 1000000
+                        )::INT8
+                        * 1000
+                    )::STRING
+                )
+               ) AS d
+          FROM system.descriptor
+         WHERE id IN (oldid,)
+       );
+-- Update the namespace entry and delete the old descriptor.
+	SELECT crdb_internal.unsafe_upsert_namespace_entry("parentID", "parentSchemaID", name, newID, true) FROM (SELECT "parentID", "parentSchemaID", name, id FROM system.namespace where id =oldID) UNION ALL
+	SELECT crdb_internal.unsafe_delete_descriptor(oldID, true);
+
+	RETURN true;
+
+END
+$$ LANGUAGE PLpgSQL;`
+
+	c.SrcTenantSQL.Exec(t, scaryTableIDRemapFunc)
+	var txnInsightsID, privilegesID int
+	c.SrcTenantSQL.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'transaction_execution_insights'`).Scan(&txnInsightsID)
+	c.SrcTenantSQL.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'privileges'`).Scan(&privilegesID)
+	require.NotEqual(t, 0, txnInsightsID)
+	require.NotEqual(t, 0, privilegesID)
+
+	// renumber these two priv tables to be out of the way
+	txnInsightIDRemapedID := txnInsightsID + 1000
+	privilegesIDRemapedID := privilegesID + 1000
+	c.SrcTenantSQL.Exec(t, `SELECT renumber_desc($1, $2)`, txnInsightsID, txnInsightIDRemapedID)
+	c.SrcTenantSQL.Exec(t, `SELECT renumber_desc($1, $2)`, privilegesID, privilegesIDRemapedID)
+
+	// create two user tables on the source and interleave them with system table ids
+	var fooID, barID int
+	c.SrcTenantSQL.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'foo'`).Scan(&fooID)
+	c.SrcTenantSQL.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'bar'`).Scan(&barID)
+	require.NotEqual(t, 0, fooID)
+	require.NotEqual(t, 0, barID)
+
+	c.SrcTenantSQL.Exec(t, `SELECT renumber_desc($1, $2)`, fooID, txnInsightsID)
+	c.SrcTenantSQL.Exec(t, `SELECT renumber_desc($1, $2)`, barID, privilegesID)
+
+	// Drop the function, to avoid hitting 152978
+	c.SrcTenantSQL.Exec(t, `DROP FUNCTION renumber_desc`)
+
+	offsetChecksInReaderTenant := func(sql *sqlutils.SQLRunner) {
+		// Check that txn execution insights table is not at the same id as source as it's not replicated.
+		sql.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'transaction_execution_insights'`).Scan(&txnInsightsID)
+		require.NotEqual(t, txnInsightIDRemapedID, txnInsightsID)
+
+		// Check that the privildges table is at the same id as source, since it is
+		// replicated. This also implies that the og priviliges table created during
+		// reader tenant bootstrapping at id+offset was removed.
+		sql.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'privileges'`).Scan(&privilegesID)
+		require.Equal(t, privilegesIDRemapedID, privilegesID)
+		var count int
+		sql.QueryRow(t, `SELECT count(*) FROM system.namespace WHERE name = 'privileges'`).Scan(&count)
+		require.Equal(t, 1, count)
+	}
+
+	return offset, offsetChecksInReaderTenant
 }
 
 func observeValueInReaderTenant(t *testing.T, readerSQL *sqlutils.SQLRunner) {
@@ -116,8 +232,8 @@ func observeValueInReaderTenant(t *testing.T, readerSQL *sqlutils.SQLRunner) {
 		var numTables int
 		readerSQL.QueryRow(t, `SELECT count(*) FROM [SHOW TABLES]`).Scan(&numTables)
 
-		if numTables != 1 {
-			return errors.Errorf("expected 1 table to be present in reader tenant, but got %d instead", numTables)
+		if numTables != 3 {
+			return errors.Errorf("expected 3 tables to be present in reader tenant, but got %d instead", numTables)
 		}
 
 		var actualQueryResult int

@@ -880,4 +880,23 @@ $$ LANGUAGE PLpgSQL;
 statement ok
 DROP PROCEDURE p;
 
+# Regression test for not type-checking all default expressions when replacing
+# the procedure (#155859).
+statement ok
+CREATE PROCEDURE p (s STRING(1) DEFAULT NULL, d DECIMAL(1, 1) DEFAULT NULL) AS $$
+BEGIN
+  NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE OR REPLACE PROCEDURE p (s STRING(2) DEFAULT NULL, d DECIMAL(2, 2) DEFAULT NULL) AS $$
+BEGIN
+  NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP PROCEDURE p;
+
 subtest end

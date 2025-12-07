@@ -82,6 +82,11 @@ type insertFastPathRun struct {
 	// fkSpanMap is used to de-duplicate FK existence checks. Only used if there
 	// is more than one input row.
 	fkSpanMap map[string]struct{}
+
+	// kvCPUTime tracks the cumulative CPU time (in nanoseconds) that KV reported
+	// in BatchResponse headers for FK and uniqueness check batches. The KVCPUTime
+	// performed by the INSERT is tracked by the table inserter (insertRun.ti.kvCPUTime).
+	kvCPUTime int64
 }
 
 // insertFastPathFKUniqSpanInfo records information about each Request in the
@@ -314,6 +319,11 @@ func (n *insertFastPathNode) runUniqChecks(params runParams) error {
 		return err.GoError()
 	}
 
+	// Accumulate CPU time from the BatchResponse.
+	if br.CPUTime > 0 {
+		n.run.kvCPUTime += br.CPUTime
+	}
+
 	for i := range br.Responses {
 		resp := br.Responses[i].GetInner().(*kvpb.ScanResponse)
 		if len(resp.Rows) > 0 {
@@ -340,6 +350,11 @@ func (n *insertFastPathNode) runFKChecks(params runParams) error {
 	br, err := params.p.txn.Send(params.ctx, ba)
 	if err != nil {
 		return err.GoError()
+	}
+
+	// Accumulate CPU time from the BatchResponse.
+	if br.CPUTime > 0 {
+		n.run.kvCPUTime += br.CPUTime
 	}
 
 	for i := range br.Responses {
@@ -372,6 +387,11 @@ func (n *insertFastPathNode) runFKUniqChecks(params runParams) error {
 	br, err := params.p.txn.Send(params.ctx, ba)
 	if err != nil {
 		return err.GoError()
+	}
+
+	// Accumulate CPU time from the BatchResponse.
+	if br.CPUTime > 0 {
+		n.run.kvCPUTime += br.CPUTime
 	}
 
 	for i := range br.Responses {
@@ -438,30 +458,30 @@ func (n *insertFastPathNode) startExec(params runParams) error {
 		n.run.uniqSpanInfo = make([]insertFastPathFKUniqSpanInfo, 0, maxSpans)
 	}
 
-	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext())
-}
-
-// Next is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (n *insertFastPathNode) Next(params runParams) (bool, error) { panic("not valid") }
-
-// Values is required because batchedPlanNode inherits from planNode, but
-// batchedPlanNode doesn't really provide it. See the explanatory comments
-// in plan_batch.go.
-func (n *insertFastPathNode) Values() tree.Datums { panic("not valid") }
-
-// BatchedNext implements the batchedPlanNode interface.
-func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
-	if n.run.done {
-		return false, nil
+	if err := n.run.ti.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+		return err
 	}
 
-	// The fast path node does everything in one batch.
+	// Run the mutation to completion. InsertFastPath does everything in one
+	// batch, so no need to loop.
+	return n.processBatch(params)
+}
 
+// Next implements the planNode interface.
+func (n *insertFastPathNode) Next(_ runParams) (bool, error) {
+	return n.run.next(), nil
+}
+
+// Values implements the planNode interface.
+func (n *insertFastPathNode) Values() tree.Datums {
+	return n.run.values()
+}
+
+func (n *insertFastPathNode) processBatch(params runParams) error {
+	// The fast path node does everything in one batch.
 	for rowIdx, tupleRow := range n.input {
 		if err := params.p.cancelChecker.Check(); err != nil {
-			return false, err
+			return err
 		}
 		inputRow := n.run.inputRow(rowIdx)
 		for col, typedExpr := range tupleRow {
@@ -469,34 +489,34 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 			inputRow[col], err = eval.Expr(params.ctx, params.EvalContext(), typedExpr)
 			if err != nil {
 				err = interceptAlterColumnTypeParseError(n.run.insertCols, col, err)
-				return false, err
+				return err
 			}
 		}
 
 		if buildutil.CrdbTestBuild {
 			// This testing knob allows us to suspend execution to force a race condition.
 			if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
-				fn()
+				fn(params.p.stmt.SQL)
 			}
 		}
 
 		// Process the insertion for the current source row, potentially
 		// accumulating the result row for later.
 		if err := n.run.processSourceRow(params, inputRow); err != nil {
-			return false, err
+			return err
 		}
 
 		// Add uniqueness checks.
 		if len(n.run.uniqChecks) > 0 {
 			if _, err := n.run.addUniqChecks(params.ctx, rowIdx, inputRow, false /* forTesting */); err != nil {
-				return false, err
+				return err
 			}
 		}
 
 		// Add FK existence checks.
 		if len(n.run.fkChecks) > 0 {
 			if err := n.run.addFKChecks(params.ctx, rowIdx, inputRow); err != nil {
-				return false, err
+				return err
 			}
 		}
 	}
@@ -504,48 +524,56 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 	if len(n.run.fkBatch.Requests) > 0 && len(n.run.uniqBatch.Requests) > 0 {
 		// Perform the foreign key and uniqueness checks in a single batch.
 		if err := n.runFKUniqChecks(params); err != nil {
-			return false, err
+			return err
 		}
 	} else {
 		// Perform the uniqueness checks.
 		if err := n.runUniqChecks(params); err != nil {
-			return false, err
+			return err
 		}
 
 		// Perform the FK checks.
 		// TODO(radu): we could run the FK batch in parallel with the main batch (if
 		// we aren't auto-committing).
 		if err := n.runFKChecks(params); err != nil {
-			return false, err
+			return err
 		}
 	}
 	n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
 	if err := n.run.ti.finalize(params.ctx); err != nil {
-		return false, err
+		return err
 	}
-	// Remember we're done for the next call to BatchedNext().
-	n.run.done = true
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.ri.Helper.TableDesc, len(n.input))
+	params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, n.run.ti.ri.Helper.TableDesc, len(n.input))
 
-	return true, nil
+	return nil
 }
 
-// BatchedCount implements the batchedPlanNode interface.
-func (n *insertFastPathNode) BatchedCount() int { return len(n.input) }
-
-// BatchedCount implements the batchedPlanNode interface.
-func (n *insertFastPathNode) BatchedValues(rowIdx int) tree.Datums { return n.run.ti.rows.At(rowIdx) }
-
 func (n *insertFastPathNode) Close(ctx context.Context) {
-	n.run.ti.close(ctx)
+	n.run.close(ctx)
 	*n = insertFastPathNode{}
 	insertFastPathNodePool.Put(n)
 }
 
 func (n *insertFastPathNode) rowsWritten() int64 {
-	return n.run.ti.rowsWritten
+	return n.run.rowsAffected()
+}
+
+func (n *insertFastPathNode) indexRowsWritten() int64 {
+	return n.run.ti.indexRowsWritten
+}
+
+func (n *insertFastPathNode) indexBytesWritten() int64 {
+	return n.run.ti.indexBytesWritten
+}
+
+func (n *insertFastPathNode) returnsRowsAffected() bool {
+	return !n.run.rowsNeeded
+}
+
+func (n *insertFastPathNode) kvCPUTime() int64 {
+	return n.run.ti.kvCPUTime + n.run.kvCPUTime
 }
 
 // See planner.autoCommit.

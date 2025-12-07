@@ -10,6 +10,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/vecann",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/vecindex/cspann",
+        "//pkg/sql/vecindex/vecpb",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/timeutil",

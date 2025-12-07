@@ -10,7 +10,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
-	"os"
 	"path"
 	"time"
 
@@ -34,20 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 )
-
-// At the moment, Azure VMs do not have managed identities set up yet.
-// Therefore, in order to use implicit authentication, we need to put a
-// credentials file on each VM and point the
-// `COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE` environment variable at the
-// file.
-// Currently, the only set of credentials that have write access to the storage
-// buckets are the Teamcity credentials, so the Azure fixture roachtests cannot
-// be run locally until those managed identities are set up.
-// TODO (kev-cao): Once managed identities are set up, we can remove this file
-// and rely on the managed identity to authenticate with Azure Blob Storage.
-const azureCredentialsFilePath = "/home/ubuntu/azure-credentials.yaml"
 
 // Maps a fixture database name to the expected number of tables in the
 // database, useful for verifying that the fingerprint of the fixture is as
@@ -180,8 +166,12 @@ type backupDriver struct {
 }
 
 func (bd *backupDriver) prepareCluster(ctx context.Context) {
+	startOptions := option.NewStartOpts(option.NoBackupSchedule)
+	startOptions.RoachprodOpts.ExtraArgs = append(
+		startOptions.RoachprodOpts.ExtraArgs,
+		"--vmodule=cloud_logging_transport=1")
 	bd.c.Start(
-		ctx, bd.t.L(), option.NewStartOpts(option.NoBackupSchedule),
+		ctx, bd.t.L(), startOptions,
 		install.MakeClusterSettings(
 			install.ClusterSettingsOption{
 				// Large imports can run into a death spiral where splits fail because
@@ -191,9 +181,7 @@ func (bd *backupDriver) prepareCluster(ctx context.Context) {
 				"kv.snapshot_rebalance.max_rate":                    "256 MiB",
 				"server.debug.default_vmodule":                      "s3_storage=2",
 				"cloudstorage.s3.client_retry_token_bucket.enabled": "false",
-			},
-			install.EnvOption{
-				fmt.Sprintf("COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE=%s", azureCredentialsFilePath),
+				"cloudstorage.azure.try.timeout":                    "0s",
 			},
 		))
 }
@@ -263,7 +251,7 @@ func (bd *backupDriver) runWorkload(ctx context.Context) (func(), error) {
 
 // scheduleBackups begins the backup schedule.
 func (bd *backupDriver) scheduleBackups(ctx context.Context) {
-	bd.t.L().Printf("creating backup schedule", bd.sp.fixture.WorkloadWarehouses)
+	bd.t.L().Printf("creating backup schedule %d", bd.sp.fixture.WorkloadWarehouses)
 	conn := bd.c.Conn(ctx, bd.t.L(), 1)
 	defer conn.Close()
 	if bd.sp.fixture.CompactionThreshold > 0 {
@@ -441,17 +429,19 @@ func (bd *backupDriver) queryJobStates(
 // fingerprintFixture computes fingerprints for the fixture as of the time of
 // its last incremental backup. It maps the fully qualified name of each table
 // to its fingerprint.
-func (bd *backupDriver) fingerprintFixture(ctx context.Context) map[string]string {
+func (bd *backupDriver) fingerprintFixture(ctx context.Context, asOfTime string) map[string]string {
 	conn := bd.c.Conn(ctx, bd.t.L(), 1)
 	defer conn.Close()
 	return fingerprintDatabase(
-		bd.t, conn, bd.sp.fixture.DatabaseName(), bd.getLatestAOST(sqlutils.MakeSQLRunner(conn)),
-	)
+		bd.t, conn, bd.sp.fixture.DatabaseName(), asOfTime)
 }
 
 // getLatestAOST returns the end time as seen in SHOW BACKUP of the latest
 // backup in the fixture.
-func (bd *backupDriver) getLatestAOST(sql *sqlutils.SQLRunner) string {
+func (bd *backupDriver) getLatestAOST(ctx context.Context) string {
+	conn := bd.c.Conn(ctx, bd.t.L(), 1)
+	defer conn.Close()
+	sql := sqlutils.MakeSQLRunner(conn)
 	uri := bd.registry.URI(bd.fixture.DataPath)
 	query := fmt.Sprintf(
 		`SELECT end_time FROM
@@ -558,7 +548,7 @@ func GetFixtureRegistry(ctx context.Context, t test.Test, cloud spec.Cloud) *blo
 	case spec.GCE, spec.Local:
 		account, err := vm.Providers["gce"].FindActiveAccount(t.L())
 		require.NoError(t, err)
-		t.L().Printf("using GCE account", account)
+		t.L().Printf("using GCE account %s", account)
 
 		uri = url.URL{
 			Scheme:   "gs",
@@ -646,7 +636,6 @@ func registerBackupFixtures(r registry.Registry) {
 			Suites:            bf.suites,
 			Skip:              bf.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				require.NoError(t, maybePutAzureCredentialsFile(ctx, c, azureCredentialsFilePath))
 				registry := GetFixtureRegistry(ctx, t, c.Cloud())
 
 				handle, err := registry.Create(ctx, bf.fixture.Name, t.L())
@@ -671,52 +660,15 @@ func registerBackupFixtures(r registry.Registry) {
 				stopWorkload()
 
 				if !bf.skipFingerprint {
-					fingerprint := bd.fingerprintFixture(ctx)
-					require.NoError(t, handle.SetFingerprint(ctx, fingerprint))
+					fingerprintTime := bd.getLatestAOST(ctx)
+					fingerprint := bd.fingerprintFixture(ctx, fingerprintTime)
+					require.NoError(t, handle.SetFingerprint(ctx, fingerprint, fingerprintTime))
 				}
 
 				require.NoError(t, handle.SetReadyAt(ctx))
 			},
 		})
 	}
-}
-
-func maybePutAzureCredentialsFile(ctx context.Context, c cluster.Cluster, path string) error {
-	if c.Cloud() != spec.Azure {
-		return nil
-	}
-
-	type azureCreds struct {
-		TenantID     string `yaml:"azure_tenant_id"`
-		ClientID     string `yaml:"azure_client_id"`
-		ClientSecret string `yaml:"azure_client_secret"`
-	}
-
-	azureEnvVars := []string{AzureTenantIDEnvVar, AzureClientIDEnvVar, AzureClientSecretEnvVar}
-	azureEnvValues := make(map[string]string)
-	for _, envVar := range azureEnvVars {
-		val := os.Getenv(envVar)
-		if val == "" {
-			return errors.Newf("environment variable %s is not set", envVar)
-		}
-		azureEnvValues[envVar] = val
-	}
-
-	creds := azureCreds{
-		TenantID:     azureEnvValues[AzureTenantIDEnvVar],
-		ClientID:     azureEnvValues[AzureClientIDEnvVar],
-		ClientSecret: azureEnvValues[AzureClientSecretEnvVar],
-	}
-
-	credsYaml, err := yaml.Marshal(creds)
-	if err != nil {
-		return errors.Wrapf(err, "failed to marshal Azure credentials to YAML")
-	}
-
-	return errors.Wrap(
-		c.PutString(ctx, string(credsYaml), path, 0700),
-		"failed to put Azure credentials file in cluster",
-	)
 }
 
 func registerBlobFixtureGC(r registry.Registry) {

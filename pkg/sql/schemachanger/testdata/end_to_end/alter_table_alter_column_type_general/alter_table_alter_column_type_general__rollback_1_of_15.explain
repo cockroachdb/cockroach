@@ -22,7 +22,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER COLUMN 
       │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 4 (t_pkey-)}
       │    │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 104 (t), ColumnID: 3 (j-)}
       │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (j-), TypeName: "INT8"}
-      │    │    ├── PUBLIC        → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j-), Usage: ALTER_TYPE_USING}
+      │    │    ├── PUBLIC        → ABSENT ColumnComputeExpression:{DescID: 104 (t), ColumnID: 3 (j-), ReferencedColumnIDs: [2], Usage: ALTER_TYPE_USING}
       │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (j-), IndexID: 2 (t_pkey-)}
       │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (j-), IndexID: 3}
       │    │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (j-), IndexID: 4 (t_pkey-)}

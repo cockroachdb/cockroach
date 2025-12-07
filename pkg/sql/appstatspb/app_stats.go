@@ -131,6 +131,7 @@ func (t *TransactionStatistics) Add(other *TransactionStatistics) {
 	t.RowsRead.Add(other.RowsRead, t.Count, other.Count)
 	t.BytesRead.Add(other.BytesRead, t.Count, other.Count)
 	t.RowsWritten.Add(other.RowsWritten, t.Count, other.Count)
+	t.KVCPUTimeNanos.Add(other.KVCPUTimeNanos, t.Count, other.Count)
 
 	t.ExecStats.Add(other.ExecStats)
 
@@ -181,6 +182,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
 	s.RowsWritten.Add(other.RowsWritten, s.Count, other.Count)
+	s.KVCPUTimeNanos.Add(other.KVCPUTimeNanos, s.Count, other.Count)
 	s.Nodes = util.CombineUnique(s.Nodes, other.Nodes)
 	s.KVNodeIDs = util.CombineUnique(s.KVNodeIDs, other.KVNodeIDs)
 	s.Regions = util.CombineUnique(s.Regions, other.Regions)
@@ -214,6 +216,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.Count += other.Count
 	s.FailureCount += other.FailureCount
 	s.GenericCount += other.GenericCount
+	s.StmtHintsCount += other.StmtHintsCount
 }
 
 // AlmostEqual compares two StatementStatistics and their contained NumericStats
@@ -253,6 +256,7 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.NetworkMessages.Add(other.NetworkMessages, execStatCollectionCount, other.Count)
 	s.MaxDiskUsage.Add(other.MaxDiskUsage, execStatCollectionCount, other.Count)
 	s.CPUSQLNanos.Add(other.CPUSQLNanos, execStatCollectionCount, other.Count)
+	s.AdmissionWaitTime.Add(other.AdmissionWaitTime, execStatCollectionCount, other.Count)
 
 	s.MVCCIteratorStats.StepCount.Add(other.MVCCIteratorStats.StepCount, execStatCollectionCount, other.Count)
 	s.MVCCIteratorStats.StepCountInternal.Add(other.MVCCIteratorStats.StepCountInternal, execStatCollectionCount, other.Count)

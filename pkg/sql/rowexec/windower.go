@@ -722,7 +722,10 @@ func (w *windower) populateNextOutputRow() (bool, error) {
 		copy(w.outputRow, inputRow[:len(w.inputTypes)])
 		for windowFnIdx, windowFn := range w.windowFns {
 			windowFnRes := w.windowValues[w.partitionIdx][windowFnIdx][rowIdx]
-			encWindowFnRes := rowenc.DatumToEncDatum(w.outputTypes[windowFn.outputColIdx], windowFnRes)
+			encWindowFnRes, err := rowenc.DatumToEncDatum(w.outputTypes[windowFn.outputColIdx], windowFnRes)
+			if err != nil {
+				return false, err
+			}
 			w.outputRow[windowFn.outputColIdx] = encWindowFnRes
 		}
 		w.rowsInBucketEmitted++

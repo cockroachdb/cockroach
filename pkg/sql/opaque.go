@@ -236,7 +236,7 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 	case *tree.GrantRole:
 		return p.GrantRole(ctx, n)
 	case *tree.MoveCursor:
-		return p.FetchCursor(ctx, &n.CursorStmt)
+		return p.MoveCursor(ctx, &n.CursorStmt)
 	case *tree.ReassignOwnedBy:
 		return p.ReassignOwnedBy(ctx, n)
 	case *tree.RefreshMaterializedView:
@@ -309,13 +309,21 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.Unlisten(ctx, n)
 	case *pgrepltree.IdentifySystem:
 		return p.IdentifySystem(ctx, n)
-	case tree.CCLOnlyStatement:
+	case tree.PlanHookStatement:
 		plan, err := p.maybePlanHook(ctx, stmt)
-		if plan == nil && err == nil {
-			return nil, pgerror.Newf(pgcode.CCLRequired,
-				"a CCL binary is required to use this statement type: %T", stmt)
+		if err != nil {
+			return nil, err
+		} else if plan == nil {
+			if _, ok := n.(tree.CCLOnlyStatement); ok {
+				return nil, pgerror.Newf(pgcode.CCLRequired,
+					"a CCL binary is required to use this statement type: %T", stmt)
+			}
+
+			return nil, pgerror.Newf(pgcode.InvalidSQLStatementName,
+				"unknown plan hook statement: %T", stmt)
 		}
-		return plan, err
+
+		return plan, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown opaque statement %T", stmt)
 	}
@@ -427,6 +435,7 @@ func init() {
 		&tree.ShowCreateExternalConnections{},
 		&tree.ShowExternalConnections{},
 		&tree.ShowHistogram{},
+		&tree.ShowInspectErrors{},
 		&tree.ShowTableStats{},
 		&tree.ShowTenant{},
 		&tree.ShowTraceForSession{},
@@ -441,7 +450,11 @@ func init() {
 
 		&pgrepltree.IdentifySystem{},
 
+		// planHook-based statements.
+		&tree.Inspect{},
+
 		// CCL statements (without Export which has an optimizer operator).
+		// These also use the planHook.
 		&tree.AlterBackup{},
 		&tree.AlterBackupSchedule{},
 		&tree.AlterTenantReplication{},

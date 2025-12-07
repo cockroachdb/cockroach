@@ -111,15 +111,15 @@ func (p *Provider) createInstance(
 		return nil, errors.Wrap(err, "failed to get VPC service for region")
 	}
 
-	// Create the startup script
 	startupScript, err := p.startupScript(startupArgs{
 		StartupArgs: vm.DefaultStartupArgs(
 			vm.WithVMName(opts.vmName),
 			vm.WithSharedUser(opts.providerOpts.RemoteUserName),
 			vm.WithChronyServers([]string{defaultNTPServer}),
-			vm.WithZfs(opts.vmOpts.SSDOpts.FileSystem == vm.Zfs),
+			vm.WithFilesystem(opts.vmOpts.SSDOpts.FileSystem),
+			vm.WithUseMultipleDisks(opts.providerOpts.UseMultipleDisks),
+			vm.WithBootDiskOnly(opts.providerOpts.BootDiskOnly),
 		),
-		UseMultipleDisks: opts.providerOpts.UseMultipleDisks,
 	})
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create startup script for instance %s", opts.vmName)
@@ -137,28 +137,37 @@ func (p *Provider) createInstance(
 
 	// Build the attached volumes information.
 	// Let's start with the default data disk.
-	attachedVolumes := volumeAttachments{
-		&volumeAttachment{
-			Name:                   fmt.Sprintf("%s-data-%04d", opts.vmName, 0),
-			ResourceGroupID:        p.config.roachprodResourceGroupID,
-			Capacity:               opts.providerOpts.DefaultVolume.VolumeSize,
-			IOPS:                   opts.providerOpts.DefaultVolume.IOPS,
-			Profile:                opts.providerOpts.DefaultVolume.VolumeType,
-			UserTags:               opts.tags,
-			DeleteOnInstanceDelete: true,
-		},
-	}
-	// Then we add any additional attached volumes.
-	for i, attachedVolume := range opts.providerOpts.AttachedVolumes {
-		attachedVolumes = append(attachedVolumes, &volumeAttachment{
-			Name:                   fmt.Sprintf("%s-data-%04d", opts.vmName, i+1),
-			ResourceGroupID:        p.config.roachprodResourceGroupID,
-			Capacity:               attachedVolume.VolumeSize,
-			IOPS:                   attachedVolume.IOPS,
-			Profile:                attachedVolume.VolumeType,
-			UserTags:               opts.tags,
-			DeleteOnInstanceDelete: true,
-		})
+	attachedVolumes := volumeAttachments{}
+	if !opts.providerOpts.BootDiskOnly {
+
+		// If specific attached volumes are provided, use those.
+		// Otherwise, use the default volume configuration and create the specified count.
+		if len(opts.providerOpts.AttachedVolumes) != 0 {
+			for i, attachedVolume := range opts.providerOpts.AttachedVolumes {
+				attachedVolumes = append(attachedVolumes, &volumeAttachment{
+					Name:                   fmt.Sprintf("%s-data-%04d", opts.vmName, i),
+					ResourceGroupID:        p.config.roachprodResourceGroupID,
+					Capacity:               attachedVolume.VolumeSize,
+					IOPS:                   attachedVolume.IOPS,
+					Profile:                attachedVolume.VolumeType,
+					UserTags:               opts.tags,
+					DeleteOnInstanceDelete: true,
+				})
+			}
+		} else {
+			for i := range opts.providerOpts.AttachedVolumesCount {
+				attachedVolumes = append(attachedVolumes, &volumeAttachment{
+					Name:                   fmt.Sprintf("%s-data-%04d", opts.vmName, i),
+					ResourceGroupID:        p.config.roachprodResourceGroupID,
+					Capacity:               opts.providerOpts.DefaultVolume.VolumeSize,
+					IOPS:                   opts.providerOpts.DefaultVolume.IOPS,
+					Profile:                opts.providerOpts.DefaultVolume.VolumeType,
+					UserTags:               opts.tags,
+					DeleteOnInstanceDelete: true,
+				})
+			}
+		}
+
 	}
 
 	// Determine what happen in case of a host failure or maintenance.
@@ -1256,16 +1265,23 @@ type parsedCRN struct {
 	id     string
 }
 
+// parseCRN takes an IBM Cloud Resource Name string and parses it into
+// its components for easier use.
+// We don't store the resource ID in vm.VM, we need to parse the CRN if
+// we need the resource ID which is at index 9 after splitting.
+// CRN format:
+//
+//	crn:version:cname:ctype:service-name:location:scope:service-instance:resource-type:resource
+//
+// CRN e.g.
+//
+//	crn:v1:bluemix:public:is:ca-tor-1:a/ba0325a6257b4dabb3a7aa149a6578ae::instance:02q7_1a2940f7-b058-4742-8ef1-b1ee08273cf0
 func (p *Provider) parseCRN(crn string) (*parsedCRN, error) {
 
 	if crn == "" {
 		return nil, fmt.Errorf("empty CRN")
 	}
 
-	// CRN have the following format:
-	// crn:version:cname:ctype:service-name:location:scope:service-instance:resource-type:resource
-	// e.g.: crn:v1:bluemix:public:is:ca-tor-1:a/ba0325a6257b4dabb3a7aa149a6578ae::instance:02q7_1a2940f7-b058-4742-8ef1-b1ee08273cf0
-	// we're interested in the "resource" part, which is the 10th part
 	parts := strings.Split(crn, ":")
 
 	if len(parts) < 10 {
@@ -1276,6 +1292,9 @@ func (p *Provider) parseCRN(crn string) (*parsedCRN, error) {
 		id: parts[9],
 	}
 
+	// a CRN's location field can be a region or a zone, handle both cases
+	// region e.g. br-sao
+	// zone e.g. br-sao-1
 	splitsRegion := strings.Split(parts[5], "-")
 	if len(splitsRegion) < 3 {
 		c.region = parts[5]

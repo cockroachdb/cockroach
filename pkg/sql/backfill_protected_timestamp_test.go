@@ -99,7 +99,7 @@ func TestValidationWithProtectedTS(t *testing.T) {
 			t,
 			spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf),
 		)
-		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
+		require.NoError(t, repl.TestingReadProtectedTimestamps(ctx))
 	}
 	// Refresh forces the PTS cache to update to at least asOf.
 	refreshPTSCacheTo := func(t *testing.T, asOf hlc.Timestamp) {
@@ -241,6 +241,7 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 	var db *gosql.DB
 	var tableID uint32
 	s, db, _ = serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156127),
 		Knobs: base.TestingKnobs{
 			SQLEvalContext: &eval.TestingKnobs{
 				ForceProductionValues: true,
@@ -315,7 +316,7 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 		if err := spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf); err != nil {
 			return err
 		}
-		return repl.ReadProtectedTimestampsForTesting(ctx)
+		return repl.TestingReadProtectedTimestamps(ctx)
 	}
 	// Refresh forces the PTS cache to update to at least asOf.
 	refreshPTSCacheTo := func(ctx context.Context, asOf hlc.Timestamp) error {

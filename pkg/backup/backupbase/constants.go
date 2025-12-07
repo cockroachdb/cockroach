@@ -19,6 +19,10 @@ const (
 	// LATEST files will be stored as we no longer want to overwrite it.
 	LatestHistoryDirectory = backupMetadataDirectory + "/" + "latest"
 
+	// BackupPartitionDescriptorPrefix is the file name prefix for serialized
+	// BackupPartitionDescriptor protos.
+	BackupPartitionDescriptorPrefix = "BACKUP_PART"
+
 	// DateBasedIncFolderName is the date format used when creating sub-directories
 	// storing incremental backups for auto-appendable backups.
 	// It is exported for testing backup inspection tooling.
@@ -35,19 +39,12 @@ const (
 	// Also exported for testing backup inspection tooling.
 	DateBasedIntoFolderName = "/2006/01/02-150405.00"
 
-	// BackupOldManifestName is an old name for the serialized BackupManifest
-	// proto. It is used by 20.1 nodes and earlier.
+	// DeprecatedBackupManifestName is the file name used for serialized
+	// BackupManifest protos.
 	//
-	// TODO(adityamaru): Remove this in 22.2 as part of disallowing backups
-	// from >1 major version in the past.
-	BackupOldManifestName = "BACKUP"
-
-	// BackupManifestName is the file name used for serialized BackupManifest
-	// protos.
-	//
-	// TODO(adityamaru): Remove in 23.2 since at that point all nodes will be
-	// writing a SlimBackupManifest instead.
-	BackupManifestName = "BACKUP_MANIFEST"
+	// TODO(msbutler): Remove 26.3 when we're guaranteed that no backup wrote
+	// exclusively the backup_manifest, and not the slim manifest.
+	DeprecatedBackupManifestName = "BACKUP_MANIFEST"
 
 	// BackupMetadataName is the file name used for serialized BackupManifest
 	// protos written by 23.1 nodes and later. This manifest has the alloc heavy
@@ -67,6 +64,10 @@ const (
 	// BackupIndexDirectoryName is the path from the root of the backup collection
 	// to the directory containing the index files for the backup collection.
 	BackupIndexDirectoryPath = "index/"
+
+	// BackupIndexFlattenedSubdir is the format used for the top-level
+	// subdirectories within the index directory.
+	BackupIndexFlattenedSubdir = "2006-01-02-150405.00"
 
 	// BackupIndexFilenameTimestampFormat is the format used for the human
 	// readable start and end times in the index file names.

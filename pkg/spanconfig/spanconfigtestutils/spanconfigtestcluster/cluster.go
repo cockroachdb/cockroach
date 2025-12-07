@@ -71,6 +71,9 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 				SpanConfig:     h.scKnobs,
 				GCJob:          &tenantGCJobKnobs,
 				UpgradeManager: serverUpgradeKnobs,
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					UseTransactionalDescIDGenerator: true,
+				},
 			},
 		}
 		var err error

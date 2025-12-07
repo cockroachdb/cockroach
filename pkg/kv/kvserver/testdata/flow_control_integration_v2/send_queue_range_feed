@@ -8,7 +8,7 @@ echo
 -- n3, using 4x1 MiB (deduction, the write itself is small) writes. Then,
 -- we will write 1 MiB to the range and wait for the closedTS to fall
 -- behind on n3. We expect that the closedTS falling behind will trigger
--- an error that is returned to the mux rangefeed client, which will in turn 
+-- an error that is returned to the mux rangefeed client, which will in turn
 -- allows the rangefeed  request to be re-routed to another replica.
 
 
@@ -31,12 +31,12 @@ SELECT
 
 
 -- Send queue metrics from n1, n3's send queue should have 1 MiB for s3.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%send_queue%'
   AND name != 'kvflowcontrol.send_queue.count'
 ORDER BY
@@ -69,7 +69,7 @@ ORDER BY
   a        | 3        | 4.0 MiB               
 
 
--- Per-store tokens available from n1, these should reflect the lack of tokens 
+-- Per-store tokens available from n1, these should reflect the lack of tokens
 -- for s3.
 SELECT
   store_id,
@@ -107,12 +107,12 @@ SELECT
 
 
 -- Send queue and flow token metrics from n1. All tokens should be returned.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%send_queue%'
   AND name != 'kvflowcontrol.send_queue.count'
 ORDER BY

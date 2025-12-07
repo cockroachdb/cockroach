@@ -69,7 +69,7 @@ func newMMAStoreRebalancer(
 func (m *mmaStoreRebalancer) run(ctx context.Context, stopper *stop.Stopper) {
 	timer := time.NewTicker(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&m.st.SV)))
 	defer timer.Stop()
-	log.Dev.Infof(ctx, "starting multi-metric store rebalancer with mode=%v", kvserverbase.LoadBasedRebalancingMode.Get(&m.st.SV))
+	log.KvDistribution.Infof(ctx, "starting multi-metric store rebalancer with mode=%v", kvserverbase.LoadBasedRebalancingMode.Get(&m.st.SV))
 
 	for {
 		select {
@@ -81,7 +81,7 @@ func (m *mmaStoreRebalancer) run(ctx context.Context, stopper *stop.Stopper) {
 			// Wait out the first tick before doing anything since the store is still
 			// starting up and we might as well wait for some stats to accumulate.
 			timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&m.st.SV)))
-			if kvserverbase.LoadBasedRebalancingMode.Get(&m.st.SV) != kvserverbase.LBRebalancingMultiMetric {
+			if !kvserverbase.LoadBasedRebalancingModeIsMMA(&m.st.SV) {
 				continue
 			}
 
@@ -129,7 +129,7 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 	knownStoresByMMA := m.mma.KnownStores()
 	storeLeaseholderMsg, numIgnoredRanges := m.store.MakeStoreLeaseholderMsg(ctx, knownStoresByMMA)
 	if numIgnoredRanges > 0 {
-		log.Dev.Infof(ctx, "mma rebalancer: ignored %d ranges since the allocator does not know all stores",
+		log.KvDistribution.Infof(ctx, "mma rebalancer: ignored %d ranges since the allocator does not know all stores",
 			numIgnoredRanges)
 	}
 
@@ -140,7 +140,7 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 	// TODO(wenyihu6): add allocator sync and post apply here
 	for _, change := range changes {
 		if err := m.applyChange(ctx, change); err != nil {
-			log.Dev.VInfof(ctx, 1, "failed to apply change for range %d: %v", change.RangeID, err)
+			log.KvDistribution.VInfof(ctx, 1, "failed to apply change for range %d: %v", change.RangeID, err)
 		}
 	}
 
@@ -150,17 +150,17 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 // applyChange safely applies a single change to the store. It handles the case
 // where the replica might not exist and provides proper error handling.
 func (m *mmaStoreRebalancer) applyChange(
-	ctx context.Context, change mmaprototype.PendingRangeChange,
+	ctx context.Context, change mmaprototype.ExternalRangeChange,
 ) error {
 	repl := m.store.GetReplicaIfExists(change.RangeID)
 	if repl == nil {
-		m.as.MarkChangesAsFailed(change.ChangeIDs())
+		m.as.MarkChangeAsFailed(change)
 		return errors.Errorf("replica not found for range %d", change.RangeID)
 	}
-	changeID := m.as.MMAPreApply(repl.RangeUsageInfo(), change)
+	changeID := m.as.MMAPreApply(ctx, repl.RangeUsageInfo(), change)
 	var err error
 	switch {
-	case change.IsTransferLease():
+	case change.IsPureTransferLease():
 		err = m.applyLeaseTransfer(ctx, repl, change)
 	case change.IsChangeReplicas():
 		err = m.applyReplicaChanges(ctx, repl, change)
@@ -175,7 +175,7 @@ func (m *mmaStoreRebalancer) applyChange(
 
 // applyLeaseTransfer applies a lease transfer change.
 func (m *mmaStoreRebalancer) applyLeaseTransfer(
-	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.PendingRangeChange,
+	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.ExternalRangeChange,
 ) error {
 	return repl.AdminTransferLease(
 		ctx,
@@ -186,7 +186,7 @@ func (m *mmaStoreRebalancer) applyLeaseTransfer(
 
 // applyReplicaChanges applies replica membership changes.
 func (m *mmaStoreRebalancer) applyReplicaChanges(
-	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.PendingRangeChange,
+	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.ExternalRangeChange,
 ) error {
 	// TODO(mma): We should be setting a timeout on the ctx here, in the case
 	// where rebalancing takes a long time (stuck behind other snapshots).

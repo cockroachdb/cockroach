@@ -41,7 +41,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/apiinternal"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
@@ -491,6 +493,7 @@ func newTenantServer(
 
 	// Tell the status/admin servers how to access SQL structures.
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
+	sStatus.setTxnDiagnosticsRequester(sqlServer.execCfg.TxnDiagnosticsRecorder)
 	serverIterator.sqlServer = sqlServer
 	sStatus.baseStatusServer.sqlServer = sqlServer
 	sAdmin.sqlServer = sqlServer
@@ -604,7 +607,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		lf = s.sqlServer.cfg.RPCListenerFactory
 	}
 
-	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(
+	pgL, loopbackPgL, grpcLoopbackDialFn, drpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(
 		ctx, workersCtx, *s.sqlServer.cfg, s.stopper,
 		s.grpc, s.drpc, lf, enableSQLListener, s.cfg.AcceptProxyProtocolHeaders)
 	if err != nil {
@@ -616,7 +619,8 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	s.loopbackPgL = loopbackPgL
 
 	// Tell the RPC context how to connect in-memory.
-	s.rpcContext.SetLoopbackDialer(rpcLoopbackDialFn)
+	s.rpcContext.SetLoopbackDialer(grpcLoopbackDialFn)
+	s.rpcContext.SetLoopbackDRPCDialer(drpcLoopbackDialFn)
 
 	// NB: This is where (*Server).PreStart() reports the listener readiness
 	// via testing knobs: PauseAfterGettingRPCAddress, SignalAfterGettingRPCAddress.
@@ -632,7 +636,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.sqlServer.cfg.AmbientCtx,
 		s.rpcContext,
 		s.stopper,
-		s.grpc,
 		s.sqlServer.cfg.AdvertiseAddr,
 	)
 	if err != nil {
@@ -821,6 +824,19 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	var apiInternalServer http.Handler
+	if rpcbase.TODODRPC && rpcbase.DRPCEnabled(ctx, s.cfg.Settings) {
+		// Pass our own instance ID to connect to local RPC servers
+		apiInternalServer, err = apiinternal.NewAPIInternalServer(ctx,
+			s.sqlServer.sqlInstanceDialer,
+			roachpb.NodeID(s.sqlServer.SQLInstanceID()), s.cfg.Settings)
+		if err != nil {
+			return err
+		}
+	} else {
+		apiInternalServer = gwMux
+	}
+
 	// Connect the HTTP endpoints. This also wraps the privileged HTTP
 	// endpoints served by gwMux by the HTTP cookie authentication
 	// check.
@@ -830,10 +846,12 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	if err := s.http.setupRoutes(ctx,
 		s.sqlServer.ExecutorConfig(), /* execCfg */
 		s.authentication,             /* authnServer */
+		s.tenantAdmin,                /* adminServer */
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */
-		gwMux,                        /* handleRequestsUnauthenticated */
+		gwMux,                        /* unauthenticatedGWMux */
+		apiInternalServer,            /* unauthenticatedAPIInternalServer */
 		s.debug,                      /* handleDebugUnauthenticated */
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
@@ -1311,11 +1329,14 @@ func makeTenantSQLServerArgs(
 	externalStorage := esb.makeExternalStorage
 	externalStorageFromURI := esb.makeExternalStorageFromURI
 
-	grpcServer, err := newGRPCServer(startupCtx, rpcContext, registry)
+	requestMetrics := rpc.NewRequestMetrics()
+	registry.AddMetricStruct(requestMetrics)
+
+	grpcServer, err := newGRPCServer(startupCtx, rpcContext, requestMetrics)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
-	drpcServer, err := newDRPCServer(startupCtx, rpcContext)
+	drpcServer, err := newDRPCServer(startupCtx, rpcContext, requestMetrics)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}

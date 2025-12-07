@@ -1,0 +1,249 @@
+user testuser
+
+statement error pq: user testuser does not have INSPECT system privilege
+SHOW INSPECT ERRORS
+
+user root
+
+statement ok
+GRANT SYSTEM INSPECT TO testuser;
+
+statement error relation "bad_table" does not exist
+SHOW INSPECT ERRORS FOR TABLE bad_table
+
+statement ok
+CREATE TABLE foo (a INT);
+CREATE TABLE bar (b INT);
+
+let $foo_table_id
+SELECT 'foo'::regclass::oid
+
+let $bar_table_id
+SELECT 'bar'::regclass::oid
+
+let $database_id
+SELECT id FROM system.namespace WHERE name = current_database() AND "parentID" = 0
+
+let $schema_id
+SELECT current_schema()::regnamespace::oid
+
+let $aost
+SELECT '2025-09-23-11:02:14-04:00'::timestamp
+
+# the job_info insert addresses the `crdb_internal.system_jobs` inner join
+statement ok
+INSERT INTO system.jobs (id, owner, status, job_type)
+VALUES (555, 'testuser', 'failed', 'INSPECT');
+INSERT INTO system.job_info (job_id, info_key, value)
+VALUES (
+  555,
+  'legacy_payload',
+  crdb_internal.json_to_pb(
+    'cockroach.sql.jobs.jobspb.Payload',
+    json_build_object(
+      'inspectDetails', json_build_object(
+        'checks', json_build_array(
+          json_build_object('tableId', $foo_table_id),
+          json_build_object('tableId', $bar_table_id)
+        )
+      )
+    )
+  )
+);
+
+statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, aost, database_id, schema_id, id, details)
+VALUES
+  (555, '555_foo', '$aost', $database_id, $schema_id, $foo_table_id, '{"detail":"555\"foo"}'),
+  (555, '555_bar', '$aost', $database_id, $schema_id, $bar_table_id, '{"detail":"555\"bar"}');
+
+statement ok
+INSERT INTO system.jobs (id, owner, status, job_type)
+VALUES (666, 'testuser', 'failed', 'INSPECT');
+INSERT INTO system.job_info (job_id, info_key, value)
+VALUES (
+  666,
+  'legacy_payload',
+  crdb_internal.json_to_pb(
+    'cockroach.sql.jobs.jobspb.Payload',
+    json_build_object(
+      'inspectDetails', json_build_object(
+        'checks', json_build_array(
+          json_build_object('tableId', $foo_table_id)
+        )
+      )
+    )
+  )
+);
+
+statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, aost, database_id, schema_id, id, details)
+VALUES (666, '666_foo', '$aost', $database_id, $schema_id, $foo_table_id, '{"detail1":"\u2603 666_foo_1","detail2":"\n666_foo_2"}');
+
+statement ok
+INSERT INTO system.jobs (id, owner, status, job_type)
+VALUES (777, 'testuser', 'running', 'INSPECT');
+INSERT INTO system.job_info (job_id, info_key, value)
+VALUES (
+  777,
+  'legacy_payload',
+  crdb_internal.json_to_pb(
+    'cockroach.sql.jobs.jobspb.Payload',
+    json_build_object(
+      'inspectDetails', json_build_object(
+        'checks', json_build_array(
+          json_build_object('tableId', $foo_table_id)
+        )
+      )
+    )
+  )
+);
+
+statement ok
+INSERT INTO system.inspect_errors (job_id, error_type, aost, database_id, schema_id, id, details)
+VALUES (777, '777_foo', '$aost', $database_id, $schema_id, $foo_table_id, '{"detail":"777 foo"}');
+
+user testuser
+
+# no options should show most records from the recent completed job
+query TTTTTIT colnames
+SHOW INSPECT ERRORS
+----
+error_type  database_name  schema_name  table_name  primary_key  job_id  aost
+666_foo     test           public       foo         NULL         666     2025-09-23 04:00:00.000000
+
+query TTTTTITT colnames
+SHOW INSPECT ERRORS WITH DETAILS
+----
+error_type  database_name  schema_name  table_name  primary_key  job_id  aost                        details
+666_foo     test           public       foo         NULL         666     2025-09-23 04:00:00.000000  {
+                                                                                                         "detail1": "☃ 666_foo_1",
+                                                                                                         "detail2": "\n666_foo_2"
+                                                                                                     }
+
+# specifying a job shows results regardless of status
+query TTTTTIT
+SHOW INSPECT ERRORS FOR JOB 777
+----
+777_foo  test  public  foo  NULL  777  2025-09-23 04:00:00.000000
+
+query TTTTTIT nosort
+SHOW INSPECT ERRORS FOR JOB 555
+----
+555_bar  test  public  bar  NULL  555  2025-09-23 04:00:00.000000
+555_foo  test  public  foo  NULL  555  2025-09-23 04:00:00.000000
+
+# query by table shows records from the most recent completed job that reported errors on that table
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE foo
+----
+666_foo  test  public  foo  NULL  666  2025-09-23 04:00:00.000000
+
+# and query by table only shows records for that given table
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE bar
+----
+555_bar  test  public  bar  NULL  555  2025-09-23 04:00:00.000000
+
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE public.bar
+----
+555_bar  test  public  bar  NULL  555  2025-09-23 04:00:00.000000
+
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE test.public.bar
+----
+555_bar  test  public  bar  NULL  555  2025-09-23 04:00:00.000000
+
+query TTTTTITT colnames
+SHOW INSPECT ERRORS FOR TABLE foo FOR JOB 555 WITH DETAILS
+----
+error_type  database_name  schema_name  table_name  primary_key  job_id  aost                        details
+555_foo     test           public       foo         NULL         555     2025-09-23 04:00:00.000000  {
+                                                                                                         "detail": "555\"foo"
+                                                                                                     }
+
+# Test SHOW selects the most recent job for a table even if it has no errors.
+subtest show_after_clean_inspect
+
+user root
+
+# Job 888 inspects foo (payload check) but finds no errors (no inspect_errors
+# records).
+statement ok
+INSERT INTO system.jobs (id, owner, status, job_type)
+VALUES (888, 'testuser', 'succeeded', 'INSPECT');
+INSERT INTO system.job_info (job_id, info_key, value)
+VALUES (
+  888,
+  'legacy_payload',
+  crdb_internal.json_to_pb(
+    'cockroach.sql.jobs.jobspb.Payload',
+    json_build_object(
+      'inspectDetails', json_build_object(
+        'checks', json_build_array(
+          json_build_object('tableId', $foo_table_id)
+        )
+      )
+    )
+  )
+);
+
+# No errors inserted for job 888 - it inspected foo but found no problems.
+
+user testuser
+
+# Now query for foo errors without specifying a job.
+# Even though job 666 has errors for foo, job 888 is the most recent completed job
+# that inspected foo, so we should get no results.
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE foo
+----
+
+# Verify we can still get job 666's errors by specifying the job explicitly.
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE foo FOR JOB 666
+----
+666_foo  test  public  foo  NULL  666  2025-09-23 04:00:00.000000
+
+subtest end
+
+# Verify the SHOW query works if an INSPECT job is created with empty checks.
+subtest empty_checks_array
+
+user root
+
+# Job 999 has an empty checks array in its payload.
+statement ok
+INSERT INTO system.jobs (id, owner, status, job_type)
+VALUES (999, 'testuser', 'succeeded', 'INSPECT');
+INSERT INTO system.job_info (job_id, info_key, value)
+VALUES (
+  999,
+  'legacy_payload',
+  crdb_internal.json_to_pb(
+    'cockroach.sql.jobs.jobspb.Payload',
+    json_build_object(
+      'inspectDetails', json_build_object(
+        'checks', json_build_array()
+      )
+    )
+  )
+);
+
+user testuser
+
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE foo
+----
+
+query TTTTTIT
+SHOW INSPECT ERRORS FOR TABLE bar
+----
+555_bar  test  public  bar  NULL  555  2025-09-23 04:00:00.000000
+
+query TTTTTIT
+SHOW INSPECT ERRORS FOR JOB 999
+----
+
+subtest end

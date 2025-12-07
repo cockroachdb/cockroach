@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -72,8 +73,15 @@ func (ex *connExecutor) execPrepare(
 		ex.deletePreparedStmt(ctx, "")
 	}
 
-	stmt := makeStatement(parseCmd.Statement, ex.server.cfg.GenerateID(),
-		tree.FmtFlags(queryFormattingForFingerprintsMask.Get(ex.server.cfg.SV())))
+	var statementHintsCache *hints.StatementHintsCache
+	if ex.executorType != executorTypeInternal {
+		statementHintsCache = ex.server.cfg.StatementHintsCache
+	}
+	stmt := makeStatement(
+		ctx, parseCmd.Statement, ex.server.cfg.GenerateID(),
+		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(ex.server.cfg.SV())),
+		statementHintsCache,
+	)
 	_, err := ex.addPreparedStmt(
 		ctx,
 		parseCmd.Name,
@@ -236,6 +244,10 @@ func (ex *connExecutor) prepare(
 		prepared.Statement.NumPlaceholders = origNumPlaceholders
 		prepared.StatementNoConstants = stmt.StmtNoConstants
 		prepared.StatementSummary = stmt.StmtSummary
+		prepared.Hints = stmt.Hints
+		prepared.HintIDs = stmt.HintIDs
+		prepared.HintsGeneration = stmt.HintsGeneration
+		prepared.ASTWithInjectedHints = stmt.ASTWithInjectedHints
 
 		// Point to the prepared state, which can be further populated during query
 		// preparation.
@@ -388,13 +400,13 @@ func (ex *connExecutor) execBind(
 	// Decode the arguments, except for internal queries for which we just verify
 	// that the arguments match what's expected.
 	qargs := make(tree.QueryArguments, numQArgs)
-	if bindCmd.internalArgs != nil {
-		if len(bindCmd.internalArgs) != int(numQArgs) {
+	if bindCmd.InternalArgs != nil {
+		if len(bindCmd.InternalArgs) != int(numQArgs) {
 			return retErr(
 				pgwirebase.NewProtocolViolationErrorf(
-					"expected %d arguments, got %d", numQArgs, len(bindCmd.internalArgs)))
+					"expected %d arguments, got %d", numQArgs, len(bindCmd.InternalArgs)))
 		}
-		for i, datum := range bindCmd.internalArgs {
+		for i, datum := range bindCmd.InternalArgs {
 			t := ps.InferredTypes[i]
 			if oid := datum.ResolvedType().Oid(); datum != tree.DNull && oid != t {
 				return retErr(
@@ -632,7 +644,7 @@ func (ex *connExecutor) execDescribe(
 			return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))
 		}
 		res.SetInferredTypes(ps.InferredTypes)
-		if stmtHasNoData(ast) {
+		if stmtHasNoData(ast, ps.Columns) {
 			res.SetNoDataRowDescription()
 		} else {
 			res.SetPrepStmtOutput(ctx, ps.Columns)
@@ -661,7 +673,7 @@ func (ex *connExecutor) execDescribe(
 		if isAbortedTxn && !ex.isAllowedInAbortedTxn(ast) {
 			return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))
 		}
-		if stmtHasNoData(ast) {
+		if stmtHasNoData(ast, portal.Stmt.Columns) {
 			res.SetNoDataRowDescription()
 		} else {
 			res.SetPortalOutput(ctx, portal.Stmt.Columns, portal.OutFormats)

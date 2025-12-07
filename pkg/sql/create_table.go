@@ -570,7 +570,6 @@ func (n *createTableNode) startExec(params runParams) error {
 			ti := tableInserterPool.Get().(*tableInserter)
 			*ti = tableInserter{ri: ri}
 			defer func() {
-				ti.close(params.ctx)
 				*ti = tableInserter{}
 				tableInserterPool.Put(ti)
 			}()
@@ -597,8 +596,8 @@ func (n *createTableNode) startExec(params runParams) error {
 					break
 				}
 
-				// Periodically flush out the batches, so that we don't issue gigantic
-				// raft commands.
+				// Periodically flush out the SQL-level batches, so that we don't
+				// issue gigantic raft commands.
 				if ti.currentBatchSize >= ti.maxBatchSize ||
 					ti.b.ApproximateMutationBytes() >= ti.maxBatchByteSize {
 					if err := ti.flushAndStartNewBatch(params.ctx); err != nil {

@@ -1145,14 +1145,14 @@ func runTest(t *testing.T, data testRunData, verify gcVerifier) {
 	expectedStats := dataItems.liveDistribution().setupTest(t, ctrlEng, desc)
 
 	if log.V(1) {
-		log.Dev.Info(ctx, "Expected data:")
+		log.KvExec.Info(ctx, "Expected data:")
 		for _, l := range formatTable(engineData(t, ctrlEng, desc), tablePrefix) {
-			log.Dev.Infof(ctx, "%s", l)
+			log.KvExec.Infof(ctx, "%s", l)
 		}
 
-		log.Dev.Info(ctx, "Actual data:")
+		log.KvExec.Info(ctx, "Actual data:")
 		for _, l := range formatTable(engineData(t, eng, desc), tablePrefix) {
-			log.Dev.Infof(ctx, "%s", l)
+			log.KvExec.Infof(ctx, "%s", l)
 		}
 	}
 

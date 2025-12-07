@@ -6,12 +6,9 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -77,10 +74,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	gwutil "github.com/grpc-ecosystem/grpc-gateway/utilities"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcerr"
@@ -116,7 +111,7 @@ type adminServer struct {
 	statsLimiter     *quotapool.IntPool
 	st               *cluster.Settings
 	serverIterator   ServerIterator
-	nd               rpcbase.NodeDialer
+	nd               *nodeDialer
 	distSender       *kvcoord.DistSender
 	rpcContext       *rpc.Context
 	clock            *hlc.Clock
@@ -221,7 +216,7 @@ func newAdminServer(
 		),
 		st:             cs,
 		serverIterator: serverIterator,
-		nd:             &nodeDialer{si: serverIterator},
+		nd:             &nodeDialer{cs: cs, si: serverIterator},
 		distSender:     distSender,
 		rpcContext:     rpcCtx,
 		clock:          clock,
@@ -280,44 +275,6 @@ func (s *adminServer) RegisterDRPCService(d drpc.Mux) error {
 func (s *adminServer) RegisterGateway(
 	ctx context.Context, mux *gwruntime.ServeMux, conn *grpc.ClientConn,
 ) error {
-	// Register the /_admin/v1/stmtbundle endpoint, which serves statement support
-	// bundles as files.
-	stmtBundlePattern := gwruntime.MustPattern(gwruntime.NewPattern(
-		1, /* version */
-		[]int{
-			int(gwutil.OpLitPush), 0, int(gwutil.OpLitPush), 1, int(gwutil.OpLitPush), 2,
-			int(gwutil.OpPush), 0, int(gwutil.OpConcatN), 1, int(gwutil.OpCapture), 3},
-		[]string{"_admin", "v1", "stmtbundle", "id"},
-		"", /* verb */
-	))
-
-	mux.Handle("GET", stmtBundlePattern, func(
-		w http.ResponseWriter, req *http.Request, pathParams map[string]string,
-	) {
-		idStr, ok := pathParams["id"]
-		if !ok {
-			http.Error(w, "missing id", http.StatusBadRequest)
-			return
-		}
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-
-		// The privilege checks in the privilege checker below checks the user in the incoming
-		// gRPC metadata.
-		md := authserver.TranslateHTTPAuthInfoToGRPCMetadata(req.Context(), req)
-		authCtx := metadata.NewIncomingContext(req.Context(), md)
-		authCtx = s.AnnotateCtx(authCtx)
-		if err := s.privilegeChecker.RequireViewActivityAndNoViewActivityRedactedPermission(authCtx); err != nil {
-			http.Error(w, err.Error(), http.StatusForbidden)
-			return
-		}
-		s.getStatementBundle(req.Context(), id, w)
-	})
-
-	// Register the endpoints defined in the proto.
 	return serverpb.RegisterAdminHandler(ctx, mux, conn)
 }
 
@@ -1357,7 +1314,7 @@ func (s *adminServer) statsForSpan(
 				var spanResponse *roachpb.SpanStatsResponse
 				err := timeutil.RunWithTimeout(ctx, "request remote stats", 20*time.Second,
 					func(ctx context.Context) error {
-						client, err := serverpb.DialStatusClient(s.nd, ctx, nodeID)
+						client, err := serverpb.DialStatusClient(s.nd, ctx, nodeID, s.nd.cs)
 						if err == nil {
 							req := roachpb.SpanStatsRequest{
 								Spans:  []roachpb.Span{span},
@@ -2135,7 +2092,7 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 		return err
 	}
 
-	if s.drpc.enabled {
+	if rpcbase.DRPCEnabled(ctx, s.st) {
 		if err := s.drpc.health(ctx); err != nil {
 			return err
 		}
@@ -2181,7 +2138,7 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 		return err
 	}
 
-	if s.drpc.enabled {
+	if rpcbase.DRPCEnabled(ctx, s.st) {
 		if err := s.drpc.health(ctx); err != nil {
 			return err
 		}
@@ -2492,12 +2449,15 @@ func jobHelper(
 	return &job, nil
 }
 
+// fetchJobMessages retrieves the messages associated with a job using the node
+// user; its results should only be shown to a user already known to have access
+// to the passed job.
 func fetchJobMessages(
 	ctx context.Context, jobID int64, user username.SQLUsername, sqlServer *SQLServer,
 ) (messages []serverpb.JobMessage) {
 	const msgQuery = `SELECT kind, written, message FROM system.job_message WHERE job_id = $1 ORDER BY written DESC`
 	it, err := sqlServer.internalExecutor.QueryIteratorEx(ctx, "admin-job-messages", nil,
-		sessiondata.InternalExecutorOverride{User: user},
+		sessiondata.NodeUserSessionDataOverride, // We are post-priv check and sys table requires node.
 		msgQuery,
 		jobID,
 	)
@@ -2644,55 +2604,6 @@ func (s *adminServer) QueryPlan(
 	return &serverpb.QueryPlanResponse{
 		DistSQLPhysicalQueryPlan: string(dbDatum),
 	}, nil
-}
-
-// getStatementBundle retrieves the statement bundle with the given id and
-// writes it out as an attachment. Note this function assumes the user has
-// permission to access the statement bundle.
-func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.ResponseWriter) {
-	row, err := s.internalExecutor.QueryRowEx(
-		ctx, "admin-stmt-bundle", nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
-		"SELECT bundle_chunks FROM system.statement_diagnostics WHERE id=$1 AND bundle_chunks IS NOT NULL",
-		id,
-	)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if row == nil {
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
-	}
-	// Put together the entire bundle. Ideally we would stream it in chunks,
-	// but it's hard to return errors once we start.
-	var bundle bytes.Buffer
-	chunkIDs := row[0].(*tree.DArray).Array
-	for _, chunkID := range chunkIDs {
-		chunkRow, err := s.internalExecutor.QueryRowEx(
-			ctx, "admin-stmt-bundle", nil, /* txn */
-			sessiondata.NodeUserSessionDataOverride,
-			"SELECT data FROM system.statement_bundle_chunks WHERE id=$1",
-			chunkID,
-		)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if chunkRow == nil {
-			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-			return
-		}
-		data := chunkRow[0].(*tree.DBytes)
-		bundle.WriteString(string(*data))
-	}
-
-	w.Header().Set(
-		"Content-Disposition",
-		fmt.Sprintf("attachment; filename=stmt-bundle-%d.zip", id),
-	)
-
-	_, _ = io.Copy(w, &bundle)
 }
 
 // DecommissionPreCheck runs checks and returns the DecommissionPreCheckResponse
@@ -3510,11 +3421,11 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		*d = &val
 
 	case *int64:
-		s, ok := tree.AsDInt(src)
+		s, ok := src.(*tree.DInt)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
-		*d = int64(s)
+		*d = int64(*s)
 
 	case **int64:
 		s, ok := src.(*tree.DInt)
@@ -3529,29 +3440,29 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		*d = &val
 
 	case *[]int64:
-		s, ok := tree.AsDArray(src)
+		s, ok := src.(*tree.DArray)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
 		for i := 0; i < s.Len(); i++ {
-			id, ok := tree.AsDInt(s.Array[i])
+			id, ok := s.Array[i].(*tree.DInt)
 			if !ok {
 				return errors.Errorf("source type assertion failed on index %d", i)
 			}
-			*d = append(*d, int64(id))
+			*d = append(*d, int64(*id))
 		}
 
 	case *[]descpb.ID:
-		s, ok := tree.AsDArray(src)
+		s, ok := src.(*tree.DArray)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
 		for i := 0; i < s.Len(); i++ {
-			id, ok := tree.AsDInt(s.Array[i])
+			id, ok := s.Array[i].(*tree.DInt)
 			if !ok {
 				return errors.Errorf("source type assertion failed on index %d", i)
 			}
-			*d = append(*d, descpb.ID(id))
+			*d = append(*d, descpb.ID(*id))
 		}
 
 	case *time.Time:
@@ -3770,7 +3681,7 @@ func (s *adminServer) queryTableID(
 func (s *adminServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (serverpb.RPCAdminClient, error) {
-	return serverpb.DialAdminClient(s.nd, ctx, nodeID)
+	return serverpb.DialAdminClient(s.nd, ctx, nodeID, s.nd.cs)
 }
 
 func (s *adminServer) ListTracingSnapshots(

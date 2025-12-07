@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -36,6 +37,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
+
+const tsDumpAppName = catconstants.InternalAppNamePrefix + " cockroach tsdump"
 
 // TODO(knz): this struct belongs elsewhere.
 // See: https://github.com/cockroachdb/cockroach/issues/49509
@@ -57,6 +60,7 @@ var debugTimeSeriesDumpOpts = struct {
 	noOfUploadWorkers      int
 	retryFailedRequests    bool
 	disableDeltaProcessing bool
+	ddMetricInterval       int64 // interval for datadoginit format only
 }{
 	format:                 tsDumpText,
 	from:                   timestampValue{},
@@ -65,15 +69,19 @@ var debugTimeSeriesDumpOpts = struct {
 	yaml:                   "/tmp/tsdump.yaml",
 	retryFailedRequests:    false,
 	disableDeltaProcessing: false, // delta processing enabled by default
+
+	// default to 10 seconds interval for datadoginit.
+	// This is based on the scrape interval that is currently set accross all managed clusters
+	ddMetricInterval: 10,
 }
 
 // hostNameOverride is used to override the hostname for testing purpose.
 var hostNameOverride string
 
 // datadogSeriesThreshold holds the threshold for the number of series
-// that will be uploaded to Datadog in a single request. We have capped it to 100
+// that will be uploaded to Datadog in a single request. We have capped it to 50
 // to avoid hitting the Datadog API limits.
-var datadogSeriesThreshold = 100
+var datadogSeriesThreshold = 50
 
 const uploadWorkerErrorMessage = "--upload-workers is set to an invalid value." +
 	" please select a value which between 1 and 100."
@@ -125,7 +133,22 @@ will then convert it to the --format requested in the current invocation.
 				10_000_000, /* threshold */
 				doRequest,
 			)
-		case tsDumpDatadogInit, tsDumpDatadog:
+		case tsDumpDatadogInit:
+			datadogWriter, err := makeDatadogWriter(
+				debugTimeSeriesDumpOpts.ddSite,
+				true, /* init */
+				debugTimeSeriesDumpOpts.ddApiKey,
+				datadogSeriesThreshold,
+				hostNameOverride,
+				debugTimeSeriesDumpOpts.noOfUploadWorkers,
+				false, /* retryFailedRequests not applicable for init */
+			)
+			if err != nil {
+				return err
+			}
+
+			return datadogWriter.uploadInitMetrics()
+		case tsDumpDatadog:
 			if len(args) < 1 {
 				return errors.New("no input file provided")
 			}
@@ -136,7 +159,7 @@ will then convert it to the --format requested in the current invocation.
 
 			datadogWriter, err := makeDatadogWriter(
 				debugTimeSeriesDumpOpts.ddSite,
-				cmd == tsDumpDatadogInit,
+				false, /* init */
 				debugTimeSeriesDumpOpts.ddApiKey,
 				datadogSeriesThreshold,
 				hostNameOverride,
@@ -529,7 +552,7 @@ func createYAML(ctx context.Context) (resErr error) {
 
 // getStoreToNodeMapping retrieves the store-to-node mapping from the database
 func getStoreToNodeMapping(ctx context.Context) (map[string]string, error) {
-	sqlConn, err := makeSQLClient(ctx, "cockroach tsdump", useSystemDb)
+	sqlConn, err := makeSQLClient(ctx, tsDumpAppName, useSystemDb)
 	if err != nil {
 		return nil, err
 	}

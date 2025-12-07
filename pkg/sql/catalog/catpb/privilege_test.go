@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPrivilege(t *testing.T) {
@@ -87,7 +89,6 @@ func TestPrivilege(t *testing.T) {
 					{Kind: privilege.CREATE},
 					{Kind: privilege.DELETE},
 					{Kind: privilege.DROP},
-					{Kind: privilege.INSPECT},
 					{Kind: privilege.REPLICATIONDEST},
 					{Kind: privilege.REPLICATIONSOURCE},
 					{Kind: privilege.TRIGGER},
@@ -616,7 +617,7 @@ func TestRevokeWithGrantOption(t *testing.T) {
 			true,
 			privilege.List{privilege.CREATE},
 			privilege.List{privilege.ALL},
-			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DELETE, privilege.DROP, privilege.INSERT, privilege.INSPECT, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.SELECT, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DELETE, privilege.DROP, privilege.INSERT, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.SELECT, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
 			false},
 		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.ALL}, privilege.List{privilege.ALL}, username.AdminRoleName()),
 			testUser, privilege.Table,
@@ -650,8 +651,8 @@ func TestRevokeWithGrantOption(t *testing.T) {
 			testUser, privilege.Table,
 			false,
 			privilege.List{privilege.CREATE},
-			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DELETE, privilege.DROP, privilege.INSERT, privilege.INSPECT, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.SELECT, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
-			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DELETE, privilege.DROP, privilege.INSERT, privilege.INSPECT, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.SELECT, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DELETE, privilege.DROP, privilege.INSERT, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.SELECT, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DELETE, privilege.DROP, privilege.INSERT, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.SELECT, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
 			false},
 		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.SELECT, privilege.INSERT}, privilege.List{privilege.INSERT}, username.AdminRoleName()),
 			testUser, privilege.Table,
@@ -704,4 +705,29 @@ func TestRevokeWithGrantOption(t *testing.T) {
 				tcNum, actualGrantOption, tc.expectedGrantOption)
 		}
 	}
+}
+
+// TestPrivilegeValidationErrorRedaction tests that privilege validation errors
+// are properly redacted.
+func TestPrivilegeValidationErrorRedaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Create a descriptor where root/admin don't have the required privileges
+	// This will trigger ValidateSuperuserPrivileges error
+	descriptor := catpb.NewCustomSuperuserPrivilegeDescriptor(
+		privilege.List{privilege.UPDATE}, // Wrong privilege (not ALL)
+		username.AdminRoleName(),
+	)
+
+	id := catid.DescID(bootstrap.TestingMinUserDescID())
+	err := descriptor.Validate(id, privilege.Table, "sensitive_table_name", catpb.DefaultSuperuserPrivileges)
+	require.Error(t, err)
+
+	nonRedactedMsg := redact.Sprint(err).StripMarkers()
+	expectedNonRedacted := `user root must have exactly [ALL] privileges on table "sensitive_table_name"`
+	require.Equal(t, expectedNonRedacted, nonRedactedMsg, "non-redacted message mismatch")
+
+	redactedMsg := redact.Sprint(err).Redact()
+	expectedRedacted := `user root must have exactly [ALL] privileges on table ‹×›`
+	require.Equal(t, expectedRedacted, string(redactedMsg), "redacted message mismatch")
 }

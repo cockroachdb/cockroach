@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/cockroachkvs"
@@ -1634,6 +1637,10 @@ func TestMinimumSupportedFormatVersion(t *testing.T) {
 func TestPebbleFormatVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	if len(pebbleFormatVersionMap) == 1 {
+		skip.IgnoreLint(t, "test requires multiple entries in pebbleFormatVersionMap")
+	}
+
 	latestKey := pebbleFormatVersionKeys[0]
 	latestVersion := latestKey.Version()
 	latestFmv := pebbleFormatVersionMap[latestKey]
@@ -1708,9 +1715,7 @@ func TestPebbleLoggingSlowReads(t *testing.T) {
 
 	testFunc := func(t *testing.T, fileStr string) int {
 		s := log.ScopeWithoutShowLogs(t)
-		prevVModule := log.GetVModule()
-		_ = log.SetVModule(fileStr + "=2")
-		defer func() { _ = log.SetVModule(prevVModule) }()
+		testutils.SetVModule(t, fileStr+"=2")
 		defer s.Close(t)
 
 		ctx := context.Background()
@@ -1888,9 +1893,8 @@ func TestPebbleSpanPolicyFunc(t *testing.T) {
 				return k
 			}(),
 			wantPolicy: pebble.SpanPolicy{
-				PreferFastCompression:          true,
-				DisableValueSeparationBySuffix: true,
-				ValueStoragePolicy:             pebble.ValueStorageLowReadLatency,
+				PreferFastCompression: true,
+				ValueStoragePolicy:    pebble.ValueStorageLowReadLatency,
 			},
 			wantEndKey: spanPolicyLockTableEndKey,
 		},
@@ -1904,10 +1908,74 @@ func TestPebbleSpanPolicyFunc(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("%x", tc.startKey), func(t *testing.T) {
 			ek := EngineKey{Key: tc.startKey}.Encode()
-			policy, endKey, err := spanPolicyFunc(ek)
+			policy, endKey, err := spanPolicyFuncFactory(nil /* sv */)(ek)
 			require.NoError(t, err)
 			require.Equal(t, tc.wantPolicy, policy)
 			require.Equal(t, tc.wantEndKey, endKey)
 		})
 	}
+}
+
+func TestDiskUnhealthyTracker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var b strings.Builder
+	builderStr := func() string {
+		str := b.String()
+		b.Reset()
+		return str
+	}
+	var isClosed atomic.Bool
+	ts := timeutil.NewManualTime(time.Unix(0, 0))
+	st := cluster.MakeTestingClusterSettings()
+	UnhealthyWriteDuration.Override(t.Context(), &st.SV, 5*time.Second)
+	tickReceivedCh := make(chan time.Time, 1)
+	tracker := &diskUnhealthyTracker{
+		st: st,
+		isClosed: func() bool {
+			closed := isClosed.Load()
+			fmt.Fprintf(&b, "asyncRunner.Closed(): %t\n", closed)
+			return closed
+		},
+		runAsync: func(fn func()) {
+			fmt.Fprintf(&b, "asyncRunner.async\n")
+			go fn()
+		},
+		ts:                    ts,
+		testingTickReceivedCh: tickReceivedCh,
+	}
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "disk_unhealthy_tracker"),
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "slow-event":
+				var durationSec int
+				d.ScanArgs(t, "dur", &durationSec)
+				tracker.onDiskSlow(vfs.DiskSlowInfo{Duration: time.Duration(durationSec) * time.Second})
+				return builderStr()
+
+			case "advance-time":
+				var durationSec int
+				d.ScanArgs(t, "sec", &durationSec)
+				ts.Advance(time.Duration(durationSec) * time.Second)
+				return ""
+
+			case "receive-runner-tick":
+				tickTime := <-tickReceivedCh
+				fmt.Fprintf(&b, "tickTime: %ds\n", tickTime.Unix())
+				return builderStr()
+
+			case "get-state":
+				fmt.Fprintf(&b, "unhealthy: %t, unhealthy-duration: %v\n",
+					tracker.getUnhealthy(), tracker.getUnhealthyDuration())
+				return builderStr()
+
+			case "close":
+				isClosed.Store(true)
+				return ""
+
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
 }

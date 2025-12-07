@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -65,7 +66,7 @@ func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg 
 
 	if log.V(2) {
 		var sp roachpb.Spans = cfg.Spans
-		log.Dev.Infof(ctx, "performing scan on %s at %v withDiff %v",
+		log.Changefeed.Infof(ctx, "performing scan on %s at %v withDiff %v",
 			sp, cfg.Timestamp, cfg.WithDiff)
 	}
 
@@ -119,7 +120,7 @@ func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg 
 				backfillDec()
 			}
 			if log.V(2) {
-				log.Dev.Infof(ctx, `exported %d of %d: %v`, finished, len(spans), err)
+				log.Changefeed.Infof(ctx, `exported %d of %d: %v`, finished, len(spans), err)
 			}
 			return err
 		})
@@ -156,7 +157,7 @@ func (p *scanRequestScanner) tryAcquireMemory(
 		// Sink implements memory allocator interface, so acquire
 		// memory needed to hold scan reply.
 		if logMemAcquireEvery.ShouldLog() {
-			log.Dev.Errorf(ctx, "Failed to acquire memory for export span: %s (attempt %d)",
+			log.Changefeed.Errorf(ctx, "Failed to acquire memory for export span: %s (attempt %d)",
 				err, attempt.CurrentAttempt()+1)
 		}
 		alloc, err = allocator.AcquireMemory(ctx, changefeedbase.ScanRequestSize.Get(&p.settings.SV))
@@ -182,12 +183,12 @@ func (p *scanRequestScanner) exportSpan(
 
 	txn := p.db.NewTxn(ctx, "changefeed backfill")
 	if log.V(2) {
-		log.Dev.Infof(ctx, `sending ScanRequest %s at %s`, span, ts)
+		log.Changefeed.Infof(ctx, `sending ScanRequest %s at %s`, span, ts)
 	}
 	if err := txn.SetFixedTimestamp(ctx, ts); err != nil {
 		return err
 	}
-	stopwatchStart := timeutil.Now()
+	stopwatchStart := crtime.NowMono()
 	var scanDuration, bufferDuration time.Duration
 	targetBytesPerScan := changefeedbase.ScanRequestSize.Get(&p.settings.SV)
 	for remaining := &span; remaining != nil; {
@@ -223,14 +224,14 @@ func (p *scanRequestScanner) exportSpan(
 		if err := txn.Run(ctx, b); err != nil {
 			return errors.Wrapf(err, `fetching changes for %s`, span)
 		}
-		afterScan := timeutil.Now()
+		afterScan := crtime.NowMono()
+		scanDuration += afterScan.Sub(crtime.MonoFromTime(start))
+
 		res := b.RawResponse().Responses[0].GetScan()
 		if err := slurpScanResponse(ctx, sink, res, ts, withDiff, *remaining); err != nil {
 			return err
 		}
-		afterBuffer := timeutil.Now()
-		scanDuration += afterScan.Sub(start)
-		bufferDuration += afterBuffer.Sub(afterScan)
+		bufferDuration += afterScan.Elapsed()
 		if res.ResumeSpan != nil {
 			consumed := roachpb.Span{Key: remaining.Key, EndKey: res.ResumeSpan.Key}
 			if err := sink.Add(
@@ -248,8 +249,8 @@ func (p *scanRequestScanner) exportSpan(
 		return err
 	}
 	if log.V(2) {
-		log.Dev.Infof(ctx, `finished Scan of %s at %s took %s`,
-			span, ts.AsOfSystemTime(), timeutil.Since(stopwatchStart))
+		log.Changefeed.Infof(ctx, `finished Scan of %s at %s took %s`,
+			span, ts.AsOfSystemTime(), stopwatchStart.Elapsed())
 	}
 	return nil
 }
@@ -319,7 +320,7 @@ func slurpScanResponse(
 				return errors.Wrapf(err, `decoding changes for %s`, span)
 			}
 			if log.V(3) {
-				log.Dev.Infof(ctx, "scanResponse: %s@%s", keys.PrettyPrint(nil, keyBytes), ts)
+				log.Changefeed.Infof(ctx, "scanResponse: %s@%s", keys.PrettyPrint(nil, keyBytes), ts)
 			}
 			if err = sink.Add(ctx, kvevent.NewBackfillKVEvent(keyBytes, ts, valBytes, withDiff, backfillTS)); err != nil {
 				return errors.Wrapf(err, `buffering changes for %s`, span)

@@ -101,6 +101,8 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "slow under race")
+
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
@@ -135,8 +137,8 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 		"recover",
 		"collect-info",
 		"--insecure",
-		"--host",
-		tc.Server(2).AdvRPCAddr(),
+		"--host", tc.Server(2).AdvRPCAddr(),
+		"--cluster-name", tc.ClusterName(),
 		replicaInfoFileName,
 	})
 
@@ -153,7 +155,11 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 	require.Equal(t, 2, len(stores), "collected replicas from stores")
 	require.Equal(t, 2, len(replicas.LocalInfo), "collected info is not split by node")
 	require.Equal(t, totalRanges*2, totalReplicas, "number of collected replicas")
-	require.Equal(t, totalRanges, len(replicas.Descriptors),
+	// The number of range descriptors is counted by iterating over meta2 keys.
+	// Since meta1 and meta2 ranges are split, the number of range descriptors
+	// is going to be one less than the number of ranges as meta1 is a range but
+	// its descriptor isn't stored in meta2.
+	require.Equal(t, totalRanges-1, len(replicas.Descriptors),
 		"number of collected descriptors from metadata")
 	require.Equal(t, clusterversion.Latest.Version(), replicas.Version,
 		"collected version info from stores")
@@ -548,6 +554,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 			"--confirm=y",
 			"--certs-dir=test_certs",
 			"--host=" + tc.Server(0).AdvRPCAddr(),
+			"--cluster-name=" + tc.ClusterName(),
 			"--plan=" + planFile,
 		})
 	require.NoError(t, err, "failed to run make-plan")
@@ -571,6 +578,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 			"debug", "recover", "apply-plan",
 			"--certs-dir=test_certs",
 			"--host=" + tc.Server(0).AdvRPCAddr(),
+			"--cluster-name=" + tc.ClusterName(),
 			"--confirm=y", planFile,
 		})
 	require.NoError(t, err, "failed to run apply plan")
@@ -586,6 +594,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 			"debug", "recover", "verify",
 			"--certs-dir=test_certs",
 			"--host=" + tc.Server(0).AdvRPCAddr(),
+			"--cluster-name=" + tc.ClusterName(),
 			planFile,
 		})
 	require.NoError(t, err, "failed to run verify plan")
@@ -635,6 +644,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 			"debug", "recover", "verify",
 			"--certs-dir=test_certs",
 			"--host=" + tc.Server(0).AdvRPCAddr(),
+			"--cluster-name=" + tc.ClusterName(),
 			planFile,
 		})
 	require.NoError(t, err, "failed to run verify plan")

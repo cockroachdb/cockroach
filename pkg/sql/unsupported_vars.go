@@ -8,6 +8,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 )
 
 // DummyVars contains a list of dummy vars we do not support that
@@ -20,7 +21,7 @@ var DummyVars = map[string]sessionVar{
 		func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableSeqScan), nil
 		},
-		func(m sessionDataMutator, v bool) {
+		func(m sessionmutator.SessionDataMutator, v bool) {
 			m.SetEnableSeqScan(v)
 		},
 		func(sv *settings.Values) string { return "on" },
@@ -30,7 +31,7 @@ var DummyVars = map[string]sessionVar{
 		func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().SynchronousCommit), nil
 		},
-		func(m sessionDataMutator, v bool) {
+		func(m sessionmutator.SessionDataMutator, v bool) {
 			m.SetSynchronousCommit(v)
 		},
 		func(sv *settings.Values) string { return "on" },

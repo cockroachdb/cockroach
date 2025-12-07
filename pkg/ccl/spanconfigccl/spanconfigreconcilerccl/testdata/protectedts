@@ -74,7 +74,7 @@ state limit=3
 {source=1,target=2}                        protection_policies=[{ts: 2}]
 ...
 
-state offset=51
+state offset=52
 ----
 ...
 /Table/4{7-8}                              ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true exclude_data_from_backup=true
@@ -103,6 +103,9 @@ state offset=51
 /Table/7{1-2}                              database system (host)
 /Table/7{2-3}                              database system (host)
 /Table/7{3-4}                              database system (host)
+/Table/7{4-5}                              database system (host)
+/Table/7{5-6}                              database system (host)
+/Table/7{6-7}                              database system (host)
 /Table/10{6-7}                             protection_policies=[{ts: 3} {ts: 4}]
 /Table/10{7-8}                             protection_policies=[{ts: 3} {ts: 4}]
 
@@ -124,10 +127,11 @@ mutations
 ----
 delete {entire-keyspace}
 
-state limit=2
+state limit=3
 ----
 {source=1,target=1}                        protection_policies=[{ts: 2}]
 {source=1,target=2}                        protection_policies=[{ts: 2}]
+/M{in-eta2}                                ttl_seconds=3600 num_replicas=5
 ...
 
 # Release the tenant records.
@@ -141,14 +145,15 @@ mutations
 delete {source=1,target=1}
 delete {source=1,target=2}
 
-state limit=2
+state limit=3
 ----
-/{Min-System/NodeLiveness}                 ttl_seconds=3600 num_replicas=5
+/M{in-eta2}                                ttl_seconds=3600 num_replicas=5
+/{Meta2-System/NodeLiveness}               ttl_seconds=3600 num_replicas=5
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
 ...
 
 # Take another look at the remaining protected spans.
-state offset=57
+state offset=58
 ----
 ...
 /Table/5{7-8}                              database system (host)
@@ -168,6 +173,9 @@ state offset=57
 /Table/7{1-2}                              database system (host)
 /Table/7{2-3}                              database system (host)
 /Table/7{3-4}                              database system (host)
+/Table/7{4-5}                              database system (host)
+/Table/7{5-6}                              database system (host)
+/Table/7{6-7}                              database system (host)
 /Table/10{6-7}                             protection_policies=[{ts: 3} {ts: 4}]
 /Table/10{7-8}                             protection_policies=[{ts: 3} {ts: 4}]
 
@@ -179,7 +187,7 @@ release record-id=4
 ----
 
 # Observe that they're no longer protected.
-state offset=57
+state offset=58
 ----
 ...
 /Table/5{7-8}                              database system (host)
@@ -199,5 +207,8 @@ state offset=57
 /Table/7{1-2}                              database system (host)
 /Table/7{2-3}                              database system (host)
 /Table/7{3-4}                              database system (host)
+/Table/7{4-5}                              database system (host)
+/Table/7{5-6}                              database system (host)
+/Table/7{6-7}                              database system (host)
 /Table/10{6-7}                             range default
 /Table/10{7-8}                             range default

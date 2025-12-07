@@ -46,9 +46,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/randgen/randgencfg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -2709,7 +2710,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "timestamp", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts, ok := tree.AsDFloat(args[0])
+				ts, ok := args[0].(*tree.DFloat)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected float argument for to_timestamp")
 				}
@@ -2854,7 +2855,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts, ok := tree.AsDTimestampTZ(args[0])
+				ts, ok := args[0].(*tree.DTimestampTZ)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected timestamptz argument for min_timestamp")
 				}
@@ -2870,7 +2871,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts, ok := tree.AsDTimestampTZ(args[0])
+				ts, ok := args[0].(*tree.DTimestampTZ)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected timestamptz argument for min_timestamp")
 				}
@@ -2889,7 +2890,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				interval, ok := tree.AsDInterval(args[0])
+				interval, ok := args[0].(*tree.DInterval)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected interval argument for max_staleness")
 				}
@@ -2905,7 +2906,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				interval, ok := tree.AsDInterval(args[0])
+				interval, ok := args[0].(*tree.DInterval)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected interval argument for max_staleness")
 				}
@@ -5628,7 +5629,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tableID := catid.DescID(tree.MustBeDInt(args[0]))
 				indexID := catid.IndexID(tree.MustBeDInt(args[1]))
-				rowDatums, ok := tree.AsDTuple(args[2])
+				rowDatums, ok := args[2].(*tree.DTuple)
 				if !ok {
 					return nil, pgerror.Newf(
 						pgcode.DatatypeMismatch,
@@ -5664,11 +5665,11 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Types:      tree.ParamTypes{{Name: "descriptor", Typ: types.Bytes}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				s, ok := tree.AsDBytes(args[0])
+				s, ok := args[0].(*tree.DBytes)
 				if !ok {
 					return nil, errors.Newf("expected bytes value, got %T", args[0])
 				}
-				ret, err := evalCtx.CatalogBuiltins.RedactDescriptor(ctx, []byte(s))
+				ret, err := evalCtx.CatalogBuiltins.RedactDescriptor(ctx, []byte(*s))
 				if err != nil {
 					return nil, err
 				}
@@ -5688,7 +5689,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Types:      tree.ParamTypes{{Name: "descriptor", Typ: types.Bytes}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				s, ok := tree.AsDBytes(args[0])
+				s, ok := args[0].(*tree.DBytes)
 				if !ok {
 					return nil, errors.Newf("expected bytes value, got %T", args[0])
 				}
@@ -5702,7 +5703,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 					return true
 				}
 				ret, err := evalCtx.CatalogBuiltins.RepairedDescriptor(
-					ctx, []byte(s), descIDAlwaysValid, jobIDAlwaysValid, roleAlwaysValid,
+					ctx, []byte(*s), descIDAlwaysValid, jobIDAlwaysValid, roleAlwaysValid,
 				)
 				if err != nil {
 					return nil, err
@@ -5728,23 +5729,23 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				s, ok := tree.AsDBytes(args[0])
+				s, ok := args[0].(*tree.DBytes)
 				if !ok {
 					return nil, errors.Newf("expected bytes value, got %T", args[0])
 				}
 				descIDMightExist := func(id descpb.ID) bool { return true }
 				if args[1] != tree.DNull {
-					descIDs, ok := tree.AsDArray(args[1])
+					descIDs, ok := args[1].(*tree.DArray)
 					if !ok {
 						return nil, errors.Newf("expected array value, got %T", args[1])
 					}
 					descIDMap := make(map[descpb.ID]struct{}, descIDs.Len())
 					for i, n := 0, descIDs.Len(); i < n; i++ {
-						id, isInt := tree.AsDInt(descIDs.Array[i])
+						id, isInt := descIDs.Array[i].(*tree.DInt)
 						if !isInt {
 							return nil, errors.Newf("expected int value, got %T", descIDs.Array[i])
 						}
-						descIDMap[descpb.ID(id)] = struct{}{}
+						descIDMap[descpb.ID(*id)] = struct{}{}
 					}
 					descIDMightExist = func(id descpb.ID) bool {
 						_, found := descIDMap[id]
@@ -5753,17 +5754,17 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 				}
 				nonTerminalJobIDMightExist := func(id jobspb.JobID) bool { return true }
 				if args[2] != tree.DNull {
-					jobIDs, ok := tree.AsDArray(args[2])
+					jobIDs, ok := args[2].(*tree.DArray)
 					if !ok {
 						return nil, errors.Newf("expected array value, got %T", args[2])
 					}
 					jobIDMap := make(map[jobspb.JobID]struct{}, jobIDs.Len())
 					for i, n := 0, jobIDs.Len(); i < n; i++ {
-						id, isInt := tree.AsDInt(jobIDs.Array[i])
+						id, isInt := jobIDs.Array[i].(*tree.DInt)
 						if !isInt {
 							return nil, errors.Newf("expected int value, got %T", jobIDs.Array[i])
 						}
-						jobIDMap[jobspb.JobID(id)] = struct{}{}
+						jobIDMap[jobspb.JobID(*id)] = struct{}{}
 					}
 					nonTerminalJobIDMightExist = func(id jobspb.JobID) bool {
 						_, found := jobIDMap[id]
@@ -5775,7 +5776,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 					return true
 				}
 				if args[3] != tree.DNull {
-					roles, ok := tree.AsDArray(args[3])
+					roles, ok := args[3].(*tree.DArray)
 					if !ok {
 						return nil, errors.Newf("expected array value, got %T", args[3])
 					}
@@ -5794,7 +5795,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 					}
 				}
 				ret, err := evalCtx.CatalogBuiltins.RepairedDescriptor(
-					ctx, []byte(s), descIDMightExist, nonTerminalJobIDMightExist, roleMightExist,
+					ctx, []byte(*s), descIDMightExist, nonTerminalJobIDMightExist, roleMightExist,
 				)
 				if err != nil {
 					return nil, err
@@ -7820,7 +7821,7 @@ enabled.`,
 		},
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
-				stmt, err := parser.ParseOne(s)
+				stmt, err := parserutils.ParseOne(s)
 				if err != nil {
 					// Return the same statement if it does not parse.
 					// This can happen for invalid zone config state, in which case
@@ -8659,7 +8660,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 					return tree.NewDString(""), nil
 				}
 
-				parsed, err := parser.ParseOne(sql)
+				parsed, err := parserutils.ParseOne(sql)
 				if err != nil {
 					// If parsing is unsuccessful, we shouldn't return an error, however
 					// we can't return the original stmt since this function is used to
@@ -8693,7 +8694,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 					sqlNoConstants := ""
 
 					if len(sql) != 0 {
-						parsed, err := parser.ParseOne(sql)
+						parsed, err := parserutils.ParseOne(sql)
 						// Leave result as empty string on parsing error.
 						if err == nil {
 							sqlNoConstants = tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)
@@ -8788,7 +8789,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	},
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, sql string) (tree.Datum, error) {
-				parsed, err := parser.ParseOne(sql)
+				parsed, err := parserutils.ParseOne(sql)
 				if err != nil {
 					// If parsing was unsuccessful, mark the entire string as redactable.
 					return tree.NewDString(string(redact.Sprintf("%s", sql))), nil //nolint:returnerrcheck
@@ -8821,7 +8822,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 					sql := string(tree.MustBeDString(sqlDatum))
 					sqlRedactable := ""
 
-					parsed, err := parser.ParseOne(sql)
+					parsed, err := parserutils.ParseOne(sql)
 					if err != nil {
 						// If parsing was unsuccessful, mark the entire string as redactable.
 						sqlRedactable = string(redact.Sprintf("%s", sql))
@@ -9629,7 +9630,7 @@ WHERE object_id = table_descriptor_id
 			Volatility: volatility.Immutable,
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				ltree := tree.MustBeDLTree(args[0])
-				return tree.NewDString(ltree.String()), nil
+				return tree.NewDString(ltree.LTree.String()), nil
 			},
 		},
 	),
@@ -9683,6 +9684,114 @@ WHERE object_id = table_descriptor_id
 				}
 				return tree.NewDLTree(lca), nil
 			},
+		},
+	),
+
+	"crdb_internal.inject_hint": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "statement_fingerprint", Typ: types.String},
+				{Name: "donor_sql", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				stmtFingerprint := string(tree.MustBeDString(args[0]))
+				donorSQL := string(tree.MustBeDString(args[1]))
+
+				// Validate that the donor statement matches the target statement
+				// without hints.
+				fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
+					&evalCtx.Settings.SV,
+				))
+				targetStmt, err := parserutils.ParseOne(stmtFingerprint)
+				if err != nil {
+					return nil, pgerror.Wrap(
+						err, pgcode.InvalidParameterValue, "could not parse statement fingerprint",
+					)
+				}
+				donorStmt, err := parserutils.ParseOne(donorSQL)
+				if err != nil {
+					return nil, pgerror.Wrap(
+						err, pgcode.InvalidParameterValue, "could not parse hint donor statement",
+					)
+				}
+				donor, err := tree.NewHintInjectionDonor(donorStmt.AST, fingerprintFlags)
+				if err != nil {
+					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error while creating donor")
+				}
+				if err := donor.Validate(targetStmt.AST, fingerprintFlags); err != nil {
+					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+				}
+
+				// Do a trial hint injection to validate that the target statement gets
+				// rewritten into the donor statement.
+				result, _, err := donor.InjectHints(targetStmt.AST)
+				if err != nil {
+					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+				}
+				// Either the target statement or the donor statement could be
+				// non-fingerprint or fingerprint, so for an apples-to-apples comparison
+				// we need to convert both to fingerprints.
+				resultFingerprint := tree.FormatStatementHideConstants(result, fingerprintFlags)
+				donorFingerprint := tree.FormatStatementHideConstants(donorStmt.AST, fingerprintFlags)
+				if resultFingerprint != donorFingerprint {
+					return nil, pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						"could not validate that target statement is rewritten as donor statement (%s): %s",
+						donorFingerprint, resultFingerprint,
+					)
+				}
+
+				// Insert into statement_hints.
+				var hint hintpb.StatementHintUnion
+				hint.SetValue(&hintpb.InjectHints{DonorSQL: donorSQL})
+				hintID, err := evalCtx.Planner.InsertStatementHint(ctx, stmtFingerprint, hint)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(hintID)), nil
+			},
+			Info: "This function is used to build a serialized statement hint to be inserted into" +
+				" the system.statement_hints table. It returns the hint ID of the newly created hint.",
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.clear_statement_hints_cache": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			Undocumented:     true,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				evalCtx.Planner.ClearStatementHintsCache()
+				return tree.DVoidDatum, nil
+			},
+			Info:       `This function is used to clear the statement hints cache on the gateway node`,
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.await_statement_hints_cache": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			Undocumented:     true,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				evalCtx.Planner.AwaitStatementHintsCache(ctx)
+				return tree.DVoidDatum, nil
+			},
+			Info:       `This function is used to await the statement hints cache on the gateway node`,
+			Volatility: volatility.Volatile,
 		},
 	),
 }
@@ -10326,7 +10435,7 @@ func verboseFingerprint(
 
 	// The startTime can either be a timestampTZ or a decimal.
 	var startTimestamp hlc.Timestamp
-	if parsedDecimal, ok := tree.AsDDecimal(args[1]); ok {
+	if parsedDecimal, ok := args[1].(*tree.DDecimal); ok {
 		startTimestamp, err = hlc.DecimalToHLC(&parsedDecimal.Decimal)
 		if err != nil {
 			return nil, err
@@ -11410,7 +11519,7 @@ func arrayLength(arr *tree.DArray, dim int64) tree.Datum {
 	if dim == 1 {
 		return tree.NewDInt(tree.DInt(arr.Len()))
 	}
-	a, ok := tree.AsDArray(arr.Array[0])
+	a, ok := arr.Array[0].(*tree.DArray)
 	if !ok {
 		return tree.DNull
 	}
@@ -11426,7 +11535,7 @@ func arrayLower(arr *tree.DArray, dim int64) tree.Datum {
 	if dim == 1 {
 		return intOne
 	}
-	a, ok := tree.AsDArray(arr.Array[0])
+	a, ok := arr.Array[0].(*tree.DArray)
 	if !ok {
 		return tree.DNull
 	}
@@ -12125,8 +12234,9 @@ func asJSONBuildObjectKey(
 		), nil
 	case *tree.DBitArray, *tree.DBool, *tree.DBox2D, *tree.DBytes, *tree.DDate,
 		*tree.DDecimal, *tree.DEnum, *tree.DFloat, *tree.DGeography,
-		*tree.DGeometry, *tree.DIPAddr, *tree.DInt, *tree.DInterval, *tree.DOid,
-		*tree.DOidWrapper, *tree.DPGLSN, *tree.DPGVector, *tree.DTime, *tree.DTimeTZ,
+		*tree.DGeometry, *tree.DIPAddr, *tree.DInt, *tree.DInterval,
+		*tree.DJsonpath, *tree.DLTree, *tree.DOid, *tree.DOidWrapper,
+		*tree.DPGLSN, *tree.DPGVector, *tree.DTime, *tree.DTimeTZ,
 		*tree.DTimestamp, *tree.DTSQuery, *tree.DTSVector, *tree.DUuid, *tree.DVoid:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
 	default:
@@ -12416,7 +12526,7 @@ func prettyStatementCustomConfig(
 }
 
 func prettyStatement(p tree.PrettyCfg, stmt string) (string, error) {
-	stmts, err := parser.Parse(stmt)
+	stmts, err := parserutils.Parse(stmt)
 	if err != nil {
 		return "", err
 	}
@@ -12748,7 +12858,7 @@ func makeBackupASTFromStmt(
 	backupStmt tree.Datum,
 ) (*tree.Backup, jobspb.BackupEncryptionOptions, error) {
 	stmt := string(tree.MustBeDString(backupStmt))
-	ast, err := parser.ParseOne(stmt)
+	ast, err := parserutils.ParseOne(stmt)
 	if err != nil {
 		return nil, jobspb.BackupEncryptionOptions{}, err
 	}

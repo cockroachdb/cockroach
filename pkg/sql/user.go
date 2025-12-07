@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -606,30 +607,30 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 	return p.applyOnSessionDataMutators(
 		ctx,
 		local,
-		func(m sessionDataMutator) error {
-			oldIsSuperuser := m.data.IsSuperuser
-			m.data.IsSuperuser = willBecomeAdmin
+		func(m sessionmutator.SessionDataMutator) error {
+			oldIsSuperuser := m.Data.IsSuperuser
+			m.Data.IsSuperuser = willBecomeAdmin
 			if oldIsSuperuser != willBecomeAdmin {
-				m.bufferParamStatusUpdate("is_superuser", updateStr)
+				m.BufferParamStatusUpdate("is_superuser", updateStr)
 			}
 
 			// The "none" user does resets the SessionUserProto in a SET ROLE.
 			if becomeUser.IsNoneRole() {
-				if m.data.SessionUserProto.Decode().Normalized() != "" {
-					m.data.UserProto = m.data.SessionUserProto
-					m.data.SessionUserProto = ""
+				if m.Data.SessionUserProto.Decode().Normalized() != "" {
+					m.Data.UserProto = m.Data.SessionUserProto
+					m.Data.SessionUserProto = ""
 				}
-				m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
+				m.Data.SearchPath = m.Data.SearchPath.WithUserSchemaName(m.Data.User().Normalized())
 				return nil
 			}
 
 			// Only update session_user when we are transitioning from the current_user
 			// being the session_user.
-			if m.data.SessionUserProto == "" {
-				m.data.SessionUserProto = m.data.UserProto
+			if m.Data.SessionUserProto == "" {
+				m.Data.SessionUserProto = m.Data.UserProto
 			}
-			m.data.UserProto = becomeUser.EncodeProto()
-			m.data.SearchPath = m.data.SearchPath.WithUserSchemaName(m.data.User().Normalized())
+			m.Data.UserProto = becomeUser.EncodeProto()
+			m.Data.SearchPath = m.Data.SearchPath.WithUserSchemaName(m.Data.User().Normalized())
 			return nil
 		},
 	)

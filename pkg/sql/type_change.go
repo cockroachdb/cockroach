@@ -417,7 +417,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 					continue
 				}
 				rows, err := txn.QueryBufferedEx(ctx, "select-invalid-instances", txn.KV(),
-					sessiondata.NodeUserSessionDataOverride, `SELECT id FROM system.sql_instances 
+					sessiondata.NodeUserSessionDataOverride, `SELECT id FROM system.sql_instances
  							WHERE crdb_region = $1`, member.PhysicalRepresentation)
 				if err != nil {
 					return err
@@ -1430,10 +1430,10 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 }
 
 func (t *typeSchemaChanger) logTags() *logtags.Buffer {
-	buf := &logtags.Buffer{}
-	buf = buf.Add("typeChangeExec", nil)
-	buf = buf.Add("type", t.typeID)
-	return buf
+	buf := logtags.BuildBuffer()
+	buf.Add("typeChangeExec", nil)
+	buf.Add("type", t.typeID)
+	return buf.Finish()
 }
 
 // typeChangeResumer is the anchor struct for the type change job.

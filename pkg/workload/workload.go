@@ -205,6 +205,10 @@ func (t Table) GetResolvedName() tree.TableName {
 type BatchedTuples struct {
 	// NumBatches is the number of batches of tuples.
 	NumBatches int
+	// MayContainDuplicates is a flag indicating whether the tuples may contain
+	// keys that violate uniqueness constraints. If true, the data loader will
+	// use INSERT ... ON CONFLICT DO NOTHING statements.
+	MayContainDuplicates bool
 	// FillBatch is a function to deterministically compute a columnar-batch of
 	// tuples given its index.
 	//
@@ -415,7 +419,8 @@ func (l requiresCCLBinaryDataLoader) InitialDataLoad(
 type QueryLoad struct {
 	// WorkerFns is one function per worker. It is to be called once per unit of
 	// work to be done.
-	WorkerFns []func(context.Context) error
+	WorkerFns     []func(context.Context) error
+	ChangefeedFns []func(context.Context) error
 
 	// Close, if set, is called before the process exits, giving workloads a
 	// chance to print some information or perform cleanup.

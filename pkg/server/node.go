@@ -112,6 +112,7 @@ understanding the health of the KV layer.
 `,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaExecSuccess = metric.Metadata{
 		Name: "exec.success",
@@ -452,10 +453,10 @@ func allocateStoreIDs(
 
 // GetBootstrapSchema returns the schema which will be used to bootstrap a new
 // server.
-func GetBootstrapSchema(
+func GetBootstrapSchemaForTest(
 	defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) bootstrap.MetadataSchema {
-	return bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig)
+	return bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig, bootstrap.NoOffset)
 }
 
 // bootstrapCluster initializes the passed-in engines for a new cluster.
@@ -1158,29 +1159,23 @@ func (n *Node) startPeriodicLivenessCompaction(
 				_ = n.stores.VisitStores(func(store *kvserver.Store) error {
 					store.VisitReplicas(func(repl *kvserver.Replica) bool {
 						span := repl.Desc().KeySpan().AsRawSpanWithNoLocals()
-						if keys.NodeLivenessSpan.Overlaps(span) {
-
-							// The CompactRange() method expects the start and end keys to be
-							// encoded.
-							startEngineKey :=
-								storage.EngineKey{
-									Key: span.Key,
-								}.Encode()
-
-							endEngineKey :=
-								storage.EngineKey{
-									Key: span.EndKey,
-								}.Encode()
-
-							timeBeforeCompaction := timeutil.Now()
-							if err := store.StateEngine().CompactRange(
-								context.Background(), startEngineKey, endEngineKey); err != nil {
-								log.Dev.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
-							}
-
-							log.Dev.Infof(ctx, "finished compacting liveness replica: %+v and it took: %+v",
-								repl, timeutil.Since(timeBeforeCompaction))
+						if !keys.NodeLivenessSpan.Overlaps(span) {
+							return true
 						}
+
+						// CompactRange() expects the start and end keys to be encoded.
+						startEngineKey := storage.EngineKey{Key: span.Key}.Encode()
+						endEngineKey := storage.EngineKey{Key: span.EndKey}.Encode()
+
+						timeBeforeCompaction := timeutil.Now()
+						if err := store.StateEngine().CompactRange(
+							context.Background(), startEngineKey, endEngineKey,
+						); err != nil {
+							log.Dev.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
+						}
+
+						log.Dev.Infof(ctx, "finished compacting liveness replica: %+v and it took: %+v",
+							repl, timeutil.Since(timeBeforeCompaction))
 						return true
 					})
 					return nil
@@ -1225,7 +1220,7 @@ func (n *Node) computeMetricsPeriodically(
 			} else {
 				storeToMetrics[store].FlushWriteThroughput = newMetrics.Flush.WriteThroughput
 			}
-			if err := newMetrics.LogWriter.FsyncLatency.Write(&storeToMetrics[store].WALFsyncLatency); err != nil {
+			if err := newMetrics.Metrics.WALMetrics.PrimaryFileOpLatency.Write(&storeToMetrics[store].WALFsyncLatency); err != nil {
 				return err
 			}
 			if newMetrics.WAL.Failover.FailoverWriteAndSyncLatency != nil {
@@ -1234,11 +1229,18 @@ func (n *Node) computeMetricsPeriodically(
 					return err
 				}
 			}
+			if newMetrics.Metrics.WALMetrics.SecondaryFileOpLatency != nil {
+				if err := newMetrics.Metrics.WALMetrics.SecondaryFileOpLatency.Write(
+					&storeToMetrics[store].WALSecondaryFileOpLatency); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	})
 	n.updateNodeRangeCount()
 	n.storeCfg.KVFlowStreamTokenProvider.UpdateMetricGauges()
+	n.stores.TryLogFlowControlSendQueues(ctx)
 	return err
 }
 
@@ -1374,10 +1376,12 @@ func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetric
 		if s, ok := storeIDToDiskStats[store.StoreID()]; ok {
 			diskStats = s
 		}
+		diskUnhealthy := eng.GetDiskUnhealthy()
 		metrics = append(metrics, admission.StoreMetrics{
 			StoreID:                   store.StoreID(),
 			Metrics:                   m.Metrics,
 			WriteStallCount:           m.WriteStallCount,
+			DiskUnhealthy:             diskUnhealthy,
 			DiskStats:                 diskStats,
 			MemTableSizeForStopWrites: memTableSizeForStopWrites,
 		})
@@ -1621,8 +1625,19 @@ func (n *Node) batchInternal(
 		defer log.Event(ctx, "node sending response")
 	}
 
+	var rangeTenantIDForAC roachpb.TenantID
+	// The computation of rangeTenantIDForAC fails open in case of error.
+	if len(args.Requests) > 0 {
+		k, err := keys.Addr(args.Requests[0].GetInner().Header().Key)
+		if err == nil {
+			_, tid, err := keys.DecodeTenantPrefix(roachpb.Key(k))
+			if err == nil {
+				rangeTenantIDForAC = tid
+			}
+		}
+	}
 	tStart := timeutil.Now()
-	handle, err := n.storeCfg.KVAdmissionController.AdmitKVWork(ctx, tenID, args)
+	handle, err := n.storeCfg.KVAdmissionController.AdmitKVWork(ctx, tenID, rangeTenantIDForAC, args)
 	if err != nil {
 		return nil, err
 	}
@@ -2213,10 +2228,13 @@ func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error
 
 	sm := &rangefeed.StreamManager{}
 	if kvserver.RangefeedUseBufferedSender.Get(&n.storeCfg.Settings.SV) {
-		sm = rangefeed.NewStreamManager(rangefeed.NewBufferedSender(lockedMuxStream, n.metrics.BufferedSenderMetrics),
+		sm = rangefeed.NewStreamManager(
+			rangefeed.NewBufferedSender(lockedMuxStream, n.storeCfg.Settings, n.metrics.BufferedSenderMetrics),
 			n.metrics.StreamManagerMetrics)
 	} else {
-		sm = rangefeed.NewStreamManager(rangefeed.NewUnbufferedSender(lockedMuxStream), n.metrics.StreamManagerMetrics)
+		sm = rangefeed.NewStreamManager(
+			rangefeed.NewUnbufferedSender(lockedMuxStream),
+			n.metrics.StreamManagerMetrics)
 	}
 
 	if err := sm.Start(ctx, n.stopper); err != nil {
@@ -2252,14 +2270,14 @@ func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error
 				continue
 			}
 
-			tags := &logtags.Buffer{}
-			tags = tags.Add("r", req.RangeID)
-			tags = tags.Add("sm", req.Replica.StoreID)
-			tags = tags.Add("sid", req.StreamID)
+			tags := logtags.BuildBuffer()
+			tags.Add("r", req.RangeID)
+			tags.Add("sm", req.Replica.StoreID)
+			tags.Add("sid", req.StreamID)
 			if req.ConsumerID != 0 {
-				tags = tags.Add("cid", req.ConsumerID)
+				tags.Add("cid", req.ConsumerID)
 			}
-			streamCtx := logtags.AddTags(ctx, tags)
+			streamCtx := logtags.AddTags(ctx, tags.Finish())
 
 			streamSink := sm.NewStream(req.StreamID, req.RangeID)
 
@@ -2291,7 +2309,10 @@ func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error
 			// Disconnector returned can be used to shut down rangefeed from the
 			// stream manager. If rangefeed disconnects with an error after being
 			// successfully registered, it calls streamSink.SendError.
+			sm.RegisteringStream(req.StreamID)
 			if disconnector, err := n.stores.RangeFeed(streamCtx, req, streamSink, limiter); err != nil {
+				// The rangefeed was not registered, so it should be safe to send this
+				// error directly to the stream rather than via the registration.
 				streamSink.SendError(kvpb.NewError(err))
 			} else {
 				sm.AddStream(req.StreamID, disconnector)

@@ -56,6 +56,8 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "//pkg/storage",
+        "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/hlc",

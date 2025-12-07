@@ -167,7 +167,10 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 	voterReplicas := desc.Replicas().VoterDescriptors()
 	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
 	if !rp.knobs.DisableReplicaRebalancing {
-		scorerOptions := rp.allocator.ScorerOptions(ctx)
+		scorerOptions := allocatorimpl.ScorerOptions(rp.allocator.ScorerOptions(ctx))
+		if rp.allocator.CountBasedRebalancingDisabled() {
+			scorerOptions = rp.allocator.BaseScorerOptionsWithNoConvergence()
+		}
 		rangeUsageInfo := repl.RangeUsageInfo()
 		_, _, _, ok := rp.allocator.RebalanceVoter(
 			ctx,
@@ -790,6 +793,9 @@ func (rp ReplicaPlanner) considerRebalance(
 	if scatter {
 		scorerOpts = rp.allocator.ScorerOptionsForScatter(ctx)
 	}
+	if rp.allocator.CountBasedRebalancingDisabled() {
+		scorerOpts = rp.allocator.BaseScorerOptionsWithNoConvergence()
+	}
 	rangeUsageInfo := repl.RangeUsageInfo()
 	addTarget, removeTarget, details, ok := rp.allocator.RebalanceVoter(
 		ctx,
@@ -894,7 +900,6 @@ func (rp ReplicaPlanner) maybeTransferLeaseAwayTarget(
 		desc.Replicas().VoterDescriptors(),
 		repl,
 		usageInfo,
-		false, /* forceDecisionWithoutStats */
 		allocator.TransferLeaseOptions{
 			Goal: allocator.LeaseCountConvergence,
 			// NB: This option means that the allocator is asked to not consider the

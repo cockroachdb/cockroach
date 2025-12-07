@@ -53,6 +53,17 @@ type SelectRangedOptions struct {
 	UserKeys bool
 }
 
+// SelectAllRanged returns SelectRangeOptions that covers all span-based
+// replicated keys in the given range.
+func SelectAllRanged(span roachpb.RSpan) SelectRangedOptions {
+	return SelectRangedOptions{
+		RSpan:      span,
+		SystemKeys: true,
+		LockTable:  true,
+		UserKeys:   true,
+	}
+}
+
 // SelectOpts configures which spans for a Replica to return from Select.
 // A Replica comprises replicated (i.e. belonging to the state machine) spans
 // and unreplicated spans, and depending on external circumstances one may want

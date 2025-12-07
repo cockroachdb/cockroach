@@ -19,6 +19,7 @@ var (
 		Help:        "Time spent in RangeFeed catchup scan",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaRangeFeedExhausted = metric.Metadata{
 		Name:        "kv.rangefeed.budget_allocation_failed",
@@ -71,15 +72,9 @@ var (
 		Measurement: "Cancellation Count",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaRangeFeedProcessorsGO = metric.Metadata{
-		Name:        "kv.rangefeed.processors_goroutine",
-		Help:        "Number of active RangeFeed processors using goroutines",
-		Measurement: "Processors",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaRangeFeedProcessorsScheduler = metric.Metadata{
-		Name:        "kv.rangefeed.processors_scheduler",
-		Help:        "Number of active RangeFeed processors using scheduler",
+	metaRangeFeedProcessors = metric.Metadata{
+		Name:        "kv.rangefeed.processors",
+		Help:        "Number of active RangeFeed processors",
 		Measurement: "Processors",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -129,11 +124,7 @@ type Metrics struct {
 	// limit, but it's here to limit the effect on stability in case something
 	// unexpected happens.
 	RangeFeedSlowClosedTimestampNudgeSem chan struct{}
-	// Metrics exposing rangefeed processor by type. Those metrics are used to
-	// monitor processor switch over. They could be removed when legacy processor
-	// is removed.
-	RangeFeedProcessorsGO        *metric.Gauge
-	RangeFeedProcessorsScheduler *metric.Gauge
+	RangeFeedProcessors                  *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -152,8 +143,7 @@ func NewMetrics() *Metrics {
 		RangeFeedSlowClosedTimestampRanges:          metric.NewGauge(metaRangefeedSlowClosedTimestampRanges),
 		RangeFeedSlowClosedTimestampLogN:            log.Every(5 * time.Second),
 		RangeFeedSlowClosedTimestampNudgeSem:        make(chan struct{}, 1024),
-		RangeFeedProcessorsGO:                       metric.NewGauge(metaRangeFeedProcessorsGO),
-		RangeFeedProcessorsScheduler:                metric.NewGauge(metaRangeFeedProcessorsScheduler),
+		RangeFeedProcessors:                         metric.NewGauge(metaRangeFeedProcessors),
 		RangeFeedBufferedRegistrations:              metric.NewGauge(metaRangeFeedBufferedRegistrations),
 		RangeFeedUnbufferedRegistrations:            metric.NewGauge(metaRangeFeedUnbufferedRegistrations),
 		RangefeedOutputLoopNanosForUnbufferedReg:    metric.NewCounter(metaRangeFeedOutputLoopNanosUnbufferedRegistration),

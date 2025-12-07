@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,6 +48,7 @@ type Parser struct {
 type ParseOptions struct {
 	intType        *types.T
 	retainComments bool
+	numAnnotations *tree.AnnotationIdx
 }
 
 var DefaultParseOptions = ParseOptions{
@@ -64,38 +66,38 @@ func (po ParseOptions) WithIntType(t *types.T) ParseOptions {
 	return po
 }
 
+// WithNumAnnotations overrides how annotations are handled. If this option is
+// used, then
+// - the given integer indicates the number of annotations already claimed, and
+// - if multiple stmts are parsed, then unique annotation indexes are used
+// across all stmts.
+//
+// When this option is not used, then each stmt is parsed indepedently.
+func (po ParseOptions) WithNumAnnotations(numAnnotations tree.AnnotationIdx) ParseOptions {
+	po.numAnnotations = &numAnnotations
+	return po
+}
+
 // INT8 is the historical interpretation of INT. This should be left
 // alone in the future, since there are many sql fragments stored
 // in various descriptors. Any user input that was created after
 // INT := INT4 will simply use INT4 in any resulting code.
 var defaultNakedIntType = types.Int
 
-// NakedIntTypeFromDefaultIntSize given the size in bits or bytes (preferred)
-// of how a "naked" INT type should be parsed returns the corresponding integer
-// type.
-func NakedIntTypeFromDefaultIntSize(defaultIntSize int32) *types.T {
-	switch defaultIntSize {
-	case 4, 32:
-		return types.Int4
-	default:
-		return types.Int
-	}
-}
-
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (statements.Statements, error) {
-	return p.parseWithDepth(1, sql, DefaultParseOptions)
+	return p.parseWithOptions(sql, DefaultParseOptions)
 }
 
 // ParseWithOptions parses the sql with the provided options and returns a list of statements.
 func (p *Parser) ParseWithOptions(sql string, opts ParseOptions) (statements.Statements, error) {
-	return p.parseWithDepth(1, sql, opts)
+	return p.parseWithOptions(sql, opts)
 }
 
 func (p *Parser) parseOne(
 	sql string, opts ParseOptions,
 ) (statements.Statement[tree.Statement], error) {
-	stmts, err := p.parseWithDepth(1, sql, opts)
+	stmts, err := p.parseWithOptions(sql, opts)
 	if err != nil {
 		return statements.Statement[tree.Statement]{}, err
 	}
@@ -159,23 +161,36 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 	}
 }
 
-func (p *Parser) parseWithDepth(
-	depth int, sql string, options ParseOptions,
-) (statements.Statements, error) {
+func (p *Parser) parseWithOptions(sql string, options ParseOptions) (statements.Statements, error) {
 	stmts := statements.Statements(p.stmtBuf[:0])
 	p.scanner.Init(sql)
 	if options.retainComments {
 		p.scanner.RetainComments()
 	}
 	defer p.scanner.Cleanup()
+	var numAnnotations tree.AnnotationIdx
+	if options.numAnnotations != nil {
+		numAnnotations = *options.numAnnotations
+	}
 	for {
 		sql, tokens, done := p.scanOneStmt()
-		stmt, err := p.parse(depth+1, sql, tokens, options.intType)
+		stmt, err := p.parse(sql, tokens, options.intType, numAnnotations)
 		if err != nil {
 			return nil, err
 		}
 		if stmt.AST != nil {
 			stmts = append(stmts, stmt)
+			if options.numAnnotations != nil {
+				if buildutil.CrdbTestBuild && numAnnotations > stmt.NumAnnotations {
+					return nil, errors.AssertionFailedf(
+						"annotation index has regressed: numAnnotations=%d, stmt.NumAnnotations=%d ",
+						numAnnotations, stmt.NumAnnotations,
+					)
+				}
+				// If this stmt used any annotations, we need to advance the
+				// number of annotations accordingly.
+				numAnnotations = stmt.NumAnnotations
+			}
 		}
 		if done {
 			break
@@ -186,9 +201,9 @@ func (p *Parser) parseWithDepth(
 
 // parse parses a statement from the given scanned tokens.
 func (p *Parser) parse(
-	depth int, sql string, tokens []sqlSymType, nakedIntType *types.T,
+	sql string, tokens []sqlSymType, nakedIntType *types.T, numAnnotations tree.AnnotationIdx,
 ) (statements.Statement[tree.Statement], error) {
-	p.lexer.init(sql, tokens, nakedIntType)
+	p.lexer.init(sql, tokens, nakedIntType, numAnnotations)
 	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
 		if p.lexer.lastError == nil {
@@ -371,7 +386,8 @@ func ParseTablePattern(sql string) (tree.TablePattern, error) {
 // the results are undefined if the string contains invalid SQL
 // syntax.
 func ParseExprs(exprs []string) (tree.Exprs, error) {
-	return ParseExprsWithOptions(exprs, DefaultParseOptions)
+	res, _, err := ParseExprsWithOptions(exprs, DefaultParseOptions)
+	return res, err
 }
 
 // ParseExprsWithOptions parses a comma-delimited sequence of SQL scalar
@@ -379,19 +395,23 @@ func ParseExprs(exprs []string) (tree.Exprs, error) {
 // ensuring that the input is, in fact, a comma-delimited sequence of SQL
 // scalar expressions — the results are undefined if the string contains
 // invalid SQL syntax.
-func ParseExprsWithOptions(exprs []string, opts ParseOptions) (tree.Exprs, error) {
+//
+// It also returns the number of annotations used.
+func ParseExprsWithOptions(
+	exprs []string, opts ParseOptions,
+) (tree.Exprs, tree.AnnotationIdx, error) {
 	if len(exprs) == 0 {
-		return tree.Exprs{}, nil
+		return tree.Exprs{}, 0, nil
 	}
 	stmt, err := ParseOneWithOptions(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")), opts)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	set, ok := stmt.AST.(*tree.SetVar)
 	if !ok {
-		return nil, errors.AssertionFailedf("expected a SET statement, but found %T", stmt)
+		return nil, 0, errors.AssertionFailedf("expected a SET statement, but found %T", stmt)
 	}
-	return set.Values, nil
+	return set.Values, stmt.NumAnnotations, nil
 }
 
 // ParseExpr parses a SQL scalar expression. The caller is responsible

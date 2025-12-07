@@ -8,7 +8,6 @@ package rangefeed
 import (
 	"context"
 	"fmt"
-	"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,10 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -241,9 +241,9 @@ func (f *RangeFeed) start(
 		// pprof.Do function does exactly what we do here, but it also results in
 		// pprof.Do function showing up in the stack traces -- so, just set and reset
 		// labels manually.
-		defer pprof.SetGoroutineLabels(ctx)
-		ctx = pprof.WithLabels(ctx, pprof.Labels(append(f.extraPProfLabels, "rangefeed", f.name)...))
-		pprof.SetGoroutineLabels(ctx)
+		ctx, reset := pprofutil.SetProfilerLabels(ctx, append(f.extraPProfLabels, "rangefeed", f.name)...)
+		defer reset()
+
 		if f.invoker != nil {
 			_ = f.invoker(func() error {
 				f.run(ctx, frontier, resumeFromFrontier)
@@ -361,7 +361,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 			log.Eventf(ctx, "starting rangefeed from %v on %v", ts, f.spansDebugStr)
 		}
 
-		start := timeutil.Now()
+		start := crtime.NowMono()
 
 		rangeFeedTask := func(ctx context.Context) error {
 			if f.invoker == nil {
@@ -396,9 +396,10 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 			errors.HasType(err, &kvpb.MVCCHistoryMutationError{}) {
 			if errCallback := f.onUnrecoverableError; errCallback != nil {
 				errCallback(ctx, err)
+				log.VEventf(ctx, 1, "exiting rangefeed due to internal error: %v", err)
+			} else {
+				log.Dev.Warningf(ctx, "exiting rangefeed because of internal error with no OnInternalError callback: %s", err.Error())
 			}
-
-			log.VEventf(ctx, 1, "exiting rangefeed due to internal error: %v", err)
 			return
 		}
 		if err != nil && ctx.Err() == nil && restartLogEvery.ShouldLog() {
@@ -410,7 +411,7 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 			return
 		}
 
-		ranFor := timeutil.Since(start)
+		ranFor := start.Elapsed()
 		log.VEventf(ctx, 1, "restarting rangefeed for %v after %v",
 			f.spansDebugStr, ranFor)
 		if f.knobs != nil && f.knobs.OnRangefeedRestart != nil {

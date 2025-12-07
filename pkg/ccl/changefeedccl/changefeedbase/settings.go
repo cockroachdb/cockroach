@@ -215,6 +215,23 @@ var ProtectTimestampLag = settings.RegisterDurationSetting(
 	10*time.Minute,
 	settings.PositiveDuration)
 
+// PerTableProtectedTimestamps enables per-table protected timestamp records
+// instead of a single record for all tables in a changefeed.
+var PerTableProtectedTimestamps = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.protect_timestamp.per_table.enabled",
+	"if true, creates separate protected timestamp records for each table in a changefeed; "+
+		"if false, uses a single protected timestamp record for all tables",
+	metamorphic.ConstantWithTestBool("changefeed.protect_timestamp.per_table.enabled", false))
+
+// BulkDelivery enables bulk delivery of rangefeed events, which can improve performance during catchup scans.
+var BulkDelivery = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.bulk_delivery.enabled",
+	"if true, rangefeed events are delivered in bulk during catchup scans; "+
+		"if false, rangefeed events are delivered individually",
+	metamorphic.ConstantWithTestBool("changefeed.bulk_delivery.enabled", true))
+
 // MaxProtectedTimestampAge controls the frequency of protected timestamp record updates
 var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
@@ -400,4 +417,16 @@ var TrackPerTableProgress = settings.RegisterBoolSetting(
 		"granular saving/restoring of progress, which will reduce duplicates during restarts, "+
 		"but doing so may incur additional overhead during ordinary changefeed execution",
 	metamorphic.ConstantWithTestBool("changefeed.progress.per_table_tracking.enabled", true),
+)
+
+// FrontierPersistenceInterval configures the minimum amount of time that must
+// elapse before a changefeed will persist its entire span frontier again.
+var FrontierPersistenceInterval = settings.RegisterDurationSettingWithExplicitUnit(
+	settings.ApplicationLevel,
+	"changefeed.progress.frontier_persistence.interval",
+	"minimum amount of time that must elapse before a changefeed "+
+		"will persist its entire span frontier again",
+	30*time.Second, /* defaultValue */
+	settings.DurationInRange(5*time.Second, 10*time.Minute),
+	settings.WithPublic,
 )

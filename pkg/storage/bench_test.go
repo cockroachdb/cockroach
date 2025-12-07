@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/stretchr/testify/require"
@@ -1126,7 +1127,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, opts benchScanOptions) {
 		// Pull all of the sstables into the RocksDB cache in order to make the
 		// timings more stable. Otherwise, the first run will be penalized pulling
 		// data into the cache while later runs will not.
-		if _, err := ComputeStats(ctx, eng, keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+		if _, err := ComputeStats(ctx, eng, fs.UnknownReadCategory, keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 			b.Fatalf("stats failed: %s", err)
 		}
 	}
@@ -1523,7 +1524,7 @@ func runMVCCDeleteRangeUsingTombstone(
 			eng := getInitialStateEngine(ctx, b, opts, false /* inMemory */)
 			defer eng.Close()
 
-			ms, err := ComputeStats(ctx, eng, keys.LocalMax, keys.MaxKey, 0)
+			ms, err := ComputeStats(ctx, eng, fs.UnknownReadCategory, keys.LocalMax, keys.MaxKey, 0)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -1667,7 +1668,7 @@ func runMVCCComputeStats(ctx context.Context, b *testing.B, valueBytes int, numR
 	var stats enginepb.MVCCStats
 	var err error
 	for i := 0; i < b.N; i++ {
-		stats, err = ComputeStats(ctx, eng, keys.LocalMax, keys.MaxKey, 0)
+		stats, err = ComputeStats(ctx, eng, fs.UnknownReadCategory, keys.LocalMax, keys.MaxKey, 0)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -2126,7 +2127,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 			MaxSize:                0,
 			StopMidKey:             false,
 			IncludeMVCCValueHeader: opts.importEpochs,
-		}, &buf)
+		}, &objstorage.MemObj{})
 		if err != nil {
 			b.Fatal(err)
 		}

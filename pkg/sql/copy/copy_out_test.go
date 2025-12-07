@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
@@ -46,12 +45,12 @@ func TestCopyOutTransaction(t *testing.T) {
 	`)
 	require.NoError(t, err)
 
-	pgURL, cleanupGoDB, err := s.PGUrlE(
+	pgURL, cleanupGoDB := s.PGUrl(
+		t,
 		serverutils.CertsDirPrefix("StartServer"),
 		serverutils.User(username.RootUser),
 	)
-	require.NoError(t, err)
-	s.AppStopper().AddCloser(stop.CloserFn(func() { cleanupGoDB() }))
+	defer cleanupGoDB()
 	config, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
 
@@ -62,14 +61,26 @@ func TestCopyOutTransaction(t *testing.T) {
 	tx, err := conn.Begin(ctx)
 	require.NoError(t, err)
 
-	_, err = tx.Exec(ctx, "INSERT INTO t VALUES (1)")
-	require.NoError(t, err)
+	for val, doSavepoint := range []bool{true, false} {
+		func() {
+			if doSavepoint {
+				_, err = tx.Exec(ctx, "SAVEPOINT s")
+				require.NoError(t, err)
+				defer func() {
+					_, err = tx.Exec(ctx, "ROLLBACK TO SAVEPOINT s")
+					require.NoError(t, err)
+				}()
+			}
 
-	var buf bytes.Buffer
-	_, err = tx.Conn().PgConn().CopyTo(ctx, &buf, "COPY t TO STDOUT")
-	require.NoError(t, err)
-	require.Equal(t, "1\n", buf.String())
+			_, err = tx.Exec(ctx, "INSERT INTO t VALUES ($1)", val)
+			require.NoError(t, err)
 
+			var buf bytes.Buffer
+			_, err = tx.Conn().PgConn().CopyTo(ctx, &buf, "COPY t TO STDOUT")
+			require.NoError(t, err)
+			require.Equal(t, fmt.Sprintf("%d\n", val), buf.String())
+		}()
+	}
 	require.NoError(t, tx.Rollback(ctx))
 }
 
@@ -113,12 +124,12 @@ func TestCopyOutRandom(t *testing.T) {
 
 	// Use pgx for this next bit as it allows selecting rows by raw values.
 	// Furthermore, it handles CopyTo!
-	pgURL, cleanupGoDB, err := s.PGUrlE(
+	pgURL, cleanupGoDB := s.PGUrl(
+		t,
 		serverutils.CertsDirPrefix("StartServer"),
 		serverutils.User(username.RootUser),
 	)
-	require.NoError(t, err)
-	s.AppStopper().AddCloser(stop.CloserFn(func() { cleanupGoDB() }))
+	defer cleanupGoDB()
 	config, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
 	config.Database = sqlutils.TestDB

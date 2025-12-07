@@ -12,6 +12,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -84,6 +86,11 @@ func (b *Builder) isExemptFromRLSPolicies(
 	// Check if RLS filtering is exempt.
 	if isAdmin || isOwnerAndNotForced || bypassRLS {
 		return true
+	}
+	// RLS applies. Reject the query if row-level security is disabled in the session.
+	if !b.evalCtx.SessionData().RowSecurity {
+		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
+			"query would be affected by row-level security policy for table %q", tabMeta.Table.Name()))
 	}
 	return false
 }

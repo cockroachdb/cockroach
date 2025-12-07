@@ -487,11 +487,14 @@ func ShrinkCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 
 func (c *Cluster) DeletePrometheusConfig(ctx context.Context, l *logger.Logger) error {
 
-	cl := promhelperclient.NewPromClient()
-
 	stopSpinner := ui.NewDefaultSpinner(l, "Destroying Prometheus configs").Start()
 	defer stopSpinner()
 
+	// We first iterate on all VMs to determine if any machine of the cluster
+	// was reachable by Prometheus and if we need to delete its config.
+	// This is done this way to avoid authenticating the promhelper client
+	// in case we don't need to delete any config.
+	needDelete := false
 	for _, node := range c.VMs {
 
 		reachability := promhelperclient.ProviderReachability(
@@ -502,29 +505,20 @@ func (c *Cluster) DeletePrometheusConfig(ctx context.Context, l *logger.Logger) 
 			continue
 		}
 
-		err := cl.DeleteClusterConfig(ctx, c.Name, false, false /* insecure */, l)
-		if err != nil {
-
-			if !promhelperclient.IsNotFoundError(err) {
-				return errors.Wrapf(
-					err,
-					"failed to delete the cluster config with cluster as secure",
-				)
-			}
-
-			// TODO(bhaskar): Obtain secure cluster information.
-			// Cluster does not have the information on secure or not.
-			// So, we retry as insecure  if delete fails with cluster as secure.
-			if err = cl.DeleteClusterConfig(ctx, c.Name, false, true /* insecure */, l); err != nil {
-				return errors.Wrapf(
-					err,
-					"failed to delete the cluster config with cluster as insecure and secure",
-				)
-			}
-
-		}
+		needDelete = true
 		break
+	}
 
+	if needDelete {
+		cl, err := promhelperclient.NewPromClient()
+		if err != nil {
+			return err
+		}
+
+		err = cl.DeleteClusterConfig(ctx, c.Name, l)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -540,9 +534,16 @@ func DestroyCluster(l *logger.Logger, c *Cluster) error {
 	// DNS entries are destroyed first to ensure that the GC job will not try
 	// and clean-up entries prematurely.
 	stopSpinner := ui.NewDefaultSpinner(l, "Destroying DNS entries").Start()
+	publicRecords := make([]string, 0, len(c.VMs))
+	for _, v := range c.VMs {
+		publicRecords = append(publicRecords, v.PublicDNS)
+	}
 	dnsErr := vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
-		return p.DeleteRecordsBySubdomain(context.Background(), c.Name)
+		publicRecordsErr := p.DeletePublicRecordsByName(context.Background(), publicRecords...)
+		srvRecordsErr := p.DeleteSRVRecordsBySubdomain(context.Background(), c.Name)
+		return errors.CombineErrors(publicRecordsErr, srvRecordsErr)
 	})
+
 	stopSpinner()
 
 	stopSpinner = ui.NewDefaultSpinner(l, "Destroying VMs").Start()

@@ -48,7 +48,7 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 
 	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
 	)()
 
 	os.Exit(m.Run())
@@ -316,6 +316,13 @@ func TestLogic_bytes(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "bytes")
+}
+
+func TestLogic_canary_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "canary_stats")
 }
 
 func TestLogic_cascade(
@@ -1170,6 +1177,13 @@ func TestLogic_jsonb_path_exists(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "jsonb_path_exists")
+}
+
+func TestLogic_jsonb_path_exists_index_acceleration(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_exists_index_acceleration")
 }
 
 func TestLogic_jsonb_path_match(
@@ -2033,6 +2047,13 @@ func TestLogic_show_indexes(
 	runLogicTest(t, "show_indexes")
 }
 
+func TestLogic_show_inspect_errors(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_inspect_errors")
+}
+
 func TestLogic_show_tenant_fingerprints(
 	t *testing.T,
 ) {
@@ -2094,6 +2115,13 @@ func TestLogic_srfs(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "srfs")
+}
+
+func TestLogic_statement_hint_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "statement_hint_builtins")
 }
 
 func TestLogic_statement_source(

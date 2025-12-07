@@ -128,21 +128,28 @@ func (p *ScheduledProcessor) Start(
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue.
 	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
+		rtsIter, err := rtsIterFunc()
+		if err != nil {
+			// No need to close rtsIter if error is non-nil.
+			p.scheduler.StopProcessor()
+			return err
+		}
+
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
 		// TODO(oleg): we need to cap number of tasks that we can fire up across
 		// all feeds as they could potentially generate O(n) tasks during start.
-		err := stopper.RunAsyncTask(p.taskCtx, "rangefeed: init resolved ts", initScan.Run)
+		err = stopper.RunAsyncTask(p.taskCtx, "rangefeed: init resolved ts", initScan.Run)
 		if err != nil {
 			initScan.Cancel()
 			p.scheduler.StopProcessor()
 			return err
 		}
 	} else {
+		// This case should only be reached in tests.
 		p.initResolvedTS(p.taskCtx, nil)
 	}
 
-	p.Metrics.RangeFeedProcessorsScheduler.Inc(1)
+	p.Metrics.RangeFeedProcessors.Inc(1)
 	return nil
 }
 
@@ -244,7 +251,7 @@ func (p *ScheduledProcessor) processPushTxn(ctx context.Context) {
 
 func (p *ScheduledProcessor) processStop() {
 	p.cleanup()
-	p.Metrics.RangeFeedProcessorsScheduler.Dec(1)
+	p.Metrics.RangeFeedProcessors.Dec(1)
 }
 
 func (p *ScheduledProcessor) cleanup() {
@@ -314,27 +321,12 @@ func (p *ScheduledProcessor) stopInternal(ctx context.Context, pErr *kvpb.Error)
 	p.scheduler.StopProcessor()
 }
 
-// Register registers the stream over the specified span of keys.
-//
-// The registration will not observe any events that were consumed before this
-// method was called. It is undefined whether the registration will observe
-// events that are consumed concurrently with this call. The channel will be
-// provided an error when the registration closes.
-//
-// The optionally provided "catch-up" iterator is used to read changes from the
-// engine which occurred after the provided start timestamp (exclusive).
-//
-// If the method returns false, the processor will have been stopped, so calling
-// Stop is not necessary. If the method returns true, it will also return an
-// updated operation filter that includes the operations required by the new
-// registration.
-//
-// NB: startTS is exclusive; the first possible event will be at startTS.Next().
+// Register implements rangefeed.Processor.
 func (p *ScheduledProcessor) Register(
 	streamCtx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchUpIter *CatchUpIterator,
+	catchUpSnap *CatchUpSnapshot,
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
@@ -352,11 +344,11 @@ func (p *ScheduledProcessor) Register(
 	bufferedStream, isBufferedStream := stream.(BufferedStream)
 	if isBufferedStream {
 		r = newUnbufferedRegistration(
-			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
+			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpSnap, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
 			p.Config.EventChanCap, p.Metrics, bufferedStream, p.unregisterClientAsync)
 	} else {
 		r = newBufferedRegistration(
-			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
+			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpSnap, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
 			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, p.unregisterClientAsync)
 	}
 
@@ -364,8 +356,8 @@ func (p *ScheduledProcessor) Register(
 		if p.stopping.Load() {
 			return nil
 		}
-		if !p.Span.AsRawSpanWithNoLocals().Contains(r.getSpan()) {
-			log.Dev.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
+		if !p.Span.AsRawSpanWithNoLocals().Contains(r.Span()) {
+			log.KvExec.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 		}
 
 		// Add the new registration to the registry.
@@ -631,7 +623,7 @@ func runRequest[T interface{}](
 		if buildutil.CrdbTestBuild {
 			select {
 			case <-p.stoppedC:
-				log.Dev.Fatalf(ctx, "processing request on stopped processor")
+				log.KvExec.Fatalf(ctx, "processing request on stopped processor")
 			default:
 			}
 		}
@@ -695,7 +687,7 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 	case e.sync != nil:
 		if e.sync.testRegCatchupSpan != nil {
 			if err := p.reg.waitForCaughtUp(ctx, *e.sync.testRegCatchupSpan); err != nil {
-				log.Dev.Errorf(
+				log.KvExec.Errorf(
 					ctx,
 					"error waiting for registries to catch up during test, results might be impacted: %s",
 					err,
@@ -704,7 +696,7 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 		}
 		close(e.sync.c)
 	default:
-		log.Dev.Fatalf(ctx, "missing event variant: %+v", e)
+		log.KvExec.Fatalf(ctx, "missing event variant: %+v", e)
 	}
 }
 
@@ -742,7 +734,7 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 			// No updates to publish.
 
 		default:
-			log.Dev.Fatalf(ctx, "unknown logical op %T", t)
+			log.KvExec.Fatalf(ctx, "unknown logical op %T", t)
 		}
 
 		// Determine whether the operation caused the resolved timestamp to
@@ -786,7 +778,7 @@ func (p *ScheduledProcessor) publishValue(
 	alloc *SharedBudgetAllocation,
 ) {
 	if !p.Span.ContainsKey(roachpb.RKey(key)) {
-		log.Dev.Fatalf(ctx, "key %v not in Processor's key range %v", key, p.Span)
+		log.KvExec.Fatalf(ctx, "key %v not in Processor's key range %v", key, p.Span)
 	}
 
 	var prevVal roachpb.Value
@@ -813,7 +805,7 @@ func (p *ScheduledProcessor) publishDeleteRange(
 ) {
 	span := roachpb.Span{Key: startKey, EndKey: endKey}
 	if !p.Span.ContainsKeyRange(roachpb.RKey(startKey), roachpb.RKey(endKey)) {
-		log.Dev.Fatalf(ctx, "span %s not in Processor's key range %v", span, p.Span)
+		log.KvExec.Fatalf(ctx, "span %s not in Processor's key range %v", span, p.Span)
 	}
 
 	var event kvpb.RangeFeedEvent
@@ -832,10 +824,10 @@ func (p *ScheduledProcessor) publishSSTable(
 	alloc *SharedBudgetAllocation,
 ) {
 	if sstSpan.Equal(roachpb.Span{}) {
-		log.Dev.Fatalf(ctx, "received SSTable without span")
+		log.KvExec.Fatalf(ctx, "received SSTable without span")
 	}
 	if sstWTS.IsEmpty() {
-		log.Dev.Fatalf(ctx, "received SSTable without write timestamp")
+		log.KvExec.Fatalf(ctx, "received SSTable without write timestamp")
 	}
 	p.reg.PublishToOverlapping(ctx, sstSpan, &kvpb.RangeFeedEvent{
 		SST: &kvpb.RangeFeedSSTable{

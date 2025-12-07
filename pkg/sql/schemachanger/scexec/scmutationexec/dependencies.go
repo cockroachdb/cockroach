@@ -146,6 +146,9 @@ type DeferredMutationStateUpdater interface {
 	// AddIndexForMaybeSplitAndScatter splits and scatters rows for a given index,
 	// if it's either hash sharded or under the system tenant.
 	AddIndexForMaybeSplitAndScatter(
-		tableID catid.DescID, indexID catid.IndexID,
+		tableID catid.DescID, indexID catid.IndexID, copyIndexID catid.IndexID,
 	)
+
+	// UpdateTTLScheduleMetadata updates the TTL schedule metadata for a table.
+	UpdateTTLScheduleMetadata(ctx context.Context, tableID descpb.ID, newName string) error
 }

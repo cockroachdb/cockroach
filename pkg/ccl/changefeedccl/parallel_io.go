@@ -100,7 +100,7 @@ func NewParallelIO(
 	wg.GoCtx(func(ctx context.Context) error {
 		return io.processIO(ctx, numWorkers)
 	})
-
+	io.metrics.recordParallelIOWorkers(int64(numWorkers))
 	return io
 }
 

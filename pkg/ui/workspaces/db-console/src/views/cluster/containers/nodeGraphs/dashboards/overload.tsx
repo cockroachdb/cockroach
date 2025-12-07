@@ -62,11 +62,11 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Admission IO Tokens Exhausted Duration Per Second"
+      title="Admission Foreground IO Tokens Exhausted Duration Per Second"
       sources={storeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
-      tooltip={`Relative time the node had exhausted IO tokens for all IO-bound work per second of wall time, measured in microseconds/second. Increased IO token exhausted duration indicates IO resource exhaustion.`}
+      tooltip={`Relative time the store had exhausted foreground (regular) IO tokens for all IO-bound work per second of wall time, measured in microseconds/second. Increased IO token exhausted duration indicates IO resource exhaustion.`}
     >
       <Axis label="Duration (micros/sec)">
         {storeMetrics(
@@ -79,6 +79,17 @@ export default function (props: GraphDashboardProps) {
           storeIDsByNodeID,
           "regular (foreground)",
         )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Admission Background IO Tokens Exhausted Duration Per Second"
+      sources={storeSources}
+      tenantSource={tenantSource}
+      showMetricsInTooltip={true}
+      tooltip={`Relative time the store had exhausted background (elastic) IO tokens for all IO-bound work per second of wall time, measured in microseconds/second. Increased IO token exhausted duration indicates IO resource exhaustion.`}
+    >
+      <Axis label="Duration (micros/sec)">
         {storeMetrics(
           {
             name: "cr.store.admission.granter.elastic_io_tokens_exhausted_duration.kv",
@@ -168,11 +179,11 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Admission Queueing Delay p99 – Store"
+      title="Admission Queueing Delay p99 – Foreground (Regular) Store"
       sources={storeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
-      tooltip={`The 99th percentile latency of requests waiting in the Admission Control store queue.`}
+      tooltip={`The 99th percentile latency of requests waiting in the foreground (regular) Admission Control store queue.`}
     >
       <Axis units={AxisUnits.DurationMillis} label="Write Delay Duration">
         {storeMetrics(
@@ -184,6 +195,17 @@ export default function (props: GraphDashboardProps) {
           storeIDsByNodeID,
           "KV",
         )}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Admission Queueing Delay p99 – Background (Elastic) Store"
+      sources={storeSources}
+      tenantSource={tenantSource}
+      showMetricsInTooltip={true}
+      tooltip={`The 99th percentile latency of requests waiting in the background (elastic) Admission Control store queue.`}
+    >
+      <Axis units={AxisUnits.DurationMillis} label="Write Delay Duration">
         {storeMetrics(
           {
             name: "cr.store.admission.wait_durations.elastic-stores-p99",

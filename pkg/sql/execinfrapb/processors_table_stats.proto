@@ -43,9 +43,9 @@ message SketchSpec {
   // and is the empty string for a full table statistic.
   optional string partial_predicate = 7 [(gogoproto.nullable) = false];
 
-  // FullStatisticID is non-zero for partial statistics and 0 for full
-  // statistics. It is the statistic id of the full statistic that this partial
-  // statistic was derived from.
+  // FullStatisticID is non-zero for partial statistics USING EXTREMES and 0
+  // otherwise. It is the statistic id of the full statistic that this partial
+  // statistic on extreme values was derived from.
   optional uint64 full_statistic_id = 8 [(gogoproto.customname) = "FullStatisticID", (gogoproto.nullable) = false];
 
   // PrevLowerBound is a tree.Datum serialized into a string representing

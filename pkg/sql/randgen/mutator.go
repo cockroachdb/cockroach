@@ -19,6 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	// Ensure that sql/parser.ParseDoBlockFn is injected from the PLpgSQL
+	// parser.
+	_ "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -223,7 +226,7 @@ func statisticsMutator(
 			colType := tree.MustBeStaticallyKnownType(col.Type)
 			h := randHistogram(rng, colType)
 			statIdx := colNameToStatIdx[col.Name]
-			if err := allStats[statIdx].SetHistogram(&h); err != nil {
+			if err := allStats[statIdx].SetHistogram(context.Background(), &h); err != nil {
 				panic(err)
 			}
 		}

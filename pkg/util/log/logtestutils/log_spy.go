@@ -86,7 +86,7 @@ func (s *LogSpy) Reset() {
 	s.mu.logs = []logpb.Entry{}
 }
 
-// ReadAll consumes the specified number of logs contained within
+// Read consumes the specified number of logs contained within
 // the spy and returns them as a list. Once the logs are consumed
 // they cannot be read again.
 func (s *LogSpy) Read(n int) []logpb.Entry {

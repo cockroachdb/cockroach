@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 const (
@@ -28,15 +29,21 @@ const (
 	defaultSplitStatRetention      = 10 * time.Minute
 	defaultSeed                    = 42
 	defaultLBRebalancingInterval   = time.Minute
-	defaultLBRebalanceQPSThreshold = 0.1
-	defaultLBRebalancingObjective  = 0 // QPS
+)
+
+const (
+	DefaultNodeCPUCores                   = 8.0                                 // 8 vcpus
+	DefaultNodeCPURateCapacityNanos       = DefaultNodeCPUCores * 1e9           // 8 vcpus
+	DefaultStoreDiskCapacityBytes         = 1024 << 30                          // 1024 GiB
+	DoubleDefaultNodeCPURateCapacityNanos = DefaultNodeCPURateCapacityNanos * 2 // 16 vcpus
+	DoubleDefaultStoreDiskCapacityBytes   = 2048 << 30                          // 2048 GiB
 )
 
 var (
-	// defaultStartTime is used as the default beginning time for simulation
+	// DefaultStartTime is used as the default beginning time for simulation
 	// runs. It isn't necessarily meaningful other than for logging and having
 	// "some" start time for components taking a time.Time.
-	defaultStartTime = time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
+	DefaultStartTime = time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
 )
 
 // SimulationSettings controls
@@ -95,8 +102,6 @@ type SimulationSettings struct {
 	// SplitStatRetention is the duration which recorded load will be retained
 	// and factored into load based splitting decisions.
 	SplitStatRetention time.Duration
-	// LBRebalancingObjective is the load objective to balance.
-	LBRebalancingObjective int64
 	// LBRebalancingInterval controls how often the store rebalancer will
 	// consider opportunities for rebalancing.
 	LBRebalancingInterval time.Duration
@@ -111,12 +116,15 @@ type SimulationSettings struct {
 	// TODO(wenyihu6): Remove any non-simulation settings from this struct and
 	// instead override the settings below.
 	ST *cluster.Settings
+	// OnRecording is called with trace spans obtained by recording the allocator.
+	// NB: we can't use state.StoreID here since that causes an import cycle.
+	OnRecording func(storeID int64, atDuration time.Duration, rec tracingpb.Recording)
 }
 
 // DefaultSimulationSettings returns a set of default settings for simulation.
 func DefaultSimulationSettings() *SimulationSettings {
 	return &SimulationSettings{
-		StartTime:               defaultStartTime,
+		StartTime:               DefaultStartTime,
 		TickInterval:            defaultTickInteval,
 		MetricsInterval:         defaultMetricsInterval,
 		Seed:                    defaultSeed,
@@ -132,7 +140,6 @@ func DefaultSimulationSettings() *SimulationSettings {
 		StateExchangeDelay:      defaultStateExchangeDelay,
 		SplitQPSThreshold:       defaultSplitQPSThreshold,
 		SplitStatRetention:      defaultSplitStatRetention,
-		LBRebalancingObjective:  defaultLBRebalancingObjective,
 		LBRebalancingInterval:   defaultLBRebalancingInterval,
 		ReplicateQueueEnabled:   true,
 		LeaseQueueEnabled:       true,

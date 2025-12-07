@@ -2,12 +2,12 @@ echo
 ----
 ----
 -- Flow token metrics, before issuing the 1MiB replicated write.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -78,12 +78,12 @@ ORDER BY
 -- and it being admitted on n1, n2 and n3. We should see 3*1MiB = 3MiB of
 -- {regular,elastic} tokens deducted and returned, and {8*3=24MiB,16*3=48MiB} of
 -- {regular,elastic} tokens available. Everything should be accounted for.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;

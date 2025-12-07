@@ -530,6 +530,12 @@ func (oc *optCatalog) UserHasGlobalPrivilegeOrRoleOption(
 }
 
 // FullyQualifiedName is part of the cat.Catalog interface.
+//
+// Note that:
+//   - this call may involve a database operation so it shouldn't be used in
+//     performance sensitive paths;
+//   - the fully qualified name of a data source object can change without the
+//     object itself changing (e.g. when a database is renamed).
 func (oc *optCatalog) FullyQualifiedName(
 	ctx context.Context, ds cat.DataSource,
 ) (cat.DataSourceName, error) {
@@ -603,15 +609,17 @@ func (oc *optCatalog) LeaseByStableID(ctx context.Context, stableID cat.StableID
 
 // GetDependencyDigest is part of the cat.Catalog interface.
 func (oc *optCatalog) GetDependencyDigest() cat.DependencyDigest {
-	// The stats cache may not be setup in some tests like
+	// The stats and hints caches may not be setup in some tests like
 	// TestPortalsDestroyedOnTxnFinish. In which case always
 	// return the empty digest.
-	if oc.planner.ExecCfg().TableStatsCache == nil {
+	if oc.planner.ExecCfg().TableStatsCache == nil ||
+		oc.planner.ExecCfg().StatementHintsCache == nil {
 		return cat.DependencyDigest{}
 	}
 	return cat.DependencyDigest{
 		LeaseGeneration: oc.planner.Descriptors().GetLeaseGeneration(),
 		StatsGeneration: oc.planner.execCfg.TableStatsCache.GetGeneration(),
+		HintsGeneration: oc.planner.execCfg.StatementHintsCache.GetGeneration(),
 		SystemConfig:    oc.planner.execCfg.SystemConfig.GetSystemConfig(),
 		CurrentDatabase: oc.planner.CurrentDatabase(),
 		SearchPath:      oc.planner.SessionData().SearchPath,
@@ -742,13 +750,9 @@ func (oc *optCatalog) codec() keys.SQLCodec {
 	return oc.planner.ExecCfg().Codec
 }
 
-// DisableUnsafeInternalCheck sets the planners skipUnsafeInternalsCheck
-// to true, and returns a function which reverses it to false.
+// DisableUnsafeInternalCheck forwards the call to the planner.
 func (oc *optCatalog) DisableUnsafeInternalCheck() func() {
-	oc.planner.skipUnsafeInternalsCheck = true
-	return func() {
-		oc.planner.skipUnsafeInternalsCheck = false
-	}
+	return oc.planner.DisableUnsafeInternalsCheck()
 }
 
 // optView is a wrapper around catalog.TableDescriptor that implements
@@ -1155,12 +1159,13 @@ func newOptTable(
 				canUseTombstones := idx.ImplicitPartitioningColumnCount() == 1 &&
 					partitionColumn.GetType().Family() == types.EnumFamily
 				ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
-					name:                  idx.GetName(),
-					table:                 ot.ID(),
-					columns:               idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
-					withoutIndex:          true,
-					canUseTombstones:      canUseTombstones,
-					tombstoneIndexOrdinal: idx.Ordinal(),
+					name:             idx.GetName(),
+					table:            ot.ID(),
+					columns:          idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
+					withoutIndex:     true,
+					canUseTombstones: canUseTombstones,
+					// One would assume that this would be idx.Ordinal(), but they can differ during schema change
+					tombstoneIndexOrdinal: i,
 					predicate:             idx.GetPredicate(),
 					// TODO(rytaft): will we ever support an unvalidated unique constraint
 					// here?

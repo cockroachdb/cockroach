@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -130,11 +129,11 @@ func registerKnex(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:  "knex",
 		Owner: registry.OwnerSQLFoundations,
-		// Requires a pre-built node-oracledb binary for linux arm64.
-		Cluster:          r.MakeClusterSpec(1, spec.Arch(vm.ArchAMD64)),
+		// Requires a pre-built node-oracledb binary for linux arm64 and s390x.
+		Cluster:          r.MakeClusterSpec(1, spec.Arch(spec.OnlyAMD64)),
 		Leases:           registry.MetamorphicLeases,
 		NativeLibs:       registry.LibGEOS,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKnex(ctx, t, c)

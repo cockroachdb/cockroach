@@ -117,7 +117,7 @@ func Rollback(t *testing.T, relPath string, factory TestServerFactory) {
 		}
 		factory.WithSchemaChangerKnobs(knobs).Run(ctx, t, runfn)
 	}
-	cumulativeTestForEachPostCommitStage(t, relPath, factory, testRollbackCase)
+	cumulativeTestForEachPostCommitStage(t, relPath, factory, nil, testRollbackCase, sampleAllPostCommitRevertible /* enableSampling */)
 }
 
 // ExecuteWithDMLInjection tests that the schema changer behaviour is sane
@@ -333,9 +333,10 @@ func Pause(t *testing.T, path string, factory TestServerFactory) {
 	skip.UnderRace(t)
 	skip.UnderDeadlock(t)
 
-	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
+	cumulativeTestForEachPostCommitStage(t, path, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		pause(t, factory, cs)
-	})
+	},
+		sampleAllPostCommitStages /* enableSampling */)
 }
 
 // PauseMixedVersion is like Pause but in a mixed-version cluster which gets
@@ -347,9 +348,10 @@ func PauseMixedVersion(t *testing.T, path string, factory TestServerFactory) {
 	skip.UnderDeadlock(t)
 
 	factory.WithMixedVersion()
-	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
+	cumulativeTestForEachPostCommitStage(t, path, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		pause(t, factory, cs)
-	})
+	},
+		sampleAllPostCommitStages /* enableSampling */)
 }
 
 func pause(t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec) {

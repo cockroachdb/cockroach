@@ -31,12 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
@@ -447,7 +448,7 @@ type Replica struct {
 	raftMu struct {
 		syncutil.Mutex
 
-		stateLoader stateloader.StateLoader
+		stateLoader kvstorage.StateLoader
 
 		// stateMachine is used to apply committed raft entries.
 		stateMachine replicaStateMachine
@@ -571,6 +572,14 @@ type Replica struct {
 	//
 	// TODO(pav-kv): audit all other fields and include here.
 	shMu struct {
+		// The destroyed status of a replica indicating if it's alive, corrupt,
+		// scheduled for destruction or has been GCed. destroyStatus should only be
+		// set while also holding the raftMu and readOnlyCmdMu.
+		//
+		// When this replica is being removed, the destroyStatus is updated and
+		// RangeTombstone is written in the same raftMu critical section.
+		destroyStatus
+
 		// The state of the Raft state machine.
 		// Invariant: state.TruncatedState == nil. The field is being phased out in
 		// favour of the one contained in logStorage.
@@ -587,14 +596,6 @@ type Replica struct {
 	mu struct {
 		// Protects all fields in the mu struct.
 		ReplicaMutex
-		// The destroyed status of a replica indicating if it's alive, corrupt,
-		// scheduled for destruction or has been GCed.
-		// destroyStatus should only be set while also holding the raftMu and
-		// readOnlyCmdMu.
-		//
-		// When this replica is being removed, the destroyStatus is updated and
-		// RangeTombstone is written in the same raftMu critical section.
-		destroyStatus
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
 		//
@@ -1056,7 +1057,7 @@ type Replica struct {
 	// information and without explicit throttling some replicas will offer once
 	// per applied Raft command, which is silly and also clogs up the queues'
 	// semaphores.
-	splitQueueThrottle, mergeQueueThrottle util.EveryN
+	splitQueueThrottle, mergeQueueThrottle util.EveryN[crtime.Mono]
 
 	// loadBasedSplitter keeps information about load-based splitting.
 	loadBasedSplitter split.Decider
@@ -1184,25 +1185,25 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig, sp roachpb.Span) bool {
 // impacted by changes to the SpanConfig. This should be called after any
 // changes to the span configs.
 func (r *Replica) MaybeQueue(ctx context.Context, now hlc.ClockTimestamp) {
-	r.store.splitQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+	_ = r.store.splitQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 		h.MaybeAdd(ctx, r, now)
 	})
-	r.store.mergeQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+	_ = r.store.mergeQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 		h.MaybeAdd(ctx, r, now)
 	})
 	if EnqueueInMvccGCQueueOnSpanConfigUpdateEnabled.Get(&r.store.GetStoreConfig().Settings.SV) {
-		r.store.mvccGCQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		_ = r.store.mvccGCQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 			h.MaybeAdd(ctx, r, now)
 		})
 	}
-	r.store.leaseQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+	_ = r.store.leaseQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 		h.MaybeAdd(ctx, r, now)
 	})
 	// The replicate queue has a relatively more expensive queue check
 	// (shouldQueue), because it scales with the number of stores, and
 	// performs more checks.
 	if EnqueueInReplicateQueueOnSpanConfigUpdateEnabled.Get(&r.store.GetStoreConfig().Settings.SV) {
-		r.store.replicateQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		_ = r.store.replicateQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
 			h.MaybeAdd(ctx, r, now)
 		})
 	}
@@ -1250,7 +1251,7 @@ func (r *Replica) IsDestroyed() (DestroyReason, error) {
 }
 
 func (r *Replica) isDestroyedRLocked() (DestroyReason, error) {
-	return r.mu.destroyStatus.reason, r.mu.destroyStatus.err
+	return r.shMu.destroyStatus.reason, r.shMu.destroyStatus.err
 }
 
 // IsQuiescent returns whether the replica is quiescent or not.
@@ -1408,6 +1409,11 @@ func (r *Replica) StoreID() roachpb.StoreID {
 	return r.store.StoreID()
 }
 
+// LogEngine returns the log engine.
+func (r *Replica) LogEngine() storage.Engine {
+	return r.store.LogEngine()
+}
+
 // EvalKnobs returns the EvalContext's Knobs.
 func (r *Replica) EvalKnobs() kvserverbase.BatchEvalTestingKnobs {
 	return r.store.cfg.TestingKnobs.EvalKnobs
@@ -1482,7 +1488,7 @@ func entireSpanExcludedFromBackup(
 			return false, errors.Newf("replica's span configuration bounds not set")
 		}
 		if !confSpan.Contains(sp) {
-			log.Dev.Warningf(ctx, "ExcludeDataFromBackup set but span %q not containd by span config bounds %q",
+			log.KvExec.Warningf(ctx, "ExcludeDataFromBackup set but span %q not contained by span config bounds %q",
 				sp,
 				confSpan)
 
@@ -1531,7 +1537,7 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 			// I wish this could be a Fatal, but unfortunately it's possible for the
 			// lease to be incoherent with the descriptor after a leaseholder was
 			// brutally removed through `cockroach debug recover`.
-			log.Dev.Errorf(ctx, "leaseholder replica not in descriptor; desc: %s, lease: %s", desc, l)
+			log.KvExec.Errorf(ctx, "leaseholder replica not in descriptor; desc: %s, lease: %s", desc, l)
 			// Let's not return an incoherent lease; for example if we end up
 			// returning it to a client through a br.RangeInfos, the client will freak
 			// out.
@@ -1721,9 +1727,9 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 	return *r.shMu.state.Stats
 }
 
-// SetMVCCStatsForTesting updates the MVCC stats on the repl object only, it does
+// TestingSetMVCCStats updates the MVCC stats on the repl object only, it does
 // not affect the on disk state and is only safe to use for testing purposes.
-func (r *Replica) SetMVCCStatsForTesting(stats *enginepb.MVCCStats) {
+func (r *Replica) TestingSetMVCCStats(stats *enginepb.MVCCStats) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
@@ -1784,7 +1790,7 @@ func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
 func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	var timestamp hlc.Timestamp
-	_, err := storage.MVCCGetProto(ctx, r.store.TODOEngine(), key, hlc.Timestamp{}, &timestamp,
+	_, err := storage.MVCCGetProto(ctx, r.store.LogEngine(), key, hlc.Timestamp{}, &timestamp,
 		storage.MVCCGetOptions{})
 	if err != nil {
 		return hlc.Timestamp{}, err
@@ -1795,7 +1801,7 @@ func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp,
 func (r *Replica) setLastReplicaGCTimestamp(ctx context.Context, timestamp hlc.Timestamp) error {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	return storage.MVCCPutProto(
-		ctx, r.store.TODOEngine(), key, hlc.Timestamp{}, &timestamp, storage.MVCCWriteOptions{})
+		ctx, r.store.LogEngine(), key, hlc.Timestamp{}, &timestamp, storage.MVCCWriteOptions{})
 }
 
 // getQueueLastProcessed returns the last processed timestamp for the
@@ -1804,7 +1810,7 @@ func (r *Replica) getQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
 	var timestamp hlc.Timestamp
 	if r.store != nil {
-		_, err := storage.MVCCGetProto(ctx, r.store.TODOEngine(), key, hlc.Timestamp{}, &timestamp,
+		_, err := storage.MVCCGetProto(ctx, r.store.StateEngine(), key, hlc.Timestamp{}, &timestamp,
 			storage.MVCCGetOptions{})
 		if err != nil {
 			log.VErrEventf(ctx, 2, "last processed timestamp unavailable: %s", err)
@@ -1967,20 +1973,20 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 // to check that the in-memory and on-disk states of the Replica are congruent.
 // Requires that r.raftMu is locked and r.mu is read locked.
 func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
-	ctx context.Context, reader storage.Reader,
+	ctx context.Context, stateRO kvstorage.StateRO, raftRO kvstorage.RaftRO,
 ) {
 	if ts := r.shMu.state.TruncatedState; ts != nil {
-		log.Dev.Fatalf(ctx, "non-empty RaftTruncatedState in ReplicaState: %+v", ts)
-	} else if loaded, err := r.raftMu.stateLoader.LoadRaftTruncatedState(ctx, reader); err != nil {
-		log.Dev.Fatalf(ctx, "%s", err)
+		log.KvExec.Fatalf(ctx, "non-empty RaftTruncatedState in ReplicaState: %+v", ts)
+	} else if loaded, err := r.raftMu.stateLoader.LoadRaftTruncatedState(ctx, raftRO); err != nil {
+		log.KvExec.Fatalf(ctx, "%s", err)
 	} else if ts := r.asLogStorage().shMu.trunc; loaded != ts {
-		log.Dev.Fatalf(ctx, "on-disk and in-memory RaftTruncatedState diverged: %s",
+		log.KvExec.Fatalf(ctx, "on-disk and in-memory RaftTruncatedState diverged: %s",
 			redact.Safe(pretty.Diff(loaded, ts)))
 	}
 
-	diskState, err := r.raftMu.stateLoader.Load(ctx, reader, r.shMu.state.Desc)
+	diskState, err := r.raftMu.stateLoader.Load(ctx, stateRO, r.shMu.state.Desc)
 	if err != nil {
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 
 	// We don't care about this field; see comment on
@@ -1991,15 +1997,15 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 		// The roundabout way of printing here is to expose this information in sentry.io.
 		//
 		// TODO(dt): expose properly once #15892 is addressed.
-		log.Dev.Errorf(ctx, "on-disk and in-memory state diverged:\n%s",
+		log.KvExec.Errorf(ctx, "on-disk and in-memory state diverged:\n%s",
 			pretty.Diff(diskState, r.shMu.state))
 		r.shMu.state.Desc, diskState.Desc = nil, nil
-		log.Dev.Fatalf(ctx, "on-disk and in-memory state diverged: %s",
+		log.KvExec.Fatalf(ctx, "on-disk and in-memory state diverged: %s",
 			redact.Safe(pretty.Diff(diskState, r.shMu.state)))
 	}
 	if r.IsInitialized() {
 		if !r.startKey.Equal(r.shMu.state.Desc.StartKey) {
-			log.Dev.Fatalf(ctx, "denormalized start key %s diverged from %s",
+			log.KvExec.Fatalf(ctx, "denormalized start key %s diverged from %s",
 				r.startKey, r.shMu.state.Desc.StartKey)
 		}
 	}
@@ -2029,18 +2035,18 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 	if !r.store.TestingKnobs().DisableEagerReplicaRemoval && r.shMu.state.Desc.IsInitialized() {
 		replDesc, ok := r.shMu.state.Desc.GetReplicaDescriptor(r.store.StoreID())
 		if !ok {
-			log.Dev.Fatalf(ctx, "%+v does not contain local store s%d", r.shMu.state.Desc, r.store.StoreID())
+			log.KvExec.Fatalf(ctx, "%+v does not contain local store s%d", r.shMu.state.Desc, r.store.StoreID())
 		}
 		if replDesc.ReplicaID != r.replicaID {
-			log.Dev.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.replicaID, r.shMu.state.Desc)
+			log.KvExec.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.replicaID, r.shMu.state.Desc)
 		}
 	}
-	diskReplID, err := r.raftMu.stateLoader.LoadRaftReplicaID(ctx, reader)
+	diskReplID, err := r.raftMu.stateLoader.LoadRaftReplicaID(ctx, stateRO)
 	if err != nil {
-		log.Dev.Fatalf(ctx, "%s", err)
+		log.KvExec.Fatalf(ctx, "%s", err)
 	}
 	if diskReplID.ReplicaID != r.replicaID {
-		log.Dev.Fatalf(ctx, "disk replicaID %d does not match in-mem %d", diskReplID, r.replicaID)
+		log.KvExec.Fatalf(ctx, "disk replicaID %d does not match in-mem %d", diskReplID, r.replicaID)
 	}
 }
 
@@ -2362,7 +2368,7 @@ func shouldWaitForPendingMerge(
 	mergeTxnID uuid.UUID,
 ) error {
 	if !mergeInProgress {
-		log.Dev.Fatal(ctx, "programming error: shouldWaitForPendingMerge should"+
+		log.KvExec.Fatal(ctx, "programming error: shouldWaitForPendingMerge should"+
 			" only be called when a range merge is in progress")
 		return nil
 	}
@@ -2461,44 +2467,18 @@ func shouldWaitForPendingMerge(
 	return &kvpb.MergeInProgressError{}
 }
 
-// isNewerThanSplit is a helper used in split(Pre|Post)Apply to
-// determine whether the Replica on the right hand side of the split must
-// have been removed from this store after the split.
+// isNewerThanSplit is a helper used in split(Pre|Post)Apply to determine
+// whether the RHS replica of the split must have been removed from this store
+// after the split, and the given Replica has a higher ID.
 //
-// TODO(tbg): the below is true as of 22.2: we persist any Replica's ReplicaID
-// under RaftReplicaIDKey, so the below caveats should be addressed now.
-//
-// TODO(ajwerner):  There is one false negative where false will be returned but
-// the hard state may be due to a newer replica which is outlined below. It
-// should be safe.
-// Ideally if this store had ever learned that the replica created by the split
-// were removed it would not forget that fact. There exists one edge case where
-// the store may learn that it should house a replica of the same range with a
-// higher replica ID and then forget. If the first raft message this store ever
-// receives for the this range contains a replica ID higher than the replica ID
-// in the split trigger then an in-memory replica at that higher replica ID will
-// be created and no tombstone at a lower replica ID will be written. If the
-// server then crashes it will forget that it had ever been the higher replica
-// ID. The server may then proceed to process the split and initialize a replica
-// at the replica ID implied by the split. This is potentially problematic as
-// the replica may have voted as this higher replica ID and when it rediscovers
-// the higher replica ID it will delete all of the state corresponding to the
-// older replica ID including its hard state which may have been synthesized
-// with votes as the newer replica ID. This case tends to be handled safely in
-// practice because the replica should only be receiving messages as the newer
-// replica ID after it has been added to the range as a learner.
-//
-// Despite the safety due to the change replicas protocol explained above it'd
-// be good to know for sure that a replica ID for a range on a store is always
-// monotonically increasing, even across restarts.
+// NB: from v22.2, we persist any Replica's ID under RaftReplicaIDKey. A
+// complementary mechanism, RangeTombstone, ensures that replica deletions are
+// persistent as well. As a result, the ReplicaID existence and non-existence is
+// monotonic and survives restarts.
 //
 // See TestProcessSplitAfterRightHandSideHasBeenRemoved.
 func (r *Replica) isNewerThanSplit(split *roachpb.SplitTrigger) bool {
 	rightDesc, _ := split.RightDesc.GetReplicaDescriptor(r.StoreID())
-	// If the first raft message we received for the RHS range was for a replica
-	// ID which is above the replica ID of the split then we would not have
-	// written a tombstone but we will have a replica ID that will exceed the
-	// split replica ID.
 	return r.replicaID > rightDesc.ReplicaID
 }
 
@@ -2536,7 +2516,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 	// if one exists, regardless of what timestamp it is written at.
 	desc := r.descRLocked()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	intentRes, err := storage.MVCCGet(ctx, r.store.TODOEngine(), descKey, hlc.MaxTimestamp,
+	intentRes, err := storage.MVCCGet(ctx, r.store.StateEngine(), descKey, hlc.MaxTimestamp,
 		storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return false, err
@@ -2544,7 +2524,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 	valRes, err := storage.MVCCGetAsTxn(
-		ctx, r.store.TODOEngine(), descKey, intentRes.Intent.Txn.WriteTimestamp, intentRes.Intent.Txn)
+		ctx, r.store.StateEngine(), descKey, intentRes.Intent.Txn.WriteTimestamp, intentRes.Intent.Txn)
 	if err != nil {
 		return false, err
 	} else if valRes.Value != nil {
@@ -2599,7 +2579,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 					// transaction was probably caused by the shutdown, so ignore it.
 					return
 				default:
-					log.Dev.Warningf(ctx, "error while watching for merge to complete: PushTxn: %+v", err)
+					log.KvExec.Warningf(ctx, "error while watching for merge to complete: PushTxn: %+v", err)
 					// We can't safely unblock traffic until we can prove that the merge
 					// transaction is committed or aborted. Nothing to do but try again.
 					continue
@@ -2640,7 +2620,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 						// descriptor was probably caused by the shutdown, so ignore it.
 						return
 					default:
-						log.Dev.Warningf(ctx, "error while watching for merge to complete: Get %s: %s", metaKey, pErr)
+						log.KvExec.Warningf(ctx, "error while watching for merge to complete: Get %s: %s", metaKey, pErr)
 						// We can't safely unblock traffic until we can prove that the merge
 						// transaction is committed or aborted. Nothing to do but try again.
 						continue
@@ -2658,7 +2638,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 				// merge committed iff that range descriptor has a different range ID.
 				var meta2Desc roachpb.RangeDescriptor
 				if err := getRes.Value.GetProto(&meta2Desc); err != nil {
-					log.Dev.Fatalf(ctx, "error while watching for merge to complete: "+
+					log.KvExec.Fatalf(ctx, "error while watching for merge to complete: "+
 						"unmarshaling meta2 range descriptor: %s", err)
 				}
 				if meta2Desc.RangeID != r.RangeID {
@@ -2666,17 +2646,17 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 				}
 			}
 		default:
-			log.Dev.Fatalf(ctx, "PushTxn returned while merge transaction %s was still %s",
+			log.KvExec.Fatalf(ctx, "PushTxn returned while merge transaction %s was still %s",
 				intentRes.Intent.Txn.ID.Short(), pushTxnRes.PusheeTxn.Status)
 		}
 		r.raftMu.Lock()
 		r.readOnlyCmdMu.Lock()
 		r.mu.Lock()
-		if mergeCommitted && r.mu.destroyStatus.IsAlive() {
+		if mergeCommitted && r.shMu.destroyStatus.IsAlive() {
 			// The merge committed but the left-hand replica on this store hasn't
 			// subsumed this replica yet. Mark this replica as destroyed so it
 			// doesn't serve requests when we close the mergeCompleteCh below.
-			r.mu.destroyStatus.Set(kvpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()), destroyReasonMergePending)
+			r.shMu.destroyStatus.Set(kvpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()), destroyReasonMergePending)
 		}
 		// Unblock pending requests. If the merge committed, the requests will
 		// notice that the replica has been destroyed and return an appropriate
@@ -2749,9 +2729,9 @@ func (r *Replica) GetLeaseHistory() []roachpb.Lease {
 	return r.leaseHistory.get()
 }
 
-// EnableLeaseHistoryForTesting turns on the lease history for testing purposes.
+// TestingEnableLeaseHistory turns on the lease history for testing purposes.
 // Returns a function to return it to its original state that can be deferred.
-func EnableLeaseHistoryForTesting(maxEntries int) func() {
+func TestingEnableLeaseHistory(maxEntries int) func() {
 	originalValue := leaseHistoryMaxEntries
 	leaseHistoryMaxEntries = maxEntries
 	return func() {
@@ -2848,21 +2828,21 @@ func (r *Replica) measureNanosRunning(start time.Duration, f func(float64)) {
 	f(float64(dur))
 }
 
-// GetLoadStatsForTesting is for use only by tests to read the Replicas' load
+// TestingGetLoadStats is for use only by tests to read the Replicas' load
 // tracker state.
-func (r *Replica) GetLoadStatsForTesting() *load.ReplicaLoad {
+func (r *Replica) TestingGetLoadStats() *load.ReplicaLoad {
 	return r.loadStats
 }
 
-// HasOutstandingLearnerSnapshotInFlightForTesting is for use only by tests to
+// TestingHasOutstandingLearnerSnapshotInFlight is for use only by tests to
 // gather whether there are in-flight snapshots to learner replcas.
-func (r *Replica) HasOutstandingLearnerSnapshotInFlightForTesting() bool {
+func (r *Replica) TestingHasOutstandingLearnerSnapshotInFlight() bool {
 	return r.errOnOutstandingLearnerSnapshotInflight() != nil
 }
 
-// ReadProtectedTimestampsForTesting is for use only by tests to read and update
+// TestingReadProtectedTimestamps is for use only by tests to read and update
 // the Replicas' cached protected timestamp state.
-func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err error) {
+func (r *Replica) TestingReadProtectedTimestamps(ctx context.Context) (err error) {
 	var ts cachedProtectedTimestampState
 	defer r.maybeUpdateCachedProtectedTS(&ts)
 	r.mu.RLock()
@@ -2871,29 +2851,26 @@ func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err er
 	return err
 }
 
-// GetMutexForTesting returns the replica's mutex, for use in tests.
-func (r *Replica) GetMutexForTesting() *ReplicaMutex {
+// TestingGetMutex returns the replica's mutex, for use in tests.
+func (r *Replica) TestingGetMutex() *ReplicaMutex {
 	return &r.mu.ReplicaMutex
 }
 
-// TODO(wenyihu6): rename the *ForTesting functions to be Testing* (see
-// #144119 for more details).
-
-// SetCachedClosedTimestampPolicyForTesting sets the closed timestamp policy on r
+// TestingSetCachedClosedTimestampPolicy sets the closed timestamp policy on r
 // to be the given policy. It is a test-only helper method.
-func (r *Replica) SetCachedClosedTimestampPolicyForTesting(policy ctpb.RangeClosedTimestampPolicy) {
+func (r *Replica) TestingSetCachedClosedTimestampPolicy(policy ctpb.RangeClosedTimestampPolicy) {
 	r.cachedClosedTimestampPolicy.Store(&policy)
 }
 
-// GetCachedClosedTimestampPolicyForTesting returns the closed timestamp policy on r.
+// TestingGetCachedClosedTimestampPolicy returns the closed timestamp policy on r.
 // It is a test-only helper method.
-func (r *Replica) GetCachedClosedTimestampPolicyForTesting() ctpb.RangeClosedTimestampPolicy {
+func (r *Replica) TestingGetCachedClosedTimestampPolicy() ctpb.RangeClosedTimestampPolicy {
 	return *r.cachedClosedTimestampPolicy.Load()
 }
 
-// RefreshLeaderlessWatcherUnavailableStateForTesting refreshes the replica's
+// TestingRefreshLeaderlessWatcherUnavailableState refreshes the replica's
 // leaderlessWatcher's unavailable state. Intended for tests.
-func (r *Replica) RefreshLeaderlessWatcherUnavailableStateForTesting(
+func (r *Replica) TestingRefreshLeaderlessWatcherUnavailableState(
 	ctx context.Context, postTickLead raftpb.PeerID, nowPhysicalTime time.Time, st *cluster.Settings,
 ) {
 	r.mu.Lock()
@@ -2921,8 +2898,9 @@ func (r *Replica) RefreshLeaderlessWatcherUnavailableStateForTesting(
 // manner via the replica scanner, see #130199. This functionality is disabled
 // by default for this reason.
 func (r *Replica) maybeEnqueueProblemRange(
-	ctx context.Context, now time.Time, leaseValid, isLeaseholder bool,
+	ctx context.Context, now time.Time, leaseValid, isLeaseholder bool, maybeLog bool,
 ) {
+
 	// The method expects the caller to provide whether the lease is valid and
 	// the replica is the leaseholder for the range, so that it can avoid
 	// unnecessary work. We expect this method to be called in the context of
@@ -2958,16 +2936,38 @@ func (r *Replica) maybeEnqueueProblemRange(
 			"lastProblemRangeReplicateEnqueueTime was updated concurrently", r.Desc())
 		return
 	}
-	// Log at default verbosity to ensure some indication the nudger is working
-	// (other logs have a verbosity of 1 which).
-	log.KvDistribution.Infof(ctx, "decommissioning nudger enqueuing replica %s "+
-		"with priority %f", r.Desc(),
-		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
 	r.store.metrics.DecommissioningNudgerEnqueue.Inc(1)
 	// TODO(dodeca12): Figure out a better way to track the
 	// decommissioning nudger enqueue failures/errors.
-	r.store.replicateQueue.AddAsync(ctx, r,
-		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority())
+	level := log.Level(2)
+	if maybeLog {
+		level = log.Level(0)
+	}
+	r.store.replicateQueue.AddAsyncWithCallback(ctx, r,
+		allocatorimpl.AllocatorReplaceDecommissioningVoter.Priority(), processCallback{
+			onEnqueueResult: func(indexOnHeap int, err error) {
+				if err != nil {
+					log.KvDistribution.VInfof(ctx, level,
+						"decommissioning nudger failed to enqueue range %v due to %v", r.Desc(), err)
+					r.store.metrics.DecommissioningNudgerEnqueueFailure.Inc(1)
+				} else {
+					log.KvDistribution.VInfof(ctx, level,
+						"decommissioning nudger successfully enqueued range %v at index %d", r.Desc(), indexOnHeap)
+					r.store.metrics.DecommissioningNudgerEnqueueSuccess.Inc(1)
+				}
+			},
+			onProcessResult: func(err error) {
+				if err != nil {
+					log.KvDistribution.VInfof(ctx, level,
+						"decommissioning nudger failed to process range %v due to %v", r.Desc(), err)
+					r.store.metrics.DecommissioningNudgerProcessFailure.Inc(1)
+				} else {
+					log.KvDistribution.VInfof(ctx, level,
+						"decommissioning nudger successfully processed replica %s", r.Desc())
+					r.store.metrics.DecommissioningNudgerProcessSuccess.Inc(1)
+				}
+			},
+		})
 }
 
 // SendStreamStats sets the stats for the replica send streams that belong to

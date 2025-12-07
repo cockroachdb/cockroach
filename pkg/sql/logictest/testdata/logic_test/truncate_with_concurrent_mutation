@@ -7,7 +7,7 @@ SET CLUSTER SETTING jobs.registry.interval.cancel = '50ms'
 # Make sure that table cannot be truncated if an index is being dropped
 # concurrently.
 statement ok
-CREATE TABLE t1(a int primary key, b int);
+CREATE TABLE t1(a int primary key, b int) WITH (schema_locked=false);
 
 statement ok
 CREATE INDEX idx_b ON t1(b);
@@ -28,7 +28,7 @@ SET CLUSTER SETTING jobs.debug.pausepoints = '';
 # dropped concurrently.
 statement ok
 CREATE TYPE e AS ENUM ('v1', 'v2');
-CREATE TABLE t2(a int primary key, b e);
+CREATE TABLE t2(a int primary key, b e) WITH (schema_locked = false);
 
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec,newschemachanger.before.exec';
@@ -45,7 +45,7 @@ SET CLUSTER SETTING jobs.debug.pausepoints = '';
 # Make sure that table cannot be truncated when a constraint without index is
 # being added concurrently.
 statement ok
-CREATE TABLE t3(a INT PRIMARY KEY, b INT);
+CREATE TABLE t3(a INT PRIMARY KEY, b INT) WITH (schema_locked = false);
 
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec,newschemachanger.before.exec';
@@ -61,7 +61,7 @@ SET CLUSTER SETTING jobs.debug.pausepoints = '';
 
 # Make sure table cannot be truncated if there is concurrent primary key change.
 statement ok
-CREATE TABLE t4(a INT PRIMARY KEY, b INT NOT NULL);
+CREATE TABLE t4(a INT PRIMARY KEY, b INT NOT NULL) WITH (schema_locked=false);
 
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec,newschemachanger.before.exec';

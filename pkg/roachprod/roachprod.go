@@ -31,13 +31,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/fluentbit"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/opentelemetry"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/parca"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/fluentbit"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/opentelemetry"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -813,7 +814,6 @@ func updatePrometheusTargets(
 		return err
 	}
 
-	cl := promhelperclient.NewPromClient()
 	nodeIPPorts := promhelperclient.NodeTargets{}
 	nodeIPPortsMutex := syncutil.RWMutex{}
 	var wg sync.WaitGroup
@@ -886,8 +886,11 @@ func updatePrometheusTargets(
 	}
 	wg.Wait()
 	if len(nodeIPPorts) > 0 {
-		if err := cl.UpdatePrometheusTargets(ctx,
-			c.Name, false, nodeIPPorts, false, l); err != nil {
+		cl, err := promhelperclient.NewPromClient()
+		if err != nil {
+			return err
+		}
+		if err := cl.UpdatePrometheusTargets(ctx, c.Name, nodeIPPorts, l); err != nil {
 			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
 		}
 	}
@@ -1030,14 +1033,20 @@ func Reformat(ctx context.Context, l *logger.Logger, clusterName string, fs stri
 	}
 
 	var fsCmd string
-	switch fs {
+	switch vm.Filesystem(fs) {
 	case vm.Zfs:
-		if err := install.Install(ctx, l, c, []string{vm.Zfs}); err != nil {
+		if err := install.Install(ctx, l, c, []string{string(vm.Zfs)}); err != nil {
 			return err
 		}
 		fsCmd = `sudo zpool create -f data1 -m /mnt/data1 /dev/sdb`
 	case vm.Ext4:
 		fsCmd = `sudo mkfs.ext4 -F /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
+	case vm.Xfs:
+		fsCmd = `sudo mkfs.xfs -f /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
+	case vm.F2fs:
+		fsCmd = `sudo mkfs.f2fs -f /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
+	case vm.Btrfs:
+		fsCmd = `sudo mkfs.btrfs -f /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
 	default:
 		return fmt.Errorf("unknown filesystem %q", fs)
 	}
@@ -1128,12 +1137,13 @@ func Get(ctx context.Context, l *logger.Logger, clusterName, src, dest string) e
 }
 
 type PGURLOptions struct {
-	Database           string
-	Secure             install.SecureOption
-	External           bool
-	VirtualClusterName string
-	SQLInstance        int
-	Auth               install.PGAuthMode
+	Database                string
+	Secure                  install.SecureOption
+	External                bool
+	VirtualClusterName      string
+	SQLInstance             int
+	Auth                    install.PGAuthMode
+	DisallowUnsafeInternals bool
 }
 
 // PgURL generates pgurls for the nodes in a cluster.
@@ -1168,7 +1178,7 @@ func PgURL(
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode, opts.Auth, opts.Database))
+		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode, opts.Auth, opts.Database, opts.DisallowUnsafeInternals))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
@@ -1741,13 +1751,21 @@ func Create(
 	}
 
 	for _, o := range opts {
-		if o.CreateOpts.SSDOpts.FileSystem == vm.Zfs {
+		// Validate Filesystem option + check compatibility with providers.
+
+		fs, err := vm.ParseFileSystemOption(o.CreateOpts.SSDOpts.FileSystem)
+		if err != nil {
+			return err
+		}
+
+		if fs == vm.F2fs {
 			for _, provider := range o.CreateOpts.VMProviders {
-				// TODO(DarrylWong): support zfs on other providers, see: #123775.
-				// Once done, revisit all tests that set zfs to see if they can run on non GCE.
-				if !(provider == gce.ProviderName || provider == aws.ProviderName || provider == ibm.ProviderName) {
+				// TODO(golgeek): f2fs requires kernel 6+, which isn't available
+				// on IBM Cloud for Ubuntu 22.04 as of now. Remove this check when
+				// support is added.
+				if provider == ibm.ProviderName {
 					return fmt.Errorf(
-						"creating a node with --filesystem=zfs is currently not supported in %q", provider,
+						"creating a node with --filesystem=f2fs is currently not supported in %q", provider,
 					)
 				}
 			}
@@ -1770,6 +1788,11 @@ func Create(
 		// No need for ssh for local clusters.
 		return LoadClusters()
 	}
+
+	if err := CreatePublicDNS(ctx, l, clusterName); err != nil {
+		l.Printf("Failed to create DNS for cluster %s: %v", clusterName, err)
+	}
+
 	l.Printf("Created cluster %s; setting up SSH...", clusterName)
 	return SetupSSH(ctx, l, clusterName, false /* sync */)
 }
@@ -2575,7 +2598,7 @@ func StartOpenTelemetry(
 	return opentelemetry.Install(ctx, l, c, config)
 }
 
-// Stop stops the OpenTelemetry Collector on the cluster identified by clusterName.
+// StopOpenTelemetry stops the OpenTelemetry Collector on the cluster identified by clusterName.
 func StopOpenTelemetry(ctx context.Context, l *logger.Logger, clusterName string) error {
 	if err := LoadClusters(); err != nil {
 		return err
@@ -2589,14 +2612,74 @@ func StopOpenTelemetry(ctx context.Context, l *logger.Logger, clusterName string
 	return opentelemetry.Stop(ctx, l, c)
 }
 
+// StartParcaAgent starts a Parca Agent on the cluster.
+func StartParcaAgent(
+	ctx context.Context, l *logger.Logger, clusterName string, config parca.Config,
+) error {
+	if config.Token == "" {
+		return errors.New("Token cannot be empty")
+	}
+
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return parca.Install(ctx, l, c, config)
+}
+
+// StopParcaAgent stops the Parca Agent on the cluster.
+func StopParcaAgent(ctx context.Context, l *logger.Logger, clusterName string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return parca.Stop(ctx, l, c)
+}
+
 // DestroyDNS destroys the DNS records for the given cluster.
 func DestroyDNS(ctx context.Context, l *logger.Logger, clusterName string) error {
 	c, err := GetClusterFromCache(l, clusterName)
 	if err != nil {
 		return err
 	}
+	publicRecords := make([]string, 0, len(c.VMs))
+	for _, v := range c.VMs {
+		publicRecords = append(publicRecords, v.PublicDNS)
+	}
+
 	return vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
-		return p.DeleteRecordsBySubdomain(ctx, c.Name)
+		return errors.CombineErrors(
+			p.DeleteSRVRecordsBySubdomain(ctx, c.Name),
+			p.DeletePublicRecordsByName(ctx, publicRecords...),
+		)
+	})
+}
+
+// CreatePublicDNS creates or updates the public A records for the given cluster.
+func CreatePublicDNS(ctx context.Context, l *logger.Logger, clusterName string) error {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
+		recs := make([]vm.DNSRecord, 0, len(c.VMs))
+		for _, v := range c.VMs {
+			rec := vm.CreateDNSRecord(v.PublicDNS, vm.A, v.PublicIP, 60)
+			rec.Public = true
+			recs = append(recs, rec)
+		}
+		return p.CreateRecords(ctx, recs...)
 	})
 }
 
@@ -2883,7 +2966,7 @@ func LoadBalancerPgURL(
 	if err != nil {
 		return "", err
 	}
-	return c.NodeURL(addr.IP, port, opts.VirtualClusterName, serviceMode, opts.Auth, opts.Database), nil
+	return c.NodeURL(addr.IP, port, opts.VirtualClusterName, serviceMode, opts.Auth, opts.Database, opts.DisallowUnsafeInternals), nil
 }
 
 // LoadBalancerIP resolves the IP of a load balancer serving the

@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -702,20 +703,39 @@ func TestDecommissionSelf(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, resp.Status)
 
-	// The nodes should now have been (or soon become) decommissioned.
+	// The nodes should now have been (or soon become) decommissioned. In a cruel
+	// twist of fate, the decommissioned nodes may not find out about that,
+	// however. This is because the other nodes may learn that (say) n4 is
+	// decommissioned before n4 does, and will block all communication with it,
+	// which includes receiving an updated liveness record. So we only verify that
+	// the non-decommissioned nodes see the decommissioned nodes as such, but
+	// don't verify the decommissioned nodes' own view of their (or anyone's, really)
+	// liveness.
 	for i := 0; i < tc.NumServers(); i++ {
 		srv := tc.Server(i)
-		expect := livenesspb.MembershipStatus_ACTIVE
+		var omit bool
 		for _, nodeID := range decomNodeIDs {
 			if srv.NodeID() == nodeID {
-				expect = livenesspb.MembershipStatus_DECOMMISSIONED
-				break
+				omit = true
 			}
 		}
-		require.Eventually(t, func() bool {
-			liveness, ok := srv.NodeLiveness().(*liveness.NodeLiveness).GetLiveness(srv.NodeID())
-			return ok && liveness.Membership == expect
-		}, 5*time.Second, 100*time.Millisecond, "timed out waiting for node %v status %v", i, expect)
+		if omit {
+			continue
+		}
+		nl := srv.NodeLiveness().(*liveness.NodeLiveness)
+		testutils.SucceedsSoon(t, func() error {
+			entry, ok := nl.GetLiveness(srv.NodeID())
+			if !ok || entry.Membership != livenesspb.MembershipStatus_ACTIVE {
+				return errors.Errorf("n%d not ACTIVE: %v", srv.NodeID(), entry.Membership)
+			}
+			for _, nodeID := range decomNodeIDs {
+				entry, ok := nl.GetLiveness(nodeID)
+				if !ok || entry.Membership != livenesspb.MembershipStatus_DECOMMISSIONED {
+					return errors.Errorf("n%d not DECOMMISSIONED: %v", srv.NodeID(), entry.Membership)
+				}
+			}
+			return nil
+		})
 	}
 }
 
@@ -799,6 +819,7 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 		ReplicationMode: base.ReplicationManual, // saves time
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(81590),
+			DefaultDRPCOption: base.TestDRPCDisabled,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -1029,4 +1050,52 @@ func checkRangeCheckResult(
 			checkResult.RangeID, checkResult.Error)
 	}
 	passed = true
+}
+
+// TestDecommissionPreCheckRetryThrottledStores tests that the decommission
+// pre-check retries when it encounters transient throttled errors. Regression
+// test for #156849.
+func TestDecommissionPreCheckRetryThrottledStores(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	var returnedError atomic.Bool
+	returnError := func() error {
+		if returnedError.CompareAndSwap(false, true) {
+			return errors.New("injected error")
+		}
+		return nil
+	}
+
+	tc := serverutils.StartCluster(t, 4, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					AllocatorCheckRangeInterceptor: returnError,
+				},
+			},
+		},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+
+	// Add replicas to the scratch range on nodes 2 and 3.
+	scratchDesc := tc.AddVotersOrFatal(t, scratchKey, tc.Target(1), tc.Target(2))
+	require.Len(t, scratchDesc.InternalReplicas, 3)
+
+	// Perform decommission pre-check on node 3. AllocatorCheckRange will fail
+	// once due to the injected error, then succeed after retries.
+	decommissioningNodeIDs := []roachpb.NodeID{tc.Server(2).NodeID()}
+	result, err := tc.Server(0).DecommissionPreCheck(ctx, decommissioningNodeIDs,
+		true /* strictReadiness */, false /* collectTraces */, 0 /* maxErrors */)
+
+	require.NoError(t, err)
+	require.Greater(t, result.RangesChecked, 0)
+	require.Empty(t, result.RangesNotReady)
+	require.True(t, returnedError.Load())
 }

@@ -203,7 +203,7 @@ func TestTenantGlobalAggregatedLivebytes(t *testing.T) {
 		// Exact match for non stress tests, and allow values to differ by up to
 		// 5% in stress situations.
 		confidenceLevel := 0.0
-		if skip.Stress() {
+		if skip.DevStress() {
 			confidenceLevel = 0.05
 		}
 		testutils.SucceedsSoon(t, func() error {

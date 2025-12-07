@@ -34,6 +34,7 @@ type rangeFeedConfig struct {
 	WithDiff             bool
 	WithFiltering        bool
 	WithFrontierQuantize time.Duration
+	WithBulkDelivery     bool
 	ConsumerID           int64
 	RangeObserver        kvcoord.RangeObserver
 	Knobs                TestingKnobs
@@ -97,7 +98,10 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 	// Bulk delivery is an optimization that decreases rangefeed overhead during
 	// catchup scans. It results in the emission of BulkEvents instead of
 	// individual events where possible.
-	rfOpts := []kvcoord.RangeFeedOption{kvcoord.WithBulkDelivery()}
+	var rfOpts []kvcoord.RangeFeedOption
+	if cfg.WithBulkDelivery {
+		rfOpts = append(rfOpts, kvcoord.WithBulkDelivery())
+	}
 	if cfg.WithDiff {
 		rfOpts = append(rfOpts, kvcoord.WithDiff())
 	}
@@ -144,13 +148,13 @@ func (p *rangefeed) handleRangefeedEvent(ctx context.Context, e *kvpb.RangeFeedE
 				return err
 			}
 		}
-		stop := p.st.RangefeedBufferValue.Start()
+		timer := p.st.RangefeedBufferValue.Start()
 		if err := p.memBuf.Add(
 			ctx, kvevent.MakeKVEvent(e),
 		); err != nil {
 			return err
 		}
-		stop()
+		timer.End()
 	case *kvpb.RangeFeedCheckpoint:
 		ev := e.ShallowCopy()
 		ev.Checkpoint.ResolvedTS = quantizeTS(ev.Checkpoint.ResolvedTS, p.cfg.WithFrontierQuantize)
@@ -163,13 +167,13 @@ func (p *rangefeed) handleRangefeedEvent(ctx context.Context, e *kvpb.RangeFeedE
 		if p.knobs.ShouldSkipCheckpoint != nil && p.knobs.ShouldSkipCheckpoint(t) {
 			return nil
 		}
-		stop := p.st.RangefeedBufferCheckpoint.Start()
+		timer := p.st.RangefeedBufferCheckpoint.Start()
 		if err := p.memBuf.Add(
 			ctx, kvevent.MakeResolvedEvent(ev, jobspb.ResolvedSpan_NONE),
 		); err != nil {
 			return err
 		}
-		stop()
+		timer.End()
 	case *kvpb.RangeFeedSSTable:
 		// For now, we just error on SST ingestion, since we currently don't
 		// expect SST ingestion into spans with active changefeeds.

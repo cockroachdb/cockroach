@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -187,8 +188,8 @@ func UnderDuressWithIssue(t SkippableTest, githubIssueID int, args ...interface{
 	}
 }
 
-// Duress catures the conditions that currently lead us to
-// believe that tests may be slower than normal.
+// Duress captures the conditions that currently lead us to believe that tests
+// may be slower than normal.
 func Duress() bool {
 	return util.RaceEnabled || Stress() || syncutil.DeadlockEnabled
 }
@@ -212,6 +213,14 @@ func UnderRemoteExecutionWithIssue(t SkippableTest, githubIssueID int, args ...i
 		maybeSkip(t, withIssue("disabled under race", githubIssueID), args...)
 	}
 
+}
+
+func OnArch(t SkippableTest, arch string, args ...interface{}) {
+	t.Helper()
+	if runtime.GOARCH == arch {
+		skipReason := fmt.Sprintf("on-arch %s (current config %s)", arch, testConfig())
+		maybeSkip(t, skipReason, args...)
+	}
 }
 
 func testConfig() string {

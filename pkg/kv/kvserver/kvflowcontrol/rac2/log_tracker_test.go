@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -191,8 +192,7 @@ func TestLogTracker(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	readPri := func(t *testing.T, d *datadriven.TestData) raftpb.Priority {
-		var s string
-		d.ScanArgs(t, "pri", &s)
+		s := dd.ScanArg[string](t, d, "pri")
 		pri := priFromString(s)
 		if pri == raftpb.NumPriorities {
 			t.Fatalf("unknown pri: %s", s)
@@ -200,10 +200,10 @@ func TestLogTracker(t *testing.T) {
 		return pri
 	}
 	readMark := func(t *testing.T, d *datadriven.TestData, idxName string) LogMark {
-		var mark LogMark
-		d.ScanArgs(t, "term", &mark.Term)
-		d.ScanArgs(t, idxName, &mark.Index)
-		return mark
+		return LogMark{
+			Term:  dd.ScanArg[uint64](t, d, "term"),
+			Index: dd.ScanArg[uint64](t, d, idxName),
+		}
 	}
 
 	var tracker LogTracker
@@ -230,8 +230,7 @@ func TestLogTracker(t *testing.T) {
 			return state(false)
 
 		case "append": // Example: append term=10 after=100 to=200
-			var after uint64
-			d.ScanArgs(t, "after", &after)
+			after := dd.ScanArg[uint64](t, d, "after")
 			to := readMark(t, d, "to")
 			updated := tracker.Append(ctx, after, to)
 			return state(updated)

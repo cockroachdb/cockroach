@@ -117,7 +117,7 @@ func TestStreamEncodeDecode(t *testing.T) {
 			if rng.Intn(10) != 0 {
 				rows[i].row = make(rowenc.EncDatumRow, rowLen)
 				for j := range rows[i].row {
-					rows[i].row[j] = rowenc.DatumToEncDatum(info[j].Type,
+					rows[i].row[j] = rowenc.DatumToEncDatumUnsafe(info[j].Type,
 						randgen.RandDatum(rng, info[j].Type, true))
 				}
 			} else {

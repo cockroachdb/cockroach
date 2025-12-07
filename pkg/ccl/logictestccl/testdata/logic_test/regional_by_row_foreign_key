@@ -2237,3 +2237,67 @@ DROP FUNCTION display_child;
 DROP TABLE child;
 
 subtest end
+
+# ==============================================================================
+# Verify that a foreign key violation causes the addition of the
+# rbr_using_constraint to be reverted properly.
+# ==============================================================================
+
+subtest revert_fk_violation
+
+statement ok
+SET create_table_with_schema_locked = false;
+
+statement ok
+CREATE TABLE a (
+  id uuid NOT NULL PRIMARY KEY
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE b (
+  id uuid NOT NULL,
+  a_id uuid NULL,
+  CONSTRAINT b_pkey PRIMARY KEY (id ASC),
+  CONSTRAINT a_id_fk FOREIGN KEY (a_id) REFERENCES a (id)
+) LOCALITY REGIONAL BY ROW
+
+# Insert data that will cause a foreign key violation when we try to add the composite FK.
+statement ok
+INSERT INTO a (id, crdb_region) VALUES ('4227eceb-71d6-422c-808b-6a12ec8a1e54', 'us-east-1')
+
+statement ok
+INSERT INTO b (id, a_id, crdb_region) VALUES ('8f6ce660-423e-4823-8e41-bf001a007b46', '4227eceb-71d6-422c-808b-6a12ec8a1e54', 'ca-central-1')
+
+# This statement should fail with a foreign key violation, and the schema change
+# should properly revert without causing infinite retries due to the missing RBRUsingConstraint.
+# Prior to the bugfix, the rollback logic would would drop the constraint but
+# not clear the RBRUsingConstraint field, causing validation to fail during
+# the rollback.
+statement error pgcode 23503 pq: foreign key violation: "b" row crdb_region='ca-central-1', a_id='4227eceb-71d6-422c-808b-6a12ec8a1e54', id='8f6ce660-423e-4823-8e41-bf001a007b46' has no match in "a"
+ALTER TABLE b
+  DROP CONSTRAINT a_id_fk,
+  ADD CONSTRAINT a_crdb_region_id_fk
+    FOREIGN KEY (crdb_region, a_id) REFERENCES a (crdb_region, id) ON UPDATE CASCADE ON DELETE CASCADE,
+  SET (infer_rbr_region_col_using_constraint = a_crdb_region_id_fk)
+
+# Verify the tables are still functional after the failed schema change.
+query I
+SELECT count(*) FROM a
+----
+1
+
+query I
+SELECT count(*) FROM b
+----
+1
+
+statement ok
+DROP TABLE b CASCADE
+
+statement ok
+DROP TABLE a CASCADE
+
+statement ok
+RESET create_table_with_schema_locked;
+
+subtest end

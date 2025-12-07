@@ -8,6 +8,7 @@
 package workload_generator
 
 import (
+	"bufio"
 	_ "embed"
 	"strings"
 	"testing"
@@ -25,8 +26,11 @@ func TestSplitColumnDefsAndTableConstraints(t *testing.T) {
 		id INT PRIMARY KEY,
 		name TEXT NOT NULL,
 		age INT DEFAULT 30,
+		checksum BYTES DEFAULT 30,
+		haserror BOOL NULL AS (errordetail != '':::STRING) VIRTUAL,
 		CONSTRAINT user_pk PRIMARY KEY (id),
 		UNIQUE (name),
+		INDEX emigratingbuckets_haserror_idx (haserror DESC),
 		FOREIGN KEY (age) REFERENCES other(age),
 		CHECK (age > 0)
 	`
@@ -35,15 +39,88 @@ func TestSplitColumnDefsAndTableConstraints(t *testing.T) {
 		"id INT PRIMARY KEY",
 		"name TEXT NOT NULL",
 		"age INT DEFAULT 30",
+		"checksum BYTES DEFAULT 30",
+		"haserror BOOL NULL AS (errordetail != '':::STRING) VIRTUAL",
 	}
 	wantConstraints := []string{
 		"CONSTRAINT user_pk PRIMARY KEY (id)",
 		"UNIQUE (name)",
+		"INDEX emigratingbuckets_haserror_idx (haserror DESC)",
 		"FOREIGN KEY (age) REFERENCES other(age)",
 		"CHECK (age > 0)",
 	}
 	assert.Equal(t, wantCols, cols)
 	assert.Equal(t, wantConstraints, constraints)
+}
+func TestRemoveComputedColumns(t *testing.T) {
+	stmt := `
+CREATE TABLE public.emigratingbuckets (
+	bucketnum INT8 NOT NULL,
+	bucket STRING NOT NULL,
+	shardname STRING NOT NULL,
+	destcluster STRING NOT NULL,
+	starttime TIMESTAMP(0) NULL,
+	startbinlogfile STRING NULL,
+	startbinlogpos INT4 NULL,
+	generation INT4 NOT NULL DEFAULT 0:::INT8,
+	state STRING NOT NULL,
+	activeon STRING NOT NULL,
+	lastheartbeat TIMESTAMP(0) NULL,
+	enqd BOOL NULL,
+	enqdfirst BOOL NULL,
+	enqdtime TIMESTAMP(6) NULL,
+	laststatechangetime TIMESTAMP(0) NOT NULL,
+	lastbinlogfile STRING NOT NULL,
+	lastbinlogpos INT4 NOT NULL,
+	laststatusupdate TIMESTAMP(0) NULL,
+	errordetail STRING NOT NULL,
+	migrationparams JSONB NULL,
+	migrationstatus JSONB NULL,
+	srcbucketinfo JSONB NULL,
+	haserror BOOL NULL AS (errordetail != '':::STRING) VIRTUAL,
+	CONSTRAINT ""primary"" PRIMARY KEY (bucketnum ASC),
+	INDEX emigratingbuckets_state_idx (state ASC),
+	INDEX emigratingbuckets_activeon_idx (activeon DESC),
+	INDEX emigratingbuckets_shardname_idx (shardname ASC),
+	INDEX emigratingbuckets_destcluster_idx (destcluster ASC),
+	INDEX emigratingbuckets_enqd_idx (enqd DESC),
+	INDEX emigratingbuckets_enqdfirst_idx (enqdfirst DESC),
+	INDEX emigratingbuckets_haserror_idx (haserror DESC),
+	CONSTRAINT check_bucketnum CHECK (bucketnum > 0:::INT8)
+)`
+	assert.Equal(t, `
+CREATE TABLE public.emigratingbuckets (
+	bucketnum INT8 NOT NULL,
+	bucket STRING NOT NULL,
+	shardname STRING NOT NULL,
+	destcluster STRING NOT NULL,
+	starttime TIMESTAMP(0) NULL,
+	startbinlogfile STRING NULL,
+	startbinlogpos INT4 NULL,
+	generation INT4 NOT NULL DEFAULT 0:::INT8,
+	state STRING NOT NULL,
+	activeon STRING NOT NULL,
+	lastheartbeat TIMESTAMP(0) NULL,
+	enqd BOOL NULL,
+	enqdfirst BOOL NULL,
+	enqdtime TIMESTAMP(6) NULL,
+	laststatechangetime TIMESTAMP(0) NOT NULL,
+	lastbinlogfile STRING NOT NULL,
+	lastbinlogpos INT4 NOT NULL,
+	laststatusupdate TIMESTAMP(0) NULL,
+	errordetail STRING NOT NULL,
+	migrationparams JSONB NULL,
+	migrationstatus JSONB NULL,
+	srcbucketinfo JSONB NULL,
+	CONSTRAINT ""primary"" PRIMARY KEY (bucketnum ASC),
+	INDEX emigratingbuckets_state_idx (state ASC),
+	INDEX emigratingbuckets_activeon_idx (activeon DESC),
+	INDEX emigratingbuckets_shardname_idx (shardname ASC),
+	INDEX emigratingbuckets_destcluster_idx (destcluster ASC),
+	INDEX emigratingbuckets_enqd_idx (enqd DESC),
+	INDEX emigratingbuckets_enqdfirst_idx (enqdfirst DESC),
+	CONSTRAINT check_bucketnum CHECK (bucketnum > 0:::INT8)
+)`, removeComputedColumns(stmt))
 }
 
 func TestParseDDL(t *testing.T) {
@@ -115,13 +192,57 @@ var data string
 
 func TestGenerateDDLsIntegration(t *testing.T) {
 	t.Run("expect success", func(t *testing.T) {
-		schemas, stmts, err := generateDDLFromReader(strings.NewReader(data), testDBName, false)
+		schemas, stmts, err := generateDDLFromCSV(strings.NewReader(data), testDBName, false)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, schemas)
 		assert.NotEmpty(t, stmts)
 	})
 	t.Run("expect failure due to invalid file location", func(t *testing.T) {
-		_, _, err := generateDDLs("wrong_file_location", testDBName, false)
+		_, _, err := generateDDLs("wrong_file_location", testDBName, "", false)
 		assert.NotNil(t, err)
+	})
+}
+
+func TestGenerateDDLFromDDLFile(t *testing.T) {
+	// Sample DDL statements for testing
+	sampleDDL := `"CREATE TABLE public.users (
+		id INT8 NOT NULL,
+		name VARCHAR(50) NOT NULL,
+		email VARCHAR(100) UNIQUE,
+		CONSTRAINT users_pkey PRIMARY KEY (id)
+	);"
+
+	CREATE TABLE public.orders (
+		order_id INT8 NOT NULL,
+		user_id INT8 NOT NULL,
+		amount DECIMAL(10,2) NOT NULL,
+		CONSTRAINT orders_pkey PRIMARY KEY (order_id)
+	);
+
+	ALTER TABLE public.orders ADD CONSTRAINT orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+	`
+
+	t.Run("expect success with DDL file", func(t *testing.T) {
+		reader := strings.NewReader(sampleDDL)
+		schemas, stmts, err := generateDDLFromDDLFile(bufio.NewReader(reader), testDBName, false)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, schemas)
+		assert.NotEmpty(t, stmts)
+
+		// Verify that both tables were parsed correctly
+		assert.Contains(t, schemas, "users")
+		assert.Contains(t, schemas, "orders")
+
+		// Verify that the users table has the correct columns
+		usersSchema := schemas["users"]
+		assert.Contains(t, usersSchema.Columns, "id")
+		assert.Contains(t, usersSchema.Columns, "name")
+		assert.Contains(t, usersSchema.Columns, "email")
+
+		// Verify that the orders table has the correct columns
+		ordersSchema := schemas["orders"]
+		assert.Contains(t, ordersSchema.Columns, "order_id")
+		assert.Contains(t, ordersSchema.Columns, "user_id")
+		assert.Contains(t, ordersSchema.Columns, "amount")
 	})
 }

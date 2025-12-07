@@ -19,15 +19,14 @@ import (
 var ChannelCompatibilityModeEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"log.channel_compatibility_mode.enabled",
-	"when true, logs will continue to log to the expected logging channels; "+
-		"when false, logs will be moved to new logging channels as part of a "+
-		"logging channel consolidation effort",
-	metamorphic.ConstantWithTestBool("log.channel_compatibility_mode.enabled", true),
+	"when true, logs will to log to their legacy (pre 26.1) logging channels; "+
+		"when false, logs will be logged to new logging channels",
+	metamorphic.ConstantWithTestBool("log.channel_compatibility_mode.enabled", false),
 	settings.WithPublic,
 )
 
 func ShouldMigrateEvent(sv *settings.Values) bool {
-	return !ChannelCompatibilityModeEnabled.Get(sv)
+	return ChannelCompatibilityModeEnabled.Get(sv)
 }
 
 // StructuredEventMigrator handles conditional routing of structured events
@@ -73,7 +72,6 @@ func (sem StructuredEventMigrator) structuredEventDepth(
 		structuredEventDepth(ctx, sev, depth+1, sem.newChannel, event)
 	} else {
 		structuredEventDepth(ctx, sev, depth+1, event.LoggingChannel(), event)
-
 	}
 }
 

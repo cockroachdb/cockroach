@@ -25,7 +25,9 @@ func TestRequestMetricRegistered(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultDRPCOption: base.TestDRPCDisabled,
+	})
 	defer ts.Stopper().Stop(ctx)
 
 	requestMetrics := rpc.NewRequestMetrics()
@@ -41,7 +43,7 @@ func TestRequestMetricRegistered(t *testing.T) {
 
 	_, _ = ts.GetAdminClient(t).Settings(ctx, &serverpb.SettingsRequest{})
 	require.Len(t, histogramVec.ToPrometheusMetrics(), 0, "Should not have recorded any metrics yet")
-	serverGRPCRequestMetricsEnabled.Override(context.Background(), &ts.ClusterSettings().SV, true)
+	serverRPCRequestMetricsEnabled.Override(context.Background(), &ts.ClusterSettings().SV, true)
 	_, _ = ts.GetAdminClient(t).Settings(ctx, &serverpb.SettingsRequest{})
 	require.Len(t, histogramVec.ToPrometheusMetrics(), 1, "Should have recorded metrics for request")
 }
@@ -65,7 +67,7 @@ func TestShouldRecordRequestDuration(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	for _, tt := range tests {
 		t.Run(tt.methodName, func(t *testing.T) {
-			serverGRPCRequestMetricsEnabled.Override(context.Background(), &settings.SV, tt.metricsEnabled)
+			serverRPCRequestMetricsEnabled.Override(context.Background(), &settings.SV, tt.metricsEnabled)
 			require.Equal(t, tt.expected, shouldRecordRequestDuration(settings, tt.methodName))
 		})
 	}

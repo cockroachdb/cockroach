@@ -9,12 +9,12 @@
 set -xeuo pipefail
 
 # When updating to a new Go version, update all of these variables.
-GOVERS=1.23.12
+GOVERS=1.25.3
 GOCOMMIT=$(grep -v ^# /bootstrap/commit.txt | head -n1)
 # We use this for bootstrapping (this is NOT re-published). Note the version
 # matches the version we're publishing, although it doesn't technically have to.
 GOLINUXLINK=https://go.dev/dl/go$GOVERS.linux-amd64.tar.gz
-LINUXSHASUM=d3847fef834e9db11bf64e3fb34db9c04db14e068eeb064f49af747010454f90
+LINUXSHASUM=0335f314b6e7bfe08c3d0cfaa7c19db961b7b99fb20be62b0a826c992ad14e0f
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -69,7 +69,7 @@ cd go
 git checkout $GOCOMMIT
 cd ..
 
-CONFIGS="linux_amd64 linux_arm64 linux_s390x darwin_amd64 darwin_arm64 windows_amd64"
+CONFIGS="linux_amd64 linux_arm64 linux_s390x darwin_arm64 windows_amd64"
 
 for CONFIG in $CONFIGS; do
     case $CONFIG in
@@ -85,10 +85,6 @@ for CONFIG in $CONFIGS; do
             CC_FOR_TARGET=/x-tools/s390x-ibm-linux-gnu/bin/s390x-ibm-linux-gnu-cc
             CXX_FOR_TARGET=/x-tools/s390x-ibm-linux-gnu/bin/s390x-ibm-linux-gnu-c++
         ;;
-        darwin_amd64)
-            CC_FOR_TARGET=/x-tools/x86_64-apple-darwin21.2/bin/x86_64-apple-darwin21.2-cc
-            CXX_FOR_TARGET=/x-tools/x86_64-apple-darwin21.2/bin/x86_64-apple-darwin21.2-c++
-            ;;
         darwin_arm64)
             CC_FOR_TARGET=/x-tools/x86_64-apple-darwin21.2/bin/aarch64-apple-darwin21.2-cc
             CXX_FOR_TARGET=/x-tools/x86_64-apple-darwin21.2/bin/aarch64-apple-darwin21.2-c++

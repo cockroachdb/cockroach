@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
@@ -42,13 +43,13 @@ var (
 // subarray. The outer slice of levels must be sorted in reverse chronological
 // order: a key in a file in a level at a lower index will shadow the same key
 // contained within a file in a level at a higher index.
-func NewSSTIterator(files [][]sstable.ReadableFile, opts IterOptions) (MVCCIterator, error) {
+func NewSSTIterator(files [][]objstorage.ReadableFile, opts IterOptions) (MVCCIterator, error) {
 	return newPebbleSSTIterator(files, opts)
 }
 
 // NewSSTEngineIterator is like NewSSTIterator, but returns an EngineIterator.
 func NewSSTEngineIterator(
-	files [][]sstable.ReadableFile, opts IterOptions,
+	files [][]objstorage.ReadableFile, opts IterOptions,
 ) (EngineIterator, error) {
 	return newPebbleSSTIterator(files, opts)
 }
@@ -62,11 +63,11 @@ func NewMemSSTIterator(sst []byte, verify bool, opts IterOptions) (MVCCIterator,
 // NewMultiMemSSTIterator returns an MVCCIterator for the provided SST data,
 // similarly to NewSSTIterator().
 func NewMultiMemSSTIterator(ssts [][]byte, verify bool, opts IterOptions) (MVCCIterator, error) {
-	files := make([]sstable.ReadableFile, 0, len(ssts))
+	files := make([]objstorage.ReadableFile, 0, len(ssts))
 	for _, sst := range ssts {
 		files = append(files, vfs.NewMemFile(sst))
 	}
-	iter, err := NewSSTIterator([][]sstable.ReadableFile{files}, opts)
+	iter, err := NewSSTIterator([][]objstorage.ReadableFile{files}, opts)
 	if err != nil {
 		return nil, err
 	}

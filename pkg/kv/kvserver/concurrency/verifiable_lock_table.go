@@ -118,7 +118,7 @@ func (v verifyingLockTable) QueryLockTableState(
 }
 
 func (v verifyingLockTable) ExportUnreplicatedLocks(
-	span roachpb.Span, exporter func(*roachpb.LockAcquisition),
+	span roachpb.Span, exporter func(*roachpb.LockAcquisition) bool,
 ) {
 	v.lt.ExportUnreplicatedLocks(span, exporter)
 }
@@ -133,7 +133,7 @@ func (v verifyingLockTable) String() string {
 	return v.lt.String()
 }
 
-// TestingSetMaxLocks implements the lockTable interface.
-func (v verifyingLockTable) TestingSetMaxLocks(maxKeysLocked int64) {
-	v.lt.TestingSetMaxLocks(maxKeysLocked)
+// SetMaxLockTableSize implements the lockTable interface.
+func (v verifyingLockTable) SetMaxLockTableSize(maxKeysLocked int64) {
+	v.lt.SetMaxLockTableSize(maxKeysLocked)
 }

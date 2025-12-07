@@ -158,7 +158,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 				Map: cmd.Cmd.TraceData,
 			})
 			if err != nil {
-				log.Dev.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
+				log.KvExec.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
 			} else {
 				cmd.ctx, cmd.sp = d.r.AmbientContext.Tracer.StartSpanCtx(
 					ctx,

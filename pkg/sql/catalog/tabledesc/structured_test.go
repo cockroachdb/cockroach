@@ -963,7 +963,7 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
-	const expectedErrRE = `.*: computed column \"b\" cannot also have a DEFAULT expression`
+	const expectedErrRE = `.*: computed column \"b\" cannot also have a DEFAULT or ON UPDATE expression`
 	// Create a table with a computed column.
 	tdb.Exec(t, `CREATE DATABASE t`)
 	tdb.Exec(t, `CREATE TABLE t.tbl (a INT PRIMARY KEY, b INT AS (1) STORED)`)

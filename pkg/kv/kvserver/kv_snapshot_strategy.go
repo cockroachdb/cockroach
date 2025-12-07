@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -136,7 +137,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	snapshotQ := s.cfg.KVAdmissionController.GetSnapshotQueue(s.StoreID())
 	if snapshotQ == nil {
-		log.Dev.Errorf(ctx, "unable to find snapshot queue for store: %s", s.StoreID())
+		log.KvDistribution.Errorf(ctx, "unable to find snapshot queue for store: %s", s.StoreID())
 	}
 	// Using a nil pacer is effectively a noop if snapshot control is disabled.
 	var pacer *admission.SnapshotPacer = nil
@@ -358,12 +359,6 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		return nil
 	}
 
-	// If snapshots containing shared files are allowed, and this range is a
-	// non-system range, take advantage of shared storage to minimize the amount
-	// of data we're iterating on and sending over the network.
-	sharedReplicate := header.SharedReplicate && rditer.IterateReplicaKeySpansShared != nil
-	externalReplicate := header.ExternalReplicate && rditer.IterateReplicaKeySpansShared != nil
-
 	iterateRKSpansVisitor := func(iter storage.EngineIterator, _ roachpb.Span) error {
 		timingTag.start("iter")
 		defer timingTag.stop("iter")
@@ -413,13 +408,13 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 		return err
 	}
-	if err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, rditer.SelectOpts{
+	if err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.StateSnap, fs.RangeSnapshotReadCategory, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
 			SystemKeys: true,
 			LockTable:  true,
 			// In shared/external mode, the user span come from external SSTs and
 			// are not iterated over here.
-			UserKeys: !(sharedReplicate || externalReplicate),
+			UserKeys: !(header.SharedReplicate || header.ExternalReplicate),
 		},
 		ReplicatedByRangeID:   true,
 		UnreplicatedByRangeID: false,
@@ -428,9 +423,12 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	}
 
 	var valBuf []byte
-	if sharedReplicate || externalReplicate {
+	// If snapshots containing shared files are allowed, and this range is a
+	// non-system range, take advantage of shared storage to minimize the amount
+	// of data we're iterating on and sending over the network.
+	if header.SharedReplicate || header.ExternalReplicate {
 		var sharedVisitor func(sst *pebble.SharedSSTMeta) error
-		if sharedReplicate {
+		if header.SharedReplicate {
 			sharedVisitor = func(sst *pebble.SharedSSTMeta) error {
 				sharedSSTCount++
 				snap.sharedBackings = append(snap.sharedBackings, sst.Backing)
@@ -459,7 +457,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			}
 		}
 		var externalVisitor func(sst *pebble.ExternalFile) error
-		if externalReplicate {
+		if header.ExternalReplicate {
 			externalVisitor = func(sst *pebble.ExternalFile) error {
 				externalSSTCount++
 				externalSSTs = append(externalSSTs, kvserverpb.SnapshotRequest_ExternalTable{
@@ -479,7 +477,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			}
 		}
 		kvsBefore := kvs
-		err := rditer.IterateReplicaKeySpansShared(ctx, snap.State.Desc, kvSS.st, kvSS.clusterID, snap.EngineSnap, func(key *pebble.InternalKey, value pebble.LazyValue, _ pebble.IteratorLevel) error {
+		err := rditer.IterateReplicaKeySpansShared(ctx, snap.State.Desc, kvSS.st, kvSS.clusterID, snap.StateSnap, func(key *pebble.InternalKey, value pebble.LazyValue, _ pebble.IteratorLevel) error {
 			kvs++
 			if b == nil {
 				b = kvSS.newWriteBatch()
@@ -542,7 +540,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			//
 			// See: https://github.com/cockroachdb/cockroach/issues/142673
 			transitionFromSharedToRegularReplicate = true
-			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, rditer.SelectOpts{
+			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.StateSnap, fs.RangeSnapshotReadCategory, rditer.SelectOpts{
 				Ranged: rditer.SelectRangedOptions{
 					UserKeys: true,
 				},
@@ -605,7 +603,7 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 		// disk space (which is reclaimed on node restart). It is unexpected
 		// though, so log a warning.
 		if err := kvSS.scratch.Close(); err != nil {
-			log.Dev.Warningf(ctx, "error closing kvBatchSnapshotStrategy: %v", err)
+			log.KvDistribution.Warningf(ctx, "error closing kvBatchSnapshotStrategy: %v", err)
 		}
 	}
 }

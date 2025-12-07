@@ -343,9 +343,15 @@ func newCopyMachine(
 	// to have field data then we have to populate the expectedHiddenColumnIdxs
 	// field with the columns indexes we expect to be hidden.
 	if c.p.SessionData().ExpectAndIgnoreNotVisibleColumnsInCopy && len(n.Columns) == 0 {
+		numInaccessibleCols := 0
 		for i, col := range tableDesc.PublicColumns() {
 			if col.IsHidden() {
-				c.expectedHiddenColumnIdxs = append(c.expectedHiddenColumnIdxs, i)
+				// Offset the index by the number of preceding inaccessible
+				// columns, which are never expected in the input.
+				c.expectedHiddenColumnIdxs = append(c.expectedHiddenColumnIdxs, i-numInaccessibleCols)
+			}
+			if col.IsInaccessible() {
+				numInaccessibleCols++
 			}
 		}
 	}
@@ -420,6 +426,19 @@ func (c *copyMachine) canSupportVectorized(table catalog.TableDescriptor) bool {
 	}
 	// Columnar vector index encoding is not yet supported.
 	if len(table.VectorIndexes()) > 0 {
+		return false
+	}
+	forcePut := table.GetPrimaryIndex().ForcePut()
+	secondaryIndexes := table.WritableNonPrimaryIndexes()
+	for i := 0; !forcePut && i < len(secondaryIndexes); i++ {
+		forcePut = secondaryIndexes[i].ForcePut()
+	}
+	if forcePut {
+		// Even though the vector encoder supports ForcePut behavior, testing
+		// COPY with a concurrent ALTER PRIMARY KEY has resulted in different
+		// corruption scenarios. The non-vectorized COPY doesn't hit those, so
+		// we choose to fall back.
+		// TODO(#157198): investigate this.
 		return false
 	}
 	// Vectorized COPY doesn't support foreign key checks, no reason it couldn't
@@ -1147,7 +1166,7 @@ func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 			// for the next batch.
 			return c.doneWithRows(ctx)
 		} else {
-			if errIsRetryable(err) {
+			if ErrIsRetryable(err) {
 				log.SqlExec.Infof(ctx, "%s failed on attempt %d and with retryable error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
 				// It is currently only safe to retry if we are not in atomic copy
 				// mode & we are in an implicit transaction.
@@ -1247,6 +1266,12 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 		},
 		Returning: tree.AbsentReturningClause,
 	}
+
+	// Initialize annotations for the statement. This is required for proper
+	// error handling and logging during plan optimization. Since this is a
+	// synthetic INSERT statement, we provide an empty annotations array.
+	c.p.semaCtx.Annotations = tree.MakeAnnotations(0)
+	c.p.extendedEvalCtx.Annotations = &c.p.semaCtx.Annotations
 
 	// TODO(cucaroach): We shouldn't need to do this for every batch.
 	if err := c.p.makeOptimizerPlan(ctx); err != nil {

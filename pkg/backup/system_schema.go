@@ -866,6 +866,15 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.InspectErrorsTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.TransactionDiagnosticsRequestsTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
+	systemschema.TransactionDiagnosticsTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
+	systemschema.StatementHintsTable.GetName(): {
+		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+	},
 }
 
 func rekeySystemTable(

@@ -24,7 +24,7 @@ func RandDatumEncoding(rng *rand.Rand) catenumpb.DatumEncoding {
 func RandEncDatum(rng *rand.Rand) (rowenc.EncDatum, *types.T) {
 	typ := RandType(rng)
 	datum := RandDatum(rng, typ, true /* nullOk */)
-	return rowenc.DatumToEncDatum(typ, datum), typ
+	return rowenc.DatumToEncDatumUnsafe(typ, datum), typ
 }
 
 // RandSortingEncDatumSlice generates a slice of random EncDatum values of the
@@ -33,7 +33,7 @@ func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]rowenc.EncDatum, *
 	typ := RandSortingType(rng)
 	vals := make([]rowenc.EncDatum, numVals)
 	for i := range vals {
-		vals[i] = rowenc.DatumToEncDatum(typ, RandDatum(rng, typ, true))
+		vals[i] = rowenc.DatumToEncDatumUnsafe(typ, RandDatum(rng, typ, true))
 	}
 	return vals, typ
 }
@@ -57,7 +57,7 @@ func RandSortingEncDatumSlices(
 func RandEncDatumRowOfTypes(rng *rand.Rand, types []*types.T) rowenc.EncDatumRow {
 	vals := make([]rowenc.EncDatum, len(types))
 	for i := range types {
-		vals[i] = rowenc.DatumToEncDatum(types[i], RandDatum(rng, types[i], true))
+		vals[i] = rowenc.DatumToEncDatumUnsafe(types[i], RandDatum(rng, types[i], true))
 	}
 	return vals
 }

@@ -42,6 +42,9 @@ dump_json() {
   fi
 }
 
+# NB: if you're trying to trigger a weekly roachtest, need to use
+# 'Cockroach_Nightlies_RoachtestWeeklyBazel' as the buildType below.
+
 json_payload=$(jq -n \
   --arg branch_name "$pr" \
   --arg tests "$tests" \

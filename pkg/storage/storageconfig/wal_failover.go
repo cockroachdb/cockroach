@@ -43,6 +43,9 @@ type ExternalPath struct {
 	Encryption *EncryptionOptions
 }
 
+// IsSet returns whether the path was provided.
+func (e ExternalPath) IsSet() bool { return e.Path != "" }
+
 // WALFailover is the configuration for write-ahead log (WAL) failover, used
 // to temporarily write WALs to a separate location when disk
 // stalls are encountered.
@@ -62,10 +65,13 @@ type WALFailover struct {
 	PrevPath ExternalPath
 }
 
-// Type implements the pflag.Value interface.
-func (c *WALFailover) Type() string { return "string" }
-
 // String implements fmt.Stringer.
+//
+// Representation:
+// - DefaultMode: ""
+// - Disabled: "disabled[,prev_path=<prev_path>]"
+// - AmongStores: "among-stores"
+// - ToExplicitPath: "path=<path>[,prev_path=<prev_path>]"
 func (c *WALFailover) String() string {
 	return redact.StringWithoutMarkers(c)
 }
@@ -95,15 +101,18 @@ func (c *WALFailover) SafeFormat(p redact.SafePrinter, _ rune) {
 	}
 }
 
-// Set implements the pflag.Value interface.
-func (c *WALFailover) Set(s string) error {
+// ParseWALFailover parses a string in the format produced by String().
+//
+// Used to parse the --wal-failover command-line flag.
+func ParseWALFailover(s string) (WALFailover, error) {
+	var c WALFailover
 	switch {
 	case strings.HasPrefix(s, "disabled"):
 		c.Mode = WALFailoverDisabled
 		var ok bool
 		c.Path.Path, c.PrevPath.Path, ok = parseWALFailoverPathFields(strings.TrimPrefix(s, "disabled"))
 		if !ok || c.Path.IsSet() {
-			return errors.Newf("invalid disabled --wal-failover setting: %s "+
+			return WALFailover{}, errors.Newf("invalid disabled --wal-failover setting: %s "+
 				"expect disabled[,prev_path=<prev_path>]", s)
 		}
 	case s == "among-stores":
@@ -113,14 +122,14 @@ func (c *WALFailover) Set(s string) error {
 		var ok bool
 		c.Path.Path, c.PrevPath.Path, ok = parseWALFailoverPathFields(s)
 		if !ok || !c.Path.IsSet() {
-			return errors.Newf("invalid path --wal-failover setting: %s "+
+			return WALFailover{}, errors.Newf("invalid path --wal-failover setting: %s "+
 				"expect path=<path>[,prev_path=<prev_path>]", s)
 		}
 	default:
-		return errors.Newf("invalid --wal-failover setting: %s "+
+		return WALFailover{}, errors.Newf("invalid --wal-failover setting: %s "+
 			"(possible values: disabled, among-stores, path=<path>)", s)
 	}
-	return nil
+	return c, nil
 }
 
 func parseWALFailoverPathFields(s string) (path, prevPath string, ok bool) {
@@ -144,6 +153,3 @@ func parseWALFailoverPathFields(s string) (path, prevPath string, ok bool) {
 	prevPath = strings.TrimPrefix(s, ",prev_path=")
 	return path, prevPath, true
 }
-
-// IsSet returns whether or not the path was provided.
-func (e ExternalPath) IsSet() bool { return e.Path != "" }

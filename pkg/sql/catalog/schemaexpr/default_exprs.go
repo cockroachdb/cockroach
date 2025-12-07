@@ -9,7 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,7 +50,7 @@ func MakeDefaultExprs(
 			exprStrings = append(exprStrings, col.GetDefaultExpr())
 		}
 	}
-	exprs, err := parser.ParseExprs(exprStrings)
+	exprs, err := parserutils.ParseExprs(exprStrings)
 	if err != nil {
 		return nil, err
 	}

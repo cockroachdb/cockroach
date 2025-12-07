@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -38,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -218,6 +221,9 @@ type cFetcherArgs struct {
 	alwaysReallocate bool
 	// Txn is the txn for the fetch. It might be nil.
 	txn *kv.Txn
+
+	// tenantID is required in some places for AC/bookkeeping.
+	tenantID roachpb.TenantID
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -265,20 +271,22 @@ type cFetcher struct {
 	// stableKVs indicates whether the KVs returned by nextKVer are stable (i.e.
 	// are not invalidated) across NextKV() calls.
 	stableKVs bool
-	// bytesRead, kvPairsRead, and batchRequestsIssued store the total number of
-	// bytes read, key-values pairs read, and of BatchRequests issued,
-	// respectively, by this cFetcher throughout its lifetime in case when the
-	// underlying row.KVFetcher has already been closed and nil-ed out.
+	// bytesRead, kvPairsRead, kvCPUTime, and batchRequestsIssued store the total number of
+	// bytes read, key-values pairs read, CPU time reported by KV BatchResponses, and of
+	// BatchRequests issued, respectively, by this cFetcher throughout its lifetime in
+	// case when the underlying row.KVFetcher has already been closed and nil-ed out.
 	//
 	// The fields should not be accessed directly by the users of the cFetcher -
-	// getBytesRead(), getKVPairsRead(), and getBatchRequestsIssued() should be
+	// getBytesRead(), getKVPairsRead(), getKVCpuTime(), and getBatchRequestsIssued() should be
 	// used instead.
 	bytesRead           int64
 	kvPairsRead         int64
+	kvCPUTime           int64
 	batchRequestsIssued int64
 	// cpuStopWatch tracks the CPU time spent by this cFetcher while fulfilling KV
 	// requests *in the current goroutine*.
 	cpuStopWatch *timeutil.CPUStopWatch
+	pacer        *admission.Pacer
 
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
@@ -460,6 +468,15 @@ func (cf *cFetcher) Init(
 	// MVCC decoding.
 	if cf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
 		if cf.txn != nil && cf.txn.BufferedWritesEnabled() {
+			if cf.txn.Type() == kv.LeafTxn {
+				// We're only allowed to disable buffered writes on the RootTxn.
+				// If we have a LeafTxn, we'll return an assertion error instead
+				// of crashing.
+				//
+				// Note that we might have a LeafTxn with no buffered writes, in
+				// which case BufferedWritesEnabled() is false.
+				return errors.AssertionFailedf("got LeafTxn when MVCC decoding is required")
+			}
 			cf.txn.SetBufferedWritesEnabled(false /* enabled */)
 		}
 	}
@@ -544,6 +561,17 @@ func (cf *cFetcher) Init(
 	if cf.cFetcherArgs.collectStats {
 		cf.cpuStopWatch = timeutil.NewCPUStopWatch()
 	}
+	if cf.txn != nil {
+		if pri := admissionpb.WorkPriority(cf.txn.AdmissionHeader().Priority); pri <= admissionpb.BulkNormalPri {
+			cf.pacer = cf.txn.DB().AdmissionPacerFactory.NewPacer(
+				50*time.Millisecond, // Request a realistic per-batch amount.
+				admission.WorkInfo{
+					TenantID: cf.tenantID, Priority: pri, CreateTime: timeutil.Now().UnixNano(),
+				},
+			)
+		}
+	}
+
 	cf.machine.state[0] = stateResetBatch
 	cf.machine.state[1] = stateInitFetch
 
@@ -724,6 +752,15 @@ func (cf *cFetcher) setNextKV(kv roachpb.KeyValue) {
 // rows, the Batch.Length is 0.
 func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 	for {
+		// While Pace() is nil-safe, its contract does not require it be a total
+		// no-op when nil. We, however, are using its nil-ness specifically to
+		// reflect our prior determination of the scan's priority, so this call to
+		// Pace() should be explicitly conditional on Pacer's non-nilness.
+		if cf.pacer != nil {
+			if _, err := cf.pacer.Pace(ctx); err != nil {
+				return nil, err
+			}
+		}
 		if debugState {
 			log.Dev.Infof(ctx, "State %s", cf.machine.state[0])
 		}
@@ -1448,6 +1485,15 @@ func (cf *cFetcher) getKVPairsRead() int64 {
 	return cf.kvPairsRead
 }
 
+// getKVCPUTime returns the CPU time as reported by KV BatchResponses processed
+// by the cFetcher throughout its lifetime so far.
+func (cf *cFetcher) getKVCPUTime() int64 {
+	if cf.fetcher != nil {
+		return cf.fetcher.GetKVCPUTime()
+	}
+	return cf.kvCPUTime
+}
+
 // getBatchRequestsIssued returns the number of BatchRequests issued by the
 // cFetcher throughout its lifetime so far.
 func (cf *cFetcher) getBatchRequestsIssued() int64 {
@@ -1480,10 +1526,13 @@ func (cf *cFetcher) Release() {
 
 func (cf *cFetcher) Close(ctx context.Context) {
 	if cf != nil {
+		cf.pacer.Close()
+		cf.pacer = nil
 		cf.nextKVer = nil
 		if cf.fetcher != nil {
 			cf.bytesRead = cf.fetcher.GetBytesRead()
 			cf.kvPairsRead = cf.fetcher.GetKVPairsRead()
+			cf.kvCPUTime = cf.fetcher.GetKVCPUTime()
 			cf.batchRequestsIssued = cf.fetcher.GetBatchRequestsIssued()
 			cf.fetcher.Close(ctx)
 			cf.fetcher = nil

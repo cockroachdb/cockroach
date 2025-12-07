@@ -54,7 +54,8 @@ func registerDiskFull(r registry.Registry) {
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
 					"./cockroach workload run kv --tolerate-errors --init --read-percent=0"+
-						" --concurrency=10 --duration=4m {pgurl:2-%d}",
+						" --min-block-bytes=512 --max-block-bytes=512"+
+						" --concurrency=10 --duration=10m {pgurl:2-%d}",
 					len(c.CRDBNodes()))
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 				return nil

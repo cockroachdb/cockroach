@@ -175,13 +175,16 @@ func TestInvalidData(t *testing.T) {
 // TestTooManyAttributesInSchema tests that a schema with too many attributes
 // causes an error.
 func TestTooManyAttributesInSchema(t *testing.T) {
-	// At time of writing, there are two system attributes. That leaves 30
-	// bits of the 32-bit ordinal set for use by the user.
+	// At time of writing, there are two system attributes. That leaves 62
+	// bits of the 64-bit ordinal set for use by the user.
 	type tooManyAttrs struct {
 		F0, F1, F2, F3, F4, F5, F6, F7, F8, F9           *uint32
 		F10, F11, F12, F13, F14, F15, F16, F17, F18, F19 *uint32
 		F20, F21, F22, F23, F24, F25, F26, F27, F28, F29 *uint32
-		F30                                              *uint32
+		F30, F31, F32, F33, F34, F35, F36, F37, F38, F39 *uint32
+		F40, F41, F42, F43, F44, F45, F46, F47, F48, F49 *uint32
+		F50, F51, F52, F53, F54, F55, F56, F57, F58, F59 *uint32
+		F60, F61, F62                                    *uint32
 	}
 	justEnoughMappings := []rel.EntityMappingOption{
 		rel.EntityAttr(stringAttr("A0"), "F0"),
@@ -214,6 +217,38 @@ func TestTooManyAttributesInSchema(t *testing.T) {
 		rel.EntityAttr(stringAttr("A27"), "F27"),
 		rel.EntityAttr(stringAttr("A28"), "F28"),
 		rel.EntityAttr(stringAttr("A29"), "F29"),
+		rel.EntityAttr(stringAttr("A30"), "F30"),
+		rel.EntityAttr(stringAttr("A31"), "F31"),
+		rel.EntityAttr(stringAttr("A32"), "F32"),
+		rel.EntityAttr(stringAttr("A33"), "F33"),
+		rel.EntityAttr(stringAttr("A34"), "F34"),
+		rel.EntityAttr(stringAttr("A35"), "F35"),
+		rel.EntityAttr(stringAttr("A36"), "F36"),
+		rel.EntityAttr(stringAttr("A37"), "F37"),
+		rel.EntityAttr(stringAttr("A38"), "F38"),
+		rel.EntityAttr(stringAttr("A39"), "F39"),
+		rel.EntityAttr(stringAttr("A40"), "F40"),
+		rel.EntityAttr(stringAttr("A41"), "F41"),
+		rel.EntityAttr(stringAttr("A42"), "F42"),
+		rel.EntityAttr(stringAttr("A43"), "F43"),
+		rel.EntityAttr(stringAttr("A44"), "F44"),
+		rel.EntityAttr(stringAttr("A45"), "F45"),
+		rel.EntityAttr(stringAttr("A46"), "F46"),
+		rel.EntityAttr(stringAttr("A47"), "F47"),
+		rel.EntityAttr(stringAttr("A48"), "F48"),
+		rel.EntityAttr(stringAttr("A49"), "F49"),
+		rel.EntityAttr(stringAttr("A50"), "F50"),
+		rel.EntityAttr(stringAttr("A51"), "F51"),
+		rel.EntityAttr(stringAttr("A52"), "F52"),
+		rel.EntityAttr(stringAttr("A53"), "F53"),
+		rel.EntityAttr(stringAttr("A54"), "F54"),
+		rel.EntityAttr(stringAttr("A55"), "F55"),
+		rel.EntityAttr(stringAttr("A56"), "F56"),
+		rel.EntityAttr(stringAttr("A57"), "F57"),
+		rel.EntityAttr(stringAttr("A58"), "F58"),
+		rel.EntityAttr(stringAttr("A59"), "F59"),
+		rel.EntityAttr(stringAttr("A60"), "F60"),
+		rel.EntityAttr(stringAttr("A61"), "F61"),
 	}
 	{
 		_, err := rel.NewSchema("just_enough",
@@ -224,7 +259,7 @@ func TestTooManyAttributesInSchema(t *testing.T) {
 	{
 		_, err := rel.NewSchema("too_many",
 			rel.EntityMapping(reflect.TypeOf((*tooManyAttrs)(nil)),
-				append(justEnoughMappings, rel.EntityAttr(stringAttr("A30"), "F30"))...,
+				append(justEnoughMappings, rel.EntityAttr(stringAttr("A62"), "F62"))...,
 			),
 		)
 		require.Regexp(t, "too many attributes", err)
@@ -241,7 +276,8 @@ func (sa stringAttr) String() string { return string(sa) }
 // so.
 func TestTooManyAttributesInValues(t *testing.T) {
 	type tooManyAttrs struct {
-		F1, F2, F3, F4, F5, F6, F7, F8 *uint32
+		F1, F2, F3, F4, F5, F6, F7, F8        *uint32
+		F9, F10, F11, F12, F13, F14, F15, F16 *uint32
 	}
 	sc := rel.MustSchema("too_many",
 		rel.EntityMapping(reflect.TypeOf((*tooManyAttrs)(nil)),
@@ -253,6 +289,14 @@ func TestTooManyAttributesInValues(t *testing.T) {
 			rel.EntityAttr(stringAttr("A6"), "F6"),
 			rel.EntityAttr(stringAttr("A7"), "F7"),
 			rel.EntityAttr(stringAttr("A8"), "F8"),
+			rel.EntityAttr(stringAttr("A9"), "F9"),
+			rel.EntityAttr(stringAttr("A10"), "F10"),
+			rel.EntityAttr(stringAttr("A11"), "F11"),
+			rel.EntityAttr(stringAttr("A12"), "F12"),
+			rel.EntityAttr(stringAttr("A13"), "F13"),
+			rel.EntityAttr(stringAttr("A14"), "F14"),
+			rel.EntityAttr(stringAttr("A15"), "F15"),
+			rel.EntityAttr(stringAttr("A16"), "F16"),
 		),
 	)
 	one := uint32(1)
@@ -267,38 +311,62 @@ func TestTooManyAttributesInValues(t *testing.T) {
 				{Attr: stringAttr("A6"), Eq: one},
 				{Attr: stringAttr("A7"), Eq: one},
 				{Attr: stringAttr("A8"), Eq: one},
+				{Attr: stringAttr("A9"), Eq: one},
+				{Attr: stringAttr("A10"), Eq: one},
+				{Attr: stringAttr("A11"), Eq: one},
+				{Attr: stringAttr("A12"), Eq: one},
+				{Attr: stringAttr("A13"), Eq: one},
+				{Attr: stringAttr("A14"), Eq: one},
+				{Attr: stringAttr("A15"), Eq: one},
+				{Attr: stringAttr("A16"), Eq: one},
 				{Attr: rel.Type, Eq: reflect.TypeOf((*tooManyAttrs)(nil))},
 			},
 		})
-		require.EqualError(t, err, `invalid index predicate [{A1 1} {A2 1} {A3 1} {A4 1} {A5 1} {A6 1} {A7 1} {A8 1} {Type *rel_test.tooManyAttrs}] with more than 8 attributes`)
+		require.EqualError(t, err, `invalid index predicate [{A1 1} {A2 1} {A3 1} {A4 1} {A5 1} {A6 1} {A7 1} {A8 1} {A9 1} {A10 1} {A11 1} {A12 1} {A13 1} {A14 1} {A15 1} {A16 1} {Type *rel_test.tooManyAttrs}] with more than 16 attributes`)
 	})
 	db, err := rel.NewDatabase(sc, rel.Index{})
 	require.NoError(t, err)
 	t.Run("index predicate too large", func(t *testing.T) {
-		require.Regexp(t, `invalid entity \*rel_test.tooManyAttrs has too many attributes: maximum allowed is 8, have at least \[A1 A2 A3 A4 A5 A6 Self Type A7\]`, db.Insert(&tooManyAttrs{
-			F1: &one,
-			F2: &one,
-			F3: &one,
-			F4: &one,
-			F5: &one,
-			F6: &one,
-			F7: &one,
-			F8: &one,
+		require.Regexp(t, `invalid entity \*rel_test.tooManyAttrs has too many attributes: maximum allowed is 16, have at least \[A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 Self Type A15\]`, db.Insert(&tooManyAttrs{
+			F1:  &one,
+			F2:  &one,
+			F3:  &one,
+			F4:  &one,
+			F5:  &one,
+			F6:  &one,
+			F7:  &one,
+			F8:  &one,
+			F9:  &one,
+			F10: &one,
+			F11: &one,
+			F12: &one,
+			F13: &one,
+			F14: &one,
+			F15: &one,
+			F16: &one,
 		}))
 
 	})
 	t.Run("query join predicate too large", func(t *testing.T) {
 		require.NoError(t, db.Insert(&tooManyAttrs{
-			F1: &one,
-			F2: &one,
-			F3: &one,
-			F4: &one,
+			F1:  &one,
+			F2:  &one,
+			F3:  &one,
+			F4:  &one,
+			F9:  &one,
+			F10: &one,
+			F11: &one,
+			F12: &one,
 		}))
 		require.NoError(t, db.Insert(&tooManyAttrs{
-			F5: &one,
-			F6: &one,
-			F7: &one,
-			F8: &one,
+			F5:  &one,
+			F6:  &one,
+			F7:  &one,
+			F8:  &one,
+			F13: &one,
+			F14: &one,
+			F15: &one,
+			F16: &one,
 		}))
 		var a, b, c rel.Var = "a", "b", "c"
 		base := []rel.Clause{
@@ -313,11 +381,19 @@ func TestTooManyAttributesInValues(t *testing.T) {
 			rel.Var("f6").Entities(stringAttr("A6"), b, c),
 			rel.Var("f7").Entities(stringAttr("A7"), b, c),
 			rel.Var("f8").Entities(stringAttr("A8"), b, c),
+			rel.Var("f9").Entities(stringAttr("A9"), a, c),
+			rel.Var("f10").Entities(stringAttr("A10"), a, c),
+			rel.Var("f11").Entities(stringAttr("A11"), a, c),
+			rel.Var("f12").Entities(stringAttr("A12"), a, c),
+			rel.Var("f13").Entities(stringAttr("A13"), b, c),
+			rel.Var("f14").Entities(stringAttr("A14"), b, c),
+			rel.Var("f15").Entities(stringAttr("A15"), b, c),
+			rel.Var("f16").Entities(stringAttr("A16"), b, c),
 		}
 		{
 			q, err := rel.NewQuery(sc, append(base, c.Type((*tooManyAttrs)(nil)))...)
 			require.NoError(t, err)
-			require.Regexp(t, "failed to create predicate with more than 8 attributes", q.Iterate(db, &rel.QueryStats{}, func(r rel.Result) error {
+			require.Regexp(t, "failed to create predicate with more than 16 attributes", q.Iterate(db, &rel.QueryStats{}, func(r rel.Result) error {
 				return nil
 			}))
 		}
@@ -327,7 +403,7 @@ func TestTooManyAttributesInValues(t *testing.T) {
 					base, c.Type((*tooManyAttrs)(nil), (*rel.Schema)(nil)),
 				)...)
 				require.NoError(t, err)
-				require.Regexp(t, "failed to create predicate with more than 8 attributes", q.Iterate(db, nil, func(r rel.Result) error {
+				require.Regexp(t, "failed to create predicate with more than 16 attributes", q.Iterate(db, nil, func(r rel.Result) error {
 					return nil
 				}))
 			}
@@ -535,4 +611,189 @@ func TestConcurrentQueryInDifferentDatabases(t *testing.T) {
 		g.Go(run(i))
 	}
 	require.NoError(t, g.Wait())
+}
+
+type notJoinTestAttr string
+
+func (a notJoinTestAttr) String() string { return string(a) }
+
+// TestNotJoinSubqueryDepthWithNonEntityVariables tests that notJoin subqueries
+// execute at the correct depth when they depend on non-entity variables that
+// are bound by entities at different join depths.
+//
+// This test catches a bug where notJoin subqueries would execute too early,
+// before their required non-entity variables were bound. The fix ensures that
+// we track which entity provides each variable through facts, so notJoin
+// subqueries wait until all their input variables are available.
+func TestNotJoinSubqueryDepthWithNonEntityVariables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type FirstEntity struct {
+		ID       int
+		SharedID int
+	}
+	type SecondEntity struct {
+		ID       int
+		SharedID int
+		Value    string
+	}
+	type ThirdEntity struct {
+		ID       int
+		SharedID int
+		Flag     int
+	}
+
+	schema := rel.MustSchema("test_notjoin_depth",
+		rel.EntityMapping(reflect.TypeOf((*FirstEntity)(nil)),
+			rel.EntityAttr(notJoinTestAttr("id"), "ID"),
+			rel.EntityAttr(notJoinTestAttr("shared_id"), "SharedID"),
+		),
+		rel.EntityMapping(reflect.TypeOf((*SecondEntity)(nil)),
+			rel.EntityAttr(notJoinTestAttr("id"), "ID"),
+			rel.EntityAttr(notJoinTestAttr("shared_id"), "SharedID"),
+			rel.EntityAttr(notJoinTestAttr("value"), "Value"),
+		),
+		rel.EntityMapping(reflect.TypeOf((*ThirdEntity)(nil)),
+			rel.EntityAttr(notJoinTestAttr("id"), "ID"),
+			rel.EntityAttr(notJoinTestAttr("shared_id"), "SharedID"),
+			rel.EntityAttr(notJoinTestAttr("flag"), "Flag"),
+		),
+	)
+
+	// Define a notJoin rule that depends on a non-entity variable (shared_id).
+	// This rule checks if there's no ThirdEntity with the given shared_id and flag=1.
+	noThirdWithFlag := schema.DefNotJoin1("no_third_with_flag", "shared_id_var", func(
+		sharedIDVar rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{
+			rel.Var("third").Type((*ThirdEntity)(nil)),
+			rel.Var("third").AttrEqVar(notJoinTestAttr("shared_id"), sharedIDVar),
+			rel.Var("third").AttrEq(notJoinTestAttr("flag"), 1),
+		}
+	})
+
+	first1 := &FirstEntity{ID: 1, SharedID: 100}
+	second1 := &SecondEntity{ID: 2, SharedID: 100, Value: "test"}
+	third1 := &ThirdEntity{ID: 3, SharedID: 100, Flag: 0}
+	third2 := &ThirdEntity{ID: 4, SharedID: 200, Flag: 1}
+
+	db, err := rel.NewDatabase(schema,
+		rel.Index{Attrs: []rel.Attr{rel.Type}},
+		rel.Index{Attrs: []rel.Attr{rel.Self}},
+		rel.Index{Attrs: []rel.Attr{notJoinTestAttr("id")}},
+		rel.Index{Attrs: []rel.Attr{notJoinTestAttr("shared_id")}},
+		rel.Index{Attrs: []rel.Attr{notJoinTestAttr("flag")}},
+		rel.Index{Attrs: []rel.Attr{notJoinTestAttr("value")}},
+	)
+	require.NoError(t, err)
+	require.NoError(t, db.Insert(first1))
+	require.NoError(t, db.Insert(second1))
+	require.NoError(t, db.Insert(third1))
+	require.NoError(t, db.Insert(third2))
+
+	// Test case 1: Query where shared_id is bound by SecondEntity (at depth 2).
+	// The notJoin should execute after SecondEntity is joined.
+	t.Run("notjoin_executes_after_second_entity", func(t *testing.T) {
+		q, err := rel.NewQuery(schema,
+			// FirstEntity is joined first (depth 1).
+			rel.Var("first").Type((*FirstEntity)(nil)),
+			rel.Var("first").AttrEq(notJoinTestAttr("id"), 1),
+			// SecondEntity is joined second (depth 2) and binds shared_id_var.
+			rel.Var("second").Type((*SecondEntity)(nil)),
+			rel.Var("second").AttrEqVar(notJoinTestAttr("shared_id"), "shared_id_var"),
+			// Join FirstEntity and SecondEntity on shared_id.
+			rel.Var("first").AttrEqVar(notJoinTestAttr("shared_id"), "shared_id_var"),
+			// This notJoin depends on shared_id_var, which is bound by SecondEntity
+			// It should execute at depth 2 or later, not before
+			noThirdWithFlag("shared_id_var"),
+		)
+		require.NoError(t, err)
+
+		var results [][]interface{}
+		err = q.Iterate(db, nil, func(r rel.Result) error {
+			results = append(results, []interface{}{
+				r.Var(rel.Var("first")),
+				r.Var(rel.Var("second")),
+				r.Var(rel.Var("shared_id_var")),
+			})
+			return nil
+		})
+		require.NoError(t, err)
+		// Should find the combination where shared_id=100.
+		require.Len(t, results, 1)
+		require.Equal(t, first1, results[0][0])
+		require.Equal(t, second1, results[0][1])
+		require.Equal(t, 100, results[0][2])
+	})
+
+	// Test case 2: Query where shared_id would cause the notJoin to fail.
+	t.Run("notjoin_filters_results_correctly", func(t *testing.T) {
+		// Add a FirstEntity with shared_id=200.
+		first2 := &FirstEntity{ID: 5, SharedID: 200}
+		second2 := &SecondEntity{ID: 6, SharedID: 200, Value: "test2"}
+		require.NoError(t, db.Insert(first2))
+		require.NoError(t, db.Insert(second2))
+
+		q, err := rel.NewQuery(schema,
+			rel.Var("first").Type((*FirstEntity)(nil)),
+			rel.Var("first").AttrEq(notJoinTestAttr("id"), 5),
+			rel.Var("second").Type((*SecondEntity)(nil)),
+			rel.Var("second").AttrEqVar(notJoinTestAttr("shared_id"), "shared_id_var"),
+			rel.Var("first").AttrEqVar(notJoinTestAttr("shared_id"), "shared_id_var"),
+			noThirdWithFlag("shared_id_var"),
+		)
+		require.NoError(t, err)
+
+		var results [][]interface{}
+		err = q.Iterate(db, nil, func(r rel.Result) error {
+			results = append(results, []interface{}{
+				r.Var(rel.Var("first")),
+				r.Var(rel.Var("second")),
+			})
+			return nil
+		})
+		require.NoError(t, err)
+		// Should find no results because third2 has shared_id=200 and flag=1.
+		require.Empty(t, results)
+	})
+
+	// Test case 3: Complex case with non-entity variable bound at depth 3.
+	t.Run("notjoin_with_variable_bound_at_depth_3", func(t *testing.T) {
+		// Define a more complex notJoin that uses two variables.
+		complexNotJoin := schema.DefNotJoin2("complex_not_join", "sid", "val", func(
+			sidVar, valVar rel.Var,
+		) rel.Clauses {
+			return rel.Clauses{
+				rel.Var("e").Type((*SecondEntity)(nil)),
+				rel.Var("e").AttrEqVar(notJoinTestAttr("shared_id"), sidVar),
+				rel.Var("e").AttrEqVar(notJoinTestAttr("value"), valVar),
+			}
+		})
+
+		q, err := rel.NewQuery(schema,
+			// Depth 1
+			rel.Var("f1").Type((*FirstEntity)(nil)),
+			// Depth 2
+			rel.Var("f2").Type((*FirstEntity)(nil)),
+			rel.Var("f2").AttrNeq(notJoinTestAttr("id"), 1),
+			// Depth 3 - this is where shared_id and value are bound.
+			rel.Var("s").Type((*SecondEntity)(nil)),
+			rel.Var("s").AttrEqVar(notJoinTestAttr("shared_id"), "sid"),
+			rel.Var("s").AttrEqVar(notJoinTestAttr("value"), "val"),
+			// The notJoin should only execute after depth 3.
+			complexNotJoin("sid", "val"),
+			// Add a filter to limit results.
+			rel.Filter("limit", "f1")(func(e *FirstEntity) bool {
+				return e.ID == 1
+			}),
+		)
+		require.NoError(t, err)
+
+		// This should execute without "unbound variable" errors
+		// even though the notJoin depends on variables bound at depth 3
+		err = q.Iterate(db, nil, func(r rel.Result) error {
+			return nil
+		})
+		require.NoError(t, err)
+	})
 }

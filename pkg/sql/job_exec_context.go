@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/redact"
 )
@@ -53,7 +54,7 @@ func (e *plannerJobExecContext) ExtendedEvalContext() *extendedEvalContext {
 func (e *plannerJobExecContext) SessionData() *sessiondata.SessionData {
 	return e.p.SessionData()
 }
-func (e *plannerJobExecContext) SessionDataMutatorIterator() *sessionDataMutatorIterator {
+func (e *plannerJobExecContext) SessionDataMutatorIterator() *sessionmutator.SessionDataMutatorIterator {
 	return e.p.SessionDataMutatorIterator()
 }
 func (e *plannerJobExecContext) ExecCfg() *ExecutorConfig        { return e.p.ExecCfg() }
@@ -84,7 +85,7 @@ type JobExecContext interface {
 	SemaCtx() *tree.SemaContext
 	ExtendedEvalContext() *extendedEvalContext
 	SessionData() *sessiondata.SessionData
-	SessionDataMutatorIterator() *sessionDataMutatorIterator
+	SessionDataMutatorIterator() *sessionmutator.SessionDataMutatorIterator
 	ExecCfg() *ExecutorConfig
 	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *lease.Manager

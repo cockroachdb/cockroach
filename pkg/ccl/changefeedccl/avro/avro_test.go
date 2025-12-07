@@ -72,7 +72,8 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	tableID := descpb.ID(bootstrap.TestingUserDescID(1))
 	semaCtx := makeTestSemaCtx()
 	mutDesc, err := importer.MakeTestingSimpleTableDescriptor(
-		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importer.NoFKs, timeutil.Now().UnixNano())
+		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, timeutil.Now().UnixNano(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +119,7 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.Enc
 			if err != nil {
 				return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
 			}
-			row = append(row, rowenc.DatumToEncDatum(col.GetType(), datum))
+			row = append(row, rowenc.DatumToEncDatumUnsafe(col.GetType(), datum))
 		}
 		rows = append(rows, row)
 	}
@@ -950,8 +951,8 @@ func randEncDatumRow(typ *types.T) rowenc.EncDatumRow {
 	const notNull = false
 	rnd, _ := randutil.NewTestRand()
 	return rowenc.EncDatumRow{
-		rowenc.DatumToEncDatum(typ, randgen.RandDatum(rnd, typ, allowNull)),
-		rowenc.DatumToEncDatum(types.Int, randgen.RandDatum(rnd, types.Int, notNull)),
+		rowenc.DatumToEncDatumUnsafe(typ, randgen.RandDatum(rnd, typ, allowNull)),
+		rowenc.DatumToEncDatumUnsafe(types.Int, randgen.RandDatum(rnd, types.Int, notNull)),
 	}
 }
 
@@ -1058,7 +1059,7 @@ func BenchmarkEncodeDecimal(b *testing.B) {
 	d := &tree.DDecimal{}
 	coeff := int64(rand.Uint64()) % 10000
 	d.Decimal.SetFinite(coeff, 2)
-	encRow[0] = rowenc.DatumToEncDatum(typ, d)
+	encRow[0] = rowenc.DatumToEncDatumUnsafe(typ, d)
 	benchmarkEncodeType(b, typ, encRow)
 }
 

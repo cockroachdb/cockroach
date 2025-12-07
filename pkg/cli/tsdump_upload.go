@@ -10,12 +10,14 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	_ "embed"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,8 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v4"
 )
 
 const (
@@ -71,7 +74,26 @@ var (
 		"GAUGE":   datadogV2.METRICINTAKETYPE_GAUGE.Ptr(),
 		"COUNTER": datadogV2.METRICINTAKETYPE_COUNT.Ptr(),
 	}
+	prometheusNameReplaceRE = regexp.MustCompile("^[^a-zA-Z_:]|[^a-zA-Z0-9_:]")
+	// Skip patterns - metrics that we haven't included for historical reasons
+	skipPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`^auth_`),
+		regexp.MustCompile(`^distsender_rpc_err_errordetailtype_`),
+		regexp.MustCompile(`^gossip_callbacks_`),
+		regexp.MustCompile(`^jobs_auto_config_env_runner_`),
+		regexp.MustCompile(`^jobs_update_table_`),
+		regexp.MustCompile(`^logical_replication_`),
+		regexp.MustCompile(`^sql_crud_`),
+		regexp.MustCompile(`^storage_l\d_`),
+		regexp.MustCompile(`^storage_sstable_compression_`),
+	}
 )
+
+//go:embed files/cockroachdb_metrics_base.yaml
+var cockroachdbMetricsBaseYAMLBytes []byte
+
+//go:embed files/cockroachdb_datadog_metrics.yaml
+var cockroachdbMetricsYAMLBytes []byte
 
 // FailedRequest represents a failed metric upload request that can be retried
 type FailedRequest struct {
@@ -84,6 +106,78 @@ type FailedRequest struct {
 // FailedRequestsFile represents the structure of the failed requests file
 type FailedRequestsFile struct {
 	Requests []FailedRequest `json:"requests"`
+}
+
+// GapFillProcessor interpolates 30-minute resolution counter metrics to 10-second resolution
+// by filling gaps with zero values while preserving the original data points.
+type GapFillProcessor struct{}
+
+func NewGapFillProcessor() *GapFillProcessor {
+	return &GapFillProcessor{}
+}
+
+// BaseMappingsYAML represents the structure of cockroachdb_metrics_base.yaml
+type BaseMappingsYAML struct {
+	RuntimeConditionalMetrics []MetricInfo      `yaml:"runtime_conditional_metrics"`
+	LegacyMetrics             map[string]string `yaml:"legacy_metrics"`
+}
+
+// processCounterMetric interpolates 30-minute resolution counter metrics to 10-second resolution.
+// It checks if the metric is a counter type with 30-minute interval (1800 seconds) and converts
+// it to 10-second resolution by filling gaps with zero values between original data points.
+func (gfp *GapFillProcessor) processCounterMetric(series *datadogV2.MetricSeries) error {
+	// Only process counter metrics
+	if series.Type == nil || *series.Type != datadogV2.METRICINTAKETYPE_COUNT {
+		return nil
+	}
+
+	// Only process 30-minute resolution metrics (1800 seconds)
+	if series.Interval == nil || *series.Interval != 1800 {
+		return nil
+	}
+
+	// If no points or only one point, nothing to interpolate
+	if len(series.Points) <= 1 {
+		// Still update interval to 10 seconds for consistency
+		series.Interval = datadog.PtrInt64(10)
+		return nil
+	}
+
+	// Create new points array with interpolated values
+	var newPoints []datadogV2.MetricPoint
+
+	for i := 0; i < len(series.Points); i++ {
+		currentValue := *series.Points[i].Value
+		currentTimestamp := *series.Points[i].Timestamp
+
+		// Distribute the delta value across 180 points (1800s / 10s = 180)
+		distributedValue := currentValue / 180.0
+
+		newPoints = append(newPoints, datadogV2.MetricPoint{
+			Timestamp: datadog.PtrInt64(currentTimestamp),
+			Value:     datadog.PtrFloat64(distributedValue),
+		})
+
+		// Add 179 zero points (10-second intervals) between current and next
+		for j := 1; j < 180; j++ {
+			// We are adding delta of 0 so that same distributed value is getting published
+			// across all points. This would help us to perform roll ups with 10 seconds
+			// for metrics with 30 minute intervals.
+			// metric value = (metric value/180) * 180
+			interpolatedTimestamp := currentTimestamp + int64(j*10)
+			newPoints = append(newPoints, datadogV2.MetricPoint{
+				Timestamp: datadog.PtrInt64(interpolatedTimestamp),
+				Value:     datadog.PtrFloat64(0.0),
+			})
+		}
+
+	}
+
+	// Update the series with new points and 10-second interval
+	series.Points = newPoints
+	series.Interval = datadog.PtrInt64(10)
+
+	return nil
 }
 
 var newTsdumpUploadID = func(uploadTime time.Time) string {
@@ -122,6 +216,10 @@ type datadogWriter struct {
 	hasFailedRequestsInUpload bool
 	// cumulativeToDeltaProcessor is used to convert cumulative counter metrics to delta metrics
 	cumulativeToDeltaProcessor *CumulativeToDeltaProcessor
+	// gapFillProcessor is used to interpolate 30-minute resolution counter metrics to 10-second resolution
+	gapFillProcessor *GapFillProcessor
+	// metricsNameMap maps metric names to their Datadog format
+	metricsNameMap map[string]string
 }
 
 func makeDatadogWriter(
@@ -139,6 +237,13 @@ func makeDatadogWriter(
 	if err != nil {
 		fmt.Printf(
 			"error loading metric types map: %v\nThis may lead to some metrics not behaving correctly on Datadog.\n", err)
+	}
+
+	metricsNameMap, err := generateMetricsNameMap(context.Background())
+	if err != nil {
+		fmt.Printf(
+			"error loading metrics name map: %v\nThis will affect metric naming consistency.\n", err)
+		return nil, err
 	}
 
 	ctx := context.WithValue(
@@ -185,6 +290,8 @@ func makeDatadogWriter(
 		noOfUploadWorkers:               noOfUploadWorkers,
 		isPartialUploadOfFailedRequests: isPartialUploadOfFailedRequests,
 		cumulativeToDeltaProcessor:      NewCumulativeToDeltaProcessor(),
+		gapFillProcessor:                NewGapFillProcessor(),
+		metricsNameMap:                  metricsNameMap,
 	}, nil
 }
 
@@ -248,6 +355,12 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 		appendTag(series, nodeKey, "0")
 	}
 
+	// Convert metric name to Prometheus format and lookup in metricsNameMap
+	promName := prometheusNameReplaceRE.ReplaceAllString(series.Metric, "_")
+	if datadogName, ok := d.metricsNameMap[promName]; ok {
+		series.Metric = datadogName
+	}
+
 	isSorted := true
 	var previousTimestamp int64
 	for i := 0; i < idata.SampleCount(); i++ {
@@ -281,6 +394,11 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 		if err := d.cumulativeToDeltaProcessor.processCounterMetric(series, isSorted); err != nil {
 			return nil, err
 		}
+	}
+
+	// Process gap-filling for 30-minute resolution counter metrics
+	if err := d.gapFillProcessor.processCounterMetric(series); err != nil {
+		return nil, err
 	}
 
 	return series, nil
@@ -932,4 +1050,190 @@ func loadMetricTypesMap(ctx context.Context) (map[string]string, error) {
 	}
 
 	return metricTypeMap, nil
+}
+
+// generateMetricsNameMap creates a comprehensive metrics name map by:
+// 1. Getting all metrics from gen metric-list output
+// 2. Appending runtime conditional metrics from base YAML
+// 3. Mapping them to Datadog format
+// 4. Mapping with legacy mappings
+func generateMetricsNameMap(ctx context.Context) (map[string]string, error) {
+	// Get all metrics from gen metric-list
+	metricLayers, err := generateMetricList(ctx, true /* skipFiltering */)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to generate metric list")
+	}
+
+	// Load base mappings (runtime conditional + legacy metrics)
+	baseMappings, err := loadBaseMappingsFromFile()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load base mappings")
+	}
+
+	// Load Datadog mappings
+	datadogMappings, err := loadDatadogMappingsFromFile()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load Datadog mappings")
+	}
+
+	// Collect all metrics from metric-list and runtime conditional metrics
+	allMetrics := make([]MetricInfo, 0)
+
+	// Process metrics from gen metric-list
+	for _, layer := range metricLayers {
+		for _, category := range layer.Categories {
+			allMetrics = append(allMetrics, category.Metrics...)
+		}
+	}
+	allMetrics = append(allMetrics, baseMappings.RuntimeConditionalMetrics...)
+	metricNameMap := mapMetricsToDatadog(allMetrics, datadogMappings)
+	metricNameMap = mergeLegacyMappings(baseMappings.LegacyMetrics, metricNameMap)
+
+	return metricNameMap, nil
+}
+
+// mapMetricsToDatadog processes the CRDB metrics and maps them to Datadog names
+func mapMetricsToDatadog(
+	metrics []MetricInfo, datadogMappings map[string]string,
+) map[string]string {
+	result := make(map[string]string)
+
+	for _, metric := range metrics {
+		// Convert to prometheus format (replace non-alphanumeric with underscore)
+		promName := prometheusNameReplaceRE.ReplaceAllString(metric.Name, "_")
+
+		if shouldSkipMetric(promName) {
+			continue
+		}
+
+		// Get Datadog name from mapping, default to normalized CRDB name
+		var datadogName = ""
+		if ddName, exists := datadogMappings[strings.ToLower(promName)]; exists {
+			datadogName = ddName
+		} else {
+			// Normalize metric name for Datadog by replacing hyphens with underscores
+			// Datadog metric names should not contain hyphens
+			datadogName = strings.ReplaceAll(metric.Name, "-", "_")
+		}
+
+		result[promName] = datadogName
+
+		// Add histogram variants if applicable
+		if metric.Type == "HISTOGRAM" {
+			result[promName+"_bucket"] = datadogName + ".bucket"
+			result[promName+"_count"] = datadogName + ".count"
+			result[promName+"_sum"] = datadogName + ".sum"
+		}
+	}
+
+	return result
+}
+
+// shouldSkipMetric checks if a metric name matches any skip patterns
+func shouldSkipMetric(promName string) bool {
+	for _, pattern := range skipPatterns {
+		if pattern.MatchString(promName) {
+			return true
+		}
+	}
+	return false
+}
+
+// mergeLegacyMappings combines legacy mappings with new mappings, giving priority to new mappings
+func mergeLegacyMappings(legacyMappings, newMappings map[string]string) map[string]string {
+	result := make(map[string]string)
+
+	for k, v := range legacyMappings {
+		result[k] = v
+	}
+
+	for k, v := range newMappings {
+		result[k] = v
+	}
+
+	return result
+}
+
+// loadBaseMappingsFromFile loads the base mappings YAML file
+func loadBaseMappingsFromFile() (*BaseMappingsYAML, error) {
+	var baseMappings BaseMappingsYAML
+	if err := yamlutil.UnmarshalStrict(cockroachdbMetricsBaseYAMLBytes, &baseMappings); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal cockroachdb_metrics_base.yaml")
+	}
+
+	return &baseMappings, nil
+}
+
+// loadDatadogMappingsFromFile loads the Datadog mappings YAML file
+func loadDatadogMappingsFromFile() (map[string]string, error) {
+	var datadogMappings map[string]string
+	if err := yamlutil.UnmarshalStrict(cockroachdbMetricsYAMLBytes, &datadogMappings); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal cockroachdb_datadog_metrics.yaml")
+	}
+
+	return datadogMappings, nil
+}
+
+// uploadInitMetrics uploads all available metrics with zero values and current timestamp
+// This eliminates the need for a tsdump file in init mode
+func (d *datadogWriter) uploadInitMetrics() error {
+	if debugTimeSeriesDumpOpts.dryRun {
+		fmt.Println("Dry-run mode enabled. Not actually uploading data to Datadog.")
+	}
+
+	// get list of all metrics
+	metricLayers, err := generateMetricList(context.Background(), true /* skipFiltering */)
+	if err != nil {
+		return errors.Wrap(err, "failed to generate metric list for init upload")
+	}
+
+	currentTimestamp := getCurrentTime().Unix()
+	var successfulUploads, skippedMetrics int
+
+	// batch metrics based on threshold
+	currentBatch := make([]datadogV2.MetricSeries, 0, d.threshold)
+	for _, layer := range metricLayers {
+		for _, category := range layer.Categories {
+			for _, metric := range category.Metrics {
+				series := datadogV2.MetricSeries{
+					Metric: metric.Name,
+					Tags:   []string{},
+					Type:   d.resolveMetricType(metric.Name),
+					Points: []datadogV2.MetricPoint{{
+						Value:     datadog.PtrFloat64(0),
+						Timestamp: datadog.PtrInt64(currentTimestamp),
+					}},
+					Interval: datadog.PtrInt64(debugTimeSeriesDumpOpts.ddMetricInterval),
+				}
+
+				currentBatch = append(currentBatch, series)
+
+				// flush batch when threshold is reached
+				if len(currentBatch) >= d.threshold {
+					_, err := d.emitDataDogMetrics(currentBatch)
+					if err != nil {
+						fmt.Printf("Warning: Failed to upload batch of %d metrics: %v\n", len(currentBatch), err)
+						skippedMetrics += len(currentBatch)
+					} else {
+						successfulUploads += len(currentBatch)
+					}
+					currentBatch = make([]datadogV2.MetricSeries, 0, d.threshold)
+				}
+			}
+		}
+	}
+
+	// flush remaining metrics in the last batch
+	if len(currentBatch) > 0 {
+		_, err := d.emitDataDogMetrics(currentBatch)
+		if err != nil {
+			fmt.Printf("Warning: Failed to upload final batch of %d metrics: %v\n", len(currentBatch), err)
+			skippedMetrics += len(currentBatch)
+		} else {
+			successfulUploads += len(currentBatch)
+		}
+	}
+
+	fmt.Printf("Init upload completed: successfully uploaded %d metrics, skipped %d metrics\n", successfulUploads, skippedMetrics)
+	return nil
 }

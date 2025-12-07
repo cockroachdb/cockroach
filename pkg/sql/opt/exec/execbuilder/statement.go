@@ -168,6 +168,15 @@ func (b *Builder) buildExplain(
 		return b.buildExplainOpt(explainExpr)
 	}
 
+	if explainExpr.Options.Mode == tree.ExplainFingerprint {
+		var ep execPlan
+		ep.root, err = b.factory.ConstructExplainOpt(explainExpr.Fingerprint, exec.ExplainEnvData{})
+		if err != nil {
+			return execPlan{}, colOrdMap{}, err
+		}
+		return ep, b.outputColsFromList(explainExpr.ColList), nil
+	}
+
 	var ep execPlan
 	ep.root, err = b.factory.ConstructExplain(
 		&explainExpr.Options,
@@ -432,7 +441,9 @@ func (b *Builder) buildCancelSessions(
 func (b *Builder) buildCreateStatistics(
 	c *memo.CreateStatisticsExpr,
 ) (_ execPlan, outputCols colOrdMap, err error) {
-	node, err := b.factory.ConstructCreateStatistics(c.Syntax)
+	table := b.mem.Metadata().Table(c.Table)
+	index := table.Index(c.Index)
+	node, err := b.factory.ConstructCreateStatistics(c.Syntax, table, index, c.Constraint)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}

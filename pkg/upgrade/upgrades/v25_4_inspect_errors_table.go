@@ -14,8 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
-// createInspectErrorsTable creates the prepared_transactions system
-// table.
+// createInspectErrorsTable creates the inspect_errors system table.
 func createInspectErrorsTable(
 	ctx context.Context, cv clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {

@@ -146,7 +146,9 @@ package keys
 
 // NB: The sorting order of the symbols below map to the physical layout.
 // Preserve group-wise ordering when adding new constants.
-var _ = [...]interface{}{
+//
+// See TestSchemaIsStable for additional considerations when changing schema.
+var schema = [...]interface{}{
 	MinKey,
 
 	// There are five types of local key data enumerated below: replicated
@@ -176,19 +178,31 @@ var _ = [...]interface{}{
 	//   range as a whole. Though they are replicated, they are unaddressable.
 	//   Typical examples are MVCC stats and the abort span. They all share
 	//   `LocalRangeIDPrefix` and `LocalRangeIDReplicatedInfix`.
-	AbortSpanKey,             // "abc-"
-	RangeGCThresholdKey,      // "lgc-"
-	RangeAppliedStateKey,     // "rask"
-	RangeForceFlushKey,       // "rffk"
-	RangeLeaseKey,            // "rll-"
-	RangePriorReadSummaryKey, // "rprs"
+	LocalRangeIDReplicatedInfix,                 // "r"
+	AbortSpanKey,                                // "abc-"
+	RangeGCThresholdKey,                         // "lgc-"
+	RangeAppliedStateKey,                        // "rask"
+	RangeForceFlushKey,                          // "rffk"
+	RangeLeaseKey,                               // "rll-"
+	RangePriorReadSummaryKey,                    // "rprs"
 	ReplicatedSharedLocksTransactionLatchingKey, // "rsl-"
-	RangeVersionKey, // "rver"
+	RangeVersionKey,                             // "rver"
 
 	//   2. Unreplicated range-ID local keys: These contain metadata that
 	//   pertain to just one replica of a range. They are unreplicated and
 	//   unaddressable. The typical example is the Raft log. They all share
 	//   `LocalRangeIDPrefix` and `localRangeIDUnreplicatedInfix`.
+	//
+	// WARNING: when adding a new key in this section, decide whether it should be
+	// classified as "raft" or "state machine" key, correspondingly to which
+	// engine it resides in:
+	//
+	//	- keys <= RangeTombstoneKey in this prefix are "state machine" engine keys
+	//	- keys > RangeTombstoneKey in this prefix are "raft" engine keys
+	//	- historical exception: RaftReplicaIDKey belongs to the state machine
+	//
+	// Failure to classify may result in replica state corruption in storage.
+	localRangeIDUnreplicatedInfix,  // "u"
 	RangeTombstoneKey,              // "rftb"
 	RaftHardStateKey,               // "rfth"
 	RaftLogKey,                     // "rftl"
@@ -200,6 +214,7 @@ var _ = [...]interface{}{
 	//   as a whole. They are replicated and addressable. Typical examples are
 	//   the range descriptor and transaction records. They all share
 	//   `LocalRangePrefix`.
+	LocalRangePrefix,      // "k"
 	RangeProbeKey,         // "prbe"
 	QueueLastProcessedKey, // "qlpt"
 	RangeDescriptorKey,    // "rdsc"
@@ -208,6 +223,7 @@ var _ = [...]interface{}{
 	//   4. Store local keys: These contain metadata about an individual store.
 	//   They are unreplicated and unaddressable. The typical example is the
 	//   store 'ident' record. They all share `localStorePrefix`.
+	LocalStorePrefix,                 // "s"
 	DeprecatedStoreClusterVersionKey, // "cver"
 	StoreGossipKey,                   // "goss"
 	StoreHLCUpperBoundKey,            // "hlcu"
@@ -219,6 +235,7 @@ var _ = [...]interface{}{
 	StoreLivenessSupporterMetaKey,    // "slsm"
 	StoreCachedSettingsKey,           // "stng"
 	StoreLastUpKey,                   // "uptm"
+	StoreWAGNodeKey,                  // "wagn"
 
 	//   5. Range lock keys for all replicated locks. All range locks share
 	//   LocalRangeLockTablePrefix. Locks can be acquired on global keys and on
@@ -228,6 +245,7 @@ var _ = [...]interface{}{
 	//   Single key locks use a byte, LockTableSingleKeyInfix, that follows
 	//   the LocalRangeLockTablePrefix. This is to keep the single-key locks
 	//   separate from (future) range locks.
+	LocalRangeLockTablePrefix, // "z"
 	LockTableSingleKey,
 
 	// The global keyspace includes the meta{1,2}, system, system tenant SQL

@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -34,7 +35,9 @@ func TestUnbufferedRegWithStreamManager(t *testing.T) {
 	defer stopper.Stop(ctx)
 	testServerStream := newTestServerStream()
 	smMetrics := NewStreamManagerMetrics()
-	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
+	st := cluster.MakeTestingClusterSettings()
+
+	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
 	sm := NewStreamManager(bs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 
@@ -45,7 +48,8 @@ func TestUnbufferedRegWithStreamManager(t *testing.T) {
 	})
 	t.Run("register 50 streams", func(t *testing.T) {
 		for id := int64(0); id < 50; id++ {
-			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+			sm.RegisteringStream(id)
+			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpSnap */
 				false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
 				sm.NewStream(id, r1))
 			require.True(t, registered)
@@ -62,13 +66,14 @@ func TestUnbufferedRegWithStreamManager(t *testing.T) {
 		})
 	})
 	testServerStream.reset()
-	t.Run("publish 20 logical ops to 50 registrations", func(t *testing.T) {
-		for i := 0; i < 20; i++ {
+	eventCount := testProcessorEventCCap - 1
+	t.Run(fmt.Sprintf("publish %d logical ops to 50 registrations", eventCount), func(t *testing.T) {
+		for range eventCount {
 			p.ConsumeLogicalOps(ctx, writeValueOp(hlc.Timestamp{WallTime: 1}))
 		}
-		testServerStream.waitForEventCount(t, 20*50)
+		testServerStream.waitForEventCount(t, eventCount*50)
 		testServerStream.iterateEventsByStreamID(func(_ int64, events []*kvpb.MuxRangeFeedEvent) {
-			require.Equal(t, 20, len(events))
+			require.Equal(t, eventCount, len(events))
 			require.NotNil(t, events[0].RangeFeedEvent.Val)
 		})
 	})
@@ -106,7 +111,8 @@ func TestUnbufferedRegCorrectnessOnDisconnect(t *testing.T) {
 	defer stopper.Stop(ctx)
 	testServerStream := newTestServerStream()
 	smMetrics := NewStreamManagerMetrics()
-	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
+	st := cluster.MakeTestingClusterSettings()
+	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
 	sm := NewStreamManager(bs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 	defer sm.Stop(ctx)
@@ -137,8 +143,9 @@ func TestUnbufferedRegCorrectnessOnDisconnect(t *testing.T) {
 	evErr.MustSetValue(&kvpb.RangeFeedError{Error: *discErr})
 
 	// Register one stream.
+	sm.RegisteringStream(s1)
 	registered, d, _ := p.Register(ctx, h.span, startTs,
-		makeCatchUpIterator(catchUpIter, span, startTs), /* catchUpIter */
+		makeCatchUpSnap(catchUpIter, span, startTs), /* catchUpSnap */
 		true /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
 		sm.NewStream(s1, r1))
 	sm.AddStream(s1, d)
@@ -251,11 +258,11 @@ func TestUnbufferedRegOnCatchUpSwitchOver(t *testing.T) {
 			withCatchUpIter(iter)).(*unbufferedRegistration)
 		catchUpReg.publish(ctx, ev1, nil /* alloc */)
 		catchUpReg.Disconnect(kvpb.NewError(nil))
-		require.Nil(t, catchUpReg.mu.catchUpIter)
+		require.Nil(t, catchUpReg.mu.catchUpSnap)
 		// Catch up scan should not be initiated.
 		go catchUpReg.runOutputLoop(ctx, 0)
 		require.NoError(t, catchUpReg.waitForCaughtUp(ctx))
-		require.Nil(t, catchUpReg.mu.catchUpIter)
+		require.Nil(t, catchUpReg.mu.catchUpSnap)
 		// No events should be sent since the registration has catch up buffer and
 		// is disconnected before catch up scan starts.
 		require.Nil(t, s.GetAndClearEvents())
@@ -359,19 +366,17 @@ func TestUnbufferedRegOnCatchUpSwitchOver(t *testing.T) {
 			defer wg.Done()
 			r.runOutputLoop(ctx, 0)
 		}()
-		capOfBuf := cap(r.mu.catchUpBuf)
-		r.publish(ctx, ev1, &SharedBudgetAllocation{refCount: 1})
-		r.publish(ctx, ev2, &SharedBudgetAllocation{refCount: 1})
-		r.publish(ctx, ev3, &SharedBudgetAllocation{refCount: 1})
-		r.publish(ctx, ev4, &SharedBudgetAllocation{refCount: 1})
-		r.publish(ctx, ev5, &SharedBudgetAllocation{refCount: 1})
+		postCatchUpEvents := []*kvpb.RangeFeedEvent{ev1, ev2, ev3, ev4, ev5}
+		for _, ev := range postCatchUpEvents {
+			r.publish(ctx, ev, &SharedBudgetAllocation{refCount: 1})
+		}
 		catchUpEvents := expEvents(false)
 		wg.Wait()
 
 		require.False(t, r.getOverflowed())
 		require.Nil(t, r.getBuf())
-		s.waitForEventCount(t, capOfBuf+len(catchUpEvents))
+		s.waitForEventCount(t, len(postCatchUpEvents)+len(catchUpEvents))
 		require.Equal(t,
-			[]*kvpb.RangeFeedEvent{ev1, ev2, ev3, ev4, ev5}, s.mu.events[len(catchUpEvents):])
+			postCatchUpEvents, s.mu.events[len(catchUpEvents):])
 	})
 }

@@ -9,9 +9,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	gogotypes "github.com/gogo/protobuf/types"
 )
 
 // IndexBackfillPlanner holds dependencies for an index backfiller
@@ -81,6 +84,15 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	}
 	// Add spans that were already completed before the job resumed.
 	addCompleted(progress.CompletedSpans...)
+	sstManifestBuf := backfill.NewSSTManifestBuffer(progress.SSTManifests)
+	progress.SSTManifests = sstManifestBuf.Snapshot()
+	updateSSTManifests := func(newManifests []jobspb.IndexBackfillSSTManifest) {
+		progress.SSTManifests = sstManifestBuf.Append(newManifests)
+	}
+	mode, err := getIndexBackfillDistributedMergeMode(job)
+	if err != nil {
+		return err
+	}
 	updateFunc := func(
 		ctx context.Context, meta *execinfrapb.ProducerMetadata,
 	) error {
@@ -88,6 +100,13 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 			return nil
 		}
 		progress.CompletedSpans = addCompleted(meta.BulkProcessorProgress.CompletedSpans...)
+		var mapProgress execinfrapb.IndexBackfillMapProgress
+		if gogotypes.Is(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress) {
+			if err := gogotypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress); err != nil {
+				return err
+			}
+			updateSSTManifests(mapProgress.SSTManifests)
+		}
 		// Make sure the progress update does not contain overlapping spans.
 		// This is a sanity check that only runs in test configurations, since it
 		// is an expensive n^2 check.
@@ -106,7 +125,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 
 		knobs := &ib.execCfg.DistSQLSrv.TestingKnobs
 		if knobs.RunBeforeIndexBackfillProgressUpdate != nil {
-			knobs.RunBeforeIndexBackfillProgressUpdate(ctx, progress.CompletedSpans)
+			knobs.RunBeforeIndexBackfillProgressUpdate(ctx, meta.BulkProcessorProgress.CompletedSpans)
 		}
 		return tracker.SetBackfillProgress(ctx, progress)
 	}
@@ -128,6 +147,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	// timestamp because other writing transactions have been writing at the
 	// appropriate timestamps in-between.
 	readAsOf := now
+	useDistributedMerge := mode == jobspb.IndexBackfillDistributedMergeMode_Enabled
 	run, retErr := ib.plan(
 		ctx,
 		descriptor,
@@ -137,6 +157,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		spansToDo,
 		progress.DestIndexIDs,
 		progress.SourceIndexID,
+		useDistributedMerge,
 		updateFunc,
 	)
 	if retErr != nil {
@@ -188,6 +209,7 @@ func (ib *IndexBackfillPlanner) plan(
 	sourceSpans []roachpb.Span,
 	indexesToBackfill []descpb.IndexID,
 	sourceIndexID descpb.IndexID,
+	useDistributedMerge bool,
 	callback func(_ context.Context, meta *execinfrapb.ProducerMetadata) error,
 ) (runFunc func(context.Context) error, _ error) {
 
@@ -211,6 +233,9 @@ func (ib *IndexBackfillPlanner) plan(
 			*td.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize,
 			indexesToBackfill, sourceIndexID,
 		)
+		if useDistributedMerge {
+			backfill.EnableDistributedMergeIndexBackfillSink(ib.execCfg.NodeInfo.NodeID.SQLInstanceID(), &spec)
+		}
 		var err error
 		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, sourceSpans)
 		return err
@@ -235,4 +260,16 @@ func (ib *IndexBackfillPlanner) plan(
 		ib.execCfg.DistSQLPlanner.Run(ctx, planCtx, nil, p, recv, evalCtxCopy, nil)
 		return cbw.Err()
 	}, nil
+}
+
+func getIndexBackfillDistributedMergeMode(
+	job *jobs.Job,
+) (jobspb.IndexBackfillDistributedMergeMode, error) {
+	payload := job.Payload()
+	details := payload.GetNewSchemaChange()
+	if details == nil {
+		return jobspb.IndexBackfillDistributedMergeMode_Disabled,
+			errors.AssertionFailedf("expected new schema change details on job %d", job.ID())
+	}
+	return details.DistributedMergeMode, nil
 }

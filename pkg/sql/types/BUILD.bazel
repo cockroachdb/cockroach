@@ -38,6 +38,7 @@ go_test(
     name = "types_test",
     size = "small",
     srcs = [
+        "canonical_test.go",
         "types_test.go",
         "types_text_marshal_test.go",
     ],
@@ -48,6 +49,7 @@ go_test(
         "//pkg/sql/oidext",
         "//pkg/sql/sem/catid",
         "//pkg/util/protoutil",
+        "@com_github_google_go_cmp//cmp",
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

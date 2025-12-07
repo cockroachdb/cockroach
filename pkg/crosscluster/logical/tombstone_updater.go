@@ -159,7 +159,7 @@ func (tu *tombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.De
 		tu.ReleaseLeases(ctx)
 
 		var err error
-		tu.leased.descriptor, err = tu.leaseMgr.Acquire(ctx, timestamp, tu.descID)
+		tu.leased.descriptor, err = tu.leaseMgr.Acquire(ctx, lease.TimestampToReadTimestamp(timestamp), tu.descID)
 		if err != nil {
 			return row.Deleter{}, err
 		}

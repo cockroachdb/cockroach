@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -108,7 +109,8 @@ func newEventConsumer(
 		if encodingOpts.Envelope == changefeedbase.OptEnvelopeEnriched {
 			var schemaInfo map[descpb.ID]tableSchemaInfo
 			if inSet(changefeedbase.EnrichedPropertySource, encodingOpts.EnrichedProperties) {
-				schemaInfo, err = GetTableSchemaInfo(ctx, cfg, feed.Targets)
+				targetTS := spec.GetSchemaTS()
+				schemaInfo, err = GetTableSchemaInfo(ctx, cfg, feed.Targets, targetTS)
 				if err != nil {
 					return nil, err
 				}
@@ -301,7 +303,7 @@ func newEvaluator(
 				"error upgrading changefeed expression.  Please recreate changefeed manually"))
 		}
 		if newExpr != sc {
-			log.Dev.Warningf(ctx,
+			log.Changefeed.Warningf(ctx,
 				"changefeed expression %s (job %d) created prior to 22.2-30 rewritten as %s",
 				tree.AsString(sc), spec.JobID,
 				tree.AsString(newExpr))
@@ -342,7 +344,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	// Request CPU time to use for event consumption, block if this time is
 	// unavailable. If there is unused CPU time left from the last call to
 	// Pace, then use that time instead of blocking.
-	if err := c.pacer.Pace(ctx); err != nil {
+	if _, err := c.pacer.Pace(ctx); err != nil {
 		return err
 	}
 
@@ -360,6 +362,9 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		// Column families are stored contiguously, so we'll get
 		// events for each one even if we're not watching them all.
 		if errors.Is(err, cdcevent.ErrUnwatchedFamily) {
+			// Release the event's allocation since we're not processing it.
+			a := ev.DetachAlloc()
+			a.Release(ctx)
 			return nil
 		}
 		return err
@@ -376,6 +381,9 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		// Column families are stored contiguously, so we'll get
 		// events for each one even if we're not watching them all.
 		if errors.Is(err, cdcevent.ErrUnwatchedFamily) {
+			// Release the event's allocation since we're not processing it.
+			a := ev.DetachAlloc()
+			a.Release(ctx)
 			return nil
 		}
 		return err
@@ -441,7 +449,7 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 		}
 	}
 
-	stop := c.metrics.Timers.Encode.Start()
+	timer := c.metrics.Timers.Encode.Start()
 	if c.encodingOpts.Format == changefeedbase.OptFormatParquet {
 		return c.encodeForParquet(
 			ctx, updatedRow, prevRow, topic, schemaTS, updatedRow.MvccTimestamp,
@@ -465,7 +473,7 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	// Since we're done processing/converting this event, and will not use much more
 	// than len(key)+len(bytes) worth of resources, adjust allocation to match.
 	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
-	stop()
+	timer.End()
 
 	headers, err := c.makeRowHeaders(ctx, updatedRow)
 	if err != nil {
@@ -479,13 +487,13 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	})
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
-			log.Dev.Warningf(ctx, `sink failed to emit row: %v`, err)
+			log.Changefeed.Warningf(ctx, `sink failed to emit row: %v`, err)
 			c.metrics.SinkErrors.Inc(1)
 		}
 		return err
 	}
 	if log.V(3) {
-		log.Dev.Infof(ctx, `r %s: %s(%+v) -> %s`, updatedRow.TableName, keyCopy, headers, valueCopy)
+		log.Changefeed.Infof(ctx, `r %s: %s(%+v) -> %s`, updatedRow.TableName, keyCopy, headers, valueCopy)
 	}
 	return nil
 }
@@ -518,7 +526,7 @@ func (c *kvEventToRowConsumer) makeRowHeaders(
 	}
 	if objIt == nil {
 		if jsonHeaderWrongTypeLogLim.ShouldLog() || log.V(2) {
-			log.Dev.Warningf(ctx, "headers column %s must be a JSON object, was %s, in: %s", c.encodingOpts.HeadersJSONColName, redact.SafeString(headersJSON.Type().String()), updatedRow.DebugString())
+			log.Changefeed.Warningf(ctx, "headers column %s must be a JSON object, was %s, in: %s", c.encodingOpts.HeadersJSONColName, redact.SafeString(headersJSON.Type().String()), updatedRow.DebugString())
 		}
 		return nil, nil
 	}
@@ -536,7 +544,7 @@ func (c *kvEventToRowConsumer) makeRowHeaders(
 			headers[objIt.Key()] = []byte(objIt.Value().String())
 		default:
 			if jsonHeaderWrongValTypeLogLim.ShouldLog() || log.V(2) {
-				log.Dev.Warningf(ctx, "headers column %s must be a JSON object with primitive values, got %s - %s, in: %s",
+				log.Changefeed.Warningf(ctx, "headers column %s must be a JSON object with primitive values, got %s - %s, in: %s",
 					c.encodingOpts.HeadersJSONColName, redact.SafeString(objIt.Value().Type().String()), objIt.Value(), updatedRow.DebugString())
 			}
 		}
@@ -631,10 +639,9 @@ type parallelEventConsumer struct {
 var _ eventConsumer = (*parallelEventConsumer)(nil)
 
 func (c *parallelEventConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
-	startTime := timeutil.Now().UnixNano()
+	start := crtime.NowMono()
 	defer func() {
-		time := timeutil.Now().UnixNano()
-		c.metrics.ParallelConsumerConsumeNanos.RecordValue(time - startTime)
+		c.metrics.ParallelConsumerConsumeNanos.RecordValue(start.Elapsed().Nanoseconds())
 	}()
 
 	bucket := c.getBucketForEvent(ev)
@@ -702,7 +709,7 @@ func (c *parallelEventConsumer) workerLoop(
 	defer func() {
 		err := consumer.Close()
 		if err != nil {
-			log.Dev.Errorf(ctx, "closing consumer: %v", err)
+			log.Changefeed.Errorf(ctx, "closing consumer: %v", err)
 		}
 	}()
 
@@ -760,10 +767,9 @@ func (c *parallelEventConsumer) setWorkerError(err error) error {
 // Flush flushes the consumer by blocking until all events are consumed,
 // or until there is an error.
 func (c *parallelEventConsumer) Flush(ctx context.Context) error {
-	startTime := timeutil.Now().UnixNano()
+	start := crtime.NowMono()
 	defer func() {
-		time := timeutil.Now().UnixNano()
-		c.metrics.ParallelConsumerFlushNanos.RecordValue(time - startTime)
+		c.metrics.ParallelConsumerFlushNanos.RecordValue(start.Elapsed().Nanoseconds())
 	}()
 
 	needFlush := func() bool {
@@ -825,7 +831,7 @@ func readOneJSONValue(row cdcevent.Row, colName string) (*tree.DJSON, error) {
 		if d == tree.DNull {
 			return nil
 		}
-		if valJSON, ok = tree.AsDJSON(d); !ok {
+		if valJSON, ok = d.(*tree.DJSON); !ok {
 			return errors.Newf("expected a JSON object, got %s", d.ResolvedType())
 		}
 		return nil

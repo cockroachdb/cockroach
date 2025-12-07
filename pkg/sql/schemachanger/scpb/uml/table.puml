@@ -57,6 +57,18 @@ ColumnFamily :  TableID
 ColumnFamily :  FamilyID
 ColumnFamily :  Name
 
+object ColumnGeneratedAsIdentity
+
+ColumnGeneratedAsIdentity :  TableID
+ColumnGeneratedAsIdentity :  ColumnID
+ColumnGeneratedAsIdentity :  Type
+ColumnGeneratedAsIdentity :  SequenceOption
+
+object ColumnHidden
+
+ColumnHidden :  TableID
+ColumnHidden :  ColumnID
+
 object ColumnName
 
 ColumnName :  TableID
@@ -81,7 +93,6 @@ ColumnType :  TableID
 ColumnType :  FamilyID
 ColumnType :  ColumnID
 ColumnType :  TypeT
-ColumnType :  IsNullable
 ColumnType :  ComputeExpr
 ColumnType :  IsVirtual
 ColumnType :  ElementCreationMetadata
@@ -384,6 +395,7 @@ SecondaryIndex :  Index
 SecondaryIndex :  EmbeddedExpr
 SecondaryIndex :  RecreateSourceIndexID
 SecondaryIndex :  RecreateTargetIndexID
+SecondaryIndex :  HideForPrimaryKeyRecreated
 
 object Sequence
 
@@ -568,6 +580,8 @@ Column <|-- ColumnComment
 Column <|-- ColumnComputeExpression
 Column <|-- ColumnDefaultExpression
 Table <|-- ColumnFamily
+Column <|-- ColumnGeneratedAsIdentity
+Column <|-- ColumnHidden
 Column <|-- ColumnName
 Column <|-- ColumnNotNull
 Column <|-- ColumnOnUpdateExpression

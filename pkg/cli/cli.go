@@ -356,7 +356,7 @@ func debugSignalSetup() func() {
 				case <-exit:
 					return
 				case <-debugSignalCh:
-					log.Shout(ctx, severity.INFO, "setting up localhost debugging endpoint...")
+					log.Dev.Shout(ctx, severity.INFO, "setting up localhost debugging endpoint...")
 					mux := http.NewServeMux()
 					mux.HandleFunc("/debug/pprof/", pprof.Index)
 					mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
@@ -367,7 +367,7 @@ func debugSignalSetup() func() {
 					listenAddr := "localhost:0"
 					listener, err := net.Listen("tcp", listenAddr)
 					if err != nil {
-						log.Shoutf(ctx, severity.WARNING, "debug server could not start listening on %s: %v", listenAddr, err)
+						log.Dev.Shoutf(ctx, severity.WARNING, "debug server could not start listening on %s: %v", listenAddr, err)
 						continue
 					}
 
@@ -377,7 +377,7 @@ func debugSignalSetup() func() {
 							log.Dev.Warningf(ctx, "debug server: %v", err)
 						}
 					}()
-					log.Shoutf(ctx, severity.INFO, "debug server listening on %s", listener.Addr())
+					log.Dev.Shoutf(ctx, severity.INFO, "debug server listening on %s", listener.Addr())
 					<-exit
 					if err := server.Shutdown(ctx); err != nil {
 						log.Dev.Warningf(ctx, "error shutting down debug server: %s", err)

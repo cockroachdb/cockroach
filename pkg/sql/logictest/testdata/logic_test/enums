@@ -1987,3 +1987,132 @@ CREATE TABLE public.t (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 ) WITH (schema_locked = true);
+
+# Testcase for issue 154461: drop an enum value when the histogram contains
+# range counts.
+subtest 154461
+
+statement ok
+USE test
+
+statement ok
+CREATE TYPE e154461 AS ENUM ('e', 'f', 'g')
+
+statement ok
+CREATE TABLE t154461 (a e154461, INDEX (a)) WITH (sql_stats_histogram_buckets_count = 2)
+
+statement ok
+INSERT INTO t154461 VALUES ('e'), ('e'), ('f'), ('g'), ('g')
+
+statement ok
+CREATE STATISTICS s FROM t154461
+
+query T
+SELECT * FROM t154461 WHERE a != 'g' ORDER BY a
+----
+e
+e
+f
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t154461]
+WHERE statistics_name = 's' AND column_names = '{a}'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+'e'          0           0                    2
+'g'          1           1                    2
+
+query T
+SELECT jsonb_pretty(stat)
+FROM (
+  SELECT json_array_elements(statistics) - 'created_at' - 'id' - 'avg_size' AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE t154461]
+)
+WHERE stat->>'columns' = '["a"]'
+----
+{
+    "columns": [
+        "a"
+    ],
+    "distinct_count": 3,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 2,
+            "num_range": 0,
+            "upper_bound": "e"
+        },
+        {
+            "distinct_range": 1,
+            "num_eq": 2,
+            "num_range": 1,
+            "upper_bound": "g"
+        }
+    ],
+    "histo_col_type": "test.public.e154461",
+    "histo_version": 3,
+    "name": "s",
+    "null_count": 0,
+    "row_count": 5
+}
+
+# Now drop the enum value that is the first bucket in the 2-bucket histogram.
+
+statement ok
+DELETE FROM t154461 WHERE a = 'e'
+
+statement ok
+ALTER TYPE e154461 DROP VALUE 'e'
+
+query T
+SELECT * FROM t154461 WHERE a != 'g' ORDER BY a
+----
+f
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t154461]
+WHERE statistics_name = 's' AND column_names = '{a}'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+'f'          0           0                    1
+'g'          0           0                    2
+
+query T
+SELECT jsonb_pretty(stat)
+FROM (
+  SELECT json_array_elements(statistics) - 'created_at' - 'id' - 'avg_size' AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE t154461]
+)
+WHERE stat->>'columns' = '["a"]'
+----
+{
+    "columns": [
+        "a"
+    ],
+    "distinct_count": 2,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 1,
+            "num_range": 0,
+            "upper_bound": "f"
+        },
+        {
+            "distinct_range": 0,
+            "num_eq": 2,
+            "num_range": 0,
+            "upper_bound": "g"
+        }
+    ],
+    "histo_col_type": "test.public.e154461",
+    "histo_version": 3,
+    "name": "s",
+    "null_count": 0,
+    "row_count": 5
+}

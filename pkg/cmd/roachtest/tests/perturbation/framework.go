@@ -304,6 +304,8 @@ func (v variations) makeClusterSpec() spec.ClusterSpec {
 	// Disable cluster reuse to avoid potential cgroup side effects.
 	if v.perturbationName() == "slowDisk" {
 		opts = append(opts, spec.ReuseNone())
+		// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
+		opts = append(opts, spec.Arch(spec.AllExceptFIPS))
 	}
 	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, opts...)
 }

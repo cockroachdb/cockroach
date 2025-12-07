@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insightspb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -128,31 +129,31 @@ func TestLatencyQuantileDetector(t *testing.T) {
 			name             string
 			seedLatency      time.Duration
 			candidateLatency time.Duration
-			status           Statement_Status
+			status           insightspb.Statement_Status
 			isSlow           bool
 		}{{
 			name:             "slow and failed statement",
 			seedLatency:      100 * time.Millisecond,
 			candidateLatency: 200 * time.Millisecond,
-			status:           Statement_Failed,
+			status:           insightspb.Statement_Failed,
 			isSlow:           true,
 		}, {
 			name:             "slow and non-failed statement",
 			seedLatency:      100 * time.Millisecond,
 			candidateLatency: 200 * time.Millisecond,
-			status:           Statement_Completed,
+			status:           insightspb.Statement_Completed,
 			isSlow:           true,
 		}, {
 			name:             "fast and non-failed statement",
 			seedLatency:      100 * time.Millisecond,
 			candidateLatency: 50 * time.Millisecond,
-			status:           Statement_Completed,
+			status:           insightspb.Statement_Completed,
 			isSlow:           false,
 		}, {
 			name:             "fast and failed statement",
 			seedLatency:      100 * time.Millisecond,
 			candidateLatency: 50 * time.Millisecond,
-			status:           Statement_Failed,
+			status:           insightspb.Statement_Failed,
 			isSlow:           false,
 		}}
 

@@ -58,6 +58,7 @@ func runSQLStatsMixedVersion(ctx context.Context, t test.Test, c cluster.Cluster
 		// the `workload fixtures import` command, which is only supported
 		// reliably multi-tenant mode starting from that version.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
+		mixedversion.WithWorkloadNodes(c.WorkloadNode()),
 	)
 	flushInterval := 2 * time.Minute
 
@@ -74,7 +75,7 @@ func runSQLStatsMixedVersion(ctx context.Context, t test.Test, c cluster.Cluster
 	}
 
 	mvt.OnStartup("set cluster settings", setClusterSettings)
-	stopTpcc := mvt.Workload("tpcc", c.WorkloadNode(), initWorkload, runWorkload, false /* overrideBinary */)
+	stopTpcc := mvt.Workload("tpcc", c.WorkloadNode(), initWorkload, runWorkload)
 	defer stopTpcc()
 
 	requestTypes := map[string]serverpb.CombinedStatementsStatsRequest_StatsType{

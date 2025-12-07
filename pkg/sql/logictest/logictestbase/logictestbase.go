@@ -95,6 +95,9 @@ type TestClusterConfig struct {
 	DisableSchemaLockedByDefault bool
 	// PrepareQueries executes queries and statements with Prepare and Execute.
 	PrepareQueries bool
+	// EnableLeasedDescriptorSupport enables leased descriptors for pg_catalog /
+	// crdb_internal and locked leasing behavior.
+	EnableLeasedDescriptorSupport bool
 }
 
 // TenantMode is the type of the UseSecondaryTenant field in TestClusterConfig.
@@ -284,7 +287,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// local is the configuration where we run all tests which have bad
 		// interactions with the default test tenant.
 		//
-		// TODO(#76378): We should review this choice. Why can't we use "Random"
+		// TODO(#156124): We should review this choice. Why can't we use "Random"
 		// here? If there are specific tests that are incompatible, we can
 		// flag them to run only in a separate config.
 		UseSecondaryTenant:          Never,
@@ -353,7 +356,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// restrictive in the way we allow zone configs to be modified by
 		// secondary tenants. See #100787 for more info.
 		//
-		// TODO(#76378): We should review this choice. Zone configs have
+		// TODO(#156124): We should review this choice. Zone configs have
 		// been supported for secondary tenants since v22.2.
 		// Should this config use "Random" instead?
 		UseSecondaryTenant: Never,
@@ -465,7 +468,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// locality optimized search working in multi-tenant configurations.
 		// Tracked with #80678.
 		//
-		// TODO(#76378): We've fixed that issue. Review this choice. Can
+		// TODO(#156124): We've fixed that issue. Review this choice. Can
 		// it be "Random" instead? Then we can merge it with the next
 		// config below.
 		UseSecondaryTenant:          Never,
@@ -496,44 +499,34 @@ var LogicTestConfigs = []TestClusterConfig{
 		Localities: multiregion15node5region3azsLocalities,
 	},
 	{
-		// This config runs tests using 25.2 cluster version, simulating a node that
+		// This config runs tests using 25.4 cluster version, simulating a node that
 		// is operating in a mixed-version cluster.
-		Name:                        "local-mixed-25.2",
+		Name:                        "local-mixed-25.4",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V25_2,
-		DisableUpgrade:              true,
-		DeclarativeCorpusCollection: true,
-		// Mixed version clusters do not support disabling schema_locked
-		// automatically, since we added more statements in 25.3.
-		// Note: This can be removed once the mixed version level is 25.3,
-		// since the entire test suite should be compatible.
-		DisableSchemaLockedByDefault: true,
-	},
-	{
-		// This config runs tests using 25.3 cluster version, simulating a node that
-		// is operating in a mixed-version cluster.
-		Name:                        "local-mixed-25.3",
-		NumNodes:                    1,
-		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V25_3,
+		BootstrapVersion:            clusterversion.V25_4,
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
 	},
 	{
-		// This config runs a cluster with 3 nodes, with a separate process per
-		// node. The nodes initially start on v25.2.
-		Name:                     "cockroach-go-testserver-25.2",
-		UseCockroachGoTestserver: true,
-		BootstrapVersion:         clusterversion.V25_2,
-		NumNodes:                 3,
+		Name:                "local-leased-descriptors",
+		NumNodes:            1,
+		OverrideDistSQLMode: "off",
+		// local is the configuration where we run all tests which have bad
+		// interactions with the default test tenant.
+		//
+		// TODO(#156124): We should review this choice. Why can't we use "Random"
+		// here? If there are specific tests that are incompatible, we can
+		// flag them to run only in a separate config.
+		UseSecondaryTenant:            Never,
+		EnableLeasedDescriptorSupport: true,
 	},
 	{
 		// This config runs a cluster with 3 nodes, with a separate process per
-		// node. The nodes initially start on v25.3.
-		Name:                     "cockroach-go-testserver-25.3",
+		// node. The nodes initially start on v25.4.
+		Name:                     "cockroach-go-testserver-25.4",
 		UseCockroachGoTestserver: true,
-		BootstrapVersion:         clusterversion.V25_3,
+		BootstrapVersion:         clusterversion.V25_4,
 		NumNodes:                 3,
 	},
 }
@@ -623,8 +616,7 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
-		"local-mixed-25.2",
-		"local-mixed-25.3",
+		"local-mixed-25.4",
 	),
 
 	// Special alias for all 5 node configs.
@@ -656,14 +648,12 @@ var DefaultConfigSets = map[string]ConfigSet{
 
 	// Special alias for all testserver configs (for mixed-version testing).
 	"cockroach-go-testserver-configs": makeConfigSet(
-		"cockroach-go-testserver-25.2",
-		"cockroach-go-testserver-25.3",
+		"cockroach-go-testserver-25.4",
 	),
 
 	// Special alias for configs where schema locked is disabled.
 	"schema-locked-disabled": makeConfigSet(
 		"local-legacy-schema-changer",
-		"local-mixed-25.2",
 	),
 }
 
@@ -818,6 +808,9 @@ func processConfigs(
 		// config list.
 		names := getDefaultConfigListNames(blockedConfig)
 		if len(names) == 0 {
+			if !ConfigExists(blockedConfig) && blockedConfig != "metamorphic-batch-sizes" {
+				panic(fmt.Sprintf("attempted to block logic test config that doesn't exist: %s", blockedConfig))
+			}
 			blocklist[blockedConfig] = issueNo
 		} else {
 			for _, name := range names {
@@ -908,6 +901,22 @@ func ConfigIsInDefaultList(configName, defaultName string) bool {
 
 func getDefaultConfigListNames(name string) []string {
 	return DefaultConfigSets[name].ConfigNames()
+}
+
+var allConfigNames = make(map[string]struct{}, len(LogicTestConfigs))
+
+func init() {
+	for _, cfg := range LogicTestConfigs {
+		allConfigNames[cfg.Name] = struct{}{}
+	}
+}
+
+// ConfigExists returns whether the given name matches either a config or an
+// alias.
+func ConfigExists(name string) bool {
+	_, config := allConfigNames[name]
+	_, alias := DefaultConfigSets[name]
+	return config || alias
 }
 
 // ConfigCalculator is used to enumerate a map of configuration -> file.

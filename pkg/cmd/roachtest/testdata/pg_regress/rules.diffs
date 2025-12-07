@@ -1229,7 +1229,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  	   AND rsl.sl_len_cm >= rsh.slminlen_cm
  	   AND rsl.sl_len_cm <= rsh.slmaxlen_cm;
 +ERROR:  unknown function: int4smaller()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  INSERT INTO unit VALUES ('cm', 1.0);
  INSERT INTO unit VALUES ('m', 100.0);
  INSERT INTO unit VALUES ('inch', 2.54);

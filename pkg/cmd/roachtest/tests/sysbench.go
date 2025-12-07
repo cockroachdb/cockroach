@@ -197,9 +197,15 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	var start time.Time
 	runWorkload := func(ctx context.Context) error {
 		t.Status("preparing workload")
-		cmd := opts.cmd(useHAProxy /* haproxy */)
 		{
-			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), roachtestutil.PrefixCmdOutputWithTimestamp(cmd+" prepare"))
+			opts := opts
+			// We often see the prepare phase hit `result is ambiguous: error=replica unavailable`
+			// due to io overload. Sysbench prepare parallelizes work based on number of tables,
+			// so limit concurrency to half the number of tables so we aren't inserting into every
+			// table at once.
+			opts.concurrency = opts.tables / 2
+
+			result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), roachtestutil.PrefixCmdOutputWithTimestamp(opts.cmd(useHAProxy)+" prepare"))
 			if err != nil {
 				return err
 			} else if msg, crashed := detectSysbenchCrash(result); crashed {
@@ -231,7 +237,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 		t.Status("running workload")
 		start = timeutil.Now()
-		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), roachtestutil.PrefixCmdOutputWithTimestamp(cmd+" run"))
+		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()), roachtestutil.PrefixCmdOutputWithTimestamp(opts.cmd(useHAProxy)+" run"))
 
 		if msg, crashed := detectSysbenchCrash(result); crashed {
 			t.Skipf("%s; skipping test", msg)

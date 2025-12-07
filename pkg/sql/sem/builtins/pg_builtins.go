@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -773,12 +773,45 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}, {Name: "arg_num", Typ: types.Int4}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Body:       "SELECT NULL",
+			Body: `
+WITH defaults_parsed AS (
+  SELECT
+    proargdefaults,
+    pronargs,
+    proargmodes,
+    array_upper(proargmodes, 1) AS total_args,
+    CASE
+      WHEN proargdefaults IS NULL THEN 0
+      ELSE array_length(string_to_array(trim('()' FROM proargdefaults), '}, {'), 1)
+    END AS num_defaults,
+    trim('()' FROM proargdefaults) AS defaults_trimmed,
+    -- Count input arguments up to position $2
+    CASE
+      WHEN proargmodes IS NULL THEN $2
+      ELSE (
+        SELECT count(*)
+        FROM generate_series(1, $2) AS i
+        WHERE proargmodes[i] IN ('i', 'b', 'v')
+      )
+    END AS nth_input_arg
+  FROM pg_catalog.pg_proc
+  WHERE oid = $1
+  LIMIT 1
+)
+SELECT
+  CASE
+    WHEN proargdefaults IS NULL THEN NULL
+    WHEN $2 < 1 OR $2 > COALESCE(total_args, pronargs) THEN NULL
+    WHEN (proargmodes IS NOT NULL AND proargmodes[$2] NOT IN ('i', 'b', 'v')) THEN NULL
+    WHEN nth_input_arg <= (pronargs - num_defaults) THEN NULL
+    ELSE trim('{}' FROM split_part(defaults_trimmed, '}, {', nth_input_arg - (pronargs - num_defaults)))
+  END
+FROM defaults_parsed
+			`,
 			Info: "Get textual representation of a function argument's default value. " +
 				"The second argument of this function is the argument number among all " +
 				"arguments (i.e. proallargtypes, *not* proargtypes), starting with 1, " +
-				"because that's how information_schema.sql uses it. Currently, this " +
-				"always returns NULL, since CockroachDB does not support default values.",
+				"because that's how information_schema.sql uses it.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
 			Language:          tree.RoutineLangSQL,
@@ -879,7 +912,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tableName := tree.MustBeDString(args[0])
 				columnName := tree.MustBeDString(args[1])
-				qualifiedName, err := parser.ParseQualifiedTableName(string(tableName))
+				qualifiedName, err := parserutils.ParseQualifiedTableName(string(tableName))
 				if err != nil {
 					return nil, err
 				}

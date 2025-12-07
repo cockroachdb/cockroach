@@ -7,6 +7,7 @@ package fipsccl
 
 import (
 	"context"
+	"crypto/fips140"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -45,7 +46,7 @@ func init() {
 				)
 			}
 
-			return tree.MakeDBool(tree.DBool(IsFIPSReady())), nil
+			return tree.MakeDBool(tree.DBool(fips140.Enabled())), nil
 		},
 		Class:      tree.NormalClass,
 		Volatility: volatility.Stable,

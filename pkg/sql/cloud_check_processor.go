@@ -203,20 +203,27 @@ func newCloudCheckProcessor(
 	return p, nil
 }
 
+func getCloudCheckConcurrency(params CloudCheckParams) int {
+	concurrency := int(params.Concurrency)
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	return concurrency
+}
+
 // Start is part of the RowSource interface.
 func (p *proc) Start(ctx context.Context) {
 	p.StartInternal(ctx, "cloudcheck.proc")
 
-	concurrency := int(p.spec.Params.Concurrency)
-	if concurrency < 1 {
-		concurrency = 1
-	}
-
+	concurrency := getCloudCheckConcurrency(p.spec.Params)
 	p.results = make(chan result, concurrency)
 
 	if err := p.FlowCtx.Stopper().RunAsyncTask(p.Ctx(), "cloudcheck.proc", func(ctx context.Context) {
 		defer close(p.results)
-		if err := ctxgroup.GroupWorkers(ctx, concurrency, func(ctx context.Context, _ int) error {
+		// We're ignoring the context cancellation error (which is the only one
+		// possible) because the main goroutine will observe it on its own
+		// anyway in Next.
+		_ = ctxgroup.GroupWorkers(ctx, concurrency, func(ctx context.Context, _ int) error {
 			select {
 			case p.results <- checkURI(
 				ctx,
@@ -229,9 +236,7 @@ func (p *proc) Start(ctx context.Context) {
 			case <-ctx.Done():
 				return ctx.Err()
 			}
-		}); err != nil {
-			p.MoveToDraining(err)
-		}
+		})
 	}); err != nil {
 		p.MoveToDraining(err)
 	}
@@ -252,15 +257,15 @@ func (p *proc) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 			return nil, p.DrainHelper()
 		}
 		return rowenc.EncDatumRow{
-			rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(p.FlowCtx.EvalCtx.NodeID.SQLInstanceID()))),
-			rowenc.DatumToEncDatum(types.String, tree.NewDString(p.FlowCtx.EvalCtx.Locality.String())),
-			rowenc.DatumToEncDatum(types.Bool, tree.MakeDBool(tree.DBool(res.ok))),
-			rowenc.DatumToEncDatum(types.String, tree.NewDString(res.error)),
-			rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(res.readBytes))),
-			rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(res.readTime))),
-			rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(res.wroteBytes))),
-			rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(res.wroteTime))),
-			rowenc.DatumToEncDatum(types.Bool, tree.MakeDBool(tree.DBool(res.canDelete))),
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(p.FlowCtx.EvalCtx.NodeID.SQLInstanceID()))),
+			rowenc.DatumToEncDatumUnsafe(types.String, tree.NewDString(p.FlowCtx.EvalCtx.Locality.String())),
+			rowenc.DatumToEncDatumUnsafe(types.Bool, tree.MakeDBool(tree.DBool(res.ok))),
+			rowenc.DatumToEncDatumUnsafe(types.String, tree.NewDString(res.error)),
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(res.readBytes))),
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(res.readTime))),
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(res.wroteBytes))),
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(res.wroteTime))),
+			rowenc.DatumToEncDatumUnsafe(types.Bool, tree.MakeDBool(tree.DBool(res.canDelete))),
 		}, nil
 	}
 }

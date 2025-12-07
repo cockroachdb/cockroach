@@ -89,6 +89,12 @@ type decommissionBenchSpec struct {
 	// instead of a random node.
 	decommissionNode int
 
+	// When true, the decommissioning nudger
+	// (kv.enqueue_in_replicate_queue_on_problem.interval) will be used to
+	// periodically enqueue decommissioning ranges at its leaseholders every 5
+	// minutes.
+	useDecommissioningNudger bool
+
 	skip string
 }
 
@@ -199,6 +205,16 @@ func registerDecommissionBench(r registry.Registry) {
 			decommissionNode:   2,
 		},
 		{
+			// Same as above but using the decommissioning nudger.
+			nodes:                    6,
+			warehouses:               1000,
+			whileUpreplicating:       true,
+			drainFirst:               true,
+			multiregion:              true,
+			decommissionNode:         2,
+			useDecommissioningNudger: true,
+		},
+		{
 			// Multiregion decommission, and add a new node in a different region.
 			nodes:              6,
 			warehouses:         1000,
@@ -206,6 +222,16 @@ func registerDecommissionBench(r registry.Registry) {
 			drainFirst:         true,
 			multiregion:        true,
 			decommissionNode:   3,
+		},
+		{
+			// Same as above but using the decommissioning nudger.
+			nodes:                    6,
+			warehouses:               1000,
+			whileUpreplicating:       true,
+			drainFirst:               true,
+			multiregion:              true,
+			decommissionNode:         3,
+			useDecommissioningNudger: true,
 		},
 	} {
 		registerDecommissionBenchSpec(r, benchSpec)
@@ -274,6 +300,10 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 		extraNameParts = append(extraNameParts, "multi-region")
 	}
 
+	if benchSpec.useDecommissioningNudger {
+		extraNameParts = append(extraNameParts, "use-nudger")
+	}
+
 	// Save some money and CPU quota by using a smaller workload CPU. Only
 	// do this for cluster of size 3 or smaller to avoid regressions.
 	specOptions = append(specOptions, spec.WorkloadNode())
@@ -299,7 +329,7 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 			specOptions...,
 		),
 		CompatibleClouds:    registry.OnlyGCE,
-		Suites:              registry.Suites(registry.Nightly),
+		Suites:              registry.Suites(registry.Weekly),
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Timeout:             timeout,
 		NonReleaseBlocker:   true,
@@ -336,11 +366,7 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 			return aggregatedPerfMetrics, nil
 		},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if benchSpec.duration > 0 {
-				runDecommissionBenchLong(ctx, t, c, benchSpec, timeout)
-			} else {
-				runDecommissionBench(ctx, t, c, benchSpec, timeout)
-			}
+			runDecommissionBench(ctx, t, c, benchSpec, timeout)
 		},
 	})
 }
@@ -430,6 +456,15 @@ func setupDecommissionBench(
 	{
 		db := c.Conn(ctx, t.L(), pinnedNode)
 		defer db.Close()
+
+		// Metamorphically enable the decommissioning nudger to get more test
+		// coverage on decommissioning nudger.
+		if benchSpec.useDecommissioningNudger {
+			if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.enqueue_in_replicate_queue_on_problem.interval = '5m'`); err != nil {
+				t.Fatal(err)
+			}
+			t.L().Printf("enabled decommissioning nudger")
+		}
 
 		// Note that we are waiting for 3 replicas only. We can't assume 5 replicas
 		// here because 5 only applies to system ranges so we will never reach this
@@ -709,151 +744,34 @@ func runDecommissionBench(
 			time.Sleep(1 * time.Minute)
 		}
 
-		m.ExpectDeath()
-		defer m.ResetDeaths()
-		err := runSingleDecommission(ctx, c, h, pinnedNode, benchSpec.decommissionNode, &targetNodeAtomic, benchSpec.snapshotRate,
-			benchSpec.whileDown, benchSpec.drainFirst, false /* reuse */, benchSpec.whileUpreplicating,
-			true /* estimateDuration */, benchSpec.slowWrites, tickByName,
-		)
-
-		// Include an additional minute of buffer time post-decommission to gather
-		// workload stats.
-		time.Sleep(1 * time.Minute)
-
-		return err
-	})
-
-	m.Go(func(ctx context.Context) error {
-		hists := reg.GetHandle()
-
-		db := c.Conn(ctx, t.L(), pinnedNode)
-		defer db.Close()
-
-		return trackBytesUsed(ctx, db, &targetNodeAtomic, hists, tickByName)
-	})
-
-	if err := m.WaitE(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// runDecommissionBenchLong initializes a cluster with TPCC and attempts to
-// benchmark the decommissioning of nodes picked at random before subsequently
-// wiping them and re-adding them to the cluster to continually execute the
-// decommissioning process over the runtime of the test. The cluster may or may
-// not be running under load.
-func runDecommissionBenchLong(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	benchSpec decommissionBenchSpec,
-	testTimeout time.Duration,
-) {
-	// node1 is kept pinned (i.e. not decommissioned/restarted), and is the node
-	// through which we run decommissions. The last node is used for the workload.
-	pinnedNode := 1
-	workloadNode := benchSpec.nodes + 1
-	crdbNodes := c.Range(pinnedNode, benchSpec.nodes)
-	t.L().Printf("nodes %d - %d are crdb nodes", crdbNodes[0], crdbNodes[len(crdbNodes)-1])
-	t.L().Printf("node %d is the workload node", workloadNode)
-
-	maxRate := tpccMaxRate(benchSpec.warehouses)
-	rampDuration := 3 * time.Minute
-	rampStarted := make(chan struct{})
-	importCmd := fmt.Sprintf(
-		`./cockroach workload fixtures import tpcc --warehouses=%d`,
-		benchSpec.warehouses,
-	)
-	workloadCmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
-		"%s --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,
-		testTimeout, roachtestutil.GetWorkloadHistogramString(t, c, nil, true), rampDuration, benchSpec.nodes)
-
-	setupDecommissionBench(ctx, t, c, benchSpec, pinnedNode, importCmd)
-
-	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	m := c.NewDeprecatedMonitor(workloadCtx, crdbNodes)
-
-	if !benchSpec.noLoad {
-		m.Go(
-			func(ctx context.Context) error {
-				close(rampStarted)
-
-				// Run workload indefinitely, to be later killed by context
-				// cancellation once decommission has completed.
-				err := c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), workloadCmd)
-				if errors.Is(ctx.Err(), context.Canceled) {
-					// Workload intentionally cancelled via context, so don't return error.
-					return nil
-				}
+		if benchSpec.duration > 0 {
+			for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= benchSpec.duration; {
+				m.ExpectDeath()
+				err := runSingleDecommission(ctx, c, h, pinnedNode, benchSpec.decommissionNode, &targetNodeAtomic, benchSpec.snapshotRate,
+					benchSpec.whileDown, benchSpec.drainFirst, true /* reuse */, benchSpec.whileUpreplicating,
+					true /* estimateDuration */, benchSpec.slowWrites, tickByName,
+				)
+				m.ResetDeaths()
 				if err != nil {
-					t.L().Printf("workload error: %s", err)
+					return err
 				}
-				return err
-			},
-		)
-	}
-
-	// Setup Prometheus/Grafana using workload node.
-	cleanupFunc := setupGrafana(ctx, t, c, crdbNodes, workloadNode)
-	defer cleanupFunc()
-
-	// Create a histogram registry for recording multiple decommission metrics.
-	// Note that "decommission.*" metrics are special in that they are
-	// long-running metrics measured by the elapsed time between each tick,
-	// as opposed to the histograms of workload operation latencies or other
-	// recorded values that are typically output in a "tick" each second.
-	reg, tickByName, perfBuf, exporter := createDecommissionBenchPerfArtifacts(t, c,
-		decommissionMetric, upreplicateMetric, bytesUsedMetric,
-	)
-
-	defer func() {
-		if err := exporter.Close(func() error {
-			uploadPerfArtifacts(ctx, t, c, workloadNode, perfBuf)
-			return nil
-		}); err != nil {
-			t.Errorf("error closing perf exporter: %s", err)
-		}
-	}()
-
-	// The logical node id of the current decommissioning node.
-	var targetNodeAtomic uint32
-
-	m.Go(func(ctx context.Context) error {
-		defer workloadCancel()
-
-		h := newDecommTestHelper(t, c)
-		h.blockFromRandNode(workloadNode)
-
-		// If we are running a workload, wait until it has started and completed its
-		// ramp time before initiating a decommission.
-		if !benchSpec.noLoad {
-			<-rampStarted
-			t.Status("Waiting for workload to ramp up...")
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(rampDuration + 1*time.Minute):
-				// Workload ramp-up complete, plus 1 minute of recording workload stats.
 			}
-		}
-
-		for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= benchSpec.duration; {
+			// Include an additional minute of buffer time post-decommission to gather
+			// workload stats.
+			time.Sleep(1 * time.Minute)
+			return nil
+		} else {
 			m.ExpectDeath()
+			defer m.ResetDeaths()
 			err := runSingleDecommission(ctx, c, h, pinnedNode, benchSpec.decommissionNode, &targetNodeAtomic, benchSpec.snapshotRate,
-				benchSpec.whileDown, benchSpec.drainFirst, true /* reuse */, benchSpec.whileUpreplicating,
+				benchSpec.whileDown, benchSpec.drainFirst, false /* reuse */, benchSpec.whileUpreplicating,
 				true /* estimateDuration */, benchSpec.slowWrites, tickByName,
 			)
-			m.ResetDeaths()
-			if err != nil {
-				return err
-			}
+			// Include an additional minute of buffer time post-decommission to gather
+			// workload stats.
+			time.Sleep(1 * time.Minute)
+			return err
 		}
-
-		// Include an additional minute of buffer time post-decommission to gather
-		// workload stats.
-		time.Sleep(1 * time.Minute)
-
-		return nil
 	})
 
 	m.Go(func(ctx context.Context) error {
@@ -868,7 +786,6 @@ func runDecommissionBenchLong(
 	if err := m.WaitE(); err != nil {
 		t.Fatal(err)
 	}
-
 }
 
 // runSingleDecommission picks a random node and attempts to decommission that

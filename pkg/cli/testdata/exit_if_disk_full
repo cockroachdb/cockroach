@@ -1,0 +1,11 @@
+run
+disk-usage: /mnt/foo 1KiB 300GiB
+disk-usage: /mnt/bar 1KiB 300GiB
+store: path=/mnt/foo
+store: path=/mnt/bar
+----
+# open: /mnt/foo/temp-dirs-record.txt
+# open: /mnt/bar/temp-dirs-record.txt
+# get-disk-usage: /mnt/foo
+# get-disk-usage: /mnt/bar
+<error:store /mnt/foo: out of disk space>

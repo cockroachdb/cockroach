@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
 	"reflect"
 	"sort"
 	"strings"
@@ -40,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
@@ -54,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -63,7 +62,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -71,7 +69,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
@@ -98,7 +95,7 @@ func (s *Store) TestSender() kv.Sender {
 		// that.
 		key, err := keys.Addr(ba.Requests[0].GetInner().Header().Key)
 		if err != nil {
-			log.Dev.Fatalf(context.Background(), "%v", err)
+			log.KvExec.Fatalf(context.Background(), "%v", err)
 		}
 
 		ba.RangeID = roachpb.RangeID(1)
@@ -128,7 +125,7 @@ type testStoreOpts struct {
 
 func (opts *testStoreOpts) splits() (_kvs []roachpb.KeyValue, _splits []roachpb.RKey) {
 	kvs, splits := bootstrap.MakeMetadataSchema(
-		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), bootstrap.NoOffset,
 	).GetInitialValues()
 	if !opts.createSystemRanges {
 		return kvs, nil
@@ -252,7 +249,7 @@ func createTestStoreWithoutStart(
 		supportGracePeriod := rpcContext.StoreLivenessWithdrawalGracePeriod()
 		options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
 		transport, err := storeliveness.NewTransport(
-			cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, grpcServer, drpcServer, nil, /* knobs */
+			cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, grpcServer, drpcServer, cfg.Settings, nil, /* knobs */
 		)
 		require.NoError(t, err)
 		knobs := cfg.TestingKnobs.StoreLivenessKnobs
@@ -344,131 +341,6 @@ func createTestStoreWithConfig(
 	return store
 }
 
-// TestIterateIDPrefixKeys lays down a number of tombstones (at keys.RangeTombstoneKey) interspersed
-// with other irrelevant keys (both chosen randomly). It then verifies that IterateIDPrefixKeys
-// correctly returns only the relevant keys and values.
-func TestIterateIDPrefixKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
-	eng := storage.NewDefaultInMemForTesting()
-	stopper.AddCloser(eng)
-
-	seed := randutil.NewPseudoSeed()
-	// const seed = -1666367124291055473
-	t.Logf("seed is %d", seed)
-	rng := rand.New(rand.NewSource(seed))
-
-	ops := []func(rangeID roachpb.RangeID) roachpb.Key{
-		keys.RaftHardStateKey, // unreplicated; sorts after tombstone
-		// Replicated key-anchored local key (i.e. not one we should care about).
-		// Will be written at zero timestamp, but that's ok.
-		func(rangeID roachpb.RangeID) roachpb.Key {
-			return keys.RangeDescriptorKey([]byte(fmt.Sprintf("fakerange%d", rangeID)))
-		},
-		func(rangeID roachpb.RangeID) roachpb.Key {
-			return roachpb.Key(fmt.Sprintf("fakeuserkey%d", rangeID))
-		},
-	}
-
-	const rangeCount = 10
-	rangeIDFn := func() roachpb.RangeID {
-		return 1 + roachpb.RangeID(rng.Intn(10*rangeCount)) // spread rangeIDs out
-	}
-
-	// Write a number of keys that should be irrelevant to the iteration in this test.
-	for i := 0; i < rangeCount; i++ {
-		rangeID := rangeIDFn()
-
-		// Grab between one and all ops, randomly.
-		for _, opIdx := range rng.Perm(len(ops))[:rng.Intn(1+len(ops))] {
-			key := ops[opIdx](rangeID)
-			t.Logf("writing op=%d rangeID=%d", opIdx, rangeID)
-			if _, err := storage.MVCCPut(
-				ctx,
-				eng,
-				key,
-				hlc.Timestamp{},
-				roachpb.MakeValueFromString("fake value for "+key.String()),
-				storage.MVCCWriteOptions{},
-			); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
-	type seenT struct {
-		rangeID   roachpb.RangeID
-		tombstone kvserverpb.RangeTombstone
-	}
-
-	// Next, write the keys we're planning to see again.
-	var wanted []seenT
-	{
-		used := make(map[roachpb.RangeID]struct{})
-		for {
-			rangeID := rangeIDFn()
-			if _, ok := used[rangeID]; ok {
-				// We already wrote this key, so roll the dice again.
-				continue
-			}
-
-			tombstone := kvserverpb.RangeTombstone{
-				NextReplicaID: roachpb.ReplicaID(rng.Int31n(100)),
-			}
-
-			used[rangeID] = struct{}{}
-			wanted = append(wanted, seenT{rangeID: rangeID, tombstone: tombstone})
-
-			t.Logf("writing tombstone at rangeID=%d", rangeID)
-			require.NoError(t, stateloader.Make(rangeID).SetRangeTombstone(ctx, eng, tombstone))
-
-			if len(wanted) >= rangeCount {
-				break
-			}
-		}
-	}
-
-	sort.Slice(wanted, func(i, j int) bool {
-		return wanted[i].rangeID < wanted[j].rangeID
-	})
-
-	var seen []seenT
-	var tombstone kvserverpb.RangeTombstone
-
-	handleTombstone := func(rangeID roachpb.RangeID) error {
-		seen = append(seen, seenT{rangeID: rangeID, tombstone: tombstone})
-		return nil
-	}
-
-	if err := kvstorage.IterateIDPrefixKeys(ctx, eng, keys.RangeTombstoneKey, &tombstone, handleTombstone); err != nil {
-		t.Fatal(err)
-	}
-	placeholder := seenT{
-		rangeID: roachpb.RangeID(9999),
-	}
-
-	if len(wanted) != len(seen) {
-		t.Errorf("wanted %d results, got %d", len(wanted), len(seen))
-	}
-
-	for len(wanted) < len(seen) {
-		wanted = append(wanted, placeholder)
-	}
-	for len(seen) < len(wanted) {
-		seen = append(seen, placeholder)
-	}
-
-	if diff := pretty.Diff(wanted, seen); len(diff) > 0 {
-		pretty.Ldiff(t, wanted, seen)
-		t.Fatal("diff(wanted, seen) is nonempty")
-	}
-}
-
 // TestStoreConfigSetDefaults checks that StoreConfig.SetDefaults() sets proper
 // defaults based on numStores.
 func TestStoreConfigSetDefaultsNumStores(t *testing.T) {
@@ -519,9 +391,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{}, &cfg)
 	defer stopper.Stop(ctx)
 
-	if _, err := kvstorage.ReadStoreIdent(ctx, store.TODOEngine()); err != nil {
-		t.Fatalf("unable to read store ident: %+v", err)
-	}
+	_, err := kvstorage.ReadStoreIdent(ctx, store.LogEngine())
+	require.NoError(t, err)
 
 	store.VisitReplicas(func(repl *Replica) (more bool) {
 		// Stats should agree with recomputation. Hold raftMu to avoid
@@ -532,7 +403,9 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		memMS := repl.GetMVCCStats()
 		// Stats should agree with a recomputation.
 		now := store.Clock().Now()
-		diskMS, err := rditer.ComputeStatsForRange(ctx, repl.Desc(), store.TODOEngine(), now.WallTime)
+		diskMS, err := rditer.ComputeStatsForRange(
+			ctx, repl.Desc(), store.StateEngine(),
+			fs.UnknownReadCategory, now.WallTime)
 		require.NoError(t, err)
 		memMS.AgeTo(diskMS.LastUpdateNanos)
 		require.Equal(t, memMS, diskMS)
@@ -596,8 +469,9 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 		NextReplicaID: 2,
 	}
 	const replicaID = 1
-	if err := stateloader.WriteInitialRangeState(
-		ctx, s.TODOEngine(), *desc, replicaID, clusterversion.TestingClusterVersion.Version,
+	if err := kvstorage.WriteInitialRangeState(
+		ctx, s.StateEngine(), s.LogEngine(),
+		*desc, replicaID, clusterversion.TestingClusterVersion.Version,
 	); err != nil {
 		panic(err)
 	}
@@ -776,7 +650,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	require.Equal(t, errRemoved, err)
 
 	repl1.mu.RLock()
-	expErr := repl1.mu.destroyStatus.err
+	expErr := repl1.shMu.destroyStatus.err
 	repl1.mu.RUnlock()
 
 	if expErr == nil {
@@ -893,8 +767,8 @@ func TestMarkReplicaInitialized(t *testing.T) {
 	}
 
 	newID := roachpb.FullReplicaID{RangeID: 3, ReplicaID: 1}
-	require.NoError(t, stateloader.Make(newID.RangeID).SetRaftReplicaID(
-		ctx, store.TODOEngine(), newID.ReplicaID))
+	require.NoError(t, kvstorage.MakeStateLoader(newID.RangeID).SetRaftReplicaID(
+		ctx, store.StateEngine(), newID.ReplicaID))
 
 	r, err := newUninitializedReplica(store, newID)
 	require.NoError(t, err)
@@ -1436,7 +1310,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 			var txn roachpb.Transaction
 			if ok, err := storage.MVCCGetProto(
-				ctx, store.TODOEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
+				ctx, store.StateEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 			); err != nil {
 				t.Fatal(err)
 			} else if ok {
@@ -1747,7 +1621,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 	var txn roachpb.Transaction
 	if ok, err := storage.MVCCGetProto(
-		ctx, store.TODOEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
+		ctx, store.StateEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 	); !ok || err != nil {
 		t.Fatalf("not found or err: %+v", err)
 	}
@@ -2775,7 +2649,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		}
 		repl.mu.Lock()
 		gcThreshold := *repl.shMu.state.GCThreshold
-		pgcThreshold, err := stateloader.Make(repl.RangeID).LoadGCThreshold(
+		pgcThreshold, err := kvstorage.MakeStateLoader(repl.RangeID).LoadGCThreshold(
 			context.Background(), store.StateEngine())
 		repl.mu.Unlock()
 		if err != nil {
@@ -4108,7 +3982,7 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, created)
-	replicaID, err := stateloader.Make(repl.RangeID).LoadRaftReplicaID(
+	replicaID, err := kvstorage.MakeStateLoader(repl.RangeID).LoadRaftReplicaID(
 		ctx, tc.store.StateEngine())
 	require.NoError(t, err)
 	require.Equal(t, kvserverpb.RaftReplicaID{ReplicaID: 7}, replicaID)
@@ -4138,7 +4012,7 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	}
 	desc.AddReplica(1, 1, roachpb.VOTER_FULL)
 
-	sl := stateloader.Make(desc.RangeID)
+	sl := kvstorage.MakeStateLoader(desc.RangeID)
 	// Write the range state that will be consulted and copied during the split.
 	lease := roachpb.Lease{
 		Replica:       desc.InternalReplicas[0],
@@ -4171,19 +4045,17 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	}, &rightDesc.InternalReplicas[0])
 	require.NoError(t, err)
 
-	split := roachpb.SplitTrigger{
-		LeftDesc:  leftDesc,
-		RightDesc: rightDesc,
-	}
+	in, err := validateAndPrepareSplit(ctx, lhsRepl, roachpb.SplitTrigger{LeftDesc: leftDesc, RightDesc: rightDesc}, nil)
+	require.NoError(t, err)
 
-	splitPreApply(ctx, lhsRepl, batch, split, nil)
+	splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), in)
 
 	// Verify that the RHS truncated state is initialized as expected.
-	rsl := stateloader.Make(rightDesc.RangeID)
+	rsl := kvstorage.MakeStateLoader(rightDesc.RangeID)
 	truncState, err := rsl.LoadRaftTruncatedState(ctx, batch)
 	require.NoError(t, err)
-	require.Equal(t, stateloader.RaftInitialLogIndex, int(truncState.Index))
-	require.Equal(t, stateloader.RaftInitialLogTerm, int(truncState.Term))
+	require.Equal(t, kvstorage.RaftInitialLogIndex, int(truncState.Index))
+	require.Equal(t, kvstorage.RaftInitialLogTerm, int(truncState.Term))
 }
 
 func BenchmarkStoreGetReplica(b *testing.B) {

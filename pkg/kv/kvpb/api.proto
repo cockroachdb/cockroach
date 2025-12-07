@@ -249,14 +249,15 @@ message GetResponse {
   Value intent_value = 3;
 }
 
-// A ProbeRequest is an internal request type used to send a replicated
-// no-op through a Range as a means of probing write availability. The
-// request will be serialized like a regular write, i.e. will acquire
-// latches, and declare key access, but it will not check locks (i.e.
-// if an intent exists on the key that is being probed, the probe will
-// not observe it). ProbeRequest can be served by any Replica including
-// followers, i.e. it can be used to verify that a given Replica is able
-// to access the replication layer.
+// A ProbeRequest is an internal request type used to send a replicated no-op
+// through a Range as a means of probing write availability. The request does
+// not take any latches or locks and thus is not serialized like a regular
+// write. This is because we want the probe to bypass as much of the above-raft
+// machinery as possible so that it gives us a signal on the replication layer
+// alone.
+//
+// ProbeRequest can be served by any Replica including followers, i.e. it can be
+// used to verify that a given Replica is able to access the replication layer.
 message ProbeRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
@@ -1934,6 +1935,7 @@ message BulkOpSummary {
   // generation logic is also available in the BulkOpSummaryID helper. It does
   // not take MVCC range tombstones into account.
   map<uint64, int64> entry_counts = 5;
+  // Please update BulkOpSummary.DeepCopy() if new fields are added.
 }
 
 // ExportResponse is the response to an Export() operation.
@@ -2801,9 +2803,12 @@ message Header {
   // - ResolveIntentRangeRequest
   // - QueryLocksRequest
   // - IsSpanEmptyRequest
+  // - FlushLockTableRequest
   //
-  // The following requests types are also allowed in the batch, although the
-  // limit has no effect on them:
+  // The following request types are also allowed in the batch. These requests
+  // do not consume any keys from the limit; however, they may fail to be
+  // processed if the batch previously consumed the entire limit.
+  //
   // - ExportRequest
   // - QueryIntentRequest
   // - EndTxnRequest
@@ -3202,6 +3207,10 @@ message BatchResponse {
     // The field is cleared by the DistSender because it refers routing
     // information not exposed by the KV API.
     repeated RangeInfo range_infos = 7 [(gogoproto.nullable) = false];
+    // CPUTime is tracked in Replica.Send, meaning it only tracks the CPU time
+    // for the request evaluation goroutine, and not the other replication related
+    // work. The value is either zero (unset) or positive.
+    int64 cpu_time = 8 [(gogoproto.customname) = "CPUTime"];
     // NB: if you add a field here, don't forget to update combine().
   }
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -3865,6 +3874,13 @@ message ContentionEvent {
   // IsLatch, if true, indicates that the contention event was due to waiting to
   // acquire a latch.
   bool is_latch = 4;
+}
+
+// QuorumReplicationFlowAdmissionEvent is a message that is recorded on traces by a
+// range controller when waiting for quorum flow control.
+message QuorumReplicationFlowAdmissionEvent {
+  // WaitDurationNanos is the time spent waiting.
+  int64 wait_duration_nanos = 1 [(gogoproto.casttype) = "time.Duration"];
 }
 
 // ScanStats is a message that tracks miscellaneous statistics of all Gets,

@@ -81,8 +81,7 @@ func InsertNewStat(
 		}
 	}
 
-	// Need to assign to a nil interface{} to be able
-	// to insert NULL value.
+	// Need to assign to a nil interface{} to be able to insert NULL value.
 	var predicateValue interface{}
 	if partialPredicate != "" {
 		predicateValue = partialPredicate

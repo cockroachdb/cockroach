@@ -135,7 +135,7 @@ func makeTestCert(
 	expiration time.Time,
 ) (*x509.Certificate, []byte) {
 	// Make smallest rsa key possible: not saved.
-	key, err := rsa.GenerateKey(rand.Reader, 512)
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		t.Fatalf("error on GenerateKey for CN=%s: %v", commonName, err)
 	}

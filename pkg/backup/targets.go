@@ -126,10 +126,12 @@ func getRelevantDescChanges(
 		}
 		for _, i := range starting {
 			switch desc := i.(type) {
-			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
+			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor, catalog.FunctionDescriptor:
 				// We need to add to interestingIDs so that if we later see a delete for
 				// this ID we still know it is interesting to us, even though we will not
 				// have a parentID at that point (since the delete is a nil desc).
+				//
+				// In other words, descriptor exists at start time, but not at end time.
 				if _, ok := interestingParents[desc.GetParentID()]; ok {
 					interestingIDs[desc.GetID()] = struct{}{}
 				}
@@ -159,7 +161,9 @@ func getRelevantDescChanges(
 		} else if change.Desc != nil {
 			desc := backupinfo.NewDescriptorForManifest(change.Desc)
 			switch desc := desc.(type) {
-			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
+			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor, catalog.FunctionDescriptor:
+				// In other words, does not exist at start or end time, but within the
+				// interval.
 				if _, ok := interestingParents[desc.GetParentID()]; ok {
 					interestingIDs[desc.GetID()] = struct{}{}
 					interestingChanges = append(interestingChanges, change)
@@ -185,7 +189,7 @@ func getAllDescChanges(
 	startTime, endTime hlc.Timestamp,
 	priorIDs map[descpb.ID]descpb.ID,
 ) ([]backuppb.BackupManifest_DescriptorRevision, error) {
-	startKey := codec.TablePrefix(keys.DescriptorTableID)
+	startKey := codec.IndexPrefix(keys.DescriptorTableID, keys.DescriptorTablePrimaryKeyIndexID)
 	endKey := startKey.PrefixEnd()
 
 	g := ctxgroup.WithContext(ctx)
@@ -305,6 +309,10 @@ func fullClusterTargetsRestore(
 	var filteredDescs []catalog.Descriptor
 	var filteredDBs []catalog.DatabaseDescriptor
 	for _, desc := range fullClusterDescs {
+		if table, ok := desc.(catalog.TableDescriptor); ok && table.IsTemporary() {
+			// TODO(jeffswenson): We should move this filtering into backup.
+			continue
+		}
 		if desc.GetID() != keys.SystemDatabaseID {
 			filteredDescs = append(filteredDescs, desc)
 		}
@@ -381,7 +389,6 @@ func selectTargets(
 	}
 
 	if descriptorCoverage == tree.AllDescriptors {
-
 		tables, dbs, patterns, err := fullClusterTargetsRestore(ctx, allDescs, lastBackupManifest)
 		return tables, dbs, patterns, nil, err
 	}

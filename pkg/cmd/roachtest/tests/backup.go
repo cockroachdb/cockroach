@@ -65,10 +65,6 @@ const (
 	AssumeRoleGCSCredentials    = "GOOGLE_CREDENTIALS_ASSUME_ROLE"
 	AssumeRoleGCSServiceAccount = "GOOGLE_SERVICE_ACCOUNT"
 
-	AzureClientIDEnvVar     = "AZURE_CLIENT_ID"
-	AzureClientSecretEnvVar = "AZURE_CLIENT_SECRET"
-	AzureTenantIDEnvVar     = "AZURE_TENANT_ID"
-
 	// rows2TiB is the number of rows to import to load 2TB of data (when
 	// replicated).
 	rows2TiB   = 65_104_166
@@ -630,7 +626,7 @@ func runBackupMVCCRangeTombstones(
 	require.NoError(t, err)
 	_, err = conn.Exec(`USE tpch`)
 	require.NoError(t, err)
-	createStmt, err := readCreateTableFromFixture(
+	createStmt, err := readFileFromFixture(
 		"gs://cockroach-fixtures-us-east1/tpch-csv/schema/orders.sql?AUTH=implicit", conn)
 	require.NoError(t, err)
 	_, err = conn.ExecContext(ctx, createStmt)
@@ -756,7 +752,7 @@ func runBackupMVCCRangeTombstones(
 			`IMPORT INTO orders CSV DATA ('%s') WITH delimiter='|', detached`,
 			strings.Join(files, "', '")),
 		).Scan(&jobID))
-		waitForState(jobID, jobs.StatePaused, "", 30*time.Minute)
+		waitForState(jobID, jobs.StatePaused, "", time.Hour)
 
 		t.Status("canceling import")
 		_, err = conn.ExecContext(ctx, fmt.Sprintf(`CANCEL JOB %s`, jobID))

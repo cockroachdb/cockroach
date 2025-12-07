@@ -601,7 +601,7 @@ func (twb *txnWriteBuffer) adjustError(
 				// For requests that were not transformed, attributing an error to them
 				// shouldn't confuse the client.
 				if baIdx == pErr.Index.Index && record.transformed {
-					log.Dev.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
+					log.KvExec.Warningf(ctx, "error index %d is part of a transformed request", pErr.Index.Index)
 					pErr.Index = nil
 					return pErr
 				} else if baIdx == pErr.Index.Index {
@@ -626,7 +626,7 @@ func (twb *txnWriteBuffer) adjustErrorUponFlush(
 		if pErr.Index.Index < int32(numBuffered) {
 			// If the error belongs to a request because part of the buffer flush, nil
 			// out the index.
-			log.Dev.Warningf(ctx, "error index %d is part of the buffer flush", pErr.Index.Index)
+			log.KvExec.Warningf(ctx, "error index %d is part of the buffer flush", pErr.Index.Index)
 			pErr.Index = nil
 		} else {
 			// Otherwise, adjust the error index to hide the impact of any flushed
@@ -1313,7 +1313,7 @@ func (twb *txnWriteBuffer) mergeResponseWithRequestRecords(
 	ctx context.Context, rr requestRecords, br *kvpb.BatchResponse,
 ) (_ *kvpb.BatchResponse, pErr *kvpb.Error) {
 	if rr.Empty() && br == nil {
-		log.Dev.Fatal(ctx, "unexpectedly found no transformations and no batch response")
+		log.KvExec.Fatal(ctx, "unexpectedly found no transformations and no batch response")
 	} else if rr.Empty() {
 		return br, nil
 	}
@@ -1325,7 +1325,7 @@ func (twb *txnWriteBuffer) mergeResponseWithRequestRecords(
 		brResp := kvpb.ResponseUnion{}
 		if !record.stripped {
 			if len(br.Responses) == 0 {
-				log.Dev.Fatal(ctx, "unexpectedly found a non-stripped request and no batch response")
+				log.KvExec.Fatal(ctx, "unexpectedly found a non-stripped request and no batch response")
 			}
 			// If the request wasn't stripped from the batch we sent to KV, we
 			// received a response for it, which then needs to be combined with
@@ -1377,6 +1377,11 @@ func (rr requestRecord) toResp(
 	var ru kvpb.ResponseUnion
 	switch req := rr.origRequest.(type) {
 	case *kvpb.ConditionalPutRequest:
+		if !rr.stripped && br.GetInner().Header().ResumeSpan != nil {
+			return kvpb.ResponseUnion{},
+				kvpb.NewError(errors.AssertionFailedf("unexpected non-nil ResumeSpan for ConditionalPutRequest"))
+		}
+
 		// Evaluate the condition.
 		evalFn := mvcceval.MaybeConditionFailedError
 		if twb.testingOverrideCPutEvalFn != nil {
@@ -1390,11 +1395,6 @@ func (rr requestRecord) toResp(
 			// We only use the response from KV if there wasn't already a
 			// buffered value for this key that our transaction wrote
 			// previously.
-			// TODO(yuzefovich): for completeness, we should check whether
-			// ResumeSpan is non-nil, in which case the response from KV is
-			// incomplete. This can happen when MaxSpanRequestKeys and/or
-			// TargetBytes limits are set on the batch, and SQL currently
-			// doesn't do that for batches with CPuts.
 			val = br.GetInner().(*kvpb.GetResponse).Value
 		}
 
@@ -1425,12 +1425,12 @@ func (rr requestRecord) toResp(
 		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, dla)
 
 	case *kvpb.PutRequest:
+		if !rr.stripped && br.GetInner().Header().ResumeSpan != nil {
+			return kvpb.ResponseUnion{},
+				kvpb.NewError(errors.AssertionFailedf("unexpected non-nil ResumeSpan for PutRequest"))
+		}
+
 		var dla *bufferedDurableLockAcquisition
-		// TODO(yuzefovich): for completeness, we should check whether
-		// ResumeSpan is non-nil if we transformed the request, in which case
-		// the response from KV is incomplete. This can happen when
-		// MaxSpanRequestKeys and/or TargetBytes limits are set on the batch,
-		// and SQL currently doesn't do that for batches with Puts.
 		if rr.transformed && exclusionTimestampRequired {
 			dla = &bufferedDurableLockAcquisition{
 				str: lock.Exclusive,
@@ -1515,10 +1515,10 @@ func (rr requestRecord) toResp(
 		// a lock, we add it to the buffer since we may need to flush it as
 		// replicated lock.
 		if rr.transformed {
-
 			transformedGetResponse := br.GetInner().(*kvpb.GetResponse)
 			valueWasPresent := transformedGetResponse.Value.IsPresent()
-			lockShouldHaveBeenAcquired := valueWasPresent || req.LockNonExisting
+			lockShouldHaveBeenAcquired := (valueWasPresent || req.LockNonExisting) &&
+				transformedGetResponse.ResumeSpan == nil
 
 			if lockShouldHaveBeenAcquired {
 				dla := &bufferedDurableLockAcquisition{
@@ -1762,7 +1762,7 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 		return twb.wrapped.SendLocked(ctx, ba) // nothing to flush
 	}
 
-	_, hasEndTxn := ba.GetArg(kvpb.EndTxn)
+	endTxnArg, hasEndTxn := ba.GetArg(kvpb.EndTxn)
 	if !hasEndTxn {
 		// We're flushing the buffer even though the batch doesn't contain an EndTxn
 		// request. That means we buffered some writes and decided to disable write
@@ -1771,10 +1771,7 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	}
 
 	midTxnFlush := !hasEndTxn
-
-	// SkipLocked reads cannot be in a batch with basically anything else. If we
-	// encounter one, we need to flush our buffer in its own batch.
-	splitBatchRequired := ba.WaitPolicy == lock.WaitPolicy_SkipLocked
+	splitBatchRequired := separateBatchIsNeeded(ba, endTxnArg)
 
 	// Flush all buffered writes by pre-pending them to the requests being sent
 	// in the batch.
@@ -1816,30 +1813,91 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	})
 
 	if splitBatchRequired {
-		log.VEventf(ctx, 2, "flushing buffer via separate batch")
 		flushBatch := ba.ShallowCopy()
-		flushBatch.WaitPolicy = 0
+		clearBatchRequestOptions(flushBatch)
 		flushBatch.Requests = reqs
+
+		log.VEventf(ctx, 2, "flushing %d buffered requests in separate batch: %v", len(reqs), ba)
 		br, pErr := twb.wrapped.SendLocked(ctx, flushBatch)
 		if pErr != nil {
 			pErr.Index = nil
 			return nil, pErr
 		}
+		if err := requireAllFlushedRequestsProcessed(br.Responses); err != nil {
+			return nil, kvpb.NewError(err)
+		}
 
+		// We've written intents now, so this should be false.
+		ba.HasBufferedAllPrecedingWrites = false
 		ba.UpdateTxn(br.Txn)
+
 		return twb.wrapped.SendLocked(ctx, ba)
 	} else {
 		ba = ba.ShallowCopy()
 		ba.Requests = append(reqs, ba.Requests...)
+
+		log.VEventf(ctx, 2, "flushing %d buffered requests in batch: %v", len(reqs), ba)
 		br, pErr := twb.wrapped.SendLocked(ctx, ba)
 		if pErr != nil {
 			return nil, twb.adjustErrorUponFlush(ctx, numRevisionsBuffered, pErr)
 		}
-
+		if err := requireAllFlushedRequestsProcessed(br.Responses[0:numRevisionsBuffered]); err != nil {
+			return nil, kvpb.NewError(err)
+		}
 		// Strip out responses for all the flushed buffered writes.
 		br.Responses = br.Responses[numRevisionsBuffered:]
 		return br, nil
 	}
+}
+
+func requireAllFlushedRequestsProcessed(responses []kvpb.ResponseUnion) error {
+	for _, resp := range responses {
+		if resp.GetInner().Header().ResumeSpan != nil {
+			return errors.AssertionFailedf("response from buffered request has non-nil resume span")
+		}
+	}
+	return nil
+}
+
+// separateBatchIsNeeded returns true if BatchRequest contains any options that
+// require us to flush buffered requests using a separate batch.
+//
+// NB: If you are updating this function, you need to update
+// clearBatchRequestOptions as well.
+func separateBatchIsNeeded(ba *kvpb.BatchRequest, optEndTxn kvpb.Request) bool {
+	if optEndTxn != nil {
+		// TODO(#153513): This should really be fixed server-side. Currently, if we
+		// send an EndTxn with Prepare, it will be erroneously evaluated as a 1PC
+		// commit.
+		if optEndTxn.(*kvpb.EndTxnRequest).Prepare {
+			return true
+		}
+	}
+
+	return ba.MightStopEarly() ||
+		ba.ReadConsistency != 0 ||
+		ba.WaitPolicy != 0 ||
+		ba.WriteOptions != nil && (*ba.WriteOptions != kvpb.WriteOptions{}) ||
+		ba.IsReverse
+}
+
+// clearBatchRequestOptions clears any options that should not be present on a
+// batch used to send previously buffered requests.
+//
+// NB: If you are updating this function, you need to update
+// separateBatchIsNeeded as well.
+func clearBatchRequestOptions(ba *kvpb.BatchRequest) {
+	// If read consistency is set to anything but CONSISTENT, our flush will fail
+	// because we only allow inconsistent reads for read only requests.
+	ba.ReadConsistency = 0
+	// If WaitPolicy is set to SkipLocked, our request may fail validation.
+	ba.WaitPolicy = 0
+	// Reset options that could result in an early batch return.
+	ba.MaxSpanRequestKeys = 0
+	ba.TargetBytes = 0
+	ba.ReturnElasticCPUResumeSpans = false
+	ba.IsReverse = false
+	ba.WriteOptions = nil
 }
 
 // hasBufferedWrites returns whether the interceptor has buffered any writes

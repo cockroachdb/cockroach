@@ -465,15 +465,23 @@ func getTableMetadataBaseQuery(userName string) *safesql.Query {
 		FROM system.table_metadata tbm,
 		     (SELECT "sql.stats.automatic_collection.enabled" as auto_stats_enabled 
 		  		FROM [SHOW CLUSTER SETTING sql.stats.automatic_collection.enabled]) csc
-		LEFT JOIN system.role_members rm ON rm.role = 'admin' AND member = $
-		WHERE (rm.role = 'admin' OR tbm.db_name IN (
+		WHERE (
+			$ = 'admin'
+			OR EXISTS (
+				SELECT 1
+				FROM system.role_members rm
+				WHERE rm.member = $
+					AND rm.role = 'admin'
+			)
+			OR tbm.db_name IN (
 	  			SELECT cdp.database_name
 	  			FROM "".crdb_internal.cluster_database_privileges cdp
 	  			WHERE (grantee = $ OR grantee = 'public')
 	  			AND privilege_type = 'CONNECT'
-	  		))
+	  		)
+		)
 		AND tbm.table_type = 'TABLE'
-		`, userName, userName)
+		`, userName, userName, userName)
 
 	return query
 }
@@ -859,22 +867,30 @@ func getDatabaseMetadataBaseQuery(userName string) *safesql.Query {
 		COALESCE(s.store_ids, ARRAY[]) as store_ids,
 		count(*) OVER() as total_row_count
 		FROM system.namespace n
-		LEFT JOIN  system.table_metadata tbm ON n.id = tbm.db_id
-		LEFT JOIN system.role_members rm ON rm.role = 'admin' AND member = $
+		LEFT JOIN system.table_metadata tbm ON n.id = tbm.db_id
 		LEFT JOIN (
 			SELECT db_id, array_agg(DISTINCT unnested_ids) as store_ids
 			FROM system.table_metadata, unnest(store_ids) as unnested_ids
 			GROUP BY db_id
 		) s ON s.db_id = tbm.db_id
-		WHERE (rm.role = 'admin' OR n.name IN (
-	  			SELECT cdp.database_name
-	  			FROM "".crdb_internal.cluster_database_privileges cdp
-	  			WHERE (grantee = $ OR grantee = 'public')
-	  			AND privilege_type = 'CONNECT'
-		))
+		WHERE (
+			$ = 'admin'
+			OR EXISTS (
+				SELECT 1
+				FROM system.role_members rm
+				WHERE rm.member = $
+					AND rm.role = 'admin'
+			)
+			OR n.name IN (
+				SELECT cdp.database_name
+				FROM "".crdb_internal.cluster_database_privileges AS cdp
+				WHERE (cdp.grantee = $ OR cdp.grantee = 'public')
+					AND cdp.privilege_type = 'CONNECT'
+			)
+		)
 		AND n."parentID" = 0
 		AND n."parentSchemaID" = 0
-`, userName, userName)
+`, userName, userName, userName)
 
 	return query
 }

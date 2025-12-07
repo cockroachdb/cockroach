@@ -143,6 +143,10 @@ const (
 	dropTable    // DROP TABLE <table>
 	dropTrigger  // DROP TRIGGER <trigger> ON <table>
 	dropView     // DROP VIEW <view>
+	truncateTable
+
+	// INSPECT ...
+	inspect // INSPECT {TABLE|DATABASE} ...
 
 	// Unimplemented operations. TODO(sql-foundations): Audit and/or implement these operations.
 	// alterDatabaseOwner
@@ -205,7 +209,7 @@ const (
 )
 
 func isDMLOpType(t opType) bool {
-	return t == insertRow || t == selectStmt || t == validate
+	return t == insertRow || t == selectStmt || t == validate || t == inspect
 }
 
 var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, error){
@@ -213,6 +217,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	insertRow:  (*operationGenerator).insertRow,
 	selectStmt: (*operationGenerator).selectStmt,
 	validate:   (*operationGenerator).validate,
+	inspect:    (*operationGenerator).inspect,
 
 	// DDL Operations
 	alterDatabaseAddRegion:            (*operationGenerator).addRegion,
@@ -264,6 +269,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	renameSequence:                    (*operationGenerator).renameSequence,
 	renameTable:                       (*operationGenerator).renameTable,
 	renameView:                        (*operationGenerator).renameView,
+	truncateTable:                     (*operationGenerator).truncateTable,
 }
 
 var opWeights = []int{
@@ -271,6 +277,7 @@ var opWeights = []int{
 	insertRow:  10,
 	selectStmt: 10,
 	validate:   2, // validate twice more often
+	inspect:    1,
 
 	// DDL Operations
 	alterDatabaseAddRegion:            1,
@@ -321,6 +328,7 @@ var opWeights = []int{
 	renameSequence:                    1,
 	renameTable:                       1,
 	renameView:                        1,
+	truncateTable:                     1,
 }
 
 // This workload will maintain its own list of minimal supported versions for
@@ -331,6 +339,7 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	insertRow:  clusterversion.MinSupported,
 	selectStmt: clusterversion.MinSupported,
 	validate:   clusterversion.MinSupported,
+	inspect:    clusterversion.V25_4,
 
 	alterPolicy:                       clusterversion.V25_2,
 	alterTableAddColumn:               clusterversion.MinSupported,
@@ -358,4 +367,5 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	dropTable:                         clusterversion.MinSupported,
 	dropTrigger:                       clusterversion.MinSupported,
 	dropView:                          clusterversion.MinSupported,
+	truncateTable:                     clusterversion.V25_4,
 }

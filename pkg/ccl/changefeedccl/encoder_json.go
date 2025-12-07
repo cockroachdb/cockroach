@@ -387,7 +387,7 @@ func (e *versionEncoder) datumToJSON(ctx context.Context, d tree.Datum) (json.JS
 				return nil, err
 			}
 			if collides && jsonNullObjectCollisionLogLim.ShouldLog() {
-				log.Dev.Warningf(ctx, "JSON value collides with reserved null object: %q", j.String())
+				log.Changefeed.Warningf(ctx, "JSON value collides with reserved null object: %q", j.String())
 			}
 		}
 	}

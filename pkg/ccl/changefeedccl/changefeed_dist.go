@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -55,35 +56,16 @@ const (
 	changeFrontierProcName   = `changefntr`
 )
 
-// distChangefeedFlow plans and runs a distributed changefeed.
-//
-// One or more ChangeAggregator processors watch table data for changes. These
-// transform the changed kvs into changed rows and either emit them to a sink
-// (such as kafka) or, if there is no sink, forward them in columns 1,2,3 (where
-// they will be eventually returned directly via pgwire). In either case,
-// periodically a span will become resolved as of some timestamp, meaning that
-// no new rows will ever be emitted at or below that timestamp. These span-level
-// resolved timestamps are emitted as a marshaled `jobspb.ResolvedSpan` proto in
-// column 0.
-//
-// The flow will always have exactly one ChangeFrontier processor which all the
-// ChangeAggregators feed into. It collects all span-level resolved timestamps
-// and aggregates them into a changefeed-level resolved timestamp, which is the
-// minimum of the span-level resolved timestamps. This changefeed-level resolved
-// timestamp is emitted into the changefeed sink (or returned to the gateway if
-// there is no sink) whenever it advances. ChangeFrontier also updates the
-// progress of the changefeed's corresponding system job.
-func distChangefeedFlow(
+// computeDistChangefeedTimestamps computes the initialHighWater and schemaTS
+// for a changefeed run, and mutates localState.progress when appropriate
+// (e.g., to set the high-water if initial scan should be skipped). It also
+// invokes testing knobs that observe the initial high-water.
+func computeDistChangefeedTimestamps(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
-	description string,
 	localState *cachedState,
-	resultsCh chan<- tree.Datums,
-	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
-	targets changefeedbase.Targets,
-) error {
+) (initialHighWater hlc.Timestamp, schemaTS hlc.Timestamp, _ error) {
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	progress := localState.progress
 
@@ -99,7 +81,7 @@ func distChangefeedFlow(
 		// cursor but we have a request to not have an initial scan.
 		initialScanType, err := opts.GetInitialScanType()
 		if err != nil {
-			return err
+			return hlc.Timestamp{}, hlc.Timestamp{}, err
 		}
 		if noHighWater && initialScanType == changefeedbase.NoInitialScan {
 			// If there is a cursor, the statement time has already been set to it.
@@ -107,27 +89,22 @@ func distChangefeedFlow(
 		}
 	}
 
-	var initialHighWater hlc.Timestamp
-	schemaTS := details.StatementTime
-	{
-		if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
-			initialHighWater = *h
-			// If we have a high-water set, use it to compute the spans, since the
-			// ones at the statement time may have been garbage collected by now.
-			schemaTS = initialHighWater
-		}
-
-		// We want to fetch the target spans as of the timestamp following the
-		// highwater unless the highwater corresponds to a timestamp of an initial
-		// scan. This logic is irritatingly complex but extremely important. Namely,
-		// we may be here because the schema changed at the current resolved
-		// timestamp. However, an initial scan should be performed at exactly the
-		// timestamp specified; initial scans can be created at the timestamp of a
-		// schema change and thus should see the side-effect of the schema change.
-		isRestartAfterCheckpointOrNoInitialScan := progress.GetHighWater() != nil
-		if isRestartAfterCheckpointOrNoInitialScan {
-			schemaTS = schemaTS.Next()
-		}
+	schemaTS = details.StatementTime
+	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
+		initialHighWater = *h
+		// If we have a high-water set, use it to compute the spans, since the
+		// ones at the statement time may have been garbage collected by now.
+		schemaTS = initialHighWater
+	}
+	// We want to fetch the target spans as of the timestamp following the
+	// highwater unless the highwater corresponds to a timestamp of an initial
+	// scan. This logic is irritatingly complex but extremely important. Namely,
+	// we may be here because the schema changed at the current resolved
+	// timestamp. However, an initial scan should be performed at exactly the
+	// timestamp specified; initial scans can be created at the timestamp of a
+	// schema change and thus should see the side-effect of the schema change.
+	if progress.GetHighWater() != nil {
+		schemaTS = schemaTS.Next()
 	}
 
 	if knobs, ok := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
@@ -135,8 +112,7 @@ func distChangefeedFlow(
 			knobs.StartDistChangefeedInitialHighwater(ctx, initialHighWater)
 		}
 	}
-	return startDistChangefeed(
-		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh, onTracingEvent, targets)
+	return initialHighWater, schemaTS, nil
 }
 
 func fetchTableDescriptors(
@@ -224,7 +200,24 @@ func fetchSpansForTables(
 		sd, tableDescs[0], initialHighwater, target, sc)
 }
 
-// startDistChangefeed starts distributed changefeed execution.
+// startDistChangefeed plans and runs a distributed changefeed.
+//
+// One or more ChangeAggregator processors watch table data for changes. These
+// transform the changed kvs into changed rows and either emit them to a sink
+// (such as kafka) or, if there is no sink, forward them in columns 1,2,3 (where
+// they will be eventually returned directly via pgwire). In either case,
+// periodically a span will become resolved as of some timestamp, meaning that
+// no new rows will ever be emitted at or below that timestamp. These span-level
+// resolved timestamps are emitted as a marshaled `jobspb.ResolvedSpan` proto in
+// column 0.
+//
+// The flow will always have exactly one ChangeFrontier processor which all the
+// ChangeAggregators feed into. It collects all span-level resolved timestamps
+// and aggregates them into a changefeed-level resolved timestamp, which is the
+// minimum of the span-level resolved timestamps. This changefeed-level resolved
+// timestamp is emitted into the changefeed sink (or returned to the gateway if
+// there is no sink) whenever it advances. ChangeFrontier also updates the
+// progress of the changefeed's corresponding system job.
 func startDistChangefeed(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
@@ -252,7 +245,7 @@ func startDistChangefeed(
 		return err
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Dev.Infof(ctx, "tracked spans: %s", trackedSpans)
+		log.Changefeed.Infof(ctx, "tracked spans: %s", trackedSpans)
 	}
 	localState.trackedSpans = trackedSpans
 
@@ -265,11 +258,11 @@ func startDistChangefeed(
 	if progress := localState.progress.GetChangefeed(); progress != nil && progress.SpanLevelCheckpoint != nil {
 		spanLevelCheckpoint = progress.SpanLevelCheckpoint
 		if log.V(2) {
-			log.Dev.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
+			log.Changefeed.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
 		}
 	}
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
-		trackedSpans, spanLevelCheckpoint, localState.drainingNodes)(ctx, dsp)
+		trackedSpans, spanLevelCheckpoint, localState.drainingNodes, schemaTS)(ctx, dsp)
 	if err != nil {
 		return err
 	}
@@ -312,6 +305,7 @@ func startDistChangefeed(
 		defer recv.Release()
 
 		var finishedSetupFn func(flowinfra.Flow)
+
 		if details.SinkURI != `` {
 			// We abuse the job's results channel to make CREATE CHANGEFEED wait for
 			// this before returning to the user to ensure the setup went okay. Job
@@ -321,9 +315,11 @@ func startDistChangefeed(
 			// returned by resumed jobs, then it breaks instead of returning
 			// nonsense.
 			finishedSetupFn = func(flowinfra.Flow) { resultsCh <- tree.Datums(nil) }
-		}
 
-		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
+			// We only store the plan diagram for changefeeds that have a sink since
+			// sinkless changefeed don't have a job record.
+			jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
+		}
 
 		// Make sure to use special changefeed monitor going forward as the
 		// parent monitor for the DistSQL infrastructure. This is needed to
@@ -344,35 +340,38 @@ func startDistChangefeed(
 // The bin packing choice gives preference to leaseholder replicas if possible.
 var replicaOracleChoice = replicaoracle.BinPackingChoice
 
-type rangeDistributionType int
+type clusterSettingRangeDistributionType int
 
 const (
 	// defaultDistribution employs no load balancing on the changefeed
 	// side. We defer to distsql to select nodes and distribute work.
-	defaultDistribution rangeDistributionType = 0
+	defaultDistribution clusterSettingRangeDistributionType = 0
 	// balancedSimpleDistribution defers to distsql for selecting the
 	// set of nodes to distribute work to. However, changefeeds will try to
 	// distribute work evenly across this set of nodes.
-	balancedSimpleDistribution rangeDistributionType = 1
+	balancedSimpleDistribution clusterSettingRangeDistributionType = 1
 	// TODO(jayant): add balancedFullDistribution which takes
 	// full control of node selection and distribution.
 )
 
-// RangeDistributionStrategy is used to determine how the changefeed balances
-// ranges between nodes.
-// TODO: deprecate this setting in favor of a changefeed option.
+var rangeDistributionStrategyStrings = map[clusterSettingRangeDistributionType]string{
+	defaultDistribution:        string(changefeedbase.ChangefeedRangeDistributionStrategyDefault),
+	balancedSimpleDistribution: string(changefeedbase.ChangefeedRangeDistributionStrategyBalancedSimple),
+}
+
 var RangeDistributionStrategy = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"changefeed.default_range_distribution_strategy",
-	"configures how work is distributed among nodes for a given changefeed. "+
-		"for the most balanced distribution, use `balanced_simple`. changing this setting "+
-		"will not override locality restrictions",
+	"controls how changefeed work is distributed across nodes. "+
+		"'default' defers to DistSQL for node selection and work distribution. "+
+		"'balanced_simple' uses DistSQL for node selection but then attempts to evenly "+
+		"distribute ranges across those selected nodes for better load balancing. "+
+		"this setting does not override locality restrictions and can be overridden "+
+		"per-changefeed using the 'range_distribution_strategy' option.",
 	metamorphic.ConstantWithTestChoice("default_range_distribution_strategy",
-		"default", "balanced_simple"),
-	map[rangeDistributionType]string{
-		defaultDistribution:        "default",
-		balancedSimpleDistribution: "balanced_simple",
-	},
+		string(changefeedbase.ChangefeedRangeDistributionStrategyDefault),
+		string(changefeedbase.ChangefeedRangeDistributionStrategyBalancedSimple)),
+	rangeDistributionStrategyStrings,
 	settings.WithPublic)
 
 var useBulkOracle = settings.RegisterBoolSetting(
@@ -390,6 +389,7 @@ func makePlan(
 	trackedSpans []roachpb.Span,
 	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	drainingNodes []roachpb.NodeID,
+	schemaTS hlc.Timestamp,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		sv := &execCtx.ExecCfg().Settings.SV
@@ -409,26 +409,47 @@ func makePlan(
 			}
 		}
 
-		rangeDistribution := RangeDistributionStrategy.Get(sv)
 		evalCtx := execCtx.ExtendedEvalContext()
 		oracle := replicaoracle.NewOracle(replicaOracleChoice, dsp.ReplicaOracleConfig(locFilter))
 		if useBulkOracle.Get(&evalCtx.Settings.SV) {
-			log.Dev.Infof(ctx, "using bulk oracle for DistSQL planning")
-			oracle = kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), locFilter, kvfollowerreadsccl.StreakConfig{})
+			log.Changefeed.Infof(ctx, "using bulk oracle for DistSQL planning")
+			var err error
+			oracle, err = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), sql.SingleLocalityFilter(locFilter))
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil, /* planner */
-			blankTxn, sql.DistributionType(distMode), oracle, locFilter)
+			blankTxn, sql.DistributionType(distMode), oracle, sql.SingleLocalityFilter(locFilter), sql.NoStrictLocalityFiltering)
 		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans, sql.PartitionSpansBoundDefault)
 		if err != nil {
 			return nil, nil, err
 		}
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Dev.Infof(ctx, "spans returned by DistSQL: %v", spanPartitions)
+			log.Changefeed.Infof(ctx, "spans returned by DistSQL: %v", spanPartitions)
+		}
+		// Preference for the range distribution strategy is given to the
+		// changefeed option. If none is specified, the cluster setting,
+		// defaulting to 'default', is used. The default behavior is to defer
+		// to distsql for range distribution and not rebalance.
+		changefeedRangeDistribution, err := changefeedbase.MakeStatementOptions(details.Opts).GetChangefeedRangeDistributionStrategy()
+		if err != nil {
+			return nil, nil, err
+		}
+		clusterRangeDistribution := changefeedbase.ChangefeedRangeDistributionStrategy(
+			rangeDistributionStrategyStrings[RangeDistributionStrategy.Get(sv)])
+
+		rangeDistributionStrategy := changefeedRangeDistribution
+		if rangeDistributionStrategy == changefeedbase.ChangefeedRangeDistributionStrategyNotSpecified {
+			rangeDistributionStrategy = clusterRangeDistribution
+		}
+		if haveKnobs && maybeCfKnobs.RangeDistributionStrategyCallback != nil {
+			maybeCfKnobs.RangeDistributionStrategyCallback(rangeDistributionStrategy)
 		}
 		switch {
-		case distMode == sql.LocalDistribution || rangeDistribution == defaultDistribution:
-		case rangeDistribution == balancedSimpleDistribution:
-			log.Dev.Infof(ctx, "rebalancing ranges using balanced simple distribution")
+		case distMode == sql.LocalDistribution || rangeDistributionStrategy == changefeedbase.ChangefeedRangeDistributionStrategyDefault:
+		case rangeDistributionStrategy == changefeedbase.ChangefeedRangeDistributionStrategyBalancedSimple:
+			log.Changefeed.Infof(ctx, "rebalancing ranges using balanced simple distribution")
 			sender := execCtx.ExecCfg().DB.NonTransactionalSender()
 			distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 			ri := kvcoord.MakeRangeIterator(distSender)
@@ -438,11 +459,14 @@ func makePlan(
 				return nil, nil, err
 			}
 			if log.ExpensiveLogEnabled(ctx, 2) {
-				log.Dev.Infof(ctx, "spans after balanced simple distribution rebalancing: %v", spanPartitions)
+				log.Changefeed.Infof(ctx, "spans after balanced simple distribution rebalancing: %v", spanPartitions)
 			}
 		default:
-			return nil, nil, errors.AssertionFailedf("unsupported dist strategy %d and dist mode %d",
-				rangeDistribution, distMode)
+			return nil, nil, errors.AssertionFailedf(
+				"unsupported dist strategy %s and dist mode %d (cluster setting: %q, changefeed option: %q)",
+				rangeDistributionStrategy, distMode,
+				clusterRangeDistribution, changefeedRangeDistribution,
+			)
 		}
 
 		if haveKnobs && maybeCfKnobs.FilterDrainingNodes != nil && len(drainingNodes) > 0 {
@@ -459,15 +483,37 @@ func makePlan(
 		// Create progress config based on current settings.
 		var progressConfig *execinfrapb.ChangefeedProgressConfig
 		if execCtx.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V25_4) {
+			perTableTrackingEnabled := changefeedbase.TrackPerTableProgress.Get(sv)
+			perTableProtectedTimestampsEnabled := changefeedbase.PerTableProtectedTimestamps.Get(sv)
 			progressConfig = &execinfrapb.ChangefeedProgressConfig{
-				PerTableTracking: changefeedbase.TrackPerTableProgress.Get(sv),
+				PerTableTracking: perTableTrackingEnabled,
+				// If the per table pts flag was turned on between changefeed creation and now,
+				// the per table pts records will be rewritten in the new format when the
+				// highwater mark is updated in manageProtectedTimestamps.
+				PerTableProtectedTimestamps: perTableTrackingEnabled && perTableProtectedTimestampsEnabled,
+			}
+		}
+
+		var resolvedSpans []jobspb.ResolvedSpan
+		if jobID != 0 {
+			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				spans, ok, err := jobfrontier.GetAllResolvedSpans(ctx, txn, jobID)
+				if err != nil {
+					return err
+				}
+				if ok {
+					resolvedSpans = spans
+				}
+				return nil
+			}); err != nil {
+				return nil, nil, err
 			}
 		}
 
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
 		for i, sp := range spanPartitions {
 			if log.ExpensiveLogEnabled(ctx, 2) {
-				log.Dev.Infof(ctx, "watched spans for node %d: %v", sp.SQLInstanceID, sp)
+				log.Changefeed.Infof(ctx, "watched spans for node %d: %v", sp.SQLInstanceID, sp)
 			}
 
 			watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
@@ -487,6 +533,8 @@ func makePlan(
 				Select:              execinfrapb.Expression{Expr: details.Select},
 				Description:         description,
 				ProgressConfig:      progressConfig,
+				ResolvedSpans:       resolvedSpans,
+				SchemaTS:            &schemaTS,
 			}
 		}
 
@@ -502,6 +550,8 @@ func makePlan(
 			UserProto:           execCtx.User().EncodeProto(),
 			Description:         description,
 			ProgressConfig:      progressConfig,
+			ResolvedSpans:       resolvedSpans,
+			SchemaTS:            &schemaTS,
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
@@ -537,11 +587,11 @@ func makePlan(
 			flowSpecs,
 			execinfrapb.DiagramFlags{},
 		); err != nil {
-			log.Dev.Warningf(ctx, "failed to generate changefeed plan diagram: %s", err)
+			log.Changefeed.Warningf(ctx, "failed to generate changefeed plan diagram: %s", err)
 		} else if diagURL := diagURL.String(); len(diagURL) > maxLenDiagURL {
-			log.Dev.Warningf(ctx, "changefeed plan diagram length is too large to be logged: %d", len(diagURL))
+			log.Changefeed.Warningf(ctx, "changefeed plan diagram length is too large to be logged: %d", len(diagURL))
 		} else {
-			log.Dev.Infof(ctx, "changefeed plan diagram: %s", diagURL)
+			log.Changefeed.Infof(ctx, "changefeed plan diagram: %s", diagURL)
 		}
 
 		return p, planCtx, nil
@@ -650,7 +700,7 @@ func rebalanceSpanPartitions(
 		nRanges, ok := p.NumRanges()
 		// We cannot rebalance if we're missing range information.
 		if !ok {
-			log.Dev.Warning(ctx, "skipping rebalance due to missing range info")
+			log.Changefeed.Warning(ctx, "skipping rebalance due to missing range info")
 			return partitions, nil
 		}
 		builders[i].numRanges = nRanges

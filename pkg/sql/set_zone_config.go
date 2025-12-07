@@ -44,8 +44,6 @@ type setZoneConfigNode struct {
 	yamlConfig    tree.TypedExpr
 	options       map[tree.Name]zone.OptionValue
 	setDefault    bool
-
-	run setZoneConfigRun
 }
 
 func (p *planner) getUpdatedZoneConfigYamlConfig(
@@ -228,11 +226,6 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 
 	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(p.SessionData().User(),
 		[]privilege.Kind{privilege.ZONECONFIG, privilege.CREATE}, string(tableDesc.DescriptorType()), tableDesc.GetName())
-}
-
-// setZoneConfigRun contains the run-time state of setZoneConfigNode during local execution.
-type setZoneConfigRun struct {
-	numAffected int
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -747,7 +740,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		zoneToWrite := partialZone
 		// TODO(ajwerner): This is extremely fragile because we accept a nil table
 		// all the way down here.
-		n.run.numAffected, err = writeZoneConfig(
+		err = writeZoneConfig(
 			params.ctx,
 			params.p.InternalSQLTxn(),
 			targetID,
@@ -795,8 +788,6 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 func (n *setZoneConfigNode) Next(runParams) (bool, error) { return false, nil }
 func (n *setZoneConfigNode) Values() tree.Datums          { return nil }
 func (*setZoneConfigNode) Close(context.Context)          {}
-
-func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffected, true }
 
 type nodeGetter func(context.Context, *serverpb.NodesRequest) (*serverpb.NodesResponse, error)
 type regionsGetter func(context.Context) (*serverpb.RegionsResponse, error)
@@ -1058,41 +1049,38 @@ func writeZoneConfig(
 	execCfg *ExecutorConfig,
 	hasNewSubzones bool,
 	kvTrace bool,
-) (numAffected int, err error) {
+) error {
 	update, err := prepareZoneConfigWrites(ctx, execCfg, targetID, table, zone, expectedExistingRawBytes, hasNewSubzones)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	return writeZoneConfigUpdate(ctx, txn, kvTrace, update)
 }
 
 func writeZoneConfigUpdate(
 	ctx context.Context, txn descs.Txn, kvTrace bool, update *zoneConfigUpdate,
-) (numAffected int, err error) {
+) error {
 	b := txn.KV().NewBatch()
 	if update.zoneConfig == nil {
-		err = txn.Descriptors().DeleteZoneConfigInBatch(ctx, kvTrace, b, update.id)
+		err := txn.Descriptors().DeleteZoneConfigInBatch(ctx, kvTrace, b, update.id)
+		if err != nil {
+			return err
+		}
 	} else {
-		numAffected = 1
-		err = txn.Descriptors().WriteZoneConfigToBatch(ctx, kvTrace, b, update.id, update.zoneConfig)
-	}
-	if err != nil {
-		return 0, err
+		err := txn.Descriptors().WriteZoneConfigToBatch(ctx, kvTrace, b, update.id, update.zoneConfig)
+		if err != nil {
+			return err
+		}
 	}
 
 	if err := txn.KV().Run(ctx, b); err != nil {
-		return 0, err
+		return err
 	}
 	r := b.Results[0]
 	if r.Err != nil {
 		panic("run succeeded even through the result has an error")
 	}
-	// We don't really care how many keys are affected since this function always
-	// write one single zone config.
-	if len(r.Keys) > 0 {
-		numAffected = 1
-	}
-	return numAffected, err
+	return nil
 }
 
 // RemoveIndexZoneConfigs removes the zone configurations for some
@@ -1139,7 +1127,7 @@ func RemoveIndexZoneConfigs(
 
 	if zcRewriteNecessary {
 		// Ignore CCL required error to allow schema change to progress.
-		_, err = writeZoneConfig(
+		err = writeZoneConfig(
 			ctx, txn, tableDesc.GetID(), tableDesc, zone,
 			zoneWithRaw.GetRawBytesInStorage(), execCfg,
 			false /* hasNewSubzones */, kvTrace,

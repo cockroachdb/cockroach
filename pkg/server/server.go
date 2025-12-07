@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -68,8 +69,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/apiinternal"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
@@ -97,7 +100,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob"    // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer" // register jobs/planHooks declared outside of pkg/sql
-	_ "github.com/cockroachdb/cockroach/pkg/sql/inspect"  // register jobs declared outside of pkg/sql
+	_ "github.com/cockroachdb/cockroach/pkg/sql/inspect"  // register job and planHook declared outside of pkg/sql
+	_ "github.com/cockroachdb/cockroach/pkg/sql/isession" // register isession constructor hook
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
@@ -301,9 +305,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	engines, err := cfg.CreateEngines(ctx)
 	if err != nil {
-		if true {
-			panic(err)
-		}
 		return nil, errors.Wrap(err, "failed to create engines")
 	}
 	stopper.AddCloser(&engines)
@@ -405,12 +406,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	// and after ValidateAddrs().
 	rpcContext.CheckCertificateAddrs(ctx)
 
-	grpcServer, err := newGRPCServer(ctx, rpcContext, appRegistry)
+	requestMetrics := rpc.NewRequestMetrics()
+	appRegistry.AddMetricStruct(requestMetrics)
+
+	grpcServer, err := newGRPCServer(ctx, rpcContext, requestMetrics)
 	if err != nil {
 		return nil, err
 	}
 
-	drpcServer, err := newDRPCServer(ctx, rpcContext)
+	drpcServer, err := newDRPCServer(ctx, rpcContext, requestMetrics)
 	if err != nil {
 		return nil, err
 	}
@@ -670,7 +674,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
 		transport, err := storeliveness.NewTransport(
 			cfg.AmbientCtx, stopper, clock, kvNodeDialer,
-			grpcServer.Server, drpcServer.DRPCServer, nil, /* knobs */
+			grpcServer.Server, drpcServer.DRPCServer, st, nil, /* knobs */
 		)
 		if err != nil {
 			return nil, err
@@ -902,9 +906,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			uint64(kvserver.EagerLeaseAcquisitionConcurrency.Get(&cfg.Settings.SV)))
 	})
 
-	mmaAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
-		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
-	allocatorSync := mmaintegration.NewAllocatorSync(storePool, mmaAllocator, st)
+	mmaAlloc, mmaAllocSync := func() (mmaprototype.Allocator, *mmaintegration.AllocatorSync) {
+		mmaAllocState := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
+			rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+		allocatorSync := mmaintegration.NewAllocatorSync(storePool, mmaAllocState, st, nil)
+		// We make sure that mmaAllocState is returned through the `Allocator`
+		// interface so that when looking up callers to the interface, we see this
+		// call site.
+		return mmaAllocState, allocatorSync
+	}()
+
 	g.RegisterCallback(
 		gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
 		func(_ string, content roachpb.Value, origTimestampNanos int64) {
@@ -914,8 +925,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 				return
 			}
 			storeLoadMsg := mmaintegration.MakeStoreLoadMsg(storeDesc, origTimestampNanos)
-			mmaAllocator.SetStore(state.StoreAttrAndLocFromDesc(storeDesc))
-			mmaAllocator.ProcessStoreLoadMsg(context.TODO(), &storeLoadMsg)
+			mmaAlloc.SetStore(state.StoreAttrAndLocFromDesc(storeDesc))
+			mmaAlloc.ProcessStoreLoadMsg(ctx, &storeLoadMsg)
 		},
 	)
 
@@ -930,8 +941,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		NodeLiveness:                 nodeLiveness,
 		StoreLiveness:                storeLiveness,
 		StorePool:                    storePool,
-		MMAllocator:                  mmaAllocator,
-		AllocatorSync:                allocatorSync,
+		MMAllocator:                  mmaAlloc,
+		AllocatorSync:                mmaAllocSync,
 		Transport:                    raftTransport,
 		NodeDialer:                   kvNodeDialer,
 		RPCContext:                   rpcContext,
@@ -1312,6 +1323,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	// Tell the status server how to access SQL structures.
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
+	sStatus.setTxnDiagnosticsRequester(sqlServer.execCfg.TxnDiagnosticsRecorder)
 	sStatus.baseStatusServer.sqlServer = sqlServer
 
 	// Create a server controller.
@@ -1577,8 +1589,9 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// startRPCServer (and for the loopback grpc-gw connection).
 	var initServer *initServer
 	{
-		getDialOpts := s.rpcContext.GRPCDialOptions
-		initConfig := newInitServerConfig(ctx, s.cfg, getDialOpts)
+		getGRPCDialOpts := s.rpcContext.GRPCDialOptions
+		getDRPCDialOpts := s.rpcContext.DRPCDialOptions
+		initConfig := newInitServerConfig(ctx, s.cfg, getGRPCDialOpts, getDRPCDialOpts)
 		inspectedDiskState, err := inspectEngines(
 			ctx,
 			s.engines,
@@ -1659,7 +1672,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
 	// below when the server has initialized.
-	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(
+	pgL, loopbackPgL, grpcLoopbackDialFn, drpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(
 		ctx, workersCtx, s.cfg.BaseConfig,
 		s.stopper, s.grpc, s.drpc, ListenAndUpdateAddrs, true /* enableSQLListener */, s.cfg.AcceptProxyProtocolHeaders)
 	if err != nil {
@@ -1669,7 +1682,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	s.loopbackPgL = loopbackPgL
 
 	// Tell the RPC context how to connect in-memory.
-	s.rpcContext.SetLoopbackDialer(rpcLoopbackDialFn)
+	s.rpcContext.SetLoopbackDialer(grpcLoopbackDialFn)
+	s.rpcContext.SetLoopbackDRPCDialer(drpcLoopbackDialFn)
 
 	if s.cfg.TestingKnobs.Server != nil {
 		knobs := s.cfg.TestingKnobs.Server.(*TestingKnobs)
@@ -1705,7 +1719,6 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.cfg.AmbientCtx,
 		s.rpcContext,
 		s.stopper,
-		s.grpc,
 		s.cfg.AdvertiseAddr,
 	)
 	if err != nil {
@@ -2001,7 +2014,12 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// The writes will be async; we'll wait for the first one to go through
 	// later in this method, using the returned channel.
 	firstTSDBPollDone := s.tsDB.PollSource(
-		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
+		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper, false,
+	)
+
+	// high cardinality child metrics collector, we don't need to wait for the first one
+	s.tsDB.PollSource(
+		s.cfg.AmbientCtx, s.recorder, base.DefaultHighCardinalityMetricsSampleInterval, ts.Resolution1m, s.stopper, true,
 	)
 
 	// Export statistics to graphite, if enabled by configuration.
@@ -2127,6 +2145,17 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			return err
 		}
 	}
+	var apiInternalServer http.Handler
+	if rpcbase.TODODRPC && rpcbase.DRPCEnabled(ctx, s.cfg.Settings) {
+		// Pass our own node ID to connect to local RPC servers
+		apiInternalServer, err = apiinternal.NewAPIInternalServer(
+			ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get(), s.cfg.Settings)
+		if err != nil {
+			return err
+		}
+	} else {
+		apiInternalServer = gwMux
+	}
 
 	// Connect the HTTP endpoints. This also wraps the privileged HTTP
 	// endpoints served by gwMux by the HTTP cookie authentication
@@ -2137,10 +2166,12 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	if err := s.http.setupRoutes(ctx,
 		s.sqlServer.ExecutorConfig(), /* execCfg */
 		s.authentication,             /* authnServer */
+		s.admin.adminServer,          /* adminServer */
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */
-		gwMux,                        /* handleRequestsUnauthenticated */
+		gwMux,                        /* unauthenticatedGWMux */
+		apiInternalServer,            /* unauthenticatedAPIInternalServer */
 		s.debug,                      /* handleDebugUnauthenticated */
 		s.inspectzServer,             /* handleInspectzUnauthenticated */
 		newAPIV2Server(ctx, &apiV2ServerOpts{

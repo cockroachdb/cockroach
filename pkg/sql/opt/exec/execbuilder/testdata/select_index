@@ -233,8 +233,15 @@ vectorized: true
               table: t@bc
               spans: /"3"-/"3"/PrefixEnd
 
+
+statement ok
+ALTER TABLE t SET (schema_locked=false)
+
 statement ok
 TRUNCATE TABLE t
+
+statement ok
+ALTER TABLE t SET (schema_locked=true)
 
 statement ok
 INSERT INTO t VALUES
@@ -1936,4 +1943,4 @@ vectorized: true
 • scan
   missing stats
   table: t5@t5_a_idx
-  spans: [/'A.B.C' - /'A.B.D')
+  spans: [/'A.B.C' - /'A.B.C-')

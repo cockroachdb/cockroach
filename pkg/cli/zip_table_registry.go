@@ -162,6 +162,17 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"crdb_internal.hide_sql_constants(stmt) as stmt",
 		},
 	},
+	"crdb_internal.cluster_inspect_errors": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"error_id",
+			"job_id",
+			"error_type",
+			"aost",
+			"database_id",
+			"schema_id",
+			"id",
+		},
+	},
 	"crdb_internal.cluster_locks": {
 		// `lock_key` column contains the txn lock key, which may contain
 		// sensitive row-level data.
@@ -198,6 +209,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"phase",
 			"full_scan",
 			"crdb_internal.hide_sql_constants(query) as query",
+			"num_txn_retries",
+			"num_txn_auto_retries",
 		},
 	},
 	"crdb_internal.cluster_sessions": {
@@ -841,7 +854,6 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 		nonSensitiveCols: NonSensitiveColumns{
 			"flow_id",
 			"node_id",
-			"stmt",
 			"since",
 			"crdb_internal.hide_sql_constants(stmt) as stmt",
 		},
@@ -921,6 +933,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"phase",
 			"full_scan",
 			"crdb_internal.hide_sql_constants(query) as query",
+			"num_txn_retries",
+			"num_txn_auto_retries",
 		},
 	},
 	"crdb_internal.node_runtime_info": {

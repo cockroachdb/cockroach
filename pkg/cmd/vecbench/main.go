@@ -48,6 +48,7 @@ const (
 )
 
 const (
+	ClearLine  = "\033[2K"
 	HideCursor = "\033[?25l"
 	ShowCursor = "\033[?25h"
 )
@@ -78,6 +79,8 @@ var flagDisableAdaptiveSearch = flag.Bool(
 var flagMemStore = flag.Bool("memstore", false, "Use in-memory store instead of CockroachDB")
 var flagDBConnStr = flag.String("db", "postgresql://root@localhost:26257",
 	"Database connection string (when not using --memstore)")
+var flagCreateIndexAfterImport = flag.Bool("index-after", false,
+	"Create vector index after data import instead of during table creation (SQL provider only)")
 
 // vecbench benchmarks vector index in-memory build and search performance on a
 // variety of datasets. Datasets are downloaded from the
@@ -96,6 +99,9 @@ var flagDBConnStr = flag.String("db", "postgresql://root@localhost:26257",
 //	laion-1m-test-ip (1M vectors, 768 dims)
 //	coco-t2i-512-angular (113K vectors, 512 dims)
 //	coco-i2i-512-angular (113K vectors, 512 dims)
+//	wiki-cohere-768-100k-angular (100K vectors, 768 dims)
+//	wiki-cohere-768-1m-angular (1M vectors, 768 dims)
+//	wiki-cohere-768-10m-angular (10M vectors, 768 dims)
 //
 // After download, the datasets are cached in a local temp directory and a
 // vector index is created. The built vector index is also cached in the temp
@@ -122,7 +128,7 @@ func main() {
 	// Hide the cursor, but ensure it's restored on exit, including Ctrl+C.
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	stopper.RunAsyncTask(ctx, "Ctrl+C", func(context.Context) {
+	err := stopper.RunAsyncTask(ctx, "Ctrl+C", func(context.Context) {
 		select {
 		case <-c:
 			fmt.Print(ShowCursor)
@@ -133,12 +139,17 @@ func main() {
 			break
 		}
 	})
+	if err != nil {
+		fmt.Printf("Failed to install Ctrl-C handler: %v\n", err)
+	}
 	fmt.Print(HideCursor)
 	defer fmt.Print(ShowCursor)
 
-	// Start pprof server at http://localhost:8080/debug/pprof/
+	// Start pprof server at http://localhost:8080/debug/pprof/.
 	go func() {
-		http.ListenAndServe("localhost:8080", nil)
+		if err := http.ListenAndServe("localhost:8080", nil); err != nil {
+			fmt.Printf("Failed to start pprof server: %v\n", err)
+		}
 	}()
 
 	switch flag.Arg(0) {
@@ -195,15 +206,9 @@ type vectorBench struct {
 func newVectorBench(ctx context.Context, stopper *stop.Stopper, datasetName string) *vectorBench {
 	// Derive the distance metric from the dataset name, assuming certain naming
 	// conventions.
-	var distanceMetric vecpb.DistanceMetric
-	if strings.HasSuffix(datasetName, "-euclidean") {
-		distanceMetric = vecpb.L2SquaredDistance
-	} else if strings.HasSuffix(datasetName, "-ip") || strings.HasSuffix(datasetName, "-dot") {
-		distanceMetric = vecpb.InnerProductDistance
-	} else if strings.HasSuffix(datasetName, "-angular") {
-		distanceMetric = vecpb.CosineDistance
-	} else {
-		panic(errors.Newf("can't derive distance metric for dataset %s", datasetName))
+	distanceMetric, err := vecann.DeriveDistanceMetric(datasetName)
+	if err != nil {
+		panic(err)
 	}
 
 	return &vectorBench{
@@ -244,20 +249,28 @@ func (vb *vectorBench) SearchIndex() {
 			panic(err)
 		}
 
-		start := timeutil.Now()
+		// Create percentile estimator for search latencies.
+		latencyEstimator := NewPercentileEstimator(1000)
 
 		// Search for test vectors.
-		var sumRecall, sumVectors, sumLeafVectors, sumFullVectors, sumPartitions float64
+		var sumRecall, sumVectors, sumLeafVectors, sumFullVectors, sumPartitions, sumElapsed float64
 		count := vb.data.Test.Count
 		for i := range count {
 			// Calculate truth set for the vector.
 			queryVector := vb.data.Test.At(i)
 
+			// Time individual search.
+			start := timeutil.Now()
 			var stats cspann.SearchStats
 			prediction, err := vb.provider.Search(vb.ctx, state, queryVector, &stats)
 			if err != nil {
 				panic(err)
 			}
+
+			// Record latency in seconds.
+			elapsed := timeutil.Since(start).Seconds()
+			sumElapsed += elapsed
+			latencyEstimator.Add(elapsed)
 
 			primaryKeys := make([]byte, maxResults*4)
 			truth := make([]cspann.KeyBytes, maxResults)
@@ -267,19 +280,25 @@ func (vb *vectorBench) SearchIndex() {
 				truth[neighbor] = primaryKey
 			}
 
-			sumRecall += calculateRecall(prediction, truth)
+			sumRecall += vecann.CalculateRecall(prediction, truth)
 			sumVectors += float64(stats.QuantizedVectorCount)
 			sumLeafVectors += float64(stats.QuantizedLeafVectorCount)
 			sumFullVectors += float64(stats.FullVectorCount)
 			sumPartitions += float64(stats.PartitionCount)
 		}
 
-		elapsed := timeutil.Since(start)
-		fmt.Printf("%d\t%0.2f%%\t%0.0f\t%0.0f\t%0.2f\t%0.2f\t%0.2f\n",
+		qps := float64(count) / sumElapsed
+
+		// Calculate percentile latencies.
+		p50Latency := latencyEstimator.Estimate(0.50) * 1000
+		p95Latency := latencyEstimator.Estimate(0.95) * 1000
+		p99Latency := latencyEstimator.Estimate(0.99) * 1000
+
+		fmt.Printf("%d\t%0.2f%%\t%0.0f\t%0.0f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\n",
 			beamSize, sumRecall/float64(count)*100,
 			sumLeafVectors/float64(count), sumVectors/float64(count),
 			sumFullVectors/float64(count), sumPartitions/float64(count),
-			float64(count)/elapsed.Seconds())
+			qps, p50Latency, p95Latency, p99Latency)
 	}
 
 	fmt.Println()
@@ -290,7 +309,7 @@ func (vb *vectorBench) SearchIndex() {
 		minPartitionSize, maxPartitionSize, *flagBeamSize)
 	fmt.Println(vb.provider.FormatStats())
 
-	fmt.Printf("beam\trecall\tleaf\tall\tfull\tpartns\tqps\n")
+	fmt.Printf("beam\trecall\tleaf\tall\tfull\tpartns\tqps\tp50(ms)\tp95(ms)\tp99(ms)\n")
 
 	// Search multiple times with different search beam sizes.
 	beamSizeStrs := strings.Split(*flagSearchBeamSizes, ",")
@@ -323,6 +342,14 @@ func (vb *vectorBench) BuildIndex() {
 		panic(err)
 	}
 
+	// Create index immediately if flag is not set (default behavior).
+	if !*flagCreateIndexAfterImport {
+		err = vb.provider.CreateIndex(vb.ctx)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	// Compute percentile latencies.
 	estimator := NewPercentileEstimator(1000)
 
@@ -351,7 +378,7 @@ func (vb *vectorBench) BuildIndex() {
 	var lastInserted int
 	batchSize := *flagBatchSize
 
-	// Reset the dataset to start from the beginning
+	// Reset the dataset to start from the beginning.
 	vb.data.Reset()
 
 	for {
@@ -367,7 +394,7 @@ func (vb *vectorBench) BuildIndex() {
 		trainBatch := vb.data.Train
 		insertedBefore := int(insertCount.Load())
 
-		// Create primary keys for this batch
+		// Create primary keys for this batch.
 		primaryKeys := make([]cspann.KeyBytes, trainBatch.Count)
 		keyBuf := make(cspann.KeyBytes, trainBatch.Count*4)
 		for i := range trainBatch.Count {
@@ -439,6 +466,50 @@ func (vb *vectorBench) BuildIndex() {
 		}
 	}
 
+	// Create index after import if flag is set.
+	if *flagCreateIndexAfterImport {
+		if !*flagHideProgress {
+			fmt.Println()
+		}
+		startIndexTime := timeutil.Now()
+
+		// Start index creation in a goroutine to track progress.
+		done := make(chan error, 1)
+		go func() {
+			done <- vb.provider.CreateIndex(vb.ctx)
+		}()
+
+		// Track progress until CreateIndex returns.
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case err := <-done:
+				// CreateIndex returned, stop tracking.
+				if err != nil {
+					panic(err)
+				}
+				fmt.Printf(ClearLine+White+"\rVector index creation completed in %v\n"+Reset,
+					roundDuration(timeutil.Since(startIndexTime)))
+				goto indexCreated
+			case <-ticker.C:
+				if *flagHideProgress {
+					break
+				}
+				// Check progress.
+				progress, err := vb.provider.CheckIndexCreationStatus(vb.ctx)
+				if err != nil {
+					fmt.Printf(Red+"Error checking index status: %v\n"+Reset, err)
+				} else {
+					fmt.Printf(ClearLine+White+"\rIndex creation progress: %.1f%% in %v"+Reset,
+						progress*100, timeutil.Since(startIndexTime).Truncate(time.Second))
+				}
+			}
+		}
+	indexCreated:
+	}
+
 	fmt.Printf(White+"\nBuilt index in %v\n"+Reset, roundDuration(startAt.Elapsed()))
 
 	// Ensure that index is persisted so it can be reused.
@@ -477,6 +548,11 @@ func (vb *vectorBench) ensureDataset(ctx context.Context) {
 func newVectorProvider(
 	stopper *stop.Stopper, datasetName string, dims int, distanceMetric vecpb.DistanceMetric,
 ) (VectorProvider, error) {
+	// Validate flag compatibility.
+	if *flagCreateIndexAfterImport && *flagMemStore {
+		return nil, errors.New("--create-index-after-import flag cannot be used with --memstore")
+	}
+
 	options := cspann.IndexOptions{
 		MinPartitionSize:      minPartitionSize,
 		MaxPartitionSize:      maxPartitionSize,
@@ -496,26 +572,6 @@ func newVectorProvider(
 	}
 
 	return provider, nil
-}
-
-// calculateRecall returns the percentage overlap of the predicted set with the
-// truth set. If the predicted set has fewer items than the truth set, it is
-// treated as if the predicted set has missing/incorrect items that reduce the
-// recall rate.
-func calculateRecall(prediction, truth []cspann.KeyBytes) float64 {
-	predictionMap := make(map[string]bool, len(prediction))
-	for _, p := range prediction {
-		predictionMap[string(p)] = true
-	}
-
-	var intersect float64
-	for _, t := range truth {
-		_, ok := predictionMap[string(t)]
-		if ok {
-			intersect++
-		}
-	}
-	return intersect / float64(len(truth))
 }
 
 func roundDuration(duration time.Duration) time.Duration {

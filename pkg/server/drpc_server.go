@@ -24,26 +24,32 @@ type drpcServer struct {
 	serveModeHandler
 	// Underlying DRPC server implementation.
 	rpc.DRPCServer
-	// Indicates if DRPC is enabled for this server.
-	enabled bool
 	// TLS configuration for secure connections.
 	tlsCfg *tls.Config
 }
 
 // newDRPCServer creates and configures a new drpcServer instance. It enables
 // DRPC if the experimental setting is on, otherwise returns a dummy server.
-func newDRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*drpcServer, error) {
+func newDRPCServer(
+	ctx context.Context, rpcCtx *rpc.Context, requestMetrics *rpc.RequestMetrics,
+) (*drpcServer, error) {
 	drpcServer := &drpcServer{}
-	if rpc.ExperimentalDRPCEnabled.Get(&rpcCtx.Settings.SV) {
-		d, err := rpc.NewDRPCServer(ctx, rpcCtx)
-		if err != nil {
-			return nil, err
-		}
-		drpcServer.DRPCServer = d
-		drpcServer.enabled = true
-	} else {
-		drpcServer.DRPCServer = rpc.NewDummyDRPCServer()
-		drpcServer.enabled = false
+	drpcServer.setMode(modeInitializing)
+
+	d, err := rpc.NewDRPCServer(
+		ctx,
+		rpcCtx,
+		rpc.WithInterceptor(
+			func(path string) error {
+				return drpcServer.intercept(path)
+			}),
+		rpc.WithDRPCMetricsServerInterceptor(
+			rpc.NewDRPCRequestMetricsInterceptor(requestMetrics, func(method string) bool {
+				return shouldRecordRequestDuration(rpcCtx.Settings, method)
+			}),
+		))
+	if err != nil {
+		return nil, err
 	}
 
 	tlsCfg, err := rpcCtx.GetServerTLSConfig()
@@ -51,8 +57,8 @@ func newDRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*drpcServer, error
 		return nil, err
 	}
 
+	drpcServer.DRPCServer = d
 	drpcServer.tlsCfg = tlsCfg
-	drpcServer.setMode(modeInitializing)
 
 	if err := rpc.DRPCRegisterHeartbeat(drpcServer, rpcCtx.NewHeartbeatService()); err != nil {
 		return nil, err

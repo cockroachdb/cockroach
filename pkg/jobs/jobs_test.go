@@ -392,6 +392,7 @@ func (rts *registryTestSuite) idb() isql.DB {
 func TestRegistryLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 152542)
 
 	t.Run("normal success", func(t *testing.T) {
 		rts := registryTestSuite{}
@@ -3215,7 +3216,7 @@ func TestJobTypeMetrics(t *testing.T) {
 
 	checkPTSCounts := func(typ jobspb.Type, count int64) {
 		testutils.SucceedsSoon(t, func() error {
-			m := reg.MetricsStruct().JobMetrics[typ]
+			m := reg.MetricsStruct().JobPTSMetrics[typ]
 			if m.NumJobsWithPTS.Value() == count && (count == 0 || m.ProtectedAge.Value() > 0) {
 				return nil
 			}

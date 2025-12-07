@@ -252,6 +252,8 @@ func (s *Stopper) OnQuiesce(f func()) {
 
 // AddCloser adds an object to close after the stopper has been stopped.
 //
+// Closers are called in the reverse add order.
+//
 // WARNING: memory resources acquired by this method will stay around for
 // the lifetime of the Stopper. Use with care to avoid leaking memory.
 //

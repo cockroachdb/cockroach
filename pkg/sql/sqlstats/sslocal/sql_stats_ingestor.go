@@ -265,6 +265,25 @@ func (i *SQLStatsIngester) ingest(ctx context.Context, events *eventBuffer) {
 	}
 }
 
+func (i *SQLStatsIngester) RecordStatement(statement *sqlstats.RecordedStmtStats) {
+	i.BufferStatement(statement)
+	if i.testingKnobs != nil && i.testingKnobs.SynchronousSQLStats {
+		// Flush buffer and wait for the stats ingester to finish writing.
+		i.guard.ForceSync()
+		<-i.syncStatsTestingCh
+	}
+}
+
+func (i *SQLStatsIngester) RecordTransaction(transaction *sqlstats.RecordedTxnStats) {
+	i.BufferTransaction(transaction)
+
+	if i.testingKnobs != nil && i.testingKnobs.SynchronousSQLStats {
+		// Flush buffer and wait for the stats ingester to finish writing.
+		i.guard.ForceSync()
+		<-i.syncStatsTestingCh
+	}
+}
+
 func (i *SQLStatsIngester) BufferStatement(statement *sqlstats.RecordedStmtStats) {
 	if i.testingKnobs != nil && i.testingKnobs.IngesterStmtInterceptor != nil {
 		i.testingKnobs.IngesterStmtInterceptor(statement.SessionID, statement)

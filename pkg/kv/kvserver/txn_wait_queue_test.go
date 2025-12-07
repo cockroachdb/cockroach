@@ -37,7 +37,7 @@ import (
 
 func writeTxnRecord(ctx context.Context, tc *testContext, txnRecord *roachpb.Transaction) error {
 	key := keys.TransactionKey(txnRecord.Key, txnRecord.ID)
-	return storage.MVCCPutProto(ctx, tc.store.TODOEngine(), key, hlc.Timestamp{}, txnRecord, storage.MVCCWriteOptions{})
+	return storage.MVCCPutProto(ctx, tc.store.StateEngine(), key, hlc.Timestamp{}, txnRecord, storage.MVCCWriteOptions{})
 }
 
 // createTxnForPushQueue creates a txn struct and writes a "fake"

@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -93,7 +93,7 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 		// function signature syntax is sane from grammar perspective. We may
 		// match postgres' implementation of `parseNameAndArgTypes` to return
 		// more detailed errors like "expected a left parenthesis".
-		stmt, err := parser.ParseOne("ALTER FUNCTION " + strings.TrimSpace(s) + " IMMUTABLE")
+		stmt, err := parserutils.ParseOne("ALTER FUNCTION " + strings.TrimSpace(s) + " IMMUTABLE")
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid function signature: %s", s)
 		}

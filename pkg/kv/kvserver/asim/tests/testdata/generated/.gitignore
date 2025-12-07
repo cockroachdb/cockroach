@@ -4,4 +4,9 @@
 !*/
 
 # Except this specific directory (relative to .gitignore)
-!example_rebalancing/**
+# Note that this intentionally does not include subdirectories (such as traces)
+# which are not deterministic.
+!sma/rebalancing_qps/**
+**/traces
+# And the readme file.
+!README.md

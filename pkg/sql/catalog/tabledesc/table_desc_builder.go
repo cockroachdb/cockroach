@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -1188,7 +1188,7 @@ func maybeUpgradeSequenceReferenceForView(
 		if err != nil {
 			return false, expr, err
 		}
-		newExpr, err = parser.ParseExpr(newExprStr)
+		newExpr, err = parserutils.ParseExpr(newExprStr)
 		if err != nil {
 			return false, expr, err
 		}
@@ -1197,7 +1197,7 @@ func maybeUpgradeSequenceReferenceForView(
 		return false, newExpr, err
 	}
 
-	stmt, err := parser.ParseOne(viewDesc.GetViewQuery())
+	stmt, err := parserutils.ParseOne(viewDesc.GetViewQuery())
 	if err != nil {
 		return hasUpgraded, err
 	}

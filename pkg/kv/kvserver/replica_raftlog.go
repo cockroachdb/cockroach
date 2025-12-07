@@ -386,7 +386,7 @@ func (r *replicaRaftMuLogSnap) LogSnapshot() raft.LogStorageSnapshot {
 
 func (r *replicaLogStorage) reportRaftStorageError(err error) {
 	if raftStorageErrorLogger.ShouldLog() {
-		log.Dev.Errorf(r.ctx, "error in raft.LogStorage %v", err)
+		log.KvExec.Errorf(r.ctx, "error in raft.LogStorage %v", err)
 	}
 	r.metrics.RaftStorageError.Inc(1)
 }

@@ -6,9 +6,12 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -16,9 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
+	"github.com/cockroachdb/crlib/crstrings"
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -147,20 +153,20 @@ func TestStartArgChecking(t *testing.T) {
 		{[]string{`--store=path=~/blah`}, `path cannot start with '~': ~/blah`},
 		{[]string{`--store=path=./~/blah`}, ``},
 		{[]string{`--store=size=blih`}, `could not parse size`},
-		{[]string{`--store=size=0.005`}, `size \(0.005\) must be between 1% and 100%`},
-		{[]string{`--store=size=100.5`}, `size \(100.5\) must be between 1% and 100%`},
-		{[]string{`--store=size=0.5%`}, `size \(0.5%\) must be between 1% and 100%`},
-		{[]string{`--store=size=0.5%`}, `size \(0.5%\) must be between 1% and 100%`},
-		{[]string{`--store=size=500.0%`}, `size \(500.0%\) must be between 1% and 100%`},
+		{[]string{`--store=size=0.005`}, `store size \(0.5%\) must be at least 1%`},
+		{[]string{`--store=size=100.5`}, `size \(100.5\) must be between 0% and 100%`},
+		{[]string{`--store=size=0.5%`}, `size \(0.5%\) must be at least 1%`},
+		{[]string{`--store=size=0.5%`}, `size \(0.5%\) must be at least 1%`},
+		{[]string{`--store=size=500.0%`}, `size \(500.0%\) must be between 0% and 100%`},
 		{[]string{`--store=size=.5,path=.`}, ``},
 		{[]string{`--store=size=50.%,path=.`}, ``},
 		{[]string{`--store=size=50%,path=.`}, ``},
 		{[]string{`--store=size=50.5%,path=.`}, ``},
-		{[]string{`--store=size=-1231MB`}, `size \(-1231MB\) must be at least`},
-		{[]string{`--store=size=1231B`}, `size \(1231B\) must be at least`},
-		{[]string{`--store=size=1231BLA`}, `unhandled size name: bla`},
-		{[]string{`--store=ballast-size=60.0`}, `ballast: size \(60.0\) must be between 0% and 50%`},
-		{[]string{`--store=ballast-size=1231BLA`}, `unhandled size name: bla`},
+		{[]string{`--store=size=-1231MB`}, `size \(-1,231,000,000 B\) must be at least`},
+		{[]string{`--store=size=1231B`}, `size \(1,231 B\) must be at least`},
+		{[]string{`--store=size=1231BLA`}, `unknown unit "BLA"`},
+		{[]string{`--store=ballast-size=60.0`}, `ballast: size \(60.0\) must be between 0% and 100%`},
+		{[]string{`--store=ballast-size=1231BLA`}, `unknown unit "BLA"`},
 		{[]string{`--store=ballast-size=0.5%,path=.`}, ``},
 		{[]string{`--store=ballast-size=.5,path=.`}, ``},
 		{[]string{`--store=ballast-size=50.%,path=.`}, ``},
@@ -215,9 +221,8 @@ func TestExitIfDiskFull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	err := exitIfDiskFull(mockDiskSpaceFS{FS: vfs.NewMem()}, []base.StoreSpec{
-		{},
-	})
+	err := exitIfDiskFull(t.Context(), &mockDiskSpaceFS{FS: vfs.NewMem()},
+		[]base.StoreSpec{{}})
 	require.Error(t, err)
 	var cliErr *clierror.Error
 	require.True(t, errors.As(err, &cliErr))
@@ -226,12 +231,88 @@ func TestExitIfDiskFull(t *testing.T) {
 
 type mockDiskSpaceFS struct {
 	vfs.FS
+	diskUsages map[string]vfs.DiskUsage
 }
 
-func (fs mockDiskSpaceFS) GetDiskUsage(path string) (vfs.DiskUsage, error) {
+func (fs *mockDiskSpaceFS) Unwrap() vfs.FS { return fs.FS }
+
+func (fs *mockDiskSpaceFS) GetDiskUsage(path string) (vfs.DiskUsage, error) {
+	if fs.diskUsages != nil {
+		for usagePath, usage := range fs.diskUsages {
+			if strings.HasPrefix(path, usagePath) {
+				return usage, nil
+			}
+		}
+	}
 	return vfs.DiskUsage{
 		AvailBytes: 10 << 20,
 		TotalBytes: 100 << 30,
 		UsedBytes:  100<<30 - 10<<20,
 	}, nil
+}
+
+func TestExitIfDiskFullDatadriven(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var buf bytes.Buffer
+	var fs vfs.FS = vfs.NewMem()
+	require.NoError(t, fs.MkdirAll("/mnt", 0755))
+	mockDiskUsage := &mockDiskSpaceFS{FS: fs, diskUsages: make(map[string]vfs.DiskUsage)}
+	fs = vfs.WithLogging(mockDiskUsage, func(format string, args ...interface{}) {
+		fmt.Fprint(&buf, "# ")
+		fmt.Fprintf(&buf, format, args...)
+		fmt.Fprintln(&buf)
+	})
+	datadriven.RunTestAny(t, "testdata/exit_if_disk_full", func(t testing.TB, td *datadriven.TestData) string {
+		buf.Reset()
+		switch td.Cmd {
+		case "run":
+			var specs []base.StoreSpec
+			clear(mockDiskUsage.diskUsages)
+			for _, line := range crstrings.Lines(td.Input) {
+				switch {
+				case strings.HasPrefix(line, "disk-usage:"):
+					// disk-usage: <path> <avail> <total>
+					line = strings.TrimSpace(strings.TrimPrefix(line, "disk-usage:"))
+					fields := strings.Fields(line)
+					if len(fields) != 3 {
+						return fmt.Sprintf("invalid disk-usage line: %q", line)
+					}
+					path := fields[0]
+					avail, err := humanizeutil.ParseBytes(fields[1])
+					if err != nil {
+						return fmt.Sprintf("invalid disk-usage line: %q", line)
+					}
+					total, err := humanizeutil.ParseBytes(fields[2])
+					if err != nil {
+						return fmt.Sprintf("invalid disk-usage line: %q", line)
+					}
+					mockDiskUsage.diskUsages[path] = vfs.DiskUsage{
+						AvailBytes: uint64(avail),
+						TotalBytes: uint64(total),
+						UsedBytes:  uint64(total - avail),
+					}
+				case strings.HasPrefix(line, "store:"):
+					line = strings.TrimSpace(strings.TrimPrefix(line, "store:"))
+					spec, err := base.NewStoreSpec(line)
+					if err != nil {
+						return fmt.Sprintf("failed to parse store spec: %v", err)
+					}
+					specs = append(specs, spec)
+				default:
+					return fmt.Sprintf("unknown line: %q", line)
+				}
+			}
+			err := exitIfDiskFull(t.Context(), fs, specs)
+			if err == nil {
+				fmt.Fprint(&buf, "<no-error>")
+			} else {
+				fmt.Fprintf(&buf, "<error:%s>", err)
+			}
+			return buf.String()
+		default:
+			return fmt.Sprintf("unknown command: %s", td.Cmd)
+		}
+	})
 }

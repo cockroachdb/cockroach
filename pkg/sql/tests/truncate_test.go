@@ -400,7 +400,7 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 
 			var err error
 			_, err = conn.ExecContext(ctx, `
-CREATE TABLE a(a INT PRIMARY KEY, b INT, INDEX(b));
+CREATE TABLE a(a INT PRIMARY KEY, b INT, INDEX(b)) WITH (schema_locked=false);
 INSERT INTO a SELECT g,g FROM generate_series(1,10000) g(g);
 ALTER TABLE a SPLIT AT VALUES(1000), (2000), (3000), (4000), (5000), (6000), (7000), (8000), (9000);
 ALTER INDEX a_b_idx SPLIT AT VALUES(1000), (2000), (3000), (4000), (5000), (6000), (7000), (8000), (9000);
@@ -429,9 +429,10 @@ SELECT count(*) FROM [SHOW RANGES FROM TABLE a]`)
 
 			// We subtract 1 from the original n ranges because the first range
 			// can't be migrated to the new keyspace, as its prefix doesn't
-			// include an index ID.
-			expRanges := origNRanges + testCase.nodes*int(sql.PreservedSplitCountMultiple.Get(
-				&tenantSettings.SV))
+			// include an index ID. The declarative schema changer will create
+			// split point count per-index.
+			expRanges := origNRanges + min((testCase.nodes*int(sql.PreservedSplitCountMultiple.Get(
+				&tenantSettings.SV)*2)), origNRanges-1)
 
 			testutils.SucceedsSoon(t, func() error {
 				row := conn.QueryRowContext(ctx, `

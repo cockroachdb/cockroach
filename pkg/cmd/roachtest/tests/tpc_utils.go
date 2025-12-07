@@ -19,23 +19,30 @@ import (
 	"github.com/lib/pq"
 )
 
-// loadTPCHDataset loads a TPC-H dataset for the specific benchmark spec on the
-// provided roachNodes. The function is idempotent and first checks whether a
-// compatible dataset exists (compatible is defined as a tpch dataset with a
-// scale factor at least as large as the provided scale factor), performing an
-// expensive dataset restore only if it doesn't.
+// importTPCHDataset imports a TPC-H dataset for the specific scale factor. The
+// function is idempotent and first checks whether a compatible dataset exists
+// (compatible is defined as a tpch dataset with a scale factor at least as
+// large as the provided scale factor), performing an expensive dataset IMPORT
+// only if it doesn't.
 //
 // The function disables auto stats collection and ensures that table statistics
 // are present for all TPCH tables.
-func loadTPCHDataset(
+//
+// - virtualClusterName, if set, is the name of the target secondary tenant to
+// import into.
+// - smallRanges, if true, will change the zone config to reduce range sizes to
+// be in [16MiB, 64MiB] interval.
+func importTPCHDataset(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
+	virtualClusterName string,
 	db *gosql.DB,
 	sf int,
 	m cluster.Monitor,
 	roachNodes option.NodeListOption,
 	disableMergeQueue bool,
+	smallRanges bool,
 ) (retErr error) {
 	_, err := db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
 	if err != nil {
@@ -91,20 +98,21 @@ func loadTPCHDataset(
 		return err
 	}
 
-	t.L().Printf("restoring tpch scale factor %d\n", sf)
-	// Lower the target size for the restore spans so that we get more ranges.
-	// This is useful to exercise the parallelism across ranges within a single
-	// query.
-	if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING backup.restore_span.target_size = '64MiB';"); err != nil {
-		return err
+	if smallRanges {
+		// Reduce the range size so that we get more ranges. This is useful to
+		// exercise the parallelism across ranges within a single query.
+		if _, err := db.ExecContext(ctx, "ALTER RANGE default CONFIGURE ZONE USING range_min_bytes = 16777216, range_max_bytes = 67108864;"); err != nil {
+			return err
+		}
 	}
-	tpchURL := fmt.Sprintf("gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=%d/backup?AUTH=implicit", sf)
-	if _, err := db.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS tpch;`); err != nil {
-		return err
+	t.L().Printf("importing tpch scale factor %d\n", sf)
+	node := roachNodes.RandNode()
+	var tenantSuffix string
+	if virtualClusterName != "" {
+		tenantSuffix = fmt.Sprintf(":%s", virtualClusterName)
 	}
-	query := fmt.Sprintf(`RESTORE tpch.* FROM '/' IN '%s' WITH into_db = 'tpch', unsafe_restore_incompatible_version;`, tpchURL)
-	_, err = db.ExecContext(ctx, query)
-	return err
+	cmd := fmt.Sprintf("./cockroach workload fixtures import tpch --scale-factor=%d --checks=false {pgurl%s%s}", sf, node, tenantSuffix)
+	return c.RunE(ctx, option.WithNodes(node), cmd)
 }
 
 // scatterTables runs "ALTER TABLE ... SCATTER" statement for every table in

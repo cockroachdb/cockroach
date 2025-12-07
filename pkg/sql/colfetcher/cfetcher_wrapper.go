@@ -223,6 +223,11 @@ func newCFetcherWrapper(
 	const collectStats = false
 	// We cannot reuse batches if we're not serializing the response.
 	alwaysReallocate := !mustSerialize
+
+	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+	if !ok {
+		tenantID = roachpb.SystemTenantID
+	}
 	// TODO(yuzefovich, 23.1): think through estimatedRowCount (#94850) and
 	// traceKV arguments.
 	fetcher.cFetcherArgs = cFetcherArgs{
@@ -232,7 +237,8 @@ func newCFetcherWrapper(
 		true,  /* singleUse */
 		collectStats,
 		alwaysReallocate,
-		nil, /* txn */
+		nil, /* txn; TODO(dt): this means no AC priority info is passed. */
+		tenantID,
 	}
 
 	// This memory monitor is not connected to the memory accounting system

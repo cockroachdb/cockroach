@@ -83,7 +83,7 @@ func (ctx *jsonpathCtx) evalNumericMethod(
 			dec.Negative = false
 		}
 	default:
-		panic(errors.Newf("unimplemented method: %s", method.Type))
+		return nil, errors.Newf("unsupported jsonpath method type %d for numeric evaluation", method.Type)
 	}
 	if err != nil {
 		return nil, err

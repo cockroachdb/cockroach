@@ -457,8 +457,12 @@ func (s *DmsetupDiskStaller) Setup(ctx context.Context, l *logger.Logger, args F
 
 	// snapd will run "snapd auto-import /dev/dm-0" via udev triggers when
 	// /dev/dm-0 is created. This possibly interferes with the dmsetup create
-	// reload, so uninstall snapd.
-	if err = s.Run(ctx, l, s.c.Nodes, `sudo apt-get purge -y snapd`); err != nil {
+	// reload, so we disable snapd auto-import udev rules by creating an empty
+	// /etc/udev/rules.d/66-snapd-autoimport.rules file (which takes precedence
+	// over the corresponding file in /lib/udev/rules.d/).
+	if err = s.Run(ctx, l, s.c.Nodes, `echo '# disabled during tests' | sudo tee /etc/udev/rules.d/66-snapd-autoimport.rules >/dev/null; \
+sudo udevadm control --reload; \
+sudo udevadm settle`); err != nil {
 		return err
 	}
 	if err = s.Run(ctx, l, s.c.Nodes, `sudo umount -f /mnt/data1 || true`); err != nil {
@@ -578,8 +582,9 @@ func (s *DmsetupDiskStaller) Cleanup(
 	if err := s.Run(ctx, l, s.c.Nodes, `sudo mount /mnt/data1`); err != nil {
 		return err
 	}
-	// Reinstall snapd.
-	if err := s.Run(ctx, l, s.c.Nodes, `sudo apt-get install -y snapd`); err != nil {
+	// Reenable snapd autoimport udev rules.
+	if err := s.Run(ctx, l, s.c.Nodes, `sudo rm -f /etc/udev/rules.d/66-snapd-autoimport.rules; \
+sudo udevadm control --reload`); err != nil {
 		return err
 	}
 

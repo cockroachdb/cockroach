@@ -461,6 +461,10 @@ type layerFilters struct {
 	// the hydration of another descriptor which depends on it.
 	// TODO(postamar): untangle the hydration mess
 	withoutHydration bool
+	// withMetadata will read zone configs and comments for lease descriptors.
+	// This is always acquired for descriptors from storage, and may need an extra
+	// round trip.
+	withMetadata bool
 }
 
 type descFilters struct {
@@ -523,6 +527,14 @@ type ByIDGetterBuilder getterBase
 // the main client of this layer.
 func (b ByIDGetterBuilder) WithoutSynthetic() ByIDGetterBuilder {
 	b.flags.layerFilters.withoutSynthetic = true
+	return b
+}
+
+// WithMetaData configures the byIDGetterBuilder to read zone configs and comments
+// for lease descriptors. This is always acquired for descriptors from storage,
+// and may need an extra round trip.
+func (b ByIDGetterBuilder) WithMetaData() ByIDGetterBuilder {
+	b.flags.layerFilters.withMetadata = true
 	return b
 }
 

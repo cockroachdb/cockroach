@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -17,13 +16,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -38,10 +37,10 @@ import (
 
 func TestTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	skip.UnderRace(t, "does too much work under race, see: "+
 		"https://github.com/cockroachdb/cockroach/pull/56343#issuecomment-733577377")
-
-	defer log.Scope(t).Close(t)
 
 	// These are always appended, even without the test specifying it.
 	alwaysOptionalSpans := []string{
@@ -53,6 +52,7 @@ func TestTrace(t *testing.T) {
 		"local proposal",
 		"admissionWorkQueueWait",
 		"index recommendation",
+		"/cockroach.roachpb.KVBatch/Batch", // present with dRPC, absent with gRPC
 	}
 	// Depending on whether the data is local or not, we may not see these
 	// spans. Only applicable with distsql=on.
@@ -62,33 +62,30 @@ func TestTrace(t *testing.T) {
 		"/cockroach.sql.distsqlrun.DistSQL/FlowStream",
 		"noop",
 	}
-	nonVectorizedExpSpans := []string{
+	// These are optional if we use a test tenant.
+	tenantOptionalSpans := []string{
+		"/cockroach.roachpb.Internal/RangeLookup",
+		"executeWriteBatch",
+	}
+	commonExpSpans := []string{
 		"session recording",
 		"sql txn",
 		"sql query",
 		"optimizer",
 		"flow",
-		"table reader",
 		"consuming rows",
 		"txn coordinator send",
 		"dist sender send",
 		"/cockroach.roachpb.Internal/Batch",
 		"commit sql txn",
 	}
-	vectorizedExpSpans := []string{
-		"session recording",
-		"sql txn",
-		"sql query",
-		"optimizer",
-		"flow",
+	nonVectorizedExpSpans := append(append([]string(nil), commonExpSpans...), []string{
+		"table reader",
+	}...)
+	vectorizedExpSpans := append(append([]string(nil), commonExpSpans...), []string{
 		"batch flow coordinator",
 		"colbatchscan",
-		"consuming rows",
-		"txn coordinator send",
-		"dist sender send",
-		"/cockroach.roachpb.Internal/Batch",
-		"commit sql txn",
-	}
+	}...)
 
 	getRows := func(t *testing.T, sqlDB *gosql.DB, distsql, vectorize string, useShowTraceFor bool) (*gosql.Rows, string, error) {
 		if _, err := sqlDB.Exec(fmt.Sprintf("SET distsql = %s", distsql)); err != nil {
@@ -212,6 +209,9 @@ func TestTrace(t *testing.T) {
 		if test.distSQL == "on" {
 			optionalSpans = append(optionalSpans, distsqlOptionalSpans...)
 		}
+		if cluster.StartedDefaultTestTenant() {
+			optionalSpans = append(optionalSpans, tenantOptionalSpans...)
+		}
 		expSpans := nonVectorizedExpSpans
 		if test.vectorize == "on" {
 			expSpans = vectorizedExpSpans
@@ -240,8 +240,9 @@ func TestTrace(t *testing.T) {
 							//
 							// TODO(andrei): Pull the check for an empty session_trace out of
 							// the sub-tests so we can use cluster.ServerConn(i) here.
-							pgURL, cleanup := pgurlutils.PGUrl(
-								t, cluster.Server(i).AdvSQLAddr(), "TestTrace", url.User(username.RootUser))
+							pgURL, cleanup := cluster.ApplicationLayer(i).PGUrl(
+								t, serverutils.CertsDirPrefix("TestTrace"), serverutils.User(username.RootUser),
+							)
 							defer cleanup()
 							q := pgURL.Query()
 							// This makes it easier to test with the `tracing` sesssion var.
@@ -347,10 +348,19 @@ func TestTraceFieldDecomposition(t *testing.T) {
 			},
 		},
 	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
 
 	sqlDB.SetMaxOpenConns(1)
+
+	if srv.DeploymentMode() == serverutils.ExternalProcess {
+		// Disable RU estimation because it adds a structured payload to the
+		// trace that - when stringified - can have unexpected whitespace (i.e.
+		// it'll be of the form 'r_u:0.625 ').
+		if _, err := sqlDB.Exec("SET CLUSTER SETTING sql.tenant_ru_estimation.enabled = false;"); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	if _, err := sqlDB.Exec("SET tracing = ON"); err != nil {
 		t.Fatal(err)
@@ -541,6 +551,11 @@ func TestTraceDistSQL(t *testing.T) {
 	})
 	defer cluster.Stopper().Stop(ctx)
 
+	if cluster.DefaultTenantDeploymentMode().IsExternal() {
+		cluster.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
 	r := sqlutils.MakeSQLRunner(cluster.ServerConn(0))
 	// TODO(yuzefovich): tracing in the vectorized engine is very limited since
 	// only wrapped processors and the materializers use it outside of the
@@ -568,7 +583,11 @@ func TestTraceDistSQL(t *testing.T) {
 	require.NotNil(t, anonTagGroup)
 	val, ok := anonTagGroup.FindTag("node")
 	require.True(t, ok)
-	require.Equal(t, "2", val)
+	expected := "2"
+	if cluster.DefaultTenantDeploymentMode().IsExternal() {
+		expected = "sql2"
+	}
+	require.Equal(t, expected, val)
 }
 
 // Test the sql.trace.stmt.enable_threshold cluster setting.
@@ -595,12 +614,9 @@ func TestTraceTxnSampleRateAndThreshold(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: settings,
-	})
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	appLogsSpy := logtestutils.NewLogSpy(
 		t,
@@ -665,15 +681,15 @@ func TestTraceTxnSampleRateAndThreshold(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			sql.TraceTxnThreshold.Override(ctx, &settings.SV, tc.threshold)
-			sql.TraceTxnSampleRate.Override(ctx, &settings.SV, tc.sampleRate)
+			sql.TraceTxnThreshold.Override(ctx, &s.ClusterSettings().SV, tc.threshold)
+			sql.TraceTxnSampleRate.Override(ctx, &s.ClusterSettings().SV, tc.sampleRate)
 			log.FlushAllSync()
 			appLogsSpy.Reset()
 			r := sqlutils.MakeSQLRunner(db)
 
 			if tc.exptToTraceEventually {
 				if tc.checkJaegerOutput {
-					sql.TraceTxnOutputJaegerJSON.Override(ctx, &settings.SV, true)
+					sql.TraceTxnOutputJaegerJSON.Override(ctx, &s.ClusterSettings().SV, true)
 					testutils.SucceedsSoon(t, func() error {
 						r.Exec(t, "SELECT pg_sleep(0.01)")
 						log.FlushAllSync()
@@ -686,7 +702,7 @@ func TestTraceTxnSampleRateAndThreshold(t *testing.T) {
 						return nil
 					})
 				} else if tc.checkExcludeInternal {
-					sql.TraceTxnIncludeInternal.Override(ctx, &settings.SV, false)
+					sql.TraceTxnIncludeInternal.Override(ctx, &s.ClusterSettings().SV, false)
 					log.FlushAllSync()
 					appLogsSpy.Reset() // Clear logs after setting the cluster setting
 

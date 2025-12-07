@@ -54,6 +54,15 @@ type VectorProvider interface {
 	// identified by a key.
 	InsertVectors(ctx context.Context, keys []cspann.KeyBytes, vectors vector.Set) error
 
+	// CreateIndex creates a vector index on the data. This is called after
+	// table/store creation when the index should be created before data import.
+	CreateIndex(ctx context.Context) error
+
+	// CheckIndexCreationStatus returns the percentage complete (0.0-1.0) of index
+	// creation and any error. For providers that don't support async index creation,
+	// this should return 1.0, nil.
+	CheckIndexCreationStatus(ctx context.Context) (float64, error)
+
 	// SetupSearch allows the provider to perform expensive up-front steps in
 	// preparation for many calls to Search. It returns provider-specific state
 	// that will be passed to Search.

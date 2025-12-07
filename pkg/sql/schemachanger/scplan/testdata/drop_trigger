@@ -16,7 +16,7 @@ DROP TRIGGER t1_tg ON defaultdb.t1;
 StatementPhase stage 1 of 1 with 3 MutationType ops
   transitions:
     [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[TriggerDeps:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveTrigger
       Trigger:
@@ -36,14 +36,14 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[TriggerDeps:{DescID: 104, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
 PreCommitPhase stage 2 of 2 with 3 MutationType ops
   transitions:
     [[Trigger:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[TriggerDeps:{DescID: 104, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveTrigger
       Trigger:
@@ -64,7 +64,7 @@ PreCommitPhase stage 2 of 2 with 3 MutationType ops
 deps
 DROP TRIGGER t1_tg ON defaultdb.t1;
 ----
-- from: [TriggerDeps:{DescID: 104, TriggerID: 1}, ABSENT]
+- from: [TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, ABSENT]
   to:   [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
   kind: Precedence
   rule: trigger removed before dependents

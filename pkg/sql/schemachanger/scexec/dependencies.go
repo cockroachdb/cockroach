@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -119,7 +118,12 @@ type Catalog interface {
 	Reset(ctx context.Context) error
 
 	// InitializeSequence initializes the initial value for a sequence.
-	InitializeSequence(id descpb.ID, startVal int64)
+	InitializeSequence(ctx context.Context, id descpb.ID, startVal int64) error
+
+	// CheckMaxSchemaObjects checks if the number of schema objects in the
+	// cluster plus the new objects being created would exceed the configured
+	// limit. Returns an error if the limit would be exceeded.
+	CheckMaxSchemaObjects(ctx context.Context, numNewObjects int) error
 }
 
 // Telemetry encapsulates metrics gather for the declarative schema changer.
@@ -242,8 +246,9 @@ type Validator interface {
 type IndexSpanSplitter interface {
 
 	// MaybeSplitIndexSpans will attempt to split the backfilled index span, if
-	// the index is in the system tenant or is partitioned.
-	MaybeSplitIndexSpans(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index) error
+	// the index is in the system tenant or is partitioned. copyIndexSource is an
+	// optional index that can be specified as a potential source for split points.
+	MaybeSplitIndexSpans(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index, copyIndexSource catalog.Index) error
 
 	// MaybeSplitIndexSpansForPartitioning will split backfilled index spans
 	// across hash-sharded index boundaries if applicable.
@@ -265,6 +270,10 @@ type BackfillProgress struct {
 	// backfilled into the destination indexes. The spans are expected to
 	// contain any tenant prefix.
 	CompletedSpans []roachpb.Span
+
+	// SSTManifests captures SST metadata emitted by the distributed merge
+	// backfill pipeline.
+	SSTManifests []jobspb.IndexBackfillSSTManifest
 }
 
 // Backfill corresponds to a definition of a backfill from a source
@@ -370,7 +379,7 @@ type DescriptorMetadataUpdater interface {
 
 	// UpdateTTLScheduleLabel updates the schedule_name for the TTL Scheduled Job
 	// of the given table.
-	UpdateTTLScheduleLabel(ctx context.Context, tbl *tabledesc.Mutable) error
+	UpdateTTLScheduleLabel(ctx context.Context, tbl catalog.TableDescriptor) error
 }
 
 type TemporarySchemaCreator interface {
@@ -391,7 +400,7 @@ type StatsRefreshQueue interface {
 type StatsRefresher interface {
 	// NotifyMutation notifies the stats refresher that a table needs its
 	// statistics updated.
-	NotifyMutation(table catalog.TableDescriptor, rowsAffected int)
+	NotifyMutation(ctx context.Context, table catalog.TableDescriptor, rowsAffected int)
 }
 
 // ProtectedTimestampManager used to install a protected timestamp before

@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 )
 
 const (
@@ -215,8 +216,10 @@ func sanitizeVersionForBackup(v *clusterupgrade.Version) string {
 // hasInternalSystemJobs returns true if the cluster is expected to
 // have the `crdb_internal.system_jobs` vtable. If so, it should be
 // used instead of `system.jobs` when querying job status.
-func hasInternalSystemJobs(ctx context.Context, rng *rand.Rand, db *gosql.DB) (bool, error) {
-	cv, err := clusterupgrade.ClusterVersion(ctx, db)
+func hasInternalSystemJobs(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, db *gosql.DB,
+) (bool, error) {
+	cv, err := clusterupgrade.ClusterVersion(ctx, l, db)
 	if err != nil {
 		return false, fmt.Errorf("failed to query cluster version: %w", err)
 	}
@@ -630,7 +633,7 @@ func (fc *fingerprintContents) Load(
 ) error {
 	l.Printf("computing fingerprints for table %s", fc.table)
 	query := fmt.Sprintf(
-		"SELECT index_name, fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s]%s ORDER BY index_name",
+		"SELECT index_name, COALESCE(fingerprint, '') FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s]%s ORDER BY index_name",
 		fc.table, aostFor(timestamp),
 	)
 	rows, err := fc.db.QueryContext(ctx, query)
@@ -1267,8 +1270,9 @@ func (d *BackupRestoreTestDriver) verifyBackupCollection(
 	bc *backupCollection,
 	checkFiles bool,
 	internalSystemJobs bool,
+	mvHelper *mixedversion.Helper,
 ) error {
-	restoredTables, _, err := d.runRestore(ctx, l, rng, bc, checkFiles, internalSystemJobs)
+	restoredTables, _, err := d.runRestore(ctx, l, rng, bc, checkFiles, internalSystemJobs, mvHelper)
 	if err != nil {
 		return fmt.Errorf("error restoring backup: %w", err)
 	}
@@ -1288,7 +1292,7 @@ func (d *BackupRestoreTestDriver) verifyBackupCollection(
 		}
 	}
 	_, db := d.testUtils.RandomDB(rng, d.testUtils.roachNodes)
-	if err := roachtestutil.CheckInvalidDescriptors(ctx, db); err != nil {
+	if err := roachtestutil.CheckInvalidDescriptors(ctx, l, db); err != nil {
 		return fmt.Errorf("failed descriptor check: %w", err)
 	}
 
@@ -1306,6 +1310,7 @@ func (d *BackupRestoreTestDriver) runRestore(
 	bc *backupCollection,
 	checkFiles bool,
 	internalSystemJobs bool,
+	mvHelper *mixedversion.Helper,
 ) ([]string, string, error) {
 	restoreStmt, restoredTables, restoreDB := d.buildRestoreStatement(bc)
 	if _, isTableBackup := bc.btype.(*tableBackup); isTableBackup {
@@ -1327,9 +1332,34 @@ func (d *BackupRestoreTestDriver) runRestore(
 	if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
 		return nil, "", fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
 	}
-	if err := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); err != nil {
-		return nil, "", err
+	if jobErr := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); jobErr != nil {
+		if mvHelper == nil {
+			return nil, "", jobErr
+		}
+		v25_4 := version.MajorVersion{Year: 25, Ordinal: 4}
+		isUpgradeTo25_4 := mvHelper.System.ToVersion.Major().Equals(v25_4) &&
+			mvHelper.System.FromVersion.Major().LessThan(v25_4)
+		if !isUpgradeTo25_4 {
+			return nil, "", jobErr
+		}
+		// In the 25.4 upgrade, all descriptors are rewritten in the migration to use
+		// the new serialization format. If this upgrade occurs in the middle of the
+		// restore, we may encounter a version mismatch error. As a short-term fix for
+		// this test flake, we retry the restore if we encounter this error.
+		if !strings.Contains(jobErr.Error(), "version mismatch for descriptor") {
+			return nil, "", jobErr
+		}
+		l.Printf(
+			"encountered version mismatch error due to mixed-version upgrade, retrying restore: %v", jobErr,
+		)
+		if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
+			return nil, "", fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
+		}
+		if jobErr = d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); jobErr != nil {
+			return nil, "", jobErr
+		}
 	}
+
 	return restoredTables, restoreDB, nil
 }
 
@@ -2117,7 +2147,10 @@ func (d *BackupRestoreTestDriver) runBackup(
 			backupErr <- err
 		}
 		return nil
-	}, task.Name(fmt.Sprintf("backup %s", collection.name)))
+	},
+		task.Logger(l),
+		task.Name(fmt.Sprintf("backup %s", collection.name)),
+	)
 
 	var numPauses int
 	for {
@@ -2210,7 +2243,7 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 	backupNamePrefix := mvb.backupNamePrefix(h, label)
 	n, db := h.System.RandomDB(rng)
 	l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
-	internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
+	internalSystemJobs, err := hasInternalSystemJobs(ctx, l, rng, db)
 	if err != nil {
 		return err
 	}
@@ -2355,9 +2388,11 @@ func (d *BackupRestoreTestDriver) deleteUserTableSST(
 	ctx context.Context, l *logger.Logger, db *gosql.DB, collection *backupCollection,
 ) error {
 	var sstPath string
+	var startPretty, endPretty string
+	var sizeBytes, numRows int
 	if err := db.QueryRowContext(
 		ctx,
-		`SELECT path FROM
+		`SELECT path, start_pretty, end_pretty, size_bytes, rows FROM
 		(
 			SELECT row_number() OVER (), * FROM
 			[SHOW BACKUP FILES FROM LATEST IN $1]
@@ -2366,14 +2401,17 @@ func (d *BackupRestoreTestDriver) deleteUserTableSST(
 		ORDER BY row_number DESC
 		LIMIT 1`,
 		collection.uri(),
-	).Scan(&sstPath); err != nil {
+	).Scan(&sstPath, &startPretty, &endPretty, &sizeBytes, &numRows); err != nil {
 		return errors.Wrapf(err, "failed to get SST path from %s", collection.uri())
 	}
 	uri, err := url.Parse(collection.uri())
 	if err != nil {
 		return errors.Wrapf(err, "failed to parse backup collection URI %q", collection.uri())
 	}
-	l.Printf("deleting sst %s at %s", sstPath, uri)
+	l.Printf(
+		"deleting sst %s at %s: covering %d bytes and %d rows in [%s, %s)",
+		sstPath, uri, sizeBytes, numRows, startPretty, endPretty,
+	)
 	storage, err := cloud.ExternalStorageFromURI(
 		ctx,
 		collection.uri(),
@@ -2673,7 +2711,13 @@ func (d BackupRestoreTestDriver) getORDownloadJobID(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand,
 ) (int, error) {
 	var downloadJobID int
-	if err := d.testUtils.QueryRow(ctx, rng, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`).Scan(&downloadJobID); err != nil {
+	if err := d.testUtils.QueryRow(
+		ctx,
+		rng,
+		`SELECT job_id FROM [SHOW JOBS]
+		WHERE description LIKE '%Background Data Download%' AND job_type = 'RESTORE'
+		ORDER BY created DESC LIMIT 1`,
+	).Scan(&downloadJobID); err != nil {
 		return 0, err
 	}
 	return downloadJobID, nil
@@ -2735,14 +2779,16 @@ func (mvb *mixedVersionBackup) verifySomeBackups(
 
 	n, db := h.System.RandomDB(rng)
 	l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
-	internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
+	internalSystemJobs, err := hasInternalSystemJobs(ctx, l, rng, db)
 	if err != nil {
 		return err
 	}
 
 	for _, collection := range toBeRestored {
 		l.Printf("mixed-version: verifying %s", collection.name)
-		if err := mvb.backupRestoreTestDriver.verifyBackupCollection(ctx, l, rng, collection, checkFiles, internalSystemJobs); err != nil {
+		if err := mvb.backupRestoreTestDriver.verifyBackupCollection(
+			ctx, l, rng, collection, checkFiles, internalSystemJobs, h,
+		); err != nil {
 			return errors.Wrap(err, "mixed-version")
 		}
 	}
@@ -2816,13 +2862,15 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 
 			n, db := h.System.RandomDB(rng)
 			l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
-			internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
+			internalSystemJobs, err := hasInternalSystemJobs(ctx, l, rng, db)
 			if err != nil {
 				restoreErrors = append(restoreErrors, fmt.Errorf("error checking for internal system jobs: %w", err))
 				return
 			}
 
-			if err := mvb.backupRestoreTestDriver.verifyBackupCollection(ctx, l, rng, collection, checkFiles, internalSystemJobs); err != nil {
+			if err := mvb.backupRestoreTestDriver.verifyBackupCollection(
+				ctx, l, rng, collection, checkFiles, internalSystemJobs, h,
+			); err != nil {
 				err := errors.Wrapf(err, "%s", v)
 				l.Printf("restore error: %v", err)
 				// Attempt to collect logs and debug.zip at the time of this
@@ -2912,6 +2960,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// migrations enough time to finish considering all the data
 				// that might exist in the cluster by the time the upgrade is
 				// attempted.
+				mixedversion.WithWorkloadNodes(c.WorkloadNode()),
 				mixedversion.UpgradeTimeout(30*time.Minute),
 				mixedversion.AlwaysUseLatestPredecessors,
 				mixedversion.EnabledDeploymentModes(enabledDeploymentModes...),
@@ -2926,6 +2975,10 @@ func registerBackupMixedVersion(r registry.Registry) {
 				mixedversion.DisableAllClusterSettingMutators(),
 			)
 			testRNG := mvt.RNG()
+
+			// Workload can only take a positive int as a seed, but seed could be a
+			// negative int. Ensure the seed passed to workload is an int.
+			workloadSeed := testRNG.Int63()
 
 			dbs := []string{"bank", "tpcc"}
 			backupTest, err := newMixedVersionBackup(t, c, c.CRDBNodes(), dbs)
@@ -2944,8 +2997,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 			// for the cluster used in this test without overloading it,
 			// which can make the backups take much longer to finish.
 			const numWarehouses = 100
-			bankInit, bankRun := bankWorkloadCmd(t.L(), testRNG, c.CRDBNodes(), false)
-			tpccInit, tpccRun := tpccWorkloadCmd(t.L(), testRNG, numWarehouses, c.CRDBNodes())
+			bankInit, bankRun := bankWorkloadCmd(t.L(), testRNG, workloadSeed, c.CRDBNodes(), false)
+			tpccInit, tpccRun := tpccWorkloadCmd(t.L(), testRNG, workloadSeed, numWarehouses, c.CRDBNodes())
 
 			mvt.OnStartup("set short job interval", backupTest.setShortJobIntervals)
 			mvt.OnStartup("take backup in previous version", backupTest.maybeTakePreviousVersionBackup)
@@ -2959,13 +3012,8 @@ func registerBackupMixedVersion(r registry.Registry) {
 			//   the cluster relatively busy while the backup and restores
 			//   take place. Its schema is also more complex, and the
 			//   operations more closely resemble a customer workload.
-
-			// Use the same versioned workload binary as the cluster. The bank workload
-			// is no longer backwards compatible after #149374, so we need to use the same
-			// version as the cockroach cluster.
-			// TODO(testeng): Replace with https://github.com/cockroachdb/cockroach/issues/147374
-			stopBank := mvt.Workload("bank", c.WorkloadNode(), bankInit, bankRun, true /* overrideBinary */)
-			stopTPCC := mvt.Workload("tpcc", c.WorkloadNode(), tpccInit, tpccRun, false /* overrideBinary */)
+			stopBank := mvt.Workload("bank", c.WorkloadNode(), bankInit, bankRun)
+			stopTPCC := mvt.Workload("tpcc", c.WorkloadNode(), tpccInit, tpccRun)
 			stopSystemWriter := mvt.BackgroundFunc("system table writer", backupTest.systemTableWriter)
 
 			mvt.InMixedVersion("plan and run backups", backupTest.planAndRunBackups)
@@ -2983,15 +3031,21 @@ func registerBackupMixedVersion(r registry.Registry) {
 }
 
 func tpccWorkloadCmd(
-	l *logger.Logger, testRNG *rand.Rand, numWarehouses int, roachNodes option.NodeListOption,
+	l *logger.Logger,
+	testRNG *rand.Rand,
+	seed int64,
+	numWarehouses int,
+	roachNodes option.NodeListOption,
 ) (init *roachtestutil.Command, run *roachtestutil.Command) {
 	init = roachtestutil.NewCommand("./cockroach workload init tpcc").
 		MaybeOption(testRNG.Intn(2) == 0, "families").
 		Arg("{pgurl%s}", roachNodes).
-		Flag("warehouses", numWarehouses)
+		Flag("warehouses", numWarehouses).
+		MaybeFlag(seed != 0, "seed", seed)
 	run = roachtestutil.NewCommand("./cockroach workload run tpcc").
 		Arg("{pgurl%s}", roachNodes).
 		Flag("warehouses", numWarehouses).
+		MaybeFlag(seed != 0, "seed", seed).
 		Option("tolerate-errors")
 	l.Printf("tpcc init: %s", init)
 	l.Printf("tpcc run: %s", run)
@@ -2999,7 +3053,7 @@ func tpccWorkloadCmd(
 }
 
 func bankWorkloadCmd(
-	l *logger.Logger, testRNG *rand.Rand, roachNodes option.NodeListOption, mock bool,
+	l *logger.Logger, testRNG *rand.Rand, seed int64, roachNodes option.NodeListOption, mock bool,
 ) (init *roachtestutil.Command, run *roachtestutil.Command) {
 	bankRows := bankPossibleRows[testRNG.Intn(len(bankPossibleRows))]
 	possiblePayloads := bankPossiblePayloadBytes
@@ -3014,14 +3068,15 @@ func bankWorkloadCmd(
 		bankPayload = 9
 		bankRows = 10
 	}
-
 	init = roachtestutil.NewCommand("./cockroach workload init bank").
 		Flag("rows", bankRows).
 		MaybeFlag(bankPayload != 0, "payload-bytes", bankPayload).
+		MaybeFlag(seed != 0, "seed", seed).
 		Flag("ranges", 0).
 		Arg("{pgurl%s}", roachNodes)
 	run = roachtestutil.NewCommand("./cockroach workload run bank").
 		Arg("{pgurl%s}", roachNodes).
+		MaybeFlag(seed != 0, "seed", seed).
 		Option("tolerate-errors")
 	l.Printf("bank init: %s", init)
 	l.Printf("bank run: %s", run)
@@ -3029,7 +3084,7 @@ func bankWorkloadCmd(
 }
 
 func schemaChangeWorkloadCmd(
-	l *logger.Logger, testRNG *rand.Rand, roachNodes option.NodeListOption, mock bool,
+	l *logger.Logger, testRNG *rand.Rand, seed int64, roachNodes option.NodeListOption, mock bool,
 ) (init *roachtestutil.Command, run *roachtestutil.Command) {
 	maxOps := 1000
 	concurrency := 5
@@ -3037,12 +3092,15 @@ func schemaChangeWorkloadCmd(
 		maxOps = 10
 		concurrency = 2
 	}
-	initCmd := roachtestutil.NewCommand("./workload init schemachange").
+	if seed == 0 {
+		seed = testRNG.Int63()
+	}
+	initCmd := roachtestutil.NewCommand("COCKROACH_RANDOM_SEED=%d ./workload init schemachange", seed).
 		Arg("{pgurl%s}", roachNodes)
 	// TODO (msbutler): ideally we'd use the `db` flag to explicitly set the
 	// database, but it is currently broken:
 	// https://github.com/cockroachdb/cockroach/issues/115545
-	runCmd := roachtestutil.NewCommand("COCKROACH_RANDOM_SEED=%d ./workload run schemachange", testRNG.Int63()).
+	runCmd := roachtestutil.NewCommand("COCKROACH_RANDOM_SEED=%d ./workload run schemachange", seed).
 		Flag("verbose", 1).
 		Flag("max-ops", maxOps).
 		Flag("concurrency", concurrency).

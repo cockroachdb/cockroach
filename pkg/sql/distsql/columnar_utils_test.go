@@ -82,7 +82,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	tempEngine, tempFS, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, tempFS, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	}
 
 	proc, err := rowexec.NewProcessor(
-		ctx, flowCtx, 0, &args.pspec.Core, &args.pspec.Post, inputsProc, nil,
+		ctx, flowCtx, 0, 0, &args.pspec.Core, &args.pspec.Post, inputsProc, nil,
 	)
 	if err != nil {
 		return err

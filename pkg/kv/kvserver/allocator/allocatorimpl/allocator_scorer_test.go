@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -436,10 +437,18 @@ func TestBestRebalanceTarget(t *testing.T) {
 	expectedTargets := []roachpb.StoreID{13, 13, 11, 12}
 	expectedExistingRepls := []roachpb.StoreID{3, 2, 1, 1}
 	allocRand := makeAllocatorRand(rand.NewSource(0))
+	ctx := context.Background()
+	stopper, _, _, a, _ := CreateTestAllocatorWithKnobs(ctx, 10, false, /* deterministic */
+		nil /* allocator.TestingKnobs */, &mmaintegration.TestingKnobs{
+			OverrideIsInConflictWithMMA: func(cand roachpb.StoreID) bool {
+				return false
+			},
+		} /* mmaintegration.TestingKnobs */)
+	defer stopper.Stop(ctx)
 	var i int
 	for {
 		i++
-		target, existing := bestRebalanceTarget(allocRand, candidates)
+		target, existing, _ := bestRebalanceTarget(allocRand, candidates, a.as)
 		if len(expectedTargets) == 0 {
 			if target == nil {
 				break
@@ -1557,7 +1566,9 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	options := &RangeCountScorerOptions{
-		DiskCapacityOptions: defaultDiskCapacityOptions(),
+		BaseScorerOptions: BaseScorerOptions{
+			DiskCapacity: defaultDiskCapacityOptions(),
+		},
 	}
 	newStore := func(id int, locality roachpb.Locality) roachpb.StoreDescriptor {
 		return roachpb.StoreDescriptor{
@@ -2008,7 +2019,9 @@ func TestBalanceScoreByRangeCount(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	options := RangeCountScorerOptions{
-		DiskCapacityOptions:     defaultDiskCapacityOptions(),
+		BaseScorerOptions: BaseScorerOptions{
+			DiskCapacity: defaultDiskCapacityOptions(),
+		},
 		rangeRebalanceThreshold: 0.1,
 	}
 	storeList := storepool.StoreList{
@@ -2094,7 +2107,9 @@ func TestRebalanceConvergesRangeCountOnMean(t *testing.T) {
 	}
 
 	options := RangeCountScorerOptions{
-		DiskCapacityOptions: defaultDiskCapacityOptions(),
+		BaseScorerOptions: BaseScorerOptions{
+			DiskCapacity: defaultDiskCapacityOptions(),
+		},
 	}
 	eqClass := equivalenceClass{
 		candidateSL: storeList,
@@ -2172,4 +2187,46 @@ func TestCandidateListString(t *testing.T) {
 		"s2, valid:true, fulldisk:true, necessary:true, voterNecessary:true, diversity:0.00, ioOverloaded: true, ioOverload: 0.00, converges:1, balance:1, hasNonVoter:true, rangeCount:2, queriesPerSecond:0.00, details:(mock detail 2)\n"+
 		"s3, valid:false, fulldisk:false, necessary:false, voterNecessary:false, diversity:1.00, ioOverloaded: false, ioOverload: 1.00, converges:-1, balance:-1, hasNonVoter:false, rangeCount:3, queriesPerSecond:0.00, details:(mock detail 3)]",
 		cl.String())
+}
+
+func TestIOOverloadOptionsDiskUnhealthy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	options := IOOverloadOptions{
+		UseIOThresholdMax:            false,
+		ReplicaIOOverloadThreshold:   0.2,
+		LeaseIOOverloadThreshold:     0.2,
+		LeaseIOOverloadShedThreshold: 0.2,
+		DiskUnhealthyScore:           0.3,
+	}
+
+	store := roachpb.StoreDescriptor{}
+	o := options
+	o.ReplicaEnforcementLevel = IOOverloadThresholdBlockAll
+	require.True(t, o.allocateReplicaToCheck(ctx, store, storepool.StoreList{}))
+	store.Capacity.IOThreshold.DiskUnhealthy = true
+	require.False(t, o.allocateReplicaToCheck(ctx, store, storepool.StoreList{}))
+
+	store = roachpb.StoreDescriptor{}
+	o = options
+	o.ReplicaEnforcementLevel = IOOverloadThresholdBlockTransfers
+	require.True(t, o.rebalanceReplicaToCheck(ctx, store, storepool.StoreList{}))
+	store.Capacity.IOThreshold.DiskUnhealthy = true
+	require.False(t, o.rebalanceReplicaToCheck(ctx, store, storepool.StoreList{}))
+
+	store = roachpb.StoreDescriptor{}
+	o = options
+	o.LeaseEnforcementLevel = IOOverloadThresholdShed
+	require.True(t, o.ExistingLeaseCheck(ctx, store, storepool.StoreList{}))
+	store.Capacity.IOThreshold.DiskUnhealthy = true
+	require.False(t, o.ExistingLeaseCheck(ctx, store, storepool.StoreList{}))
+
+	store = roachpb.StoreDescriptor{}
+	o = options
+	o.LeaseEnforcementLevel = IOOverloadThresholdBlockTransfers
+	require.True(t, o.transferLeaseToCheck(ctx, store, storepool.StoreList{}))
+	store.Capacity.IOThreshold.DiskUnhealthy = true
+	require.False(t, o.transferLeaseToCheck(ctx, store, storepool.StoreList{}))
 }

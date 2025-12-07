@@ -121,7 +121,7 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ order: -column70,-created
+│ order: -column71,-created
 │
 └── • render
     │
@@ -482,7 +482,7 @@ vectorized: true
         │       │                       └── • render
         │       │                           │
         │       │                           └── • filter
-        │       │                               │ filter: classoid = 4294967082
+        │       │                               │ filter: classoid = 4294967081
         │       │                               │
         │       │                               └── • virtual table
         │       │                                     table: kv_catalog_comments@primary
@@ -2347,7 +2347,7 @@ quality of service: regular
 query T
 EXPLAIN (OPT, MEMO) SELECT * FROM tc JOIN t ON k=a
 ----
-memo (optimized, ~19KB, required=[presentation: info:14] [distribution: test])
+memo (optimized, ~20KB, required=[presentation: info:14] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:8,v:9] [distribution: test])
  │    └── [presentation: info:14] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:8,v:9] [distribution: test]" [presentation: a:1,b:2,k:8,v:9] [distribution: test])
@@ -2428,7 +2428,7 @@ TABLE t
  ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX t_pkey
       └── k int not null
-memo (optimized, ~19KB, required=[presentation: info:14] [distribution: test])
+memo (optimized, ~20KB, required=[presentation: info:14] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:8,v:9] [distribution: test])
  │    └── [presentation: info:14] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:8,v:9] [distribution: test]" [presentation: a:1,b:2,k:8,v:9] [distribution: test])
@@ -2573,3 +2573,49 @@ vectorized: true
           table: t_float@t_float_pkey
           spans: /1/0 /2/0 /3/0 /4/0 /5/0 /6/0 /7/0 /8/0 /9/0 /10/0 /11/0 /12/0 /13/0 /14/0 /15/0 /16/0 /17/0 /18/0 /19/0 /20/0 … (20 more)
           parallel
+
+# Verify that the number of applied statement hints is displayed.
+statement ok
+CREATE TABLE t_hints (k INT PRIMARY KEY, v INT, INDEX (v))
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT k FROM t_hints WHERE k >= _',
+  'SELECT k FROM t_hints@t_hints_v_idx WHERE k >= _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+query T
+EXPLAIN SELECT k FROM t_hints WHERE k >= 100
+----
+distribution: local
+vectorized: true
+statement hints count: 1
+·
+• filter
+│ filter: k >= 100
+│
+└── • scan
+      missing stats
+      table: t_hints@t_hints_v_idx
+      spans: FULL SCAN
+
+query T
+EXPLAIN (VERBOSE) SELECT k FROM t_hints WHERE k >= 100
+----
+distribution: local
+vectorized: true
+statement hints count: 1
+·
+• filter
+│ columns: (k)
+│ estimated row count: 333 (missing stats)
+│ filter: k >= 100
+│
+└── • scan
+      columns: (k)
+      estimated row count: 1,000 (missing stats)
+      table: t_hints@t_hints_v_idx
+      spans: FULL SCAN

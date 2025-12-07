@@ -57,14 +57,14 @@ import (
 type testSpec struct {
 	format roachpb.IOFileFormat
 	inputs map[int32]string
-	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable
+	table  *execinfrapb.ReadImportDataSpec_ImportTable
 }
 
 // Given test spec returns ReadImportDataSpec suitable creating input converter.
 func (spec *testSpec) getConverterSpec() *execinfrapb.ReadImportDataSpec {
 	return &execinfrapb.ReadImportDataSpec{
 		Format:            spec.format,
-		Tables:            spec.tables,
+		Table:             spec.table,
 		Uri:               spec.inputs,
 		ReaderParallelism: 1, // Make tests deterministic
 	}
@@ -326,6 +326,12 @@ func (fakeDB) Txn(
 }
 
 func (fakeDB) Executor(option ...isql.ExecutorOption) isql.Executor {
+	panic("unimplemented")
+}
+
+func (fakeDB) Session(
+	ctx context.Context, name string, options ...isql.ExecutorOption,
+) (isql.Session, error) {
 	panic("unimplemented")
 }
 
@@ -676,11 +682,8 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
 
-	s, db, _ := serverutils.StartServer(t,
+	srv, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
-			// Hangs when run from a test tenant. More investigation is
-			// required here. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
@@ -688,9 +691,10 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 				},
 			},
 		})
-	registry := s.JobRegistry().(*jobs.Registry)
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	registry := s.JobRegistry().(*jobs.Registry)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	setSmallIngestBufferSizes(t, sqlDB)
@@ -774,6 +778,11 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	sqlDB.CheckQueryResults(t, `SELECT id FROM t ORDER BY id`,
 		sqlDB.QueryStr(t, `SELECT generate_series(0, $1)`, csv1.numRows-1),
 	)
+
+	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return js.prog.Summary.EntryCounts != nil })
+	for _, e := range js.prog.Summary.EntryCounts {
+		require.Equal(t, int64(csv1.numRows), e)
+	}
 }
 
 func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
@@ -783,11 +792,8 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
 	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
 
-	s, db, _ := serverutils.StartServer(t,
+	srv, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
-			// Test hangs when run within a test tenant. More investigation
-			// is required here. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				DistSQL: &execinfra.TestingKnobs{
@@ -795,9 +801,10 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 				},
 			},
 		})
-	registry := s.JobRegistry().(*jobs.Registry)
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	registry := s.JobRegistry().(*jobs.Registry)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
@@ -875,6 +882,11 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 
 	// Verify that after resume we have not processed any additional rows.
 	assert.Zero(t, importSummary.Rows)
+
+	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return js.prog.Summary.EntryCounts != nil })
+	for _, e := range js.prog.Summary.EntryCounts {
+		require.Equal(t, int64(csv1.numRows+csv2.numRows+csv3.numRows), e)
+	}
 }
 
 func (ses *generatedStorage) externalStorageFactory() cloud.ExternalStorageFactory {
@@ -923,14 +935,12 @@ func newTestSpec(
 	var descr *tabledesc.Mutable
 	switch format.Format {
 	case roachpb.IOFileFormat_CSV:
-		descr = descForTable(ctx, t,
-			"CREATE TABLE simple (i INT PRIMARY KEY, s text )", 100, 150, 200, NoFKs)
+		descr = descForTable(ctx, t, "CREATE TABLE simple (i INT PRIMARY KEY, s text )", 100, 150, 200)
 	case
 		roachpb.IOFileFormat_MysqlOutfile,
 		roachpb.IOFileFormat_PgCopy,
 		roachpb.IOFileFormat_Avro:
-		descr = descForTable(ctx, t,
-			"CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea default null)", 100, 150, 200, NoFKs)
+		descr = descForTable(ctx, t, "CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea default null)", 100, 150, 200)
 	default:
 		t.Fatalf("Unsupported input format: %v", format)
 	}
@@ -945,8 +955,9 @@ func newTestSpec(
 	}
 	assert.True(t, numCols > 0)
 
-	spec.tables = map[string]*execinfrapb.ReadImportDataSpec_ImportTable{
-		"simple": {Desc: descr.TableDesc(), TargetCols: targetCols[0:numCols]},
+	spec.table = &execinfrapb.ReadImportDataSpec_ImportTable{
+		Desc:       descr.TableDesc(),
+		TargetCols: targetCols[0:numCols],
 	}
 
 	for id, path := range inputs {

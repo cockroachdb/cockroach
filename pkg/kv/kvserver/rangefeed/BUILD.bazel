@@ -20,6 +20,7 @@ go_library(
         "stream_manager.go",
         "task.go",
         "test_helpers.go",
+        "txn_push_notifier.go",
         "unbuffered_registration.go",
         "unbuffered_sender.go",
     ],
@@ -30,6 +31,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -38,6 +40,7 @@ go_library(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
+        "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/bufalloc",
         "//pkg/util/buildutil",
@@ -57,6 +60,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

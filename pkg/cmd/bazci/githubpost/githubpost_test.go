@@ -14,6 +14,7 @@ import (
 
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
+	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,56 +31,35 @@ type issue struct {
 }
 
 func init() {
-	fileLineForTesting = map[packageAndTest]fileAndLine{
+	codeowners.FileMapForTesting = map[codeowners.PackageAndTest]string{
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/util/stop",
-			testName:    "TestStopperWithCancelConcurrent",
-		}: {
-			filename: "pkg/util/stop/stopper_test.go",
-			linenum:  "375",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/util/stop",
+			TestName:    "TestStopperWithCancelConcurrent",
+		}: "pkg/util/stop/stopper_test.go",
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
-			testName:    "TestReplicateQueueRebalance",
-		}: {
-			filename: "pkg/kv/kvserver/replicate_queue_test.go",
-			linenum:  "56",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
+			TestName:    "TestReplicateQueueRebalance",
+		}: "pkg/kv/kvserver/replicate_queue_test.go",
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
-			testName:    "TestGossipHandlesReplacedNode",
-		}: {
-			filename: "pkg/kv/kvserver/gossip_test.go",
-			linenum:  "142",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
+			TestName:    "TestGossipHandlesReplacedNode",
+		}: "pkg/kv/kvserver/gossip_test.go",
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/util/json",
-			testName:    "TestPretty",
-		}: {
-			filename: "pkg/util/json/json_test.go",
-			linenum:  "2234",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/util/json",
+			TestName:    "TestPretty",
+		}: "pkg/util/json/json_test.go",
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/util/json",
-			testName:    "TestJSONErrors",
-		}: {
-			filename: "pkg/util/json/json_test.go",
-			linenum:  "249",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/util/json",
+			TestName:    "TestJSONErrors",
+		}: "pkg/util/json/json_test.go",
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
-			testName:    "TestTxnCoordSenderPipelining",
-		}: {
-			filename: "pkg/kv/kvclient/kvcoord/txn_coord_sender_test.go",
-			linenum:  "2429",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
+			TestName:    "TestTxnCoordSenderPipelining",
+		}: "pkg/kv/kvclient/kvcoord/txn_coord_sender_test.go",
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
-			testName:    "TestAbortReadOnlyTransaction",
-		}: {
-			filename: "pkg/kv/kvclient/kvcoord/txn_coord_sender_test.go",
-			linenum:  "1990",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
+			TestName:    "TestAbortReadOnlyTransaction",
+		}: "pkg/kv/kvclient/kvcoord/txn_coord_sender_test.go",
 	}
 }
 
@@ -421,9 +401,12 @@ func TestListFailuresFromTestXML(t *testing.T) {
 				title:    "util/json: TestJSONErrors failed",
 				message: `=== RUN   TestJSONErrors
 --- FAIL: TestJSONErrors (0.00s)
-=== RUN   TestJSONErrors/frues
-    json_test.go:278: expected error message to be 'trailing characters after JSON document', but was 'unable to decode JSON: invalid character 'r' in literal false (expecting 'a')'
-    --- FAIL: TestJSONErrors/frues (0.00s)`,
+=== RUN   TestJSONErrors/gostd/frues
+    json_test.go:404: 
+        	Error Trace:	pkg/util/json/json_test.go:404
+        	Error:      	Expect "unable to decode JSON: invalid character 'r' in literal false (expecting 'a')" to match "trailing characters after JSON document"
+        	Test:       	TestJSONErrors/gostd/frues
+--- FAIL: TestJSONErrors/gostd/frues (0.00s)`,
 				mention: []string{"@cockroachdb/unowned"},
 			}},
 		},

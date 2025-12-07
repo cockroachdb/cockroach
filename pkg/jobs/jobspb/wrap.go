@@ -151,10 +151,6 @@ const AutoStatsName = "__auto__"
 // automatically.
 const AutoPartialStatsName = "__auto_partial__"
 
-// ImportStatsName is the name to use for statistics created automatically
-// during import.
-const ImportStatsName = "__import__"
-
 // ForecastStatsName is the name to use for statistic forecasts.
 const ForecastStatsName = "__forecast__"
 

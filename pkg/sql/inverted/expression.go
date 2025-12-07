@@ -682,8 +682,8 @@ func intersectSpanExpressions(left, right *SpanExpression) *SpanExpression {
 		Right:              right,
 	}
 	if expr.FactoredUnionSpans != nil {
-		left.FactoredUnionSpans = subtractSpans(left.FactoredUnionSpans, expr.FactoredUnionSpans)
-		right.FactoredUnionSpans = subtractSpans(right.FactoredUnionSpans, expr.FactoredUnionSpans)
+		left.FactoredUnionSpans = SubtractSpans(left.FactoredUnionSpans, expr.FactoredUnionSpans)
+		right.FactoredUnionSpans = SubtractSpans(right.FactoredUnionSpans, expr.FactoredUnionSpans)
 	}
 	tryPruneChildren(expr)
 	return expr
@@ -910,9 +910,9 @@ func intersectSpans(left []Span, right []Span) []Span {
 	return spans
 }
 
-// subtractSpans subtracts right from left, under the assumption that right is a
+// SubtractSpans subtracts right from left, under the assumption that right is a
 // subset of left.
-func subtractSpans(left []Span, right []Span) []Span {
+func SubtractSpans(left []Span, right []Span) []Span {
 	if len(right) == 0 {
 		return left
 	}

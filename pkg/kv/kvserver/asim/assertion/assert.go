@@ -34,9 +34,9 @@ func (tht ThresholdType) String() string {
 	case ExactBound:
 		return "="
 	case UpperBound:
-		return "<"
+		return "≤"
 	case LowerBound:
-		return ">"
+		return "≥"
 	default:
 		panic("unknown threshold type")
 	}
@@ -108,7 +108,7 @@ func (sa SteadyStateAssertion) Assert(
 	m := h.Recorded
 	ticks := len(m)
 	if sa.Ticks > ticks {
-		log.Dev.VInfof(ctx, 2,
+		log.KvDistribution.VInfof(ctx, 2,
 			"The history to run assertions against (%d) is shorter than "+
 				"the assertion duration (%d)", ticks, sa.Ticks)
 		return true, ""
@@ -128,16 +128,37 @@ func (sa SteadyStateAssertion) Assert(
 		max, _ := stats.Max(trimmedStoreStats)
 		min, _ := stats.Min(trimmedStoreStats)
 
-		maxMean := math.Abs(max/mean - 1)
-		minMean := math.Abs(min/mean - 1)
+		var maxMean, minMean float64
+		if mean == 0 {
+			if min == 0 || max == 0 {
+				// If the min is zero, all datapoints are nonnegative, so for the mean
+				// to be zero, they must all be zero. If the max is zero, vice versa.
+				// Define 0/0=1 to capture that they're equal, which is what matters
+				// here (0/0 defaults to NaN in Go, but we don't want that here).
+				maxMean = 0
+				minMean = 0
+			} else {
+				// The datapoints cross zero, and their mean is zero, for example
+				// [-1, 1]. The values here would also result from the "regular"
+				// computation below, but it doesn't hurt to be explicit.
+				minMean = math.Inf(1)
+				maxMean = math.Inf(1)
+			}
+		} else {
+			maxMean = math.Abs(max/mean - 1)
+			minMean = math.Abs(min/mean - 1)
+		}
 
-		if sa.Threshold.isViolated(maxMean) || sa.Threshold.isViolated(minMean) {
+		if sa.Threshold.isViolated(maxMean) || sa.Threshold.isViolated(minMean) || math.IsNaN(maxMean) || math.IsNaN(minMean) {
+			if buf.Len() != 0 {
+				fmt.Fprintf(&buf, "\n")
+			}
 			if holds {
 				fmt.Fprintf(&buf, "  %s\n", sa)
 				holds = false
 			}
 			fmt.Fprintf(&buf,
-				"\tstore=%d min/mean=%.2f max/mean=%.2f\n",
+				"\tstore=%d min/mean=%.2f max/mean=%.2f",
 				i+1, minMean, maxMean)
 		}
 	}
@@ -195,7 +216,7 @@ func (ba BalanceAssertion) Assert(
 	m := h.Recorded
 	ticks := len(m)
 	if ba.Ticks > ticks {
-		log.Dev.VInfof(ctx, 2,
+		log.KvDistribution.VInfof(ctx, 2,
 			"The history to run assertions against (%d) is shorter than "+
 				"the assertion duration (%d)", ticks, ba.Ticks)
 		return true, ""
@@ -217,15 +238,18 @@ func (ba BalanceAssertion) Assert(
 		max, _ := stats.Max(tickStats)
 		maxMeanRatio := max / mean
 
-		log.Dev.VInfof(ctx, 2,
+		log.KvDistribution.VInfof(ctx, 2,
 			"Balance assertion: stat=%s, max/mean=%.2f, threshold=%+v raw=%v",
 			ba.Stat, maxMeanRatio, ba.Threshold, tickStats)
 		if ba.Threshold.isViolated(maxMeanRatio) {
+			if buf.Len() != 0 {
+				fmt.Fprintf(&buf, "\n")
+			}
 			if holds {
 				fmt.Fprintf(&buf, "  %s\n", ba)
 				holds = false
 			}
-			fmt.Fprintf(&buf, "\tmax/mean=%.2f tick=%d\n", maxMeanRatio, tick)
+			fmt.Fprintf(&buf, "\tmax/mean=%.2f tick=%d", maxMeanRatio, tick)
 		}
 	}
 	return holds, buf.String()
@@ -258,7 +282,7 @@ func (sa StoreStatAssertion) Assert(
 	m := h.Recorded
 	ticks := len(m)
 	if sa.Ticks > ticks {
-		log.Dev.VInfof(ctx, 2,
+		log.KvDistribution.VInfof(ctx, 2,
 			"The history to run assertions against (%d) is shorter than "+
 				"the assertion duration (%d)", ticks, sa.Ticks)
 		return true, ""
@@ -276,12 +300,15 @@ func (sa StoreStatAssertion) Assert(
 		trimmedStoreStats := statTs[store-1][ticks-sa.Ticks-1:]
 		for _, stat := range trimmedStoreStats {
 			if sa.Threshold.isViolated(stat) {
+				if buf.Len() != 0 {
+					fmt.Fprintf(&buf, "\n")
+				}
 				if holds {
 					holds = false
 					fmt.Fprintf(&buf, "  %s\n", sa)
 				}
 				fmt.Fprintf(&buf,
-					"\tstore=%d stat=%.2f\n",
+					"\tstore=%d stat=%.2f",
 					store, stat)
 			}
 		}
@@ -360,6 +387,9 @@ func (ca ConformanceAssertion) Assert(
 	violatingLeases, lessPrefLeases := len(leaseViolatingPrefs), len(leaseLessPrefs)
 
 	maybeInitHolds := func() {
+		if buf.Len() != 0 {
+			fmt.Fprintf(&buf, "\n")
+		}
 		if holds {
 			holds = false
 			fmt.Fprintf(&buf, "  %s\n", ca)
@@ -455,11 +485,13 @@ func printRangeDesc(r roachpb.RangeDescriptor) string {
 
 func PrintSpanConfigConformanceList(tag string, ranges []roachpb.ConformanceReportedRange) string {
 	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf("%s:\n", tag))
+	if len(ranges) == 0 {
+		buf.WriteString("\t<none>")
+		return buf.String()
+	}
 	for i, r := range ranges {
-		if i == 0 {
-			buf.WriteString(fmt.Sprintf("%s:\n", tag))
-		}
-		buf.WriteString(fmt.Sprintf("  %s applying %s", printRangeDesc(r.RangeDescriptor),
+		buf.WriteString(fmt.Sprintf("\t%s applying %s", printRangeDesc(r.RangeDescriptor),
 			spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(r.Config)))
 		if i != len(ranges)-1 {
 			buf.WriteString("\n")

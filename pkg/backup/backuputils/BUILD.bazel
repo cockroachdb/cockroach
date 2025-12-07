@@ -21,7 +21,10 @@ go_library(
 
 go_test(
     name = "backuputils_test",
-    srcs = ["memory_backed_quota_pool_test.go"],
+    srcs = [
+        "memory_backed_quota_pool_test.go",
+        "utils_test.go",
+    ],
     embed = [":backuputils"],
     deps = [
         "//pkg/settings/cluster",

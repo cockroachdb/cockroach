@@ -510,6 +510,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = false
 	notStale()
 
+	// Stale optimizer_use_max_frequency_selectivity.
+	evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity = true
+	stale()
+	evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity = false
+	notStale()
+
 	// Stale optimizer_prove_implication_with_virtual_computed_columns.
 	evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = true
 	stale()
@@ -595,6 +601,16 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject = false
 	notStale()
 
+	evalCtx.SessionData().OptimizerClampLowHistogramSelectivity = true
+	stale()
+	evalCtx.SessionData().OptimizerClampLowHistogramSelectivity = false
+	notStale()
+
+	evalCtx.SessionData().OptimizerClampInequalitySelectivity = true
+	stale()
+	evalCtx.SessionData().OptimizerClampInequalitySelectivity = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
@@ -672,7 +688,18 @@ func TestMemoIsStale(t *testing.T) {
 	stale()
 	evalCtx.SessionData().UserProto = oldUser
 	notStale()
+
+	// User changes (after RLS was reinitialized)
 	o.Memo().Metadata().ClearRLSEnabled()
+	evalCtx.SessionData().UserProto = newUser
+	notStale()
+	evalCtx.SessionData().UserProto = oldUser
+	notStale()
+
+	// Stale row_security.
+	evalCtx.SessionData().RowSecurity = true
+	stale()
+	evalCtx.SessionData().RowSecurity = false
 	notStale()
 }
 

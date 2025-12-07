@@ -153,18 +153,20 @@ func TestCompare(t *testing.T) {
 	}
 }
 
-func TestNext(t *testing.T) {
+func TestNextSibling(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected string
+		ok       bool
 	}{
-		{"a", "b"},
-		{"a.b", "a.c"},
-		{"a.z", "a.z-"},
-		{"-", "0"},
-		{"9", "A"},
-		{"Z", "_"},
-		{"_", "a"},
+		{"", "", false},
+		{"a", "a-", true},
+		{"a.b", "a.b-", true},
+		{"a.z", "a.z-", true},
+		{"-", "--", true},
+		{"9", "9-", true},
+		{"Z", "Z-", true},
+		{"_", "_-", true},
 	}
 
 	for _, tc := range tests {
@@ -172,9 +174,12 @@ func TestNext(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error parsing %q: %v", tc.input, err)
 		}
-		next := a.NextSibling()
-		if next.String() != tc.expected {
-			t.Errorf("expected next of %q to be %q, got %q", tc.input, tc.expected, next.String())
+		next, ok := a.NextSibling()
+		if ok != tc.ok {
+			t.Errorf("expected ok=%v for input %q, got %v", tc.ok, tc.input, ok)
+		}
+		if n := next.String(); n != tc.expected {
+			t.Errorf("expected %q for input %q, got %q", tc.expected, tc.input, n)
 		}
 	}
 }

@@ -6,7 +6,6 @@
 package backup
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	math "math"
@@ -47,7 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -73,7 +72,7 @@ func slurpSSTablesLatestKey(
 			LowerBound: keys.LocalMax,
 			UpperBound: keys.MaxKey,
 		}
-		sst, err := storage.NewSSTIterator([][]sstable.ReadableFile{{file}}, iterOpts)
+		sst, err := storage.NewSSTIterator([][]objstorage.ReadableFile{{file}}, iterOpts)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -193,7 +192,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	writeSST := func(t *testing.T, offsets []int) string {
 		path := strconv.FormatInt(timeutil.Now().UnixNano(), 10)
 
-		var sstFile bytes.Buffer
+		var sstFile objstorage.MemObj
 		sst := storage.MakeTransportSSTWriter(ctx, cs, &sstFile)
 		defer sst.Close()
 		ts := hlc.NewClockForTesting(nil).Now()
@@ -209,7 +208,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		if err := sst.Finish(); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, "foo", path), sstFile.Bytes(), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "foo", path), sstFile.Data(), 0644); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		return path

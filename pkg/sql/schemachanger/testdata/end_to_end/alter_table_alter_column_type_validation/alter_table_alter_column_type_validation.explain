@@ -60,7 +60,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
       │    │    └── PUBLIC → TRANSIENT_VALIDATED CheckConstraint:{DescID: 104 (t), IndexID: 1 (t_pkey), ConstraintID: 2, ReferencedColumnIDs: [2]}
       │    └── 4 Mutation operations
       │         ├── MakePublicCheckConstraintValidated {"ConstraintID":2,"TableID":104}
-      │         ├── UpsertColumnType {"ColumnType":{"ColumnID":2,"IsNullable":true,"TableID":104}}
+      │         ├── UpsertColumnType {"ColumnType":{"ColumnID":2,"TableID":104}}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase

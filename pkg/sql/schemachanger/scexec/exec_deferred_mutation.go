@@ -28,7 +28,9 @@ type deferredState struct {
 	scheduleIDsToDelete          []jobspb.ScheduleID
 	statsToRefresh               catalog.DescriptorIDSet
 	indexesToSplitAndScatter     []indexesToSplitAndScatter
+	ttlScheduleMetadataUpdates   []ttlScheduleMetadataUpdate
 	gcJobs
+	distributedMergeMode jobspb.IndexBackfillDistributedMergeMode
 }
 
 type databaseRoleSettingToDelete struct {
@@ -36,8 +38,14 @@ type databaseRoleSettingToDelete struct {
 }
 
 type indexesToSplitAndScatter struct {
-	tableID catid.DescID
-	indexID catid.IndexID
+	tableID     catid.DescID
+	indexID     catid.IndexID
+	copyIndexID catid.IndexID
+}
+
+type ttlScheduleMetadataUpdate struct {
+	tableID descpb.ID
+	newName string
 }
 
 type schemaChangerJobUpdate struct {
@@ -57,12 +65,13 @@ func (s *deferredState) DeleteDatabaseRoleSettings(ctx context.Context, dbID des
 }
 
 func (s *deferredState) AddIndexForMaybeSplitAndScatter(
-	tableID catid.DescID, indexID catid.IndexID,
+	tableID catid.DescID, indexID catid.IndexID, copyIndexID catid.IndexID,
 ) {
 	s.indexesToSplitAndScatter = append(s.indexesToSplitAndScatter,
 		indexesToSplitAndScatter{
-			tableID: tableID,
-			indexID: indexID,
+			tableID:     tableID,
+			indexID:     indexID,
+			copyIndexID: copyIndexID,
 		})
 }
 
@@ -72,6 +81,16 @@ func (s *deferredState) DeleteSchedule(scheduleID jobspb.ScheduleID) {
 
 func (s *deferredState) RefreshStats(descriptorID descpb.ID) {
 	s.statsToRefresh.Add(descriptorID)
+}
+
+func (s *deferredState) UpdateTTLScheduleMetadata(
+	ctx context.Context, tableID descpb.ID, newName string,
+) error {
+	s.ttlScheduleMetadataUpdates = append(s.ttlScheduleMetadataUpdates, ttlScheduleMetadataUpdate{
+		tableID: tableID,
+		newName: newName,
+	})
+	return nil
 }
 
 func (s *deferredState) AddNewSchemaChangerJob(
@@ -92,6 +111,7 @@ func (s *deferredState) AddNewSchemaChangerJob(
 		auth,
 		descriptorIDs,
 		runningStatus,
+		s.distributedMergeMode,
 	)
 	return nil
 }
@@ -112,6 +132,7 @@ func MakeDeclarativeSchemaChangeJobRecord(
 	auth scpb.Authorization,
 	descriptorIDs catalog.DescriptorIDSet,
 	runningStatus redact.RedactableString,
+	distributedMergeMode jobspb.IndexBackfillDistributedMergeMode,
 ) *jobs.Record {
 	stmtStrs := make([]string, len(stmts))
 	for i, stmt := range stmts {
@@ -131,7 +152,9 @@ func MakeDeclarativeSchemaChangeJobRecord(
 		Statements:    stmtStrs,
 		Username:      username.MakeSQLUsernameFromPreNormalizedString(auth.UserName),
 		DescriptorIDs: descriptorIDs.Ordered(),
-		Details:       jobspb.NewSchemaChangeDetails{},
+		Details: jobspb.NewSchemaChangeDetails{
+			DistributedMergeMode: distributedMergeMode,
+		},
 		Progress:      jobspb.NewSchemaChangeProgress{},
 		StatusMessage: jobs.StatusMessage(runningStatus),
 		NonCancelable: isNonCancelable,
@@ -188,6 +211,21 @@ func (s *deferredState) exec(
 			return err
 		}
 	}
+	for _, ttlUpdate := range s.ttlScheduleMetadataUpdates {
+		descs, err := c.MustReadImmutableDescriptors(ctx, ttlUpdate.tableID)
+		if err != nil {
+			return err
+		}
+		desc := descs[0]
+		// Skip if this isn't a table descriptor
+		tableDesc, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			continue
+		}
+		if err := m.UpdateTTLScheduleLabel(ctx, tableDesc); err != nil {
+			return err
+		}
+	}
 	for _, idx := range s.indexesToSplitAndScatter {
 		descs, err := c.MustReadImmutableDescriptors(ctx, idx.tableID)
 		if err != nil {
@@ -198,7 +236,14 @@ func (s *deferredState) exec(
 		if err != nil {
 			return err
 		}
-		if err := iss.MaybeSplitIndexSpans(ctx, tableDesc, idxDesc); err != nil {
+		var copyIndexSource catalog.Index
+		if idx.copyIndexID != 0 {
+			copyIndexSource, err = catalog.MustFindIndexByID(tableDesc, idx.copyIndexID)
+			if err != nil {
+				return err
+			}
+		}
+		if err := iss.MaybeSplitIndexSpans(ctx, tableDesc, idxDesc, copyIndexSource); err != nil {
 			return err
 		}
 	}

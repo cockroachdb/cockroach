@@ -190,7 +190,7 @@ var (
 	// that "violate" a hint like forcing a specific index or join algorithm.
 	// If the final expression has this cost or larger, it means that there was no
 	// plan that could satisfy the hints.
-	hugeCost = memo.Cost{C: 1e100, Flags: memo.CostFlags{HugeCostPenalty: true}}
+	hugeCost = memo.Cost{C: 1e100, Penalties: memo.HugeCostPenalty}
 
 	// SmallDistributeCost is the per-operation cost overhead for scans which may
 	// access remote regions, but the scanned table is unpartitioned with no lease
@@ -217,8 +217,8 @@ var (
 	//               region instead of relying on costing, which may not guarantee
 	//               the correct plan is found?
 	LargeDistributeCostWithHomeRegion = memo.Cost{
-		C:     LargeDistributeCost.C / 2,
-		Flags: memo.CostFlags{HugeCostPenalty: true},
+		C:         LargeDistributeCost.C / 2,
+		Penalties: memo.HugeCostPenalty,
 	}
 )
 
@@ -625,15 +625,34 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	// preferable, all else being equal.
 	cost.C += cpuCostFactor
 
+	// Within a locality optimized search, distribution costs are added to the
+	// remote branch, but not the local branch. Scale the remote branch costs by
+	// a factor reflecting the likelihood of executing that branch. Right now
+	// this probability is not estimated, so just use a default probability of
+	// 1/10.
+	// TODO(msirek): Add an estimation of the probability of executing the
+	// remote branch, e.g., compare the size of the limit hint with the expected
+	// row count of the local branch. Is there a better approach?
+	if required.RemoteBranch {
+		cost.C /= 10
+	}
+
 	// Add a one-time cost for any operator with unbounded cardinality. This
-	// ensures we prefer plans that push limits as far down the tree as possible,
-	// all else being equal.
+	// ensures we prefer plans that push limits as far down the tree as
+	// possible, all else being equal.
 	//
-	// Also add a cost flag for unbounded cardinality.
+	// Also add a penalty if the corresponding session setting is enabled and
+	// increment the unbounded read count for expressions that read from an
+	// index.
 	if candidate.Relational().Cardinality.IsUnbounded() {
 		cost.C += cpuCostFactor
 		if c.evalCtx.SessionData().OptimizerPreferBoundedCardinality {
-			cost.Flags.UnboundedCardinality = true
+			cost.Penalties |= memo.UnboundedCardinalityPenalty
+		}
+		switch candidate.Op() {
+		case opt.ScanOp, opt.PlaceholderScanOp, opt.LookupJoinOp, opt.IndexJoinOp,
+			opt.InvertedJoinOp, opt.ZigzagJoinOp, opt.VectorSearchOp:
+			cost.IncrUnboundedReadCount()
 		}
 	}
 
@@ -897,7 +916,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		cost.IncrFullScanCount()
 		if scan.Flags.AvoidFullScan {
 			// Apply a penalty for a full scan if needed.
-			cost.Flags.FullScanPenalty = true
+			cost.Penalties |= memo.FullScanPenalty
 		}
 	}
 

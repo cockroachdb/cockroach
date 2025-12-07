@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/redact"
@@ -114,6 +115,8 @@ var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+var allowMMA = envutil.EnvOrDefaultBool("COCKROACH_ALLOW_MMA", false)
+
 // LoadBasedRebalancingMode controls whether range rebalancing takes
 // additional variables such as write load and disk usage into account.
 // If disabled, rebalancing is done purely based on replica count.
@@ -123,20 +126,29 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 	"whether to rebalance based on the distribution of load across stores",
 	"leases and replicas",
 	map[LBRebalancingMode]string{
-		LBRebalancingOff:               "off",
-		LBRebalancingLeasesOnly:        "leases",
-		LBRebalancingLeasesAndReplicas: "leases and replicas",
-		LBRebalancingMultiMetric:       "multi-metric",
+		LBRebalancingOff:                 "off",
+		LBRebalancingLeasesOnly:          "leases",
+		LBRebalancingLeasesAndReplicas:   "leases and replicas",
+		LBRebalancingMultiMetricOnly:     "multi-metric only",
+		LBRebalancingMultiMetricAndCount: "multi-metric and count",
 	},
 	settings.WithPublic,
 	settings.WithValidateEnum(func(enumStr string) error {
-		if buildutil.CrdbTestBuild || enumStr != "multi-metric" {
+		isMMA := enumStr == "multi-metric and count" || enumStr == "multi-metric only"
+		if buildutil.CrdbTestBuild || !isMMA || allowMMA {
 			return nil
 		}
 		return unimplemented.NewWithIssue(
 			103320, "multi-metric rebalancing not supported for production use")
 	}),
 )
+
+// LoadBasedRebalancingModeIsMMA returns true if the load-based rebalancing mode
+// uses the multi-metric store rebalancer.
+var LoadBasedRebalancingModeIsMMA = func(sv *settings.Values) bool {
+	mode := LoadBasedRebalancingMode.Get(sv)
+	return mode == LBRebalancingMultiMetricOnly || mode == LBRebalancingMultiMetricAndCount
+}
 
 // LBRebalancingMode controls if and when we do store-level rebalancing
 // based on load.
@@ -152,10 +164,17 @@ const (
 	// LBRebalancingLeasesAndReplicas means that we rebalance both leases and
 	// replicas based on store-level load imbalances.
 	LBRebalancingLeasesAndReplicas
-	// LBRebalancingMultiMetric means that the store rebalancer yields to the
+	// LBRebalancingMultiMetricOnly means that the store rebalancer yields to the
 	// multi-metric store rebalancer, balancing both leases and replicas based on
-	// store-level load imbalances.
-	LBRebalancingMultiMetric
+	// store-level load imbalances. Note that this disables replica-count and
+	// lease-count based rebalancing.
+	LBRebalancingMultiMetricOnly
+	// LBRebalancingMultiMetricAndCount means that both multi-metric store
+	// rebalancer and count based rebalancing via lease queue and replicate queue
+	// are enabled, balancing lease count, replica count, and store-level load
+	// across stores. Note that this might cause more thrashing since lease and
+	// replica counts goal may be in conflict with the store-level load goal.
+	LBRebalancingMultiMetricAndCount
 )
 
 // RangeFeedRefreshInterval is injected from kvserver to avoid import cycles
@@ -364,3 +383,16 @@ var MaxCommandSize = settings.RegisterByteSizeSetting(
 	MaxCommandSizeDefault,
 	settings.ByteSizeWithMinimum(MaxCommandSizeFloor),
 )
+
+// DefaultRangefeedEventCap is the channel capacity of the rangefeed processor
+// and each registration. It is also used to calculate the default capacity
+// limit for the buffered sender.
+//
+// The size of an event is 72 bytes, so this will result in an allocation on the
+// order of ~300KB per RangeFeed. That's probably ok given the number of ranges
+// on a node that we'd like to support with active rangefeeds, but it's
+// certainly on the upper end of the range.
+//
+// Note that processors also must reserve memory from one of two memory monitors
+// for each event.
+const DefaultRangefeedEventCap = 4096

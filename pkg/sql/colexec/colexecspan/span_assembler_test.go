@@ -160,7 +160,7 @@ func TestSpanAssembler(t *testing.T) {
 											row := make(rowenc.EncDatumRow, len(typs))
 											for j := range typs {
 												datum := converter.GetDatumColumn(j)[i]
-												row[j] = rowenc.DatumToEncDatum(typs[j], datum)
+												row[j] = rowenc.DatumToEncDatumUnsafe(typs[j], datum)
 											}
 											rows[i] = row
 										}

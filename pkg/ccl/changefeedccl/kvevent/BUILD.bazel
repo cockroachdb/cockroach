@@ -28,8 +28,8 @@ go_library(
         "//pkg/util/quotapool",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -59,6 +59,7 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/quotapool",
         "//pkg/util/randutil",

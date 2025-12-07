@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -588,7 +588,7 @@ func (desc *wrapper) getAllReferencedTypesInTableColumns(
 			// Skip trigger function bodies.
 			return nil
 		}
-		expr, err := parser.ParseExpr(*exprStr)
+		expr, err := parserutils.ParseExpr(*exprStr)
 		if err != nil {
 			return err
 		}
@@ -2236,6 +2236,18 @@ func (desc *wrapper) HasPrimaryKey() bool {
 	return !desc.PrimaryIndex.Disabled
 }
 
+// IsExpressionIndex implements the TableDescriptor interface.
+func (desc *wrapper) IsExpressionIndex(idx catalog.Index) bool {
+	for i := 0; i < idx.NumKeyColumns(); i++ {
+		colID := idx.GetKeyColumnID(i)
+		col := catalog.FindColumnByID(desc, colID)
+		if col != nil && col.IsExpressionIndexColumn() {
+			return true
+		}
+	}
+	return false
+}
+
 // HasColumnBackfillMutation implements the TableDescriptor interface.
 func (desc *wrapper) HasColumnBackfillMutation() bool {
 	for _, m := range desc.AllMutations() {
@@ -2591,6 +2603,9 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) 
 	}
 	if desc.IsSchemaLocked() {
 		appendStorageParam(`schema_locked`, `true`)
+	}
+	if desc.StatsCanaryWindow != 0 {
+		appendStorageParam(`sql_stats_canary_window`, fmt.Sprintf(`'%s'`, desc.StatsCanaryWindow.String()))
 	}
 	if usingFK := desc.GetRegionalByRowUsingConstraint(); usingFK != descpb.ConstraintID(0) {
 		// NOTE: when validating the descriptor, we check that the referenced

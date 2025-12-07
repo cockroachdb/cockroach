@@ -423,16 +423,16 @@ func RunNemesis(
 		time := timeutil.Now()
 		for i := 0; i < numInserts; i++ {
 			query := queryGen.Generate()
-			log.Dev.Infof(ctx, "Executing query: %s", query)
+			log.Changefeed.Infof(ctx, "Executing query: %s", query)
 			err := timeutil.RunWithTimeout(ctx, "nemeses populate table",
 				insertTimeout, func(ctx context.Context) error {
 					_, err := db.ExecContext(ctx, query)
 					return err
 				})
-			log.Dev.Infof(ctx, "Time taken to execute last query: %s", timeutil.Since(time))
+			log.Changefeed.Infof(ctx, "Time taken to execute last query: %s", timeutil.Since(time))
 			time = timeutil.Now()
 			if err != nil {
-				log.Dev.Infof(ctx, "Skipping query %s because error %s", query, err)
+				log.Changefeed.Infof(ctx, "Skipping query %s because error %s", query, err)
 				continue
 			}
 		}
@@ -454,10 +454,10 @@ func RunNemesis(
 		var id int
 		var ts string
 		if err := rows.Scan(&id, &ts); err != nil {
-			log.Dev.Infof(ctx, "# skipping row because error: %s", err)
+			log.Changefeed.Infof(ctx, "# skipping row because error: %s", err)
 			continue
 		}
-		log.Dev.Infof(ctx, "INSERT INTO foo (id,ts) VALUES (%d, %s);", id, ts)
+		log.Changefeed.Infof(ctx, "INSERT INTO foo (id,ts) VALUES (%d, %s);", id, ts)
 	}
 
 	cfo := newChangefeedOption(testName)
@@ -465,7 +465,7 @@ func RunNemesis(
 		`CREATE CHANGEFEED FOR foo %s`,
 		cfo.OptionString(),
 	)
-	log.Dev.Infof(ctx, "Using changefeed options: %s", changefeedStatement)
+	log.Changefeed.Infof(ctx, "Using changefeed options: %s", changefeedStatement)
 	foo, err := f.Feed(changefeedStatement)
 	if err != nil {
 		return nil, err
@@ -922,7 +922,7 @@ var compiledStateTransitions = fsm.Compile(stateTransitions)
 
 func logEvent(fn func(fsm.Args) error) func(fsm.Args) error {
 	return func(a fsm.Args) error {
-		log.Dev.Infof(a.Ctx, "Event: %#v, Payload: %#v\n", a.Event, a.Payload)
+		log.Changefeed.Infof(a.Ctx, "Event: %#v, Payload: %#v\n", a.Event, a.Payload)
 		return fn(a)
 	}
 }
@@ -1084,7 +1084,7 @@ func noteFeedMessage(a fsm.Args) error {
 			if err != nil {
 				return err
 			}
-			log.Dev.Infof(a.Ctx, "%v", string(m.Resolved))
+			log.Changefeed.Infof(a.Ctx, "%v", string(m.Resolved))
 			err = ns.v.NoteResolved(m.Partition, ts)
 			if err != nil {
 				return err
@@ -1096,7 +1096,7 @@ func noteFeedMessage(a fsm.Args) error {
 				return err
 			}
 			ns.availableRows--
-			log.Dev.Infof(a.Ctx, "%s->%s", m.Key, m.Value)
+			log.Changefeed.Infof(a.Ctx, "%s->%s", m.Key, m.Value)
 			return ns.v.NoteRow(m.Partition, string(m.Key), string(m.Value), ts, m.Topic)
 		}
 	}

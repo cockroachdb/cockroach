@@ -34,7 +34,7 @@ func (p *planner) CommentOnIndex(ctx context.Context, n *tree.CommentOnIndex) (p
 		return nil, err
 	}
 
-	_, tableDesc, index, err := p.getTableAndIndex(ctx, &n.Index, privilege.CREATE, true /* skipCache */)
+	_, tableDesc, index, err := p.GetTableAndIndex(ctx, &n.Index, privilege.CREATE, true /* skipCache */)
 	if err != nil {
 		return nil, err
 	}

@@ -324,6 +324,7 @@ func (s *raftScheduler) Start(stopper *stop.Stopper) {
 				})
 			if err != nil {
 				s.done.Done()
+				continue
 			}
 			go f(ctx, hdl)
 		}
@@ -401,7 +402,7 @@ func (ss *raftSchedulerShard) worker(
 		}
 		if util.RaceEnabled { // assert the ticks invariant
 			if tick := state.flags&stateRaftTick != 0; tick != (state.ticks != 0) {
-				log.Dev.Fatalf(ctx, "stateRaftTick is %v with ticks %v", tick, state.ticks)
+				log.KvExec.Fatalf(ctx, "stateRaftTick is %v with ticks %v", tick, state.ticks)
 			}
 		}
 		if state.flags&stateRaftTick != 0 {

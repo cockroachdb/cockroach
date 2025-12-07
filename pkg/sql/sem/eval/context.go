@@ -246,6 +246,11 @@ type Context struct {
 	// bundle request.
 	StmtDiagnosticsRequestInserter StmtDiagnosticsRequestInsertFunc
 
+	// TxnDiagnosticsRequestInsertFunc is used by the
+	// crdb_internal.request_transaction_bundle builtin to insert a transaction
+	// bundle request.
+	TxnDiagnosticsRequestInserter TxnDiagnosticsRequestInsertFunc
+
 	// CatalogBuiltins is used by various builtins which depend on looking up
 	// catalog information. Unlike the Planner, it is available in DistSQL.
 	CatalogBuiltins CatalogBuiltins
@@ -315,6 +320,40 @@ type Context struct {
 	// ExecutedStatementCounters contains metrics for successfully executed
 	// statements defined within the body of a UDF/SP.
 	ExecutedRoutineStatementCounters RoutineStatementCounters
+	// UseCanaryStats indicates whether this query participates in the canary
+	// statistics rollout feature. When set to true, the optimizer attempts to use
+	// "canary statistics" for all tables referenced by the query.
+	//
+	// This flag is determined probabilistically during query planning based on the
+	// sql.stats.canary_fraction cluster setting. The selection is atomic per query:
+	// either all tables use canary stats (when available) or all use stable stats.
+	//
+	// Canary statistics are newly collected table statistics that are still within
+	// their configured "canary window" (sql_stats_canary_window storage parameter).
+	// These stats provide a controlled way to gradually roll out new statistics
+	// before promoting them to stable, allowing for manual intervention if
+	// performance regressions are detected.
+	//
+	// Stable statistics are the previously established statistics that have either
+	// been promoted from canary status or were collected before canary mode was
+	// enabled for the table.
+	//
+	// Fallback behavior: If a table lacks distinct canary statistics (e.g., only
+	// one statistics version exists, or canary stats have expired), the optimizer
+	// will use the available stable statistics even when this flag is true.
+	//
+	// UseCanaryStats should only be set True for non-internal and when creating
+	// a not-prepared stmt. In other words, internal queries and prepared statements
+	// will always use stable statistics.
+	//
+	// When UseCanaryStats is true, the optimizer will bypass query cache or
+	// the cached memo within a prepared stmt, but rather build a one-off memo
+	// only for this query execution. This is because we roll the dice for
+	// query execution to decide whether to use canary stats or not, and
+	// we'd like to avoid frequently invalidating cached plans. The rule of
+	// thumb is: the cached memo, either in query cache or prepared stmt,
+	// are always for stable stats.
+	UseCanaryStats bool
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution
@@ -453,19 +492,31 @@ func MakeTestingEvalContext(st *cluster.Settings) Context {
 		Name:     mon.MakeName("test-monitor"),
 		Settings: st,
 	})
-	return MakeTestingEvalContextWithMon(st, monitor)
+	return MakeTestingEvalContextWithMon(keys.SystemSQLCodec, st, monitor)
+}
+
+// MakeTestingEvalContextWithCodec is the same as MakeTestingEvalContext but
+// allows overriding keys.SystemSQLCodec.
+func MakeTestingEvalContextWithCodec(codec keys.SQLCodec, st *cluster.Settings) Context {
+	monitor := mon.NewMonitor(mon.Options{
+		Name:     mon.MakeName("test-monitor"),
+		Settings: st,
+	})
+	return MakeTestingEvalContextWithMon(codec, st, monitor)
 }
 
 // MakeTestingEvalContextWithMon returns an EvalContext with the given
 // MemoryMonitor. Ownership of the memory monitor is transferred to the
 // EvalContext so do not start or close the memory monitor.
-func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) Context {
+func MakeTestingEvalContextWithMon(
+	codec keys.SQLCodec, st *cluster.Settings, monitor *mon.BytesMonitor,
+) Context {
 	sessionData := &sessiondata.SessionData{}
 	// Set defaults that match what the session variables system expects.
 	// allow_unsafe_internals defaults to true.
 	sessionData.AllowUnsafeInternals = true
 	ctx := Context{
-		Codec:            keys.SystemSQLCodec,
+		Codec:            codec,
 		Txn:              &kv.Txn{},
 		SessionDataStack: sessiondata.NewStack(sessionData),
 		Settings:         st,
@@ -520,6 +571,16 @@ func (p *fakePlannerWithMonitor) PLpgSQLFetchCursor(
 // AutoCommit is part of the eval.Planner interface.
 func (p *fakePlannerWithMonitor) AutoCommit() bool {
 	return false
+}
+
+// UsingHintInjection is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) UsingHintInjection() bool {
+	return false
+}
+
+// GetHintIDs is part of the eval.Planner interface.
+func (o *fakePlannerWithMonitor) GetHintIDs() []int64 {
+	return nil
 }
 
 type fakeStreamManagerFactory struct {

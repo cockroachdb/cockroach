@@ -15,17 +15,17 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath_encoding
 +-- checks for double-quoted values
 +-- basic unicode input
 +SELECT '"\u"'::jsonpath;		-- ERROR, incomplete escape
-+ERROR:  could not parse "\"\\u\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "\"\\u\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +"\u"
 +^
 +SELECT '"\u00"'::jsonpath;		-- ERROR, incomplete escape
-+ERROR:  could not parse "\"\\u00\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "\"\\u00\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +"\u00"
 +^
 +SELECT '"\u000g"'::jsonpath;	-- ERROR, g is not a hex digit
-+ERROR:  could not parse "\"\\u000g\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "\"\\u000g\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +"\u000g"
 +^
@@ -43,27 +43,27 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath_encoding
 +
 +-- handling of unicode surrogate pairs
 +select '"\ud83d\ude04\ud83d\udc36"'::jsonpath as correct_in_utf8;
-+ERROR:  could not parse "\"\\ud83d\\ude04\\ud83d\\udc36\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "\"\\ud83d\\ude04\\ud83d\\udc36\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +"\ud83d\ude04\ud83d\udc36"
 +^
 +select '"\ud83d\ud83d"'::jsonpath; -- 2 high surrogates in a row
-+ERROR:  could not parse "\"\\ud83d\\ud83d\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "\"\\ud83d\\ud83d\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +"\ud83d\ud83d"
 +^
 +select '"\ude04\ud83d"'::jsonpath; -- surrogates in wrong order
-+ERROR:  could not parse "\"\\ude04\\ud83d\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "\"\\ude04\\ud83d\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +"\ude04\ud83d"
 +^
 +select '"\ud83dX"'::jsonpath; -- orphan high surrogate
-+ERROR:  could not parse "\"\\ud83dX\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "\"\\ud83dX\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +"\ud83dX"
 +^
 +select '"\ude04X"'::jsonpath; -- orphan low surrogate
-+ERROR:  could not parse "\"\\ude04X\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "\"\\ude04X\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +"\ude04X"
 +^
@@ -101,17 +101,17 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath_encoding
 +-- checks for quoted key names
 +-- basic unicode input
 +SELECT '$."\u"'::jsonpath;		-- ERROR, incomplete escape
-+ERROR:  could not parse "$.\"\\u\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "$.\"\\u\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +$."\u"
 +  ^
 +SELECT '$."\u00"'::jsonpath;	-- ERROR, incomplete escape
-+ERROR:  could not parse "$.\"\\u00\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "$.\"\\u00\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +$."\u00"
 +  ^
 +SELECT '$."\u000g"'::jsonpath;	-- ERROR, g is not a hex digit
-+ERROR:  could not parse "$.\"\\u000g\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "$.\"\\u000g\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +$."\u000g"
 +  ^
@@ -129,27 +129,27 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/jsonpath_encoding
 +
 +-- handling of unicode surrogate pairs
 +select '$."\ud83d\ude04\ud83d\udc36"'::jsonpath as correct_in_utf8;
-+ERROR:  could not parse "$.\"\\ud83d\\ude04\\ud83d\\udc36\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "$.\"\\ud83d\\ude04\\ud83d\\udc36\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +$."\ud83d\ude04\ud83d\udc36"
 +  ^
 +select '$."\ud83d\ud83d"'::jsonpath; -- 2 high surrogates in a row
-+ERROR:  could not parse "$.\"\\ud83d\\ud83d\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "$.\"\\ud83d\\ud83d\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +$."\ud83d\ud83d"
 +  ^
 +select '$."\ude04\ud83d"'::jsonpath; -- surrogates in wrong order
-+ERROR:  could not parse "$.\"\\ude04\\ud83d\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "$.\"\\ude04\\ud83d\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +$."\ude04\ud83d"
 +  ^
 +select '$."\ud83dX"'::jsonpath; -- orphan high surrogate
-+ERROR:  could not parse "$.\"\\ud83dX\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "$.\"\\ud83dX\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +$."\ud83dX"
 +  ^
 +select '$."\ude04X"'::jsonpath; -- orphan low surrogate
-+ERROR:  could not parse "$.\"\\ude04X\"" as type jsonpath: lexical error: invalid syntax
++ERROR:  could not parse "$.\"\\ude04X\"" as type jsonpath: at or near "invalid syntax": syntax error
 +DETAIL:  source SQL:
 +$."\ude04X"
 +  ^

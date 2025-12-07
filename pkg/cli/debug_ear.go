@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -169,7 +168,7 @@ with their env type and encryption settings (if applicable).
 // fillEncryptionOptionsForStore fills the EnvConfig fields
 // based on the --enterprise-encryption flag value.
 func fillEncryptionOptionsForStore(dir string, cfg *fs.EnvConfig) error {
-	opts, err := storageconfig.EncryptionOptionsForStore(dir, encryptionSpecs)
+	opts, err := encryptionOptionsForStore(dir, encryptionSpecs)
 	if err != nil {
 		return err
 	}

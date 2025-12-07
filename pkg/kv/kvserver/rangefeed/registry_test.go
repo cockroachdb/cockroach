@@ -493,16 +493,11 @@ func TestRegistryShutdownMetrics(t *testing.T) {
 func TestBaseRegistration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	r := newTestRegistration(newTestStream(), withRSpan(spAB), withStartTs(hlc.Timestamp{WallTime: 10}), withDiff(true), withFiltering(true))
-	require.Equal(t, spAB, r.getSpan())
-	require.Equal(t, hlc.Timestamp{WallTime: 10}, r.getCatchUpTimestamp())
-	r.setSpanAsKeys()
+	require.Equal(t, spAB, r.Span())
 	require.Equal(t, r.Range(), spAB.AsRange())
 	require.Equal(t, r.Range(), r.Range())
 	r.setID(10)
 	require.Equal(t, uintptr(10), r.ID())
-	require.True(t, r.getWithDiff())
-	require.True(t, r.getWithFiltering())
-	require.False(t, r.getWithOmitRemote())
 }
 
 // TODO(wenyihu6): Should catch up events also get stripped events? They current'y don't.

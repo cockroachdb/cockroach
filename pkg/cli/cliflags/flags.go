@@ -719,6 +719,14 @@ information.
 `,
 	}
 
+	UseNewRPC = FlagInfo{
+		Name: "use-new-rpc",
+		Description: `
+Use the new RPC framework for internode communication instead of gRPC. This is
+a preview feature and is intended for non-production use only.
+`,
+	}
+
 	LocalityAdvertiseAddr = FlagInfo{
 		Name: "locality-advertise-addr",
 		Description: `
@@ -939,6 +947,22 @@ A string of comma separated list of distinguished-name
 <attribute-type>=<attribute-value> mappings in accordance with RFC4514 for the node
 user. This strictly needs to match the DN subject in the client certificate
 provided for node user if this flag is set.
+`,
+	}
+
+	DisallowRootLogin = FlagInfo{
+		Name: "disallow-root-login",
+		Description: `
+When set, prevents authentication attempts by clients presenting certificates
+with "root" as one of the principals (CommonName or SubjectAlternativeName).
+This applies to both SQL client connections and RPC connections. Authentication
+attempts by root will be rejected with an error.
+<PRE>
+
+</PRE>
+Note: Please ensure none of the certificates that are in use by the cluster or
+the SQL/RPC clients have a root in the SAN fields since the flag will block
+access to that client.
 `,
 	}
 
@@ -1197,10 +1221,14 @@ Verbose output.`,
 	TempDir = FlagInfo{
 		Name: "temp-dir",
 		Description: `
-The parent directory path where a temporary subdirectory will be created to be used for temporary files.
-This path must exist or the node will not start.
-The temporary subdirectory is used primarily as working memory for distributed computations
-and CSV importing.
+The parent directory path where a temporary subdirectory will be created to be
+used for temporary files. This path must exist or the node will not start.
+
+The encryption from one of the stores is used with the temporary directory
+(specifically, the first store that is on-disk and encrypted).
+
+The temporary subdirectory is used primarily as working memory for distributed
+computations and CSV importing.
 For example, the following will generate an arbitrary, temporary subdirectory
 "/mnt/ssd01/temp/cockroach-temp<NUMBER>":
 <PRE>
@@ -1209,7 +1237,8 @@ For example, the following will generate an arbitrary, temporary subdirectory
 
 </PRE>
 If this flag is unspecified, the temporary subdirectory will be located under
-the root of the first store.`,
+the root of one of the stores (with preference for on-disk, encrypted stores).
+`,
 	}
 
 	ExternalIODir = FlagInfo{

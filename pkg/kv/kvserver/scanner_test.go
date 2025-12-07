@@ -279,7 +279,7 @@ func TestScannerTiming(t *testing.T) {
 			s.stopper.Stop(context.Background())
 
 			avg := s.avgScan()
-			log.Dev.Infof(context.Background(), "%d: average scan: %s", i, avg)
+			log.KvExec.Infof(context.Background(), "%d: average scan: %s", i, avg)
 			if avg.Nanoseconds()-duration.Nanoseconds() > maxError.Nanoseconds() ||
 				duration.Nanoseconds()-avg.Nanoseconds() > maxError.Nanoseconds() {
 				return errors.Errorf("expected %s, got %s: exceeds max error of %s", duration, avg, maxError)

@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/stretchr/testify/require"
 )
 
 // Regression tests for #22304.
@@ -30,8 +32,7 @@ func TestConstraintValidationBeforeBuffering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
@@ -132,13 +133,20 @@ func TestReadCommittedImplicitPartitionUpsert(t *testing.T) {
 		mu.l.Unlock()
 	}
 
+	peekState := func() State {
+		mu.l.Lock()
+		defer mu.l.Unlock()
+		return mu.state
+	}
+
 	ctx := context.Background()
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	// If test is in Ready state, transition to ReadDone and wait for conflict.
 	params.Knobs = base.TestingKnobs{
 		SQLExecutor: &sql.ExecutorTestingKnobs{
-			AfterArbiterRead: func() {
-				if mu.state != Ready {
+			AfterArbiterRead: func(query string) {
+				// Only wait for arbiter operations on the upsert table.
+				if peekState() != Ready || !strings.Contains(query, "d.upsert") {
 					return
 				}
 				setState(ReadDone)
@@ -271,8 +279,12 @@ PARTITION ALL BY LIST (r) (
 		}
 		rows.Close()
 
+		_, err = db.Exec(`ALTER TABLE d.upsert SET (schema_locked=false)`)
+		require.NoError(t, err)
 		if _, err := db.Exec(`TRUNCATE TABLE d.upsert`); err != nil {
 			t.Fatal(err)
 		}
+		_, err = db.Exec(`ALTER TABLE d.upsert SET (schema_locked=true)`)
+		require.NoError(t, err)
 	}
 }

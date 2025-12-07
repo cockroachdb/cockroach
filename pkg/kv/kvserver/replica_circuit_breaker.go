@@ -135,7 +135,7 @@ func newReplicaCircuitBreaker(
 			ambientCtx: ambientCtx,
 			EventHandler: &circuit.EventLogger{
 				Log: func(buf redact.StringBuilder) {
-					log.Dev.Infof(ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
+					log.KvExec.Infof(ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
 				},
 			},
 			onTrip:  onTrip,
@@ -157,10 +157,10 @@ func (r replicaCircuitBreakerLogger) OnTrip(b *circuit.Breaker, prev, cur error)
 	if prev == nil {
 		r.onTrip()
 	}
-	// Log directly from this method via log.Dev.Errorf.
+	// Log directly from this method via log.KvExec.Errorf.
 	var buf redact.StringBuilder
 	circuit.EventFormatter{}.OnTrip(b, prev, cur, &buf)
-	log.Dev.Errorf(r.ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
+	log.KvExec.Errorf(r.ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
 }
 
 func (r replicaCircuitBreakerLogger) OnReset(br *circuit.Breaker, prev error) {

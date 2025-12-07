@@ -24,9 +24,13 @@ go_library(
 go_test(
     name = "catformat_test",
     size = "small",
-    srcs = ["index_test.go"],
+    srcs = [
+        "index_test.go",
+        "inject_parser_test.go",
+    ],
     embed = [":catformat"],
     deps = [
+        "//pkg/sql",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",

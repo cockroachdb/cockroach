@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -53,12 +53,16 @@ func TestSQLRowReader(t *testing.T) {
 
 	// Create sqlRowReader for source table
 	srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab")
-	srcReader, err := newSQLRowReader(srcDesc, sessiondata.InternalExecutorOverride{})
+	srcSession := newInternalSession(t, s)
+	defer srcSession.Close(ctx)
+	srcReader, err := newSQLRowReader(ctx, srcDesc, srcSession)
 	require.NoError(t, err)
 
 	// Create sqlRowReader for destination table
 	dstDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "b", "tab")
-	dstReader, err := newSQLRowReader(dstDesc, sessiondata.InternalExecutorOverride{})
+	dstSession := newInternalSession(t, server.Server(0))
+	defer dstSession.Close(ctx)
+	dstReader, err := newSQLRowReader(ctx, dstDesc, dstSession)
 	require.NoError(t, err)
 
 	// Create test rows to look up
@@ -66,10 +70,10 @@ func TestSQLRowReader(t *testing.T) {
 	// Use sqlRowReader to get prior rows from both tables
 	db := s.InternalDB().(isql.DB)
 
-	readRows := func(t *testing.T, db isql.DB, rows []tree.Datums, reader *sqlRowReader) map[int]priorRow {
+	readRows := func(t *testing.T, db isql.DB, rows []tree.Datums, reader sqlRowReader) map[int]priorRow {
 		var result map[int]priorRow
 		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			result, err = reader.ReadRows(ctx, txn, rows)
+			result, err = reader.ReadRows(ctx, rows)
 			require.NoError(t, err)
 			return err
 		}))
@@ -136,4 +140,55 @@ func TestSQLRowReader(t *testing.T) {
 		readRows(t, db, testRows, dstReader),
 		readRowsSql(t, dbDest, primaryKeys),
 		"reading destination did not yield expected rows")
+}
+
+func TestSQLRowReaderWithArrayColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create tables with array column
+	createStmt := `CREATE TABLE tab_array (pk int[] primary key, value int)`
+	runner.Exec(t, createStmt)
+
+	// Insert test data
+	runner.Exec(t, "INSERT INTO tab_array VALUES (ARRAY['1', '2'], 10), (ARRAY['1'], 20)")
+
+	// Create sqlRowReader for source table
+	desc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "defaultdb", "tab_array")
+	session := newInternalSession(t, s)
+	defer session.Close(ctx)
+	reader, err := newSQLRowReader(ctx, desc, session)
+	require.NoError(t, err)
+
+	db := s.InternalDB().(isql.DB)
+
+	testRows := []tree.Datums{
+		{
+			tree.NewDArrayFromDatums(types.Int, tree.Datums{tree.NewDInt(1), tree.NewDInt(2)}),
+			tree.NewDInt(0),
+		},
+		{
+			tree.NewDArrayFromDatums(types.Int, tree.Datums{tree.NewDInt(1)}),
+			tree.NewDInt(0),
+		},
+	}
+
+	var result map[int]priorRow
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		result, err = reader.ReadRows(ctx, testRows)
+		return err
+	}))
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result, 2)
+	require.Equal(t, result[0].row[1], tree.NewDInt(10))
+	require.Equal(t, result[1].row[1], tree.NewDInt(20))
 }

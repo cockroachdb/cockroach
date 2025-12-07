@@ -397,13 +397,15 @@ func runDebugBallast(cmd *cobra.Command, args []string) error {
 	usedBytes := du.TotalBytes - du.AvailBytes
 
 	var targetUsage uint64
-	p := debugCtx.ballastSize.Percent
-	if math.Abs(p) > 100 {
-		return errors.Errorf("absolute percentage value %f greater than 100", p)
-	}
-	b := debugCtx.ballastSize.Bytes
-	if p != 0 && b != 0 {
-		return errors.New("expected exactly one of percentage or bytes non-zero, found both")
+	var p float64
+	var b int64
+	if debugCtx.ballastSize.IsPercent() {
+		p = debugCtx.ballastSize.Percent()
+		if math.Abs(p) > 100 {
+			return errors.Errorf("absolute percentage value %f greater than 100", p)
+		}
+	} else if debugCtx.ballastSize.IsBytes() {
+		b = debugCtx.ballastSize.Bytes()
 	}
 	switch {
 	case p > 0:
@@ -495,7 +497,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	defer snapshot.Close()
 
 	var results int
-	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, rditer.SelectOpts{
+	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, fs.UnknownReadCategory, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
 			SystemKeys: true,
 			LockTable:  true,
@@ -1620,6 +1622,8 @@ func init() {
 	f.IntVar(&debugTimeSeriesDumpOpts.noOfUploadWorkers, "upload-workers", 75, "number of workers to upload the time series data in parallel")
 	f.BoolVar(&debugTimeSeriesDumpOpts.retryFailedRequests, "retry-failed-requests", false, "retry previously failed requests from file")
 	f.BoolVar(&debugTimeSeriesDumpOpts.disableDeltaProcessing, "disable-delta-processing", false, "disable delta calculation for counter metrics (enabled by default)")
+	f.Int64Var(&debugTimeSeriesDumpOpts.ddMetricInterval, "dd-metric-interval", debugTimeSeriesDumpOpts.ddMetricInterval, "interval in seconds for datadoginit format only (default 10). Regular datadog format uses actual intervals from tsdump.")
+	f.Lookup("dd-metric-interval").Hidden = true // this is for internal use only
 
 	f = debugSendKVBatchCmd.Flags()
 	f.StringVar(&debugSendKVBatchContext.traceFormat, "trace", debugSendKVBatchContext.traceFormat,

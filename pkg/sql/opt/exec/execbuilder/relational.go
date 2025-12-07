@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -409,34 +410,24 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 		}
 		if scan, ok := e.(*memo.ScanExpr); ok {
 			tab := b.mem.Metadata().Table(scan.Table)
-			if tab.StatisticCount() > 0 {
-				// The first stat is the most recent full one.
-				var first int
-				for first < tab.StatisticCount() &&
-					(tab.Statistic(first).IsPartial() ||
-						(tab.Statistic(first).IsMerged() && !b.evalCtx.SessionData().OptimizerUseMergedPartialStatistics) ||
-						(tab.Statistic(first).IsForecast() && !b.evalCtx.SessionData().OptimizerUseForecasts)) {
-					first++
+			first := cat.FindLatestFullStat(tab, b.evalCtx.SessionData())
+			if first < tab.StatisticCount() {
+				stat := tab.Statistic(first)
+				val.TableStatsRowCount = stat.RowCount()
+				if val.TableStatsRowCount == 0 {
+					val.TableStatsRowCount = 1
 				}
-
-				if first < tab.StatisticCount() {
-					stat := tab.Statistic(first)
-					val.TableStatsRowCount = stat.RowCount()
-					if val.TableStatsRowCount == 0 {
-						val.TableStatsRowCount = 1
-					}
-					val.TableStatsCreatedAt = stat.CreatedAt()
-					val.LimitHint = scan.RequiredPhysical().LimitHint
-					val.Forecast = stat.IsForecast()
-					if val.Forecast {
-						val.ForecastAt = stat.CreatedAt()
-						// Find the first non-forecast full stat.
-						for i := first + 1; i < tab.StatisticCount(); i++ {
-							nextStat := tab.Statistic(i)
-							if !nextStat.IsPartial() && !nextStat.IsForecast() {
-								val.TableStatsCreatedAt = nextStat.CreatedAt()
-								break
-							}
+				val.TableStatsCreatedAt = stat.CreatedAt()
+				val.LimitHint = scan.RequiredPhysical().LimitHint
+				val.Forecast = stat.IsForecast()
+				if val.Forecast {
+					val.ForecastAt = stat.CreatedAt()
+					// Find the first non-forecast full stat.
+					for i := first + 1; i < tab.StatisticCount(); i++ {
+						nextStat := tab.Statistic(i)
+						if !nextStat.IsPartial() && !nextStat.IsForecast() {
+							val.TableStatsCreatedAt = nextStat.CreatedAt()
+							break
 						}
 					}
 				}
@@ -662,7 +653,11 @@ func (b *Builder) indexConstraintMaxResults(
 
 // scanParams populates ScanParams and the output column mapping.
 func (b *Builder) scanParams(
-	tab cat.Table, scan *memo.ScanPrivate, relProps *props.Relational, reqProps *physical.Required,
+	tab cat.Table,
+	scan *memo.ScanPrivate,
+	relProps *props.Relational,
+	reqProps *physical.Required,
+	statsCreatedAt time.Time,
 ) (exec.ScanParams, colOrdMap, error) {
 	// Check if we tried to force a specific index but there was no Scan with that
 	// index in the memo.
@@ -737,7 +732,7 @@ func (b *Builder) scanParams(
 		sqltelemetry.IncrementPartitioningCounter(sqltelemetry.PartitionConstrainedScan)
 	}
 
-	softLimit := reqProps.LimitHintInt64()
+	softLimit := uint64(reqProps.LimitHintInt64())
 	hardLimit := scan.HardLimit.RowCount()
 	maxResults, maxResultsOk := b.indexConstraintMaxResults(scan, relProps)
 
@@ -814,6 +809,7 @@ func (b *Builder) scanParams(
 		Parallelize:        parallelize,
 		Locking:            locking,
 		EstimatedRowCount:  rowCount,
+		StatsCreatedAt:     statsCreatedAt,
 		LocalityOptimized:  scan.LocalityOptimized,
 	}, outputMap, nil
 }
@@ -885,32 +881,30 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 		}
 	}
 
+	var statsCreatedAt time.Time
 	// Save some instrumentation info.
 	b.ScanCounts[exec.ScanCount]++
 	if stats.Available {
 		b.TotalScanRows += stats.RowCount
 		b.ScanCounts[exec.ScanWithStatsCount]++
 
-		// The first stat is the most recent full one. Check if it was a forecast.
-		var first int
-		for first < tab.StatisticCount() && tab.Statistic(first).IsPartial() {
-			first++
-		}
+		sd := b.evalCtx.SessionData()
+		first := cat.FindLatestFullStat(tab, sd)
 		if first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
-			if b.evalCtx.SessionData().OptimizerUseForecasts {
-				b.ScanCounts[exec.ScanWithStatsForecastCount]++
+			b.ScanCounts[exec.ScanWithStatsForecastCount]++
 
-				// Calculate time since the forecast (or negative time until the forecast).
-				nanosSinceStatsForecasted := timeutil.Since(tab.Statistic(first).CreatedAt())
-				if nanosSinceStatsForecasted.Abs() > b.NanosSinceStatsForecasted.Abs() {
-					b.NanosSinceStatsForecasted = nanosSinceStatsForecasted
-				}
+			// Calculate time since the forecast (or negative time until the forecast).
+			nanosSinceStatsForecasted := timeutil.Since(tab.Statistic(first).CreatedAt())
+			if nanosSinceStatsForecasted.Abs() > b.NanosSinceStatsForecasted.Abs() {
+				b.NanosSinceStatsForecasted = nanosSinceStatsForecasted
 			}
-			// Find the first non-forecast full stat.
-			for first < tab.StatisticCount() &&
-				(tab.Statistic(first).IsPartial() || tab.Statistic(first).IsForecast()) {
-				first++
-			}
+
+			// Since currently 'first' points at the forecast, then usage of the
+			// forecasts must be enabled, so in order to find the first full
+			// non-forecast stat, we'll temporarily disable their usage.
+			sd.OptimizerUseForecasts = false
+			first = cat.FindLatestFullStat(tab, sd)
+			sd.OptimizerUseForecasts = true
 		}
 
 		if first < tab.StatisticCount() {
@@ -933,11 +927,14 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 				rowCountWithoutForecast = float64(minCardinality)
 			}
 			b.TotalScanRowsWithoutForecasts += rowCountWithoutForecast
+			statsCreatedAt = tabStat.CreatedAt()
 		}
 	}
 
 	var params exec.ScanParams
-	params, outputCols, err = b.scanParams(tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical())
+	params, outputCols, err = b.scanParams(
+		tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical(), statsCreatedAt,
+	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -1018,7 +1015,8 @@ func (b *Builder) buildPlaceholderScan(
 	private.SetConstraint(b.ctx, b.evalCtx, &c)
 
 	var params exec.ScanParams
-	params, outputCols, err = b.scanParams(tab, &private, scan.Relational(), scan.RequiredPhysical())
+	params, outputCols, err = b.scanParams(tab, &private, scan.Relational(),
+		scan.RequiredPhysical(), time.Time{} /* statsCreatedAt */)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -1259,28 +1257,13 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 	// Note: we put o outside of the function so we allocate it only once.
 	var o xform.Optimizer
 	fromMemo := b.mem
-	planRightSideFn := func(ctx context.Context, ef exec.Factory, leftRow tree.Datums) (_ exec.Plan, err error) {
-		defer func() {
-			if r := recover(); r != nil {
-				// This code allows us to propagate internal errors without having to add
-				// error checks everywhere throughout the code. This is only possible
-				// because the code does not update shared state and does not manipulate
-				// locks.
-				//
-				// This is the same panic-catching logic that exists in
-				// o.Optimize() below. It's required here because it's possible
-				// for factory functions to panic below, like
-				// CopyAndReplaceDefault.
-				if ok, e := errorutil.ShouldCatch(r); ok {
-					err = e
-					log.VEventf(ctx, 1, "%v", err)
-				} else {
-					// Other panic objects can't be considered "safe" and thus are
-					// propagated as crashes that terminate the session.
-					panic(r)
-				}
-			}
-		}()
+	planRightSideFn := func(ctx context.Context, ef exec.Factory, leftRow tree.Datums) (_ exec.Plan, retErr error) {
+		// This is the same panic-catching logic that exists in o.Optimize()
+		// below. It's required here because it's possible for factory functions
+		// to panic below, like CopyAndReplaceDefault.
+		defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
+			log.VEventf(ctx, 1, "%v", caughtErr)
+		})
 
 		o.Init(ctx, b.evalCtx, b.catalog)
 		f := o.Factory()
@@ -1349,6 +1332,16 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 		return plan, nil
 	}
 
+	// Build the stringified representation of the unoptimized right side for
+	// EXPLAIN purposes on demand.
+	rightSideForExplainFn := func(redactableValues bool) string {
+		f := memo.MakeExprFmtCtx(
+			b.ctx, memo.ExprFmtHideAll, redactableValues, b.mem, b.catalog,
+		)
+		f.FormatExpr(rightExpr)
+		return f.Buffer.String()
+	}
+
 	// The right plan will always produce the columns in the presentation, in
 	// the same order. This map is only used for the lifetime of this function,
 	// so free the map afterward.
@@ -1391,6 +1384,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 		b.presentationToResultColumns(rightRequiredProps.Presentation),
 		onExpr,
 		planRightSideFn,
+		rightSideForExplainFn,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -3498,9 +3492,6 @@ func (b *Builder) buildWith(with *memo.WithExpr) (_ execPlan, outputCols colOrdM
 		return execPlan{}, colOrdMap{}, err
 	}
 
-	// TODO(justin): if the binding here has a spoolNode at its root, we can
-	// remove it, since subquery execution also guarantees complete execution.
-
 	// Add the buffer as a subquery so it gets executed ahead of time, and is
 	// available to be referenced by other queries. Use SubqueryDiscardAllRows to
 	// avoid buffering the results in the subquery, since the bufferNode will
@@ -3713,6 +3704,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		udf.Def.BodyProps,
 		udf.Def.BodyStmts,
 		udf.Def.BodyTags,
+		udf.Def.BodyASTs,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		0,     /* resultBufferID */
@@ -4335,12 +4327,23 @@ func (b *Builder) getEnvData() (exec.ExplainEnvData, error) {
 			refTableIncluded.Add(int(table.ID()))
 		},
 	)
-	envOpts.AddFKs = opt.GetAllFKsAmongTables(
+	var skipFKs []*tree.AlterTable
+	envOpts.AddFKs, skipFKs = opt.GetAllFKs(
+		b.ctx,
+		b.catalog,
 		refTables,
 		func(t cat.Table) (tree.TableName, error) {
 			return b.catalog.FullyQualifiedName(b.ctx, t)
 		},
 	)
+	// Given that we include all FK-related tables when visiting them, we should
+	// not skip any FKs - we'll return an error if we find any in test-only
+	// builds.
+	if buildutil.CrdbTestBuild {
+		if len(skipFKs) > 0 {
+			return envOpts, errors.AssertionFailedf("unexpectedly skipped adding FKs in EXPLAIN (OPT): %v", skipFKs)
+		}
+	}
 	var err error
 	envOpts.Tables, err = getNames(len(refTables), func(i int) cat.DataSource {
 		return refTables[i]

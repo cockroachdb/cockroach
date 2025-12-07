@@ -9,14 +9,16 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
 
-// Metadata encapsulates information about a statement that is gathered
-// during Prepare and is later used during Describe or Execute.
+// Metadata encapsulates information about a statement that is gathered during
+// Prepare and is later used during Describe or Execute. It should contain
+// everything necessary to create a sql.Statement at execution time.
 type Metadata struct {
 	// Note that AST may be nil if the prepared statement is empty.
 	statements.Statement[tree.Statement]
@@ -38,6 +40,22 @@ type Metadata struct {
 	// InferredTypes represents the inferred types for placeholder, using protocol
 	// identifiers. Used for reporting on Describe.
 	InferredTypes []oid.Oid
+
+	// Hints are any external statement hints from the system.statement_hints
+	// table that could apply to this statement, based on the statement
+	// fingerprint. Hints are ordered with the most recent first.
+	Hints []hints.Hint
+
+	// HintIDs are the IDs of any external statement hints, which are used for
+	// invalidation of cached plans. The order matches Hints.
+	HintIDs []int64
+
+	// HintsGeneration is the generation of the hints cache at the time the
+	// hints were retrieved, used for invalidation of cached plans.
+	HintsGeneration int64
+
+	// ASTWithInjectedHints is the AST rewritten with injected hints.
+	ASTWithInjectedHints tree.Statement
 }
 
 // MemoryEstimate returns an estimation (in bytes) of how much memory is used by
@@ -48,6 +66,9 @@ func (pm *Metadata) MemoryEstimate() int64 {
 	// We don't have a good way of estimating the size of the AST. Just assume
 	// it's a small multiple of the string length.
 	res += 2 * int64(len(pm.SQL))
+	if pm.ASTWithInjectedHints != nil {
+		res += 2 * int64(len(pm.SQL))
+	}
 
 	res += int64(len(pm.StatementNoConstants))
 
@@ -56,6 +77,11 @@ func (pm *Metadata) MemoryEstimate() int64 {
 
 	res += int64(len(pm.Columns)) * int64(unsafe.Sizeof(colinfo.ResultColumn{}))
 	res += int64(len(pm.InferredTypes)) * int64(unsafe.Sizeof(oid.Oid(0)))
+
+	for i := range pm.Hints {
+		res += pm.Hints[i].Size()
+	}
+	res += int64(len(pm.HintIDs)) * int64(unsafe.Sizeof(int64(0)))
 
 	return res
 }

@@ -69,6 +69,22 @@ func (unitTestFormatterTyp) Body(r *Renderer, data TemplateData) error {
 			r.Escaped("Schema:")
 			r.CodeBlock("", rsgCrash.Schema)
 		}
+	} else if fnr, ok := data.CondensedMessage.FatalNodeRoachtest(); ok {
+		r.Escaped("Failed with:")
+		r.CodeBlock("", fnr.Message)
+		r.Escaped("Fatal entries found in Cockroach logs:")
+		r.CodeBlock("", fnr.FatalLogs)
+		if nodeIpMap, ok := data.CondensedMessage.NodeToIpMappingRoachtest(); ok {
+			r.Escaped("Cluster Node to Ip Mapping:")
+			r.nl()
+			r.Escaped(nodeIpMap.NodeToIpMapping)
+		}
+	} else if nodeIpMap, ok := data.CondensedMessage.NodeToIpMappingRoachtest(); ok {
+		r.Escaped("Failed with:")
+		r.CodeBlock("", nodeIpMap.Message)
+		r.Escaped("Cluster Node to Ip Mapping:")
+		r.nl()
+		r.Escaped(nodeIpMap.NodeToIpMapping)
 	} else {
 		r.CodeBlock("", data.CondensedMessage.Digest(50))
 	}

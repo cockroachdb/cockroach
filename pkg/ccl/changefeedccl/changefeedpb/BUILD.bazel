@@ -4,17 +4,9 @@ load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 
 proto_library(
     name = "changefeedpb_proto",
-    srcs = [
-        "changefeed.proto",
-        "scheduled_changefeed.proto",
-    ],
+    srcs = ["scheduled_changefeed.proto"],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/jobs/jobspb:jobspb_proto",
-        "//pkg/util/hlc:hlc_proto",
-        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
-    ],
 )
 
 go_proto_library(
@@ -23,25 +15,16 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb",
     proto = ":changefeedpb_proto",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/jobs/jobspb",
-        "//pkg/util/hlc",
-        "@com_github_gogo_protobuf//gogoproto",
-    ],
 )
 
 go_library(
     name = "changefeedpb",
-    srcs = [
-        "changefeed.go",
-        "marshal.go",
-    ],
+    srcs = ["marshal.go"],
     embed = [":changefeedpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cloud",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "@com_github_cockroachdb_errors//:errors",

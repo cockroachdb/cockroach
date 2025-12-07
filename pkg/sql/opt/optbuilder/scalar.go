@@ -549,8 +549,9 @@ func (b *Builder) buildFunction(
 	if overload.HasSQLBody() {
 		return b.buildUDF(f, def, inScope, outScope, outCol, colRefs)
 	}
+	unsafeOverride := b.evalCtx.TestingKnobs.UnsafeOverride
 	if b.isUnsafeBuiltin(overload, def) {
-		if err := unsafesql.CheckInternalsAccess(b.evalCtx.SessionData()); err != nil {
+		if err := unsafesql.CheckInternalsAccess(b.ctx, b.evalCtx.SessionData(), b.stmt, b.evalCtx.Annotations, &b.evalCtx.Settings.SV, unsafeOverride); err != nil {
 			panic(err)
 		}
 	}
@@ -889,6 +890,15 @@ func (b *Builder) constructUnary(
 	panic(errors.AssertionFailedf("unhandled unary operator: %s", redact.Safe(un)))
 }
 
+// SupportedCRDBInternalBuiltins are the builtin internals that are "supported"
+// for real customer use in production for legacy reasons.
+var SupportedCRDBInternalBuiltins = map[string]struct{}{
+	// LOCKED: Do not add to this list.
+	// Supported builtins should now be added to information_schema.
+	`crdb_internal.datums_to_bytes`:           {},
+	`crdb_internal.increment_feature_counter`: {},
+}
+
 // isUnsafeBuiltin returns true if the given function definition
 // is a CRDB internal builtin function.
 func (b *Builder) isUnsafeBuiltin(
@@ -903,7 +913,9 @@ func (b *Builder) isUnsafeBuiltin(
 	}
 	for _, o := range def.Overloads {
 		if o.Schema == catconstants.CRDBInternalSchemaName {
-			return true
+			if _, ok := SupportedCRDBInternalBuiltins[def.Name]; !ok {
+				return true
+			}
 		}
 	}
 	return false
@@ -959,20 +971,8 @@ func NewScalar(
 
 // Build a memo structure from a TypedExpr: the root group represents a scalar
 // expression equivalent to expr.
-func (sb *ScalarBuilder) Build(expr tree.Expr) (_ opt.ScalarExpr, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate errors without adding lots of checks
-			// for `if err != nil` throughout the construction code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				panic(r)
-			}
-		}
-	}()
+func (sb *ScalarBuilder) Build(expr tree.Expr) (_ opt.ScalarExpr, retErr error) {
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 	typedExpr := sb.scope.resolveType(expr, types.AnyElement)
 	scalar := sb.buildScalar(typedExpr, &sb.scope, nil, nil, nil)

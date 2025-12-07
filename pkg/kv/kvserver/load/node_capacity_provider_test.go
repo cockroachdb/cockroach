@@ -25,8 +25,8 @@ type mockStoresStatsAggregator struct {
 
 func (m *mockStoresStatsAggregator) GetAggregatedStoreStats(
 	_ bool,
-) (totalCPUUsage int64, totalStoreCount int32) {
-	return m.cpuUsage, m.storeCount
+) (totalCPUUsage int64, totalStoreCount int32, _ error) {
+	return m.cpuUsage, m.storeCount, nil
 }
 
 // TestNodeCapacityProvider tests the basic functionality of the
@@ -51,7 +51,8 @@ func TestNodeCapacityProvider(t *testing.T) {
 
 	// Provider should have valid stats.
 	testutils.SucceedsSoon(t, func() error {
-		nc := provider.GetNodeCapacity(false)
+		nc, err := provider.GetNodeCapacity(false)
+		require.NoError(t, err)
 		if nc.NodeCPURateUsage == 0 || nc.NodeCPURateCapacity == 0 || nc.StoresCPURate == 0 {
 			return errors.Newf(
 				"CPU usage or capacity is 0: node cpu rate usage %v, node cpu rate capacity %v, stores cpu rate %v",
@@ -62,7 +63,8 @@ func TestNodeCapacityProvider(t *testing.T) {
 
 	cancel()
 	// GetNodeCapacity should still return valid stats after cancellation.
-	nc := provider.GetNodeCapacity(false)
+	nc, err := provider.GetNodeCapacity(false)
+	require.NoError(t, err)
 	require.Greater(t, nc.NodeCPURateCapacity, int64(0))
 	require.Greater(t, nc.NodeCPURateUsage, int64(0))
 }

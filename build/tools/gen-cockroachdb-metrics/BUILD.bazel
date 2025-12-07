@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "gen-cockroachdb-metrics_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/build/tools/gen-cockroachdb-metrics",
+    visibility = ["//visibility:private"],
+    deps = ["@in_gopkg_yaml_v2//:yaml_v2"],
+)
+
+go_binary(
+    name = "gen-cockroachdb-metrics",
+    data = ["@datadog_cockroachdb_metrics//:metrics.py"],
+    embed = [":gen-cockroachdb-metrics_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "gen-cockroachdb-metrics_test",
+    srcs = ["main_test.go"],
+    data = ["@datadog_cockroachdb_metrics//:metrics.py"],
+    embed = [":gen-cockroachdb-metrics_lib"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

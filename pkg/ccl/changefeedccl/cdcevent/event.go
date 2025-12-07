@@ -521,9 +521,14 @@ func getEventDescriptorCached(
 	idVer := CacheKey{ID: desc.GetID(), Version: desc.GetVersion(), FamilyID: family.ID}
 
 	if v, ok := cache.Get(idVer); ok {
-		ed := v.(*EventDescriptor)
-		if catalog.UserDefinedTypeColsHaveSameVersion(ed.td, desc) {
-			return ed, nil
+		cached := v.(*EventDescriptor)
+		if catalog.UserDefinedTypeColsHaveSameVersion(cached.td, desc) {
+			// Make a shallow copy to avoid modifying the cached value. The cached
+			// EventDescriptor is shared across changefeed operations and may be
+			// referenced concurrently.
+			ed := *cached
+			ed.SchemaTS = schemaTS
+			return &ed, nil
 		}
 	}
 
@@ -612,7 +617,7 @@ func (d *eventDecoder) DecodeKV(
 	err = changefeedbase.WithTerminalError(errors.Wrapf(err,
 		"error decoding key %s@%s (hex_kv: %x)",
 		keys.PrettyPrint(nil, kv.Key), kv.Value.Timestamp, kvBytes))
-	log.Dev.Errorf(ctx, "terminal error decoding KV: %v", err)
+	log.Changefeed.Errorf(ctx, "terminal error decoding KV: %v", err)
 	return Row{}, err
 }
 
@@ -810,7 +815,7 @@ func TestingMakeEventRowFromDatums(datums tree.Datums) Row {
 	for i, d := range datums {
 		desc.cols = append(desc.cols, ResultColumn{ord: i})
 		desc.valueCols = append(desc.valueCols, i)
-		encRow = append(encRow, rowenc.DatumToEncDatum(d.ResolvedType(), d))
+		encRow = append(encRow, rowenc.DatumToEncDatumUnsafe(d.ResolvedType(), d))
 	}
 	return Row{
 		EventDescriptor: &desc,
@@ -844,7 +849,7 @@ func MakeRowFromTuple(ctx context.Context, evalCtx *eval.Context, t *tree.DTuple
 		r.AddValueColumn(name, d.ResolvedType())
 		if err := r.SetValueDatumAt(i, d); err != nil {
 			if build.IsRelease() {
-				log.Dev.Warningf(ctx, "failed to set row value from tuple due to error %v", err)
+				log.Changefeed.Warningf(ctx, "failed to set row value from tuple due to error %v", err)
 				_ = r.SetValueDatumAt(i, tree.DNull)
 			} else {
 				panic(err)

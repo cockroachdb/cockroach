@@ -32,13 +32,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -213,7 +213,7 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	// The clock did not advance and the final command was not executed.
 	ts3 := s.Clock().Now()
 	require.Zero(t, ts3.GoTime().Sub(ts2.GoTime()))
-	valRes, err := storage.MVCCGet(context.Background(), store.TODOEngine(), key, ts3,
+	valRes, err := storage.MVCCGet(context.Background(), store.StateEngine(), key, ts3,
 		storage.MVCCGetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, incArgs.Increment*numCmds, mustGetInt(valRes.Value))
@@ -328,7 +328,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 
 			updatedVal := []byte("updatedVal")
 			if err := txn.CPut(ctx, key, updatedVal, kvclientutils.StrToCPutExistingValue("initVal")); err != nil {
-				log.Dev.Errorf(context.Background(), "failed put value: %+v", err)
+				log.KvExec.Errorf(context.Background(), "failed put value: %+v", err)
 				return err
 			}
 
@@ -778,7 +778,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Increase the verbosity of the test to help investigate failures.
-	require.NoError(t, log.SetVModule("replica_range_lease=3,raft=4,txn=3,txn_coord_sender=3"))
+	testutils.SetVModule(t, "replica_range_lease=3,raft=4,txn=3,txn_coord_sender=3")
 	const numNodes = 2
 	var manuals []*hlc.HybridManualClock
 	var clocks []*hlc.Clock
@@ -1595,7 +1595,7 @@ func (l *leaseTransferTest) sendRead(t *testing.T, storeIdx int) *kvpb.Error {
 		getArgs(l.leftKey),
 	)
 	if pErr != nil {
-		log.Dev.Warningf(context.Background(), "%v", pErr)
+		log.KvExec.Warningf(context.Background(), "%v", pErr)
 	}
 	return pErr
 }
@@ -1637,9 +1637,9 @@ func (l *leaseTransferTest) setFilter(setTo bool, extensionSem chan struct{}) {
 			l.evalFilter = nil
 			l.filterMu.Unlock()
 			extensionSem <- struct{}{}
-			log.Dev.Infof(filterArgs.Ctx, "filter blocking request: %s", llReq)
+			log.KvExec.Infof(filterArgs.Ctx, "filter blocking request: %s", llReq)
 			<-extensionSem
-			log.Dev.Infof(filterArgs.Ctx, "filter unblocking lease request")
+			log.KvExec.Infof(filterArgs.Ctx, "filter unblocking lease request")
 		}
 		return nil
 	}
@@ -2344,7 +2344,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 		})
 	})
 
-	log.Dev.Info(ctx, "restarting")
+	log.KvExec.Info(ctx, "restarting")
 	require.NoError(t, tc.Restart())
 
 	// Send another read and check that the pre-existing lease has not been used.
@@ -2461,13 +2461,13 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 
 			_, pErr := kv.SendWrapped(ctx, s.DB().NonTransactionalSender(), &leaseReq)
 			if _, ok := pErr.GetDetail().(*kvpb.AmbiguousResultError); ok {
-				log.Dev.Infof(ctx, "retrying lease after %s", pErr)
+				log.KvExec.Infof(ctx, "retrying lease after %s", pErr)
 				continue
 			}
 			if _, ok := pErr.GetDetail().(*kvpb.LeaseRejectedError); ok {
 				// Lease rejected? Try again. The extension should work because
 				// extending is idempotent (assuming the PrevLease matches).
-				log.Dev.Infof(ctx, "retrying lease after %s", pErr)
+				log.KvExec.Infof(ctx, "retrying lease after %s", pErr)
 				continue
 			}
 			if pErr != nil {
@@ -2955,7 +2955,7 @@ func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Increase the verbosity of the test to help investigate failures.
-	require.NoError(t, log.SetVModule("replica_range_lease=3,raft=4"))
+	testutils.SetVModule(t, "replica_range_lease=3,raft=4")
 
 	ctx := context.Background()
 	stickyVFSRegistry := fs.NewStickyRegistry()
@@ -3021,7 +3021,7 @@ func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 	// Randomly stop server index 0 or 1.
 	stoppedNodeInx := rand.Intn(2)
 	aliveNodeIdx := 1 - stoppedNodeInx
-	log.Dev.Infof(ctx, "stopping node id: %d", stoppedNodeInx+1)
+	log.KvExec.Infof(ctx, "stopping node id: %d", stoppedNodeInx+1)
 	tc.StopServer(stoppedNodeInx)
 	repl := tc.GetFirstStoreFromServer(t, aliveNodeIdx).LookupReplica(roachpb.RKey(key))
 
@@ -3133,7 +3133,7 @@ func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T)
 	// The leaderlessWatcher starts off as available.
 	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
 	// Let it know it's leaderless.
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, raft.None, manual.Now(), st)
 	// Even though the replica is leaderless, enough time hasn't passed for it to
 	// be considered unavailable.
 	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
@@ -3141,7 +3141,7 @@ func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T)
 	require.NoError(t, repl.LeaderlessWatcher.Err())
 	// Let enough time pass.
 	manual.Increment(10 * time.Second.Nanoseconds())
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, raft.None, manual.Now(), st)
 	// Now the replica is considered unavailable.
 	require.True(t, repl.LeaderlessWatcher.IsUnavailable())
 	require.Error(t, repl.LeaderlessWatcher.Err())
@@ -3151,14 +3151,14 @@ func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T)
 
 	// Next up, let the replica know there's a leader. This should make it
 	// available again.
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, 1, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, 1, manual.Now(), st)
 	require.False(t, repl.LeaderlessWatcher.IsUnavailable())
 	// Change the range descriptor. Mark it leaderless and let enough time pass
 	// for it to be considered unavailable again.
 	tc.AddVotersOrFatal(t, key, tc.Targets(2)...)
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, raft.None, manual.Now(), st)
 	manual.Increment(10 * time.Second.Nanoseconds())
-	repl.RefreshLeaderlessWatcherUnavailableStateForTesting(ctx, raft.None, manual.Now(), st)
+	repl.TestingRefreshLeaderlessWatcherUnavailableState(ctx, raft.None, manual.Now(), st)
 	// The replica should now be considered unavailable again.
 	require.True(t, repl.LeaderlessWatcher.IsUnavailable())
 	require.Error(t, repl.LeaderlessWatcher.Err())
@@ -3199,7 +3199,7 @@ func TestClearRange(t *testing.T) {
 		t.Helper()
 		start := prefix
 		end := prefix.PrefixEnd()
-		kvs, err := storage.Scan(context.Background(), store.TODOEngine(), start, end, 0)
+		kvs, err := storage.Scan(context.Background(), store.StateEngine(), start, end, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4169,7 +4169,7 @@ func TestReplicaTombstone(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					ts, err := stateloader.Make(rhsDesc.RangeID).LoadRangeTombstone(
+					ts, err := kvstorage.MakeStateLoader(rhsDesc.RangeID).LoadRangeTombstone(
 						context.Background(), store.StateEngine(),
 					)
 					require.NoError(t, err)
@@ -4707,7 +4707,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 					t,
 					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, l.Start.ToTimestamp().Next()),
 				)
-				require.NoError(t, r.ReadProtectedTimestampsForTesting(ctx))
+				require.NoError(t, r.TestingReadProtectedTimestamps(ctx))
 			}
 		}
 		refreshTo = func(t *testing.T, asOf hlc.Timestamp) {
@@ -4718,7 +4718,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 					t,
 					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf),
 				)
-				require.NoError(t, r.ReadProtectedTimestampsForTesting(ctx))
+				require.NoError(t, r.TestingReadProtectedTimestamps(ctx))
 			}
 		}
 		// waitForProtectionAndReadProtectedTimestamps waits until the
@@ -4735,7 +4735,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 				ptutil.TestingWaitForProtectedTimestampToExistOnSpans(ctx, t, tc.Server(i),
 					ptsReader, protectionTimestamp,
 					[]roachpb.Span{span})
-				require.NoError(t, r.ReadProtectedTimestampsForTesting(ctx))
+				require.NoError(t, r.TestingReadProtectedTimestamps(ctx))
 			}
 		}
 		insqlDB = tc.Server(0).InternalDB().(isql.DB)
@@ -5357,8 +5357,8 @@ func TestRangeMigration(t *testing.T) {
 			t.Fatalf("expected in-memory version %s, got %s", expV, gotV)
 		}
 
-		sl := stateloader.Make(rangeID)
-		persistedV, err := sl.LoadVersion(ctx, store.TODOEngine())
+		sl := kvstorage.MakeStateLoader(rangeID)
+		persistedV, err := sl.LoadVersion(ctx, store.StateEngine())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -6072,7 +6072,7 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	require.NoError(t, log.SetVModule("cmd_lease=2"))
+	testutils.SetVModule(t, "cmd_lease=2")
 
 	// Test Setup:
 	//
@@ -6106,9 +6106,9 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start with the lease on store 1.
-	t.Logf("transfering to s1")
+	t.Logf("transferring to s1")
 	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(0)))
-	t.Logf("done transfering to s1")
+	t.Logf("done transferring to s1")
 
 	// Txn 1:
 	// - Acquire lock and block until we are are sure txn2 has returned.
@@ -6165,19 +6165,24 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	// on tx1 to start).
 	<-txn2Started
 
-	t.Log("transfering lease from s1 -> s2")
+	t.Log("transferring lease from s1 -> s2")
 	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
 	time.Sleep(250 * time.Millisecond)
 	t.Log("cancelling txn2")
 	txn2Cancel()
 	require.NoError(t, g.Wait())
+
+	// Check metrics
+	locksWritten, err := tc.GetFirstStoreFromServer(t, 0).Metrics().GetStoreMetric("leases.transfers.locks_written")
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, locksWritten, int64(1))
 }
 
 func TestLeaseTransferDropsLocksIfLargerThanCommandSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	require.NoError(t, log.SetVModule("cmd_lease=2"))
+	testutils.SetVModule(t, "cmd_lease=2")
 
 	// Test Plan:
 	//
@@ -6228,7 +6233,7 @@ func TestMergeDropsLocksIfLargerThanMax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	require.NoError(t, log.SetVModule("cmd_subsume=2"))
+	testutils.SetVModule(t, "cmd_subsume=2")
 
 	// Test Plan:
 	//
@@ -6312,15 +6317,16 @@ func TestMergeReplicatesLocks(t *testing.T) {
 	)
 	concurrency.UnreplicatedLockReliabilityMerge.Override(ctx, &st.SV, true)
 
-	for _, b := range []bool{true, false} {
+	for _, rhsLock := range []bool{true, false} {
 		name := "lhs-lock"
 		lockKeySuffix := lhsKey
-		if b {
+		if rhsLock {
 			name = "rhs-lock"
 			lockKeySuffix = rhsKey
 		}
 		t.Run(name, func(t *testing.T) {
-			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			nodeCount := 3
+			tc := testcluster.StartTestCluster(t, nodeCount, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					Settings: st,
 				},
@@ -6416,6 +6422,17 @@ func TestMergeReplicatesLocks(t *testing.T) {
 			})
 			for _, err := range failures {
 				t.Errorf("consistency failure: %s", err.Error())
+			}
+			if rhsLock {
+				// The range could have been on any node. We just care that this metric
+				// is written somewhere.
+				var locksWritten int64
+				for i := range nodeCount {
+					l, err := tc.GetFirstStoreFromServer(t, i).Metrics().GetStoreMetric("subsume.locks_written")
+					require.NoError(t, err)
+					locksWritten += l
+				}
+				require.GreaterOrEqual(t, locksWritten, int64(1))
 			}
 		})
 	}

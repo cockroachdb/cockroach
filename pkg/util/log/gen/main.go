@@ -342,80 +342,6 @@ func (logger{{.Name}}) {{with $sev}}{{.Name}}{{end}}fDepth(ctx context.Context, 
   logfDepth(ctx, depth+1, severity.{{with $sev}}{{.NAME}}{{end}}, channel.{{.NAME}}, format, args...)
 }
 
-{{if .NAME|eq "DEV"}}
-// {{with $sev}}{{.Name}}{{end}}f logs to the {{.NAME}} channel with severity {{with $sev}}{{.NAME}}{{end}},
-// if logging has been enabled for the source file where the call is
-// performed at the provided verbosity level, via the vmodule setting.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-{{.Comment -}}
-//
-{{with $sev}}{{.Comment}}{{end -}}
-//
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
-func {{with $sev}}{{.Name}}{{end}}f(ctx context.Context, format string, args ...interface{}) {
-  logfDepth(ctx, 1, severity.{{with $sev}}{{.NAME}}{{end}}, channel.{{.NAME}}, format, args...)
-}
-
-// V{{with $sev}}{{.Name}}{{end}}f logs to the {{.NAME}} channel with severity {{with $sev}}{{.NAME}}{{end}}.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-{{.Comment -}}
-//
-{{with $sev}}{{.Comment}}{{end -}}
-//
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
-func V{{with $sev}}{{.Name}}{{end}}f(ctx context.Context, level Level, format string, args ...interface{}) {
-  if VDepth(level, 1) {
-    logfDepth(ctx, 1, severity.{{with $sev}}{{.NAME}}{{end}}, channel.{{.NAME}}, format, args...)
-  }
-}
-
-// {{with $sev}}{{.Name}}{{end}} logs to the {{.NAME}} channel with severity {{with $sev}}{{.NAME}}{{end}}.
-// It extracts log tags from the context and logs them along with the given
-// message.
-//
-{{.Comment -}}
-//
-{{with $sev}}{{.Comment}}{{end -}}
-//
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
-func {{with $sev}}{{.Name}}{{end}}(ctx context.Context, msg string) {
-  logfDepth(ctx, 1, severity.{{with $sev}}{{.NAME}}{{end}}, channel.{{.NAME}}, msg)
-}
-
-// {{with $sev}}{{.Name}}{{end}}fDepth logs to the {{.NAME}} channel with severity {{with $sev}}{{.NAME}}{{end}},
-// offsetting the caller's stack frame by 'depth'.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-{{.Comment -}}
-//
-{{with $sev}}{{.Comment}}{{end -}}
-//
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
-func {{with $sev}}{{.Name}}{{end}}fDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-  logfDepth(ctx, depth+1, severity.{{with $sev}}{{.NAME}}{{end}}, channel.{{.NAME}}, format, args...)
-}
-{{end}}{{- /* end channel name = DEV */ -}}
 
 {{end}}{{end}}{{end}}{{- /* end range severities */ -}}
 
@@ -459,38 +385,6 @@ func (logger{{.Name}}) VEventfDepth(ctx context.Context, depth int, level Level,
 	vEventf(ctx, false /* isErr */, 1+depth, level, channel.{{.NAME}}, format, args...)
 }
 
-{{if .NAME|eq "DEV"}}
-
-// Shout logs to channel {{.NAME}}, and also to the real stderr if logging
-// is currently redirected to a file.
-//
-{{.Comment -}}
-//
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
-func Shout(ctx context.Context, sev Severity, msg string) {
-  shoutfDepth(ctx, 1, sev, channel.{{.NAME}}, msg)
-}
-
-// Shoutf logs to channel {{.NAME}}, and also to the real stderr if
-// logging is currently redirected to a file. Arguments are handled in
-// the manner of fmt.Printf.
-//
-{{.Comment -}}
-//
-// TODO: to avoid linting failures, we don't include details about
-// alternative usage. Once all usages have been replaced, update the
-// deprecation comment to describe the replacement functions
-//
-// Deprecated
-func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
-  shoutfDepth(ctx, 1, sev, channel.{{.NAME}}, format, args...)
-}
-
-{{end}}{{- /* end channel name = DEV */ -}}
 
 {{end}}{{- /* end range channels */ -}}
 `,

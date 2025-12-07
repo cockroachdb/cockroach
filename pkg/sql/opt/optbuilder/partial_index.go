@@ -120,7 +120,7 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 func (b *Builder) buildPartialIndexPredicate(
 	tabMeta *opt.TableMeta, tableScope *scope, expr tree.Expr, context string,
 ) (memo.FiltersExpr, error) {
-	texpr := resolvePartialIndexPredicate(tableScope, expr)
+	texpr := tableScope.resolveAndRequireType(expr, types.Bool)
 
 	var scalar opt.ScalarExpr
 	b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
@@ -197,17 +197,4 @@ func (b *Builder) buildPartialIndexPredicate(
 		// Panic rather than return an incorrect predicate.
 		panic(errors.AssertionFailedf("unexpected expression during partial index normalization: %T", t))
 	}
-}
-
-// resolvePartialIndexPredicate attempts to resolve the type of expr as a
-// boolean and return a tree.TypedExpr if successful. It asserts that no errors
-// occur during resolution because the predicate should always be valid within
-// this context. If an error occurs, it is likely due to a bug in the optimizer.
-func resolvePartialIndexPredicate(tableScope *scope, expr tree.Expr) tree.TypedExpr {
-	defer func() {
-		if r := recover(); r != nil {
-			panic(errors.AssertionFailedf("unexpected error during partial index predicate type resolution: %v", r))
-		}
-	}()
-	return tableScope.resolveAndRequireType(expr, types.Bool)
 }

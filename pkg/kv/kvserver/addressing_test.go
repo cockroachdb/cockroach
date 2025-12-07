@@ -164,7 +164,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		//   to RocksDB will be asynchronous.
 		var kvs []roachpb.KeyValue
 		testutils.SucceedsSoon(t, func() error {
-			res, err := storage.MVCCScan(ctx, store.TODOEngine(), keys.MetaMin, keys.MetaMax,
+			res, err := storage.MVCCScan(ctx, store.StateEngine(), keys.MetaMin, keys.MetaMax,
 				hlc.MaxTimestamp, storage.MVCCScanOptions{})
 			if err != nil {
 				// Wait for the intent to be resolved.
@@ -210,16 +210,16 @@ func TestUpdateRangeAddressing(t *testing.T) {
 
 		if test.split {
 			if log.V(1) {
-				log.Dev.Infof(ctx, "test case %d: split %q-%q at %q", i, left.StartKey, right.EndKey, left.EndKey)
+				log.KvExec.Infof(ctx, "test case %d: split %q-%q at %q", i, left.StartKey, right.EndKey, left.EndKey)
 			}
 		} else {
 			if log.V(1) {
-				log.Dev.Infof(ctx, "test case %d: merge %q-%q + %q-%q", i, left.StartKey, left.EndKey, left.EndKey, right.EndKey)
+				log.KvExec.Infof(ctx, "test case %d: merge %q-%q + %q-%q", i, left.StartKey, left.EndKey, left.EndKey, right.EndKey)
 			}
 		}
 		for _, meta := range metas {
 			if log.V(1) {
-				log.Dev.Infof(ctx, "%q", meta.key)
+				log.KvExec.Infof(ctx, "%q", meta.key)
 			}
 		}
 

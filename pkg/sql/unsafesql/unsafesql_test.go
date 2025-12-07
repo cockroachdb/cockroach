@@ -16,14 +16,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -35,41 +40,6 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
-}
-
-func TestCheckUnsafeInternalsAccess(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	t.Run("returns the right response with the right session data", func(t *testing.T) {
-		for _, test := range []struct {
-			Internal             bool
-			AllowUnsafeInternals bool
-			Passes               bool
-		}{
-			{Internal: true, AllowUnsafeInternals: true, Passes: true},
-			{Internal: true, AllowUnsafeInternals: false, Passes: true},
-			{Internal: false, AllowUnsafeInternals: true, Passes: true},
-			{Internal: false, AllowUnsafeInternals: false, Passes: false},
-		} {
-			t.Run(fmt.Sprintf("%t", test), func(t *testing.T) {
-				err := unsafesql.CheckInternalsAccess(&sessiondata.SessionData{
-					SessionData: sessiondatapb.SessionData{
-						Internal: test.Internal,
-					},
-					LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-						AllowUnsafeInternals: test.AllowUnsafeInternals,
-					},
-				})
-
-				if test.Passes {
-					require.NoError(t, err)
-				} else {
-					require.ErrorIs(t, err, sqlerrors.ErrUnsafeTableAccess)
-				}
-			})
-		}
-	})
 }
 
 func checkUnsafeErr(t *testing.T, err error) {
@@ -95,15 +65,38 @@ func TestAccessCheckServer(t *testing.T) {
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				UnsafeOverride: func() *bool { return nil }, // no override
+			},
+		},
 	})
 	defer s.Stopper().Stop(ctx)
 
 	pool := s.SQLConn(t)
 	defer pool.Close()
 
-	_, err := pool.Exec("CREATE TABLE foo (id INT PRIMARY KEY)")
-	require.NoError(t, err)
+	runner := sqlutils.MakeSQLRunner(pool)
+	// override the log limiter so that the tests can run without pauses.
+	defer unsafesql.TestRemoveLimiters()()
 
+	// create a user table to test user table access.
+	runner.Exec(t, "CREATE TABLE foo (id INT PRIMARY KEY)")
+
+	// create and register a log accessedSpy to see the unsafe access logs
+	accessedSpy := logtestutils.NewStructuredLogSpy[eventpb.UnsafeInternalsAccessed](
+		t, []logpb.Channel{logpb.Channel_SENSITIVE_ACCESS}, []string{"unsafe_internals_accessed"}, logtestutils.FromLogEntry,
+	)
+	// create and register a log deniedSpy to see the denied access logs
+	deniedSpy := logtestutils.NewStructuredLogSpy[eventpb.UnsafeInternalsDenied](
+		t, []logpb.Channel{logpb.Channel_SENSITIVE_ACCESS}, []string{"unsafe_internals_denied"}, logtestutils.FromLogEntry,
+	)
+	accessedCleanup := log.InterceptWith(ctx, accessedSpy)
+	deniedCleanup := log.InterceptWith(ctx, deniedSpy)
+	defer accessedCleanup()
+	defer deniedCleanup()
+
+	// helper function for sending queries in different ways.
 	sendQuery := func(allowUnsafe bool, internal bool, query string) error {
 		if internal {
 			idb := s.InternalDB().(isql.DB)
@@ -135,9 +128,12 @@ func TestAccessCheckServer(t *testing.T) {
 
 	for _, test := range []struct {
 		Query                string
+		AppName              string
 		Internal             bool
 		AllowUnsafeInternals bool
 		Passes               bool
+		LogsAccessed         bool
+		LogsDenied           bool
 	}{
 		// Regular tables aren't considered unsafe.
 		{
@@ -162,23 +158,35 @@ func TestAccessCheckServer(t *testing.T) {
 			Internal:             false,
 			AllowUnsafeInternals: false,
 			Passes:               false,
+			LogsDenied:           true,
 		},
 		{
 			Query:                "SELECT * FROM system.namespace",
 			Internal:             false,
 			AllowUnsafeInternals: true,
 			Passes:               true,
+			LogsAccessed:         true,
+		},
+		{
+			Query:                "SELECT * FROM system.namespace",
+			AppName:              "$ internal app",
+			Internal:             false,
+			AllowUnsafeInternals: false,
+			Passes:               true,
+			LogsAccessed:         false,
 		},
 		// Tests on unsupported crdb_internal objects.
 		{
 			Query:                "SELECT * FROM crdb_internal.gossip_alerts",
 			AllowUnsafeInternals: false,
 			Passes:               false,
+			LogsDenied:           true,
 		},
 		{
 			Query:                "SELECT * FROM crdb_internal.gossip_alerts",
 			AllowUnsafeInternals: true,
 			Passes:               true,
+			LogsAccessed:         true,
 		},
 		// Tests on supported crdb_internal objects.
 		{
@@ -198,13 +206,15 @@ func TestAccessCheckServer(t *testing.T) {
 		},
 		// Crdb_internal functions require the override.
 		{
-			Query:  "SELECT * FROM crdb_internal.tenant_span_stats()",
-			Passes: false,
+			Query:      "SELECT * FROM crdb_internal.tenant_span_stats()",
+			Passes:     false,
+			LogsDenied: true,
 		},
 		{
 			Query:                "SELECT * FROM crdb_internal.tenant_span_stats()",
 			AllowUnsafeInternals: true,
 			Passes:               true,
+			LogsAccessed:         true,
 		},
 		// Tests on delegate behavior.
 		{
@@ -213,8 +223,9 @@ func TestAccessCheckServer(t *testing.T) {
 		},
 		{
 			// this query is what show grants is using under the hood.
-			Query:  "SELECT * FROM crdb_internal.privilege_name('SELECT')",
-			Passes: false,
+			Query:      "SELECT * FROM crdb_internal.privilege_name('SELECT')",
+			Passes:     false,
+			LogsDenied: true,
 		},
 		{
 			Query:  "SHOW DATABASES",
@@ -222,17 +233,75 @@ func TestAccessCheckServer(t *testing.T) {
 		},
 		{
 			// this query is what show databases is using under the hood.
-			Query:  "SELECT * FROM crdb_internal.databases",
-			Passes: false,
+			Query:      "SELECT * FROM crdb_internal.databases",
+			Passes:     false,
+			LogsDenied: true,
+		},
+		{
+			// test nested delegates
+			Query:  "SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS]",
+			Passes: true,
+		},
+		{
+			// unexpected unsafe builtin access
+			Query:  "SELECT col_description(0, 0)",
+			Passes: true,
 		},
 	} {
 		t.Run(fmt.Sprintf("query=%s,internal=%t,allowUnsafe=%t", test.Query, test.Internal, test.AllowUnsafeInternals), func(t *testing.T) {
+			accessedSpy.Reset()
+			deniedSpy.Reset()
+			runner.Exec(t, "SET application_name = $1", test.AppName)
 			err := sendQuery(test.AllowUnsafeInternals, test.Internal, test.Query)
 			if test.Passes {
 				require.NoError(t, err)
 			} else {
 				checkUnsafeErr(t, err)
 			}
+
+			if test.LogsAccessed {
+				require.Equal(t, 1, accessedSpy.Count(), "expected exactly one log entry for unsafe internals access")
+			} else {
+				require.Equal(t, 0, accessedSpy.Count(), "expected no log entries")
+			}
+
+			if test.LogsDenied {
+				require.Equal(t, 1, deniedSpy.Count(), "expected exactly one log entry for unsafe internals access")
+			} else {
+				require.Equal(t, 0, deniedSpy.Count(), "expected no log entries")
+			}
 		})
 	}
+}
+
+// panickingStatement is a mock Statement that panics during formatting
+type panickingStatement struct{}
+
+func (ps panickingStatement) String() string {
+	return "panicking statement"
+}
+
+func (ps panickingStatement) Format(ctx *tree.FmtCtx) {
+	panic("deliberate panic for testing")
+}
+
+func (ps panickingStatement) StatementReturnType() tree.StatementReturnType {
+	return tree.Unknown
+}
+
+func (ps panickingStatement) StatementType() tree.StatementType {
+	return tree.TypeDML
+}
+
+func (ps panickingStatement) StatementTag() string {
+	return "TEST"
+}
+
+func TestPanickingSQLFormat(t *testing.T) {
+	result := unsafesql.SafeFormatQuery(panickingStatement{}, nil, &settings.Values{})
+	require.Equal(
+		t,
+		"<panicked query format>",
+		string(result),
+	)
 }

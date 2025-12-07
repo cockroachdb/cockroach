@@ -241,9 +241,9 @@ func (f *MultiFrontier[P]) String() string {
 	return buf.String()
 }
 
-// Frontiers returns an iterator over the sub-frontiers.
-func (f *MultiFrontier[P]) Frontiers() iter.Seq2[P, Frontier] {
-	return func(yield func(P, Frontier) bool) {
+// Frontiers returns an iterator over the sub-frontiers (with read-only access).
+func (f *MultiFrontier[P]) Frontiers() iter.Seq2[P, ReadOnlyFrontier] {
+	return func(yield func(P, ReadOnlyFrontier) bool) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 

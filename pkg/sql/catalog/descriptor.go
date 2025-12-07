@@ -341,7 +341,7 @@ type DatabaseDescriptor interface {
 type TableDescriptor interface {
 	Descriptor
 
-	// TableDesc returns the backing protobuf for this database.
+	// TableDesc returns the backing protobuf for this table.
 	TableDesc() *descpb.TableDescriptor
 
 	// GetState returns the raw state of this descriptor. This information is
@@ -514,6 +514,9 @@ type TableDescriptor interface {
 	// in preparation to add a new one. In CockroachDB, all tables have primary
 	// keys, even if they're not defined by the user.
 	HasPrimaryKey() bool
+
+	// IsExpressionIndex returns if the given index is an expression index.
+	IsExpressionIndex(idx Index) bool
 
 	// AllColumns returns a slice of Column interfaces containing the
 	// table's public columns and column mutations, in the canonical order:

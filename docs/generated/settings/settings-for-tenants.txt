@@ -5,7 +5,6 @@ admission.epoch_lifo.epoch_duration	duration	100ms	the duration of an epoch, for
 admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo	duration	105ms	the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering	application
 admission.sql_kv_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a KV response is subject to admission control	application
 admission.sql_sql_response.enabled	boolean	true	when true, work performed by the SQL layer when receiving a DistSQL response is subject to admission control	application
-bulkio.backup.deprecated_full_backup_with_subdir.enabled	boolean	false	when true, a backup command with a user specified subdirectory will create a full backup at the subdirectory if no backup already exists at that subdirectory	application
 bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP	application
 bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail	application
 bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads	application
@@ -13,7 +12,7 @@ changefeed.aggregator.flush_jitter	float	0.1	jitter aggregator flushes as a frac
 changefeed.backfill.concurrent_scan_requests	integer	0	number of concurrent scan requests per node issued during a backfill	application
 changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request	application
 changefeed.batch_reduction_retry.enabled (alias: changefeed.batch_reduction_retry_enabled)	boolean	false	if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes	application
-changefeed.default_range_distribution_strategy	enumeration	default	configures how work is distributed among nodes for a given changefeed. for the most balanced distribution, use `balanced_simple`. changing this setting will not override locality restrictions [default = 0, balanced_simple = 1]	application
+changefeed.default_range_distribution_strategy	enumeration	default	controls how changefeed work is distributed across nodes. 'default' defers to DistSQL for node selection and work distribution. 'balanced_simple' uses DistSQL for node selection but then attempts to evenly distribute ranges across those selected nodes for better load balancing. this setting does not override locality restrictions and can be overridden per-changefeed using the 'range_distribution_strategy' option. [default = 0, balanced_simple = 1]	application
 changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events which a worker can buffer	application
 changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled	application
 changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation	application
@@ -22,6 +21,7 @@ changefeed.kafka_v2_error_details.enabled	boolean	true	if enabled, Kafka v2 sink
 changefeed.memory.per_changefeed_limit	byte size	512 MiB	controls amount of data that can be buffered per changefeed	application
 changefeed.resolved_timestamp.min_update_interval (alias: changefeed.min_highwater_advance)	duration	0s	minimum amount of time that must have elapsed since the last time a changefeed's resolved timestamp was updated before it is eligible to be updated again; default of 0 means no minimum interval is enforced but updating will still be limited by the average time it takes to checkpoint progress	application
 changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds	application
+changefeed.progress.frontier_persistence.interval	duration	30s	minimum amount of time that must elapse before a changefeed will persist its entire span frontier again	application
 changefeed.protect_timestamp.max_age	duration	96h0m0s	fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration	application
 changefeed.protect_timestamp_interval	duration	10m0s	controls how often the changefeed forwards its protected timestamp to the resolved timestamp	application
 changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables	application
@@ -77,13 +77,15 @@ feature.infer_rbr_region_col_using_constraint.enabled	boolean	false	set to true 
 feature.restore.enabled	boolean	true	set to true to enable restore, false to disable; default is true	application
 feature.schema_change.enabled	boolean	true	set to true to enable schema changes, false to disable; default is true	application
 feature.stats.enabled	boolean	true	set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true	application
-feature.vector_index.enabled	boolean	false	set to true to enable vector indexes, false to disable; default is false	application
+feature.vector_index.enabled	boolean	true	set to true to enable vector indexes, false to disable; default is true	application
 jobs.retention_time	duration	336h0m0s	the amount of time for which records for completed jobs are retained	application
 kv.bulk_sst.target_size	byte size	16 MiB	target size for SSTs emitted from export requests; export requests (i.e. BACKUP) may buffer up to the sum of kv.bulk_sst.target_size and kv.bulk_sst.max_allowed_overage in memory	system-visible
 kv.closed_timestamp.follower_reads.enabled (alias: kv.closed_timestamp.follower_reads_enabled)	boolean	true	allow (all) replicas to serve consistent historical reads based on closed timestamp information	system-visible
 kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled	boolean	false	if enabled, observed network latency between leaseholders and their furthest follower will be used to adjust closed timestamp policies for rangesranges configured to serve global reads. kv.closed_timestamp.lead_for_global_reads_override takes precedence if set.	system-visible
 kv.closed_timestamp.lead_for_global_reads_override	duration	0s	if nonzero, overrides the lead time that global_read ranges use to publish closed timestamps	system-visible
 kv.closed_timestamp.side_transport_interval	duration	200ms	the interval at which the closed timestamp side-transport attempts to advance each range's closed timestamp; set to 0 to disable the side-transport	system-visible
+kv.closed_timestamp.side_transport_pacing_refresh_interval	duration	10ms	the refresh interval for the task pacer that controls pacing of sending sidetransport updates to avoid overloading the system when many connections are waiting	system-visible
+kv.closed_timestamp.side_transport_pacing_smear_interval	duration	1ms	the smear interval for the task pacer that controls the amount of time each paced batch is going to take when broadcasting sidetransport updates	system-visible
 kv.closed_timestamp.target_duration	duration	3s	if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration	system-visible
 kv.dist_sender.circuit_breaker.cancellation.enabled	boolean	true	when enabled, in-flight requests will be cancelled when the circuit breaker trips	application
 kv.dist_sender.circuit_breaker.cancellation.write_grace_period	duration	10s	how long after the circuit breaker trips to cancel write requests (these can't retry internally, so should be long enough to allow quorum/lease recovery)	application
@@ -106,7 +108,7 @@ kv.transaction.write_pipelining.locking_reads.enabled	boolean	true	if enabled, t
 kv.transaction.write_pipelining.ranged_writes.enabled	boolean	true	if enabled, transactional ranged writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.enabled (alias: kv.transaction.write_pipelining_enabled)	boolean	true	if enabled, transactional writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.max_batch_size (alias: kv.transaction.write_pipelining_max_batch_size)	integer	128	if non-zero, defines that maximum size batch that will be pipelined through Raft consensus	application
-log.channel_compatibility_mode.enabled	boolean	true	when true, logs will continue to log to the expected logging channels; when false, logs will be moved to new logging channels as part of a logging channel consolidation effort	application
+log.channel_compatibility_mode.enabled	boolean	false	when true, logs will to log to their legacy (pre 26.1) logging channels; when false, logs will be logged to new logging channels	application
 obs.tablemetadata.automatic_updates.enabled	boolean	false	enables automatic updates of the table metadata cache system.table_metadata	application
 obs.tablemetadata.data_valid_duration	duration	20m0s	the duration for which the data in system.table_metadata is considered valid	application
 schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
@@ -177,6 +179,7 @@ sql.auth.change_own_password.enabled	boolean	false	controls whether a user is al
 sql.auth.grant_option_for_owner.enabled	boolean	true	determines whether the GRANT OPTION for privileges is implicitly given to the owner of an object	application
 sql.auth.grant_option_inheritance.enabled	boolean	true	determines whether the GRANT OPTION for privileges is inherited through role membership	application
 sql.auth.public_schema_create_privilege.enabled	boolean	true	determines whether to grant all users the CREATE privileges on the public schema when it is created	application
+sql.catalog.allow_leased_descriptors.enabled	boolean	false	if true, catalog views (crdb_internal, information_schema, pg_catalog) can use leased descriptors for improved performance	application
 sql.closed_session_cache.capacity	integer	1000	the maximum number of sessions in the cache	application
 sql.closed_session_cache.time_to_live	integer	3600	the maximum time to live, in seconds	application
 sql.contention.event_store.capacity	byte size	64 MiB	the in-memory storage capacity per-node of contention event store	application
@@ -322,6 +325,7 @@ sql.insights.execution_insights_capacity	integer	1000	the size of the per-node s
 sql.insights.high_retry_count.threshold	integer	10	the number of retries a slow statement must have undergone for its high retry count to be highlighted as a potential problem	application
 sql.insights.latency_threshold	duration	100ms	amount of time after which an executing statement is considered slow. Use 0 to disable.	application
 sql.log.redact_names.enabled	boolean	false	if set, schema object identifers are redacted in SQL statements that appear in event logs	application
+sql.log.scan_row_count_misestimate.enabled	boolean	false	when set to true, log a warning when a scan's actual row count differs significantly from the optimizer's estimate	application
 sql.log.slow_query.experimental_full_table_scans.enabled	boolean	false	when set to true, statements that perform a full table/index scan will be logged to the slow query log even if they do not meet the latency threshold. Must have the slow query log enabled for this setting to have any effect.	application
 sql.log.slow_query.internal_queries.enabled	boolean	false	when set to true, internal queries which exceed the slow query log threshold are logged to a separate log. Must have the slow query log enabled for this setting to have any effect.	application
 sql.log.slow_query.latency_threshold	duration	0s	when set to non-zero, log statements whose service latency exceeds the threshold to a secondary logger on each node	application
@@ -345,6 +349,7 @@ sql.multiple_modifications_of_table.enabled	boolean	false	if true, allow stateme
 sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRIMARY REGION of a database if it is the last region	application
 sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent	application
 sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability	application
+sql.schema.approx_max_object_count	integer	20000	approximate maximum number of schema objects allowed in the cluster; the check uses cached statistics, so the actual count may slightly exceed this limit; set to 0 to disable	application
 sql.schema.telemetry.recurrence	string	@weekly	cron-tab recurrence for SQL schema telemetry job	system-visible
 sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators	application
 sql.sqlcommenter.enabled	boolean	false	enables support for sqlcommenter. Key value parsed from sqlcommenter comments will be included in sql insights and sql logs. See https://google.github.io/sqlcommenter/ for more details.	application
@@ -356,6 +361,7 @@ sql.stats.automatic_full_collection.enabled	boolean	true	automatic full statisti
 sql.stats.automatic_partial_collection.enabled	boolean	true	automatic partial statistics collection mode	application
 sql.stats.automatic_partial_collection.fraction_stale_rows	float	0.05	target fraction of stale rows per table that will trigger a partial statistics refresh	application
 sql.stats.automatic_partial_collection.min_stale_rows	integer	100	target minimum number of stale rows per table that will trigger a partial statistics refresh	application
+sql.stats.canary_fraction	float	0	probability that table statistics will use canary mode instead of stable mode for query planning [0.0-1.0]	application
 sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cleanup job	application
 sql.stats.detailed_latency_metrics.enabled	boolean	false	label latency metrics with the statement fingerprint. Workloads with tens of thousands of distinct query fingerprints should leave this setting false. (experimental, affects performance for workloads with high fingerprint cardinality)	application
 sql.stats.error_on_concurrent_create_stats.enabled	boolean	false	set to true to error on concurrent CREATE STATISTICS jobs, instead of skipping them	application
@@ -408,10 +414,11 @@ storage.delete_compaction_excise.enabled	boolean	true	set to false to direct Peb
 storage.ingestion.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in ingestion sstables	application
 storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	system-visible
 storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	application
-storage.sstable.compression_algorithm	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store (balanced,good are experimental); [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5, balanced = 6, good = 7]	system-visible
+storage.sstable.compression_algorithm	enumeration	fastest	determines the compression algorithm to use for Pebble stores [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5, balanced = 6, good = 7, fast = 8]	system-visible
 storage.sstable.compression_algorithm_backup_storage	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for backup row data storage (fast,balanced,good are experimental); [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5, fast = 6, balanced = 7, good = 8]	system-visible
 storage.sstable.compression_algorithm_backup_transport	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for backup transport (fast,balanced,good are experimental); [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5, fast = 6, balanced = 7, good = 8]	system-visible
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	system-visible
+timeseries.storage.resolution_1m.ttl	duration	240h0m0s	the maximum age of time series data stored at the 1 minute resolution. Data older than this is subject to rollup and deletion.	system-visible
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	system-visible
 trace.debug_http_endpoint.enabled (alias: trace.debug.enable)	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	application
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.	application
@@ -421,4 +428,4 @@ trace.zipkin.collector	string		the address of a Zipkin instance to receive trace
 ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
 ui.default_timezone	string		the default timezone used to format timestamps in the ui	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui. This setting is deprecatedand will be removed in a future version. Use the 'ui.default_timezone' setting instead. 'ui.default_timezone' takes precedence over this setting. [etc/utc = 0, america/new_york = 1]	application
-version	version	1000025.3-upgrading-to-1000025.4-step-008	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000025.4-upgrading-to-1000026.1-step-004	set the active cluster version in the format '<major>.<minor>'	application

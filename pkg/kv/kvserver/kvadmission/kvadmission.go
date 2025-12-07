@@ -142,14 +142,32 @@ var ConnectedStoreExpiration = settings.RegisterDurationSetting(
 	5*time.Minute,
 )
 
+// useRangeTenantIDForNonAdminEnabled determines whether the range's tenant ID
+// is used by admission control when called by the system tenant. When false,
+// the requester's tenant ID (i.e., the system tenant ID) is used.
+var useRangeTenantIDForNonAdminEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kvadmission.use_range_tenant_id_for_non_admin.enabled",
+	"when true, and the caller is the system tenant, the tenantID used by admission control "+
+		"for non-admin requests is overridden to the range's tenantID",
+	true,
+)
+
 // Controller provides admission control for the KV layer.
 type Controller interface {
 	// AdmitKVWork must be called before performing KV work.
 	// BatchRequest.AdmissionHeader and BatchRequest.Replica.StoreID must be
-	// populated for admission to work correctly. If err is non-nil, the
-	// returned handle can be ignored. If err is nil, AdmittedKVWorkDone must be
-	// called after the KV work is done executing.
-	AdmitKVWork(context.Context, roachpb.TenantID, *kvpb.BatchRequest) (Handle, error)
+	// populated for admission to work correctly. The requestTenantID represents
+	// the authenticated caller and must be populated. The rangeTenantID
+	// represents the tenant of the range on which the work is being performed
+	// -- in rare cases it may be unpopulated.
+	//
+	// If err is non-nil, the returned handle can be ignored. If err is nil,
+	// AdmittedKVWorkDone must be called after the KV work is done executing.
+	AdmitKVWork(
+		_ context.Context, requestTenantID roachpb.TenantID, rangeTenantID roachpb.TenantID,
+		_ *kvpb.BatchRequest,
+	) (Handle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
 	AdmittedKVWorkDone(Handle, *StoreWriteBytes)
@@ -269,50 +287,16 @@ func MakeController(
 // TODO(irfansharif): There's a fair bit happening here and there's no test
 // coverage. Fix that.
 func (n *controllerImpl) AdmitKVWork(
-	ctx context.Context, tenantID roachpb.TenantID, ba *kvpb.BatchRequest,
-) (handle Handle, retErr error) {
-	ah := Handle{tenantID: tenantID}
+	ctx context.Context,
+	requestTenantID roachpb.TenantID,
+	rangeTenantID roachpb.TenantID,
+	ba *kvpb.BatchRequest,
+) (_ Handle, retErr error) {
 	if n.kvAdmissionQ == nil {
-		return ah, nil
+		return Handle{}, nil
 	}
-
-	bypassAdmission := ba.IsAdmin()
-	source := ba.AdmissionHeader.Source
-	if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
-		// Request is from a SQL node.
-		bypassAdmission = false
-		source = kvpb.AdmissionHeader_FROM_SQL
-	}
-	if source == kvpb.AdmissionHeader_OTHER {
-		bypassAdmission = true
-	}
-	// TODO(abaptist): Revisit and deprecate this setting in v23.1.
-	if admission.KVBulkOnlyAdmissionControlEnabled.Get(&n.settings.SV) {
-		if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
-			bypassAdmission = true
-		}
-	}
-	// LeaseInfo requests are used as makeshift replica health probes by
-	// DistSender circuit breakers, make sure they bypass AC.
-	//
-	// TODO(erikgrinaker): the various bypass conditions here should be moved to
-	// one or more request flags.
-	if ba.IsSingleLeaseInfoRequest() {
-		bypassAdmission = true
-	}
-	createTime := ba.AdmissionHeader.CreateTime
-	if !bypassAdmission && createTime == 0 {
-		// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
-		// of zero CreateTime needs to be revisited. It should use high priority.
-		createTime = timeutil.Now().UnixNano()
-	}
-	admissionInfo := admission.WorkInfo{
-		TenantID:        tenantID,
-		Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
-		CreateTime:      createTime,
-		BypassAdmission: bypassAdmission,
-	}
-
+	admissionInfo := workInfoForBatch(n.settings, requestTenantID, rangeTenantID, ba)
+	ah := Handle{tenantID: admissionInfo.TenantID}
 	admissionEnabled := true
 	// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
 	// it would bypass admission, it would consume a slot. When writes are
@@ -323,13 +307,14 @@ func (n *controllerImpl) AdmitKVWork(
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
 		var admitted bool
 		attemptFlowControl := kvflowcontrol.Enabled.Get(&n.settings.SV)
-		if attemptFlowControl && !bypassAdmission {
+		if attemptFlowControl && !admissionInfo.BypassAdmission {
 			kvflowHandle, found := n.kvflowHandles.LookupReplicationAdmissionHandle(ba.RangeID)
 			if !found {
 				return Handle{}, nil
 			}
 			var err error
-			admitted, err = kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime))
+			admitted, err = kvflowHandle.Admit(
+				ctx, admissionInfo.Priority, timeutil.FromUnixNanos(admissionInfo.CreateTime))
 			if err != nil {
 				return Handle{}, err
 			} else if admitted {
@@ -450,7 +435,7 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 			// This issue is tracked by
 			// https://github.com/cockroachdb/cockroach/issues/126681.
 			if buildutil.CrdbTestBuild {
-				log.Dev.Warningf(context.Background(), "grunning.Time() should be non-decreasing, cpuTime=%s", cpuTime)
+				log.KvDistribution.Warningf(context.Background(), "grunning.Time() should be non-decreasing, cpuTime=%s", cpuTime)
 			}
 			cpuTime = 1
 		}
@@ -465,10 +450,10 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 		if err != nil {
 			// This shouldn't be happening.
 			if buildutil.CrdbTestBuild {
-				log.Dev.Fatalf(context.Background(), "%s", errors.WithAssertionFailure(err))
+				log.KvDistribution.Fatalf(context.Background(), "%s", errors.WithAssertionFailure(err))
 			}
 			if n.every.ShouldLog() {
-				log.Dev.Errorf(context.Background(), "%s", err)
+				log.KvDistribution.Errorf(context.Background(), "%s", err)
 			}
 		}
 	}
@@ -569,12 +554,12 @@ var _ replica_rac2.ACWorkQueue = &controllerImpl{}
 func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForAdmission) bool {
 	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(entry.StoreID)
 	if storeAdmissionQ == nil {
-		log.Dev.Errorf(ctx, "unable to find queue for store: %s", entry.StoreID)
+		log.KvDistribution.Errorf(ctx, "unable to find queue for store: %s", entry.StoreID)
 		return false // nothing to do
 	}
 
 	if entry.RequestedCount == 0 {
-		log.Dev.Fatal(ctx, "found (unexpected) empty raft command for below-raft admission")
+		log.KvDistribution.Fatal(ctx, "found (unexpected) empty raft command for below-raft admission")
 	}
 	wi := admission.WorkInfo{
 		TenantID:        entry.TenantID,
@@ -600,11 +585,11 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 		WorkInfo: wi,
 	})
 	if err != nil {
-		log.Dev.Errorf(ctx, "error while admitting to store admission queue: %v", err)
+		log.KvDistribution.Errorf(ctx, "error while admitting to store admission queue: %v", err)
 		return false
 	}
 	if handle.UseAdmittedWorkDone() {
-		log.Dev.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
+		log.KvDistribution.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
 	}
 	return true
 }
@@ -653,4 +638,58 @@ func (wb *StoreWriteBytes) Release() {
 		return
 	}
 	storeWriteBytesPool.Put(wb)
+}
+
+func workInfoForBatch(
+	st *cluster.Settings,
+	requestTenantID roachpb.TenantID,
+	rangeTenantID roachpb.TenantID,
+	ba *kvpb.BatchRequest,
+) admission.WorkInfo {
+	bypassAdmission := ba.IsAdmin()
+	source := ba.AdmissionHeader.Source
+	tenantID := requestTenantID
+	if requestTenantID.IsSystem() {
+		if useRangeTenantIDForNonAdminEnabled.Get(&st.SV) && !bypassAdmission &&
+			rangeTenantID.IsSet() {
+			tenantID = rangeTenantID
+		}
+		// Else, either it is an admin request (common), or rangeTenantID is not
+		// set (rare), or the cluster setting is disabled, so continue using the
+		// SystemTenantID.
+	} else {
+		// Request is from a SQL node.
+		bypassAdmission = false
+		source = kvpb.AdmissionHeader_FROM_SQL
+	}
+	if source == kvpb.AdmissionHeader_OTHER {
+		bypassAdmission = true
+	}
+	// TODO(abaptist): Revisit and deprecate this setting in v23.1.
+	if admission.KVBulkOnlyAdmissionControlEnabled.Get(&st.SV) {
+		if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
+			bypassAdmission = true
+		}
+	}
+	// LeaseInfo requests are used as makeshift replica health probes by
+	// DistSender circuit breakers, make sure they bypass AC.
+	//
+	// TODO(erikgrinaker): the various bypass conditions here should be moved to
+	// one or more request flags.
+	if ba.IsSingleLeaseInfoRequest() {
+		bypassAdmission = true
+	}
+	createTime := ba.AdmissionHeader.CreateTime
+	if !bypassAdmission && createTime == 0 {
+		// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
+		// of zero CreateTime needs to be revisited. It should use high priority.
+		createTime = timeutil.Now().UnixNano()
+	}
+	admissionInfo := admission.WorkInfo{
+		TenantID:        tenantID,
+		Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
+		CreateTime:      createTime,
+		BypassAdmission: bypassAdmission,
+	}
+	return admissionInfo
 }

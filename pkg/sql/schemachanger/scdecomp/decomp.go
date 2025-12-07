@@ -543,7 +543,6 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 	column := &scpb.Column{
 		TableID:                           tbl.GetID(),
 		ColumnID:                          col.GetID(),
-		IsHidden:                          col.IsHidden(),
 		IsInaccessible:                    col.IsInaccessible(),
 		GeneratedAsIdentityType:           col.GetGeneratedAsIdentityType(),
 		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOptionStr(),
@@ -563,7 +562,6 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 		columnType := &scpb.ColumnType{
 			TableID:                 tbl.GetID(),
 			ColumnID:                col.GetID(),
-			IsNullable:              col.IsNullable(),
 			IsVirtual:               col.IsVirtual(),
 			ElementCreationMetadata: NewElementCreationMetadata(w.clusterVersion),
 		}
@@ -591,7 +589,37 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 				columnType.ComputeExpr = expr
 			}
 		}
+
+		if columnType.ElementCreationMetadata.In_26_1OrLater {
+			if col.IsGeneratedAsIdentity() {
+				w.ev(scpb.Status_PUBLIC,
+					&scpb.ColumnGeneratedAsIdentity{
+						TableID:        tbl.GetID(),
+						ColumnID:       col.GetID(),
+						Type:           col.GetGeneratedAsIdentityType(),
+						SequenceOption: col.GetGeneratedAsIdentitySequenceOptionStr(),
+					})
+				column.GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
+				column.GeneratedAsIdentitySequenceOption = ""
+			}
+		} else {
+			column.GeneratedAsIdentityType = col.GetGeneratedAsIdentityType()
+			column.GeneratedAsIdentitySequenceOption = col.GetGeneratedAsIdentitySequenceOptionStr()
+		}
 		w.ev(scpb.Status_PUBLIC, columnType)
+
+		if col.IsHidden() {
+			if columnType.ElementCreationMetadata.In_26_1OrLater {
+				columnHidden := scpb.ColumnHidden{
+					TableID:  tbl.GetID(),
+					ColumnID: col.GetID(),
+				}
+				w.ev(scpb.Status_PUBLIC, &columnHidden)
+			} else {
+				column.IsHidden = true
+			}
+		}
+
 	}
 	if !col.IsNullable() {
 		w.ev(scpb.Status_PUBLIC, &scpb.ColumnNotNull{
@@ -1028,10 +1056,11 @@ func (w *walkCtx) walkForeignKeyConstraint(
 func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 	typeT := newTypeT(fnDesc.GetReturnType().Type)
 	fn := &scpb.Function{
-		FunctionID: fnDesc.GetID(),
-		ReturnSet:  fnDesc.GetReturnType().ReturnSet,
-		ReturnType: *typeT,
-		Params:     make([]scpb.Function_Parameter, len(fnDesc.GetParams())),
+		FunctionID:  fnDesc.GetID(),
+		ReturnSet:   fnDesc.GetReturnType().ReturnSet,
+		ReturnType:  *typeT,
+		Params:      make([]scpb.Function_Parameter, len(fnDesc.GetParams())),
+		IsProcedure: fnDesc.IsProcedure(),
 	}
 	for i, param := range fnDesc.GetParams() {
 		typeT := newTypeT(param.Type)

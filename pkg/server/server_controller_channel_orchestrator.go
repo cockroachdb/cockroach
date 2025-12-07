@@ -7,12 +7,12 @@ package server
 
 import (
 	"context"
-	"runtime/pprof"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -223,8 +223,10 @@ func (o *channelOrchestrator) startControlledServer(
 	// stopper will have its own tracer which is incompatible with the
 	// tracer attached to the incoming context.
 	tenantCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
-	tenantCtx = logtags.AddTag(tenantCtx, "tenant-orchestration", nil)
-	tenantCtx = logtags.AddTag(tenantCtx, "tenant", tenantName)
+	tags := logtags.BuildBuffer()
+	tags.Add("tenant-orchestration", nil)
+	tags.Add("tenant", tenantName)
+	tenantCtx = logtags.AddTags(tenantCtx, tags.Finish())
 
 	// ctlStopper is a stopper uniquely responsible for the control
 	// loop. It is separate from the tenantStopper defined below so
@@ -328,9 +330,8 @@ func (o *channelOrchestrator) startControlledServer(
 		// Set the pprof label to more easily identify
 		// goroutines related to this virtual cluster. The
 		// calls here are exactly what pprof.Do does.
-		defer pprof.SetGoroutineLabels(ctx)
-		ctx = pprof.WithLabels(ctx, pprof.Labels("cluster", string(tenantName)))
-		pprof.SetGoroutineLabels(ctx)
+		ctx, reset := pprofutil.SetProfilerLabels(ctx, "cluster", string(tenantName))
+		defer reset()
 
 		// We want a context that gets cancelled when the server is
 		// shutting down, for the possible few cases in

@@ -26,7 +26,11 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 
 	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156327),
+	)()
+
+	defer serverutils.TestingGlobalDRPCOption(
+		base.TestDRPCEnabledRandomly,
 	)()
 
 	os.Exit(m.Run())

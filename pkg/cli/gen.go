@@ -47,7 +47,7 @@ type MetricInfo struct {
 	Aggregation  string `yaml:"aggregation"`
 	Derivative   string `yaml:"derivative"`
 	HowToUse     string `yaml:"how_to_use,omitempty"`
-	Essential    bool   `yaml:"essential,omitempty"`
+	Visibility   string `yaml:"visibility,omitempty"`
 }
 
 type Category struct {
@@ -477,18 +477,23 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 
 		for _, chart := range section.Charts {
 			// There are many charts, but only 1 metric per chart.
+			visibility := chart.Metrics[0].Visibility
+			// Only include visibility if it's not the default INTERNAL value
+			if visibility == "INTERNAL" {
+				visibility = ""
+			}
 			metric := MetricInfo{
 				Name:         chart.Metrics[0].Name,
 				ExportedName: chart.Metrics[0].ExportedName,
 				LabeledName:  chart.Metrics[0].LabeledName,
-				Description:  chart.Metrics[0].Help,
+				Description:  strings.TrimSpace(chart.Metrics[0].Help),
 				YAxisLabel:   chart.AxisLabel,
 				Type:         chart.Metrics[0].MetricType.String(),
 				Unit:         chart.Units.String(),
 				Aggregation:  chart.Aggregator.String(),
 				Derivative:   chart.Derivative.String(),
-				HowToUse:     chart.Metrics[0].HowToUse,
-				Essential:    chart.Metrics[0].Essential,
+				HowToUse:     strings.TrimSpace(chart.Metrics[0].HowToUse),
+				Visibility:   visibility,
 			}
 			category.Metrics = append(category.Metrics, metric)
 		}

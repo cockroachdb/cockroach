@@ -8,10 +8,34 @@ package inspect
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/errors"
 )
+
+// inspectCheckApplicability defines the interface for determining if a check
+// applies to a span.
+type inspectCheckApplicability interface {
+	// AppliesTo reports whether this check applies to the given span.
+	AppliesTo(codec keys.SQLCodec, span roachpb.Span) (bool, error)
+}
+
+// assertCheckApplies is a helper that calls AppliesTo and asserts the check applies.
+func assertCheckApplies(
+	check inspectCheckApplicability, codec keys.SQLCodec, span roachpb.Span,
+) error {
+	applies, err := check.AppliesTo(codec, span)
+	if err != nil {
+		return err
+	}
+	if !applies {
+		return errors.AssertionFailedf(
+			"check does not apply to this span: span=%s", span.String())
+	}
+	return nil
+}
 
 // inspectCheck defines a single validation operation used by the INSPECT system.
 // Each check represents a specific type of data validation, such as index consistency.
@@ -25,6 +49,8 @@ import (
 // under the hood to detect inconsistencies. All results are surfaced through the
 // inspectIssue type.
 type inspectCheck interface {
+	inspectCheckApplicability
+
 	// Started reports whether the check has been initialized.
 	Started() bool
 
@@ -40,12 +66,6 @@ type inspectCheck interface {
 
 	// Close cleans up resources for the check.
 	Close(ctx context.Context) error
-}
-
-// inspectLogger records issues found by inspect checks. Implementations of this
-// interface define how inspectIssue results are handled.
-type inspectLogger interface {
-	logIssue(ctx context.Context, issue *inspectIssue) error
 }
 
 // inspectRunner coordinates the execution of a set of inspectChecks.
@@ -64,6 +84,9 @@ type inspectRunner struct {
 
 	// logger records issues reported by the checks.
 	logger inspectLogger
+
+	// foundIssue indicates whether any issues were found.
+	foundIssue bool
 }
 
 // Step advances execution by processing one result from the current inspectCheck.
@@ -91,6 +114,7 @@ func (c *inspectRunner) Step(
 				return false, err
 			}
 			if issue != nil {
+				c.foundIssue = true
 				err = c.logger.logIssue(ctx, issue)
 				if err != nil {
 					return false, errors.Wrapf(err, "error logging inspect issue")
@@ -105,4 +129,31 @@ func (c *inspectRunner) Step(
 		c.checks = c.checks[1:]
 	}
 	return false, nil
+}
+
+// CheckCount returns the number of remaining checks to be processed.
+func (c *inspectRunner) CheckCount() int {
+	return len(c.checks)
+}
+
+// Close cleans up all checks in the runner. It will attempt to close each check,
+// even if errors occur during closing. If multiple checks fail to close, then
+// a combined error is returned.
+func (c *inspectRunner) Close(ctx context.Context) error {
+	var retErr error
+	for _, check := range c.checks {
+		if err := check.Close(ctx); err != nil {
+			retErr = errors.CombineErrors(retErr, err)
+		}
+	}
+	return retErr
+}
+
+// spanContainsTable checks if the given span contains data for the specified table.
+func spanContainsTable(tableID descpb.ID, codec keys.SQLCodec, span roachpb.Span) (bool, error) {
+	_, spanTableID, err := codec.DecodeTablePrefix(span.Key)
+	if err != nil {
+		return false, err
+	}
+	return descpb.ID(spanTableID) == tableID, nil
 }

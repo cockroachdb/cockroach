@@ -7,7 +7,9 @@ package testutils
 
 import (
 	"regexp"
+	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,4 +37,21 @@ func MatchInOrder(s string, res ...string) error {
 		sPos += loc[1]
 	}
 	return nil
+}
+
+// SetVModule sets the logging vmodule. The vmodule will be reset by the given
+// testing.TB's Cleanup method.
+//
+// Not safe for concurrent use.
+func SetVModule(t testing.TB, vmodule string) {
+	t.Helper()
+	prevVModule := log.GetVModule()
+	if err := log.SetVModule(vmodule); err != nil {
+		t.Fatalf("failed to set vmodule: %s", err.Error())
+	}
+	t.Cleanup(func() {
+		if err := log.SetVModule(prevVModule); err != nil {
+			t.Fatalf("failed to set vmodule: %s", err.Error())
+		}
+	})
 }

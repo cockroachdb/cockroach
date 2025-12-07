@@ -8,23 +8,20 @@ package props
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/datumrange"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/timetz"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 )
@@ -41,6 +38,20 @@ type Histogram struct {
 	selectivity float64
 	buckets     []cat.HistogramBucket
 	col         opt.ColumnID
+	// resolution is the number of rows below which selectivity estimates based on
+	// this histogram should fall back to a more pessimistic distinct-count based
+	// estimate. This is used to avoid overfitting to histograms that may be
+	// missing values due to sampling or staleness. This number roughly
+	// corresponds to the highest expected multiplicity of any value missing from
+	// the histogram.
+	resolution float64
+	// hasTightUB and hasTightLB indicate whether there are guaranteed upper
+	// bounds on the range of values in the underlying dataset (possibly, though
+	// not necessarily, equal to the upper and lower bounds of the histogram).
+	// This is the case for a histogram derived after a filter that restricts the
+	// column's values to a finite range. Contrast this with the histogram derived
+	// from a table sample, which may miss extreme values or become stale.
+	hasTightUB, hasTightLB bool
 }
 
 func (h *Histogram) String() string {
@@ -52,7 +63,9 @@ func (h *Histogram) String() string {
 }
 
 // Init initializes the histogram with data from the catalog.
-func (h *Histogram) Init(evalCtx *eval.Context, col opt.ColumnID, buckets []cat.HistogramBucket) {
+func (h *Histogram) Init(
+	evalCtx *eval.Context, col opt.ColumnID, buckets []cat.HistogramBucket, resolution float64,
+) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*h = Histogram{
@@ -60,34 +73,51 @@ func (h *Histogram) Init(evalCtx *eval.Context, col opt.ColumnID, buckets []cat.
 		col:         col,
 		selectivity: 1,
 		buckets:     buckets,
+		resolution:  resolution,
 	}
 }
 
-// bucketCount returns the number of buckets in the histogram.
-func (h *Histogram) bucketCount() int {
+// BucketCount returns the number of buckets in the histogram.
+func (h *Histogram) BucketCount() int {
 	return len(h.buckets)
 }
 
 // numEq returns NumEq for the ith histogram bucket, with the histogram's
 // selectivity applied. i must be greater than or equal to 0 and less than
-// bucketCount.
+// BucketCount.
 func (h *Histogram) numEq(i int) float64 {
 	return h.buckets[i].NumEq * h.selectivity
 }
 
 // numRange returns NumRange for the ith histogram bucket, with the histogram's
 // selectivity applied. i must be greater than or equal to 0 and less than
-// bucketCount.
+// BucketCount.
 func (h *Histogram) numRange(i int) float64 {
+	// The first bucket always has a zero value for NumRange, so the lower bound
+	// of the histogram is the upper bound of the first bucket. We only check this
+	// in test builds.
+	if i == 0 && h.buckets[i].NumRange != 0 {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
+		}
+		return 0
+	}
 	return h.buckets[i].NumRange * h.selectivity
 }
 
 // distinctRange returns DistinctRange for the ith histogram bucket, with the
 // histogram's selectivity applied. i must be greater than or equal to 0 and
-// less than bucketCount.
+// less than BucketCount.
 func (h *Histogram) distinctRange(i int) float64 {
 	n := h.buckets[i].NumRange
 	d := h.buckets[i].DistinctRange
+
+	if i == 0 && d != 0 {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("the first bucket should have DistinctRange=0"))
+		}
+		return 0
+	}
 
 	if d == 0 {
 		return 0
@@ -104,7 +134,7 @@ func (h *Histogram) distinctRange(i int) float64 {
 }
 
 // upperBound returns UpperBound for the ith histogram bucket. i must be
-// greater than or equal to 0 and less than bucketCount.
+// greater than or equal to 0 and less than BucketCount.
 func (h *Histogram) upperBound(i int) tree.Datum {
 	return h.buckets[i].UpperBound
 }
@@ -119,6 +149,23 @@ func (h *Histogram) ValuesCount() float64 {
 		count += h.numEq(i)
 	}
 	return count
+}
+
+// Resolution returns the minimum row count for which selectivity estimates
+// based on this histogram should be trusted. See the resolution field comment
+// for details.
+func (h *Histogram) Resolution() float64 {
+	return h.resolution
+}
+
+// TightBounds returns whether the histogram has been constrained such that
+// there are guaranteed finite upper and lower bounds on the values in the
+// histogram column. Note that the guaranteed bounds may not match the
+// histogram's maximum and minimum values. This information can be used to
+// determine how to clamp row-count estimates for inequality filters to avoid
+// over-fitting on stale or inaccurate histograms.
+func (h *Histogram) TightBounds() (tightUpper, tightLower bool) {
+	return h.hasTightUB, h.hasTightLB
 }
 
 // EqEstimate returns the estimated number of rows that equal the given
@@ -207,11 +254,6 @@ func (h *Histogram) maxDistinctValuesCount() float64 {
 		return 0
 	}
 
-	// The first bucket always has a zero value for NumRange, so the lower bound
-	// of the histogram is the upper bound of the first bucket.
-	if h.numRange(0) != 0 {
-		panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
-	}
 	previousUpperBound := h.upperBound(0)
 
 	var count float64
@@ -307,6 +349,33 @@ func (h *Histogram) CanFilter(
 	return 0, exactPrefix, false
 }
 
+// checkSpanBounds determines whether the given spans bound the histogram column
+// above and below. This can be used to determine how to clamp row-count
+// estimates for inequality filters to avoid over-fitting on stale or inaccurate
+// histograms.
+func checkSpanBounds(
+	spanCount int, getSpan func(int) *constraint.Span, desc bool, colOffset int,
+) (hasUpperBound, hasLowerBound bool) {
+	if spanCount == 0 {
+		return false, false
+	}
+	firstSpan := getSpan(0)
+	lastSpan := getSpan(spanCount - 1)
+	hasBound := func(key constraint.Key) bool {
+		// A NULL value is not considered a bound in this context, since they order
+		// before (or after) all non-NULL values and are not included in histograms.
+		return key.Length() > colOffset && key.Value(colOffset) != tree.DNull
+	}
+	if desc {
+		hasUpperBound = hasBound(firstSpan.StartKey())
+		hasLowerBound = hasBound(lastSpan.EndKey())
+	} else {
+		hasLowerBound = hasBound(firstSpan.StartKey())
+		hasUpperBound = hasBound(lastSpan.EndKey())
+	}
+	return hasUpperBound, hasLowerBound
+}
+
 func (h *Histogram) filter(
 	ctx context.Context,
 	spanCount int,
@@ -316,20 +385,24 @@ func (h *Histogram) filter(
 	prefix []tree.Datum,
 	columns constraint.Columns,
 ) *Histogram {
-	bucketCount := h.bucketCount()
+	bucketCount := h.BucketCount()
 	filtered := &Histogram{
 		evalCtx:     h.evalCtx,
 		col:         h.col,
 		selectivity: h.selectivity,
+		resolution:  h.resolution,
+		hasTightLB:  h.hasTightLB,
+		hasTightUB:  h.hasTightUB,
+	}
+	spanUB, spanLB := checkSpanBounds(spanCount, getSpan, desc, colOffset)
+	if spanUB {
+		filtered.hasTightUB = true
+	}
+	if spanLB {
+		filtered.hasTightLB = true
 	}
 	if bucketCount == 0 {
 		return filtered
-	}
-
-	// The first bucket always has a zero value for NumRange, so the lower bound
-	// of the histogram is the upper bound of the first bucket.
-	if h.numRange(0) != 0 {
-		panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
 	}
 
 	var iter histogramIter
@@ -645,7 +718,7 @@ func (hi *histogramIter) init(h *Histogram, desc bool) {
 		desc: desc,
 	}
 	if desc {
-		hi.idx = h.bucketCount()
+		hi.idx = h.BucketCount()
 	}
 	hi.next()
 }
@@ -689,7 +762,7 @@ func (hi *histogramIter) next() (ok bool) {
 		hi.eub, hi.ub, hi.elb, hi.lb = getBounds()
 	} else {
 		hi.idx++
-		if hi.idx >= hi.h.bucketCount() {
+		if hi.idx >= hi.h.BucketCount() {
 			return false
 		}
 		// If iter.desc=false, the lower bounds are less than the upper bounds.
@@ -852,7 +925,7 @@ func getFilteredBucket(
 	// Extract the range sizes before and after filtering. Only numeric and
 	// date-time types will have ok=true, since these are the only types for
 	// which we can accurately calculate the range size of a non-equality span.
-	rangeBefore, rangeAfter, ok := getRangesBeforeAndAfter(
+	rangeBefore, rangeAfter, ok := datumrange.GetRangesBeforeAndAfter(
 		bucketLowerBound, bucketUpperBound, spanLowerBound, spanUpperBound, iter.desc,
 	)
 
@@ -940,203 +1013,6 @@ func getFilteredBucket(
 	}
 }
 
-// getRangesBeforeAndAfter returns the size of the before and after ranges based
-// on the lower and upper bounds provided. If swap is true, the upper and lower
-// bounds of both ranges are swapped. Returns ok=true if these range sizes are
-// calculated successfully, and false otherwise. The calculations for
-// rangeBefore and rangeAfter are datatype dependent.
-//
-// For numeric types, we can simply find the difference between the lower and
-// upper bounds for rangeBefore/rangeAfter.
-//
-// For non-numeric types, we can convert each bound into sorted key bytes (CRDB
-// key representation) to find their range. As we do need a lot of precision in
-// our range estimate, we can remove the common prefix between the lower and
-// upper bounds, and limit the byte array to 8 bytes. This also simplifies our
-// implementation since we won't need to handle an arbitrary length of bounds.
-// Following the conversion, we must zero extend the byte arrays to ensure the
-// length is uniform between lower and upper bounds. This process is highlighted
-// below, where [\bear - \bobcat] represents the before range and
-// [\bluejay - \boar] represents the after range.
-//
-//	bear    := [18  98  101 97  114 0   1          ]
-//	        => [101 97  114 0   0   0   0   0      ]
-//
-//	bluejay := [18  98  108 117 101 106 97  121 0 1]
-//	        => [108 117 101 106 97  121 0   0      ]
-//
-//	boar    := [18  98  111 97  114 0   1          ]
-//	        => [111 97  114 0   0   0   0   0      ]
-//
-//	bobcat  := [18  98  111 98  99  97  116 0   1  ]
-//	        => [111 98  99  97  116 0   0   0      ]
-//
-// We can now find the range before/after by finding the difference between
-// the lower and upper bounds:
-//
-//		 rangeBefore := [111 98  99  97  116 0   1   0] -
-//	                 [101 97  114 0   1   0   0   0]
-//
-//	  rangeAfter  := [111 97  114 0   1   0   0   0] -
-//	                 [108 117 101 106 97  121 0   1]
-//
-// Subtracting the uint64 representations of the byte arrays, the resulting
-// rangeBefore and rangeAfter are:
-//
-//		 rangeBefore := 8,026,086,756,136,779,776 - 7,305,245,414,897,221,632
-//	              := 720,841,341,239,558,100
-//
-//		 rangeAfter := 8,025,821,355,276,500,992 - 7,815,264,235,947,622,400
-//	             := 210,557,119,328,878,600
-func getRangesBeforeAndAfter(
-	beforeLowerBound, beforeUpperBound, afterLowerBound, afterUpperBound tree.Datum, swap bool,
-) (rangeBefore, rangeAfter float64, ok bool) {
-	// If the data types don't match, don't bother trying to calculate the range
-	// sizes. This should almost never happen, but we want to avoid type
-	// assertion errors below.
-	typesMatch :=
-		beforeLowerBound.ResolvedType().Equivalent(beforeUpperBound.ResolvedType()) &&
-			beforeUpperBound.ResolvedType().Equivalent(afterLowerBound.ResolvedType()) &&
-			afterLowerBound.ResolvedType().Equivalent(afterUpperBound.ResolvedType())
-	if !typesMatch {
-		return 0, 0, false
-	}
-
-	if swap {
-		beforeLowerBound, beforeUpperBound = beforeUpperBound, beforeLowerBound
-		afterLowerBound, afterUpperBound = afterUpperBound, afterLowerBound
-	}
-
-	// The calculations below assume that all bounds are inclusive.
-	// TODO(rytaft): handle more types here.
-	switch beforeLowerBound.ResolvedType().Family() {
-	case types.IntFamily:
-		rangeBefore = float64(*beforeUpperBound.(*tree.DInt)) - float64(*beforeLowerBound.(*tree.DInt))
-		rangeAfter = float64(*afterUpperBound.(*tree.DInt)) - float64(*afterLowerBound.(*tree.DInt))
-		return rangeBefore, rangeAfter, true
-
-	case types.DateFamily:
-		lowerBefore := beforeLowerBound.(*tree.DDate)
-		upperBefore := beforeUpperBound.(*tree.DDate)
-		lowerAfter := afterLowerBound.(*tree.DDate)
-		upperAfter := afterUpperBound.(*tree.DDate)
-		if lowerBefore.IsFinite() && upperBefore.IsFinite() && lowerAfter.IsFinite() && upperAfter.IsFinite() {
-			rangeBefore = float64(upperBefore.PGEpochDays()) - float64(lowerBefore.PGEpochDays())
-			rangeAfter = float64(upperAfter.PGEpochDays()) - float64(lowerAfter.PGEpochDays())
-			return rangeBefore, rangeAfter, true
-		}
-		return 0, 0, false
-
-	case types.DecimalFamily:
-		lowerBefore, err := beforeLowerBound.(*tree.DDecimal).Float64()
-		if err != nil {
-			return 0, 0, false
-		}
-		upperBefore, err := beforeUpperBound.(*tree.DDecimal).Float64()
-		if err != nil {
-			return 0, 0, false
-		}
-		lowerAfter, err := afterLowerBound.(*tree.DDecimal).Float64()
-		if err != nil {
-			return 0, 0, false
-		}
-		upperAfter, err := afterUpperBound.(*tree.DDecimal).Float64()
-		if err != nil {
-			return 0, 0, false
-		}
-		rangeBefore = upperBefore - lowerBefore
-		rangeAfter = upperAfter - lowerAfter
-		return rangeBefore, rangeAfter, true
-
-	case types.FloatFamily:
-		rangeBefore = float64(*beforeUpperBound.(*tree.DFloat)) - float64(*beforeLowerBound.(*tree.DFloat))
-		rangeAfter = float64(*afterUpperBound.(*tree.DFloat)) - float64(*afterLowerBound.(*tree.DFloat))
-		return rangeBefore, rangeAfter, true
-
-	case types.TimestampFamily:
-		lowerBefore := beforeLowerBound.(*tree.DTimestamp).Time
-		upperBefore := beforeUpperBound.(*tree.DTimestamp).Time
-		lowerAfter := afterLowerBound.(*tree.DTimestamp).Time
-		upperAfter := afterUpperBound.(*tree.DTimestamp).Time
-		rangeBefore = float64(upperBefore.Sub(lowerBefore))
-		rangeAfter = float64(upperAfter.Sub(lowerAfter))
-		return rangeBefore, rangeAfter, true
-
-	case types.TimestampTZFamily:
-		lowerBefore := beforeLowerBound.(*tree.DTimestampTZ).Time
-		upperBefore := beforeUpperBound.(*tree.DTimestampTZ).Time
-		lowerAfter := afterLowerBound.(*tree.DTimestampTZ).Time
-		upperAfter := afterUpperBound.(*tree.DTimestampTZ).Time
-		rangeBefore = float64(upperBefore.Sub(lowerBefore))
-		rangeAfter = float64(upperAfter.Sub(lowerAfter))
-		return rangeBefore, rangeAfter, true
-
-	case types.TimeFamily:
-		lowerBefore := beforeLowerBound.(*tree.DTime)
-		upperBefore := beforeUpperBound.(*tree.DTime)
-		lowerAfter := afterLowerBound.(*tree.DTime)
-		upperAfter := afterUpperBound.(*tree.DTime)
-		rangeBefore = float64(*upperBefore) - float64(*lowerBefore)
-		rangeAfter = float64(*upperAfter) - float64(*lowerAfter)
-		return rangeBefore, rangeAfter, true
-
-	case types.TimeTZFamily:
-		// timeTZOffsetSecsRange is the total number of possible values for offset.
-		timeTZOffsetSecsRange := timetz.MaxTimeTZOffsetSecs - timetz.MinTimeTZOffsetSecs + 1
-
-		// Find the ranges in microseconds based on the absolute times of the range
-		// boundaries.
-		lowerBefore := beforeLowerBound.(*tree.DTimeTZ)
-		upperBefore := beforeUpperBound.(*tree.DTimeTZ)
-		lowerAfter := afterLowerBound.(*tree.DTimeTZ)
-		upperAfter := afterUpperBound.(*tree.DTimeTZ)
-		rangeBefore = float64(upperBefore.ToTime().Sub(lowerBefore.ToTime()) / time.Microsecond)
-		rangeAfter = float64(upperAfter.ToTime().Sub(lowerAfter.ToTime()) / time.Microsecond)
-
-		// Account for the offset.
-		rangeBefore *= float64(timeTZOffsetSecsRange)
-		rangeAfter *= float64(timeTZOffsetSecsRange)
-		rangeBefore += float64(upperBefore.OffsetSecs - lowerBefore.OffsetSecs)
-		rangeAfter += float64(upperAfter.OffsetSecs - lowerAfter.OffsetSecs)
-		return rangeBefore, rangeAfter, true
-
-	case types.StringFamily, types.BytesFamily, types.UuidFamily, types.INetFamily:
-		// For non-numeric types, convert the datums to encoded keys to
-		// approximate the range. We utilize an array to reduce repetitive code.
-		boundArr := [4]tree.Datum{
-			beforeLowerBound, beforeUpperBound, afterLowerBound, afterUpperBound,
-		}
-		var boundArrByte [4][]byte
-
-		for i := range boundArr {
-			var err error
-			// Encode each bound value into a sortable byte format.
-			boundArrByte[i], err = keyside.Encode(nil, boundArr[i], encoding.Ascending)
-			if err != nil {
-				return 0, 0, false
-			}
-		}
-
-		// Remove common prefix.
-		ind := getCommonPrefix(boundArrByte)
-		for i := range boundArrByte {
-			// Fix length of byte arrays to 8 bytes.
-			boundArrByte[i] = getFixedLenArr(boundArrByte[i], ind, 8 /* fixLen */)
-		}
-
-		rangeBefore = float64(binary.BigEndian.Uint64(boundArrByte[1]) -
-			binary.BigEndian.Uint64(boundArrByte[0]))
-		rangeAfter = float64(binary.BigEndian.Uint64(boundArrByte[3]) -
-			binary.BigEndian.Uint64(boundArrByte[2]))
-
-		return rangeBefore, rangeAfter, true
-
-	default:
-		// Range calculations are not supported for the given type family.
-		return 0, 0, false
-	}
-}
-
 // isDiscrete returns true if the given data type is discrete.
 func isDiscrete(typ *types.T) bool {
 	switch typ.Family() {
@@ -1144,55 +1020,6 @@ func isDiscrete(typ *types.T) bool {
 		return true
 	}
 	return false
-}
-
-// getCommonPrefix returns the first index where the value at said index differs
-// across all byte arrays in byteArr. byteArr must contain at least one element
-// to compute a common prefix.
-func getCommonPrefix(byteArr [4][]byte) int {
-	// Checks if the current value at index is the same between all byte arrays.
-	currIndMatching := func(ind int) bool {
-		for i := 0; i < len(byteArr); i++ {
-			if ind >= len(byteArr[i]) || byteArr[0][ind] != byteArr[i][ind] {
-				return false
-			}
-		}
-		return true
-	}
-
-	ind := 0
-	for currIndMatching(ind) {
-		ind++
-	}
-
-	return ind
-}
-
-// getFixedLenArr returns a byte array of size fixLen starting from specified
-// index within the original byte array.
-func getFixedLenArr(byteArr []byte, ind, fixLen int) []byte {
-
-	if len(byteArr) <= 0 {
-		panic(errors.AssertionFailedf("byteArr must have at least one element"))
-	}
-
-	if fixLen <= 0 {
-		panic(errors.AssertionFailedf("desired fixLen must be greater than 0"))
-	}
-
-	if ind < 0 || ind > len(byteArr) {
-		panic(errors.AssertionFailedf("ind must be contained within byteArr"))
-	}
-
-	// If byteArr is insufficient to hold desired size of byte array (fixLen),
-	// allocate new array, else return subarray of size fixLen starting at ind
-	if len(byteArr) < ind+fixLen {
-		byteArrFix := make([]byte, fixLen)
-		copy(byteArrFix, byteArr[ind:])
-		return byteArrFix
-	}
-
-	return byteArr[ind : ind+fixLen]
 }
 
 // histogramWriter prints histograms with the following formatting:

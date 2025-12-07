@@ -373,7 +373,8 @@ func (mb *mutationBuilder) recomputeComputedColsForTrigger(eventType tree.Trigge
 			colIDs[i] = 0
 		}
 	}
-	mb.addSynthesizedComputedCols(colIDs, false /* restrict */)
+	mb.addSynthesizedComputedCols(colIDs,
+		nil /* targetColList */, nil /* targetColSet */, false /* restrict */)
 }
 
 // ============================================================================
@@ -659,11 +660,13 @@ func (tb *rowLevelAfterTriggerBuilder) Build(
 			tgLevel := tree.NewDString("ROW")
 			tgRelID := tree.NewDOid(oid.Oid(tb.mutatedTable.ID()))
 			tgTableName := tree.NewDString(string(tb.mutatedTable.Name()))
-			fqName, err := b.catalog.FullyQualifiedName(ctx, tb.mutatedTable)
+			schema, err := b.catalog.ResolveSchemaByID(
+				b.ctx, cat.Flags{}, cat.StableID(tb.mutatedTable.GetSchemaID()),
+			)
 			if err != nil {
 				panic(err)
 			}
-			tgTableSchema := tree.NewDString(fqName.Schema())
+			tgTableSchema := tree.NewDString(schema.Name().Schema())
 			var tgOp opt.ScalarExpr
 			switch tb.mutation {
 			case opt.InsertOp:

@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -185,8 +186,9 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		inFlightWrites []roachpb.SequencedWrite
 		deadline       hlc.Timestamp
 		// Expected result.
-		expError string
-		expTxn   *roachpb.TransactionRecord
+		expError      string
+		expTxn        *roachpb.TransactionRecord
+		validateError func(t *testing.T, err error)
 	}{
 		{
 			// Standard case where a transaction is rolled back when
@@ -1050,6 +1052,28 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
+			// Non-standard case where the transaction is being rolled back after a
+			// successful refresh. In this case we want to be sure that the staging
+			// record is returned so that we don't attempt transaction recovery using
+			// the refreshed transaction.
+			name: "record staging, rollback after refresh.",
+			// Replica state.
+			existingTxn: stagingRecord,
+			// Request state.
+			headerTxn: refreshedHeaderTxn,
+			commit:    false,
+			// Expected result.
+			expError: "found txn in indeterminate STAGING state",
+			expTxn:   stagingRecord,
+			validateError: func(t *testing.T, err error) {
+				var icErr *kvpb.IndeterminateCommitError
+				errors.As(err, &icErr)
+				require.NotNil(t, icErr)
+				require.Equal(t, stagingRecord.WriteTimestamp, icErr.StagingTxn.WriteTimestamp)
+			},
+		},
+
+		{
 			// Non-standard case where a transaction record is re-staged during
 			// a parallel commit. The record already exists because of a failed
 			// parallel commit attempt in a prior epoch.
@@ -1597,10 +1621,11 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 				if !testutils.IsError(err, regexp.QuoteMeta(c.expError)) {
 					t.Fatalf("expected error %q; found %v", c.expError, err)
 				}
-			} else {
-				if err != nil {
-					t.Fatal(err)
+				if c.validateError != nil {
+					c.validateError(t, err)
 				}
+			} else {
+				require.NoError(t, err)
 
 				// Assert that the txn record is written as expected.
 				var resTxnRecord roachpb.TransactionRecord
@@ -2169,7 +2194,7 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	gcHint := roachpb.GCHint{GCTimestamp: gcThreshold}
 	abortSpanTxnID := uuid.MakeV4()
 	as := abortspan.New(desc.RangeID)
-	sl := stateloader.Make(desc.RangeID)
+	sl := kvstorage.MakeStateLoader(desc.RangeID)
 	rec := (&MockEvalCtx{
 		ClusterSettings:        st,
 		Desc:                   &desc,
@@ -2203,14 +2228,21 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	err = sl.SetVersion(ctx, batch, nil, &version)
 	require.NoError(t, err)
 
+	in := SplitTriggerHelperInput{
+		LeftLease:      lease,
+		GCThreshold:    &gcThreshold,
+		GCHint:         &gcHint,
+		ReplicaVersion: version,
+	}
+
 	// Run the split trigger, which is normally run as a subset of EndTxn request
 	// evaluation.
-	_, _, err = splitTrigger(ctx, rec, batch, enginepb.MVCCStats{}, split, hlc.Timestamp{})
+	_, _, err = splitTrigger(ctx, rec, batch, enginepb.MVCCStats{}, split, in, hlc.Timestamp{})
 	require.NoError(t, err)
 
 	// Verify that range state was migrated to the right-hand side properly.
 	asRight := abortspan.New(rightDesc.RangeID)
-	slRight := stateloader.Make(rightDesc.RangeID)
+	slRight := kvstorage.MakeStateLoader(rightDesc.RangeID)
 	// The abort span should have been transferred over.
 	ok, err := asRight.Get(ctx, batch, abortSpanTxnID, &roachpb.AbortSpanEntry{})
 	require.NoError(t, err)
@@ -2244,9 +2276,9 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, version, loadedVersion)
 	expAppliedState := kvserverpb.RangeAppliedState{
-		RaftAppliedIndexTerm: stateloader.RaftInitialLogTerm,
-		RaftAppliedIndex:     stateloader.RaftInitialLogIndex,
-		LeaseAppliedIndex:    stateloader.InitialLeaseAppliedIndex,
+		RaftAppliedIndexTerm: kvstorage.RaftInitialLogTerm,
+		RaftAppliedIndex:     kvstorage.RaftInitialLogIndex,
+		LeaseAppliedIndex:    kvstorage.InitialLeaseAppliedIndex,
 	}
 	loadedAppliedState, err := slRight.LoadRangeAppliedState(ctx, batch)
 	require.NoError(t, err)

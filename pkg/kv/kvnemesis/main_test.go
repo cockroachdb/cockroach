@@ -29,6 +29,10 @@ func TestMain(m *testing.M) {
 		base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 	)()
 
+	defer serverutils.TestingGlobalDRPCOption(
+		base.TestDRPCDisabled,
+	)()
+
 	os.Exit(m.Run())
 }
 

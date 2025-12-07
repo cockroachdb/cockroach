@@ -4,12 +4,12 @@ echo
 -- Flow token metrics from n1 after issuing 1 1MiB 5x replicated write
 -- that's not admitted. Since this test is ignoring crashed nodes for token
 -- deduction purposes, we see a deduction of 5MiB tokens.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -89,12 +89,12 @@ ORDER BY
 
 -- Flow token metrics from n1 after issuing 1 1MiB 5x replicated write
 -- that's not admitted. We'll have deducted another 5*1MiB=5MiB worth of tokens.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -154,12 +154,12 @@ ORDER BY
 -- 2MiB previously held by those nodes (2MiB each). We're reacting to it's raft
 -- progress state, noting that since we've truncated our log, we need to catch
 -- it up via snapshot. So we release all held tokens.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -214,12 +214,12 @@ ORDER BY
 
 -- Flow token metrics from n1 after work gets admitted. We see the remaining
 -- 6MiB of tokens returned.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;

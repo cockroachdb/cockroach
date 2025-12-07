@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -416,8 +417,14 @@ func TestTenantCtx(t *testing.T) {
 						// context looks as expected, and signal their channels.
 
 						tenID, isTenantRequest := roachpb.ClientTenantFromContext(ctx)
-						keyRecognized := strings.Contains(ba.Requests[0].GetInner().Header().Key.String(), magicKey)
+						key := ba.Requests[0].GetInner().Header().Key
+						keyRecognized := strings.Contains(key.String(), magicKey)
 						if !keyRecognized {
+							return nil
+						}
+
+						// Skip meta2 range lookups as they don't carry tenant context.
+						if bytes.HasPrefix(key, keys.Meta2Prefix) {
 							return nil
 						}
 
@@ -429,6 +436,9 @@ func TestTenantCtx(t *testing.T) {
 						if isSinglePushTxn := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == kvpb.PushTxn; isSinglePushTxn {
 							pushReq = ba.Requests[0].GetInner().(*kvpb.PushTxnRequest)
 						}
+
+						t.Logf("received request with key: %s, isTenantRequest: %t, tenID: %d",
+							key.String(), isTenantRequest, tenID)
 
 						switch {
 						case scanReq != nil:
@@ -482,16 +492,19 @@ func TestTenantCtx(t *testing.T) {
 		_, err = tx1.Exec("insert into t(x) values ($1)", magicKey)
 		require.NoError(t, err)
 
-		var tx2 *gosql.Tx
-		var tx2C = make(chan struct{})
-		go func() {
-			var err error
-			tx2, err = tsql.BeginTx(ctx, nil /* opts */)
-			assert.NoError(t, err)
+		g := ctxgroup.WithContext(ctx)
+		g.Go(func() error {
+			tx2, err := tsql.BeginTx(ctx, nil /* opts */)
+			if err != nil {
+				return err
+			}
+			// This SELECT should be blocked by the insert on tx1.
 			_, err = tx2.Exec("select * from t where x = $1", magicKey)
-			assert.NoError(t, err)
-			close(tx2C)
-		}()
+			if err != nil {
+				return err
+			}
+			return tx2.Rollback()
+		})
 
 		// Wait for tx2 goroutine to send the PushTxn request, and then roll back tx1
 		// to unblock tx2.
@@ -507,9 +520,7 @@ func TestTenantCtx(t *testing.T) {
 		case <-time.After(3 * time.Second):
 			t.Fatal("timed out waiting for PushTxn")
 		}
-		_ = tx1.Rollback()
-		// Wait for tx2 to be unblocked.
-		<-tx2C
-		_ = tx2.Rollback()
+		require.NoError(t, tx1.Rollback())
+		require.NoError(t, g.Wait())
 	})
 }

@@ -412,10 +412,10 @@ func SendReport(
 
 	res := sentry.CaptureEvent(event)
 	if res != nil {
-		log.Shoutf(ctx, severity.ERROR, "Queued as error %v", string(*res))
+		log.Dev.Shoutf(ctx, severity.ERROR, "Queued as error %v", string(*res))
 	}
 	if !sentry.Flush(10 * time.Second) {
-		log.Shout(ctx, severity.ERROR, "Timeout trying to submit crash report")
+		log.Dev.Shout(ctx, severity.ERROR, "Timeout trying to submit crash report")
 	}
 }
 

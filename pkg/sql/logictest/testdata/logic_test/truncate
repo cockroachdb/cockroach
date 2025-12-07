@@ -118,7 +118,14 @@ SELECT get_min_t0();
 0
 
 statement ok
+ALTER TABLE t0 SET (schema_locked=false)
+
+# Fallback to legacy schema changer due to references.
+statement ok
 TRUNCATE TABLE t0;
+
+statement ok
+ALTER TABLE t0 RESET (schema_locked)
 
 query I
 SELECT * FROM v0 ORDER BY c0;
@@ -187,6 +194,8 @@ CREATE TABLE t (
 COMMENT ON COLUMN t.x IS '''hi''); DROP TABLE t;';
 COMMENT ON COLUMN t.z IS 'comm"en"t2';
 COMMENT ON INDEX t@i2 IS 'comm''ent3';
+
+statement ok
 TRUNCATE t
 
 query TT

@@ -63,7 +63,7 @@ var (
 		Help:        "Number of SQL queries that experienced contention",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric is incremented whenever there is a non-trivial amount of contention experienced by a statement whether read-write or write-write conflicts. Monitor this metric to correlate possible workload performance issues to contention conflicts.`,
 	}

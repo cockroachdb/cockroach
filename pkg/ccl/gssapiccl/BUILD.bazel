@@ -11,17 +11,12 @@ go_library(
         "//conditions:default": ["empty.go"],
     }),
     cdeps = select({
-        "@io_bazel_rules_go//go/platform:linux": ["//c-deps:libkrb5"],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "//c-deps:libkrb5", "//build/bazelutil/cc:resolver_compat","//build/bazelutil/cc:resolver_libs",
+        ],
         "//conditions:default": [],
     }),
     cgo = True,
-    clinkopts = select({
-        # NB: On Ubuntu, res_nsearch is found in the resolv_wrapper library,
-        # found in the libresolv-wrapper package.
-        "//build/toolchains:is_dev_linux": ["-ldl -lresolv -lresolv_wrapper"],
-        "@io_bazel_rules_go//go/platform:linux": ["-ldl -lresolv"],
-        "//conditions:default": [],
-    }),
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl",
     visibility = ["//visibility:public"],
     deps = select({

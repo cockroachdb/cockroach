@@ -757,8 +757,15 @@ CREATE TABLE l (
 statement ok
 INSERT INTO l VALUES (1, 1), (6, 6)
 
+
+statement ok
+ALTER TABLE l SET (schema_locked=false)
+
 statement ok
 TRUNCATE l
+
+statement ok
+ALTER TABLE l RESET (schema_locked)
 
 query II rowsort
 SELECT * FROM l@a_b_gt_5 WHERE b > 5

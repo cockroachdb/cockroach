@@ -416,6 +416,7 @@ func TestStatusAPIStatements(t *testing.T) {
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
@@ -464,11 +465,6 @@ func TestStatusAPIStatements(t *testing.T) {
 		// See if the statements returned are what we executed.
 		var statementsInResponse []string
 		for _, respStatement := range resp.Statements {
-			if respStatement.Stats.FailureCount > 0 {
-				// We ignore failed statements here as the INSERT statement can fail and
-				// be automatically retried, confusing the test success check.
-				continue
-			}
 			if respStatement.Key.KeyData.App != "test" {
 				continue
 			}
@@ -540,7 +536,8 @@ func TestStatusAPICombinedStatementsTotalLatency(t *testing.T) {
 	sqlStatsKnobs.SynchronousSQLStats = true
 	// Start the cluster.
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Insecure: true,
+		DefaultDRPCOption: base.TestDRPCDisabled,
+		Insecure:          true,
 		Knobs: base.TestingKnobs{
 			SQLStatsKnobs: sqlStatsKnobs,
 		},
@@ -702,6 +699,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
@@ -807,14 +805,7 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 		// statement statistics received from the server response.
 		actualResponseStatsMap := make(map[string]serverpb.StatementsResponse_CollectedStatementStatistics)
 		for _, respStatement := range resp.Statements {
-			// Skip failed statements: The test app may encounter transient 40001
-			// errors that are automatically retried. Thus, we only consider
-			// statements that were that were successfully executed by the test app
-			// to avoid counting such failures. If a statement that we expect to be
-			// successful is not found in the response, the test will fail later.
-			if respStatement.Key.KeyData.App == testAppName && respStatement.Stats.FailureCount == 0 {
-				actualResponseStatsMap[respStatement.Key.KeyData.Query] = respStatement
-			}
+			actualResponseStatsMap[respStatement.Key.KeyData.Query] = respStatement
 		}
 
 		for respQuery, expectedData := range expectedStatementStatsMap {
@@ -877,6 +868,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
@@ -927,11 +919,6 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		var statementsInResponse []string
 		expectedTxnFingerprints := map[appstatspb.TransactionFingerprintID]struct{}{}
 		for _, respStatement := range resp.Statements {
-			if respStatement.Stats.FailureCount > 0 {
-				// We ignore failed statements here as the INSERT statement can fail and
-				// be automatically retried, confusing the test success check.
-				continue
-			}
 			if respStatement.Key.KeyData.App != "test" {
 				// CombinedStatementStats should filter out internal queries.
 				if strings.HasPrefix(respStatement.Key.KeyData.Query, catconstants.InternalAppNamePrefix) {
@@ -1053,6 +1040,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
@@ -1655,7 +1643,9 @@ func TestDrainSqlStats_partialOutage(t *testing.T) {
 func TestDrainSqlStatsPermissionDenied(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultDRPCOption: base.TestDRPCDisabled,
+	})
 	ctx := context.Background()
 	nonRootUser := apiconstants.TestingUserNameNoAdmin()
 	sqlutils.MakeSQLRunner(ts.SQLConn(t)).Exec(t, fmt.Sprintf("CREATE USER IF NOT EXISTS %s", nonRootUser))

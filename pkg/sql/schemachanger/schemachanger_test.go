@@ -1158,3 +1158,100 @@ CREATE TABLE other_schema.t1(n int REFERENCES complex_drop_schema.t1(n));
 		grp.Wait(),
 		`cannot create "complex_drop_schema.sc1" because the target database or schema does not exist`)
 }
+
+func testApproxMaxSchemaObjectsImpl(t *testing.T, useDeclarative bool) {
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "slow test, requires polling to wait for auto stats job")
+	skip.UnderShort(t, "slow test, requires polling to wait for auto stats job")
+
+	ctx := context.Background()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.min_stale_rows = 1")
+
+	// Configure the declarative schema changer mode.
+	if useDeclarative {
+		tdb.Exec(t, `SET sql.defaults.use_declarative_schema_changer = 'on'`)
+		tdb.Exec(t, `SET use_declarative_schema_changer = 'on'`)
+	} else {
+		tdb.Exec(t, `SET sql.defaults.use_declarative_schema_changer = 'off'`)
+		tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+	}
+
+	var maxObjects int
+	updateMaxObjects := func() {
+		// Manually refresh stats.
+		tdb.Exec(t, "ANALYZE system.public.descriptor")
+
+		// Get the current count of descriptors to set a realistic limit.
+		var currentCount int
+		tdb.QueryRow(t, `SELECT count(*) FROM system.descriptor`).Scan(&currentCount)
+
+		// Set the limit to be slightly more than current count.
+		maxObjects = currentCount + 1
+		tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING sql.schema.approx_max_object_count = %d`, maxObjects))
+	}
+	updateMaxObjects()
+
+	// Test that different object types are subject to the limit.
+	objectTypes := []string{"table", "database", "schema", "type", "function"}
+	for _, objectType := range objectTypes {
+		t.Run(objectType, func(t *testing.T) {
+			// Increase the limit before each subtest to avoid interference.
+			updateMaxObjects()
+
+			objNum := 0
+			testutils.SucceedsWithin(t, func() error {
+				var createStmt string
+				switch objectType {
+				case "table":
+					createStmt = fmt.Sprintf(`CREATE TABLE t%d (id INT PRIMARY KEY)`, objNum)
+				case "database":
+					createStmt = fmt.Sprintf(`CREATE DATABASE db%d`, objNum)
+				case "schema":
+					createStmt = fmt.Sprintf(`CREATE SCHEMA sc%d`, objNum)
+				case "type":
+					createStmt = fmt.Sprintf(`CREATE TYPE enum%d AS ENUM ('a', 'b', 'c')`, objNum)
+				case "function":
+					createStmt = fmt.Sprintf(`CREATE FUNCTION f%d() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`, objNum)
+				}
+
+				_, err := sqlDB.Exec(createStmt)
+				if err != nil {
+					// Check if we got the expected error and message.
+					if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+						if string(pqErr.Code) == pgcode.ConfigurationLimitExceeded.String() {
+							if testutils.IsError(err, "would exceed approximate maximum") {
+								return nil
+							}
+						}
+					}
+					// Some other error occurred.
+					return err
+				}
+				objNum++
+
+				// Haven't hit the limit yet, keep trying.
+				return errors.Errorf("created %d %ss without hitting limit (max=%d)", objNum, objectType, maxObjects)
+			}, 5*time.Minute)
+		})
+	}
+}
+
+// TestApproxMaxSchemaObjects tests that the approximate max schema objects
+// guardrail works correctly with the declarative schema changer.
+func TestApproxMaxSchemaObjectsDeclarative(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testApproxMaxSchemaObjectsImpl(t, true)
+}
+
+// TestApproxMaxSchemaObjects tests that the approximate max schema objects
+// guardrail works correctly with the legacy schema changer.
+func TestApproxMaxSchemaObjectsLegacy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testApproxMaxSchemaObjectsImpl(t, false)
+}

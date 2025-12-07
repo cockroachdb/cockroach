@@ -307,7 +307,6 @@ test           public       t            table        testuser  CHANGEFEED      
 test           public       t            table        testuser  CREATE             true
 test           public       t            table        testuser  DROP               true
 test           public       t            table        testuser  INSERT             true
-test           public       t            table        testuser  INSPECT            true
 test           public       t            table        testuser  REPLICATIONDEST    true
 test           public       t            table        testuser  REPLICATIONSOURCE  true
 test           public       t            table        testuser  SELECT             true

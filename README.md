@@ -28,12 +28,8 @@ minimal latency disruption and no manual intervention; supports
 **strongly-consistent** ACID transactions; and provides a familiar
 **SQL** API for structuring, manipulating, and querying data.
 
-For more details, see our [FAQ](https://cockroachlabs.com/docs/stable/frequently-asked-questions.html) or [architecture document](
+For more details, see our [product overview](https://www.cockroachlabs.com/product/overview/), [FAQ](https://cockroachlabs.com/docs/stable/frequently-asked-questions.html) or [architecture document](
 https://www.cockroachlabs.com/docs/stable/architecture/overview.html).
-
-<p align="center">
-  <a href='https://www.youtube.com/watch?v=VgXiMcbGwzQ'> <img src='docs/media/explainer-video-preview.png' width='70%'> </a>
-</p>
 
 ## Docs
 
@@ -96,7 +92,7 @@ doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
 
 ## Licensing
 
-All versions released after November 18, 2024, including patch fixes for prior versions 23.1 onward, are published under the [CockroachDB Software License (CSL)](./LICENSE). Source code in a given file is licensed under the CSL and the copyright belongs to The Cockroach Authors unless otherwise noted in the file or in a LICENSE or README file located in the same or parent directory of the file.
+All versions released on or after November 18, 2024 (specifically, major version series v24.3 and later, and patch fixes for v23.1.29+, v23.2.16+, v24.1.7+, and v24.2.5+) are published under the [CockroachDB Software License (CSL)](./LICENSE). Source code in a given file is licensed under the CSL and the copyright belongs to The Cockroach Authors unless otherwise noted in the file or in a LICENSE or README file located in the same or a parent directory of the file.
 
 ## Comparison with Other Databases
 

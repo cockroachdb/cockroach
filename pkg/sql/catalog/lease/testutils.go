@@ -61,9 +61,6 @@ type ManagerTestingKnobs struct {
 	// To disable the deletion of orphaned leases at server startup.
 	DisableDeleteOrphanedLeases bool
 
-	// DisableRangeFeedCheckpoint is used to disable rangefeed checkpoints.
-	DisableRangeFeedCheckpoint bool
-
 	// RangeFeedReset channel is closed to indicate that the range feed
 	// has been reset.
 	RangeFeedResetChannel chan struct{}
@@ -88,7 +85,7 @@ func (m *Manager) TestingAcquireAndAssertMinVersion(
 	if err := ensureVersion(ctx, id, minVersion, m); err != nil {
 		return nil, err
 	}
-	desc, _, err := t.findForTimestamp(ctx, timestamp)
+	desc, _, err := t.findForTimestamp(ctx, TimestampToReadTimestamp(timestamp))
 	if err != nil {
 		return nil, err
 	}

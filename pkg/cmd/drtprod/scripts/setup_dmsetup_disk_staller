@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Sets up datadog for the drt clusters.
+# Sets up disk staller support (dmsetup) for /mnt/data1.
 # NOTE - This uses CLUSTER environment variable, if not set the script fails
 
 if [ -z "${CLUSTER}" ]; then

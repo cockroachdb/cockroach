@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEncDatum(t *testing.T) {
@@ -42,14 +44,14 @@ func TestEncDatum(t *testing.T) {
 		t.Errorf("empty rowenc.EncDatum has an encoding")
 	}
 
-	x := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(5))
+	x := rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(5))
 
 	check := func(x rowenc.EncDatum) {
 		if x.IsUnset() {
-			t.Errorf("unset after DatumToEncDatum()")
+			t.Errorf("unset after DatumToEncDatumUnsafe()")
 		}
 		if x.IsNull() {
-			t.Errorf("null after DatumToEncDatum()")
+			t.Errorf("null after DatumToEncDatumUnsafe()")
 		}
 		if val, err := x.GetInt(); err != nil {
 			t.Fatal(err)
@@ -123,7 +125,7 @@ func TestEncDatumNull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Verify DNull is null.
-	n := rowenc.DatumToEncDatum(types.Int, tree.DNull)
+	n := rowenc.DatumToEncDatumUnsafe(types.Int, tree.DNull)
 	if !n.IsNull() {
 		t.Error("DNull not null")
 	}
@@ -150,7 +152,6 @@ func TestEncDatumNull(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 // checkEncDatumCmp encodes the given values using the given encodings,
@@ -239,8 +240,8 @@ func TestEncDatumCompare(t *testing.T) {
 				break
 			}
 		}
-		v1 := rowenc.DatumToEncDatum(typ, d1)
-		v2 := rowenc.DatumToEncDatum(typ, d2)
+		v1 := rowenc.DatumToEncDatumUnsafe(typ, d1)
+		v2 := rowenc.DatumToEncDatumUnsafe(typ, d2)
 
 		if val, err := v1.Compare(context.Background(), typ, a, evalCtx, &v2); err != nil {
 			t.Fatal(err)
@@ -341,7 +342,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 
 	v := [5]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	asc := encoding.Ascending
@@ -495,7 +496,7 @@ func TestEncDatumRowAlloc(t *testing.T) {
 				in[i] = make(rowenc.EncDatumRow, cols)
 				for j := 0; j < cols; j++ {
 					datum := randgen.RandDatum(rng, colTypes[j], true /* nullOk */)
-					in[i][j] = rowenc.DatumToEncDatum(colTypes[j], datum)
+					in[i][j] = rowenc.DatumToEncDatumUnsafe(colTypes[j], datum)
 				}
 			}
 			var alloc rowenc.EncDatumRowAlloc
@@ -614,7 +615,7 @@ func TestEncDatumSize(t *testing.T) {
 			expectedSize: rowenc.EncDatumOverhead + 3, // 12345 is encoded with length 3 byte array
 		},
 		{
-			encDatum:     rowenc.DatumToEncDatum(types.Int, tree.NewDInt(123)),
+			encDatum:     rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(123)),
 			expectedSize: rowenc.EncDatumOverhead + DIntSize,
 		},
 		{
@@ -634,7 +635,7 @@ func TestEncDatumSize(t *testing.T) {
 			expectedSize: rowenc.EncDatumOverhead + 9, // 123.0 is encoded with length 9 byte array
 		},
 		{
-			encDatum:     rowenc.DatumToEncDatum(types.Float, tree.NewDFloat(123)),
+			encDatum:     rowenc.DatumToEncDatumUnsafe(types.Float, tree.NewDFloat(123)),
 			expectedSize: rowenc.EncDatumOverhead + DFloatSize,
 		},
 		{
@@ -654,7 +655,7 @@ func TestEncDatumSize(t *testing.T) {
 			expectedSize: rowenc.EncDatumOverhead + 4, // 123.0 is encoded with length 4 byte array
 		},
 		{
-			encDatum:     rowenc.DatumToEncDatum(types.Decimal, dec12300),
+			encDatum:     rowenc.DatumToEncDatumUnsafe(types.Decimal, dec12300),
 			expectedSize: rowenc.EncDatumOverhead + decimalSize,
 		},
 		{
@@ -674,7 +675,7 @@ func TestEncDatumSize(t *testing.T) {
 			expectedSize: rowenc.EncDatumOverhead + 9, // "123⌘" is encoded with length 9 byte array
 		},
 		{
-			encDatum:     rowenc.DatumToEncDatum(types.String, tree.NewDString("12")),
+			encDatum:     rowenc.DatumToEncDatumUnsafe(types.String, tree.NewDString("12")),
 			expectedSize: rowenc.EncDatumOverhead + DStringSize + 2,
 		},
 		{
@@ -766,6 +767,41 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 		}
 		if memAcc.Used() != c.newMemUsage {
 			t.Errorf("on %v\taccounted for %d, expected %d", c.encDatum, memAcc.Used(), c.newMemUsage)
+		}
+	}
+}
+
+func TestDecodesToCanonical(t *testing.T) {
+	rng, _ := randutil.NewTestRand()
+	for i := 0; i < 20; i++ {
+		typ := randgen.RandType(rng)
+		datum := randgen.RandDatum(rng, typ, false)
+
+		buf, err := valueside.Encode(nil, valueside.NoColumnID, datum)
+		require.NoError(t, err)
+		decoded, _, err := valueside.Decode(&tree.DatumAlloc{}, typ, buf)
+
+		valueType := decoded.ResolvedType()
+		require.NoError(t, err)
+		require.True(t, valueType.Identical(typ.Canonical()), "value type %+v not identical to canonical type %+v", valueType, typ)
+		require.Equal(t, decoded.ResolvedType().Oid(), typ.Canonical().Oid())
+
+		direction := encoding.Ascending
+		if rng.Int()%2 == 0 {
+			direction = encoding.Descending
+		}
+
+		if colinfo.ColumnTypeIsIndexable(typ) {
+			buf, err = keyside.Encode(nil, datum, direction)
+			require.NoError(t, err)
+
+			decodedKey, _, err := keyside.Decode(&tree.DatumAlloc{}, typ, buf, direction)
+			require.NoError(t, err)
+
+			keyType := decodedKey.ResolvedType()
+			require.NoError(t, err)
+			require.True(t, keyType.Identical(typ.Canonical()), "key type %+v not identical to canonical type %+v", keyType, typ)
+			require.Equal(t, decodedKey.ResolvedType().Oid(), typ.Canonical().Oid())
 		}
 	}
 }

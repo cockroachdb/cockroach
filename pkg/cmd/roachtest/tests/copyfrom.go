@@ -148,8 +148,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 	// Enable the verbose logging on relevant files to have better understanding
 	// in case the test fails.
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=copy_from=2,insert=2")
-	// roachtest frequently runs on overloaded instances and can timeout as a result
-	clusterSettings := install.MakeClusterSettings(install.ClusterSettingsOption{"kv.closed_timestamp.target_duration": "60s"})
+	clusterSettings := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), startOpts, clusterSettings, c.All())
 	initTest(ctx, t, c, sf)
 	db, err := c.ConnE(ctx, t.L(), 1)
@@ -158,13 +157,22 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 		"CREATE USER importer WITH PASSWORD '123'",
 		fmt.Sprintf("ALTER ROLE importer SET copy_from_atomic_enabled = %t", atomic),
 	}
+	if atomic {
+		// Disable auto stats collection so that it doesn't contend with the
+		// long-running atomic COPY txn.
+		stmts = append(stmts, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
+	}
 	for _, stmt := range stmts {
 		_, err = db.ExecContext(ctx, stmt)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{Auth: install.AuthUserPassword})
+	// psql doesn't support the CRDB specific "allow_unsafe_internals" parameter.
+	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{
+		Auth:                    install.AuthUserPassword,
+		DisallowUnsafeInternals: true,
+	})
 	require.NoError(t, err)
 	m := c.NewDeprecatedMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {

@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -122,7 +123,8 @@ type QueryLevelStats struct {
 	LatchWaitTime                      time.Duration
 	ContentionEvents                   []kvpb.ContentionEvent
 	RUEstimate                         float64
-	CPUTime                            time.Duration
+	SQLCPUTime                         time.Duration
+	AdmissionWaitTime                  time.Duration
 	// SQLInstanceIDs is an ordered list of SQL instances that were involved in
 	// query processing.
 	SQLInstanceIDs []int32
@@ -187,7 +189,8 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.LatchWaitTime += other.LatchWaitTime
 	s.ContentionEvents = append(s.ContentionEvents, other.ContentionEvents...)
 	s.RUEstimate += other.RUEstimate
-	s.CPUTime += other.CPUTime
+	s.SQLCPUTime += other.SQLCPUTime
+	s.AdmissionWaitTime += other.AdmissionWaitTime
 	s.SQLInstanceIDs = util.CombineUnique(s.SQLInstanceIDs, other.SQLInstanceIDs)
 	s.KVNodeIDs = util.CombineUnique(s.KVNodeIDs, other.KVNodeIDs)
 	s.Regions = util.CombineUnique(s.Regions, other.Regions)
@@ -287,7 +290,7 @@ func (a *TraceAnalyzer) ProcessStats() {
 		s.LockWaitTime += stats.KV.LockWaitTime.Value()
 		s.LatchWaitTime += stats.KV.LatchWaitTime.Value()
 		s.RUEstimate += float64(stats.Exec.ConsumedRU.Value())
-		s.CPUTime += stats.Exec.CPUTime.Value()
+		s.SQLCPUTime += stats.Exec.CPUTime.Value()
 	}
 
 	// Process streamStats.
@@ -378,23 +381,35 @@ func (a *TraceAnalyzer) GetQueryLevelStats() QueryLevelStats {
 	return a.queryLevelStats
 }
 
-// getAllContentionEvents returns all contention events that are found in the
-// given trace.
-func getAllContentionEvents(trace []tracingpb.RecordedSpan) []kvpb.ContentionEvent {
-	var contentionEvents []kvpb.ContentionEvent
-	var ev kvpb.ContentionEvent
+func getKVAndACStats(
+	trace []tracingpb.RecordedSpan,
+) (contentionEvents []kvpb.ContentionEvent, acWaitTime time.Duration) {
 	for i := range trace {
 		trace[i].Structured(func(any *pbtypes.Any, _ time.Time) {
-			if !pbtypes.Is(any, &ev) {
+			if pbtypes.Is(any, (*kvpb.ContentionEvent)(nil)) {
+				var ce kvpb.ContentionEvent
+				if err := pbtypes.UnmarshalAny(any, &ce); err == nil {
+					contentionEvents = append(contentionEvents, ce)
+				}
 				return
 			}
-			if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
+			if pbtypes.Is(any, (*admissionpb.AdmissionWorkQueueStats)(nil)) {
+				var stats admissionpb.AdmissionWorkQueueStats
+				if err := pbtypes.UnmarshalAny(any, &stats); err == nil {
+					acWaitTime += stats.WaitDurationNanos
+				}
 				return
 			}
-			contentionEvents = append(contentionEvents, ev)
+			if pbtypes.Is(any, (*kvpb.QuorumReplicationFlowAdmissionEvent)(nil)) {
+				var event kvpb.QuorumReplicationFlowAdmissionEvent
+				if err := pbtypes.UnmarshalAny(any, &event); err == nil {
+					acWaitTime += event.WaitDurationNanos
+				}
+				return
+			}
 		})
 	}
-	return contentionEvents
+	return contentionEvents, acWaitTime
 }
 
 // GetQueryLevelStats returns all the top-level stats in a QueryLevelStats
@@ -416,6 +431,8 @@ func GetQueryLevelStats(
 		analyzer.ProcessStats()
 		queryLevelStats.Accumulate(analyzer.GetQueryLevelStats())
 	}
-	queryLevelStats.ContentionEvents = getAllContentionEvents(trace)
+	contentionEvents, acWaitTime := getKVAndACStats(trace)
+	queryLevelStats.AdmissionWaitTime = acWaitTime
+	queryLevelStats.ContentionEvents = contentionEvents
 	return queryLevelStats, errs
 }

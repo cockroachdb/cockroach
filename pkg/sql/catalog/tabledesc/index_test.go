@@ -51,9 +51,6 @@ func TestIndexInterface(t *testing.T) {
 	}
 	runner := sqlutils.MakeSQLRunner(conn)
 
-	// Enable vector indexes.
-	runner.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
-
 	runner.Exec(t, `
 		CREATE TABLE d.t (
 			c1 INT,

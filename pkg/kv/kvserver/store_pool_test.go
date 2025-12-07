@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -255,15 +255,15 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	// Create replica.
 	rg := roachpb.RangeDescriptor{
 		RangeID:       1,
-		StartKey:      roachpb.RKey([]byte("a")),
-		EndKey:        roachpb.RKey([]byte("b")),
+		StartKey:      roachpb.RKey("a"),
+		EndKey:        roachpb.RKey("b"),
 		NextReplicaID: 1,
 	}
 	rg.AddReplica(1, 1, roachpb.VOTER_FULL)
 
 	const replicaID = 1
-	require.NoError(t,
-		stateloader.Make(rg.RangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+	require.NoError(t, kvstorage.MakeStateLoader(rg.RangeID).SetRaftReplicaID(
+		ctx, store.StateEngine(), replicaID))
 	replica, err := loadInitializedReplicaForTesting(ctx, store, &rg, replicaID)
 	if err != nil {
 		t.Fatalf("make replica error : %+v", err)

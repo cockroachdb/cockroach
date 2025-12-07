@@ -90,11 +90,22 @@ func newAggStats() *aggStats {
 func printLogWriterMetrics(t T, prefix string, m storage.Metrics) {
 	var b strings.Builder
 	_, _ = fmt.Fprintf(&b, "%s logWriter: rate(peak): %s(%s) len(pending,sync): (%.2f,%.2f)",
-		prefix, humanize.IBytes(uint64(m.LogWriter.WriteThroughput.Rate())),
-		humanize.IBytes(uint64(m.LogWriter.WriteThroughput.PeakRate())),
-		m.LogWriter.PendingBufferLen.Mean(), m.LogWriter.SyncQueueLen.Mean())
-	qs := calculateQuantiles(m.LogWriter.FsyncLatency, 0.5, 0.9, 0.99)
-	_, _ = fmt.Fprintf(&b, " sync: p50,p90,p99: %.2fms,%.2fms,%.2fms", qs[0]/1e6, qs[1]/1e6, qs[2]/1e6)
+		prefix, humanize.IBytes(uint64(m.Metrics.WALMetrics.WriteThroughput.Rate())),
+		humanize.IBytes(uint64(m.Metrics.WALMetrics.WriteThroughput.PeakRate())),
+		m.Metrics.WALMetrics.PendingBufferLen.Mean(), m.Metrics.WALMetrics.SyncQueueLen.Mean())
+
+	// Log primary file operation latency
+	qsPrimary := calculateQuantiles(m.Metrics.WALMetrics.PrimaryFileOpLatency, 0.5, 0.9, 0.99)
+	_, _ = fmt.Fprintf(&b, " primary: p50,p90,p99: %.2fms,%.2fms,%.2fms",
+		qsPrimary[0]/1e6, qsPrimary[1]/1e6, qsPrimary[2]/1e6)
+
+	// Log secondary file operation latency if available (WAL failover scenarios)
+	if m.Metrics.WALMetrics.SecondaryFileOpLatency != nil {
+		qsSecondary := calculateQuantiles(m.Metrics.WALMetrics.SecondaryFileOpLatency, 0.5, 0.9, 0.99)
+		_, _ = fmt.Fprintf(&b, " secondary: p50,p90,p99: %.2fms,%.2fms,%.2fms",
+			qsSecondary[0]/1e6, qsSecondary[1]/1e6, qsSecondary[2]/1e6)
+	}
+
 	logf(t, "%s", &b)
 }
 
@@ -176,8 +187,8 @@ func writeAmp(m storage.Metrics, payloadBytes int64) WriteAmpStats {
 	var was WriteAmpStats
 	was.WALBytesWritten += int64(m.WAL.BytesWritten)
 	for i := 0; i < len(m.Levels); i++ {
-		flushed := m.Levels[i].TableBytesFlushed + m.Levels[i].BlobBytesFlushed // only populated for L0
-		compacted := m.Levels[i].TableBytesCompacted + m.Levels[i].BlobBytesCompacted
+		flushed := m.Levels[i].TablesFlushed.Bytes + m.Levels[i].BlobBytesFlushed // only populated for L0
+		compacted := m.Levels[i].TablesCompacted.Bytes + m.Levels[i].BlobBytesCompacted
 		was.FlushBytesWritten += int64(flushed)
 		was.CompactionBytesWritten += int64(flushed + compacted)
 	}

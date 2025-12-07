@@ -101,7 +101,8 @@ func descExists(sqlDB *gosql.DB, exists bool, id descpb.ID) error {
 func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
+
+	var params base.TestServerArgs
 	ctx, cancel := context.WithCancel(context.Background())
 	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
 		RunBeforeResume: func(jobID jobspb.JobID) error {
@@ -262,7 +263,9 @@ CREATE DATABASE t;
 func TestDropDatabaseDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
+
+	var params base.TestServerArgs
+	params.DefaultTestTenant = base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156127)
 	// Speed up mvcc queue scan.
 	params.ScanMaxIdleTime = time.Millisecond
 
@@ -445,7 +448,7 @@ func TestDropIndex(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const chunkSize = 200
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
@@ -560,7 +563,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	const chunkSize = 200
 	const numRows = 2*chunkSize + 1
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{BackfillChunkSize: chunkSize},
 	}
@@ -625,7 +628,7 @@ func TestDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	ctx, cancel := context.WithCancel(context.Background())
 	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
 		RunBeforeResume: func(jobID jobspb.JobID) error {
@@ -728,7 +731,8 @@ func TestDropTable(t *testing.T) {
 func TestDropTableDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
+
+	var params base.TestServerArgs
 	// Speed up mvcc queue scan.
 	params.ScanMaxIdleTime = time.Millisecond
 
@@ -889,8 +893,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.ScanMaxIdleTime = time.Millisecond
 	srv, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
@@ -969,8 +972,8 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 func TestDropTableInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
@@ -1009,7 +1012,8 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 func TestDropAndCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
+
+	var params base.TestServerArgs
 	params.UseDatabase = "test"
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -1053,7 +1057,7 @@ func TestCommandsWhileTableBeingDropped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	// Block schema changers so that the table we're about to DROP is not
 	// actually dropped; it will be left in the "deleted" state.
 	params.Knobs = base.TestingKnobs{
@@ -1248,8 +1252,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 
 	// Start a test server and connect to it with notice handler (so we can get and check notices from running queries).
 	ctx := context.Background()
-	params, _ := createTestServerParamsAllowTenants()
-	srv := serverutils.StartServerOnly(t, params)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 
 	s := srv.ApplicationLayer()
@@ -1332,8 +1335,8 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 func TestDropDatabaseWithForeignKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
-	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
+
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 
 	s := srv.ApplicationLayer()
@@ -1392,9 +1395,8 @@ ORDER BY
 func TestDropPhysicalTableGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	_, err := sqlDB.Exec(`CREATE DATABASE test;`)
 	require.NoError(t, err)
@@ -1550,6 +1552,58 @@ func TestDropLargeDatabaseWithDeclarativeSchemaChanger(t *testing.T) {
 			GraphDepth:         2,
 		},
 		true)
+}
+
+// TestTruncateLarge truncates a large number of tables in a single transaction.
+func TestTruncateLarge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testTruncateLarge(t, true /* batchLimitSet */)
+}
+
+// TestTruncateLargeErr verifies that an error is returned if the batch limit is
+// effectively not set.
+func TestTruncateLargeErr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testTruncateLarge(t, false /* batchLimitSet */)
+}
+
+func testTruncateLarge(t *testing.T, batchLimitSet bool) {
+	skip.UnderDuress(t, "truncating a large number of tables")
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: 1 << 30, /* 1 GiB */
+	})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	createCommand := strings.Builder{}
+	truncateCommand := strings.Builder{}
+	systemDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	systemDB.Exec(t, "SET CLUSTER SETTING kv.raft.command.max_size='4.1MiB'")
+	if batchLimitSet {
+		sqlDB.Exec(t, "SET CLUSTER SETTING sql.schema_changer.batch_flush_threshold_size='1.8MiB'")
+	}
+	// Generate the truncate and create table commands.
+	const numTables = 340
+	truncateCommand.WriteString("TRUNCATE TABLE ")
+	for i := range numTables {
+		createCommand.WriteString(fmt.Sprintf("CREATE TABLE t%d (a INT PRIMARY KEY, j INT, k INT, INDEX (j), INDEX (k), UNIQUE (j, k));\n", i))
+		truncateCommand.WriteString(fmt.Sprintf("t%d", i))
+		if i != numTables-1 {
+			truncateCommand.WriteString(", ")
+		}
+	}
+	// Execute the create commands first.
+	sqlDB.Exec(t, createCommand.String())
+
+	// The default limit is larger than our reduced raft command size, so if the
+	// limit is not modified, the truncate command will fail.
+	if batchLimitSet {
+		sqlDB.Exec(t, truncateCommand.String())
+	} else {
+		sqlDB.ExpectErr(t, "command is too large", truncateCommand.String())
+	}
 }
 
 func BenchmarkDropLargeDatabaseWithGenerateTestObjects(b *testing.B) {

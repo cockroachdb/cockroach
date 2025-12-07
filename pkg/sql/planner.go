@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -33,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
@@ -45,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -220,13 +224,15 @@ type planner struct {
 
 	instrumentation instrumentationHelper
 
+	statsCollector *sslocal.StatsCollector
+
 	// Contexts for different stages of planning and execution.
 	semaCtx         tree.SemaContext
 	extendedEvalCtx extendedEvalContext
 
 	// sessionDataMutatorIterator is used to mutate the session variables. Read
 	// access to them is provided through evalCtx.
-	sessionDataMutatorIterator *sessionDataMutatorIterator
+	sessionDataMutatorIterator *sessionmutator.SessionDataMutatorIterator
 
 	// execCfg is used to access the server configuration for the Executor.
 	execCfg *ExecutorConfig
@@ -234,6 +240,15 @@ type planner struct {
 	preparedStatements preparedStatementsAccessor
 
 	sqlCursors sqlCursors
+
+	// routineMetadataForwarder, if set, is used to propagate ProducerMetadata
+	// out of the routine execution.
+	// TODO(yuzefovich): this is rather ugly, but the routines are expressions,
+	// so we don't have easy access to the DistSQL infrastructure. Additionally,
+	// we don't want to mutate the eval.Context for this. It seems fine given
+	// that we only have local plans with routines and there should be no
+	// concurrency.
+	routineMetadataForwarder metadataForwarder
 
 	storedProcTxnState storedProcTxnStateAccessor
 
@@ -308,6 +323,10 @@ type planner struct {
 	// skipUnsafeInternalsCheck is used to skip the check that the
 	// planner is not used for unsafe internal statements.
 	skipUnsafeInternalsCheck bool
+
+	// usingHintInjection is true if we're passing the rewritten AST with injected
+	// hints into optbuild. It is only set during planning.
+	usingHintInjection bool
 }
 
 // hasFlowForPausablePortal returns true if the planner is for re-executing a
@@ -395,6 +414,8 @@ func newInternalPlanner(
 	// asking the caller for one is hard to explain. What we need is better and
 	// separate interfaces for planning and running plans, which could take
 	// suitable contexts.
+	// TODO(yuzefovich): this comment is outdated - we no longer store context
+	// within EvalCtx. Re-evaluate the situation.
 	ctx := logtags.AddTag(context.Background(), string(opName), "")
 
 	sd = sd.Clone()
@@ -432,17 +453,14 @@ func newInternalPlanner(
 	p := &planner{execCfg: execCfg, datumAlloc: &tree.DatumAlloc{}}
 	p.resetPlanner(ctx, txn, sd, plannerMon, nil /* sessionMon */)
 
-	smi := &sessionDataMutatorIterator{
-		sds: sds,
-		sessionDataMutatorBase: sessionDataMutatorBase{
-			defaults: SessionDefaults(map[string]string{
-				"application_name": "crdb-internal",
-				"database":         sd.SessionData.Database,
-			}),
-			settings: execCfg.Settings,
-		},
-		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
-	}
+	smi := sessionmutator.MakeSessionDataMutatorIterator(
+		sds,
+		sessionmutator.SessionDefaults(map[string]string{
+			"application_name": "crdb-internal",
+			"database":         sd.SessionData.Database,
+		}),
+		execCfg.Settings,
+	)
 
 	p.extendedEvalCtx = internalExtendedEvalCtx(ctx, sds, params.collection, txn, ts, ts, execCfg)
 	p.extendedEvalCtx.Planner = p
@@ -460,6 +478,9 @@ func newInternalPlanner(
 	p.extendedEvalCtx.NodeID = execCfg.NodeInfo.NodeID
 	p.extendedEvalCtx.Locality = execCfg.Locality
 	p.extendedEvalCtx.DescIDGenerator = execCfg.DescIDGenerator
+	if execCfg.TestingKnobs.UseTransactionalDescIDGenerator && txn != nil {
+		p.extendedEvalCtx.DescIDGenerator = descidgen.NewTransactionalGenerator(execCfg.Settings, execCfg.Codec, txn)
+	}
 
 	p.sessionDataMutatorIterator = smi
 
@@ -480,6 +501,7 @@ func newInternalPlanner(
 	p.schemaResolver.authAccessor = p
 	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors())
 	p.extendedEvalCtx.CatalogBuiltins = &p.evalCatalogBuiltins
+	p.statsCollector = &sslocal.StatsCollector{}
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create
@@ -554,6 +576,7 @@ func internalExtendedEvalCtx(
 			IndexUsageStatsController:      indexUsageStatsController,
 			ConsistencyChecker:             execCfg.ConsistencyChecker,
 			StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
+			TxnDiagnosticsRequestInserter:  execCfg.TxnDiagnosticsRecorder.InsertTxnRequest,
 			RangeStatsFetcher:              execCfg.RangeStatsFetcher,
 		},
 		Tracing:           &SessionTracing{},
@@ -611,9 +634,9 @@ func (p *planner) ExprEvaluator(op string) exprutil.Evaluator {
 // inside the session data.
 func (p *planner) GetOrInitSequenceCache() sessiondatapb.SequenceCache {
 	if p.SessionData().SequenceCache == nil {
-		p.sessionDataMutatorIterator.applyOnEachMutator(
-			func(m sessionDataMutator) {
-				m.initSequenceCache()
+		p.sessionDataMutatorIterator.ApplyOnEachMutator(
+			func(m sessionmutator.SessionDataMutator) {
+				m.InitSequenceCache()
 			},
 		)
 	}
@@ -658,6 +681,19 @@ func (p *planner) InternalSQLTxn() descs.Txn {
 		p.internalSQLTxn.init(p.txn, ie)
 	}
 	return &p.internalSQLTxn
+}
+
+// DisableUnsafeInternalCheck sets the skipUnsafeInternalsCheck property
+// to true, and returns a function which reverses it to false.
+func (p *planner) DisableUnsafeInternalsCheck() func() {
+	if p.skipUnsafeInternalsCheck {
+		return func() {}
+	}
+
+	p.skipUnsafeInternalsCheck = true
+	return func() {
+		p.skipUnsafeInternalsCheck = false
+	}
 }
 
 func (p *planner) regionsProvider() *regions.Provider {
@@ -795,7 +831,7 @@ func (p *planner) SessionData() *sessiondata.SessionData {
 }
 
 // SessionDataMutatorIterator is part of the PlanHookState interface.
-func (p *planner) SessionDataMutatorIterator() *sessionDataMutatorIterator {
+func (p *planner) SessionDataMutatorIterator() *sessionmutator.SessionDataMutatorIterator {
 	return p.sessionDataMutatorIterator
 }
 
@@ -968,9 +1004,12 @@ func (p *planner) resetPlanner(
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID
 	p.pausablePortal = nil
+	p.routineMetadataForwarder = nil
 	p.autoRetryCounter = 0
 	p.autoRetryStmtReason = nil
 	p.autoRetryStmtCounter = 0
+
+	p.usingHintInjection = false
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager.
@@ -1060,8 +1099,23 @@ func (p *planner) ClearTableStatsCache() {
 	}
 }
 
-// mustUseLeafTxn returns true if inner plans must use a leaf transaction.
-func (p *planner) mustUseLeafTxn() bool {
+// ClearStatementHintsCache is part of the eval.Planner interface.
+func (p *planner) ClearStatementHintsCache() {
+	if p.execCfg.StatementHintsCache != nil {
+		p.execCfg.StatementHintsCache.Clear()
+	}
+}
+
+// AwaitStatementHintsCache is part of the eval.Planner interface.
+func (p *planner) AwaitStatementHintsCache(ctx context.Context) {
+	if p.execCfg.StatementHintsCache != nil {
+		p.execCfg.StatementHintsCache.Await(ctx)
+	}
+}
+
+// innerPlansMustUseLeafTxn returns true if inner plans must use a leaf
+// transaction.
+func (p *planner) innerPlansMustUseLeafTxn() bool {
 	return atomic.LoadInt32(&p.atomic.innerPlansMustUseLeafTxn) >= 1
 }
 
@@ -1089,4 +1143,21 @@ func (p *planner) ProcessVectorIndexFixups(
 		return err
 	}
 	return vi.ProcessFixups(ctx)
+}
+
+// InsertStatementHint is part of the eval.Planner interface.
+func (p *planner) InsertStatementHint(
+	ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion,
+) (int64, error) {
+	return hints.InsertHintIntoDB(ctx, p.InternalSQLTxn(), statementFingerprint, hint)
+}
+
+// UsingHintInjection is part of the eval.Planner interface.
+func (p *planner) UsingHintInjection() bool {
+	return p.usingHintInjection
+}
+
+// GetHintIDs is part of the eval.Planner interface.
+func (p *planner) GetHintIDs() []int64 {
+	return p.stmt.HintIDs
 }

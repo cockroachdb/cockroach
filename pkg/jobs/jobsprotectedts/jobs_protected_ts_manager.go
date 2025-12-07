@@ -55,6 +55,9 @@ func setProtectedTSOnJob(details jobspb.Details, u *uuid.UUID) jobspb.Details {
 	case jobspb.SchemaChangeDetails:
 		v.ProtectedTimestampRecord = u
 		return v
+	case jobspb.InspectDetails:
+		v.ProtectedTimestampRecord = u
+		return v
 	default:
 		panic(errors.AssertionFailedf("not supported %T", details))
 	}
@@ -67,6 +70,8 @@ func getProtectedTSOnJob(details jobspb.Details) *uuid.UUID {
 	case jobspb.NewSchemaChangeDetails:
 		return v.ProtectedTimestampRecord
 	case jobspb.SchemaChangeDetails:
+		return v.ProtectedTimestampRecord
+	case jobspb.InspectDetails:
 		return v.ProtectedTimestampRecord
 	default:
 		panic("not supported")

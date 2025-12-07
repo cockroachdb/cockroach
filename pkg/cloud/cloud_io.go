@@ -41,6 +41,8 @@ type HTTPClientConfig struct {
 	// accepts any certificate presented by the server and any host name in that
 	// certificate. In this mode, TLS is susceptible to machine-in-the-middle attacks.
 	InsecureSkipVerify bool
+
+	HttpMiddleware HttpMiddleware
 }
 
 // Timeout is a cluster setting used for cloud storage interactions.
@@ -115,7 +117,7 @@ func MakeHTTPClientForTransport(t http.RoundTripper) (*http.Client, error) {
 // Prefer MakeHTTPClient where possible.
 func MakeTransport(
 	settings *cluster.Settings, metrics *Metrics, config HTTPClientConfig,
-) (*http.Transport, error) {
+) (http.RoundTripper, error) {
 	var tlsConf *tls.Config
 	if config.InsecureSkipVerify {
 		tlsConf = &tls.Config{InsecureSkipVerify: true}
@@ -129,7 +131,6 @@ func MakeTransport(
 		}
 		tlsConf = &tls.Config{RootCAs: roots}
 	}
-
 	t := http.DefaultTransport.(*http.Transport).Clone()
 
 	// Add our custom CA.
@@ -140,7 +141,13 @@ func MakeTransport(
 	if metrics != nil {
 		t.DialContext = metrics.NetMetrics.Wrap(t.DialContext, config.Cloud, config.Bucket, config.Client)
 	}
-	return t, nil
+
+	var roundTripper http.RoundTripper = t
+	if config.HttpMiddleware != nil {
+		roundTripper = config.HttpMiddleware(roundTripper)
+	}
+	roundTripper = maybeAddLogging(roundTripper)
+	return roundTripper, nil
 }
 
 // MaxDelayedRetryAttempts is the number of times the delayedRetry method will
@@ -235,6 +242,7 @@ type ReaderOpenerAt func(ctx context.Context, pos int64) (io.ReadCloser, int64, 
 type ResumingReader struct {
 	Opener       ReaderOpenerAt   // Get additional content
 	Reader       io.ReadCloser    // Currently opened reader
+	ReaderSpan   *tracing.Span    // Span for the current reader, if Reader is non-nil
 	Filename     string           // Used for logging
 	Pos          int64            // How much data was received so far
 	Size         int64            // Total size of the file
@@ -277,6 +285,10 @@ func NewResumingReader(
 
 // Open opens the reader at its current offset.
 func (r *ResumingReader) Open(ctx context.Context) error {
+	if r.Reader != nil {
+		return errors.AssertionFailedf("reader already open")
+	}
+
 	if r.Size > 0 && r.Pos >= r.Size {
 		// Don't try to open a file if the size has been set and the position is
 		// at size. This generally results in an invalid range error for the
@@ -287,10 +299,18 @@ func (r *ResumingReader) Open(ctx context.Context) error {
 
 	return DelayedRetry(ctx, "Open", r.ErrFn, func() error {
 		var readErr error
+
+		ctx, span := tracing.ForkSpan(ctx, "resuming-reader")
 		r.Reader, r.Size, readErr = r.Opener(ctx, r.Pos)
 		if readErr != nil {
+			span.Finish()
 			return errors.Wrapf(readErr, "open %s", r.Filename)
 		}
+
+		// We hold onto the span for the lifetime of the reader because the reader
+		// may issue new HTTP requests after Open returns.
+		r.ReaderSpan = span
+
 		return nil
 	})
 }
@@ -333,10 +353,9 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 			}
 			log.Dev.Errorf(ctx, "Retry IO error: %s", lastErr)
 			lastErr = nil
-			if r.Reader != nil {
-				r.Reader.Close()
-			}
-			r.Reader = nil
+			// Ignore the error from Close(). We are already handling a read error
+			// so we know the handle is in a bad state.
+			_ = r.Close(ctx)
 		}
 	}
 
@@ -349,10 +368,14 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 
 // Close implements io.Closer.
 func (r *ResumingReader) Close(ctx context.Context) error {
-	if r.Reader != nil {
-		return r.Reader.Close()
+	if r.Reader == nil {
+		return nil
 	}
-	return nil
+
+	err := r.Reader.Close()
+	r.ReaderSpan.Finish()
+	r.Reader = nil
+	return err
 }
 
 // CheckHTTPContentRangeHeader parses Content-Range header and ensures that
@@ -448,7 +471,7 @@ func WriteFile(ctx context.Context, dest ExternalStorage, basename string, src i
 	_, err = io.Copy(w, src)
 	if err != nil {
 		cancel()
-		return errors.CombineErrors(w.Close(), err)
+		return errors.CombineErrors(err, w.Close())
 	}
 	return errors.Wrap(w.Close(), "closing object")
 }

@@ -21,12 +21,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/storerebalancer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 // Simulator simulates an entire cluster, and runs the allocator of each store
 // in that cluster.
 type Simulator struct {
 	log.AmbientContext
+	onRecording func(storeID state.StoreID, atDuration time.Duration, rec tracingpb.Recording)
+
 	curr time.Time
 	end  time.Time
 	// interval is the step between ticks for active simulaton components, such
@@ -94,24 +98,34 @@ func NewSimulator(
 	changer := state.NewReplicaChanger()
 	controllers := make(map[state.StoreID]op.Controller)
 
+	var onRecording func(storeID state.StoreID, atDuration time.Duration, rec tracingpb.Recording)
+	if fn := settings.OnRecording; fn != nil {
+		onRecording = func(storeID state.StoreID, atDuration time.Duration, rec tracingpb.Recording) {
+			fn(int64(storeID), atDuration, rec)
+		}
+	}
+
 	s := &Simulator{
 		AmbientContext: log.MakeTestingAmbientCtxWithNewTracer(),
-		curr:           settings.StartTime,
-		end:            settings.StartTime.Add(duration),
-		interval:       settings.TickInterval,
-		generators:     wgs,
-		state:          initialState,
-		changer:        changer,
-		rqs:            rqs,
-		lqs:            lqs,
-		sqs:            sqs,
-		controllers:    controllers,
-		srs:            srs,
-		mmSRs:          mmSRs,
-		pacers:         pacers,
-		gossip:         gossip.NewGossip(initialState, settings),
-		metrics:        m,
-		shuffler:       state.NewShuffler(settings.Seed),
+		// onRecording is intentionally nil if settings.OnRecording is nil, to
+		// short-circuit trace creation overhead in that case.
+		onRecording: onRecording,
+		curr:        settings.StartTime,
+		end:         settings.StartTime.Add(duration),
+		interval:    settings.TickInterval,
+		generators:  wgs,
+		state:       initialState,
+		changer:     changer,
+		rqs:         rqs,
+		lqs:         lqs,
+		sqs:         sqs,
+		controllers: controllers,
+		srs:         srs,
+		mmSRs:       mmSRs,
+		pacers:      pacers,
+		gossip:      gossip.NewGossip(initialState, settings),
+		metrics:     m,
+		shuffler:    state.NewShuffler(settings.Seed),
 		// TODO(kvoli): Keeping the state around is a bit hacky, find a better
 		// method of reporting the ranges.
 		history:       history.History{Recorded: [][]metrics.StoreMetrics{}, S: initialState},
@@ -295,7 +309,7 @@ func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
 // each store ticks the pending operations such as relocate range and lease
 // transfers.
 func (s *Simulator) tickStateChanges(ctx context.Context, tick time.Time) {
-	s.changer.Tick(tick, s.state)
+	s.changer.Tick(ctx, tick, s.state)
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
@@ -314,6 +328,25 @@ func (s *Simulator) tickStoreClocks(tick time.Time) {
 	s.state.TickClock(tick)
 }
 
+func (s *Simulator) doAndMaybeTrace(
+	ctx context.Context,
+	storeID state.StoreID,
+	tick time.Time,
+	op string,
+	f func(ctx context.Context),
+) {
+	atDuration := tick.Sub(s.settings.StartTime)
+
+	var finishAndGetRecording func() tracingpb.Recording
+	if s.onRecording != nil {
+		ctx, finishAndGetRecording = tracing.ContextWithRecordingSpan(ctx, s.Tracer, op)
+	}
+	f(ctx)
+	if finishAndGetRecording != nil {
+		s.onRecording(storeID, atDuration, finishAndGetRecording())
+	}
+}
+
 // tickQueues iterates over the next replicas for each store to
 // consider. It then enqueues each of these and ticks the replicate queue for
 // processing.
@@ -325,14 +358,20 @@ func (s *Simulator) tickQueues(ctx context.Context, tick time.Time, state state.
 
 		// Tick the split queue.
 		s.sqs[storeID].Tick(ctx, tick, state)
+
 		// Tick the replicate queue.
-		s.rqs[storeID].Tick(ctx, tick, state)
+		s.doAndMaybeTrace(ctx, storeID, tick, "replicateQueue.PlanOneChange", func(ctx context.Context) {
+			s.rqs[storeID].Tick(ctx, tick, state)
+		})
+
 		// Tick the lease queue.
-		s.lqs[storeID].Tick(ctx, tick, state)
+		s.doAndMaybeTrace(ctx, storeID, tick, "leaseQueue.PlanOneChange", func(ctx context.Context) {
+			s.lqs[storeID].Tick(ctx, tick, state)
+		})
 
 		// Tick changes that may have been enqueued with a lower completion
 		// than the current tick, from the queues.
-		s.changer.Tick(tick, state)
+		s.changer.Tick(ctx, tick, state)
 
 		// Try adding suggested load splits that are pending for this store.
 		for _, rangeID := range state.LoadSplitterFor(storeID).ClearSplitKeys() {
@@ -370,7 +409,9 @@ func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, st
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
-		s.srs[store.StoreID()].Tick(ctx, tick, state)
+		s.doAndMaybeTrace(ctx, store.StoreID(), tick, "StoreRebalancer", func(ctx context.Context) {
+			s.srs[store.StoreID()].Tick(ctx, tick, state)
+		})
 	}
 }
 
@@ -380,7 +421,9 @@ func (s *Simulator) tickMMStoreRebalancers(ctx context.Context, tick time.Time, 
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
-		s.mmSRs[store.StoreID()].Tick(ctx, tick, state)
+		s.doAndMaybeTrace(ctx, store.StoreID(), tick, "mma.ComputeChanges", func(ctx context.Context) {
+			s.mmSRs[store.StoreID()].Tick(ctx, tick, state)
+		})
 	}
 }
 

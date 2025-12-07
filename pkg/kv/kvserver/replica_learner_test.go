@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -363,7 +364,7 @@ func weakEqualf(t *testing.T, successes int64, count int64, s string, id int) {
 		require.Equalf(t, successes, count, s, id)
 	} else {
 		if successes != count {
-			log.Dev.Warningf(context.Background(), "Not equal, expected %d, got %d for %s %d", successes, count, s, id)
+			log.KvExec.Warningf(context.Background(), "Not equal, expected %d, got %d for %s %d", successes, count, s, id)
 		}
 	}
 }
@@ -880,7 +881,7 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 		case roachpb.NON_VOTER:
 			_, err = tc.AddNonVoters(scratchStartKey, tc.Target(1))
 		default:
-			log.Dev.Fatalf(ctx, "unexpected replicaType: %s", replicaType)
+			log.KvExec.Fatalf(ctx, "unexpected replicaType: %s", replicaType)
 		}
 
 		if !testutils.IsError(err, `remote couldn't accept snapshot`) {
@@ -926,7 +927,10 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 
 	tc := testcluster.StartTestCluster(
 		t, 2, base.TestClusterArgs{
-			ServerArgs:      base.TestServerArgs{Knobs: knobs},
+			ServerArgs: base.TestServerArgs{
+				DefaultDRPCOption: base.TestDRPCDisabled,
+				Knobs:             knobs,
+			},
 			ReplicationMode: base.ReplicationManual,
 		},
 	)
@@ -976,7 +980,7 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 		// Manually enqueue the leaseholder replica into its store's raft snapshot
 		// queue. We expect it to pick up on the fact that the non-voter on its range
 		// needs a snapshot.
-		ctx, rec := tracing.ContextWithRecordingSpan(ctx, leaseholderStore.GetStoreConfig().Tracer(), "trace-enqueue")
+		ctx, finish := tracing.ContextWithRecordingSpan(ctx, leaseholderStore.GetStoreConfig().Tracer(), "trace-enqueue")
 		pErr, err := leaseholderStore.Enqueue(
 			ctx,
 			"raftsnapshot",
@@ -984,13 +988,14 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 			false, /* skipShouldQueue */
 			false, /* async */
 		)
+		rec := finish()
 		if pErr != nil {
 			return pErr
 		}
 		if err != nil {
 			return err
 		}
-		matched, err := regexp.MatchString("streamed snapshot.*to.*NON_VOTER", rec().String())
+		matched, err := regexp.MatchString("streamed snapshot.*to.*NON_VOTER", rec.String())
 		if err != nil {
 			return err
 		}
@@ -1050,6 +1055,9 @@ func TestSnapshotsToDrainingNodes(t *testing.T) {
 		tc := testcluster.StartTestCluster(
 			t, 2, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					DefaultDRPCOption: base.TestDRPCDisabled,
+				},
 			},
 		)
 		defer tc.Stopper().Stop(ctx)
@@ -1214,6 +1222,7 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// NB also see TestAllocatorRemoveLearner for a lower-level test.
+	testutils.SetVModule(t, "queue=4,replicate_queue=4,replica_command=4,allocator=4,replicate=4")
 
 	ctx := context.Background()
 	_, ltk := makeReplicationTestKnobs()
@@ -1254,10 +1263,11 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 		processErr, err := store.Enqueue(
 			traceCtx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
 		)
+		rec := finish()
 		require.NoError(t, err)
 		require.NoError(t, processErr)
 		action := "next replica action: remove learner"
-		require.NoError(t, testutils.MatchInOrder(finish().String(), []string{action}...))
+		require.NoError(t, testutils.MatchInOrder(rec.String(), []string{action}...))
 		require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
 
 		testutils.SucceedsSoon(t, func() error {
@@ -1284,10 +1294,12 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 		processErr, err := store.Enqueue(
 			traceCtx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
 		)
+		rec := finish()
+
 		require.NoError(t, err)
 		require.NoError(t, processErr)
 		action := "next replica action: finalize conf change"
-		require.NoError(t, testutils.MatchInOrder(finish().String(), []string{action}...))
+		require.NoError(t, testutils.MatchInOrder(rec.String(), []string{action}...))
 
 		testutils.SucceedsSoon(t, func() error {
 			desc = tc.LookupRangeOrFatal(t, scratchStartKey)
@@ -1321,14 +1333,15 @@ func TestReplicaGCQueueSeesLearnerOrJointConfig(t *testing.T) {
 	// Run the replicaGC queue.
 	checkNoGC := func() roachpb.RangeDescriptor {
 		store, repl := getFirstStoreReplica(t, tc.Server(1), scratchStartKey)
-		traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+		traceCtx, finish := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
 		processErr, err := store.Enqueue(
 			traceCtx, "replicaGC", repl, true /* skipShouldQueue */, false, /* async */
 		)
+		rec := finish()
 		require.NoError(t, err)
 		require.NoError(t, processErr)
 		const msg = `not gc'able, replica is still in range descriptor: (n2,s2):`
-		require.Contains(t, rec().String(), msg)
+		require.Contains(t, rec.String(), msg)
 		return tc.LookupRangeOrFatal(t, scratchStartKey)
 	}
 	desc := checkNoGC()
@@ -1384,10 +1397,11 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 	// raft to figure out that the replica needs a snapshot.
 	store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
 	testutils.SucceedsSoon(t, func() error {
-		traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+		traceCtx, finish := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
 		processErr, err := store.Enqueue(
 			traceCtx, "raftsnapshot", repl, true /* skipShouldQueue */, false, /* async */
 		)
+		rec := finish()
 		if err != nil {
 			return err
 		}
@@ -1395,7 +1409,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 			return processErr
 		}
 		const msg = `skipping snapshot; replica is likely a LEARNER in the process of being added: (n2,s2):2LEARNER`
-		formattedTrace := rec().String()
+		formattedTrace := rec.String()
 		if !strings.Contains(formattedTrace, msg) {
 			return errors.Errorf(`expected "%s" in trace got:\n%s`, msg, formattedTrace)
 		}
@@ -1537,17 +1551,18 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	queue1ErrCh := make(chan error, 1)
 	go func() {
 		queue1ErrCh <- func() error {
-			traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+			traceCtx, finish := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
 			processErr, err := store.Enqueue(
 				traceCtx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
 			)
+			rec := finish()
 			if err != nil {
 				return err
 			}
 			if processErr == nil || !strings.Contains(processErr.Error(), `descriptor changed`) {
 				return errors.Wrap(processErr, `expected "descriptor changed" error got: %+v`)
 			}
-			formattedTrace := rec().String()
+			formattedTrace := rec.String()
 			expectedMessages := []string{
 				`could not promote .*?n3,s3.*? to voter, rolling back:.*?change replicas of r\d+ failed: descriptor changed`,
 				`learner to roll back not found`,
@@ -1741,7 +1756,7 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 		repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
 		require.NoError(t, err)
-		if repl.HasOutstandingLearnerSnapshotInFlightForTesting() {
+		if repl.TestingHasOutstandingLearnerSnapshotInFlight() {
 			return errors.Errorf("outstanding learner snapshot in flight %s", desc)
 		}
 		return nil
@@ -2080,13 +2095,14 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		})
 
 		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-		traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+		traceCtx, finish := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
 		processErr, err := store.Enqueue(
 			traceCtx, "merge", repl, true /* skipShouldQueue */, false, /* async */
 		)
+		rec := finish()
 		require.NoError(t, err)
 		require.NoError(t, processErr)
-		formattedTrace := rec().String()
+		formattedTrace := rec.String()
 		expectedMessages := []string{
 			`removing learner replicas \[n2,s2\]`,
 			`merging to produce range: /Table/Max-/Max`,
@@ -2118,13 +2134,14 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 		checkTransitioningOut := func() {
 			t.Helper()
 			store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
-			traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+			traceCtx, finish := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
 			processErr, err := store.Enqueue(
 				traceCtx, "merge", repl, true /* skipShouldQueue */, false, /* async */
 			)
+			rec := finish()
 			require.NoError(t, err)
 			require.NoError(t, processErr)
-			formattedTrace := rec().String()
+			formattedTrace := rec.String()
 			expectedMessages := []string{
 				`transitioning out of joint configuration`,
 				`merging to produce range: /Table/Max-/Max`,
@@ -2216,7 +2233,7 @@ func getExpectedSnapshotSizeBytes(
 	}
 	defer snap.Close()
 
-	b := originStore.TODOEngine().NewWriteBatch()
+	b := originStore.StateEngine().NewWriteBatch() // NB: only replicated keys
 	defer b.Close()
 
 	selOpts := rditer.SelectOpts{
@@ -2228,7 +2245,7 @@ func getExpectedSnapshotSizeBytes(
 		ReplicatedByRangeID:   true,
 		UnreplicatedByRangeID: false,
 	}
-	err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, selOpts, func(iter storage.EngineIterator, _ roachpb.Span) error {
+	err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.StateSnap, fs.ReplicationReadCategory, selOpts, func(iter storage.EngineIterator, _ roachpb.Span) error {
 		var err error
 		for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
 			hasPoint, hasRange := iter.HasPointAndRange()

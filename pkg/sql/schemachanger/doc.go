@@ -15,7 +15,7 @@ package schemachanger
 // # Similarities and differences with the legacy schema changer
 //
 // The main challenge that any schema changer in CockroachDB must solve is to
-// perform these correctly while maintaining the "online" property: tables must
+// perform these correctly while maintaining the "online" property: Tables must
 // remain accessible to concurrent queries while they undergo schema changes.
 // Online schema changes are enabled by upholding the 2-version invariant, see
 // docs/RFCS/20151014_online_schema_change.md for details. This necessarily
@@ -31,15 +31,15 @@ package schemachanger
 // nonempty table. However, we want these rollbacks to always succeed.
 //
 // In CockroachDB, both in the legacy and in the declarative schema changer, for
-// schema changes involving more than one transaction. this sequence of
-// transactions is driven by a job; of type SCHEMA_CHANGE or
+// schema changes involving more than one transaction, this sequence of
+// transactions is driven by a job: Of type SCHEMA_CHANGE or
 // TYPEDESC_SCHEMA_CHANGE for the legacy schema changer, NEW_SCHEMA_CHANGE for
 // the declarative schema changer. In both cases the schema change gets rolled
 // back when the job's `Resume` method encounters an error, after which its
 // `OnFailOrCancel` method takes over and eventually transitions the job to the
 // `failed` terminal state. Both schema changers also have in common the fact
 // that they store the current state and targeted end-state of an ongoing schema
-// change inside the affected descriptor, but here the similarities end: for the
+// change inside the affected descriptor, but here the similarities end: For the
 // legacy schema changer, this state is encoded in the descriptor protobuf's
 // `mutations` slice; for the declarative schema changer, it's
 // `declarative_schema_changer_state`.
@@ -77,16 +77,15 @@ package schemachanger
 // # The element model
 //
 // The declarative schema changer models its persisted state in terms of
-// elements, which can be thought of as "things" on which a schema change can be
-// performed, typically leaves of a DDL statement's AST: e.g. a table's name is
+// elements (which can be thought of as "things" on which a schema change can be
+// performed, typically leaves of a DDL statement's AST): e.g. a table's name is
 // modeled as an element called TableName, a column's default value expression
 // is modelled by ColumnDefaultExpression, and so forth.
 //
-// A schema change is defined by setting target statuses to a set of
-//elements.
-// These statuses are PUBLIC, ABSENT or TRANSIENT_ABSENT. This is best described
-// by example; `ALTER TABLE foo RENAME COLUMN x TO y`, assuming `foo` has
-// descriptor ID 123 and `x` has column ID 4, gets translated into:
+// A schema change is defined by setting target statuses to a set of elements.
+// These statuses are PUBLIC, ABSENT, or TRANSIENT_ABSENT. This is best
+// described by example; `ALTER TABLE foo RENAME COLUMN x TO y`, assuming `foo`
+// has descriptor ID 123 and `x` has column ID 4, gets translated into:
 //  - ColumnName{DescID: 123, ColumnID: 4, Name: x} targets ABSENT,
 //  - ColumnName{DescID: 123, ColumnID: 4, Name: y} targets PUBLIC.
 //

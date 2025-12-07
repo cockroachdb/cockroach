@@ -1709,7 +1709,7 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 	if err != nil {
 		return nil, err
 	}
-	columnRemovalWillDropFKBackingIndexes, err := og.columnRemovalWillDropFKBackingIndexes(ctx, tx, tableName, columnName)
+	columnDropViolatesFKIndexRequirements, err := og.columnDropViolatesFKIndexRequirements(ctx, tx, tableName, columnName)
 	if err != nil {
 		return nil, err
 	}
@@ -1731,7 +1731,7 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInAddingOrDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey || colIsRefByComputed},
-		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn || columnRemovalWillDropFKBackingIndexes},
+		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn || columnDropViolatesFKIndexRequirements},
 		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
 	})
 	stmt.potentialExecErrors.addAll(codesWithConditions{
@@ -2520,7 +2520,7 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 
 	defaultDatum := randgen.RandDatum(og.params.rng, datumTyp, columnForDefault.nullable)
 	stmt := makeOpStmt(OpStmtDDL)
-	if (!datumTyp.Equivalent(columnForDefault.typ)) && defaultDatum != tree.DNull {
+	if !datumTyp.Equivalent(columnForDefault.typ) {
 		stmt.expectedExecErrors.add(pgcode.DatatypeMismatch)
 	}
 	// Generated columns cannot have default values.
@@ -2528,10 +2528,24 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 		stmt.potentialExecErrors.add(pgcode.Syntax)
 		stmt.potentialExecErrors.add(pgcode.InvalidTableDefinition)
 	}
+	// Check for references to any types that are not supported in mixed version
+	// clusters.
+	ltreeNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_4.Version())
+	if err != nil {
+		return nil, err
+	}
+	if ltreeNotSupported &&
+		defaultDatum.ResolvedType().Family() == types.ArrayFamily &&
+		strings.HasPrefix(defaultDatum.ResolvedType().ArrayContents().SQLString(), "LTREE") {
+		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
+	}
 
 	strDefault := tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`,
-		tableName.String(), columnForDefault.name.String(), strDefault)
+	// Always use explicit type casting to ensure consistent behavior and avoid parse errors.
+	// When the types don't match, this will produce the expected DatatypeMismatch error.
+	// When the types do match, the cast is harmless and makes the intent explicit.
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s::%s`,
+		tableName.String(), columnForDefault.name.String(), strDefault, datumTyp.SQLString())
 	return stmt, nil
 }
 
@@ -3120,9 +3134,6 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	// we will need to evaluate generated expressions below.
 	hasUniqueConstraints := false
 	hasUniqueConstraintsMutations := false
-	hasForeignKeyMutations := false
-	expectedFkViolation := false
-	potentialFkViolation := false
 	if !anyInvalidInserts {
 		// Verify if the new row may violate unique constraints by checking the
 		// constraints in the database.
@@ -3137,31 +3148,17 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		if err != nil {
 			return nil, err
 		}
-		// Verify if the new row will violate fk constraints by checking the constraints and rows
-		// in the database.
-		expectedFkViolation, potentialFkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, nonGeneratedColNames, rows)
-		if err != nil {
-			return nil, err
-		}
-		// Determine if a foreign key mutation exists.
-		hasForeignKeyMutations, err = og.tableHasForeignKeyMutation(ctx, tx, tableName)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints || hasUniqueConstraintsMutations},
-		{code: pgcode.ForeignKeyViolation, condition: expectedFkViolation || potentialFkViolation || hasForeignKeyMutations},
+		{code: pgcode.ForeignKeyViolation, condition: true},
 		{code: pgcode.NotNullViolation, condition: true},
 		{code: pgcode.CheckViolation, condition: true},
 		{code: pgcode.InsufficientPrivilege, condition: true}, // For RLS violations
 	})
-	og.expectedCommitErrors.addAll(codesWithConditions{
-		{code: pgcode.ForeignKeyViolation, condition: expectedFkViolation && !hasForeignKeyMutations},
-	})
 	og.potentialCommitErrors.addAll(codesWithConditions{
-		{code: pgcode.ForeignKeyViolation, condition: potentialFkViolation || hasForeignKeyMutations},
+		{code: pgcode.ForeignKeyViolation, condition: true},
 	})
 
 	var formattedRows []string
@@ -3457,6 +3454,90 @@ func (og *operationGenerator) validate(ctx context.Context, tx pgx.Tx) (*opStmt,
 		return validateStmt, nil
 	}
 	return validateStmt, errors.Errorf("Validation FAIL:\n%s", strings.Join(errs, "\n"))
+}
+
+func (og *operationGenerator) inspect(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	stmt := makeOpStmt(OpStmtDML)
+
+	var sb strings.Builder
+	sb.WriteString("INSPECT ")
+
+	if og.randIntn(2) == 0 {
+		tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+		if err != nil {
+			return nil, err
+		}
+		tableExists, err := og.tableExists(ctx, tx, tableName)
+		if err != nil {
+			return nil, err
+		}
+		sb.WriteString("TABLE ")
+		sb.WriteString(tableName.String())
+		if !tableExists {
+			stmt.expectedExecErrors.add(pgcode.UndefinedTable)
+		}
+	} else {
+		database, err := og.getDatabase(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		useExisting := og.randIntn(100) < og.pctExisting(true)
+		var databaseName string
+		if useExisting {
+			databaseName = database
+		} else {
+			databaseName = fmt.Sprintf("inspect_db_%s", og.newUniqueSeqNumSuffix())
+			stmt.expectedExecErrors.add(pgcode.InvalidCatalogName)
+		}
+		sb.WriteString("DATABASE ")
+		sb.WriteString(databaseName)
+	}
+
+	asof := og.randomInspectAsOfClause()
+	sb.WriteString(asof)
+	// If we use an ASOF time with inspect, chances are it will conflict with
+	// the timestamp chosen for the transaction, and return an "inconsistent AS
+	// OF SYSTEM TIME timestamp" error.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{pgcode.FeatureNotSupported, asof != ""},
+	})
+	// Detached flag was added in 26.1, so we expect errors till the user upgrades.
+	isDetachedUnsupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_1.Version())
+	if err != nil {
+		return nil, err
+	}
+	if isDetachedUnsupported {
+		stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
+		stmt.potentialExecErrors.add(pgcode.Syntax)
+	}
+	// Always run DETACHED as this allows us to use INSPECT inside of a
+	// transaction. We have post-processing at the end of the run to verify
+	// INSPECT didn't find any issues.
+	sb.WriteString(" WITH OPTIONS DETACHED")
+	stmt.sql = sb.String()
+
+	// If INSPECT is not supported yet, so we expect a syntax error or feature
+	// not supported.
+	isInspectUnsupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_4.Version())
+	if err != nil {
+		return nil, err
+	}
+	if isInspectUnsupported {
+		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
+		stmt.expectedExecErrors.add(pgcode.Syntax)
+	}
+
+	return stmt, nil
+}
+
+func (og *operationGenerator) randomInspectAsOfClause() string {
+	// Use AS OF SYSTEM TIME infrequently (~10% of the time) because transactions
+	// are never started with AS OF SYSTEM TIME, and INSPECT with AS OF inside a
+	// transaction without AS OF can cause conflicts.
+	if og.randIntn(10) == 0 {
+		return fmt.Sprintf(" AS OF SYSTEM TIME '-%ds'", og.randIntn(30)+1)
+	}
+	return ""
 }
 
 type column struct {
@@ -4144,8 +4225,8 @@ func (og *operationGenerator) randType(
 
 	typ := randgen.RandSortingType(og.params.rng)
 	for (pgVectorNotSupported && typ.Family() == types.PGVectorFamily) ||
-		(citextNotSupported && typ.Oid() == oidext.T_citext) ||
-		(ltreeNotSupported && typ.Oid() == oidext.T_ltree) {
+		(citextNotSupported && typ.Oid() == oidext.T_citext || typ.Oid() == oidext.T__citext) ||
+		(ltreeNotSupported && (typ.Oid() == oidext.T_ltree || typ.Oid() == oidext.T__ltree)) {
 		typ = randgen.RandSortingType(og.params.rng)
 	}
 
@@ -4351,10 +4432,12 @@ FROM
 			continue
 		}
 
-		if citextNotSupported && typeVal.Oid() == oidext.T_citext {
+		if citextNotSupported &&
+			(typeVal.Oid() == oidext.T_citext || typeVal.Oid() == oidext.T__citext) {
 			continue
 		}
-		if ltreeNotSupported && typeVal.Oid() == oidext.T_ltree {
+		if ltreeNotSupported &&
+			(typeVal.Oid() == oidext.T_ltree || typeVal.Oid() == oidext.T__ltree) {
 			continue
 		}
 
@@ -5431,18 +5514,29 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
+	schemaName, err := og.randSchema(ctx, tx, og.alwaysExisting())
+	if err != nil {
+		return nil, err
+	}
 	triggerFunctionName := fmt.Sprintf("trigger_function_%s", og.newUniqueSeqNumSuffix())
+	resolvedTriggerFunctionName := fmt.Sprintf("%s.%s", schemaName, triggerFunctionName)
 
-	// Try to generate a random SELECT statement for more complex dependencies
+	// Try to generate a random SELECT statement for more coamplex dependencies
 	selectStmt, err := og.selectStmt(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
 	// Our trigger function will always return the original value to avoid
 	// breaking inserts.
-	triggerFunction := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`, triggerFunctionName, selectStmt.sql)
+	triggerFunction := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`, resolvedTriggerFunctionName, selectStmt.sql)
 
-	og.LogMessage(fmt.Sprintf("Created trigger function %s", triggerFunction))
+	// Check if the routine already exists.
+	routineAlreadyExists, err := og.fnExistsByName(ctx, tx, schemaName, triggerFunctionName)
+	if err != nil {
+		return nil, err
+	}
+
+	og.LogMessage(fmt.Sprintf("Created trigger function %s", resolvedTriggerFunctionName))
 
 	// Create TRIGGER statement components
 	triggerActionTime := "BEFORE"
@@ -5471,8 +5565,7 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 
 	// Build the SQL statement
 	sqlStatement := fmt.Sprintf("%s;CREATE TRIGGER %s %s %s ON %s FOR EACH ROW EXECUTE FUNCTION %s()",
-		triggerFunction, triggerName, triggerActionTime, eventClause, tableName, triggerFunctionName)
-
+		triggerFunction, triggerName, triggerActionTime, eventClause, tableName, resolvedTriggerFunctionName)
 	og.LogMessage(fmt.Sprintf("createTrigger: %s", sqlStatement))
 
 	opStmt := makeOpStmt(OpStmtDDL)
@@ -5484,6 +5577,7 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 		// It does not catch cases where the select statement in the trigger function
 		// has a select query on a table that doesn't exist.
 		{code: pgcode.UndefinedTable, condition: !triggerTableExists},
+		{code: pgcode.DuplicateFunction, condition: routineAlreadyExists},
 	})
 
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
@@ -5565,4 +5659,68 @@ func (og *operationGenerator) findExistingTrigger(
 	}
 
 	return &triggerWithInfo, nil
+}
+
+// truncateTable generates a TRUNCATE TABLE statement.
+func (og *operationGenerator) truncateTable(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tbls, err := Collect(ctx, og, tx, pgx.RowTo[string],
+		`SELECT quote_ident(schema_name) || '.' || quote_ident(table_name) FROM [SHOW TABLES] WHERE type = 'table'`)
+	if err != nil {
+		return nil, err
+	}
+
+	const MaxTruncateTables = 8
+	stmt, expectedCode, err := Generate[*tree.Truncate](og.params.rng, og.produceError(), []GenerationCase{
+		{pgcode.SuccessfulCompletion, `TRUNCATE TABLE {MultipleTableNames}`},
+		{pgcode.SuccessfulCompletion, `TRUNCATE TABLE {MultipleTableNames} CASCADE`},
+		{pgcode.UndefinedTable, `TRUNCATE TABLE {TableNameDoesNotExist}`},
+		{pgcode.UndefinedTable, `TRUNCATE TABLE {TableNameDoesNotExist} CASCADE`},
+	}, template.FuncMap{
+		"MultipleTableNames": func() (string, error) {
+			selectedTables, err := PickBetween(og.params.rng, 1, MaxTruncateTables, tbls)
+			if err != nil {
+				return "", err
+			}
+			return strings.Join(selectedTables, ","), nil
+		},
+		"TableNameDoesNotExist": func() (string, error) {
+			return "TableThatDoesNotExist", nil
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	op := newOpStmt(stmt, codesWithConditions{
+		{expectedCode, true},
+	})
+
+	// If the the TRUNCATE is not cascaded, then the operation can fail
+	// if foreign key references exist.
+	if expectedCode == pgcode.SuccessfulCompletion &&
+		stmt.DropBehavior != tree.DropCascade {
+		tableSet := map[string]struct{}{}
+		fkSet := map[string]struct{}{}
+		// Gather the set of tables handled by this statement, and
+		// any foreign keys that reference these tables.
+		for _, table := range stmt.Tables {
+			tableSet[table.FQString()] = struct{}{}
+			fkReferenceTables, err := og.getTableForeignKeyReferences(ctx, tx, &table)
+			if err != nil {
+				return nil, err
+			}
+			for _, fk := range fkReferenceTables {
+				fkSet[fk.FQString()] = struct{}{}
+			}
+		}
+		// Check if any of the foreign keys that reference these
+		// tables are not truncated. If they are, then the TRUNCATE
+		// will fail with an error.
+		for fk := range fkSet {
+			if _, hasTable := tableSet[fk]; !hasTable {
+				op.expectedExecErrors.add(pgcode.FeatureNotSupported)
+				break
+			}
+		}
+	}
+	return op, nil
 }

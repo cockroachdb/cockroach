@@ -16,8 +16,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -38,10 +36,13 @@ var lowercaseTimezones = map[string]string{
 
 func main() {
 	var filenameFlag = flag.String("filename", "lowercase_timezones_generated.go", "filename path")
-	var zoneInfoFlag = flag.String("zoneinfo", filepath.Join(runtime.GOROOT(), "lib", "time", "zoneinfo.zip"), "path to zoneinfo.zip")
+	var zoneInfoFlag = flag.String("zoneinfo", "", "path to zoneinfo.zip")
 	var crlfmtFlag = flag.String("crlfmt", "crlfmt", "crlfmt binary to use")
 	flag.Parse()
 
+	if *zoneInfoFlag == "" {
+		log.Fatalf("must pass -zoneinfo")
+	}
 	zipdataFile, err := os.Open(*zoneInfoFlag)
 	if err != nil {
 		log.Fatalf("error loading zoneinfo.zip: %+v\n", err)

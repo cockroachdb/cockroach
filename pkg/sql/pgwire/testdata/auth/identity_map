@@ -48,13 +48,13 @@ host     all      all  all     cert-password map=testing
 # testing testuser2 carl              # Cert that doesn't correspond to a db user
 # testing testuser@example.com carl   # Cert with a non-SQL principal baked in
 # Active configuration:
-# map-name system-username         database-username
-testing    ^testuser$              carl
-testing    (.*)@cockroachlabs.com  \1                # substituteAt=0
-testing    ^testuser$              another_carl
-testing    ^will_be_carl$          carl
-testing    ^testuser2$             carl
-testing    ^testuser@example\.com$ carl
+# map-name system-username             database-username
+testing    (?i)^testuser$              carl
+testing    (?i)(.*)@cockroachlabs.com  \1                # substituteAt=0
+testing    (?i)^testuser$              another_carl
+testing    (?i)^will_be_carl$          carl
+testing    (?i)^testuser2$             carl
+testing    (?i)^testuser@example\.com$ carl
 
 sql
 CREATE USER carl WITH PASSWORD 'doggo';
@@ -274,7 +274,7 @@ host     all      all  all     cert-password map=testing
 # testing testuser root               # Exact remapping
 # Active configuration:
 # map-name system-username database-username
-testing    ^testuser$      root
+testing    (?i)^testuser$  root
 
 connect user=testuser database=mydb
 ----
@@ -303,7 +303,7 @@ host     all      all  all     cert-password map=testing
 # testing testuser node               # Exact remapping
 # Active configuration:
 # map-name system-username database-username
-testing    ^testuser$      node
+testing    (?i)^testuser$  node
 
 connect user=testuser database=mydb
 ----

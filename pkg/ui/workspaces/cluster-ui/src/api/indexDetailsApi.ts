@@ -20,7 +20,7 @@ import {
 
 import { INTERNAL_APP_NAME_PREFIX } from "../activeExecutions/activeStatementUtils";
 import { AggregateStatistics } from "../statementsTable";
-import { TimeScale, toDateRange } from "../timeScaleDropdown";
+import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
 
 export type TableIndexStatsRequest =
   cockroach.server.serverpb.TableIndexStatsRequest;
@@ -77,7 +77,7 @@ export function StatementsListRequestFromDetails(
   ts: TimeScale,
 ): StatementsUsingIndexRequest {
   if (ts === null) return { table, index, database };
-  const [start, end] = toDateRange(ts);
+  const [start, end] = toRoundedDateRange(ts);
   return { table, index, database, start, end };
 }
 

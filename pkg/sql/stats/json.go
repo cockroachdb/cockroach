@@ -8,6 +8,7 @@ package stats
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -55,7 +56,7 @@ type JSONHistoBucket struct {
 }
 
 // SetHistogram fills in the HistogramColumnType and HistogramBuckets fields.
-func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
+func (js *JSONStatistic) SetHistogram(ctx context.Context, h *HistogramData) error {
 	typ := h.ColumnType
 	if typ == nil {
 		return fmt.Errorf("histogram type is unset")
@@ -66,26 +67,19 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 	js.HistogramColumnType = typ.SQLStringFullyQualified()
 	js.HistogramBuckets = make([]JSONHistoBucket, 0, len(h.Buckets))
 	js.HistogramVersion = h.Version
-	var a tree.DatumAlloc
-	for i := range h.Buckets {
-		b := &h.Buckets[i]
-		if b.UpperBound == nil {
-			return fmt.Errorf("histogram bucket upper bound is unset")
-		}
-		datum, err := DecodeUpperBound(h.Version, typ, &a, b.UpperBound)
-		if err != nil {
-			if h.ColumnType.Family() == types.EnumFamily && errors.Is(err, types.EnumValueNotFound) {
-				// Skip over buckets for enum values that were dropped.
-				continue
-			}
-			return err
-		}
 
+	decodedBuckets, distinctAdjustment, err := h.DecodeBuckets(ctx)
+	if err != nil {
+		return err
+	}
+	js.DistinctCount = uint64(math.Max(0, float64(js.DistinctCount)+distinctAdjustment))
+	for i := range decodedBuckets {
+		b := &decodedBuckets[i]
 		js.HistogramBuckets = append(js.HistogramBuckets, JSONHistoBucket{
-			NumEq:         b.NumEq,
-			NumRange:      b.NumRange,
+			NumEq:         int64(b.NumEq),
+			NumRange:      int64(b.NumRange),
 			DistinctRange: b.DistinctRange,
-			UpperBound:    tree.AsStringWithFlags(datum, tree.FmtExport|tree.FmtAlwaysQualifyUserDefinedTypeNames),
+			UpperBound:    tree.AsStringWithFlags(b.UpperBound, tree.FmtExport|tree.FmtAlwaysQualifyUserDefinedTypeNames),
 		})
 	}
 	return nil
@@ -123,7 +117,7 @@ func (js *JSONStatistic) DecodeAndSetHistogram(
 		}
 		h.ColumnType = typ
 	}
-	return js.SetHistogram(h)
+	return js.SetHistogram(ctx, h)
 }
 
 // GetHistogram converts the json histogram into HistogramData.
@@ -162,7 +156,8 @@ func (js *JSONStatistic) GetHistogram(
 	return h, nil
 }
 
-// IsPartial returns true if this statistic was collected with a where clause.
+// IsPartial returns true if this statistic was collected with USING EXTREMES
+// or with a WHERE clause.
 func (js *JSONStatistic) IsPartial() bool {
 	return js.PartialPredicate != ""
 }
@@ -180,5 +175,5 @@ func (js *JSONStatistic) IsForecast() bool {
 
 // IsAuto returns true if this statistic was collected automatically.
 func (js *JSONStatistic) IsAuto() bool {
-	return js.Name == jobspb.AutoStatsName
+	return js.Name == jobspb.AutoStatsName || js.Name == jobspb.AutoPartialStatsName
 }

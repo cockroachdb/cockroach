@@ -11,7 +11,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -585,7 +584,9 @@ func (m *Manager) waitForSignal(
 	}
 	log.Eventf(ctx, "waiting to acquire %s latch %s, held by %s latch %s", waitType, wait, heldType, held)
 	poisonCh := held.g.poison.signalChan()
-	t.Reset(base.SlowRequestThreshold)
+
+	slowThreshold := m.slowLatchRequestThreshold()
+	t.Reset(slowThreshold)
 	for {
 		select {
 		case <-held.g.done.signalChan():
@@ -607,8 +608,8 @@ func (m *Manager) waitForSignal(
 				return errors.Errorf("unsupported poison.Policy %d", pp)
 			}
 		case <-t.C:
-			log.Dev.Warningf(ctx, "have been waiting %s to acquire %s latch %s, held by %s latch %s",
-				base.SlowRequestThreshold, waitType, wait, heldType, held)
+			log.KvExec.Warningf(ctx, "have been waiting %s to acquire %s latch %s, held by %s latch %s",
+				slowThreshold, waitType, wait, heldType, held)
 			if m.slowReqs != nil {
 				m.slowReqs.Inc(1)
 				defer m.slowReqs.Dec(1) //nolint:deferloop
@@ -674,7 +675,7 @@ func (m *Manager) Release(ctx context.Context, lg *Guard) {
 		const msg = "%s has held latch for %s. Some possible causes are " +
 			"slow disk reads, slow raft replication, and expensive request processing."
 		if m.everySecondLogger.ShouldLog() {
-			log.Dev.Warningf(ctx, msg, lg.ba, humanizeutil.Duration(held))
+			log.KvExec.Warningf(ctx, msg, lg.ba, humanizeutil.Duration(held))
 		} else {
 			log.VEventf(ctx, 2, msg, lg.ba, humanizeutil.Duration(held))
 		}
@@ -707,6 +708,14 @@ func (m *Manager) longLatchHoldThreshold() time.Duration {
 		return math.MaxInt64 // disable
 	}
 	return LongLatchHoldThreshold.Get(&m.settings.SV)
+}
+
+// slowLatchRequestThreshold returns the threshold for logging slow latch requests.
+func (m *Manager) slowLatchRequestThreshold() time.Duration {
+	if m.settings == nil {
+		return math.MaxInt64 // disable
+	}
+	return SlowLatchRequestThreshold.Get(&m.settings.SV)
 }
 
 // Metrics holds information about the state of a Manager.

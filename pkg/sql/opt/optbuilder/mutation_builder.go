@@ -800,11 +800,16 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 // expression. New columns are synthesized for any missing columns using the
 // computed column expression.
 //
+// The target table columns corresponding to each projected computed column are
+// added to targetColList and targetColSet, if they are not nil.
+//
 // NOTE: colIDs is updated with the column IDs of any synthesized columns which
 // are added to mb.outScope. If restrict is true, only columns that depend on
 // columns that were already in the list (plus all write-only columns) are
 // updated.
-func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList, restrict bool) {
+func (mb *mutationBuilder) addSynthesizedComputedCols(
+	colIDs opt.OptionalColList, targetColList *opt.ColList, targetColSet *opt.ColSet, restrict bool,
+) {
 	// We will construct a new Project operator that will contain the newly
 	// synthesized column(s).
 	pb := makeProjectionBuilder(mb.b, mb.outScope)
@@ -876,8 +881,12 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 		}
 
 		// Add corresponding target column.
-		mb.targetColList = append(mb.targetColList, tabColID)
-		mb.targetColSet.Add(tabColID)
+		if targetColList != nil {
+			*targetColList = append(*targetColList, tabColID)
+		}
+		if targetColSet != nil {
+			targetColSet.Add(tabColID)
+		}
 	}
 
 	mb.outScope = pb.Finish()
@@ -1645,9 +1654,6 @@ func (mb *mutationBuilder) projectVectorIndexColsImpl(op opt.Operator) {
 func (mb *mutationBuilder) buildVectorMutationSearch(
 	input memo.RelExpr, index cat.Index, partitionCol, quantizedVecCol opt.ColumnID, isIndexPut bool,
 ) memo.RelExpr {
-	if index.IsTemporaryIndexForBackfill() {
-		panic(unimplemented.NewWithIssue(144443, "Cannot write to a vector index while it is being built"))
-	}
 	getCol := func(colOrd int) (colID opt.ColumnID) {
 		// Check in turn if the column is being upserted, inserted, updated, or
 		// fetched.

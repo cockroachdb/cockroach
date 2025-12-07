@@ -31,11 +31,11 @@ type AggregatorFrontier struct {
 func NewAggregatorFrontier(
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
-	decoder TablePrefixDecoder,
+	codec TableCodec,
 	perTableTracking bool,
 	spans ...roachpb.Span,
 ) (*AggregatorFrontier, error) {
-	rsf, err := newResolvedSpanFrontier(statementTime, initialHighWater, decoder, perTableTracking, spans...)
+	rsf, err := newResolvedSpanFrontier(statementTime, initialHighWater, codec, perTableTracking, spans...)
 	if err != nil {
 		return nil, err
 	}
@@ -80,11 +80,11 @@ type CoordinatorFrontier struct {
 func NewCoordinatorFrontier(
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
-	decoder TablePrefixDecoder,
+	codec TableCodec,
 	perTableTracking bool,
 	spans ...roachpb.Span,
 ) (*CoordinatorFrontier, error) {
-	rsf, err := newResolvedSpanFrontier(statementTime, initialHighWater, decoder, perTableTracking, spans...)
+	rsf, err := newResolvedSpanFrontier(statementTime, initialHighWater, codec, perTableTracking, spans...)
 	if err != nil {
 		return nil, err
 	}
@@ -218,13 +218,13 @@ type resolvedSpanFrontier struct {
 func newResolvedSpanFrontier(
 	statementTime hlc.Timestamp,
 	initialHighWater hlc.Timestamp,
-	decoder TablePrefixDecoder,
+	codec TableCodec,
 	perTableTracking bool,
 	spans ...roachpb.Span,
 ) (*resolvedSpanFrontier, error) {
 	sf, err := func() (maybeTablePartitionedFrontier, error) {
 		if perTableTracking {
-			return span.NewMultiFrontierAt(newTableIDPartitioner(decoder), initialHighWater, spans...)
+			return span.NewMultiFrontierAt(newTableIDPartitioner(codec), initialHighWater, spans...)
 		}
 		f, err := span.MakeFrontierAt(initialHighWater, spans...)
 		if err != nil {
@@ -255,18 +255,12 @@ func (f *resolvedSpanFrontier) ForwardResolvedSpan(
 		return false, err
 	}
 	f.latestTS.Forward(r.Timestamp)
-	if r.BoundaryType != jobspb.ResolvedSpan_NONE {
-		newBoundary := resolvedSpanBoundary{
-			ts:  r.Timestamp,
-			typ: r.BoundaryType,
-		}
-		boundaryForwarded := f.boundary.Forward(newBoundary)
-		if boundaryForwarded && !forwarded {
-			// The frontier is considered forwarded if the boundary type
-			// changes to non-NONE and all the spans are at the boundary
-			// timestamp already.
-			forwarded, _, _ = f.AtBoundary()
-		}
+	boundaryForwarded := f.boundary.Forward(r.Timestamp, r.BoundaryType)
+	if boundaryForwarded && !forwarded {
+		// The frontier is considered forwarded if the boundary type
+		// changes to non-NONE and all the spans are at the boundary
+		// timestamp already.
+		forwarded, _, _ = f.AtBoundary()
 	}
 	return forwarded, nil
 }
@@ -354,6 +348,11 @@ func (f *resolvedSpanFrontier) HasLaggingSpans(sv *settings.Values) bool {
 	return frontier.Add(lagThresholdNanos, 0).Less(f.latestTS)
 }
 
+// LatestTS returns the latest timestamp in the frontier.
+func (f *resolvedSpanFrontier) LatestTS() hlc.Timestamp {
+	return f.latestTS
+}
+
 // All returns an iterator over the resolved spans in the frontier.
 func (f *resolvedSpanFrontier) All() iter.Seq[jobspb.ResolvedSpan] {
 	return func(yield func(jobspb.ResolvedSpan) bool) {
@@ -403,7 +402,7 @@ func newResolvedSpanBoundary(
 // At returns whether a timestamp is equal to the boundary timestamp
 // and if so, the boundary type as well.
 func (b *resolvedSpanBoundary) At(ts hlc.Timestamp) (bool, jobspb.ResolvedSpan_BoundaryType) {
-	if ts.Equal(b.ts) {
+	if b.IsSet() && ts.Equal(b.ts) {
 		return true, b.typ
 	}
 	return false, 0
@@ -411,17 +410,25 @@ func (b *resolvedSpanBoundary) At(ts hlc.Timestamp) (bool, jobspb.ResolvedSpan_B
 
 // After returns whether the boundary is after a given timestamp.
 func (b *resolvedSpanBoundary) After(ts hlc.Timestamp) bool {
-	return b.ts.After(ts)
+	return b.IsSet() && b.ts.After(ts)
 }
 
 // Forward forwards the boundary to the new boundary if it is later.
 // It returns true if the boundary changed and false otherwise.
-func (b *resolvedSpanBoundary) Forward(newBoundary resolvedSpanBoundary) bool {
-	if newBoundary.After(b.ts) {
-		*b = newBoundary
+func (b *resolvedSpanBoundary) Forward(
+	ts hlc.Timestamp, typ jobspb.ResolvedSpan_BoundaryType,
+) bool {
+	if typ != jobspb.ResolvedSpan_NONE && ts.After(b.ts) {
+		b.ts = ts
+		b.typ = typ
 		return true
 	}
 	return false
+}
+
+// IsSet returns whether the boundary is set.
+func (b *resolvedSpanBoundary) IsSet() bool {
+	return b.typ != jobspb.ResolvedSpan_NONE
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
@@ -437,8 +444,8 @@ type maybeTablePartitionedFrontier interface {
 	// Frontiers returns an iterator over the table ID and sub-frontiers
 	// being tracked by the frontier. If the frontier is not tracking
 	// on a per-table basis, the iterator will return a single frontier
-	// with an ID of 0.
-	Frontiers() iter.Seq2[descpb.ID, span.Frontier]
+	// with descpb.InvalidID.
+	Frontiers() iter.Seq2[descpb.ID, span.ReadOnlyFrontier]
 }
 
 var _ maybeTablePartitionedFrontier = (*span.MultiFrontier[descpb.ID])(nil)
@@ -456,29 +463,28 @@ type notTablePartitionedFrontier struct {
 var _ maybeTablePartitionedFrontier = notTablePartitionedFrontier{}
 
 // Frontiers implements maybeTablePartitionedFrontier.
-func (f notTablePartitionedFrontier) Frontiers() iter.Seq2[descpb.ID, span.Frontier] {
-	return func(yield func(descpb.ID, span.Frontier) bool) {
-		yield(0, f.spanFrontier)
+func (f notTablePartitionedFrontier) Frontiers() iter.Seq2[descpb.ID, span.ReadOnlyFrontier] {
+	return func(yield func(descpb.ID, span.ReadOnlyFrontier) bool) {
+		yield(descpb.InvalidID, f.spanFrontier)
 	}
 }
 
-// A TablePrefixDecoder decodes table prefixes from keys.
+// A TableCodec does table-related decoding/encoding.
 // The production implementation is keys.SQLCodec.
-type TablePrefixDecoder interface {
+type TableCodec interface {
 	DecodeTablePrefix(key roachpb.Key) ([]byte, uint32, error)
+	TableSpan(tableID uint32) roachpb.Span
 }
 
-func newTableIDPartitioner(decoder TablePrefixDecoder) span.PartitionerFunc[descpb.ID] {
+func newTableIDPartitioner(codec TableCodec) span.PartitionerFunc[descpb.ID] {
 	return func(sp roachpb.Span) (descpb.ID, error) {
-		_, startKeyTableID, err := decoder.DecodeTablePrefix(sp.Key)
+		_, startKeyTableID, err := codec.DecodeTablePrefix(sp.Key)
 		if err != nil {
-			return 0, err
+			return 0, errors.Wrapf(err, "error decoding start key in %v", sp)
 		}
-		_, endKeyTableID, err := decoder.DecodeTablePrefix(sp.EndKey)
-		if err != nil {
-			return 0, err
-		}
-		if startKeyTableID != endKeyTableID {
+		// Reject any spans that cross table boundaries.
+		tableSpan := codec.TableSpan(startKeyTableID)
+		if !tableSpan.Contains(sp) {
 			return 0, errors.AssertionFailedf("span encompassing multiple tables: %s", sp)
 		}
 		return descpb.ID(startKeyTableID), nil

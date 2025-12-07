@@ -411,7 +411,7 @@ func (m panicNodeMutator) Generate(
 
 	// If we have at least 5 nodes, we can safely upreplicate to 5X before panicking a node.
 	// This allows for a longer panic duration before recovery.
-	supportsUpReplication := len(nodeList) >= 5
+	supportsUpReplication := planner.options.enableUpReplication && len(nodeList) >= 5
 
 	for _, upgrade := range upgrades {
 		possiblePointsInTime := upgrade.
@@ -543,7 +543,8 @@ type networkPartitionMutator struct{}
 func (m networkPartitionMutator) Name() string { return failures.IPTablesNetworkPartitionName }
 
 func (m networkPartitionMutator) Probability() float64 {
-	return 0.3
+	// TODO(#154547)
+	return 0.0
 }
 
 func (m networkPartitionMutator) Generate(

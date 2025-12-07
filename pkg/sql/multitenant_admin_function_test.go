@@ -13,10 +13,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -58,6 +60,13 @@ func createTestClusterArgs(ctx context.Context, numReplicas, numVoters int32) ba
 	clusterSettings := cluster.MakeTestingClusterSettings()
 	kvserverbase.LoadBasedRebalancingMode.Override(ctx, &clusterSettings.SV, kvserverbase.LBRebalancingOff)
 	kvserverbase.MergeQueueEnabled.Override(ctx, &clusterSettings.SV, false)
+
+	// Set allocator intervals to scan faster to help with recovery from race
+	// conditions between allocator and manual relocate operations.
+	allocator.LoadBasedRebalanceInterval.Override(ctx, &clusterSettings.SV, 100*time.Millisecond)
+	kvserver.MinLeaseTransferInterval.Override(ctx, &clusterSettings.SV, 100*time.Millisecond)
+	kvserver.MinIOOverloadLeaseShedInterval.Override(ctx, &clusterSettings.SV, 100*time.Millisecond)
+
 	return base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings: clusterSettings,
@@ -668,6 +677,8 @@ func TestTruncateTable(t *testing.T) {
 		func(_ serverutils.TestClusterInterface, db *gosql.DB, tenant string, tExp tenantExpected) {
 			_, err := db.ExecContext(ctx, createTable)
 			message := fmt.Sprintf("tenant=%s", tenant)
+			require.NoErrorf(t, err, message)
+			_, err = db.ExecContext(ctx, "ALTER TABLE t SET (schema_locked=false)")
 			require.NoErrorf(t, err, message)
 			_, err = db.ExecContext(ctx, "ALTER TABLE t SPLIT AT VALUES (1);")
 			require.NoErrorf(t, err, message)

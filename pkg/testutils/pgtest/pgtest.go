@@ -239,6 +239,11 @@ func (p *PGTest) Until(
 		}
 		msg := x.Interface().(pgproto3.BackendMessage)
 		if notice, ok := msg.(*pgproto3.NoticeResponse); ok {
+			// Skip all "waiting for job(s) to complete" notices, since they include
+			// non-deterministic jobIDs.
+			if strings.HasPrefix(notice.Message, "waiting for job") {
+				continue
+			}
 			// The line number can change frequently, so to reduce churn, we always
 			// ignore it.
 			notice.Line = 0

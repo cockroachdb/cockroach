@@ -6,8 +6,6 @@
 package norm
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -195,6 +193,45 @@ func (c *CustomFuncs) IsConstValueOrGroupOfConstValues(input opt.ScalarExpr) boo
 	return memo.CanExtractConstDatum(input)
 }
 
+// FoldComparisonWithAny evaluates a comparison expression over a constant on
+// the left-hand side and an ANY/SOME clause on the right-hand side.
+// It returns a constant expression if it finds elements in the clause
+// that make the comparison a definite value, and the evaluation causes
+// no error. Otherwise, it returns ok=false.
+func (c *CustomFuncs) FoldComparisonWithAny(
+	cmp opt.Operator, left, right opt.ScalarExpr,
+) (_ opt.ScalarExpr, ok bool) {
+	rightTuple := right.(*memo.TupleExpr)
+	allConst := true
+	hasNull := false
+	for _, expr := range rightTuple.Elems {
+		if !c.IsConstValueOrGroupOfConstValues(expr) {
+			allConst = false
+			continue
+		}
+		folded, ok := c.FoldComparison(cmp, left, expr)
+		if !ok {
+			continue
+		}
+		if _, ok := folded.(*memo.TrueExpr); ok {
+			return folded, true
+		}
+		if _, ok := folded.(*memo.NullExpr); ok {
+			hasNull = true
+		}
+	}
+	if allConst {
+		// In case every element in right tuple is a constant but none of them
+		// made the comparison return TrueExpr, we can safely fold
+		// expression to either FalseExpr or NullExpr.
+		if hasNull {
+			return c.f.ConstructNull(types.Bool), true
+		}
+		return c.f.ConstructFalse(), true
+	}
+	return nil, false
+}
+
 // IsNeverNull returns true if the input is a non-null constant value,
 // any tuple, or any array.
 func (c *CustomFuncs) IsNeverNull(input opt.ScalarExpr) bool {
@@ -338,7 +375,7 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 			if err != nil {
 				return nil, false, err
 			}
-			oid, ok := tree.AsDOid(cDatum)
+			oid, ok := cDatum.(*tree.DOid)
 			if !ok {
 				return nil, false, nil
 			}
@@ -663,8 +700,10 @@ func (c *CustomFuncs) FoldFunction(
 	if c.f.evalCtx != nil && c.f.catalog != nil { // Some tests leave those unset.
 		unresolved := tree.MakeUnresolvedName(private.Name)
 		def, err := c.f.catalog.ResolveFunction(
-			context.Background(), tree.MakeUnresolvedFunctionName(&unresolved),
-			&c.f.evalCtx.SessionData().SearchPath)
+			c.f.ctx,
+			tree.MakeUnresolvedFunctionName(&unresolved),
+			&c.f.evalCtx.SessionData().SearchPath,
+		)
 		if err != nil {
 			log.Dev.Warningf(c.f.ctx, "function %s() not defined: %v", redact.Safe(private.Name), err)
 			return nil, false

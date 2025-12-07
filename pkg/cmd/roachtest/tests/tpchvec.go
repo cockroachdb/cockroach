@@ -525,20 +525,19 @@ func getTPCHVecWorkloadCmd(numRunsPerQuery, queryNum int, sharedProcessMT bool) 
 	if sharedProcessMT {
 		url = fmt.Sprintf("{pgurl:1:%s}", appTenantName)
 	}
-	// Note that we use --default-vectorize flag which tells tpch workload to
-	// use the current cluster setting sql.defaults.vectorize which must have
-	// been set correctly in preQueryRunHook.
 	return fmt.Sprintf("./cockroach workload run tpch --concurrency=1 --db=tpch "+
-		"--default-vectorize --max-ops=%d --queries=%d %s --enable-checks=true",
+		"--max-ops=%d --queries=%d %s",
 		numRunsPerQuery, queryNum, url)
 }
 
 func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tpchVecTestCase) {
 	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings())
 
+	var virtualClusterName string
 	var conn *gosql.DB
 	var disableMergeQueue bool
 	if testCase.sharedProcessMT() {
+		virtualClusterName = appTenantName
 		singleTenantConn := c.Conn(ctx, t.L(), 1)
 		// Disable merge queue in the system tenant.
 		if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
@@ -552,9 +551,10 @@ func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tp
 		disableMergeQueue = true
 	}
 
-	t.Status("restoring TPCH dataset for Scale Factor 1")
-	if err := loadTPCHDataset(
-		ctx, t, c, conn, 1 /* sf */, c.NewDeprecatedMonitor(ctx), c.All(), disableMergeQueue,
+	t.Status("importing TPCH dataset for Scale Factor 1")
+	if err := importTPCHDataset(
+		ctx, t, c, virtualClusterName, conn, 1 /* sf */, c.NewDeprecatedMonitor(ctx),
+		c.All(), disableMergeQueue, true, /* smallRanges */
 	); err != nil {
 		t.Fatal(err)
 	}

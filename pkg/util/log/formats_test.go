@@ -65,7 +65,7 @@ func TestFormatRedaction(t *testing.T) {
 							require.NoError(t, err)
 							defer cleanupFn()
 
-							Infof(ctx, "safe2 %s", "secret3")
+							Dev.Infof(ctx, "safe2 %s", "secret3")
 							FlushFiles()
 
 							contents, err := os.ReadFile(getDebugLogFileName(t))

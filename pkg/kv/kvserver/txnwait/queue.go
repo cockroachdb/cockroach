@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"container/list"
 	"context"
-	"runtime/pprof"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -343,7 +343,7 @@ func (q *Queue) Clear(disable bool) {
 	metrics.PusheeWaiting.Dec(int64(len(q.mu.txns)))
 
 	if log.V(1) {
-		log.Dev.Infof(
+		log.KvExec.Infof(
 			context.Background(),
 			"clearing %d push waiters and %d query waiters",
 			waitingPushesCount,
@@ -394,7 +394,7 @@ func (q *Queue) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
 	}
 
 	if log.V(1) {
-		log.Dev.Infof(
+		log.KvExec.Infof(
 			context.Background(),
 			"clearing %d push waiters and %d query waiters",
 			waitingPushesCount,
@@ -503,7 +503,7 @@ func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 	metrics.PusheeWaiting.Dec(1)
 
 	if log.V(1) && waitingPushes.Len() > 0 {
-		log.Dev.Infof(ctx, "updating %d push waiters for %s", waitingPushes.Len(), txn.ID.Short())
+		log.KvExec.Infof(ctx, "updating %d push waiters for %s", waitingPushes.Len(), txn.ID.Short())
 	}
 	// Send on pending waiter channels outside of the mutex lock.
 	for e := waitingPushes.Front(); e != nil; e = e.Next() {
@@ -639,10 +639,9 @@ func (q *Queue) MaybeWaitForPush(
 	)
 	var res *kvpb.PushTxnResponse
 	var err *kvpb.Error
-	labels := pprof.Labels("pushee", req.PusheeTxn.ID.String(), "pusher", pusherStr)
-	pprof.Do(ctx, labels, func(ctx context.Context) {
+	pprofutil.Do(ctx, func(ctx context.Context) {
 		res, err = q.waitForPush(ctx, req, push, pending)
-	})
+	}, "pushee", req.PusheeTxn.ID.String(), "pusher", pusherStr)
 	return res, err
 }
 
@@ -698,7 +697,7 @@ func (q *Queue) waitForPush(
 		select {
 		case <-slowTimer.C:
 			metrics.PusherSlow.Inc(1)
-			log.Dev.Warningf(ctx, "pusher %s: have been waiting %.2fs for pushee %s",
+			log.KvExec.Warningf(ctx, "pusher %s: have been waiting %.2fs for pushee %s",
 				req.PusherTxn.ID.Short(),
 				timeutil.Since(tBegin).Seconds(),
 				req.PusheeTxn.ID.Short(),
@@ -706,7 +705,7 @@ func (q *Queue) waitForPush(
 			//nolint:deferloop
 			defer func() {
 				metrics.PusherSlow.Dec(1)
-				log.Dev.Warningf(ctx, "pusher %s: finished waiting after %.2fs for pushee %s",
+				log.KvExec.Warningf(ctx, "pusher %s: finished waiting after %.2fs for pushee %s",
 					req.PusherTxn.ID.Short(),
 					timeutil.Since(tBegin).Seconds(),
 					req.PusheeTxn.ID.Short(),
@@ -840,7 +839,7 @@ func (q *Queue) waitForPush(
 					// in a deadlock, but we don't want these to be too spammy.
 					level := log.Level(1)
 					if q.every.ShouldLog() {
-						level = 0 // will behave like a log.Dev.Infof
+						level = 0 // will behave like a log.KvExec.Infof
 					}
 					log.VEventf(
 						ctx,

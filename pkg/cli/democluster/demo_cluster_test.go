@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
@@ -140,6 +139,10 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			actual.Stopper = nil
 			actual.StoreSpecs = nil
 			actual.Knobs.JobsTestingKnobs = nil
+
+			// Copy the SQLEvalContext from actual to expected since it's set by SetUnsafeOverride
+			// and contains function pointers that we can't predict
+			tc.expected.Knobs.SQLEvalContext = actual.Knobs.SQLEvalContext
 
 			assert.Equal(t, tc.expected, actual)
 		})
@@ -308,9 +311,6 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	var cancel func()
 	ctx, cancel = c.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
-
-	// Ensure CREATE TABLE below works properly.
-	sqlclustersettings.RestrictAccessToSystemInterface.Override(ctx, &c.firstServer.SystemLayer().ClusterSettings().SV, false)
 
 	testutils.RunTrueAndFalse(t, "forSecondaryTenant", func(t *testing.T, forSecondaryTenant bool) {
 		url, err := c.getNetworkURLForServer(ctx, 0,

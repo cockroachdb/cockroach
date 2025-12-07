@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -363,6 +364,66 @@ func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 	mu.Lock()
 	require.True(t, mu.lastStartTS.IsEmpty(), "expected reconciler to start with empty checkpoint")
 	mu.Unlock()
+}
+
+// TestReconciliationJobFinalErrorIncludesCause verifies that the reconciliation
+// job surfaces the last reconciliation error when internal retries are exhausted.
+func TestReconciliationJobFinalErrorIncludesCause(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	const injectedErrMsg = "injected reconciliation failure"
+	injectedErr := errors.New(injectedErrMsg)
+
+	var jobID jobspb.JobID
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SpanConfig: &spanconfig.TestingKnobs{
+				ManagerDisableJobCreation: true, // disable automatic job creation; we'll create one explicitly
+				JobDisableInternalRetry:   true,
+				JobOnCheckpointInterceptor: func(_ hlc.Timestamp) error {
+					return injectedErr
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	manager := spanconfigmanager.New(
+		ts.InternalDB().(isql.DB),
+		ts.JobRegistry().(*jobs.Registry),
+		ts.AppStopper(),
+		ts.ClusterSettings(),
+		ts.SpanConfigReconciler().(spanconfig.Reconciler),
+		&spanconfig.TestingKnobs{
+			ManagerCreatedJobInterceptor: func(jobI interface{}) {
+				jobID = jobI.(*jobs.Job).ID()
+			},
+		},
+	)
+
+	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
+	require.NoError(t, err)
+	require.True(t, started)
+
+	testutils.SucceedsSoon(t, func() error {
+		if jobID == 0 {
+			return errors.New("waiting for job to be created")
+		}
+		return nil
+	})
+
+	waitForJobState(t, tdb, jobID, jobs.StateFailed)
+
+	payload := jobutils.GetJobPayload(t, tdb, jobID)
+	require.NotNil(t, payload.FinalResumeError)
+	decodedErr := errors.DecodeError(ctx, *payload.FinalResumeError)
+	require.ErrorContains(t, decodedErr, "reconciliation unsuccessful, failing job")
+	require.ErrorContains(t, decodedErr, injectedErrMsg)
 }
 
 // TestReconciliationUsesRightCheckpoint verifies that the reconciliation

@@ -470,7 +470,7 @@ func setDebugContextDefaults() {
 	debugCtx.sizes = false
 	debugCtx.replicated = false
 	debugCtx.inputFile = ""
-	debugCtx.ballastSize = storageconfig.Size{Bytes: 1000000000}
+	debugCtx.ballastSize = storageconfig.BytesSize(1000000000)
 	debugCtx.maxResults = 0
 	debugCtx.decodeAsTableDesc = ""
 	debugCtx.verbose = false
@@ -488,6 +488,7 @@ var startCtx struct {
 	serverRootCertDN       string
 	serverNodeCertDN       string
 	serverTLSCipherSuites  []string
+	disallowRootLogin      bool
 
 	// The TLS auto-handshake parameters.
 	initToken             string
@@ -543,6 +544,7 @@ func setStartContextDefaults() {
 	startCtx.serverCertPrincipalMap = nil
 	startCtx.serverRootCertDN = ""
 	startCtx.serverNodeCertDN = ""
+	startCtx.disallowRootLogin = false
 	startCtx.serverListenAddr = ""
 	startCtx.unencryptedLocalhostHTTP = false
 	startCtx.tempDir = ""
@@ -719,24 +721,4 @@ var userfileCtx struct {
 // every test that exercises command-line parsing.
 func setUserfileContextDefaults() {
 	userfileCtx.recursive = false
-}
-
-// GetServerCfgStores provides direct public access to the StoreSpecList inside
-// serverCfg. This is used by CCL code to populate some fields.
-//
-// WARNING: consider very carefully whether you should be using this.
-// If you are not writing CCL code that performs command-line flag
-// parsing, you probably should not be using this.
-func GetServerCfgStores() base.StoreSpecList {
-	return serverCfg.Stores
-}
-
-// GetWALFailoverConfig provides direct public access to the WALFailoverConfig
-// inside serverCfg. This is used by CCL code to populate some fields.
-//
-// WARNING: consider very carefully whether you should be using this.
-// If you are not writing CCL code that performs command-line flag
-// parsing, you probably should not be using this.
-func GetWALFailoverConfig() *storageconfig.WALFailover {
-	return &serverCfg.StorageConfig.WALFailover
 }

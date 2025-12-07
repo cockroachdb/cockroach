@@ -10,7 +10,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -42,7 +41,7 @@ func alterTableAlterColumnType(
 ) {
 	colID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /* required */)
 	col := mustRetrieveColumnElem(b, tbl.TableID, colID)
-	panicIfSystemColumn(col, t.Column.String())
+	panicIfSystemColumn(col, t.Column)
 
 	// Setup for the new type ahead of any checking. As we need its resolved type
 	// for the checks.
@@ -93,12 +92,12 @@ func alterTableAlterColumnType(
 		case *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr:
 			panic(sqlerrors.NewAlterDependsOnPolicyExprError(op, objType, t.Column.String()))
 		}
-	})
+	}, false /* allowPartialIdxPredicateRef */)
 
 	var err error
 	newColType.Type, err = schemachange.ValidateAlterColumnTypeChecks(
 		b, t, b.ClusterSettings(), newColType.Type,
-		col.GeneratedAsIdentityType != catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN,
+		isColumnGeneratedAsIdentity(b, tbl.TableID, col.ColumnID),
 		newColType.IsVirtual)
 	if err != nil {
 		panic(err)
@@ -215,7 +214,7 @@ func validateNewTypeForComputedColumn(
 		func() colinfo.ResultColumns {
 			return getNonDropResultColumns(b, tableID)
 		},
-		func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+		func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 			return columnLookupFn(b, tableID, columnName)
 		},
 	)
@@ -309,7 +308,7 @@ func handleGeneralColumnConversion(
 		case *scpb.SecondaryIndex:
 			panic(sqlerrors.NewAlterColumnTypeColInIndexNotSupportedErr())
 		}
-	})
+	}, false /* allowPartialIdxPredicateRef */)
 
 	// This code path should never be reached for virtual columns, as their values
 	// are always computed dynamically on access and are never stored on disk.
@@ -335,6 +334,8 @@ func handleGeneralColumnConversion(
 		panic(scerrors.NotImplementedErrorf(t,
 			"old active version; ALTER COLUMN TYPE requires backfill. Reverting to legacy handling"))
 	}
+
+	colHidden := retrieveColumnHidden(b, tbl.TableID, col.ColumnID)
 
 	colNotNull := retrieveColumnNotNull(b, tbl.TableID, col.ColumnID)
 
@@ -380,6 +381,9 @@ func handleGeneralColumnConversion(
 	}
 	if colNotNull != nil {
 		b.Drop(colNotNull)
+	}
+	if colHidden != nil {
+		b.Drop(colHidden)
 	}
 	if oldColComment != nil {
 		b.Drop(oldColComment)
@@ -429,6 +433,7 @@ func handleGeneralColumnConversion(
 			Expression: *b.WrapExpression(tbl.TableID, expr),
 			Usage:      scpb.ColumnComputeExpression_ALTER_TYPE_USING,
 		},
+		hidden:  colHidden != nil,
 		notNull: retrieveColumnNotNull(b, tbl.TableID, col.ColumnID) != nil,
 		// The new column will be placed in the same column family as the one
 		// it's replacing, so there's no need to specify a family.
@@ -505,7 +510,7 @@ func maybeWriteNoticeForFKColTypeMismatch(b BuildCtx, col *scpb.Column, colType 
 		case *scpb.ForeignKeyConstraintUnvalidated:
 			writeNoticeHelper(e.ColumnIDs, e.ReferencedColumnIDs, e.ReferencedTableID)
 		}
-	})
+	}, false /* allowPartialIdxPredicateRef */)
 }
 
 func getComputeExpressionForBackfill(
@@ -531,7 +536,7 @@ func getComputeExpressionForBackfill(
 		func() colinfo.ResultColumns {
 			return getNonDropResultColumns(b, tableID)
 		},
-		func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+		func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 			return columnLookupFn(b, tableID, columnName)
 		},
 	)

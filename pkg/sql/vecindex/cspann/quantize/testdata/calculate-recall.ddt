@@ -31,9 +31,9 @@ Cosine: 88.50% recall@10
 # material difference.
 calculate-recall dataset=random-20d-1k randomize
 ----
-Euclidean: 91.50% recall@10
+Euclidean: 91.00% recall@10
 InnerProduct: 90.50% recall@10
-Cosine: 91.00% recall@10
+Cosine: 90.50% recall@10
 
 # ----------------------------------------------------------------------
 # Calculate average recall on 28x28 greyscale pixel images (flattened to 784

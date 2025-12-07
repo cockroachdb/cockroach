@@ -18,6 +18,7 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/flagstub",
+        "//pkg/util/ctxgroup",
         "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/syncutil",

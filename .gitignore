@@ -58,6 +58,7 @@ build/variables.mk
 *.pb.gw.go
 pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl/generated_test.go
 pkg/backup/data_driven_generated_test.go
+pkg/internal/teams/TEAMS.yaml
 pkg/testutils/serverutils/*_generated.go
 
 # Temporary directories during gomock generate
@@ -66,3 +67,4 @@ pkg/testutils/serverutils/*_generated.go
 .DS_Store
 .idea/
 .vscode/
+CLAUDE.local.md

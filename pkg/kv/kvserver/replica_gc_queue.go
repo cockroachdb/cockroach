@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -123,7 +124,7 @@ func (rgcq *replicaGCQueue) shouldQueue(
 	}
 	lastCheck, err := repl.GetLastReplicaGCTimestamp(ctx)
 	if err != nil {
-		log.Dev.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
+		log.KvDistribution.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
 		return false, 0
 	}
 	isSuspect := replicaIsSuspect(repl)
@@ -299,23 +300,17 @@ func (rgcq *replicaGCQueue) process(
 			// snapshot for *each* of them. This typically happens for the last
 			// range:
 			// [n1,replicaGC,s1,r33/1:/{Table/53/1/3…-Max}] removing replica [...]
-			log.Dev.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
+			log.KvDistribution.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
 		}
 
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "destroying local data")
 
 		nextReplicaID := replyDesc.NextReplicaID
-		// Note that this seems racy - we didn't hold any locks between reading
-		// the range descriptor above and deciding to remove the replica - but
-		// we pass in the NextReplicaID to detect situations in which the
-		// replica became "non-gc'able" in the meantime by checking (with raftMu
-		// held throughout) whether the replicaID is still smaller than the
-		// NextReplicaID. Given non-zero replica IDs don't change, this is only
-		// possible if we currently think we're processing a pre-emptive snapshot
-		// but discover in RemoveReplica that this range has since been added and
-		// knows that.
-		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, "MVCC GC queue"); err != nil {
+		// NB: since we didn't hold any locks between reading the range descriptor
+		// above and deciding to remove the replica, it could have been removed
+		// concurrently. RemoveReplica gracefully returns nil in this case.
+		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, "replica GC queue"); err != nil {
 			// Should never get an error from RemoveReplica.
 			const format = "error during replicaGC: %v"
 			logcrash.ReportOrPanic(ctx, &repl.store.ClusterSettings().SV, format, err)
@@ -354,11 +349,11 @@ func (rgcq *replicaGCQueue) process(
 			}
 		}
 
-		// A tombstone is written with a value of mergedTombstoneReplicaID because
+		// A tombstone is written with a value of MergedTombstoneReplicaID because
 		// we know the range to have been merged. See the Merge case of
 		// runPreApplyTriggers() for details.
 		if err := repl.store.RemoveReplica(
-			ctx, repl, mergedTombstoneReplicaID, "dangling subsume via MVCC GC queue",
+			ctx, repl, kvstorage.MergedTombstoneReplicaID, "dangling subsume via replica GC queue",
 		); err != nil {
 			return false, err
 		}

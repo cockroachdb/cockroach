@@ -73,7 +73,7 @@ func getJobsUpdatedWithPayload(
 
 	// Execute query and process results.
 	err := helpers.ExecuteQuery(ctx, func(rowValues []string) error {
-		var payload *jobspb.Payload
+		payload := &jobspb.Payload{}
 		err := protoutil.Unmarshal([]byte(rowValues[1]), payload)
 		if err != nil {
 			return err

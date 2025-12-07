@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -48,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -62,59 +60,11 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/cockroachdb/redact"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/lib/pq"
-	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/require"
 )
-
-func TestAnonymizeStatementsForReporting(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s := cluster.MakeTestingClusterSettings()
-	vt, err := sql.NewVirtualSchemaHolder(context.Background(), s)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	const stmt1s = `
-INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
-`
-	stmt1, err := parser.ParseOne(stmt1s)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rUnsafe := errors.New("some error")
-	safeErr := sql.WithAnonymizedStatement(rUnsafe, stmt1.AST, vt, nil /* ClientNoticeSender */)
-
-	const expMessage = "some error"
-	actMessage := safeErr.Error()
-	if actMessage != expMessage {
-		t.Errorf("wanted: %s\ngot: %s", expMessage, actMessage)
-	}
-
-	const expSafeRedactedMsgPrefix = `some error
-(1) while executing: INSERT INTO _(_, _) VALUES ('_', '_', __more1_10__)`
-
-	actSafeRedactedMessage := string(redact.Sprintf("%+v", safeErr))
-
-	if !strings.HasPrefix(actSafeRedactedMessage, expSafeRedactedMsgPrefix) {
-		diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-			A:        difflib.SplitLines(expSafeRedactedMsgPrefix),
-			B:        difflib.SplitLines(actSafeRedactedMessage[:len(expSafeRedactedMsgPrefix)]),
-			FromFile: "Expected Message Prefix",
-			FromDate: "",
-			ToFile:   "Actual Message Prefix",
-			ToDate:   "",
-			Context:  1,
-		})
-		t.Errorf("Diff:\n%s", diff)
-	}
-}
 
 // Test that a connection closed abruptly while a SQL txn is in progress results
 // in that txn being rolled back.
@@ -125,15 +75,17 @@ INSERT INTO sensitive(super, sensible) VALUES('that', 'nobody', 'must', 'see')
 func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
-	s, mainDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, mainDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	{
-		pgURL, cleanup := pgurlutils.PGUrl(
-			t, s.AdvSQLAddr(), "TestSessionFinishRollsBackTxn", url.User(username.RootUser))
+		pgURL, cleanup := s.PGUrl(
+			t, serverutils.CertsDirPrefix("TestSessionFinishRollsBackTxn"), serverutils.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -157,7 +109,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	for _, state := range tests {
 		t.Run(state, func(t *testing.T) {
 			// Create a low-level lib/pq connection so we can close it at will.
-			pgURL, cleanup := s.ApplicationLayer().PGUrl(t)
+			pgURL, cleanup := s.PGUrl(t)
 			defer cleanup()
 			c, err := pq.Open(pgURL.String())
 			if err != nil {
@@ -418,7 +370,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	defer mutations.ResetMaxBatchSizeForTests()
 	numRows := smallerKvBatchSize + smallerInsertBatchSize + 10
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Insecure = true
 	params.Knobs.DistSQL = &execinfra.TestingKnobs{
 		TableReaderBatchBytesLimit: 10,
@@ -489,7 +441,7 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Insecure = true
 
 	s := serverutils.StartServerOnly(t, params)
@@ -692,7 +644,9 @@ func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(156146),
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	testDB := sqlutils.MakeSQLRunner(sqlDB)
@@ -1009,15 +963,16 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 
 	ctx := context.Background()
 	filter := newDynamicRequestFilter()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: filter.filter,
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
-	codec := s.ApplicationLayer().Codec()
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	codec := s.Codec()
 
 	testDB := sqlutils.MakeSQLRunner(sqlDB)
 	testDB.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
@@ -1030,7 +985,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	// transaction state evolves appropriately.
 
 	// Use pgx so that we can introspect error codes returned from cockroach.
-	pgURL, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "", url.User("root"))
+	pgURL, cleanup := s.PGUrl(t, serverutils.User(username.RootUser))
 	defer cleanup()
 	conf, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
@@ -1453,8 +1408,15 @@ func TestShowLastQueryStatistics(t *testing.T) {
 	skip.UnderRace(t, "measure planning latency which is slower than usual under race")
 
 	ctx := context.Background()
-	params := base.TestServerArgs{}
-	s, sqlConn, _ := serverutils.StartServer(t, params)
+	var testTenant base.DefaultTestTenantOptions
+	if syncutil.DeadlockEnabled {
+		// Under deadlock, the planning latency in the external process mode can
+		// sometimes exceed 1s allowed limit.
+		testTenant = base.TestSkipForExternalProcessMode()
+	}
+	s, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: testTenant,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	testCases := []struct {
@@ -1592,9 +1554,9 @@ func TestInjectRetryErrors(t *testing.T) {
 			}
 		},
 	}
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-	defer db.Close()
+	srv, db, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	_, err := db.Exec("SET inject_retry_errors_enabled = 'true'")
 	require.NoError(t, err)
@@ -1705,8 +1667,9 @@ func TestInjectRetryErrors(t *testing.T) {
 
 		// Choose a small results_buffer_size and make sure the statement retry
 		// does not occur.
-		pgURL, cleanupFn := pgurlutils.PGUrl(
-			t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+		pgURL, cleanupFn := s.PGUrl(
+			t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(username.RootUser),
+		)
 		defer cleanupFn()
 		q := pgURL.Query()
 		q.Add("results_buffer_size", "4")
@@ -1784,8 +1747,11 @@ func TestAbortedTxnLocks(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156127),
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	var TransactionStatus string
 
@@ -2472,8 +2438,9 @@ func TestInternalAppNamePrefix(t *testing.T) {
 	ctx := context.Background()
 	params := base.TestServerArgs{}
 	params.Insecure = true
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Create a test table.
 	_, err := sqlDB.Exec("CREATE TABLE test (k INT PRIMARY KEY, v INT)")
@@ -2481,13 +2448,9 @@ func TestInternalAppNamePrefix(t *testing.T) {
 
 	t.Run("app name set at conn init", func(t *testing.T) {
 		// Create a connection.
-		connURL := url.URL{
-			Scheme: "postgres",
-			User:   url.User(username.RootUser),
-			Host:   s.AdvSQLAddr(),
-		}
+		connURL, cleanup := s.PGUrl(t, serverutils.User(username.RootUser))
+		defer cleanup()
 		q := connURL.Query()
-		q.Add("sslmode", "disable")
 		q.Add("application_name", catconstants.InternalAppNamePrefix+"mytest")
 		connURL.RawQuery = q.Encode()
 		db, err := gosql.Open("postgres", connURL.String())
@@ -2509,15 +2472,7 @@ func TestInternalAppNamePrefix(t *testing.T) {
 
 	t.Run("app name set in session", func(t *testing.T) {
 		// Create a connection.
-		connURL := url.URL{
-			Scheme:   "postgres",
-			User:     url.User(username.RootUser),
-			Host:     s.AdvSQLAddr(),
-			RawQuery: "sslmode=disable",
-		}
-		db, err := gosql.Open("postgres", connURL.String())
-		require.NoError(t, err)
-		defer db.Close()
+		db := s.SQLConn(t, serverutils.User(username.RootUser))
 		runner := sqlutils.MakeSQLRunner(db)
 
 		// Get initial metric values

@@ -10,9 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -49,7 +47,7 @@ func intCols(numCols int) []*types.T {
 }
 
 func encInt(i int) rowenc.EncDatum {
-	return rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+	return rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
 }
 
 func TestZigzagJoiner(t *testing.T) {
@@ -57,8 +55,9 @@ func TestZigzagJoiner(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	null := tree.DNull
 
@@ -175,17 +174,17 @@ func TestZigzagJoiner(t *testing.T) {
 		sqlutils.ToRowFn(aFn, bFn, eFn, dFn),
 	)
 
-	empty := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "empty")
-	single := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "single")
-	smallDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "small")
-	medDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "med")
-	highRangeDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "offset")
-	overlappingDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "overlapping")
-	compDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "comp")
-	revCompDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "rev")
-	compUnqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "unq")
-	t2Desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
-	nullableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "nullable")
+	empty := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "empty")
+	single := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "single")
+	smallDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "small")
+	medDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "med")
+	highRangeDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "offset")
+	overlappingDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "overlapping")
+	compDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "comp")
+	revCompDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "rev")
+	compUnqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "unq")
+	t2Desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t2")
+	nullableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "nullable")
 
 	testCases := []zigzagJoinerTestCase{
 		{
@@ -193,11 +192,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, empty, "c", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), empty, "c", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, empty, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), empty, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},
@@ -213,11 +212,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, empty, "c", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), empty, "c", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, highRangeDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), highRangeDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},
@@ -233,11 +232,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, highRangeDesc, "c", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), highRangeDesc, "c", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, empty, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), empty, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},
@@ -253,11 +252,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, empty, "c", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), empty, "c", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, highRangeDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), highRangeDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},
@@ -273,11 +272,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, single, "c", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), single, "c", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, single, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), single, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},
@@ -293,11 +292,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, smallDesc, "c", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), smallDesc, "c", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, smallDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), smallDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},
@@ -313,11 +312,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, medDesc, "c", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), medDesc, "c", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, medDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), medDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},
@@ -333,11 +332,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, medDesc, "c", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), medDesc, "c", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, medDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), medDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
 					},
 				},
@@ -354,11 +353,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, medDesc, "c", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), medDesc, "c", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, medDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), medDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
 					},
 				},
@@ -374,11 +373,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, highRangeDesc, "c", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), highRangeDesc, "c", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, highRangeDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), highRangeDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
 					},
 				},
@@ -395,11 +394,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, medDesc, "c", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), medDesc, "c", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, smallDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), smallDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},
@@ -415,11 +414,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, smallDesc, "c", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), smallDesc, "c", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, medDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), medDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},
@@ -435,11 +434,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, overlappingDesc, "ac", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), overlappingDesc, "ac", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, overlappingDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), overlappingDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
 					},
 				},
@@ -455,11 +454,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, smallDesc, "small_pkey", "a,b"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), smallDesc, "small_pkey", "a,b"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, t2Desc, "t2_pkey", "b,a"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), t2Desc, "t2_pkey", "b,a"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},
@@ -475,11 +474,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, t2Desc, "t2_pkey", "b,a"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), t2Desc, "t2_pkey", "b,a"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, smallDesc, "small_pkey", "a,b"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), smallDesc, "small_pkey", "a,b"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},
@@ -495,11 +494,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, smallDesc, "small_pkey", "a,b"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), smallDesc, "small_pkey", "a,b"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, smallDesc, "small_pkey", "a,b"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), smallDesc, "small_pkey", "a,b"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},
@@ -515,11 +514,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, smallDesc, "small_pkey", "a,b"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), smallDesc, "small_pkey", "a,b"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, t2Desc, "t2_pkey", "b,a"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), t2Desc, "t2_pkey", "b,a"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
 					},
 				},
@@ -535,11 +534,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, compDesc, "cab", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), compDesc, "cab", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, compDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), compDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},
@@ -555,11 +554,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, revCompDesc, "cba", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), revCompDesc, "cba", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0}}, // join on a
 					},
 					{
-						FetchSpec: makeFetchSpec(t, revCompDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), revCompDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
 					},
 				},
@@ -575,11 +574,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, revCompDesc, "cba", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), revCompDesc, "cba", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, revCompDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), revCompDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
 					},
 				},
@@ -596,11 +595,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, revCompDesc, "cba", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), revCompDesc, "cba", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, revCompDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), revCompDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
 					},
 				},
@@ -617,11 +616,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, compUnqDesc, "cb", "a,b,c"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), compUnqDesc, "cb", "a,b,c"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, compUnqDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), compUnqDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{1}},
 					},
 				},
@@ -637,11 +636,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, nullableDesc, "e", "a,b,e"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), nullableDesc, "e", "a,b,e"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{2}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, nullableDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), nullableDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{2}},
 					},
 				},
@@ -660,11 +659,11 @@ func TestZigzagJoiner(t *testing.T) {
 			spec: execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, medDesc, "med_pkey", "a,b,c,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), medDesc, "med_pkey", "a,b,c,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, medDesc, "d", "a,b,d"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), medDesc, "d", "a,b,d"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{2}},
 					},
 				},
@@ -681,14 +680,14 @@ func TestZigzagJoiner(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
-			st := cluster.MakeTestingClusterSettings()
-			evalCtx := eval.MakeTestingEvalContext(st)
+			st := s.ClusterSettings()
+			evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 			defer evalCtx.Stop(ctx)
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
 				Mon:     evalCtx.TestingMon,
 				Cfg:     &execinfra.ServerConfig{Settings: st},
-				Txn:     kv.NewTxn(ctx, s.DB(), s.NodeID()),
+				Txn:     kv.NewTxn(ctx, s.DB(), srv.NodeID()),
 			}
 
 			out := &distsqlutils.RowBuffer{}
@@ -730,15 +729,16 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	v := [10]tree.Datum{}
 	for i := range v {
 		v[i] = tree.NewDInt(tree.DInt(i))
 	}
-	encThree := rowenc.DatumToEncDatum(types.Int, v[3])
-	encSeven := rowenc.DatumToEncDatum(types.Int, v[7])
+	encThree := rowenc.DatumToEncDatumUnsafe(types.Int, v[3])
+	encSeven := rowenc.DatumToEncDatumUnsafe(types.Int, v[7])
 
 	sqlutils.CreateTable(
 		t,
@@ -748,19 +748,19 @@ func TestZigzagJoinerDrain(t *testing.T) {
 		1, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowIdxFn, sqlutils.RowIdxFn, sqlutils.RowIdxFn),
 	)
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 
 	// Run the flow in a verbose trace so that we can test for tracing info.
 	tracer := s.TracerI().(*tracing.Tracer)
 	ctx, sp := tracer.StartSpanCtx(context.Background(), "test flow ctx", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
-	evalCtx := eval.MakeTestingEvalContext(s.ClusterSettings())
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
 
-	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
+	rootTxn := kv.NewTxn(ctx, s.DB(), srv.NodeID())
 	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	require.NoError(t, err)
-	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState, nil /* header */)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), srv.NodeID(), leafInputState, nil /* header */)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
@@ -777,11 +777,11 @@ func TestZigzagJoinerDrain(t *testing.T) {
 			&execinfrapb.ZigzagJoinerSpec{
 				Sides: []execinfrapb.ZigzagJoinerSpec_Side{
 					{
-						FetchSpec: makeFetchSpec(t, td, "t_pkey", "a,b"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), td, "t_pkey", "a,b"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 					{
-						FetchSpec: makeFetchSpec(t, td, "c", "a,b"),
+						FetchSpec: makeFetchSpec(t, s.Codec(), td, "c", "a,b"),
 						EqColumns: execinfrapb.Columns{Columns: []uint32{0, 1}},
 					},
 				},

@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"reflect"
@@ -50,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -79,11 +81,17 @@ type TestCluster struct {
 	clusterArgs base.TestClusterArgs
 
 	defaultTestTenantOptions base.DefaultTestTenantOptions
+	defaultDRPCOption        base.DefaultTestDRPCOption
 
 	t serverutils.TestFataler
 }
 
 var _ serverutils.TestClusterInterface = &TestCluster{}
+
+// ClusterName returns the configured or auto-generated cluster name.
+func (tc *TestCluster) ClusterName() string {
+	return tc.clusterArgs.ServerArgs.ClusterName
+}
 
 // NumServers is part of TestClusterInterface.
 func (tc *TestCluster) NumServers() int {
@@ -260,6 +268,40 @@ func PrintTimings(testMain time.Duration) {
 	}
 }
 
+// validateDefaultTestTenant checks that per-server args don't override
+// the top-level DefaultTestTenant setting inconsistently.
+func (tc *TestCluster) validateDefaultTestTenant(
+	t serverutils.TestFataler, nodes int, defaultTestTenantOptions base.DefaultTestTenantOptions,
+) {
+	for i := range nodes {
+		if args, ok := tc.clusterArgs.ServerArgsPerNode[i]; ok &&
+			args.DefaultTestTenant != (base.DefaultTestTenantOptions{}) &&
+			args.DefaultTestTenant != defaultTestTenantOptions {
+			tc.Stopper().Stop(context.Background())
+			t.Fatalf("improper use of DefaultTestTenantOptions in per-server args: %v vs %v\n"+
+				"Tip: use the top-level ServerArgs to set the default test tenant options.",
+				args.DefaultTestTenant, defaultTestTenantOptions)
+		}
+	}
+}
+
+// validateDefaultDRPCOption checks that per-server args don't override
+// the top-level DefaultDRPCOption setting inconsistently.
+func (tc *TestCluster) validateDefaultDRPCOption(
+	t serverutils.TestFataler, nodes int, clusterDRPCOption base.DefaultTestDRPCOption,
+) {
+	for i := range nodes {
+		if args, ok := tc.clusterArgs.ServerArgsPerNode[i]; ok &&
+			args.DefaultDRPCOption != base.TestDRPCUnset &&
+			args.DefaultDRPCOption != clusterDRPCOption {
+			tc.Stopper().Stop(context.Background())
+			t.Fatalf("improper use of DefaultDRPCOption in per-server args: %v vs %v\n"+
+				"Use the top-level ServerArgs to set the default DRPC option.",
+				args.DefaultDRPCOption, clusterDRPCOption)
+		}
+	}
+}
+
 // StartTestCluster creates and starts up a TestCluster made up of `nodes`
 // in-memory testing servers.
 // The cluster should be stopped using TestCluster.Stopper().Stop().
@@ -281,6 +323,16 @@ func NewTestCluster(
 	}
 	if clusterArgs.StartSingleNode && nodes > 1 {
 		t.Fatal("StartSingleNode implies 1 node only, but asked to create", nodes)
+	}
+	if clusterArgs.ServerArgs.ClusterName == "" {
+		// NB: not using randutil.NewTestRand which deterministically depends on the
+		// testing seed. It would defeat the ClusterName's purpose (prevent messages
+		// across TestClusters), e.g. if a test is stressed with the same seed.
+		rng := rand.New(rand.NewSource(rand.Int63()))
+		// Use a cluster name that is sufficiently unique (within the CI env) but is
+		// concise and recognizable.
+		clusterArgs.ServerArgs.ClusterName = fmt.Sprintf("TestCluster-%s",
+			randutil.RandString(rng, 10, randutil.PrintableKeyAlphabet))
 	}
 
 	if err := checkServerArgsForCluster(
@@ -314,22 +366,17 @@ func NewTestCluster(
 		noLocalities = false
 	}
 
-	// Find out how to do the default test tenant.
-	// The choice should be made by the top-level ServerArgs.
+	// Resolve the test tenant configuration for the cluster. The choice should
+	// be made by the top-level ServerArgs.
 	defaultTestTenantOptions := tc.clusterArgs.ServerArgs.DefaultTestTenant
-	// API check: verify that no non-default choice was made via per-server args,
-	// and inform the user otherwise.
-	for i := 0; i < nodes; i++ {
-		if args, ok := tc.clusterArgs.ServerArgsPerNode[i]; ok &&
-			args.DefaultTestTenant != (base.DefaultTestTenantOptions{}) &&
-			args.DefaultTestTenant != defaultTestTenantOptions {
-			tc.Stopper().Stop(context.Background())
-			t.Fatalf("improper use of DefaultTestTenantOptions in per-server args: %v vs %v\n"+
-				"Tip: use the top-level ServerArgs to set the default test tenant options.",
-				args.DefaultTestTenant, defaultTestTenantOptions)
-		}
-	}
+	tc.validateDefaultTestTenant(t, nodes, defaultTestTenantOptions)
 	tc.defaultTestTenantOptions = serverutils.ShouldStartDefaultTestTenant(t, defaultTestTenantOptions)
+
+	// Resolve the DRPC configuration for the cluster. The choice should be made
+	// by the top-level ServerArgs.
+	defaultDRPCOption := tc.clusterArgs.ServerArgs.DefaultDRPCOption
+	tc.validateDefaultDRPCOption(t, nodes, defaultDRPCOption)
+	tc.defaultDRPCOption = serverutils.ShouldEnableDRPC(context.Background(), t, defaultDRPCOption)
 
 	var firstListener net.Listener
 	for i := 0; i < nodes; i++ {
@@ -345,8 +392,6 @@ func NewTestCluster(
 		if serverArgs.Settings != nil && nodes > 1 {
 			serverArgs.Settings = cluster.TestingCloneClusterSettings(serverArgs.Settings)
 		}
-
-		serverutils.TryEnableDRPCSetting(context.Background(), t, &serverArgs)
 
 		// If a reusable listener registry is provided, create reusable listeners
 		// for every server that doesn't have a custom listener provided. (Only
@@ -606,6 +651,9 @@ func (tc *TestCluster) AddServer(
 	if serverArgs.JoinAddr != "" {
 		serverArgs.NoAutoInitializeCluster = true
 	}
+	if serverArgs.ClusterName == "" {
+		serverArgs.ClusterName = tc.clusterArgs.ServerArgs.ClusterName
+	}
 
 	// Check args even though we have called checkServerArgsForCluster()
 	// already in NewTestCluster(). AddServer might be called for servers
@@ -650,9 +698,10 @@ func (tc *TestCluster) AddServer(
 		serverArgs.Addr = serverArgs.Listener.Addr().String()
 	}
 
-	// Inject the decision that was made about whether or not to start a
-	// test tenant server, into this new server's configuration.
+	// Inject the decisions that were made about test configuration
+	// into this new server's configuration.
 	serverArgs.DefaultTestTenant = tc.defaultTestTenantOptions
+	serverArgs.DefaultDRPCOption = tc.defaultDRPCOption
 
 	s, err := serverutils.NewServer(serverArgs)
 	if err != nil {
@@ -1238,6 +1287,7 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 		return nil, errors.Errorf("must set StoreTestingKnobs.AllowLeaseRequestProposalsWhenNotLeader")
 	}
 
+	log.Dev.Infof(ctx, "moving lease non-cooperatively of range %v to %v", rangeDesc, dest)
 	destServer, err := tc.FindMemberServer(dest.StoreID)
 	if err != nil {
 		return nil, err
@@ -1351,8 +1401,17 @@ func (tc *TestCluster) ensureLeaderStepsDown(
 				leaderStore = curStore
 				leaderNode = s
 				leaderReplica = curR
+
+				// Make sure that the leader is fortified because in the next step we
+				// will stop store liveness messages to the leader, and we want to cause
+				// it to step down. If the leader isn't fortified yet, stopping store
+				// liveness messages to it will not cause it to step down.
+				if curR.RaftStatus().LeadSupportUntil.IsEmpty() {
+					return errors.Errorf("leader is not fortified")
+				}
 			}
 		}
+
 		// At this point we have iterated over all nodes in the cluster, if we
 		// haven't found a leader, wait for a bit for one to step up.
 		if leaderStore == nil {

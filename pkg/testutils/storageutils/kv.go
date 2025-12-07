@@ -6,6 +6,7 @@
 package storageutils
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
@@ -26,8 +27,9 @@ func (kvs KVs) MVCCKeyValues() []storage.MVCCKeyValue {
 
 // PointKey creates an MVCCKey for the given string key and timestamp (walltime
 // seconds).
-func PointKey(key string, ts int) storage.MVCCKey {
-	return storage.MVCCKey{Key: roachpb.Key(key), Timestamp: WallTS(ts)}
+func PointKey(codec keys.SQLCodec, key string, ts int) storage.MVCCKey {
+	k := append(append(roachpb.Key(nil), codec.TenantPrefix()...), roachpb.Key(key)...)
+	return storage.MVCCKey{Key: k, Timestamp: WallTS(ts)}
 }
 
 // PointKV creates an MVCCKeyValue for the given string key/value and timestamp
@@ -50,7 +52,7 @@ func PointKVWithLocalTS(key string, ts int, localTS int, value string) storage.M
 		panic(err)
 	}
 	return storage.MVCCKeyValue{
-		Key:   PointKey(key, ts),
+		Key:   PointKey(keys.SystemSQLCodec, key, ts),
 		Value: v,
 	}
 }
@@ -70,7 +72,7 @@ func PointKVWithImportEpoch(
 		panic(err)
 	}
 	return storage.MVCCKeyValue{
-		Key:   PointKey(key, ts),
+		Key:   PointKey(keys.SystemSQLCodec, key, ts),
 		Value: v,
 	}
 }

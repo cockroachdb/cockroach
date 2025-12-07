@@ -476,32 +476,69 @@ func (h *BatchTruncationHelper) Truncate(
 // non-trivial slowdown and increase in allocations, so we choose to duplicate
 // the code for performance.
 func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUnion, []int, error) {
-	var truncReqs []kvpb.RequestUnion
-	var positions []int
-	for i := h.startIdx; i < len(h.positions); i++ {
-		pos := h.positions[i]
+	endIdx := len(h.positions)
+	headers := h.headers[h.startIdx:endIdx]
+	positions := h.positions[h.startIdx:endIdx]
+	requests := h.requests[h.startIdx:endIdx]
+	isRange := h.isRange[h.startIdx:endIdx]
+	endIdx = len(positions)
+
+	fullyProcessed := 0
+	for i := range positions {
+		//gcassert:bce
+		pos := positions[i]
+		if pos < 0 {
+			fullyProcessed++
+			continue
+		}
+		//gcassert:bce
+		header := headers[i]
+		ek := rs.EndKey.AsRawKey()
+		if ek.Compare(header.Key) <= 0 {
+			// All of the remaining requests start after this range, so we're
+			// done.
+			endIdx = i
+			break
+		}
+	}
+
+	headers = headers[:endIdx]
+	positions = positions[:endIdx]
+	requests = requests[:endIdx]
+	isRange = isRange[:endIdx]
+	numReqs := len(positions) - fullyProcessed
+	if numReqs == 0 {
+		return nil, nil, nil
+	}
+	truncReqs := make([]kvpb.RequestUnion, 0, numReqs)
+	truncPositions := make([]int, 0, numReqs)
+
+	for i := range positions {
+		//gcassert:bce
+		pos := positions[i]
 		if pos < 0 {
 			// This request has already been fully processed, so there is no
 			// need to look at it.
 			continue
 		}
-		header := h.headers[i]
+		//gcassert:bce
+		header := headers[i]
 		// rs.EndKey can't be local because it contains range split points,
 		// which are never local.
 		ek := rs.EndKey.AsRawKey()
-		if ek.Compare(header.Key) <= 0 {
-			// All of the remaining requests start after this range, so we're
-			// done.
-			break
-		}
-		if !h.isRange[i] {
+		//gcassert:bce
+		req := requests[i]
+		//gcassert:bce
+		if !isRange[i] {
 			// This is a point request, and the key is contained within this
 			// range, so we include the request as is and mark it as "fully
 			// processed".
-			truncReqs = append(truncReqs, h.requests[i])
-			positions = append(positions, pos)
-			h.headers[i] = kvpb.RequestHeader{}
-			h.positions[i] = -1
+			truncReqs = append(truncReqs, req)
+			truncPositions = append(truncPositions, pos)
+			//gcassert:bce
+			headers[i] = kvpb.RequestHeader{}
+			//gcassert:bce
+			positions[i] = -1
 			continue
 		}
 		// We're dealing with a range-spanning request.
@@ -514,32 +551,35 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 				)
 			}
 		}
-		inner := h.requests[i].GetInner()
+		inner := req.GetInner()
 		if header.EndKey.Compare(ek) <= 0 {
 			// This is the last part of this request since it is fully contained
 			// within this range, so we mark the request as "fully processed".
-			h.headers[i] = kvpb.RequestHeader{}
-			h.positions[i] = -1
+			//gcassert:bce
+			headers[i] = kvpb.RequestHeader{}
+			//gcassert:bce
+			positions[i] = -1
 			if origStartKey := inner.Header().Key; origStartKey.Equal(header.Key) {
 				// This range-spanning request fits within a single range, so we
 				// can just use the original request.
-				truncReqs = append(truncReqs, h.requests[i])
-				positions = append(positions, pos)
+				truncReqs = append(truncReqs, req)
+				truncPositions = append(truncPositions, pos)
 				continue
 			}
 		} else {
 			header.EndKey = ek
 			// Adjust the start key of the header so that it contained only the
 			// unprocessed suffix of the request.
-			h.headers[i].Key = header.EndKey
+			//gcassert:bce
+			headers[i].Key = header.EndKey
 		}
 		shallowCopy := inner.ShallowCopy()
 		shallowCopy.SetHeader(header)
 		truncReqs = append(truncReqs, kvpb.RequestUnion{})
 		truncReqs[len(truncReqs)-1].MustSetInner(shallowCopy)
-		positions = append(positions, pos)
+		truncPositions = append(truncPositions, pos)
 	}
-	return truncReqs, positions, nil
+	return truncReqs, truncPositions, nil
 }
 
 // truncateDesc is the optimized strategy for Truncate() with the Descending
@@ -635,32 +675,69 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 // non-trivial slowdown and increase in allocations, so we choose to duplicate
 // the code for performance.
 func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUnion, []int, error) {
-	var truncReqs []kvpb.RequestUnion
-	var positions []int
-	for i := h.startIdx; i < len(h.positions); i++ {
-		pos := h.positions[i]
+	endIdx := len(h.positions)
+	headers := h.headers[h.startIdx:endIdx]
+	positions := h.positions[h.startIdx:endIdx]
+	requests := h.requests[h.startIdx:endIdx]
+	isRange := h.isRange[h.startIdx:endIdx]
+	endIdx = len(positions)
+
+	fullyProcessed := 0
+	for i := range positions {
+		//gcassert:bce
+		pos := positions[i]
+		if pos < 0 {
+			fullyProcessed++
+			continue
+		}
+		//gcassert:bce
+		header := headers[i]
+		sk := rs.Key.AsRawKey()
+		if sk.Compare(header.EndKey) >= 0 {
+			// All of the remaining requests end before this range, so we're
+			// done.
+			endIdx = i
+			break
+		}
+	}
+
+	headers = headers[:endIdx]
+	positions = positions[:endIdx]
+	requests = requests[:endIdx]
+	isRange = isRange[:endIdx]
+	numReqs := len(positions) - fullyProcessed
+	if numReqs == 0 {
+		return nil, nil, nil
+	}
+	truncReqs := make([]kvpb.RequestUnion, 0, numReqs)
+	truncPositions := make([]int, 0, numReqs)
+
+	for i := range positions {
+		//gcassert:bce
+		pos := positions[i]
 		if pos < 0 {
 			// This request has already been fully processed, so there is no
 			// need to look at it.
 			continue
 		}
-		header := h.headers[i]
+		//gcassert:bce
+		header := headers[i]
 		// rs.Key can't be local because it contains range split points, which
 		// are never local.
 		sk := rs.Key.AsRawKey()
-		if sk.Compare(header.EndKey) >= 0 {
-			// All of the remaining requests end before this range, so we're
-			// done.
-			break
-		}
-		if !h.isRange[i] {
+		//gcassert:bce
+		req := requests[i]
+		//gcassert:bce
+		if !isRange[i] {
 			// This is a point request, and the key is contained within this
 			// range, so we include the request as is and mark it as "fully
 			// processed".
-			truncReqs = append(truncReqs, h.requests[i])
-			positions = append(positions, pos)
-			h.headers[i] = kvpb.RequestHeader{}
-			h.positions[i] = -1
+			truncReqs = append(truncReqs, req)
+			truncPositions = append(truncPositions, pos)
+			//gcassert:bce
+			headers[i] = kvpb.RequestHeader{}
+			//gcassert:bce
+			positions[i] = -1
 			continue
 		}
 		// We're dealing with a range-spanning request.
@@ -673,32 +750,35 @@ func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUn
 				)
 			}
 		}
-		inner := h.requests[i].GetInner()
+		inner := req.GetInner()
 		if header.Key.Compare(sk) >= 0 {
 			// This is the last part of this request since it is fully contained
 			// within this range, so we mark the request as "fully processed".
-			h.headers[i] = kvpb.RequestHeader{}
-			h.positions[i] = -1
+			//gcassert:bce
+			headers[i] = kvpb.RequestHeader{}
+			//gcassert:bce
+			positions[i] = -1
 			if origEndKey := inner.Header().EndKey; len(origEndKey) == 0 || origEndKey.Equal(header.EndKey) {
 				// This range-spanning request fits within a single range, so we
 				// can just use the original request.
-				truncReqs = append(truncReqs, h.requests[i])
-				positions = append(positions, pos)
+				truncReqs = append(truncReqs, req)
+				truncPositions = append(truncPositions, pos)
 				continue
 			}
 		} else {
 			header.Key = sk
 			// Adjust the end key of the header so that it contained only the
 			// unprocessed prefix of the request.
-			h.headers[i].EndKey = header.Key
+			//gcassert:bce
+			headers[i].EndKey = header.Key
 		}
 		shallowCopy := inner.ShallowCopy()
 		shallowCopy.SetHeader(header)
 		truncReqs = append(truncReqs, kvpb.RequestUnion{})
 		truncReqs[len(truncReqs)-1].MustSetInner(shallowCopy)
-		positions = append(positions, pos)
+		truncPositions = append(truncPositions, pos)
 	}
-	return truncReqs, positions, nil
+	return truncReqs, truncPositions, nil
 }
 
 var emptyHeader = kvpb.RequestHeader{}

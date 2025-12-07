@@ -88,7 +88,7 @@ func TestTelemetryLogging(t *testing.T) {
 	db.QueryRow(t, `SHOW database`).Scan(&databaseName)
 	db.Exec(t, `SET application_name = 'telemetry-logging-test'`)
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
-	db.Exec(t, "CREATE TABLE t();")
+	db.Exec(t, "CREATE TABLE t() WITH (schema_locked=false);")
 	db.Exec(t, "CREATE TABLE u(x int);")
 	db.Exec(t, "INSERT INTO u SELECT generate_series(1, 100);")
 	// Use INJECT STATISTICS instead of ANALYZE to avoid test flakes.
@@ -170,7 +170,7 @@ func TestTelemetryLogging(t *testing.T) {
 				MvccKeyBytes:                       110,
 				MvccBlockBytesInCache:              111,
 				MvccBlockBytes:                     112,
-				CPUTime:                            113,
+				SQLCPUTime:                         113,
 				KVBatchRequestsIssued:              113,
 				KVTime:                             114,
 				Regions:                            []string{"eastus1"},
@@ -411,7 +411,7 @@ func TestTelemetryLogging(t *testing.T) {
 				MvccKeyBytes:                       9223372036854775807,
 				MvccBlockBytesInCache:              9223372036854775807,
 				MvccBlockBytes:                     9223372036854775807,
-				CPUTime:                            9223372036854775807,
+				SQLCPUTime:                         9223372036854775807,
 				KVBatchRequestsIssued:              9223372036854775807,
 				KVTime:                             9223372036854775807,
 				Regions:                            []string{"9223372036854775807EastUS9223372036854775807/z^&*&#()(!@%&^61%^7'\\\\&*@#$%"},
@@ -587,7 +587,7 @@ func TestTelemetryLogging(t *testing.T) {
 					require.Equal(t, tc.queryLevelStats.Regions, sampledQueryFromLog.Regions)
 					require.Equal(t, tc.queryLevelStats.SQLInstanceIDs, sampledQueryFromLog.SQLInstanceIDs)
 					require.Equal(t, tc.queryLevelStats.KVNodeIDs, sampledQueryFromLog.KVNodeIDs)
-					require.Equal(t, tc.queryLevelStats.CPUTime.Nanoseconds(), sampledQueryFromLog.CpuTimeNanos)
+					require.Equal(t, tc.queryLevelStats.SQLCPUTime.Nanoseconds(), sampledQueryFromLog.CpuTimeNanos)
 					require.Greater(t, sampledQueryFromLog.PlanLatencyNanos, int64(0))
 					require.Greater(t, sampledQueryFromLog.RunLatencyNanos, int64(0))
 					require.Equal(t, int64(0), sampledQueryFromLog.IdleLatencyNanos)
@@ -1630,7 +1630,7 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 
 func getSampleQueryLoggingChannel(sv *settings.Values) logpb.Channel {
 	if log.ShouldMigrateEvent(sv) {
-		return logpb.Channel_SQL_EXEC
+		return logpb.Channel_TELEMETRY
 	}
-	return logpb.Channel_TELEMETRY
+	return logpb.Channel_SQL_EXEC
 }

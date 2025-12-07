@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"text/tabwriter"
 	"time"
@@ -330,6 +331,7 @@ import (
 //      - noticetrace: runs the query and compares only the notices that
 //						appear. Cannot be combined with kvtrace.
 //      - nodeidx=N: runs the query on node N of the cluster.
+//      - allowunsafe: allows access to unsafe internals during execution.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -969,6 +971,9 @@ type logicQuery struct {
 	// roundFloatsInStringsSigFigs specifies the number of significant figures
 	// to round floats embedded in strings to where zero means do not round.
 	roundFloatsInStringsSigFigs int
+
+	// allowUnsafe indicates whether unsafe operations are allowed during execution.
+	allowUnsafe bool
 }
 
 var allowedKVOpTypes = []string{
@@ -1119,6 +1124,10 @@ type logicTest struct {
 	// retryDuration is the maximum duration to retry a statement when using
 	// the retry directive.
 	retryDuration time.Duration
+
+	// allowUnsafe is a variable which controls whether the test can access
+	// unsafe internals.
+	allowUnsafe atomic.Bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1303,6 +1312,11 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 	}
 
 	connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+		// Skip all "waiting for job(s) to complete" notices, since they include
+		// non-deterministic jobIDs.
+		if strings.HasPrefix(notice.Message, "waiting for job") {
+			return
+		}
 		t.noticeBuffer = append(t.noticeBuffer, notice.Severity+": "+notice.Message)
 		if notice.Detail != "" {
 			t.noticeBuffer = append(t.noticeBuffer, "DETAIL: "+notice.Detail)
@@ -1343,6 +1357,9 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 	var envVars []string
 	// Set crash reporting URL to the empty string to disable Sentry crash reports.
 	envVars = append(envVars, "COCKROACH_CRASH_REPORTS=")
+	// Allow access to crdb_internal for mixed-version tests that need to check versions
+	// and for the framework's object validation queries.
+	envVars = append(envVars, "COCKROACH_OVERRIDE_ALLOW_UNSAFE_INTERNALS=true")
 	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
 		// If we're using a cockroach-short binary, that means it was
 		// locally built, so we need to opt-out of version offsetting to
@@ -1488,6 +1505,10 @@ func (t *logicTest) newCluster(
 			DisableOptimizerRuleProbability: *disableOptRuleProbability,
 			OptimizerCostPerturbation:       *optimizerCostPerturbation,
 			ForceProductionValues:           serverArgs.ForceProductionValues,
+			UnsafeOverride: func() *bool {
+				v := t.allowUnsafe.Load()
+				return &v
+			},
 		}
 		knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 			DeterministicExplain:            true,
@@ -1820,6 +1841,22 @@ func (t *logicTest) newCluster(
 				t.Fatal(err)
 			}
 		}
+		if cfg.EnableLeasedDescriptorSupport {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = true",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled = true",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.prefetch.enabled = true"); err != nil {
+				t.Fatal(err)
+			}
+		}
 		// We disable the automatic stats collection in order to have
 		// deterministic tests.
 		//
@@ -1874,14 +1911,6 @@ func (t *logicTest) newCluster(
 			); err != nil {
 				t.Fatal(err)
 			}
-		}
-
-		// Enable vector indexes by default for tests.
-		// TODO(andyk): Remove this once vector indexes are enabled by default.
-		if _, err := conn.Exec(
-			"SET CLUSTER SETTING feature.vector_index.enabled = true",
-		); err != nil {
-			t.Fatal(err)
 		}
 
 		// Ensure that vector index background operations are deterministic, so
@@ -2118,6 +2147,18 @@ func (c knobOptSynchronousEventLog) apply(args *base.TestingKnobs) {
 	args.EventLog.(*eventlog.EventLogTestingKnobs).SyncWrites = true
 }
 
+// knobOptAllowUnsafe always allows access to the unsafe internals.
+type knobOptAllowUnsafe struct{}
+
+var _ knobOpt = knobOptAllowUnsafe{}
+
+// apply implements the clusterOpt interface.
+func (c knobOptAllowUnsafe) apply(args *base.TestingKnobs) {
+	e := args.SQLEvalContext.(*eval.TestingKnobs)
+	v := true
+	e.UnsafeOverride = func() *bool { return &v }
+}
+
 // clusterOptIgnoreStrictGCForTenants corresponds to the
 // ignore-tenant-strict-gc-enforcement directive.
 type clusterOptIgnoreStrictGCForTenants struct{}
@@ -2271,6 +2312,8 @@ func readKnobOptions(t *testing.T, path string) []knobOpt {
 			res = append(res, knobOptDisableCorpusGeneration{})
 		case "sync-event-log":
 			res = append(res, knobOptSynchronousEventLog{})
+		case "allow-unsafe":
+			res = append(res, knobOptAllowUnsafe{})
 		default:
 			t.Fatalf("unrecognized knob option: %s", opt)
 		}
@@ -2957,6 +3000,9 @@ func (t *logicTest) processSubtest(
 						case "async":
 							query.expectAsync = true
 
+						case "allowunsafe":
+							query.allowUnsafe = true
+
 						default:
 							if strings.HasPrefix(opt, "round-in-strings") {
 								significantFigures, err := floatcmp.ParseRoundInStringsDirective(opt)
@@ -3237,7 +3283,7 @@ func (t *logicTest) processSubtest(
 			// In multi-tenant tests, we may need to also create database test when
 			// we switch to a different tenant.
 			//
-			// TODO(#76378): It seems the conditional should include `||
+			// TODO(#156124): It seems the conditional should include `||
 			// t.cluster.StartedDefaultTestTenant()` here, to cover the case
 			// where the config specified "Random" and a test tenant was
 			// effectively created.
@@ -3335,7 +3381,9 @@ func (t *logicTest) processSubtest(
 				for _, configName := range args {
 					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
 						s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, githubIssueStr(githubIssueID)))
-						break
+					}
+					if !logictestbase.ConfigExists(configName) {
+						return errors.Newf("logic test config %s doesn't exist", configName)
 					}
 				}
 			case "backup-restore":
@@ -3388,7 +3436,9 @@ func (t *logicTest) processSubtest(
 					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
 						// Our config matches one item in the list.
 						shouldSkip = false
-						break
+					}
+					if !logictestbase.ConfigExists(configName) {
+						return errors.Newf("logic test config %s doesn't exist", configName)
 					}
 				}
 				if shouldSkip {
@@ -3602,6 +3652,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, er
 var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
 
 func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (bool, error) {
+	defer t.setSafetyGate(stmt.sql, false)()
 	db := t.db
 	t.noticeBuffer = nil
 	if *showSQL {
@@ -3725,6 +3776,7 @@ func (t *logicTest) hashResults(results []string) (string, error) {
 }
 
 func (t *logicTest) execQuery(query logicQuery) error {
+	defer t.setSafetyGate(query.sql, query.allowUnsafe)()
 	if *showSQL {
 		t.outf("%s;", query.sql)
 	}
@@ -4613,6 +4665,7 @@ func RunLogicTest(
 		rng:                        rng,
 		declarativeCorpusCollector: cc,
 	}
+	lt.allowUnsafe.Store(true)
 	if *printErrorSummary {
 		defer lt.printErrorSummary()
 	}
@@ -4886,4 +4939,24 @@ func locateCockroachPredecessor(version string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// setSafetyGate is a utility function which controls whether access to the unsafe
+// internals is allowed by the contained sql statement. The reasoning behind it is
+// as follows. We want queries which explicitly access unsafe internals to have
+// access to them, but we want to prevent indirect access wherever possible.
+// Indirect access can be described as any query which doesn't reference an unsafe
+// object, but still accesses it under the hood. We want to flush out these cases
+// so that users can never execute statements which look safe, but block when executed.
+func (t *logicTest) setSafetyGate(sql string, skip bool) func() {
+	sql = strings.ToLower(sql)
+	explicitlyUnsafe := strings.Contains(sql, "crdb_internal.") || strings.Contains(sql, "system.")
+	if skip || explicitlyUnsafe {
+		return func() {}
+	}
+
+	t.allowUnsafe.Store(false)
+	return func() {
+		t.allowUnsafe.Store(true)
+	}
 }

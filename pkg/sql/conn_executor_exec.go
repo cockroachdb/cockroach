@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -135,6 +136,8 @@ func (ex *connExecutor) execStmt(
 	if _, ok := ast.(tree.ObserverStatement); ok {
 		ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 		err := ex.runObserverStatement(ctx, ast, res)
+		ex.extraTxnState.idleLatency += ex.phaseTimes.GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryServiced, crtime.NowMono())
 		// Note that regardless of res.Err(), these observer statements don't
 		// generate error events; transactions are always allowed to continue.
 		return nil, nil, err
@@ -178,6 +181,7 @@ func (ex *connExecutor) execStmt(
 		case eventNonRetryableErrPayload:
 			ex.recordFailure(p)
 		}
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryServiced, crtime.NowMono())
 
 	case stateAborted:
 		ev, payload = ex.execStmtInAbortedState(ctx, ast, res)
@@ -278,7 +282,6 @@ func (ex *connExecutor) recordFailure(p eventNonRetryableErrPayload) {
 func (ex *connExecutor) execPortal(
 	ctx context.Context,
 	portal PreparedPortal,
-	portalName string,
 	stmtRes CommandResult,
 	pinfo *tree.PlaceholderInfo,
 	canAutoCommit bool,
@@ -287,7 +290,7 @@ func (ex *connExecutor) execPortal(
 		if portal.isPausable() {
 			if !portal.pauseInfo.exhaustPortal.cleanup.isComplete {
 				portal.pauseInfo.exhaustPortal.cleanup.appendFunc(func(_ context.Context) {
-					ex.exhaustPortal(portalName)
+					ex.exhaustPortal(portal.Name)
 				})
 				portal.pauseInfo.exhaustPortal.cleanup.isComplete = true
 			}
@@ -327,8 +330,8 @@ func (ex *connExecutor) execPortal(
 		// to re-execute the portal from scratch.
 		// The current statement may have just closed and deleted the portal,
 		// so only exhaust it if it still exists.
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok && !portal.isPausable() {
-			defer ex.exhaustPortal(portalName)
+		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portal.Name]; ok && !portal.isPausable() {
+			defer ex.exhaustPortal(portal.Name)
 		}
 		return ev, payload, retErr
 
@@ -380,21 +383,25 @@ func (ex *connExecutor) execStmtInOpenState(
 	os := ex.machine.CurState().(stateOpen)
 
 	isExtendedProtocol := prepared != nil
-	stmtFingerprintFmtMask := tree.FmtHideConstants | tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
+	stmtFingerprintFmtMask := tree.FmtHideConstants | tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
+	var statementHintsCache *hints.StatementHintsCache
+	if ex.executorType != executorTypeInternal {
+		statementHintsCache = ex.server.cfg.StatementHintsCache
+	}
 
 	var stmt Statement
 	if isExtendedProtocol {
-		stmt = makeStatementFromPrepared(prepared, queryID)
+		stmt = makeStatementFromPrepared(ctx, prepared, queryID, stmtFingerprintFmtMask, statementHintsCache)
 	} else {
-		stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
+		stmt = makeStatement(ctx, parserStmt, queryID, stmtFingerprintFmtMask, statementHintsCache)
 	}
 
 	if len(stmt.QueryTags) > 0 {
-		tags := &logtags.Buffer{}
+		tags := logtags.BuildBuffer()
 		for _, tag := range stmt.QueryTags {
-			tags = tags.Add("querytag-"+tag.Key, tag.Value)
+			tags.Add("querytag-"+tag.Key, tag.Value)
 		}
-		ctx = logtags.AddTags(ctx, tags)
+		ctx = logtags.AddTags(ctx, tags.Finish())
 	}
 
 	var queryTimeoutTicker *time.Timer
@@ -449,7 +456,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
-	p.sessionDataMutatorIterator.paramStatusUpdater = res
+	p.sessionDataMutatorIterator.ParamStatusUpdater = res
 	p.noticeSender = res
 	ih := &p.instrumentation
 
@@ -555,6 +562,11 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.ExpectedTypes = ps.Columns
 		stmt.StmtNoConstants = ps.StatementNoConstants
 		stmt.StmtSummary = ps.StatementSummary
+		stmt.Hints = ps.Hints
+		stmt.HintIDs = ps.HintIDs
+		stmt.HintsGeneration = ps.HintsGeneration
+		stmt.ASTWithInjectedHints = ps.ASTWithInjectedHints
+		stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache)
 		res.ResetStmtType(ps.AST)
 
 		if e.DiscardRows {
@@ -563,15 +575,14 @@ func (ex *connExecutor) execStmtInOpenState(
 		ast = stmt.Statement.AST
 	}
 
+	if len(stmt.Hints) > 0 {
+		telemetry.Inc(sqltelemetry.StatementHintsCounter)
+	}
+
 	// This goroutine is the only one that can modify txnState.mu.priority and
 	// txnState.mu.autoRetryCounter, so we don't need to get a mutex here.
-	ctx = ih.Setup(
-		ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-		&stmt, os.ImplicitTxn.Get(),
-		ex.state.mu.priority,
-		ex.extraTxnState.shouldCollectTxnExecutionStats,
-		ex.state.mu.autoRetryCounter,
-	)
+	ctx = ih.Setup(ctx, ex, p, &stmt, os.ImplicitTxn.Get(),
+		ex.state.mu.priority, ex.state.mu.autoRetryCounter)
 
 	// Note that here we always unconditionally defer a function that takes care
 	// of finishing the instrumentation helper. This is needed since in order to
@@ -580,9 +591,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	defer func() {
 		if ih.needFinish {
 			retErr = ih.Finish(
-				ex.server.cfg,
-				ex.statsCollector,
-				&ex.extraTxnState.accumulatedStats,
+				ex,
 				ih.collectExecStats,
 				p,
 				ast,
@@ -894,6 +903,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 		}
 		prepStmt := makeStatement(
+			ctx,
 			statements.Statement[tree.Statement]{
 				// We need the SQL string just for the part that comes after
 				// "PREPARE ... AS",
@@ -905,7 +915,8 @@ func (ex *connExecutor) execStmtInOpenState(
 				NumAnnotations:  stmt.NumAnnotations,
 			},
 			ex.server.cfg.GenerateID(),
-			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
+			statementHintsCache,
 		)
 		var rawTypeHints []oid.Oid
 
@@ -1256,12 +1267,16 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	os := ex.machine.CurState().(stateOpen)
 
 	isExtendedProtocol := portal != nil && portal.Stmt != nil
-	stmtFingerprintFmtMask := tree.FmtHideConstants | tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
+	stmtFingerprintFmtMask := tree.FmtHideConstants | tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
+	var statementHintsCache *hints.StatementHintsCache
+	if ex.executorType != executorTypeInternal {
+		statementHintsCache = ex.server.cfg.StatementHintsCache
+	}
 
 	if isExtendedProtocol {
-		vars.stmt = makeStatementFromPrepared(portal.Stmt, queryID)
+		vars.stmt = makeStatementFromPrepared(ctx, portal.Stmt, queryID, stmtFingerprintFmtMask, statementHintsCache)
 	} else {
-		vars.stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
+		vars.stmt = makeStatement(ctx, parserStmt, queryID, stmtFingerprintFmtMask, statementHintsCache)
 	}
 
 	var queryTimeoutTicker *time.Timer
@@ -1342,7 +1357,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
-	p.sessionDataMutatorIterator.paramStatusUpdater = res
+	p.sessionDataMutatorIterator.ParamStatusUpdater = res
 	p.noticeSender = res
 	ih := &p.instrumentation
 
@@ -1448,6 +1463,11 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		vars.stmt.ExpectedTypes = ps.Columns
 		vars.stmt.StmtNoConstants = ps.StatementNoConstants
 		vars.stmt.StmtSummary = ps.StatementSummary
+		vars.stmt.Hints = ps.Hints
+		vars.stmt.HintIDs = ps.HintIDs
+		vars.stmt.HintsGeneration = ps.HintsGeneration
+		vars.stmt.ASTWithInjectedHints = ps.ASTWithInjectedHints
+		vars.stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache)
 		res.ResetStmtType(ps.AST)
 
 		if e.DiscardRows {
@@ -1456,19 +1476,18 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		vars.ast = vars.stmt.Statement.AST
 	}
 
+	if len(vars.stmt.Hints) > 0 {
+		telemetry.Inc(sqltelemetry.StatementHintsCounter)
+	}
+
 	// For pausable portal, the instrumentation helper needs to be set up only
 	// when the portal is executed for the first time.
 	//
 	// This goroutine is the only one that can modify txnState.mu.priority and
 	// txnState.mu.autoRetryCounter, so we don't need to get a mutex here.
 	if !portal.isPausable() || portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
-		ctx = ih.Setup(
-			ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-			&vars.stmt, os.ImplicitTxn.Get(),
-			ex.state.mu.priority,
-			ex.extraTxnState.shouldCollectTxnExecutionStats,
-			ex.state.mu.autoRetryCounter,
-		)
+		ctx = ih.Setup(ctx, ex, p, &vars.stmt, os.ImplicitTxn.Get(),
+			ex.state.mu.priority, ex.state.mu.autoRetryCounter)
 	} else {
 		ctx = portal.pauseInfo.execStmtInOpenState.ihWrapper.ctx
 	}
@@ -1485,7 +1504,13 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		if portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
 			portal.pauseInfo.execStmtInOpenState.ihWrapper = &instrumentationHelperWrapper{
 				ctx: ctx,
-				ih:  *ih,
+				// TODO(yuzefovich): we're capturing the instrumentationHelper
+				// by value here, meaning that modifications that happen later
+				// (notably in makeExecPlan) aren't captured. For example,
+				// explainPlan field will remain unset. However, so far we've
+				// only observed this impact EXPLAIN ANALYZE which doesn't run
+				// through the pausable portal path.
+				ih: *ih,
 			}
 		} else {
 			p.instrumentation = portal.pauseInfo.execStmtInOpenState.ihWrapper.ih
@@ -1509,9 +1534,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		}
 		if ihToFinish.needFinish {
 			retErr = ihToFinish.Finish(
-				ex.server.cfg,
-				ex.statsCollector,
-				&ex.extraTxnState.accumulatedStats,
+				ex,
 				ihToFinish.collectExecStats,
 				p,
 				vars.ast,
@@ -1700,6 +1723,9 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			}
 		}
 
+		// Note that here we process the cleanup function (which will append it
+		// to the cleanup queue) without a defer since there is no more code
+		// relevant to pausable portals model below.
 		processCleanupFunc(func() {
 			cancelQueryCtx := ctx
 			if portal.isPausable() {
@@ -1856,6 +1882,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			}
 		}
 		prepStmt := makeStatement(
+			ctx,
 			statements.Statement[tree.Statement]{
 				// We need the SQL string just for the part that comes after
 				// "PREPARE ... AS",
@@ -1867,7 +1894,8 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 				NumAnnotations:  vars.stmt.NumAnnotations,
 			},
 			ex.server.cfg.GenerateID(),
-			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
+			statementHintsCache,
 		)
 		var rawTypeHints []oid.Oid
 
@@ -2334,31 +2362,27 @@ func (ex *connExecutor) reportSessionDataChanges(fn func() error) error {
 		return err
 	}
 	after := ex.sessionDataStack.Top()
-	if ex.dataMutatorIterator.paramStatusUpdater != nil {
+	if ex.dataMutatorIterator.ParamStatusUpdater != nil {
 		for _, param := range bufferableParamStatusUpdates {
-			_, v, err := getSessionVar(param.lowerName, false /* missingOk */)
-			if err != nil {
-				return err
-			}
-			if v.Equal == nil {
+			if param.sv.Equal == nil {
 				return errors.AssertionFailedf("Equal for %s must be set", param.name)
 			}
-			if v.GetFromSessionData == nil {
+			if param.sv.GetFromSessionData == nil {
 				return errors.AssertionFailedf("GetFromSessionData for %s must be set", param.name)
 			}
-			if !v.Equal(before, after) {
-				ex.dataMutatorIterator.paramStatusUpdater.BufferParamStatusUpdate(
+			if !param.sv.Equal(before, after) {
+				ex.dataMutatorIterator.ParamStatusUpdater.BufferParamStatusUpdate(
 					param.name,
-					v.GetFromSessionData(after),
+					param.sv.GetFromSessionData(after),
 				)
 			}
 		}
 	}
-	if before.DefaultIntSize != after.DefaultIntSize && ex.dataMutatorIterator.onDefaultIntSizeChange != nil {
-		ex.dataMutatorIterator.onDefaultIntSizeChange(after.DefaultIntSize)
+	if before.DefaultIntSize != after.DefaultIntSize && ex.dataMutatorIterator.OnDefaultIntSizeChange != nil {
+		ex.dataMutatorIterator.OnDefaultIntSizeChange(after.DefaultIntSize)
 	}
-	if before.ApplicationName != after.ApplicationName && ex.dataMutatorIterator.onApplicationNameChange != nil {
-		ex.dataMutatorIterator.onApplicationNameChange(after.ApplicationName)
+	if before.ApplicationName != after.ApplicationName && ex.dataMutatorIterator.OnApplicationNameChange != nil {
+		ex.dataMutatorIterator.OnApplicationNameChange(after.ApplicationName)
 	}
 	return nil
 }
@@ -2431,6 +2455,10 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 		if err := ex.checkDescriptorTwoVersionInvariant(ctx); err != nil {
 			return err
 		}
+	}
+
+	if err := ex.extraTxnState.descCollection.EmitDescriptorUpdatesKey(ctx, ex.state.mu.txn); err != nil {
+		return err
 	}
 
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
@@ -2531,6 +2559,13 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	return eventTxnFinishAborted{}, nil
 }
 
+func getPausablePortalInfo(p *planner) *portalPauseInfo {
+	if p != nil && p.pausablePortal != nil {
+		return p.pausablePortal.pauseInfo
+	}
+	return nil
+}
+
 // Each statement in an explicit READ COMMITTED transaction has a SAVEPOINT.
 // This allows for TransactionRetry errors to be retried automatically. We don't
 // do this for implicit transactions because the conn_executor state machine
@@ -2548,13 +2583,7 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		)
 	}
 
-	getPausablePortalInfo := func() *portalPauseInfo {
-		if p != nil && p.pausablePortal != nil {
-			return p.pausablePortal.pauseInfo
-		}
-		return nil
-	}
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+	if ppInfo := getPausablePortalInfo(p); ppInfo != nil {
 		p.autoRetryStmtReason = ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtReason
 		p.autoRetryStmtCounter = ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtCounter
 	}
@@ -2650,7 +2679,7 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		}
 		p.autoRetryStmtCounter++
 		p.autoRetryStmtReason = maybeRetryableErr
-		if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+		if ppInfo := getPausablePortalInfo(p); ppInfo != nil {
 			ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtReason = p.autoRetryStmtReason
 			ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtCounter = p.autoRetryStmtCounter
 		}
@@ -2677,14 +2706,8 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 func (ex *connExecutor) dispatchToExecutionEngine(
 	ctx context.Context, planner *planner, res RestrictedCommandResult,
 ) (retErr error) {
-	getPausablePortalInfo := func() *portalPauseInfo {
-		if planner != nil && planner.pausablePortal != nil {
-			return planner.pausablePortal.pauseInfo
-		}
-		return nil
-	}
 	defer func() {
-		if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+		if ppInfo := getPausablePortalInfo(planner); ppInfo != nil {
 			if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 				ppInfo.dispatchToExecutionEngine.cleanup.isComplete = true
 			}
@@ -2748,34 +2771,50 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	var err error
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil {
 		if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 			ctx, err = ex.makeExecPlan(ctx, planner)
-			// TODO(janexing): This is a temporary solution to disallow procedure
-			// call statements that contain mutations for pausable portals. Since
-			// relational.CanMutate is not yet propagated from the function body
-			// via builder.BuildCall(), we must temporarily disallow all
-			// TCL statements, which includes the CALL statements.
-			// This should be removed once CanMutate is fully propagated.
-			// (pending https://github.com/cockroachdb/cockroach/issues/147568)
-			isTCL := planner.curPlan.stmt.AST.StatementType() == tree.TypeTCL
-			if flags := planner.curPlan.flags; err == nil && (isTCL || flags.IsSet(planFlagContainsMutation) || flags.IsSet(planFlagIsDDL)) {
-				telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
-				// We don't allow mutations in a pausable portal. Set it back to
-				// an un-pausable (normal) portal.
-				planner.pausablePortal.pauseInfo = nil
-				err = res.RevokePortalPausability()
-				// If this plan is a transaction control statement, we don't
-				// even execute it but just early exit.
-				if isTCL {
-					err = errors.CombineErrors(err, ErrStmtNotSupportedForPausablePortal)
+			if err == nil {
+				// TODO(janexing): This is a temporary solution to disallow procedure
+				// call statements that contain mutations for pausable portals. Since
+				// relational.CanMutate is not yet propagated from the function body
+				// via builder.BuildCall(), we must temporarily disallow all
+				// TCL statements, which includes the CALL statements.
+				// This should be removed once CanMutate is fully propagated.
+				// (pending https://github.com/cockroachdb/cockroach/issues/147568)
+				isTCL := planner.curPlan.stmt.AST.StatementType() == tree.TypeTCL
+				// We don't allow mutations in a pausable portal.
+				notReadOnly := isTCL || planner.curPlan.flags.IsSet(planFlagContainsMutation) || planner.curPlan.flags.IsSet(planFlagIsDDL)
+				// We don't allow sub / post queries for pausable portal.
+				hasSubOrPostQuery := len(planner.curPlan.subqueryPlans) != 0 || len(planner.curPlan.cascades) != 0 ||
+					len(planner.curPlan.checkPlans) != 0 || len(planner.curPlan.triggers) != 0
+				if notReadOnly || hasSubOrPostQuery {
+					if notReadOnly {
+						telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
+					} else {
+						telemetry.Inc(sqltelemetry.SubOrPostQueryStmtsTriedWithPausablePortals)
+					}
+					// This stmt is not supported via the pausable portals model
+					// - set it back to an un-pausable (normal) portal.
+					ex.disablePortalPausability(planner.pausablePortal)
+					planner.pausablePortal = nil
+					err = res.RevokePortalPausability()
+					// If this plan is a transaction control statement, we don't
+					// even execute it but just early exit.
+					if isTCL {
+						err = errors.CombineErrors(err, ErrStmtNotSupportedForPausablePortal)
+					}
+					defer planner.curPlan.close(ctx)
+				} else {
+					ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
+					defer func() {
+						ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
+							ppInfo.dispatchToExecutionEngine.planTop.close(ctx)
+						})
+					}()
 				}
-				defer planner.curPlan.close(ctx)
 			} else {
-				ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
-				ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
-					ppInfo.dispatchToExecutionEngine.planTop.close(ctx)
-				})
+				defer planner.curPlan.close(ctx)
 			}
 		} else {
 			planner.curPlan = ppInfo.dispatchToExecutionEngine.planTop
@@ -2830,38 +2869,15 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 
 	var afterGetPlanDistribution func()
-	if planner.pausablePortal != nil {
-		if len(planner.curPlan.subqueryPlans) == 0 &&
-			len(planner.curPlan.cascades) == 0 &&
-			len(planner.curPlan.checkPlans) == 0 &&
-			len(planner.curPlan.triggers) == 0 {
-			// We don't allow a distributed plan for pausable portals.
-			origDistSQLMode := ex.sessionData().DistSQLMode
-			ex.sessionData().DistSQLMode = sessiondatapb.DistSQLOff
-			afterGetPlanDistribution = func() {
-				ex.sessionData().DistSQLMode = origDistSQLMode
-			}
-		} else {
-			telemetry.Inc(sqltelemetry.SubOrPostQueryStmtsTriedWithPausablePortals)
-			// We don't allow sub / post queries for pausable portal. Set it back to an
-			// un-pausable (normal) portal.
-			// With pauseInfo is nil, no cleanup function will be added to the stack
-			// and all clean-up steps will be performed as for normal portals.
-			// TODO(#115887): We may need to move resetting pauseInfo before we add
-			// the pausable portal cleanup step above.
-			planner.pausablePortal.pauseInfo = nil
-			// We need this so that the result consumption for this portal cannot be
-			// paused either.
-			if err := res.RevokePortalPausability(); err != nil {
-				res.SetError(err)
-				return nil
-			}
+	if getPausablePortalInfo(planner) != nil {
+		// We don't allow a distributed plan for pausable portals.
+		origDistSQLMode := ex.sessionData().DistSQLMode
+		ex.sessionData().DistSQLMode = sessiondatapb.DistSQLOff
+		afterGetPlanDistribution = func() {
+			ex.sessionData().DistSQLMode = origDistSQLMode
 		}
 	}
-	distributePlan, distSQLProhibitedErr := getPlanDistribution(
-		ctx, planner.Descriptors().HasUncommittedTypes(),
-		ex.sessionData(), planner.curPlan.main, &planner.distSQLVisitor,
-	)
+	distributePlan, distSQLProhibitedErr := planner.getPlanDistribution(ctx, planner.curPlan.main)
 	if afterGetPlanDistribution != nil {
 		afterGetPlanDistribution()
 	}
@@ -2911,7 +2927,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	stats, err := ex.execWithDistSQLEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic, distSQLProhibitedErr,
 	)
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil {
 		// For pausable portals, we log the stats when closing the portal, so we need
 		// to aggregate the stats for all executions.
 		ppInfo.dispatchToExecutionEngine.queryStats.add(&stats)
@@ -2937,11 +2953,14 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.rowsRead += stats.rowsRead
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
+	ex.extraTxnState.kvCPUTimeNanos += stats.kvCPUTimeNanos
 
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
+	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 		// We need to ensure that we're using the planner bound to the first-time
 		// execution of a portal.
 		curPlanner := *planner
+		// Note that here we append the cleanup function without a defer since
+		// there is no more code relevant to pausable portals model below.
 		ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
 			populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
 			ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
@@ -3018,6 +3037,12 @@ func populateQueryLevelStats(
 			}
 		}
 		ih.queryLevelStatsWithErr.Stats.ClientTime = topLevelStats.clientTime
+		if cfg.TestingKnobs.DeterministicExplain {
+			// We only show AdmissionWaitTime when it's non-zero, yet its value
+			// is non-deterministic, so if we need deterministic EXPLAIN, then
+			// we need to zero it out.
+			ih.queryLevelStatsWithErr.Stats.AdmissionWaitTime = 0
+		}
 	}
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
 		ih.traceMetadata.annotateExplain(
@@ -3115,6 +3140,7 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 	if shouldLog {
 		commonSQLEventDetails := ex.planner.getCommonSQLEventDetails()
 		var event logpb.EventPayload
+		var migrator log.StructuredEventMigrator
 		if ex.executorType == executorTypeInternal {
 			if isRead {
 				event = &eventpb.TxnRowsReadLimitInternal{
@@ -3127,6 +3153,9 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 					CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails,
 				}
 			}
+			migrator = log.NewStructuredEventMigrator(func() bool {
+				return log.ShouldMigrateEvent(ex.planner.ExecCfg().SV())
+			}, logpb.Channel_SQL_INTERNAL_PERF)
 		} else {
 			if isRead {
 				event = &eventpb.TxnRowsReadLimit{
@@ -3139,12 +3168,12 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 					CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails,
 				}
 			}
-			migrator := log.NewStructuredEventMigrator(func() bool {
+			migrator = log.NewStructuredEventMigrator(func() bool {
 				return log.ShouldMigrateEvent(ex.planner.ExecCfg().SV())
-			}, logpb.Channel_SQL_EXEC)
-			migrator.StructuredEvent(ctx, severity.INFO, event)
-			logCounter.Inc(1)
+			}, logpb.Channel_SQL_PERF)
 		}
+		migrator.StructuredEvent(ctx, severity.INFO, event)
+		logCounter.Inc(1)
 	}
 	if shouldErr {
 		if isRead {
@@ -3206,6 +3235,12 @@ func (ex *connExecutor) makeExecPlan(
 		return ctx, err
 	}
 
+	// For each non-internal query, we roll the dice to decide to use
+	// canary stats or stable stats for planning.
+	if !planner.SessionData().Internal {
+		planner.EvalContext().UseCanaryStats = canaryRollDice(planner.EvalContext(), ex.rng.internal)
+	}
+
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
 		log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
 		return ctx, err
@@ -3249,7 +3284,7 @@ func (ex *connExecutor) makeExecPlan(
 
 	// Include gist in error reports.
 	ih := &planner.instrumentation
-	ctx = withPlanGist(ctx, ih.planGist.String())
+	ex.curStmtPlanGist = redact.SafeString(ih.planGist.String())
 	if buildutil.CrdbTestBuild && ih.planGist.String() != "" {
 		// Ensure that the gist can be decoded in test builds.
 		//
@@ -3283,12 +3318,23 @@ func (ex *connExecutor) makeExecPlan(
 
 // topLevelQueryStats returns some basic statistics about the run of the query.
 type topLevelQueryStats struct {
-	// bytesRead is the number of bytes read from disk.
-	bytesRead int64
-	// rowsRead is the number of rows read from disk.
+	// rowsRead is the number of rows read from primary and secondary indexes.
 	rowsRead int64
-	// rowsWritten is the number of rows written.
+	// bytesRead is the number of bytes read from primary and secondary indexes.
+	bytesRead int64
+	// rowsWritten is the number of rows written to the primary index. It does not
+	// include rows written to secondary indexes.
+	// NB: There is an asymmetry between rowsRead and rowsWritten - rowsRead
+	// includes rows read from secondary indexes, while rowsWritten does not
+	// include rows written to secondary indexes. This matches the behavior of
+	// EXPLAIN ANALYZE and SQL "rows affected".
 	rowsWritten int64
+	// indexRowsWritten is the number of rows written to primary and secondary
+	// indexes. It is always >= rowsWritten.
+	indexRowsWritten int64
+	// indexBytesWritten is the number of bytes written to primary and secondary
+	// indexes.
+	indexBytesWritten int64
 	// networkEgressEstimate is an estimate for the number of bytes sent to the
 	// client. It is used for estimating the number of RUs consumed by a query.
 	networkEgressEstimate int64
@@ -3296,14 +3342,21 @@ type topLevelQueryStats struct {
 	// client receiving the PGWire protocol messages (as well as construcing
 	// those messages).
 	clientTime time.Duration
+	// kvCPUTimeNanos is the CPU time consumed by KV operations during query execution.
+	kvCPUTimeNanos time.Duration
+	// NB: when adding another field here, consider whether
+	// forwardInnerQueryStats method needs an adjustment.
 }
 
 func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
 	s.bytesRead += other.bytesRead
 	s.rowsRead += other.rowsRead
 	s.rowsWritten += other.rowsWritten
+	s.indexBytesWritten += other.indexBytesWritten
+	s.indexRowsWritten += other.indexRowsWritten
 	s.networkEgressEstimate += other.networkEgressEstimate
 	s.clientTime += other.clientTime
+	s.kvCPUTimeNanos += other.kvCPUTimeNanos
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
@@ -3368,6 +3421,10 @@ func (ex *connExecutor) execWithDistSQLEngine(
 			}
 		}
 		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
+	}
+
+	if err == nil && res.Err() == nil {
+		recv.maybeLogMisestimates(ctx, planner)
 	}
 	return recv.stats, err
 }
@@ -3452,8 +3509,11 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		}
 
 		p := &ex.planner
-		stmt := makeStatement(parserStmt, ex.server.cfg.GenerateID(),
-			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)))
+		stmt := makeStatement(
+			ctx, parserStmt, ex.server.cfg.GenerateID(),
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
+			nil, /* statementHintsCache */
+		)
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
@@ -4142,6 +4202,7 @@ func (ex *connExecutor) onTxnRestart(ctx context.Context) {
 		ex.extraTxnState.rowsRead = 0
 		ex.extraTxnState.bytesRead = 0
 		ex.extraTxnState.rowsWritten = 0
+		ex.extraTxnState.kvCPUTimeNanos = 0
 
 		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
 			ex.server.cfg.TestingKnobs.BeforeRestart(ctx, ex.state.mu.autoRetryReason)
@@ -4173,6 +4234,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 	ex.extraTxnState.idleLatency = 0
 	ex.extraTxnState.rowsRead = 0
+	ex.extraTxnState.kvCPUTimeNanos = 0
 	ex.extraTxnState.bytesRead = 0
 	ex.extraTxnState.rowsWritten = 0
 	ex.extraTxnState.rowsWrittenLogged = false
@@ -4212,13 +4274,12 @@ func (ex *connExecutor) recordTransactionFinish(
 	txnStart crtime.Mono,
 	txnErr error,
 ) error {
-	recordingStart := timeutil.Now()
+	recordingStart := crtime.NowMono()
 	defer func() {
-		recordingOverhead := timeutil.Since(recordingStart)
 		ex.server.
 			ServerMetrics.
 			StatsMetrics.
-			SQLTxnStatsCollectionOverhead.RecordValue(recordingOverhead.Nanoseconds())
+			SQLTxnStatsCollectionOverhead.RecordValue(recordingStart.Elapsed().Nanoseconds())
 	}()
 
 	txnEnd := timeutil.Now()
@@ -4286,6 +4347,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		RowsRead:                ex.extraTxnState.rowsRead,
 		RowsWritten:             ex.extraTxnState.rowsWritten,
 		BytesRead:               ex.extraTxnState.bytesRead,
+		KVCPUTimeNanos:          ex.extraTxnState.kvCPUTimeNanos,
 		Priority:                ex.state.mu.priority,
 		// TODO(107318): add isolation level
 		// TODO(107318): add qos
@@ -4385,17 +4447,16 @@ func (ex *connExecutor) execWithProfiling(
 		if prepared != nil {
 			stmtNoConstants = prepared.StatementNoConstants
 		} else {
-			stmtNoConstants = formatStatementHideConstants(ast)
+			stmtNoConstants = tree.FormatStatementHideConstants(ast)
 		}
-		labels := pprof.Labels(
+		pprofutil.Do(ctx, func(ctx context.Context) {
+			err = op(ctx)
+		},
 			"appname", ex.sessionData().ApplicationName,
 			"addr", remoteAddr,
 			"stmt.tag", ast.StatementTag(),
 			"stmt.no.constants", stmtNoConstants,
 		)
-		pprof.Do(ctx, labels, func(ctx context.Context) {
-			err = op(ctx)
-		})
 	} else {
 		err = op(ctx)
 	}

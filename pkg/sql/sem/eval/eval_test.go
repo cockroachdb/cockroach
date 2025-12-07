@@ -95,6 +95,7 @@ func optBuildScalar(evalCtx *eval.Context, e tree.Expr) (tree.TypedExpr, error) 
 	o.Init(ctx, evalCtx, nil /* catalog */)
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	b := optbuilder.NewScalar(ctx, &semaCtx, evalCtx, o.Factory())
+	defer b.DisableUnsafeInternalCheck()()
 	scalar, err := b.Build(e)
 	if err != nil {
 		return nil, err

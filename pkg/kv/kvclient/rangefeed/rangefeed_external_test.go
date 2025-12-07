@@ -560,13 +560,19 @@ func TestWithOnSSTable(t *testing.T) {
 		// handle duplicated events.
 		kvserver.RangefeedUseBufferedSender.Override(ctx, &settings.SV, rt.useBufferedSender)
 		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
-			Settings:          settings,
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109473),
+			Settings: settings,
 		})
 		defer srv.Stopper().Stop(ctx)
 		tsrv := srv.ApplicationLayer()
 
-		_, _, err := srv.SplitRange(roachpb.Key("a"))
+		scratchKey := append(tsrv.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+		_, _, err := srv.SplitRange(scratchKey)
+		require.NoError(t, err)
+		scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
+		mkKey := func(k string) roachpb.Key {
+			return encoding.EncodeStringAscending(scratchKey, k)
+		}
+		_, _, err = srv.SplitRange(mkKey("a"))
 		require.NoError(t, err)
 
 		for _, l := range []serverutils.ApplicationLayerInterface{tsrv, srv.SystemLayer()} {
@@ -583,7 +589,7 @@ func TestWithOnSSTable(t *testing.T) {
 		var once sync.Once
 		checkpointC := make(chan struct{})
 		sstC := make(chan kvcoord.RangeFeedMessage)
-		spans := []roachpb.Span{{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}}
+		spans := []roachpb.Span{{Key: mkKey("c"), EndKey: mkKey("e")}}
 		r, err := f.RangeFeed(ctx, "test", spans, db.Clock().Now(),
 			func(ctx context.Context, value *kvpb.RangeFeedValue) {},
 			rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
@@ -620,10 +626,10 @@ func TestWithOnSSTable(t *testing.T) {
 		now.Logical = 0
 		ts := int(now.WallTime)
 		sstKVs := kvs{
-			pointKV("a", ts, "1"),
-			pointKV("b", ts, "2"),
-			pointKV("c", ts, "3"),
-			rangeKV("d", "e", ts, ""),
+			pointKV(string(mkKey("a")), ts, "1"),
+			pointKV(string(mkKey("b")), ts, "2"),
+			pointKV(string(mkKey("c")), ts, "3"),
+			rangeKV(string(mkKey("d")), string(mkKey("e")), ts, ""),
 		}
 		sst, sstStart, sstEnd := storageutils.MakeSST(t, tsrv.ClusterSettings(), sstKVs)
 		_, _, _, pErr := db.AddSSTableAtBatchTimestamp(ctx, sstStart, sstEnd, sst,
@@ -665,7 +671,6 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 		kvserver.RangefeedUseBufferedSender.Override(ctx, &settings.SV, rt.useBufferedSender)
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109473),
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						SmallEngineBlocks: smallEngineBlocks,
@@ -679,7 +684,7 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 		srv := tsrv.ApplicationLayer()
 		db := srv.DB()
 
-		_, _, err := tc.SplitRange(roachpb.Key("a"))
+		_, _, err := tc.SplitRange(makeKey(srv.Codec(), "a"))
 		require.NoError(t, err)
 		require.NoError(t, tc.WaitForFullReplication())
 
@@ -696,7 +701,7 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 		var once sync.Once
 		checkpointC := make(chan struct{})
 		rowC := make(chan *kvpb.RangeFeedValue)
-		spans := []roachpb.Span{{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}}
+		spans := []roachpb.Span{{Key: makeKey(srv.Codec(), "c"), EndKey: makeKey(srv.Codec(), "e")}}
 		r, err := f.RangeFeed(ctx, "test", spans, db.Clock().Now(),
 			func(ctx context.Context, value *kvpb.RangeFeedValue) {
 				select {
@@ -731,8 +736,11 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 			pointKV("d", ts, "4"),
 			pointKV("e", ts, "5"),
 		}
-		expectKVs := kvs{pointKV("c", ts, "3"), pointKV("d", ts, "4")}
-		sst, sstStart, sstEnd := storageutils.MakeSST(t, srv.ClusterSettings(), sstKVs)
+		mkKey := func(s string) string {
+			return string(makeKey(srv.Codec(), s))
+		}
+		expectKVs := kvs{pointKV(mkKey("c"), ts, "3"), pointKV(mkKey("d"), ts, "4")}
+		sst, sstStart, sstEnd := storageutils.MakeSSTWithPrefix(t, srv.ClusterSettings(), srv.Codec().TenantPrefix(), sstKVs)
 		_, _, _, pErr := db.AddSSTableAtBatchTimestamp(ctx, sstStart, sstEnd, sst,
 			false /* disallowConflicts */, hlc.Timestamp{},
 			nil, /* stats */
@@ -758,6 +766,10 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 		}
 		require.Equal(t, expectKVs, seenKVs)
 	})
+}
+
+func makeKey(codec keys.SQLCodec, s string) roachpb.Key {
+	return append(codec.TenantPrefix(), roachpb.Key(s)...)
 }
 
 // TestWithOnDeleteRange tests that the rangefeed emits MVCC range tombstones.
@@ -790,12 +802,8 @@ func TestWithOnDeleteRange(t *testing.T) {
 		srv := tsrv.ApplicationLayer()
 		db := srv.DB()
 
-		_, _, err := tsrv.SplitRange(roachpb.Key("a"))
+		_, _, err := tsrv.SplitRange(makeKey(srv.Codec(), "a"))
 		require.NoError(t, err)
-
-		mkKey := func(s string) string {
-			return string(append(srv.Codec().TenantPrefix(), roachpb.Key(s)...))
-		}
 
 		// events tracks the observed events during a test run.
 		events := &testEvents{
@@ -806,8 +814,8 @@ func TestWithOnDeleteRange(t *testing.T) {
 		// We start the rangefeed over a narrower span than the DeleteRanges (c-g),
 		// to ensure the DeleteRange event is truncated to the registration span.
 		spans := []roachpb.Span{{
-			Key:    append(srv.Codec().TenantPrefix(), roachpb.Key("c")...),
-			EndKey: append(srv.Codec().TenantPrefix(), roachpb.Key("g")...),
+			Key:    makeKey(srv.Codec(), "c"),
+			EndKey: makeKey(srv.Codec(), "g"),
 		}}
 
 		// To coordinate updates that occur after the rangefeed starts, we track a
@@ -833,14 +841,19 @@ func TestWithOnDeleteRange(t *testing.T) {
 		// should be visible, because catchup scans do emit tombstones. The range
 		// tombstone should be ordered after the initial point, but before the foo
 		// catchup point, and the previous values should respect the range tombstones.
-		require.NoError(t, db.Put(ctx, mkKey("covered"), "covered"))
-		require.NoError(t, db.Put(ctx, mkKey("foo"), "covered"))
-		require.NoError(t, db.DelRangeUsingTombstone(ctx, mkKey("a"), mkKey("z")))
-		require.NoError(t, db.Put(ctx, mkKey("foo"), "initial"))
+		//
+		// NB: When RaceEnabled=true, the range key will be emitted multiple
+		// times, since CatchUpSnapshot.CatchUpScan recreates the iterator at
+		// every step. These duplications are harmless and are de-duped by
+		// testEvents when printing.
+		require.NoError(t, db.Put(ctx, makeKey(srv.Codec(), "covered"), "covered"))
+		require.NoError(t, db.Put(ctx, makeKey(srv.Codec(), "foo"), "covered"))
+		require.NoError(t, db.DelRangeUsingTombstone(ctx, makeKey(srv.Codec(), "a"), makeKey(srv.Codec(), "z")))
+		require.NoError(t, db.Put(ctx, makeKey(srv.Codec(), "foo"), "initial"))
 		rangeFeedTS0 := db.Clock().Now()
-		require.NoError(t, db.Put(ctx, mkKey("covered"), "catchup"))
-		require.NoError(t, db.DelRangeUsingTombstone(ctx, mkKey("a"), mkKey("z")))
-		require.NoError(t, db.Put(ctx, mkKey("foo"), "catchup"))
+		require.NoError(t, db.Put(ctx, makeKey(srv.Codec(), "covered"), "catchup"))
+		require.NoError(t, db.DelRangeUsingTombstone(ctx, makeKey(srv.Codec(), "a"), makeKey(srv.Codec(), "z")))
+		require.NoError(t, db.Put(ctx, makeKey(srv.Codec(), "foo"), "catchup"))
 		rangeFeedTS1 := db.Clock().Now()
 		f, err := rangefeed.NewFactory(srv.AppStopper(), db, srv.ClusterSettings(), nil)
 		require.NoError(t, err)
@@ -863,7 +876,7 @@ func TestWithOnDeleteRange(t *testing.T) {
 
 		// Wait for checkpoint after catchup scan.
 		waitForFrontier(rangeFeedTS1)
-		require.NoError(t, db.DelRangeUsingTombstone(ctx, mkKey("a"), mkKey("z")))
+		require.NoError(t, db.DelRangeUsingTombstone(ctx, makeKey(srv.Codec(), "a"), makeKey(srv.Codec(), "z")))
 		waitForFrontier(db.Clock().Now())
 		r.Close()
 
@@ -952,7 +965,6 @@ func TestUnrecoverableErrors(t *testing.T) {
 		// handle duplicated events.
 		kvserver.RangefeedUseBufferedSender.Override(ctx, &settings.SV, rt.useBufferedSender)
 		srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109472),
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ConfigureScratchRange: true,
@@ -1009,7 +1021,7 @@ func TestUnrecoverableErrors(t *testing.T) {
 			if conf, err := repl.LoadSpanConfig(ctx); err != nil || conf.GCPolicy.IgnoreStrictEnforcement {
 				return errors.New("waiting for span config to apply")
 			}
-			require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
+			require.NoError(t, repl.TestingReadProtectedTimestamps(ctx))
 			return nil
 		})
 
@@ -1968,7 +1980,7 @@ func TestRangefeedCatchupStarvation(t *testing.T) {
 				if len(seen) >= totalKeys {
 					return
 				}
-			case <-time.After(testutils.DefaultSucceedsSoonDuration):
+			case <-time.After(testutils.SucceedsSoonDuration()):
 				t.Fatal("test timed out")
 			}
 		}

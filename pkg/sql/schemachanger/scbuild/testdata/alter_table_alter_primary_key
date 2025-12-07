@@ -16,9 +16,9 @@ ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (j)
   {constraintId: 1, indexId: 1, isUnique: true, tableId: 104}
 - [[IndexName:{DescID: 104, Name: pkey, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, name: pkey, tableId: 104}
-- [[IndexComment:{DescID: 104, IndexID: 1, Comment: pkey is an index}, ABSENT], PUBLIC]
+- [[IndexComment:{DescID: 104, IndexID: 1, Value: pkey is an index}, ABSENT], PUBLIC]
   {comment: pkey is an index, indexId: 1, tableId: 104}
-- [[ConstraintComment:{DescID: 104, ConstraintID: 1, Comment: pkey is a constraint}, ABSENT], PUBLIC]
+- [[ConstraintComment:{DescID: 104, ConstraintID: 1, Value: pkey is a constraint}, ABSENT], PUBLIC]
   {comment: pkey is a constraint, constraintId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 104}
@@ -32,9 +32,9 @@ ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (j)
   {columnId: 1, indexId: 4, kind: STORED, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, PUBLIC], ABSENT]
   {columnId: 2, indexId: 4, tableId: 104}
-- [[IndexComment:{DescID: 104, IndexID: 4, Comment: pkey is an index}, PUBLIC], ABSENT]
+- [[IndexComment:{DescID: 104, IndexID: 4, Value: pkey is an index}, PUBLIC], ABSENT]
   {comment: pkey is an index, indexId: 4, tableId: 104}
-- [[ConstraintComment:{DescID: 104, ConstraintID: 4, Comment: pkey is a constraint}, PUBLIC], ABSENT]
+- [[ConstraintComment:{DescID: 104, ConstraintID: 4, Value: pkey is a constraint}, PUBLIC], ABSENT]
   {comment: pkey is a constraint, constraintId: 4, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 4}, PUBLIC], ABSENT]
   {indexId: 4, tableId: 104}
@@ -46,7 +46,7 @@ ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (j)
   {columnId: 2, indexId: 5, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 5, tableId: 104}
-- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4, RecreateSourceIndexID: 0}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, PUBLIC], ABSENT]
   {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 4, tableId: 104, temporaryIndexId: 3}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, tableId: 104}
@@ -69,11 +69,13 @@ build
 ALTER TABLE defaultdb.bar ALTER PRIMARY KEY USING COLUMNS (i)
 ----
 - [[Column:{DescID: 105, ColumnID: 2}, ABSENT], PUBLIC]
-  {columnId: 2, isHidden: true, tableId: 105}
+  {columnId: 2, tableId: 105}
 - [[ColumnName:{DescID: 105, Name: rowid, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: rowid, tableId: 105}
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, tableId: 105, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
+  {columnId: 2, elementCreationMetadata: {in243OrLater: true, in261OrLater: true}, tableId: 105, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
+- [[ColumnHidden:{DescID: 105, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, tableId: 105}
 - [[ColumnNotNull:{DescID: 105, ColumnID: 2, IndexID: 0}, ABSENT], PUBLIC]
   {columnId: 2, tableId: 105}
 - [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2, Expr: unique_rowid()}, ABSENT], PUBLIC]

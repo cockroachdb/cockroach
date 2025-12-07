@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/spf13/pflag"
 )
 
@@ -446,6 +445,12 @@ var (
 		Usage: `Disable posting GitHub issue for failures`,
 	})
 
+	DryRunIssuePosting bool
+	_                  = registerRunFlag(&DryRunIssuePosting, FlagInfo{
+		Name:  "dry-run-issue-posting",
+		Usage: `Enable dry-run mode for GitHub issue posting (formats issues but doesn't post them)`,
+	})
+
 	PromPort int = 2113
 	_            = registerRunFlag(&PromPort, FlagInfo{
 		Name: "prom-port",
@@ -476,12 +481,6 @@ var (
 		Usage: `Percentage of failed tests before all remaining tests are automatically terminated.`,
 	})
 
-	GlobalSeed int64 = randutil.NewPseudoSeed()
-	_                = registerRunFlag(&GlobalSeed, FlagInfo{
-		Name:  "global-seed",
-		Usage: `The global random seed used for all tests.`,
-	})
-
 	ClearClusterCache bool = true
 	_                      = registerRunFlag(&ClearClusterCache, FlagInfo{
 		Name: "clear-cluster-cache",
@@ -497,6 +496,14 @@ var (
 		Usage: `
 						Always collect artifacts during test teardown, even if the test did not
 						time out or fail.`,
+	})
+
+	Caffeinate bool = true
+	_               = registerRunFlag(&Caffeinate, FlagInfo{
+		Name: "caffeinate",
+		Usage: `
+						On Darwin, prevent the system from sleeping while roachtest is running
+						by invoking caffeinate -i -w <pid>. Default is true.`,
 	})
 )
 
@@ -516,10 +523,10 @@ var (
 		Usage: `Override use of local SSD`,
 	})
 
-	OverrideFilesystem string
+	OverrideFilesystem vm.Filesystem
 	_                  = registerRunFlag(&OverrideFilesystem, FlagInfo{
 		Name:  "filesystem",
-		Usage: `Override the underlying file system(ext4/zfs)`,
+		Usage: `Override the underlying file system(ext4/zfs/xfs/f2fs/btrfs)`,
 	})
 
 	OverrideNoExt4Barrier bool

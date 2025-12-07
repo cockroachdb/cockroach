@@ -33,6 +33,7 @@ import (
 // with the given inputs, and asserts that the outputted rows are as expected.
 func runProcessorTest(
 	t *testing.T,
+	codec keys.SQLCodec,
 	core execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
 	inputTypes []*types.T,
@@ -47,7 +48,7 @@ func runProcessorTest(
 	out := &distsqlutils.RowBuffer{}
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := eval.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContextWithCodec(codec, st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st, Stopper: stopper, DistSender: distSender},
@@ -57,7 +58,7 @@ func runProcessorTest(
 	}
 
 	p, err := NewProcessor(
-		context.Background(), &flowCtx, 0 /* processorID */, &core, &post,
+		context.Background(), &flowCtx, 0 /* processorID */, 0 /* stageID */, &core, &post,
 		[]execinfra.RowSource{in}, []execinfra.LocalProcessor{})
 	if err != nil {
 		t.Fatal(err)
@@ -137,7 +138,7 @@ func (r *rowGeneratingSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 	}
 
 	for i := range r.scratchEncDatumRow {
-		r.scratchEncDatumRow[i] = rowenc.DatumToEncDatum(r.types[i], datumRow[i])
+		r.scratchEncDatumRow[i] = rowenc.DatumToEncDatumUnsafe(r.types[i], datumRow[i])
 	}
 	r.rowIdx++
 	return r.scratchEncDatumRow, nil
@@ -193,7 +194,7 @@ func (r *rowDisposer) NumRowsDisposed() int {
 //
 //	makeFetchSpec(t, table, "idx_c", "a,b,c")
 func makeFetchSpec(
-	t testing.TB, table catalog.TableDescriptor, indexName string, colNames string,
+	t testing.TB, codec keys.SQLCodec, table catalog.TableDescriptor, indexName, colNames string,
 ) fetchpb.IndexFetchSpec {
 	index, err := catalog.MustFindIndexByName(table, indexName)
 	if err != nil {
@@ -210,7 +211,7 @@ func makeFetchSpec(
 		}
 	}
 	var fetchSpec fetchpb.IndexFetchSpec
-	if err := rowenc.InitIndexFetchSpec(&fetchSpec, keys.SystemSQLCodec, table, index, colIDs); err != nil {
+	if err := rowenc.InitIndexFetchSpec(&fetchSpec, codec, table, index, colIDs); err != nil {
 		t.Fatal(err)
 	}
 	return fetchSpec

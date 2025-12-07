@@ -226,14 +226,14 @@ func (r *Replica) executeWriteBatch(
 				if err := r.store.intentResolver.CleanupTxnIntentsAsync(
 					ctx, r.RangeID, propResult.EndTxns, true, /* allowSync */
 				); err != nil {
-					log.Dev.Warningf(ctx, "transaction cleanup failed: %v", err)
+					log.KvExec.Warningf(ctx, "transaction cleanup failed: %v", err)
 				}
 			}
 			if len(propResult.EncounteredIntents) > 0 {
 				if err := r.store.intentResolver.CleanupIntentsAsync(
 					ctx, ba.AdmissionHeader, propResult.EncounteredIntents, true, /* allowSync */
 				); err != nil {
-					log.Dev.Warningf(ctx, "intent cleanup failed: %v", err)
+					log.KvExec.Warningf(ctx, "intent cleanup failed: %v", err)
 				}
 			}
 			if ba.Requests[0].GetMigrate() != nil && propResult.Err == nil {
@@ -335,7 +335,7 @@ func (r *Replica) executeWriteBatch(
 								return ctx.Err()
 							})
 						if err != nil {
-							log.Dev.Warningf(ctx, "transaction cleanup failed: %v", err)
+							log.KvExec.Warningf(ctx, "transaction cleanup failed: %v", err)
 							r.store.intentResolver.Metrics.FinalizedTxnCleanupFailed.Inc(1)
 						}
 					})
@@ -377,7 +377,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 	// timestamp, even for isolation levels that can commit with such skew. Sanity
 	// check that this timestamp is equal to the batch timestamp.
 	if ba.Timestamp != ba.Txn.ReadTimestamp || ba.Timestamp != ba.Txn.WriteTimestamp {
-		log.Dev.Fatalf(ctx, "unexpected 1PC execution with diverged read or write timestamps; "+
+		log.KvExec.Fatalf(ctx, "unexpected 1PC execution with diverged read or write timestamps; "+
 			"ba.Timestamp: %s, ba.Txn.ReadTimestamp: %s, ba.Txn.WriteTimestamp: %s",
 			ba.Timestamp, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
 	}
@@ -446,7 +446,7 @@ func (r *Replica) evaluateWriteBatch(
 			return ba, res.batch, res.stats, res.br, res.res, nil
 		case onePCFailed:
 			if res.pErr == nil {
-				log.Dev.Fatalf(ctx, "1PC failed but no err. ba: %s", ba.String())
+				log.KvExec.Fatalf(ctx, "1PC failed but no err. ba: %s", ba.String())
 			}
 			return ba, nil, enginepb.MVCCStats{}, nil, result.Result{}, res.pErr
 		case onePCFallbackToTransactionalEvaluation:
@@ -464,7 +464,7 @@ func (r *Replica) evaluateWriteBatch(
 	}
 
 	if ba.Require1PC() {
-		log.Dev.Fatalf(ctx,
+		log.KvExec.Fatalf(ctx,
 			"Require1PC should not have gotten to transactional evaluation. ba: %s", ba.String())
 	}
 
@@ -746,7 +746,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	ui uncertainty.Interval,
 	omitInRangefeeds bool,
 ) (storage.Batch, *kvpb.BatchResponse, result.Result, *kvpb.Error) {
-	batch, opLogger := r.newBatchedEngine(ba, g)
+	batch, opLogger := r.newBatchedEngine(g)
 	now := timeutil.Now()
 	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, st, ui, readWrite, omitInRangefeeds)
 	r.store.metrics.ReplicaWriteBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
@@ -764,9 +764,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // are enabled, it also returns an engine.OpLoggerBatch. If non-nil, then this
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
-func (r *Replica) newBatchedEngine(
-	ba *kvpb.BatchRequest, g *concurrency.Guard,
-) (storage.Batch, *storage.OpLoggerBatch) {
+func (r *Replica) newBatchedEngine(g *concurrency.Guard) (storage.Batch, *storage.OpLoggerBatch) {
 	batch := r.store.TODOEngine().NewBatch()
 	if !batch.ConsistentIterators() {
 		// This is not currently needed for correctness, but future optimizations
@@ -816,8 +814,12 @@ func (r *Replica) newBatchedEngine(
 		// safe as we're only ever writing at timestamps higher than the timestamp
 		// any write latch would be declared at. But because of this, we don't
 		// assert on access timestamps using spanset.NewBatchAt.
-		batch = spanset.NewBatch(batch, g.LatchSpans())
+		spans := g.LatchSpans()
+		spans.AddForbiddenMatcher(overlapsUnreplicatedRangeIDLocalKeys)
+		spans.AddForbiddenMatcher(overlapsStoreLocalKeys)
+		batch = spanset.NewBatch(batch, spans)
 	}
+
 	return batch, opLogger
 }
 

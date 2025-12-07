@@ -37,6 +37,7 @@ if [ -z "${WORKLOAD_CLUSTER}" ]; then
 fi
 
 export ROACHPROD_DISABLED_PROVIDERS=IBM
+export COCKROACH_ROACHPROD_INSECURE="${COCKROACH_ROACHPROD_INSECURE:-false}"
 
 absolute_path=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
 pwd=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")

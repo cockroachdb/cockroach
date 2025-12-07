@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -64,6 +64,7 @@ import (
 func TestFlowControlBasicV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -159,7 +160,8 @@ ORDER BY name ASC;
 func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer setRACv2DebugVModule(t)()
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
+	setRACv2DebugVModule(t)
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -280,6 +282,7 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -382,7 +385,7 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderDuressWithIssue(t, 150840)
-	defer setRACv2DebugVModule(t)()
+	setRACv2DebugVModule(t)
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -535,6 +538,7 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 func TestFlowControlCrashedNodeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -554,7 +558,8 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				Settings: settings,
+				DefaultDRPCOption: base.TestDRPCDisabled,
+				Settings:          settings,
 				RaftConfig: base.RaftConfig{
 					// Reduce the RangeLeaseDuration to speeds up failure detection
 					// below.
@@ -646,7 +651,8 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 func TestFlowControlRaftSnapshotV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer setRACv2DebugVModule(t)()
+	setRACv2DebugVModule(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	const numServers int = 5
 
@@ -891,7 +897,7 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// And also #148903, #148348, #144546, #141912.
 	skip.UnderDuressWithIssue(t, 149036)
-	defer setRACv2DebugVModule(t)()
+	setRACv2DebugVModule(t)
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1032,7 +1038,7 @@ func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 	// Under overload, token deductions may not line up as expected, likely due
 	// to dropping streams.
 	skip.UnderDuressWithIssue(t, 148079)
-	defer setRACv2DebugVModule(t)()
+	setRACv2DebugVModule(t)
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1166,6 +1172,7 @@ func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 func TestFlowControlClassPrioritizationV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1262,6 +1269,7 @@ func TestFlowControlClassPrioritizationV2(t *testing.T) {
 func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1389,6 +1397,7 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 func TestFlowControlTransferLeaseV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1479,6 +1488,7 @@ func TestFlowControlTransferLeaseV2(t *testing.T) {
 func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1569,7 +1579,7 @@ func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 		h.query(n1, v2FlowTokensQueryStr)
 
 		h.comment(`
--- (Issuing another 1x1MiB, 3x replicated write that's admitted via 
+-- (Issuing another 1x1MiB, 3x replicated write that's admitted via
 -- the work queue on the leaseholder. It shouldn't deduct any tokens.)
 `)
 		h.put(ctx, k, 1, testFlowModeToPri(mode))
@@ -1597,6 +1607,7 @@ func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 func TestFlowControlGranterAdmitOneByOneV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1709,6 +1720,7 @@ func isTestGeneratedPut(ctx context.Context) bool {
 func TestFlowControlSendQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	ctx := context.Background()
 	const numNodes = 5
@@ -1800,7 +1812,10 @@ func TestFlowControlSendQueue(t *testing.T) {
 	}
 
 	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
-		ReplicationMode:   base.ReplicationManual,
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			DefaultDRPCOption: base.TestDRPCDisabled,
+		},
 		ServerArgsPerNode: stickyArgsPerServer,
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -1854,7 +1869,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 --   Block admission [n2,n3,n4,n5].
 --   Regular write -4 MiB.
 --   Regular write -1  MiB.
---   - Blocks on wait-for-eval, however the test bypasses this instance.    
+--   - Blocks on wait-for-eval, however the test bypasses this instance.
 --   - Metrics should reflect 2 streams being prevented from forming a send queue.
 --   Allow admission [n1,n2,n3,n4,n5] (all).
 --   Assert all tokens returned.
@@ -1928,11 +1943,11 @@ func TestFlowControlSendQueue(t *testing.T) {
 -- Send queue metrics from n1, n3's send queue should have been force-flushed.`)
 	h.query(n1, flowSendQueueQueryStr)
 	h.comment(`
--- Observe the total tracked tokens per-stream on n1, n3's flushed entries 
+-- Observe the total tracked tokens per-stream on n1, n3's flushed entries
 -- will also be tracked here.`)
 	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`
--- Per-store tokens available from n1, these should reflect the deducted 
+-- Per-store tokens available from n1, these should reflect the deducted
 -- tokens from force-flushing n3.`)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
@@ -2021,7 +2036,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	setTokenReturnEnabled(true /* enabled */, 0, 1, 2, 3, 4)
 	h.waitForAllTokensReturned(ctx, 5, 0 /* serverIdx */)
 	h.comment(`
--- Per-store tokens available from n1. Expect these to return to the same as 
+-- Per-store tokens available from n1. Expect these to return to the same as
 -- the initial state.
 `)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
@@ -2056,7 +2071,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	h.comment(`
 -- Observe the total tracked tokens per-stream on n1. We should expect to see the
 -- 1 MiB write being tracked across a quorum of streams, while the 4 MiB write
--- is tracked across each stream (except s1). Two(/4 non-leader) replica send 
+-- is tracked across each stream (except s1). Two(/4 non-leader) replica send
 -- streams should be prevented from forming a send queue and have higher tracked
 -- tokens than the other two.
 `)
@@ -2242,7 +2257,7 @@ func TestFlowControlSendQueueManyInflight(t *testing.T) {
 -- queue prevented from forming. Lastly, we will unblock admission and stress
 -- the raft in-flights tracker as the queue is drained.`)
 	h.comment(`
--- Initial per-store tokens available from n1. 
+-- Initial per-store tokens available from n1.
 `)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 	h.comment(`-- (Blocking below-raft admission on [n1,n2,n3].)`)
@@ -2456,7 +2471,7 @@ func TestFlowControlSendQueueRangeRelocate(t *testing.T) {
 -- be tracked here.`)
 			h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 			h.comment(`
--- Per-store tokens available from n1, these should reflect the lack of tokens 
+-- Per-store tokens available from n1, these should reflect the lack of tokens
 -- for s3.`)
 			h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
@@ -2534,7 +2549,7 @@ func TestFlowControlSendQueueRangeRelocate(t *testing.T) {
 				// Avoid double printing if the lease hasn't moved.
 				h.comment(fmt.Sprintf(`
 -- Observe the total tracked tokens per-stream on new leaseholder n%v.`, newLeaseNode))
-				h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
+				h.query(newLeaseDB, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 			}
 
 			// Allow admission to proceed on n3 and wait for all tokens to be returned.
@@ -2744,7 +2759,7 @@ func TestFlowControlRangeSplitMergeMixedVersion(t *testing.T) {
 	h.waitForSendQueueSize(ctx, merged.RangeID, 0 /* expSize 0 MiB */, 0 /* serverIdx */)
 
 	h.comment(`
--- Send queue and flow token metrics from n1, post-split-merge. 
+-- Send queue and flow token metrics from n1, post-split-merge.
 -- We do not expect to see the send queue develop for s3.`)
 	h.query(n1, flowSendQueueQueryStr)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
@@ -2905,8 +2920,8 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 			return errors.Errorf("expected in-memory version %s, got %s", expV, gotV)
 		}
 
-		sl := stateloader.Make(desc.RangeID)
-		persistedV, err := sl.LoadVersion(ctx, store.TODOEngine())
+		sl := kvstorage.MakeStateLoader(desc.RangeID)
+		persistedV, err := sl.LoadVersion(ctx, store.StateEngine())
 		if err != nil {
 			return err
 		}
@@ -2957,7 +2972,7 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 -- be tracked here.`)
 	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`
--- Per-store tokens available from n1, these should reflect the lack of tokens 
+-- Per-store tokens available from n1, these should reflect the lack of tokens
 -- for s3.`)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
@@ -3142,7 +3157,7 @@ func TestFlowControlSendQueueRangeSplitMerge(t *testing.T) {
 -- be tracked here.`)
 	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`
--- Per-store tokens available from n1, these should reflect the lack of tokens 
+-- Per-store tokens available from n1, these should reflect the lack of tokens
 -- for s3.`)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
@@ -3216,6 +3231,7 @@ func TestFlowControlSendQueueRangeSplitMerge(t *testing.T) {
 func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	testutils.SetVModule(t, "dist_sender_mux_rangefeed=2,dist_sender_rangefeed=2")
 
 	// rangeFeed will create a rangefeed suitable for testing. It will start a
 	// rangefeed and return a function that can be used to stop it.
@@ -3329,7 +3345,10 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 	}
 
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
-		ReplicationMode:   base.ReplicationManual,
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			DefaultDRPCOption: base.TestDRPCDisabled,
+		},
 		ServerArgsPerNode: argsPerServer,
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -3351,7 +3370,7 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 	h.resetV2TokenMetrics(ctx)
 	h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
 
-	ts := tc.Server(2)
+	srv2 := tc.Server(2)
 	span := desc.KeySpan().AsRawSpanWithNoLocals()
 	ignoreValues := func(event kvcoord.RangeFeedMessage) {}
 
@@ -3392,17 +3411,26 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
   WHERE name LIKE 'kv.rangefeed.closed_timestamp.slow_ranges.cancelled'
   ORDER BY name ASC;
 `
-
-	closeFeed := rangeFeed(
-		ctx,
-		ts.DistSenderI(),
-		span,
-		tc.Server(0).Clock().Now(),
-		ignoreValues,
-		kvcoord.WithRangeObserver(observer),
-	)
+	// The rangefeed is supposed to live on n3, since that's srv2 and it is
+	// supposed to prefer the local replica. However, it can happen that n3
+	// doesn't see itself in the gossip network yet. Retry until the rangefeed
+	// does get planned on n3.
+	var closeFeed func()
+	testutils.SucceedsSoon(t, func() error {
+		if closeFeed != nil {
+			closeFeed()
+		}
+		closeFeed = rangeFeed(
+			ctx,
+			srv2.DistSenderI(),
+			span,
+			tc.Server(0).Clock().Now(),
+			ignoreValues,
+			kvcoord.WithRangeObserver(observer),
+		)
+		return checkRangeFeedNodeID(3, true /* include */)
+	})
 	defer closeFeed()
-	testutils.SucceedsSoon(t, func() error { return checkRangeFeedNodeID(3, true /* include */) })
 	h.comment(`(Rangefeed on n3)`)
 
 	h.comment(`
@@ -3410,7 +3438,7 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 -- n3, using 4x1 MiB (deduction, the write itself is small) writes. Then,
 -- we will write 1 MiB to the range and wait for the closedTS to fall
 -- behind on n3. We expect that the closedTS falling behind will trigger
--- an error that is returned to the mux rangefeed client, which will in turn 
+-- an error that is returned to the mux rangefeed client, which will in turn
 -- allows the rangefeed  request to be re-routed to another replica.`)
 	// Block admission on n3, while allowing every other node to admit.
 	setTokenReturnEnabled(true /* enabled */, 0, 1)
@@ -3444,7 +3472,7 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 -- be tracked here.`)
 	h.query(n1, v2FlowPerStreamTrackedQueryStr, flowPerStreamTrackedQueryHeaderStrs...)
 	h.comment(`
--- Per-store tokens available from n1, these should reflect the lack of tokens 
+-- Per-store tokens available from n1, these should reflect the lack of tokens
 -- for s3.`)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 
@@ -3763,7 +3791,7 @@ func (h *flowControlTestHelper) comment(comment string) {
 
 func (h *flowControlTestHelper) log(msg string) {
 	if log.ShowLogs() {
-		log.Dev.Infof(context.Background(), "%s", msg)
+		log.KvExec.Infof(context.Background(), "%s", msg)
 	}
 }
 
@@ -3813,12 +3841,12 @@ var flowPerStoreDeductionQueryHeaderStrs = []string{
 // v2FlowTokensQueryStr is the query string to fetch flow tokens metrics from
 // the node metrics table.
 const v2FlowTokensQueryStr = `
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -3827,12 +3855,12 @@ ORDER BY
 // flowSendQueueQueryStr is the query string to fetch flow control send queue
 // metrics from the node metrics table.
 const flowSendQueueQueryStr = `
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%send_queue%'
   AND name != 'kvflowcontrol.send_queue.count'
 ORDER BY
@@ -4062,13 +4090,10 @@ func BenchmarkFlowControlV2Basic(b *testing.B) {
 	})
 }
 
-func setRACv2DebugVModule(t *testing.T) (reset func()) {
+func setRACv2DebugVModule(t *testing.T) {
 	t.Helper()
-	old := log.GetVModule()
-	require.NoError(t, log.SetVModule("replica_raft=1,replica_proposal_buf=1,"+
+	testutils.SetVModule(t, "replica_raft=1,replica_proposal_buf=1,"+
 		"raft_transport=2,kvadmission=1,work_queue=1,replica_flow_control=1,"+
 		"tracker=1,client_raft_helpers_test=1,range_controller=2,"+
-		"token_counter=2,token_tracker=2,processor=2",
-	))
-	return func() { require.NoError(t, log.SetVModule(old)) }
+		"token_counter=2,token_tracker=2,processor=2")
 }

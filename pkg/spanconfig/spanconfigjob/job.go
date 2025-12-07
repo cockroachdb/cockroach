@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -101,14 +102,14 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 	settingValues := &execCtx.ExecCfg().Settings.SV
 	persistCheckpointsMu := struct {
 		syncutil.Mutex
-		util.EveryN
+		util.EveryN[crtime.Mono]
 	}{}
-	persistCheckpointsMu.EveryN = util.Every(ReconciliationJobCheckpointInterval.Get(settingValues))
+	persistCheckpointsMu.EveryN = util.EveryMono(ReconciliationJobCheckpointInterval.Get(settingValues))
 
 	ReconciliationJobCheckpointInterval.SetOnChange(settingValues, func(ctx context.Context) {
 		persistCheckpointsMu.Lock()
 		defer persistCheckpointsMu.Unlock()
-		persistCheckpointsMu.EveryN = util.Every(ReconciliationJobCheckpointInterval.Get(settingValues))
+		persistCheckpointsMu.EveryN = util.EveryMono(ReconciliationJobCheckpointInterval.Get(settingValues))
 	})
 
 	checkpointingDisabled := false
@@ -134,6 +135,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 	}
 
 	var lastCheckpoint = hlc.Timestamp{}
+	var lastErr error
 	const aWhile = 5 * time.Minute // arbitrary but much longer than a retry
 	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
 		started := timeutil.Now()
@@ -151,7 +153,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 			shouldPersistCheckpoint := func() bool {
 				persistCheckpointsMu.Lock()
 				defer persistCheckpointsMu.Unlock()
-				return persistCheckpointsMu.ShouldProcess(timeutil.Now())
+				return persistCheckpointsMu.ShouldProcess(crtime.NowMono())
 			}()
 
 			if !shouldPersistCheckpoint {
@@ -167,6 +169,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 				Checkpoint: rc.Checkpoint(),
 			})
 		}); err != nil {
+			lastErr = err
 			if shouldSkipRetry {
 				break
 			}
@@ -192,6 +195,9 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 		return nil // we're done here (the stopper was stopped, Reconcile exited cleanly)
 	}
 
+	if lastErr != nil {
+		return errors.Wrap(lastErr, "reconciliation unsuccessful, failing job")
+	}
 	return errors.Newf("reconciliation unsuccessful, failing job")
 }
 

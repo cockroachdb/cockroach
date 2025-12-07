@@ -85,6 +85,14 @@ func (m *ManualTime) Advance(duration time.Duration) {
 	m.AdvanceTo(m.Now().Add(duration))
 }
 
+// AdvanceInOneTick forwards the current time by the given duration. If
+// tick(s) are needed, only one will be sent out. This simulates a ticker
+// dropping ticks, as can happen if receivers are slow:
+// https://pkg.go.dev/time#NewTicker
+func (m *ManualTime) AdvanceInOneTick(duration time.Duration) {
+	m.AdvanceToInOneTick(m.Now().Add(duration))
+}
+
 // Backwards moves the clock back by duration. Duration is expected to be
 // positive, and it will be subtracted from the current time.
 func (m *ManualTime) Backwards(duration time.Duration) {
@@ -102,7 +110,17 @@ func (m *ManualTime) Backwards(duration time.Duration) {
 func (m *ManualTime) AdvanceTo(now time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.advanceToLocked(now)
+	m.advanceToLocked(now, false /* skipIntermediateTicks */)
+}
+
+// AdvanceToInOneTick advances the current time to t. If t is earlier than the current
+// time then AdvanceTo is a no-op. If tick(s) are needed, only one will be sent out.
+// This simulates a ticker dropping ticks, as can happen if receivers are slow:
+// https://pkg.go.dev/time#NewTicker
+func (m *ManualTime) AdvanceToInOneTick(now time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.advanceToLocked(now, true /* skipIntermediateTicks */)
 }
 
 // MustAdvanceTo is like AdvanceTo, except it panics if now is below m's current time.
@@ -112,10 +130,10 @@ func (m *ManualTime) MustAdvanceTo(now time.Time) {
 	if now.Before(m.mu.now) {
 		panic(fmt.Sprintf("attempting to move ManualTime backwards from %s to %s", m.mu.now, now))
 	}
-	m.advanceToLocked(now)
+	m.advanceToLocked(now, false /* skipIntermediateTicks */)
 }
 
-func (m *ManualTime) advanceToLocked(now time.Time) {
+func (m *ManualTime) advanceToLocked(now time.Time, skipIntermediateTicks bool) {
 	if !now.After(m.mu.now) {
 		return
 	}
@@ -134,13 +152,27 @@ func (m *ManualTime) advanceToLocked(now time.Time) {
 	// Fire off any tickers.
 	for e := m.mu.tickers.Front(); e != nil; e = e.Next() {
 		t := e.Value.(*manualTicker)
-		for !t.nextTick.After(now) {
-			select {
-			case t.ch <- t.nextTick:
-			default:
-				panic("ticker channel full")
+		// This simulates a ticker dropping ticks, as can happen if receivers are slow:
+		// https://pkg.go.dev/time#NewTicker. We are not trying to copy the exact
+		// behavior of time.Ticker here, which is not documented.
+		if skipIntermediateTicks {
+			if !t.nextTick.After(now) {
+				select {
+				case t.ch <- now:
+				default:
+					panic("ticker channel full")
+				}
+				t.nextTick = now.Add(t.duration)
 			}
-			t.nextTick = t.nextTick.Add(t.duration)
+		} else {
+			for !t.nextTick.After(now) {
+				select {
+				case t.ch <- t.nextTick:
+				default:
+					panic("ticker channel full")
+				}
+				t.nextTick = t.nextTick.Add(t.duration)
+			}
 		}
 	}
 }

@@ -979,7 +979,7 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 		// Try each address on each retry iteration (in random order).
 		for _, i := range rand.Perm(len(c.addrs)) {
 			addr := c.addrs[i]
-			if !rpcbase.TODODRPC {
+			if !rpcbase.DRPCEnabled(ctx, c.rpcContext.Settings) {
 				conn, err := c.dialAddr(ctx, addr)
 				if err != nil {
 					log.Dev.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)

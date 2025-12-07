@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
@@ -51,31 +53,6 @@ const (
 	// NB: this can't easily become a variable as the UI hard-codes it to 10s.
 	// See https://github.com/cockroachdb/cockroach/issues/20310.
 	DefaultMetricsSampleInterval = 10 * time.Second
-
-	// defaultRangeLeaseRenewalFraction specifies what fraction the range lease
-	// renewal duration should be of the range lease active time. For example,
-	// with a value of 0.2 and a lease duration of 10 seconds, leases would be
-	// eagerly renewed 8 seconds into each lease.
-	//
-	// A range lease extension requires 1 RTT (Raft consensus), assuming the
-	// leaseholder is colocated with the Raft leader, so 3 seconds should be
-	// sufficient (see NetworkTimeout). However, on user ranges, Raft consensus
-	// uses the DefaultClass RPC class, and is thus subject to head-of-line
-	// blocking by other RPC traffic which can cause very high latencies under
-	// heavy load (several seconds).
-	defaultRangeLeaseRenewalFraction = 0.5
-
-	// livenessRenewalFraction specifies what fraction the node liveness renewal
-	// duration should be of the node liveness duration. For example, with a value
-	// of 0.2 and a liveness duration of 10 seconds, each node's liveness record
-	// would be eagerly renewed after 8 seconds.
-	//
-	// A liveness record write requires 2 RTTs (RPC and Raft consensus). Assuming
-	// a max RTT of 600ms (see NetworkTimeout), 3 seconds is enough for 2 RTTs
-	// (2*600ms) and 1 RTO (900ms), with a 900ms buffer. The write is committed
-	// 1/2 RTT before this. Liveness RPCs including Raft messages are sent via
-	// SystemClass, and thus avoid head-of-line blocking by general RPC traffic.
-	livenessRenewalFraction = 0.5
 
 	// DefaultDescriptorLeaseDuration is the default mean duration a
 	// lease will be acquired for. The actual duration is jittered using
@@ -111,6 +88,10 @@ const (
 	// contributes meaningfully to the average, while earlier measurements have
 	// diminishing impact.
 	DefaultCPUUsageMovingAverageAge = 20
+
+	// DefaultHighCardinalityMetricsSampleInterval is the default interval for
+	// sampling low-frequency high-cardinality metrics.
+	DefaultHighCardinalityMetricsSampleInterval = time.Minute
 )
 
 // DefaultCertsDirectory is the default value for the cert directory flag.
@@ -216,6 +197,33 @@ var (
 	// lease acquisition and 2.5s for Raft elections.
 	defaultRangeLeaseDuration = envutil.EnvOrDefaultDuration(
 		"COCKROACH_RANGE_LEASE_DURATION", 6*time.Second)
+
+	// defaultRangeLeaseRenewalFraction specifies what fraction the range lease
+	// renewal duration should be of the range lease active time. For example,
+	// with a value of 0.2 and a lease duration of 10 seconds, leases would be
+	// eagerly renewed 8 seconds into each lease.
+	//
+	// A range lease extension requires 1 RTT (Raft consensus), assuming the
+	// leaseholder is colocated with the Raft leader, so 3 seconds should be
+	// sufficient (see NetworkTimeout). However, on user ranges, Raft consensus
+	// uses the DefaultClass RPC class, and is thus subject to head-of-line
+	// blocking by other RPC traffic which can cause very high latencies under
+	// heavy load (several seconds).
+	defaultRangeLeaseRenewalFraction = envutil.EnvOrDefaultFloat64(
+		"COCKROACH_RANGE_LEASE_RENEWAL_FRACTION", 0.5)
+
+	// livenessRenewalFraction specifies what fraction the node liveness renewal
+	// duration should be of the node liveness duration. For example, with a value
+	// of 0.2 and a liveness duration of 10 seconds, each node's liveness record
+	// would be eagerly renewed after 8 seconds.
+	//
+	// A liveness record write requires 2 RTTs (RPC and Raft consensus). Assuming
+	// a max RTT of 600ms (see NetworkTimeout), 3 seconds is enough for 2 RTTs
+	// (2*600ms) and 1 RTO (900ms), with a 900ms buffer. The write is committed
+	// 1/2 RTT before this. Liveness RPCs including Raft messages are sent via
+	// SystemClass, and thus avoid head-of-line blocking by general RPC traffic.
+	livenessRenewalFraction = envutil.EnvOrDefaultFloat64(
+		"COCKROACH_LIVENESS_RENEWAL_FRACTION", 0.5)
 
 	// DefaultRPCHeartbeatTimeout is the default RPC heartbeat timeout. It is set
 	// very high at 3 * NetworkTimeout for several reasons: the gRPC transport may
@@ -466,6 +474,9 @@ type Config struct {
 
 	// RPCHearbeatTimeout is the timeout for Ping requests.
 	RPCHeartbeatTimeout time.Duration
+
+	// UseDRPC indicates whether to use DRPC as the RPC framework instead of gRPC.
+	UseDRPC bool
 
 	// ApplicationInternalRPCPortMin/PortMax define the range of TCP ports
 	// used to start the internal RPC service for application-level
@@ -904,19 +915,25 @@ type TempStorageConfig struct {
 	// InMemory specifies whether the temporary storage will remain
 	// in-memory or occupy a temporary subdirectory on-disk.
 	InMemory bool
-	// Path is the filepath of the temporary subdirectory created for
-	// the temp storage.
+	// Path is the filepath of the temporary subdirectory created for the temp
+	// storage. Empty if InMemory is true.
 	Path string
 	// Mon will be used by the temp storage to register all its capacity requests.
 	// It can be used to limit the disk or memory that temp storage is allowed to
 	// use. If InMemory is set, than this has to be a memory monitor; otherwise it
 	// has to be a disk monitor.
 	Mon *mon.BytesMonitor
-	// Spec stores the StoreSpec this TempStorageConfig will use.
-	Spec StoreSpec
+	// Encryption is set if encryption is enabled. We use the same encryption
+	// options as the store we chose for temp storage.
+	Encryption *storageconfig.EncryptionOptions
 	// Settings stores the cluster.Settings this TempStoreConfig will use. Must
 	// not be nil.
 	Settings *cluster.Settings
+	// If set, TempDirsRecordPath is the path to a temp-dirs-record.txt file in
+	// one of the stores (see server.TempDirsRecordFilename). Used when we create
+	// a new temporary storage directory for a new shared-process tenant. Empty if
+	// InMemory is false.
+	TempDirsRecordPath string
 }
 
 // ExternalIODirConfig describes various configuration options pertaining
@@ -948,32 +965,29 @@ type ExternalIODirConfig struct {
 	EnableNonAdminImplicitAndArbitraryOutbound bool
 }
 
-// TempStorageConfigFromEnv creates a TempStorageConfig.
-// If parentDir is not specified and the specified store is in-memory,
-// then the temp storage will also be in-memory.
-func TempStorageConfigFromEnv(
-	ctx context.Context,
-	st *cluster.Settings,
-	useStore StoreSpec,
-	parentDir string,
-	maxSizeBytes int64,
-) TempStorageConfig {
-	inMem := parentDir == "" && useStore.InMemory
-	return newTempStorageConfig(ctx, st, inMem, useStore, maxSizeBytes)
-}
-
 // InheritTempStorageConfig creates a new TempStorageConfig using the
 // configuration of the given TempStorageConfig. It assumes the given
 // TempStorageConfig has been fully initialized.
 func InheritTempStorageConfig(
 	ctx context.Context, st *cluster.Settings, parentConfig TempStorageConfig,
 ) TempStorageConfig {
-	return newTempStorageConfig(ctx, st, parentConfig.InMemory, parentConfig.Spec, parentConfig.Mon.Limit())
+	return NewTempStorageConfig(ctx, st, parentConfig.InMemory, parentConfig.Path, parentConfig.Encryption, parentConfig.Mon.Limit(), parentConfig.TempDirsRecordPath)
 }
 
-func newTempStorageConfig(
-	ctx context.Context, st *cluster.Settings, inMemory bool, useStore StoreSpec, maxSizeBytes int64,
+// NewTempStorageConfig creates a new TempStorageConfig.
+// The path should be empty iff inMemory is true.
+func NewTempStorageConfig(
+	ctx context.Context,
+	st *cluster.Settings,
+	inMemory bool,
+	path string,
+	encryption *storageconfig.EncryptionOptions,
+	maxSizeBytes int64,
+	tempDirsRecordPath string,
 ) TempStorageConfig {
+	if inMemory != (path == "") {
+		log.Dev.Fatalf(ctx, "inMemory (%t) must be true iff path is empty (%q)", inMemory, path)
+	}
 	var monitorName mon.Name
 	if inMemory {
 		monitorName = mon.MakeName("in-mem temp storage")
@@ -988,9 +1002,11 @@ func newTempStorageConfig(
 	})
 	monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
-		InMemory: inMemory,
-		Mon:      monitor,
-		Spec:     useStore,
-		Settings: st,
+		InMemory:           inMemory,
+		Path:               path,
+		Mon:                monitor,
+		Encryption:         encryption,
+		Settings:           st,
+		TempDirsRecordPath: tempDirsRecordPath,
 	}
 }

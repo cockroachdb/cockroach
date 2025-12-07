@@ -8,6 +8,7 @@ package insights
 import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insightspb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
@@ -25,7 +26,7 @@ type lockingRegistry struct {
 // Instead of creating and allocating a map to track duplicate
 // causes each time, we just iterate through the array since
 // we don't expect it to be very large.
-func addCause(arr []Cause, n Cause) []Cause {
+func addCause(arr []insightspb.Cause, n insightspb.Cause) []insightspb.Cause {
 	for i := range arr {
 		if arr[i] == n {
 			return arr
@@ -37,7 +38,7 @@ func addCause(arr []Cause, n Cause) []Cause {
 // Instead of creating and allocating a map to track duplicate
 // problems each time, we just iterate through the array since
 // we don't expect it to be very large.
-func addProblem(arr []Problem, n Problem) []Problem {
+func addProblem(arr []insightspb.Problem, n insightspb.Problem) []insightspb.Problem {
 	for i := range arr {
 		if arr[i] == n {
 			return arr
@@ -89,12 +90,12 @@ func (r *lockingRegistry) observeTransaction(
 	insight := makeInsight(sessionID, transaction)
 
 	if highContention {
-		insight.Transaction.Problems = addProblem(insight.Transaction.Problems, Problem_SlowExecution)
-		insight.Transaction.Causes = addCause(insight.Transaction.Causes, Cause_HighContention)
+		insight.Transaction.Problems = addProblem(insight.Transaction.Problems, insightspb.Problem_SlowExecution)
+		insight.Transaction.Causes = addCause(insight.Transaction.Causes, insightspb.Cause_HighContention)
 	}
 
 	if txnFailed {
-		insight.Transaction.Problems = addProblem(insight.Transaction.Problems, Problem_FailedExecution)
+		insight.Transaction.Problems = addProblem(insight.Transaction.Problems, insightspb.Problem_FailedExecution)
 	}
 
 	// The transaction status will reflect the status of its statements; it will
@@ -106,11 +107,11 @@ func (r *lockingRegistry) observeTransaction(
 		s := makeStmtInsight(recordedStmt)
 		if slowOrFailedStatements.Contains(i) {
 			switch s.Status {
-			case Statement_Completed:
-				s.Problem = Problem_SlowExecution
+			case insightspb.Statement_Completed:
+				s.Problem = insightspb.Problem_SlowExecution
 				s.Causes = r.causes.examine(s.Causes, s)
-			case Statement_Failed:
-				s.Problem = Problem_FailedExecution
+			case insightspb.Statement_Failed:
+				s.Problem = insightspb.Problem_FailedExecution
 				if transaction.LastErrorCode == "" {
 					lastStmtErr = s.ErrorMsg
 					lastStmtErrCode = s.ErrorCode

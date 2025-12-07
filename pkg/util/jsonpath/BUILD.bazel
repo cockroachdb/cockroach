@@ -12,8 +12,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/jsonpath",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keysbase",
+        "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/buildutil",
+        "//pkg/util/encoding",
         "//pkg/util/json",
         "@com_github_cockroachdb_errors//:errors",
     ],

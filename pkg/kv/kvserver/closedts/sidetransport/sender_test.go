@@ -9,6 +9,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,11 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -188,6 +193,7 @@ func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdat
 			closedts.TargetDuration.Get(&s.st.SV),
 			closedts.LeadForGlobalReadsOverride.Get(&s.st.SV),
 			closedts.SideTransportCloseInterval.Get(&s.st.SV),
+			closedts.SideTransportPacingRefreshInterval.Get(&s.st.SV),
 			pol,
 		)
 	}
@@ -622,7 +628,7 @@ type mockDialer struct {
 	}
 }
 
-var _ nodeDialer = &mockDialer{}
+var _ rpcbase.NodeDialer = &mockDialer{}
 
 type nodeAddr struct {
 	nid  roachpb.NodeID
@@ -825,7 +831,7 @@ type failingDialer struct {
 	dialCount int32
 }
 
-var _ nodeDialer = &failingDialer{}
+var _ rpcbase.NodeDialer = &failingDialer{}
 
 func (f *failingDialer) Dial(
 	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
@@ -858,8 +864,14 @@ func TestRPCConnStopOnClose(t *testing.T) {
 
 	dialer := &failingDialer{}
 	factory := newRPCConnFactory(dialer, connTestingKnobs{sleepOnErrOverride: sleepTime})
-	connection := factory.new(nil, /* sender is not needed as dialer always fails Dial attempts */
-		roachpb.NodeID(1))
+
+	s, stopper := newMockSender(factory)
+	defer stopper.Stop(ctx)
+
+	// While sender is strictly not needed to dial a connection as dialer
+	// always fails dial attempts, it is needed to check if DRPC is enabled
+	// or disabled.
+	connection := factory.new(s, roachpb.NodeID(1))
 	connection.run(ctx, stopper)
 
 	// Wait for first dial attempt for sanity reasons.
@@ -876,5 +888,148 @@ func TestRPCConnStopOnClose(t *testing.T) {
 			return errors.New("connection worker didn't stop yet")
 		}
 		return nil
+	})
+}
+
+// TestAllUpdatesBufAreSignalled creates a bunch of goroutines that wait on
+// updatesBuf, and then publishes multiple messages to the updatesBuf. It
+// verifies that all goroutines are signalled for all messages, and no goroutine
+// misses any message.
+func TestAllUpdatesBufAreSignalled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	connFactory := &mockConnFactory{}
+	st := cluster.MakeTestingClusterSettings()
+	s, stopper := newMockSenderWithSt(connFactory, st)
+	defer stopper.Stop(ctx)
+
+	const numGoroutines = 100
+	const numMsgs = 100
+	var counter atomic.Int64
+
+	// Start 100 goroutines that will wait on sequence numbers 1-100.
+	wg := sync.WaitGroup{}
+	wg.Add(numGoroutines)
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			for seqNum := ctpb.SeqNum(1); seqNum <= numMsgs; seqNum++ {
+				_, ok := s.buf.GetBySeq(ctx, seqNum)
+				if ok {
+					counter.Add(1)
+				}
+			}
+			wg.Done()
+		}()
+	}
+
+	// Publish 10 messages.
+	for i := 0; i < numMsgs; i++ {
+		s.publish(ctx)
+	}
+
+	// Verify that eventually all goroutines received all messages.
+	wg.Wait()
+	require.Equal(t, int64(numGoroutines*numMsgs), counter.Load())
+}
+
+// TestPaceUpdateSignalling verifies that the task pacer properly spaces out
+// signal calls after an update on the updatesBuf.
+func TestPaceUpdateSignalling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Flaky under duress.
+	skip.UnderDuress(t)
+
+	// Create a mock sender to get access to the buffer.
+	ctx := context.Background()
+	connFactory := &mockConnFactory{}
+	st := cluster.MakeTestingClusterSettings()
+	closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 250*time.Millisecond)
+	s, stopper := newMockSenderWithSt(connFactory, st)
+	defer stopper.Stop(ctx)
+
+	// numWaiters controls how many goroutines will wait on updatesBuf.
+	numWaiters := 1000
+
+	// testPacing tests that when multiple goroutines are waiting on
+	// s.buf.GetBySeq, they receive their items spaced out by at least
+	// expectedMinSpread. If expectedMinSpread is 0, then pacing is disabled,
+	// and we expect all goroutines to receive their items within a few ms of
+	// each other.
+	//
+	// seqNum is the sequence number to wait for.
+	testPacing := func(t *testing.T, seqNum ctpb.SeqNum, assertionFunc func(timeSpread time.Duration)) {
+		// Track the times when goroutines receive items from the buffer.
+		var receiveTimes []crtime.Mono
+		var mu syncutil.Mutex
+
+		// Create numWaiters goroutines that wait on s.buf.GetBySeq and record
+		// receive times.
+		g := ctxgroup.WithContext(ctx)
+		for range numWaiters {
+			g.Go(func() error {
+				// Wait for the specified sequence number.
+				_, ok := s.buf.GetBySeq(ctx, seqNum)
+				require.True(t, ok)
+
+				mu.Lock()
+				defer mu.Unlock()
+				receiveTimes = append(receiveTimes, crtime.NowMono())
+				return nil
+			})
+		}
+
+		// Wait until all goroutines are waiting on the buffer.
+		testutils.SucceedsSoon(t, func() error {
+			if s.buf.TestingGetTotalNumWaiters() < numWaiters {
+				return errors.New("not all goroutines are waiting yet")
+			}
+			return nil
+		})
+
+		// Publish an item to the buffer, which should trigger the paced signalling.
+		s.publish(ctx)
+
+		// Wait for all goroutines to finish.
+		require.NoError(t, g.Wait())
+
+		// Verify that all goroutines received the message.
+		require.Len(t, receiveTimes, numWaiters)
+
+		// Verify that the time spread matches expectations.
+		minTime := slices.Min(receiveTimes)
+		maxTime := slices.Max(receiveTimes)
+		timeSpread := maxTime.Sub(minTime)
+		assertionFunc(timeSpread)
+	}
+
+	// Test with 250ms pacing interval - expect at least 125ms spread just to be
+	// conservative. In practice, it should be closer to 250ms.
+	t.Run("pacing_interval=250ms", func(t *testing.T) {
+		closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 250*time.Millisecond)
+		testPacing(t, 1 /* seqNum */, func(timeSpread time.Duration) {
+			require.GreaterOrEqual(t, timeSpread, 125*time.Millisecond)
+		})
+	})
+
+	// Change to 100ms pacing interval - expect at least 50ms spread.
+	t.Run("pacing_interval=100ms", func(t *testing.T) {
+		closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 100*time.Millisecond)
+		testPacing(t, 2 /* seqNum */, func(timeSpread time.Duration) {
+			require.GreaterOrEqual(t, timeSpread, 50*time.Millisecond)
+		})
+	})
+
+	// Change to 0ms (disabled) pacing interval - expect all goroutines to be
+	// woken within a few milliseconds of each other.
+	t.Run("pacing_interval=0ms", func(t *testing.T) {
+		closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 0)
+		testPacing(t, 3 /* seqNum */, func(timeSpread time.Duration) {
+			// The expectation here is many 30x what is typically seen. But, we want
+			// to avoid flakes.
+			require.LessOrEqual(t, timeSpread, 30*time.Millisecond)
+		})
 	})
 }

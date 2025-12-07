@@ -11,10 +11,12 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -50,8 +53,31 @@ const (
 // runTests is the main function for the run and bench commands.
 // Assumes initRunFlagsBinariesAndLibraries was called.
 func runTests(register func(registry.Registry), filter *registry.TestFilter) error {
+	// On Darwin, start caffeinate to prevent the system from sleeping.
+	if runtime.GOOS == "darwin" && roachtestflags.Caffeinate {
+		pid := os.Getpid()
+		cmd := exec.Command("caffeinate", "-i", "-w", strconv.Itoa(pid))
+		if err := cmd.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to start caffeinate: %v\n", err)
+		} else {
+			defer func() {
+				if cmd.Process != nil {
+					_ = cmd.Process.Kill()
+				}
+			}()
+		}
+	}
+
+	globalSeed := randutil.NewPseudoSeed()
+	if globalSeedEnv := os.Getenv("ROACHTEST_GLOBAL_SEED"); globalSeedEnv != "" {
+		if parsed, err := strconv.ParseInt(globalSeedEnv, 0, 64); err == nil {
+			globalSeed = parsed
+		} else {
+			return errors.Wrapf(err, "could not parse ROACHTEST_GLOBAL_SEED=%q", globalSeedEnv)
+		}
+	}
 	//lint:ignore SA1019 deprecated
-	rand.Seed(roachtestflags.GlobalSeed)
+	rand.Seed(globalSeed)
 	r := makeTestRegistry()
 
 	// actual registering of tests
@@ -143,11 +169,12 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 
 	github := &githubIssues{
 		disable:     runner.config.disableIssue,
+		dryRun:      runner.config.dryRunIssuePosting,
 		issuePoster: issues.Post,
 		teamLoader:  team.DefaultLoadTeams,
 	}
 
-	l.Printf("global random seed: %d", roachtestflags.GlobalSeed)
+	l.Printf("global random seed: %d", globalSeed)
 	go func() {
 		if err := http.ListenAndServe(
 			fmt.Sprintf(":%d", roachtestflags.PromPort),

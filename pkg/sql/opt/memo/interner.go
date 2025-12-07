@@ -644,8 +644,9 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 		}
 	}
 	h.HashOrderingChoice(val.Ordering)
-	h.HashFloat64(val.LimitHint)
 	h.HashDistribution(val.Distribution)
+	h.HashFloat64(val.LimitHint)
+	h.HashBool(val.RemoteBranch)
 }
 
 func (h *hasher) HashDistribution(val physical.Distribution) {

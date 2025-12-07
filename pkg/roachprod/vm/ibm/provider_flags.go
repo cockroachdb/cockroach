@@ -27,6 +27,10 @@ type ProviderOpts struct {
 	// DefaultVolume is the default data volume to be attached.
 	DefaultVolume IbmVolume
 
+	// AttachedVolumesCount is the number of additional volumes to be attached.
+	// This is superseded by the length of AttachedVolumes if that is non-empty.
+	AttachedVolumesCount int
+
 	// AttachedVolumes is a list of additional volumes to be attached.
 	AttachedVolumes IbmVolumeList
 
@@ -48,6 +52,10 @@ type ProviderOpts struct {
 	// or terminated in case of a host failure or maintenance event. The default
 	// is to migrate the instance, which is the same as setting this to false.
 	TerminateOnMigration bool
+
+	// BootDiskOnly ensures that no additional disks will be attached, other than
+	// the boot disk.
+	BootDiskOnly bool
 }
 
 // Volume represents a volume to be attached to an IBM instance.
@@ -88,6 +96,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		RemoteUserName:       defaultRemoteUser,
 		DefaultVolume:        IbmVolume{VolumeType: defaultVolumeType, VolumeSize: defaultVolumeSize},
 		AttachedVolumes:      IbmVolumeList{},
+		AttachedVolumesCount: 1,
 		TerminateOnMigration: false,
 	}
 }
@@ -121,6 +130,11 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		o.DefaultVolume.IOPS,
 		"Custom number of IOPS to provision for the default data volume",
 	)
+	flags.IntVar(&o.AttachedVolumesCount,
+		ProviderName+"-volume-count",
+		1,
+		"Number of additional volumes to attach, superseded by --"+ProviderName+"-attached-volume",
+	)
 
 	// Additional attached volumes
 	flags.VarP(
@@ -131,7 +145,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 Specified as JSON: '{ "VolumeType": "general-purpose", "VolumeSize": 1000, "IOPS": 15000 }'
 - VolumeType: 'general-purpose' (3 IOPS/GB), '5iops-tier' (5 IOPS/GB), '10iops-tier' (10 IOPS/GB), 'custom' (specify IOPS)
 - VolumeSize: Size in GB of the volume
-- IOPS: IOPS for the volume`,
+- IOPS: IOPS for the volume (if VolumeType is 'custom')`,
 	)
 
 	flags.StringSliceVar(
@@ -145,6 +159,13 @@ If > 1 zone specified, the cluster will be spread out evenly by zone regardless 
 (default [%s])`,
 			strings.Join(DefaultZones(true), ","),
 		),
+	)
+
+	flags.BoolVar(
+		&o.BootDiskOnly,
+		ProviderName+"-boot-disk-only",
+		o.BootDiskOnly,
+		"Only attach the boot disk. No additional volumes will be provisioned even if specified.",
 	)
 
 	flags.BoolVar(

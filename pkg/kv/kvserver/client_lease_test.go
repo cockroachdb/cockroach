@@ -231,7 +231,7 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 		t.Fatalf("no store has gossiped %s; gossip contents: %+v",
 			nodeLivenessKey, tc.GetFirstStoreFromServer(t, 0).Gossip().GetInfoStatus())
 	}
-	log.Dev.Infof(context.Background(), "%s gossiped from s%d",
+	log.KvExec.Infof(context.Background(), "%s gossiped from s%d",
 		nodeLivenessKey, initialServerId)
 
 	newServerIdx := (initialServerId + 1) % numStores
@@ -1727,6 +1727,9 @@ func TestLeaseTransfersUseExpirationLeasesAndPromoteCorrectly(t *testing.T) {
 func TestLeaseRequestBumpsEpoch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// This is to help investigate failures like #157128.
+	testutils.SetVModule(t, "raft=4")
 
 	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
 		ctx := context.Background()

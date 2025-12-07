@@ -135,18 +135,20 @@ type Processor interface {
 	// It is ok to start registering streams before background initialization
 	// completes.
 	//
-	// The provided iterator is used to initialize the rangefeed's resolved
-	// timestamp. It must obey the contract of an iterator used for an
-	// initResolvedTSScan. The Processor promises to clean up the iterator by
-	// calling its Close method when it is finished.
+	// The provided IntentScannerConstructor is used to construct a lock table
+	// iterator which will be used to initialize the rangefeed's resolved
+	// timestamp. It must be called under the same raftMu lock as first call to
+	// Register to ensure that there are no missing events.
 	//
-	// Note that newRtsIter must be called under the same lock as first
-	// registration to ensure that all there would be no missing events.
-	// This is currently achieved by Register function synchronizing with
-	// the work loop before the lock is released.
+	// If IntentScannerConstructor returns a non-nil error, the processor will be
+	// stopped. Otherwise, the intent scanner is successfully initialized. It must
+	// obey the contract of an iterator used for an initResolvedTSScan. The
+	// processor promises to clean up the iterator by calling its Close method
+	// when it's finished.
 	//
-	// If the iterator is nil then no initialization scan will be performed and
-	// the resolved timestamp will immediately be considered initialized.
+	// If the IntentScannerConstructor is nil then no initialization scan will be
+	// performed and the resolved timestamp will immediately be considered
+	// initialized. This should only be the case in tests.
 	Start(stopper *stop.Stopper, newRtsIter IntentScannerConstructor) error
 	// Stop processor and close all registrations.
 	//
@@ -173,10 +175,10 @@ type Processor interface {
 	// events that are consumed concurrently with this call. The channel will be
 	// provided an error when the registration closes.
 	//
-	// The optionally provided "catch-up" iterator is used to read changes from the
+	// The optionally provided "catch-up" snapshot is used to read changes from the
 	// engine which occurred after the provided start timestamp (exclusive). If
-	// this method succeeds, registration must take ownership of iterator and
-	// subsequently close it. If method fails, iterator must be kept intact and
+	// this method succeeds, registration must take ownership of snapshot and
+	// subsequently close it. If method fails, snapshot must be kept intact and
 	// would be closed by caller.
 	//
 	// If the method returns false, the processor will have been stopped, so calling
@@ -189,7 +191,7 @@ type Processor interface {
 		streamCtx context.Context,
 		span roachpb.RSpan,
 		startTS hlc.Timestamp, // exclusive
-		catchUpIter *CatchUpIterator,
+		catchUpSnap *CatchUpSnapshot,
 		withDiff bool,
 		withFiltering bool,
 		withOmitRemote bool,
@@ -306,4 +308,4 @@ type logicalOpMetadata struct {
 // IntentScannerConstructor is used to construct an IntentScanner. It
 // should be called from underneath a stopper task to ensure that the
 // engine has not been closed.
-type IntentScannerConstructor func() IntentScanner
+type IntentScannerConstructor func() (IntentScanner, error)

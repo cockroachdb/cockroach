@@ -980,14 +980,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  -- Test backwards parsing
  CREATE VIEW xmlview1 AS SELECT xmlcomment('test');
 +ERROR:  unknown function: xmlcomment()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  CREATE VIEW xmlview2 AS SELECT xmlconcat('hello', 'you');
 -ERROR:  unsupported XML feature
 -LINE 1: CREATE VIEW xmlview2 AS SELECT xmlconcat('hello', 'you');
 -                                                 ^
 -DETAIL:  This functionality requires the server to be built with libxml support.
 +ERROR:  unknown function: xmlconcat()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  CREATE VIEW xmlview3 AS SELECT xmlelement(name element, xmlattributes (1 as ":one:", 'deuce' as two), 'content&');
 -ERROR:  unsupported XML feature
 -DETAIL:  This functionality requires the server to be built with libxml support.
@@ -1004,7 +1002,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
 +                                               ^
  CREATE VIEW xmlview5 AS SELECT xmlparse(content '<abc>x</abc>');
 +ERROR:  unknown function: xmlparse()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  CREATE VIEW xmlview6 AS SELECT xmlpi(name foo, 'bar');
 -ERROR:  unsupported XML feature
 -DETAIL:  This functionality requires the server to be built with libxml support.

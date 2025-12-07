@@ -1753,8 +1753,15 @@ SHOW intervalstyle
 ----
 iso_8601
 
+
+statement ok
+ALTER TABLE rewind_session_test SET (schema_locked=false)
+
 statement ok
 TRUNCATE rewind_session_test
+
+statement ok
+ALTER TABLE rewind_session_test RESET (schema_locked)
 
 statement ok
 SET intervalstyle = 'postgres'

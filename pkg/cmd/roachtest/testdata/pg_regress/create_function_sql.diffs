@@ -589,9 +589,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_function_s
 - functest_is_2 |                1 | a              | 
 - functest_is_2 |                2 | b              | 1
 - functest_is_3 |                1 | a              | 1
-+ functest_is_1 |                2 | b              | 
-+ functest_is_1 |                3 | c              | 
-+ functest_is_3 |                1 | a              | 
++ functest_is_1 |                2 | b              | 1:::INT8
++ functest_is_1 |                3 | c              | 'foo':::STRING
++ functest_is_3 |                1 | a              | 1:::INT8
   functest_is_3 |                2 | b              | 
 -(7 rows)
 +(5 rows)

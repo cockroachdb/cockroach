@@ -61,7 +61,7 @@ CREATE TABLE j2 (
   i INT,
   j JSON,
   s STRING,
-  INVERTED INDEX ij_idx (i, j),
+  INVERTED INDEX ij_idx (i DESC, j),
   INVERTED INDEX isj_idx (i, s, j)
 )
 

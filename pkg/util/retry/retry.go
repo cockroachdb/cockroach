@@ -172,6 +172,15 @@ func (r *Retry) Next() bool {
 		return false
 	}
 
+	// Check for cancellation first to prioritize over timer.
+	select {
+	case <-r.opts.Closer:
+		return false
+	case <-r.ctx.Done():
+		return false
+	default:
+	}
+
 	backoff, actualWait, shouldAttempt := r.calcDurationScopedBackoff()
 
 	if !shouldAttempt && r.opts.PreemptivelyCancel {

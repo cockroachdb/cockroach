@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -73,7 +72,7 @@ func registerCDCMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "cdc/mixed-versions",
 		Owner:            registry.OwnerCDC,
-		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode(), spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
+		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode(), spec.GCEZones(teamcityAgentZone), spec.Arch(spec.OnlyAMD64)),
 		Timeout:          3 * time.Hour,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
@@ -86,7 +85,7 @@ func registerCDCMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "cdc/mixed-version/checkpointing",
 		Owner:            registry.OwnerCDC,
-		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode(), spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
+		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode(), spec.GCEZones(teamcityAgentZone), spec.Arch(spec.OnlyAMD64)),
 		Timeout:          3 * time.Hour,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
@@ -104,8 +103,8 @@ func registerCDCMixedVersions(r registry.Registry) {
 // after upgrade.
 type cdcMixedVersionTester struct {
 	ctx context.Context
-
-	c cluster.Cluster
+	t   test.Test
+	c   cluster.Cluster
 
 	crdbNodes     option.NodeListOption
 	workloadNodes option.NodeListOption
@@ -144,9 +143,12 @@ type cdcMixedVersionTester struct {
 	jobID int
 }
 
-func newCDCMixedVersionTester(ctx context.Context, c cluster.Cluster) cdcMixedVersionTester {
+func newCDCMixedVersionTester(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) cdcMixedVersionTester {
 	return cdcMixedVersionTester{
 		ctx:           ctx,
+		t:             t,
 		c:             c,
 		crdbNodes:     c.CRDBNodes(),
 		workloadNodes: c.WorkloadNode(),
@@ -448,8 +450,8 @@ func (cmvt *cdcMixedVersionTester) initWorkload(
 	if err := enableTenantSplitScatter(l, r, h); err != nil {
 		return err
 	}
-
-	bankInit := roachtestutil.NewCommand("%s workload init bank", test.DefaultCockroachPath).
+	bankInit := roachtestutil.NewCommand(
+		"%s workload init bank", h.VersionedCockroachPath(cmvt.t)).
 		Flag("ranges", targetTableRanges).
 		Flag("rows", targetTableRows).
 		Flag("seed", r.Int63()).
@@ -539,7 +541,7 @@ func canMixedVersionUseDeletedClusterSetting(
 }
 
 func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
-	tester := newCDCMixedVersionTester(ctx, c)
+	tester := newCDCMixedVersionTester(ctx, t, c)
 
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, tester.crdbNodes,
@@ -552,6 +554,7 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// We limit the total number of plan steps to 80, which is roughly 60% of all plan lengths.
 		// See https://github.com/cockroachdb/cockroach/pull/137963#discussion_r1906256740 for more details.
 		mixedversion.MaxNumPlanSteps(80),
+		mixedversion.WithWorkloadNodes(c.WorkloadNode()),
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)
@@ -594,7 +597,7 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.OnStartup("init workload", tester.initWorkload)
 
 	runWorkloadCmd := tester.runWorkloadCmd(mvt.RNG())
-	_ = mvt.BackgroundCommand("run workload", tester.workloadNodes, runWorkloadCmd)
+	_ = mvt.Workload("bank", tester.workloadNodes, nil, runWorkloadCmd)
 	_ = mvt.BackgroundFunc("run kafka consumer", tester.runKafkaConsumer)
 
 	// NB: mvt.InMixedVersion will run these hooks multiple times at various points during the rolling upgrade, but
@@ -618,7 +621,7 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 // restoring the checkpoint implicitly happens following each of the rolling
 // restarts during the mixed-version test run.
 func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster.Cluster) {
-	tester := newCDCMixedVersionTester(ctx, c)
+	tester := newCDCMixedVersionTester(ctx, t, c)
 
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, tester.crdbNodes,
@@ -626,6 +629,7 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 		// versions that can upgrade to 25.2 (only 24.3 and 25.1), since that's
 		// the first version with the new span-level checkpoint format.
 		mixedversion.MinimumSupportedVersion("v24.3.0"),
+		mixedversion.WithWorkloadNodes(c.WorkloadNode()),
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)
@@ -661,7 +665,7 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 
 	// Run workload and kafka consumer.
 	runWorkloadCmd := tester.runWorkloadCmd(mvt.RNG())
-	_ = mvt.BackgroundCommand("run workload", tester.workloadNodes, runWorkloadCmd)
+	_ = mvt.Workload("bank", tester.workloadNodes, nil, runWorkloadCmd)
 	_ = mvt.BackgroundFunc("run kafka consumer", tester.runKafkaConsumer)
 
 	// Scatter the ranges throughout the test to make it more likely that every

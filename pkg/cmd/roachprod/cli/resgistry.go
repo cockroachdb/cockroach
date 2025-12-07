@@ -68,8 +68,11 @@ func (cr *commandRegistry) register() {
 		cr.buildFluentBitStopCmd(),
 		cr.buildOpentelemetryStartCmd(),
 		cr.buildOpentelemetryStopCmd(),
+		cr.buildParcaAgentStartCmd(),
+		cr.buildParcaAgentStopCmd(),
 		cr.buildFetchLogsCmd(),
 		cr.buildGetLatestPProfCmd(),
 		cr.buildFetchCertsDir(),
+		cr.buildChaosCmd(),
 	})
 }

@@ -2119,3 +2119,30 @@ c" STRING
 statement ok
 CREATE INVERTED INDEX ON t126444 ("b
 c" gin_trgm_ops)
+
+# Regression test for panicking with some GEOS errors (#151995).
+statement ok
+CREATE TABLE t151995 (
+  c0 INT PRIMARY KEY,
+  c1 GEOMETRY,
+  INVERTED INDEX (c1 ASC)
+);
+
+statement ok
+INSERT INTO t151995 (c0, c1) VALUES (
+        0,
+        '010300004001000000040000004ED667271F45EEC180F702131A41A7C138EDC3641D46F041E9E58A67A768F0C1CBB3A399C439FEC1189C38E3BBDDEEC16074F4D5F0C7FA414CCB652363EC01429029CED0E787E1C14ED667271F45EEC180F702131A41A7C138EDC3641D46F041':::GEOMETRY
+       );
+
+statement ok
+ANALYZE t151995;
+
+# Clear the stat cache so that the new statistic is guaranteed to be used (which
+# are needed for the inverted join to be picked).
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement error geos error: IllegalArgumentException: BufferOp::getResultGeometry distance must be a finite value
+SELECT *
+  FROM t151995 AS t1
+  JOIN t151995 AS t2 ON st_dfullywithinexclusive(t2.c1, t1.c1, '+Inf');

@@ -37,6 +37,9 @@ const (
 	WindowedHistogramWrapNum = 2
 	// CardinalityLimit is the max number of distinct label values combinations for any given MetricVec.
 	CardinalityLimit = 2000
+	// HighCardinalityMetricsLimit is the max number of distinct label values combinations for any given
+	//HighCardinality metrics.
+	HighCardinalityMetricsLimit = 5000
 )
 
 // Maintaining a list of static label names here to avoid duplication and
@@ -48,6 +51,7 @@ const (
 	LabelCertificateType = "certificate_type"
 	LabelName            = "name"
 	LabelType            = "type"
+	LabelLevel           = "level"
 )
 
 type LabelConfig uint64
@@ -131,6 +135,17 @@ type PrometheusReinitialisable interface {
 	PrometheusIterable
 
 	ReinitialiseChildMetrics(labelConfig LabelConfig)
+}
+
+// PrometheusEvictable is an extension of PrometheusIterable to indicate that
+// this metric uses cache as a storage and children metric can be evicted
+// based on eviction policy.
+// The InitializeMetrics method accepts a reference of LabelSliceCache which is
+// initialised at metric registry and settings values for configurable eviction policy.
+type PrometheusEvictable interface {
+	PrometheusIterable
+
+	InitializeMetrics(*LabelSliceCache)
 }
 
 // WindowedHistogram represents a histogram with data over recent window of
@@ -218,11 +233,20 @@ func (m *Metadata) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
 	return lps
 }
 
+// Returns the value for TsdbRecordLabeled,
+// defaults to True when it is not supplied.
+func (m *Metadata) GetTsdbRecordLabeled() bool {
+	if m.TsdbRecordLabeled == nil {
+		return true
+	}
+	return *m.TsdbRecordLabeled
+}
+
 // AddLabel adds a label/value pair for this metric.
 func (m *Metadata) AddLabel(name, value string) {
 	m.Labels = append(m.Labels,
 		&LabelPair{
-			Name:  proto.String(exportedLabel(name)),
+			Name:  proto.String(ExportedLabel(name)),
 			Value: proto.String(value),
 		})
 }
@@ -308,6 +332,24 @@ const nativeHistogramsBucketCountMultiplierEnvVar = "COCKROACH_PROMETHEUS_NATIVE
 
 var nativeHistogramsBucketCountMultiplier = envutil.EnvOrDefaultFloat64(nativeHistogramsBucketCountMultiplierEnvVar, 1)
 
+// maxLabelValuesEnvVar can be used to configure the maximum number of distinct
+// label value combinations for high cardinality metrics before eviction starts.
+const maxLabelValuesEnvVar = "COCKROACH_HIGH_CARDINALITY_METRICS_MAX_LABEL_VALUES"
+
+// MaxLabelValues is the configured maximum number of distinct label value combinations
+// for high cardinality metrics before eviction starts, read from the environment variable.
+var MaxLabelValues = envutil.EnvOrDefaultInt(maxLabelValuesEnvVar, 0)
+
+// retentionTimeTillEvictionEnvVar can be used to configure the time duration
+// after which unused label value combinations can be evicted from the cache.
+const retentionTimeTillEvictionEnvVar = "COCKROACH_HIGH_CARDINALITY_METRICS_RETENTION_TIME_TILL_EVICTION"
+
+// RetentionTimeTillEviction is the configured time duration after which unused
+// label value combinations can be evicted from the cache, read from the environment variable.
+// We are making sure that metrics would be scraped in at least one scrape as we have a default 10 second
+// scrape interval.
+var RetentionTimeTillEviction = envutil.EnvOrDefaultDuration(retentionTimeTillEvictionEnvVar, 10*time.Second)
+
 type HistogramMode byte
 
 const (
@@ -329,6 +371,25 @@ const (
 	// HdrHistogram model, since suitable defaults are used for both.
 	HistogramModePreferHdrLatency
 )
+
+// HighCardinalityMetricOptions defines the configuration options for high cardinality metrics
+// (Counter, Gauge, Histogram) that use cache storage. This allows fine-grained control over
+// eviction policies to manage memory usage for metrics with many distinct label combinations.
+type HighCardinalityMetricOptions struct {
+	// Metadata is the metric Metadata associated with the high cardinality metric.
+	Metadata Metadata
+	// MaxLabelValues sets the maximum number of distinct label value combinations
+	// that can be stored in the cache before eviction starts. When this limit is reached,
+	// the cache will evict entries based on the configured eviction policy.
+	// If set to 0, the default 5000 value is used.
+	MaxLabelValues int
+	// RetentionTimeTillEviction specifies the time duration after which unused
+	// label value combinations can be evicted from the cache. Entries that haven't
+	// been accessed for longer than this duration may be evicted.
+	// If set to 0, the default value of 20 seconds is used to ensure the label value is
+	// scraped at least once with default scrape interval of 10 seconds.
+	RetentionTimeTillEviction time.Duration
+}
 
 type HistogramOptions struct {
 	// Metadata is the metric Metadata associated with the histogram.
@@ -354,6 +415,9 @@ type HistogramOptions struct {
 	// Mode defines the type of histogram to be used. See individual
 	// comments on each HistogramMode value for details.
 	Mode HistogramMode
+	// HighCardinalityOpts configures cache eviction for high cardinality histograms.
+	// Only applies when using NewHighCardinalityHistogram.
+	HighCardinalityOpts HighCardinalityMetricOptions
 }
 
 func NewHistogram(opt HistogramOptions) IHistogram {
@@ -814,7 +878,7 @@ func (c *Counter) Inc(v int64) {
 // maintained elsewhere.
 func (c *Counter) Update(val int64) {
 	if buildutil.CrdbTestBuild {
-		if prev := c.count.Load(); val < prev {
+		if prev := c.count.Load(); val < prev && val != 0 {
 			panic(fmt.Sprintf("Counters should not decrease, prev: %d, new: %d.", prev, val))
 		}
 	}
@@ -1435,7 +1499,7 @@ func (cv *CounterVec) Update(labels map[string]string, v int64) {
 	}
 
 	currentValue := cv.Count(labels)
-	if currentValue > v {
+	if currentValue > v && v != 0 {
 		panic(fmt.Sprintf("Counters should not decrease, prev: %d, new: %d.", currentValue, v))
 	}
 

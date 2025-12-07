@@ -567,6 +567,14 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			},
 			schemaChange: "ALTER TABLE tbl DROP CONSTRAINT c, DROP COLUMN i",
 		},
+		{
+			desc: "verify that names can be swapped atomically",
+			setup: []string{
+				"ALTER TABLE tbl ADD COLUMN i INT DEFAULT 11, ADD COLUMN j INT DEFAULT 22",
+			},
+			schemaChange: "ALTER TABLE tbl RENAME COLUMN i TO i_old, RENAME COLUMN j TO i",
+			query:        "SELECT i FROM tbl LIMIT 1",
+		},
 	}
 
 	ctx := context.Background()

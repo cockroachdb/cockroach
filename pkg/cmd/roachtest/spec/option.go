@@ -5,24 +5,20 @@
 
 package spec
 
-import (
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-)
+import "time"
 
 // Option for MakeClusterSpec.
 type Option func(spec *ClusterSpec)
 
-// Arch requests a specific CPU architecture.
+// Arch requests specific CPU architecture(s).
 //
 // Note that it is not guaranteed that this architecture will be used (e.g. if
 // the requested machine size isn't available in this architecture).
 //
 // TODO(radu): add a flag to indicate whether it's a preference or a requirement.
-func Arch(arch vm.CPUArch) Option {
+func Arch(as ArchSet) Option {
 	return func(spec *ClusterSpec) {
-		spec.Arch = arch
+		spec.CompatibleArchs = as
 	}
 }
 
@@ -57,6 +53,15 @@ func WorkloadNodeCPU(n int) Option {
 	}
 }
 
+// WorkloadRequiresDisk should be used if the workload nodes should have the
+// exact same disk configuration as the rest of the cluster. Otherwise, all
+// workload nodes only have a boot disk.
+func WorkloadRequiresDisk() Option {
+	return func(spec *ClusterSpec) {
+		spec.WorkloadRequiresDisk = true
+	}
+}
+
 // Mem requests nodes with low/standard/high ratio of memory per CPU.
 func Mem(level MemPerCPU) Option {
 	return func(spec *ClusterSpec) {
@@ -68,6 +73,20 @@ func Mem(level MemPerCPU) Option {
 func VolumeSize(n int) Option {
 	return func(spec *ClusterSpec) {
 		spec.VolumeSize = n
+	}
+}
+
+// VolumeType sets the volume type.
+func VolumeType(volumeType string) Option {
+	return func(spec *ClusterSpec) {
+		spec.VolumeType = volumeType
+	}
+}
+
+// VolumeCount sets the volume count.
+func VolumeCount(volumeCount int) Option {
+	return func(spec *ClusterSpec) {
+		spec.VolumeCount = volumeCount
 	}
 }
 
@@ -242,20 +261,6 @@ func GCEMinCPUPlatform(platform string) Option {
 	}
 }
 
-// GCEVolumeType sets the volume type when the cluster is on GCE.
-func GCEVolumeType(volumeType string) Option {
-	return func(spec *ClusterSpec) {
-		spec.GCE.VolumeType = volumeType
-	}
-}
-
-// GCEVolumeCount sets the volume count when the cluster is on GCE.
-func GCEVolumeCount(volumeCount int) Option {
-	return func(spec *ClusterSpec) {
-		spec.GCE.VolumeCount = volumeCount
-	}
-}
-
 // GCEZones is a node option which requests Geo-distributed nodes; only applies
 // when the test runs on GCE.
 //
@@ -316,6 +321,14 @@ func AzureZones(zones string) Option {
 	}
 }
 
+// AzureVolumeIOPS sets the provisioned IOPS for ultra-disk volumes
+// when the cluster is on Azure.
+func AzureVolumeIOPS(iops int) Option {
+	return func(spec *ClusterSpec) {
+		spec.Azure.VolumeIOPS = iops
+	}
+}
+
 // IBMMachineType sets the machine (instance) type when the cluster is on IBM.
 func IBMMachineType(machineType string) Option {
 	return func(spec *ClusterSpec) {
@@ -323,24 +336,10 @@ func IBMMachineType(machineType string) Option {
 	}
 }
 
-// IBMVolumeType sets the volume type when the cluster is on IBM.
-func IBMVolumeType(volumeType string) Option {
-	return func(spec *ClusterSpec) {
-		spec.IBM.VolumeType = volumeType
-	}
-}
-
 // IBMVolumeIOPS sets the IOPS when the cluster is on IBM.
 func IBMVolumeIOPS(iops int) Option {
 	return func(spec *ClusterSpec) {
 		spec.IBM.VolumeIOPS = iops
-	}
-}
-
-// IBMVolumeCount sets the volume count when the cluster is on IBM.
-func IBMVolumeCount(count int) Option {
-	return func(spec *ClusterSpec) {
-		spec.IBM.VolumeCount = count
 	}
 }
 

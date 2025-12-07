@@ -28,6 +28,9 @@ var reg = rttanalysis.NewRegistry(numNodes, rttanalysis.MakeClusterConstructor(f
 	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		tb, numNodes, knobs,
 	)
+	if err := cluster.WaitForFullReplication(); err != nil {
+		tb.Fatal(err)
+	}
 	db := cluster.ServerConn(0)
 	// Eventlog is async, and introduces jitter in the benchmark.
 	if _, err := db.Exec("SET CLUSTER SETTING server.eventlog.enabled = false"); err != nil {

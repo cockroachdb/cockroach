@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
@@ -457,15 +456,6 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					return err
 				}
 			}
-
-			for _, s := range []string{
-				string(sqlclustersettings.RestrictAccessToSystemInterface.Name()),
-				string(sql.TipUserAboutSystemInterface.Name()),
-			} {
-				if _, err := ie.Exec(ctx, "restrict-system-interface", nil, fmt.Sprintf(`SET CLUSTER SETTING %s = true`, s)); err != nil {
-					return err
-				}
-			}
 		}
 
 		// Prepare the URL for use by the SQL shell.
@@ -545,6 +535,15 @@ func (c *transientCluster) startTenantService(
 						InjectedLatencyEnabled: c.latencyEnabled.Load,
 					},
 				},
+				JobsTestingKnobs: &jobs.TestingKnobs{
+					// Allow the scheduler daemon to start earlier in demo.
+					SchedulerDaemonInitialScanDelay: func() time.Duration {
+						return time.Second * 2
+					},
+					SchedulerDaemonScanDelay: func() time.Duration {
+						return time.Second * 5
+					},
+				},
 			},
 		}
 
@@ -571,6 +570,15 @@ func (c *transientCluster) startTenantService(
 						ContextTestingKnobs: rpc.ContextTestingKnobs{
 							InjectedLatencyOracle:  latencyMap,
 							InjectedLatencyEnabled: c.latencyEnabled.Load,
+						},
+					},
+					JobsTestingKnobs: &jobs.TestingKnobs{
+						// Allow the scheduler daemon to start earlier in demo.
+						SchedulerDaemonInitialScanDelay: func() time.Duration {
+							return time.Second * 2
+						},
+						SchedulerDaemonScanDelay: func() time.Duration {
+							return time.Second * 5
 						},
 					},
 				},
@@ -934,7 +942,10 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 			JobsTestingKnobs: &jobs.TestingKnobs{
 				// Allow the scheduler daemon to start earlier in demo.
 				SchedulerDaemonInitialScanDelay: func() time.Duration {
-					return time.Second * 15
+					return time.Second * 2
+				},
+				SchedulerDaemonScanDelay: func() time.Duration {
+					return time.Second * 5
 				},
 			},
 		},
@@ -973,6 +984,11 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		args.Insecure = false
 		args.SSLCertsDir = demoDir
 	}
+
+	// Allow access to system and crdb_internal tables in demo mode.
+	// Demo mode is for development/testing, so we want to allow access
+	// to these tables for debugging and introspection.
+	serverutils.SetUnsafeOverride(&args.Knobs)
 
 	return args
 }

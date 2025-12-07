@@ -4,7 +4,9 @@ go_library(
     name = "cloud",
     srcs = [
         "cloud_io.go",
+        "cloud_logging_transport.go",
         "external_storage.go",
+        "flush_writer.go",
         "impl_registry.go",
         "kms.go",
         "kms_test_utils.go",
@@ -31,7 +33,9 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/sysutil",
         "//pkg/util/tracing",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_prometheus_client_model//go",
         "@com_github_stretchr_testify//require",
     ],
@@ -41,14 +45,18 @@ go_test(
     name = "cloud_test",
     srcs = [
         "cloud_io_test.go",
+        "cloud_logging_transport_test.go",
         "options_test.go",
         "uris_test.go",
     ],
     embed = [":cloud"],
     deps = [
         "//pkg/cloud/cloudpb",
+        "//pkg/testutils",
         "//pkg/util/ioctx",
+        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
 )

@@ -83,6 +83,7 @@ go_test(
         "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/dd",
         "//pkg/testutils/skip",
         "//pkg/util",
         "//pkg/util/allstacks",

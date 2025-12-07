@@ -11,6 +11,7 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -804,7 +805,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				tableDesc.GetRowLevelTTL().HasDurationExpr() {
 				return pgerror.Newf(
 					pgcode.InvalidTableDefinition,
-					`cannot rename column %s while ttl_expire_after is set`,
+					`cannot alter column %s while ttl_expire_after is set`,
 					columnName,
 				)
 			}
@@ -986,7 +987,7 @@ func applyColumnMutation(
 			}
 			return pgerror.Newf(
 				pgcode.Syntax,
-				"computed column %q cannot also have a DEFAULT expression",
+				"computed column %q cannot also have a DEFAULT or ON UPDATE expression",
 				col.GetName())
 		}
 		if err := updateNonComputedColExpr(
@@ -1005,6 +1006,12 @@ func applyColumnMutation(
 		}
 
 	case *tree.AlterTableSetOnUpdate:
+		if col.IsComputed() {
+			return pgerror.Newf(
+				pgcode.Syntax,
+				"computed column %q cannot also have a DEFAULT or ON UPDATE expression",
+				col.GetName())
+		}
 		// We want to reject uses of ON UPDATE where there is also a foreign key ON
 		// UPDATE.
 		for _, fk := range tableDesc.OutboundFKs {
@@ -1261,7 +1268,7 @@ func applyColumnMutation(
 			return err
 		}
 
-		// Alter referenced sequence for identity with sepcified option.
+		// Alter referenced sequence for identity with specified option.
 		// Does not override existing values if not specified.
 		if err := alterSequenceImpl(params, seqDesc, t.SeqOptions, t); err != nil {
 			return err
@@ -1282,7 +1289,7 @@ func applyColumnMutation(
 		if opts.Virtual {
 			optsNode = append(optsNode, tree.SequenceOption{Name: tree.SeqOptVirtual})
 		}
-		s := tree.Serialize(&optsNode)
+		s := strings.TrimSpace(tree.Serialize(&optsNode))
 		col.ColumnDesc().GeneratedAsIdentitySequenceOption = &s
 
 	case *tree.AlterTableDropIdentity:

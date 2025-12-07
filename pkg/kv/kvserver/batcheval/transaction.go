@@ -138,7 +138,7 @@ func CanCreateTxnRecord(ctx context.Context, rec EvalContext, txn *roachpb.Trans
 // be PENDING.
 func BumpToMinTxnCommitTS(ctx context.Context, rec EvalContext, txn *roachpb.Transaction) {
 	if txn.Status != roachpb.PENDING {
-		log.Dev.Fatalf(ctx, "non-pending txn passed to BumpToMinTxnCommitTS: %v", txn)
+		log.KvExec.Fatalf(ctx, "non-pending txn passed to BumpToMinTxnCommitTS: %v", txn)
 	}
 	minCommitTS := rec.MinTxnCommitTS(ctx, txn.ID, txn.Key)
 	if bumped := txn.WriteTimestamp.Forward(minCommitTS); bumped {

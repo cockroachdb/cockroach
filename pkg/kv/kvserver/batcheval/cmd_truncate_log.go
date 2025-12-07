@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -51,7 +52,7 @@ func TruncateLog(
 	// the range specified in the request body.
 	rangeID := cArgs.EvalCtx.GetRangeID()
 	if rangeID != args.RangeID {
-		log.Dev.Infof(ctx, "attempting to truncate raft logs for another range: r%d. Normally this is due to a merge and can be ignored.",
+		log.KvExec.Infof(ctx, "attempting to truncate raft logs for another range: r%d. Normally this is due to a merge and can be ignored.",
 			args.RangeID)
 		return result.Result{}, nil
 	}
@@ -69,7 +70,7 @@ func TruncateLog(
 	firstIndex := cArgs.EvalCtx.GetCompactedIndex() + 1
 	if firstIndex >= args.Index {
 		if log.V(3) {
-			log.Dev.Infof(ctx, "attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
+			log.KvExec.Infof(ctx, "attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
 				firstIndex, args.Index)
 		}
 		return result.Result{}, nil
@@ -110,6 +111,16 @@ func TruncateLog(
 	start := keys.RaftLogKey(rangeID, firstIndex)
 	end := keys.RaftLogKey(rangeID, args.Index)
 
+	// TODO(pav-kv): GetCompactedIndex, GetTerm, and NewReader calls can disagree
+	// on the state of the log since we don't hold any Replica locks here. Move
+	// the computation inside Replica where locking can be controlled precisely.
+	//
+	// Use the log engine to compute stats for the raft log.
+	// TODO(#136358): After we precisely maintain the Raft Log size, we could stop
+	// needing the Log Engine to compute the stats.
+	logReader := cArgs.EvalCtx.LogEngine().NewReader(storage.StandardDurability)
+	defer logReader.Close()
+
 	// Compute the stats delta that were to occur should the log entries be
 	// purged. We do this as a side effect of seeing a new TruncatedState,
 	// downstream of Raft.
@@ -118,7 +129,8 @@ func TruncateLog(
 	// are not tracked in the raft log delta. The delta will be adjusted below
 	// raft.
 	// We can pass zero as nowNanos because we're only interested in SysBytes.
-	ms, err := storage.ComputeStats(ctx, readWriter, start, end, 0 /* nowNanos */)
+	ms, err := storage.ComputeStats(ctx, logReader, fs.ReplicationReadCategory,
+		start, end, 0 /* nowNanos */)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "while computing stats of Raft log freed by truncation")
 	}

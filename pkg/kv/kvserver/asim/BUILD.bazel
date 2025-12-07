@@ -18,11 +18,14 @@ go_library(
         "//pkg/kv/kvserver/asim/storerebalancer",
         "//pkg/kv/kvserver/asim/workload",
         "//pkg/util/log",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
     ],
 )
 
 go_test(
     name = "asim_test",
+    size = "large",
     srcs = ["asim_test.go"],
     deps = [
         ":asim",

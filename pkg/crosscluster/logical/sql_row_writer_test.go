@@ -11,12 +11,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -30,6 +32,18 @@ func makeTestRow(t *testing.T, _ catalog.TableDescriptor, id int64, name string)
 	}
 }
 
+func newInternalSession(t *testing.T, s serverutils.ApplicationLayerInterface) isql.Session {
+	sd := tableHandlerSessionSettings(sql.NewInternalSessionData(context.Background(), s.ClusterSettings(), ""))
+	session, err := s.InternalDB().(isql.DB).Session(context.Background(), "test_session", isql.WithSessionData(sd))
+	require.NoError(t, err)
+	return session
+}
+
+// hlcToString converts an HLC timestamp to the format used by crdb_internal_origin_timestamp
+func hlcToString(ts hlc.Timestamp) string {
+	return eval.TimestampToDecimalDatum(ts).String()
+}
+
 func TestSQLRowWriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -38,7 +52,6 @@ func TestSQLRowWriter(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	internalDB := s.InternalDB().(isql.DB)
 
 	// Create a test table
 	sqlDB.Exec(t, `
@@ -49,47 +62,58 @@ func TestSQLRowWriter(t *testing.T) {
 		)
 	`)
 
+	session := newInternalSession(t, s)
+	defer session.Close(ctx)
+
 	// Create a row writer
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ApplicationLayer().ExecutorConfig(), "test_table")
-	writer, err := newSQLRowWriter(desc, sessiondata.InternalExecutorOverride{})
+	writer, err := newSQLRowWriter(ctx, desc, session)
 	require.NoError(t, err)
 
 	// Test InsertRow
 	insertRow := makeTestRow(t, desc, 1, "test")
-	require.NoError(t, internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return writer.InsertRow(ctx, txn, s.Clock().Now(), insertRow)
-	}))
+	insertTimestamp := s.Clock().Now()
+	require.NoError(t, writer.InsertRow(ctx, insertTimestamp, insertRow))
 	require.Equal(t,
-		[][]string{{"1", "test", "NULL"}},
-		sqlDB.QueryStr(t, "SELECT id, name, is_always_null FROM test_table WHERE id = 1"))
+		[][]string{{"1", "test", "NULL", hlcToString(insertTimestamp), "1"}},
+		sqlDB.QueryStr(t, "SELECT id, name, is_always_null, crdb_internal_origin_timestamp, crdb_internal_origin_id FROM test_table WHERE id = 1"))
 
 	// Test UpdateRow
 	updateRow := makeTestRow(t, desc, 1, "updated")
-	require.NoError(t, internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return writer.UpdateRow(ctx, txn, s.Clock().Now(), insertRow, updateRow)
-	}))
+	updateTimestamp := s.Clock().Now()
+	require.NoError(t, writer.UpdateRow(ctx, updateTimestamp, insertRow, updateRow))
 	require.Equal(t,
-		[][]string{{"1", "updated", "NULL"}},
-		sqlDB.QueryStr(t, "SELECT id, name, is_always_null FROM test_table WHERE id = 1"))
+		[][]string{{"1", "updated", "NULL", hlcToString(updateTimestamp), "1"}},
+		sqlDB.QueryStr(t, "SELECT id, name, is_always_null, crdb_internal_origin_timestamp, crdb_internal_origin_id FROM test_table WHERE id = 1"))
 
 	// Test UpdateRow with stale previous value
 	staleRow := makeTestRow(t, desc, 1, "test") // Using old value
-	err = internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return writer.UpdateRow(ctx, txn, s.Clock().Now(), staleRow, updateRow)
-	})
+	err = writer.UpdateRow(ctx, s.Clock().Now(), staleRow, updateRow)
 	require.ErrorIs(t, err, errStalePreviousValue)
 
-	// Test DeleteRow
-	require.NoError(t, internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return writer.DeleteRow(ctx, txn, s.Clock().Now(), updateRow)
-	}))
+	// Test DeleteRow - first insert a test row to verify origin data before delete
+	insertRow2 := makeTestRow(t, desc, 2, "to_delete")
+	insertTimestamp2 := s.Clock().Now()
+	require.NoError(t, writer.InsertRow(ctx, insertTimestamp2, insertRow2))
+
+	// Verify the row exists with correct data and origin metadata
+	require.Equal(t,
+		[][]string{{"2", "to_delete", "NULL", hlcToString(insertTimestamp2), "1"}},
+		sqlDB.QueryStr(t, "SELECT id, name, is_always_null, crdb_internal_origin_timestamp, crdb_internal_origin_id FROM test_table WHERE id = 2"))
+
+	// Now delete the row
+	require.NoError(t, writer.DeleteRow(ctx, s.Clock().Now(), insertRow2))
 	require.Equal(t,
 		[][]string{},
-		sqlDB.QueryStr(t, "SELECT id, name, is_always_null FROM test_table WHERE id = 1"))
+		sqlDB.QueryStr(t, "SELECT id, name, is_always_null, crdb_internal_origin_timestamp, crdb_internal_origin_id FROM test_table WHERE id = 2"))
+
+	// Also delete the original row to clean up
+	require.NoError(t, writer.DeleteRow(ctx, s.Clock().Now(), updateRow))
+	require.Equal(t,
+		[][]string{},
+		sqlDB.QueryStr(t, "SELECT id, name, is_always_null, crdb_internal_origin_timestamp, crdb_internal_origin_id FROM test_table WHERE id = 1"))
 
 	// Test DeleteRow with stale value
-	err = internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return writer.DeleteRow(ctx, txn, s.Clock().Now(), staleRow)
-	})
+	err = writer.DeleteRow(ctx, s.Clock().Now(), staleRow)
 	require.ErrorIs(t, err, errStalePreviousValue)
 }

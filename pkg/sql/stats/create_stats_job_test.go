@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -147,8 +148,7 @@ func runCreateStatsJob(
 	case err := <-errCh:
 		return 0, errors.Wrapf(err, "query returned before expected: %s", query)
 	}
-	var jobID jobspb.JobID
-	db.QueryRow(t, `SELECT id FROM system.jobs WHERE job_type = 'CREATE STATS' ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+	jobID := getLastRunningCreateStatsJobID(t, db)
 	db.Exec(t, fmt.Sprintf("%s JOB %d", op, jobID))
 	*allowProgressIota <- struct{}{}
 	close(*allowProgressIota)
@@ -234,11 +234,6 @@ func testAtMostOneRunningCreateStatsImpl(t *testing.T, errorOnConcurrentCreateSt
 
 	var allowRequest chan struct{}
 	var allowRequestOpen bool
-	defer func() {
-		if allowRequestOpen {
-			close(allowRequest)
-		}
-	}()
 
 	filter, setTableID := createStatsRequestFilter(&allowRequest)
 	var params base.TestClusterArgs
@@ -246,12 +241,19 @@ func testAtMostOneRunningCreateStatsImpl(t *testing.T, errorOnConcurrentCreateSt
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: filter,
 	}
-	params.ServerArgs.DefaultTestTenant = base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109379)
 
+	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 	const nodes = 1
 	tc := testcluster.StartTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
+
+	defer func() {
+		if allowRequestOpen {
+			close(allowRequest)
+		}
+	}()
+
 	conn := tc.ApplicationLayer(0).SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -301,28 +303,30 @@ func testAtMostOneRunningCreateStatsImpl(t *testing.T, errorOnConcurrentCreateSt
 	runAutoStatsJob(t, sqlDB, "d.t", false /* partial */, errorOnConcurrentCreateStats)
 	runAutoStatsJob(t, sqlDB, "d.t", true /* partial */, errorOnConcurrentCreateStats)
 
-	// PAUSE JOB does not block until the job is paused but only requests it.
-	// Wait until the job is set to paused.
-	var jobID jobspb.JobID
-	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
-	opts := retry.Options{
-		InitialBackoff: 1 * time.Millisecond,
-		MaxBackoff:     time.Second,
-		Multiplier:     2,
-	}
-	if err := retry.WithMaxAttempts(context.Background(), opts, 10, func() error {
-		_, err := sqlDB.DB.ExecContext(context.Background(), `PAUSE JOB $1`, jobID)
-		if err != nil {
+	jobID := getLastRunningCreateStatsJobID(t, sqlDB)
+	pauseJob := rng.Float64() < 0.5
+	if pauseJob {
+		// PAUSE JOB does not block until the job is paused but only requests it.
+		// Wait until the job is set to paused.
+		opts := retry.Options{
+			InitialBackoff: 1 * time.Millisecond,
+			MaxBackoff:     time.Second,
+			Multiplier:     2,
+		}
+		if err := retry.WithMaxAttempts(context.Background(), opts, 10, func() error {
+			_, err := sqlDB.DB.ExecContext(context.Background(), `PAUSE JOB $1`, jobID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var status string
+			sqlDB.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1 LIMIT 1`, jobID).Scan(&status)
+			if status != "paused" {
+				return errors.New("could not pause job")
+			}
+			return err
+		}); err != nil {
 			t.Fatal(err)
 		}
-		var status string
-		sqlDB.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1 LIMIT 1`, jobID).Scan(&status)
-		if status != "paused" {
-			return errors.New("could not pause job")
-		}
-		return err
-	}); err != nil {
-		t.Fatal(err)
 	}
 
 	// Starting automatic full and partial stats run should still fail.
@@ -341,19 +345,6 @@ func testAtMostOneRunningCreateStatsImpl(t *testing.T, errorOnConcurrentCreateSt
 		manualPartialStatErrCh <- err
 	}()
 
-	select {
-	case allowRequest <- struct{}{}:
-	case err := <-runningManualFullStatErrCh:
-		t.Fatal(err)
-	case err := <-manualFullStatErrCh:
-		t.Fatal(err)
-	case err := <-manualPartialStatErrCh:
-		t.Fatal(err)
-	}
-
-	close(allowRequest)
-	allowRequestOpen = false
-
 	// Verify that the manual full and partial stat jobs completed successfully.
 	if err := <-manualFullStatErrCh; err != nil {
 		t.Fatalf("create stats job should have completed: %s", err)
@@ -362,10 +353,30 @@ func testAtMostOneRunningCreateStatsImpl(t *testing.T, errorOnConcurrentCreateSt
 		t.Fatalf("create partial stats job should have completed: %s", err)
 	}
 
-	// Verify that the running full stat job completed successfully.
+	beforeCount := getNumberOfTableStats(t, sqlDB, "d.t", "s1")
 	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", jobID))
+	close(allowRequest)
+	allowRequestOpen = false
+
+	// Verify that the running full stat job completed successfully.
 	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
-	<-runningManualFullStatErrCh
+	if pauseJob {
+		// If the job was paused, then we expect an error to be returned to us
+		// even though the stats were collected.
+		if err := <-runningManualFullStatErrCh; !testutils.IsError(err, "node liveness error: restarting in background") {
+			t.Fatalf("expected 'node liveness error: restarting in background' error, found %v", err)
+		}
+	} else {
+		// If the job wasn't paused, then we expect no error.
+		if err := <-runningManualFullStatErrCh; err != nil {
+			t.Fatalf("expected no error, found %v", err)
+		}
+	}
+	// Now ensure that the new statistic is present.
+	afterCount := getNumberOfTableStats(t, sqlDB, "d.t", "s1")
+	if beforeCount == afterCount {
+		t.Fatal("expected new statistic to have been collected")
+	}
 }
 
 // TestBackgroundAutoPartialStats tests that a running auto partial stats job
@@ -385,11 +396,6 @@ func testBackgroundAutoPartialStatsImpl(t *testing.T, errorOnConcurrentCreateSta
 
 	var allowRequest chan struct{}
 	var allowRequestOpen bool
-	defer func() {
-		if allowRequestOpen {
-			close(allowRequest)
-		}
-	}()
 
 	filter, setTableID := createStatsRequestFilter(&allowRequest)
 	var params base.TestClusterArgs
@@ -397,12 +403,18 @@ func testBackgroundAutoPartialStatsImpl(t *testing.T, errorOnConcurrentCreateSta
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: filter,
 	}
-	params.ServerArgs.DefaultTestTenant = base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109379)
 
 	ctx := context.Background()
 	const nodes = 1
 	tc := testcluster.StartTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
+
+	defer func() {
+		if allowRequestOpen {
+			close(allowRequest)
+		}
+	}()
+
 	conn := tc.ApplicationLayer(0).SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -641,7 +653,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	}
 
 	// Fetch the new job ID since we know it's running now.
-	jobID := getLastCreateStatsJobID(t, sqlDB)
+	jobID := getLastRunningCreateStatsJobID(t, sqlDB)
 
 	// Ensure that 0 progress has been recorded since there are no existing
 	// stats available to estimate progress.
@@ -695,7 +707,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	}
 
 	// Fetch the new job ID since we know it's running now.
-	jobID = getLastCreateStatsJobID(t, sqlDB)
+	jobID = getLastRunningCreateStatsJobID(t, sqlDB)
 
 	// Ensure that partial progress has been recorded since there are existing
 	// stats available.
@@ -823,7 +835,7 @@ func TestCreateStatsUsingExtremesProgress(t *testing.T) {
 	}
 
 	// Fetch the new job ID since we know it's running now.
-	jobID := getLastCreateStatsJobID(t, sqlDB)
+	jobID := getLastRunningCreateStatsJobID(t, sqlDB)
 
 	var fractionCompleted float32
 	prevFractionCompleted := getFractionCompleted(t, sqlDB, jobID)
@@ -930,7 +942,7 @@ func createStatsRequestFilter(
 	}, func(id descpb.ID) { tableToBlock.Store(id) }
 }
 
-func getLastCreateStatsJobID(t testing.TB, db *sqlutils.SQLRunner) jobspb.JobID {
+func getLastRunningCreateStatsJobID(t testing.TB, db *sqlutils.SQLRunner) jobspb.JobID {
 	var jobID jobspb.JobID
 	db.QueryRow(t, "SELECT id FROM system.jobs WHERE status = 'running' AND "+
 		"job_type = 'CREATE STATS' ORDER BY created DESC LIMIT 1").Scan(&jobID)
@@ -949,12 +961,20 @@ func getFractionCompleted(t testing.TB, sqlDB *sqlutils.SQLRunner, jobID jobspb.
 	return progress.Progress.(*jobspb.Progress_FractionCompleted).FractionCompleted
 }
 
-func runAutoStatsJob(
-	t *testing.T, sqlDB *sqlutils.SQLRunner, tableName string, partial bool, shouldFail bool,
-) {
+func getNumberOfTableStats(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, tableName, statsName string,
+) int {
 	var tableID descpb.ID
 	sqlDB.QueryRow(t, `SELECT $1::regclass::int`, tableName).Scan(&tableID)
 
+	var count int
+	sqlDB.QueryRow(t, `SELECT count(*) FROM system.table_statistics WHERE "tableID" = $1 AND name = $2`, tableID, statsName).Scan(&count)
+	return count
+}
+
+func runAutoStatsJob(
+	t *testing.T, sqlDB *sqlutils.SQLRunner, tableName string, partial bool, shouldFail bool,
+) {
 	var statsName string
 	if partial {
 		statsName = "__auto_partial__"
@@ -966,19 +986,16 @@ func runAutoStatsJob(
 		queryPostfix = " USING EXTREMES"
 	}
 
-	var beforeCount int
-	sqlDB.QueryRow(t, `SELECT count(*) FROM system.table_statistics WHERE "tableID" = $1 AND name = $2`, tableID, statsName).Scan(&beforeCount)
+	query := fmt.Sprintf("CREATE STATISTICS %s FROM %s%s", statsName, tableName, queryPostfix)
+	beforeCount := getNumberOfTableStats(t, sqlDB, tableName, statsName)
 
 	if shouldFail {
-		sqlDB.ExpectErr(t, "another CREATE STATISTICS job is already running", fmt.Sprintf("CREATE STATISTICS %s FROM %s%s", statsName, tableName, queryPostfix))
+		sqlDB.ExpectErr(t, "another CREATE STATISTICS job is already running", query)
 		return
 	}
 
-	sqlDB.Exec(t, fmt.Sprintf("CREATE STATISTICS %s FROM %s%s", statsName, tableName, queryPostfix))
-
-	var afterCount int
-	sqlDB.QueryRow(t, `SELECT count(*) FROM system.table_statistics WHERE "tableID" = $1 AND name = $2`, tableID, statsName).Scan(&afterCount)
-
+	sqlDB.Exec(t, query)
+	afterCount := getNumberOfTableStats(t, sqlDB, tableName, statsName)
 	if beforeCount != afterCount {
 		t.Fatalf("auto stats job should have failed, but it didn't (beforeCount: %d, afterCount: %d)", beforeCount, afterCount)
 	}

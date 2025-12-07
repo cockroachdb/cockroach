@@ -253,7 +253,7 @@ ALTER TABLE tab3 SET (schema_locked=true)
 
 subtest alter_commands
 
-statement error pq: cannot rename system column "crdb_internal_mvcc_timestamp"
+statement error pq: cannot alter system column "crdb_internal_mvcc_timestamp"
 ALTER TABLE tab3 RENAME crdb_internal_mvcc_timestamp TO blah;
 
 statement error pq: cannot alter system column "crdb_internal_mvcc_timestamp"

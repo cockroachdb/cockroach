@@ -7,88 +7,43 @@ package kvstorage
 
 import (
 	"context"
+	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// ClearRangeThresholdPointKeys is the threshold (as number of point keys)
-	// beyond which we'll clear range data using a Pebble range tombstone rather
-	// than individual Pebble point tombstones.
-	//
-	// It is expensive for there to be many Pebble range tombstones in the same
-	// sstable because all of the tombstones in an sstable are loaded whenever the
-	// sstable is accessed. So we avoid using range deletion unless there is some
-	// minimum number of keys. The value here was pulled out of thin air. It might
-	// be better to make this dependent on the size of the data being deleted. Or
-	// perhaps we should fix Pebble to handle large numbers of range tombstones in
-	// an sstable better.
-	ClearRangeThresholdPointKeys = 64
-)
+// MergedTombstoneReplicaID is the replica ID written into the RangeTombstone
+// for replicas of a range which is known to have been merged. This value
+// should prevent any messages from stale replicas of that range from ever
+// resurrecting merged replicas. Whenever merging or subsuming a replica we
+// know new replicas can never be created so this value is used even if we
+// don't know the current replica ID.
+const MergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
 
-// ClearRangeDataOptions specify which parts of a Replica are to be destroyed.
-type ClearRangeDataOptions struct {
-	// ClearReplicatedByRangeID indicates that replicated RangeID-based keys
-	// (abort span, etc) should be removed.
-	ClearReplicatedByRangeID bool
-	// ClearUnreplicatedByRangeID indicates that unreplicated RangeID-based keys
-	// (logstore state incl. HardState, etc) should be removed.
-	ClearUnreplicatedByRangeID bool
-	// ClearReplicatedBySpan causes the state machine data (i.e. the replicated state
-	// for the given RSpan) that is key-addressable (i.e. range descriptor, user keys,
-	// locks) to be removed. No data is removed if this is the zero span.
-	ClearReplicatedBySpan roachpb.RSpan
+// clearRangeThresholdPointKeys is the value of ClearRangeThresholdPointKeys().
+// Can be overridden only in tests, in order to deterministically force using
+// ClearRawRange instead of point clears, when destroying replicas.
+var clearRangeThresholdPointKeys = 64
 
-	// If MustUseClearRange is true, a Pebble range tombstone will always be used
-	// to clear the key spans (unless empty). This is typically used when we need
-	// to write additional keys to an SST after this clear, e.g. a replica
-	// tombstone, since keys must be written in order. When this is false, a
-	// heuristic will be used instead.
-	MustUseClearRange bool
-}
-
-// ClearRangeData clears the data associated with a range descriptor selected
-// by the provided options.
+// ClearRangeThresholdPointKeys returns the threshold (as number of point keys)
+// beyond which we'll clear range data using a Pebble range tombstone rather
+// than individual Pebble point tombstones.
 //
-// TODO(tbg): could rename this to XReplica. The use of "Range" in both the
-// "CRDB Range" and "storage.ClearRange" context in the setting of this method could
-// be confusing.
-func ClearRangeData(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	reader storage.Reader,
-	writer storage.Writer,
-	opts ClearRangeDataOptions,
-) error {
-	keySpans := rditer.Select(rangeID, rditer.SelectOpts{
-		Ranged: rditer.SelectRangedOptions{
-			RSpan:      opts.ClearReplicatedBySpan,
-			SystemKeys: true,
-			LockTable:  true,
-			UserKeys:   true,
-		},
-		ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
-		UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
-	})
-
-	pointKeyThreshold := ClearRangeThresholdPointKeys
-	if opts.MustUseClearRange {
-		pointKeyThreshold = 1
-	}
-
-	for _, keySpan := range keySpans {
-		if err := storage.ClearRangeWithHeuristic(
-			ctx, reader, writer, keySpan.Key, keySpan.EndKey, pointKeyThreshold,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
+// It is expensive for there to be many Pebble range tombstones in the same
+// sstable because all of the tombstones in an sstable are loaded whenever the
+// sstable is accessed. So we avoid using range deletion unless there is some
+// minimum number of keys. The value here was pulled out of thin air. It might
+// be better to make this dependent on the size of the data being deleted. Or
+// perhaps we should fix Pebble to handle large numbers of range tombstones in
+// an sstable better.
+func ClearRangeThresholdPointKeys() int {
+	return clearRangeThresholdPointKeys
 }
 
 // DestroyReplicaTODO is the plan for splitting DestroyReplica into cross-engine
@@ -108,47 +63,196 @@ func ClearRangeData(
 // atomically, and 1 is not written.
 const DestroyReplicaTODO = 0
 
-// DestroyReplica destroys all or a part of the Replica's state, installing a
-// RangeTombstone in its place. Due to merges, splits, etc, there is a need
-// to control which part of the state this method actually gets to remove,
-// which is done via the provided options[^1]; the caller is always responsible
-// for managing the remaining disk state accordingly.
+// DestroyReplicaInfo contains the replica's metadata needed for its removal
+// from storage.
 //
-// [^1] e.g., on a merge, the user data moves to the subsuming replica and must
-// not be cleared.
+// TODO(pav-kv): for separated storage, add the applied raft log span. #152845
+type DestroyReplicaInfo struct {
+	// FullReplicaID identifies the replica on its store.
+	roachpb.FullReplicaID
+	// Keys is the user key span of this replica, taken from its RangeDescriptor.
+	// Non-empty iff the replica is initialized.
+	Keys roachpb.RSpan
+}
+
+// DestroyReplica destroys the entirety of the replica's state in storage, and
+// installs a RangeTombstone in its place. It handles both uninitialized and
+// initialized replicas uniformly.
+//
+// This call issues all writes ordered by key. This is to support a large
+// variety of uses, including SSTable generation for snapshot application.
 func DestroyReplica(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	reader storage.Reader,
-	writer storage.Writer,
-	nextReplicaID roachpb.ReplicaID,
-	opts ClearRangeDataOptions,
+	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo, next roachpb.ReplicaID,
 ) error {
-	diskReplicaID, err := stateloader.Make(rangeID).LoadRaftReplicaID(ctx, reader)
-	if err != nil {
+	return destroyReplicaImpl(ctx, rw, info, next)
+}
+
+func destroyReplicaImpl(
+	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo, next roachpb.ReplicaID,
+) error {
+	if next <= info.ReplicaID {
+		return errors.AssertionFailedf("%v must not survive its own tombstone", info.FullReplicaID)
+	}
+	sl := MakeStateLoader(info.RangeID)
+	// Assert that the ReplicaID in storage matches the one being removed.
+	if loaded, err := sl.LoadRaftReplicaID(ctx, rw.State.RO); err != nil {
+		return err
+	} else if id := loaded.ReplicaID; id != info.ReplicaID {
+		return errors.AssertionFailedf("%v has a mismatching ID %d", info.FullReplicaID, id)
+	}
+	// Assert that the provided tombstone moves the existing one strictly forward.
+	// A failure would indicate that something is wrong in the replica lifecycle.
+	if ts, err := sl.LoadRangeTombstone(ctx, rw.State.RO); err != nil {
+		return err
+	} else if next <= ts.NextReplicaID {
+		return errors.AssertionFailedf("%v cannot rewind tombstone from %d to %d",
+			info.FullReplicaID, ts.NextReplicaID, next)
+	}
+
+	_ = DestroyReplicaTODO
+	// Clear all range data in sorted order of engine keys. This call can be used
+	// for generating SSTables when ingesting a snapshot, which requires Clears
+	// and Puts to be written in key order.
+	//
+	// All the code below is equivalent to clearing all the spans that the
+	// following SelectOpts represents, and leaving only the RangeTombstoneKey
+	// populated with the specified NextReplicaID.
+	if buildutil.CrdbTestBuild {
+		_ = rditer.SelectOpts{
+			ReplicatedByRangeID:   true,
+			UnreplicatedByRangeID: true,
+			Ranged:                rditer.SelectAllRanged(info.Keys),
+		}
+	}
+
+	// First, clear all RangeID-local replicated keys. Also, include all
+	// RangeID-local unreplicated keys < RangeTombstoneKey as a drive-by, since we
+	// decided that these (currently none) belong to the state machine engine.
+	span := roachpb.Span{
+		Key:    keys.MakeRangeIDReplicatedPrefix(info.RangeID),
+		EndKey: keys.RangeTombstoneKey(info.RangeID),
+	}
+	if err := storage.ClearRangeWithHeuristic(
+		ctx, rw.State.RO, rw.State.WO,
+		span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+	); err != nil {
 		return err
 	}
-	if diskReplicaID.ReplicaID >= nextReplicaID {
-		return errors.AssertionFailedf("replica r%d/%d must not survive its own tombstone", rangeID, diskReplicaID)
-	}
-	_ = DestroyReplicaTODO // 2.1 + 2.2 + 3.1
-	if err := ClearRangeData(ctx, rangeID, reader, writer, opts); err != nil {
+	// Save a tombstone to ensure that replica IDs never get reused.
+	if err := sl.SetRangeTombstone(ctx, rw.State.WO, kvserverpb.RangeTombstone{
+		NextReplicaID: next, // NB: NextReplicaID > 0
+	}); err != nil {
 		return err
 	}
 
-	// Save a tombstone to ensure that replica IDs never get reused. Assert that
-	// the provided tombstone moves the existing one strictly forward. Failure to
-	// do so indicates that something is going wrong in the replica lifecycle.
-	sl := stateloader.Make(rangeID)
-	ts, err := sl.LoadRangeTombstone(ctx, reader)
-	if err != nil {
-		return err
-	} else if ts.NextReplicaID >= nextReplicaID {
-		return errors.AssertionFailedf(
-			"cannot rewind tombstone from %d to %d", ts.NextReplicaID, nextReplicaID)
+	// Clear the rest of the RangeID-local unreplicated keys. These are all raft
+	// engine keys, except for RaftReplicaIDKey. Make a stop at the latter, and
+	// clear it manually (note that it always exists for an existing replica, and
+	// we have asserted that above).
+	//
+	// TODO(pav-kv): make a helper for piece-wise clearing, instead of using a
+	// series of ClearRangeWithHeuristic.
+	span = roachpb.Span{
+		Key:    span.EndKey.Next(), // RangeTombstoneKey.Next()
+		EndKey: keys.RaftReplicaIDKey(info.RangeID),
 	}
-	_ = DestroyReplicaTODO // 2.3
-	return sl.SetRangeTombstone(ctx, writer, kvserverpb.RangeTombstone{
-		NextReplicaID: nextReplicaID, // NB: nextReplicaID > 0
-	})
+	// TODO(#152845): with separated raft storage, clear only the unapplied suffix
+	// of the raft log, which is in this span.
+	if err := storage.ClearRangeWithHeuristic(
+		ctx, rw.Raft.RO, rw.Raft.WO,
+		span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+	); err != nil {
+		return err
+	}
+	if err := sl.ClearRaftReplicaID(rw.State.WO); err != nil {
+		return err
+	}
+	span = roachpb.Span{
+		Key:    span.EndKey.Next(), // RaftReplicaIDKey.Next()
+		EndKey: keys.MakeRangeIDUnreplicatedPrefix(info.RangeID).PrefixEnd(),
+	}
+	if err := storage.ClearRangeWithHeuristic(
+		ctx, rw.Raft.RO, rw.Raft.WO,
+		span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+	); err != nil {
+		return err
+	}
+
+	// Finally, clear all the user keys (MVCC keyspace and the corresponding
+	// system and lock table keys), if info.Keys is not empty.
+	for _, span := range rditer.Select(info.RangeID, rditer.SelectOpts{
+		Ranged: rditer.SelectAllRanged(info.Keys),
+	}) {
+		if err := storage.ClearRangeWithHeuristic(
+			ctx, rw.State.RO, rw.State.WO,
+			span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SubsumeReplica is like DestroyReplica, but it does not delete the user keys
+// (and the corresponding system and lock table keys). The latter are inherited
+// by the subsuming range.
+//
+// Returns SelectOpts which can be used to reflect on the key spans that this
+// function clears.
+// TODO(pav-kv): get rid of SelectOpts.
+func SubsumeReplica(
+	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo,
+) (rditer.SelectOpts, error) {
+	// Forget about the user keys.
+	info.Keys = roachpb.RSpan{}
+	return rditer.SelectOpts{
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: true,
+	}, destroyReplicaImpl(ctx, rw, info, MergedTombstoneReplicaID)
+}
+
+// RemoveStaleRHSFromSplit removes all replicated data for the RHS replica of a
+// split. This is used in a situation when the RHS replica is already known to
+// have been removed from our store, so any pending writes that were supposed to
+// initialize the RHS replica should be dropped from the write batch.
+func RemoveStaleRHSFromSplit(
+	ctx context.Context, stateRW State, rangeID roachpb.RangeID, keys roachpb.RSpan,
+) error {
+	for _, span := range rditer.Select(rangeID, rditer.SelectOpts{
+		// Since the RHS replica is uninitalized, we know there isn't anything in
+		// the replicated spans below, before the current batch. Setting these
+		// options will in effect only clear the writes to the RHS replicated state
+		// staged in the batch.
+		ReplicatedByRangeID: true,
+		Ranged:              rditer.SelectAllRanged(keys),
+		// Leave the unreplicated keys intact. The unreplicated space either belongs
+		// to a newer (uninitialized) replica, or is empty and only contains a
+		// RangeTombstone with a higher ReplicaID than the RHS in the split trigger.
+		UnreplicatedByRangeID: false,
+	}) {
+		if err := storage.ClearRangeWithHeuristic(
+			ctx, stateRW.RO, stateRW.WO, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// TestingForceClearRange changes the value of ClearRangeThresholdPointKeys to
+// 1, which effectively forces ClearRawRange in the replica destruction path,
+// instead of point deletions. This can be used for making the storage
+// operations in tests deterministic.
+//
+// The caller must call the returned function at the end of the test, to restore
+// the default value.
+func TestingForceClearRange() func() {
+	if !buildutil.CrdbTestBuild {
+		panic("test-only function")
+	}
+	old := clearRangeThresholdPointKeys
+	clearRangeThresholdPointKeys = 1 // forces ClearRawRange
+	return func() {
+		clearRangeThresholdPointKeys = old
+	}
 }

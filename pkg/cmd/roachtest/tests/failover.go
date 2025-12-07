@@ -56,6 +56,13 @@ var failoverAggregateFunction = func(test string, histogram *roachtestutil.Histo
 	}, nil
 }
 
+// NB: the liveness range's ID has changed in the past. It used to be 2, now
+// it's 3 (#155554). Using the start key avoids relying on a specific rangeID.
+const (
+	predAllButLiveness = `start_key != '/System/NodeLiveness'`
+	predOnlyLiveness   = `start_key = '/System/NodeLiveness'`
+)
+
 // registerFailover registers a set of failover benchmarks. These tests
 // benchmark the maximum unavailability experienced by clients during various
 // node failures, and exports them for roachperf graphing. They do not make any
@@ -104,12 +111,13 @@ func registerFailover(r registry.Registry) {
 			}
 
 			r.Add(registry.TestSpec{
-				Name:                   "failover/chaos" + readOnlyStr + leasesStr,
-				Owner:                  registry.OwnerKV,
-				Benchmark:              true,
-				Timeout:                90 * time.Minute,
-				Cluster:                r.MakeClusterSpec(10, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2), spec.DisableLocalSSD(), spec.ReuseNone()), // uses disk stalls
-				CompatibleClouds:       registry.OnlyGCE,                                                                                                           // dmsetup only configured for gce
+				Name:      "failover/chaos" + readOnlyStr + leasesStr,
+				Owner:     registry.OwnerKV,
+				Benchmark: true,
+				Timeout:   90 * time.Minute,
+				// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and lsblk outputs in the same format.
+				Cluster:                r.MakeClusterSpec(10, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2), spec.DisableLocalSSD(), spec.ReuseNone(), spec.Arch(spec.AllExceptFIPS)), // uses disk stalls
+				CompatibleClouds:       registry.OnlyGCE,                                                                                                                                          // dmsetup only configured for gce
 				Suites:                 registry.Suites(registry.Nightly),
 				Leases:                 leases,
 				SkipPostValidations:    registry.PostValidationNoDeadNodes, // cleanup kills nodes
@@ -172,6 +180,8 @@ func registerFailover(r registry.Registry) {
 				// Don't reuse the cluster for tests that call dmsetup to avoid
 				// spurious flakes from previous runs. See #107865
 				clusterOpts = append(clusterOpts, spec.ReuseNone())
+				// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and lsblk outputs in the same format.
+				clusterOpts = append(clusterOpts, spec.Arch(spec.AllExceptFIPS))
 				postValidation = registry.PostValidationNoDeadNodes
 				// dmsetup is currently only configured for gce.
 				clouds = registry.OnlyGCE
@@ -749,7 +759,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	// all nodes regardless.
 	relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3, 4}, []int{5, 6, 7})
 	relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{5, 6, 7}, []int{1, 2, 3, 4})
-	relocateRanges(t, ctx, conn, `range_id != 2`, []int{4}, []int{1, 2, 3})
+	relocateRanges(t, ctx, conn, predAllButLiveness, []int{4}, []int{1, 2, 3})
 
 	// Run workload on n8 using n1-n3 as gateways (not partitioned) until test
 	// ends (context cancels).
@@ -778,8 +788,8 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 				// them to where they should be.
 				relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3, 4}, []int{5, 6, 7})
 				relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{node}, []int{1, 2, 3})
-				relocateRanges(t, ctx, conn, `range_id = 2`, []int{5, 6, 7}, []int{1, 2, 3, 4})
-				relocateLeases(t, ctx, conn, `range_id = 2`, 4)
+				relocateRanges(t, ctx, conn, predOnlyLiveness, []int{5, 6, 7}, []int{1, 2, 3, 4})
+				relocateLeases(t, ctx, conn, predOnlyLiveness, 4)
 
 				// Randomly sleep up to the lease renewal interval, to vary the time
 				// between the last lease renewal and the failure.
@@ -973,10 +983,10 @@ func runFailoverLiveness(
 	// do it ourselves. Precreating the database/range and moving it to the
 	// correct nodes first is not sufficient, since workload will spread the
 	// ranges across all nodes regardless.
-	relocateRanges(t, ctx, conn, `range_id != 2`, []int{4}, []int{1, 2, 3})
+	relocateRanges(t, ctx, conn, predAllButLiveness, []int{4}, []int{1, 2, 3})
 
-	// We also make sure the lease is located on n4.
-	relocateLeases(t, ctx, conn, `range_id = 2`, 4)
+	// We also make sure the liveness lease is located on n4.
+	relocateLeases(t, ctx, conn, predOnlyLiveness, 4)
 
 	// Run workload on n5 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
@@ -999,8 +1009,8 @@ func runFailoverLiveness(
 
 			// Ranges and leases may occasionally escape their constraints. Move them
 			// to where they should be.
-			relocateRanges(t, ctx, conn, `range_id != 2`, []int{4}, []int{1, 2, 3})
-			relocateLeases(t, ctx, conn, `range_id = 2`, 4)
+			relocateRanges(t, ctx, conn, predAllButLiveness, []int{4}, []int{1, 2, 3})
+			relocateLeases(t, ctx, conn, predOnlyLiveness, 4)
 
 			// Randomly sleep up to the lease renewal interval, to vary the time
 			// between the last lease renewal and the failure.
@@ -1015,7 +1025,7 @@ func runFailoverLiveness(
 
 			t.L().Printf("recovering n%d (%s)", 4, failer)
 			failer.Recover(ctx, 4)
-			relocateLeases(t, ctx, conn, `range_id = 2`, 4)
+			relocateLeases(t, ctx, conn, predOnlyLiveness, 4)
 		}
 
 		sleepFor(ctx, t, time.Minute) // let cluster recover
@@ -1086,9 +1096,9 @@ func runFailoverSystemNonLiveness(
 	// n1-n3, so we do it ourselves. Precreating the database/range and moving it
 	// to the correct nodes first is not sufficient, since workload will spread
 	// the ranges across all nodes regardless.
-	relocateRanges(t, ctx, conn, `database_name = 'kv' OR range_id = 2`,
+	relocateRanges(t, ctx, conn, `database_name = 'kv' OR `+predOnlyLiveness,
 		[]int{4, 5, 6}, []int{1, 2, 3})
-	relocateRanges(t, ctx, conn, `database_name != 'kv' AND range_id != 2`,
+	relocateRanges(t, ctx, conn, `database_name != 'kv' AND `+predAllButLiveness,
 		[]int{1, 2, 3}, []int{4, 5, 6})
 
 	// Run workload on n7 via n1-n3 as gateways until test ends (context cancels).
@@ -1113,9 +1123,9 @@ func runFailoverSystemNonLiveness(
 
 				// Ranges may occasionally escape their constraints. Move them
 				// to where they should be.
-				relocateRanges(t, ctx, conn, `database_name != 'kv' AND range_id != 2`,
+				relocateRanges(t, ctx, conn, `database_name != 'kv' AND `+predAllButLiveness,
 					[]int{1, 2, 3}, []int{4, 5, 6})
-				relocateRanges(t, ctx, conn, `database_name = 'kv' OR range_id = 2`,
+				relocateRanges(t, ctx, conn, `database_name = 'kv' OR `+predOnlyLiveness,
 					[]int{4, 5, 6}, []int{1, 2, 3})
 
 				// Randomly sleep up to the lease renewal interval, to vary the time

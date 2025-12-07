@@ -8,7 +8,6 @@ package dumpstore
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -156,16 +155,16 @@ func TestRemoveOldAndTooBig(t *testing.T) {
 type myDumper struct{}
 
 func (myDumper) PreFilter(
-	_ context.Context, files []os.FileInfo, cleanupFn func(fileName string) error,
+	_ context.Context, files []os.DirEntry, cleanupFn func(fileName string) error,
 ) (preserved map[int]bool, err error) {
 	panic("unimplemented")
 }
 
-func (myDumper) CheckOwnsFile(_ context.Context, fi os.FileInfo) bool {
+func (myDumper) CheckOwnsFile(_ context.Context, fi os.DirEntry) bool {
 	return strings.HasPrefix(fi.Name(), "memprof")
 }
 
-func populate(t *testing.T, dirName string, fileNames []string, sizes []int64) []os.FileInfo {
+func populate(t *testing.T, dirName string, fileNames []string, sizes []int64) []os.DirEntry {
 	if len(sizes) > 0 {
 		require.Equal(t, len(fileNames), len(sizes))
 	}
@@ -187,7 +186,7 @@ func populate(t *testing.T, dirName string, fileNames []string, sizes []int64) [
 	}
 
 	// Retrieve the file list for the remainder of the test.
-	files, err := ioutil.ReadDir(dirName)
+	files, err := os.ReadDir(dirName)
 	if err != nil {
 		t.Fatal(err)
 	}

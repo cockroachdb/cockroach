@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -43,7 +44,7 @@ type Options struct {
 	Incrementer Incrementer
 	BlockSize   int64
 	Stopper     *stop.Stopper
-	Fatalf      func(context.Context, string, ...interface{}) // defaults to log.Dev.Fatalf
+	Fatalf      func(context.Context, string, ...interface{}) // defaults to log.KvExec.Fatalf
 }
 
 // An Allocator is used to increment a key in allocation blocks of arbitrary
@@ -66,7 +67,7 @@ func NewAllocator(opts Options) (*Allocator, error) {
 		return nil, errors.Errorf("blockSize must be a positive integer: %d", opts.BlockSize)
 	}
 	if opts.Fatalf == nil {
-		opts.Fatalf = log.Dev.Fatalf
+		opts.Fatalf = log.KvExec.Fatalf
 	}
 	opts.AmbientCtx.AddLogTag("idalloc", nil)
 	return &Allocator{
@@ -84,7 +85,7 @@ func (ia *Allocator) Allocate(ctx context.Context) (int64, error) {
 	case id := <-ia.ids:
 		// when the channel is closed, the zero value is returned.
 		if id == 0 {
-			return id, errors.Errorf("could not allocate ID; system is draining")
+			return id, &kvpb.NodeUnavailableError{}
 		}
 		return id, nil
 	case <-ctx.Done():
@@ -112,7 +113,7 @@ func (ia *Allocator) start() {
 					break
 				}
 
-				log.Dev.Warningf(
+				log.KvExec.Warningf(
 					ctx,
 					"unable to allocate %d ids from %s: %+v",
 					ia.opts.BlockSize,

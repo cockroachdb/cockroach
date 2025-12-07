@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/asciitsdb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -279,8 +280,7 @@ func TestUsingSimulation(t *testing.T) {
 				if d.HasArg("t") {
 					// Parse t=[<duration>,<duration>), but ignoring the
 					// start time.
-					var tstr string
-					d.ScanArgs(t, "t", &tstr)
+					tstr := dd.ScanArg[string](t, d, "t")
 					tstr = strings.TrimSuffix(strings.TrimPrefix(tstr, "["), ")")
 					args := strings.Split(tstr, ",")
 					dur, err := time.ParseDuration(args[1])
@@ -298,16 +298,9 @@ func TestUsingSimulation(t *testing.T) {
 				return buf.String()
 
 			case "plot":
-				var h, w, p = 15, 40, 1
-				if d.HasArg("height") {
-					d.ScanArgs(t, "height", &h)
-				}
-				if d.HasArg("width") {
-					d.ScanArgs(t, "width", &w)
-				}
-				if d.HasArg("precision") {
-					d.ScanArgs(t, "precision", &p)
-				}
+				h := dd.ScanArgOr(t, d, "height", 15)
+				w := dd.ScanArgOr(t, d, "width", 40)
+				p := dd.ScanArgOr(t, d, "precision", 1)
 
 				var buf strings.Builder
 				for i, line := range strings.Split(d.Input, "\n") {
@@ -369,10 +362,8 @@ func TestUsingSimulation(t *testing.T) {
 					default:
 					}
 
-					if d.HasArg("t") {
+					if tstr, ok := dd.ScanArgOpt[string](t, d, "t"); ok {
 						// Parse t=[<duration>,<duration>).
-						var tstr string
-						d.ScanArgs(t, "t", &tstr)
 						tstr = strings.TrimSuffix(strings.TrimPrefix(tstr, "["), ")")
 						args := strings.Split(tstr, ",")
 
@@ -395,8 +386,7 @@ func TestUsingSimulation(t *testing.T) {
 				return buf.String()
 
 			case "snapshots":
-				var name string
-				d.ScanArgs(t, "handle", &name)
+				name := dd.ScanArg[string](t, d, "handle")
 				rangeID, ok := handleToRangeID[name]
 				require.True(t, ok, "expected to find handle %q, was it initialized?", name)
 				handle := sim.state.ranges[rangeID]
@@ -1034,7 +1024,7 @@ func (rc *rangeController) testingNonBlockingAdmit(
 	// connected to the leader. Expect there to be at least one voter set and no
 	// joint configuration (multiple voter sets).
 	if len(vss) != 1 {
-		log.Dev.Fatalf(ctx, "expected exactly one voter set, found %d", len(vss))
+		log.KvDistribution.Fatalf(ctx, "expected exactly one voter set, found %d", len(vss))
 	}
 	// Similar to the token counter non-blocking admit, we also don't care about
 	// replica types, or waiting for only a quorum. We just wait for all
@@ -1084,7 +1074,7 @@ func (r *testingRCRange) testingDeductTokens(
 	t *testing.T, ctx context.Context, pri admissionpb.WorkPriority, tokens kvflowcontrol.Tokens,
 ) {
 	if r.rc == nil {
-		log.Dev.Fatal(ctx, "operating on a closed RangeController")
+		log.KvDistribution.Fatal(ctx, "operating on a closed RangeController")
 	}
 	r.mu.quorumPosition.Index++
 	entry := testingCreateEntry(t, entryInfo{
@@ -1136,7 +1126,7 @@ func (r *testingRCRange) testingReturnTokens(
 	rid := r.testingFindReplStreamOrFatal(ctx, stream)
 	rs := r.rc.replicaMap[rid]
 	if rs == nil || rs.sendStream == nil {
-		log.Dev.Fatalf(ctx, "expected to find non-closed replica send stream for %v", stream)
+		log.KvDistribution.Fatalf(ctx, "expected to find non-closed replica send stream for %v", stream)
 	}
 
 	// We need to determine the index at which we're returning tokens via
@@ -1177,7 +1167,7 @@ func (r *testingRCRange) testingFindReplStreamOrFatal(
 			return rs.desc.ReplicaID
 		}
 	}
-	log.Dev.Fatalf(ctx, "expected to find replica for stream %v", stream)
+	log.KvDistribution.Fatalf(ctx, "expected to find replica for stream %v", stream)
 	panic("unreachable")
 }
 
@@ -1188,7 +1178,7 @@ func (r *testingRCRange) testingConnectStream(
 	t *testing.T, ctx context.Context, stream kvflowcontrol.Stream,
 ) {
 	if r.rc == nil {
-		log.Dev.Fatal(ctx, "operating on a closed RangeController")
+		log.KvDistribution.Fatal(ctx, "operating on a closed RangeController")
 	}
 	r.mu.r.replicaSet[roachpb.ReplicaID(stream.StoreID)] = testingReplica{
 		desc: roachpb.ReplicaDescriptor{

@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -145,7 +146,7 @@ func (p *planner) DeserializeSessionState(
 
 	for _, prepStmt := range m.PreparedStatements {
 		stmts, err := parser.ParseWithOptions(
-			prepStmt.SQL, parser.DefaultParseOptions.WithIntType(parser.NakedIntTypeFromDefaultIntSize(sd.DefaultIntSize)),
+			prepStmt.SQL, parser.DefaultParseOptions.WithIntType(parserutils.NakedIntTypeFromDefaultIntSize(sd.DefaultIntSize)),
 		)
 		if err != nil {
 			return nil, err
@@ -160,7 +161,11 @@ func (p *planner) DeserializeSessionState(
 		}
 		// len(stmts) == 0 results in a nil (empty) statement.
 		id := clusterunique.GenerateID(evalCtx.ExecCfg.Clock.Now(), evalCtx.ExecCfg.NodeInfo.NodeID.SQLInstanceID())
-		stmt := makeStatement(parserStmt, id, tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&evalCtx.Settings.SV)))
+		stmt := makeStatement(
+			ctx, parserStmt, id,
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&evalCtx.Settings.SV)),
+			evalCtx.ExecCfg.StatementHintsCache,
+		)
 
 		var placeholderTypes tree.PlaceholderTypes
 		if len(prepStmt.PlaceholderTypeHints) > 0 {

@@ -65,8 +65,8 @@ SELECT
 			id AS job_id,
 			crdb_internal.pb_to_json(
 				'cockroach.sql.jobs.jobspb.Payload',
-				payload)->'logicalReplicationDetails'->>'parentId' AS parent_id 
-		FROM crdb_internal.system_jobs 
+				payload)->'logicalReplicationDetails'->>'parentId' AS parent_id
+		FROM crdb_internal.system_jobs
 		WHERE job_type = 'LOGICAL REPLICATION'
 	) AS t
 	WHERE t.parent_id = $1
@@ -116,6 +116,12 @@ func createLogicalReplicationStreamPlanHook(
 		}
 
 		hasUDF := len(options.userFunctions) > 0 || options.defaultFunction != nil && options.defaultFunction.FunctionId != 0
+
+		if hasUDF && !crosscluster.LogicalReplicationUDFWriterEnabled.Get(&p.ExecCfg().Settings.SV) {
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"UDF-based logical replication is disabled and will be deleted in a future CockroachDB release. "+
+					"Enable with SET CLUSTER SETTING logical_replication.deprecated_udf_writer.enabled = true")
+		}
 
 		mode := jobspb.LogicalReplicationDetails_Immediate
 		if m, ok := options.GetMode(); ok {
@@ -359,10 +365,12 @@ func (r *ResolvedDestObjects) TargetDescription() string {
 	return targetDescription
 }
 
+// TargetTableNames returns the fully qualified names of the resolved target
+// tables.
 func (r *ResolvedDestObjects) TargetTableNames() []string {
-	var targetTableNames []string
+	targetTableNames := make([]string, len(r.TableNames))
 	for i := range r.TableNames {
-		targetTableNames = append(targetTableNames, r.TableNames[i].Table())
+		targetTableNames[i] = r.TableNames[i].FQString()
 	}
 	return targetTableNames
 }

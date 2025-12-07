@@ -26,10 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -861,7 +863,7 @@ func makeIndexSpec(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (s i
 
 // makeTempIndexSpec clones the primary/secondary index spec into one for a
 // temporary index, based on the populated information.
-func makeTempIndexSpec(src indexSpec) indexSpec {
+func makeTempIndexSpec(b BuildCtx, src indexSpec) indexSpec {
 	if src.secondary == nil && src.primary == nil {
 		panic(errors.AssertionFailedf("make temp index converts a primary/secondary index into a temporary one"))
 	}
@@ -886,6 +888,15 @@ func makeTempIndexSpec(src indexSpec) indexSpec {
 	newTempSpec.temporary.TemporaryIndexID = 0
 	newTempSpec.temporary.IndexID = tempID
 	newTempSpec.temporary.ConstraintID = srcIdx.ConstraintID + 1
+	// The temporary index for a vector index is a FORWARD index that stores
+	// modifications temporarily until they can be applied during merge.
+	if newTempSpec.secondary != nil && newTempSpec.secondary.Type == idxtype.VECTOR {
+		newTempSpec.temporary.Type = idxtype.FORWARD
+		newTempSpec.temporary.VecConfig = &vecpb.Config{}
+		fixupColumnsForTempVectorIndex(b, &newTempSpec)
+		// Also need to fix partitioning to inherit from primary key instead of vector index
+		fixupPartitioningForTempVectorIndex(b, &newTempSpec, tempID)
+	}
 	newTempSpec.secondary = nil
 	newTempSpec.primary = nil
 
@@ -1028,7 +1039,7 @@ func makeSwapIndexSpec(
 	}
 	// Setup temporary index.
 	{
-		temp = makeTempIndexSpec(in)
+		temp = makeTempIndexSpec(b, in)
 	}
 	return in, temp
 }
@@ -1218,12 +1229,12 @@ func checkTableSchemaChangePrerequisites(
 }
 
 // panicIfSystemColumn blocks alter operations on system columns.
-func panicIfSystemColumn(column *scpb.Column, columnName string) {
+func panicIfSystemColumn(column *scpb.Column, columnName tree.Name) {
 	if column.IsSystemColumn {
 		// Block alter operations on system columns.
 		panic(pgerror.Newf(
 			pgcode.FeatureNotSupported,
-			"cannot alter system column %q", columnName))
+			"cannot alter system column %q", tree.ErrString(&columnName)))
 	}
 }
 
@@ -1417,6 +1428,36 @@ func getLatestPrimaryIndex(b BuildCtx, tableID catid.DescID) *scpb.PrimaryIndex 
 	}
 }
 
+// getNonDropResultColumns returns all public and adding columns, sorted by
+// column ID in ascending order, in the format of ResultColumns.
+func getNonDropResultColumns(b BuildCtx, tableID catid.DescID) (ret colinfo.ResultColumns) {
+	for _, col := range getNonDropColumns(b, tableID) {
+		ret = append(ret, colinfo.ResultColumn{
+			Name:           mustRetrieveColumnNameElem(b, tableID, col.ColumnID).Name,
+			Typ:            mustRetrieveColumnTypeElem(b, tableID, col.ColumnID).Type,
+			Hidden:         col.IsHidden || retrieveColumnHidden(b, tableID, col.ColumnID) != nil,
+			TableID:        tableID,
+			PGAttributeNum: uint32(col.PgAttributeNum),
+		})
+	}
+	return ret
+}
+
+// columnLookupFn can look up information of a column by name.
+func columnLookupFn(
+	b BuildCtx, tableID catid.DescID, columnName tree.Name,
+) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
+	columnID := getColumnIDFromColumnName(b, tableID, columnName, false /* required */)
+	if columnID == 0 {
+		return false, false, false, 0, nil
+	}
+
+	colElem := mustRetrieveColumnElem(b, tableID, columnID)
+	colTypeElem := mustRetrieveColumnTypeElem(b, tableID, columnID)
+	computeExpr := retrieveColumnComputeExpression(b, tableID, columnID)
+	return true, !colElem.IsInaccessible, computeExpr != nil, columnID, colTypeElem.Type
+}
+
 // addASwapInIndexByCloningFromSource adds a primary index `in` that is going
 // to swap out `out` yet `in`'s columns are cloned from `source`.
 //
@@ -1456,7 +1497,12 @@ func addASwapInIndexByCloningFromSource(
 //
 // Note that this function excludes acting upon indexes whose IDs are in `excludes`.
 func updateElementsToDependOnNewFromOld(
-	b BuildCtx, tableID catid.DescID, old catid.IndexID, new catid.IndexID, excludes catid.IndexSet,
+	b BuildCtx,
+	tableID catid.DescID,
+	old catid.IndexID,
+	new catid.IndexID,
+	newRecreateTargetID catid.IndexID,
+	excludes catid.IndexSet,
 ) {
 	b.QueryByID(tableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		switch e := e.(type) {
@@ -1471,6 +1517,9 @@ func updateElementsToDependOnNewFromOld(
 		case *scpb.SecondaryIndex:
 			if e.SourceIndexID == old && !excludes.Contains(e.IndexID) {
 				e.SourceIndexID = new
+			}
+			if e.RecreateTargetIndexID == old && !excludes.Contains(e.IndexID) {
+				e.RecreateTargetIndexID = newRecreateTargetID
 			}
 		case *scpb.CheckConstraint:
 			if e.IndexIDForValidation == old {
@@ -1539,7 +1588,7 @@ func (pic *primaryIndexChain) inflate(b BuildCtx) {
 		b BuildCtx, tableID catid.DescID, out catid.IndexID, source catid.IndexID, isInFinal bool,
 	) (in, inTemp indexSpec) {
 		in, inTemp = addASwapInIndexByCloningFromSource(b, tableID, out, source, isInFinal)
-		updateElementsToDependOnNewFromOld(b, tableID, out, in.primary.IndexID,
+		updateElementsToDependOnNewFromOld(b, tableID, out, in.primary.IndexID, in.primary.IndexID,
 			catid.MakeIndexIDSet(in.primary.IndexID, in.primary.TemporaryIndexID))
 		return in, inTemp
 	}
@@ -1624,6 +1673,14 @@ func (pic *primaryIndexChain) deflate(b BuildCtx) {
 		redundants = append(redundants, idxSpec)
 		redundantIDs[idxSpec] = true
 	}
+	hasRedundantID := func(id catid.IndexID) bool {
+		for _, r := range redundants {
+			if r.indexID() == id {
+				return true
+			}
+		}
+		return false
+	}
 
 	if haveSameIndexCols(b, tableID, pic.oldSpec.primary.IndexID, pic.inter1Spec.primary.IndexID) {
 		markAsRedundant(&pic.inter1Spec)
@@ -1664,8 +1721,28 @@ func (pic *primaryIndexChain) deflate(b BuildCtx) {
 	// identified by attrs defined in screl and updating SourceIndexID of a
 	// primary index will cause us to fail to retrieve the element to drop).
 	for _, redundant := range redundants {
+		// For new replacement secondary indexes we need to select the index to
+		// publish this index with. The source index ID is an excellent candidate
+		// as long as its not the old primary index (i.e. we folded all earlier
+		// primary indexes).
+		recreateTargetID := redundant.SourceIndexID()
+		if recreateTargetID == pic.oldSpec.primary.IndexID || hasRedundantID(recreateTargetID) {
+			// Otherwise, we need to select the next valid index in the chain, that
+			// follows the redundant one.
+			firstMatch := false
+			specs := pic.allPrimaryIndexSpecs(func(spec *indexSpec) bool {
+				if spec.indexID() == recreateTargetID {
+					firstMatch = true
+					return false
+				}
+				return !redundantIDs[spec] && firstMatch
+			})
+			if len(specs) > 0 {
+				recreateTargetID = specs[0].indexID()
+			}
+		}
 		updateElementsToDependOnNewFromOld(b, tableID,
-			redundant.indexID(), redundant.SourceIndexID(), catid.IndexSet{} /* excludes */)
+			redundant.indexID(), redundant.SourceIndexID(), recreateTargetID, catid.IndexSet{} /* excludes */)
 		*redundant = indexSpec{} // reset this indexSpec in the chain
 	}
 
@@ -2045,6 +2122,14 @@ func retrieveColumnNotNull(
 		MustGetZeroOrOneElement()
 }
 
+func retrieveColumnHidden(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) *scpb.ColumnHidden {
+	return b.QueryByID(tableID).FilterColumnHidden().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnHidden) bool { return e.ColumnID == columnID }).
+		MustGetZeroOrOneElement()
+}
+
 func retrieveColumnComment(
 	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
 ) *scpb.ColumnComment {
@@ -2107,4 +2192,72 @@ func hasSubzonesForIndex(b BuildCtx, tableID descpb.ID, indexID catid.IndexID) b
 			return e.IndexID == indexID
 		}).Size()
 	return numIdxSubzones > 0 || numPartSubzones > 0
+}
+
+// isShardColumn checks if the given column is a shard column by examining
+// all indexes on the table to see if any sharded index uses this column name.
+func isShardColumn(b BuildCtx, col *scpb.Column) bool {
+	// Get the column name.
+	colNameElt := b.QueryByID(col.TableID).FilterColumnName().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName) bool {
+			return e.ColumnID == col.ColumnID
+		}).MustGetZeroOrOneElement()
+
+	if colNameElt == nil {
+		return false
+	}
+
+	colName := colNameElt.Name
+
+	// Check all indexes on this table.
+	found := false
+	b.QueryByID(col.TableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		switch idx := e.(type) {
+		case *scpb.PrimaryIndex:
+			if idx.Sharding != nil && idx.Sharding.IsSharded && idx.Sharding.Name == colName {
+				found = true
+			}
+		case *scpb.SecondaryIndex:
+			if idx.Sharding != nil && idx.Sharding.IsSharded && idx.Sharding.Name == colName {
+				found = true
+			}
+		}
+	})
+
+	return found
+}
+
+// retrieveColumnGeneratedAsIdentityElem returns the element for GeneratedAsIdentity.
+// Returns nil in versions before 26.1.
+func retrieveColumnGeneratedAsIdentityElem(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) (generatedAsIdentity *scpb.ColumnGeneratedAsIdentity) {
+	return b.QueryByID(tableID).FilterColumnGeneratedAsIdentity().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnGeneratedAsIdentity) bool {
+			return e.ColumnID == columnID
+		}).MustGetZeroOrOneElement()
+}
+
+// retrieveColumnGeneratedAsIdentityType returns the GeneratedAsIdentityType.
+// Handles versions before 26.1 that store it in Column.GeneratedAsIdentityType.
+func retrieveColumnGeneratedAsIdentityType(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) (generatedAsIdentityType catpb.GeneratedAsIdentityType) {
+	// First try to retrieve it from ColumnGeneratedAsIdentity. This may be nil
+	// if the column is not a generated identity column or the cluster version is older
+	// than 26.1. In that case, will return Column.GeneratedAsIdentityType.
+	colGeneratedAsID := retrieveColumnGeneratedAsIdentityElem(b, tableID, columnID)
+	if colGeneratedAsID != nil {
+		return colGeneratedAsID.Type
+	}
+	// Check the ColumnType in case this is an older version.
+	col := mustRetrieveColumnElem(b, tableID, columnID)
+	return col.GeneratedAsIdentityType
+}
+
+func isColumnGeneratedAsIdentity(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) (isGenerated bool) {
+	generatedAsIdentityType := retrieveColumnGeneratedAsIdentityType(b, tableID, columnID)
+	return generatedAsIdentityType != catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
 }

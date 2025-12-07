@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -84,6 +84,11 @@ func TestCancelDistSQLQuery(t *testing.T) {
 			},
 		})
 	defer tc.Stopper().Stop(context.Background())
+
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
 
 	conn1 = tc.ServerConn(0)
 	conn2 = tc.ServerConn(1)
@@ -213,7 +218,7 @@ GRANT admin TO has_admin2;
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Open a session for the target user.
-			targetDB := getUserConn(t, tc.targetUser, testCluster.Server(0))
+			targetDB := testCluster.ApplicationLayer(0).SQLConn(t, serverutils.User(tc.targetUser), serverutils.ClientCerts(false))
 			defer targetDB.Close()
 			sqlutils.MakeSQLRunner(targetDB).Exec(t, `SELECT version()`)
 
@@ -233,7 +238,7 @@ GRANT admin TO has_admin2;
 
 			// Attempt to cancel the session. We connect to the other node to make sure
 			// non-local sessions can be canceled.
-			db := getUserConn(t, tc.user, testCluster.Server(1))
+			db := testCluster.ApplicationLayer(1).SQLConn(t, serverutils.User(tc.user), serverutils.ClientCerts(false))
 			defer db.Close()
 			runner := sqlutils.MakeSQLRunner(db)
 			if tc.shouldSucceed {
@@ -331,7 +336,7 @@ GRANT admin TO has_admin2;
 		func() {
 			wg.Add(1)
 			// Start a query with the target user.
-			targetDB := getUserConn(t, tc.targetUser, testCluster.Server(0))
+			targetDB := testCluster.ApplicationLayer(0).SQLConn(t, serverutils.User(tc.targetUser), serverutils.ClientCerts(false))
 			defer targetDB.Close()
 			go func(shouldSucceed bool) {
 				var errRE string
@@ -365,7 +370,7 @@ GRANT admin TO has_admin2;
 
 			// Attempt to cancel the query. We connect to the other node to make sure
 			// non-local queries can be canceled.
-			db := getUserConn(t, tc.user, testCluster.Server(1))
+			db := testCluster.ApplicationLayer(1).SQLConn(t, serverutils.User(tc.user), serverutils.ClientCerts(false))
 			defer db.Close()
 			runner := sqlutils.MakeSQLRunner(db)
 			if tc.shouldSucceed {
@@ -410,8 +415,7 @@ func TestCancelWithSubquery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
-	s, conn, _ := serverutils.StartServer(t, params)
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	_, err := conn.Exec("CANCEL SESSION (SELECT session_id FROM [SHOW session_id]);")
@@ -941,20 +945,6 @@ func TestStatementTimeoutRetryableErrors(t *testing.T) {
 		})
 }
 
-func getUserConn(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {
-	pgURL := url.URL{
-		Scheme:   "postgres",
-		User:     url.User(username),
-		Host:     server.AdvSQLAddr(),
-		RawQuery: "sslmode=disable",
-	}
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return db
-}
-
 // TestTenantStatementTimeoutAdmissionQueueCancellation tests that a KV request
 // that is canceled via a statement timeout is properly removed from the
 // admission control queue. A testing filter is used to "park" a small number of
@@ -1153,10 +1143,11 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 				if implicitTxn {
 					_, err := conn.DB.ExecContext(ctx, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 32")
 					require.ErrorContains(t, err, sqlerrors.QueryTimeoutError.Error())
-					require.Equal(t, 1, len(actualNotices))
+					require.Equal(t, 2, len(actualNotices))
+					require.Regexp(t, "waiting for job\\(s\\) to complete: \\d+", actualNotices[0])
 					require.Regexp(t,
 						"The statement has timed out, but the following background jobs have been created and will continue running: \\d+",
-						actualNotices[0])
+						actualNotices[1])
 				} else {
 					txn := conn.Begin(t)
 					_, err := txn.Exec("SET LOCAL autocommit_before_ddl=off")

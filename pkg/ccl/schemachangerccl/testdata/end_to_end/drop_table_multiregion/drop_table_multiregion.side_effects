@@ -25,7 +25,7 @@ write *eventpb.DropTable to event log:
     tag: DROP TABLE
     user: root
   tableName: multi_region_test_db.public.table_regional_by_row
-## StatementPhase stage 1 of 1 with 47 MutationType ops
+## StatementPhase stage 1 of 1 with 52 MutationType ops
 delete object namespace entry {104 105 table_regional_by_row} -> 108
 upsert descriptor #106
   ...
@@ -48,6 +48,12 @@ upsert descriptor #107
   +  version: "3"
 upsert descriptor #108
   ...
+         width: 64
+     - defaultExpr: default_to_database_primary_region(gateway_region())::@100106
+  -    hidden: true
+       id: 2
+       name: crdb_region
+  ...
      createAsOfTime:
        wallTime: "1640995200000000000"
   +  dropTime: <redacted>"
@@ -66,7 +72,7 @@ upsert descriptor #108
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 51 MutationType ops
+## PreCommitPhase stage 2 of 2 with 56 MutationType ops
 delete object namespace entry {104 105 table_regional_by_row} -> 108
 upsert descriptor #106
    type:
@@ -111,6 +117,12 @@ upsert descriptor #107
   -  version: "2"
   +  version: "3"
 upsert descriptor #108
+  ...
+         width: 64
+     - defaultExpr: default_to_database_primary_region(gateway_region())::@100106
+  -    hidden: true
+       id: 2
+       name: crdb_region
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"

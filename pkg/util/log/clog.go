@@ -438,7 +438,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 func DumpStacks(ctx context.Context, reason redact.RedactableString) {
 	allStacks := allstacks.Get()
 	// TODO(knz): This should really be a "debug" level, not "info".
-	Shoutf(ctx, severity.INFO, "%s. stack traces:\n%s", reason, allStacks)
+	Dev.Shoutf(ctx, severity.INFO, "%s. stack traces:\n%s", reason, allStacks)
 }
 
 func setActive() {

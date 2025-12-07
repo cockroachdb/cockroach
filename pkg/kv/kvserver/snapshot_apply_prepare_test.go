@@ -14,9 +14,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -69,17 +69,18 @@ func TestPrepareSnapApply(t *testing.T) {
 		}
 	}
 
-	id := roachpb.FullReplicaID{RangeID: 123, ReplicaID: 4}
+	const replicaID = 4
+	id := roachpb.FullReplicaID{RangeID: 123, ReplicaID: replicaID}
 	descA := desc(101, "a", "b")
 	descB := desc(102, "b", "z")
 	createRangeData(t, eng, *descA)
 	createRangeData(t, eng, *descB)
 
-	sl := stateloader.Make(id.RangeID)
+	sl := kvstorage.MakeStateLoader(id.RangeID)
 	ctx := context.Background()
 	require.NoError(t, sl.SetRaftReplicaID(ctx, eng, id.ReplicaID))
 	for _, rID := range []roachpb.RangeID{101, 102} {
-		require.NoError(t, stateloader.Make(rID).SetRaftReplicaID(ctx, eng, id.ReplicaID))
+		require.NoError(t, kvstorage.MakeStateLoader(rID).SetRaftReplicaID(ctx, eng, replicaID))
 	}
 
 	swb := snapWriteBuilder{
@@ -88,10 +89,14 @@ func TestPrepareSnapApply(t *testing.T) {
 		sl:       sl,
 		writeSST: writeSST,
 
-		truncState:    kvserverpb.RaftTruncatedState{Index: 100, Term: 20},
-		hardState:     raftpb.HardState{Term: 20, Commit: 100},
-		desc:          desc(id.RangeID, "a", "k"),
-		subsumedDescs: []*roachpb.RangeDescriptor{descA, descB},
+		truncState: kvserverpb.RaftTruncatedState{Index: 100, Term: 20},
+		hardState:  raftpb.HardState{Term: 20, Commit: 100},
+		desc:       desc(id.RangeID, "a", "k"),
+		origDesc:   desc(id.RangeID, "a", "k"),
+		subsume: []kvstorage.DestroyReplicaInfo{
+			{FullReplicaID: roachpb.FullReplicaID{RangeID: descA.RangeID, ReplicaID: replicaID}, Keys: descA.RSpan()},
+			{FullReplicaID: roachpb.FullReplicaID{RangeID: descB.RangeID, ReplicaID: replicaID}, Keys: descB.RSpan()},
+		},
 	}
 
 	err := swb.prepareSnapApply(ctx)

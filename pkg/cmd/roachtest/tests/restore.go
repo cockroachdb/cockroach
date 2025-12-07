@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/blobfixture"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -42,6 +41,10 @@ import (
 )
 
 var restoreAggregateFunction = func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+	if len(histogram.Summaries) == 0 {
+		return roachtestutil.AggregatedPerfMetrics{}, errors.New("histogram has no summaries")
+	}
+
 	metricValue := histogram.Summaries[0].HighestTrackableValue / 1e9
 
 	return roachtestutil.AggregatedPerfMetrics{
@@ -307,6 +310,12 @@ func registerRestore(r registry.Registry) {
 			suites:   registry.Suites(registry.Nightly),
 		},
 		{
+			hardware: makeHardwareSpecs(hardwareSpecs{}),
+			backup:   backupSpecs{cloud: spec.Azure, fixture: SmallFixture},
+			timeout:  2 * time.Hour,
+			suites:   registry.Suites(registry.Nightly),
+		},
+		{
 			// Benchmarks using a low memory per core ratio - we don't expect ideal
 			// performance but nodes should not OOM.
 			hardware: makeHardwareSpecs(hardwareSpecs{mem: spec.Low}),
@@ -527,7 +536,7 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
 			panic("cannot set stores per node and not use local SSD")
 		}
 		clusterOpts = append(clusterOpts, spec.SSD(hw.storesPerNode))
-		clusterOpts = append(clusterOpts, spec.Arch(vm.ArchAMD64))
+		clusterOpts = append(clusterOpts, spec.Arch(spec.OnlyAMD64))
 	}
 
 	if hw.mem != spec.Auto {
@@ -700,9 +709,6 @@ type restoreSpecs struct {
 
 	setUpStmts []string
 
-	// extraArgs are passed to the cockroach binary at startup.
-	extraArgs []string
-
 	// skip, if non-empty, skips the test with the given reason.
 	skip string
 
@@ -790,7 +796,7 @@ func (rd *restoreDriver) defaultClusterSettings() []install.ClusterSettingOption
 
 func (rd *restoreDriver) roachprodOpts() option.StartOpts {
 	opts := option.NewStartOpts(option.NoBackupSchedule)
-	opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs, rd.sp.extraArgs...)
+	opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs, "--vmodule=cloud_logging_transport=1")
 	if rd.c.Spec().SSDs > 1 && !rd.c.Spec().RAID0 {
 		opts.RoachprodOpts.StoreCount = rd.c.Spec().SSDs
 	}
@@ -824,6 +830,11 @@ func (rd *restoreDriver) prepareCluster(ctx context.Context) {
 
 // getAOST gets the AOST to use in the restore cmd.
 func (rd *restoreDriver) getAOST(ctx context.Context) {
+	if rd.fixtureMetadata.FingerprintTime != "" {
+		rd.aost = rd.fixtureMetadata.FingerprintTime
+		rd.t.L().Printf("using AOST from fixture metadata: %s", rd.aost)
+		return
+	}
 	if !rd.sp.fullBackupOnly {
 		rd.aost = ""
 		return

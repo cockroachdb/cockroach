@@ -47,6 +47,10 @@ func (j *Job) ProgressStorage() ProgressStorage {
 func (i ProgressStorage) Get(
 	ctx context.Context, txn isql.Txn,
 ) (float64, hlc.Timestamp, time.Time, error) {
+	if jobspb.JobID(i) == jobspb.InvalidJobID {
+		return 0, hlc.Timestamp{}, time.Time{}, errors.AssertionFailedf("invalid job ID")
+	}
+
 	ctx, sp := tracing.ChildSpan(ctx, "get-job-progress")
 	defer sp.Finish()
 
@@ -96,6 +100,10 @@ func (i ProgressStorage) Get(
 func (i ProgressStorage) Set(
 	ctx context.Context, txn isql.Txn, fraction float64, resolved hlc.Timestamp,
 ) error {
+	if jobspb.JobID(i) == jobspb.InvalidJobID {
+		return errors.AssertionFailedf("invalid job ID")
+	}
+
 	ctx, sp := tracing.ChildSpan(ctx, "write-job-progress")
 	defer sp.Finish()
 
@@ -166,6 +174,10 @@ func (j *Job) StatusStorage() StatusStorage {
 
 // Clear clears the status message row for the job, if it exists.
 func (i StatusStorage) Clear(ctx context.Context, txn isql.Txn) error {
+	if jobspb.JobID(i) == jobspb.InvalidJobID {
+		return errors.AssertionFailedf("invalid job ID")
+	}
+
 	_, err := txn.ExecEx(
 		ctx, "clear-job-status-delete", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		`DELETE FROM system.job_status WHERE job_id = $1`, i,
@@ -176,6 +188,10 @@ func (i StatusStorage) Clear(ctx context.Context, txn isql.Txn) error {
 // Sets writes the current status, replacing the current one if it exists.
 // Setting an empty status is the same as calling Clear().
 func (i StatusStorage) Set(ctx context.Context, txn isql.Txn, status string) error {
+	if jobspb.JobID(i) == jobspb.InvalidJobID {
+		return errors.AssertionFailedf("invalid job ID")
+	}
+
 	ctx, sp := tracing.ChildSpan(ctx, "write-job-status")
 	defer sp.Finish()
 
@@ -197,6 +213,10 @@ func (i StatusStorage) Set(ctx context.Context, txn isql.Txn, status string) err
 
 // Get gets the current status mesasge for a job, if any.
 func (i StatusStorage) Get(ctx context.Context, txn isql.Txn) (string, time.Time, error) {
+	if jobspb.JobID(i) == jobspb.InvalidJobID {
+		return "", time.Time{}, errors.AssertionFailedf("invalid job ID")
+	}
+
 	ctx, sp := tracing.ChildSpan(ctx, "get-job-status")
 	defer sp.Finish()
 
@@ -247,6 +267,10 @@ func (j *Job) Messages() MessageStorage {
 // log for this job, and prunes retained messages of the same kind based on the
 // configured limit to keep the total number of retained messages bounded.
 func (i MessageStorage) Record(ctx context.Context, txn isql.Txn, kind, message string) error {
+	if jobspb.JobID(i) == jobspb.InvalidJobID {
+		return errors.AssertionFailedf("invalid job ID")
+	}
+
 	ctx, sp := tracing.ChildSpan(ctx, "write-job-message")
 	defer sp.Finish()
 
@@ -279,6 +303,10 @@ type JobMessage struct {
 }
 
 func (i MessageStorage) Fetch(ctx context.Context, txn isql.Txn) (_ []JobMessage, retErr error) {
+	if jobspb.JobID(i) == jobspb.InvalidJobID {
+		return nil, errors.AssertionFailedf("invalid job ID")
+	}
+
 	ctx, sp := tracing.ChildSpan(ctx, "get-all-job-message")
 	defer sp.Finish()
 
@@ -374,6 +402,9 @@ func (i *InfoStorage) checkClaimSession(ctx context.Context) error {
 }
 
 func (i InfoStorage) get(ctx context.Context, opName, infoKey string) ([]byte, bool, error) {
+	if i.j.ID() == jobspb.InvalidJobID {
+		return nil, false, errors.AssertionFailedf("invalid job ID")
+	}
 	if i.txn == nil {
 		return nil, false, errors.New("cannot access the job info table without an associated txn")
 	}
@@ -440,6 +471,9 @@ func (i InfoStorage) write(
 func (i InfoStorage) doWrite(
 	ctx context.Context, fn func(ctx context.Context, job *Job, txn isql.Txn) error,
 ) error {
+	if i.j.ID() == jobspb.InvalidJobID {
+		return errors.AssertionFailedf("invalid job ID")
+	}
 	if i.txn == nil {
 		return errors.New("cannot write to the job info table without an associated txn")
 	}
@@ -466,6 +500,9 @@ func (i InfoStorage) iterate(
 	infoPrefix string,
 	fn func(infoKey string, value []byte) error,
 ) (retErr error) {
+	if i.j.ID() == jobspb.InvalidJobID {
+		return errors.AssertionFailedf("invalid job ID")
+	}
 	if i.txn == nil {
 		return errors.New("cannot iterate over the job info table without an associated txn")
 	}
@@ -589,6 +626,9 @@ func (i InfoStorage) DeleteRange(
 
 // Count counts the info records in the range [start, end).
 func (i InfoStorage) Count(ctx context.Context, startInfoKey, endInfoKey string) (int, error) {
+	if i.j.ID() == jobspb.InvalidJobID {
+		return 0, errors.AssertionFailedf("invalid job ID")
+	}
 	if i.txn == nil {
 		return 0, errors.New("cannot access the job info table without an associated txn")
 	}

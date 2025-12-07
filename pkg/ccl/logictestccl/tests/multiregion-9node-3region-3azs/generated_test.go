@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 
 	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
 	)()
 
 	os.Exit(m.Run())
@@ -284,6 +284,13 @@ func TestCCLLogic_regional_by_row_rename_column(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "regional_by_row_rename_column")
+}
+
+func TestCCLLogic_regional_by_row_safe_updates(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "regional_by_row_safe_updates")
 }
 
 func TestCCLLogic_regional_by_table_placement_restricted(

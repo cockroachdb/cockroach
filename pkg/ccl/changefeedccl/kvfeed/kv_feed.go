@@ -94,6 +94,11 @@ type Config struct {
 	// enables filtering out any transactional writes with that flag set to true.
 	WithFiltering bool
 
+	// WithBulkDelivery is propagated via the RangefeedRequest to the rangefeed
+	// server, where if true, the server will deliver rangefeed events in bulk
+	// during catchup scans.
+	WithBulkDelivery bool
+
 	// WithFrontierQuantize specifies the resolved timestamp quantization
 	// granularity. If non-zero, resolved timestamps from rangefeed checkpoint
 	// events will be rounded down to the nearest multiple of the quantization
@@ -128,14 +133,14 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	bf := func() kvevent.Buffer {
-		return kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), &cfg.Settings.SV, &cfg.Metrics.RangefeedBufferMetricsWithCompat)
+		return kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), &cfg.Settings.SV, &cfg.Metrics.RangefeedBufferMetrics)
 	}
 
 	g := ctxgroup.WithContext(ctx)
 	f := newKVFeed(
 		cfg.Writer, cfg.Spans,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
-		cfg.NeedsInitialScan, cfg.WithDiff, cfg.WithFiltering,
+		cfg.NeedsInitialScan, cfg.WithDiff, cfg.WithFiltering, cfg.WithBulkDelivery,
 		cfg.WithFrontierQuantize,
 		cfg.ConsumerID,
 		cfg.InitialHighWater, cfg.InitialSpanTimePairs, cfg.EndTime,
@@ -159,16 +164,16 @@ func Run(ctx context.Context, cfg Config) error {
 	var scErr schemaChangeDetectedError
 	isChangefeedCompleted := errors.Is(err, errChangefeedCompleted)
 	if !isChangefeedCompleted && !errors.As(err, &scErr) {
-		log.Dev.Errorf(ctx, "stopping kv feed due to error: %s", err)
+		log.Changefeed.Errorf(ctx, "stopping kv feed due to error: %s", err)
 		// Regardless of whether we exited KV feed with or without an error, that error
 		// is not a schema change; so, close the writer and return.
 		return errors.CombineErrors(err, f.writer.CloseWithReason(ctx, err))
 	}
 
 	if isChangefeedCompleted {
-		log.Dev.Info(ctx, "stopping kv feed: changefeed completed")
+		log.Changefeed.Info(ctx, "stopping kv feed: changefeed completed")
 	} else {
-		log.Dev.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
+		log.Changefeed.Infof(ctx, "stopping kv feed due to schema change at %v", scErr.ts)
 	}
 
 	// Drain the writer before we close it so that all events emitted prior to schema change
@@ -260,6 +265,7 @@ type kvFeed struct {
 	withDiff             bool
 	withFiltering        bool
 	withInitialBackfill  bool
+	withBulkDelivery     bool
 	consumerID           int64
 	initialHighWater     hlc.Timestamp
 	initialSpanTimePairs []kvcoord.SpanTimePair
@@ -289,7 +295,7 @@ func newKVFeed(
 	spans []roachpb.Span,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
-	withInitialBackfill, withDiff, withFiltering bool,
+	withInitialBackfill, withDiff, withFiltering, withBulkDelivery bool,
 	withFrontierQuantize time.Duration,
 	consumerID int64,
 	initialHighWater hlc.Timestamp,
@@ -312,6 +318,7 @@ func newKVFeed(
 		withDiff:             withDiff,
 		withFiltering:        withFiltering,
 		withFrontierQuantize: withFrontierQuantize,
+		withBulkDelivery:     withBulkDelivery,
 		consumerID:           consumerID,
 		initialHighWater:     initialHighWater,
 		endTime:              endTime,
@@ -333,11 +340,11 @@ var errChangefeedCompleted = errors.New("changefeed completed")
 func (f *kvFeed) run(ctx context.Context) (err error) {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.kvfeed.run")
 	defer sp.Finish()
-	log.Dev.Infof(ctx, "kv feed run starting")
+	log.Changefeed.Infof(ctx, "kv feed run starting")
 
 	emitResolved := func(ts hlc.Timestamp, boundary jobspb.ResolvedSpan_BoundaryType) error {
 		if log.V(2) {
-			log.Dev.Infof(ctx, "emitting resolved spans at time %s with boundary %s for spans: %s", ts, boundary, f.spans)
+			log.Changefeed.Infof(ctx, "emitting resolved spans at time %s with boundary %s for spans: %s", ts, boundary, f.spans)
 		}
 		for _, sp := range f.spans {
 			if err := f.writer.Add(ctx, kvevent.NewBackfillResolvedEvent(sp, ts, boundary)); err != nil {
@@ -406,14 +413,14 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 			return err
 		}
 		if log.V(2) {
-			log.Dev.Infof(ctx, "kv feed encountered table events at or before %s: %#v", schemaChangeTS, events)
+			log.Changefeed.Infof(ctx, "kv feed encountered table events at or before %s: %#v", schemaChangeTS, events)
 		}
 		var tables []redact.RedactableString
 		for _, event := range events {
 			tables = append(tables, redact.Sprintf("table %q (id %d, version %d -> %d)",
 				redact.Safe(event.Before.GetName()), event.Before.GetID(), event.Before.GetVersion(), event.After.GetVersion()))
 		}
-		log.Dev.Infof(ctx, "kv feed encountered schema change(s) at or before %s: %s",
+		log.Changefeed.Infof(ctx, "kv feed encountered schema change(s) at or before %s: %s",
 			schemaChangeTS, redact.Join(", ", tables))
 
 		// Detect whether the event corresponds to a primary index change. Also
@@ -445,11 +452,11 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 
 		// Exit if the policy says we should.
 		if boundaryType == jobspb.ResolvedSpan_RESTART || boundaryType == jobspb.ResolvedSpan_EXIT {
-			log.Dev.Infof(ctx, "kv feed run loop exiting due to schema change at %s and boundary type %s", schemaChangeTS, boundaryType)
+			log.Changefeed.Infof(ctx, "kv feed run loop exiting due to schema change at %s and boundary type %s", schemaChangeTS, boundaryType)
 			return schemaChangeDetectedError{ts: schemaChangeTS}
 		}
 
-		log.Dev.Infof(ctx, "kv feed run loop restarting because of schema change at %s and boundary type %s", schemaChangeTS, boundaryType)
+		log.Changefeed.Infof(ctx, "kv feed run loop restarting because of schema change at %s and boundary type %s", schemaChangeTS, boundaryType)
 	}
 }
 
@@ -615,6 +622,7 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 		WithDiff:             f.withDiff,
 		WithFiltering:        f.withFiltering,
 		WithFrontierQuantize: f.withFrontierQuantize,
+		WithBulkDelivery:     f.withBulkDelivery,
 		ConsumerID:           f.consumerID,
 		Knobs:                f.knobs,
 		Timers:               f.timers,
@@ -732,7 +740,7 @@ func copyFromSourceToDestUntilTableEvent(
 		// from rangefeed) and checks if a table event was encountered at or before
 		// said timestamp. If so, it replaces the copy boundary with the table event.
 		checkForTableEvent = func(ts hlc.Timestamp) error {
-			defer st.KVFeedWaitForTableEvent.Start()()
+			defer st.KVFeedWaitForTableEvent.Start().End()
 			// There's no need to check for table events again if we already found one
 			// since that should already be the earliest one.
 			if _, ok := boundary.(*errTableEventReached); ok {
@@ -829,7 +837,7 @@ func copyFromSourceToDestUntilTableEvent(
 
 		// writeToDest writes an event to the dest.
 		writeToDest = func(e kvevent.Event) error {
-			defer st.KVFeedBuffer.Start()()
+			defer st.KVFeedBuffer.Start().End()
 
 			switch e.Type() {
 			case kvevent.TypeKV, kvevent.TypeFlush:

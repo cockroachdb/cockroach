@@ -42,6 +42,15 @@ func (n NodeListOption) Equals(o NodeListOption) bool {
 	return true
 }
 
+func (n NodeListOption) Contains(node int) bool {
+	for _, n := range n {
+		if n == node {
+			return true
+		}
+	}
+	return false
+}
+
 // Option implements Option.
 func (n NodeListOption) Option() {}
 

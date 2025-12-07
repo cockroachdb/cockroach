@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "spanconfigsqltranslator",
@@ -6,11 +6,13 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog",
@@ -18,10 +20,4 @@ go_library(
         "//pkg/sql/catalog/descs",
         "@com_github_cockroachdb_errors//:errors",
     ],
-)
-
-go_test(
-    name = "spanconfigsqltranslator_test",
-    srcs = ["sqltranslator_test.go"],
-    data = glob(["testdata/**"]),
 )

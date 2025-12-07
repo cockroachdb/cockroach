@@ -211,6 +211,7 @@ type processorTestHelper struct {
 	rts                      *resolvedTimestamp
 	syncEventC               func()
 	sendSpanSync             func(*roachpb.Span)
+	rawScheduler             *Scheduler
 	scheduler                *ClientScheduler
 	toBufferedStreamIfNeeded func(s Stream) Stream
 }
@@ -252,27 +253,16 @@ func (h *processorTestHelper) triggerTxnPushUntilPushed(t *testing.T, pushedC <-
 	}
 }
 
-type rangefeedTestType bool
+type rangefeedTestType string
 
-var (
-	scheduledProcessorWithUnbufferedSender rangefeedTestType
-	scheduledProcessorWithBufferedSender   rangefeedTestType
+const (
+	scheduledProcessorWithUnbufferedSender rangefeedTestType = "unbuffered_sender"
+	scheduledProcessorWithBufferedSender   rangefeedTestType = "buffered_sender"
 )
 
 var testTypes = []rangefeedTestType{
 	scheduledProcessorWithUnbufferedSender,
 	scheduledProcessorWithBufferedSender,
-}
-
-func (t rangefeedTestType) String() string {
-	switch t {
-	case scheduledProcessorWithUnbufferedSender:
-		return "scheduled"
-	case scheduledProcessorWithBufferedSender:
-		return "scheduled/registration=buffered"
-	default:
-		panic("unknown rangefeed test type")
-	}
 }
 
 type testConfig struct {
@@ -311,8 +301,8 @@ func withMetrics(m *Metrics) option {
 func withRtsScanner(scanner IntentScanner) option {
 	return func(config *testConfig) {
 		if scanner != nil {
-			config.isc = func() IntentScanner {
-				return scanner
+			config.isc = func() (IntentScanner, error) {
+				return scanner, nil
 			}
 		}
 	}
@@ -348,7 +338,7 @@ func withSettings(st *cluster.Settings) option {
 	}
 }
 
-func withPushTxnsIntervalAge(interval, age time.Duration) option {
+func withPushTxnsIntervalAge(age time.Duration) option {
 	return func(config *testConfig) {
 		config.PushTxnsAge = age
 	}
@@ -421,6 +411,7 @@ func newTestProcessor(
 			EventChanCap:     testProcessorEventCCap,
 			Metrics:          NewMetrics(),
 		},
+		feedType: scheduledProcessorWithUnbufferedSender,
 	}
 	for _, o := range opts {
 		o(&cfg)
@@ -451,6 +442,7 @@ func newTestProcessor(
 		h.sendSpanSync = func(span *roachpb.Span) {
 			p.syncSendAndWait(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
 		}
+		h.rawScheduler = sch
 		h.scheduler = &p.scheduler
 		switch cfg.feedType {
 		case scheduledProcessorWithUnbufferedSender:

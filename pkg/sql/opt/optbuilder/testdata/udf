@@ -865,9 +865,9 @@ project
            ├── params: i:1
            └── body
                 └── project
-                     ├── columns: column8:8
+                     ├── columns: column8:8 b:3
                      ├── project
-                     │    ├── columns: column7:7
+                     │    ├── columns: column7:7 b:3
                      │    ├── limit
                      │    │    ├── columns: a:2!null b:3 c:4!null
                      │    │    ├── internal-ordering: -3
@@ -911,9 +911,9 @@ project
            ├── params: i:1
            └── body
                 └── project
-                     ├── columns: column8:8
+                     ├── columns: column8:8 b:3
                      ├── project
-                     │    ├── columns: column7:7
+                     │    ├── columns: column7:7 b:3
                      │    ├── limit
                      │    │    ├── columns: a:2!null b:3 c:4!null
                      │    │    ├── internal-ordering: -3

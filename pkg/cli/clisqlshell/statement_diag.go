@@ -25,7 +25,7 @@ func (c *cliState) handleStatementDiag(
 		cmd = args[0]
 		args = args[1:]
 	}
-
+	defer c.conn.AllowExecuteInternal(context.Background())()
 	var cmdErr error
 	switch cmd {
 	case "list":

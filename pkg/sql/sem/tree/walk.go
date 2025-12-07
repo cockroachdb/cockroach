@@ -14,24 +14,74 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Visitor defines methods that are called for nodes during an expression or statement walk.
+// Visitor defines methods that are called for Expr nodes during an expression
+// or statement walk.
 type Visitor interface {
-	// VisitPre is called for each node before recursing into that subtree. Upon return, if recurse
-	// is false, the visit will not recurse into the subtree (and VisitPost will not be called for
-	// this node).
+	// VisitPre is called for each Expr node before recursing into that
+	// subtree. Upon return, if recurse is false, the visit will not recurse into
+	// the subtree (and VisitPost will not be called for this Expr node).
 	//
-	// The returned Expr replaces the visited expression and can be used for rewriting expressions.
-	// The function should NOT modify nodes in-place; it should make copies of nodes. The Walk
-	// infrastructure will automatically make copies of parents as needed.
+	// The returned Expr replaces the visited expression and can be used for
+	// rewriting expressions. The function should NOT modify nodes in-place; it
+	// should make copies of nodes. The Walk infrastructure will automatically
+	// make copies of parents as needed.
+	//
+	// VisitPre visits Exprs but not TableExprs. For TableExprs, VisitTablePre
+	// must be used.
 	VisitPre(expr Expr) (recurse bool, newExpr Expr)
 
-	// VisitPost is called for each node after recursing into the subtree. The returned Expr
-	// replaces the visited expression and can be used for rewriting expressions.
+	// VisitPost is called for each Expr node after recursing into the
+	// subtree. The returned Expr replaces the visited expression and can be used
+	// for rewriting expressions.
 	//
-	// The returned Expr replaces the visited expression and can be used for rewriting expressions.
-	// The function should NOT modify nodes in-place; it should make and return copies of nodes. The
-	// Walk infrastructure will automatically make copies of parents as needed.
-	VisitPost(expr Expr) (newNode Expr)
+	// The returned Expr replaces the visited expression and can be used for
+	// rewriting expressions. The function should NOT modify nodes in-place; it
+	// should make and return copies of nodes. The Walk infrastructure will
+	// automatically make copies of parents as needed.
+	//
+	// VisitPost visits Exprs but not TableExprs. For TableExprs, VisitTablePost
+	// must be used.
+	VisitPost(expr Expr) (newExpr Expr)
+}
+
+// ExtendedVisitor extends Visitor with methods that are called for TableExpr
+// nodes and Statement nodes during an expression or statement walk.
+//
+// Unlike Visitor, which does not visit some parts of the AST for historical
+// reasons, ExtendedVisitor is intended to visit every node in the tree. (If a
+// node is missing, please add it.)
+type ExtendedVisitor interface {
+	Visitor
+
+	// VisitTablePre is called for each TableExpr node before recursing into that
+	// subtree. Upon return, if recurse if false, the visit will not recurse into
+	// the subtree (and VisitTablePost will node be called for this TableExpr
+	// node).
+	//
+	// VisitTablePre is identical to VisitPre but handles TableExpr nodes.
+	VisitTablePre(expr TableExpr) (recurse bool, newExpr TableExpr)
+
+	// VisitTablePost is called for each TableExpr node after recursing into the
+	// subtree. The returned TableExpr replaces the visited expression and can be
+	// used for rewriting expressions.
+	//
+	// VisitTablePost is identical to VisitPost but handles TableExpr nodes.
+	VisitTablePost(expr TableExpr) (newExpr TableExpr)
+
+	// VisitStatementPre is called for each Statement node before recursing into
+	// that subtree. Upon return, if recurse if false, the visit will not recurse
+	// into the subtree (and VisitStatementPost will node be called for this
+	// Statement node).
+	//
+	// VisitStatementPre is identical to VisitPre but handles Statement nodes.
+	VisitStatementPre(expr Statement) (recurse bool, newExpr Statement)
+
+	// VisitStatementPost is called for each Statement node after recursing into
+	// the subtree. The returned Statement replaces the visited expression and can
+	// be used for rewriting expressions.
+	//
+	// VisitStatementPost is identical to VisitPost but handles Statement nodes.
+	VisitStatementPost(expr Statement) (newExpr Statement)
 }
 
 // Walk implements the Expr interface.
@@ -311,7 +361,17 @@ func (expr *FuncExpr) Walk(v Visitor) Expr {
 			ret.Filter = e
 		}
 	}
-
+	if _, ok := v.(ExtendedVisitor); ok {
+		if expr.WindowDef != nil {
+			w, changed := walkWindowDef(v, expr.WindowDef)
+			if changed {
+				if ret == expr {
+					ret = expr.copyNode()
+				}
+				ret.WindowDef = w
+			}
+		}
+	}
 	if expr.OrderBy != nil {
 		order, changed := walkOrderBy(v, expr.OrderBy)
 		if changed {
@@ -553,10 +613,20 @@ func (expr *ParenTableExpr) WalkTableExpr(v Visitor) TableExpr {
 func (expr *JoinTableExpr) WalkTableExpr(v Visitor) TableExpr {
 	left, changedL := walkTableExpr(v, expr.Left)
 	right, changedR := walkTableExpr(v, expr.Right)
-	if changedL || changedR {
+	cond, changedCond := expr.Cond, false
+	if _, ok := v.(ExtendedVisitor); ok {
+		if j, ok := expr.Cond.(*OnJoinCond); ok {
+			if onExpr, changed := WalkExpr(v, j.Expr); changed {
+				cond = &OnJoinCond{onExpr}
+				changedCond = true
+			}
+		}
+	}
+	if changedL || changedR || changedCond {
 		exprCopy := *expr
 		exprCopy.Left = left
 		exprCopy.Right = right
+		exprCopy.Cond = cond
 		return &exprCopy
 	}
 	return expr
@@ -846,8 +916,16 @@ func WalkExpr(v Visitor, expr Expr) (newExpr Expr, changed bool) {
 	return newExpr, (reflect.ValueOf(expr) != reflect.ValueOf(newExpr))
 }
 
-func walkTableExpr(v Visitor, expr TableExpr) (newExpr TableExpr, changed bool) {
-	newExpr = expr.WalkTableExpr(v)
+func walkTableExpr(v Visitor, expr TableExpr) (TableExpr, bool) {
+	if ev, ok := v.(ExtendedVisitor); ok {
+		recurse, newExpr := ev.VisitTablePre(expr)
+		if recurse {
+			newExpr = newExpr.WalkTableExpr(v)
+			newExpr = ev.VisitTablePost(newExpr)
+		}
+		return newExpr, (reflect.ValueOf(expr) != reflect.ValueOf(newExpr))
+	}
+	newExpr := expr.WalkTableExpr(v)
 	return newExpr, (reflect.ValueOf(expr) != reflect.ValueOf(newExpr))
 }
 
@@ -2082,15 +2160,24 @@ var _ walkableStmt = &ValuesClause{}
 // by WalkExpr.
 //
 // NOTE: Beware that WalkStmt does not necessarily traverse all parts of a
-// statement by itself. For example, it will not walk into Subquery nodes
-// within a FROM clause or into a JoinCond. Walk's logic is pretty
-// interdependent with the logic for constructing a query plan.
-func WalkStmt(v Visitor, stmt Statement) (newStmt Statement, changed bool) {
+// statement by itself. For example, it will not walk into Subquery nodes within
+// a FROM clause or into a JoinCond (unless using an ExtendedVisitor). Walk's
+// logic is pretty interdependent with the logic for constructing a query plan.
+func WalkStmt(v Visitor, stmt Statement) (Statement, bool) {
+	if ev, ok := v.(ExtendedVisitor); ok {
+		recurse, newStmt := ev.VisitStatementPre(stmt)
+		if walkable, ok := newStmt.(walkableStmt); recurse && ok {
+			newStmt = walkable.walkStmt(v)
+			newStmt = ev.VisitStatementPost(newStmt)
+		}
+		return newStmt, (stmt != newStmt)
+	}
+
 	walkable, ok := stmt.(walkableStmt)
 	if !ok {
 		return stmt, false
 	}
-	newStmt = walkable.walkStmt(v)
+	newStmt := walkable.walkStmt(v)
 	return newStmt, (stmt != newStmt)
 }
 
@@ -2114,14 +2201,14 @@ func (v *simpleVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 
 func (*simpleVisitor) VisitPost(expr Expr) Expr { return expr }
 
-// SimpleVisitFn is a function that is run for every node in the VisitPre stage;
-// see SimpleVisit.
+// SimpleVisitFn is a function that is run for every Expr node in the VisitPre
+// stage; see SimpleVisit.
 type SimpleVisitFn func(expr Expr) (recurse bool, newExpr Expr, err error)
 
 // SimpleVisit is a convenience wrapper for visitors that only have VisitPre
 // code and don't return any results except an error. The given function is
-// called in VisitPre for every node. The visitor stops as soon as an error is
-// returned.
+// called in VisitPre for every Expr node. The visitor stops as soon as an error
+// is returned.
 func SimpleVisit(expr Expr, preFn SimpleVisitFn) (Expr, error) {
 	v := simpleVisitor{fn: preFn}
 	newExpr, _ := WalkExpr(&v, expr)
@@ -2131,10 +2218,10 @@ func SimpleVisit(expr Expr, preFn SimpleVisitFn) (Expr, error) {
 	return newExpr, nil
 }
 
-// SimpleStmtVisit is a convenience wrapper for visitors that want to visit
-// all part of a statement, only have VisitPre code and don't return
-// any results except an error. The given function is called in VisitPre
-// for every node. The visitor stops as soon as an error is returned.
+// SimpleStmtVisit is a convenience wrapper for visitors that want to visit all
+// part of a statement, only have VisitPre code, and don't return any results
+// except an error. The given function is called in VisitPre for every Expr
+// node. The visitor stops as soon as an error is returned.
 func SimpleStmtVisit(stmt Statement, preFn SimpleVisitFn) (Statement, error) {
 	v := simpleVisitor{fn: preFn}
 	newStmt, changed := WalkStmt(&v, stmt)
@@ -2147,12 +2234,102 @@ func SimpleStmtVisit(stmt Statement, preFn SimpleVisitFn) (Statement, error) {
 	return stmt, nil
 }
 
+type extendedSimpleVisitor struct {
+	simpleVisitor
+	preTableFn ExtendedSimpleVisitTableFn
+	preStmtFn  ExtendedSimpleVisitStmtFn
+}
+
+var _ ExtendedVisitor = &extendedSimpleVisitor{}
+
+func (ev *extendedSimpleVisitor) VisitTablePre(expr TableExpr) (recurse bool, newExpr TableExpr) {
+	if ev.err != nil {
+		return false, expr
+	}
+	recurse, newExpr, ev.err = ev.preTableFn(expr)
+	if ev.err != nil {
+		return false, expr
+	}
+	return recurse, newExpr
+}
+
+func (ev *extendedSimpleVisitor) VisitTablePost(expr TableExpr) (newExpr TableExpr) { return expr }
+
+func (ev *extendedSimpleVisitor) VisitStatementPre(
+	expr Statement,
+) (recurse bool, newExpr Statement) {
+	if ev.err != nil {
+		return false, expr
+	}
+	recurse, newExpr, ev.err = ev.preStmtFn(expr)
+	if ev.err != nil {
+		return false, expr
+	}
+	return recurse, newExpr
+}
+
+func (ev *extendedSimpleVisitor) VisitStatementPost(expr Statement) (newExpr Statement) {
+	return expr
+}
+
+// ExtendedSimpleVisitFn and ExtendedSimpleVisitStmtFn are functions that are
+// run for every TableExpr and Statement node, respectively; see
+// ExtendedSimpleVisit.
+type ExtendedSimpleVisitTableFn func(expr TableExpr) (recurse bool, newExpr TableExpr, err error)
+type ExtendedSimpleVisitStmtFn func(expr Statement) (recurse bool, newExpr Statement, err error)
+
+// ExtendedSimpleVisit is a convenience wrapper for extended visitors that only
+// have VisitPre, VisitTablePre, and VisitStatementPre code, and don't return
+// any results except an error. The given functions are called in VisitPre for
+// every Expr node, VisitTablePre for every TableExpr node, and
+// VisitStatementPre for every Statement node. The visitor stops as soon as an
+// error is returned.
+//
+// ExtendedSimpleVisit is identical to SimpleVisit but also handles TableExpr
+// and Statement nodes.
+func ExtendedSimpleVisit(
+	expr Expr,
+	preFn SimpleVisitFn,
+	preTableFn ExtendedSimpleVisitTableFn,
+	preStmtFn ExtendedSimpleVisitStmtFn,
+) (Expr, error) {
+	ev := extendedSimpleVisitor{simpleVisitor{fn: preFn}, preTableFn, preStmtFn}
+	newExpr, _ := WalkExpr(&ev, expr)
+	if ev.err != nil {
+		return nil, ev.err
+	}
+	return newExpr, nil
+}
+
+// ExtendedSimpleStmtVisit is a convenience wrapper for visitors that want to
+// visit all part of a statement, only have VisitPre, VisitTablePre, and
+// VisitStatementPre code, and don't return any results except an error. The
+// given functions are called in VisitPre for every Expr node, VisitTablePre for
+// every TableExpr node, and VisitStatementPre for every Statement node. The
+// visitor stops as soon as an error is returned.
+func ExtendedSimpleStmtVisit(
+	stmt Statement,
+	preFn SimpleVisitFn,
+	preTableFn ExtendedSimpleVisitTableFn,
+	preStmtFn ExtendedSimpleVisitStmtFn,
+) (Statement, error) {
+	ev := extendedSimpleVisitor{simpleVisitor{fn: preFn}, preTableFn, preStmtFn}
+	newStmt, changed := WalkStmt(&ev, stmt)
+	if ev.err != nil {
+		return nil, ev.err
+	}
+	if changed {
+		return newStmt, nil
+	}
+	return stmt, nil
+}
+
 type debugVisitor struct {
 	buf   bytes.Buffer
 	level int
 }
 
-var _ Visitor = &debugVisitor{}
+var _ ExtendedVisitor = &debugVisitor{}
 
 func (v *debugVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	v.level++
@@ -2165,6 +2342,36 @@ func (v *debugVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 }
 
 func (v *debugVisitor) VisitPost(expr Expr) Expr {
+	v.level--
+	return expr
+}
+
+func (v *debugVisitor) VisitTablePre(expr TableExpr) (recurse bool, newExpr TableExpr) {
+	v.level++
+	fmt.Fprintf(&v.buf, "%*s", 2*v.level, " ")
+	str := fmt.Sprintf("%#v\n", expr)
+	// Remove "parser." to make the string more compact.
+	str = strings.Replace(str, "parser.", "", -1)
+	v.buf.WriteString(str)
+	return true, expr
+}
+
+func (v *debugVisitor) VisitTablePost(expr TableExpr) TableExpr {
+	v.level--
+	return expr
+}
+
+func (v *debugVisitor) VisitStatementPre(expr Statement) (recurse bool, newExpr Statement) {
+	v.level++
+	fmt.Fprintf(&v.buf, "%*s", 2*v.level, " ")
+	str := fmt.Sprintf("%#v\n", expr)
+	// Remove "parser." to make the string more compact.
+	str = strings.Replace(str, "parser.", "", -1)
+	v.buf.WriteString(str)
+	return true, expr
+}
+
+func (v *debugVisitor) VisitStatementPost(expr Statement) Statement {
 	v.level--
 	return expr
 }

@@ -1,3 +1,5 @@
+# LogicTest: default-configs 3node-tenant local-leased-descriptors
+
 subtest regression45707
 
 user root

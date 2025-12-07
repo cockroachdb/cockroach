@@ -642,7 +642,7 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 			redundant := areFiltersRedundant(&jb.equivs, e.filters, notNullCols)
 			// Update notNullCols based on null-rejecting filters to aid in
 			// finding subsequent redundant filters.
-			notNullCols.UnionWith(memo.NullColsRejectedByFilter(jb.ctx, jb.evalCtx, e.filters))
+			memo.ExtractNullColsRejectedByFilter(jb.ctx, jb.evalCtx, e.filters, &notNullCols)
 			if redundant {
 				// Avoid adding redundant filters.
 				continue
@@ -1256,7 +1256,7 @@ func (e *edge) calcNullRejectedRels(jb *JoinOrderBuilder) {
 	var nullRejectedCols opt.ColSet
 	for i := range e.filters {
 		if constraints := e.filters[i].ScalarProps().Constraints; constraints != nil {
-			nullRejectedCols.UnionWith(constraints.ExtractNotNullCols(jb.ctx, jb.evalCtx))
+			constraints.ExtractNotNullCols(jb.ctx, jb.evalCtx, &nullRejectedCols)
 		}
 	}
 	e.nullRejectedRels = jb.getRelations(nullRejectedCols)

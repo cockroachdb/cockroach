@@ -172,6 +172,10 @@ func (s *serverController) SetDraining() {
 	}
 }
 
+func (s *serverController) IsDraining() bool {
+	return s.draining.Load()
+}
+
 // start monitors changes to the service mode and updates
 // the running servers accordingly.
 func (c *serverController) start(ctx context.Context, ie isql.Executor) error {

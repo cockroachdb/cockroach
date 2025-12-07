@@ -184,17 +184,20 @@ func Subsume(
 	// will be cleared later when OnRangeMerge is called the replica in
 	// (*Store).MergeRange.
 	stats := cArgs.EvalCtx.GetMVCCStats()
+	var locksWritten int
 	if args.PreserveUnreplicatedLocks {
 		durabilityUpgradeLimit := concurrency.GetMaxLockFlushSize(&cArgs.EvalCtx.ClusterSettings().SV)
 		acquisitions, approxSize := cArgs.EvalCtx.GetConcurrencyManager().OnRangeSubsumeEval()
 		if approxSize > durabilityUpgradeLimit {
-			log.Dev.Warningf(ctx,
+			log.KvExec.Warningf(ctx,
 				"refusing to upgrade lock durability of %d locks since approximate lock size of %d byte exceeds %d bytes",
 				len(acquisitions),
 				approxSize,
 				durabilityUpgradeLimit)
 		} else {
-			log.VEventf(ctx, 2, "upgrading durability of %d locks", len(acquisitions))
+			if len(acquisitions) > 0 {
+				log.KvExec.Infof(ctx, "upgrading durability of %d lock during subsume", len(acquisitions))
+			}
 			statsDelta := enginepb.MVCCStats{}
 			for _, acq := range acquisitions {
 				if err := storage.MVCCAcquireLock(ctx, readWriter,
@@ -206,6 +209,7 @@ func Subsume(
 			// response and to the stats update we expect as part of this proposal.
 			stats.Add(statsDelta)
 			cArgs.Stats.Add(statsDelta)
+			locksWritten = len(acquisitions)
 		}
 	}
 
@@ -227,7 +231,8 @@ func Subsume(
 	// rather than introducing additional synchronization complexity.
 	ridPrefix := keys.MakeRangeIDReplicatedPrefix(desc.RangeID)
 	reply.RangeIDLocalMVCCStats, err = storage.ComputeStats(
-		ctx, readWriter, ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
+		ctx, readWriter, fs.BatchEvalReadCategory,
+		ridPrefix, ridPrefix.PrefixEnd(), 0 /* nowNanos */)
 	if err != nil {
 		return result.Result{}, err
 	}
@@ -246,5 +251,10 @@ func Subsume(
 	// waitForApplication when sending a kvpb.SubsumeRequest.
 	pd.Replicated.DoTimelyApplicationToAllReplicas = true
 	pd.Local.RepopulateSubsumeResponseLAI = args.PreserveUnreplicatedLocks
+	if locksWritten > 0 {
+		pd.Local.Metrics = &result.Metrics{
+			SubsumeLocksWritten: locksWritten,
+		}
+	}
 	return pd, nil
 }

@@ -17,15 +17,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // blockingBuffer is an implementation of Buffer which allocates memory
 // from a mon.BoundAccount and blocks if no resources are available.
 type blockingBuffer struct {
 	sv       *settings.Values
-	metrics  *PerBufferMetricsWithCompat
+	metrics  *PerBufferMetrics
 	qp       allocPool     // Pool for memory allocations.
 	signalCh chan struct{} // Signal when new events are available.
 
@@ -54,7 +54,7 @@ type blockingBuffer struct {
 func NewMemBuffer(
 	acc mon.BoundAccount,
 	sv *settings.Values,
-	metrics *PerBufferMetricsWithCompat,
+	metrics *PerBufferMetrics,
 	options ...BlockingBufferOption,
 ) Buffer {
 	return newMemBuffer(acc, sv, metrics, nil, options...)
@@ -65,7 +65,7 @@ func NewMemBuffer(
 func TestingNewMemBuffer(
 	acc mon.BoundAccount,
 	sv *settings.Values,
-	metrics *PerBufferMetricsWithCompat,
+	metrics *PerBufferMetrics,
 	onWaitStart quotapool.OnWaitStartFunc,
 ) Buffer {
 	return newMemBuffer(acc, sv, metrics, onWaitStart)
@@ -74,7 +74,7 @@ func TestingNewMemBuffer(
 func newMemBuffer(
 	acc mon.BoundAccount,
 	sv *settings.Values,
-	metrics *PerBufferMetricsWithCompat,
+	metrics *PerBufferMetrics,
 	onWaitStart quotapool.OnWaitStartFunc,
 	options ...BlockingBufferOption,
 ) Buffer {
@@ -279,11 +279,15 @@ func (b *blockingBuffer) AcquireMemory(ctx context.Context, n int64) (alloc Allo
 // Add implements Writer interface.
 func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 	if b.knobs.BeforeAdd != nil {
-		ctx, e = b.knobs.BeforeAdd(ctx, e)
+		var shouldAdd bool
+		ctx, e, shouldAdd = b.knobs.BeforeAdd(ctx, e)
+		if !shouldAdd {
+			return nil
+		}
 	}
 
 	if log.V(2) {
-		log.Dev.Infof(ctx, "Add event: %s", e.String())
+		log.Changefeed.Infof(ctx, "Add event: %s", e.String())
 	}
 
 	// Immediately enqueue event if it already has allocation,
@@ -295,7 +299,7 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 
 	// Acquire the quota first.
 	n := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.ApproximateSize()))
-	e.bufferAddTimestamp = timeutil.Now()
+	e.bufferAddTimestamp = crtime.NowMono()
 	alloc, err := b.AcquireMemory(ctx, n)
 	if err != nil {
 		return err
@@ -488,7 +492,7 @@ func (r *memRequest) ShouldWait() bool {
 
 type allocPool struct {
 	*quotapool.AbstractPool
-	metrics *PerBufferMetricsWithCompat
+	metrics *PerBufferMetrics
 	sv      *settings.Values
 }
 
@@ -522,13 +526,14 @@ func logSlowAcquisition(
 	return func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) func() {
 		shouldLog := logSlowAcquire.ShouldLog()
 		if shouldLog {
-			log.Dev.Warningf(ctx, "have been waiting %s attempting to acquire changefeed quota (buffer=%s)", redact.SafeString(bufType),
-				timeutil.Since(start))
+			log.Changefeed.Warningf(ctx, "have been waiting %s attempting to acquire changefeed quota (buffer=%s)",
+				timeutil.Since(start), bufType)
 		}
 
 		return func() {
 			if shouldLog {
-				log.Dev.Infof(ctx, "acquired changefeed quota after %s (buffer=%s)", timeutil.Since(start), redact.SafeString(bufType))
+				log.Changefeed.Infof(ctx, "acquired changefeed quota after %s (buffer=%s)",
+					timeutil.Since(start), bufType)
 			}
 		}
 	}

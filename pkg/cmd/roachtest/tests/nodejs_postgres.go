@@ -8,11 +8,11 @@ package tests
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -110,34 +110,40 @@ PGSSLCERT=$HOME/certs/client.%[1]s.crt PGSSLKEY=$HOME/certs/client.%[1]s.key PGS
 
 		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)
-		if err != nil {
-			// Check for expected test failures. We allow:
-			// 1. One failing test that is "pool size of 1"
-			// 2. One failing test that is "events"
-			// 3. Two failing tests that are exactly "events" and "pool size of 1"
-			if strings.Contains(rawResultsStr, "1 failing") {
-				// Single test failure case
-				if strings.Contains(rawResultsStr, "1) pool size of 1") ||
-					strings.Contains(rawResultsStr, "1) events") {
-					err = nil
-				}
-			} else if strings.Contains(rawResultsStr, "2 failing") {
-				// Two test failures case - must be exactly events and pool size of 1
-				if strings.Contains(rawResultsStr, "1) events") &&
-					strings.Contains(rawResultsStr, "2) pool size of 1") {
-					err = nil
-				}
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
+
+		// Get version for reporting
+		version, versionErr := fetchCockroachVersion(ctx, t.L(), c, node[0])
+		if versionErr != nil {
+			version = "unknown"
+		}
+
+		// Use the new parsing system with blocklist and ignorelist
+		const blocklistName = "nodePostgresBlockList"
+		const ignorelistName = "nodePostgresIgnoreList"
+		expectedFailures := nodePostgresBlockList
+		ignorelist := nodePostgresIgnoreList
+
+		status := fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
+			version, blocklistName, ignorelistName)
+		t.L().Printf("%s", status)
+
+		// Parse and summarize the test results
+		// If there were no command errors, the test passed completely
+		if err == nil {
+			t.L().Printf("All tests passed successfully")
+		} else {
+			// Parse the output and check against blocklist/ignorelist
+			parseAndSummarizeNodeJSTestResults(
+				ctx, t, c, node, "node-postgres", rawResultsStr,
+				blocklistName, expectedFailures, ignorelist, version,
+			)
 		}
 	}
 
 	r.Add(registry.TestSpec{
 		Name:             "node-postgres",
 		Owner:            registry.OwnerSQLFoundations,
-		Cluster:          r.MakeClusterSpec(1),
+		Cluster:          r.MakeClusterSpec(1, spec.Arch(spec.AllExceptFIPS)),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly, registry.Driver),

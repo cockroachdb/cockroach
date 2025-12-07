@@ -6,19 +6,21 @@
 package state
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/google/btree"
 )
 
 // Change is a state change for a range, to a target store that has some delay.
 type Change interface {
 	// Apply applies a change to the state.
-	Apply(s State)
+	Apply(ctx context.Context, s State)
 	// Target returns the recipient store of the change.
 	Target() StoreID
 	// Range returns the range id the change is for.
@@ -40,7 +42,7 @@ type Changer interface {
 	Push(tick time.Time, sc Change) (time.Time, bool)
 	// Tick updates state changer to apply any changes that have occurred
 	// between the last tick and this one.
-	Tick(tick time.Time, state State)
+	Tick(ctx context.Context, tick time.Time, state State)
 }
 
 // ReplicaChange contains information necessary to add, remove or move (both) a
@@ -70,9 +72,10 @@ type LeaseTransferChange struct {
 }
 
 // Apply applies a change to the state.
-func (lt *LeaseTransferChange) Apply(s State) {
+func (lt *LeaseTransferChange) Apply(ctx context.Context, s State) {
 	if s.TransferLease(lt.RangeID, lt.TransferTarget) {
 		s.ClusterUsageInfo().storeRef(lt.Author).LeaseTransfers++
+		log.KvDistribution.VEventf(ctx, 3, "r%d: s%d transferred lease to s%d (took %s)", lt.RangeID, lt.Author, lt.TransferTarget, lt.Wait)
 	}
 }
 
@@ -99,9 +102,10 @@ func (lt *LeaseTransferChange) Blocking() bool {
 }
 
 // Apply applies a change to the state.
-func (rsc *RangeSplitChange) Apply(s State) {
+func (rsc *RangeSplitChange) Apply(ctx context.Context, s State) {
 	if _, _, ok := s.SplitRange(rsc.SplitKey); ok {
 		s.ClusterUsageInfo().storeRef(rsc.Author).RangeSplits++
+		log.KvDistribution.VEventf(ctx, 3, "r%d: s%d split range at key=%d (took %s)", rsc.RangeID, rsc.Author, rsc.SplitKey, rsc.Wait)
 	}
 }
 
@@ -183,7 +187,7 @@ func replChangeHasStoreID(storeID StoreID, changes []roachpb.ReplicationTarget) 
 // Apply applies a replica change for a range. This is an implementation of the
 // Change interface. It requires that a replica being removed, must not hold
 // the lease unless a replica is also being added in the same change.
-func (rc *ReplicaChange) Apply(s State) {
+func (rc *ReplicaChange) Apply(ctx context.Context, s State) {
 	if len(rc.Changes) == 0 {
 		// Nothing to do.
 		return
@@ -197,6 +201,11 @@ func (rc *ReplicaChange) Apply(s State) {
 	rangeID := rc.RangeID
 
 	defer func() {
+		if rollback != nil {
+			log.KvDistribution.VEventf(ctx, 5, "r%d: s%d failed to apply replica change (after %s)", rangeID, rc.Author, rc.Wait)
+		} else {
+			log.KvDistribution.VEventf(ctx, 5, "r%d: s%d successfully applied replica change (after %s)", rangeID, rc.Author, rc.Wait)
+		}
 		n := len(rollback)
 		for i := n - 1; i > -1; i-- {
 			if rollback[i] != nil {
@@ -275,6 +284,7 @@ func (rc *ReplicaChange) Apply(s State) {
 	for _, nonVoterPromotion := range targets.NonVoterPromotions {
 		ok, revert := promoDemo(
 			s, rangeID, StoreID(nonVoterPromotion.StoreID), roachpb.NON_VOTER, roachpb.VOTER_FULL)
+		log.KvDistribution.VEventf(ctx, 5, "r%d: author s%d promoted non-voter s%s to voter", rangeID, rc.Author, nonVoterPromotion.StoreID)
 		rollback = append(rollback, revert...)
 		if !ok {
 			return
@@ -283,6 +293,7 @@ func (rc *ReplicaChange) Apply(s State) {
 	for _, voterAddition := range targets.VoterAdditions {
 		ok, revert := addReplica(
 			s, rangeID, StoreID(voterAddition.StoreID), roachpb.VOTER_FULL)
+		log.KvDistribution.VEventf(ctx, 5, "r%d: author s%d added voter s%s", rangeID, rc.Author, voterAddition.StoreID)
 		rollback = append(rollback, revert)
 		if !ok {
 			return
@@ -296,6 +307,7 @@ func (rc *ReplicaChange) Apply(s State) {
 		if !s.TransferLease(rangeID, nextLH) {
 			return
 		}
+		log.KvDistribution.VEventf(ctx, 5, "r%d: author s%d transferred lease to s%d", rangeID, rc.Author, nextLH)
 		rollback = append(rollback, func() {
 			if !s.TransferLease(rangeID, lhStore.StoreID()) {
 				panic("unable to rollback lease transfer")
@@ -306,6 +318,7 @@ func (rc *ReplicaChange) Apply(s State) {
 	for _, voterDemotion := range targets.VoterDemotions {
 		ok, revert := promoDemo(
 			s, rangeID, StoreID(voterDemotion.StoreID), roachpb.VOTER_FULL, roachpb.NON_VOTER)
+		log.KvDistribution.VEventf(ctx, 5, "r%d: author s%d demoted voter s%s to non-voter", rangeID, rc.Author, voterDemotion.StoreID)
 		rollback = append(rollback, revert...)
 		if !ok {
 			return
@@ -314,6 +327,7 @@ func (rc *ReplicaChange) Apply(s State) {
 	for _, voterRemoval := range targets.VoterRemovals {
 		ok, revert := removeReplica(
 			s, rangeID, StoreID(voterRemoval.StoreID), roachpb.VOTER_FULL)
+		log.KvDistribution.VEventf(ctx, 5, "r%d: author s%d removed voter s%s", rangeID, rc.Author, voterRemoval.StoreID)
 		rollback = append(rollback, revert)
 		if !ok {
 			return
@@ -322,6 +336,7 @@ func (rc *ReplicaChange) Apply(s State) {
 	for _, nonVoterAddition := range targets.NonVoterAdditions {
 		ok, revert := addReplica(
 			s, rangeID, StoreID(nonVoterAddition.StoreID), roachpb.NON_VOTER)
+		log.KvDistribution.VEventf(ctx, 5, "r%d: author s%d added non-voter s%s", rangeID, rc.Author, nonVoterAddition.StoreID)
 		rollback = append(rollback, revert)
 		if !ok {
 			return
@@ -330,6 +345,7 @@ func (rc *ReplicaChange) Apply(s State) {
 	for _, nonVoterRemoval := range targets.NonVoterRemovals {
 		ok, revert := removeReplica(
 			s, rangeID, StoreID(nonVoterRemoval.StoreID), roachpb.NON_VOTER)
+		log.KvDistribution.VEventf(ctx, 5, "r%d: author s%d removed non-voter s%s", rangeID, rc.Author, nonVoterRemoval.StoreID)
 		rollback = append(rollback, revert)
 		if !ok {
 			return
@@ -345,6 +361,7 @@ func (rc *ReplicaChange) Apply(s State) {
 
 		authorUsageInfo := s.ClusterUsageInfo().storeRef(rc.Author)
 		authorUsageInfo.Rebalances++
+		log.KvDistribution.VEventf(ctx, 5, "r%d: author s%d rebalancing", rangeID, rc.Author)
 		if requiresUpReplication {
 			authorUsageInfo.RebalanceSentBytes += r.Size()
 			s.ClusterUsageInfo().storeRef(storeNeedingSnapshot).RebalanceRcvdBytes += r.Size()
@@ -470,7 +487,7 @@ func (rc *replicaChanger) Push(tick time.Time, change Change) (time.Time, bool) 
 
 // Tick updates state changer to apply any changes that have occurred
 // between the last tick and this one.
-func (rc *replicaChanger) Tick(tick time.Time, state State) {
+func (rc *replicaChanger) Tick(ctx context.Context, tick time.Time, state State) {
 	var changeList []*pendingChange
 
 	// NB: Add the smallest unit of time, in order to find all items in
@@ -483,7 +500,7 @@ func (rc *replicaChanger) Tick(tick time.Time, state State) {
 
 	for _, nextChange := range changeList {
 		change := rc.pendingTickets[nextChange.ticket]
-		change.Apply(state)
+		change.Apply(ctx, state)
 
 		// Cleanup the pending trackers for this ticket. This allows another
 		// change to be pushed for Range().

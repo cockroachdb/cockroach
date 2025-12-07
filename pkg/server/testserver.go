@@ -285,7 +285,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	// Validate the store specs.
 	for _, storeSpec := range params.StoreSpecs {
 		if storeSpec.InMemory {
-			if storeSpec.Size.Percent > 0 {
+			if storeSpec.Size.IsPercent() {
 				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", base.StoreSpecCmdLineString(storeSpec)))
 			}
 		} else {
@@ -331,6 +331,13 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 
 	if params.Knobs.AdmissionControlOptions == nil {
 		cfg.TestingKnobs.AdmissionControlOptions = &admission.Options{}
+	}
+
+	switch params.DefaultDRPCOption {
+	case base.TestDRPCEnabled:
+		rpcbase.ExperimentalDRPCEnabled.Override(context.Background(), &st.SV, true)
+	case base.TestDRPCDisabled:
+		rpcbase.ExperimentalDRPCEnabled.Override(context.Background(), &st.SV, false)
 	}
 
 	return cfg
@@ -509,6 +516,7 @@ func (ts *testServer) SQLConnE(opts ...serverutils.SQLConnOption) (*gosql.DB, er
 		ts.cfg.Insecure,
 		options.ClientCerts,
 		options.CertsDirPrefix,
+		options.CertName,
 	)
 }
 
@@ -537,6 +545,7 @@ func (ts *testServer) PGUrlE(opts ...serverutils.SQLConnOption) (url.URL, func()
 		ts.cfg.Insecure,
 		options.ClientCerts,
 		options.CertsDirPrefix,
+		options.CertName,
 	)
 }
 
@@ -617,6 +626,11 @@ func (ts *testServer) TestTenant() serverutils.ApplicationLayerInterface {
 	return ts.testTenants[0]
 }
 
+// GetTxnRegistry is part of the serverutils.ApplicationLayerInterface.
+func (ts *testServer) TxnRegistry() interface{} {
+	return ts.sqlServer.txnDiagnosticsRegistry
+}
+
 func (ts *testServer) startDefaultTestTenant(
 	ctx context.Context,
 ) (serverutils.ApplicationLayerInterface, error) {
@@ -686,6 +700,7 @@ func (ts *testServer) setupTenantTestingKnobs(tenantKnobs *base.TestingKnobs) {
 		}
 		tenantKnobs.Server.(*TestingKnobs).StubTimeNow = ts.params.Knobs.Server.(*TestingKnobs).StubTimeNow
 	}
+	serverutils.SetUnsafeOverride(tenantKnobs)
 	if ts.params.Knobs.UpgradeManager != nil {
 		tenantKnobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps = ts.params.Knobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps
 	}
@@ -1027,6 +1042,7 @@ func (t *testTenant) SQLConnE(opts ...serverutils.SQLConnOption) (*gosql.DB, err
 		t.Cfg.Insecure,
 		options.ClientCerts,
 		options.CertsDirPrefix,
+		options.CertName,
 	)
 }
 
@@ -1061,6 +1077,7 @@ func (t *testTenant) PGUrlE(opts ...serverutils.SQLConnOption) (url.URL, func(),
 		t.Cfg.Insecure,
 		options.ClientCerts,
 		options.CertsDirPrefix,
+		options.CertName,
 	)
 }
 
@@ -1281,13 +1298,6 @@ func (t *testTenant) TracerI() interface{} {
 	return t.Tracer()
 }
 
-// ForceTableGC is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) ForceTableGC(
-	ctx context.Context, database, table string, timestamp hlc.Timestamp,
-) error {
-	return internalForceTableGC(ctx, t, database, table, timestamp)
-}
-
 // DefaultZoneConfig is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) DefaultZoneConfig() zonepb.ZoneConfig {
 	return *t.SystemConfigProvider().GetSystemConfig().DefaultZoneConfig
@@ -1385,6 +1395,10 @@ func (ts *testServer) StartSharedProcessTenant(
 		_, err := ie.ExecEx(ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride, stmt, qargs...)
 		return err
 	}
+
+	// Allow access to unsafe internals for the tenant server in test environments.
+	serverutils.SetUnsafeOverride(&args.Knobs)
+
 	// Save the args for use if the server needs to be created.
 	func() {
 		ts.topLevelServer.serverController.mu.Lock()
@@ -1544,6 +1558,11 @@ func (t *testTenant) SetReady(ready bool) {
 // SetAcceptSQLWithoutTLS is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) SetAcceptSQLWithoutTLS(accept bool) {
 	t.Cfg.AcceptSQLWithoutTLS = accept
+	// If we're running in a shared-process mode, the pre-serve handler has its
+	// own copy of base.Config (that is shared with the system tenant), so we
+	// must propagate the updated value there too. (For other deployments this
+	// call is redundant with the update above but otherwise harmless.)
+	t.pgPreServer.TestingSetAcceptSQLWithoutTLS(accept)
 }
 
 // PrivilegeChecker is part of the serverutils.ApplicationLayerInterface.
@@ -1764,6 +1783,9 @@ func (ts *testServer) StartTenant(
 		stopper.SetTracer(tr)
 	}
 
+	// Allow access to unsafe internals on this tenant.
+	serverutils.SetUnsafeOverride(&params.TestingKnobs)
+
 	baseCfg := makeTestBaseConfig(st, stopper.Tracer())
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.Insecure = params.ForceInsecure
@@ -1886,7 +1908,7 @@ func ExpectedInitialRangeCount(
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (int, error) {
-	_, splits := bootstrap.MakeMetadataSchema(codec, defaultZoneConfig, defaultSystemZoneConfig).GetInitialValues()
+	_, splits := bootstrap.MakeMetadataSchema(codec, defaultZoneConfig, defaultSystemZoneConfig, bootstrap.NoOffset).GetInitialValues()
 	// N splits means N+1 ranges.
 	return len(config.StaticSplits()) + len(splits) + 1, nil
 }
@@ -2278,25 +2300,16 @@ func (ts *testServer) Tracer() *tracing.Tracer {
 	return ts.node.storeCfg.AmbientCtx.Tracer
 }
 
-// ForceTableGC is part of the serverutils.ApplicationLayerInterface.
+// ForceTableGC is part of the serverutils.StorageLayerInterface.
 func (ts *testServer) ForceTableGC(
 	ctx context.Context, database, table string, timestamp hlc.Timestamp,
 ) error {
-	return internalForceTableGC(ctx, ts, database, table, timestamp)
-}
-
-func internalForceTableGC(
-	ctx context.Context,
-	app serverutils.ApplicationLayerInterface,
-	database, table string,
-	timestamp hlc.Timestamp,
-) error {
-	tableID, err := app.QueryTableID(ctx, username.RootUserName(), database, table)
+	tableID, err := ts.QueryTableID(ctx, username.RootUserName(), database, table)
 	if err != nil {
 		return err
 	}
 
-	tblKey := app.Codec().TablePrefix(uint32(tableID))
+	tblKey := ts.Codec().TablePrefix(uint32(tableID))
 	gcr := kvpb.GCRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key:    tblKey,
@@ -2304,7 +2317,7 @@ func internalForceTableGC(
 		},
 		Threshold: timestamp,
 	}
-	_, pErr := kv.SendWrapped(ctx, app.DistSenderI().(kv.Sender), &gcr)
+	_, pErr := kv.SendWrapped(ctx, ts.DistSenderI().(kv.Sender), &gcr)
 	return pErr.GoError()
 }
 
@@ -2636,7 +2649,7 @@ func (ts *testServer) RPCClientConn(
 func (ts *testServer) RPCClientConnE(user username.SQLUsername) (serverutils.RPCConn, error) {
 	ctx := context.Background()
 	rpcCtx := ts.NewClientRPCContext(ctx, user)
-	if !rpcbase.TODODRPC {
+	if !rpcbase.DRPCEnabled(ctx, rpcCtx.Settings) {
 		conn, err := rpcCtx.GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), ts.Locality(), rpcbase.DefaultClass).Connect(ctx)
 		if err != nil {
 			return nil, err
@@ -2688,7 +2701,7 @@ func (t *testTenant) RPCClientConn(
 func (t *testTenant) RPCClientConnE(user username.SQLUsername) (serverutils.RPCConn, error) {
 	ctx := context.Background()
 	rpcCtx := t.NewClientRPCContext(ctx, user)
-	if !rpcbase.TODODRPC {
+	if !rpcbase.DRPCEnabled(ctx, rpcCtx.Settings) {
 		conn, err := rpcCtx.GRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), t.Locality(), rpcbase.DefaultClass).Connect(ctx)
 		if err != nil {
 			return nil, err
@@ -2722,9 +2735,11 @@ func newClientRPCContext(
 	cid *base.ClusterIDContainer,
 	s serverutils.ApplicationLayerInterface,
 ) *rpc.Context {
-	ctx = logtags.AddTag(ctx, "testclient", nil)
-	ctx = logtags.AddTag(ctx, "user", user)
-	ctx = logtags.AddTag(ctx, "nsql", s.SQLInstanceID())
+	tags := logtags.BuildBuffer()
+	tags.Add("testclient", nil)
+	tags.Add("user", user)
+	tags.Add("nsql", s.SQLInstanceID())
+	ctx = logtags.AddTags(ctx, tags.Finish())
 
 	stopper := s.AppStopper()
 	if ctx.Done() == nil {
@@ -2759,4 +2774,9 @@ func newClientRPCContext(
 
 	stopper.AddCloser(stop.CloserFn(func() { clientStopper.Stop(ctx) }))
 	return rpcCtx
+}
+
+// GetTxnRegistry is part of the serverutils.ApplicationLayerInterface.
+func (t *testTenant) TxnRegistry() interface{} {
+	return t.sql.txnDiagnosticsRegistry
 }

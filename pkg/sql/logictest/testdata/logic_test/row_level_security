@@ -1,4 +1,4 @@
-# LogicTest: !local-legacy-schema-changer !local-mixed-25.2 !local-mixed-25.3
+# LogicTest: !local-legacy-schema-changer
 
 subtest setup
 
@@ -649,7 +649,7 @@ ALTER TABLE colref DROP COLUMN c1;
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE colref SET (schema_locked=true)
+ALTER TABLE colref RESET (schema_locked)
 
 statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
@@ -685,7 +685,7 @@ ALTER TABLE colref DROP COLUMN c2;
 
 skipif config schema-locked-disabled
 statement ok
-ALTER TABLE colref SET (schema_locked=true)
+ALTER TABLE colref RESET (schema_locked)
 
 statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
@@ -962,7 +962,7 @@ statement error pq: ALTER TABLE ... ROW LEVEL SECURITY is only implemented in th
 ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
 
 statement ok
-ALTER TABLE roaches SET (schema_locked=true);
+ALTER TABLE roaches RESET (schema_locked);
 
 statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
@@ -2495,7 +2495,13 @@ trunc  CREATE TABLE public.trunc (
 
 # Truncate should be allowed, despite the policy to prevent deletes.
 statement ok
+ALTER TABLE trunc SET (schema_locked=false)
+
+statement ok
 TRUNCATE TABLE trunc;
+
+statement ok
+ALTER TABLE trunc RESET (schema_locked)
 
 query IT
 SELECT a, b FROM trunc ORDER BY a;
@@ -3225,9 +3231,15 @@ select * from multip ORDER BY key, value;
 statement ok
 SET ROLE root;
 
+statement ok
+ALTER TABLE multip SET (schema_locked=false);
+
 # Setup to verify the write policies.
 statement ok
 TRUNCATE TABLE multip;
+
+statement ok
+ALTER TABLE multip RESET (schema_locked);
 
 statement ok
 CREATE POLICY or1 ON multip AS PERMISSIVE USING (key = 1);
@@ -5521,6 +5533,64 @@ REVOKE SYSTEM CREATEDB FROM can_createdb_global;
 statement ok
 DROP ROLE can_createdb_global;
 
+# Test that dependencies are preserved when altering only the USING expression
+# of a policy that has both USING and WITH CHECK expressions. This is a repro
+# for GH issue 153191.
+subtest bug_fix_lost_dependencies_alter_policy_#153191
+
+statement ok
+CREATE TABLE dep_test (id INT PRIMARY KEY, value INT);
+
+statement ok
+CREATE SEQUENCE seq_with_check;
+
+statement ok
+CREATE FUNCTION func_using_old(n INT) RETURNS BOOL AS $$ SELECT n > 0; $$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION func_using_new(n INT) RETURNS BOOL AS $$ SELECT n >= 0; $$ LANGUAGE SQL;
+
+# Create a olicy that have different dependencies for USING and WITH CHECK
+# expressions.
+statement ok
+CREATE POLICY test_policy ON dep_test
+  FOR ALL
+  USING (func_using_old(value))
+  WITH CHECK (nextval('seq_with_check') < 1000);
+
+# Verify initial dependencies are tracked.
+statement error pq: cannot drop function "func_using_old" because other objects
+DROP FUNCTION func_using_old;
+
+statement error pq: cannot drop sequence seq_with_check because other objects depend on it
+DROP SEQUENCE seq_with_check;
+
+# Alter only the USING expression, which should preserve the WITH CHECK
+# dependency.
+statement ok
+ALTER POLICY test_policy ON dep_test USING (func_using_new(value));
+
+# Ensure dependency on WITH CHECK still exists.
+statement error pq: cannot drop sequence seq_with_check because other objects depend on it
+DROP SEQUENCE seq_with_check;
+
+# Ensure old dependency on USING doesn't exist anymore.
+statement ok
+DROP FUNCTION func_using_old;
+
+# And the new USING function should be protected.
+statement error pq: cannot drop function "func_using_new" because other objects
+DROP FUNCTION func_using_new;
+
+statement ok
+DROP TABLE dep_test CASCADE;
+
+statement ok
+DROP SEQUENCE seq_with_check;
+
+statement ok
+DROP FUNCTION func_using_new;
+
 subtest end
 
 subtest filter_pushdown_leaks
@@ -5656,5 +5726,208 @@ DROP TABLE roach_pg_table
 
 statement ok
 SET allow_view_with_security_invoker_clause = off
+
+subtest end
+
+subtest row_security_off
+
+statement ok
+CREATE USER alice;
+
+statement ok
+CREATE TABLE accounts (
+    id INT PRIMARY KEY,
+    owner TEXT,
+    balance INT
+);
+
+statement ok
+INSERT INTO accounts VALUES
+  (1, 'alice', 100),
+  (2, 'bob', 200);
+
+statement ok
+ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
+
+statement ok
+GRANT ALL ON accounts TO alice;
+
+statement ok
+SET ROLE alice;
+
+# RLS enabled but no policies (deny all) - row_security='off' should fail.
+query ITI
+SELECT * FROM accounts;
+----
+
+statement ok
+SET SESSION row_security = 'off';
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+SELECT * FROM accounts;
+
+statement ok
+RESET row_security;
+
+statement ok
+SET ROLE root;
+
+# Add policy and test with alice as non-owner.
+statement ok
+CREATE POLICY user_is_owner ON accounts
+  USING (owner = current_user());
+
+statement ok
+SET ROLE alice;
+
+query ITI
+SELECT * FROM accounts;
+----
+1  alice  100
+
+statement ok
+SET SESSION row_security = 'off';
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+SELECT * FROM accounts;
+
+statement ok
+RESET row_security;
+
+# Test INSERT and UPDATE.
+statement ok
+INSERT INTO accounts VALUES (3, 'alice', 300);
+
+statement ok
+UPDATE accounts SET balance = balance + 50 WHERE id = 3;
+
+statement ok
+SET SESSION row_security = 'off';
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+INSERT INTO accounts VALUES (5, 'alice', 500);
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+UPDATE accounts SET balance = balance + 50 WHERE id = 3;
+
+statement ok
+RESET row_security;
+
+# Test DELETE and UPSERT.
+statement ok
+DELETE FROM accounts WHERE id = 1;
+
+statement ok
+UPSERT INTO accounts VALUES (3, 'alice', 400);
+
+statement ok
+SET SESSION row_security = 'off';
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+DELETE FROM accounts WHERE id = 3;
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+UPSERT INTO accounts VALUES (6, 'alice', 600);
+
+statement ok
+RESET row_security;
+
+statement ok
+SET ROLE root;
+
+# Table owner bypasses RLS without FORCE.
+statement ok
+ALTER TABLE accounts OWNER TO alice;
+
+statement ok
+SET ROLE alice;
+
+statement ok
+DROP POLICY user_is_owner ON accounts;
+
+statement ok
+CREATE POLICY deny_all ON accounts USING (false);
+
+query ITI rowsort
+SELECT * FROM accounts;
+----
+2  bob    200
+3  alice  400
+
+statement ok
+SET SESSION row_security = 'off';
+
+query ITI rowsort
+SELECT * FROM accounts;
+----
+2  bob    200
+3  alice  400
+
+statement ok
+RESET row_security;
+
+# With FORCE, table owner is restricted.
+statement ok
+ALTER TABLE accounts FORCE ROW LEVEL SECURITY;
+
+query ITI
+SELECT * FROM accounts;
+----
+
+statement ok
+SET SESSION row_security = 'off';
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+SELECT * FROM accounts;
+
+statement ok
+RESET row_security;
+
+statement ok
+SET ROLE root;
+
+# Verify setting doesn't apply to admin.
+statement ok
+SET SESSION row_security = 'off';
+
+query ITI rowsort
+SELECT * FROM accounts;
+----
+2  bob    200
+3  alice  400
+
+statement ok
+RESET row_security;
+
+# Non-RLS table allows row_security='off'.
+statement ok
+CREATE TABLE non_rls (id INT PRIMARY KEY);
+
+statement ok
+INSERT INTO non_rls VALUES (1), (2);
+
+statement ok
+GRANT ALL ON non_rls TO alice;
+
+statement ok
+SET ROLE alice;
+
+statement ok
+SET SESSION row_security = 'off';
+
+query I rowsort
+SELECT * FROM non_rls;
+----
+1
+2
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP TABLE accounts, non_rls;
+
+statement ok
+DROP USER alice;
 
 subtest end

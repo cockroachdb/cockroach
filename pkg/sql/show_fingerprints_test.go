@@ -81,7 +81,7 @@ func TestShowFingerprintsColumnNames(t *testing.T) {
 		"cApiTaLByTEs" BYTES,
 		INDEX capital_int_idx ("cApiTaLInT"),
 		INDEX capital_bytes_idx ("cApiTaLByTEs")
-	)`)
+	) WITH (schema_locked=false)`)
 
 	sqlDB.Exec(t, `INSERT INTO d.t VALUES (1, 2, 'a')`)
 	fprint1 := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`)
@@ -137,8 +137,9 @@ func TestShowFingerprintsDuringSchemaChange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
@@ -235,7 +236,7 @@ func TestShowTenantFingerprintsProtectsTimestamp(t *testing.T) {
 			t,
 			spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf),
 		)
-		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
+		require.NoError(t, repl.TestingReadProtectedTimestamps(ctx))
 	}
 	gcTestTableRange := func() {
 		row := tenantSQL.QueryRow(t, "SELECT range_id FROM [SHOW RANGES FROM TABLE test.foo]")

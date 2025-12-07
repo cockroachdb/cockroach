@@ -126,7 +126,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	// below.
 	consumer.ConsumerDone()
 
-	row := rowenc.EncDatumRow{rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(0)))}
+	row := rowenc.EncDatumRow{rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(0)))}
 
 	// Now push a row to the outbox's RowChannel and expect the consumer status
 	// returned to be DrainRequested. This is wrapped in a SucceedsSoon because

@@ -54,7 +54,7 @@ func TestInitialKeys(t *testing.T) {
 			nonDescKeys = 8
 		}
 
-		ms := bootstrap.MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+		ms := bootstrap.MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), bootstrap.NoOffset)
 		kv, _ /* splits */ := ms.GetInitialValues()
 		expected := nonDescKeys + keysPerDesc*ms.SystemDescriptorCount()
 		if actual := len(kv); actual != expected {
@@ -129,7 +129,7 @@ func TestInitialKeysAndSplits(t *testing.T) {
 			}
 
 			ms := bootstrap.MakeMetadataSchema(
-				codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+				codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), bootstrap.NoOffset,
 			)
 			kvs, splits := ms.GetInitialValues()
 
@@ -176,7 +176,7 @@ func TestSystemTableLiterals(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	s := tc.Servers[0]
+	s := tc.ApplicationLayer(0)
 
 	testcases := make(map[string]testcase)
 	for _, table := range systemschema.MakeSystemTables() {
@@ -201,7 +201,7 @@ func TestSystemTableLiterals(t *testing.T) {
 			desc = mut.ImmutableCopy().(catalog.TableDescriptor)
 		}
 		leaseManager := s.LeaseManager().(*lease.Manager)
-		collection := descs.MakeTestCollection(ctx, keys.SystemSQLCodec, leaseManager)
+		collection := descs.MakeTestCollection(ctx, s.Codec(), leaseManager)
 
 		gen, err := sql.CreateTestTableDescriptor(
 			context.Background(),

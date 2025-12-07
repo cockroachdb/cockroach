@@ -46,7 +46,7 @@ func TestSnapshotQueue(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				closeFn()
-				tg = &testGranter{gk: token, buf: &buf}
+				tg = &testGranter{buf: &buf}
 				q = makeSnapshotQueue(tg, metrics)
 				q.ts = timeutil.NewManualTime(initialTime)
 				tg.r = q

@@ -95,6 +95,10 @@ type DependencyDigest struct {
 	// StatsGeneration tracks if any new statistics have been published.
 	StatsGeneration int64
 
+	// HintsGeneration tracks if any new hints have been published in
+	// system.statement_hints.
+	HintsGeneration int64
+
 	// SystemConfig tracks the current system config, which is refreshed on
 	// any zone config update.
 	SystemConfig *config.SystemConfig
@@ -108,6 +112,7 @@ type DependencyDigest struct {
 func (d *DependencyDigest) Equal(other *DependencyDigest) bool {
 	return d.LeaseGeneration == other.LeaseGeneration &&
 		d.StatsGeneration == other.StatsGeneration &&
+		d.HintsGeneration == other.HintsGeneration &&
 		// Note: If the system config is modified a new SystemConfig structure
 		// is always allocated. Individual fields cannot change on the caller,
 		// so for the purpose of the dependency digest its sufficient to just

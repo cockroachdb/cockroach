@@ -247,6 +247,33 @@ type RemoveColumnComputeExpression struct {
 	ColumnID descpb.ColumnID
 }
 
+// AddColumnGeneratedAsIdentity will add a new generated as identity to a column.
+type AddColumnGeneratedAsIdentity struct {
+	immediateMutationOp
+	GeneratedAsIdentity scpb.ColumnGeneratedAsIdentity
+}
+
+// RemoveColumnGeneratedAsIdentity will remove the generated as identity from a column.
+type RemoveColumnGeneratedAsIdentity struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// MakeColumnHidden will add the hidden attribute to a column.
+type MakeColumnHidden struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// MakeColumnHidden will remove the hidden attribute from a column.
+type MakeColumnVisible struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
 // MakeWriteOnlyColumnPublic moves a new column from its mutation to public.
 type MakeWriteOnlyColumnPublic struct {
 	immediateMutationOp
@@ -1072,7 +1099,7 @@ type CreateSequenceDescriptor struct {
 	Temporary  bool
 }
 
-type SetSequenceOptions struct {
+type SetSequenceOption struct {
 	immediateMutationOp
 	SequenceID descpb.ID
 	Key        string
@@ -1185,6 +1212,7 @@ type MarkRecreatedIndexAsInvisible struct {
 	TableID              descpb.ID
 	IndexID              descpb.IndexID
 	TargetPrimaryIndexID descpb.IndexID
+	SetHideIndexFlag     bool
 }
 
 // MarkRecreatedIndexesAsVisible is used to mark secondary indexes recreated
@@ -1194,6 +1222,16 @@ type MarkRecreatedIndexesAsVisible struct {
 	immediateMutationOp
 	TableID           descpb.ID
 	IndexVisibilities map[descpb.IndexID]float64
+}
+
+// MarkRecreatedIndexAsVisible is used to mark secondary index recreated
+// after a primary key swap as visible. This is to allow their use after
+// primary key swap is complete.
+type MarkRecreatedIndexAsVisible struct {
+	immediateMutationOp
+	TableID         descpb.ID
+	IndexID         descpb.IndexID
+	IndexVisibility float64
 }
 
 // SetTableSchemaLocked is used to toggle a table schema as locked.

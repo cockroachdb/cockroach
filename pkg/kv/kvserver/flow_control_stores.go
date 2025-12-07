@@ -45,7 +45,7 @@ func (sh *storesForFlowControl) LookupReplicationAdmissionHandle(
 		return nil
 	}); err != nil {
 		ctx := ls.AnnotateCtx(context.Background())
-		log.Dev.Errorf(ctx, "unexpected error: %s", err)
+		log.KvDistribution.Errorf(ctx, "unexpected error: %s", err)
 		return nil, false
 	}
 	return handle, found
@@ -151,7 +151,7 @@ func (ss *storesForRACv2) ScheduleAdmittedResponseForRangeRACv2(
 	for _, m := range msgs {
 		s, err := ls.GetStore(m.ToStoreID)
 		if err != nil {
-			log.Dev.Errorf(ctx, "store %s not found", m.ToStoreID)
+			log.KvDistribution.Errorf(ctx, "store %s not found", m.ToStoreID)
 			continue
 		}
 		repl := s.GetReplicaIfExists(m.RangeID)
@@ -179,7 +179,7 @@ func (ss *storesForRACv2) LookupInspect(
 		}
 		return nil
 	}); err != nil {
-		log.Dev.Errorf(ls.AnnotateCtx(context.Background()),
+		log.KvDistribution.Errorf(ls.AnnotateCtx(context.Background()),
 			"unexpected error iterating stores: %s", err)
 	}
 	return handle, found
@@ -196,7 +196,7 @@ func (ss *storesForRACv2) Inspect() []roachpb.RangeID {
 		})
 		return nil
 	}); err != nil {
-		log.Dev.Errorf(ls.AnnotateCtx(context.Background()),
+		log.KvDistribution.Errorf(ls.AnnotateCtx(context.Background()),
 			"unexpected error iterating stores: %s", err)
 	}
 	return rangeIDs

@@ -29,6 +29,9 @@ type Disconnector interface {
 	// Disconnected is a permanent state; once IsDisconnected returns true, it
 	// always returns true
 	IsDisconnected() bool
+	// Unregister is called when an error has finally been delivered to the
+	// underlying stream.
+	Unregister()
 }
 
 // registration defines an interface for registration that can be added to a
@@ -40,33 +43,32 @@ type registration interface {
 	// registration implementation to decide how to handle the event and how to
 	// prevent missing events.
 	publish(ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation)
+
+	// shouldPublishLogicalOp return true if a logical operation at the given
+	// timestamp and with the given logicalOpMetadata should be published to this
+	// registration.
+	shouldPublishLogicalOp(hlc.Timestamp, logicalOpMetadata) bool
+
 	// runOutputLoop runs the output loop for the registration. The output loop is
 	// meant to be run in a separate goroutine.
 	runOutputLoop(ctx context.Context, forStacks roachpb.RangeID)
 	// drainAllocations drains all pending allocations when being unregistered
 	// from processor if any.
 	drainAllocations(ctx context.Context)
-	// waitForCaughtUp waits for the registration to forward all buffered events
-	// if any.
-	waitForCaughtUp(ctx context.Context) error
-	// setID sets the id field of the registration.
+
+	// Span returns the span of the registration.
+	Span() roachpb.Span
+
+	// WithDiff return true if the registration consumer requires the previous
+	// value.
+	WithDiff() bool
+
+	// registrations are stored in an interval tree by the processor.
+	//
+	// setID sets the id field of the registration. This is used by the processor
+	// to assign the ID that will be used by the interval tree.
 	setID(int64)
-	// setSpanAsKeys sets the keys field to the span of the registration.
-	setSpanAsKeys()
-	// getSpan returns the span of the registration.
-	getSpan() roachpb.Span
-	// getCatchUpTimestamp returns the catchUpTimestamp of the registration.
-	getCatchUpTimestamp() hlc.Timestamp
-	// getWithDiff returns the withDiff field of the registration.
-	getWithDiff() bool
-	// getWithFiltering returns the withFiltering field of the registration.
-	getWithFiltering() bool
-	// getWithOmitRemote returns the withOmitRemote field of the registration.
-	getWithOmitRemote() bool
-	// Range returns the keys field of the registration.
-	Range() interval.Range
-	// ID returns the id field of the registration as a uintptr.
-	ID() uintptr
+	interval.Interface
 
 	// shouldUnregister returns true if this registration should be unregistered
 	// by unregisterMarkedRegistrations. UnregisterMarkedRegistrations is called
@@ -76,27 +78,60 @@ type registration interface {
 	// setShouldUnregister sets shouldUnregister to true. Used by the rangefeed
 	// processor in response to an unregister request.
 	setShouldUnregister()
+
+	// waitForCaughtUp waits for the registration to forward all buffered events
+	// if any.
+	waitForCaughtUp(ctx context.Context) error
 }
 
 // baseRegistration is a common base for all registration types. It is intended
 // to be embedded in an actual registration struct.
 type baseRegistration struct {
-	streamCtx      context.Context
-	span           roachpb.Span
-	withDiff       bool
-	withFiltering  bool
-	withOmitRemote bool
-	bulkDelivery   int
+	streamCtx context.Context
+
+	// Set during construction.
+	span             roachpb.Span
+	keys             interval.Range // Constructed from span.
+	withDiff         bool
+	withFiltering    bool
+	withOmitRemote   bool
+	bulkDelivery     int
+	catchUpTimestamp hlc.Timestamp // exclusive
 	// removeRegFromProcessor is called to remove the registration from its
 	// processor. This is provided by the creator of the registration and called
 	// during disconnect(). Since it is called during disconnect it must be
 	// non-blocking.
 	removeRegFromProcessor func(registration)
 
-	catchUpTimestamp hlc.Timestamp // exclusive
-	id               int64         // internal
-	keys             interval.Range
-	shouldUnreg      atomic.Bool
+	// Set via accessors.
+	id          int64
+	shouldUnreg atomic.Bool
+}
+
+// newBaseRegistration returns a baseRegistration. Note that a baseRegistration
+// does not implement registration. Rather this is used by the buffered and
+// unbuffered registrations to share some basic methods.
+func newBaseRegistration(
+	streamCtx context.Context,
+	span roachpb.Span,
+	startTS hlc.Timestamp,
+	withDiff bool,
+	withFiltering bool,
+	withOmitRemote bool,
+	bulkDeliverySize int,
+	removeRegFromProcessor func(registration),
+) baseRegistration {
+	return baseRegistration{
+		streamCtx:              streamCtx,
+		span:                   span,
+		keys:                   span.AsRange(),
+		catchUpTimestamp:       startTS,
+		withDiff:               withDiff,
+		withFiltering:          withFiltering,
+		withOmitRemote:         withOmitRemote,
+		bulkDelivery:           bulkDeliverySize,
+		removeRegFromProcessor: removeRegFromProcessor,
+	}
 }
 
 // ID implements interval.Interface.
@@ -117,24 +152,29 @@ func (r *baseRegistration) setID(id int64) {
 	r.id = id
 }
 
-func (r *baseRegistration) setSpanAsKeys() {
-	r.keys = r.span.AsRange()
-}
-
-func (r *baseRegistration) getSpan() roachpb.Span {
+func (r *baseRegistration) Span() roachpb.Span {
 	return r.span
 }
 
-func (r *baseRegistration) getCatchUpTimestamp() hlc.Timestamp {
-	return r.catchUpTimestamp
-}
-
-func (r *baseRegistration) getWithFiltering() bool {
-	return r.withFiltering
-}
-
-func (r *baseRegistration) getWithOmitRemote() bool {
-	return r.withOmitRemote
+//gcassert:inline
+func (r *baseRegistration) shouldPublishLogicalOp(
+	minTS hlc.Timestamp, valueMetadata logicalOpMetadata,
+) bool {
+	// Don't publish events if they:
+	// 1. are equal to or less than the registration's starting timestamp, or
+	// 2. have OmitInRangefeeds = true and this registration has opted into filtering, or
+	// 3. have OmitRemote = true and this value is from a remote cluster.
+	if !r.catchUpTimestamp.Less(minTS) {
+		return false
+	}
+	if r.withFiltering && valueMetadata.omitInRangefeeds {
+		return false
+	}
+	isRemoteEvent := valueMetadata.originID != 0
+	if r.withOmitRemote && isRemoteEvent {
+		return false
+	}
+	return true
 }
 
 func (r *baseRegistration) shouldUnregister() bool {
@@ -145,7 +185,7 @@ func (r *baseRegistration) setShouldUnregister() {
 	r.shouldUnreg.Store(true)
 }
 
-func (r *baseRegistration) getWithDiff() bool {
+func (r *baseRegistration) WithDiff() bool {
 	return r.withDiff
 }
 
@@ -154,37 +194,37 @@ func (r *baseRegistration) assertEvent(ctx context.Context, event *kvpb.RangeFee
 	switch t := event.GetValue().(type) {
 	case *kvpb.RangeFeedValue:
 		if t.Key == nil {
-			log.Dev.Fatalf(ctx, "unexpected empty RangeFeedValue.Key: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedValue.Key: %v", t)
 		}
 		if t.Value.RawBytes == nil {
-			log.Dev.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.RawBytes: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.RawBytes: %v", t)
 		}
 		if t.Value.Timestamp.IsEmpty() {
-			log.Dev.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.Timestamp: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.Timestamp: %v", t)
 		}
 	case *kvpb.RangeFeedCheckpoint:
 		if t.Span.Key == nil {
-			log.Dev.Fatalf(ctx, "unexpected empty RangeFeedCheckpoint.Span.Key: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedCheckpoint.Span.Key: %v", t)
 		}
 	case *kvpb.RangeFeedSSTable:
 		if len(t.Data) == 0 {
-			log.Dev.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Data: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Data: %v", t)
 		}
 		if len(t.Span.Key) == 0 {
-			log.Dev.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Span: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Span: %v", t)
 		}
 		if t.WriteTS.IsEmpty() {
-			log.Dev.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Timestamp: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Timestamp: %v", t)
 		}
 	case *kvpb.RangeFeedDeleteRange:
 		if len(t.Span.Key) == 0 || len(t.Span.EndKey) == 0 {
-			log.Dev.Fatalf(ctx, "unexpected empty key in RangeFeedDeleteRange.Span: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty key in RangeFeedDeleteRange.Span: %v", t)
 		}
 		if t.Timestamp.IsEmpty() {
-			log.Dev.Fatalf(ctx, "unexpected empty RangeFeedDeleteRange.Timestamp: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedDeleteRange.Timestamp: %v", t)
 		}
 	default:
-		log.Dev.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
+		log.KvExec.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
 	}
 }
 
@@ -226,7 +266,7 @@ func (r *baseRegistration) maybeStripEvent(
 			// observed all values up to the checkpoint timestamp over a given
 			// key span if any updates to that span have been filtered out.
 			if !t.Span.Contains(r.span) {
-				log.Dev.Fatalf(ctx, "registration span %v larger than checkpoint span %v", r.span, t.Span)
+				log.KvExec.Fatalf(ctx, "registration span %v larger than checkpoint span %v", r.span, t.Span)
 			}
 			t = copyOnWrite().(*kvpb.RangeFeedCheckpoint)
 			t.Span = r.span
@@ -241,7 +281,7 @@ func (r *baseRegistration) maybeStripEvent(
 		// SSTs are always sent in their entirety, it is up to the caller to
 		// filter out irrelevant entries.
 	default:
-		log.Dev.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
+		log.KvExec.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
 	}
 	return ret
 }
@@ -325,10 +365,9 @@ func (reg *registry) updateMetricsOnUnregistration(r registration) {
 func (reg *registry) Register(ctx context.Context, r registration) {
 	reg.updateMetricsOnRegistration(r)
 	r.setID(reg.nextID())
-	r.setSpanAsKeys()
 	if err := reg.tree.Insert(r, false /* fast */); err != nil {
 		// TODO(erikgrinaker): these errors should arguably be returned.
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 }
 
@@ -364,15 +403,11 @@ func (reg *registry) PublishToOverlapping(
 		// surprising. Revisit this once RangeFeed has more users.
 		minTS = hlc.MaxTimestamp
 	default:
-		log.Dev.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
+		log.KvExec.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
 	}
 
 	reg.forOverlappingRegs(ctx, span, func(r registration) (bool, *kvpb.Error) {
-		// Don't publish events if they:
-		// 1. are equal to or less than the registration's starting timestamp, or
-		// 2. have OmitInRangefeeds = true and this registration has opted into filtering, or
-		// 3. have OmitRemote = true and this value is from a remote cluster.
-		if r.getCatchUpTimestamp().Less(minTS) && !(r.getWithFiltering() && valueMetadata.omitInRangefeeds) && (!r.getWithOmitRemote() || valueMetadata.originID == 0) {
+		if r.shouldPublishLogicalOp(minTS, valueMetadata) {
 			r.publish(ctx, event, alloc)
 		}
 		return false, nil
@@ -436,13 +471,13 @@ func (reg *registry) remove(ctx context.Context, toDelete []interval.Interface) 
 	} else if len(toDelete) == 1 {
 		reg.updateMetricsOnUnregistration(toDelete[0].(registration))
 		if err := reg.tree.Delete(toDelete[0], false /* fast */); err != nil {
-			log.Dev.Fatalf(ctx, "%v", err)
+			log.KvExec.Fatalf(ctx, "%v", err)
 		}
 	} else if len(toDelete) > 1 {
 		for _, i := range toDelete {
 			reg.updateMetricsOnUnregistration(i.(registration))
 			if err := reg.tree.Delete(i, true /* fast */); err != nil {
-				log.Dev.Fatalf(ctx, "%v", err)
+				log.KvExec.Fatalf(ctx, "%v", err)
 			}
 		}
 		reg.tree.AdjustRanges()

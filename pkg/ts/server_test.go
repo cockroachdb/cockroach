@@ -305,8 +305,6 @@ func TestServerQueryTenant(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 
-	systemDB := s.SystemLayer().SQLConn(t)
-
 	// This metric exists in the tenant registry since it's SQL-specific.
 	tenantMetricName := "sql.insert.count"
 	// This metric exists only in the host/system registry since it's process-level.
@@ -571,12 +569,9 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 
 	tenant, _ := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
-	_, err = systemDB.Exec("ALTER TENANT [2] GRANT CAPABILITY can_view_tsdb_metrics=true;\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	capability := map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewTSDBMetrics: "true"}
-	serverutils.WaitForTenantCapabilities(t, s, tenantID, capability, "")
+	require.NoError(t, s.GrantTenantCapabilities(
+		context.Background(), tenantID,
+		map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewTSDBMetrics: "true"}))
 	tenantConn := tenant.RPCClientConn(t, username.RootUserName())
 	tenantClient := tenantConn.NewTimeSeriesClient()
 
@@ -638,12 +633,9 @@ func TestServerQueryTenant(t *testing.T) {
 			},
 		},
 	}
-	_, err = systemDB.Exec("ALTER TENANT [2] GRANT CAPABILITY can_view_all_metrics=true;\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	capability = map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewAllMetrics: "true"}
-	serverutils.WaitForTenantCapabilities(t, s, tenantID, capability, "")
+	require.NoError(t, s.GrantTenantCapabilities(
+		context.Background(), tenantID,
+		map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewAllMetrics: "true"}))
 
 	tenantResponse, err = tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 400 * 1e9,

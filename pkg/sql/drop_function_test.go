@@ -244,12 +244,14 @@ USE defaultdb;
 			dscExpectedErr: `pq: cannot drop view v because other objects depend on it`,
 		},
 		{
-			stmt:        "ALTER TABLE t RENAME TO t_new",
-			expectedErr: `pq: cannot rename relation "t" because function "f" depends on it`,
+			stmt:           "ALTER TABLE t RENAME TO t_new",
+			expectedErr:    `pq: cannot rename relation "t" because function "f" depends on it`,
+			dscExpectedErr: `pq: cannot rename relation "defaultdb.public.t" because function "f" depends on it`,
 		},
 		{
-			stmt:        "ALTER TABLE t SET SCHEMA test_sc",
-			expectedErr: `pq: cannot set schema on relation "t" because function "f" depends on it`,
+			stmt:           "ALTER TABLE t SET SCHEMA test_sc",
+			expectedErr:    `pq: cannot set schema on relation "t" because function "f" depends on it`,
+			dscExpectedErr: `pq: cannot set schema on relation "defaultdb.public.t" because function "f" depends on it`,
 		},
 		{
 			stmt:        "ALTER TABLE t DROP COLUMN d",

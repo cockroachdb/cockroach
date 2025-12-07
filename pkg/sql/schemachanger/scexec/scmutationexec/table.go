@@ -30,3 +30,9 @@ func (i *immediateVisitor) SetTableSchemaLocked(
 	tbl.SchemaLocked = op.Locked
 	return nil
 }
+
+func (d *deferredVisitor) UpdateTTLScheduleMetadata(
+	ctx context.Context, op scop.UpdateTTLScheduleMetadata,
+) error {
+	return d.DeferredMutationStateUpdater.UpdateTTLScheduleMetadata(ctx, op.TableID, op.NewName)
+}

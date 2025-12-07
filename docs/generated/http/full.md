@@ -349,7 +349,8 @@ NodeStatus records the most recent values of metrics for a node.
 | latencies | [NodeStatus.LatenciesEntry](#cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.LatenciesEntry) | repeated | latencies is a map of nodeIDs to nanoseconds which is the latency between this node and the other node.<br><br>NOTE: this is deprecated and is only set if the min supported       cluster version is >= VersionRPCNetworkStats. | [reserved](#support-status) |
 | activity | [NodeStatus.ActivityEntry](#cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
 | total_system_memory | [int64](#cockroach.server.serverpb.NodesResponse-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
-| num_cpus | [int32](#cockroach.server.serverpb.NodesResponse-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+| num_cpus | [int32](#cockroach.server.serverpb.NodesResponse-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. This reflects the physical CPU count and does not account for container/cgroup limits. See num_vcpus for container-aware CPU allocation. | [alpha](#support-status) |
+| num_vcpus | [double](#cockroach.server.serverpb.NodesResponse-double) |  | num_vcpus is the number of vCPUs allocated to the process by the container orchestrator (e.g., Kubernetes, Docker) based on cgroup CPU quota/period. This represents the platform CPU allocation and is independent of GOMAXPROCS runtime tuning. Falls back to num_cpus if no container limits are configured. Supports fractional values (e.g., 1.5 for Kubernetes CPU limits like "1500m"). | [alpha](#support-status) |
 
 
 
@@ -501,7 +502,8 @@ NodeStatus records the most recent values of metrics for a node.
 | latencies | [NodeStatus.LatenciesEntry](#cockroach.server.status.statuspb.NodeStatus-cockroach.server.status.statuspb.NodeStatus.LatenciesEntry) | repeated | latencies is a map of nodeIDs to nanoseconds which is the latency between this node and the other node.<br><br>NOTE: this is deprecated and is only set if the min supported       cluster version is >= VersionRPCNetworkStats. | [reserved](#support-status) |
 | activity | [NodeStatus.ActivityEntry](#cockroach.server.status.statuspb.NodeStatus-cockroach.server.status.statuspb.NodeStatus.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
 | total_system_memory | [int64](#cockroach.server.status.statuspb.NodeStatus-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
-| num_cpus | [int32](#cockroach.server.status.statuspb.NodeStatus-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+| num_cpus | [int32](#cockroach.server.status.statuspb.NodeStatus-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. This reflects the physical CPU count and does not account for container/cgroup limits. See num_vcpus for container-aware CPU allocation. | [alpha](#support-status) |
+| num_vcpus | [double](#cockroach.server.status.statuspb.NodeStatus-double) |  | num_vcpus is the number of vCPUs allocated to the process by the container orchestrator (e.g., Kubernetes, Docker) based on cgroup CPU quota/period. This represents the platform CPU allocation and is independent of GOMAXPROCS runtime tuning. Falls back to num_cpus if no container limits are configured. Supports fractional values (e.g., 1.5 for Kubernetes CPU limits like "1500m"). | [alpha](#support-status) |
 
 
 
@@ -656,6 +658,7 @@ NodeStatus records the most recent values of metrics for a node.
 | activity | [NodeResponse.ActivityEntry](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeResponse.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
 | total_system_memory | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
 | num_cpus | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+| num_vcpus | [double](#cockroach.server.serverpb.NodesResponseExternal-double) |  | num_vcpus is the number of provisioned vCPUs as reported by cgroups or the operating system. | [reserved](#support-status) |
 
 
 
@@ -914,6 +917,7 @@ NodeStatus records the most recent values of metrics for a node.
 | activity | [NodeResponse.ActivityEntry](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeResponse.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
 | total_system_memory | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
 | num_cpus | [int32](#cockroach.server.serverpb.NodeResponse-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+| num_vcpus | [double](#cockroach.server.serverpb.NodeResponse-double) |  | num_vcpus is the number of provisioned vCPUs as reported by cgroups or the operating system. | [reserved](#support-status) |
 
 
 
@@ -2315,6 +2319,7 @@ Session represents one SQL session.
 | trace_id | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | The ID of the session's active trace. It will be 0 if tracing is off. | [reserved](#support-status) |
 | goroutine_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | The ID of the session's goroutine. | [reserved](#support-status) |
 | authentication_method | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
+| default_isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The session's default transaction isolation level. | [reserved](#support-status) |
 
 
 
@@ -2341,6 +2346,7 @@ ActiveQuery represents a query in flight on some Session.
 | plan_gist | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The compressed plan that can be converted back into the statement's logical plan. Empty if the statement is in the PREPARING state. | [reserved](#support-status) |
 | placeholders | [string](#cockroach.server.serverpb.ListSessionsResponse-string) | repeated | The placeholders if any. | [reserved](#support-status) |
 | database | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The database the statement was executed on. | [reserved](#support-status) |
+| isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The isolation level the query was run in. | [reserved](#support-status) |
 
 
 
@@ -2465,6 +2471,7 @@ Session represents one SQL session.
 | trace_id | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | The ID of the session's active trace. It will be 0 if tracing is off. | [reserved](#support-status) |
 | goroutine_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | The ID of the session's goroutine. | [reserved](#support-status) |
 | authentication_method | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
+| default_isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The session's default transaction isolation level. | [reserved](#support-status) |
 
 
 
@@ -2491,6 +2498,7 @@ ActiveQuery represents a query in flight on some Session.
 | plan_gist | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The compressed plan that can be converted back into the statement's logical plan. Empty if the statement is in the PREPARING state. | [reserved](#support-status) |
 | placeholders | [string](#cockroach.server.serverpb.ListSessionsResponse-string) | repeated | The placeholders if any. | [reserved](#support-status) |
 | database | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The database the statement was executed on. | [reserved](#support-status) |
+| isolation_level | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The isolation level the query was run in. | [reserved](#support-status) |
 
 
 
@@ -4709,6 +4717,191 @@ Support status: [reserved](#support-status)
 | id | [int64](#cockroach.server.serverpb.StatementDiagnosticsResponse-int64) |  |  | [reserved](#support-status) |
 | statement_fingerprint | [string](#cockroach.server.serverpb.StatementDiagnosticsResponse-string) |  |  | [reserved](#support-status) |
 | collected_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDiagnosticsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+## CreateTransactionDiagnosticsReport
+
+`POST /_status/txndiagreports`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+createTransactionDiagnosticsReportRequest is a message that captures a
+user's requst to capture a transaction diagnostic bundle.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| transaction_fingerprint_id | [bytes](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportRequest-bytes) |  |  | [reserved](#support-status) |
+| statement_fingerprint_ids | [bytes](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportRequest-bytes) | repeated |  | [reserved](#support-status) |
+| min_execution_latency | [google.protobuf.Duration](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportRequest-google.protobuf.Duration) |  |  | [reserved](#support-status) |
+| expires_at | [google.protobuf.Duration](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportRequest-google.protobuf.Duration) |  |  | [reserved](#support-status) |
+| sampling_probability | [double](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportRequest-double) |  |  | [reserved](#support-status) |
+| redacted | [bool](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportRequest-bool) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| report | [TransactionDiagnosticsReport](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-cockroach.server.serverpb.TransactionDiagnosticsReport) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-cockroach.server.serverpb.TransactionDiagnosticsReport"></a>
+#### TransactionDiagnosticsReport
+
+TransactionDiagnosticsReport is a message that represents a
+diagnostics capture request for a given transaction.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [int64](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-int64) |  |  | [reserved](#support-status) |
+| completed | [bool](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-bool) |  |  | [reserved](#support-status) |
+| transaction_fingerprint_id | [bytes](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-bytes) |  | TODO(davidh): should these be strings or int64??? I think bytes is most correct. | [reserved](#support-status) |
+| statement_fingerprint_ids | [bytes](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-bytes) | repeated |  | [reserved](#support-status) |
+| transaction_fingerprint | [string](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-string) |  |  | [reserved](#support-status) |
+| transaction_diagnostics_id | [int64](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-int64) |  |  | [reserved](#support-status) |
+| requested_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| min_execution_latency | [google.protobuf.Duration](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
+| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| sampling_probability | [double](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-double) |  |  | [reserved](#support-status) |
+| redacted | [bool](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-bool) |  |  | [reserved](#support-status) |
+| username | [string](#cockroach.server.serverpb.CreateTransactionDiagnosticsReportResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+## CancelTransactionDiagnosticsReport
+
+`POST /_status/txndiagreports/cancel`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| request_id | [int64](#cockroach.server.serverpb.CancelTransactionDiagnosticsReportRequest-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| canceled | [bool](#cockroach.server.serverpb.CancelTransactionDiagnosticsReportResponse-bool) |  | canceled indicates whether the request for the given fingerprint was actually canceled. | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.CancelTransactionDiagnosticsReportResponse-string) |  | error is set only if canceled is false. | [reserved](#support-status) |
+
+
+
+
+
+
+
+## TransactionDiagnosticsRequests
+
+`GET /_status/txndiagreports`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| reports | [TransactionDiagnosticsReport](#cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-cockroach.server.serverpb.TransactionDiagnosticsReport) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-cockroach.server.serverpb.TransactionDiagnosticsReport"></a>
+#### TransactionDiagnosticsReport
+
+TransactionDiagnosticsReport is a message that represents a
+diagnostics capture request for a given transaction.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [int64](#cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-int64) |  |  | [reserved](#support-status) |
+| completed | [bool](#cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-bool) |  |  | [reserved](#support-status) |
+| transaction_fingerprint_id | [bytes](#cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-bytes) |  | TODO(davidh): should these be strings or int64??? I think bytes is most correct. | [reserved](#support-status) |
+| statement_fingerprint_ids | [bytes](#cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-bytes) | repeated |  | [reserved](#support-status) |
+| transaction_fingerprint | [string](#cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-string) |  |  | [reserved](#support-status) |
+| transaction_diagnostics_id | [int64](#cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-int64) |  |  | [reserved](#support-status) |
+| requested_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| min_execution_latency | [google.protobuf.Duration](#cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |
+| expires_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| sampling_probability | [double](#cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-double) |  |  | [reserved](#support-status) |
+| redacted | [bool](#cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-bool) |  |  | [reserved](#support-status) |
+| username | [string](#cockroach.server.serverpb.TransactionDiagnosticsReportsResponse-string) |  |  | [reserved](#support-status) |
 
 
 

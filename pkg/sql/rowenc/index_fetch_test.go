@@ -28,9 +28,7 @@ func TestInitIndexFetchSpec(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109390),
-	})
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 	codec := srv.ApplicationLayer().Codec()
 
@@ -75,6 +73,13 @@ func TestInitIndexFetchSpec(t *testing.T) {
 				var spec fetchpb.IndexFetchSpec
 				if err := rowenc.InitIndexFetchSpec(&spec, codec, table, index, fetchColumnIDs); err != nil {
 					d.Fatalf(t, "%+v", err)
+				}
+				if srv.StartedDefaultTestTenant() {
+					// If we started a test tenant, then all keys will have the
+					// tenant prefix (of 2 bytes) prepended to them. In order to
+					// not create the duplicate expectation file, we'll adjust
+					// the spec here to ignore those 2 bytes.
+					spec.KeyPrefixLength -= uint32(len(codec.TenantPrefix()))
 				}
 				res, err := json.MarshalIndent(&spec, "", "  ")
 				if err != nil {

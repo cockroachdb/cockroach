@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -413,16 +414,31 @@ func (c TestCLI) RunWithArgs(origArgs []string) {
 		args := append([]string(nil), origArgs[:1]...)
 		if c.Server != nil {
 			addr := c.getRPCAddr()
-			if isSQL, err := isSQLCommand(origArgs); err != nil {
+			isSQL, err := isSQLCommand(origArgs)
+			if err != nil {
 				return err
-			} else if isSQL {
+			}
+			if isSQL {
 				addr = c.getSQLAddr()
 			}
+
 			h, p, err := net.SplitHostPort(addr)
 			if err != nil {
 				return err
 			}
-			args = append(args, fmt.Sprintf("--host=%s", net.JoinHostPort(h, p)))
+
+			if isSQL {
+				// Create a connection string URL with client_min_messages = 'warning'.
+				// This avoids showing SQL notices, which can be non-deterministic.
+				u := pgurl.New().WithNet(pgurl.NetTCP(h, p))
+				if err := u.SetOption("client_min_messages", "warning"); err != nil {
+					return err
+				}
+				args = append(args, fmt.Sprintf("--url=%s", u.String()))
+			} else {
+				args = append(args, fmt.Sprintf("--host=%s", net.JoinHostPort(h, p)))
+			}
+
 			if c.Insecure {
 				args = append(args, "--insecure=true")
 			} else {

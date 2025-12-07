@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
@@ -2313,7 +2315,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 	ms.AgeTo(2000)
 
 	// Sanity check starting stats.
-	msComputed, err := ComputeStats(ctx, e, localMax, keyMax, 2000)
+	msComputed, err := ComputeStats(ctx, e, fs.UnknownReadCategory, localMax, keyMax, 2000)
 	require.NoError(t, err)
 	require.Equal(t, msComputed, ms)
 
@@ -2351,7 +2353,7 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 				batch.Close()
 			}
 
-			msComputed, err := ComputeStats(ctx, e, localMax, keyMax, 2000)
+			msComputed, err := ComputeStats(ctx, e, fs.UnknownReadCategory, localMax, keyMax, 2000)
 			require.NoError(t, err)
 			require.Equal(t, msComputed, ms)
 			// Scanning at "now" post-revert should yield the same result as scanning
@@ -5838,7 +5840,7 @@ func TestMVCCGarbageCollectRanges(t *testing.T) {
 				"not all range tombstone expectations were consumed")
 
 			ms.AgeTo(tsMax.WallTime)
-			expMs, err := ComputeStats(ctx, engine, d.rangeStart, d.rangeEnd, tsMax.WallTime)
+			expMs, err := ComputeStats(ctx, engine, fs.UnknownReadCategory, d.rangeStart, d.rangeEnd, tsMax.WallTime)
 			require.NoError(t, err, "failed to compute stats for range")
 			require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
 
@@ -6168,7 +6170,7 @@ func TestMVCCGarbageCollectClearPointsInRange(t *testing.T) {
 	require.EqualValues(t, expKs, ks)
 
 	ms.AgeTo(tsMax.WallTime)
-	expMs, err := ComputeStats(ctx, engine, rangeStart, rangeEnd, tsMax.WallTime)
+	expMs, err := ComputeStats(ctx, engine, fs.UnknownReadCategory, rangeStart, rangeEnd, tsMax.WallTime)
 	require.NoError(t, err, "failed to compute stats for range")
 	require.EqualValues(t, expMs, ms, "computed range stats vs gc'd")
 
@@ -6428,13 +6430,13 @@ func TestMVCCExportToSSTExhaustedAtStart(t *testing.T) {
 
 		startKey := initialOpts.StartKey
 		for len(startKey.Key) > 0 {
-			var sstFile bytes.Buffer
+			var sstFile objstorage.MemObj
 			opts := initialOpts
 			opts.StartKey = startKey
 			_, resumeInfo, err := MVCCExportToSST(ctx, st, engine, opts, &sstFile)
 			require.NoError(t, err)
 
-			keys, rangeKeys := sstToKeys(t, sstFile.Bytes())
+			keys, rangeKeys := sstToKeys(t, sstFile.Data())
 
 			require.LessOrEqual(t, len(keys), len(expectedKeys)-keysIndex, "remaining test key data")
 
@@ -6572,7 +6574,7 @@ func TestMVCCExportToSSTExhaustedAtStart(t *testing.T) {
 			}
 			require.NoError(t, engine.Flush(), "Flush engine data")
 
-			var sstFile bytes.Buffer
+			var sstFile objstorage.MemObj
 			opts := MVCCExportOptions{
 				StartKey:           MVCCKey{Key: testKey(minKey), Timestamp: minTimestamp},
 				EndKey:             testKey(maxKey),
@@ -6599,17 +6601,17 @@ func TestMVCCExportToSSTExhaustedAtStart(t *testing.T) {
 			// revisions or 0 revisions.
 			_, _, err := MVCCExportToSST(ctx, st, engine, opts, &sstFile)
 			require.NoError(t, err)
-			chunk, _ := sstToKeys(t, sstFile.Bytes())
+			chunk, _ := sstToKeys(t, sstFile.Data())
 			require.Equal(t, 6, len(chunk))
 
 			// With StopMidKey=true, we can stop in the
 			// middle of iteration.
 			callsBeforeFailure = 2
-			sstFile.Reset()
+			sstFile = objstorage.MemObj{}
 			opts.StopMidKey = true
 			_, _, err = MVCCExportToSST(ctx, st, engine, opts, &sstFile)
 			require.NoError(t, err)
-			chunk, _ = sstToKeys(t, sstFile.Bytes())
+			chunk, _ = sstToKeys(t, sstFile.Data())
 			// We expect 3 here rather than 2 because the
 			// first iteration never calls the handler.
 			require.Equal(t, 3, len(chunk))
@@ -6642,7 +6644,7 @@ func exportAllData(
 	t *testing.T, engine Engine, limits queryLimits,
 ) ([]MVCCKey, []MVCCRangeKeyStack) {
 	st := cluster.MakeTestingClusterSettings()
-	var sstFile bytes.Buffer
+	var sstFile objstorage.MemObj
 	_, _, err := MVCCExportToSST(context.Background(), st, engine, MVCCExportOptions{
 		StartKey:           MVCCKey{Key: testKey(limits.minKey), Timestamp: limits.minTimestamp},
 		EndKey:             testKey(limits.maxKey),
@@ -6651,7 +6653,7 @@ func exportAllData(
 		ExportAllRevisions: !limits.latest,
 	}, &sstFile)
 	require.NoError(t, err, "Failed to export expected data")
-	return sstToKeys(t, sstFile.Bytes())
+	return sstToKeys(t, sstFile.Data())
 }
 
 func sstToKeys(t *testing.T, data []byte) ([]MVCCKey, []MVCCRangeKeyStack) {
@@ -6742,7 +6744,7 @@ func TestMVCCExportToSSTFailureIntentBatching(t *testing.T) {
 				TargetLockConflictBytes: targetBytes,
 				StopMidKey:              false,
 				ScanStats:               &ss,
-			}, &bytes.Buffer{})
+			}, &objstorage.MemObj{})
 			if len(expectedIntentIndices) == 0 {
 				require.NoError(t, err)
 			} else {
@@ -6834,7 +6836,7 @@ func TestMVCCExportToSSTSplitMidKey(t *testing.T) {
 							TargetSize:         1,
 							MaxSize:            maxSize,
 							StopMidKey:         test.stopMidKey,
-						}, &bytes.Buffer{})
+						}, &objstorage.MemObj{})
 					require.NoError(t, err)
 					resumeKey = resumeInfo.ResumeKey
 					if !resumeKey.Timestamp.IsEmpty() {
@@ -6870,7 +6872,7 @@ func TestMVCCExportToSSTSErrorsOnLargeKV(t *testing.T) {
 			TargetSize:         1,
 			MaxSize:            1,
 			StopMidKey:         true,
-		}, &bytes.Buffer{})
+		}, &objstorage.MemObj{})
 	require.Equal(t, int64(0), summary.DataSize)
 	expectedErr := &ExceedMaxSizeError{}
 	require.ErrorAs(t, err, &expectedErr)
@@ -6897,7 +6899,7 @@ func TestMVCCExportDeadlineExceeded(t *testing.T) {
 			ExportAllRevisions: false,
 			TargetSize:         1,
 			ScanStats:          &ss,
-		}, &bytes.Buffer{})
+		}, &objstorage.MemObj{})
 	// Stats are not completely deterministic, so we assert lower bounds.
 	require.LessOrEqual(t, uint64(1), ss.NumInterfaceSeeks)
 	require.LessOrEqual(t, uint64(1), ss.NumInterfaceSteps)
@@ -6922,15 +6924,15 @@ func TestMVCCExportFingerprint(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 
 	fingerprint := func(opts MVCCExportOptions, engine Engine) (uint64, []byte, kvpb.BulkOpSummary, MVCCKey) {
-		var dest bytes.Buffer
+		var dest objstorage.MemObj
 		var err error
 		res, resumeInfo, fingerprint, hasRangeKeys, err := MVCCExportFingerprint(
 			ctx, st, engine, opts, &dest)
 		require.NoError(t, err)
 		if !hasRangeKeys {
-			dest.Reset()
+			dest = objstorage.MemObj{}
 		}
-		return fingerprint, dest.Bytes(), res, resumeInfo.ResumeKey
+		return fingerprint, dest.Data(), res, resumeInfo.ResumeKey
 	}
 
 	// verifyFingerprintAgainstOracle uses the `fingerprintOracle` to compute a
@@ -7176,10 +7178,10 @@ func (f *fingerprintOracle) getFingerprintAndRangeKeys(
 ) (uint64, []MVCCRangeKeyStack) {
 	t.Helper()
 
-	var dest bytes.Buffer
+	var dest objstorage.MemObj
 	_, _, err := MVCCExportToSST(ctx, f.st, f.engine, *f.opts, &dest)
 	require.NoError(t, err)
-	return f.fingerprintPointKeys(t, dest.Bytes()), getRangeKeys(t, dest.Bytes())
+	return f.fingerprintPointKeys(t, dest.Data()), getRangeKeys(t, dest.Data())
 }
 
 func (f *fingerprintOracle) fingerprintPointKeys(t *testing.T, dataSST []byte) uint64 {
