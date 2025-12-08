@@ -972,22 +972,7 @@ func (b *Builder) buildPlaceholderScan(
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("PlaceholderScan cannot have constraints")
 	}
 
-	md := b.mem.Metadata()
-	tab := md.Table(scan.Table)
-	idx := tab.Index(scan.Index)
-
-	// Build the index constraint.
-	spanColumns := make([]opt.OrderingColumn, len(scan.Span))
-	for i := range spanColumns {
-		col := idx.Column(i)
-		ordinal := col.Ordinal()
-		colID := scan.Table.ColumnID(ordinal)
-		spanColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
-	}
-	var columns constraint.Columns
-	columns.Init(spanColumns)
-	keyCtx := constraint.MakeKeyContext(b.ctx, &columns, b.evalCtx)
-
+	// Evaluate the scalar expressions.
 	values := make([]tree.Datum, len(scan.Span))
 	for i, expr := range scan.Span {
 		// The expression is either a placeholder or a constant.
@@ -1013,6 +998,22 @@ func (b *Builder) buildPlaceholderScan(
 		}
 		values[i] = val
 	}
+
+	md := b.mem.Metadata()
+	tab := md.Table(scan.Table)
+	idx := tab.Index(scan.Index)
+
+	// Build the index constraint.
+	spanColumns := make([]opt.OrderingColumn, len(scan.Span))
+	for i := range spanColumns {
+		col := idx.Column(i)
+		ordinal := col.Ordinal()
+		colID := scan.Table.ColumnID(ordinal)
+		spanColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+	}
+	var columns constraint.Columns
+	columns.Init(spanColumns)
+	keyCtx := constraint.MakeKeyContext(b.ctx, &columns, b.evalCtx)
 
 	key := constraint.MakeCompositeKey(values...)
 	var span constraint.Span
