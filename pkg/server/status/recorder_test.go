@@ -1035,7 +1035,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		}
 
 		var dest []tspb.TimeSeriesData
-		recorder.recordChangefeedChildMetrics(&dest)
+		recorder.recordChangefeedChildMetrics(&dest, nil)
 
 		require.Empty(t, dest)
 	})
@@ -1060,7 +1060,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		}
 
 		var dest []tspb.TimeSeriesData
-		recorder.recordChangefeedChildMetrics(&dest)
+		recorder.recordChangefeedChildMetrics(&dest, nil)
 
 		require.Empty(t, dest)
 	})
@@ -1092,7 +1092,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		}
 
 		var dest []tspb.TimeSeriesData
-		recorder.recordChangefeedChildMetrics(&dest)
+		recorder.recordChangefeedChildMetrics(&dest, nil)
 
 		// Should be empty since TsdbRecordLabeled is false
 		require.Empty(t, dest)
@@ -1123,7 +1123,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		}
 
 		var dest []tspb.TimeSeriesData
-		recorder.recordChangefeedChildMetrics(&dest)
+		recorder.recordChangefeedChildMetrics(&dest, nil)
 
 		// Should have data for child metrics (TsdbRecordLabeled is defaulted true and metric is in allowed list)
 		require.Len(t, dest, 2)
@@ -1161,7 +1161,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		}
 
 		var dest []tspb.TimeSeriesData
-		recorder.recordChangefeedChildMetrics(&dest)
+		recorder.recordChangefeedChildMetrics(&dest, nil)
 
 		// Should be limited to 1024 child metrics
 		require.Len(t, dest, 1024)
@@ -1188,7 +1188,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		}
 
 		var dest []tspb.TimeSeriesData
-		recorder.recordChangefeedChildMetrics(&dest)
+		recorder.recordChangefeedChildMetrics(&dest, nil)
 
 		require.Len(t, dest, 1)
 
@@ -1227,6 +1227,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 				},
 				Duration:     10 * time.Second,
 				BucketConfig: metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePrometheus,
 			},
 			"scope",
 		)
@@ -1244,7 +1245,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		}
 
 		var dest []tspb.TimeSeriesData
-		recorder.recordChangefeedChildMetrics(&dest)
+		recorder.recordChangefeedChildMetrics(&dest, nil)
 
 		require.Len(t, dest, 13) // 1 gauge + 1 counter + 11 histogram metrics
 
@@ -1320,7 +1321,7 @@ func BenchmarkRecordChangefeedChildMetrics(b *testing.B) {
 
 			for n := 0; n < b.N; n++ {
 				var dest []tspb.TimeSeriesData
-				recorder.recordChangefeedChildMetrics(&dest)
+				recorder.recordChangefeedChildMetrics(&dest, nil)
 			}
 		})
 	}
