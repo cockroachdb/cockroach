@@ -1147,7 +1147,8 @@ type optOutOfMetamorphicEnrichedEnvelope struct {
 	reason string
 }
 
-var forceDBLevelChangefeed = metamorphic.ConstantWithTestBool("changefeed-force-database-level", false)
+// TODO(#154053): Add back metamorphic testing for db-level changefeeds once it's enabled.
+var forceDBLevelChangefeed = false
 
 type optOutOfMetamorphicDBLevelChangefeed struct {
 	reason string
