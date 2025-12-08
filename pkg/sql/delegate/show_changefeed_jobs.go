@@ -73,13 +73,6 @@ targets AS (
     id,
     names
   FROM table_targets
-),
-database as (
-  SELECT
-    sd.id, 
-    name
-  FROM spec_details sd
-  INNER JOIN crdb_internal.databases d ON sd.descriptor_id::int = d.id
 )
 SELECT
   job_id,
@@ -100,13 +93,11 @@ SELECT
   ) AS sink_uri,
   targets.names AS full_table_names,
   changefeed_details->'opts'->>'topics' AS topics,
-  COALESCE(changefeed_details->'opts'->>'format','json') AS format,
-  database.name AS database_name
+  COALESCE(changefeed_details->'opts'->>'format','json') AS format
 FROM
   crdb_internal.jobs
   INNER JOIN targets ON job_id = targets.id
   INNER JOIN payload ON job_id = payload.id
-  LEFT JOIN database ON job_id = database.id
 `
 	)
 	var whereClause, innerWhereClause, orderbyClause string
