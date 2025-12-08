@@ -38,7 +38,11 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
+// SnapshotIngestAsWriteThreshold is the approximate size up to which a "simple"
+// snapshot (without external/shared SSTs) is applied as a write batch, instead
+// of being ingested as SST files. This helps optimizing performance in the case
+// when many empty/small snapshots are being applied.
+var SnapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.snapshot.ingest_as_write_threshold",
 	"size below which a range snapshot ingestion will be performed as a normal write",
@@ -632,7 +636,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	}
 
 	if len(inSnap.externalSSTs)+len(inSnap.sharedSSTs) == 0 && /* simple */
-		inSnap.SSTSize <= snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) /* small */ {
+		inSnap.SSTSize <= SnapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) /* small */ {
 		applyAsIngest = false
 	}
 

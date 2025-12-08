@@ -4029,11 +4029,18 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			// Don't return errors here because that crashes the process.
 			return nil
 		}
+
 		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		// Force snapshots to be applied using Pebble ingests. The test verifies the
+		// content of the corresponding SST files.
+		kvserver.SnapshotIngestAsWriteThreshold.Override(ctx, &st.SV, 0)
+
 		tc := testcluster.StartTestCluster(t, 5,
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
+					Settings: st,
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
 							BeforeSnapshotSSTIngestion: beforeSnapshotSSTIngestion,
