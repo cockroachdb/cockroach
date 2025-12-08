@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -191,6 +192,11 @@ will then convert it to the --format requested in the current invocation.
 		if convertFile == "" {
 			// To enable conversion without a running cluster, we want to skip
 			// connecting to the server when converting an existing tsdump.
+			if cliCtx.clientOpts.User != username.RootUser {
+				// Error is ignored because PurposeValidation does not return errors.
+				serverCfg.User, _ = username.MakeSQLUsernameFromUserInput(cliCtx.clientOpts.User, username.PurposeValidation)
+			}
+
 			conn, finish, err := newClientConn(ctx, serverCfg)
 			if err != nil {
 				return err

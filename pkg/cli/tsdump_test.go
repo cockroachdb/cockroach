@@ -48,6 +48,26 @@ func TestDebugTimeSeriesDumpCmd(t *testing.T) {
 		require.Greater(t, len(results[:len(results)-2]), 0, "expected to have at least one metric")
 	})
 
+	t.Run("debug tsdump with non-root user", func(t *testing.T) {
+		// Create a test user with ADMIN privileges
+		_, err := c.RunWithCapture("sql -e 'CREATE USER IF NOT EXISTS tsdump_testuser'")
+		require.NoError(t, err)
+		_, err = c.RunWithCapture("sql -e 'GRANT ADMIN TO tsdump_testuser'")
+		require.NoError(t, err)
+
+		// Test with non-root user
+		out, err := c.RunWithCapture("debug tsdump --user=tsdump_testuser --format=text --cluster-name=test-cluster-1 --disable-cluster-name-verification")
+		require.NoError(t, err)
+		results := strings.Split(out, "\n")[1:] // Drop first item that contains executed command string.
+		require.Greater(t, len(results), 0, "expected output from tsdump with non-root user")
+
+		// Test that root user still works (regression test)
+		out, err = c.RunWithCapture("debug tsdump --format=text --cluster-name=test-cluster-1 --disable-cluster-name-verification")
+		require.NoError(t, err)
+		results = strings.Split(out, "\n")[1:]
+		require.Greater(t, len(results), 0, "expected output from tsdump with root user")
+	})
+
 	t.Run("debug tsdump --format=raw with custom SQL and gRPC ports", func(t *testing.T) {
 		//  The `NewCLITest` function we call above to setup the test, already uses custom
 		//  ports to avoid conflict between concurrently running tests.
