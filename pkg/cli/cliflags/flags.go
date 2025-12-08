@@ -966,6 +966,22 @@ access to that client.
 `,
 	}
 
+	AllowDebugUser = FlagInfo{
+		Name: "allow-debug-user",
+		Description: `
+When set, allows authentication attempts by clients presenting certificates
+with "debuguser" as one of the principals (CommonName or SubjectAlternativeName).
+This applies to both SQL client connections and RPC connections. By default,
+the debuguser is not allowed to authenticate. Authentication attempts by debuguser
+will be rejected with an error unless this flag is explicitly set.
+<PRE>
+
+</PRE>
+Note: This flag is intended for debugging and troubleshooting purposes. The
+debuguser should only be enabled when necessary and disabled when not in use.
+`,
+	}
+
 	TLSCipherSuites = FlagInfo{
 		Name: "tls-cipher-suites",
 		Description: `

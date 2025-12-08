@@ -571,6 +571,13 @@ func init() {
 		cliflagcfg.BoolFlag(f, &startCtx.disallowRootLogin, cliflags.DisallowRootLogin)
 		_ = f.MarkHidden(cliflags.DisallowRootLogin.Name)
 
+		// We add the allow debug user flag for enabling the debuguser from rpc
+		// and sql access for debugging and troubleshooting purposes. We currently
+		// mark it as hidden since the flag behavior is experimental and subject to
+		// change. By default, debuguser is not allowed to authenticate.
+		cliflagcfg.BoolFlag(f, &startCtx.allowDebugUser, cliflags.AllowDebugUser)
+		_ = f.MarkHidden(cliflags.AllowDebugUser.Name)
+
 		// TLS Cipher Suites configured
 		cliflagcfg.StringSliceFlag(f, &startCtx.serverTLSCipherSuites, cliflags.TLSCipherSuites)
 
@@ -1161,6 +1168,7 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		return err
 	}
 	security.SetDisallowRootLogin(startCtx.disallowRootLogin)
+	security.SetAllowDebugUser(startCtx.allowDebugUser)
 	// Currently we don't handle the case where we are setting the --insecure flag
 	// as well as providing the --tls-cipher-suites, we should probably error out
 	// if both are set, issue: #144935.
@@ -1171,6 +1179,7 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	serverCfg.Insecure = startCtx.serverInsecure
 	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
 	serverCfg.DisallowRootLogin = startCtx.disallowRootLogin
+	serverCfg.AllowDebugUser = startCtx.allowDebugUser
 
 	fs := cliflagcfg.FlagSetForCmd(cmd)
 

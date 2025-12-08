@@ -217,6 +217,13 @@ type BaseConfig struct {
 	// and RPC connections.
 	DisallowRootLogin bool
 
+	// AllowDebugUser when set, allows authentication attempts by clients
+	// presenting certificates with "debuguser" as one of the principals
+	// (CommonName or SubjectAlternativeName). This applies to both SQL client
+	// connections and RPC connections. By default, debuguser is not allowed to
+	// authenticate.
+	AllowDebugUser bool
+
 	// ReadyFn is called when the server has started listening on its
 	// sockets.
 	//
