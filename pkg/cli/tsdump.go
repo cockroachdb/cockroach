@@ -62,6 +62,7 @@ var debugTimeSeriesDumpOpts = struct {
 	disableDeltaProcessing bool
 	ddMetricInterval       int64  // interval for datadoginit format only
 	metricsListFile        string // file containing explicit list of metrics to dump
+	nonVerbose             bool   // dump only essential and support metrics
 }{
 	format:                 tsDumpText,
 	from:                   timestampValue{},
@@ -70,6 +71,7 @@ var debugTimeSeriesDumpOpts = struct {
 	yaml:                   "/tmp/tsdump.yaml",
 	retryFailedRequests:    false,
 	disableDeltaProcessing: false, // delta processing enabled by default
+	nonVerbose:             false, // dump all metrics by default
 
 	// default to 10 seconds interval for datadoginit.
 	// This is based on the scrape interval that is currently set accross all managed clusters
@@ -201,6 +203,11 @@ will then convert it to the --format requested in the current invocation.
 			target, _ := addr.AddrWithDefaultLocalhost(serverCfg.AdvertiseAddr)
 			adminClient := conn.NewAdminClient()
 
+			// Validate that --non-verbose and --metrics-list-file are not both specified
+			if debugTimeSeriesDumpOpts.nonVerbose && debugTimeSeriesDumpOpts.metricsListFile != "" {
+				return errors.New("--non-verbose and --metrics-list-file cannot be used together")
+			}
+
 			var names []string
 			var filter []serverpb.MetricsFilterEntry
 			if debugTimeSeriesDumpOpts.metricsListFile != "" {
@@ -211,7 +218,7 @@ will then convert it to the --format requested in the current invocation.
 				}
 			}
 			var stats serverpb.FilterStats
-			names, stats, err = serverpb.GetInternalTimeseriesNamesFromServer(ctx, adminClient, filter)
+			names, stats, err = serverpb.GetInternalTimeseriesNamesFromServer(ctx, adminClient, filter, debugTimeSeriesDumpOpts.nonVerbose)
 			if err != nil {
 				return err
 			}
