@@ -2125,11 +2125,16 @@ func (cs *clusterState) setStore(sal storeAttributesAndLocalityWithNodeTier) {
 	if !ok {
 		// This is the first time seeing this store.
 		ss := newStoreState()
+		// TODO(tbg): below is what we should be doing once asim and production code actually
+		// have a way to update the health status. For now, we just set it to healthy initially
+		// and that's where it will stay (outside of unit tests).
+		//
 		// At this point, the store's health is unknown. It will need to be marked
 		// as healthy separately. Until we know more, we won't place leases or
 		// replicas on it (nor will we try to shed any that are already reported to
 		// have replicas on it).
-		ss.status = MakeStatus(HealthUnknown, LeaseDispositionRefusing, ReplicaDispositionRefusing)
+		// ss.status = MakeStatus(HealthUnknown, LeaseDispositionRefusing, ReplicaDispositionRefusing)
+		ss.status = MakeStatus(HealthOK, LeaseDispositionOK, ReplicaDispositionOK)
 		ss.overloadStartTime = cs.ts.Now()
 		ss.overloadEndTime = cs.ts.Now()
 		cs.stores[sal.StoreID] = ss
