@@ -178,10 +178,7 @@ message ExternalStorage {
   ExternalConnectionConfig external_connection_config = 9 [(gogoproto.nullable) = false];
 
   // URI is the string URI from which this encoded external storage config was
-  // derived, if known. May be empty in most cases unless set explicitly by the
-  // caller who created the config from a URI.
-  // TODO(dt): It would be nice if this were always set but we would need every
-  // implementation of ExternalStorage to do so in its Conf() method.
+  // derived. May be empty if the storage configuration was not built from a URI.
   string URI = 10;
 }
 

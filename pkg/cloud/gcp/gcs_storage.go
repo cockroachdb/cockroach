@@ -76,6 +76,7 @@ func parseGSURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	gsURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_gs
+	conf.URI = uri.String()
 	assumeRole, delegateRoles := cloud.ParseRoleString(gsURL.ConsumeParam(AssumeRoleParam))
 	conf.GoogleCloudConfig = &cloudpb.ExternalStorage_GCS{
 		Bucket:              uri.Host,
@@ -105,6 +106,7 @@ type gcsStorage struct {
 	ioConf   base.ExternalIODirConfig
 	prefix   string
 	settings *cluster.Settings
+	uri      string // original URI used to construct this storage
 }
 
 var _ cloud.ExternalStorage = &gcsStorage{}
@@ -113,6 +115,7 @@ func (g *gcsStorage) Conf() cloudpb.ExternalStorage {
 	return cloudpb.ExternalStorage{
 		Provider:          cloudpb.ExternalStorageProvider_gs,
 		GoogleCloudConfig: g.conf,
+		URI:               g.uri,
 	}
 }
 
@@ -223,6 +226,7 @@ func makeGCSStorage(
 		ioConf:   args.IOConf,
 		prefix:   conf.Prefix,
 		settings: args.Settings,
+		uri:      dest.URI,
 	}, nil
 }
 
