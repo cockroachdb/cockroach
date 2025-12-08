@@ -465,6 +465,8 @@ type layerFilters struct {
 	// This is always acquired for descriptors from storage, and may need an extra
 	// round trip.
 	withMetadata bool
+	// withAdding specifies that adding descriptors can be safely included.
+	withAdding bool
 }
 
 type descFilters struct {
