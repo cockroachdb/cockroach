@@ -339,7 +339,7 @@ func makeExternalSpanSendFunc(
 				return nil
 			})
 
-		if res.CPUTime > 0 {
+		if err != nil && res.CPUTime > 0 {
 			atomic.AddInt64(kvCPUTime, res.CPUTime)
 		}
 		// Note that in some code paths there is no concurrency when using the
