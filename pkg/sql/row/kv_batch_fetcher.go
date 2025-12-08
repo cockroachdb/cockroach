@@ -338,15 +338,18 @@ func makeExternalSpanSendFunc(
 				}
 				return nil
 			})
-
-		if res.CPUTime > 0 {
-			atomic.AddInt64(kvCPUTime, res.CPUTime)
-		}
 		// Note that in some code paths there is no concurrency when using the
 		// sendFunc, but we choose to unconditionally use atomics here since its
 		// overhead should be negligible in the grand scheme of things anyway.
 		atomic.AddInt64(batchRequestsIssued, 1)
-		return res, err
+		if err != nil {
+			return nil, err
+		}
+
+		if res.CPUTime > 0 {
+			atomic.AddInt64(kvCPUTime, res.CPUTime)
+		}
+		return res, nil
 	}
 }
 
