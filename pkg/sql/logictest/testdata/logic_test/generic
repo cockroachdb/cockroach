@@ -622,3 +622,71 @@ quality of service: regular
 
 statement ok
 DEALLOCATE p
+
+# Regression test for #158945. Placeholder scans should correctly handle NULL
+# placeholder values.
+statement ok
+CREATE TABLE t158945 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE (a),
+  INDEX (b)
+)
+
+statement ok
+INSERT INTO t158945 VALUES (1, NULL, NULL)
+
+statement ok
+PREPARE p158945a AS SELECT k FROM t158945 WHERE a = $1
+
+query empty
+EXECUTE p158945a(NULL)
+
+query T
+EXPLAIN ANALYZE EXECUTE p158945a(NULL)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• norows
+  sql nodes: <hidden>
+  regions: <hidden>
+  actual row count: 0
+  execution time: 0µs
+
+statement ok
+PREPARE p158945b AS SELECT k FROM t158945 WHERE a = $1
+
+query empty
+EXECUTE p158945b(NULL)
+
+query T
+EXPLAIN ANALYZE EXECUTE p158945b(NULL)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• norows
+  sql nodes: <hidden>
+  regions: <hidden>
+  actual row count: 0
+  execution time: 0µs
