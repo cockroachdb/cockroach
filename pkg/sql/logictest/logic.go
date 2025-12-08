@@ -3990,6 +3990,13 @@ func (t *logicTest) finishExecQuery(query logicQuery, rowses []*gosql.Rows, exec
 					}
 
 					rowCount++
+
+					if query.empty {
+						// Skip column assertions if we are expecting an empty
+						// result.
+						continue
+					}
+
 					for i, v := range vals {
 						colT := query.colTypes[i]
 						// Ignore column - useful for non-deterministic output.
