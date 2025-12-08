@@ -70,6 +70,11 @@ type Manager struct {
 
 	// clock is used to provide predictable timestamps for testing.
 	clock *hlc.Clock
+
+	// slowLatchRequestThresholdOverride, when set to a nonzero value smaller
+	// than kv.concurrency.slow_latch_request_duration, overrides that setting
+	// as the threshold for considering a latch request to be slow.
+	slowLatchRequestThresholdOverride time.Duration
 }
 
 // scopedManager is a latch manager scoped to either local or global keys.
@@ -712,10 +717,23 @@ func (m *Manager) longLatchHoldThreshold() time.Duration {
 
 // slowLatchRequestThreshold returns the threshold for logging slow latch requests.
 func (m *Manager) slowLatchRequestThreshold() time.Duration {
-	if m.settings == nil {
-		return math.MaxInt64 // disable
+	threshold := time.Duration(math.MaxInt64)
+	if m.settings != nil {
+		threshold = SlowLatchRequestThreshold.Get(&m.settings.SV)
 	}
-	return SlowLatchRequestThreshold.Get(&m.settings.SV)
+
+	if m.slowLatchRequestThresholdOverride != time.Duration(0) && m.slowLatchRequestThresholdOverride < threshold {
+		threshold = m.slowLatchRequestThresholdOverride
+	}
+
+	return threshold
+}
+
+// SetSlowLatchRequestThresholdOverride sets an override for the slow latch
+// request threshold. The override only applies if non-zero and smaller than the
+// cluster setting kv.concurrency.slow_latch_request_duration.
+func (m *Manager) SetSlowLatchRequestThresholdOverride(threshold time.Duration) {
+	m.slowLatchRequestThresholdOverride = threshold
 }
 
 // Metrics holds information about the state of a Manager.
