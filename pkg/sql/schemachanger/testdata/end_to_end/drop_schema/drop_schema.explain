@@ -9,7 +9,7 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 6 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (sc-), Name: "sc"}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db), IntValue: 0}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 106 (sc-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (sc-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (sc-), Name: "root"}
@@ -25,7 +25,7 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 6 elements transitioning toward ABSENT
- │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 106 (sc-), Name: "sc"}
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db), IntValue: 0}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 106 (sc-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 106 (sc-), Name: "admin"}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 106 (sc-), Name: "root"}
@@ -35,7 +35,7 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 6 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (sc-), Name: "sc"}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db), IntValue: 0}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 106 (sc-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (sc-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (sc-), Name: "root"}

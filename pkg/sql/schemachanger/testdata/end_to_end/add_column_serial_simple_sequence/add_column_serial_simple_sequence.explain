@@ -11,7 +11,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 23 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC        Sequence:{DescID: 107 (tbl_serial_id_seq+)}
- │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 105 (public)}
+ │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db), IntValue: 105}
  │         │    ├── ABSENT → PUBLIC        SchemaChild:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 105 (public)}
  │         │    ├── ABSENT → PUBLIC        TableData:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 104 (db)}
  │         │    ├── ABSENT → PUBLIC        Column:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+)}
@@ -81,7 +81,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 23 elements transitioning toward PUBLIC
  │    │    │    ├── PUBLIC        → ABSENT Sequence:{DescID: 107 (tbl_serial_id_seq+)}
- │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 105 (public)}
+ │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db), IntValue: 105}
  │    │    │    ├── PUBLIC        → ABSENT SchemaChild:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 105 (public)}
  │    │    │    ├── PUBLIC        → ABSENT TableData:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 104 (db)}
  │    │    │    ├── PUBLIC        → ABSENT Column:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+)}
@@ -114,7 +114,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 23 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC        Sequence:{DescID: 107 (tbl_serial_id_seq+)}
- │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 105 (public)}
+ │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db), IntValue: 105}
  │         │    ├── ABSENT → PUBLIC        SchemaChild:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 105 (public)}
  │         │    ├── ABSENT → PUBLIC        TableData:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 104 (db)}
  │         │    ├── ABSENT → PUBLIC        Column:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+)}

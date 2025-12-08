@@ -36,6 +36,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -106,6 +107,9 @@ var (
 
 	// Regex to convert CRDB metric names to Prometheus format
 	prometheusNameRegex = regexp.MustCompile(`[^a-zA-Z0-9]`)
+
+	datadogOnly = flag.Bool("datadog-only", false, "generate metrics in datadog-only mode")
+	verbose     = flag.Bool("verbose", false, "print diagnostic logs")
 )
 
 // YAML template for generating the cockroachdb_metrics.yaml file
@@ -458,20 +462,19 @@ func printUsage() {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(1)
-	}
+	flag.Parse()
 
+	args := flag.Args()
+	
 	// Check if running in datadog-only mode
-	if os.Args[1] == "--datadog-only" {
-		if len(os.Args) < 4 {
+	if *datadogOnly {
+		if len(flag.Args()) < 2 {
 			printUsage()
 			os.Exit(1)
 		}
 
-		datadogMappingsPath := os.Args[2]
-		outputPath := os.Args[3]
+		datadogMappingsPath := args[0]
+		outputPath := args[1]
 
 		datadogMappings, err := loadDatadogMappings(datadogMappingsPath)
 		if err != nil {
@@ -484,7 +487,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		if !strings.Contains(outputPath, "-exec-") && !strings.Contains(outputPath, "for tool") {
+		if *verbose {
 			fmt.Printf("Generated %d raw Datadog metric mappings\n", len(datadogMappings))
 			fmt.Printf("Output written to: %s\n", outputPath)
 		}
@@ -492,19 +495,19 @@ func main() {
 	}
 
 	// Normal mode: generate cockroachdb_metrics.yaml
-	if len(os.Args) < 4 {
+	if len(args) < 3 {
 		printUsage()
 		os.Exit(1)
 	}
 
-	metricsYamlPath := os.Args[1]
-	outputPath := os.Args[2]
-	datadogMappingsPath := os.Args[3]
+	metricsYamlPath := args[0]
+	outputPath := args[1]
+	datadogMappingsPath := args[2]
 
 	// Optional fourth argument: base YAML file with extra and legacy metrics
 	basePath := ""
-	if len(os.Args) >= 5 {
-		basePath = os.Args[4]
+	if len(args) >= 4 {
+		basePath = args[3]
 	}
 
 	datadogMappings, err := loadDatadogMappings(datadogMappingsPath)
@@ -534,9 +537,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Only print summary if not in exec/tool configuration to avoid duplicate logs.
-	// Bazel builds the tool in both target and exec configurations, causing duplicate output.
-	if !strings.Contains(outputPath, "-exec-") && !strings.Contains(outputPath, "for tool") {
+	if *verbose {
 		fmt.Printf("Generated %d metric mappings:\n", len(finalMappings))
 		fmt.Printf("  - %d from metrics.yaml\n", len(allMetrics)-len(baseMetrics.RuntimeConditionalMetrics))
 		fmt.Printf("  - %d runtime conditional metrics\n", len(baseMetrics.RuntimeConditionalMetrics))

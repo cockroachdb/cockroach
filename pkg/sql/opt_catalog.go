@@ -530,6 +530,12 @@ func (oc *optCatalog) UserHasGlobalPrivilegeOrRoleOption(
 }
 
 // FullyQualifiedName is part of the cat.Catalog interface.
+//
+// Note that:
+//   - this call may involve a database operation so it shouldn't be used in
+//     performance sensitive paths;
+//   - the fully qualified name of a data source object can change without the
+//     object itself changing (e.g. when a database is renamed).
 func (oc *optCatalog) FullyQualifiedName(
 	ctx context.Context, ds cat.DataSource,
 ) (cat.DataSourceName, error) {

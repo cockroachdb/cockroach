@@ -1279,7 +1279,6 @@ NULL                   NULL                  UTF8                UCS            
 NULL                   NULL                  UTF8                UCS                   UTF8         test                     NULL                    NULL
 
 
-skipif config local-mixed-25.3
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -1622,7 +1621,6 @@ table_catalog  table_schema  table_name  column_name    constraint_catalog  cons
 system         public        locations   localityKey    system              public             primary
 system         public        locations   localityValue  system              public             primary
 
-skipif config local-mixed-25.3
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -4289,6 +4287,7 @@ use_improved_routine_dependency_tracking                         on
 use_pre_25_2_variadic_builtins                                   off
 use_proc_txn_control_extended_protocol_fix                       on
 use_soft_limit_for_distribute_scan                               on
+use_swap_mutations                                               off
 variable_inequality_lookup_join_enabled                          on
 vector_search_beam_size                                          32
 vector_search_rerank_multiplier                                  50

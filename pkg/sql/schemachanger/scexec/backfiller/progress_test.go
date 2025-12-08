@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/require"
 )
@@ -31,13 +32,13 @@ func TestSSTManifestTenantPrefixConversion(t *testing.T) {
 		WriteTimestamp: &ts,
 	}}
 
-	stripped, err := stripTenantPrefixFromSSTManifests(tenantCodec, input)
+	stripped, err := backfill.StripTenantPrefixFromSSTManifests(tenantCodec, input)
 	require.NoError(t, err)
 	require.Len(t, stripped, 1)
 	require.False(t, bytes.HasPrefix(stripped[0].Span.Key, tenantCodec.TenantPrefix()))
 	require.False(t, bytes.HasPrefix(stripped[0].Span.EndKey, tenantCodec.TenantPrefix()))
 	require.False(t, bytes.HasPrefix(stripped[0].RowSample, tenantCodec.TenantPrefix()))
 
-	withPrefix := addTenantPrefixToSSTManifests(tenantCodec, stripped)
+	withPrefix := backfill.AddTenantPrefixToSSTManifests(tenantCodec, stripped)
 	require.Equal(t, input, withPrefix)
 }

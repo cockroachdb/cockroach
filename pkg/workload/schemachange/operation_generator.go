@@ -3501,7 +3501,15 @@ func (og *operationGenerator) inspect(ctx context.Context, tx pgx.Tx) (*opStmt, 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{pgcode.FeatureNotSupported, asof != ""},
 	})
-
+	// Detached flag was added in 26.1, so we expect errors till the user upgrades.
+	isDetachedUnsupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_1.Version())
+	if err != nil {
+		return nil, err
+	}
+	if isDetachedUnsupported {
+		stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
+		stmt.potentialExecErrors.add(pgcode.Syntax)
+	}
 	// Always run DETACHED as this allows us to use INSPECT inside of a
 	// transaction. We have post-processing at the end of the run to verify
 	// INSPECT didn't find any issues.

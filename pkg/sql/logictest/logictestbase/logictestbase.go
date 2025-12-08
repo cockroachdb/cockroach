@@ -499,16 +499,6 @@ var LogicTestConfigs = []TestClusterConfig{
 		Localities: multiregion15node5region3azsLocalities,
 	},
 	{
-		// This config runs tests using 25.3 cluster version, simulating a node that
-		// is operating in a mixed-version cluster.
-		Name:                        "local-mixed-25.3",
-		NumNodes:                    1,
-		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V25_3,
-		DisableUpgrade:              true,
-		DeclarativeCorpusCollection: true,
-	},
-	{
 		// This config runs tests using 25.4 cluster version, simulating a node that
 		// is operating in a mixed-version cluster.
 		Name:                        "local-mixed-25.4",
@@ -517,14 +507,6 @@ var LogicTestConfigs = []TestClusterConfig{
 		BootstrapVersion:            clusterversion.V25_4,
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
-	},
-	{
-		// This config runs a cluster with 3 nodes, with a separate process per
-		// node. The nodes initially start on v25.3.
-		Name:                     "cockroach-go-testserver-25.3",
-		UseCockroachGoTestserver: true,
-		BootstrapVersion:         clusterversion.V25_3,
-		NumNodes:                 3,
 	},
 	{
 		Name:                "local-leased-descriptors",
@@ -634,7 +616,6 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
-		"local-mixed-25.3",
 		"local-mixed-25.4",
 	),
 
@@ -667,7 +648,6 @@ var DefaultConfigSets = map[string]ConfigSet{
 
 	// Special alias for all testserver configs (for mixed-version testing).
 	"cockroach-go-testserver-configs": makeConfigSet(
-		"cockroach-go-testserver-25.3",
 		"cockroach-go-testserver-25.4",
 	),
 
@@ -828,6 +808,9 @@ func processConfigs(
 		// config list.
 		names := getDefaultConfigListNames(blockedConfig)
 		if len(names) == 0 {
+			if !ConfigExists(blockedConfig) && blockedConfig != "metamorphic-batch-sizes" {
+				panic(fmt.Sprintf("attempted to block logic test config that doesn't exist: %s", blockedConfig))
+			}
 			blocklist[blockedConfig] = issueNo
 		} else {
 			for _, name := range names {
@@ -918,6 +901,22 @@ func ConfigIsInDefaultList(configName, defaultName string) bool {
 
 func getDefaultConfigListNames(name string) []string {
 	return DefaultConfigSets[name].ConfigNames()
+}
+
+var allConfigNames = make(map[string]struct{}, len(LogicTestConfigs))
+
+func init() {
+	for _, cfg := range LogicTestConfigs {
+		allConfigNames[cfg.Name] = struct{}{}
+	}
+}
+
+// ConfigExists returns whether the given name matches either a config or an
+// alias.
+func ConfigExists(name string) bool {
+	_, config := allConfigNames[name]
+	_, alias := DefaultConfigSets[name]
+	return config || alias
 }
 
 // ConfigCalculator is used to enumerate a map of configuration -> file.

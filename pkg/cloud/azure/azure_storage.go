@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -222,10 +223,16 @@ type azureStorage struct {
 	settings  *cluster.Settings
 }
 
+type azCacheKey struct {
+	conf    cloudpb.ExternalStorage_Azure
+	envFile string
+	envID   string
+}
+
 var azClientCache struct {
 	syncutil.Mutex
 	// TODO(dt): make this an >1 item cache e.g. add a FIFO ring.
-	key    cloudpb.ExternalStorage_Azure
+	key    azCacheKey
 	set    time.Time
 	client *service.Client
 }
@@ -274,14 +281,19 @@ func makeAzureStorage(
 
 	var azClient *service.Client
 
-	clientConf := *conf
-	clientConf.Prefix = "" // Prefix is not part of the client identity.
+	clientID, _ := envutil.ExternalEnvString("AZURE_CLIENT_ID", 0)
+	cacheKey := azCacheKey{
+		conf:    *conf,
+		envFile: credFileEnv(),
+		envID:   clientID,
+	}
+	cacheKey.conf.Prefix = "" // Prefix is not part of the client identity.
 
 	if reuseSession.Get(&args.Settings.SV) {
 		func() {
 			azClientCache.Lock()
 			defer azClientCache.Unlock()
-			if cached := azClientCache.client; cached != nil && azClientCache.key == clientConf && timeutil.Since(azClientCache.set) < 2*time.Minute {
+			if cached := azClientCache.client; cached != nil && azClientCache.key == cacheKey && timeutil.Since(azClientCache.set) < 2*time.Minute {
 				azClient = cached
 			}
 		}()
@@ -342,7 +354,7 @@ func makeAzureStorage(
 	if reuseSession.Get(&args.Settings.SV) {
 		azClientCache.Lock()
 		defer azClientCache.Unlock()
-		azClientCache.key = clientConf
+		azClientCache.key = cacheKey
 		azClientCache.client = azClient
 		azClientCache.set = timeutil.Now()
 	}

@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	gogotypes "github.com/gogo/protobuf/types"
 )
 
 const (
@@ -943,12 +944,15 @@ func (sc *SchemaChanger) distIndexBackfill(
 ) error {
 	// Gather the initial resume spans for the table.
 	var todoSpans []roachpb.Span
+	var resumeManifests []jobspb.IndexBackfillSSTManifest
 	var mutationIdx int
+	jobDetails := sc.job.Details().(jobspb.SchemaChangeDetails)
+	useDistributedMerge := jobDetails.DistributedMergeMode == jobspb.IndexBackfillDistributedMergeMode_Enabled
 
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) (err error) {
-		todoSpans, _, mutationIdx, err = rowexec.GetResumeSpans(
+		todoSpans, resumeManifests, _, mutationIdx, err = rowexec.GetResumeSpansAndSSTManifests(
 			ctx, sc.jobRegistry, txn, sc.execCfg.Codec, txn.Descriptors(), sc.descID,
 			sc.mutationID, filter,
 		)
@@ -963,7 +967,9 @@ func (sc *SchemaChanger) distIndexBackfill(
 		return nil
 	}
 
-	writeAsOf := sc.job.Details().(jobspb.SchemaChangeDetails).WriteTimestamp
+	manifestBuf := backfill.NewSSTManifestBuffer(resumeManifests)
+
+	writeAsOf := jobDetails.WriteTimestamp
 	if writeAsOf.IsEmpty() {
 		status := jobs.StatusMessage("scanning target index for in-progress transactions")
 		if err := sc.job.NoTxn().UpdateStatusMessage(ctx, status); err != nil {
@@ -1044,8 +1050,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
 		spec := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes, 0)
-		if details, ok := sc.job.Details().(jobspb.SchemaChangeDetails); ok &&
-			details.DistributedMergeMode == jobspb.IndexBackfillDistributedMergeMode_Enabled {
+		if useDistributedMerge {
 			backfill.EnableDistributedMergeIndexBackfillSink(sc.execCfg.NodeInfo.NodeID.SQLInstanceID(), &spec)
 		}
 		p, err = sc.distSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, todoSpans)
@@ -1075,6 +1080,18 @@ func (sc *SchemaChanger) distIndexBackfill(
 				mu.updatedTodoSpans = make([]roachpb.Span, len(todoSpans))
 				copy(mu.updatedTodoSpans, todoSpans)
 			}()
+
+			if useDistributedMerge {
+				var mapProgress execinfrapb.IndexBackfillMapProgress
+				if gogotypes.Is(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress) {
+					if err := gogotypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress); err != nil {
+						return err
+					}
+					if len(mapProgress.SSTManifests) > 0 {
+						manifestBuf.Append(mapProgress.SSTManifests)
+					}
+				}
+			}
 
 			if sc.testingKnobs.AlwaysUpdateIndexBackfillDetails {
 				if err := updateJobDetails(); err != nil {
@@ -1156,15 +1173,28 @@ func (sc *SchemaChanger) distIndexBackfill(
 	var updateJobMu syncutil.Mutex
 	updateJobDetails = func() error {
 		updatedTodoSpans := getTodoSpansForUpdate()
+		manifestDirty := manifestBuf.Dirty()
 		return sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			updateJobMu.Lock()
 			defer updateJobMu.Unlock()
-			// No processor has returned completed spans yet.
-			if updatedTodoSpans == nil {
+			// No processor has returned completed spans yet and no new manifests.
+			if updatedTodoSpans == nil && !manifestDirty {
 				return nil
 			}
-			log.VEventf(ctx, 2, "writing todo spans to job details: %+v", updatedTodoSpans)
-			return rowexec.SetResumeSpansInJob(ctx, updatedTodoSpans, mutationIdx, txn, sc.job)
+			spansToPersist := updatedTodoSpans
+			if spansToPersist == nil {
+				spansToPersist = todoSpans
+			}
+			var manifestSnapshot []jobspb.IndexBackfillSSTManifest
+			if manifestDirty {
+				manifestSnapshot = manifestBuf.SnapshotAndMarkClean()
+			} else {
+				manifestSnapshot = manifestBuf.Snapshot()
+			}
+			log.VEventf(ctx, 2, "writing todo spans to job details: %+v", spansToPersist)
+			return rowexec.SetResumeSpansAndSSTManifestsInJob(
+				ctx, &sc.execCfg.Codec, spansToPersist, manifestSnapshot, mutationIdx, txn, sc.job,
+			)
 		})
 	}
 

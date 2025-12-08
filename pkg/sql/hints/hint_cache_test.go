@@ -557,12 +557,12 @@ func requireHintsCount(
 	checkIDOrder(t, ids)
 }
 
-// checkIDOrder verifies that the row IDs are in ascending order.
+// checkIDOrder verifies that the row IDs are in descending order.
 func checkIDOrder(t *testing.T, ids []int64) {
 	t.Helper()
 	for i := 1; i < len(ids); i++ {
-		if ids[i] <= ids[i-1] {
-			t.Fatalf("expected IDs to be in ascending order, got %v", ids)
+		if ids[i] >= ids[i-1] {
+			t.Fatalf("expected IDs to be in descending order, got %v", ids)
 		}
 	}
 }

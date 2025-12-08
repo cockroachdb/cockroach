@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/pebble/objstorage"
-	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -73,7 +72,7 @@ func slurpSSTablesLatestKey(
 			LowerBound: keys.LocalMax,
 			UpperBound: keys.MaxKey,
 		}
-		sst, err := storage.NewSSTIterator([][]sstable.ReadableFile{{file}}, iterOpts)
+		sst, err := storage.NewSSTIterator([][]objstorage.ReadableFile{{file}}, iterOpts)
 		if err != nil {
 			t.Fatal(err)
 		}

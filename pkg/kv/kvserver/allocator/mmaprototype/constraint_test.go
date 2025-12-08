@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -878,4 +880,45 @@ func TestDiversityScore(t *testing.T) {
 				tt.name, tt.expectedReplicaScore, replicaScore)
 		})
 	}
+}
+
+// TestNormalizedVoterAllRelationships verifies both normalization and the
+// building of relationships between voter and all replica constraints.
+func TestNormalizedVoterAllRelationships(t *testing.T) {
+	interner := newStringInterner()
+	datadriven.RunTest(t, filepath.Join(datapathutils.TestDataPath(t), t.Name()),
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "normalized-voter-all-rels":
+				conf := parseSpanConfig(t, d)
+				var b strings.Builder
+				fmt.Fprintf(&b, "input:\n")
+				printSpanConfig(&b, conf)
+
+				nConf, err := makeBasicNormalizedSpanConfig(&conf, interner)
+				if err != nil {
+					fmt.Fprintf(&b, "normalization error: %s\n", err.Error())
+					return b.String()
+				}
+				fmt.Fprintf(&b, "normalized:\n")
+				printSpanConfig(&b, nConf.uninternedConfig())
+
+				rels, emptyConstraintIndex, emptyVoterConstraintIndex, err := buildVoterAndAllRelationships(nConf)
+				fmt.Fprintf(&b, "table:\n")
+				fmt.Fprintf(&b, "\temptyConstraintIndex: %d\n", emptyConstraintIndex)
+				fmt.Fprintf(&b, "\temptyVoterConstraintIndex: %d\n", emptyVoterConstraintIndex)
+				fmt.Fprintf(&b, "\trelationships:\n")
+				if err != nil {
+					fmt.Fprintf(&b, "\terr: %s\n", err.Error())
+					return b.String()
+				}
+				for i, rel := range rels {
+					fmt.Fprintf(&b, "\t[idx=%d][voter=%s] [all=%s] rel=%s\n",
+						i, nConf.voterConstraints[rel.voterIndex].unintern(interner), nConf.constraints[rel.allIndex].unintern(interner), rel.voterAndAllRel)
+				}
+				return b.String()
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
 }

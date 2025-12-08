@@ -1597,7 +1597,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
    select aggfns(a,b,c)
      from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
 +ERROR:  unknown function: aggfns()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  select * from agg_view1;
 -                    aggfns                     
 ------------------------------------------------
@@ -1618,7 +1617,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
      from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
           generate_series(1,3) i;
 +ERROR:  unknown function: aggfns()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  select * from agg_view1;
 -                    aggfns                     
 ------------------------------------------------
@@ -1664,7 +1662,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
    select aggfns(a,b,c order by b+1)
      from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
 +ERROR:  unknown function: aggfns()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  select * from agg_view1;
 -                    aggfns                     
 ------------------------------------------------
@@ -1684,7 +1681,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
    select aggfns(a,a,c order by b)
      from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c);
 +ERROR:  unknown function: aggfns()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  select * from agg_view1;
 -                     aggfns                     
 -------------------------------------------------

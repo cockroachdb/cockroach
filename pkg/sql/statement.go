@@ -45,11 +45,11 @@ type Statement struct {
 
 	// Hints are any external statement hints from the system.statement_hints
 	// table that could apply to this statement, based on the statement
-	// fingerprint.
+	// fingerprint. Hints are ordered with the most recent first.
 	Hints []hints.Hint
 
 	// HintIDs are the IDs of any external statement hints, which are used for
-	// invalidation of cached plans.
+	// invalidation of cached plans. The order matches Hints.
 	HintIDs []int64
 
 	// HintsGeneration is the generation of the hints cache at the time the
@@ -183,7 +183,10 @@ func (s *Statement) ReloadHintsIfStale(
 	)
 
 	for i, hint := range s.Hints {
-		if hd := hint.HintInjectionDonor; hd != nil {
+		if !hint.Enabled || hint.Err != nil {
+			continue
+		}
+		if hd := hint.HintInjectionDonor; hd != nil && s.ASTWithInjectedHints == nil {
 			if err := hd.Validate(ast, fmtFlags); err != nil {
 				log.Eventf(
 					ctx, "failed to validate hint injection donor from external statement hint %v: %v",

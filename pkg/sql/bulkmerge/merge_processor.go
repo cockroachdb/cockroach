@@ -7,6 +7,7 @@ package bulkmerge
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -14,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 	"github.com/cockroachdb/errors"
 )
 
@@ -25,7 +28,7 @@ var (
 // Output row format for the bulk merge processor. The third column contains
 // a marshaled BulkMergeSpec_Output protobuf with the list of output SSTs.
 var bulkMergeProcessorOutputTypes = []*types.T{
-	types.Int4,  // SQL Instance ID of the merge processor
+	types.Bytes, // The encoded SQL Instance ID used for routing
 	types.Int4,  // Task ID
 	types.Bytes, // Encoded list of output SSTs (BulkMergeSpec_Output protobuf)
 }
@@ -40,8 +43,40 @@ var bulkMergeProcessorOutputTypes = []*types.T{
 // Task n is to process the input range from [spans[n].Key, spans[n].EndKey).
 type bulkMergeProcessor struct {
 	execinfra.ProcessorBase
-	spec  execinfrapb.BulkMergeSpec
-	input execinfra.RowSource
+	spec    execinfrapb.BulkMergeSpec
+	input   execinfra.RowSource
+	flowCtx *execinfra.FlowCtx
+}
+
+type mergeProcessorInput struct {
+	sqlInstanceID string
+	taskID        taskset.TaskID
+}
+
+func parseMergeProcessorInput(
+	row rowenc.EncDatumRow, typs []*types.T,
+) (mergeProcessorInput, error) {
+	if len(row) != 2 {
+		return mergeProcessorInput{}, errors.Newf("expected 2 columns, got %d", len(row))
+	}
+	if err := row[0].EnsureDecoded(typs[0], nil); err != nil {
+		return mergeProcessorInput{}, err
+	}
+	if err := row[1].EnsureDecoded(typs[1], nil); err != nil {
+		return mergeProcessorInput{}, err
+	}
+	sqlInstanceID, ok := row[0].Datum.(*tree.DBytes)
+	if !ok {
+		return mergeProcessorInput{}, errors.Newf("expected bytes column for sqlInstanceID, got %s", row[0].Datum.String())
+	}
+	taskID, ok := row[1].Datum.(*tree.DInt)
+	if !ok {
+		return mergeProcessorInput{}, errors.Newf("expected int4 column for taskID, got %s", row[1].Datum.String())
+	}
+	return mergeProcessorInput{
+		sqlInstanceID: string(*sqlInstanceID),
+		taskID:        taskset.TaskID(*taskID),
+	}, nil
 }
 
 func newBulkMergeProcessor(
@@ -53,8 +88,9 @@ func newBulkMergeProcessor(
 	input execinfra.RowSource,
 ) (execinfra.Processor, error) {
 	mp := &bulkMergeProcessor{
-		input: input,
-		spec:  spec,
+		input:   input,
+		spec:    spec,
+		flowCtx: flowCtx,
 	}
 	err := mp.Init(
 		ctx, mp, post, bulkMergeProcessorOutputTypes, flowCtx, processorID, nil,
@@ -80,15 +116,40 @@ func (m *bulkMergeProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMe
 		case meta != nil:
 			m.MoveToDraining(errors.Newf("unexpected meta: %v", meta))
 		case row != nil:
-			base := *row[0].Datum.(*tree.DBytes)
-			return rowenc.EncDatumRow{
-				rowenc.EncDatum{Datum: tree.NewDInt(1)},                  // TODO(jeffswenson): SQL Instance ID
-				rowenc.EncDatum{Datum: tree.NewDInt(1)},                  // TODO(jeffswenson): Task ID
-				rowenc.EncDatum{Datum: tree.NewDBytes(base + "->merge")}, // TODO(jeffswenson): output SST
-			}, nil
+			output, err := m.handleRow(row)
+			if err != nil {
+				m.MoveToDraining(err)
+			} else {
+				return output, nil
+			}
 		}
 	}
 	return nil, m.DrainHelper()
+}
+
+func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
+	input, err := parseMergeProcessorInput(row, m.input.OutputTypes())
+	if err != nil {
+		return nil, err
+	}
+
+	results := execinfrapb.BulkMergeSpec_Output{}
+	results.SSTs = append(results.SSTs, execinfrapb.BulkMergeSpec_SST{
+		// TODO(jeffswenson): replace this with real output. For now we just
+		// want to make sure each task is processed
+		URI: fmt.Sprintf("nodelocal://%d/merger/1337/%d.sst", m.flowCtx.NodeID.SQLInstanceID(), input.taskID),
+	})
+
+	marshaled, err := protoutil.Marshal(&results)
+	if err != nil {
+		return nil, err
+	}
+
+	return rowenc.EncDatumRow{
+		rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(input.sqlInstanceID))},
+		rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(input.taskID))},
+		rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(marshaled))},
+	}, nil
 }
 
 // Start implements execinfra.RowSource.

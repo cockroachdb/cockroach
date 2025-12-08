@@ -433,7 +433,12 @@ func (ih *instrumentationHelper) Setup(
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
 	ih.txnBufferedWritesEnabled = p.txn.BufferedWritesEnabled()
-	ih.stmtHintsCount = uint64(len(stmt.Hints))
+	ih.stmtHintsCount = 0
+	for _, hint := range stmt.Hints {
+		if hint.Enabled && hint.Err == nil {
+			ih.stmtHintsCount += 1
+		}
+	}
 	ih.retryCount = uint64(retryCount)
 	ih.codec = cfg.Codec
 	ih.origCtx = ctx
@@ -903,7 +908,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		}
 
 		if grunning.Supported {
-			ob.AddKVCPUTime(ih.topLevelStats.kvCPUTime)
+			ob.AddKVCPUTime(ih.topLevelStats.kvCPUTimeNanos)
 		}
 		if !ih.containsMutation && ih.vectorized && grunning.Supported {
 			// Currently we cannot separate SQL CPU time from local KV CPU time for

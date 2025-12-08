@@ -1920,16 +1920,6 @@ t_droppedcol  CREATE TABLE public.t_droppedcol (
                 CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
               );
 
-onlyif config local-schmea-locked
-query TT
-SHOW CREATE TABLE t_droppedcol;
-----
-t_droppedcol  CREATE TABLE public.t_droppedcol (
-                dropme INT8 NULL,
-                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
-              ) WITH (schema_locked = true);
-
 statement ok
 DROP TABLE t_droppedcol;
 

@@ -3143,7 +3143,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- REFRESH of this MV will queue a GRANT at end of transaction
  CREATE MATERIALIZED VIEW sro_mv AS SELECT mv_action() WITH NO DATA;
 +ERROR:  unknown function: mv_action()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  REFRESH MATERIALIZED VIEW sro_mv;
 -ERROR:  cannot create a cursor WITH HOLD within security-restricted operation
 -CONTEXT:  SQL function "mv_action" statement 1

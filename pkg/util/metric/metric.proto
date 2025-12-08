@@ -148,6 +148,10 @@ message Metadata {
   // Currently this field is only output to metrics.yaml for documentation
   // purposes, with plans for future use in automated dashboard generation.
   required string how_to_use = 12 [(gogoproto.nullable) = false];
+  // tsdb_record_labeled enables child metrics to be collected
+  // in the low-frequency child metrics poller. When true, child metrics with
+  // labels will be recorded in the time series database.
+  optional bool tsdb_record_labeled = 13;
 
-  // Next ID: 13.
+  // Next ID: 14.
 }

@@ -76,7 +76,7 @@ verify_docker_image(){
   build_type=$(grep "^Build Type:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
   sha=$(grep "^Build Commit ID:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
   build_tag=$(grep "^Build Tag:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
-  fips_enabled=$(grep '^FIPS enabled:\s*true' <<< "$output")
+  fips_enabled=$(grep '^FIPS enabled:\s*true' <<< "$output" || true)
 
   # Build Type should always be "release"
   if [ "$build_type" != "release" ]; then

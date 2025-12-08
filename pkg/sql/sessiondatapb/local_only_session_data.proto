@@ -759,6 +759,9 @@ message LocalOnlySessionData {
   // canary statistics (mode == on), stable statistics (mode == off), or
   // let the system decide based on random selection (mode == auto).
   int64 canary_stats_mode = 193 [(gogoproto.casttype) = "CanaryStatsMode"];
+  // UseSwapMutations, when true, enables use of the update swap and delete swap
+  // operators.
+  bool use_swap_mutations = 194;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

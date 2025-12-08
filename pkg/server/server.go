@@ -926,7 +926,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			}
 			storeLoadMsg := mmaintegration.MakeStoreLoadMsg(storeDesc, origTimestampNanos)
 			mmaAlloc.SetStore(state.StoreAttrAndLocFromDesc(storeDesc))
-			mmaAlloc.ProcessStoreLoadMsg(context.TODO(), &storeLoadMsg)
+			mmaAlloc.ProcessStoreLoadMsg(ctx, &storeLoadMsg)
 		},
 	)
 

@@ -48,6 +48,8 @@ func TestHintTableOperations(t *testing.T) {
 	var hint1, hint2 hints.Hint
 	hint1.SetValue(&hintpb.InjectHints{DonorSQL: "SELECT a FROM t@t_b_idx WHERE b = $1"})
 	hint2.SetValue(&hintpb.InjectHints{DonorSQL: "SELECT c FROM t@{NO_FULL_SCAN} WHERE d = $2"})
+	hint1.Enabled = true
+	hint2.Enabled = true
 	var err error
 	donorStmt1, err := parserutils.ParseOne(hint1.InjectHints.DonorSQL)
 	require.NoError(t, err)
@@ -118,7 +120,7 @@ func TestHintTableOperations(t *testing.T) {
 	require.Len(t, hintsFromDB, 2)
 	require.Equal(t, fingerprint1, fingerprints[0])
 	require.Equal(t, fingerprint1, fingerprints[1])
-	require.Less(t, hintIDs[0], hintIDs[1])
+	require.Greater(t, hintIDs[0], hintIDs[1])
 
 	// Insert hint for different fingerprint.
 	var insertedHintID3 int64

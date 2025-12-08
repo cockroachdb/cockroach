@@ -8,7 +8,7 @@ DROP VIEW defaultdb.v1
 ----
 StatementPhase stage 1 of 1 with 31 MutationType ops
   transitions:
-    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -137,7 +137,7 @@ StatementPhase stage 1 of 1 with 31 MutationType ops
       TableID: 105
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 105}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -167,7 +167,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
       {}
 PreCommitPhase stage 2 of 2 with 34 MutationType ops
   transitions:
-    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -524,7 +524,7 @@ DROP VIEW defaultdb.v1
   to:   [View:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 105, Name: v1, ReferencedDescID: 101}, ABSENT]
+- from: [Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   to:   [View:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -621,7 +621,7 @@ DROP VIEW defaultdb.v1
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 105}, DROPPED]
-  to:   [Namespace:{DescID: 105, Name: v1, ReferencedDescID: 101}, ABSENT]
+  to:   [Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 105}, DROPPED]
@@ -658,7 +658,7 @@ DROP VIEW defaultdb.v1 CASCADE
 ----
 StatementPhase stage 1 of 1 with 176 MutationType ops
   transitions:
-    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -683,7 +683,7 @@ StatementPhase stage 1 of 1 with 176 MutationType ops
     [[ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 105, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -711,7 +711,7 @@ StatementPhase stage 1 of 1 with 176 MutationType ops
     [[ColumnName:{DescID: 106, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 106, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -739,7 +739,7 @@ StatementPhase stage 1 of 1 with 176 MutationType ops
     [[ColumnName:{DescID: 107, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 107, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -767,7 +767,7 @@ StatementPhase stage 1 of 1 with 176 MutationType ops
     [[ColumnName:{DescID: 108, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 108, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1377,7 +1377,7 @@ StatementPhase stage 1 of 1 with 176 MutationType ops
       TableID: 111
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 105}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -1402,7 +1402,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnHidden:{DescID: 105, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -1430,7 +1430,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[ColumnName:{DescID: 106, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnHidden:{DescID: 106, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 107}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -1458,7 +1458,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[ColumnName:{DescID: 107, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnHidden:{DescID: 107, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 108}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -1486,7 +1486,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[ColumnName:{DescID: 108, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnHidden:{DescID: 108, ColumnID: 4294967292}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 111}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -1522,7 +1522,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
       {}
 PreCommitPhase stage 2 of 2 with 185 MutationType ops
   transitions:
-    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1547,7 +1547,7 @@ PreCommitPhase stage 2 of 2 with 185 MutationType ops
     [[ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 105, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1575,7 +1575,7 @@ PreCommitPhase stage 2 of 2 with 185 MutationType ops
     [[ColumnName:{DescID: 106, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 106, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1603,7 +1603,7 @@ PreCommitPhase stage 2 of 2 with 185 MutationType ops
     [[ColumnName:{DescID: 107, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 107, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -1631,7 +1631,7 @@ PreCommitPhase stage 2 of 2 with 185 MutationType ops
     [[ColumnName:{DescID: 108, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnHidden:{DescID: 108, ColumnID: 4294967292}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -3421,23 +3421,23 @@ DROP VIEW defaultdb.v1 CASCADE
   to:   [View:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 105, Name: v1, ReferencedDescID: 101}, ABSENT]
+- from: [Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   to:   [View:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 106, Name: v2, ReferencedDescID: 101}, ABSENT]
+- from: [Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   to:   [View:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 107, Name: v3, ReferencedDescID: 101}, ABSENT]
+- from: [Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 108, Name: v4, ReferencedDescID: 101}, ABSENT]
+- from: [Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 111, Name: v5, ReferencedDescID: 101}, ABSENT]
+- from: [Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   to:   [View:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -3598,7 +3598,7 @@ DROP VIEW defaultdb.v1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 105}, DROPPED]
-  to:   [Namespace:{DescID: 105, Name: v1, ReferencedDescID: 101}, ABSENT]
+  to:   [Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 105}, DROPPED]
@@ -3710,7 +3710,7 @@ DROP VIEW defaultdb.v1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 106}, DROPPED]
-  to:   [Namespace:{DescID: 106, Name: v2, ReferencedDescID: 101}, ABSENT]
+  to:   [Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 106}, DROPPED]
@@ -3822,7 +3822,7 @@ DROP VIEW defaultdb.v1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 107}, DROPPED]
-  to:   [Namespace:{DescID: 107, Name: v3, ReferencedDescID: 101}, ABSENT]
+  to:   [Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 107}, DROPPED]
@@ -3934,7 +3934,7 @@ DROP VIEW defaultdb.v1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
-  to:   [Namespace:{DescID: 108, Name: v4, ReferencedDescID: 101}, ABSENT]
+  to:   [Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
@@ -4058,7 +4058,7 @@ DROP VIEW defaultdb.v1 CASCADE
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
-  to:   [Namespace:{DescID: 111, Name: v5, ReferencedDescID: 101}, ABSENT]
+  to:   [Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]

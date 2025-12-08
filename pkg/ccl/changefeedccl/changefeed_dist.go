@@ -362,10 +362,12 @@ var rangeDistributionStrategyStrings = map[clusterSettingRangeDistributionType]s
 var RangeDistributionStrategy = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"changefeed.default_range_distribution_strategy",
-	"configures how work is distributed among nodes for a given changefeed. "+
-		"for the most balanced distribution, use `balanced_simple`. changing this setting "+
-		"will not override locality restrictions. this setting can be overridden by the "+
-		"changefeed option `range_distribution_strategy`",
+	"controls how changefeed work is distributed across nodes. "+
+		"'default' defers to DistSQL for node selection and work distribution. "+
+		"'balanced_simple' uses DistSQL for node selection but then attempts to evenly "+
+		"distribute ranges across those selected nodes for better load balancing. "+
+		"this setting does not override locality restrictions and can be overridden "+
+		"per-changefeed using the 'range_distribution_strategy' option.",
 	metamorphic.ConstantWithTestChoice("default_range_distribution_strategy",
 		string(changefeedbase.ChangefeedRangeDistributionStrategyDefault),
 		string(changefeedbase.ChangefeedRangeDistributionStrategyBalancedSimple)),
@@ -411,10 +413,14 @@ func makePlan(
 		oracle := replicaoracle.NewOracle(replicaOracleChoice, dsp.ReplicaOracleConfig(locFilter))
 		if useBulkOracle.Get(&evalCtx.Settings.SV) {
 			log.Changefeed.Infof(ctx, "using bulk oracle for DistSQL planning")
-			oracle = kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), locFilter, kvfollowerreadsccl.StreakConfig{})
+			var err error
+			oracle, err = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), sql.SingleLocalityFilter(locFilter))
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil, /* planner */
-			blankTxn, sql.DistributionType(distMode), oracle, locFilter)
+			blankTxn, sql.DistributionType(distMode), oracle, sql.SingleLocalityFilter(locFilter), sql.NoStrictLocalityFiltering)
 		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans, sql.PartitionSpansBoundDefault)
 		if err != nil {
 			return nil, nil, err

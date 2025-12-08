@@ -1,0 +1,31 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "testowner_lib",
+    testonly = 1,
+    srcs = ["testowner.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/testowner",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/cmd/roachtest/registry",
+        "//pkg/cmd/roachtest/spec",
+        "//pkg/cmd/roachtest/tests",
+        "//pkg/internal/codeowners",
+        "//pkg/internal/team",
+        "@com_github_prometheus_client_golang//prometheus/promauto",
+    ],
+)
+
+go_binary(
+    name = "testowner",
+    testonly = 1,
+    embed = [":testowner_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "testowner_test",
+    srcs = ["testowner_test.go"],
+    embed = [":testowner_lib"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

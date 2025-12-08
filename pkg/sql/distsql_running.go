@@ -18,7 +18,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -461,13 +460,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(statementSQL) > setupFlowRequestStmtMaxLength {
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
-	v := execversion.V25_2
-	if dsp.st.Version.IsActive(ctx, clusterversion.V25_4) {
-		v = execversion.V25_4
-	}
 	setupReq := execinfrapb.SetupFlowRequest{
 		LeafTxnInputState: leafInputState,
-		Version:           v,
+		Version:           execversion.V25_4,
 		TraceKV:           recv.tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
@@ -1625,7 +1620,7 @@ func forwardInnerQueryStats(f metadataForwarder, stats topLevelQueryStats) {
 	meta.Metrics.RowsWritten = stats.rowsWritten
 	meta.Metrics.IndexRowsWritten = stats.indexRowsWritten
 	meta.Metrics.IndexBytesWritten = stats.indexBytesWritten
-	meta.Metrics.KVCPUTime = int64(stats.kvCPUTime)
+	meta.Metrics.KVCPUTime = int64(stats.kvCPUTimeNanos)
 	// stats.networkEgressEstimate and stats.clientTime are ignored since they
 	// only matter at the "true" top-level query (and actually should be zero
 	// here anyway).
@@ -1676,7 +1671,7 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 		r.stats.rowsWritten += meta.Metrics.RowsWritten
 		r.stats.indexRowsWritten += meta.Metrics.IndexRowsWritten
 		r.stats.indexBytesWritten += meta.Metrics.IndexBytesWritten
-		r.stats.kvCPUTime += time.Duration(meta.Metrics.KVCPUTime)
+		r.stats.kvCPUTimeNanos += time.Duration(meta.Metrics.KVCPUTime)
 
 		if sm, ok := r.scanStageEstimateMap[meta.Metrics.StageID]; ok {
 			sm.rowsRead += uint64(meta.Metrics.RowsRead)

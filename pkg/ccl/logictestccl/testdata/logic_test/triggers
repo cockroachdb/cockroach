@@ -163,7 +163,7 @@ statement error pgcode 0A000 pq: cannot accept a value of type trigger
 CREATE TYPE udt AS (x INT, y TRIGGER, z TEXT);
 
 # Trigger array UDT field.
-statement error pgcode 42601 pq: at or near "\[": syntax error
+statement error pgcode 42704 pq: at or near ",": syntax error: type trigger\[\] does not exist
 CREATE TYPE udt AS (x INT, y TRIGGER[], z TEXT);
 
 # ==============================================================================
@@ -930,11 +930,11 @@ statement ok
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION trigger_func();
 
 # Relations are referenced by name, so renaming the table is not allowed.
-onlyif config local-legacy-schema-changer local-mixed-25.3
+onlyif config local-legacy-schema-changer
 statement error pgcode 2BP01 cannot rename relation "t" because trigger "foo" on table "xy" depends on it
 ALTER TABLE t RENAME TO t2;
 
-skipif config local-legacy-schema-changer local-mixed-25.3
+skipif config local-legacy-schema-changer
 statement error pgcode 2BP01 cannot rename relation "test.public.t" because trigger "foo" on table "xy" depends on it
 ALTER TABLE t RENAME TO t2;
 

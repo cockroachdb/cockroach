@@ -658,6 +658,7 @@ func (b *Builder) finalizeRoutineReturnType(
 // into a single tuple column.
 func (b *Builder) combineRoutineColsIntoTuple(stmtScope *scope) *scope {
 	outScope := stmtScope.push()
+	outScope.copyOrdering(stmtScope)
 	elems := make(memo.ScalarListExpr, len(stmtScope.cols))
 	typContents := make([]*types.T, len(stmtScope.cols))
 	for i := range stmtScope.cols {
@@ -682,6 +683,7 @@ func (b *Builder) expandRoutineTupleIntoCols(stmtScope *scope) *scope {
 	}
 	tupleColID := stmtScope.cols[0].id
 	outScope := stmtScope.push()
+	outScope.copyOrdering(stmtScope)
 	colTyp := b.factory.Metadata().ColumnMeta(tupleColID).Type
 	for i := range colTyp.TupleContents() {
 		varExpr := b.factory.ConstructVariable(tupleColID)
@@ -726,6 +728,7 @@ func (b *Builder) maybeAddRoutineAssignmentCasts(
 		return stmtScope
 	}
 	outScope := stmtScope.push()
+	outScope.copyOrdering(stmtScope)
 	for i, col := range stmtScope.cols {
 		scalar := b.factory.ConstructVariable(col.id)
 		if !col.typ.Identical(desiredTypes[i]) {

@@ -37,11 +37,11 @@ const (
 func (dim LoadDimension) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch dim {
 	case CPURate:
-		w.Printf("CPURate")
+		w.SafeString("CPURate")
 	case WriteBandwidth:
-		w.Print("WriteBandwidth")
+		w.SafeString("WriteBandwidth")
 	case ByteSize:
-		w.Printf("ByteSize")
+		w.SafeString("ByteSize")
 	default:
 		panic("unknown LoadDimension")
 	}
@@ -53,6 +53,8 @@ func (dim LoadDimension) String() string {
 
 // LoadValue is the load on a resource.
 type LoadValue int64
+
+func (LoadValue) SafeValue() {}
 
 // LoadVector represents a vector of loads, with one element for each resource
 // dimension.
@@ -187,7 +189,23 @@ type NodeLoad struct {
 type meanStoreLoad struct {
 	load     LoadVector
 	capacity LoadVector
-	// Util is 0 for CPURate, WriteBandwidth. Non-zero for ByteSize.
+	// util is the capacity-weighted mean utilization, computed as
+	// sum(load)/sum(capacity), NOT the average of individual store utilizations.
+	//
+	// We use capacity-weighted mean because it answers: "Is this store carrying
+	// its fair share of load?" rather than "Is this store more utilized than
+	// typical stores?". This is the desired behavior for heterogeneous clusters
+	// where ideally all stores run at the same utilization regardless of size.
+	//
+	// Example: 3 stores with (load, capacity) = (10, 10), (10, 10), (10, 100)
+	//   - Average of individual utils: (100% + 100% + 10%) / 3 = 70%
+	//   - Capacity-weighted (sum/sum): 30 / 120 = 25%
+	// The capacity-weighted 25% is the true picture of resource availability,
+	// and comparing a store's utilization against this tells us if it's
+	// carrying more than its proportional share.
+	//
+	// Util is 0 for WriteBandwidth (since its Capacity is UnknownCapacity).
+	// Non-zero for CPURate, ByteSize.
 	util [NumLoadDimensions]float64
 
 	secondaryLoad SecondaryLoadVector
@@ -456,15 +474,15 @@ func (ls loadSummary) String() string {
 func (ls loadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch ls {
 	case loadLow:
-		w.Print("loadLow")
+		w.SafeString("loadLow")
 	case loadNormal:
-		w.Print("loadNormal")
+		w.SafeString("loadNormal")
 	case loadNoChange:
-		w.Print("loadNoChange")
+		w.SafeString("loadNoChange")
 	case overloadSlow:
-		w.Print("overloadSlow")
+		w.SafeString("overloadSlow")
 	case overloadUrgent:
-		w.Print("overloadUrgent")
+		w.SafeString("overloadUrgent")
 	default:
 		panic("unknown loadSummary")
 	}

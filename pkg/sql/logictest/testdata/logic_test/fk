@@ -754,12 +754,10 @@ orders      orders_product_fkey  FOREIGN KEY      FOREIGN KEY (product) REFERENC
 orders      valid_customer       FOREIGN KEY      FOREIGN KEY (customer) REFERENCES customers(id)                                       true
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-25.3
 statement error pq: "products_upc_key" is referenced by foreign key from table "delivery"
 DROP INDEX products@products_upc_key
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-25.3
 statement error pq: "products_upc_key" is referenced by foreign key from table "delivery"
 DROP INDEX products@products_upc_key RESTRICT
 
@@ -4845,80 +4843,119 @@ subtest drop_col_dep_non_self_fk_stored
 # The logic in this UDF is equivalent to and originated from
 # columnDropViolatesFKIndexRequirements() in pkg/workload/schemachange/error_screening.go.
 statement ok
-CREATE FUNCTION column_drop_violates_fk_index_requirements(table_name STRING, column_name STRING) RETURNS BOOL LANGUAGE SQL AS $$
-  WITH fk AS (
-    SELECT
-      oid,
-      (SELECT r.relname FROM pg_class AS r WHERE r.oid = c.confrelid) AS base_table,
-      a.attname AS base_col,
-      array_position(c.confkey, a.attnum) AS base_ordinal,
-      (SELECT r.relname FROM pg_class AS r WHERE r.oid = c.conrelid) AS referencing_table,
-      unnest(
-        (SELECT array_agg(attname)
-         FROM pg_attribute
-         WHERE attrelid = c.conrelid
-           AND ARRAY[attnum] <@ c.conkey
-           AND array_position(c.confkey, a.attnum) = array_position(c.conkey, attnum))
-      ) AS referencing_col
-    FROM pg_constraint AS c
-    JOIN pg_attribute AS a ON
-      c.confrelid = a.attrelid
-      AND ARRAY[attnum] <@ c.conkey
-    WHERE c.confrelid = table_name::REGCLASS::OID
-  ),
-  all_index_columns AS (
-    SELECT
-      i.indexrelid::REGCLASS::STRING AS index_name,
-      a.attname AS col_name,
-      NOT i.indisunique AS non_unique,
-      a.attnum > i.indnkeyatts AS storing
-    FROM pg_index i
-    JOIN pg_attribute a ON a.attrelid = i.indexrelid AND a.attnum > 0
-    WHERE i.indrelid = table_name::REGCLASS::OID
-  ),
-  valid_indexes AS (
+CREATE FUNCTION column_drop_violates_fk_index_requirements(table_name STRING, column_name STRING)
+	RETURNS BOOL
+	LANGUAGE SQL
+	AS $$
+WITH fk AS (
+            SELECT oid,
+                   (
+                    SELECT r.relname
+                      FROM pg_class AS r
+                     WHERE r.oid = c.confrelid
+                   ) AS base_table,
+                   a.attname AS base_col,
+                   array_position(
+                    c.confkey,
+                    a.attnum
+                   ) AS base_ordinal,
+                   (
+                    SELECT r.relname
+                      FROM pg_class AS r
+                     WHERE r.oid = c.conrelid
+                   ) AS referencing_table,
+                   unnest(
+                    (
+                        SELECT array_agg(attname)
+                          FROM pg_attribute
+                         WHERE attrelid = c.conrelid
+                               AND ARRAY[attnum] <@ c.conkey
+                               AND array_position(
+                                    c.confkey,
+                                    a.attnum
+                                )
+                                = array_position(
+                                        c.conkey,
+                                        attnum
+                                    )
+                    )
+                   ) AS referencing_col
+              FROM pg_constraint AS c
+                   JOIN pg_attribute AS a ON c.confrelid
+                                                     = a.attrelid
+                                                     AND ARRAY[
+                                                            attnum
+                                                        ]
+                                                        <@ c.conkey
+             WHERE c.confrelid = table_name::REGCLASS::OID
+          ),
+       all_index_columns AS (
+                            SELECT
+                                i.indexrelid::REGCLASS::STRING
+                                    AS index_name,
+                                a.attname AS col_name,
+                                NOT
+                                    i.indisunique AS non_unique,
+                                a.attnum
+                                > i.indnkeyatts AS storing,
+                                a.attnum AS index_ordinal
+                            FROM
+                                pg_index AS i
+                                JOIN pg_attribute AS a ON
+                                        a.attrelid
+                                        = i.indexrelid
+                                        AND a.attnum > 0
+                            WHERE
+                                i.indrelid
+                                = table_name::REGCLASS::OID
+                         ),
+       valid_indexes AS (
+                        SELECT *
+                          FROM all_index_columns
+                         WHERE index_name
+                               NOT IN (
+                                    SELECT DISTINCT
+                                           index_name
+                                      FROM all_index_columns
+                                     WHERE col_name = column_name
+                                           AND index_name
+                                            NOT LIKE '%_pkey'
+                                )
+                     ),
+       fk_col_counts AS (
+                          SELECT oid, count(*) AS num_cols
+                            FROM fk
+                        GROUP BY oid
+                     ),
+              index_column_counts AS (
+       			SELECT index_name, count(*) as num_cols  FROM valid_indexes WHERE storing='f' GROUP BY index_name
+       		     ),
+              matching_fks AS (
+                                 SELECT fk.oid
+                                   FROM fk
+                                        JOIN valid_indexes ON
+                                               fk.base_col
+                                               = valid_indexes.col_name
+       				 JOIN index_column_counts ON
+       					valid_indexes.index_name = index_column_counts.index_name
+                                        JOIN fk_col_counts ON
+                                               fk.oid
+                                               = fk_col_counts.oid
+                                  WHERE valid_indexes.storing
+                                        = false
+                                        AND valid_indexes.non_unique
+                                           = false
+       				 AND index_column_counts.num_cols =  fk_col_counts.num_cols
+                               GROUP BY fk.oid,
+                                        valid_indexes.index_name,
+                                        fk_col_counts.num_cols
+                                 HAVING count(DISTINCT fk.base_col)
+                                        = fk_col_counts.num_cols
+                           )
+SELECT EXISTS(
     SELECT *
-    FROM all_index_columns
-    WHERE index_name NOT IN (
-      SELECT DISTINCT index_name
-      FROM all_index_columns
-      WHERE col_name = column_name
-        AND storing = false
-        AND index_name NOT LIKE '%_pkey'
-    )
-  ),
-  fk_col_counts AS (
-    SELECT oid, count(*) AS num_cols
-    FROM fk
-    GROUP BY oid
-  ),
-  index_col_counts AS (
-    SELECT index_name, count(*) AS num_cols
-    FROM valid_indexes
-    WHERE storing = false
-    GROUP BY index_name
-  ),
-  matching_fks AS (
-    SELECT fk.oid
-    FROM fk
-    JOIN valid_indexes
-      ON fk.base_col = valid_indexes.col_name
-    JOIN fk_col_counts
-      ON fk.oid = fk_col_counts.oid
-    JOIN index_col_counts
-      ON valid_indexes.index_name = index_col_counts.index_name
-    WHERE valid_indexes.storing = false
-      AND valid_indexes.non_unique = false
-      AND fk_col_counts.num_cols = index_col_counts.num_cols
-    GROUP BY fk.oid, valid_indexes.index_name, fk_col_counts.num_cols
-    HAVING count(*) = fk_col_counts.num_cols
-  )
-SELECT EXISTS (
-  SELECT *
-  FROM fk
-  WHERE oid NOT IN (
-    SELECT DISTINCT oid FROM matching_fks
-  )
+      FROM fk
+     WHERE oid NOT IN (SELECT DISTINCT oid FROM matching_fks)
 )
 $$;
 
@@ -5091,5 +5128,78 @@ self_dep_key  CREATE TABLE public.self_dep_key (
 
 statement ok
 DROP TABLE self_dep_key;
+
+# Alternative secondary index has more storing columns, but has the correct key column
+# prefix to work.
+statement ok
+CREATE TABLE self_dep_key_2 (
+       col1_w4_6 INET NOT NULL,
+       col1_w4_7 DATE NOT NULL,
+       col1_w4_8 STRING COLLATE da_DK NOT NULL,
+       col1_w4_11 STRING NOT NULL,
+       col1_w4_13 INTERVAL NOT NULL,
+       col1_w4_14 UUID NOT NULL,
+       col1_w4_15 "char" NOT NULL,
+       CONSTRAINT table_w4_1_pkey PRIMARY KEY (col1_w4_6 ASC) USING HASH WITH (bucket_count=16),
+       CONSTRAINT table_w4_1_col1_w4_6_table_w4_1_col1_w4_6_fk FOREIGN KEY (col1_w4_6) REFERENCES self_dep_key_2 (col1_w4_6) ON DELETE CASCADE ON UPDATE CASCADE,
+       UNIQUE INDEX table_w4_1_col1_w4_6_key (col1_w4_6 ASC) STORING (col1_w4_7, col1_w4_11, col1_w4_13, col1_w4_14, col1_w4_15),
+       UNIQUE INDEX table_w4_1_col1_w4_6_col1_w4_8_key (col1_w4_6 ASC, col1_w4_8 DESC)
+   );
+
+query B
+SELECT column_drop_violates_fk_index_requirements('self_dep_key_2', 'col1_w4_8');
+----
+false
+
+# Sanity this should work.
+statement ok
+ALTER TABLE self_dep_key_2 DROP COLUMN col1_w4_8;
+
+
+# Self reference where dropping the stored column will be trouble.
+statement ok
+CREATE TABLE self_dep_key_3 (
+  id INT PRIMARY KEY,
+  indexed_col INT NOT NULL,
+  stored_col INT NOT NULL,
+  UNIQUE (indexed_col) STORING (stored_col)
+);
+
+statement ok
+ALTER TABLE self_dep_key_3 ADD CONSTRAINT t_fk
+  FOREIGN KEY (indexed_col) REFERENCES self_dep_key_3 (indexed_col);
+
+query B
+SELECT column_drop_violates_fk_index_requirements('self_dep_key_3', 'stored_col');
+----
+true
+
+# This should fail
+statement error pq: "self_dep_key_3_indexed_col_key" is referenced by foreign key from table "self_dep_key_3"
+ALTER TABLE self_dep_key_3 DROP COLUMN stored_col;
+
+# Self reference where dropping the stored column will lead to the only other
+# index not being usable (not the same prefix + length).
+statement ok
+CREATE TABLE self_dep_key_4 (
+  id INT PRIMARY KEY,
+  indexed_col INT NOT NULL,
+  stored_col INT NOT NULL,
+  UNIQUE (indexed_col) STORING (stored_col),
+  UNIQUE (indexed_col, id)
+);
+
+statement ok
+ALTER TABLE self_dep_key_4 ADD CONSTRAINT t_fk
+  FOREIGN KEY (indexed_col) REFERENCES self_dep_key_4 (indexed_col);
+
+query B
+SELECT column_drop_violates_fk_index_requirements('self_dep_key_4', 'stored_col');
+----
+true
+
+# This should fail
+statement error pq: "self_dep_key_4_indexed_col_key" is referenced by foreign key from table "self_dep_key_4"
+ALTER TABLE self_dep_key_4 DROP COLUMN stored_col;
 
 subtest end

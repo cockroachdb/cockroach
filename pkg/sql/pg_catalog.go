@@ -1250,7 +1250,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 				ctx,
 				p,
 				dbContext,
-				false,
+				false, /* includeMetadata */
 				func(ctx context.Context, _ catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typeDesc catalog.TypeDescriptor) error {
 					nspOid := schemaOid(sc.GetID())
 					tn := tree.NewQualifiedTypeName(dbContext.GetName(), sc.GetName(), typeDesc.GetName())
@@ -1803,7 +1803,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 		if err != nil {
 			return err
 		}
-		return forEachSchema(ctx, p, dbContext, true, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
+		return forEachSchema(ctx, p, dbContext, true /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
 			pgProcTableOid := tableOid(pgProcDesc.GetID())
 			return sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
 				funcDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).Get().Function(ctx, sig.ID)
@@ -2303,7 +2303,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(ctx context.Context, db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, true, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
+				return forEachSchema(ctx, p, db, true /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
 					ownerOID := tree.DNull
 					if sc.SchemaKind() == catalog.SchemaUserDefined {
 						var err error
@@ -2348,7 +2348,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 					}
 					// Fallback to looking for temporary schemas.
 					var tempSchema catalog.SchemaDescriptor
-					if err := forEachSchema(ctx, p, db, false, false /* includeMetadata */, func(ctx context.Context, schema catalog.SchemaDescriptor) error {
+					if err := forEachSchema(ctx, p, db, false /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, schema catalog.SchemaDescriptor) error {
 						if schema.GetID() != descpb.ID(ooid) {
 							return nil
 						}
@@ -2891,7 +2891,7 @@ https://www.postgresql.org/docs/16/catalog-pg-proc.html`,
 		}
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(ctx context.Context, dbDesc catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, dbDesc, true, false /* includeMetadata */, func(ctx context.Context, scDesc catalog.SchemaDescriptor) error {
+				return forEachSchema(ctx, p, dbDesc, true /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, scDesc catalog.SchemaDescriptor) error {
 					return scDesc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
 						fnDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Function(ctx, sig.ID)
 						if err != nil {
@@ -5676,7 +5676,7 @@ func populateVirtualIndexForTable(
 		// Ideally, the catalog API would be able to return the temporary
 		// schemas from other sessions, but it cannot right now. See
 		// https://github.com/cockroachdb/cockroach/issues/97822.
-		if err := forEachSchema(ctx, p, dbContext, false, false, func(ctx context.Context, schema catalog.SchemaDescriptor) error {
+		if err := forEachSchema(ctx, p, dbContext, false /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, schema catalog.SchemaDescriptor) error {
 			if schema.GetID() == tableDesc.GetParentSchemaID() {
 				sc = schema
 			}

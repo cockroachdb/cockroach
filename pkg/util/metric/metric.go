@@ -233,11 +233,20 @@ func (m *Metadata) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
 	return lps
 }
 
+// Returns the value for TsdbRecordLabeled,
+// defaults to True when it is not supplied.
+func (m *Metadata) GetTsdbRecordLabeled() bool {
+	if m.TsdbRecordLabeled == nil {
+		return true
+	}
+	return *m.TsdbRecordLabeled
+}
+
 // AddLabel adds a label/value pair for this metric.
 func (m *Metadata) AddLabel(name, value string) {
 	m.Labels = append(m.Labels,
 		&LabelPair{
-			Name:  proto.String(exportedLabel(name)),
+			Name:  proto.String(ExportedLabel(name)),
 			Value: proto.String(value),
 		})
 }

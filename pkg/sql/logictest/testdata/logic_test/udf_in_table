@@ -114,20 +114,6 @@ CREATE TABLE public.t1 (
   FAMILY fam_0 (a, b, c, d, e)
 ) WITH (schema_locked = true);
 
-onlyif config local-schema-locked
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t1];
-----
-CREATE TABLE public.t1 (
-  a INT8 NOT NULL,
-  b INT8 NULL DEFAULT public.f1(),
-  c INT8 NULL,
-  d INT8 NULL ON UPDATE public.f1(),
-  e INT8 NULL,
-  CONSTRAINT t1_pkey PRIMARY KEY (a ASC),
-  FAMILY fam_0 (a, b, c, d, e)
-);
-
 # Make sure that back references are tracked properly.
 let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';

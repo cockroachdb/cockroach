@@ -2061,7 +2061,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
 +
  create view tt14v as select t.* from tt14f() t;
 +ERROR:  unknown function: tt14f()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  select pg_get_viewdef('tt14v', true);
 -         pg_get_viewdef         
 ---------------------------------
@@ -2185,7 +2184,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
 +ERROR:  relation "tt14v" does not exist
  create view tt14v as select t.f1, t.f4 from tt14f() t;
 +ERROR:  unknown function: tt14f()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  select pg_get_viewdef('tt14v', true);
 -         pg_get_viewdef         
 ---------------------------------

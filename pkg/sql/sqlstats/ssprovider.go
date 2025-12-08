@@ -85,6 +85,7 @@ type RecordedStmtStats struct {
 	BytesRead                int64
 	RowsRead                 int64
 	RowsWritten              int64
+	KVCPUTimeNanos           int64
 	Nodes                    []int64
 	KVNodeIDs                []int32
 	StatementType            tree.StatementType
@@ -123,6 +124,7 @@ type RecordedTxnStats struct {
 	RowsRead                int64
 	RowsWritten             int64
 	BytesRead               int64
+	KVCPUTimeNanos          time.Duration
 	Priority                roachpb.UserPriority
 	TxnErr                  error
 	Application             string
@@ -233,7 +235,7 @@ func (b *RecordedStatementStatsBuilder) LatencyRecorder(
 }
 
 func (b *RecordedStatementStatsBuilder) QueryLevelStats(
-	bytesRead int64, rowsRead int64, rowsWritten int64,
+	bytesRead int64, rowsRead int64, rowsWritten int64, kvCPUTime int64,
 ) *RecordedStatementStatsBuilder {
 	if b == nil {
 		return b
@@ -241,6 +243,7 @@ func (b *RecordedStatementStatsBuilder) QueryLevelStats(
 	b.stmtStats.BytesRead = bytesRead
 	b.stmtStats.RowsRead = rowsRead
 	b.stmtStats.RowsWritten = rowsWritten
+	b.stmtStats.KVCPUTimeNanos = kvCPUTime
 	return b
 }
 

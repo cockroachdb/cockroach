@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/cockroachdb/pebble/cockroachkvs"
 	"github.com/cockroachdb/pebble/metrics"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/rangekey"
@@ -554,7 +555,8 @@ var (
 		"the minimum size of a value that will be separated into a blob file given the value is "+
 			"likely not the latest version of a key",
 		int64(metamorphic.ConstantWithTestRange("storage.value_separation.mvcc_history_minimum_size",
-			32 /* 32 bytes (default) */, 25 /* 25 bytes (minimum) */, 512 /* 512 bytes (maximum) */)),
+			1<<10, /* 1 KiB (default) */
+			25 /* 25 bytes (minimum) */, 1<<20 /* 1 MiB (maximum) */)),
 		settings.IntWithMinimum(1),
 	)
 )
@@ -2506,15 +2508,14 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // named version, it can be assumed all *nodes* have ratcheted to the pebble
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
-	clusterversion.V25_4_PebbleFormatV2BlobFiles: pebble.FormatV2BlobFiles,
-	clusterversion.V25_3:                         pebble.FormatValueSeparation,
+	clusterversion.V25_4: pebble.FormatV2BlobFiles,
 }
 
 // MinimumSupportedFormatVersion is the version that provides features that the
 // Cockroach code relies on unconditionally (like range keys). New stores are by
 // default created with this version. It should correspond to the minimum
 // supported binary version.
-const MinimumSupportedFormatVersion = pebble.FormatValueSeparation
+const MinimumSupportedFormatVersion = pebble.FormatV2BlobFiles
 
 // pebbleFormatVersionKeys contains the keys in the map above, in descending order.
 var pebbleFormatVersionKeys = slices.SortedFunc(maps.Keys(pebbleFormatVersionMap), func(a, b clusterversion.Key) int {
@@ -2639,7 +2640,7 @@ func (p *Pebble) BufferedSize() int {
 func (p *Pebble) ConvertFilesToBatchAndCommit(
 	_ context.Context, paths []string, clearedSpans []roachpb.Span,
 ) error {
-	files := make([]sstable.ReadableFile, len(paths))
+	files := make([]objstorage.ReadableFile, len(paths))
 	closeFiles := func() {
 		for i := range files {
 			if files[i] != nil {
@@ -2656,7 +2657,7 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 		files[i] = f
 	}
 	iter, err := NewSSTEngineIterator(
-		[][]sstable.ReadableFile{files},
+		[][]objstorage.ReadableFile{files},
 		IterOptions{
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			LowerBound: roachpb.KeyMin,

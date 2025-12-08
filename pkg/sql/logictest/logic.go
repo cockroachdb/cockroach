@@ -3381,7 +3381,9 @@ func (t *logicTest) processSubtest(
 				for _, configName := range args {
 					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
 						s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, githubIssueStr(githubIssueID)))
-						break
+					}
+					if !logictestbase.ConfigExists(configName) {
+						return errors.Newf("logic test config %s doesn't exist", configName)
 					}
 				}
 			case "backup-restore":
@@ -3434,7 +3436,9 @@ func (t *logicTest) processSubtest(
 					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
 						// Our config matches one item in the list.
 						shouldSkip = false
-						break
+					}
+					if !logictestbase.ConfigExists(configName) {
+						return errors.Newf("logic test config %s doesn't exist", configName)
 					}
 				}
 				if shouldSkip {

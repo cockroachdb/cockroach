@@ -74,8 +74,7 @@ func parseSecondaryLoadVector(t *testing.T, in string) SecondaryLoadVector {
 	return vec
 }
 
-func parseStatusFromArgs(t *testing.T, d *datadriven.TestData) Status {
-	var status Status
+func parseStatusFromArgs(t *testing.T, d *datadriven.TestData, status *Status) {
 	if d.HasArg("health") {
 		healthStr := dd.ScanArg[string](t, d, "health")
 		found := false
@@ -118,7 +117,6 @@ func parseStatusFromArgs(t *testing.T, d *datadriven.TestData) Status {
 			t.Fatalf("unknown replica disposition: %s", replicaStr)
 		}
 	}
-	return status
 }
 
 func parseStoreLoadMsg(t *testing.T, in string) StoreLoadMsg {
@@ -215,6 +213,18 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 					replType, err := parseReplicaType(parts[1])
 					require.NoError(t, err)
 					repl.ReplicaType.ReplicaType = replType
+				case "lease-disposition":
+					found := false
+					for i := LeaseDisposition(0); i < leaseDispositionCount; i++ {
+						if i.String() == parts[1] {
+							repl.LeaseDisposition = i
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Fatalf("unknown lease disposition: %s", parts[1])
+					}
 				default:
 					t.Fatalf("unknown argument: %s", parts[0])
 				}
@@ -345,6 +355,9 @@ func TestClusterState(t *testing.T) {
 		func(t *testing.T, path string) {
 			ts := timeutil.NewManualTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 			cs := newClusterState(ts, newStringInterner())
+			tr := tracing.NewTracer()
+			tr.SetRedactable(true)
+			defer tr.Close()
 
 			printNodeListMeta := func(t *testing.T) string {
 				nodeList := []int{}
@@ -401,6 +414,11 @@ func TestClusterState(t *testing.T) {
 			// Recursively invoked in `include` directive.
 			var invokeFn func(t *testing.T, d *datadriven.TestData) string
 			invokeFn = func(t *testing.T, d *datadriven.TestData) string {
+				// Start a recording span for each command. Commands that want to
+				// include the trace in their output can call finishAndGet().
+				ctx, finishAndGet := tracing.ContextWithRecordingSpan(
+					context.Background(), tr, d.Cmd,
+				)
 				switch d.Cmd {
 				case "include":
 					loc := dd.ScanArg[string](t, d, "path")
@@ -477,8 +495,11 @@ func TestClusterState(t *testing.T) {
 					if !ok {
 						t.Fatalf("store %d not found", storeID)
 					}
-					status := parseStatusFromArgs(t, d)
-					ss.status = MakeStatus(status.Health, status.Disposition.Lease, status.Disposition.Replica)
+					// NB: we intentionall bypass the assertion in MakeStatus
+					// here so that we can test all combinations of health,
+					// lease, and replica dispositions, even those that we never
+					// want to see in production.
+					parseStatusFromArgs(t, d, &ss.status)
 					return ss.status.String()
 
 				case "store-load-msg":
@@ -576,10 +597,6 @@ func TestClusterState(t *testing.T) {
 					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
 					rng := rand.New(rand.NewSource(0))
 					dsm := newDiversityScoringMemo()
-					tr := tracing.NewTracer()
-					tr.SetRedactable(true)
-					defer tr.Close()
-					ctx, finishAndGet := tracing.ContextWithRecordingSpan(context.Background(), tr, "rebalance-stores")
 					re := newRebalanceEnv(cs, rng, dsm, cs.ts.Now())
 
 					if n, ok := dd.ScanArgOpt[int](t, d, "max-lease-transfer-count"); ok {
@@ -602,6 +619,15 @@ func TestClusterState(t *testing.T) {
 					seconds := dd.ScanArg[int](t, d, "seconds")
 					ts.Advance(time.Second * time.Duration(seconds))
 					return fmt.Sprintf("t=%v", ts.Now().Sub(testingBaseTime))
+
+				case "retain-ready-lease-target-stores-only":
+					in := dd.ScanArg[[]roachpb.StoreID](t, d, "in")
+					rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+					out := retainReadyLeaseTargetStoresOnly(ctx, storeSet(in), cs.stores, rangeID)
+					rec := finishAndGet()
+					var sb redact.StringBuilder
+					rec.SafeFormatMinimal(&sb)
+					return fmt.Sprintf("%s%v\n", sb.String(), out)
 
 				default:
 					panic(fmt.Sprintf("unknown command: %v", d.Cmd))
