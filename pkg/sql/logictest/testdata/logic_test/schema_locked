@@ -218,3 +218,45 @@ t_147993  CREATE TABLE public.t_147993 (
           ) WITH (schema_locked = true);
 
 subtest end
+
+# Regression test for #150484: schema_locked cannot be unset with the comma
+# syntax combined with other schema-changing operations. This prevents bypassing
+# the schema_locked protection by unsetting the lock and performing a schema
+# change in the same ALTER TABLE statement.
+subtest regression_150484
+
+statement ok
+CREATE TABLE t_150484 (n INT, m INT, FAMILY (n, m)) WITH (schema_locked=true);
+
+# Combining SET (schema_locked=false) with DROP COLUMN should fail.
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_150484" is locked
+ALTER TABLE t_150484 SET (schema_locked=false), DROP COLUMN n;
+
+# Combining RESET (schema_locked) with ADD COLUMN should fail.
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_150484" is locked
+ALTER TABLE t_150484 RESET (schema_locked), ADD COLUMN k INT;
+
+# Verify the table is still locked and unchanged.
+query TT
+SHOW CREATE TABLE t_150484
+----
+t_150484  CREATE TABLE public.t_150484 (
+            n INT8 NULL,
+            m INT8 NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT t_150484_pkey PRIMARY KEY (rowid ASC),
+            FAMILY fam_0_n_m_rowid (n, m, rowid)
+          ) WITH (schema_locked = true);
+
+# Confirm that SET (schema_locked=false) alone still works.
+statement ok
+ALTER TABLE t_150484 SET (schema_locked=false);
+
+# Now schema changes should work.
+statement ok
+ALTER TABLE t_150484 DROP COLUMN n;
+
+statement ok
+DROP TABLE t_150484;
+
+subtest end
