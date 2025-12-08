@@ -171,13 +171,31 @@ func TestNormalizeConstraints(t *testing.T) {
 					return b.String()
 				}
 				fmt.Fprintf(&b, "input:\n")
-				printSpanConfig(&b, nConf.uninternedConfig())
+				var prev strings.Builder
+				printSpanConfig(&prev, nConf.uninternedConfig())
+				b.WriteString(prev.String())
+
 				err = nConf.normalizeVoterConstraints()
 				fmt.Fprintf(&b, "after normalizeVoterConstraints:\n")
-				printSpanConfig(&b, nConf.uninternedConfig())
+				var cur strings.Builder
+				printSpanConfig(&cur, nConf.uninternedConfig())
+				if cur.String() == prev.String() {
+					fmt.Fprintf(&b, " (unchanged)\n")
+				} else {
+					b.WriteString(cur.String())
+				}
+				prev = cur
+
 				nConf.normalizeEmptyConstraints()
 				fmt.Fprintf(&b, "after normalizeEmptyConstraints:\n")
-				printSpanConfig(&b, nConf.uninternedConfig())
+				cur.Reset()
+				printSpanConfig(&cur, nConf.uninternedConfig())
+				if cur.String() == prev.String() {
+					fmt.Fprintf(&b, " (unchanged)\n")
+				} else {
+					b.WriteString(cur.String())
+				}
+
 				if err != nil {
 					fmt.Fprintf(&b, "err=%s\n", err.Error())
 				}
