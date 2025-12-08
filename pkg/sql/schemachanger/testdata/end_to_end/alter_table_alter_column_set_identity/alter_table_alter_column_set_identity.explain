@@ -11,11 +11,11 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward PUBLIC
- │         │    └── ABSENT → PUBLIC ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), GeneratedAsIdentityType: GENERATED_BY_DEFAULT, Value: "START 2 INCREMENT 3"}
+ │         │    └── ABSENT → PUBLIC ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "START 2 INCREMENT 3", GeneratedAsIdentityType: GENERATED_BY_DEFAULT}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
  │         ├── 1 element transitioning toward ABSENT
- │         │    └── PUBLIC → ABSENT ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), GeneratedAsIdentityType: GENERATED_ALWAYS, Value: "START 2 INCREMENT 3"}
+ │         │    └── PUBLIC → ABSENT ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "START 2 INCREMENT 3", GeneratedAsIdentityType: GENERATED_ALWAYS}
  │         └── 3 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── RemoveColumnGeneratedAsIdentity {"ColumnID":2,"TableID":104}
@@ -23,20 +23,20 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── PUBLIC → ABSENT ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), GeneratedAsIdentityType: GENERATED_BY_DEFAULT, Value: "START 2 INCREMENT 3"}
+ │    │    │    └── PUBLIC → ABSENT ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "START 2 INCREMENT 3", GeneratedAsIdentityType: GENERATED_BY_DEFAULT}
  │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
  │    │    ├── 1 element transitioning toward ABSENT
- │    │    │    └── ABSENT → PUBLIC ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), GeneratedAsIdentityType: GENERATED_ALWAYS, Value: "START 2 INCREMENT 3"}
+ │    │    │    └── ABSENT → PUBLIC ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "START 2 INCREMENT 3", GeneratedAsIdentityType: GENERATED_ALWAYS}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 1 element transitioning toward PUBLIC
- │         │    └── ABSENT → PUBLIC ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), GeneratedAsIdentityType: GENERATED_BY_DEFAULT, Value: "START 2 INCREMENT 3"}
+ │         │    └── ABSENT → PUBLIC ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "START 2 INCREMENT 3", GeneratedAsIdentityType: GENERATED_BY_DEFAULT}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
  │         ├── 1 element transitioning toward ABSENT
- │         │    └── PUBLIC → ABSENT ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), GeneratedAsIdentityType: GENERATED_ALWAYS, Value: "START 2 INCREMENT 3"}
+ │         │    └── PUBLIC → ABSENT ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "START 2 INCREMENT 3", GeneratedAsIdentityType: GENERATED_ALWAYS}
  │         └── 5 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── RemoveColumnGeneratedAsIdentity {"ColumnID":2,"TableID":104}

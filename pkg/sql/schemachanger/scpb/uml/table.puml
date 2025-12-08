@@ -416,6 +416,18 @@ SequenceOwner :  SequenceID
 SequenceOwner :  TableID
 SequenceOwner :  ColumnID
 
+object SequenceValue
+
+SequenceValue :  SequenceID
+SequenceValue :  PrevIncrement
+SequenceValue :  UpdatedIncrement
+SequenceValue :  PrevMinValue
+SequenceValue :  UpdatedMinValue
+SequenceValue :  PrevMaxValue
+SequenceValue :  UpdatedMaxValue
+SequenceValue :  PrevStart
+SequenceValue :  UpdatedStart
+
 object Table
 
 Table :  TableID
@@ -662,6 +674,7 @@ Table <|-- SecondaryIndex
 View <|-- SecondaryIndex
 Sequence <|-- SequenceOption
 Column <|-- SequenceOwner
+Sequence <|-- SequenceValue
 Table <|-- TableComment
 View <|-- TableComment
 Sequence <|-- TableComment
