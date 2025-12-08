@@ -1200,8 +1200,8 @@ func BenchmarkRecordChangefeedChildMetrics(b *testing.B) {
 	enableChildCollection := true
 
 	// Get metrics from the allowed list and convert to slice for indexing
-	allowedMetricsList := make([]string, 0, len(allowedChangefeedMetrics))
-	for metricName := range allowedChangefeedMetrics {
+	allowedMetricsList := make([]string, 0, len(tsutil.AllowedChildMetrics))
+	for metricName := range tsutil.AllowedChildMetrics {
 		allowedMetricsList = append(allowedMetricsList, metricName)
 	}
 
