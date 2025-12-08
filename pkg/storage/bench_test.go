@@ -1619,6 +1619,48 @@ func runMVCCDeleteRangeWithPredicate(
 	}
 }
 
+func runMVCCDeleteRangeWithPredicatePointTombstones(
+	ctx context.Context, b *testing.B, config mvccImportedData, deleteAfterLayer int64,
+) {
+	b.SetBytes(int64(config.layers*config.keyCount) * int64(overhead+config.valueBytes))
+	b.StopTimer()
+	b.ResetTimer()
+
+	// Since the db engine creates mvcc versions at 5 ns increments, multiply the
+	// deleteAtVersion by 5 to compute the delete range timestamp predicate.
+	predicates := kvpb.DeleteRangePredicates{
+		StartTime: hlc.Timestamp{WallTime: (deleteAfterLayer+1)*5 + 1},
+	}
+	for i := 0; i < b.N; i++ {
+		func() {
+			eng := getInitialStateEngine(ctx, b, config, false)
+			defer eng.Close()
+			b.StartTimer()
+			resumeSpan, err := MVCCPredicateDeleteRangePointTombstones(
+				ctx,
+				eng,
+				&enginepb.MVCCStats{},
+				keys.LocalMax,
+				roachpb.KeyMax,
+				hlc.MaxTimestamp,
+				hlc.ClockTimestamp{},
+				predicates,
+				math.MaxInt64,
+				math.MaxInt64,
+				0,
+				0,
+			)
+			b.StopTimer()
+			if err != nil {
+				b.Fatal(err)
+			}
+			if resumeSpan != nil {
+				b.Fatalf("unexpected resume span: %v", resumeSpan)
+			}
+		}()
+	}
+}
+
 func runClearRange(
 	ctx context.Context, b *testing.B, clearRange func(e Engine, b Batch, start, end MVCCKey) error,
 ) {
@@ -2690,6 +2732,25 @@ func BenchmarkMVCCDeleteRangeWithPredicate(b *testing.B) {
 					runMVCCDeleteRangeWithPredicate(ctx, b, config, 0, rangeKeyThreshold)
 				})
 			}
+		})
+	}
+}
+
+func BenchmarkMVCCDeleteRangeWithPredicatePointTombstones(b *testing.B) {
+	// TODO(radu): run one configuration under Short once the above TODO is
+	// resolved.
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	for _, streakBound := range []int{10, 100, 200, 500} {
+		b.Run(fmt.Sprintf("streakBound=%d", streakBound), func(b *testing.B) {
+			config := mvccImportedData{
+				streakBound: streakBound,
+				keyCount:    2000,
+				valueBytes:  64,
+				layers:      2,
+			}
+			runMVCCDeleteRangeWithPredicatePointTombstones(ctx, b, config, 0)
 		})
 	}
 }

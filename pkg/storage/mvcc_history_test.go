@@ -1384,6 +1384,11 @@ func cmdDeleteRangePredicate(e *evalCtx) error {
 		e.scanArg("max", &max)
 	}
 
+	useRangeTombstone := false
+	if e.hasArg("useRangeTombstone") {
+		e.scanArg("useRangeTombstone", &useRangeTombstone)
+	}
+
 	maxBytes := math.MaxInt64
 	if e.hasArg("maxBytes") {
 		e.scanArg("maxBytes", &maxBytes)
@@ -1403,9 +1408,16 @@ func cmdDeleteRangePredicate(e *evalCtx) error {
 	maxLockConflicts := e.getMaxLockConflicts()
 	targetLockConflictBytes := e.getTargetLockConflictBytes()
 	return e.withWriter("del_range_pred", func(rw storage.ReadWriter) error {
-		rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(rw, key, endKey)
-		resumeSpan, err := storage.MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts, localTs,
-			leftPeekBound, rightPeekBound, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), maxLockConflicts, targetLockConflictBytes)
+		var resumeSpan *roachpb.Span
+		var err error
+		if useRangeTombstone {
+			var leftPeekBound, rightPeekBound roachpb.Key
+			rw, leftPeekBound, rightPeekBound = e.metamorphicPeekBounds(rw, key, endKey)
+			resumeSpan, err = storage.MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts, localTs,
+				leftPeekBound, rightPeekBound, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), maxLockConflicts, targetLockConflictBytes)
+		} else {
+			resumeSpan, err = storage.MVCCPredicateDeleteRangePointTombstones(e.ctx, rw, e.ms, key, endKey, ts, localTs, predicates, int64(max), int64(maxBytes), maxLockConflicts, targetLockConflictBytes)
+		}
 
 		if resumeSpan != nil {
 			e.results.buf.Printf("del_range_pred: resume span [%s,%s)\n", resumeSpan.Key,
