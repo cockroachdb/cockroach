@@ -11,6 +11,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -69,7 +70,8 @@ type Manager struct {
 	latchWaitDurations metric.IHistogram
 
 	// clock is used to provide predictable timestamps for testing.
-	clock *hlc.Clock
+	clock     *hlc.Clock
+	rangeDesc *roachpb.RangeDescriptor
 }
 
 // scopedManager is a latch manager scoped to either local or global keys.
@@ -87,6 +89,7 @@ func Make(
 	settings *cluster.Settings,
 	latchWaitDurations metric.IHistogram,
 	clock *hlc.Clock,
+	rangeDesc *roachpb.RangeDescriptor,
 ) Manager {
 	return Manager{
 		stopper:            stopper,
@@ -95,6 +98,7 @@ func Make(
 		everySecondLogger:  log.Every(1 * time.Second),
 		latchWaitDurations: latchWaitDurations,
 		clock:              clock,
+		rangeDesc:          rangeDesc,
 	}
 }
 
@@ -712,10 +716,19 @@ func (m *Manager) longLatchHoldThreshold() time.Duration {
 
 // slowLatchRequestThreshold returns the threshold for logging slow latch requests.
 func (m *Manager) slowLatchRequestThreshold() time.Duration {
-	if m.settings == nil {
-		return math.MaxInt64 // disable
+	threshold := time.Duration(math.MaxInt64)
+	if m.settings != nil {
+		threshold = SlowLatchRequestThreshold.Get(&m.settings.SV)
 	}
-	return SlowLatchRequestThreshold.Get(&m.settings.SV)
+
+	if m.rangeDesc != nil && keys.NodeLivenessSpan.Overlaps(m.rangeDesc.KeySpan().AsRawSpanWithNoLocals()) {
+		// Node liveness heartbeats time out at 3s, so log slow latch acquisitions
+		// sooner than 3s to help diagnose potential heartbeat failures.
+		const nodeLivenessSlowLatchRequestThreshold = 2 * time.Second
+		threshold = min(threshold, nodeLivenessSlowLatchRequestThreshold)
+	}
+
+	return threshold
 }
 
 // Metrics holds information about the state of a Manager.

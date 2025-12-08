@@ -1268,6 +1268,7 @@ func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecuto
 		settings,
 		nil, /* latchWaitDurations */
 		clock,
+		nil, /* rangeDesc */
 	)
 	m := TestingMakeLockTableMetricsCfg()
 	ltImpl := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings,
@@ -1971,7 +1972,12 @@ func BenchmarkLockTable(b *testing.B) {
 						clock := hlc.NewClockForTesting(nil)
 						settings := cluster.MakeTestingClusterSettings()
 						lm := spanlatch.Make(
-							nil /* stopper */, nil /* slowReqs */, settings, nil /* latchWaitDurations */, clock,
+							nil, /* stopper */
+							nil, /* slowReqs */
+							settings,
+							nil, /* latchWaitDurations */
+							clock,
+							nil, /* rangeDesc */
 						)
 						m := TestingMakeLockTableMetricsCfg()
 						lt := newLockTable(maxLocks, roachpb.RangeID(3), clock, settings,

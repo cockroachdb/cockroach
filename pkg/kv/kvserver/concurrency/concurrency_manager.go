@@ -236,6 +236,7 @@ func NewManager(cfg Config) Manager {
 				cfg.Settings,
 				cfg.LatchWaitDurations,
 				cfg.Clock,
+				cfg.RangeDesc,
 			),
 		},
 		lt: lt,
