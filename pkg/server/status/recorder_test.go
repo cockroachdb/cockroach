@@ -8,6 +8,7 @@ package status
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"math/rand"
 	"os"
@@ -263,11 +264,10 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	// ========================================
 	// Verify that GetTimeSeriesData with includeChildMetrics=true returns child labels
 	// ========================================
-
 	// Add aggmetrics with child labels to the app registry
 	aggCounter := aggmetric.NewCounter(
 		metric.Metadata{
-			Name:     "changefeed.agg_counter",
+			Name:     "changefeed.emitted_messages",
 			Category: metric.Metadata_CHANGEFEEDS,
 		},
 		"some-id", "feed_id",
@@ -281,7 +281,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 
 	aggGauge := aggmetric.NewGauge(
 		metric.Metadata{
-			Name:     "changefeed.agg_gauge",
+			Name:     "changefeed.lagging_ranges",
 			Category: metric.Metadata_CHANGEFEEDS,
 		},
 		"db", "status!!",
@@ -299,49 +299,67 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	// Get time series data with child metrics enabled
 	childData := recorder.GetTimeSeriesData(true)
 
-	var foundCounterFeedA123 bool
-	var foundCounterFeedB456 bool
-	var foundGaugeMineActive bool
-	var foundGaugeYoursPaused bool
-
-	for _, ts := range childData {
-		// Check for changefeed.agg_counter with some_id and feed_id labels
-		if strings.Contains(ts.Name, "cr.node.changefeed.agg_counter") {
-			if strings.Contains(ts.Name, "feed_id=\"feed-a\"") && strings.Contains(ts.Name, "some_id=\"123\"") {
-				foundCounterFeedA123 = true
-				require.Equal(t, "7", ts.Source, "Expected source to be node ID 7")
-				require.Len(t, ts.Datapoints, 1)
-				require.Equal(t, float64(100), ts.Datapoints[0].Value)
-			}
-			if strings.Contains(ts.Name, "feed_id=\"feed-b\"") && strings.Contains(ts.Name, "some_id=\"456\"") {
-				foundCounterFeedB456 = true
-				require.Equal(t, "7", ts.Source, "Expected source to be node ID 7")
-				require.Len(t, ts.Datapoints, 1)
-				require.Equal(t, float64(200), ts.Datapoints[0].Value)
-			}
-		}
-
-		// Check for changefeed.agg_gauge with db and status labels
-		if strings.Contains(ts.Name, "cr.node.changefeed.agg_gauge") {
-			if strings.Contains(ts.Name, "db=\"mine\"") && strings.Contains(ts.Name, "status__=\"active\"") {
-				foundGaugeMineActive = true
-				require.Equal(t, "7", ts.Source, "Expected source to be node ID 7")
-				require.Len(t, ts.Datapoints, 1)
-				require.Equal(t, float64(1), ts.Datapoints[0].Value)
-			}
-			if strings.Contains(ts.Name, "db=\"yours\"") && strings.Contains(ts.Name, "status__=\"paused\"") {
-				foundGaugeYoursPaused = true
-				require.Equal(t, "7", ts.Source, "Expected source to be node ID 7")
-				require.Len(t, ts.Datapoints, 1)
-				require.Equal(t, float64(0), ts.Datapoints[0].Value)
-			}
-		}
+	appMetricTestCases := []struct {
+		name           string
+		metricPrefix   string
+		labelMatchers  []string
+		expectedSource string
+		expectedValue  float64
+	}{
+		{
+			name:           "counter feed-a with some_id=123",
+			metricPrefix:   "cr.node.changefeed.emitted_messages",
+			labelMatchers:  []string{"feed_id=\"feed-a\"", "some_id=\"123\""},
+			expectedSource: "7",
+			expectedValue:  100,
+		},
+		{
+			name:           "counter feed-b with some_id=456",
+			metricPrefix:   "cr.node.changefeed.emitted_messages",
+			labelMatchers:  []string{"feed_id=\"feed-b\"", "some_id=\"456\""},
+			expectedSource: "7",
+			expectedValue:  200,
+		},
+		{
+			name:           "gauge mine with status=active",
+			metricPrefix:   "cr.node.changefeed.lagging_ranges",
+			labelMatchers:  []string{"db=\"mine\"", "status__=\"active\""},
+			expectedSource: "7",
+			expectedValue:  1,
+		},
+		{
+			name:           "gauge yours with status=paused",
+			metricPrefix:   "cr.node.changefeed.lagging_ranges",
+			labelMatchers:  []string{"db=\"yours\"", "status__=\"paused\""},
+			expectedSource: "7",
+			expectedValue:  0,
+		},
 	}
 
-	require.True(t, foundCounterFeedA123, "Expected to find changefeed.agg_counter with some_id=123 and feed_id=feed-a")
-	require.True(t, foundCounterFeedB456, "Expected to find changefeed.agg_counter with some_id=456 and feed_id=feed-b")
-	require.True(t, foundGaugeMineActive, "Expected to find changefeed.agg_gauge with db=mine and status=active")
-	require.True(t, foundGaugeYoursPaused, "Expected to find changefeed.agg_gauge with db=yours and status=paused")
+	for _, tc := range appMetricTestCases {
+		var found bool
+		for _, ts := range childData {
+			if !strings.Contains(ts.Name, tc.metricPrefix) {
+				continue
+			}
+			allMatch := true
+			for _, matcher := range tc.labelMatchers {
+				if !strings.Contains(ts.Name, matcher) {
+					allMatch = false
+					break
+				}
+			}
+			if !allMatch {
+				continue
+			}
+			found = true
+			require.Equal(t, tc.expectedSource, ts.Source, "Expected source for %s", tc.name)
+			require.Len(t, ts.Datapoints, 1, "Expected 1 datapoint for %s", tc.name)
+			require.Equal(t, tc.expectedValue, ts.Datapoints[0].Value, "Expected value for %s", tc.name)
+			break
+		}
+		require.True(t, found, "Expected to find %s", tc.name)
+	}
 
 	// ========================================
 	// Verify that tenant changefeed child metrics are collected with proper source
@@ -367,7 +385,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 
 	tenantAggGauge := aggmetric.NewGauge(
 		metric.Metadata{
-			Name:              "changefeed.running",
+			Name:              "changefeed.backfill_pending_ranges",
 			TsdbRecordLabeled: &tsdbRecordLabeled,
 			Category:          metric.Metadata_CHANGEFEEDS,
 		},
@@ -383,48 +401,68 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	// Get time series data with child metrics enabled
 	tenantChildData := recorder.GetTimeSeriesData(true)
 
-	var foundTenantCounterFeed1 bool
-	var foundTenantCounterFeed2 bool
-	var foundTenantGaugeDefault bool
-	var foundTenantGaugeUser bool
-
-	for _, ts := range tenantChildData {
-		// Verify tenant changefeed metrics have correct source (7-123 for node 7, tenant 123)
-		if strings.Contains(ts.Name, "cr.node.changefeed.emitted_messages") {
-			if strings.Contains(ts.Name, `scope="default"`) && strings.Contains(ts.Name, `feed_id="tenant-feed-1"`) {
-				foundTenantCounterFeed1 = true
-				require.Equal(t, "7-123", ts.Source, "Expected tenant source format node-tenant")
-				require.Len(t, ts.Datapoints, 1)
-				require.Equal(t, float64(500), ts.Datapoints[0].Value)
-			}
-			if strings.Contains(ts.Name, `scope="user"`) && strings.Contains(ts.Name, `feed_id="tenant-feed-2"`) {
-				foundTenantCounterFeed2 = true
-				require.Equal(t, "7-123", ts.Source, "Expected tenant source format node-tenant")
-				require.Len(t, ts.Datapoints, 1)
-				require.Equal(t, float64(750), ts.Datapoints[0].Value)
-			}
-		}
-
-		if strings.Contains(ts.Name, "cr.node.changefeed.running") {
-			if strings.Contains(ts.Name, `scope="default"`) {
-				foundTenantGaugeDefault = true
-				require.Equal(t, "7-123", ts.Source, "Expected tenant source format node-tenant")
-				require.Len(t, ts.Datapoints, 1)
-				require.Equal(t, float64(2), ts.Datapoints[0].Value)
-			}
-			if strings.Contains(ts.Name, `scope="user"`) {
-				foundTenantGaugeUser = true
-				require.Equal(t, "7-123", ts.Source, "Expected tenant source format node-tenant")
-				require.Len(t, ts.Datapoints, 1)
-				require.Equal(t, float64(1), ts.Datapoints[0].Value)
-			}
-		}
+	tenantMetricTestCases := []struct {
+		name           string
+		metricPrefix   string
+		labelMatchers  []string
+		expectedSource string
+		expectedValue  float64
+	}{
+		{
+			name:           "tenant counter default with tenant-feed-1",
+			metricPrefix:   "cr.node.changefeed.emitted_messages",
+			labelMatchers:  []string{`scope="default"`, `feed_id="tenant-feed-1"`},
+			expectedSource: "7-123",
+			expectedValue:  500,
+		},
+		{
+			name:           "tenant counter user with tenant-feed-2",
+			metricPrefix:   "cr.node.changefeed.emitted_messages",
+			labelMatchers:  []string{`scope="user"`, `feed_id="tenant-feed-2"`},
+			expectedSource: "7-123",
+			expectedValue:  750,
+		},
+		{
+			name:           "tenant gauge default",
+			metricPrefix:   "cr.node.changefeed.backfill_pending_ranges",
+			labelMatchers:  []string{`scope="default"`},
+			expectedSource: "7-123",
+			expectedValue:  2,
+		},
+		{
+			name:           "tenant gauge user",
+			metricPrefix:   "cr.node.changefeed.backfill_pending_ranges",
+			labelMatchers:  []string{`scope="user"`},
+			expectedSource: "7-123",
+			expectedValue:  1,
+		},
 	}
 
-	require.True(t, foundTenantCounterFeed1, "Expected to find tenant changefeed.emitted_messages with scope=default and feed_id=tenant-feed-1")
-	require.True(t, foundTenantCounterFeed2, "Expected to find tenant changefeed.emitted_messages with scope=user and feed_id=tenant-feed-2")
-	require.True(t, foundTenantGaugeDefault, "Expected to find tenant changefeed.running with scope=default")
-	require.True(t, foundTenantGaugeUser, "Expected to find tenant changefeed.running with scope=user")
+	for _, tc := range tenantMetricTestCases {
+		var found bool
+		for _, ts := range tenantChildData {
+			if !strings.Contains(ts.Name, tc.metricPrefix) {
+				continue
+			}
+			// Check if all label matchers are present
+			allMatch := true
+			for _, matcher := range tc.labelMatchers {
+				if !strings.Contains(ts.Name, matcher) {
+					allMatch = false
+					break
+				}
+			}
+			if !allMatch {
+				continue
+			}
+			found = true
+			require.Equal(t, tc.expectedSource, ts.Source, "Expected source for %s", tc.name)
+			require.Len(t, ts.Datapoints, 1, "Expected 1 datapoint for %s", tc.name)
+			require.Equal(t, tc.expectedValue, ts.Datapoints[0].Value, "Expected value for %s", tc.name)
+			break
+		}
+		require.True(t, found, "Expected to find %s", tc.name)
+	}
 }
 
 func TestRegistryRecorder_RecordChild(t *testing.T) {
@@ -984,7 +1022,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		tsdbRecordLabeled := false
 		gauge := aggmetric.NewGauge(
 			metric.Metadata{
-				Name:              "changefeed.test_metric",
+				Name:              "changefeed.error_retries",
 				TsdbRecordLabeled: &tsdbRecordLabeled,
 				Category:          metric.Metadata_CHANGEFEEDS,
 			},
@@ -1013,10 +1051,9 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 	t.Run("changefeed aggmetrics with child collection", func(t *testing.T) {
 		reg := metric.NewRegistry()
 
-		// Create an aggmetric which supports child metrics
-		// Note: aggmetrics automatically have child collection capabilities
+		// Create an aggmetric which supports child metrics and is in the allowed list
 		gauge := aggmetric.NewGauge(metric.Metadata{
-			Name:     "changefeed.test_metric",
+			Name:     "changefeed.max_behind_nanos",
 			Category: metric.Metadata_CHANGEFEEDS,
 		}, "job_id", "feed_id")
 		reg.AddMetric(gauge)
@@ -1038,12 +1075,12 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		var dest []tspb.TimeSeriesData
 		recorder.recordChangefeedChildMetrics(&dest)
 
-		// Should have data for child metrics (aggmetrics have child collection enabled by default)
+		// Should have data for child metrics (TsdbRecordLabeled is defaulted true and metric is in allowed list)
 		require.Len(t, dest, 2)
 
 		// Verify the data structure
 		for _, data := range dest {
-			require.Contains(t, data.Name, "changefeed.test_metric")
+			require.Contains(t, data.Name, "changefeed.max_behind_nanos")
 			require.Equal(t, "test-source", data.Source)
 			require.Len(t, data.Datapoints, 1)
 			require.Equal(t, manual.Now().UnixNano(), data.Datapoints[0].TimestampNanos)
@@ -1055,7 +1092,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		reg := metric.NewRegistry()
 
 		gauge := aggmetric.NewGauge(metric.Metadata{
-			Name:     "changefeed.high_cardinality_metric",
+			Name:     "changefeed.total_ranges",
 			Category: metric.Metadata_CHANGEFEEDS,
 		}, "job_id")
 		reg.AddMetric(gauge)
@@ -1084,7 +1121,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		reg := metric.NewRegistry()
 
 		gauge := aggmetric.NewGauge(metric.Metadata{
-			Name:     "changefeed.label_test",
+			Name:     "changefeed.aggregator_progress",
 			Category: metric.Metadata_CHANGEFEEDS,
 		}, "job-id", "feed.name")
 		reg.AddMetric(gauge)
@@ -1107,7 +1144,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 
 		// Verify that the metric name contains sanitized labels
 		metricName := dest[0].Name
-		require.Contains(t, metricName, "changefeed.label_test{feed_name=\"my-feed!\", job_id=\"test@123\"}")
+		require.Contains(t, metricName, "changefeed.aggregator_progress{feed_name=\"my-feed!\", job_id=\"test@123\"}")
 	})
 
 	t.Run("counter and gauge support", func(t *testing.T) {
@@ -1115,7 +1152,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 
 		// Test with gauge
 		gauge := aggmetric.NewGauge(metric.Metadata{
-			Name:     "changefeed.gauge_metric",
+			Name:     "changefeed.checkpoint_progress",
 			Category: metric.Metadata_CHANGEFEEDS,
 		}, "type")
 		reg.AddMetric(gauge)
@@ -1124,7 +1161,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 
 		// Test with counter
 		counter := aggmetric.NewCounter(metric.Metadata{
-			Name:     "changefeed.counter_metric",
+			Name:     "changefeed.internal_retry_message_count",
 			Category: metric.Metadata_CHANGEFEEDS,
 		}, "type")
 		reg.AddMetric(counter)
@@ -1156,4 +1193,53 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		require.Equal(t, float64(100), gaugeValue)
 		require.Equal(t, float64(50), counterValue)
 	})
+}
+
+func BenchmarkRecordChangefeedChildMetrics(b *testing.B) {
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
+	enableChildCollection := true
+
+	// Get metrics from the allowed list and convert to slice for indexing
+	allowedMetricsList := make([]string, 0, len(allowedChangefeedMetrics))
+	for metricName := range allowedChangefeedMetrics {
+		allowedMetricsList = append(allowedMetricsList, metricName)
+	}
+
+	// Benchmark with varying numbers of child metrics
+	for childCount := 10; childCount <= 1024; childCount *= 10 {
+		b.Run(fmt.Sprintf("children-%d", childCount), func(b *testing.B) {
+			reg := metric.NewRegistry()
+
+			// Create a single gauge with varying numbers of children
+			gauge := aggmetric.NewGauge(
+				metric.Metadata{
+					Name:              allowedMetricsList[0],
+					TsdbRecordLabeled: &enableChildCollection,
+					Category:          metric.Metadata_CHANGEFEEDS,
+				},
+				"job_id",
+			)
+			reg.AddMetric(gauge)
+
+			for i := 0; i < childCount; i++ {
+				child := gauge.AddChild(strconv.Itoa(i))
+				child.Update(int64(rand.Intn(1000)))
+			}
+
+			recorder := registryRecorder{
+				registry:       reg,
+				format:         nodeTimeSeriesPrefix,
+				source:         "test-source",
+				timestampNanos: manual.Now().UnixNano(),
+			}
+
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for n := 0; n < b.N; n++ {
+				var dest []tspb.TimeSeriesData
+				recorder.recordChangefeedChildMetrics(&dest)
+			}
+		})
+	}
 }
