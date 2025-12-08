@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/fingerprint"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -83,14 +85,18 @@ type PersistedSQLStats struct {
 
 	// The last time the size was checked before doing a flush.
 	lastSizeCheck time.Time
+
+	// fingerprinter persists fingerprints to the system tables.
+	fingerprinter *fingerprint.Store
 }
 
 // New returns a new instance of the PersistedSQLStats.
 func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 	p := &PersistedSQLStats{
-		SQLStats: memSQLStats,
-		cfg:      cfg,
-		drain:    make(chan struct{}),
+		SQLStats:      memSQLStats,
+		cfg:           cfg,
+		drain:         make(chan struct{}),
+		fingerprinter: fingerprint.NewStore(cfg.DB),
 	}
 
 	p.jobMonitor = jobMonitor{
@@ -299,4 +305,14 @@ func (s *PersistedSQLStats) resetSysTableStats(ctx context.Context, tableName st
 		sessiondata.NodeUserSessionDataOverride,
 		"TRUNCATE "+tableName)
 	return err
+}
+
+func (s *PersistedSQLStats) CreateStatementFingerprint(
+	ctx context.Context, dbName string, query string, implicitTxn bool,
+) (appstatspb.StmtFingerprintID, int64) {
+	hash, id, err := s.fingerprinter.Get(ctx, dbName, query, implicitTxn)
+	if err != nil {
+		log.Dev.Errorf(ctx, "%s", err.Error())
+	}
+	return hash, id
 }

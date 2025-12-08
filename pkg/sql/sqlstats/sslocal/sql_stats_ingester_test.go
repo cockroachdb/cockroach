@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
@@ -162,7 +163,7 @@ func TestSQLIngester(t *testing.T) {
 			defer stopper.Stop(ctx)
 
 			testSink := &sqlStatsTestSink{}
-			ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), testSink)
+			ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), SqlStatsController{}, testSink)
 
 			ingester.Start(ctx, stopper, WithFlushInterval(10))
 			ingestEventsSync(ingester, tc.observations)
@@ -196,7 +197,7 @@ func TestSQLIngester_Clear(t *testing.T) {
 	defer stopper.Stop(ingesterCtx)
 	settings := cluster.MakeTestingClusterSettings()
 	testSink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), testSink)
+	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), SqlStatsController{}, testSink)
 	ingester.Start(ingesterCtx, stopper, WithoutTimedFlush())
 
 	// Fill the ingester's buffer with some data.
@@ -240,7 +241,7 @@ func TestSQLIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *t
 
 	settings := cluster.MakeTestingClusterSettings()
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), sink)
+	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), SqlStatsController{}, sink)
 	ingester.Start(ctx, stopper)
 
 	// Simulate a shutdown and wait for the consumer of the ingester's channel to stop.
@@ -283,7 +284,7 @@ func TestSQLIngesterBlockedForceSync(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), sink)
+	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), SqlStatsController{}, sink)
 
 	// We queue up a bunch of sync operations because it's unclear how
 	// many will proceed between the `Start()` and `Stop()` calls below.
@@ -341,7 +342,7 @@ func TestSQLIngester_ClearSession(t *testing.T) {
 			},
 		}
 		settings := cluster.MakeTestingClusterSettings()
-		ingester := NewSQLStatsIngester(settings, knobs, NewIngesterMetrics())
+		ingester := NewSQLStatsIngester(settings, knobs, NewIngesterMetrics(), SqlStatsController{})
 		ingester.Start(ctx, stopper)
 		ingester.BufferStatement(statementA)
 		ingester.BufferStatement(statementB)
@@ -398,7 +399,7 @@ func TestStatsCollectorIngester(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 	fakeSink := &capturingSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), fakeSink)
+	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), SqlStatsController{}, fakeSink)
 	ingester.Start(ctx, stopper, WithFlushInterval(10))
 
 	// Set up a StatsCollector with the ingester.
@@ -448,3 +449,32 @@ func TestStatsCollectorIngester(t *testing.T) {
 		return nil
 	})
 }
+
+type SqlStatsController struct {
+}
+
+func (s SqlStatsController) ResetClusterSQLStats(_ context.Context) error {
+	return nil
+}
+
+func (s SqlStatsController) ResetActivityTables(_ context.Context) error {
+	return nil
+}
+
+func (s SqlStatsController) CreateSQLStatsCompactionSchedule(_ context.Context) error {
+	return nil
+}
+
+func (s SqlStatsController) CreateStatementFingerprint(
+	_ context.Context, fingerprint string, dbName string, implicitTxn bool,
+) (appstatspb.StmtFingerprintID, int64) {
+	return appstatspb.ConstructStatementFingerprintID(fingerprint, implicitTxn, dbName), 0
+}
+
+func (s SqlStatsController) CreateTransactionFingerprint(
+	ctx context.Context, txnFpBuilder appstatspb.TransactionFingerprintBuilder,
+) appstatspb.TransactionFingerprintID {
+	return appstatspb.InvalidTransactionFingerprintID
+}
+
+var _ eval.SQLStatsController = &SqlStatsController{}

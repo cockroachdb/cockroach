@@ -93,6 +93,9 @@ const (
 	// encoded.
 	fieldNameOtelTraceID = prefixTracerState + "otel_traceid"
 	fieldNameOtelSpanID  = prefixTracerState + "otel_spanid"
+	
+	// fieldNameStatementFingerprint contains the SQL statement fingerprint.
+	fieldNameStatementFingerprint = prefixTracerState + "stmt_fingerprint"
 
 	SpanKindTagKey = "span.kind"
 )
@@ -1251,6 +1254,13 @@ child operation: %s, tracer created at:
 	}
 	s.i.crdb.SetRecordingType(recType)
 	s.i.crdb.parentSpanID = opts.parentSpanID()
+	
+	// Inherit statement fingerprint from parent (local or remote).
+	if fingerprint := opts.parentStatementFingerprint(); fingerprint != 0 {
+		s.i.crdb.mu.Lock()
+		s.i.crdb.mu.statementFingerprint = fingerprint
+		s.i.crdb.mu.Unlock()
+	}
 
 	var localRoot bool
 	{
@@ -1357,6 +1367,10 @@ func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) {
 	carrier.Set(fieldNameTraceID, strconv.FormatUint(uint64(sm.traceID), 16))
 	carrier.Set(fieldNameSpanID, strconv.FormatUint(uint64(sm.spanID), 16))
 	carrier.Set(fieldNameRecordingType, sm.recordingType.ToCarrierValue())
+	
+	if sm.statementFingerprint != 0 {
+		carrier.Set(fieldNameStatementFingerprint, strconv.FormatInt(sm.statementFingerprint, 10))
+	}
 }
 
 var noopSpanMeta = SpanMeta{}
@@ -1371,6 +1385,7 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 	var otelSpanID oteltrace.SpanID
 	var recordingTypeExplicit bool
 	var recordingType tracingpb.RecordingType
+	var statementFingerprint int64
 
 	iterFn := func(k, v string) error {
 		switch k = strings.ToLower(k); k {
@@ -1403,6 +1418,12 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 		case fieldNameRecordingType:
 			recordingTypeExplicit = true
 			recordingType = tracingpb.RecordingTypeFromCarrierValue(v)
+		case fieldNameStatementFingerprint:
+			var err error
+			statementFingerprint, err = strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return errors.Errorf("invalid statement fingerprint: %s", v)
+			}
 		}
 		return nil
 	}
@@ -1439,10 +1460,11 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 	}
 
 	return SpanMeta{
-		traceID:       traceID,
-		spanID:        spanID,
-		otelCtx:       otelCtx,
-		recordingType: recordingType,
+		traceID:              traceID,
+		spanID:               spanID,
+		otelCtx:              otelCtx,
+		recordingType:        recordingType,
+		statementFingerprint: statementFingerprint,
 		// The sterile field doesn't make it across the wire. The simple fact that
 		// there was any tracing info in the carrier means that the parent span was
 		// not sterile.

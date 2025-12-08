@@ -123,6 +123,16 @@ var upgrades = []upgradebase.Upgrade{
 
 	newFirstUpgrade(clusterversion.V26_1_Start.Version()),
 
+	upgrade.NewTenantUpgrade(
+		"create statement_fingerprints table",
+		clusterversion.V26_1_AddSystemStatementFingerprintsTable.Version(),
+		upgrade.NoPrecondition,
+		createStatementFingerprintsTable,
+		upgrade.RestoreActionNotRequired(
+			"restore for a cluster predating this table can leave it empty",
+		),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

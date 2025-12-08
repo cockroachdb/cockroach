@@ -364,7 +364,7 @@ func doFlushStmtStats(
 		serializedTransactionFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stat.Key.TransactionFingerprintID))
 		serializedPlanHash := sqlstatsutil.EncodeUint64ToBytes(stat.Key.PlanHash)
 
-		metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(stat)
+		metadataJSON, err := sqlstatsutil.BuildStmtMetadataNoFingerprintJSON(stat)
 		if err != nil {
 			return err
 		}

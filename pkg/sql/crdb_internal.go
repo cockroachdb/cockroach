@@ -6959,7 +6959,11 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
     statistics                 JSONB NOT NULL,
     sampled_plan               JSONB NOT NULL,
     aggregation_interval       INTERVAL NOT NULL,
-    index_recommendations      STRING[] NOT NULL
+    index_recommendations      STRING[] NOT NULL,
+    query                      STRING NOT NULL,
+    query_summary              STRING NOT NULL,
+    db_name                    STRING NOT NULL,
+    implicit_txn               BOOL NOT NULL
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, _ int64, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
@@ -6990,7 +6994,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 		curAggTs := s.ComputeAggregatedTs()
 		aggInterval := s.GetAggregationInterval()
 
-		const numDatums = 10
+		const numDatums = 14
 		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			return memSQLStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{
@@ -7012,7 +7016,9 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 				planHash := tree.NewDBytes(
 					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(statistics.Key.PlanHash)))
 
-				metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(statistics)
+				// TODO: add version gating here. Only new version should use "NoFingerprintJSON"
+				//metadataJSON, err := sqlstatsutil.BuildStmtMetadataJSON(statistics)
+				metadataJSON, err := sqlstatsutil.BuildStmtMetadataNoFingerprintJSON(statistics)
 				if err != nil {
 					return err
 				}
@@ -7034,16 +7040,20 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 				}
 
 				row = append(row[:0],
-					aggregatedTs,                        // aggregated_ts
-					fingerprintID,                       // fingerprint_id
-					transactionFingerprintID,            // transaction_fingerprint_id
-					planHash,                            // plan_hash
-					tree.NewDString(statistics.Key.App), // app_name
-					tree.NewDJSON(metadataJSON),         // metadata
-					tree.NewDJSON(statisticsJSON),       // statistics
-					tree.NewDJSON(plan),                 // plan
-					aggInterval,                         // aggregation_interval
-					indexRecommendations,                // index_recommendations
+					aggregatedTs,                                           // aggregated_ts
+					fingerprintID,                                          // fingerprint_id
+					transactionFingerprintID,                               // transaction_fingerprint_id
+					planHash,                                               // plan_hash
+					tree.NewDString(statistics.Key.App),                    // app_name
+					tree.NewDJSON(metadataJSON),                            // metadata
+					tree.NewDJSON(statisticsJSON),                          // statistics
+					tree.NewDJSON(plan),                                    // plan
+					aggInterval,                                            // aggregation_interval
+					indexRecommendations,                                   // index_recommendations
+					tree.NewDString(statistics.Key.Query),                  // query
+					tree.NewDString(statistics.Key.QuerySummary),           // query_summary
+					tree.NewDString(statistics.Key.Database),               // db_name
+					tree.MakeDBool(tree.DBool(statistics.Key.ImplicitTxn)), // implicit_txn
 				)
 				if buildutil.CrdbTestBuild {
 					if len(row) != numDatums {
@@ -7074,7 +7084,11 @@ SELECT
   merge_statement_stats(DISTINCT statistics),
   max(sampled_plan),
   aggregation_interval,
-  array_remove(array_cat_agg(index_recommendations), NULL) AS index_recommendations
+  array_remove(array_cat_agg(index_recommendations), NULL) AS index_recommendations,
+	query,
+	query_summary,
+	db_name,
+	implicit_txn
 FROM (
   SELECT
       aggregated_ts,
@@ -7086,23 +7100,32 @@ FROM (
       statistics,
       sampled_plan,
       aggregation_interval,
-      index_recommendations
+      index_recommendations,
+			query,
+			query_summary,
+			db_name,
+			implicit_txn
   FROM
       crdb_internal.cluster_statement_statistics
   UNION ALL
       SELECT
-          aggregated_ts,
-          fingerprint_id,
-          transaction_fingerprint_id,
-          plan_hash,
-          app_name,
-          metadata,
-          statistics,
-          plan,
-          agg_interval,
-          index_recommendations
+          ss.aggregated_ts,
+          ss.fingerprint_id,
+          ss.transaction_fingerprint_id,
+          ss.plan_hash,
+          ss.app_name,
+          ss.metadata,
+          ss.statistics,
+          ss.plan,
+          ss.agg_interval,
+          ss.index_recommendations,
+			    sf.query,
+			    sf.summary as query_summary,
+			    sf.database as db_name,
+			    sf.implicit_txn
       FROM
-          system.statement_statistics
+          system.statement_statistics ss
+			JOIN system.statement_fingerprints sf on ss.fingerprint_id = sf.fingerprint
 )
 GROUP BY
   aggregated_ts,
@@ -7110,7 +7133,11 @@ GROUP BY
   transaction_fingerprint_id,
   plan_hash,
   app_name,
-  aggregation_interval`,
+  aggregation_interval,
+	query,
+	query_summary,
+	db_name,
+	implicit_txn`,
 	resultColumns: colinfo.ResultColumns{
 		{Name: "aggregated_ts", Typ: types.TimestampTZ},
 		{Name: "fingerprint_id", Typ: types.Bytes},
@@ -7122,6 +7149,10 @@ GROUP BY
 		{Name: "sampled_plan", Typ: types.Jsonb},
 		{Name: "aggregation_interval", Typ: types.Interval},
 		{Name: "index_recommendations", Typ: types.StringArray},
+		{Name: "query", Typ: types.String},
+		{Name: "query_summary", Typ: types.String},
+		{Name: "db_name", Typ: types.String},
+		{Name: "implicit_txn", Typ: types.Bool},
 	},
 }
 
@@ -7132,26 +7163,31 @@ var crdbInternalStmtStatsPersistedView = virtualSchemaView{
 	schema: `
 CREATE VIEW crdb_internal.statement_statistics_persisted AS
       SELECT
-          aggregated_ts,
-          fingerprint_id,
-          transaction_fingerprint_id,
-          plan_hash,
-          app_name,
-          node_id,
-          agg_interval,
-          metadata,
-          statistics,
-          plan,
-          index_recommendations,
-          indexes_usage,
-          execution_count,
-          service_latency,
-          cpu_sql_nanos,
-          contention_time,
-          total_estimated_execution_time,
-          p99_latency
+          ss.aggregated_ts,
+          ss.fingerprint_id,
+          ss.transaction_fingerprint_id,
+          ss.plan_hash,
+          ss.app_name,
+          ss.node_id,
+          ss.agg_interval,
+          ss.metadata,
+          ss.statistics,
+          ss.plan,
+          ss.index_recommendations,
+          ss.indexes_usage,
+          ss.execution_count,
+          ss.service_latency,
+          ss.cpu_sql_nanos,
+          ss.contention_time,
+          ss.total_estimated_execution_time,
+          ss.p99_latency,
+					sf.query,
+					sf.summary as query_summary,
+					sf.database as db_name,
+					sf.implicit_txn
       FROM
-          system.statement_statistics`,
+          system.statement_statistics ss
+			JOIN system.statement_fingerprints sf on sf.fingerprint =  ss.fingerprint_id`,
 	resultColumns: colinfo.ResultColumns{
 		{Name: "aggregated_ts", Typ: types.TimestampTZ},
 		{Name: "fingerprint_id", Typ: types.Bytes},
@@ -7171,6 +7207,10 @@ CREATE VIEW crdb_internal.statement_statistics_persisted AS
 		{Name: "contention_time", Typ: types.Float},
 		{Name: "total_estimated_execution_time", Typ: types.Float},
 		{Name: "p99_latency", Typ: types.Float},
+		{Name: "query", Typ: types.String},
+		{Name: "query_summary", Typ: types.String},
+		{Name: "db_name", Typ: types.String},
+		{Name: "implicit_txn", Typ: types.Bool},
 	},
 }
 
@@ -7180,25 +7220,30 @@ var crdbInternalStmtActivityView = virtualSchemaView{
 	schema: `
 CREATE VIEW crdb_internal.statement_activity AS
       SELECT
-				aggregated_ts,
-				fingerprint_id,
-				transaction_fingerprint_id,
-				plan_hash,
-				app_name,
-				agg_interval,
-				metadata,
-				statistics,
-				plan,
-				index_recommendations,
-				execution_count,
-				execution_total_seconds,
-				execution_total_cluster_seconds,
-				contention_time_avg_seconds,
-				cpu_sql_avg_nanos,
-				service_latency_avg_seconds,
-				service_latency_p99_seconds
+				sa.aggregated_ts,
+				sa.fingerprint_id,
+				sa.transaction_fingerprint_id,
+				sa.plan_hash,
+				sa.app_name,
+				sa.agg_interval,
+				sa.metadata,
+				sa.statistics,
+				sa.plan,
+				sa.index_recommendations,
+				sa.execution_count,
+				sa.execution_total_seconds,
+				sa.execution_total_cluster_seconds,
+				sa.contention_time_avg_seconds,
+				sa.cpu_sql_avg_nanos,
+				sa.service_latency_avg_seconds,
+				sa.service_latency_p99_seconds,
+				sf.query,
+				sf.summary as query_summary,
+				sf.database as db_name,
+				sf.implicit_txn
       FROM
-          system.statement_activity`,
+          system.statement_activity sa
+			JOIN system.statement_fingerprints sf on sf.fingerprint =  sa.fingerprint_id`,
 	resultColumns: colinfo.ResultColumns{
 		{Name: "aggregated_ts", Typ: types.TimestampTZ},
 		{Name: "fingerprint_id", Typ: types.Bytes},
@@ -7217,6 +7262,10 @@ CREATE VIEW crdb_internal.statement_activity AS
 		{Name: "cpu_sql_avg_nanos", Typ: types.Float},
 		{Name: "service_latency_avg_seconds", Typ: types.Float},
 		{Name: "service_latency_p99_seconds", Typ: types.Float},
+		{Name: "query", Typ: types.String},
+		{Name: "query_summary", Typ: types.String},
+		{Name: "db_name", Typ: types.String},
+		{Name: "implicit_txn", Typ: types.Bool},
 	},
 }
 

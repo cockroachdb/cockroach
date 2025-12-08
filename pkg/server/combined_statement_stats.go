@@ -670,20 +670,25 @@ SELECT
     aggregated_ts,
     COALESCE(CAST(metadata -> 'distSQLCount' AS INT), 0)  AS distSQLCount,
     COALESCE(CAST(metadata -> 'fullScanCount' AS INT), 0) AS fullScanCount,
-    metadata ->> 'query'                                  AS query,
-    metadata ->> 'querySummary'                           AS querySummary,
-    (SELECT string_agg(elem::text, ',') 
-    FROM json_array_elements_text(metadata->'db') AS elem) AS databases,
+    query,
+    querySummary,
+    databases,
     statistics
 FROM (SELECT fingerprint_id,
              app_name,
+             query,
+             query_summary                                AS querySummary,
+             db_name                                      AS databases,
              max(aggregated_ts)                           AS aggregated_ts,
              merge_stats_metadata(metadata)               AS metadata,
              merge_statement_stats(statistics)            AS statistics
       FROM %s %s
       GROUP BY
           fingerprint_id,
-          app_name) %s
+          app_name,
+        	query,
+        	querySummary,
+        	db_name) %s
 %s`
 	metadataAggFn := mergeAggStmtMetadataColumnLatest
 	activityQuery := strings.Join([]string{`
@@ -693,20 +698,25 @@ SELECT
     aggregated_ts,
     COALESCE(CAST(metadata -> 'distSQLCount' AS INT), 0)  AS distSQLCount,
     COALESCE(CAST(metadata -> 'fullScanCount' AS INT), 0) AS fullScanCount,
-    metadata ->> 'query'                                  AS query,
-    metadata ->> 'querySummary'                           AS querySummary,
-    (SELECT string_agg(elem::text, ',') 
-    FROM json_array_elements_text(metadata->'db') AS elem) AS databases,
+		query,
+    querySummary,
+    databases,
     statistics
 FROM (SELECT fingerprint_id,
              app_name,
+						 query,
+             query_summary                                          AS querySummary,
+             db_name                                                AS databases,
              max(aggregated_ts)                                     AS aggregated_ts,
              `, metadataAggFn, ` AS metadata,
              merge_statement_stats(statistics)                      AS statistics
       FROM %s %s
       GROUP BY
           fingerprint_id,
-          app_name) %s
+          app_name,
+          query,
+        	querySummary,
+        	db_name) %s
 %s`}, "")
 
 	var it isql.Rows

@@ -99,6 +99,15 @@ func (s *stmtStatsMetadata) jsonFields() jsonFields {
 	}
 }
 
+func (s *stmtStatsMetadata) jsonFieldsNoQuery() jsonFields {
+	return jsonFields{
+		{"stmtType", (*jsonString)(&s.Stats.SQLType)},
+		{"distsql", (*jsonBool)(&s.Key.DistSQL)},
+		{"vec", (*jsonBool)(&s.Key.Vec)},
+		{"fullScan", (*jsonBool)(&s.Key.FullScan)},
+	}
+}
+
 func (s *stmtStatsMetadata) jsonFlagsOnlyFields() jsonFields {
 	return jsonFields{
 		{"db", (*jsonString)(&s.Key.Database)},

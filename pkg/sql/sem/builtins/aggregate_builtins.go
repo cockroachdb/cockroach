@@ -1860,6 +1860,7 @@ func (a *aggregatedStmtMetadataAggregate) Size() int64 {
 	return sizeOfAggregatedStmtMetadataAggregate
 }
 
+// TODO: Remove query, formatted_query query_summary, databases, and implicit_txn from metadata
 func mergeStatsMetadataHelper(
 	metadata *appstatspb.AggregatedStatementMetadata, metadataDatum tree.Datum,
 ) error {

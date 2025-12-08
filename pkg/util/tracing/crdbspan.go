@@ -129,6 +129,10 @@ type crdbSpanMu struct {
 	// lazyTags are tags whose values are only string-ified on demand. Each lazy
 	// tag is expected to implement either fmt.Stringer or LazyTag.
 	lazyTags []lazyTag
+
+	// statementFingerprint is the fingerprint of the SQL statement that initiated
+	// this trace, if any. This is propagated from parent to child spans.
+	statementFingerprint int64
 }
 
 type lazyTag struct {

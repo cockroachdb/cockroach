@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	fmt "fmt"
 	"reflect"
 	"runtime/trace"
 	"time"
@@ -78,7 +79,9 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 //	  Replica.maybeCommitWaitBeforeCommitTrigger (if committing with commit-trigger)
 //	                       │
 //
-// read-write ◄─────────────────────────┴────────────────────────► read-only
+// read-write
+// ◄─────────────────────────┴────────────────────────►
+// read-only
 //
 //	│                                                               │
 //	│                                                               │
@@ -129,6 +132,12 @@ func (r *Replica) SendWithWriteBytes(
 	// recorded regardless of errors that are encountered.
 	startCPU := grunning.Time()
 	defer r.MeasureReqCPUNanos(ctx, startCPU)
+
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil && 5 < 3 {
+		// the fingerprint is accessible here.
+		fmt.Println(sp.GetStatementFingerprint())
+	}
 
 	if r.store.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 		var reset func()
