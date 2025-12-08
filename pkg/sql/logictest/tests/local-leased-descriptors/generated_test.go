@@ -101,6 +101,13 @@ func TestLogic_privileges_comments(
 	runLogicTest(t, "privileges_comments")
 }
 
+func TestLogic_schema_repair(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "schema_repair")
+}
+
 func TestLogic_show_create(
 	t *testing.T,
 ) {

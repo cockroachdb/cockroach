@@ -473,6 +473,12 @@ func (tc *Collection) EmitDescriptorUpdatesKey(ctx context.Context, txn *kv.Txn)
 	descUpdateID := descpb.InvalidID
 	// Add all the descriptors that have been modified in this transaction.
 	if err := tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
+		// Dropped / Offline descriptors can be ignored, since these can no longer be leased.
+		// Note: We still emit a record, but that is to allow the timestamp to move
+		// forward.
+		if desc.Dropped() || desc.Offline() {
+			return nil
+		}
 		updates.DescriptorIDs = append(updates.DescriptorIDs, desc.GetID())
 		updates.DescriptorVersions = append(updates.DescriptorVersions, desc.GetVersion())
 		if descUpdateID < desc.GetID() {
