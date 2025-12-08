@@ -96,10 +96,10 @@ func shouldEnableDistributedMergeIndexBackfill(
 // EnableDistributedMergeIndexBackfillSink updates the backfiller spec to use the
 // distributed merge sink and file prefix for the provided SQL instance.
 func EnableDistributedMergeIndexBackfillSink(
-	nodeID base.SQLInstanceID, spec *execinfrapb.BackfillerSpec,
+	nodeID base.SQLInstanceID, jobID jobspb.JobID, spec *execinfrapb.BackfillerSpec,
 ) {
 	spec.UseDistributedMergeSink = true
-	spec.DistributedMergeFilePrefix = fmt.Sprintf("nodelocal://%d/index-backfill", nodeID)
+	spec.DistributedMergeFilePrefix = fmt.Sprintf("nodelocal://%d/job/%d/map", nodeID, jobID)
 }
 
 // DetermineDistributedMergeMode evaluates the cluster setting to decide
