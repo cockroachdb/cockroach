@@ -391,9 +391,6 @@ subtest end
 subtest regression_158898
 
 statement ok
-SET prevent_update_set_column_drop = true;
-
-statement ok
 CREATE TABLE t158898 (col1 INT8 NOT NULL);
 
 statement ok
@@ -408,16 +405,10 @@ statement ok
 DROP PROCEDURE p158898;
 DROP TABLE t158898;
 
-statement ok
-RESET prevent_update_set_column_drop;
-
 subtest end
 
 # Allow drop of columns referenced only in computed column expressions.
 subtest regression_158154
-
-statement ok
-SET use_improved_routine_deps_triggers_and_computed_cols = true;
 
 statement ok
 CREATE TABLE t158154 (col1 INT8 NOT NULL, col2 TIMESTAMP NOT NULL, computed TIMESTAMP NOT NULL AS (col2) STORED);
@@ -450,8 +441,5 @@ SELECT * FROM t158154
 statement ok
 DROP PROCEDURE p158154;
 DROP TABLE t158154;
-
-statement ok
-RESET use_improved_routine_deps_triggers_and_computed_cols;
 
 subtest end

@@ -3188,7 +3188,7 @@ plan_cache_mode                                                  auto           
 plpgsql_use_strict_into                                          off                 NULL      NULL        NULL        string
 prefer_lookup_joins_for_fks                                      off                 NULL      NULL        NULL        string
 prepared_statements_cache_size                                   0 B                 NULL      NULL        NULL        string
-prevent_update_set_column_drop                                   off                 NULL      NULL        NULL        string
+prevent_update_set_column_drop                                   on                  NULL      NULL        NULL        string
 propagate_admission_header_to_leaf_transactions                  on                  NULL      NULL        NULL        string
 propagate_input_ordering                                         off                 NULL      NULL        NULL        string
 recursion_depth_limit                                            1000                NULL      NULL        NULL        string
@@ -3241,7 +3241,7 @@ unsafe_allow_triggers_modifying_cascades                         off            
 use_cputs_on_non_unique_indexes                                  off                 NULL      NULL        NULL        string
 use_declarative_schema_changer                                   on                  NULL      NULL        NULL        string
 use_improved_routine_dependency_tracking                         on                  NULL      NULL        NULL        string
-use_improved_routine_deps_triggers_and_computed_cols             off                 NULL      NULL        NULL        string
+use_improved_routine_deps_triggers_and_computed_cols             on                  NULL      NULL        NULL        string
 use_pre_25_2_variadic_builtins                                   off                 NULL      NULL        NULL        string
 use_proc_txn_control_extended_protocol_fix                       on                  NULL      NULL        NULL        string
 use_soft_limit_for_distribute_scan                               on                  NULL      NULL        NULL        string
@@ -3440,7 +3440,7 @@ plan_cache_mode                                                  auto           
 plpgsql_use_strict_into                                          off                 NULL  user     NULL      off                 off
 prefer_lookup_joins_for_fks                                      off                 NULL  user     NULL      off                 off
 prepared_statements_cache_size                                   0 B                 B     user     NULL      0 B                 0 B
-prevent_update_set_column_drop                                   off                 NULL  user     NULL      off                 off
+prevent_update_set_column_drop                                   on                  NULL  user     NULL      on                  on
 propagate_admission_header_to_leaf_transactions                  on                  NULL  user     NULL      on                  on
 propagate_input_ordering                                         off                 NULL  user     NULL      off                 off
 recursion_depth_limit                                            1000                NULL  user     NULL      1000                1000
@@ -3493,7 +3493,7 @@ unsafe_allow_triggers_modifying_cascades                         off            
 use_cputs_on_non_unique_indexes                                  off                 NULL  user     NULL      off                 off
 use_declarative_schema_changer                                   on                  NULL  user     NULL      on                  on
 use_improved_routine_dependency_tracking                         on                  NULL  user     NULL      on                  on
-use_improved_routine_deps_triggers_and_computed_cols             off                 NULL  user     NULL      off                 off
+use_improved_routine_deps_triggers_and_computed_cols             on                  NULL  user     NULL      on                  on
 use_pre_25_2_variadic_builtins                                   off                 NULL  user     NULL      off                 off
 use_proc_txn_control_extended_protocol_fix                       on                  NULL  user     NULL      on                  on
 use_soft_limit_for_distribute_scan                               on                  NULL  user     NULL      on                  on

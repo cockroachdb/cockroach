@@ -386,6 +386,7 @@ CREATE TABLE t_computed (
 # will depend on all columns in the table.
 statement ok
 SET use_improved_routine_dependency_tracking = false;
+SET use_improved_routine_deps_triggers_and_computed_cols = false;
 
 statement ok
 CREATE FUNCTION f145098() RETURNS INT LANGUAGE SQL AS $$
@@ -395,6 +396,7 @@ $$;
 
 statement ok
 RESET use_improved_routine_dependency_tracking;
+RESET use_improved_routine_deps_triggers_and_computed_cols;
 
 statement error pgcode 2BP01 pq: cannot drop column "crdb_internal_a_shard_16" because function "f145098" depends on it
 DROP INDEX i;

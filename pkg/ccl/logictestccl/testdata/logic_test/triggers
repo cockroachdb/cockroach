@@ -5126,9 +5126,6 @@ subtest end
 subtest regression_158154
 
 statement ok
-SET use_improved_routine_deps_triggers_and_computed_cols = true;
-
-statement ok
 CREATE TABLE xy_158154 (x INT, y INT);
 
 statement ok
@@ -5176,9 +5173,6 @@ DROP PROCEDURE p
 
 statement ok
 DROP TABLE xy_158154
-
-statement ok
-RESET use_improved_routine_deps_triggers_and_computed_cols;
 
 subtest end
 
