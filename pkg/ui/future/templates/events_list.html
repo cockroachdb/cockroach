@@ -1,0 +1,6 @@
+<h4 class="text-align:center">Events</h4>
+{{range .Events}}
+<p class="overflow-wrap:break-word">
+  {{.Description}}
+<small>{{formatTimestamp .Timestamp}}</small></p>
+{{end}}

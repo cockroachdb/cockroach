@@ -847,6 +847,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.sqlServer.ExecutorConfig(), /* execCfg */
 		s.authentication,             /* authnServer */
 		s.tenantAdmin,                /* adminServer */
+		s.tenantStatus,               /* statusServer */
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */
@@ -868,6 +869,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 				s.sqlServer.serviceMode == mtinfopb.ServiceModeShared,
 			DisableKvLevelAdvancedDebug: s.sqlServer.serviceMode != mtinfopb.ServiceModeShared,
 		},
+		// TODO(davidh): Unclear what it means to use "kv" node dialer in tenant.
+		s.kvNodeDialer,            /* nodeDialer */
+		s.rpcContext.NodeID.Get(), /* localNodeID */
 	); err != nil {
 		return err
 	}

@@ -1,0 +1,151 @@
+{{template "layout-start" .}}
+<nav class="breadcrumbs" aria-label="Breadcrumbs">
+  <ul>
+    <li class="<h1>">Overview</li>
+  </ul>
+</nav>
+<div class="box flex-switch">
+  <div class="flex-column flex-grow:2">
+    <div class="<h4>">Capacity Usage</div>
+    <div class="flex-row align-items:center">
+      <label for=disk class="<h2>">{{formatPercent .Data.CapacityPercent}}</label>
+      <meter class="flex-grow:2" id=disk min=0 max={{.Data.CapacityTotal}} value={{.Data.CapacityUsed}} low={{mul .Data.CapacityTotal 0.25}} high={{mul .Data.CapacityTotal 0.85}} optimum={{mul .Data.CapacityTotal 0.5}}>{{.Data.CapacityUsedStr}} of {{.Data.CapacityTotalStr}}</meter>
+    </div>
+    <div class="flex-row">
+      <div>Used</div>
+      <div>{{.Data.CapacityUsedStr}}</div>
+      <div>Usable</div>
+      <div>{{.Data.CapacityTotalStr}}</div>
+    </div>
+  </div>
+  <div class="flex-column">
+    <div class="h4">Node Status</div>
+    <div class="flex-row">
+      <div class="flex-column">
+        <div class="<h2>">{{.Data.LiveNodes}}</div>
+        <div class="<h4>">Live Nodes</div>
+      </div>
+      <div class="flex-column">
+        <div class="<h2> color warn">{{.Data.SuspectNodes}}</div>
+        <div class="<h4>">Suspect Nodes</div>
+      </div>
+      <div class="flex-column">
+        <div class="<h2> color warn">{{.Data.DrainingNodes}}</div>
+        <div class="<h4>">Draining Nodes</div>
+      </div>
+      <div class="flex-column">
+        <div class="<h2> color bad">{{.Data.DeadNodes}}</div>
+        <div class="<h4>">Dead Nodes</div>
+      </div>
+    </div>
+  </div>
+  <div class="flex-column">
+    <div class="<h4>">Replication Status</div>
+    <div class="flex-row">
+      <div class="flex-column">
+        <div class="<h2>">{{.Data.TotalRanges}}</div>
+        <div class="<h4>">Total Ranges</div>
+      </div>
+      <div class="flex-column">
+        <div class="<h2> color warn">{{.Data.UnderReplicatedRanges}}</div>
+        <div class="<h4>">Under-Replicated Ranges</div>
+      </div>
+      <div class="flex-column">
+        <div class="<h2> color bad">{{.Data.UnavailableRanges}}</div>
+        <div class="<h4>">Unavailable Ranges</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="overflow-x:auto" x-data="tableSort()">
+  <h3>Nodes ({{.Data.TotalNodes}})</h3>
+  <table class="width:100%">
+    <thead>
+      <tr>
+        <th @click="sort('nodes', 0)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>Nodes </div><div x-text="getSortIndicator('nodes')"></div></div>
+        </th>
+        <th @click="sort('nodeCount', 1)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>Node Count </div><div x-text="getSortIndicator('nodeCount')"></div></div>
+        </th>
+        <th>
+          <div class="flex-row align-items:top">Uptime</div>
+        </th>
+        <th @click="sort('replicas', 3)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>Replicas </div><div x-text="getSortIndicator('replicas')"></div></div>
+        </th>
+        <th @click="sort('capacity', 4)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>Capacity Usage </div><div x-text="getSortIndicator('capacity')"></div></div>
+        </th>
+        <th @click="sort('memory', 5)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>Memory Use </div><div x-text="getSortIndicator('memory')"></div></div>
+        </th>
+        <th @click="sort('vcpus', 6)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>vCPUs </div><div x-text="getSortIndicator('vcpus')"></div></div>
+        </th>
+        <th>
+          <div class="flex-row align-items:top">Version</div>
+        </th>
+        <th @click="sort('status', 8)" style="cursor: pointer;">
+          <div class="flex-row align-items:top"><div>Status </div><div x-text="getSortIndicator('status')"></div></div>
+        </th>
+        <th></th>
+      </tr>
+    </thead>
+    {{range .Data.RegionGroups}}
+    <tbody x-data="{ expanded: false }">
+      {{if gt .NodeCount 1}}
+      {{/* Region summary row - only show if there are multiple nodes */}}
+      <tr>
+        <td @click="expanded = !expanded" style="cursor: pointer;">
+          <span x-show="!expanded">▶</span>
+          <span x-show="expanded">▼</span> {{if .RegionName}}{{.RegionName}}{{else}}(no region){{end}}</td>
+        <td>{{.NodeCount}}</td>
+        <td>{{if gt .UptimeSeconds 0}}{{formatTime (mul .UptimeSeconds 1000000000)}}{{end}}</td>
+        <td>{{.TotalReplicas}}</td>
+        <td>{{formatPercent .CapacityPercent}}</td>
+        <td>{{formatPercent .MemoryPercent}}</td>
+        <td>{{.TotalVCPUs}}</td>
+        <td></td>
+        <td><chip class="{{if eq .Status "Live"}}info{{else}}warn{{end}}">{{.Status}}</chip></td>
+        <td></td>
+      </tr>
+      {{/* Individual node rows */}}
+      {{range .Nodes}}
+      <tr x-show="expanded">
+        <td><a href="/future/nodes/{{.NodeID}}">{{.Address}} (n{{.NodeID}})</a></td>
+        <td></td>
+        <td>{{.UptimeFormatted}}</td>
+        <td>{{.Replicas}}</td>
+        <td>{{formatPercent .CapacityPercent}}</td>
+        <td>{{formatPercent .MemoryPercent}}</td>
+        <td>{{.VCPUs}}</td>
+        <td>{{.Version}}</td>
+        <td><chip class="{{.StatusClass}}">{{.Status}}</chip></td>
+        <td><a href="/future/nodes/{{.NodeID}}/logs">Logs</a></td>
+      </tr>
+      {{end}}
+      {{else}}
+      {{/* Single node - no expansion needed */}}
+      {{ $region := . }}
+      {{range .Nodes}}
+      <tr>
+        <td><a href="/future/nodes/{{.NodeID}}">{{.Address}} (n{{.NodeID}})</a> [{{ if $region.RegionName}}{{$region.RegionName}}{{else}}(no region){{end}}]</td>
+        <td></td>
+        <td>{{.UptimeFormatted}}</td>
+        <td>{{.Replicas}}</td>
+        <td>{{formatPercent .CapacityPercent}}</td>
+        <td>{{formatPercent .MemoryPercent}}</td>
+        <td>{{.VCPUs}}</td>
+        <td>{{.Version}}</td>
+        <td><chip class="{{.StatusClass}}">{{.Status}}</chip></td>
+        <td><a href="/future/nodes/{{.NodeID}}/logs">Logs</a></td>
+      </tr>
+      {{end}}
+      {{end}}
+    </tbody>
+    {{end}}
+  </table>
+</div>
+
+{{template "layout-end" .}}

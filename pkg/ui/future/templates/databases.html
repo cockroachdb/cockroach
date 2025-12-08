@@ -1,0 +1,139 @@
+{{ template "layout-start" .}}
+
+
+<nav class="breadcrumbs" aria-label="Breadcrumbs">
+  <ul>
+    <li class="<h1>">Databases</li>
+  </ul>
+</nav>
+
+<div class="box flex-row align-items:end">
+<form class="flex-row align-items:end"
+      hx-get="/future/databases"
+      hx-target="#databases-table"
+      hx-trigger="submit"
+      hx-select="#databases-table"
+      hx-push-url="true">
+  <div>
+    <label for=search>Search:</label>
+    <input type="text" name=search id=search placeholder="Search databases" value="{{ .Data.SearchFilter }}">
+  </div>
+  <div>
+    <label for=nodeId>Nodes:</label>
+    <select id=nodeId name=nodeId>
+      <option value="">All</option>
+      {{ range $region, $nodes := .Data.NodesByRegion }}
+      <optgroup label="{{ $region }}">
+        {{ range $nodes }}
+        <option value="{{ .NodeID }}" {{ if eq .NodeID (printf "%d" $.Data.SelectedNode) }}selected{{ end }}>n{{ .NodeID }}</option>
+        {{ end }}
+      </optgroup>
+      {{ end }}
+    </select>
+  </div>
+  <div>
+    <button type="submit" class="<big>">Filter</button>
+  </div>
+</form>
+  <div class="flex-grow:2"></div>
+  <div class="flex-column">
+    <div class="justify-item:end">
+      Auto stats collection: <chip class="ok">enabled</chip>
+    </div>
+    {{ if .Data.MetadataJobInfo.IsRunning }}
+  	<label id="database-metadata-last-refreshed"
+  	       hx-get="/future/databases"
+           hx-select="#database-metadata-last-refreshed"
+           hx-target="#database-metadata-last-refreshed"
+           hx-select-oob="#databases-table"
+  	       hx-trigger="load delay:1s"
+  	       hx-swap="outerHTML" for=refresh>
+  	  Last refreshed: {{ if .Data.MetadataJobInfo.LastCompletedAt }}{{ $now := timeNow }}{{ formatElapsedTime (timeSub $now .Data.MetadataJobInfo.LastCompletedAt) }}{{ else }}never{{ end }}
+  				<button type="button" id=refresh disabled>Refreshing</button>
+  	</label>
+    {{ else }}
+  	<label id="database-metadata-last-refreshed" for=refresh>
+  	  Last refreshed: {{ if .Data.MetadataJobInfo.LastCompletedAt }}{{ $now := timeNow }}{{ formatElapsedTime (timeSub $now .Data.MetadataJobInfo.LastCompletedAt) }}{{ else }}never{{ end }}
+  	  <button type="button" id=refresh
+  	          hx-post="/future/databases/refresh"
+              hx-select="#database-metadata-last-refreshed"
+              hx-select-oob="#databases-table"
+  	          hx-target="#database-metadata-last-refreshed"
+  	          hx-swap="outerHTML">
+  	    Refresh
+  	  </button>
+  	</label>
+    {{ end }}
+  </div>
+</div>
+
+<div id="databases-table" x-data="tableSort()" style="overflow-x: auto;">
+  <table id="table-data" class="width:100%">
+    <thead>
+      <tr>
+        <th @click="sort('name', 0)" style="cursor: pointer;">
+          Name <span x-text="getSortIndicator('name')"></span>
+        </th>
+        <th @click="sort('size', 1)" style="cursor: pointer;">
+          Size <span x-text="getSortIndicator('size')"></span>
+        </th>
+        <th @click="sort('tables', 2)" style="cursor: pointer;">
+          Tables <span x-text="getSortIndicator('tables')"></span>
+        </th>
+        <th @click="sort('regions', 3)" style="cursor: pointer;">
+          Regions/Nodes <span x-text="getSortIndicator('regions')"></span>
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      {{ if .Data.Databases }}
+        {{ range .Data.Databases }}
+      <tr>
+        <td><a href="/future/databases/{{ .DbID }}">{{ .DbName }}</a></td>
+        <td data-sort="{{ .SizeBytes }}">{{ formatBytes .SizeBytes }}</td>
+        <td>{{ .TableCount }}</td>
+        <td data-sort="{{ len .RegionNodes }}">
+          {{ if .RegionNodes }}
+            {{ range $region, $nodes := .RegionNodes }}
+              <chip>{{ $region }} ({{ len $nodes }})</chip>
+            {{ end }}
+          {{ else }}
+            -
+          {{ end }}
+        </td>
+      </tr>
+        {{ end }}
+      {{ else }}
+      <tr>
+        <td colspan="4" style="text-align: center; padding: 2rem;">No databases found</td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+  <div class="flex-row" style="justify-content: space-between; align-items: center; margin-top: 1rem;">
+    <div>
+      {{ if .Data.Databases }}
+        Showing {{ len .Data.Databases }} database(s)
+      {{ else }}
+        No results
+      {{ end }}
+    </div>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <button
+        @click="prevPage()"
+        :disabled="currentPage === 1"
+        type="button">
+        ← Previous
+      </button>
+      <span>Page <span x-text="currentPage"></span> of <span x-text="totalPages"></span></span>
+      <button
+        @click="nextPage()"
+        :disabled="currentPage === totalPages"
+        type="button">
+        Next →
+      </button>
+    </div>
+  </div>
+</div>
+
+{{ template "layout-end" .}}

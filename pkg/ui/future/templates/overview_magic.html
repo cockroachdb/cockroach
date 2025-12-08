@@ -1,0 +1,38 @@
+{{template "layout-start" .}}
+<nav class="breadcrumbs" aria-label="Breadcrumbs">
+  <ul>
+    <li class="<h1>">Dual Cluster Overview</li>
+  </ul>
+</nav>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;">
+  <!-- Cluster 1 (Default) -->
+  <div class="box">
+    <h3 style="text-align: center; margin-bottom: 1rem;">Primary Cluster</h3>
+    <div id="summary-cluster-1"
+         hx-get="/future/overview/magic/summary?cluster=1"
+         hx-trigger="load, every 10s"
+         hx-swap="innerHTML">
+      <!-- Summary will be loaded here -->
+      <p>Loading cluster 1 data...</p>
+    </div>
+  </div>
+
+  <!-- Cluster 2 (localhost:36257) -->
+  <div class="box">
+    <h3 style="text-align: center; margin-bottom: 1rem;">Secondary Cluster (localhost:36257)</h3>
+    <div id="summary-cluster-2"
+         hx-get="/future/overview/magic/summary?cluster=2"
+         hx-trigger="load, every 10s"
+         hx-swap="innerHTML">
+      <!-- Summary will be loaded here -->
+      <p>Loading cluster 2 data...</p>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 2rem; text-align: center;">
+  <p class="subtitle">Auto-refreshes every 10 seconds</p>
+</div>
+
+{{template "layout-end" .}}

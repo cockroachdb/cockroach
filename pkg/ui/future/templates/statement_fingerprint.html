@@ -1,0 +1,201 @@
+{{ template "layout-start" .}}
+
+{{ $data := .Data }}
+{{ $stmt := $data.Statement }}
+{{ $stmtID := $data.StmtID }}
+{{ $params := $data.Params }}
+{{ $diag := $data.Diagnostics }}
+{{ $planStats := $data.PlanStats }}
+
+<nav class="breadcrumbs" aria-label="Breadcrumbs">
+  <ul>
+    <li class="<h1>"><a href="/future/sqlactivity/statements">Statements</a></li>
+    <li class="<h2>"><a href="/future/sqlactivity/statements/{{ $stmtID }}">Statement Fingerprint {{ $stmtID }}</a></li>
+  </ul>
+</nav>
+
+
+<form class="flex-row box align-items:end" method="GET" x-data
+      x-init="$store.timeRangeSQL.interval = '{{ $params.Interval }}';
+              $store.timeRangeSQL.startSeconds = {{ $params.Start }};
+              $store.timeRangeSQL.endSeconds = {{ $params.End }}">
+    <div>
+      <label for=interval>Interval:</label>
+      <select
+        id=interval
+        name=interval
+        x-model="$store.timeRangeSQL.interval"
+        @change="$store.timeRangeSQL.handleIntervalChange()">
+        <option value="1h" {{ if eq $params.Interval "1h" }}selected{{ end }}>Past Hour</option>
+        <option value="6h" {{ if eq $params.Interval "6h" }}selected{{ end }}>Past 6 Hours</option>
+        <option value="1d" {{ if eq $params.Interval "1d" }}selected{{ end }}>Past Day</option>
+        <option value="2d" {{ if eq $params.Interval "2d" }}selected{{ end }}>Past 2 Days</option>
+        <option value="3d" {{ if eq $params.Interval "3d" }}selected{{ end }}>Past 3 Days</option>
+        <option value="1w" {{ if eq $params.Interval "1w" }}selected{{ end }}>Past Week</option>
+        <option value="2w" {{ if eq $params.Interval "2w" }}selected{{ end }}>Past 2 Weeks</option>
+        <option value="1m" {{ if eq $params.Interval "1m" }}selected{{ end }}>Past Month</option>
+        <option value="Custom" {{ if eq $params.Interval "Custom" }}selected{{ end }}>Custom</option>
+      </select>
+    </div>
+    <div>
+      <label for="start-time">Start:</label>
+      <input
+        type="datetime-local"
+        id="start-time"
+        x-model="$store.timeRangeSQL.startTime"
+        :disabled="$store.timeRangeSQL.interval !== 'Custom'" />
+    </div>
+    <div>
+      <label for="end-time">End:</label>
+      <input
+        type="datetime-local"
+        id="end-time"
+        x-model="$store.timeRangeSQL.endTime"
+        :disabled="$store.timeRangeSQL.interval !== 'Custom'" />
+    </div>
+  <input type="hidden" name="start" value="" x-model="$store.timeRangeSQL.startSeconds" />
+  <input type="hidden" name="end" value="" x-model="$store.timeRangeSQL.endSeconds" />
+  <div>
+    <strong><button type="submit" class="<big>">Apply</button></strong>
+  </div>
+</form>
+<div>Showing aggregated stats from {{ $params.StartTime }} to {{ $params.EndTime }} ({{ $params.Timezone }})</div>
+<div class="box">
+  <pre><code class="language-sql">{{ $stmt.Metadata.Query }}</code></pre>
+</div>
+
+<div role=tablist aria-label="Statement Fingerprint">
+  <button role=tab aria-controls=overview aria-selected=true>Overview</button>
+  <button role=tab aria-controls=explainplans>Explain Plans</button>
+  <button role=tab aria-controls=diagnostics>Diagnostics</button>
+</div>
+
+<div id=overview role=tabpanel>
+  <div class="flex-switch">
+    <div class="box">
+      <dl class="table rows" style="width: auto;">
+        <div><dt>Nodes:</dt><dd>{{ if $stmt.Stats.Nodes }}{{ joinInt64 $stmt.Stats.Nodes ", " }}{{ else }}N/A{{ end }}</dd></div>
+        <div><dt>Regions:</dt><dd>{{ if $stmt.Stats.Regions }}{{ join $stmt.Stats.Regions ", " }}{{ else }}N/A{{ end }}</dd></div>
+        <div><dt>Database:</dt><dd>{{ if $stmt.Metadata.Databases }}{{ join $stmt.Metadata.Databases ", " }}{{ else }}N/A{{ end }}</dd></div>
+        <div><dt>Application Name:</dt><dd>{{ if $stmt.Metadata.AppNames }}{{ join $stmt.Metadata.AppNames ", " }}{{ else }}N/A{{ end }}</dd></div>
+        <div><dt>Fingerprint ID:</dt><dd>{{ $stmtID }}</dd></div>
+        <div><dt>Statement Type:</dt><dd>{{ $stmt.Metadata.StmtType }}</dd></div>
+      </dl>
+    </div>
+    <div class="box">
+      <dl class="table rows" style="width: auto;">
+        <div><dt>Transaction type:</dt><dd>{{ if $stmt.Metadata.ImplicitTxn }}Implicit{{ else }}Explicit{{ end }}</dd></div>
+        <div><dt>Full scan count:</dt><dd>{{ formatNumber $stmt.Metadata.FullScanCount }}</dd></div>
+        <div><dt>Vectorized count:</dt><dd>{{ formatNumber $stmt.Metadata.VecCount }}</dd></div>
+        <div><dt>DistSQL count:</dt><dd>{{ formatNumber $stmt.Metadata.DistSQLCount }}</dd></div>
+      </dl>
+    </div>
+    <div class="box">
+      <dl class="table rows" style="width: auto;">
+        <div><dt>Statement time:</dt><dd>{{ formatTime (mul $stmt.Stats.ServiceLat.Mean 1000000000) }} (Exec: {{ formatTime (mul $stmt.Stats.RunLat.Mean 1000000000) }} / Plan: {{ formatTime (mul $stmt.Stats.PlanLat.Mean 1000000000) }})</dd></div>
+        <div><dt>Rows Processed:</dt><dd>{{ formatNumber $stmt.Stats.RowsRead.Mean }} Reads / {{ formatNumber $stmt.Stats.RowsWritten.Mean }} Writes</dd></div>
+        <div><dt>Execution Retries:</dt><dd>{{ formatNumber $stmt.Stats.MaxRetries }}</dd></div>
+        <div><dt>Execution Count:</dt><dd>{{ formatNumber $stmt.Stats.Count }}</dd></div>
+        <div><dt>Last execution:</dt><dd>{{ $stmt.Stats.LastExecTimestamp.Format "2006-01-02 15:04:05" }}</dd></div>
+      </dl>
+    </div>
+    <div class="box">
+      <dl class="table rows" style="width: auto;">
+        <div><dt>Client Wait Time:</dt><dd>{{ formatTime (mul (sub $stmt.Stats.ServiceLat.Mean $stmt.Stats.RunLat.Mean) 1000000000) }}</dd></div>
+        <div><dt>Contention Time:</dt><dd>{{ formatTime (mul $stmt.Stats.ExecStats.ContentionTime.Mean 1000000000) }}</dd></div>
+        <div><dt>SQL CPU Time:</dt><dd>{{ formatTime $stmt.Stats.ExecStats.CPUSQLNanos.Mean }}</dd></div>
+        <div><dt>Max Memory:</dt><dd>{{ formatBytes $stmt.Stats.ExecStats.MaxMemUsage.Mean }}</dd></div>
+        <div><dt>Network Bytes:</dt><dd>{{ formatBytes $stmt.Stats.ExecStats.NetworkBytes.Mean }}</dd></div>
+      </dl>
+    </div>
+  </div>
+  <div class="box">
+    Insights list TBD
+  </div>
+  <div class="flex-switch">
+    7 charts TBD
+  </div>
+</div>
+
+<div id=explainplans role=tabpanel hidden class="overflow-x:scroll">
+  {{ if $planStats }}
+  <table class="width:100%">
+    <thead>
+      <tr>
+        <th>Plan Gist</th>
+        <th>Used Indexes</th>
+        <th>Insights</th>
+        <th>Last Execution Time (America/New_York)</th>
+        <th>Average Execution Time</th>
+        <th>Execution Count</th>
+        <th>Average Rows Read</th>
+        <th>Full Scan</th>
+        <th>Min Latency</th>
+        <th>Max Latency</th>
+        <th>Generic Query Plan</th>
+        <th>Distributed</th>
+        <th>Vectorized</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{ range $planStats }}
+      <tr onclick="document.getElementById('plan-{{ .PlanHash }}').toggleAttribute('hidden')" style="cursor: pointer;">
+        <td><code>{{ if .Stats.PlanGists }}{{ index .Stats.PlanGists 0 }}{{ else }}{{ .PlanHash }}{{ end }}</code></td>
+        <td>{{ if .IndexRecommendations }}{{ join .IndexRecommendations ", " }}{{ else }}N/A{{ end }}</td>
+        <td>None</td>
+        <td>{{ .Stats.LastExecTimestamp.Format "Jan 2, 2006 at 15:04 MST" }}</td>
+        <td>{{ formatTime (mul .Stats.ServiceLat.Mean 1000000000) }}</td>
+        <td>{{ formatNumber .Stats.Count }}</td>
+        <td>{{ formatNumber .Stats.RowsRead.Mean }}</td>
+        <td>{{ if .Metadata.FullScanCount }}Yes{{ else }}No{{ end }}</td>
+        <td>{{ formatTime (mul .Stats.LatencyInfo.Min 1000000000) }}</td>
+        <td>{{ formatTime (mul .Stats.LatencyInfo.Max 1000000000) }}</td>
+        <td>No</td>
+        <td>{{ if .Metadata.DistSQLCount }}Yes{{ else }}No{{ end }}</td>
+        <td>{{ if .Metadata.VecCount }}Yes{{ else }}No{{ end }}</td>
+      </tr>
+      <tr id="plan-{{ .PlanHash }}" hidden>
+        <td colspan="13">
+          <div class="box" style="margin: 1rem 0;">
+            <div class="flex-switch">
+              <div>
+                <dl class="table rows" style="width: auto;">
+                  <div><dt>Last Execution Time:</dt><dd>{{ .Stats.LastExecTimestamp.Format "Jan 2, 2006 at 15:04 MST" }}</dd></div>
+                  <div><dt>Average Execution Time:</dt><dd>{{ formatTime (mul .Stats.ServiceLat.Mean 1000000000) }}</dd></div>
+                  <div><dt>Execution Count:</dt><dd>{{ formatNumber .Stats.Count }}</dd></div>
+                  <div><dt>Average Rows Read:</dt><dd>{{ formatNumber .Stats.RowsRead.Mean }}</dd></div>
+                </dl>
+              </div>
+              <div>
+                <dl class="table rows" style="width: auto;">
+                  <div><dt>Full Scan:</dt><dd>{{ if .Metadata.FullScanCount }}Yes{{ else }}No{{ end }}</dd></div>
+                  <div><dt>Distributed:</dt><dd>{{ if .Metadata.DistSQLCount }}Yes{{ else }}No{{ end }}</dd></div>
+                  <div><dt>Vectorized:</dt><dd>{{ if .Metadata.VecCount }}Yes{{ else }}No{{ end }}</dd></div>
+                  <div><dt>Used Indexes:</dt><dd>{{ if .IndexRecommendations }}{{ join .IndexRecommendations ", " }}{{ else }}N/A{{ end }}</dd></div>
+                </dl>
+              </div>
+            </div>
+            {{ if .ExplainPlan }}
+            <div style="margin-top: 1rem;">
+              <strong>Explain Plan:</strong>
+              <pre><code>{{ .ExplainPlan }}</code></pre>
+            </div>
+            {{ end }}
+          </div>
+        </td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+  {{ else }}
+  <div class="box">No execution plan statistics available for this statement.</div>
+  {{ end }}
+</div>
+
+<div id=diagnostics role=tabpanel hidden>
+  <div class="box">
+    {{ template "statement_diagnostics_controls" (dict "Data" $diag "IndexHTMLArgs" .IndexHTMLArgs) }}
+  </div>
+</div>
+
+{{ template "layout-end" .}}

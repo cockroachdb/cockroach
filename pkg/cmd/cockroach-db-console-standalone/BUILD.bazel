@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "cockroach-db-console-standalone_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cockroach-db-console-standalone",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/server/serverpb",
+        "//pkg/ui/future",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_binary(
+    name = "cockroach-db-console-standalone",
+    embed = [":cockroach-db-console-standalone_lib"],
+    visibility = ["//visibility:public"],
+)

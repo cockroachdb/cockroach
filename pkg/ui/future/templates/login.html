@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <script src="assets/htmx.min.js"></script>
+    <script defer src="assets/alpine.min.js"></script>
+    <script src="assets/auto-refresh.js"></script>
+    <link rel=stylesheet href="assets/missing.css">
+  </head>
+
+  <body>
+  <div class="fullscreen container center align-content:center flex-switch">
+    <div>
+      <img src="/future/assets/crl.svg" alt="CockroachDB Logo" width="200">
+      <h3>Log in to the DB Console</h3>
+      <form method="POST" class="flex-column">
+        <div>
+          <label for="username">Username:</label>
+          <input type="text" id="username"></input>
+        </div>
+        <div>
+          <label for="password">Password:</label>
+          <input type="password" id="password"></input>
+        </div>
+        <div>
+          <strong>
+            <button type="submit">Log In</button>
+          </strong>
+        </div>
+      </form>
+    </div>
+    <div>
+      <h4>A user with a password is required to log in to the DB Console on secure clusters.</h4>
+      <p>
+        Create a user with this SQL command:
+        <code class="language-sql">
+          CREATE USER craig WITH PASSWORD 'cockroach';
+        </code>
+      </p>
+      <p>
+        <a href="#">Read more about configuring login</a>
+      </p>
+    </div>
+  </div>
+  </body>
+</html>
