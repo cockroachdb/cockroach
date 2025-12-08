@@ -447,7 +447,7 @@ SET enable_shared_locking_for_serializable = true
 statement async share1
 SELECT * FROM t WHERE k = 'a' FOR SHARE;
 
-user testuser 2
+user testuser2
 
 statement ok
 BEGIN;
