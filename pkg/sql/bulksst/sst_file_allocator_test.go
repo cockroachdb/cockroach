@@ -108,6 +108,10 @@ func (f *failingWritable) Write(p []byte) error {
 	return nil
 }
 
+func (f *failingWritable) StartMetadataPortion() error {
+	return nil
+}
+
 func (f *failingWritable) Finish() error {
 	return f.finishErr
 }

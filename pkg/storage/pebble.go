@@ -673,7 +673,6 @@ func defaultPebbleOptions(sv *settings.Values) *pebble.Options {
 		BlockSize:      32 << 10,  // 32 KB
 		IndexBlockSize: 256 << 10, // 256 KB
 		FilterPolicy:   bloom.FilterPolicy(10),
-		FilterType:     pebble.TableFilter,
 	}
 	opts.Levels[0].EnsureL0Defaults()
 	for i := 1; i < len(opts.Levels); i++ {
@@ -681,7 +680,6 @@ func defaultPebbleOptions(sv *settings.Values) *pebble.Options {
 		l.BlockSize = 32 << 10       // 32 KB
 		l.IndexBlockSize = 256 << 10 // 256 KB
 		l.FilterPolicy = bloom.FilterPolicy(10)
-		l.FilterType = pebble.TableFilter
 		l.EnsureL1PlusDefaults(&opts.Levels[i-1])
 	}
 
