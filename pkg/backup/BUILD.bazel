@@ -294,7 +294,6 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlclustersettings",
-        "//pkg/sql/sqlliveness/slbase",
         "//pkg/sql/sqltestutils",
         "//pkg/sql/stats",
         "//pkg/storage",
