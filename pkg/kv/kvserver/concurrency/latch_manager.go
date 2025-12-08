@@ -7,11 +7,14 @@ package concurrency
 
 import (
 	"context"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // latchManagerImpl implements the latchManager interface.
@@ -66,4 +69,14 @@ func (m *latchManagerImpl) Release(ctx context.Context, lg latchGuard) {
 
 func (m *latchManagerImpl) Metrics() LatchMetrics {
 	return m.m.Metrics()
+}
+
+func (m *latchManagerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
+	if keys.NodeLivenessSpan.Overlaps(desc.KeySpan().AsRawSpanWithNoLocals()) {
+		// Node liveness heartbeats time out at 3s, so log slow latch acquisitions
+		// sooner than 3s to help diagnose potential heartbeat failures.
+		m.m.SetSlowLatchRequestThresholdOverride(2 * time.Second)
+	} else {
+		m.m.SetSlowLatchRequestThresholdOverride(0)
+	}
 }
