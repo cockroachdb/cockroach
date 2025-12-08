@@ -19,8 +19,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/parquet"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/ttycolor"
 	"golang.org/x/sync/errgroup"
@@ -621,6 +624,43 @@ const (
 	forceColorOff
 )
 
+// mergeLogsOutputFormat specifies the output format for merge-logs.
+type mergeLogsOutputFormat int
+
+const (
+	// mergeLogsOutputText outputs in text format (default).
+	mergeLogsOutputText mergeLogsOutputFormat = iota
+	// mergeLogsOutputParquet outputs in parquet format.
+	mergeLogsOutputParquet
+)
+
+// Type implements the pflag.Value interface.
+func (f *mergeLogsOutputFormat) Type() string { return "string" }
+
+// String implements the pflag.Value interface.
+func (f *mergeLogsOutputFormat) String() string {
+	switch *f {
+	case mergeLogsOutputText:
+		return "text"
+	case mergeLogsOutputParquet:
+		return "parquet"
+	}
+	return ""
+}
+
+// Set implements the pflag.Value interface.
+func (f *mergeLogsOutputFormat) Set(s string) error {
+	switch s {
+	case "text":
+		*f = mergeLogsOutputText
+	case "parquet":
+		*f = mergeLogsOutputParquet
+	default:
+		return errors.Errorf("invalid value for --output-format: %s (valid: text, parquet)", s)
+	}
+	return nil
+}
+
 // Type implements the pflag.Value interface.
 func (c *forceColor) Type() string { return "<true/false/auto>" }
 
@@ -650,5 +690,111 @@ func (c *forceColor) Set(v string) error {
 	default:
 		return errors.Newf("unknown value: %v (supported: true/false/auto)", v)
 	}
+	return nil
+}
+
+// writeLogStreamParquet writes log entries from s to out in parquet format.
+func writeLogStreamParquet(
+	s logStream,
+	out io.Writer,
+	filter *regexp.Regexp,
+	tenantIDsFilter []string,
+) error {
+	// Build tenant ID filter set
+	tenantIDFilterSet := make(map[string]struct{}, len(tenantIDsFilter))
+	for _, tID := range tenantIDsFilter {
+		tenantIDFilterSet[tID] = struct{}{}
+	}
+
+	// Define schema matching logpb.Entry plus source file info
+	columnNames := []string{
+		"source_file",
+		"severity",
+		"time",
+		"goroutine",
+		"file",
+		"line",
+		"message",
+		"tags",
+		"counter",
+		"redactable",
+		"channel",
+		"tenant_id",
+	}
+	columnTypes := []*types.T{
+		types.String, // source_file
+		types.Int4,   // severity
+		types.Int,    // time (nanoseconds)
+		types.Int,    // goroutine
+		types.String, // file
+		types.Int,    // line
+		types.String, // message
+		types.String, // tags
+		types.Int,    // counter
+		types.Bool,   // redactable
+		types.Int4,   // channel
+		types.String, // tenant_id
+	}
+
+	schema, err := parquet.NewSchema(columnNames, columnTypes)
+	if err != nil {
+		return errors.Wrap(err, "creating parquet schema")
+	}
+
+	writer, err := parquet.NewWriter(schema, out, parquet.WithCompressionCodec(parquet.CompressionZSTD))
+	if err != nil {
+		return errors.Wrap(err, "creating parquet writer")
+	}
+
+	for e, ok := s.peek(); ok; e, ok = s.peek() {
+		fi := s.fileInfo()
+		s.pop()
+
+		// Apply tenant filter
+		if len(tenantIDsFilter) != 0 {
+			if _, ok := tenantIDFilterSet[e.TenantID]; !ok {
+				continue
+			}
+		}
+
+		// Apply message filter
+		if filter != nil && !filter.MatchString(e.Message) {
+			continue
+		}
+
+		// Get source file path
+		sourceFile := ""
+		if fi != nil {
+			sourceFile = fi.path
+		}
+
+		datums := []tree.Datum{
+			tree.NewDString(sourceFile),
+			tree.NewDInt(tree.DInt(e.Severity)),
+			tree.NewDInt(tree.DInt(e.Time)),
+			tree.NewDInt(tree.DInt(e.Goroutine)),
+			tree.NewDString(e.File),
+			tree.NewDInt(tree.DInt(e.Line)),
+			tree.NewDString(e.Message),
+			tree.NewDString(e.Tags),
+			tree.NewDInt(tree.DInt(e.Counter)),
+			tree.MakeDBool(tree.DBool(e.Redactable)),
+			tree.NewDInt(tree.DInt(e.Channel)),
+			tree.NewDString(e.TenantID),
+		}
+
+		if err := writer.AddRow(datums); err != nil {
+			return errors.Wrap(err, "writing parquet row")
+		}
+	}
+
+	if err := s.error(); err != nil && err != io.EOF {
+		return err
+	}
+
+	if err := writer.Close(); err != nil {
+		return errors.Wrap(err, "closing parquet writer")
+	}
+
 	return nil
 }

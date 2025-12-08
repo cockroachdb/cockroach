@@ -1173,6 +1173,7 @@ var debugMergeLogsOpts = struct {
 	prefix          string
 	redactInput     bool
 	format          string
+	outputFormat    mergeLogsOutputFormat
 	useColor        forceColor
 	tenantIDsFilter []string
 }{
@@ -1180,6 +1181,7 @@ var debugMergeLogsOpts = struct {
 	file:           regexp.MustCompile(logFilePattern),
 	keepRedactable: true,
 	redactInput:    false,
+	outputFormat:   mergeLogsOutputText,
 }
 
 func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
@@ -1243,7 +1245,13 @@ func runDebugMergeLogs(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return writeLogStream(s, outStream, o.filter, o.keepRedactable, cp, o.tenantIDsFilter)
+	// Choose output format
+	switch o.outputFormat {
+	case mergeLogsOutputParquet:
+		return writeLogStreamParquet(s, outStream, o.filter, o.tenantIDsFilter)
+	default:
+		return writeLogStream(s, outStream, o.filter, o.keepRedactable, cp, o.tenantIDsFilter)
+	}
 }
 
 var debugIntentCount = &cobra.Command{
@@ -1548,6 +1556,8 @@ func init() {
 		"redact the input files to remove sensitive information")
 	f.StringVar(&debugMergeLogsOpts.format, "format", "",
 		"log format of the input files")
+	f.Var(&debugMergeLogsOpts.outputFormat, "output-format",
+		"output format (text, parquet)")
 	f.Var(&debugMergeLogsOpts.useColor, "color",
 		"force use of TTY escape codes to colorize the output")
 	f.StringSliceVar(&debugMergeLogsOpts.tenantIDsFilter, "tenant-ids", nil,
