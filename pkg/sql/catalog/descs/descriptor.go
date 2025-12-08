@@ -285,6 +285,9 @@ func filterDescriptor(desc catalog.Descriptor, flags getterFlags) error {
 			return nil
 		}
 	}
+	if flags.layerFilters.withAdding {
+		return nil
+	}
 	return catalog.FilterAddingDescriptor(desc)
 }
 
@@ -390,6 +393,11 @@ func (q *byIDLookupContext) lookupLeased(
 	}
 	desc, shouldReadFromStore, err := q.tc.leased.getByID(q.ctx, q.tc.deadlineHolder(q.txn), id)
 	if err != nil || shouldReadFromStore {
+		// Leasing does not support leasing adding descriptors, and in certain contexts,
+		// we may want them leased. So, we will fallback to the KV based reads if requested.
+		if q.flags.layerFilters.withAdding && catalog.HasAddingDescriptorError(err) {
+			return nil, catalog.NoValidation, nil
+		}
 		return nil, catalog.NoValidation, err
 	}
 	return desc, validate.ImmutableRead, nil

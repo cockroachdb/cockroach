@@ -87,6 +87,13 @@ func TestLogic_crdb_internal(
 	runLogicTest(t, "crdb_internal")
 }
 
+func TestLogic_fk(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "fk")
+}
+
 func TestLogic_pg_catalog(
 	t *testing.T,
 ) {

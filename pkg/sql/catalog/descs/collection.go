@@ -1289,6 +1289,7 @@ func (tc *Collection) aggregateAllLayers(
 	flags := defaultUnleasedFlags()
 	if getAllOptions.allowLeased {
 		flags.layerFilters.withoutLeased = false
+		flags.layerFilters.withAdding = true
 	}
 	if getAllOptions.withMetadata {
 		flags.layerFilters.withMetadata = true
