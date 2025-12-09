@@ -8,6 +8,7 @@ package backup
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1802,8 +1804,20 @@ func doRestorePlan(
 		return err
 	}
 	if restoreStmt.Options.OnlineImpl() {
-		for _, uri := range defaultURIs {
-			if err := cloud.SchemeSupportsEarlyBoot(uri); err != nil {
+		for i, path := range defaultURIs {
+			uri, err := url.Parse(path)
+			if err != nil {
+				return err
+			}
+			// definitely a better way to do this but for now lets just get something working
+			if uri.Scheme == "external" {
+				// fetch the actual connection uri and swap it out
+				ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, p.InternalSQLTxn())
+				if err != nil {
+					return err
+				}
+				defaultURIs[i] = ec.RedactedConnectionURI() + uri.Path
+			} else if err := cloud.SchemeSupportsEarlyBoot(uri); err != nil {
 				return errors.Wrap(err, "backup URI not supported for online restore")
 			}
 		}
