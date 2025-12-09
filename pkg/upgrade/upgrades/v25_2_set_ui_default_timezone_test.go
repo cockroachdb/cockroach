@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/maps"
 )
@@ -57,8 +58,13 @@ func TestSetUiDefaultTimezone(t *testing.T) {
 
 		upgrades.Upgrade(t, sqlDB, clusterversion.V25_2_SetUiDefaultTimezoneSetting, nil, false)
 
-		runner.QueryRow(t, "SHOW cluster setting ui.default_timezone").Scan(&defaultTimezoneVal)
-		require.Equal(t, strings.ToLower(val), defaultTimezoneVal)
+		testutils.SucceedsSoon(t, func() error {
+			runner.QueryRow(t, "SHOW cluster setting ui.default_timezone").Scan(&defaultTimezoneVal)
+			if strings.ToLower(val) != defaultTimezoneVal {
+				return errors.Newf("expected ui.default_timezone to be set to %s, got %s", val, defaultTimezoneVal)
+			}
+			return nil
+		})
 	})
 
 	t.Run("display_timezone=default", func(t *testing.T) {
