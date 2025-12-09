@@ -111,7 +111,11 @@ type RegisteredProvider struct {
 
 // SchemeSupportsEarlyBoot returns an error if the scheme of the
 // provided URL has a provider that can't be used during early boot.
-func SchemeSupportsEarlyBoot(uri *url.URL) error {
+func SchemeSupportsEarlyBoot(path string) error {
+	uri, err := url.Parse(path)
+	if err != nil {
+		return err
+	}
 	_, ok := earlyBootConfParsers[uri.Scheme]
 	if !ok {
 		return errors.Newf("scheme %s is not accessible during node startup", uri.Scheme)
