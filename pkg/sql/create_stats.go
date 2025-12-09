@@ -203,13 +203,22 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
 	}
 
+	var concurrencyCheckError error
 	var job *jobs.StartableJob
 	jobID := n.p.ExecCfg().JobRegistry.MakeJobID()
-	if err := n.p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+	err = n.p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 		if n.isAuto() {
 			if details.UseLocksTable {
-				if err := n.checkConcurrencyLimit(ctx, txn, details.Table.ID, jobID); err != nil {
+				concurrencyCheckError = nil
+				ok, err := n.checkConcurrencyLimit(ctx, txn, details.Table.ID, jobID)
+				if err != nil {
 					return err
+				}
+				if !ok {
+					// (ok=false,err=nil) is returned indicating that we should
+					// commit the txn without starting the auto stats job.
+					concurrencyCheckError = stats.ConcurrentCreateStatsError
+					return nil
 				}
 			} else if !jobCheckBefore {
 				// Don't start the job if there is already a CREATE STATISTICS job running.
@@ -222,7 +231,11 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 			}
 		}
 		return n.p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &job, jobID, txn, *record)
-	}); err != nil {
+	})
+	if err == nil && concurrencyCheckError != nil {
+		err = concurrencyCheckError
+	}
+	if err != nil {
 		if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) && errors.Is(err, stats.ConcurrentCreateStatsError) {
 			log.Dev.Infof(ctx, "concurrent create stats job found, skipping")
 			return nil
@@ -265,40 +278,45 @@ func init() {
 	// This query pattern performs a locking read of the table_statistics_locks
 	// table on the table_id passed as a query argument and performs a lookup
 	// join into the system.jobs table to determine whether each JobID in
-	// job_ids is still active. Still active JobIDs are aggregated into an
-	// array.
+	// job_ids is still active. Still active and no longer active JobIDs are
+	// aggregated into arrays.
 	//
 	// 'kind' value might be hard-coded or might be passed as a query argument.
 	const query = `
-SELECT array_agg(id)
+SELECT
+  array_agg(id) FILTER (WHERE status IN %[1]s),
+  array_agg(id) FILTER (WHERE status NOT IN %[1]s)
 FROM (
   SELECT unnest(job_ids) AS job_id
   FROM system.table_statistics_locks
   WHERE table_id = $1
-  AND kind %s
+  AND kind %[2]s
   FOR UPDATE OF table_statistics_locks
 )
-INNER LOOKUP JOIN system.jobs ON id = job_id
-WHERE status IN ` + jobs.NonTerminalStateTupleString
+INNER LOOKUP JOIN system.jobs ON id = job_id`
 	// Only another full auto stats collection on the same table conflicts
 	// with the full job.
-	checkFullStatsJobsQuery = fmt.Sprintf(query, " = 1")
+	checkFullStatsJobsQuery = fmt.Sprintf(query, jobs.NonTerminalStateTupleString, " = 1")
 	// Both full and USING EXTREMES auto stats collections on the same table
 	// conflict with the USING EXTREMES job.
-	checkExtremesStatsJobsQuery = fmt.Sprintf(query, " IN (1, 2)")
-	checkGlobalStatsJobsQuery = fmt.Sprintf(query, " = $2")
+	checkExtremesStatsJobsQuery = fmt.Sprintf(query, jobs.NonTerminalStateTupleString, " IN (1, 2)")
+	checkGlobalStatsJobsQuery = fmt.Sprintf(query, jobs.NonTerminalStateTupleString, " = $2")
 }
 
 // checkConcurrencyLimit verifies that starting a new stats job will not exceed
-// the allowed concurrency limits. If no error is returned, then the passed-in
+// the allowed concurrency limits. If ok=true is returned, then the passed-in
 // job ID should be used for the new stats job (necessary locks in the
 // system.table_statistics_locks have been acquired).
+//
+// The function can return (ok=false,err=nil) in which case the txn should be
+// committed, yet the new stats job shouldn't be started due to concurrency
+// limit being exceeded.
 func (n *createStatsNode) checkConcurrencyLimit(
 	ctx context.Context, txn isql.Txn, tableID descpb.ID, jobID jobspb.JobID,
-) error {
+) (ok bool, _ error) {
 	if !n.isAuto() {
 		// We don't apply any concurrency limits to manual stats jobs.
-		return nil
+		return true, nil
 	}
 	const (
 		fullKind     = 1
@@ -326,12 +344,12 @@ func (n *createStatsNode) checkConcurrencyLimit(
 		sessiondata.InternalExecutorOverride{}, tableLimitQuery, tableID,
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if row[0] != tree.DNull {
 		stillActive := tree.MustBeDArray(row[0])
 		if len(stillActive.Array) > 0 {
-			return stats.ConcurrentCreateStatsError
+			return false, stats.ConcurrentCreateStatsError
 		}
 	}
 	// Now limit the global concurrency of the target kind.
@@ -340,16 +358,32 @@ func (n *createStatsNode) checkConcurrencyLimit(
 		checkGlobalStatsJobsQuery, globalTableID, kind,
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
 	var globalJobIDs tree.Datums
 	if row[0] != tree.DNull {
 		globalJobIDs = tree.MustBeDArray(row[0]).Array
 		if len(globalJobIDs) >= globalLimit {
-			// TODO(yuzefovich): if we found some inactive jobIDs, we could
-			// consider updating the global row without claiming a slot
-			// ourselves.
-			return stats.ConcurrentCreateStatsError
+			var expiredJobIDs tree.Datums
+			if row[1] != tree.DNull {
+				expiredJobIDs = tree.MustBeDArray(row[1]).Array
+			}
+			if len(expiredJobIDs) == 0 {
+				// All jobs are still active.
+				return false, stats.ConcurrentCreateStatsError
+			}
+			// We can't start the auto stats job due to the concurrency limit,
+			// yet we found some inactive jobIDs and we've already acquired the
+			// lock on the row, so we should prune the job_ids value.
+			_, err = txn.ExecEx(
+				ctx, "create-stats-prune-global-limit", txn.KV(), sessiondata.InternalExecutorOverride{},
+				"UPDATE system.table_statistics_locks SET job_ids = $1 WHERE table_id = $2 AND kind = $3",
+				tree.NewDArrayFromDatums(types.Int, globalJobIDs), globalTableID, kind,
+			)
+			if err != nil {
+				return false, err
+			}
+			return false, nil
 		}
 	}
 	// We can start this auto stats job, so claim the locks accordingly.
@@ -360,7 +394,7 @@ func (n *createStatsNode) checkConcurrencyLimit(
 		tableID, kind, tree.NewDArrayFromDatums(types.Int, tree.Datums{&jobIDAsDatum}),
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
 	globalJobIDs = append(globalJobIDs, &jobIDAsDatum)
 	_, err = txn.ExecEx(
@@ -368,7 +402,10 @@ func (n *createStatsNode) checkConcurrencyLimit(
 		"UPSERT INTO system.table_statistics_locks (table_id, kind, job_ids) VALUES ($1, $2, $3)",
 		globalTableID, kind, tree.NewDArrayFromDatums(types.Int, globalJobIDs),
 	)
-	return err
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // makeJobRecord creates a CreateStats job record which can be used to plan and

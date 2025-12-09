@@ -156,8 +156,10 @@ scan statement_hints@hash_idx
 
 # Query used to enforce the global concurrency limit of auto stats collections.
 query T
-EXPLAIN
-SELECT array_agg(id)
+EXPLAIN (VERBOSE)
+SELECT
+  array_agg(id) FILTER (WHERE status IN ('running', 'pending', 'cancel-requested', 'paused-requested', 'reverting', 'paused')),
+  array_agg(id) FILTER (WHERE status NOT IN ('running', 'pending', 'cancel-requested', 'paused-requested', 'reverting', 'paused'))
 FROM (
   SELECT unnest(job_ids) AS job_id
   FROM system.table_statistics_locks
@@ -166,23 +168,38 @@ FROM (
   FOR UPDATE OF table_statistics_locks
 )
 INNER LOOKUP JOIN system.jobs ON id = job_id
-WHERE status IN ('running', 'pending', 'cancel-requested', 'paused-requested', 'reverting', 'paused')
 ----
 distribution: local
 vectorized: true
 ·
 • group (scalar)
+│ columns: (array_agg, array_agg)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: array_agg(id) FILTER (WHERE column29)
+│ aggregate 1: array_agg(id) FILTER (WHERE column31)
 │
-└── • lookup join
-    │ table: jobs@primary
-    │ equality: (unnest) = (id)
-    │ equality cols are key
-    │ pred: status IN ('cancel-requested', 'paused', __more1_10__, 'running')
+└── • render
+    │ columns: (column29, column31, id)
+    │ render column29: status IN ('cancel-requested', 'paused', __more1_10__, 'running')
+    │ render column31: status NOT IN ('cancel-requested', 'paused', __more1_10__, 'running')
+    │ render id: id
     │
-    └── • project set
+    └── • lookup join (inner)
+        │ columns: (table_id, kind, job_ids, unnest, id, status)
+        │ estimated row count: 10 (missing stats)
+        │ table: jobs@primary
+        │ equality: (unnest) = (id)
+        │ equality cols are key
+        │ parallel
         │
-        └── • scan
-              missing stats
-              table: table_statistics_locks@primary
-              spans: [/0/1 - /0/1]
-              locking strength: for update
+        └── • project set
+            │ columns: (table_id, kind, job_ids, unnest)
+            │ estimated row count: 10 (missing stats)
+            │ render 0: unnest(job_ids)
+            │
+            └── • scan
+                  columns: (table_id, kind, job_ids)
+                  estimated row count: 1 (missing stats)
+                  table: table_statistics_locks@primary
+                  spans: /0/1-/0/2
+                  locking strength: for update
