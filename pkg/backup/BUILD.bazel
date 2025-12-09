@@ -56,6 +56,7 @@ go_library(
         "//pkg/ccl/storageccl",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
+				"//pkg/cloud/externalconn",
         "//pkg/clusterversion",
         "//pkg/featureflag",
         "//pkg/jobs",

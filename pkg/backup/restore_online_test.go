@@ -792,6 +792,67 @@ func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
 	require.Greater(t, postPauseScatterRequests.Load(), postPauseSuccessfulScatters.Load())
 }
 
+func TestOnlineRestoreExtConn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	ctx := context.Background()
+
+	const numAccounts = 1000
+
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	defer cleanupFn()
+
+	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, orParams)
+	defer cleanupFnRestored()
+
+	extConnName := "conn-foo"
+	externalStorage := "external://" + extConnName
+	trueExternalStorage := "nodelocal://1/backup"
+	sqlDB.Exec(t, fmt.Sprintf("CREATE EXTERNAL CONNECTION '%s' AS '%s';", extConnName, trueExternalStorage))
+	rSQLDB.Exec(t, fmt.Sprintf("CREATE EXTERNAL CONNECTION '%s' AS '%s';", extConnName, trueExternalStorage))
+
+	createStmt := `SELECT create_statement FROM [SHOW CREATE TABLE data.bank]`
+	createStmtRes := sqlDB.QueryStr(t, createStmt)
+
+	testutils.RunTrueAndFalse(t, "incremental", func(t *testing.T, incremental bool) {
+		testutils.RunTrueAndFalse(t, "blocking download", func(t *testing.T, blockingDownload bool) {
+			sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+
+			if incremental {
+				sqlDB.Exec(t, "UPDATE data.bank SET balance = balance+123 where true;")
+				sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", externalStorage))
+			}
+
+			var preRestoreTs float64
+			sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&preRestoreTs)
+
+			bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage, blockingDownload)
+
+			fpSrc, err := fingerprintutils.FingerprintDatabase(ctx, tc.Conns[0], "data", fingerprintutils.Stripped())
+			require.NoError(t, err)
+			fpDst, err := fingerprintutils.FingerprintDatabase(ctx, rtc.Conns[0], "data", fingerprintutils.Stripped())
+			require.NoError(t, err)
+			require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
+
+			assertMVCCOnlineRestore(t, rSQLDB, preRestoreTs)
+			assertOnlineRestoreWithRekeying(t, sqlDB, rSQLDB)
+
+			if !blockingDownload {
+				waitForLatestDownloadJobToSucceed(t, rSQLDB)
+			}
+
+			rSQLDB.CheckQueryResults(t, createStmt, createStmtRes)
+			sqlDB.CheckQueryResults(t, jobutils.GetExternalBytesForConnectedTenant, [][]string{{"0"}})
+
+			rSQLDB.Exec(t, "DROP DATABASE data CASCADE")
+		})
+	})
+
+}
+
 func bankOnlineRestore(
 	t *testing.T,
 	sqlDB *sqlutils.SQLRunner,
