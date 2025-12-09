@@ -89,6 +89,8 @@ ALTER TABLE defaultdb.foo_index_zone_cfg DROP COLUMN k
   {indexId: 3, tableId: 105}
 - [[CheckConstraint:{DescID: 105, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [2]}, ABSENT], PUBLIC]
   {columnIds: [2], constraintId: 4, expr: 'k > 10:::INT8', referencedColumnIds: [2], tableId: 105}
+- [[ConstraintWithoutIndexName:{DescID: 105, Name: check_k, ConstraintID: 4}, ABSENT], PUBLIC]
+  {constraintId: 4, name: check_k, tableId: 105}
 - [[IndexZoneConfig:{DescID: 105, IndexID: 3, SeqNum: 0}, ABSENT], PUBLIC]
   {indexId: 3, oldIdxRef: -1, subzone: {config: {gc: {ttlSeconds: 10}, inheritedConstraints: true, inheritedLeasePreferences: true}, indexId: 3}, subzoneSpans: [{key: iw==}], tableId: 105}
 - [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]

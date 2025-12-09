@@ -14,12 +14,12 @@ ALTER TABLE defaultdb.foo ALTER PRIMARY KEY USING COLUMNS (j)
   {columnId: 2, indexId: 1, kind: STORED, tableId: 104}
 - [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
   {constraintId: 1, indexId: 1, isUnique: true, tableId: 104}
+- [[ConstraintComment:{DescID: 104, ConstraintID: 1, Value: pkey is a constraint}, ABSENT], PUBLIC]
+  {comment: pkey is a constraint, constraintId: 1, tableId: 104}
 - [[IndexName:{DescID: 104, Name: pkey, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, name: pkey, tableId: 104}
 - [[IndexComment:{DescID: 104, IndexID: 1, Value: pkey is an index}, ABSENT], PUBLIC]
   {comment: pkey is an index, indexId: 1, tableId: 104}
-- [[ConstraintComment:{DescID: 104, ConstraintID: 1, Value: pkey is a constraint}, ABSENT], PUBLIC]
-  {comment: pkey is a constraint, constraintId: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
