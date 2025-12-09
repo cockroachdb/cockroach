@@ -502,6 +502,33 @@ type lockTableGuardImpl struct {
 		// without doing any extra work.
 		mustComputeWaitingState bool
 	}
+
+	// otherTxnKnowledge is a request-scoped cache of known transactions statuses.
+	// Transactions end up in this map either because the request has successfully
+	// pushed them or because the transaction was present and finalized in the
+	// txnStatusCache when the request encountered one of its locks.
+	//
+	// When a request encounters a lock while scanning the lock table for a given
+	// lock strength, it should consult this map. If the lock's holder is present
+	// in the map, the request should consult the Status of the lock holder to
+	// determine whether it blocks the specific lock strength. This is necessary
+	// because a transaction may end up in this map because its timestamp has been
+	// pushed while its status remains PENDING. This is sufficient to not block
+	// non-locking reads (str == lock.None), but is insufficient to not block
+	// locking reads or intent writes.
+	//
+	// It is important that PENDING transactions only enter this map after being
+	// pushed by this request. The push serves as proof the the pushed transaction
+	// had not yet committed when we pushed it. Therefore its new commit timestamp
+	// is no longer uncertain with respect to its realtime ordering with our read.
+	//
+	// TODO(ssd): I _think_ it is important that pushTxn pushes the transaction to
+	// the current clock reading. Maybe it works without this but I haven't
+	// thought that through yet.
+	//
+	// See the comment in (*lockTableWaiterImpl).pushLockTxn for further details.
+	otherTxnKnowledge map[uuid.UUID]*roachpb.Transaction
+
 	// Locks to resolve before scanning again. Doesn't need to be protected by
 	// mu since should only be read after the caller has already synced with mu
 	// in realizing that it is doneWaiting.
