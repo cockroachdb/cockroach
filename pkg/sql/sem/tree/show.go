@@ -538,16 +538,25 @@ type ShowJobOptions struct {
 	// execution. These details will provide improved observability into the
 	// execution of the job.
 	ExecutionDetails bool
+	// ResolvedTimestamp, if true, will render the resolved timestamp of the job.
+	ResolvedTimestamp bool
 }
 
 func (s *ShowJobOptions) Format(ctx *FmtCtx) {
 	if s.ExecutionDetails {
 		ctx.WriteString(" EXECUTION DETAILS")
 	}
+	if s.ResolvedTimestamp {
+		if s.ExecutionDetails {
+			ctx.WriteString(",")
+		}
+		ctx.WriteString(" RESOLVED TIMESTAMP")
+	}
 }
 
 func (s *ShowJobOptions) CombineWith(other *ShowJobOptions) error {
-	s.ExecutionDetails = other.ExecutionDetails
+	s.ExecutionDetails = s.ExecutionDetails || other.ExecutionDetails
+	s.ResolvedTimestamp = s.ResolvedTimestamp || other.ResolvedTimestamp
 	return nil
 }
 
