@@ -340,8 +340,8 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 		destinations,
 		kmsURIs,
 		"",
-		nil,
-		false /* hasBeenPlanned */)
+		false, /* hasBeenPlanned */
+	)
 	if err != nil {
 		return "", err
 	}
