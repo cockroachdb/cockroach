@@ -126,12 +126,12 @@ func printSpanConfig(b *strings.Builder, conf roachpb.SpanConfig) {
 	}
 }
 
-// TestNormalizeConstraints exercises the full constraint normalization pipeline
+// TestNormalizedSpanConfig exercises the full constraint normalization pipeline
 // including both normalizeVoterConstraints and normalizeEmptyConstraints.
 // It tests relationship types: conjEqualSet, conjStrictSubset, conjStrictSuperset,
 // conjNonIntersecting, and conjPossiblyIntersecting, as well as empty constraint
 // handling across both normalization phases.
-func TestNormalizeConstraints(t *testing.T) {
+func TestNormalizedSpanConfig(t *testing.T) {
 	interner := newStringInterner()
 
 	// Handler shows intermediate states after each normalization phase,
@@ -182,11 +182,11 @@ func TestNormalizeConstraints(t *testing.T) {
 	}
 
 	t.Run("Basic", func(t *testing.T) {
-		datadriven.RunTest(t, "testdata/normalize_config", handler)
+		datadriven.RunTest(t, filepath.Join(datapathutils.TestDataPath(t), t.Name()), handler)
 	})
 
 	t.Run("EdgeCases", func(t *testing.T) {
-		datadriven.RunTest(t, filepath.Join(datapathutils.TestDataPath(t), "TestNormalizeConstraints"), handler)
+		datadriven.RunTest(t, filepath.Join(datapathutils.TestDataPath(t), t.Name()), handler)
 	})
 }
 
