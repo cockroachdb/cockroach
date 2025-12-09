@@ -173,7 +173,7 @@ var canaryFraction = settings.RegisterFloatSetting(
 	"probability that table statistics will use canary mode instead of stable mode for query planning [0.0-1.0]",
 	0,
 	settings.Fraction,
-	settings.WithPublic,
+	settings.WithVisibility(settings.Reserved),
 )
 
 // canaryRollDice performs the probabilistic check to determine if a query
