@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -154,26 +154,24 @@ func (e *scheduledBackupExecutor) executeBackup(
 func invokeBackup(
 	ctx context.Context, backupFn sql.PlanHookRowFn, registry *jobs.Registry, txn isql.Txn,
 ) (eventpb.RecoveryEvent, error) {
-	resultCh := make(chan tree.Datums) // No need to close
-	g := ctxgroup.WithContext(ctx)
+	resultCh := make(chan tree.Datums, 1) // No need to close
 
-	var backupEvent eventpb.RecoveryEvent
-	g.GoCtx(func(ctx context.Context) error {
+	err := backupFn(ctx, resultCh)
+	if err != nil {
+		return eventpb.RecoveryEvent{}, err
+	}
+
+	var event eventpb.RecoveryEvent
+	besteffort.Warning(ctx, "get-backup-telemetry", func(ctx context.Context) error {
 		select {
 		case res := <-resultCh:
-			backupEvent = getBackupFnTelemetry(ctx, registry, txn, res)
-			return nil
+			event, err = getBackupFnTelemetry(ctx, registry, txn, res)
+			return err
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	})
-
-	g.GoCtx(func(ctx context.Context) error {
-		return backupFn(ctx, resultCh)
-	})
-
-	err := g.Wait()
-	return backupEvent, err
+	return event, nil
 }
 
 func planBackup(
@@ -545,44 +543,36 @@ func (e *scheduledBackupExecutor) OnDrop(
 // corresponding to backupFnResult.
 func getBackupFnTelemetry(
 	ctx context.Context, registry *jobs.Registry, txn isql.Txn, backupFnResult tree.Datums,
-) eventpb.RecoveryEvent {
+) (eventpb.RecoveryEvent, error) {
 	if registry == nil {
-		return eventpb.RecoveryEvent{}
+		return eventpb.RecoveryEvent{}, nil
 	}
 
-	getInitialDetails := func() (jobspb.BackupDetails, error) {
-		if len(backupFnResult) == 0 {
-			return jobspb.BackupDetails{}, errors.New("unexpected empty result")
-		}
-
-		jobIDDatum := backupFnResult[0]
-		if jobIDDatum == tree.DNull {
-			return jobspb.BackupDetails{}, errors.New("expected job ID as first column of result")
-		}
-
-		jobID, ok := jobIDDatum.(*tree.DInt)
-		if !ok {
-			return jobspb.BackupDetails{}, errors.New("expected job ID as first column of result")
-		}
-
-		job, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(*jobID), txn)
-		if err != nil {
-			return jobspb.BackupDetails{}, errors.Wrap(err, "failed to load dry-run backup job")
-		}
-
-		backupDetails, ok := job.Details().(jobspb.BackupDetails)
-		if !ok {
-			return jobspb.BackupDetails{}, errors.Newf("unexpected job details type %T", job.Details())
-		}
-		return backupDetails, nil
+	if len(backupFnResult) == 0 {
+		return eventpb.RecoveryEvent{}, errors.New("unexpected empty result")
 	}
 
-	initialDetails, err := getInitialDetails()
+	jobIDDatum := backupFnResult[0]
+	if jobIDDatum == tree.DNull {
+		return eventpb.RecoveryEvent{}, errors.New("expected job ID as first column of result")
+	}
+
+	jobID, ok := jobIDDatum.(*tree.DInt)
+	if !ok {
+		return eventpb.RecoveryEvent{}, errors.New("expected job ID as first column of result")
+	}
+
+	job, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(*jobID), txn)
 	if err != nil {
-		log.Dev.Warningf(ctx, "error collecting telemetry from dry-run backup during schedule creation: %v", err)
-		return eventpb.RecoveryEvent{}
+		return eventpb.RecoveryEvent{}, errors.Wrap(err, "failed to load dry-run backup job")
 	}
-	return createBackupRecoveryEvent(ctx, initialDetails, 0)
+
+	backupDetails, ok := job.Details().(jobspb.BackupDetails)
+	if !ok {
+		return eventpb.RecoveryEvent{}, errors.Newf("unexpected job details type %T", job.Details())
+	}
+
+	return createBackupRecoveryEvent(ctx, backupDetails, 0)
 }
 
 func init() {

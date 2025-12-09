@@ -93,6 +93,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -10284,6 +10285,8 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
 	defer jobs.TestingSetProgressThresholds()()
+
+	defer besteffort.TestForbidSkip("log-backup-telemetry")()
 
 	baseDir := "testdata"
 	args := base.TestServerArgs{

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -1434,6 +1435,9 @@ func TestShowCreateScheduleStatement(t *testing.T) {
 func TestCreateScheduledBackupTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	defer besteffort.TestForbidSkip("log-backup-telemetry")()
+	defer besteffort.TestForbidSkip("get-backup-telemetry")()
 
 	th, cleanup := newTestHelper(t)
 	defer cleanup()

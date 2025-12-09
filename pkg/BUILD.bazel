@@ -2612,7 +2612,6 @@ GO_TARGETS = [
     "//pkg/util/base64:base64_test",
     "//pkg/util/besteffort:besteffort",
     "//pkg/util/besteffort:besteffort_test",
-    "//pkg/util/besteffort:besteffort",
     "//pkg/util/binfetcher:binfetcher",
     "//pkg/util/binfetcher:binfetcher_test",
     "//pkg/util/bitarray:bitarray",
