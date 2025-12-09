@@ -6,6 +6,8 @@
 package scbuildstmt
 
 import (
+	"strconv"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -26,10 +28,6 @@ func validateStorageParamKey(t tree.NodeFormatter, key string) {
 	}
 	if key == catpb.RBRUsingConstraintTableSettingName {
 		panic(scerrors.NotImplementedErrorf(t, "infer_rbr_region_col_using_constraint not implemented yet"))
-	}
-	if key == "schema_locked" {
-		// schema_locked has a dedicated element and will be handled differently.
-		panic(scerrors.NotImplementedErrorf(t, "schema_locked not implemented yet"))
 	}
 }
 
@@ -57,6 +55,13 @@ func AlterTableSetStorageParams(
 		}
 		key := param.Key
 		validateStorageParamKey(t, key)
+
+		// schema_locked uses a dedicated TableSchemaLocked element.
+		if key == "schema_locked" {
+			setSchemaLocked(b, tbl, val)
+			continue
+		}
+
 		// Do extra validation for exclude_data_from_backup
 		validateExcludeDataFromBackup(b, tbl, key)
 		currElem := b.QueryByID(tbl.TableID).FilterTableStorageParam().Filter(
@@ -146,6 +151,12 @@ func AlterTableResetStorageParams(
 			panic(err)
 		}
 
+		// schema_locked uses a dedicated TableSchemaLocked element.
+		if key == "schema_locked" {
+			setSchemaLocked(b, tbl, resetVal)
+			continue
+		}
+
 		// Find and drop the existing element.
 		currElem := b.QueryByID(tbl.TableID).FilterTableStorageParam().Filter(
 			func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TableStorageParam) bool {
@@ -165,5 +176,20 @@ func AlterTableResetStorageParams(
 			}
 			b.Add(&newElem)
 		}
+	}
+}
+
+// setSchemaLocked sets the schema_locked storage parameter using the dedicated
+// TableSchemaLocked element. The val is parsed as a boolean; empty string is
+// treated as false.
+func setSchemaLocked(b BuildCtx, tbl *scpb.Table, val string) {
+	locked, _ := strconv.ParseBool(val)
+	currElem := b.QueryByID(tbl.TableID).FilterTableSchemaLocked().MustGetZeroOrOneElement()
+	if locked {
+		// Setting schema_locked=true means TableSchemaLocked should be PUBLIC.
+		b.Add(&scpb.TableSchemaLocked{TableID: tbl.TableID})
+	} else if currElem != nil {
+		// Setting schema_locked=false means TableSchemaLocked should be ABSENT.
+		b.Drop(currElem)
 	}
 }
