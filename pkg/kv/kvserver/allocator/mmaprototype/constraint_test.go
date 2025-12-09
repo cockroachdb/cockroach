@@ -134,44 +134,32 @@ func printSpanConfig(b *strings.Builder, conf roachpb.SpanConfig) {
 func TestNormalizedSpanConfig(t *testing.T) {
 	interner := newStringInterner()
 
-	// Handler shows intermediate states after each normalization phase,
-	// printing "(unchanged)" when a phase doesn't modify the config.
+	// Handler uses observer to show intermediate states after each normalization
+	// phase, printing "(unchanged)" when a phase doesn't modify the config.
 	handler := func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "normalize":
 			conf := parseSpanConfig(t, d)
 			var b strings.Builder
-			nConf, err := makeBasicNormalizedSpanConfig(&conf, interner)
-			if err != nil {
-				fmt.Fprintf(&b, "err=%s\n", err.Error())
-				return b.String()
-			}
-			fmt.Fprintf(&b, "input:\n")
+
+			// Track previous state to detect changes.
 			var prev strings.Builder
-			printSpanConfig(&prev, nConf.uninternedConfig())
-			b.WriteString(prev.String())
 
-			err = nConf.normalizeVoterConstraints()
-			fmt.Fprintf(&b, "after normalizeVoterConstraints:\n")
-			var cur strings.Builder
-			printSpanConfig(&cur, nConf.uninternedConfig())
-			if cur.String() == prev.String() {
-				fmt.Fprintf(&b, " (unchanged)\n")
-			} else {
-				b.WriteString(cur.String())
-			}
-			prev = cur
-
-			nConf.normalizeEmptyConstraints()
-			fmt.Fprintf(&b, "after normalizeEmptyConstraints:\n")
-			cur.Reset()
-			printSpanConfig(&cur, nConf.uninternedConfig())
-			if cur.String() == prev.String() {
-				fmt.Fprintf(&b, " (unchanged)\n")
-			} else {
-				b.WriteString(cur.String())
+			// Observer compares current state with previous to avoid redundant output.
+			observer := func(phaseName string, nConf *normalizedSpanConfig) {
+				fmt.Fprintf(&b, "%s:\n", phaseName)
+				var cur strings.Builder
+				printSpanConfig(&cur, nConf.uninternedConfig())
+				if cur.String() == prev.String() {
+					fmt.Fprintf(&b, " (unchanged)\n")
+				} else {
+					b.WriteString(cur.String())
+				}
+				prev = cur
 			}
 
+			// Run normalization with observer.
+			_, err := makeNormalizedSpanConfigWithObserver(&conf, interner, observer)
 			if err != nil {
 				fmt.Fprintf(&b, "err=%s\n", err.Error())
 			}
