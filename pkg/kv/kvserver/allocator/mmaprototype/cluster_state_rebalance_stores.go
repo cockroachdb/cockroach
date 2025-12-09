@@ -775,9 +775,10 @@ func retainReadyLeaseTargetStoresOnly(
 			// we know that its load is recent.
 			//
 			// Example: Consider a range with leaseholder on s1 and voters on s2
-			// and s3. s1 is the leaseholder and the store uses 40% of its CPU.
-			// If s2 and s3 are at 80% CPU, the mean CPU utilization is 66% if
-			// we include s1 and 80% if we don't.
+			// and s3. All stores have CPU capacity of 100 units. s1 has load 40,
+			// s2 has load 80, s3 has load 80. The mean CPU utilization (total
+			// load / total capacity) is (40+80+80)/(100+100+100) = 66% if we
+			// include s1 and (80+80)/(100+100) = 80% if we don't.
 			// If we filtered out s1 just because it is ill-disposed towards
 			// leases, s2 and s3 would be exactly on the mean and we might
 			// consider transferring the lease to them, but we should not.
