@@ -2664,7 +2664,6 @@ backup_options ::=
 	| 'DETACHED' '=' 'TRUE'
 	| 'DETACHED' '=' 'FALSE'
 	| 'KMS' '=' string_or_placeholder_opt_list
-	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'EXECUTION' 'LOCALITY' '=' string_or_placeholder
 	| include_all_clusters '=' a_expr
 	| 'UPDATES_CLUSTER_MONITORING_METRICS'

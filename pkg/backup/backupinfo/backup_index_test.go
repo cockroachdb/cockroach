@@ -208,36 +208,6 @@ func TestWriteBackupIndexMetadataWithLocalityAwareBackups(t *testing.T) {
 	))
 }
 
-func TestWriteBackupIndexMetadataWithSpecifiedIncrementalLocation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	tempDir, tempDirCleanup := testutils.TempDir(t)
-	defer tempDirCleanup()
-	_, sqlDB, _, cleanup := backuptestutils.StartBackupRestoreTestCluster(
-		t, 1, backuptestutils.WithTempDir(tempDir),
-	)
-	defer cleanup()
-
-	const collectionURI = "nodelocal://1/backup"
-	const incLoc = "nodelocal://1/incremental_backup"
-
-	sqlDB.Exec(t, "BACKUP INTO $1", collectionURI)
-	sqlDB.Exec(t, "BACKUP INTO LATEST IN $1 WITH incremental_location=$2", collectionURI, incLoc)
-
-	indexDir := path.Join(tempDir, "backup", backupbase.BackupIndexDirectoryPath)
-	fullIndexes, err := os.ReadDir(indexDir)
-	require.NoError(t, err)
-	require.Len(t, fullIndexes, 1)
-
-	chainIndexes, err := os.ReadDir(path.Join(indexDir, fullIndexes[0].Name()))
-	require.NoError(t, err)
-
-	// Since we specified an incremental location, we should not see an index
-	// being written for the incremental backup.
-	require.Len(t, chainIndexes, 1)
-}
-
 func TestListIndexesHandlesInvalidFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

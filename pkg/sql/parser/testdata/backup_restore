@@ -53,15 +53,6 @@ BACKUP TABLE _ INTO LATEST IN '*****' -- identifiers removed
 BACKUP TABLE foo INTO LATEST IN 'bar' -- passwords exposed
 
 parse
-BACKUP TABLE foo INTO LATEST IN 'bar' WITH incremental_location = 'baz'
-----
-BACKUP TABLE foo INTO LATEST IN '*****' WITH OPTIONS (incremental_location = '*****') -- normalized!
-BACKUP TABLE (foo) INTO LATEST IN ('*****') WITH OPTIONS (incremental_location = ('*****')) -- fully parenthesized
-BACKUP TABLE foo INTO LATEST IN '_' WITH OPTIONS (incremental_location = '_') -- literals removed
-BACKUP TABLE _ INTO LATEST IN '*****' WITH OPTIONS (incremental_location = '*****') -- identifiers removed
-BACKUP TABLE foo INTO LATEST IN 'bar' WITH OPTIONS (incremental_location = 'baz') -- passwords exposed
-
-parse
 BACKUP TABLE foo INTO 'subdir' IN 'bar'
 ----
 BACKUP TABLE foo INTO 'subdir' IN '*****' -- normalized!
