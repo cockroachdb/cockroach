@@ -382,11 +382,24 @@ func makeBasicNormalizedSpanConfig(
 func makeNormalizedSpanConfig(
 	conf *roachpb.SpanConfig, interner *stringInterner,
 ) (*normalizedSpanConfig, error) {
+	return makeNormalizedSpanConfigWithObserver(conf, interner, nil)
+}
+
+// NormalizationPhaseObserver is an optional callback invoked after each phase
+// of structural normalization. It allows tests to observe intermediate states
+// without coupling to internal implementation details.
+type NormalizationPhaseObserver func(phaseName string, conf *normalizedSpanConfig)
+
+// makeNormalizedSpanConfigWithObserver is like makeNormalizedSpanConfig but
+// accepts an optional observer to inspect intermediate normalization states.
+func makeNormalizedSpanConfigWithObserver(
+	conf *roachpb.SpanConfig, interner *stringInterner, observer NormalizationPhaseObserver,
+) (*normalizedSpanConfig, error) {
 	nConf, err := makeBasicNormalizedSpanConfig(conf, interner)
 	if err != nil {
 		return nil, err
 	}
-	err = nConf.doStructuralNormalization()
+	err = nConf.doStructuralNormalization(observer)
 	return nConf, err
 }
 
@@ -1080,7 +1093,9 @@ func (conf *normalizedSpanConfig) normalizeVoterConstraints() error {
 // (TODO(wenyihu6): we should clarify what the operator should do with the error
 // we return an error even when we re not violating spanconfig contract which is
 // confusing.)
-func (conf *normalizedSpanConfig) doStructuralNormalization() error {
+func (conf *normalizedSpanConfig) doStructuralNormalization(
+	observer NormalizationPhaseObserver,
+) error {
 	if len(conf.constraints) == 0 || len(conf.voterConstraints) == 0 {
 		return nil
 	}
@@ -1088,7 +1103,13 @@ func (conf *normalizedSpanConfig) doStructuralNormalization() error {
 	// Do not return early on error from normalizeVoterConstraints since we want
 	// to continue with best-effort normalization for constraints.
 	err := conf.normalizeVoterConstraints()
+	if observer != nil {
+		observer("normalizeVoterConstraints", conf)
+	}
 	conf.normalizeEmptyConstraints()
+	if observer != nil {
+		observer("normalizeEmptyConstraints", conf)
+	}
 	return err
 }
 
