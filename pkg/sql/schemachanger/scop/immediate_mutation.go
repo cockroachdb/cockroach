@@ -1260,13 +1260,13 @@ type SetTableSchemaLocked struct {
 	Locked  bool
 }
 
-// SetTableStorageParam will add a new generated as identity to a column.
+// SetTableStorageParam sets a storage parameter on a table.
 type SetTableStorageParam struct {
 	immediateMutationOp
 	scpb.TableStorageParam
 }
 
-// ResetTableStorageParam will remove the generated as identity from a column.
+// ResetTableStorageParam resets a storage parameter on a table to its default.
 type ResetTableStorageParam struct {
 	immediateMutationOp
 	scpb.TableStorageParam
