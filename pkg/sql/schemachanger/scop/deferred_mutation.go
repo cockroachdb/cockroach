@@ -68,8 +68,9 @@ type CreateSchemaChangerJob struct {
 
 	// NonCancelable maps to the job's property, but in the schema changer can
 	// be thought of as !Revertible.
-	NonCancelable bool
-	RunningStatus redact.RedactableString
+	NonCancelable        bool
+	RunningStatus        redact.RedactableString
+	DistributedMergeMode jobspb.IndexBackfillDistributedMergeMode
 }
 
 // RemoveDatabaseRoleSettings is used to delete a role setting for a database.

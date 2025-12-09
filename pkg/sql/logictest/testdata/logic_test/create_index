@@ -732,19 +732,6 @@ onlyif config local-mixed-25.4
 statement error pq: .*distributed merge requires cluster version 26.*
 CREATE INDEX dist_merge_idx_idx ON dist_merge_idx (b)
 
-# Try an operation that is implemented in the declarative schema changer.
-#
-# TODO(158378): Declarative schema change don't yet implement the full flow for
-# distributed merge. So, we end up with a similar situation as above where we
-# get to validation and notice no rows were ingested.
-skipif config local-mixed-25.4
-statement error pgcode 23505 pq: .*duplicate key value violates unique constraint.*
-ALTER TABLE dist_merge_idx ALTER PRIMARY KEY USING COLUMNS (b)
-
-onlyif config local-mixed-25.4
-statement error pq: .*distributed merge requires cluster version 26.*
-ALTER TABLE dist_merge_idx ALTER PRIMARY KEY USING COLUMNS (b)
-
 statement ok
 SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'disabled'
 

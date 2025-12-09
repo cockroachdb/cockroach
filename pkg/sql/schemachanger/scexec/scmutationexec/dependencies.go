@@ -133,6 +133,7 @@ type DeferredMutationStateUpdater interface {
 		auth scpb.Authorization,
 		descriptorIDs catalog.DescriptorIDSet,
 		runningStatus redact.RedactableString,
+		distributedMergeMode jobspb.IndexBackfillDistributedMergeMode,
 	) error
 
 	// UpdateSchemaChangerJob will update the progress and payload of the
