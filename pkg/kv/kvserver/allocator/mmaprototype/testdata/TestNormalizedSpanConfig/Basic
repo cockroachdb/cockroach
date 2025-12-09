@@ -6,10 +6,6 @@ input:
  num-replicas=3 num-voters=3
  constraints:
    :3
-after normalizeVoterConstraints:
- (unchanged)
-after normalizeEmptyConstraints:
- (unchanged)
 
 # Voter constraint, no replica constraint, but have non-voters. Normalization
 # promotes the voter constraint to a replica constraint, and adds the empty
@@ -46,10 +42,6 @@ input:
    +region=us-west,+zone=us-west-a,-zone=us-west-b:3
  lease-preferences:
    +region=us-west,+rack=10
-after normalizeVoterConstraints:
- (unchanged)
-after normalizeEmptyConstraints:
- (unchanged)
 
 # Two voter constraints don't specify voter counts, so normalization creates a
 # conjunction of the constraints.
@@ -61,11 +53,6 @@ input:
  num-replicas=3 num-voters=3
  voter-constraints:
    +region=us-west,+zone=us-west-a,-zone=us-west-b:3
-after normalizeVoterConstraints:
- (unchanged)
-after normalizeEmptyConstraints:
- (unchanged)
-err=could not satisfy all voter constraints due to non-intersecting conjunctions in voter and all replica constraints
 
 # Two replica constraints, one of which specifies a count, and another that
 # does not. This is disallowed by roachpb.SpanConfig.
@@ -642,10 +629,6 @@ input:
  num-replicas=3 num-voters=3
  constraints:
    +region=a,+region=b:3
-after normalizeVoterConstraints:
- (unchanged)
-after normalizeEmptyConstraints:
- (unchanged)
 
 # Replica constraints promoted to voter constraints and vice versa. The
 # promotion to voter constraints uses the fact that +region=a covers the
