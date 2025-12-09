@@ -253,10 +253,6 @@ input:
  constraints:
    +region=a:1
    :1
-after normalizeVoterConstraints:
- (unchanged)
-after normalizeEmptyConstraints:
- (unchanged)
 
 # Sanity check that empty constraints are not allowed.
 normalize num-replicas=2 num-voters=1
@@ -289,10 +285,6 @@ input:
  num-replicas=4 num-voters=3
  constraints:
    +region=a:4
-after normalizeVoterConstraints:
- (unchanged)
-after normalizeEmptyConstraints:
- (unchanged)
 
 # Same as above but with explicit empty voter constraint.
 normalize num-replicas=4 num-voters=3
