@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -192,6 +193,7 @@ func TestInspectJobProtectedTimestamp(t *testing.T) {
 							return nil
 						},
 					},
+					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				},
 			})
 			defer s.Stopper().Stop(ctx)

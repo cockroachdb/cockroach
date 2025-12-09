@@ -30,7 +30,7 @@ query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE t WITH DETAILS]
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/76>  …/1/"d"       {1}       1
+<before:/Table/XX>  …/1/"d"       {1}       1
 …/1/"d"             …/1/"r"       {1}       1
 …/1/"r"             <after:/Max>  {1}       1
 
@@ -447,14 +447,6 @@ SET enable_shared_locking_for_serializable = true
 statement async share1
 SELECT * FROM t WHERE k = 'a' FOR SHARE;
 
-user testuser 2
-
-statement ok
-BEGIN;
-
-statement async put1
-DELETE FROM t WHERE k = 'a';
-
 user root
 
 # Verify that the waiting transaction reports Shared strength, not Exclusive.
@@ -464,7 +456,6 @@ SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, d
 database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability    granted  contended
 test           public       t           /Table/106/1/"a"/0  Exclusive      Unreplicated  true     true
 test           public       t           /Table/106/1/"a"/0  Shared         Unreplicated  false    true
-test           public       t           /Table/106/1/"a"/0  Intent         Unreplicated  false    true
 
 statement ok
 COMMIT
@@ -476,9 +467,38 @@ awaitstatement share1
 statement ok
 COMMIT
 
+user root
+
+# Same test as above, but this time with an Intent write instead of a shared
+# locking statement.
+statement ok
+BEGIN;
+SELECT * FROM t WHERE k = 'a' FOR UPDATE;
+
 user testuser2
 
-awaitstatement put1
+statement ok
+BEGIN;
+
+statement async del1
+DELETE FROM t WHERE k = 'a';
+
+user root
+
+# Verify that the waiting transaction reports Intent strength.
+query TTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name = 't'
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability    granted  contended
+test           public       t           /Table/106/1/"a"/0  Exclusive      Unreplicated  true     true
+test           public       t           /Table/106/1/"a"/0  Intent         Unreplicated  false    true
+
+statement ok
+COMMIT
+
+user testuser2
+
+awaitstatement del1
 
 statement ok
 ROLLBACK

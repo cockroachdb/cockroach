@@ -133,11 +133,11 @@ require (
 	github.com/cockroachdb/cmux v0.0.0-20250514152509-914d3bf9ec58
 	github.com/cockroachdb/cockroach-go/v2 v2.4.1
 	github.com/cockroachdb/crlib v0.0.0-20251122031428-fe658a2dbda1
-	github.com/cockroachdb/datadriven v1.0.3-0.20251006155849-f84f9e519edd
+	github.com/cockroachdb/datadriven v1.0.3-0.20251123150250-ddff6747b112
 	github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20251202161204-36cb7a24d395
+	github.com/cockroachdb/pebble v0.0.0-20251204205628-eec404107db6
 	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb

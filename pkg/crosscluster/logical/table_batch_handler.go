@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -20,7 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
+)
+
+var useSwapMutations = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.use_swap_mutations.enabled",
+	"determines whether the consumer uses swap mutations for update and delete operations",
+	metamorphic.ConstantWithTestBool("logical_replication.consumer.use_swap_mutations.enabled", true),
 )
 
 // tableHandler applies batches of replication events that are destined for a
@@ -76,12 +85,13 @@ func (t *tableBatchStats) AddTo(bs *batchStats) {
 	}
 }
 
-func tableHandlerSessionSettings(sd *sessiondata.SessionData) *sessiondata.SessionData {
+func tableHandlerSessionSettings(
+	sd *sessiondata.SessionData, settings *cluster.Settings,
+) *sessiondata.SessionData {
 	sd = sd.Clone()
 	sd.PlanCacheMode = sessiondatapb.PlanCacheModeForceGeneric
 	sd.VectorizeMode = sessiondatapb.VectorizeOff
-	// TODO(jeffswenson): enable swap mutation once update swap merges
-	//sd.UseSwapMutations = true
+	sd.UseSwapMutations = useSwapMutations.Get(&settings.SV)
 	sd.BufferedWritesEnabled = false
 	sd.OriginIDForLogicalDataReplication = 1
 	return sd
@@ -100,7 +110,7 @@ func newTableHandler(
 	settings *cluster.Settings,
 ) (_ *tableHandler, err error) {
 	var table catalog.TableDescriptor
-	sd = tableHandlerSessionSettings(sd)
+	sd = tableHandlerSessionSettings(sd, settings)
 	session, err := db.Session(ctx, "logical-data-replication", isql.WithSessionData(sd))
 	if err != nil {
 		return nil, err

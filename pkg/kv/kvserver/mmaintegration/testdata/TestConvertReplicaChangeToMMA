@@ -21,10 +21,10 @@ store-id=3 type=ADD_VOTER
 ----
 PendingRangeChange: range r1
  r1 type: RemoveReplica target store n1,s1 (replica-id=10 type=VOTER_FULL leaseholder=true)->(replica-id=none type=VOTER_FULL)
-  load: [cpu:-11, write-bandwidth:-100, byte-size:-1000]
+  load: [cpu:-11ns/s, write-bandwidth:-100 B/s, byte-size:-1.0 kB]
   secondary-load: [lease:-1, replica:0]
  r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL leaseholder=true)
-  load: [cpu:12, write-bandwidth:110, byte-size:1100]
+  load: [cpu:12ns/s, write-bandwidth:110 B/s, byte-size:1.1 kB]
   secondary-load: [lease:1, replica:0]
 As kvpb.ReplicationChanges:
  [{ADD_VOTER n3,s3} {REMOVE_VOTER n1,s1}]
@@ -35,7 +35,7 @@ store-id=2 type=REMOVE_VOTER
 ----
 PendingRangeChange: range r1
  r1 type: RemoveReplica target store n2,s2 (replica-id=20 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL)
-  load: [cpu:-1, write-bandwidth:-100, byte-size:-1000]
+  load: [cpu:-1ns/s, write-bandwidth:-100 B/s, byte-size:-1.0 kB]
   secondary-load: [lease:0, replica:0]
 As kvpb.ReplicationChanges:
  [{REMOVE_VOTER n2,s2}]
@@ -47,10 +47,10 @@ store-id=3 type=ADD_VOTER
 ----
 PendingRangeChange: range r1
  r1 type: RemoveReplica target store n2,s2 (replica-id=20 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL)
-  load: [cpu:-1, write-bandwidth:-100, byte-size:-1000]
+  load: [cpu:-1ns/s, write-bandwidth:-100 B/s, byte-size:-1.0 kB]
   secondary-load: [lease:0, replica:0]
  r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
-  load: [cpu:1, write-bandwidth:110, byte-size:1100]
+  load: [cpu:1ns/s, write-bandwidth:110 B/s, byte-size:1.1 kB]
   secondary-load: [lease:0, replica:0]
 As kvpb.ReplicationChanges:
  [{REMOVE_VOTER n2,s2} {ADD_VOTER n3,s3}]
@@ -64,13 +64,13 @@ store-id=3 type=ADD_VOTER
 ----
 PendingRangeChange: range r1
  r1 type: RemoveReplica target store n1,s1 (replica-id=10 type=VOTER_FULL leaseholder=true)->(replica-id=none type=VOTER_FULL)
-  load: [cpu:-11, write-bandwidth:-100, byte-size:-1000]
+  load: [cpu:-11ns/s, write-bandwidth:-100 B/s, byte-size:-1.0 kB]
   secondary-load: [lease:-1, replica:0]
  r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
-  load: [cpu:1, write-bandwidth:110, byte-size:1100]
+  load: [cpu:1ns/s, write-bandwidth:110 B/s, byte-size:1.1 kB]
   secondary-load: [lease:0, replica:0]
  r1 type: AddReplica target store n5,s5 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL leaseholder=true)
-  load: [cpu:12, write-bandwidth:110, byte-size:1100]
+  load: [cpu:12ns/s, write-bandwidth:110 B/s, byte-size:1.1 kB]
   secondary-load: [lease:1, replica:0]
 As kvpb.ReplicationChanges:
  [{ADD_VOTER n5,s5} {ADD_VOTER n3,s3} {REMOVE_VOTER n1,s1}]
@@ -113,10 +113,10 @@ store-id=3 type=ADD_VOTER
 ----
 PendingRangeChange: range r1
  r1 type: ChangeReplica target store n1,s1 (replica-id=10 type=VOTER_FULL leaseholder=true)->(replica-id=unknown type=NON_VOTER)
-  load: [cpu:-10, write-bandwidth:0, byte-size:0]
+  load: [cpu:-10ns/s, write-bandwidth:0 B/s, byte-size:0 B]
   secondary-load: [lease:-1, replica:0]
  r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL leaseholder=true)
-  load: [cpu:12, write-bandwidth:110, byte-size:1100]
+  load: [cpu:12ns/s, write-bandwidth:110 B/s, byte-size:1.1 kB]
   secondary-load: [lease:1, replica:0]
 As kvpb.ReplicationChanges:
  [{ADD_VOTER n3,s3} {REMOVE_VOTER n1,s1} {ADD_NON_VOTER n1,s1}]

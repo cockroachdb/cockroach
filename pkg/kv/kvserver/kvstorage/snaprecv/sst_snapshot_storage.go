@@ -231,6 +231,8 @@ func (f *SSTSnapshotStorageFile) ensureFile() error {
 	return nil
 }
 
+func (f *SSTSnapshotStorageFile) StartMetadataPortion() error { return nil }
+
 // Write is part of objstorage.Writable; it writes contents to the file while
 // respecting the limiter passed into SSTSnapshotStorageScratch. Writing empty
 // contents is okay and is treated as a noop.

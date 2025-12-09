@@ -72,6 +72,7 @@ go_test(
         "//pkg/backup/backupbase",
         "//pkg/backup/backuppb",
         "//pkg/backup/backuptestutils",
+        "//pkg/backup/backuputils",
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/ccl",

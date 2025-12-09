@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -93,29 +94,6 @@ func TestGetBackupIndexFileName(t *testing.T) {
 	require.Equal(
 		t, expectedSortedFilenames, sortedFilenames, "sort order of index filenames does not match",
 	)
-}
-
-func TestGetBackupIndexFilePath(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	start, end := hlc.Timestamp{WallTime: 10}, hlc.Timestamp{WallTime: 20}
-	t.Run("fails if subdir is 'LATEST' and unresolved", func(t *testing.T) {
-		_, err := getBackupIndexFilePath("LATEST", start, end)
-		require.Error(t, err)
-	})
-	t.Run("returns correct path for resolved subdir", func(t *testing.T) {
-		subdir := "/2025/07/17-152115.00"
-		flattenedSubdir := "2025-07-17-152115.00"
-		indexPath, err := getBackupIndexFilePath(subdir, start, end)
-		require.NoError(t, err)
-		require.True(
-			t, strings.HasPrefix(
-				indexPath,
-				path.Join(backupbase.BackupIndexDirectoryPath, flattenedSubdir),
-			),
-		)
-	})
 }
 
 func TestWriteBackupIndexMetadata(t *testing.T) {
@@ -224,7 +202,7 @@ func TestWriteBackupIndexMetadataWithLocalityAwareBackups(t *testing.T) {
 	))
 }
 
-func TestWriteBackupindexMetadataWithSpecifiedIncrementalLocation(t *testing.T) {
+func TestWriteBackupIndexMetadataWithSpecifiedIncrementalLocation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -644,6 +622,66 @@ func TestGetBackupTreeIndexMetadata(t *testing.T) {
 			})
 
 			require.Equal(t, expectedIndexTimes, actualIndexTimes)
+		})
+	}
+}
+
+func TestConvertIndexSubdirToSubdir(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	endTime := time.Date(2025, 12, 5, 0, 0, 0, 0, time.UTC)
+	endTimeAsSubdir := endTime.Format(backupbase.DateBasedIntoFolderName)
+	endTimeDescEnc := backuputils.EncodeDescendingTS(endTime)
+	endTimeIndexSuffix := endTime.Format(backupbase.BackupIndexFilenameTimestampFormat)
+
+	testcases := []struct {
+		name           string
+		indexSubdir    string
+		expectedSubdir string
+		error          string
+	}{
+		{
+			name:           "valid index subdir",
+			indexSubdir:    endTimeDescEnc + "_" + endTimeIndexSuffix,
+			expectedSubdir: endTimeAsSubdir,
+		},
+		{
+			name:        "index subdir missing two parts",
+			indexSubdir: endTimeDescEnc,
+			error:       "invalid index subdir format",
+		},
+		{
+			name:        "index subdir with extra parts",
+			indexSubdir: endTimeDescEnc + "_" + endTimeIndexSuffix + "_extra",
+			error:       "invalid index subdir format",
+		},
+		{
+			name:        "index subdir with invalid descending timestamp",
+			indexSubdir: "invalid" + "_" + endTimeIndexSuffix,
+			error:       "could not be decoded",
+		},
+		{
+			name:        "index subdir with invalid timestamp suffix",
+			indexSubdir: endTimeDescEnc + "_invalid",
+			error:       "could not be decoded",
+		},
+		{
+			name:        "index subdir with mismatched timestamps",
+			indexSubdir: endTimeDescEnc + "_" + endTime.Add(time.Second).Format(backupbase.BackupIndexFilenameTimestampFormat),
+			error:       "mismatched timestamps",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			subdir, err := convertIndexSubdirToSubdir(tc.indexSubdir)
+			if tc.error != "" {
+				require.ErrorContains(t, err, tc.error)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedSubdir, subdir)
 		})
 	}
 }

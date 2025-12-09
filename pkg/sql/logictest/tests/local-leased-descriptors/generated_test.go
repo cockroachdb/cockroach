@@ -87,6 +87,13 @@ func TestLogic_crdb_internal(
 	runLogicTest(t, "crdb_internal")
 }
 
+func TestLogic_fk(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "fk")
+}
+
 func TestLogic_pg_catalog(
 	t *testing.T,
 ) {
@@ -99,6 +106,13 @@ func TestLogic_privileges_comments(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "privileges_comments")
+}
+
+func TestLogic_schema_repair(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "schema_repair")
 }
 
 func TestLogic_show_create(

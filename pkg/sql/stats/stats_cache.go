@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -65,6 +67,11 @@ type TableStatisticsCache struct {
 	db       descs.DB
 	settings *cluster.Settings
 	stopper  *stop.Stopper
+
+	// tableStatisticsLocksTableID is the table ID of
+	// system.table_statistics_locks table, and it's populated right before the
+	// rangefeed is started.
+	tableStatisticsLocksTableID atomic.Uint32
 
 	// Used when decoding KV from the range feed.
 	datumAlloc tree.DatumAlloc
@@ -147,8 +154,23 @@ func (sc *TableStatisticsCache) GetGeneration() int64 {
 
 // Start begins watching for updates in the stats table.
 func (sc *TableStatisticsCache) Start(
-	ctx context.Context, codec keys.SQLCodec, rangeFeedFactory *rangefeed.Factory,
+	ctx context.Context,
+	codec keys.SQLCodec,
+	rangeFeedFactory *rangefeed.Factory,
+	systemTableIDResolver catalog.SystemTableIDResolver,
 ) error {
+	// We need to retry unavailable replicas here. This is only meant to be called
+	// at server startup.
+	tableStatisticsLocksTableID, err := startup.RunIdempotentWithRetryEx(
+		ctx, sc.stopper.ShouldQuiesce(), "get-table-statistics-locks-table-ID",
+		func(ctx context.Context) (descpb.ID, error) {
+			return systemTableIDResolver.LookupSystemTableID(ctx, systemschema.TableStatisticsLocksTable.GetName())
+		})
+	if err != nil {
+		return err
+	}
+	sc.tableStatisticsLocksTableID.Store(uint32(tableStatisticsLocksTableID))
+
 	// Set up a range feed to watch for updates to system.table_statistics.
 
 	statsTablePrefix := codec.TablePrefix(keys.TableStatisticsTableID)
@@ -183,7 +205,7 @@ func (sc *TableStatisticsCache) Start(
 	//    call Close() ourselves.
 	//  - an error here only happens if the server is already shutting down; we
 	//    can safely ignore it.
-	_, err := rangeFeedFactory.RangeFeed(
+	_, err = rangeFeedFactory.RangeFeed(
 		ctx,
 		"table-stats-cache",
 		[]roachpb.Span{statsTableSpan},
@@ -234,7 +256,7 @@ func decodeTableStatisticsKV(
 func (sc *TableStatisticsCache) GetTableStats(
 	ctx context.Context, table catalog.TableDescriptor, typeResolver *descs.DistSQLTypeResolver,
 ) (stats []*TableStatistic, err error) {
-	if !statsUsageAllowed(table, sc.settings) {
+	if !sc.statsUsageAllowed(table) {
 		return nil, nil
 	}
 	forecast := forecastAllowed(table, sc.settings)
@@ -262,7 +284,7 @@ func GetTableStatsProtosFromDB(
 
 // DisallowedOnSystemTable returns true if this tableID belongs to a special
 // system table on which we want to disallow stats collection and stats usage.
-func DisallowedOnSystemTable(tableID descpb.ID) bool {
+func (sc *TableStatisticsCache) DisallowedOnSystemTable(tableID descpb.ID) bool {
 	switch tableID {
 	// Disable stats on system.table_statistics because it can lead to deadlocks
 	// around the stats cache (which issues an internal query in
@@ -278,10 +300,15 @@ func DisallowedOnSystemTable(tableID descpb.ID) bool {
 	// benefit is not worth the potential performance hit.
 	// TODO(yuzefovich): re-evaluate this assumption. Perhaps we could at
 	// least enable manual collection on this table.
+	//
 	// Disable stats on system.span_configurations since we've seen excessively
 	// many collections on it in some cases, and the stats are unlikely to
 	// provide any benefit on this table.
-	case keys.TableStatisticsTableID, keys.LeaseTableID, keys.ScheduledJobsTableID, keys.SpanConfigurationsTableID:
+	//
+	// Disable stats on system.table_statistics_locks since the table is
+	// extremely simple and won't benefit from statistics on it.
+	case keys.TableStatisticsTableID, keys.LeaseTableID, keys.ScheduledJobsTableID,
+		keys.SpanConfigurationsTableID, descpb.ID(sc.tableStatisticsLocksTableID.Load()):
 		return true
 	}
 	return false
@@ -289,29 +316,27 @@ func DisallowedOnSystemTable(tableID descpb.ID) bool {
 
 // statsUsageAllowed returns true if statistics on `table` are allowed to be
 // used by the query optimizer.
-func statsUsageAllowed(table catalog.TableDescriptor, clusterSettings *cluster.Settings) bool {
+func (sc *TableStatisticsCache) statsUsageAllowed(table catalog.TableDescriptor) bool {
 	if catalog.IsSystemDescriptor(table) {
-		if DisallowedOnSystemTable(table.GetID()) {
+		if sc.DisallowedOnSystemTable(table.GetID()) {
 			return false
 		}
 		// Return whether the optimizer is allowed to use stats on system tables.
-		return UseStatisticsOnSystemTables.Get(&clusterSettings.SV)
+		return UseStatisticsOnSystemTables.Get(&sc.settings.SV)
 	}
 	return tableTypeCanHaveStats(table)
 }
 
 // autostatsCollectionAllowed returns true if statistics are allowed to be
 // automatically collected on the table.
-func autostatsCollectionAllowed(
-	table catalog.TableDescriptor, clusterSettings *cluster.Settings,
-) bool {
+func (sc *TableStatisticsCache) autostatsCollectionAllowed(table catalog.TableDescriptor) bool {
 	if catalog.IsSystemDescriptor(table) {
-		if DisallowedOnSystemTable(table.GetID()) {
+		if sc.DisallowedOnSystemTable(table.GetID()) {
 			return false
 		}
 		// Return whether autostats collection is allowed on system tables,
 		// according to the cluster settings.
-		return AutomaticStatisticsOnSystemTables.Get(&clusterSettings.SV)
+		return AutomaticStatisticsOnSystemTables.Get(&sc.settings.SV)
 	}
 	return tableTypeCanHaveStats(table)
 }

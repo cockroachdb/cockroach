@@ -2415,6 +2415,43 @@ func (c *ElementCollection[E]) FilterSequenceOwner() *ElementCollection[*Sequenc
 	return (*ElementCollection[*SequenceOwner])(ret)
 }
 
+func (e SequenceValue) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_SequenceValue) Element() Element {
+	return e.SequenceValue
+}
+
+// ForEachSequenceValue iterates over elements of type SequenceValue.
+// Deprecated
+func ForEachSequenceValue(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *SequenceValue),
+) {
+  c.FilterSequenceValue().ForEach(fn)
+}
+
+// FindSequenceValue finds the first element of type SequenceValue.
+// Deprecated
+func FindSequenceValue(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *SequenceValue) {
+	if tc := c.FilterSequenceValue(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*SequenceValue)
+	}
+	return current, target, element
+}
+
+// SequenceValueElements filters elements of type SequenceValue.
+func (c *ElementCollection[E]) FilterSequenceValue() *ElementCollection[*SequenceValue] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*SequenceValue)
+		return ok
+	})
+	return (*ElementCollection[*SequenceValue])(ret)
+}
+
 func (e Table) element() {}
 
 // Element implements ElementGetter.
@@ -3512,6 +3549,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_SequenceOption{ SequenceOption: t}
 		case *SequenceOwner:
 			e.ElementOneOf = &ElementProto_SequenceOwner{ SequenceOwner: t}
+		case *SequenceValue:
+			e.ElementOneOf = &ElementProto_SequenceValue{ SequenceValue: t}
 		case *Table:
 			e.ElementOneOf = &ElementProto_Table{ Table: t}
 		case *TableComment:
@@ -3635,6 +3674,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_Sequence)(nil)),
 	((*ElementProto_SequenceOption)(nil)),
 	((*ElementProto_SequenceOwner)(nil)),
+	((*ElementProto_SequenceValue)(nil)),
 	((*ElementProto_Table)(nil)),
 	((*ElementProto_TableComment)(nil)),
 	((*ElementProto_TableData)(nil)),
@@ -3733,6 +3773,7 @@ func GetElementTypes() []interface{} {
 	((*Sequence)(nil)),
 	((*SequenceOption)(nil)),
 	((*SequenceOwner)(nil)),
+	((*SequenceValue)(nil)),
 	((*Table)(nil)),
 	((*TableComment)(nil)),
 	((*TableData)(nil)),

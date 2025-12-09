@@ -16,7 +16,7 @@ environment:
   TOTAL_PARTITIONS: 300
   PARTITION_TYPE: partitions
   WORKLOAD_NODES: 15
-  VERSION: v25.4.1 # TBD - update once a custom binary is available (also update stage command)
+  VERSION: v25.4.1-14-g05f15f86753
   WAREHOUSES: 4000000
 
 dependent_file_locations:
@@ -67,7 +67,7 @@ targets:
         skip_notification: true
         args:
           - $CLUSTER
-          - release
+          - customized
           - $VERSION
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
         skip_notification: true

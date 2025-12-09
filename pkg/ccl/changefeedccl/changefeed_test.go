@@ -7059,53 +7059,80 @@ func TestChangefeedCursorAgeWarning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var cursorAges = []time.Duration{
-		time.Hour,
-		6 * time.Hour,
-	}
+	for name, tc := range map[string]struct {
+		cursorAge     time.Duration
+		expectWarning bool
+	}{
+		// The warning threshold is 5 hours, so we expect no warning for 1 hour.
+		"1 hour (no warning)": {cursorAge: time.Hour, expectWarning: false},
+		"6 hours (warning)":   {cursorAge: 6 * time.Hour, expectWarning: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			spy := &changefeedLogSpy{}
+			cleanup := log.InterceptWith(context.Background(), spy)
+			defer cleanup()
 
-	testutils.RunValues(t, "cursor age", cursorAges, func(t *testing.T, cursorAge time.Duration) {
-		s, stopServer := makeServer(t, withAllowChangefeedErr("expects batch ts gc error"))
-		defer stopServer()
-		knobs := s.TestingKnobs.
-			DistSQL.(*execinfra.TestingKnobs).
-			Changefeed.(*TestingKnobs)
-		knobs.OverrideCursorAge = func() int64 {
-			return int64(cursorAge)
-		}
+			s, stopServer := makeServer(t, withAllowChangefeedErr("expects batch ts gc error"))
+			defer stopServer()
+			knobs := s.TestingKnobs.
+				DistSQL.(*execinfra.TestingKnobs).
+				Changefeed.(*TestingKnobs)
+			knobs.OverrideCursorAge = func() int64 {
+				return int64(tc.cursorAge)
+			}
 
-		warning := fmt.Sprintf(
-			"the provided cursor is %d hours old; older cursors can result in increased changefeed latency",
-			int64(cursorAge/time.Hour))
-		noWarning := "(no notice)"
+			warning := fmt.Sprintf(
+				"the provided cursor is %d hours old; older cursors can result in increased changefeed latency",
+				int64(tc.cursorAge)/int64(time.Hour))
+			noWarning := "(no notice)"
 
-		expectedWarning := func(initial_scan string) string {
-			if cursorAge == time.Hour || initial_scan == "only" {
+			expectedWarning := func(initial_scan string) string {
+				if tc.expectWarning && initial_scan != "only" {
+					return warning
+				}
 				return noWarning
 			}
-			return warning
-		}
 
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE f (a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO f VALUES (1)`)
-		timeNow := strings.Split(s.Server.Clock().Now().AsOfSystemTime(), ".")[0]
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			sqlDB.Exec(t, `CREATE TABLE f (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO f VALUES (1)`)
+			timeNow := strings.Split(s.Server.Clock().Now().AsOfSystemTime(), ".")[0]
 
-		expectNotice(t, s.Server,
-			fmt.Sprintf(
-				`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='only'`,
-				timeNow), expectedWarning("only"))
+			expectNotice(t, s.Server,
+				fmt.Sprintf(
+					`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='only'`,
+					timeNow), expectedWarning("only"))
 
-		expectNotice(t, s.Server,
-			fmt.Sprintf(
-				`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='yes'`,
-				timeNow), expectedWarning("yes"))
+			expectNotice(t, s.Server,
+				fmt.Sprintf(
+					`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='yes'`,
+					timeNow), expectedWarning("yes"))
 
-		expectNotice(t, s.Server,
-			fmt.Sprintf(
-				`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='no'`,
-				timeNow), expectedWarning("no"))
-	})
+			expectNotice(t, s.Server,
+				fmt.Sprintf(
+					`CREATE CHANGEFEED FOR TABLE d.f INTO 'null://' with cursor = '%s', initial_scan='no'`,
+					timeNow), expectedWarning("no"))
+
+			// We also verify that warnings are logged and not just sent as notices.
+			spy.Lock()
+			defer spy.Unlock()
+			warningsLogged := 0
+			for _, logMsg := range spy.logs {
+				if strings.Contains(logMsg, warning) {
+					warningsLogged++
+				}
+			}
+			if tc.expectWarning {
+				// We expect two warnings to be logged, one for initial_scan='no'
+				// and one for initial_scan='yes' but not one for initial_scan='only'.
+				require.Equal(t, warningsLogged, 2,
+					"expected 2 cursor age warning logs, got %d", warningsLogged)
+			} else {
+				require.Equal(t, warningsLogged, 0,
+					"expected no cursor age warning logs, got %d", warningsLogged)
+			}
+		})
+	}
 }
 
 // TestChangefeedSchemaTTL ensures that changefeeds fail with an error in the case
@@ -12289,7 +12316,10 @@ WITH resolved='10ms', min_checkpoint_frequency='10ms', no_initial_scan`
 			require.NoError(t, err)
 			return ts
 		}
-		perTablePTSEnabled := changefeedbase.PerTableProtectedTimestamps.Get(&s.Server.ClusterSettings().SV)
+
+		// TODO(#158779): Re-add per table protected timestamps setting and
+		// fetch this value from that cluster setting.
+		perTablePTSEnabled := false
 		perTableProgressEnabled := changefeedbase.TrackPerTableProgress.Get(&s.Server.ClusterSettings().SV)
 		getPTS := func() hlc.Timestamp {
 			if perTablePTSEnabled && perTableProgressEnabled {

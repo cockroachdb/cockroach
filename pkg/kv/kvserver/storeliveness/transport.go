@@ -48,12 +48,8 @@ const (
 	connClass = rpcbase.SystemClass
 )
 
-// TODO(dodeca12): Currently this complexity allows the fallback to immediate
-// heartbeat sends. Once the smearing has been battle-tested, remove this and
-// default to using the smeared heartbeat sends approach (no more fallback).
-//
-// HeartbeatSmearingEnabled controls whether heartbeat sends are distributed over
-// time to avoid spiking the number of runnable goroutines. When enabled,
+// HeartbeatSmearingEnabled controls whether heartbeat sends are distributed
+// over time to avoid spiking the number of runnable goroutines. When enabled,
 // heartbeats are paced by the transport's smearing sender goroutine across
 // HeartbeatSmearingRefreshInterval. When disabled, heartbeats are sent
 // immediately upon enqueueing, bypassing the smearing mechanism.

@@ -70,6 +70,7 @@ go_library(
         "opgen_sequence.go",
         "opgen_sequence_option.go",
         "opgen_sequence_owner.go",
+        "opgen_sequence_value.go",
         "opgen_table.go",
         "opgen_table_comment.go",
         "opgen_table_data.go",

@@ -140,6 +140,7 @@ var systemTables = []string{
 	systemschema.TransactionDiagnosticsRequestsTableSchema,
 	systemschema.TransactionDiagnosticsTableSchema,
 	systemschema.StatementHintsTableSchema,
+	systemschema.TableStatisticsLocksTableSchema,
 }
 
 func init() {

@@ -680,7 +680,9 @@ func TestAlterChangefeedErrors(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`, optOutOfMetamorphicDBLevelChangefeed{
+			reason: "db level changefeeds don't support ADD/DROP TARGETS in ALTER CHANGEFEEDs",
+		})
 		defer closeFeed(t, testFeed)
 
 		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
@@ -1087,7 +1089,10 @@ func TestAlterChangefeedDatabaseQualifiedNames(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE d.users (id INT PRIMARY KEY, name STRING)`)
 		sqlDB.Exec(t, `INSERT INTO d.drivers VALUES (1, 'Alice')`)
 		sqlDB.Exec(t, `INSERT INTO d.users VALUES (1, 'Bob')`)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR d.drivers WITH resolved = '100ms', diff`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR d.drivers WITH resolved = '100ms', diff`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "db level changefeeds don't support ADD/DROP TARGETS in ALTER CHANGEFEEDs",
+			})
 		defer closeFeed(t, testFeed)
 
 		assertPayloads(t, testFeed, []string{
@@ -2381,7 +2386,9 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo
-WITH resolved = '100ms', min_checkpoint_frequency='1ns'`)
+WITH resolved = '100ms', min_checkpoint_frequency='1ns'`, optOutOfMetamorphicDBLevelChangefeed{
+			reason: "db level changefeeds don't support ADD/DROP TARGETS in ALTER CHANGEFEEDs",
+		})
 
 		g := ctxgroup.WithContext(context.Background())
 		g.Go(func() error {

@@ -148,6 +148,13 @@ func EncryptingWriter(ciphertext objstorage.Writable, key []byte) (objstorage.Wr
 	return &encWriter{gcm: gcm, iv: iv, ciphertext: ciphertext, buf: make([]byte, encryptionChunkSizeV2+tagSize)}, nil
 }
 
+func (e *encWriter) StartMetadataPortion() error {
+	if err := e.flush(); err != nil {
+		return err
+	}
+	return e.ciphertext.StartMetadataPortion()
+}
+
 func (e *encWriter) Write(p []byte) error {
 	var wrote int
 	for wrote < len(p) {

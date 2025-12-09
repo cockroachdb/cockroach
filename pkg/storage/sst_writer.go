@@ -550,6 +550,9 @@ func (f *MemObject) Write(p []byte) error {
 	return err
 }
 
+// StartMetadataPortion is part of the objstorage.Writable interface.
+func (*MemObject) StartMetadataPortion() error { return nil }
+
 // Finish is part of the objstorage.Writable interface.
 func (*MemObject) Finish() error {
 	return nil

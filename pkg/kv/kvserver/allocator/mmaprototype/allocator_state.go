@@ -620,7 +620,7 @@ func sortTargetCandidateSetAndPick(
 				discardedCandsHadNoPendingChanges = false
 			}
 			log.KvDistribution.VEventf(ctx, 2,
-				"candiate store %v was discarded due to (nls=%t overloadDim=%t pending_thresh=%t): sls=%v", cand.StoreID,
+				"candidate store %v was discarded due to (nls=%t overloadDim=%t pending_thresh=%t): sls=%v", cand.StoreID,
 				candDiscardedByNLS, candDiscardedByOverloadDim, candDiscardedByPendingThreshold, cand.storeLoadSummary)
 			continue
 		}

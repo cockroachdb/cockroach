@@ -127,6 +127,7 @@ func executeSupportedDDLs(
 	v261DDLs := []string{
 		`ALTER TABLE testdb.testsc.t2 ALTER COLUMN j SET NOT VISIBLE`,
 		`ALTER TABLE testdb.testsc.t2 ALTER COLUMN j SET VISIBLE`,
+		`ALTER TABLE testdb.testsc.t2 ALTER COLUMN l SET MAXVALUE 40 RESTART WITH 20 SET CACHE 5 SET INCREMENT BY 2`,
 	}
 
 	// Used to clean up our CREATE-d elements after we are done with them.
@@ -209,7 +210,7 @@ CREATE DATABASE IF NOT EXISTS testdb;
 CREATE SCHEMA IF NOT EXISTS testdb.testsc;
 CREATE TABLE IF NOT EXISTS testdb.testsc.t (i INT PRIMARY KEY, j INT NOT NULL, INDEX idx (j), CONSTRAINT check_j CHECK (j > 0));
 INSERT INTO testdb.testsc.t VALUES (1, 1);
-CREATE TABLE IF NOT EXISTS testdb.testsc.t2 (i INT NOT NULL, j INT NOT NULL, k STRING NOT NULL);
+CREATE TABLE IF NOT EXISTS testdb.testsc.t2 (i INT NOT NULL, j INT NOT NULL, k STRING NOT NULL, l INT GENERATED ALWAYS AS IDENTITY);
 INSERT INTO testdb.testsc.t2 VALUES (2, 3, 'foo');
 CREATE TABLE IF NOT EXISTS testdb.testsc.t3 (i INT NOT NULL, j INT NOT NULL, k STRING NOT NULL);
 INSERT INTO testdb.testsc.t3 VALUES (3, 3, 'bar');
