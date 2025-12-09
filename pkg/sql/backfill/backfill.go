@@ -1551,10 +1551,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			}
 
 			vectorValue := tree.MustBeDPGVector(ib.rowVals[vectorIndexHelper.vectorOrd]).T
-			encodedVector, err := vector.Encode([]byte{}, vectorValue)
-			if err != nil {
-				return nil, nil, memUsedPerChunk, err
-			}
+			encodedVector := vector.Encode([]byte{}, vectorValue)
 			ib.vectorEncodingHelper.QuantizedVecs[indexID] = tree.NewDBytes(tree.DBytes(encodedVector))
 			ib.vectorEncodingHelper.PartitionKeys[indexID] = tree.NewDInt(tree.DInt(cspann.RootKey))
 		}

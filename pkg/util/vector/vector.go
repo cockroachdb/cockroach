@@ -116,12 +116,12 @@ func (v T) Compare(v2 T) (int, error) {
 }
 
 // Encode encodes the vector as a byte array suitable for storing in KV.
-func Encode(appendTo []byte, t T) ([]byte, error) {
+func Encode(appendTo []byte, t T) []byte {
 	appendTo = encoding.EncodeUint32Ascending(appendTo, uint32(len(t)))
 	for i := range t {
 		appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, t[i])
 	}
-	return appendTo, nil
+	return appendTo
 }
 
 // Decode decodes the byte array into a vector and returns any remaining bytes.

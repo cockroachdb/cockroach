@@ -353,10 +353,7 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		}
 		return encoding.EncodeUntaggedBytesValue(b, encoded), nil
 	case *tree.DPGVector:
-		encoded, err := vector.Encode(nil, t.T)
-		if err != nil {
-			return nil, err
-		}
+		encoded := vector.Encode(nil, t.T)
 		return encoding.EncodeUntaggedBytesValue(b, encoded), nil
 	case *tree.DLTree:
 		return encoding.EncodeUntaggedLTreeValue(b, t.LTree), nil

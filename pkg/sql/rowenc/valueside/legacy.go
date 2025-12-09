@@ -168,10 +168,7 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 		}
 	case types.PGVectorFamily:
 		if v, ok := val.(*tree.DPGVector); ok {
-			data, err := vector.Encode(nil, v.T)
-			if err != nil {
-				return r, err
-			}
+			data := vector.Encode(nil, v.T)
 			r.SetBytes(data)
 			return r, nil
 		}
