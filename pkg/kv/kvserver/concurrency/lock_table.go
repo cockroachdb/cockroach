@@ -762,7 +762,7 @@ func (g *lockTableGuardImpl) PushedTransactionUpdated(txn *roachpb.Transaction) 
 	iter.SeekGE(&keyLocks{key: g.key})
 	keyIsLocked := iter.Valid() && iter.Cur().key.Equal(g.key)
 	assert(keyIsLocked, "programming error: transaction pushed but key does not exist in lock table snapshot")
-	// iter.Cur().checkStillBlocked(g)
+	iter.Cur().checkStillBlocked(g)
 }
 
 // updateRequestScopedTransactionCache adds the given transaction to our request
@@ -2201,6 +2201,58 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 			sb.Printf("    %s\n", e.Value)
 		}
 	}
+}
+
+// TODO(ssd): Rename this.
+//
+// This function is called from PushedTransactionUpdated and potentially
+// unblocks the owner of g if it is waiting on the transaction that it just
+// pushed.
+func (kl *keyLocks) checkStillBlocked(g *lockTableGuardImpl) (wait bool) {
+	kl.mu.Lock()
+	defer kl.mu.Unlock()
+	if kl.isEmptyLock() {
+		return false
+	}
+	if kl.conflictsWithLockHolders(g) {
+		ws := kl.constructWaitingState(g)
+		g.startWaitingWithWaitingState(ws, true /* notify */)
+		return true
+	}
+	found := false
+	if g.curStrength() == lock.None {
+		for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
+			if e.Value == g {
+				kl.removeReader(e)
+				found = true
+				break
+			}
+		}
+	} else {
+		for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
+			qg := e.Value
+			if qg.guard == g {
+				assert(qg.active, "expect active")
+				qg.active = false // mark as inactive
+				g.mu.Lock()
+				g.doneActivelyWaitingAtLock()
+				g.mu.Unlock()
+				//if g == kl.distinguishedWaiter {
+				//	// We're only clearing the distinguishedWaiter for now; a new one will be
+				//	// selected below in the call to informActiveWaiters.
+				//	kl.distinguishedWaiter = nil
+				//}
+				found = true
+				break
+			}
+		}
+	}
+	_ = found
+	//assert(found, "must find request in waitingReaders or queuedLockingRequests")
+	//if found {
+	//	kl.informActiveWaiters()
+	//}
+	return false
 }
 
 // collectLockStateInfo exports all locks held on the receiver's key as a list
