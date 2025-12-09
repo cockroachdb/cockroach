@@ -90,13 +90,6 @@ func WithDNSProvider(dnsP vm.DNSProvider) OptionFunc {
 	}
 }
 
-// WithSDKSupport returns an option to set the WithSDKSupport flag.
-func WithSDKSupport(withSDKSupport bool) OptionFunc {
-	return func(p *Provider) {
-		p.withSDKSupport = withSDKSupport
-	}
-}
-
 // Provider is a struct that holds configuration for the GCE provider.
 type Option interface {
 	apply(*Provider)
@@ -126,9 +119,6 @@ func (po *ProviderOptions) ToOptions() []Option {
 	}
 	if po.DNSManagedDomain != "" {
 		opts = append(opts, WithDNSManagedDomain(po.DNSManagedDomain))
-	}
-	if po.WithSDKSupport {
-		opts = append(opts, WithSDKSupport(po.WithSDKSupport))
 	}
 	return opts
 }

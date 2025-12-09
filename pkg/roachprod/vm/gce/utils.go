@@ -6,13 +6,10 @@
 package gce
 
 import (
-	"bufio"
 	"bytes"
+	"context"
 	"fmt"
-	"os"
-	"os/exec"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -101,13 +98,9 @@ function detect_disks() {
 sudo touch {{ .OSInitializedFile }}
 `
 
-// writeStartupScript writes the startup script to a temp file.
-// Returns the path to the file.
-// After use, the caller should delete the temp file.
-//
-// extraMountOpts, if not empty, is appended to the default mount options. It is
-// a comma-separated list of options for the "mount -o" flag.
-func writeStartupScript(
+// generateStartupScriptContent generates the startup script content as a string.
+// This is the core function used by both SDK and gcloud code paths.
+func generateStartupScriptContent(
 	extraMountOpts string,
 	fileSystem vm.Filesystem,
 	useMultiple bool,
@@ -142,18 +135,12 @@ func writeStartupScript(
 		PublicKey: publicKey,
 	}
 
-	tmpfile, err := os.CreateTemp("", "gce-startup-script")
-	if err != nil {
-		return "", err
-	}
-	defer tmpfile.Close()
-
-	err = vm.GenerateStartupScript(tmpfile, gceDiskStartupScriptTemplate, args)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := vm.GenerateStartupScript(&buf, gceDiskStartupScriptTemplate, args); err != nil {
 		return "", errors.Wrapf(err, "unable to generate startup script")
 	}
 
-	return tmpfile.Name(), nil
+	return buf.String(), nil
 }
 
 // SyncDNS implements the InfraProvider interface.
@@ -227,60 +214,7 @@ func (ak AuthorizedKeys) AsProjectMetadata() []byte {
 
 // GetUserAuthorizedKeys implements the InfraProvider interface.
 func (p *Provider) GetUserAuthorizedKeys() (AuthorizedKeys, error) {
-	var outBuf bytes.Buffer
-	// The below command will return a stream of user:pubkey as text.
-	cmd := exec.Command("gcloud", "compute", "project-info", "describe",
-		"--project="+p.metadataProject,
-		"--format=value(commonInstanceMetadata.ssh-keys)")
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = &outBuf
-
-	if err := cmd.Run(); err != nil {
-		return nil, err
-	}
-
-	var authorizedKeys AuthorizedKeys
-	scanner := bufio.NewScanner(&outBuf)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			continue
-		}
-		// N.B. Below, we skip over invalid public keys as opposed to failing. Since we don't control how these keys are
-		// uploaded, it's possible for a key to become invalid.
-		// N.B. This implies that an operation like `AddUserAuthorizedKey` has the side effect of removing invalid
-		// keys, since they are skipped here, and the result is then uploaded via `SetUserAuthorizedKeys`.
-		colonIdx := strings.IndexRune(line, ':')
-		if colonIdx == -1 {
-			fmt.Fprintf(os.Stderr, "WARN: malformed public key line %q\n", line)
-			continue
-		}
-
-		user := line[:colonIdx]
-		key := line[colonIdx+1:]
-
-		if !isValidSSHUser(user) {
-			continue
-		}
-
-		pubKey, comment, _, _, err := ssh.ParseAuthorizedKey([]byte(key))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "WARN: failed to parse public key in project metadata: %v\n%q\n", err, key)
-			continue
-		}
-		authorizedKeys = append(authorizedKeys, AuthorizedKey{User: user, Key: pubKey, Comment: comment})
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("failed to read public keys from project metadata: %w", err)
-	}
-
-	// For consistency, return keys sorted by username.
-	sort.Slice(authorizedKeys, func(i, j int) bool {
-		return authorizedKeys[i].User < authorizedKeys[j].User
-	})
-
-	return authorizedKeys, nil
+	return p.GetUserAuthorizedKeysWithContext(context.Background())
 }
 
 // AddUserAuthorizedKey adds the authorized key provided to the set of
@@ -298,38 +232,15 @@ func AddUserAuthorizedKey(ak AuthorizedKey) error {
 	}
 
 	newKeys := append(existingKeys, ak)
-	return SetUserAuthorizedKeys(newKeys)
+	return Infrastructure.SetUserAuthorizedKeys(newKeys)
 }
 
 // SetUserAuthorizedKeys updates the default project metadata with the
 // keys provided. Note that this overwrites any existing keys -- all
 // existing keys need to be passed in the `keys` list provided in
 // order for them to continue to exist after this function is called.
-func SetUserAuthorizedKeys(keys AuthorizedKeys) (retErr error) {
-	tmpFile, err := os.CreateTemp("", "ssh-keys-*")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	defer func() {
-		retErr = errors.CombineErrors(retErr, os.Remove(tmpFile.Name()))
-	}()
-
-	if err := os.WriteFile(tmpFile.Name(), keys.AsProjectMetadata(), 0444); err != nil {
-		return fmt.Errorf("failed to write to temp file: %w", err)
-	}
-
-	cmd := exec.Command("gcloud", "compute", "project-info", "add-metadata",
-		fmt.Sprintf("--project=%s", DefaultProject()),
-		fmt.Sprintf("--metadata-from-file=ssh-keys=%s", tmpFile.Name()),
-	)
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("error running `gcloud` command (output above): %w", err)
-	}
-
-	return nil
+func (p *Provider) SetUserAuthorizedKeys(keys AuthorizedKeys) (retErr error) {
+	return p.SetUserAuthorizedKeysWithContext(context.Background(), keys)
 }
 
 // isValidSSHUser returns whether the username provided is a valid

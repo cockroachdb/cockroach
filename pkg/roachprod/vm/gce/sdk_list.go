@@ -21,8 +21,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// listWithSDK lists VMs using the GCP SDK.
-func (p *Provider) listWithSDK(
+// list lists VMs using the GCP SDK.
+func (p *Provider) list(
 	ctx context.Context, l *logger.Logger, opts vm.ListOptions,
 ) (vm.List, error) {
 
@@ -85,7 +85,7 @@ func (p *Provider) listWithSDK(
 			if projTemplatesInUse == nil {
 				projTemplatesInUse = make(map[string]struct{})
 			}
-			templates, err := p.listInstanceTemplatesWithSDK(ctx, l, prj, "" /* clusterFilter */)
+			templates, err := p.listInstanceTemplates(ctx, l, prj, "" /* clusterFilter */)
 			if err != nil {
 				return nil, err
 			}
@@ -134,7 +134,7 @@ func (p *Provider) listWithSDK(
 
 // listInstanceTemplates returns a list of instance templates for a given
 // project.
-func (p *Provider) listInstanceTemplatesWithSDK(
+func (p *Provider) listInstanceTemplates(
 	ctx context.Context, l *logger.Logger, project, clusterFilter string,
 ) ([]*computepb.InstanceTemplate, error) {
 
@@ -181,35 +181,75 @@ type sdkAttachedDisk struct {
 	*computepb.AttachedDisk
 }
 
+// parseLifetimeFromLabels extracts and parses the lifetime duration from instance labels.
+// Returns the parsed duration and an error if the lifetime label is missing or invalid.
+func parseLifetimeFromLabels(labels map[string]string) (time.Duration, error) {
+	lifetimeStr, ok := labels[vm.TagLifetime]
+	if !ok {
+		return 0, vm.ErrNoExpiration
+	}
+
+	lifetime, err := time.ParseDuration(lifetimeStr)
+	if err != nil {
+		return 0, vm.ErrNoExpiration
+	}
+
+	return lifetime, nil
+}
+
+// parseNetworkInfo extracts network information from GCP instance network interfaces.
+// Returns publicIP, privateIP, vpc name, and an error if the network configuration is invalid.
+func parseNetworkInfo(
+	networkInterfaces []*computepb.NetworkInterface,
+) (publicIP, privateIP, vpc string, err error) {
+	if len(networkInterfaces) == 0 {
+		return "", "", "", vm.ErrBadNetwork
+	}
+
+	iface := networkInterfaces[0]
+	privateIP = iface.GetNetworkIP()
+
+	if len(iface.GetAccessConfigs()) == 0 {
+		return "", "", "", vm.ErrBadNetwork
+	}
+
+	accessConfig := iface.GetAccessConfigs()[0]
+	publicIP = accessConfig.GetNatIP()
+	vpc = lastComponent(iface.GetNetwork())
+
+	return publicIP, privateIP, vpc, nil
+}
+
+// parseProjectFromSelfLink extracts the project name from a GCP self-link URL.
+// Returns empty string if the self-link doesn't contain a project.
+func parseProjectFromSelfLink(selfLink string) string {
+	idx := strings.Index(selfLink, "/projects/")
+	if idx == -1 {
+		return ""
+	}
+
+	projectName := selfLink[idx+len("/projects/"):]
+	if idx := strings.Index(projectName, "/"); idx != -1 {
+		projectName = projectName[:idx]
+	}
+
+	return projectName
+}
+
 func (i *sdkInstance) toVM(project, dnsDomain string) *vm.VM {
 
 	var vmErrors []error
-	var err error
 
 	// Check "lifetime" label.
-	var lifetime time.Duration
-
-	if lifetimeStr, ok := i.GetLabels()[vm.TagLifetime]; ok {
-		if lifetime, err = time.ParseDuration(lifetimeStr); err != nil {
-			vmErrors = append(vmErrors, vm.ErrNoExpiration)
-		}
-	} else {
-		vmErrors = append(vmErrors, vm.ErrNoExpiration)
+	lifetime, err := parseLifetimeFromLabels(i.GetLabels())
+	if err != nil {
+		vmErrors = append(vmErrors, err)
 	}
 
 	// Extract network information
-	var publicIP, privateIP, vpc string
-	if len(i.GetNetworkInterfaces()) == 0 {
-		vmErrors = append(vmErrors, vm.ErrBadNetwork)
-	} else {
-		privateIP = i.GetNetworkInterfaces()[0].GetNetworkIP()
-		if len(i.GetNetworkInterfaces()[0].GetAccessConfigs()) == 0 {
-			vmErrors = append(vmErrors, vm.ErrBadNetwork)
-		} else {
-			_ = i.GetNetworkInterfaces()[0].GetAccessConfigs()[0].GetName() // silence unused warning
-			publicIP = i.GetNetworkInterfaces()[0].GetAccessConfigs()[0].GetNatIP()
-			vpc = lastComponent(i.GetNetworkInterfaces()[0].GetNetwork())
-		}
+	publicIP, privateIP, vpc, err := parseNetworkInfo(i.GetNetworkInterfaces())
+	if err != nil {
+		vmErrors = append(vmErrors, err)
 	}
 	if i.GetScheduling().GetOnHostMaintenance() == "" {
 		// N.B. 'onHostMaintenance' is always non-empty, hence its absense implies a parsing error
@@ -250,16 +290,8 @@ func (i *sdkInstance) toVM(project, dnsDomain string) *vm.VM {
 		}
 
 	}
-	// Parse jsonVM.SelfLink to extract the project name.
-	// N.B. The self-link contains the name of the GCE project. E.g.,
-	// "https://www.googleapis.com/compute/v1/projects/cockroach-workers/zones/us-central1-a/instances/..."
-	projectName := ""
-	if idx := strings.Index(i.GetSelfLink(), "/projects/"); idx != -1 {
-		projectName = i.GetSelfLink()[idx+len("/projects/"):]
-		if idx := strings.Index(projectName, "/"); idx != -1 {
-			projectName = projectName[:idx]
-		}
-	}
+	// Parse self-link to extract the project name.
+	projectName := parseProjectFromSelfLink(i.GetSelfLink())
 
 	creationTimestampStr := i.GetCreationTimestamp()
 	creationTimestamp, err := time.Parse(time.RFC3339, creationTimestampStr)
