@@ -1888,6 +1888,20 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 	details := r.job.Details().(jobspb.RestoreDetails)
 
+	if err := maybeRelocateJobExecution(ctx, r.job.ID(), p, details.ExecutionLocality, "RESTORE"); err != nil {
+		return err
+	}
+	if details.DownloadJob {
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_do_download_files"); err != nil {
+			return err
+		}
+		return r.doDownloadFilesWithRetry(ctx, p)
+	}
+
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_load_descriptors_from_backup"); err != nil {
+		return err
+	}
+
 	if details.OnlineImpl() {
 		// check for any exteral connections, and swap the uris
 		for i, path := range details.URIs {
@@ -1897,7 +1911,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			}
 
 			if uri.Scheme == "external" {
-				// fetch the actual connection uri and swap it out
 				err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
 					ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, t)
 					if err != nil {
@@ -1917,23 +1930,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 				}
 			}
 		}
+
 		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
 			return err
 		}
-	}
-
-	if err := maybeRelocateJobExecution(ctx, r.job.ID(), p, details.ExecutionLocality, "RESTORE"); err != nil {
-		return err
-	}
-	if details.DownloadJob {
-		if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_do_download_files"); err != nil {
-			return err
-		}
-		return r.doDownloadFilesWithRetry(ctx, p)
-	}
-
-	if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_load_descriptors_from_backup"); err != nil {
-		return err
 	}
 
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
@@ -1952,6 +1952,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err != nil {
 		return err
 	}
+
 	if err := r.validateJobIsResumable(ctx, p.ExecCfg(), backupManifests); err != nil {
 		return err
 	}
@@ -1959,6 +1960,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err != nil {
 		return err
 	}
+
 	lastBackupIndex, err := backupinfo.GetBackupIndexAtTime(backupManifests, details.EndTime)
 	if err != nil {
 		return err
