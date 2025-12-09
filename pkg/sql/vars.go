@@ -4475,6 +4475,7 @@ var varGen = map[string]sessionVar{
 	},
 
 	`canary_stats_mode`: {
+		Hidden:       true,
 		GetStringVal: makePostgresBoolGetStringValFn(`canary_stats_mode`),
 		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
 			mode, ok := sessiondatapb.CanaryStatsModeFromString(s)
