@@ -1227,6 +1227,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 				},
 				Duration:     10 * time.Second,
 				BucketConfig: metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePrometheus,
 			},
 			"scope",
 		)
