@@ -357,7 +357,6 @@ func doCreateBackupSchedules(
 
 	// Create FULL backup schedule.
 	backupNode.AppendToLatest = false
-	backupNode.Options.IncrementalStorage = nil
 	var fullScheduledBackupArgs *backuppb.ScheduledBackupExecutionArgs
 	full, fullScheduledBackupArgs, err := makeBackupSchedule(
 		env, p.User(), scheduleLabel, fullRecurrence, details, unpauseOnSuccessID,
@@ -526,8 +525,9 @@ func emitSchedule(
 		nextRun = next
 	}
 
-	redactedBackupNode, err := GetRedactedBackupNode(backupNode, to, kmsURIs, "",
-		nil, false /* hasBeenPlanned */)
+	redactedBackupNode, err := GetRedactedBackupNode(
+		backupNode, to, kmsURIs, "", false, /* hasBeenPlanned */
+	)
 	if err != nil {
 		return err
 	}
@@ -768,7 +768,6 @@ func createBackupScheduleTypeCheck(
 	stringArrays := exprutil.StringArrays{
 		tree.Exprs(schedule.To),
 		tree.Exprs(schedule.BackupOptions.EncryptionKMSURI),
-		tree.Exprs(schedule.BackupOptions.IncrementalStorage),
 	}
 	bools := exprutil.Bools{
 		schedule.BackupOptions.CaptureRevisionHistory,
