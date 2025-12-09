@@ -267,6 +267,9 @@ func TestDescriptorRepair(t *testing.T) {
 		defer cleanup()
 		tdb := sqlutils.MakeSQLRunner(db)
 
+		// This test needs to disable wait for an initial version, since the initial version
+		// is intentionally bad, so the lease manager can never acquire it.
+		tdb.Exec(t, `SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=false`)
 		tdb.Exec(t, "CREATE DATABASE db")
 		tdb.Exec(t, "CREATE TABLE foobar()")
 
