@@ -34,6 +34,9 @@ func constructSelectQuery(n *tree.ShowJobs) string {
 
 	// Check if there are any SHOW JOBS options that we need to add columns for.
 	if n.Options != nil {
+		if n.Options.ResolvedTimestamp {
+			baseQuery.WriteString(`, high_water_timestamp AS resolved_timestamp`)
+		}
 		if n.Options.ExecutionDetails {
 			baseQuery.WriteString(`, NULLIF(crdb_internal.job_execution_details(job_id)->>'plan_diagram'::STRING, '') AS plan_diagram`)
 			baseQuery.WriteString(`, NULLIF(crdb_internal.job_execution_details(job_id)->>'per_component_fraction_progressed'::STRING, '') AS component_fraction_progressed`)
