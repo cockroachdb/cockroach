@@ -942,6 +942,63 @@ test/generate_series(1,15000) as t(x).4.json.err.txt
 	assert.Equal(t, expected, fileList.String())
 }
 
+// TestZipNonRootUser verifies that debug zip works with non-root users.
+func TestZipNonRootUser(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	skip.UnderRace(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: true})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := s.SQLConn(t, serverutils.DBName("system"))
+	defer sqlDB.Close()
+
+	// Create a test user with ADMIN privileges
+	_, err := sqlDB.Exec(`CREATE USER testuser`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`GRANT ADMIN TO testuser`)
+	require.NoError(t, err)
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	// Test with non-root user
+	c := TestCLI{
+		t:        t,
+		Server:   s,
+		Insecure: true,
+	}
+
+	zipName := filepath.Join(dir, "test.zip")
+	out, err := c.RunWithCapture(fmt.Sprintf(
+		"debug zip --user=testuser --concurrency=1 --cpu-profile-duration=0s --validate-zip-file=false %s",
+		zipName,
+	))
+	require.NoError(t, err)
+	require.NotEmpty(t, out)
+
+	// Verify the zip file was created
+	_, err = os.Stat(zipName)
+	require.NoError(t, err)
+
+	// Test that root user still works (regression test)
+	zipNameRoot := filepath.Join(dir, "test_root.zip")
+	out, err = c.RunWithCapture(fmt.Sprintf(
+		"debug zip --concurrency=1 --cpu-profile-duration=0s --validate-zip-file=false %s",
+		zipNameRoot,
+	))
+	require.NoError(t, err)
+	require.NotEmpty(t, out)
+
+	// Verify the zip file was created
+	_, err = os.Stat(zipNameRoot)
+	require.NoError(t, err)
+}
+
 // This checks that SQL retry errors are properly handled.
 func TestZipFallback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
