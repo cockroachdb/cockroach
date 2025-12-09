@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -30,7 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/errors"
 )
 
 type indexType int
@@ -57,6 +60,8 @@ var uniqueRowIDString = "unique_rowid()"
 // creteFKIndexes controls whether we automatically create indexes on the
 // referencing side of foreign keys (like it was required before 20.2).
 const createFKIndexes = false
+
+const canaryWindowStorageParamKey = "canary_window"
 
 // CreateTable creates a test table from a parsed DDL statement and adds it to
 // the catalog. This is intended for testing, and is not a complete (and
@@ -439,6 +444,10 @@ OuterLoop:
 				tab.regionalByRowUsingConstraint = fk
 			}
 		}
+	}
+
+	if canaryWindowExpr := stmt.StorageParams.GetVal(canaryWindowStorageParamKey); canaryWindowExpr != nil {
+		tab.statsCanaryWindow = getDurationFromStrExpr(canaryWindowExpr)
 	}
 
 	// Add the new table to the catalog.
@@ -1587,4 +1596,25 @@ func generateDefExprForSerialCol(
 		panic(fmt.Errorf("invalid serial normalization mode for col %s in table"+
 			" %s", colName, tableName.String()))
 	}
+}
+
+// getDurationFromStrExpr to convert a tree.Expr (assert it to be of
+// *tree.StrVal type) to duration.
+func getDurationFromStrExpr(expr tree.Expr) time.Duration {
+	if expr == nil {
+		return 0
+	}
+	exprStr, ok := expr.(*tree.StrVal)
+	if !ok {
+		panic("expr must be of StrVal type")
+	}
+	d, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, exprStr.RawString())
+	if err != nil {
+		panic(errors.Wrapf(err, "parsing %q", exprStr.RawString()))
+	}
+	durInSeconds, ok := d.Duration.AsInt64()
+	if !ok {
+		panic("unable to convert duration to seconds")
+	}
+	return time.Duration(durInSeconds) * time.Second
 }
