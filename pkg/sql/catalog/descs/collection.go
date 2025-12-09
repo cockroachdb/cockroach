@@ -416,6 +416,10 @@ var allowLeasedDescriptorsInCatalogViews = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+func getAllowLeasedDescriptorsInCatalogViews(ctx context.Context, settings *cluster.Settings) bool {
+	return allowLeasedDescriptorsInCatalogViews.Get(&settings.SV) && settings.Version.IsActive(ctx, clusterversion.V26_1)
+}
+
 var prefetchLeasedDescriptorsInCatalogViews = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.allow_leased_descriptors.prefetch.enabled",
@@ -425,8 +429,8 @@ var prefetchLeasedDescriptorsInCatalogViews = settings.RegisterBoolSetting(
 
 // GetCatalogGetAllOptions returns the functional options for GetAll* methods
 // based on the cluster setting for allowing leased descriptors in catalog views.
-func GetCatalogGetAllOptions(sv *settings.Values) []GetAllOption {
-	if allowLeasedDescriptorsInCatalogViews.Get(sv) {
+func GetCatalogGetAllOptions(ctx context.Context, s *cluster.Settings) []GetAllOption {
+	if getAllowLeasedDescriptorsInCatalogViews(ctx, s) {
 		return []GetAllOption{WithAllowLeased()}
 	}
 	return nil
@@ -435,9 +439,9 @@ func GetCatalogGetAllOptions(sv *settings.Values) []GetAllOption {
 // GetCatalogDescriptorGetter returns the appropriate descriptor getter for
 // catalog views based on the cluster setting.
 func GetCatalogDescriptorGetter(
-	descriptors *Collection, txn *kv.Txn, sv *settings.Values,
+	ctx context.Context, descriptors *Collection, txn *kv.Txn, s *cluster.Settings,
 ) ByIDGetterBuilder {
-	if allowLeasedDescriptorsInCatalogViews.Get(sv) {
+	if getAllowLeasedDescriptorsInCatalogViews(ctx, s) {
 		return descriptors.ByIDWithLeased(txn)
 	}
 	return descriptors.ByIDWithoutLeased(txn)
@@ -466,7 +470,7 @@ func (tc *Collection) EmitDescriptorUpdatesKey(ctx context.Context, txn *kv.Txn)
 	if !tc.settings.Version.IsActive(ctx, clusterversion.V25_4) ||
 		tc.readerCatalogSetup ||
 		tc.uncommitted.uncommitted.Len() == 0 ||
-		!lease.LockedLeaseTimestamp.Get(&tc.settings.SV) {
+		!lease.GetLockedLeaseTimestampEnabled(ctx, tc.settings) {
 		return nil
 	}
 	updates := &descpb.DescriptorUpdates{}
