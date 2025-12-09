@@ -25,7 +25,7 @@ func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory,
-		serverutils.WithDRPCOption(base.TestDRPCEnabledRandomly))
+		serverutils.WithDRPCOption(base.TestDRPCDisabled))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	exit := m.Run()
 	testcluster.PrintTimings(timeutil.Since(start))
