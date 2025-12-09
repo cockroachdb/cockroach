@@ -1427,6 +1427,11 @@ FROM defaults_parsed
 			Types:      tree.ParamTypes{{Name: "seconds", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// Release the locked timestamp before sleeping, so that we aren't
+				// holding up any schema changes:
+				// (TODO)fqazi: This can mean we can mixed descriptor versions after this
+				// operation.
+				evalCtx.Planner.ResetLeaseTimestamp(ctx)
 				durationNanos := int64(float64(*args[0].(*tree.DFloat)) * float64(1000000000))
 				dur := time.Duration(durationNanos)
 				select {

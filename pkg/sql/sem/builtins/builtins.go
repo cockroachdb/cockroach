@@ -7892,6 +7892,11 @@ table's zone configuration this will return NULL.`,
 				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats controller not set")
 				}
+				// The schema change below requires us to relesae our current timestamp, otherwise
+				// we may get stuck waiting for leases.
+				// TODO(fqazi): We should plumb an executor from the planner instead, we can
+				// remove this later.
+				evalCtx.Planner.ResetLeaseTimestamp(ctx)
 				if err := evalCtx.SQLStatsController.ResetActivityTables(ctx); err != nil {
 					return nil, err
 				}

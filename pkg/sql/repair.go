@@ -632,6 +632,11 @@ func (p *planner) UnsafeDeleteNamespaceEntry(
 	return p.logEvent(ctx, descID, &ev)
 }
 
+// ResetLeaseTimestamp is part of interface Planner.
+func (p *planner) ResetLeaseTimestamp(ctx context.Context) {
+	p.Descriptors().ResetLeaseTimestamp(ctx)
+}
+
 // UnsafeDeleteDescriptor powers the repair builtin of the same name. The
 // idea is that it should be used only by an administrator in the most dire of
 // circumstances. It exists to empower administrators to perform repair.

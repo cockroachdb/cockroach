@@ -181,6 +181,13 @@ func (ld *leasedDescriptors) maybeAssertExternalRowDataTS(desc catalog.Descripto
 	})
 }
 
+func (ld *leasedDescriptors) releaseReadTimestamp(ctx context.Context) {
+	if ld.leaseTimestampSet {
+		ld.leaseTimestamp.Release(ctx)
+		ld.leaseTimestampSet = false
+	}
+}
+
 // maybeInitReadTimestamp selects a read timestamp for the lease manager.
 func (ld *leasedDescriptors) maybeInitReadTimestamp(ctx context.Context, txn deadlineHolder) {
 	// Refresh the leased timestamp if the read timestamp has changed on us
@@ -191,8 +198,7 @@ func (ld *leasedDescriptors) maybeInitReadTimestamp(ctx context.Context, txn dea
 	} else if ld.leaseTimestampSet {
 		// Timestamp is already set so release it before picking a new one.
 		// TODO (fqazi): Add handling for moving timestamps forward.
-		ld.leaseTimestamp.Release(ctx)
-		ld.leaseTimestampSet = false
+		ld.releaseReadTimestamp(ctx)
 	}
 	readTimestamp := txn.ReadTimestamp()
 	ld.leaseTimestampSet = true
@@ -403,10 +409,7 @@ func (ld *leasedDescriptors) releaseAll(ctx context.Context) {
 		return nil
 	})
 	ld.cache.Clear()
-	if ld.leaseTimestampSet {
-		ld.leaseTimestamp.Release(ctx)
-	}
-	ld.leaseTimestampSet = false
+	ld.releaseReadTimestamp(ctx)
 }
 
 func (ld *leasedDescriptors) release(ctx context.Context, descs []lease.IDVersion) {
@@ -416,10 +419,7 @@ func (ld *leasedDescriptors) release(ctx context.Context, descs []lease.IDVersio
 		}
 	}
 	if ld.cache.Len() == 0 {
-		if ld.leaseTimestampSet {
-			ld.leaseTimestamp.Release(ctx)
-		}
-		ld.leaseTimestampSet = false
+		ld.releaseReadTimestamp(ctx)
 	}
 }
 
