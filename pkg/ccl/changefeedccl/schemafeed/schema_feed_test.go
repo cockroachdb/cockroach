@@ -252,7 +252,7 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 		TestingAllEventFilter, targets, now, nil, changefeedbase.CanHandle{
 			MultipleColumnFamilies: true,
 			VirtualColumns:         true,
-		})
+		}, false)
 	scf := sf.(*schemaFeed)
 	desc, err := scf.fetchDescriptorVersions(ctx, beforeCreate, afterCreate)
 	require.NoError(t, err)
@@ -296,7 +296,7 @@ func TestSchemaFeedHandlesCascadeDatabaseDrop(t *testing.T) {
 		TestingAllEventFilter, targets, s.Clock().Now(), nil, changefeedbase.CanHandle{
 			MultipleColumnFamilies: true,
 			VirtualColumns:         true,
-		}).(*schemaFeed)
+		}, false).(*schemaFeed)
 
 	// initialize type dependencies in schema feed.
 	require.NoError(t, sf.primeInitialTableDescs(ctx))
