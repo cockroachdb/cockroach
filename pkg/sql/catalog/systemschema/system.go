@@ -1398,6 +1398,43 @@ CREATE TABLE public.inspect_errors (
     INDEX hash_idx (hash ASC),
     FAMILY "primary" (row_id, hash, fingerprint, hint, created_at)
   );`
+
+	// TableStatisticsLocksTableSchema defines the schema for the
+	// system.table_statistics_locks table which allows us to limit concurrency
+	// of automatic table statistics collections "globally" as well as to ensure
+	// that at most one collection is happening on a given table.
+	//
+	// * table_id: the ID of the table on which the lock is acquired. Fake ID of
+	// 0 can be used for controlling the limit on the "global" (i.e.
+	// table-independent) concurrency. E.g., the PK (0, 1) controls the total
+	// number of auto full stats collections triggered by the stats refresh.
+	//
+	// * kind: can be thought of as ENUM ('full', 'extremes', 'fixMisestimates')
+	// and identifies the reason for why the auto stats collection was kicked
+	// off:
+	//   - 'full' uses value '1' and means that the full collection was
+	//      triggered by the stats refresh;
+	//   - 'extremes' uses value '2' and means that the partial USING EXTREMES
+	//     collection was triggered by the stats refresh;
+	//   - 'fixMisestimate' uses value '3' and means that the partial collection
+	//     was triggered based on the execution feedback (which encountered a
+	//     scan misestimate).
+	// (We didn't add an enum type for this column out of complexity.)
+	//
+	// * job_ids: is an array of JobIDs of the corresponding auto stats jobs.
+	// For valid table IDs, this should contain at most one JobID, for fake
+	// table ID of 0 the number of array elements will be limited by the target
+	// concurrency limit. JobIDs are cleaned up lazily, whenever a new auto
+	// stats job is considered to be created - all relevant JobIDs are checked
+	// for whether they are still running and removed from the array if not.
+	TableStatisticsLocksTableSchema = `
+  CREATE TABLE system.table_statistics_locks (
+    table_id  INT8 NOT NULL,
+    kind      INT8 NOT NULL,
+    job_ids   INT8[] NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (table_id ASC, kind ASC),
+    FAMILY "primary" (table_id, kind, job_ids)
+  );`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1442,7 +1479,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_1_Start.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_1_AddTableStatisticsLocksTable.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1642,6 +1679,7 @@ func MakeSystemTables() []SystemTable {
 		TransactionDiagnosticsRequestsTable,
 		TransactionDiagnosticsTable,
 		StatementHintsTable,
+		TableStatisticsLocksTable,
 	}
 }
 
@@ -5410,7 +5448,7 @@ var (
 			},
 			descpb.IndexDescriptor{
 				Name:                "primary",
-				ID:                  catconstants.NamespaceTablePrimaryIndexID,
+				ID:                  1,
 				Unique:              true,
 				KeyColumnNames:      []string{"error_id"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
@@ -5472,6 +5510,36 @@ var (
 				KeyColumnDirections: singleASC,
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+			},
+		),
+	)
+
+	TableStatisticsLocksTable = makeSystemTable(
+		TableStatisticsLocksTableSchema,
+		systemTable(
+			catconstants.TableStatisticsLocksTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "table_id", ID: 1, Type: types.Int},
+				{Name: "kind", ID: 2, Type: types.Int},
+				{Name: "job_ids", ID: 3, Type: types.IntArray},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:            "primary",
+					ID:              0,
+					ColumnNames:     []string{"table_id", "kind", "job_ids"},
+					ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+					DefaultColumnID: 3,
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"table_id", "kind"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 			},
 		),
 	)
