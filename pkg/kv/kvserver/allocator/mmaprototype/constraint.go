@@ -392,6 +392,8 @@ type NormalizationPhaseObserver func(phaseName string, conf *normalizedSpanConfi
 
 // makeNormalizedSpanConfigWithObserver is like makeNormalizedSpanConfig but
 // accepts an optional observer to inspect intermediate normalization states.
+// The observer is called after basic normalization (phase "basic") and after
+// each phase of structural normalization.
 func makeNormalizedSpanConfigWithObserver(
 	conf *roachpb.SpanConfig, interner *stringInterner, observer NormalizationPhaseObserver,
 ) (*normalizedSpanConfig, error) {
@@ -399,7 +401,13 @@ func makeNormalizedSpanConfigWithObserver(
 	if err != nil {
 		return nil, err
 	}
+	if observer != nil {
+		observer("basic", nConf)
+	}
 	err = nConf.doStructuralNormalization(observer)
+	if observer != nil {
+		observer("after", nConf)
+	}
 	return nConf, err
 }
 
@@ -1107,9 +1115,6 @@ func (conf *normalizedSpanConfig) doStructuralNormalization(
 		observer("normalizeVoterConstraints", conf)
 	}
 	conf.normalizeEmptyConstraints()
-	if observer != nil {
-		observer("normalizeEmptyConstraints", conf)
-	}
 	return err
 }
 

@@ -147,7 +147,7 @@ func TestNormalizedSpanConfig(t *testing.T) {
 
 			// Observer compares current state with previous to avoid redundant output.
 			observer := func(phaseName string, nConf *normalizedSpanConfig) {
-				fmt.Fprintf(&b, "after %s:\n", phaseName)
+				fmt.Fprintf(&b, "%s:\n", phaseName)
 				var cur strings.Builder
 				printSpanConfig(&cur, nConf.uninternedConfig())
 				if cur.String() == prev.String() {
@@ -158,18 +158,8 @@ func TestNormalizedSpanConfig(t *testing.T) {
 				prev = cur
 			}
 
-			// Show input state before normalization.
-			basicConf, err := makeBasicNormalizedSpanConfig(&conf, interner)
-			if err != nil {
-				fmt.Fprintf(&b, "err=%s\n", err.Error())
-				return b.String()
-			}
-			fmt.Fprintf(&b, "input:\n")
-			printSpanConfig(&prev, basicConf.uninternedConfig())
-			b.WriteString(prev.String())
-
-			// Run structural normalization with observer.
-			err = basicConf.doStructuralNormalization(observer)
+			// Run normalization with observer.
+			_, err := makeNormalizedSpanConfigWithObserver(&conf, interner, observer)
 			if err != nil {
 				fmt.Fprintf(&b, "err=%s\n", err.Error())
 			}
