@@ -494,8 +494,8 @@ type relationshipVoterAndAll struct {
 	voterAndAllRel conjunctionRelationship
 }
 
-// TODO(wenyihu6): buildVoterAndAllRelationships should take in a scratch slice
-// to avoid repeated allocations.
+// TODO(wenyihu6): Consider using a sync.Pool for the returned slice to avoid
+// repeated allocations.
 func (conf *normalizedSpanConfig) buildVoterAndAllRelationships() (
 	rels []relationshipVoterAndAll,
 	emptyConstraintIndex int,
@@ -577,7 +577,7 @@ type normalizedConstraintsEnv struct {
 	// constraints with it. allReplicaConstraints[i].newVoterIndex starts out as
 	// -1 and is set to the index of the new voter constraint when we create a new
 	// voter constraint to satisfy an all-replica constraint that is stricter than
-	// voter constraints. newVoterIndex should correspond to an index in
+	// voter constraints. newVoterIndex must correspond to an index in
 	// voterConstraints where the index is >= len(conf.voterConstraints).
 	allReplicaConstraints []allReplicaConstraintsInfo
 
@@ -590,8 +590,10 @@ type normalizedConstraintsEnv struct {
 	// towards the desired number in conf.voterConstraints[i].numReplicas. It
 	// represents the normalized voter constraint.
 	//
-	// If a voter constraint is less strict than some all-replica constraint, we
-	// may take some of its numReplicas and construct narrower voter constraints.
+	// If a voter constraint is less strict than ALL available (i.e., not fully
+	// matched) all-replica constraints, we may take some of its numReplicas and
+	// construct narrower voter constraints.
+	//
 	// voterConstraints[i].additionalReplicas tracks the total count of replicas
 	// in such narrower voter constraints. In addition, a new voter constraint
 	// would be appended to voterConstraints, and len(voterConstraints) starts out
@@ -872,11 +874,12 @@ func (conf *normalizedSpanConfig) normalizeVoterConstraints() error {
 	//
 	// Implementation notes:
 	// - Example 1: +region=a,+zone=a1 and +region=a,+zone=a2 are classified as
-	//   conjPossiblyIntersecting, but we could do better knowing zone=a1 and
-	//   zone=a2 are disjoint. TODO(wenyihu6): merge #158722
+	// conjPossiblyIntersecting, but we could do better knowing zone=a1 and
+	// zone=a2 are disjoint.
+	//  TODO(wenyihu6): merge #158722
 	// - Example 2: +region=a,+zone=a1 and +region=a,-zone=a2 are classified as
-	//   conjPossiblyIntersecting. If zone=a3 exists in the region, they actually
-	//   intersect. We cannot do better without knowing the universe of values.
+	// conjPossiblyIntersecting. If zone=a3 exists in the region, they actually
+	// intersect. We cannot do better without knowing the universe of values.
 	index := 0
 	for index < len(rels) && rels[index].voterAndAllRel == conjPossiblyIntersecting {
 		index++
