@@ -20,6 +20,22 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// validateStorageParamKey validates a storage param key and panics with
+// NotImplementedError if the param is not yet supported in the declarative
+// schema changer.
+func validateStorageParamKey(t tree.NodeFormatter, key string) {
+	if strings.HasPrefix(strings.ToLower(key), "ttl") {
+		panic(scerrors.NotImplementedErrorf(t, redact.Sprintf("%s not implemented yet", redact.SafeString(key))))
+	}
+	if key == catpb.RBRUsingConstraintTableSettingName {
+		panic(scerrors.NotImplementedErrorf(t, "infer_rbr_region_col_using_constraint not implemented yet"))
+	}
+	if key == "schema_locked" {
+		// schema_locked has a dedicated element and will be handled differently.
+		panic(scerrors.NotImplementedErrorf(t, "schema_locked not implemented yet"))
+	}
+}
+
 // AlterTableSetStorageParams implements ALTER TABLE ... SET {storage_param} in the declarative schema changer.
 func AlterTableSetStorageParams(
 	b BuildCtx,
@@ -43,16 +59,7 @@ func AlterTableSetStorageParams(
 			panic(err) // tried to set an invalid value for param
 		}
 		key := param.Key
-		if strings.HasPrefix(strings.ToLower(key), "ttl") {
-			panic(scerrors.NotImplementedErrorf(t, redact.Sprintf("%s not implemented yet", redact.SafeString(key))))
-		}
-		if key == catpb.RBRUsingConstraintTableSettingName {
-			panic(scerrors.NotImplementedErrorf(t, "infer_rbr_region_col_using_constraint not implemented yet"))
-		}
-		if key == "schema_locked" {
-			// schema_locked has a dedicated element and will be handled differently
-			panic(scerrors.NotImplementedErrorf(t, "schema_locked not implemented yet"))
-		}
+		validateStorageParamKey(t, key)
 		// Do extra validation for exclude_data_from_backup
 		validateExcludeDataFromBackup(b, tbl, key)
 		currElem := b.QueryByID(tbl.TableID).FilterTableStorageParam().Filter(
@@ -109,4 +116,57 @@ func isTableReferencedByFK(b BuildCtx, tbl *scpb.Table) bool {
 		}
 	})
 	return hasInboundFK
+}
+
+// AlterTableResetStorageParams implements ALTER TABLE ... RESET {storage_param} in the declarative schema changer.
+func AlterTableResetStorageParams(
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	t *tree.AlterTableResetStorageParams,
+) {
+	if err := storageparam.StorageParamPreChecks(
+		b,
+		b.EvalCtx(),
+		false, /* isNewObject */
+		nil,   /* setParams */
+		t.Params,
+	); err != nil {
+		panic(err)
+	}
+	for _, key := range t.Params {
+		// Validate the key is a known storage parameter.
+		if err := tablestorageparam.IsValidParamKey(key); err != nil {
+			panic(err)
+		}
+		validateStorageParamKey(t, key)
+
+		// Get the reset value for this param. Most of the time this is the
+		// zero value, but for some params it may be different.
+		resetVal, err := tablestorageparam.GetResetValue(b, b.EvalCtx(), key)
+		if err != nil {
+			panic(err)
+		}
+
+		// Find and drop the existing element.
+		currElem := b.QueryByID(tbl.TableID).FilterTableStorageParam().Filter(
+			func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TableStorageParam) bool {
+				return e.Name == key
+			}).MustGetZeroOrOneElement()
+		if currElem != nil {
+			b.Drop(currElem)
+		}
+
+		// If there's a non-empty reset value, add a new element with that value
+		// (semantically resetting to the default value).
+		if resetVal != "" {
+			newElem := scpb.TableStorageParam{
+				TableID: tbl.TableID,
+				Name:    key,
+				Value:   resetVal,
+			}
+			b.Add(&newElem)
+		}
+	}
 }

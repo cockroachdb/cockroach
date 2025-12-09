@@ -139,7 +139,7 @@ func (po *Setter) getOrCreateRowLevelTTL() *catpb.RowLevelTTL {
 type tableParam struct {
 	validateSetValue func(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) (string, error)
 	onSet            func(ctx context.Context, po *Setter, key string, value string) error
-	getResetValue    func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) (string, error)
+	getResetValue    func(ctx context.Context, evalCtx *eval.Context, key string) (string, error)
 	onReset          func(ctx context.Context, po *Setter, key string, value string) error
 }
 
@@ -222,7 +222,7 @@ var tableParams = map[string]tableParam{
 		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
 			return nil
 		},
-		getResetValue: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) (string, error) {
+		getResetValue: func(ctx context.Context, evalCtx *eval.Context, key string) (string, error) {
 			evalCtx.ClientNoticeSender.BufferClientNotice(ctx, ttlAutomaticColumnNotice)
 			return "", nil
 		},
@@ -361,7 +361,7 @@ var tableParams = map[string]tableParam{
 		onSet: func(ctx context.Context, po *Setter, key string, value string) error {
 			return nil
 		},
-		getResetValue: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) (string, error) {
+		getResetValue: func(ctx context.Context, evalCtx *eval.Context, key string) (string, error) {
 			evalCtx.ClientNoticeSender.BufferClientNotice(ctx, ttlRangeConcurrencyNotice)
 			return "", nil
 		},
@@ -727,7 +727,7 @@ var tableParams = map[string]tableParam{
 			po.TableDesc.SchemaLocked = boolVal
 			return nil
 		},
-		getResetValue: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) (string, error) {
+		getResetValue: func(ctx context.Context, evalCtx *eval.Context, key string) (string, error) {
 			schemaLockedDefault := evalCtx.SessionData().CreateTableWithSchemaLocked
 			// Before 25.3 tables were never created with schema_locked by default.
 			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_3) {
@@ -1016,7 +1016,7 @@ func (po *Setter) Reset(ctx context.Context, evalCtx *eval.Context, key string) 
 		value := ""
 		var err error
 		if p.getResetValue != nil {
-			value, err = p.getResetValue(ctx, po, evalCtx, key)
+			value, err = p.getResetValue(ctx, evalCtx, key)
 			if err != nil {
 				return err
 			}
@@ -1035,13 +1035,40 @@ func (po *Setter) SetToStringValue(ctx context.Context, key string, value string
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
 
-// ResetToStringValue resets the param value. It will use the string value if specified.
-// This function was introduced to be used by the declarative schema changer.
-func (po *Setter) ResetToStringValue(ctx context.Context, key string, value string) error {
+// ResetToZeroValue resets the param value to its zero value. This function
+// was introduced to be used by the declarative schema changer. The declarative
+// schema changer always resets to the zero value first, and makes a separate
+// call to SetToStringValue if there is a non-zero reset value.
+func (po *Setter) ResetToZeroValue(ctx context.Context, key string) error {
 	if p, ok := tableParams[key]; ok {
-		return p.onReset(ctx, po, key, value)
+		return p.onReset(ctx, po, key, "")
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
+}
+
+// IsValidParamKey returns an error if the key is not a valid table storage
+// parameter. This function was introduced to be used by the declarative schema
+// changer for RESET validation.
+func IsValidParamKey(key string) error {
+	if _, ok := tableParams[key]; !ok {
+		return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
+	}
+	return nil
+}
+
+// GetResetValue returns the value that should be used when resetting a storage
+// parameter. If the param has a getResetValue callback, it will be called to
+// compute the value; otherwise an empty string is returned. This function was
+// introduced to be used by the declarative schema changer.
+func GetResetValue(ctx context.Context, evalCtx *eval.Context, key string) (string, error) {
+	if err := IsValidParamKey(key); err != nil {
+		return "", err
+	}
+	p := tableParams[key]
+	if p.getResetValue != nil {
+		return p.getResetValue(ctx, evalCtx, key)
+	}
+	return "", nil
 }
 
 // ParseAndValidate evaluates and validates a storage parameter value without
@@ -1079,12 +1106,13 @@ func ParseAndValidate(
 		return "", err
 	}
 
-	if p, ok := tableParams[key]; ok {
-		value, err := p.validateSetValue(ctx, semaCtx, evalCtx, key, datum)
-		if err != nil {
-			return "", err
-		}
-		return value, nil
+	if err := IsValidParamKey(key); err != nil {
+		return "", err
 	}
-	return "", pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
+	p := tableParams[key]
+	value, err := p.validateSetValue(ctx, semaCtx, evalCtx, key, datum)
+	if err != nil {
+		return "", err
+	}
+	return value, nil
 }

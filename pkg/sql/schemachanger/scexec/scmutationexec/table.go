@@ -39,7 +39,7 @@ func (i *immediateVisitor) SetTableStorageParam(
 	if err != nil {
 		return err
 	}
-	setter := tablestorageparam.NewSetter(tbl, false)
+	setter := tablestorageparam.NewSetter(tbl, false /* isNewObject */)
 	return setter.SetToStringValue(ctx, op.Name, op.Value)
 }
 
@@ -50,8 +50,8 @@ func (i *immediateVisitor) ResetTableStorageParam(
 	if err != nil {
 		return err
 	}
-	setter := tablestorageparam.NewSetter(tbl, false)
-	return setter.ResetToStringValue(ctx, op.Name, op.Value)
+	setter := tablestorageparam.NewSetter(tbl, false /* isNewObject */)
+	return setter.ResetToZeroValue(ctx, op.Name)
 }
 
 func (d *deferredVisitor) UpdateTTLScheduleMetadata(
