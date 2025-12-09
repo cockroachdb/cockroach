@@ -7,34 +7,26 @@ package tree
 
 import "slices"
 
-// IsSetOrResetSchemaLocked returns true if `n` contains only commands to
-// set/reset storage parameters including "schema_locked", with no other
-// schema-changing commands. This prevents bypassing schema_locked protection
-// by combining SET (schema_locked=false) with other operations like DROP
-// COLUMN in the same ALTER TABLE statement.
-func IsSetOrResetSchemaLocked(n Statement) bool {
+// HasSetOrResetSchemaLocked checks if the statement contains a command to
+// set/reset the "schema_locked" storage parameter.
+func HasSetOrResetSchemaLocked(n Statement) (hasSchemaLockedChange bool) {
 	alterStmt, ok := n.(*AlterTable)
 	if !ok {
 		return false
 	}
-	hasSchemaLockedChange := false
 	for _, cmd := range alterStmt.Cmds {
 		switch cmd := cmd.(type) {
 		case *AlterTableSetStorageParams:
 			if cmd.StorageParams.GetVal("schema_locked") != nil {
-				hasSchemaLockedChange = true
+				return true
 			}
 		case *AlterTableResetStorageParams:
 			if slices.Contains(cmd.Params, "schema_locked") {
-				hasSchemaLockedChange = true
+				return true
 			}
-		default:
-			// Any other command type means this is not a pure storage parameter
-			// change, so we should not allow bypassing schema_locked checks.
-			return false
 		}
 	}
-	return hasSchemaLockedChange
+	return false
 }
 
 // IsAllowedLDRSchemaChange returns true if the schema change statement is
