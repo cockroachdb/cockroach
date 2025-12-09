@@ -1558,6 +1558,19 @@ func WaitToUpdateLeases(
 	return desc, err
 }
 
+type commentToDelete struct {
+	id          int64
+	subID       int64
+	commentType catalogkeys.CommentType
+}
+
+type commentToSwap struct {
+	id          int64
+	oldSubID    int64
+	newSubID    int64
+	commentType catalogkeys.CommentType
+}
+
 // done finalizes the mutations (adds new cols/indexes to the table).
 // It ensures that all nodes are on the current (pre-update) version of
 // sc.descID and that all nodes are on the new (post-update) version of
@@ -1566,18 +1579,6 @@ func WaitToUpdateLeases(
 // It also kicks off GC jobs as needed.
 func (sc *SchemaChanger) done(ctx context.Context) error {
 	// Gathers ant comments that need to be swapped/cleaned.
-	type commentToDelete struct {
-		id          int64
-		subID       int64
-		commentType catalogkeys.CommentType
-	}
-	type commentToSwap struct {
-		id          int64
-		oldSubID    int64
-		newSubID    int64
-		commentType catalogkeys.CommentType
-	}
-	var commentsToDelete []commentToDelete
 	var commentsToSwap []commentToSwap
 	// Jobs (for GC, etc.) that need to be started immediately after the table
 	// descriptor updates are published.
@@ -1935,6 +1936,11 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		// Trim the executed mutations from the descriptor.
 		scTable.Mutations = scTable.Mutations[i:]
 
+		commentsToDelete, err := sc.findCommentsToDelete(ctx, txn, scTable)
+		if err != nil {
+			return err
+		}
+
 		// Check any jobs that we need to depend on for the current
 		// job to be successful.
 		existingDepMutationJobs, err := sc.getDependentMutationsJobs(ctx, scTable, committedMutations)
@@ -2203,6 +2209,46 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// findCommentsToDelete will collect any constraint comments whose referenced
+// constraint no longer exists on the table. This is a catch-all for constraints
+// implicitly removed by other operations (e.g. column drops).
+func (sc *SchemaChanger) findCommentsToDelete(
+	ctx context.Context, txn descs.Txn, tbl catalog.TableDescriptor,
+) ([]commentToDelete, error) {
+	seen := make(map[commentToDelete]struct{})
+	constraintIDs := make(map[uint32]struct{})
+	for _, c := range tbl.AllConstraints() {
+		constraintIDs[uint32(c.GetConstraintID())] = struct{}{}
+	}
+	ckPrefix := catalogkeys.MakeObjectCommentsMetadataPrefix(
+		sc.execCfg.Codec, catalogkeys.ConstraintCommentType, tbl.GetID())
+	kvs, err := txn.KV().Scan(ctx, ckPrefix, ckPrefix.PrefixEnd(), 0 /* maxRows */)
+	if err != nil {
+		return nil, err
+	}
+	var comments []commentToDelete
+	for _, kv := range kvs {
+		_, key, err := catalogkeys.DecodeCommentMetadataID(sc.execCfg.Codec, kv.Key)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := constraintIDs[key.SubID]; ok {
+			continue
+		}
+		ctd := commentToDelete{
+			id:          int64(tbl.GetID()),
+			subID:       int64(key.SubID),
+			commentType: catalogkeys.ConstraintCommentType,
+		}
+		if _, dup := seen[ctd]; dup {
+			continue
+		}
+		comments = append(comments, ctd)
+		seen[ctd] = struct{}{}
+	}
+	return comments, nil
 }
 
 // maybeUpdateZoneConfigsForPKChange moves zone configs for any rewritten
