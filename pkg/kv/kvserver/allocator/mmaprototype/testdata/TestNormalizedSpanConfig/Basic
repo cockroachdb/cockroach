@@ -2,12 +2,12 @@
 # constraint.
 normalize num-replicas=3 num-voters=3
 ----
-input:
- num-replicas=3 num-voters=3
-output:
+basic:
  num-replicas=3 num-voters=3
  constraints:
    :3
+after:
+ (unchanged)
 
 # Voter constraint, no replica constraint, but have non-voters. Normalization
 # promotes the voter constraint to a replica constraint, and adds the empty
@@ -15,11 +15,15 @@ output:
 normalize num-replicas=5 num-voters=3
 voter-constraint +region=a
 ----
-input:
+basic:
  num-replicas=5 num-voters=3
+ constraints:
+   :5
  voter-constraints:
-   +region=a
-output:
+   +region=a:3
+normalizeVoterConstraints:
+ (unchanged)
+after:
  num-replicas=5 num-voters=3
  constraints:
    +region=a:3
@@ -34,19 +38,14 @@ constraint +region=us-west -zone=us-west-b
 constraint +zone=us-west-a
 lease-preference +region=us-west +rack=10
 ----
-input:
- num-replicas=3 num-voters=3
- constraints:
-   +region=us-west,-zone=us-west-b
-   +zone=us-west-a
- lease-preferences:
-   +region=us-west,+rack=10
-output:
+basic:
  num-replicas=3 num-voters=3
  constraints:
    +region=us-west,+zone=us-west-a,-zone=us-west-b:3
  lease-preferences:
    +region=us-west,+rack=10
+after:
+ (unchanged)
 
 # Two voter constraints don't specify voter counts, so normalization creates a
 # conjunction of the constraints.
@@ -54,15 +53,12 @@ normalize num-replicas=3 num-voters=3
 voter-constraint +region=us-west -zone=us-west-b
 voter-constraint +zone=us-west-a
 ----
-input:
- num-replicas=3 num-voters=3
- voter-constraints:
-   +region=us-west,-zone=us-west-b
-   +zone=us-west-a
-output:
+basic:
  num-replicas=3 num-voters=3
  voter-constraints:
    +region=us-west,+zone=us-west-a,-zone=us-west-b:3
+after:
+ (unchanged)
 
 # Two replica constraints, one of which specifies a count, and another that
 # does not. This is disallowed by roachpb.SpanConfig.
@@ -71,13 +67,6 @@ constraint num-replicas=1 -zone=us-west-b
 constraint +zone=us-west-a
 lease-preference +region=us-west +rack=10
 ----
-input:
- num-replicas=5 num-voters=5
- constraints:
-   -zone=us-west-b:1
-   +zone=us-west-a
- lease-preferences:
-   +region=us-west,+rack=10
 err=cannot have zero-replica constraints mixed with non-zero-replica constraints
 
 # Replica constraints and voter constraints are fleshed out by adding the
@@ -87,14 +76,7 @@ constraint num-replicas=1 -zone=us-west-b -zone=us-west-b +rack=10
 constraint num-replicas=2 +zone=us-west-a
 voter-constraint num-replicas=2 +zone=us-west-a
 ----
-input:
- num-replicas=5 num-voters=3
- constraints:
-   -zone=us-west-b,-zone=us-west-b,+rack=10:1
-   +zone=us-west-a:2
- voter-constraints:
-   +zone=us-west-a:2
-output:
+basic:
  num-replicas=5 num-voters=3
  constraints:
    +rack=10,-zone=us-west-b:1
@@ -103,6 +85,10 @@ output:
  voter-constraints:
    +zone=us-west-a:2
    :1
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ (unchanged)
 
 # Multi-region config with all specified voter constraints in one region, and
 # one voter pinned to zone=a1.
@@ -112,15 +98,19 @@ constraint num-replicas=1 +region=c
 voter-constraint num-replicas=1 +region=a +zone=a1
 voter-constraint num-replicas=1 +region=a -zone=a1
 ----
-input:
+basic:
  num-replicas=5 num-voters=3
  constraints:
    +region=b:1
    +region=c:1
+   :3
  voter-constraints:
    +region=a,+zone=a1:1
    +region=a,-zone=a1:1
-output:
+   :1
+normalizeVoterConstraints:
+ (unchanged)
+after:
  num-replicas=5 num-voters=3
  constraints:
    +region=b:1
@@ -147,16 +137,29 @@ constraint num-replicas=1 +region=d
 voter-constraint num-replicas=1 +region=a +zone=a1
 voter-constraint num-replicas=1 +region=a -zone=a1
 ----
-input:
+basic:
  num-replicas=5 num-voters=3
  constraints:
    +region=b:1
    +region=c:1
    +region=d:1
+   :2
  voter-constraints:
    +region=a,+zone=a1:1
    +region=a,-zone=a1:1
-output:
+   :1
+normalizeVoterConstraints:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=b:1
+   +region=c:1
+   +region=d:1
+   :2
+ voter-constraints:
+   +region=a,+zone=a1:1
+   +region=a,-zone=a1:1
+   +region=b:1
+after:
  num-replicas=5 num-voters=3
  constraints:
    +region=b:1
@@ -181,7 +184,7 @@ lease-preference +region=a
 lease-preference +region=b
 lease-preference +region=c
 ----
-input:
+basic:
  num-replicas=5 num-voters=5
  constraints:
    +region=a:2
@@ -195,20 +198,10 @@ input:
    +region=a
    +region=b
    +region=c
-output:
- num-replicas=5 num-voters=5
- constraints:
-   +region=a:2
-   +region=b:2
-   +region=c:1
- voter-constraints:
-   +region=a:2
-   +region=b:2
-   +region=c:1
- lease-preferences:
-   +region=a
-   +region=b
-   +region=c
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ (unchanged)
 
 # Multi-region config with under-specified replica and voter constraints.
 normalize num-replicas=9 num-voters=9
@@ -220,7 +213,7 @@ constraint num-replicas=1 +region=e
 voter-constraint num-replicas=2 +region=f
 lease-preference +region=f
 ----
-input:
+basic:
  num-replicas=9 num-voters=9
  constraints:
    +region=a:1
@@ -228,11 +221,32 @@ input:
    +region=c:1
    +region=d:1
    +region=e:1
+   :4
  voter-constraints:
    +region=f:2
+   :7
  lease-preferences:
    +region=f
-output:
+normalizeVoterConstraints:
+ num-replicas=9 num-voters=9
+ constraints:
+   +region=a:1
+   +region=b:1
+   +region=c:1
+   +region=d:1
+   +region=e:1
+   :4
+ voter-constraints:
+   +region=f:2
+   +region=e:1
+   +region=a:1
+   +region=b:1
+   +region=c:1
+   +region=d:1
+   :2
+ lease-preferences:
+   +region=f
+after:
  num-replicas=9 num-voters=9
  constraints:
    +region=a:1
@@ -268,7 +282,7 @@ constraint num-replicas=1 +region=e
 voter-constraint num-replicas=2 +region=f
 lease-preference +region=f
 ----
-input:
+basic:
  num-replicas=9 num-voters=7
  constraints:
    +region=a:1
@@ -276,11 +290,30 @@ input:
    +region=c:1
    +region=d:1
    +region=e:1
+   :4
  voter-constraints:
    +region=f:2
+   :5
  lease-preferences:
    +region=f
-output:
+normalizeVoterConstraints:
+ num-replicas=9 num-voters=7
+ constraints:
+   +region=a:1
+   +region=b:1
+   +region=c:1
+   +region=d:1
+   +region=e:1
+   :4
+ voter-constraints:
+   +region=f:2
+   +region=c:1
+   +region=a:1
+   +region=b:1
+   :2
+ lease-preferences:
+   +region=f
+after:
  num-replicas=9 num-voters=7
  constraints:
    +region=a:1
@@ -306,27 +339,31 @@ constraint num-replicas=1 +region=c +zone=c2
 voter-constraint num-replicas=1 +region=b +zone=b1
 voter-constraint num-replicas=1 +region=a -zone=a1
 ----
-input:
+basic:
  num-replicas=5 num-voters=3
  constraints:
    +region=b,+zone=b2:1
    +region=c,+zone=c2:1
+   :3
  voter-constraints:
    +region=b,+zone=b1:1
    +region=a,-zone=a1:1
+   :1
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=b,+zone=b2:1
+   +region=c,+zone=c2:1
+   +region=a,-zone=a1:1
+   +region=b,+zone=b1:1
+   :1
+ voter-constraints:
+   +region=b,+zone=b1:1
+   +region=a,-zone=a1:1
+   :1
 err=intersecting conjunctions in constraints and voter constraints
-output:
- num-replicas=5 num-voters=3
- constraints:
-   +region=b,+zone=b2:1
-   +region=c,+zone=c2:1
-   +region=a,-zone=a1:1
-   +region=b,+zone=b1:1
-   :1
- voter-constraints:
-   +region=b,+zone=b1:1
-   +region=a,-zone=a1:1
-   :1
 
 # Multi-region with under-specified voter-constraint. In this case the
 # under-specification is not the unconstrained set, but the conjunction
@@ -338,7 +375,7 @@ constraint num-replicas=1 +region=d +zone=d2
 voter-constraint num-replicas=2 +region=b
 voter-constraint num-replicas=1 +region=c +zone=c2
 ----
-input:
+basic:
  num-replicas=3 num-voters=3
  constraints:
    +region=b,+zone=b2:1
@@ -347,8 +384,7 @@ input:
  voter-constraints:
    +region=b:2
    +region=c,+zone=c2:1
-err=could not satisfy all voter constraints due to non-intersecting conjunctions in voter and all replica constraints
-output:
+normalizeVoterConstraints:
  num-replicas=3 num-voters=3
  constraints:
    +region=b,+zone=b2:1
@@ -358,6 +394,9 @@ output:
    +region=b:1
    +region=c,+zone=c2:1
    +region=b,+zone=b2:1
+after:
+ (unchanged)
+err=could not satisfy all voter constraints due to non-intersecting conjunctions in voter and all replica constraints
 
 # Similar to previous, but under-specified in a way that does not generate an
 # error.
@@ -369,17 +408,29 @@ voter-constraint num-replicas=1 +region=e
 voter-constraint num-replicas=1 +region=c
 voter-constraint num-replicas=1 +region=d
 ----
-input:
+basic:
  num-replicas=4 num-voters=3
  constraints:
    +region=b,+zone=b2:1
    +region=c,+zone=c2:1
    +region=d,+zone=d2:1
+   :1
  voter-constraints:
    +region=e:1
    +region=c:1
    +region=d:1
-output:
+normalizeVoterConstraints:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=b,+zone=b2:1
+   +region=c,+zone=c2:1
+   +region=d,+zone=d2:1
+   :1
+ voter-constraints:
+   +region=e:1
+   +region=c,+zone=c2:1
+   +region=d,+zone=d2:1
+after:
  num-replicas=4 num-voters=3
  constraints:
    +region=b,+zone=b2:1
@@ -398,7 +449,7 @@ constraint num-replicas=3 +region=a +zone=a2
 constraint num-replicas=3 +region=a +zone=a3
 voter-constraint num-replicas=5 +region=a
 ----
-input:
+basic:
  num-replicas=9 num-voters=5
  constraints:
    +region=a,+zone=a1:3
@@ -406,7 +457,7 @@ input:
    +region=a,+zone=a3:3
  voter-constraints:
    +region=a:5
-output:
+normalizeVoterConstraints:
  num-replicas=9 num-voters=5
  constraints:
    +region=a,+zone=a1:3
@@ -416,6 +467,8 @@ output:
    +region=a,+zone=a1:2
    +region=a,+zone=a2:2
    +region=a,+zone=a3:1
+after:
+ (unchanged)
 
 # Config from #106559.
 normalize num-replicas=6 num-voters=5
@@ -426,17 +479,31 @@ constraint num-replicas=1 +region=us-west-1
 voter-constraint num-replicas=2 +region=us-west-1
 voter-constraint num-replicas=2 +region=us-east-1
 ----
-input:
+basic:
  num-replicas=6 num-voters=5
  constraints:
    +region=eu-west-1:1
    +region=us-central-1:1
    +region=us-east-1:1
    +region=us-west-1:1
+   :2
  voter-constraints:
    +region=us-west-1:2
    +region=us-east-1:2
-output:
+   :1
+normalizeVoterConstraints:
+ num-replicas=6 num-voters=5
+ constraints:
+   +region=eu-west-1:1
+   +region=us-central-1:1
+   +region=us-east-1:1
+   +region=us-west-1:1
+   :2
+ voter-constraints:
+   +region=us-west-1:2
+   +region=us-east-1:2
+   +region=eu-west-1:1
+after:
  num-replicas=6 num-voters=5
  constraints:
    +region=eu-west-1:1
@@ -458,15 +525,27 @@ constraint num-replicas=1 +region=b
 constraint num-replicas=1 +region=c
 voter-constraint num-replicas=2 +region=c
 ----
-input:
+basic:
  num-replicas=4 num-voters=3
  constraints:
    +region=a:1
    +region=b:1
    +region=c:1
+   :1
  voter-constraints:
    +region=c:2
-output:
+   :1
+normalizeVoterConstraints:
+ num-replicas=4 num-voters=3
+ constraints:
+   +region=a:1
+   +region=b:1
+   +region=c:1
+   :1
+ voter-constraints:
+   +region=c:2
+   +region=a:1
+after:
  num-replicas=4 num-voters=3
  constraints:
    +region=a:1
@@ -483,16 +562,19 @@ constraint num-replicas=1 +region=a +zone=a3
 voter-constraint num-replicas=1 +region=a +zone=a1
 voter-constraint num-replicas=1 +region=a +zone=a2
 ----
-input:
+basic:
  num-replicas=5 num-voters=3
  constraints:
    +region=a,+zone=a1:1
    +region=a,+zone=a3:1
+   :3
  voter-constraints:
    +region=a,+zone=a1:1
    +region=a,+zone=a2:1
-err=intersecting conjunctions in constraints and voter constraints
-output:
+   :1
+normalizeVoterConstraints:
+ (unchanged)
+after:
  num-replicas=5 num-voters=3
  constraints:
    +region=a,+zone=a1:1
@@ -503,6 +585,7 @@ output:
    +region=a,+zone=a1:1
    +region=a,+zone=a2:1
    :1
+err=intersecting conjunctions in constraints and voter constraints
 
 # Unable to promote one of the voter constraints that is missing in the
 # replica constraints, since the replica constraints are already full. An
@@ -514,7 +597,7 @@ constraint num-replicas=3 +region=b
 voter-constraint num-replicas=1 +region=a +zone=a1
 voter-constraint num-replicas=1 +region=a +zone=a2
 ----
-input:
+basic:
  num-replicas=5 num-voters=3
  constraints:
    +region=a,+zone=a1:1
@@ -523,17 +606,20 @@ input:
  voter-constraints:
    +region=a,+zone=a1:1
    +region=a,+zone=a2:1
+   :1
+normalizeVoterConstraints:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=a,+zone=a1:1
+   +region=a,+zone=a3:1
+   +region=b:3
+ voter-constraints:
+   +region=a,+zone=a1:1
+   +region=a,+zone=a2:1
+   +region=a,+zone=a3:1
+after:
+ (unchanged)
 err=could not satisfy all voter constraints due to non-intersecting conjunctions in voter and all replica constraints
-output:
- num-replicas=5 num-voters=3
- constraints:
-   +region=a,+zone=a1:1
-   +region=a,+zone=a3:1
-   +region=b:3
- voter-constraints:
-   +region=a,+zone=a1:1
-   +region=a,+zone=a2:1
-   +region=a,+zone=a3:1
 
 # Specify two constraints with no replicas. A conjunction will be created.
 # Currently the normalization code does not error out on the fact that the
@@ -545,15 +631,12 @@ normalize num-replicas=3 num-voters=3
 constraint +region=a
 constraint +region=b
 ----
-input:
- num-replicas=3 num-voters=3
- constraints:
-   +region=a
-   +region=b
-output:
+basic:
  num-replicas=3 num-voters=3
  constraints:
    +region=a,+region=b:3
+after:
+ (unchanged)
 
 # Replica constraints promoted to voter constraints and vice versa. The
 # promotion to voter constraints uses the fact that +region=a covers the
@@ -563,14 +646,25 @@ constraint num-replicas=1 +region=a +zone=a1
 constraint num-replicas=1 +region=a +zone=a2
 voter-constraint +region=a
 ----
-input:
+basic:
  num-replicas=3 num-voters=3
  constraints:
    +region=a,+zone=a1:1
    +region=a,+zone=a2:1
+   :1
  voter-constraints:
-   +region=a
-output:
+   +region=a:3
+normalizeVoterConstraints:
+ num-replicas=3 num-voters=3
+ constraints:
+   +region=a,+zone=a1:1
+   +region=a,+zone=a2:1
+   :1
+ voter-constraints:
+   +region=a:1
+   +region=a,+zone=a1:1
+   +region=a,+zone=a2:1
+after:
  num-replicas=3 num-voters=3
  constraints:
    +region=a,+zone=a1:1
@@ -591,14 +685,15 @@ constraint +region=a
 voter-constraint num-replicas=1 +region=a +zone=a1
 voter-constraint num-replicas=1 +region=a +zone=a2
 ----
-input:
+basic:
  num-replicas=3 num-voters=3
  constraints:
-   +region=a
+   +region=a:3
  voter-constraints:
    +region=a,+zone=a1:1
    +region=a,+zone=a2:1
-output:
+   :1
+normalizeVoterConstraints:
  num-replicas=3 num-voters=3
  constraints:
    +region=a:3
@@ -606,6 +701,8 @@ output:
    +region=a,+zone=a1:1
    +region=a,+zone=a2:1
    +region=a:1
+after:
+ (unchanged)
 
 # Replicas are not constrained. The voter constraints are promoted to replica
 # constraints.
@@ -614,14 +711,17 @@ constraint num-replicas=5
 voter-constraint num-replicas=1 +region=a +zone=a1
 voter-constraint num-replicas=1 +region=a +zone=a2
 ----
-input:
+basic:
  num-replicas=5 num-voters=3
  constraints:
    :5
  voter-constraints:
    +region=a,+zone=a1:1
    +region=a,+zone=a2:1
-output:
+   :1
+normalizeVoterConstraints:
+ (unchanged)
+after:
  num-replicas=5 num-voters=3
  constraints:
    +region=a,+zone=a2:1
@@ -640,16 +740,14 @@ normalize num-replicas=3 num-voters=3
 constraint num-replicas=3 +region=a +zone=a2
 voter-constraint num-replicas=3 +region=a +dc=dc1
 ----
-input:
+basic:
  num-replicas=3 num-voters=3
  constraints:
    +region=a,+zone=a2:3
  voter-constraints:
    +region=a,+dc=dc1:3
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ (unchanged)
 err=could not satisfy all voter constraints due to non-intersecting conjunctions in voter and all replica constraints
-output:
- num-replicas=3 num-voters=3
- constraints:
-   +region=a,+zone=a2:3
- voter-constraints:
-   +region=a,+dc=dc1:3
