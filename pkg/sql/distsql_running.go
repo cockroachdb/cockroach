@@ -750,6 +750,7 @@ func (dsp *DistSQLPlanner) Run(
 	localState.EvalContext = evalCtx
 	localState.IsLocal = planCtx.isLocal
 	localState.AddConcurrency(planCtx.flowConcurrency)
+	localState.ParallelCheckMainGoroutine = planCtx.parallelCheckMainGoroutine
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
 	localState.LocalVectorSources = plan.LocalVectorSources
@@ -2546,7 +2547,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 						planner,
 						evalCtxFactory(false /* usedConcurrently */),
 						recv,
-						false, /* parallelCheck */
+						sequentialPostquery,
 						defaultGetSaveFlowsFunc,
 						planner.instrumentation.getAssociateNodeWithComponentsFn(),
 						recv.stats.add,
@@ -2654,7 +2655,7 @@ func (dsp *DistSQLPlanner) planAndRunCascadeOrTrigger(
 		planner,
 		evalCtx,
 		recv,
-		false, /* parallelCheck */
+		sequentialPostquery,
 		defaultGetSaveFlowsFunc,
 		planner.instrumentation.getAssociateNodeWithComponentsFn(),
 		recv.stats.add,
@@ -2720,13 +2721,21 @@ var parallelChecksConcurrencyLimit = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+type postqueryInfo byte
+
+const (
+	sequentialPostquery postqueryInfo = iota
+	parallelCheckMainGoroutine
+	parallelCheckWorkerGoroutine
+)
+
 // planAndRunPostquery runs a cascade or check query. Can be safe for concurrent
 // use if parallelCheck is true.
 //
-// - parallelCheck indicates whether this is a check query that runs in parallel
-// with other check queries. If parallelCheck is true, then getSaveFlowsFunc,
-// associateNodeWithComponents, and addTopLevelQueryStats must be
-// concurrency-safe (if non-nil).
+// - postqueryInfo indicates whether this is a check query that runs in parallel
+// with other check queries. If parallelCheck is not sequentialPostquery, then
+// getSaveFlowsFunc, associateNodeWithComponents, and addTopLevelQueryStats must
+// be concurrency-safe (if non-nil).
 // - getSaveFlowsFunc will only be called if
 // planner.instrumentation.ShouldSaveFlows() returns true.
 func (dsp *DistSQLPlanner) planAndRunPostquery(
@@ -2735,7 +2744,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	planner *planner,
 	evalCtx *extendedEvalContext,
 	recv *DistSQLReceiver,
-	parallelCheck bool,
+	postqueryInfo postqueryInfo,
 	getSaveFlowsFunc func() SaveFlowsFunc,
 	associateNodeWithComponents func(exec.Node, execComponents),
 	addTopLevelQueryStats func(stats *topLevelQueryStats),
@@ -2757,8 +2766,9 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	}
 	postqueryPlanCtx.associateNodeWithComponents = associateNodeWithComponents
 	postqueryPlanCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
-	if parallelCheck {
+	if postqueryInfo != sequentialPostquery {
 		postqueryPlanCtx.flowConcurrency = distsql.ConcurrencyParallelChecks
+		postqueryPlanCtx.parallelCheckMainGoroutine = postqueryInfo == parallelCheckMainGoroutine
 	}
 
 	postqueryPhysPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, postqueryPlanCtx, postqueryPlan)
@@ -2864,14 +2874,14 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	// needed in order to return the error for the "earliest" plan (which makes
 	// the tests deterministic when multiple checks fail).
 	errs := make([]error, len(checkPlans))
-	runCheck := func(ctx context.Context, checkPlanIdx int) {
+	runCheck := func(ctx context.Context, checkPlanIdx int, postqueryInfo postqueryInfo) {
 		log.VEventf(ctx, 3, "begin check %d", checkPlanIdx)
 		errs[checkPlanIdx] = dsp.planAndRunPostquery(
 			ctx, checkPlans[checkPlanIdx].plan,
 			planner,
 			evalCtxFactory(true /* usedConcurrently */),
 			recv,
-			true, /* parallelCheck */
+			postqueryInfo,
 			getSaveFlowsFunc,
 			associateNodeWithComponents,
 			addTopLevelQueryStats,
@@ -2921,7 +2931,7 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 			},
 			func(ctx context.Context) {
 				defer wg.Done()
-				runCheck(ctx, checkPlanIdx)
+				runCheck(ctx, checkPlanIdx, parallelCheckWorkerGoroutine)
 			}); err != nil {
 			// The server is quiescing, so we just make sure to wait for all
 			// already started checks to complete after canceling them.
@@ -2935,7 +2945,7 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	}
 	// Execute all other checks serially in the current goroutine.
 	for checkPlanIdx := numParallelChecks; checkPlanIdx < len(checkPlans); checkPlanIdx++ {
-		runCheck(ctx, checkPlanIdx)
+		runCheck(ctx, checkPlanIdx, parallelCheckMainGoroutine)
 	}
 	// Wait for all concurrent checks to complete and return the error from the
 	// earliest check (if there were any errors).
