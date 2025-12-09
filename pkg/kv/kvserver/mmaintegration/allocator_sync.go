@@ -45,7 +45,8 @@ type mmaState interface {
 	// RegisterExternalChange is called by the allocator sync to register
 	// external changes with the mma.
 	RegisterExternalChange(
-		change mmaprototype.PendingRangeChange) (_ mmaprototype.ExternalRangeChange, ok bool)
+		localStoreID roachpb.StoreID, _ mmaprototype.PendingRangeChange,
+	) (_ mmaprototype.ExternalRangeChange, ok bool)
 	// AdjustPendingChangeDisposition is called by the allocator sync to adjust
 	// the disposition of pending changes to a range.
 	AdjustPendingChangeDisposition(change mmaprototype.ExternalRangeChange, success bool)
@@ -141,12 +142,13 @@ func (as *AllocatorSync) getTrackedChange(syncChangeID SyncChangeID) trackedAllo
 	return change
 }
 
-// NonMMAPreTransferLease is called by the lease/replicate queue to register a
-// transfer operation. SyncChangeID is returned to the caller. It is an
-// identifier that can be used to call PostApply to apply the change to the
-// store pool upon success.
+// NonMMAPreTransferLease is called by the lease/replicate queue (of
+// localStoreID) to register a transfer operation. SyncChangeID is returned to
+// the caller. It is an identifier that can be used to call PostApply to apply
+// the change to the store pool upon success.
 func (as *AllocatorSync) NonMMAPreTransferLease(
 	ctx context.Context,
+	localStoreID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
 	transferFrom, transferTo roachpb.ReplicationTarget,
@@ -155,7 +157,7 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 	var mmaChange mmaprototype.ExternalRangeChange
 	if kvserverbase.LoadBasedRebalancingModeIsMMA(&as.st.SV) {
 		change := convertLeaseTransferToMMA(desc, usage, transferFrom, transferTo)
-		mmaChange, isMMARegistered = as.mmaAllocator.RegisterExternalChange(change)
+		mmaChange, isMMARegistered = as.mmaAllocator.RegisterExternalChange(localStoreID, change)
 	}
 	trackedChange := trackedAllocatorChange{
 		isMMARegistered: isMMARegistered,
@@ -170,12 +172,13 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 	return as.addTrackedChange(trackedChange)
 }
 
-// NonMMAPreChangeReplicas is called by the replicate queue to register a
-// change replicas operation. SyncChangeID is returned to the caller. It is an
-// identifier that can be used to call PostApply to apply the change to the
-// store pool upon success.
+// NonMMAPreChangeReplicas is called by the replicate queue (of localStoreID)
+// to register a change replicas operation. SyncChangeID is returned to the
+// caller. It is an identifier that can be used to call PostApply to apply the
+// change to the store pool upon success.
 func (as *AllocatorSync) NonMMAPreChangeReplicas(
 	ctx context.Context,
+	localStoreID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
 	changes kvpb.ReplicationChanges,
@@ -189,7 +192,7 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 		if err != nil {
 			log.KvDistribution.Errorf(ctx, "failed to convert replica change to mma: %v", err)
 		} else {
-			mmaChange, isMMARegistered = as.mmaAllocator.RegisterExternalChange(change)
+			mmaChange, isMMARegistered = as.mmaAllocator.RegisterExternalChange(localStoreID, change)
 		}
 	}
 	trackedChange := trackedAllocatorChange{

@@ -141,6 +141,7 @@ func (lq *leaseQueue) process(
 		lq.lastLeaseTransfer.Store(timeutil.Now())
 		changeID := lq.as.NonMMAPreTransferLease(
 			ctx,
+			lq.store.StoreID(),
 			desc,
 			transferOp.Usage,
 			transferOp.Source,
