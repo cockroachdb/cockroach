@@ -63,6 +63,7 @@ var debugTimeSeriesDumpOpts = struct {
 	ddMetricInterval       int64  // interval for datadoginit format only
 	metricsListFile        string // file containing explicit list of metrics to dump
 	nonVerbose             bool   // dump only essential and support metrics
+	includeChildMetrics    bool
 }{
 	format:                 tsDumpText,
 	from:                   timestampValue{},
@@ -237,9 +238,10 @@ will then convert it to the --format requested in the current invocation.
 				}
 			}
 			req := &tspb.DumpRequest{
-				StartNanos: time.Time(debugTimeSeriesDumpOpts.from).UnixNano(),
-				EndNanos:   time.Time(debugTimeSeriesDumpOpts.to).UnixNano(),
-				Names:      names,
+				StartNanos:          time.Time(debugTimeSeriesDumpOpts.from).UnixNano(),
+				EndNanos:            time.Time(debugTimeSeriesDumpOpts.to).UnixNano(),
+				Names:               names,
+				IncludeChildMetrics: debugTimeSeriesDumpOpts.includeChildMetrics,
 				Resolutions: []tspb.TimeSeriesResolution{
 					tspb.TimeSeriesResolution_RESOLUTION_30M, tspb.TimeSeriesResolution_RESOLUTION_10S,
 				},

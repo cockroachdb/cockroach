@@ -801,25 +801,6 @@ type registryRecorder struct {
 	timestampNanos int64
 }
 
-// allowedChangefeedMetrics is the list of changefeed metrics that should have
-// child metrics collected and recorded to TSDB. This is a curated list to prevent
-// unbounded cardinality while still capturing the most important per-changefeed metrics.
-var allowedChangefeedMetrics = map[string]struct{}{
-	"changefeed.max_behind_nanos":                     {},
-	"changefeed.error_retries":                        {},
-	"changefeed.internal_retry_message_count":         {},
-	"changefeed.stage.downstream_client_send.latency": {},
-	"changefeed.emitted_messages":                     {},
-	"changefeed.sink_backpressure_nanos":              {},
-	"changefeed.backfill_pending_ranges":              {},
-	"changefeed.sink_io_inflight":                     {},
-	"changefeed.lagging_ranges":                       {},
-	"changefeed.aggregator_progress":                  {},
-	"changefeed.checkpoint_progress":                  {},
-	"changefeed.emitted_batch_sizes":                  {},
-	"changefeed.total_ranges":                         {},
-}
-
 // extractValue extracts the metric value(s) for the given metric and passes it, along with the metric name, to the
 // provided callback function.
 func extractValue(name string, mtr interface{}, fn func(string, float64)) error {
@@ -958,7 +939,7 @@ func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesD
 
 	labels := rr.registry.GetLabels()
 	rr.registry.Each(func(name string, v interface{}) {
-		if _, allowed := allowedChangefeedMetrics[name]; !allowed {
+		if _, allowed := tsutil.AllowedChildMetrics[name]; !allowed {
 			return
 		}
 		// Check if the metric has child collection enabled in its metadata
