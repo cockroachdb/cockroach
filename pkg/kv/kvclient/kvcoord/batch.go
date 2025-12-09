@@ -485,14 +485,12 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 
 	fullyProcessed := 0
 	for i := range positions {
-		//gcassert:bce
-		pos := positions[i]
+		pos := positions[i] //gcassert:bce
 		if pos < 0 {
 			fullyProcessed++
 			continue
 		}
-		//gcassert:bce
-		header := headers[i]
+		header := headers[i] //gcassert:bce
 		ek := rs.EndKey.AsRawKey()
 		if ek.Compare(header.Key) <= 0 {
 			// All of the remaining requests start after this range, so we're
@@ -514,20 +512,17 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 	truncPositions := make([]int, 0, numReqs)
 
 	for i := range positions {
-		//gcassert:bce
-		pos := positions[i]
+		pos := positions[i] //gcassert:bce
 		if pos < 0 {
 			// This request has already been fully processed, so there is no
 			// need to look at it.
 			continue
 		}
-		//gcassert:bce
-		header := headers[i]
+		header := headers[i] //gcassert:bce
 		// rs.EndKey can't be local because it contains range split points,
 		// which are never local.
 		ek := rs.EndKey.AsRawKey()
-		//gcassert:bce
-		req := requests[i]
+		req := requests[i] //gcassert:bce
 		//gcassert:bce
 		if !isRange[i] {
 			// This is a point request, and the key is contained within this
@@ -535,10 +530,8 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 			// processed".
 			truncReqs = append(truncReqs, req)
 			truncPositions = append(truncPositions, pos)
-			//gcassert:bce
-			headers[i] = kvpb.RequestHeader{}
-			//gcassert:bce
-			positions[i] = -1
+			headers[i] = kvpb.RequestHeader{} //gcassert:bce
+			positions[i] = -1                 //gcassert:bce
 			continue
 		}
 		// We're dealing with a range-spanning request.
@@ -555,10 +548,8 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 		if header.EndKey.Compare(ek) <= 0 {
 			// This is the last part of this request since it is fully contained
 			// within this range, so we mark the request as "fully processed".
-			//gcassert:bce
-			headers[i] = kvpb.RequestHeader{}
-			//gcassert:bce
-			positions[i] = -1
+			headers[i] = kvpb.RequestHeader{} //gcassert:bce
+			positions[i] = -1                 //gcassert:bce
 			if origStartKey := inner.Header().Key; origStartKey.Equal(header.Key) {
 				// This range-spanning request fits within a single range, so we
 				// can just use the original request.
@@ -570,8 +561,7 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 			header.EndKey = ek
 			// Adjust the start key of the header so that it contained only the
 			// unprocessed suffix of the request.
-			//gcassert:bce
-			headers[i].Key = header.EndKey
+			headers[i].Key = header.EndKey //gcassert:bce
 		}
 		shallowCopy := inner.ShallowCopy()
 		shallowCopy.SetHeader(header)
@@ -684,14 +674,12 @@ func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUn
 
 	fullyProcessed := 0
 	for i := range positions {
-		//gcassert:bce
-		pos := positions[i]
+		pos := positions[i] //gcassert:bce
 		if pos < 0 {
 			fullyProcessed++
 			continue
 		}
-		//gcassert:bce
-		header := headers[i]
+		header := headers[i] //gcassert:bce
 		sk := rs.Key.AsRawKey()
 		if sk.Compare(header.EndKey) >= 0 {
 			// All of the remaining requests end before this range, so we're
@@ -713,20 +701,17 @@ func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUn
 	truncPositions := make([]int, 0, numReqs)
 
 	for i := range positions {
-		//gcassert:bce
-		pos := positions[i]
+		pos := positions[i] //gcassert:bce
 		if pos < 0 {
 			// This request has already been fully processed, so there is no
 			// need to look at it.
 			continue
 		}
-		//gcassert:bce
-		header := headers[i]
+		header := headers[i] //gcassert:bce
 		// rs.Key can't be local because it contains range split points, which
 		// are never local.
 		sk := rs.Key.AsRawKey()
-		//gcassert:bce
-		req := requests[i]
+		req := requests[i] //gcassert:bce
 		//gcassert:bce
 		if !isRange[i] {
 			// This is a point request, and the key is contained within this
@@ -734,10 +719,8 @@ func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUn
 			// processed".
 			truncReqs = append(truncReqs, req)
 			truncPositions = append(truncPositions, pos)
-			//gcassert:bce
-			headers[i] = kvpb.RequestHeader{}
-			//gcassert:bce
-			positions[i] = -1
+			headers[i] = kvpb.RequestHeader{} //gcassert:bce
+			positions[i] = -1                 //gcassert:bce
 			continue
 		}
 		// We're dealing with a range-spanning request.
@@ -754,10 +737,8 @@ func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUn
 		if header.Key.Compare(sk) >= 0 {
 			// This is the last part of this request since it is fully contained
 			// within this range, so we mark the request as "fully processed".
-			//gcassert:bce
-			headers[i] = kvpb.RequestHeader{}
-			//gcassert:bce
-			positions[i] = -1
+			headers[i] = kvpb.RequestHeader{} //gcassert:bce
+			positions[i] = -1                 //gcassert:bce
 			if origEndKey := inner.Header().EndKey; len(origEndKey) == 0 || origEndKey.Equal(header.EndKey) {
 				// This range-spanning request fits within a single range, so we
 				// can just use the original request.
@@ -769,8 +750,7 @@ func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUn
 			header.Key = sk
 			// Adjust the end key of the header so that it contained only the
 			// unprocessed prefix of the request.
-			//gcassert:bce
-			headers[i].EndKey = header.Key
+			headers[i].EndKey = header.Key //gcassert:bce
 		}
 		shallowCopy := inner.ShallowCopy()
 		shallowCopy.SetHeader(header)
