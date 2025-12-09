@@ -8,7 +8,7 @@
 # Phase 2 (normalizeEmptyConstraints): Adjusts all-replica constraints using
 # empty constraint slots ([:]:N) to better match voter requirements. This phase
 # can top-up existing constraints or create new ones from the empty pool.
-#
+
 # Voters require [+region=a,-zone=a2]:3, but all-replicas only specify
 # [+region=a]:2 with [:]:2 empty. normalizeVoterConstraints makes no changes
 # since the voter is already stricter. normalizeEmptyConstraints tightens the
