@@ -55,7 +55,7 @@ import (
 func MakeAllocatorSync(
 	sp *storepool.StorePool, st *cluster.Settings,
 ) *mmaintegration.AllocatorSync {
-	mmAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
+	mmAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{}, nil,
 		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
 	return mmaintegration.NewAllocatorSync(sp, mmAllocator, st, nil)
 }

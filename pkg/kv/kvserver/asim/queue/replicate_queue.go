@@ -159,7 +159,8 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 		}
 
 		rq.next, rq.lastSyncChangeID = pushReplicateChange(
-			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue.stateChanger, rq.as, "replicate queue")
+			ctx, roachpb.StoreID(rq.storeID), change, repl, tick, rq.settings.ReplicaChangeDelayFn(),
+			rq.baseQueue.stateChanger, rq.as, "replicate queue")
 	}
 
 	rq.lastTick = tick
@@ -167,6 +168,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 
 func pushReplicateChange(
 	ctx context.Context,
+	localStoreID roachpb.StoreID,
 	change plan.ReplicateChange,
 	repl *SimulatorReplica,
 	tick time.Time,
@@ -189,6 +191,7 @@ func pushReplicateChange(
 			// as may be nil in some tests.
 			changeID = as.NonMMAPreTransferLease(
 				ctx,
+				localStoreID,
 				repl.Desc(),
 				repl.RangeUsageInfo(),
 				op.Source,
@@ -206,6 +209,7 @@ func pushReplicateChange(
 			// as may be nil in some tests.
 			changeID = as.NonMMAPreChangeReplicas(
 				ctx,
+				localStoreID,
 				repl.Desc(),
 				repl.RangeUsageInfo(),
 				op.Chgs,

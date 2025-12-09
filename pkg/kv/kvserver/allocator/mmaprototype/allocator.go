@@ -30,7 +30,7 @@ type ChangeOptions struct {
 //     be less different than integration with the old allocator.
 type Allocator interface {
 	LoadSummaryForAllStores(context.Context) string
-	Metrics() *MMAMetrics
+
 	// Methods to update the state of the external world. The allocator starts
 	// with no knowledge.
 
@@ -59,13 +59,14 @@ type Allocator interface {
 	AdjustPendingChangeDisposition(change ExternalRangeChange, success bool)
 
 	// RegisterExternalChange informs this allocator about yet to complete
-	// changes to the cluster which were not initiated by this allocator. The
-	// ownership of all state inside change is handed off to the callee. If ok
-	// is true, the change was registered, and the caller is returned an
-	// ExternalRangeChange that it should subsequently use in a call to
-	// AdjustPendingChangeDisposition when the changes are completed, either
-	// successfully or not. If ok is false, the change was not registered.
-	RegisterExternalChange(change PendingRangeChange) (_ ExternalRangeChange, ok bool)
+	// changes to the cluster (on behalf of localStoreID) which were not
+	// initiated by this allocator. The ownership of all state inside change is
+	// handed off to the callee. If ok is true, the change was registered, and
+	// the caller is returned an ExternalRangeChange that it should subsequently
+	// use in a call to AdjustPendingChangeDisposition when the changes are
+	// completed, either successfully or not. If ok is false, the change was not
+	// registered.
+	RegisterExternalChange(localStoreID roachpb.StoreID, change PendingRangeChange) (_ ExternalRangeChange, ok bool)
 
 	// ComputeChanges is called periodically and frequently, say every 10s.
 	//
