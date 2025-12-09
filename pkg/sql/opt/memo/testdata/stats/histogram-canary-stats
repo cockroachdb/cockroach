@@ -1,0 +1,410 @@
+# Test histogram statistics with canary selection
+exec-ddl
+CREATE TABLE hist_tbl (id INT PRIMARY KEY, score INT, category STRING, price DECIMAL, FAMILY (id, score, category, price)) WITH (canary_window = '25s')
+----
+
+exec-ddl
+ALTER TABLE hist_tbl INJECT STATISTICS '[
+		{
+		  "columns": ["score"],
+			"created_at": "2018-01-01 13:00:20.00000+00:00",
+			"row_count": 2000,
+			"distinct_count": 100,
+			"null_count": 0,
+			"avg_size": 8,
+			"histo_col_type": "INT8",
+			"histo_version": 3,
+			"histo_buckets": [
+				{
+					"num_eq": 20,
+					"num_range": 0,
+					"distinct_range": 0,
+					"upper_bound": "10"
+				},
+				{
+					"num_eq": 50,
+					"num_range": 180,
+					"distinct_range": 18,
+					"upper_bound": "100"
+				},
+				{
+					"num_eq": 30,
+					"num_range": 200,
+					"distinct_range": 20,
+					"upper_bound": "500"
+				},
+				{
+					"num_eq": 40,
+					"num_range": 300,
+					"distinct_range": 30,
+					"upper_bound": "1000"
+				}
+			]
+		},
+		{
+		  "columns": ["category"],
+			"created_at": "2018-01-01 13:00:20.00000+00:00",
+			"row_count": 2000,
+			"distinct_count": 8,
+			"null_count": 5,
+			"avg_size": 20,
+			"histo_col_type": "STRING",
+			"histo_version": 3,
+			"histo_buckets": [
+				{
+					"num_eq": 250,
+					"num_range": 0,
+					"distinct_range": 0,
+					"upper_bound": "electronics"
+				},
+				{
+					"num_eq": 200,
+					"num_range": 300,
+					"distinct_range": 3,
+					"upper_bound": "home"
+				},
+				{
+					"num_eq": 180,
+					"num_range": 150,
+					"distinct_range": 2,
+					"upper_bound": "sports"
+				},
+				{
+					"num_eq": 160,
+					"num_range": 100,
+					"distinct_range": 1,
+					"upper_bound": "toys"
+				}
+			]
+		},
+		{
+		  "columns": ["price"],
+			"created_at": "2018-01-01 13:00:20.00000+00:00",
+			"row_count": 2000,
+			"distinct_count": 500,
+			"null_count": 10,
+			"avg_size": 12,
+			"histo_col_type": "DECIMAL",
+			"histo_version": 3,
+			"histo_buckets": [
+				{
+					"num_eq": 100,
+					"num_range": 0,
+					"distinct_range": 0,
+					"upper_bound": "9.99"
+				},
+				{
+					"num_eq": 80,
+					"num_range": 400,
+					"distinct_range": 100,
+					"upper_bound": "99.99"
+				},
+				{
+					"num_eq": 60,
+					"num_range": 300,
+					"distinct_range": 150,
+					"upper_bound": "999.99"
+				}
+			]
+		},
+    {
+		  "columns": ["score"],
+			"created_at": "2018-01-01 13:00:00.00000+00:00",
+			"row_count": 1800,
+			"distinct_count": 90,
+			"null_count": 0,
+			"avg_size": 8,
+			"histo_col_type": "INT8",
+			"histo_version": 3,
+			"histo_buckets": [
+				{
+					"num_eq": 18,
+					"num_range": 0,
+					"distinct_range": 0,
+					"upper_bound": "10"
+				},
+				{
+					"num_eq": 45,
+					"num_range": 162,
+					"distinct_range": 16,
+					"upper_bound": "100"
+				},
+				{
+					"num_eq": 27,
+					"num_range": 180,
+					"distinct_range": 18,
+					"upper_bound": "500"
+				},
+				{
+					"num_eq": 36,
+					"num_range": 270,
+					"distinct_range": 27,
+					"upper_bound": "1000"
+				}
+			]
+		},
+		{
+		  "columns": ["category"],
+			"created_at": "2018-01-01 13:00:00.00000+00:00",
+			"row_count": 1800,
+			"distinct_count": 7,
+			"null_count": 4,
+			"avg_size": 18,
+			"histo_col_type": "STRING",
+			"histo_version": 3,
+			"histo_buckets": [
+				{
+					"num_eq": 225,
+					"num_range": 0,
+					"distinct_range": 0,
+					"upper_bound": "electronics"
+				},
+				{
+					"num_eq": 180,
+					"num_range": 270,
+					"distinct_range": 3,
+					"upper_bound": "home"
+				},
+				{
+					"num_eq": 162,
+					"num_range": 135,
+					"distinct_range": 2,
+					"upper_bound": "sports"
+				},
+				{
+					"num_eq": 144,
+					"num_range": 90,
+					"distinct_range": 1,
+					"upper_bound": "toys"
+				}
+			]
+		},
+		{
+		  "columns": ["price"],
+			"created_at": "2018-01-01 13:00:00.00000+00:00",
+			"row_count": 1800,
+			"distinct_count": 450,
+			"null_count": 9,
+			"avg_size": 12,
+			"histo_col_type": "DECIMAL",
+			"histo_version": 3,
+			"histo_buckets": [
+				{
+					"num_eq": 90,
+					"num_range": 0,
+					"distinct_range": 0,
+					"upper_bound": "9.99"
+				},
+				{
+					"num_eq": 72,
+					"num_range": 360,
+					"distinct_range": 90,
+					"upper_bound": "99.99"
+				},
+				{
+					"num_eq": 54,
+					"num_range": 270,
+					"distinct_range": 135,
+					"upper_bound": "999.99"
+				}
+			]
+		}
+	]'
+----
+
+# Test histogram-based range queries with canary stats
+opt stats-as-of=(2018-01-01 13:00:30.00000+00:00) canary-stats=true
+SELECT score FROM hist_tbl WHERE score BETWEEN 50 AND 200
+----
+select
+ ├── columns: score:2(int!null)
+ ├── stats: [rows=490.851, distinct(2)=16.576, null(2)=0]
+ │   histogram(2)=  0  0   101.12  50   49.624 0.50125
+ │                <--- 49 -------- 100 --------- 200 -
+ ├── scan hist_tbl
+ │    ├── columns: score:2(int)
+ │    └── stats: [rows=2000, distinct(2)=100, null(2)=0]
+ │        histogram(2)=  0  20  180  50   200  30   300   40
+ │                     <--- 10 ----- 100 ----- 500 ----- 1000
+ └── filters
+      └── (score:2 >= 50) AND (score:2 <= 200) [type=bool, outer=(2), constraints=(/2: [/50 - /200]; tight)]
+
+opt stats-as-of=(2018-01-01 13:00:30.00000+00:00) canary-stats=false
+SELECT score FROM hist_tbl WHERE score BETWEEN 50 AND 200
+----
+select
+ ├── columns: score:2(int!null)
+ ├── stats: [rows=441.766, distinct(2)=14.9061, null(2)=0]
+ │   histogram(2)=  0  0   91.011  45   44.662 0.45113
+ │                <--- 49 -------- 100 --------- 200 -
+ ├── scan hist_tbl
+ │    ├── columns: score:2(int)
+ │    └── stats: [rows=1800, distinct(2)=90, null(2)=0]
+ │        histogram(2)=  0  18  162  45   180  27   270   36
+ │                     <--- 10 ----- 100 ----- 500 ----- 1000
+ └── filters
+      └── (score:2 >= 50) AND (score:2 <= 200) [type=bool, outer=(2), constraints=(/2: [/50 - /200]; tight)]
+
+# Test string histogram with equality predicates
+opt stats-as-of=(2018-01-01 13:00:30.00000+00:00) canary-stats=true
+SELECT category FROM hist_tbl WHERE category = 'electronics'
+----
+select
+ ├── columns: category:3(string!null)
+ ├── stats: [rows=371.747, distinct(3)=1, null(3)=0]
+ │   histogram(3)=  0       250
+ │                <--- 'electronics'
+ ├── fd: ()-->(3)
+ ├── scan hist_tbl
+ │    ├── columns: category:3(string)
+ │    └── stats: [rows=2000, distinct(3)=8, null(3)=5]
+ │        histogram(3)=  0   5    0       250       300   200    150    180     100   160
+ │                     <--- NULL --- 'electronics' ----- 'home' ----- 'sports' ----- 'toys'
+ └── filters
+      └── category:3 = 'electronics' [type=bool, outer=(3), constraints=(/3: [/'electronics' - /'electronics']; tight), fd=()-->(3)]
+
+opt stats-as-of=(2018-01-01 13:00:30.00000+00:00) canary-stats=false
+SELECT category FROM hist_tbl WHERE category = 'electronics'
+----
+select
+ ├── columns: category:3(string!null)
+ ├── stats: [rows=334.711, distinct(3)=1, null(3)=0]
+ │   histogram(3)=  0       225
+ │                <--- 'electronics'
+ ├── fd: ()-->(3)
+ ├── scan hist_tbl
+ │    ├── columns: category:3(string)
+ │    └── stats: [rows=1800, distinct(3)=7, null(3)=4]
+ │        histogram(3)=  0   4    0       225       270   180    135    162     90   144
+ │                     <--- NULL --- 'electronics' ----- 'home' ----- 'sports' ---- 'toys'
+ └── filters
+      └── category:3 = 'electronics' [type=bool, outer=(3), constraints=(/3: [/'electronics' - /'electronics']; tight), fd=()-->(3)]
+
+# Test decimal histogram with range queries
+opt stats-as-of=(2018-01-01 13:00:30.00000+00:00) canary-stats=true
+SELECT price FROM hist_tbl WHERE price > 50.0 AND price <= 500.0
+----
+select
+ ├── columns: price:4(decimal!null)
+ ├── immutable
+ ├── stats: [rows=916.873, distinct(4)=123.213, null(4)=0]
+ │   histogram(4)=  0   0    222.18   80    133.34    0
+ │                <--- 50.0 -------- 99.99 -------- 500.0
+ ├── scan hist_tbl
+ │    ├── columns: price:4(decimal)
+ │    └── stats: [rows=2000, distinct(4)=500, null(4)=10]
+ │        histogram(4)=  0   10   0  100   400   80    300    60
+ │                     <--- NULL --- 9.99 ----- 99.99 ----- 999.99
+ └── filters
+      └── (price:4 > 50.0) AND (price:4 <= 500.0) [type=bool, outer=(4), immutable, constraints=(/4: (/50.0 - /500.0]; tight)]
+
+opt stats-as-of=(2018-01-01 13:00:30.00000+00:00) canary-stats=false
+SELECT price FROM hist_tbl WHERE price > 50.0 AND price <= 500.0
+----
+select
+ ├── columns: price:4(decimal!null)
+ ├── immutable
+ ├── stats: [rows=825.185, distinct(4)=110.992, null(4)=0]
+ │   histogram(4)=  0   0    199.96   72    120    0
+ │                <--- 50.0 -------- 99.99 ----- 500.0
+ ├── scan hist_tbl
+ │    ├── columns: price:4(decimal)
+ │    └── stats: [rows=1800, distinct(4)=450, null(4)=9]
+ │        histogram(4)=  0   9    0   90   360   72    270    54
+ │                     <--- NULL --- 9.99 ----- 99.99 ----- 999.99
+ └── filters
+      └── (price:4 > 50.0) AND (price:4 <= 500.0) [type=bool, outer=(4), immutable, constraints=(/4: (/50.0 - /500.0]; tight)]
+
+# Test combined histogram and non-histogram columns
+opt stats-as-of=(2018-01-01 13:00:30.00000+00:00) canary-stats=true
+SELECT * FROM hist_tbl WHERE score > 100 AND category LIKE 'h%'
+----
+select
+ ├── columns: id:1(int!null) score:2(int!null) category:3(string!null) price:4(decimal)
+ ├── stats: [rows=259.497, distinct(2)=52, null(2)=0, distinct(3)=1.53618, null(3)=0, distinct(2,3)=79.8815, null(2,3)=0]
+ │   histogram(2)=  0   0   91.052 13.658 136.58 18.21
+ │                <--- 100 -------- 500 --------- 1000
+ │   histogram(3)=  0   0   43.354   200    7.6984   0
+ │                <--- 'h' -------- 'home' -------- 'i'
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan hist_tbl
+ │    ├── columns: id:1(int!null) score:2(int) category:3(string) price:4(decimal)
+ │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(2)=100, null(2)=0, distinct(3)=8, null(3)=5, distinct(2,3)=800, null(2,3)=0]
+ │    │   histogram(2)=  0  20  180  50   200  30   300   40
+ │    │                <--- 10 ----- 100 ----- 500 ----- 1000
+ │    │   histogram(3)=  0   5    0       250       300   200    150    180     100   160
+ │    │                <--- NULL --- 'electronics' ----- 'home' ----- 'sports' ----- 'toys'
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      ├── score:2 > 100 [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
+      └── category:3 LIKE 'h%' [type=bool, outer=(3), constraints=(/3: [/'h' - /'i'); tight)]
+
+opt stats-as-of=(2018-01-01 13:00:30.00000+00:00) canary-stats=false
+SELECT * FROM hist_tbl WHERE score > 100 AND category LIKE 'h%'
+----
+select
+ ├── columns: id:1(int!null) score:2(int!null) category:3(string!null) price:4(decimal)
+ ├── stats: [rows=233.644, distinct(2)=47, null(2)=0, distinct(3)=1.53618, null(3)=0, distinct(2,3)=72.2006, null(2,3)=0]
+ │   histogram(2)=  0   0   81.98 12.297 122.97 16.396
+ │                <--- 100 ------- 500 --------- 1000
+ │   histogram(3)=  0   0   39.018   180    6.9286   0
+ │                <--- 'h' -------- 'home' -------- 'i'
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan hist_tbl
+ │    ├── columns: id:1(int!null) score:2(int) category:3(string) price:4(decimal)
+ │    ├── stats: [rows=1800, distinct(1)=1800, null(1)=0, distinct(2)=90, null(2)=0, distinct(3)=7, null(3)=4, distinct(2,3)=630, null(2,3)=0]
+ │    │   histogram(2)=  0  18  162  45   180  27   270   36
+ │    │                <--- 10 ----- 100 ----- 500 ----- 1000
+ │    │   histogram(3)=  0   4    0       225       270   180    135    162     90   144
+ │    │                <--- NULL --- 'electronics' ----- 'home' ----- 'sports' ---- 'toys'
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      ├── score:2 > 100 [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
+      └── category:3 LIKE 'h%' [type=bool, outer=(3), constraints=(/3: [/'h' - /'i'); tight)]
+
+# Test histogram with aggregations
+opt stats-as-of=(2018-01-01 13:00:30.00000+00:00) canary-stats=true
+SELECT category, count(*), avg(score), max(price) FROM hist_tbl GROUP BY category
+----
+group-by (hash)
+ ├── columns: category:3(string) count:7(int!null) avg:8(decimal) max:9(decimal)
+ ├── grouping columns: category:3(string)
+ ├── stats: [rows=8, distinct(3)=8, null(3)=1]
+ ├── key: (3)
+ ├── fd: (3)-->(7-9)
+ ├── scan hist_tbl
+ │    ├── columns: score:2(int) category:3(string) price:4(decimal)
+ │    └── stats: [rows=2000, distinct(3)=8, null(3)=5]
+ │        histogram(3)=  0   5    0       250       300   200    150    180     100   160
+ │                     <--- NULL --- 'electronics' ----- 'home' ----- 'sports' ----- 'toys'
+ └── aggregations
+      ├── count-rows [as=count_rows:7, type=int]
+      ├── avg [as=avg:8, type=decimal, outer=(2)]
+      │    └── score:2 [type=int]
+      └── max [as=max:9, type=decimal, outer=(4)]
+           └── price:4 [type=decimal]
+
+opt stats-as-of=(2018-01-01 13:00:30.00000+00:00) canary-stats=false
+SELECT category, count(*), avg(score), max(price) FROM hist_tbl GROUP BY category
+----
+group-by (hash)
+ ├── columns: category:3(string) count:7(int!null) avg:8(decimal) max:9(decimal)
+ ├── grouping columns: category:3(string)
+ ├── stats: [rows=7, distinct(3)=7, null(3)=1]
+ ├── key: (3)
+ ├── fd: (3)-->(7-9)
+ ├── scan hist_tbl
+ │    ├── columns: score:2(int) category:3(string) price:4(decimal)
+ │    └── stats: [rows=1800, distinct(3)=7, null(3)=4]
+ │        histogram(3)=  0   4    0       225       270   180    135    162     90   144
+ │                     <--- NULL --- 'electronics' ----- 'home' ----- 'sports' ---- 'toys'
+ └── aggregations
+      ├── count-rows [as=count_rows:7, type=int]
+      ├── avg [as=avg:8, type=decimal, outer=(2)]
+      │    └── score:2 [type=int]
+      └── max [as=max:9, type=decimal, outer=(4)]
+           └── price:4 [type=decimal]
