@@ -122,6 +122,9 @@ func (ic internedConstraint) unintern(interner *stringInterner) roachpb.Constrai
 // does not imply that +region=a is stricter than -region=b. They simply mean
 // that they are two distinct constraints.
 func (ic internedConstraint) less(b internedConstraint) bool {
+	// NB: (typ, key) must be compared before value so that relationship can
+	// detect non-intersecting constraints that share (typ, key) but differ in
+	// value with a single pass.
 	if ic.typ != b.typ {
 		return ic.typ < b.typ
 	}
