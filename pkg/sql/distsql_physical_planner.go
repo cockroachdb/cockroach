@@ -1039,6 +1039,11 @@ type PlanningCtx struct {
 	// based on other "regular" factors).
 	flowConcurrency distsql.ConcurrencyKind
 
+	// parallelCheckMainGoroutine, if set, indicates that this plan is part of
+	// parallel checks and is run on the main goroutine (i.e. the one that
+	// executed the main plan of the query).
+	parallelCheckMainGoroutine bool
+
 	// onFlowCleanup contains non-nil functions that will be called after the
 	// local flow finished running and is being cleaned up. It allows us to
 	// release the resources that are acquired during the physical planning and
