@@ -306,6 +306,49 @@ func TestAlterBackupScheduleWithSQLSpecialCharacters(t *testing.T) {
 	require.Equal(t, "@weekly", fullRecurrence)
 }
 
+func TestExecuteScheduleRejectedForBackups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newAlterSchedulesTestHelper(t, nil)
+	defer cleanup()
+
+	th.sqlDB.Exec(t, `CREATE DATABASE exec_sched_db; CREATE TABLE exec_sched_db.t (id INT PRIMARY KEY);`)
+
+	rows := th.sqlDB.QueryStr(
+		t, `CREATE SCHEDULE FOR BACKUP DATABASE exec_sched_db INTO 'nodelocal://1/backup/exec-schedule' RECURRING '@hourly'`,
+	)
+	require.NotEmpty(t, rows)
+
+	var scheduleIDs []int
+	for _, r := range rows {
+		id, err := strconv.Atoi(r[0])
+		require.NoError(t, err)
+		scheduleIDs = append(scheduleIDs, id)
+	}
+
+	before := make(map[int]string, len(scheduleIDs))
+	for _, id := range scheduleIDs {
+		nr := th.sqlDB.QueryStr(t, fmt.Sprintf(`SELECT next_run FROM [SHOW SCHEDULES] WHERE id = %d`, id))
+		require.Len(t, nr, 1)
+		require.Len(t, nr[0], 1)
+		before[id] = nr[0][0]
+	}
+
+	errMsg := "EXECUTE SCHEDULE is not supported for this schedule type\nHINT: use ALTER BACKUP SCHEDULE .* EXECUTE IMMEDIATELY"
+	for _, id := range scheduleIDs {
+		th.sqlDB.ExpectErr(t, errMsg, fmt.Sprintf(`EXECUTE SCHEDULE %d`, id))
+		th.sqlDB.ExpectErr(t, errMsg, fmt.Sprintf(`EXECUTE SCHEDULES SELECT %d`, id))
+	}
+
+	for _, id := range scheduleIDs {
+		nr := th.sqlDB.QueryStr(t, fmt.Sprintf(`SELECT next_run FROM [SHOW SCHEDULES] WHERE id = %d`, id))
+		require.Len(t, nr, 1)
+		require.Len(t, nr[0], 1)
+		require.Equal(t, before[id], nr[0][0])
+	}
+}
+
 func scheduleStatusAndRecurrence(
 	t *testing.T, th *alterSchedulesTestHelper, id int,
 ) (status string, recurrence string) {

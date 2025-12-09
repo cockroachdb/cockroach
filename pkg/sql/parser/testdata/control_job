@@ -629,3 +629,84 @@ DETAIL: source SQL:
 PAUSE ALL JOBS
               ^
 HINT: try \h PAUSE ALL JOBS
+
+parse
+EXECUTE SCHEDULES SELECT a
+----
+EXECUTE SCHEDULES SELECT a
+EXECUTE SCHEDULES SELECT (a) -- fully parenthesized
+EXECUTE SCHEDULES SELECT a -- literals removed
+EXECUTE SCHEDULES SELECT _ -- identifiers removed
+
+parse
+EXECUTE SCHEDULES SELECT 123
+----
+EXECUTE SCHEDULES SELECT 123
+EXECUTE SCHEDULES SELECT (123) -- fully parenthesized
+EXECUTE SCHEDULES SELECT _ -- literals removed
+EXECUTE SCHEDULES SELECT 123 -- identifiers removed
+
+error
+EXECUTE SCHEDULE SELECT 123
+----
+at or near "select": syntax error
+DETAIL: source SQL:
+EXECUTE SCHEDULE SELECT 123
+                 ^
+HINT: try \h EXECUTE SCHEDULES
+
+parse
+EXECUTE SCHEDULE (SELECT 123)
+----
+EXECUTE SCHEDULES VALUES ((SELECT 123)) -- normalized!
+EXECUTE SCHEDULES VALUES (((SELECT (123)))) -- fully parenthesized
+EXECUTE SCHEDULES VALUES ((SELECT _)) -- literals removed
+EXECUTE SCHEDULES VALUES ((SELECT 123)) -- identifiers removed
+
+parse
+EXPLAIN EXECUTE SCHEDULES SELECT a
+----
+EXPLAIN EXECUTE SCHEDULES SELECT a
+EXPLAIN EXECUTE SCHEDULES SELECT (a) -- fully parenthesized
+EXPLAIN EXECUTE SCHEDULES SELECT a -- literals removed
+EXPLAIN EXECUTE SCHEDULES SELECT _ -- identifiers removed
+
+parse
+EXECUTE SCHEDULE a
+----
+EXECUTE SCHEDULES VALUES (a) -- normalized!
+EXECUTE SCHEDULES VALUES ((a)) -- fully parenthesized
+EXECUTE SCHEDULES VALUES (a) -- literals removed
+EXECUTE SCHEDULES VALUES (_) -- identifiers removed
+
+parse
+EXECUTE SCHEDULE 123
+----
+EXECUTE SCHEDULES VALUES (123) -- normalized!
+EXECUTE SCHEDULES VALUES ((123)) -- fully parenthesized
+EXECUTE SCHEDULES VALUES (_) -- literals removed
+EXECUTE SCHEDULES VALUES (123) -- identifiers removed
+
+parse
+EXPLAIN EXECUTE SCHEDULE a
+----
+EXPLAIN EXECUTE SCHEDULES VALUES (a) -- normalized!
+EXPLAIN EXECUTE SCHEDULES VALUES ((a)) -- fully parenthesized
+EXPLAIN EXECUTE SCHEDULES VALUES (a) -- literals removed
+EXPLAIN EXECUTE SCHEDULES VALUES (_) -- identifiers removed
+
+parse
+EXECUTE SCHEDULES (SELECT schedule_id FROM system.scheduled_jobs WHERE label = 'my_schedule')
+----
+EXECUTE SCHEDULES (SELECT schedule_id FROM system.scheduled_jobs WHERE label = 'my_schedule')
+EXECUTE SCHEDULES (SELECT (schedule_id) FROM system.scheduled_jobs WHERE ((label) = ('my_schedule'))) -- fully parenthesized
+EXECUTE SCHEDULES (SELECT schedule_id FROM system.scheduled_jobs WHERE label = '_') -- literals removed
+EXECUTE SCHEDULES (SELECT _ FROM _._ WHERE _ = 'my_schedule') -- identifiers removed
+
+parse
+EXPLAIN EXECUTE SCHEDULES (SELECT schedule_id FROM system.scheduled_jobs WHERE label = 'my_schedule')
+----
+EXPLAIN EXECUTE SCHEDULES (SELECT schedule_id FROM system.scheduled_jobs WHERE label = 'my_schedule')
+EXPLAIN EXECUTE SCHEDULES (SELECT (schedule_id) FROM system.scheduled_jobs WHERE ((label) = ('my_schedule'))) -- fully parenthesized
+EXPLAIN EXECUTE SCHEDULES (SELECT schedule_id FROM system.scheduled_jobs WHERE label = '_') -- literals removed
+EXPLAIN EXECUTE SCHEDULES (SELECT _ FROM _._ WHERE _ = 'my_schedule') -- identifiers removed

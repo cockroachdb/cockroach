@@ -38,6 +38,8 @@ func collectTelemetry(command tree.ScheduleCommand) {
 		telemetry.Inc(sqltelemetry.ScheduledBackupControlCounter("resume"))
 	case tree.DropSchedule:
 		telemetry.Inc(sqltelemetry.ScheduledBackupControlCounter("drop"))
+	case tree.ExecuteSchedule:
+		telemetry.Inc(sqltelemetry.ScheduledBackupControlCounter("execute"))
 	}
 }
 
@@ -149,6 +151,29 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 						Update(params.ctx, schedule)
 				}
 			}
+		case tree.ExecuteSchedule:
+			if schedule.ExecutorType() == tree.ScheduledBackupExecutor.InternalName() {
+				err = errors.WithHintf(
+					pgerror.Newf(
+						pgcode.FeatureNotSupported,
+						"EXECUTE SCHEDULE is not supported for this schedule type",
+					),
+					"use ALTER BACKUP SCHEDULE ... EXECUTE IMMEDIATELY",
+				)
+				break
+			}
+			// Execute schedule will run the schedule immediately. It does this by
+			// setting the next run to now. The job scheduler daemon will pick it up
+			// and execute it.
+			if schedule.IsPaused() {
+				err = errors.Newf("cannot execute a paused schedule; use RESUME SCHEDULE instead")
+			} else {
+				env := JobSchedulerEnv(params.ExecCfg().JobsKnobs())
+				schedule.SetNextRun(env.Now())
+				err = jobs.ScheduledJobTxn(params.p.InternalSQLTxn()).
+					Update(params.ctx, schedule)
+			}
+
 		case tree.DropSchedule:
 			var ex jobs.ScheduledJobExecutor
 			ex, err = jobs.GetScheduledJobExecutor(schedule.ExecutorType())
