@@ -4356,6 +4356,8 @@ func TestEncryptedBackup(t *testing.T) {
 			_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, 3, InitManualReplication, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+					// Disabling this test for now, as it fails during the nightly
+					// MaybeStressrace tests even without DRPC enabled.
 					DefaultDRPCOption: base.TestDRPCDisabled,
 				},
 			})
