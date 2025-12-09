@@ -550,7 +550,7 @@ func registerBackup(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:              "backup/mvcc-range-tombstones",
+		Name:              "backup/import-rollback",
 		Owner:             registry.OwnerDisasterRecovery,
 		Timeout:           4 * time.Hour,
 		Cluster:           r.MakeClusterSpec(3, spec.CPU(8)),
@@ -562,12 +562,12 @@ func registerBackup(r registry.Registry) {
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runBackupMVCCRangeTombstones(ctx, t, c, mvccRangeTombstoneConfig{})
+			runBackupImportRollback(ctx, t, c, importRollbackConfig{})
 		},
 	})
 }
 
-type mvccRangeTombstoneConfig struct {
+type importRollbackConfig struct {
 	tenantName       string
 	skipClusterSetup bool
 
@@ -583,15 +583,15 @@ type mvccRangeTombstoneConfig struct {
 	debugSkipRollback bool
 }
 
-// runBackupMVCCRangeTombstones tests that backup and restore works in the
-// presence of MVCC range tombstones. It uses data from TPCH's order table, 16
+// runBackupImportRollback tests that backup and restore works in the
+// presence of import rollback. It uses data from TPCH's order table, 16
 // GB across 8 CSV files.
 //
 //  1. Import half of the tpch.orders table (odd-numbered files).
 //  2. Take fingerprint, time 'initial'.
 //  3. Take a full database backup.
 //  4. Import the other half (even-numbered files), but cancel the import
-//     and roll the data back using MVCC range tombstones. Done twice.
+//     and roll the data back. Done twice.
 //  5. Take fingerprint, time 'canceled'.
 //  6. Successfully import the other half.
 //  7. Take fingerprint, time 'completed'.
@@ -601,8 +601,8 @@ type mvccRangeTombstoneConfig struct {
 // We then do point-in-time restores of the database at times 'initial',
 // 'canceled', 'completed', and the latest time, and compare the fingerprints to
 // the original data.
-func runBackupMVCCRangeTombstones(
-	ctx context.Context, t test.Test, c cluster.Cluster, config mvccRangeTombstoneConfig,
+func runBackupImportRollback(
+	ctx context.Context, t test.Test, c cluster.Cluster, config importRollbackConfig,
 ) {
 	if !config.skipClusterSetup {
 		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings())
@@ -762,14 +762,6 @@ func runBackupMVCCRangeTombstones(
 
 	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
 	require.NoError(t, err)
-
-	// Check that we actually wrote MVCC range tombstones.
-	var rangeKeys int
-	require.NoError(t, conn.QueryRowContext(ctx, `
-		SELECT sum((crdb_internal.range_stats(raw_start_key)->'range_key_count')::INT)
-		FROM [SHOW RANGES FROM TABLE tpch.orders WITH KEYS]
-`).Scan(&rangeKeys))
-	require.NotZero(t, rangeKeys, "no MVCC range tombstones found")
 
 	// Fingerprint for restore comparison, and assert that it matches the initial
 	// import.
