@@ -5859,7 +5859,10 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE for_import (a INT PRIMARY KEY, b INT) WITH (schema_locked=false)`)
 		defer sqlDB.Exec(t, `DROP TABLE for_import`)
 		sqlDB.Exec(t, `INSERT INTO for_import VALUES (0, NULL)`)
-		forImport := feed(t, f, `CREATE CHANGEFEED FOR for_import `)
+		forImport := feed(t, f, `CREATE CHANGEFEED FOR for_import `,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "DB level changefeeds do not fail with 'CHANGEFEED cannot target offline table' terminal error",
+			})
 		defer closeFeed(t, forImport)
 		assertPayloads(t, forImport, []string{
 			`for_import: [0]->{"after": {"a": 0, "b": null}}`,
@@ -5903,7 +5906,10 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 		sqlDB.CheckQueryResultsRetry(t, "SELECT count(*) FROM for_import", [][]string{{"1"}})
 
 		// Changefeed should fail regardless
-		forImport := feed(t, f, `CREATE CHANGEFEED FOR for_import WITH cursor=$1`, start)
+		forImport := feed(t, f, `CREATE CHANGEFEED FOR for_import WITH cursor=$1`, start,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "DB level changefeeds do not fail with 'CHANGEFEED cannot target offline table' terminal error",
+			})
 		defer closeFeed(t, forImport)
 		requireTerminalErrorSoon(context.Background(), t, forImport,
 			regexp.MustCompile(`CHANGEFEED cannot target offline table: for_import \(offline reason: "importing"\)`))
