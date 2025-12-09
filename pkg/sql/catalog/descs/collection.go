@@ -218,6 +218,13 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.skipValidationOnWrite = false
 }
 
+// ResetLeaseTimestamp temporarily releases a locked timestamp until the next
+// lease is acquired. This is mainly used to avoid deadlocks between the current txn
+// and a different txn conducting a schema change on our behalf.
+func (tc *Collection) ResetLeaseTimestamp(ctx context.Context) {
+	tc.leased.maybeReleaseReadTimestamp(ctx)
+}
+
 // ResetLeaseGeneration selects an initial value at the beginning of a txn
 // for lease generation.
 func (tc *Collection) ResetLeaseGeneration() {
