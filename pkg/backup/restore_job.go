@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -20,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -1884,6 +1887,40 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	r.execCfg = p.ExecCfg()
 
 	details := r.job.Details().(jobspb.RestoreDetails)
+
+	if details.OnlineImpl() {
+		// check for any exteral connections, and swap the uris
+		for i, path := range details.URIs {
+			uri, err := url.Parse(path)
+			if err != nil {
+				return err
+			}
+
+			if uri.Scheme == "external" {
+				// fetch the actual connection uri and swap it out
+				err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
+					ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, t)
+					if err != nil {
+						return err
+					}
+					connDetails := ec.ConnectionProto()
+					switch d := connDetails.Details.(type) {
+					case *connectionpb.ConnectionDetails_SimpleURI:
+						details.URIs[i] = d.SimpleURI.URI + uri.Path
+					default:
+						return errors.Newf("invalid connection details: %v", d)
+					}
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+			}
+		}
+		if err := r.job.NoTxn().SetDetails(ctx, details); err != nil {
+			return err
+		}
+	}
 
 	if err := maybeRelocateJobExecution(ctx, r.job.ID(), p, details.ExecutionLocality, "RESTORE"); err != nil {
 		return err
