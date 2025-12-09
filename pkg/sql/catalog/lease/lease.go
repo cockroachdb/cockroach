@@ -106,7 +106,7 @@ var LockedLeaseTimestamp = settings.RegisterBoolSetting(settings.ApplicationLeve
 	"sql.catalog.descriptor_lease.use_locked_timestamps.enabled",
 	"guarantees transactional version consistency for descriptors used by the lease manager,"+
 		"descriptors used can be intentionally older to support this",
-	false)
+	true)
 
 var RetainOldVersionsForLocked = settings.RegisterBoolSetting(settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease.lock_old_versions.enabled",
