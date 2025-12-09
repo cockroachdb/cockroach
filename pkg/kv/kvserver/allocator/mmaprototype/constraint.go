@@ -112,6 +112,15 @@ func (ic internedConstraint) unintern(interner *stringInterner) roachpb.Constrai
 	}
 }
 
+// less defines an arbitrary total ordering for internedConstraint, used only to
+// sort constraints into a consistent order. This ordering has no semantic
+// meaning regarding strictness or set containment is purely lexicographic:
+// first by typ, then key, then value. Its purpose is to enable merge-based
+// comparison of two sorted constraint lists in relationship.
+//
+// For example, +region=a < -region=b because Required(0) < Prohibited(1). This
+// does not imply that +region=a is stricter than -region=b. They simply mean
+// that they are two distinct constraints.
 func (ic internedConstraint) less(b internedConstraint) bool {
 	if ic.typ != b.typ {
 		return ic.typ < b.typ
@@ -217,26 +226,26 @@ const (
 // relationship returns the logical relationship between two sets of constraints
 // (represented as sorted, de-duplicated conjunctions).
 func (cc constraintsConj) relationship(b constraintsConj) conjunctionRelationship {
-	// n is the number of conjuncts in cc.
 	n := len(cc)
-	// m is the number of conjuncts in b.
 	m := len(b)
-	// extraInCC is the number of conjuncts present in cc but not in b.
-	extraInCC := 0
-	// extraInB is the number of conjuncts present in b but not in cc.
-	extraInB := 0
-	// inBoth is the number of conjuncts that are present in both.
-	inBoth := 0
+	extraInCC := 0 // conjuncts in cc but not in b
+	extraInB := 0  // conjuncts in b but not in cc
+	inBoth := 0    // conjuncts present in both
 
-	// Example: cc = [A, C, E] and b = [B, D, E]:
+	// We are merging two lists that are already sorted based on less(). When we
+	// see cc[i] < b[j], it simply means cc[i] comes earlier in the order defined
+	// by less. Since b is also sorted, cc[i] can’t appear anywhere later in b.
+	// That tells us that cc[i] is only in cc and not in b.
 	//
-	// | Step | i | j | cc[i] | b[j] | Comparison | Action                      | extraInCC | extraInB | inBoth |
+	// Example: cc = [A, C, E] and b = [B, D, E] (where A < B < C < D < E):
+	//
+	// | Step | i | j | cc[i] | b[j] | Comparison | Action           | extraInCC | extraInB | inBoth |
 	// |------|---|---|-------|------|------------|-----------------------------|-----------|----------|--------|
-	// | 1    | 0 | 0 | A     | B    | A < B      | extraInCC++, i++            | 1         | 0        | 0      |
-	// | 2    | 1 | 0 | C     | B    | C > B      | extraInB++, j++             | 1         | 1        | 0      |
-	// | 3    | 1 | 1 | C     | D    | C < D      | extraInCC++, i++            | 2         | 1        | 0      |
-	// | 4    | 2 | 1 | E     | D    | E > D      | extraInB++, j++             | 2         | 2        | 0      |
-	// | 5    | 2 | 2 | E     | E    | E == E     | inBoth++, i++, j++          | 2         | 2        | 1      |
+	// | 1    | 0 | 0 | A     | B    | A < B      | extraInCC++, i++ | 1         | 0        | 0      |
+	// | 2    | 1 | 0 | C     | B    | C > B      | extraInB++, j++  | 1         | 1        | 0      |
+	// | 3    | 1 | 1 | C     | D    | C < D      | extraInCC++, i++ | 2         | 1        | 0      |
+	// | 4    | 2 | 1 | E     | D    | E > D      | extraInB++, j++  | 2         | 2        | 0      |
+	// | 5    | 2 | 2 | E     | E    | E == E     | inBoth++, i++,j++| 2         | 2        | 1      |
 	//
 	// i and j are indices into cc and b respectively
 	for i, j := 0, 0; i < n || j < m; {
