@@ -506,10 +506,18 @@ func (ds *ServerImpl) newFlowContext(
 		DiskMonitor:    diskMonitor,
 	}
 
-	if localState.IsLocal && localState.Collection != nil {
+	parallelCheckOffMainGoroutine := !localState.ParallelCheckMainGoroutine &&
+		localState.GetConcurrency()&ConcurrencyParallelChecks != 0
+	if localState.IsLocal && localState.Collection != nil && !parallelCheckOffMainGoroutine {
 		// If we were passed a descs.Collection to use, then take it. In this
 		// case, the caller will handle releasing the used descriptors, so we
 		// don't need to clean up the descriptors when cleaning up the flow.
+		//
+		// The only exception is when we're running a parallel check off the
+		// main goroutine - in this case we might have multiple goroutines using
+		// the collection concurrently, so we choose to create a fresh one. The
+		// parallel check running on the main goroutine can keep on using the
+		// planner's one.
 		flowCtx.Descriptors = localState.Collection
 	} else {
 		// If we weren't passed a descs.Collection, then make a new one. We are
@@ -584,6 +592,11 @@ type LocalState struct {
 	// concurrency tracks the types of concurrency present when accessing the
 	// Txn.
 	concurrency ConcurrencyKind
+
+	// ParallelCheckMainGoroutine, if set, indicates that this plan is part of
+	// parallel checks and is run on the main goroutine (i.e. the one that
+	// executed the main plan of the query).
+	ParallelCheckMainGoroutine bool
 
 	// Txn is filled in on the gateway only. It is the RootTxn that the query is running in.
 	// This will be used directly by the flow if the flow has no concurrency and IsLocal is set.

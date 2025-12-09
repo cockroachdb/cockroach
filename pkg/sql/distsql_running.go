@@ -750,6 +750,7 @@ func (dsp *DistSQLPlanner) Run(
 	localState.EvalContext = evalCtx
 	localState.IsLocal = planCtx.isLocal
 	localState.AddConcurrency(planCtx.flowConcurrency)
+	localState.ParallelCheckMainGoroutine = planCtx.parallelCheckMainGoroutine
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
 	localState.LocalVectorSources = plan.LocalVectorSources
@@ -2547,6 +2548,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 						evalCtxFactory(false /* usedConcurrently */),
 						recv,
 						false, /* parallelCheck */
+						false, /* parallelCheckMainGoroutine */
 						defaultGetSaveFlowsFunc,
 						planner.instrumentation.getAssociateNodeWithComponentsFn(),
 						recv.stats.add,
@@ -2655,6 +2657,7 @@ func (dsp *DistSQLPlanner) planAndRunCascadeOrTrigger(
 		evalCtx,
 		recv,
 		false, /* parallelCheck */
+		false, /* parallelCheckMainGoroutine */
 		defaultGetSaveFlowsFunc,
 		planner.instrumentation.getAssociateNodeWithComponentsFn(),
 		recv.stats.add,
@@ -2726,7 +2729,9 @@ var parallelChecksConcurrencyLimit = settings.RegisterIntSetting(
 // - parallelCheck indicates whether this is a check query that runs in parallel
 // with other check queries. If parallelCheck is true, then getSaveFlowsFunc,
 // associateNodeWithComponents, and addTopLevelQueryStats must be
-// concurrency-safe (if non-nil).
+// concurrency-safe (if non-nil). Additionally, parallelCheckMainGoroutine can
+// specify that the parallel check runs within the main goroutine (i.e. shared
+// with the connExecutor).
 // - getSaveFlowsFunc will only be called if
 // planner.instrumentation.ShouldSaveFlows() returns true.
 func (dsp *DistSQLPlanner) planAndRunPostquery(
@@ -2736,6 +2741,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	evalCtx *extendedEvalContext,
 	recv *DistSQLReceiver,
 	parallelCheck bool,
+	parallelCheckMainGoroutine bool,
 	getSaveFlowsFunc func() SaveFlowsFunc,
 	associateNodeWithComponents func(exec.Node, execComponents),
 	addTopLevelQueryStats func(stats *topLevelQueryStats),
@@ -2759,6 +2765,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryPlanCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
 	if parallelCheck {
 		postqueryPlanCtx.flowConcurrency = distsql.ConcurrencyParallelChecks
+		postqueryPlanCtx.parallelCheckMainGoroutine = parallelCheckMainGoroutine
 	}
 
 	postqueryPhysPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, postqueryPlanCtx, postqueryPlan)
@@ -2864,7 +2871,7 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	// needed in order to return the error for the "earliest" plan (which makes
 	// the tests deterministic when multiple checks fail).
 	errs := make([]error, len(checkPlans))
-	runCheck := func(ctx context.Context, checkPlanIdx int) {
+	runCheck := func(ctx context.Context, checkPlanIdx int, mainGoroutine bool) {
 		log.VEventf(ctx, 3, "begin check %d", checkPlanIdx)
 		errs[checkPlanIdx] = dsp.planAndRunPostquery(
 			ctx, checkPlans[checkPlanIdx].plan,
@@ -2872,6 +2879,7 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 			evalCtxFactory(true /* usedConcurrently */),
 			recv,
 			true, /* parallelCheck */
+			mainGoroutine,
 			getSaveFlowsFunc,
 			associateNodeWithComponents,
 			addTopLevelQueryStats,
@@ -2921,7 +2929,7 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 			},
 			func(ctx context.Context) {
 				defer wg.Done()
-				runCheck(ctx, checkPlanIdx)
+				runCheck(ctx, checkPlanIdx, false /* mainGoroutine */)
 			}); err != nil {
 			// The server is quiescing, so we just make sure to wait for all
 			// already started checks to complete after canceling them.
@@ -2935,7 +2943,7 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	}
 	// Execute all other checks serially in the current goroutine.
 	for checkPlanIdx := numParallelChecks; checkPlanIdx < len(checkPlans); checkPlanIdx++ {
-		runCheck(ctx, checkPlanIdx)
+		runCheck(ctx, checkPlanIdx, true /* mainGoroutine */)
 	}
 	// Wait for all concurrent checks to complete and return the error from the
 	// earliest check (if there were any errors).
