@@ -260,8 +260,7 @@ func (c *compare) postToSlack(
 				comparison := detail.Comparison
 				metric := result.Metric
 
-				if isRegression(comparison.Delta, metric.Better) ||
-					comparison.Delta == 0 {
+				if !isRegression(comparison.Delta, metric.Better) {
 					continue
 				}
 				nameSplit := strings.Split(detail.BenchmarkName, util.PackageSeparator)
