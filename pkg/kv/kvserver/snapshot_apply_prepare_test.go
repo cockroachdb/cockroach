@@ -104,6 +104,12 @@ func TestPrepareSnapApply(t *testing.T) {
 	err := swb.prepareSnapApply(ctx)
 	require.NoError(t, err)
 
+	// The snapshot construction code is spread across MultiSSTWriter and
+	// snapWriteBuilder. We only test the latter here, but for information also
+	// print the replicated spans that MultiSSTWriter generates SSTs for.
+	//
+	// TODO(pav-kv): check a few invariants, such as that all SSTs don't overlap,
+	// including with the replicated spans generated here.
 	for _, span := range rditer.MakeReplicatedKeySpans(swb.desc) {
 		sb.Printf(">> repl: %v\n", span)
 	}
