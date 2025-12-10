@@ -10,6 +10,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -238,19 +239,23 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 		nil, /* finalizeLastStageCb */
 	)
 
+	canaryStatsEnabled := desc.TableDesc().StatsCanaryWindow != 0 &&
+		dsp.st.Version.IsActive(ctx, clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn)
+
 	// Set up the final SampleAggregator stage.
 	agg := &execinfrapb.SampleAggregatorSpec{
-		Sketches:         sketchSpec,
-		InvertedSketches: invSketchSpec,
-		SampleSize:       sampler.SampleSize,
-		MinSampleSize:    sampler.MinSampleSize,
-		SampledColumnIDs: sampledColumnIDs,
-		TableID:          desc.GetID(),
-		JobID:            jobID,
-		RowsExpected:     rowsExpected,
-		DeleteOtherStats: details.DeleteOtherStats,
-		NumIndexes:       uint64(numIndexes),
-		CurIndex:         uint64(curIndex),
+		Sketches:           sketchSpec,
+		InvertedSketches:   invSketchSpec,
+		SampleSize:         sampler.SampleSize,
+		MinSampleSize:      sampler.MinSampleSize,
+		SampledColumnIDs:   sampledColumnIDs,
+		TableID:            desc.GetID(),
+		JobID:              jobID,
+		RowsExpected:       rowsExpected,
+		DeleteOtherStats:   details.DeleteOtherStats,
+		NumIndexes:         uint64(numIndexes),
+		CurIndex:           uint64(curIndex),
+		CanaryStatsEnabled: canaryStatsEnabled,
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
 	node := dsp.gatewaySQLInstanceID
