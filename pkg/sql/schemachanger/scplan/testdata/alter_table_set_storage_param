@@ -216,3 +216,48 @@ PreCommitPhase stage 2 of 2 with 2 MutationType ops
         Name: sql_stats_histogram_buckets_count
         TableID: 106
         Value: "100"
+
+setup
+CREATE TABLE ttl_table (id INT PRIMARY KEY, ts TIMESTAMPTZ) WITH (ttl_expiration_expression = 'ts');
+----
+
+ops
+ALTER TABLE ttl_table SET (ttl_select_rate_limit = 10);
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[RowLevelTTL:{DescID: 107, SeqNum: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[RowLevelTTL:{DescID: 107, SeqNum: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertRowLevelTTL
+      RowLevelTTL:
+        ExpirationExpr: ts
+        ScheduleID: 1131800315919433729
+        SelectRateLimit: 10
+      TTLExpr:
+        expr: ts
+        referencedColumnIds:
+        - 2
+      TableID: 107
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[RowLevelTTL:{DescID: 107, SeqNum: 0}, ABSENT], ABSENT] -> PUBLIC
+    [[RowLevelTTL:{DescID: 107, SeqNum: 1}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[RowLevelTTL:{DescID: 107, SeqNum: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[RowLevelTTL:{DescID: 107, SeqNum: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertRowLevelTTL
+      RowLevelTTL:
+        ExpirationExpr: ts
+        ScheduleID: 1131800315919433729
+        SelectRateLimit: 10
+      TTLExpr:
+        expr: ts
+        referencedColumnIds:
+        - 2
+      TableID: 107

@@ -1271,3 +1271,11 @@ type ResetTableStorageParam struct {
 	immediateMutationOp
 	Param scpb.TableStorageParam
 }
+
+// UpsertRowLevelTTL sets the RowLevelTTL on a table descriptor.
+type UpsertRowLevelTTL struct {
+	immediateMutationOp
+	TableID     descpb.ID
+	RowLevelTTL catpb.RowLevelTTL
+	TTLExpr     *scpb.Expression
+}

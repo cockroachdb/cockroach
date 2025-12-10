@@ -31,4 +31,22 @@ func init() {
 			}
 		},
 	)
+
+	// This rule ensures that when modifying TTL configurations, the old TTL
+	// element (with lower SeqNum) is processed before the new TTL element (with
+	// higher SeqNum).
+	registerDepRule(
+		"ensure row level TTL configs are in increasing seqNum order",
+		scgraph.Precedence,
+		"later-seqNum", "earlier-seqNum",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.RowLevelTTL)(nil)),
+				to.Type((*scpb.RowLevelTTL)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				FilterElements("SmallerSeqNumFirst", from, to, func(from, to *scpb.RowLevelTTL) bool {
+					return from.SeqNum < to.SeqNum
+				}),
+			}
+		})
 }
