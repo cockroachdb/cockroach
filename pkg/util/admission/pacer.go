@@ -7,6 +7,7 @@ package admission
 
 import (
 	"context"
+	"runtime"
 	"time"
 )
 
@@ -21,6 +22,13 @@ type Pacer struct {
 	wq   *ElasticCPUWorkQueue
 
 	cur *ElasticCPUWorkHandle
+
+	// Yield, if true, indicates that the Pacer should runtime.Yield() in each
+	// Pace() call, even if the call is otherwise a no-op due to wq being nil (ie
+	// when time-based pacing is not enabled). Eventually this might just become
+	// the default behavior for nil *Pacer, but the bool allows it to be opt-in
+	// initially.
+	Yield bool
 }
 
 // Pace will block as needed to pace work that calls it. It is
@@ -36,6 +44,14 @@ type Pacer struct {
 // delegating to the Go runtime or other some global pacing.
 func (p *Pacer) Pace(ctx context.Context) (readmitted bool, err error) {
 	if p == nil {
+		return false, nil
+	}
+
+	if p.Yield {
+		runtime.Yield()
+	}
+
+	if p.wq == nil {
 		return false, nil
 	}
 
