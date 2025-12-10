@@ -109,8 +109,7 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 					metrics.NumRuns.Count(),
 					metrics.Duration.CumulativeSnapshot().Mean() > 0)
 			case "prune-cache":
-				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsServer, s.InternalExecutor().(isql.Executor), mockTimeSrc, batchSize, knobs)
-				pruned, err := updater.pruneCache(ctx)
+				pruned, err := pruneTableMetadataCache(ctx, s.InternalExecutor().(isql.Executor))
 				if err != nil {
 					return err.Error()
 				}

@@ -16,6 +16,8 @@ const (
 	// defaultTableBatchSize is the number of tables to fetch in a
 	// single batch from the system tables.
 	defaultTableBatchSize = 20
+	// defaultPruneInterval is the default interval for the prune job.
+	defaultPruneInterval = time.Hour
 )
 
 var AutomaticCacheUpdatesEnabledSetting = settings.RegisterBoolSetting(
@@ -42,3 +44,13 @@ var updateJobBatchSizeSetting = settings.RegisterIntSetting(
 	defaultTableBatchSize,
 	settings.NonNegativeInt,
 )
+
+// PruneIntervalSetting controls the interval at which the prune job runs.
+var PruneIntervalSetting = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"obs.tablemetadata.prune_interval",
+	"the interval at which the table metadata cache prune job runs",
+	defaultPruneInterval,
+	// Prevent the prune job from running too frequently.
+	settings.DurationWithMinimum(time.Minute),
+	settings.WithPublic)

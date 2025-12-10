@@ -5631,6 +5631,105 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.prune_table_metadata_cache.currently_idle
+      exported_name: jobs_prune_table_metadata_cache_currently_idle
+      labeled_name: 'jobs{type: prune_table_metadata_cache, status: currently_idle}'
+      description: Number of prune_table_metadata_cache jobs currently considered Idle and can be freely shut down
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.prune_table_metadata_cache.currently_paused
+      exported_name: jobs_prune_table_metadata_cache_currently_paused
+      labeled_name: 'jobs{name: prune_table_metadata_cache, status: currently_paused}'
+      description: Number of prune_table_metadata_cache jobs currently considered Paused
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.prune_table_metadata_cache.currently_running
+      exported_name: jobs_prune_table_metadata_cache_currently_running
+      labeled_name: 'jobs{type: prune_table_metadata_cache, status: currently_running}'
+      description: Number of prune_table_metadata_cache jobs currently running in Resume or OnFailOrCancel state
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.prune_table_metadata_cache.expired_pts_records
+      exported_name: jobs_prune_table_metadata_cache_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: prune_table_metadata_cache}'
+      description: Number of expired protected timestamp records owned by prune_table_metadata_cache jobs
+      y_axis_label: records
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.prune_table_metadata_cache.fail_or_cancel_completed
+      exported_name: jobs_prune_table_metadata_cache_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: prune_table_metadata_cache, status: completed}'
+      description: Number of prune_table_metadata_cache jobs which successfully completed their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.prune_table_metadata_cache.fail_or_cancel_retry_error
+      exported_name: jobs_prune_table_metadata_cache_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: prune_table_metadata_cache, status: retry_error}'
+      description: Number of prune_table_metadata_cache jobs which failed with a retriable error on their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.prune_table_metadata_cache.protected_age_sec
+      exported_name: jobs_prune_table_metadata_cache_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: prune_table_metadata_cache}'
+      description: The age of the oldest PTS record protected by prune_table_metadata_cache jobs
+      y_axis_label: seconds
+      type: GAUGE
+      unit: SECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.prune_table_metadata_cache.protected_record_count
+      exported_name: jobs_prune_table_metadata_cache_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: prune_table_metadata_cache}'
+      description: Number of protected timestamp records held by prune_table_metadata_cache jobs
+      y_axis_label: records
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.prune_table_metadata_cache.resume_completed
+      exported_name: jobs_prune_table_metadata_cache_resume_completed
+      labeled_name: 'jobs.resume{name: prune_table_metadata_cache, status: completed}'
+      description: Number of prune_table_metadata_cache jobs which successfully resumed to completion
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.prune_table_metadata_cache.resume_failed
+      exported_name: jobs_prune_table_metadata_cache_resume_failed
+      labeled_name: 'jobs.resume{name: prune_table_metadata_cache, status: failed}'
+      description: Number of prune_table_metadata_cache jobs which failed with a non-retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.prune_table_metadata_cache.resume_retry_error
+      exported_name: jobs_prune_table_metadata_cache_resume_retry_error
+      labeled_name: 'jobs.resume{name: prune_table_metadata_cache, status: retry_error}'
+      description: Number of prune_table_metadata_cache jobs which failed with a retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_ingestion.currently_idle
       exported_name: jobs_replication_stream_ingestion_currently_idle
       labeled_name: 'jobs{type: replication_stream_ingestion, status: currently_idle}'
@@ -6848,6 +6947,30 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: obs.tablemetadata.prune_job.duration
+      exported_name: obs_tablemetadata_prune_job_duration
+      description: Time spent running the prune table metadata job.
+      y_axis_label: Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: obs.tablemetadata.prune_job.errors
+      exported_name: obs_tablemetadata_prune_job_errors
+      description: The total number of errors that have been emitted from the prune table metadata job.
+      y_axis_label: Errors
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: obs.tablemetadata.prune_job.runs
+      exported_name: obs_tablemetadata_prune_job_runs
+      description: The total number of runs of the prune table metadata job.
+      y_axis_label: Executions
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: obs.tablemetadata.update_job.duration
       exported_name: obs_tablemetadata_update_job_duration
       description: Time spent running the update table metadata job.

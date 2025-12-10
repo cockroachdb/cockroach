@@ -329,6 +329,10 @@ const (
 	// HotRangesLoggerJobID A static job ID which is used for the
 	// hot ranges logger job.
 	HotRangesLoggerJobID = jobspb.JobID(107)
+
+	// PruneTableMetadataCacheJobID A static job ID used for the
+	// prune table metadata cache job.
+	PruneTableMetadataCacheJobID = jobspb.JobID(108)
 )
 
 // MakeJobID generates a new job ID.

@@ -111,6 +111,7 @@ kv.transaction.write_pipelining.max_batch_size (alias: kv.transaction.write_pipe
 log.channel_compatibility_mode.enabled	boolean	false	when true, logs will to log to their legacy (pre 26.1) logging channels; when false, logs will be logged to new logging channels	application
 obs.tablemetadata.automatic_updates.enabled	boolean	false	enables automatic updates of the table metadata cache system.table_metadata	application
 obs.tablemetadata.data_valid_duration	duration	20m0s	the duration for which the data in system.table_metadata is considered valid	application
+obs.tablemetadata.prune_interval	duration	1h0m0s	the interval at which the table metadata cache prune job runs	application
 schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
 security.client_cert.subject_required.enabled	boolean	false	mandates a requirement for subject role to be set for db user	system-visible
 security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]	application

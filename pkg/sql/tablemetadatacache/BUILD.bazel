@@ -4,6 +4,7 @@ go_library(
     name = "tablemetadatacache",
     srcs = [
         "cluster_settings.go",
+        "prune_table_metadata_cache_job.go",
         "table_metadata_batch_iterator.go",
         "table_metadata_updater.go",
         "update_table_metadata_cache_job.go",

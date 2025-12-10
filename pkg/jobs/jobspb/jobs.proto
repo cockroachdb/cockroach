@@ -1571,6 +1571,25 @@ message UpdateTableMetadataCacheProgress {
   Status status = 3;
 }
 
+message PruneTableMetadataCacheDetails {}
+message PruneTableMetadataCacheProgress {
+  enum Status {
+    NOT_RUNNING = 0;
+    RUNNING = 1;
+  }
+  // The time at which the job last started a run.
+  google.protobuf.Timestamp last_start_time = 1 [
+    (gogoproto.nullable) = true,
+    (gogoproto.stdtime) = true
+  ];
+  // The time at which the job last completed a run.
+  google.protobuf.Timestamp last_completed_time = 2 [
+    (gogoproto.nullable) = true,
+    (gogoproto.stdtime) = true
+  ];
+  Status status = 3;
+}
+
 message ImportRollbackDetails {
   // TableID is the descriptor ID of table that should be rolled back.
   //
@@ -1678,6 +1697,7 @@ message Payload {
     HotRangesLoggerDetails hot_ranges_logger_details = 52;
     InspectDetails inspect_details = 53;
     FingerprintDetails fingerprint_details = 54;
+    PruneTableMetadataCacheDetails prune_table_metadata_cache_details = 55;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1763,11 +1783,12 @@ message Progress {
     HotRangesLoggerProgress hot_ranges_logger = 40;
     InspectProgress inspect = 41;
     FingerprintProgress fingerprint = 42;
+    PruneTableMetadataCacheProgress prune_table_metadata_cache = 43;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
 
-  // NEXT ID: 42
+  // NEXT ID: 44
 }
 
 enum Type {
@@ -1811,6 +1832,7 @@ enum Type {
   HOT_RANGES_LOGGER = 32 [(gogoproto.enumvalue_customname) = "TypeHotRangesLogger"];
   INSPECT = 33 [(gogoproto.enumvalue_customname) = "TypeInspect"];
   FINGERPRINT = 34 [(gogoproto.enumvalue_customname) = "TypeFingerprint"];
+  PRUNE_TABLE_METADATA_CACHE = 35 [(gogoproto.enumvalue_customname) = "TypePruneTableMetadataCache"];
 }
 
 message Job {

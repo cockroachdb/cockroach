@@ -6,6 +6,7 @@ go_library(
         "descriptor_utils.go",
         "first_upgrade.go",
         "permanent_create_jobs_metrics_polling_job.go",
+        "permanent_create_prune_table_metadata_cache_job.go",
         "permanent_create_sql_activity_flush_job.go",
         "permanent_create_update_table_metadata_cache_job.go",
         "permanent_key_visualizer_migration.go",

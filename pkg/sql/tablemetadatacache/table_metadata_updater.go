@@ -82,9 +82,6 @@ func (u *tableMetadataUpdater) RunUpdater(ctx context.Context) error {
 	u.metrics.NumRuns.Inc(1)
 	sw := timeutil.NewStopWatch()
 	sw.Start()
-	if _, err := u.pruneCache(ctx); err != nil {
-		log.Dev.Errorf(ctx, "failed to prune table metadata cache: %s", err.Error())
-	}
 	rowsUpdated, err := u.updateCache(ctx)
 	sw.Stop()
 	u.metrics.Duration.RecordValue(sw.Elapsed().Nanoseconds())
@@ -140,42 +137,6 @@ func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, er
 	}
 
 	return updated, err
-}
-
-// pruneCache deletes entries in the system.table_metadata that are not
-// present in system.namespace, using batched deletions with a batch size
-// of pruneBatchSize.
-func (u *tableMetadataUpdater) pruneCache(ctx context.Context) (removed int, err error) {
-	for {
-		rowsAffected, err := u.ie.ExecEx(
-			ctx,
-			"prune-table-metadata",
-			nil, // txn
-			sessiondata.NodeUserWithBulkLowPriSessionDataOverride, `
-DELETE FROM system.table_metadata
-WHERE table_id IN (
-  SELECT table_id
-  FROM system.table_metadata
-  WHERE table_id NOT IN (
-    SELECT id FROM system.namespace
-  )
-  LIMIT $1
-)
-RETURNING table_id`, pruneBatchSize)
-
-		if err != nil {
-			return 0, err
-		}
-
-		if rowsAffected == 0 {
-			// No more rows to delete
-			break
-		}
-
-		removed += rowsAffected
-	}
-
-	return removed, nil
 }
 
 // upsertBatch upserts the given batch of table metadata rows returning

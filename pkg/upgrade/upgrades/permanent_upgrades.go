@@ -85,6 +85,7 @@ func bootstrapCluster(
 		{"create sql activity updater job", createActivityUpdateJobMigration, true},
 		{"create mvcc stats job", createMVCCStatisticsJob, true},
 		{"create update cached table metadata job", createUpdateTableMetadataCacheJob, true},
+		{"create prune table metadata cache job", createPruneTableMetadataCacheJob, true},
 		{"maybe initialize replication standby read-only catalog", maybeSetupPCRStandbyReader, true},
 		{"create sql activity flush job", createSqlActivityFlushJob, true},
 		{"configure sql activity table TTLs", sqlStatsTTLChange, true},
