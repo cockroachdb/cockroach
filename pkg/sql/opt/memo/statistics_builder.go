@@ -680,6 +680,11 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	// Make now and annotate the metadata table with it for next time.
 	stats = &props.Statistics{}
 
+	if sb.evalCtx.SessionData().OptimizerUseForecasts && tab.ID() > 100 && tab.ID() < 110 {
+		a := 1 + 1
+		_ = a
+	}
+
 	first := cat.FindLatestFullStat(tab, sb.evalCtx.SessionData())
 	if first >= tab.StatisticCount() {
 		// No statistics.
