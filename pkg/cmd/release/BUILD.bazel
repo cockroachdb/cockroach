@@ -11,6 +11,7 @@ go_library(
         "update_helm.go",
         "update_releases.go",
         "update_versions.go",
+        "update_workflow.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/release",
     visibility = ["//visibility:private"],
