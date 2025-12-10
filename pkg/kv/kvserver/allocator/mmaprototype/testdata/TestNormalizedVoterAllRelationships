@@ -204,8 +204,7 @@ table:
 	relationships:
 	[idx=0][voter=+zone=us-west-a,+region=us-west:3] [all=+zone=us-west-b,+region=us-west:5] rel=nonIntersecting
 
-# Test error case: multiple empty voter constraints (via normalization adding
-# empty constraint).
+# Test error case: multiple empty voter constraints are combined.
 normalized-voter-all-rels num-replicas=5 num-voters=3
 voter-constraint num-replicas=1
 ----
@@ -218,13 +217,12 @@ normalized:
  constraints:
    :5
  voter-constraints:
-   :1
-   :2
+   :3
 table:
-	emptyConstraintIndex: -1
-	emptyVoterConstraintIndex: -1
+	emptyConstraintIndex: 0
+	emptyVoterConstraintIndex: 0
 	relationships:
-	err: multiple empty voter constraints: {1 []} and {2 []}
+	[idx=0][voter=:3] [all=:5] rel=equalSet
 
 # Test error case: constraint replicas add up to more than configured replicas.
 normalized-voter-all-rels num-replicas=1 num-voters=1
@@ -251,16 +249,16 @@ input:
 normalized:
  num-replicas=8 num-voters=5
  constraints:
-   :2
-   :6
+   :8
  voter-constraints:
    +region=us-west:1
    :4
 table:
-	emptyConstraintIndex: -1
-	emptyVoterConstraintIndex: -1
+	emptyConstraintIndex: 0
+	emptyVoterConstraintIndex: 1
 	relationships:
-	err: multiple empty constraints: {2 []} and {6 []}
+	[idx=0][voter=:4] [all=:8] rel=equalSet
+	[idx=1][voter=+region=us-west:1] [all=:8] rel=strictSubset
 
 # Test error case: multiple explicit empty constraints.
 normalized-voter-all-rels num-replicas=5 num-voters=3
@@ -278,16 +276,16 @@ input:
 normalized:
  num-replicas=5 num-voters=3
  constraints:
-   :2
-   :3
+   :5
  voter-constraints:
    +region=us-west:1
    :2
 table:
-	emptyConstraintIndex: -1
-	emptyVoterConstraintIndex: -1
+	emptyConstraintIndex: 0
+	emptyVoterConstraintIndex: 1
 	relationships:
-	err: multiple empty constraints: {2 []} and {3 []}
+	[idx=0][voter=:2] [all=:5] rel=equalSet
+	[idx=1][voter=+region=us-west:1] [all=:5] rel=strictSubset
 
 # Test error case: voter constraint replicas add up to more than configured voters.
 normalized-voter-all-rels num-replicas=5 num-voters=1
