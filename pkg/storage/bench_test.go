@@ -482,6 +482,9 @@ func BenchmarkIntentScan(b *testing.B) {
 					iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{
 						LowerBound: lower,
 						UpperBound: makeKey(nil, numIntentKeys),
+						// NB: BatchEvalReadCategory is considered latency sensitive and
+						// exempted from open-iterator tracking.
+						ReadCategory: fs.BatchEvalReadCategory,
 					})
 					if err != nil {
 						b.Fatal(err)
@@ -571,6 +574,10 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 							iter, err = eng.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{
 								LowerBound: lower,
 								UpperBound: makeKey(nil, numIntentKeys),
+								// NB: BatchEvalReadCategory is considered
+								// latency sensitive and exempted from
+								// open-iterator tracking.
+								ReadCategory: fs.BatchEvalReadCategory,
 							})
 							if err != nil {
 								b.Fatal(err)
@@ -1127,7 +1134,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, opts benchScanOptions) {
 		// Pull all of the sstables into the RocksDB cache in order to make the
 		// timings more stable. Otherwise, the first run will be penalized pulling
 		// data into the cache while later runs will not.
-		if _, err := ComputeStats(ctx, eng, fs.UnknownReadCategory, keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+		if _, err := ComputeStats(ctx, eng, fs.BatchEvalReadCategory, keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 			b.Fatalf("stats failed: %s", err)
 		}
 	}
@@ -1166,6 +1173,9 @@ func runMVCCScan(ctx context.Context, b *testing.B, opts benchScanOptions) {
 			AllowEmpty:      wholeRowsOfSize != 0,
 			Reverse:         opts.reverse,
 			Tombstones:      opts.tombstones,
+			// NB: BatchEvalReadCategory is considered latency sensitive and
+			// exempted from open-iterator tracking.
+			ReadCategory: fs.BatchEvalReadCategory,
 		})
 		if err != nil {
 			b.Fatalf("failed scan: %+v", err)
@@ -1217,7 +1227,11 @@ func runMVCCGet(ctx context.Context, b *testing.B, opts mvccBenchData, useBatch 
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyIdx)))
 		walltime := int64(5 * (rand.Int31n(int32(opts.numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
-		if valRes, err := MVCCGet(ctx, r, key, ts, MVCCGetOptions{}); err != nil {
+		if valRes, err := MVCCGet(ctx, r, key, ts, MVCCGetOptions{
+			// NB: BatchEvalReadCategory is considered latency sensitive and
+			// exempted from open-iterator tracking.
+			ReadCategory: fs.BatchEvalReadCategory,
+		}); err != nil {
 			b.Fatalf("failed get: %+v", err)
 		} else if valRes.Value == nil {
 			b.Fatalf("failed get (key not found): %d@%d", keyIdx, walltime)
@@ -1274,7 +1288,11 @@ func runMVCCConditionalPut(
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			batch := eng.NewBatch()
-			if _, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{}); err != nil {
+			if _, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{
+				// NB: BatchEvalReadCategory is considered latency sensitive and
+				// exempted from open-iterator tracking.
+				Category: fs.BatchEvalReadCategory,
+			}); err != nil {
 				b.Fatalf("failed put: %+v", err)
 			}
 			if err := batch.Commit(true); err != nil {
@@ -1291,7 +1309,14 @@ func runMVCCConditionalPut(
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		batch := eng.NewBatch()
-		if _, err := MVCCConditionalPut(ctx, batch, key, ts, value, expected, ConditionalPutWriteOptions{AllowIfDoesNotExist: CPutFailIfMissing}); err != nil {
+		if _, err := MVCCConditionalPut(ctx, batch, key, ts, value, expected, ConditionalPutWriteOptions{
+			AllowIfDoesNotExist: CPutFailIfMissing,
+			MVCCWriteOptions: MVCCWriteOptions{
+				// NB: BatchEvalReadCategory is considered latency sensitive and
+				// exempted from open-iterator tracking.
+				Category: fs.BatchEvalReadCategory,
+			},
+		}); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 		if err := batch.Commit(true); err != nil {
@@ -1319,7 +1344,14 @@ func runMVCCBlindConditionalPut(ctx context.Context, b *testing.B, emk engineMak
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		batch := eng.NewWriteBatch()
 		if _, err := MVCCBlindConditionalPut(
-			ctx, batch, key, ts, value, nil, ConditionalPutWriteOptions{AllowIfDoesNotExist: CPutFailIfMissing},
+			ctx, batch, key, ts, value, nil, ConditionalPutWriteOptions{
+				AllowIfDoesNotExist: CPutFailIfMissing,
+				MVCCWriteOptions: MVCCWriteOptions{
+					// NB: BatchEvalReadCategory is considered latency sensitive and
+					// exempted from open-iterator tracking.
+					Category: fs.BatchEvalReadCategory,
+				},
+			},
 		); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
@@ -1354,7 +1386,11 @@ func runMVCCBatchPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if _, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{}); err != nil {
+			if _, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{
+				// NB: BatchEvalReadCategory is considered latency sensitive and
+				// exempted from open-iterator tracking.
+				Category: fs.BatchEvalReadCategory,
+			}); err != nil {
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
@@ -1458,7 +1494,11 @@ func runMVCCGetMergedValue(
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := MVCCGet(ctx, eng, keys[rand.Intn(numKeys)], timestamp, MVCCGetOptions{})
+		_, err := MVCCGet(ctx, eng, keys[rand.Intn(numKeys)], timestamp, MVCCGetOptions{
+			// NB: BatchEvalReadCategory is considered latency sensitive and
+			// exempted from open-iterator tracking.
+			ReadCategory: fs.BatchEvalReadCategory,
+		})
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1498,6 +1538,9 @@ func runMVCCDeleteRange(ctx context.Context, b *testing.B, valueBytes int) {
 					// with MVCC range tombstones where additional seeks to find boundary
 					// conditions are involved.
 					Stats: &enginepb.MVCCStats{},
+					// NB: BatchEvalReadCategory is considered latency sensitive and
+					// exempted from open-iterator tracking.
+					Category: fs.BatchEvalReadCategory,
 				},
 				false,
 			); err != nil {
@@ -1524,7 +1567,7 @@ func runMVCCDeleteRangeUsingTombstone(
 			eng := getInitialStateEngine(ctx, b, opts, false /* inMemory */)
 			defer eng.Close()
 
-			ms, err := ComputeStats(ctx, eng, fs.UnknownReadCategory, keys.LocalMax, keys.MaxKey, 0)
+			ms, err := ComputeStats(ctx, eng, fs.BatchEvalReadCategory, keys.LocalMax, keys.MaxKey, 0)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -1710,7 +1753,7 @@ func runMVCCComputeStats(ctx context.Context, b *testing.B, valueBytes int, numR
 	var stats enginepb.MVCCStats
 	var err error
 	for i := 0; i < b.N; i++ {
-		stats, err = ComputeStats(ctx, eng, fs.UnknownReadCategory, keys.LocalMax, keys.MaxKey, 0)
+		stats, err = ComputeStats(ctx, eng, fs.BatchEvalReadCategory, keys.LocalMax, keys.MaxKey, 0)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1842,7 +1885,11 @@ func runMVCCGarbageCollect(
 				break
 			}
 			for _, key := range pointKeys {
-				if _, err := MVCCPut(ctx, batch, key, pts, val, MVCCWriteOptions{}); err != nil {
+				if _, err := MVCCPut(ctx, batch, key, pts, val, MVCCWriteOptions{
+					// NB: BatchEvalReadCategory is considered latency sensitive and
+					// exempted from open-iterator tracking.
+					Category: fs.BatchEvalReadCategory,
+				}); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -2319,6 +2366,9 @@ func runSSTIterator(b *testing.B, numKeys int, verify bool) {
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			LowerBound: keys.MinKey,
 			UpperBound: keys.MaxKey,
+			// NB: BatchEvalReadCategory is considered latency sensitive and
+			// exempted from open-iterator tracking.
+			ReadCategory: fs.BatchEvalReadCategory,
 		})
 		if err != nil {
 			b.Fatal(err)
@@ -2505,7 +2555,11 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 			b.Fatal(err)
 		}
 		res, err := mvccScanToKvs(ctx, iter, startKey, endKey,
-			hlc.Timestamp{WallTime: int64(numVersions) + 5}, MVCCScanOptions{})
+			hlc.Timestamp{WallTime: int64(numVersions) + 5}, MVCCScanOptions{
+				// NB: BatchEvalReadCategory is considered latency sensitive and
+				// exempted from open-iterator tracking.
+				ReadCategory: fs.BatchEvalReadCategory,
+			})
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -2594,10 +2648,18 @@ func BenchmarkMVCCPutDelete(b *testing.B) {
 		key := encoding.EncodeVarintAscending(nil, blockID)
 		key = encoding.EncodeVarintAscending(key, blockNum)
 
-		if _, err := MVCCPut(ctx, db, key, hlc.Timestamp{}, value, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCPut(ctx, db, key, hlc.Timestamp{}, value, MVCCWriteOptions{
+			// NB: BatchEvalReadCategory is considered latency sensitive and
+			// exempted from open-iterator tracking.
+			Category: fs.BatchEvalReadCategory,
+		}); err != nil {
 			b.Fatal(err)
 		}
-		if _, _, err := MVCCDelete(ctx, db, key, hlc.Timestamp{}, MVCCWriteOptions{}); err != nil {
+		if _, _, err := MVCCDelete(ctx, db, key, hlc.Timestamp{}, MVCCWriteOptions{
+			// NB: BatchEvalReadCategory is considered latency sensitive and
+			// exempted from open-iterator tracking.
+			Category: fs.BatchEvalReadCategory,
+		}); err != nil {
 			b.Fatal(err)
 		}
 	}
