@@ -692,7 +692,13 @@ func (oc *optCatalog) dataSourceForTable(
 			typeResolver = &r
 		}
 		var err error
-		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver)
+		var stable bool
+		var statsCanaryWindow time.Duration
+		if desc.TableDesc() != nil && oc.planner != nil && oc.planner.EvalContext() != nil {
+			stable = desc.TableDesc().StatsCanaryWindow > 0 && !oc.planner.EvalContext().UseCanaryStats
+			statsCanaryWindow = desc.TableDesc().StatsCanaryWindow
+		}
+		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver, stable, statsCanaryWindow)
 		if err != nil {
 			// Ignore any error. We still want to be able to run queries even if we lose
 			// access to the statistics table.
