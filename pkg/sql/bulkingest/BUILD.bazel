@@ -40,6 +40,7 @@ go_library(
 go_test(
     name = "bulkingest_test",
     srcs = [
+        "export_test.go",
         "ingest_file_processor_test.go",
         "ingest_test.go",
         "main_test.go",

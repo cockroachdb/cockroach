@@ -3,13 +3,14 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package bulkingest
+package bulkingest_test
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkingest"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -67,7 +68,7 @@ func TestPickSplits(t *testing.T) {
 				{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("d")},
 				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 			},
-			expectedError: "SSTs not in order",
+			expectedError: "out of order ingest sst: (uri:''[start:\"c\", end:\"d\"]) and (uri:''[start:\"a\", end:\"b\"])",
 		},
 		{
 			name: "overlapping ssts",
@@ -78,7 +79,7 @@ func TestPickSplits(t *testing.T) {
 				{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 				{StartKey: roachpb.Key("b"), EndKey: roachpb.Key("d")},
 			},
-			expectedError: "overlapping SSTs",
+			expectedError: "overlapping ingest sst: (uri:''[start:\"a\", end:\"c\"]) and (uri:''[start:\"b\", end:\"d\"])",
 		},
 		{
 			name: "sst extends beyond span",
@@ -235,7 +236,7 @@ func TestPickSplits(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := pickSplits(tc.spans, tc.ssts)
+			result, err := bulkingest.PickSplits(tc.spans, tc.ssts)
 			if tc.expectedError != "" {
 				require.ErrorContains(t, err, tc.expectedError)
 				return
@@ -331,7 +332,7 @@ func TestPickSplitsForSpan(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := pickSplitsForSpan(tc.span, tc.ssts)
+			result, err := bulkingest.PickSplitsForSpan(tc.span, tc.ssts)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, result)
 		})
@@ -405,7 +406,7 @@ func TestPickSplitsForSpanErrors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := pickSplitsForSpan(tc.span, tc.ssts)
+			_, err := bulkingest.PickSplitsForSpan(tc.span, tc.ssts)
 			require.Error(t, err)
 			require.Regexp(t, tc.expectedError, err.Error())
 		})
