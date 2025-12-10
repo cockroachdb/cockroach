@@ -260,8 +260,7 @@ func (c *compare) postToSlack(
 				comparison := detail.Comparison
 				metric := result.Metric
 
-				if (comparison.Delta < 0 && metric.Better < 0) ||
-					(comparison.Delta > 0 && metric.Better > 0) ||
+				if isRegression(comparison.Delta, metric.Better) ||
 					comparison.Delta == 0 {
 					continue
 				}
@@ -368,11 +367,7 @@ func (c *compare) postRegressionIssues(
 				comparison := detail.Comparison
 				metric := result.Metric
 
-				// Check if this is a regression
-				isRegression := (comparison.Delta < 0 && metric.Better > 0) ||
-					(comparison.Delta > 0 && metric.Better < 0)
-
-				if isRegression && math.Abs(comparison.Delta) >= slackPercentageThreshold {
+				if isRegression(comparison.Delta, metric.Better) && math.Abs(comparison.Delta) >= slackPercentageThreshold {
 					regressions = append(regressions, regressionInfo{
 						benchmarkName:  detail.BenchmarkName,
 						metricUnit:     result.Metric.Unit,
@@ -490,4 +485,9 @@ func truncateBenchmarkName(text string, maxLen int) string {
 		}
 	}
 	return text
+}
+
+func isRegression(delta float64, better int) bool {
+	return (delta < 0 && better > 0) ||
+		(delta > 0 && better < 0)
 }

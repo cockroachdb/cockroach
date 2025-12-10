@@ -59,7 +59,7 @@ func createRegressionPostRequest(
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Performance regressions detected in package %s\n\n", pkgName))
 	sb.WriteString(fmt.Sprintf("Comparison: %s\n\n", description))
-	sb.WriteString(fmt.Sprintf("Found %d benchmark(s) with regressions ≥20%%:\n\n", len(regressions)))
+	sb.WriteString(fmt.Sprintf("Found %d benchmark(s) with regressions ≥%.0f%%:\n\n", len(regressions), slackPercentageThreshold))
 
 	for i, reg := range regressions {
 		if i >= 10 { // Limit to 10 regressions in the summary
