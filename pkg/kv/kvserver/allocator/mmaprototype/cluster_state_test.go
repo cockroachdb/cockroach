@@ -597,7 +597,7 @@ func TestClusterState(t *testing.T) {
 					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
 					rng := rand.New(rand.NewSource(0))
 					dsm := newDiversityScoringMemo()
-					re := newRebalanceEnv(cs, rng, dsm, cs.ts.Now())
+					re := newRebalanceEnv(cs, rng, dsm, cs.ts.Now(), nil)
 
 					if n, ok := dd.ScanArgOpt[int](t, d, "max-lease-transfer-count"); ok {
 						re.maxLeaseTransferCount = n

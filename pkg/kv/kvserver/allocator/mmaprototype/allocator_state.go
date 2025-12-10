@@ -146,6 +146,13 @@ func (a *allocatorState) ensureMetricsForLocalStoreLocked(
 	return m
 }
 
+func (a *allocatorState) preparePassMetricsAndLoggerLocked(
+	localStoreID roachpb.StoreID,
+) *rebalancingPassMetricsAndLogger {
+	// TODO(sumeer): populate and call resetForRebalancingPass.
+	return nil
+}
+
 func (a *allocatorState) LoadSummaryForAllStores(ctx context.Context) string {
 	return a.cs.loadSummaryForAllStores(ctx)
 }
@@ -269,9 +276,16 @@ func (a *allocatorState) ComputeChanges(
 	if msg.StoreID != opts.LocalStoreID {
 		panic(fmt.Sprintf("ComputeChanges: expected StoreID %d, got %d", opts.LocalStoreID, msg.StoreID))
 	}
+	if opts.DryRun {
+		panic(errors.AssertionFailedf("unsupported dry-run mode"))
+	}
 	counterMetrics := a.ensureMetricsForLocalStoreLocked(opts.LocalStoreID)
 	a.cs.processStoreLeaseholderMsg(ctx, msg, counterMetrics)
-	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now())
+	var passObs *rebalancingPassMetricsAndLogger
+	if opts.PeriodicCall {
+		passObs = a.preparePassMetricsAndLoggerLocked(opts.LocalStoreID)
+	}
+	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now(), passObs)
 	return re.rebalanceStores(ctx, opts.LocalStoreID)
 }
 
@@ -437,6 +451,7 @@ func sortTargetCandidateSetAndPick(
 	overloadedDim LoadDimension,
 	rng *rand.Rand,
 	maxFractionPendingThreshold float64,
+	failLogger func(shedResult),
 ) roachpb.StoreID {
 	var b strings.Builder
 	var formatCandidatesLog = func(b *strings.Builder, candidates []candidateInfo) redact.SafeString {
@@ -496,6 +511,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	if j == 0 {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to disk space util")
+		failLogger(noCandidateDiskSpaceUtil)
 		return 0
 	}
 
@@ -574,6 +590,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	if j == 0 {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to load")
+		failLogger(noCandidateDueToLoad)
 		return 0
 	}
 	lowestLoadSet = cands.candidates[0].sls
@@ -605,6 +622,7 @@ func sortTargetCandidateSetAndPick(
 	// INVARIANT: lowestLoad <= loadThreshold.
 	if lowestLoadSet == loadThreshold && ignoreLevel < ignoreHigherThanLoadThreshold {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
+		failLogger(noCandidateDueToLoad)
 		return 0
 	}
 	// INVARIANT: lowestLoad < loadThreshold ||
@@ -615,6 +633,7 @@ func sortTargetCandidateSetAndPick(
 	if lowestLoadSet >= loadNoChange &&
 		(!discardedCandsHadNoPendingChanges || ignoreLevel == ignoreLoadNoChangeAndHigher) {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
+		failLogger(noCandidateDueToLoad)
 		return 0
 	}
 	if lowestLoadSet != highestLoadSet {
@@ -635,6 +654,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	if j == 0 {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to lease preference")
+		failLogger(noCandidateDueToUnmatchedLeasePreference)
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
@@ -648,6 +668,7 @@ func sortTargetCandidateSetAndPick(
 		lowestOverloadedLoad := cands.candidates[0].dimSummary[overloadedDim]
 		if lowestOverloadedLoad >= loadNoChange {
 			log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to overloadedDim")
+			failLogger(noCandidateDueToLoad)
 			return 0
 		}
 		j = 1
