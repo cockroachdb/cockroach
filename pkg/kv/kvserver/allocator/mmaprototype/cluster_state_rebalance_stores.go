@@ -60,6 +60,9 @@ type rebalanceEnv struct {
 	// now is the timestamp representing the start time of the current
 	// rebalanceStores invocation.
 	now time.Time
+	// passObs is used to collect gauge metrics and logging for this rebalancing
+	// pass. Can be nil.
+	passObs *rebalancingPassMetricsAndLogger
 	// Scratch variables reused across iterations.
 	scratch struct {
 		disj                    [1]constraintsConj
@@ -70,8 +73,13 @@ type rebalanceEnv struct {
 	}
 }
 
+// passObv can be nil.
 func newRebalanceEnv(
-	cs *clusterState, rng *rand.Rand, dsm *diversityScoringMemo, now time.Time,
+	cs *clusterState,
+	rng *rand.Rand,
+	dsm *diversityScoringMemo,
+	now time.Time,
+	passObs *rebalancingPassMetricsAndLogger,
 ) *rebalanceEnv {
 
 	// NB: these consts are intentionally local to the constructor, proving
@@ -101,6 +109,7 @@ func newRebalanceEnv(
 		rng:                   rng,
 		dsm:                   dsm,
 		now:                   now,
+		passObs:               passObs,
 		maxRangeMoveCount:     maxRangeMoveCount,
 		maxLeaseTransferCount: maxLeaseTransferCount,
 		fractionPendingIncreaseOrDecreaseThreshold: fractionPendingIncreaseOrDecreaseThreshold,
@@ -231,6 +240,7 @@ func (re *rebalanceEnv) rebalanceStores(
 		}
 	}
 
+	consideredAllOverloadedStores := true
 	for _, store := range sheddingStores {
 		// NB: we don't have to check the maxLeaseTransferCount here since only one
 		// store can transfer leases - the local store. So the limit is only checked
@@ -239,10 +249,12 @@ func (re *rebalanceEnv) rebalanceStores(
 		if re.rangeMoveCount >= re.maxRangeMoveCount {
 			log.KvDistribution.VEventf(ctx, 2, "reached max range move count %d, stopping further rebalancing",
 				re.maxRangeMoveCount)
+			consideredAllOverloadedStores = false
 			break
 		}
 		re.rebalanceStore(ctx, store, localStoreID)
 	}
+	re.passObs.finishRebalancingPass(ctx, consideredAllOverloadedStores)
 	return re.changes
 }
 
@@ -296,10 +308,10 @@ func (re *rebalanceEnv) rebalanceStore(
 		store.StoreID, store.nls, store.sls, store.worstDim)
 	ss := re.stores[store.StoreID]
 
+	topKRanges := ss.adjusted.topKRanges[localStoreID]
+	n := topKRanges.len()
 	if true {
 		// Debug logging.
-		topKRanges := ss.adjusted.topKRanges[localStoreID]
-		n := topKRanges.len()
 		if n > 0 {
 			var b strings.Builder
 			for i := 0; i < n; i++ {
@@ -317,6 +329,41 @@ func (re *rebalanceEnv) rebalanceStore(
 			log.KvDistribution.Infof(ctx, "no top-K[%s] ranges found for s%d with lease on local s%d",
 				topKRanges.dim, store.StoreID, localStoreID)
 		}
+	}
+	if n == 0 {
+		return
+	}
+
+	// Consider a cluster where s1 is overloadSlow, s2 is loadNoChange, and
+	// s3, s4 are loadNormal. Now s4 is considering rebalancing load away
+	// from s1, but the candidate top-k range has replicas {s1, s3, s4}. So
+	// the only way to shed load from s1 is a s1 => s2 move. But there may
+	// be other ranges at other leaseholder stores which can be moved from
+	// s1 => {s3, s4}. So we should not be doing this sub-optimal transfer
+	// of load from s1 => s2 unless s1 is not seeing any load shedding for
+	// some interval of time. We need a way to capture this information in a
+	// simple but effective manner. For now, we capture this using these
+	// grace duration thresholds.
+	iLevel := ignoreLoadNoChangeAndHigher
+	overloadDur := re.now.Sub(ss.overloadStartTime)
+	if overloadDur > ignoreHigherThanLoadThresholdGraceDuration {
+		iLevel = ignoreHigherThanLoadThreshold
+	} else if overloadDur > ignoreLoadThresholdAndHigherGraceDuration {
+		iLevel = ignoreLoadThresholdAndHigher
+	}
+	// Will only become true for remote stores.
+	withinLeaseSheddingGracePeriod := false
+	if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
+		re.now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
+		withinLeaseSheddingGracePeriod = true
+	}
+	re.passObs.storeOverloaded(ss.StoreID, withinLeaseSheddingGracePeriod, iLevel)
+	defer func() {
+		re.passObs.finishStore()
+	}()
+	if withinLeaseSheddingGracePeriod {
+		log.KvDistribution.VEventf(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
+		return
 	}
 
 	if ss.StoreID == localStoreID {
@@ -356,17 +403,16 @@ func (re *rebalanceEnv) rebalanceStore(
 	}
 
 	log.KvDistribution.VEventf(ctx, 2, "attempting to shed replicas next")
-	re.rebalanceReplicas(ctx, store, ss, localStoreID)
+	re.rebalanceReplicas(ctx, store, ss, localStoreID, iLevel)
 }
 
 func (re *rebalanceEnv) rebalanceReplicas(
-	ctx context.Context, store sheddingStore, ss *storeState, localStoreID roachpb.StoreID,
+	ctx context.Context,
+	store sheddingStore,
+	ss *storeState,
+	localStoreID roachpb.StoreID,
+	ignoreLevel ignoreLevel,
 ) {
-	if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
-		re.now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
-		log.KvDistribution.VEventf(ctx, 2, "skipping remote store s%d: in lease shedding grace period", store.StoreID)
-		return
-	}
 	// If the node is cpu overloaded, or the store/node is not fdOK, exclude
 	// the other stores on this node from receiving replicas shed by this
 	// store.
@@ -438,6 +484,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		if err != nil {
 			// This range has some constraints that are violated. Let those be
 			// fixed first.
+			re.passObs.replicaShed(rangeConstraintsViolated)
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: constraint violation needs fixing first: %v", rangeID, err)
 			continue
 		}
@@ -469,6 +516,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		}
 
 		if len(cands.candidates) == 0 {
+			re.passObs.replicaShed(noCandidate)
 			log.KvDistribution.VEventf(ctx, 2, "result(failed): no candidates found for r%d after exclusions", rangeID)
 			continue
 		}
@@ -489,29 +537,17 @@ func (re *rebalanceEnv) rebalanceReplicas(
 					cand.StoreID, rstate.constraints.spanConfig.leasePreferences, re.constraintMatcher)
 			}
 		}
-		// Consider a cluster where s1 is overloadSlow, s2 is loadNoChange, and
-		// s3, s4 are loadNormal. Now s4 is considering rebalancing load away
-		// from s1, but the candidate top-k range has replicas {s1, s3, s4}. So
-		// the only way to shed load from s1 is a s1 => s2 move. But there may
-		// be other ranges at other leaseholder stores which can be moved from
-		// s1 => {s3, s4}. So we should not be doing this sub-optimal transfer
-		// of load from s1 => s2 unless s1 is not seeing any load shedding for
-		// some interval of time. We need a way to capture this information in a
-		// simple but effective manner. For now, we capture this using these
-		// grace duration thresholds.
-		ignoreLevel := ignoreLoadNoChangeAndHigher
-		overloadDur := re.now.Sub(ss.overloadStartTime)
-		if overloadDur > ignoreHigherThanLoadThresholdGraceDuration {
-			ignoreLevel = ignoreHigherThanLoadThreshold
+		switch ignoreLevel {
+		case ignoreHigherThanLoadThreshold:
 			log.KvDistribution.VEventf(ctx, 3, "using level %v (threshold:%v) for r%d based on overload duration %v",
-				ignoreLevel, ssSLS.sls, rangeID, overloadDur)
-		} else if overloadDur > ignoreLoadThresholdAndHigherGraceDuration {
-			ignoreLevel = ignoreLoadThresholdAndHigher
+				ignoreLevel, ssSLS.sls, rangeID, re.now.Sub(ss.overloadStartTime))
+		case ignoreLoadThresholdAndHigher:
 			log.KvDistribution.VEventf(ctx, 3, "using level %v (threshold:%v) for r%d based on overload duration %v",
-				ignoreLevel, ssSLS.sls, rangeID, overloadDur)
+				ignoreLevel, ssSLS.sls, rangeID, re.now.Sub(ss.overloadStartTime))
 		}
 		targetStoreID := sortTargetCandidateSetAndPick(
-			ctx, cands, ssSLS.sls, ignoreLevel, loadDim, re.rng, re.fractionPendingIncreaseOrDecreaseThreshold)
+			ctx, cands, ssSLS.sls, ignoreLevel, loadDim, re.rng,
+			re.fractionPendingIncreaseOrDecreaseThreshold, re.passObs.replicaShed)
 		if targetStoreID == 0 {
 			log.KvDistribution.VEventf(ctx, 2, "result(failed): no suitable target found among candidates for r%d "+
 				"(threshold %s; %s)", rangeID, ssSLS.sls, ignoreLevel)
@@ -525,6 +561,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		if !re.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, cands.means, false, loadDim) {
 			log.KvDistribution.VEventf(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
 				store.StoreID, targetStoreID, rangeID, addedLoad)
+			re.passObs.replicaShed(noCandidateToAcceptLoad)
 			continue
 		}
 		addTarget := roachpb.ReplicationTarget{
@@ -551,6 +588,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		re.changes = append(re.changes,
 			MakeExternalRangeChange(originMMARebalance, localStoreID, rangeChange))
 		re.rangeMoveCount++
+		re.passObs.replicaShed(shedSuccess)
 		log.KvDistribution.VEventf(ctx, 2,
 			"result(success): rebalancing r%v from s%v to s%v [change: %v] with resulting loads source: %v target: %v",
 			rangeID, removeTarget.StoreID, addTarget.StoreID, &re.changes[len(re.changes)-1], ss.adjusted.load, targetSS.adjusted.load)
@@ -641,11 +679,13 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		// in candidatesToMoveLease, so why reinsert it now?
 		candsPL.insert(store.StoreID)
 		if len(candsPL) <= 1 {
+			re.passObs.leaseShed(noCandidate)
 			continue // leaseholder is the only candidate
 		}
 
 		candsPL = retainReadyLeaseTargetStoresOnly(ctx, candsPL, re.stores, rangeID)
-		if len(candsPL) == 0 {
+		if len(candsPL) == 0 || (len(candsPL) == 1 && candsPL[0] == store.StoreID) {
+			re.passObs.leaseShed(noHealthyCandidate)
 			log.KvDistribution.VEventf(ctx, 2,
 				"result(failed): no candidates to move lease from n%vs%v for r%v after retainReadyLeaseTargetStoresOnly",
 				ss.NodeID, ss.StoreID, rangeID)
@@ -685,7 +725,8 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		// will only add CPU to the target store (so it is ok to ignore other
 		// dimensions on the target).
 		targetStoreID := sortTargetCandidateSetAndPick(
-			ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, re.rng, re.fractionPendingIncreaseOrDecreaseThreshold)
+			ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, re.rng,
+			re.fractionPendingIncreaseOrDecreaseThreshold, re.passObs.leaseShed)
 		if targetStoreID == 0 {
 			log.KvDistribution.Infof(
 				ctx,
@@ -704,6 +745,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			panic("raft cpu higher than total cpu")
 		}
 		if !re.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, &means, true, CPURate) {
+			re.passObs.leaseShed(noCandidateToAcceptLoad)
 			log.KvDistribution.VEventf(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
 				store.StoreID, targetStoreID, rangeID, addedLoad)
 			continue
@@ -725,6 +767,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		re.addPendingRangeChange(leaseChange)
 		re.changes = append(re.changes,
 			MakeExternalRangeChange(originMMARebalance, store.StoreID, leaseChange))
+		re.passObs.leaseShed(shedSuccess)
 		log.KvDistribution.Infof(ctx,
 			"result(success): shedding r%v lease from s%v to s%v [change:%v] with "+
 				"resulting loads source:%v target:%v (means: %v) (frac_pending: (src:%.2f,target:%.2f) (src:%.2f,target:%.2f))",

@@ -127,6 +127,7 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=10.0 max-lease-t
 [mmaid=1] [target_sls:(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow high_disk=false frac_pending=2.53,0.00(false)),src_sls:(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.46(false))]
 [mmaid=1] result(failed): cannot shed from s1 to s2 for r1: delta load [cpu:230ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=1] skipping replica transfers for s1 to try more leases next time
+[mmaid=1] rebalancing pass shed: {s1}
 pending(4)
 change-id=1 store-id=1 node-id=1 range-id=4 load-delta=[cpu:-230ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
