@@ -207,7 +207,7 @@ var StartCompactionJob func(
 	ctx context.Context,
 	planner interface{},
 	scheduleID jobspb.ScheduleID,
-	collectionURI, incrLoc []string,
+	collectionURI []string,
 	fullBackupPath string,
 	encryptionOpts jobspb.BackupEncryptionOptions,
 	start, end hlc.Timestamp,
@@ -9407,7 +9407,7 @@ WHERE object_id = table_descriptor_id
 					return nil, errors.Newf("full_backup_path must be explicitly specified and not LATEST")
 				}
 				jobID, err := StartCompactionJob(
-					ctx, evalCtx.Planner, scheduleID, collectionURI, nil, fullPath, encryption, startTs, endTs,
+					ctx, evalCtx.Planner, scheduleID, collectionURI, fullPath, encryption, startTs, endTs,
 				)
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},
