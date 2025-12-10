@@ -449,14 +449,9 @@ exec-ddl
 DROP INDEX partial_idx
 ----
 
-# NOTE: A placeholder scan is generated but not chosen because the cost is
-# higher than the lookup-join, due to the conservative row count estimate of 330
-# for the group with the inner project (which is the group that the placeholder
-# scan is added to).
-#
-# TODO(mgartner): Tighten the row count estimate of 330. By default there are
-# 1000 rows and 100 distinct values for t, so the row count should be ~10.
-opt no-stable-folds expect=(GenerateParameterizedJoin,ConvertParameterizedLookupJoinToPlaceholderScan) format=(show-stats,show-cost)
+# A placeholder scan's scalars values contain only constants or placeholders.
+# Stable functions are not supported at execbuild-time.
+opt no-stable-folds expect=(GenerateParameterizedJoin) expect-not=(ConvertParameterizedLookupJoinToPlaceholderScan) format=(show-stats,show-cost)
 SELECT k FROM t WHERE t = now()
 ----
 project
@@ -536,14 +531,27 @@ project
  ├── columns: k:1!null
  ├── stable, has-placeholder
  ├── key: (1)
- └── placeholder-scan t@t_i_t_idx
+ └── project
       ├── columns: k:1!null i:2!null t:5!null
       ├── stable, has-placeholder
       ├── key: (1)
       ├── fd: ()-->(2,5)
-      └── span
-           ├── $1
-           └── now()
+      └── inner-join (lookup t@t_i_t_idx)
+           ├── columns: k:1!null i:2!null t:5!null "$1":8!null column9:9!null
+           ├── flags: disallow merge join
+           ├── key columns: [8 9] = [2 5]
+           ├── parameterized columns: (8,9)
+           ├── stable, has-placeholder
+           ├── key: (1)
+           ├── fd: ()-->(2,5,8,9), (2)==(8), (8)==(2), (5)==(9), (9)==(5)
+           ├── values
+           │    ├── columns: "$1":8 column9:9
+           │    ├── cardinality: [1 - 1]
+           │    ├── stable, has-placeholder
+           │    ├── key: ()
+           │    ├── fd: ()-->(8,9)
+           │    └── ($1, now())
+           └── filters (true)
 
 opt no-stable-folds expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE i = $1 AND t = now()
@@ -846,17 +854,33 @@ placeholder-scan t
  └── span
       └── $1
 
-opt no-stable-folds expect=ConvertParameterizedLookupJoinToPlaceholderScan
+# A placeholder scan's scalars values contain only constants or placeholders.
+# Stable functions are not supported at execbuild-time.
+opt no-stable-folds expect-not=ConvertParameterizedLookupJoinToPlaceholderScan
 SELECT t.k FROM (VALUES (quote_literal(1)::INT)) AS v(k) JOIN t ON t.k = v.k
 ----
-placeholder-scan t
+project
  ├── columns: k:2!null
  ├── cardinality: [0 - 1]
  ├── stable
  ├── key: ()
  ├── fd: ()-->(2)
- └── span
-      └── quote_literal(1)::INT8
+ └── inner-join (lookup t)
+      ├── columns: column1:1!null k:2!null
+      ├── key columns: [1] = [2]
+      ├── lookup columns are key
+      ├── cardinality: [0 - 1]
+      ├── stable
+      ├── key: ()
+      ├── fd: ()-->(1,2), (1)==(2), (2)==(1)
+      ├── values
+      │    ├── columns: column1:1
+      │    ├── cardinality: [1 - 1]
+      │    ├── stable
+      │    ├── key: ()
+      │    ├── fd: ()-->(1)
+      │    └── (quote_literal(1)::INT8,)
+      └── filters (true)
 
 # The rule does not match if there are no placeholders or stable expressions in
 # the Values expression.
