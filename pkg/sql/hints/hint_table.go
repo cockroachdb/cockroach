@@ -166,10 +166,10 @@ func InsertHintIntoDB(
 	if err != nil {
 		return 0, err
 	}
-	const insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint") VALUES ($1, $2) RETURNING "row_id"`
+	const insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint", "hint_type", "enabled") VALUES ($1, $2, $3, $4) RETURNING "row_id"`
 	row, err := txn.QueryRowEx(
 		ctx, opName, txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		insertStmt, fingerprint, hintBytes,
+		insertStmt, fingerprint, hintBytes, hintpb.HintTypeRewriteInlineHints, true,
 	)
 	if err != nil {
 		return 0, err

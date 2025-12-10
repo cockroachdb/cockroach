@@ -1387,6 +1387,11 @@ CREATE TABLE public.inspect_errors (
 	// * fingerprint: the statement fingerprint.
 	// * hint: an external hint for the query, serialized into bytes.
 	// * created_at: the timestamp when the hint was created.
+	// * hint_type: the type of hint (e.g., "optimization", "index").
+	// * hint_name: a human-readable name for the hint.
+	// * enabled: whether the hint is currently enabled.
+	// * where_expr: an optional filter expression to determine if the hint should apply
+	//   in a given context (e.g., filtering by current database).
 	StatementHintsTableSchema = `
   CREATE TABLE system.statement_hints (
     row_id      INT8 DEFAULT unique_rowid() NOT NULL,
@@ -1394,9 +1399,13 @@ CREATE TABLE public.inspect_errors (
     fingerprint STRING NOT NULL,
     hint        BYTES NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    hint_type   STRING NULL,
+    hint_name   STRING NULL,
+    enabled     BOOL NOT NULL DEFAULT true,
+    where_expr  STRING NULL,
     CONSTRAINT "primary" PRIMARY KEY ("row_id" ASC),
     INDEX hash_idx (hash ASC),
-    FAMILY "primary" (row_id, hash, fingerprint, hint, created_at)
+    FAMILY "primary" (row_id, hash, fingerprint, hint, created_at, hint_type, hint_name, enabled, where_expr)
   );`
 
 	// TableStatisticsLocksTableSchema defines the schema for the
@@ -5484,13 +5493,17 @@ var (
 				{Name: "fingerprint", ID: 3, Type: types.String},
 				{Name: "hint", ID: 4, Type: types.Bytes},
 				{Name: "created_at", ID: 5, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "hint_type", ID: 6, Type: types.String, Nullable: true},
+				{Name: "hint_name", ID: 7, Type: types.String, Nullable: true},
+				{Name: "enabled", ID: 8, Type: types.Bool, DefaultExpr: &trueBoolString},
+				{Name: "where_expr", ID: 9, Type: types.String, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
 					ID:          0,
-					ColumnNames: []string{"row_id", "hash", "fingerprint", "hint", "created_at"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+					ColumnNames: []string{"row_id", "hash", "fingerprint", "hint", "created_at", "hint_type", "hint_name", "enabled", "where_expr"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
 				},
 			},
 			descpb.IndexDescriptor{
