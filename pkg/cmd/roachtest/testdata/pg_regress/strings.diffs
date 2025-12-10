@@ -1488,19 +1488,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  --
  -- Additional string functions
  --
-@@ -2456,11 +2101,7 @@
- (1 row)
- 
- SELECT ascii('');
-- ascii 
---------
--     0
--(1 row)
--
-+ERROR:  the input string must not be empty
- SELECT chr(65);
-  chr 
- -----
 @@ -2468,7 +2109,11 @@
  (1 row)
  

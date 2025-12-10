@@ -11,5 +11,5 @@ INSERT INTO t111474_0 (c0) VALUES (1);
 # error. The error could still occur if the plan is distributed, so we only run
 # this in the local config.
 query II
-SELECT * FROM t111474_0, t111474_1 WHERE ascii('') > 0;
+SELECT * FROM t111474_0, t111474_1 WHERE chr(-1) > '';
 ----
