@@ -2973,9 +2973,21 @@ func typeCheckSameTypedExprs(
 		// https://www.postgresql.org/docs/15/typeconv-union-case.html
 		for i, e := range typedExprs {
 			typ := e.ResolvedType()
-			// TODO(mgartner): There should probably be a cast if the types are
-			// not identical, not just if the types are not equivalent.
 			if typ.Equivalent(candidateType) || typ.Family() == types.UnknownFamily {
+				// For equivalent types within the same family, we only need an
+				// explicit cast if the types have different widths and the
+				// expression's type is narrower (e.g., INT2 to INT4). This
+				// ensures the return type is correct without adding unnecessary
+				// casts for string types where the width represents maximum
+				// storage rather than value range.
+				if typ.Identical(candidateType) {
+					continue
+				}
+				// For integer types, different widths mean different value
+				// ranges, so we need to cast to ensure correct behavior.
+				if typ.Family() == types.IntFamily && typ.Width() != candidateType.Width() {
+					typedExprs[i] = NewTypedCastExpr(e, candidateType)
+				}
 				continue
 			}
 			if !cast.ValidCast(typ, candidateType, cast.ContextImplicit) {
