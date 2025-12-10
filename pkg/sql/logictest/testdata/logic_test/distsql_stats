@@ -517,7 +517,6 @@ column_names  row_count  distinct_count  null_count  has_histogram
 {d}           256        4               0           true
 {e}           256        2               0           true
 
-
 # Re-enable multi-column stats.
 statement ok
 SET CLUSTER SETTING sql.stats.multi_column_collection.enabled = true
@@ -1152,6 +1151,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE et]
         "columns": [
             "x"
         ],
+        "delay_delete": false,
         "distinct_count": 3,
         "histo_buckets": [
             {
@@ -1185,6 +1185,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE et]
         "columns": [
             "y"
         ],
+        "delay_delete": false,
         "distinct_count": 3,
         "histo_buckets": [
             {
@@ -1218,6 +1219,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE et]
         "columns": [
             "z"
         ],
+        "delay_delete": false,
         "distinct_count": 3,
         "histo_buckets": [
             {
@@ -1337,7 +1339,6 @@ statistics_name  column_names    row_count  distinct_count  null_count  has_hist
 s                {last_updated}  5          1               0           true
 s                {profile_id}    5          5               0           true
 s                {user_profile}  5          4               1           true
-
 
 # Test that individual columns in primary keys always have histograms collected
 # for them, with up to 200 buckets.
@@ -1813,6 +1814,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         "columns": [
             "k"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_buckets": [
             {
@@ -1834,6 +1836,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         "columns": [
             "c"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -1875,6 +1878,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
         "columns": [
             "x"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_buckets": [
             {
@@ -2064,6 +2068,7 @@ SELECT jsonb_pretty(
         "columns": [
             "r"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2077,6 +2082,7 @@ SELECT jsonb_pretty(
         "columns": [
             "a"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2091,6 +2097,7 @@ SELECT jsonb_pretty(
             "a",
             "sa"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "",
         "id": 0,
@@ -2103,6 +2110,7 @@ SELECT jsonb_pretty(
         "columns": [
             "sa"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2165,6 +2173,7 @@ SELECT jsonb_pretty(
         "columns": [
             "r"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_buckets": [
             {
@@ -2185,6 +2194,7 @@ SELECT jsonb_pretty(
         "columns": [
             "a"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_buckets": [
             {
@@ -2206,6 +2216,7 @@ SELECT jsonb_pretty(
             "a",
             "sa"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_col_type": "",
         "id": 0,
@@ -2217,6 +2228,7 @@ SELECT jsonb_pretty(
         "columns": [
             "sa"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2282,6 +2294,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "columns": [
             "a"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2294,6 +2307,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "columns": [
             "b"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2306,6 +2320,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "columns": [
             "rowid"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2319,6 +2334,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
             "a",
             "b"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "",
         "id": 0,
