@@ -114,7 +114,8 @@ func TestConvertReplicaChangeToMMA(t *testing.T) {
 					mmaChanges.SortForTesting()
 					var b strings.Builder
 					fmt.Fprintf(&b, "PendingRangeChange: %s", mmaChanges.StringForTesting())
-					externalChange := mmaprototype.MakeExternalRangeChange(mmaChanges)
+					externalChange := mmaprototype.MakeExternalRangeChange(
+						mmaprototype.OriginExternal, 1 /* arbitrary local store */, mmaChanges)
 					if externalChange.IsChangeReplicas() {
 						fmt.Fprintf(&b, "As kvpb.ReplicationChanges:\n %v\n", externalChange.ReplicationChanges())
 					} else if externalChange.IsPureTransferLease() {

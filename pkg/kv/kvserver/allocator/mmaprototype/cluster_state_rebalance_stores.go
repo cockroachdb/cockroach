@@ -548,7 +548,8 @@ func (re *rebalanceEnv) rebalanceReplicas(
 				replicaChanges, rangeID))
 		}
 		re.addPendingRangeChange(rangeChange)
-		re.changes = append(re.changes, MakeExternalRangeChange(rangeChange))
+		re.changes = append(re.changes,
+			MakeExternalRangeChange(originMMARebalance, localStoreID, rangeChange))
 		re.rangeMoveCount++
 		log.KvDistribution.VEventf(ctx, 2,
 			"result(success): rebalancing r%v from s%v to s%v [change: %v] with resulting loads source: %v target: %v",
@@ -722,7 +723,8 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			panic(errors.Wrapf(err, "pre-check failed for lease transfer %v", leaseChange))
 		}
 		re.addPendingRangeChange(leaseChange)
-		re.changes = append(re.changes, MakeExternalRangeChange(leaseChange))
+		re.changes = append(re.changes,
+			MakeExternalRangeChange(originMMARebalance, store.StoreID, leaseChange))
 		log.KvDistribution.Infof(ctx,
 			"result(success): shedding r%v lease from s%v to s%v [change:%v] with "+
 				"resulting loads source:%v target:%v (means: %v) (frac_pending: (src:%.2f,target:%.2f) (src:%.2f,target:%.2f))",
