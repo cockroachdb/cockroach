@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -451,7 +453,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// internal executor instead of doing this weird thing where it uses the
 	// internal executor to execute one statement at a time inside a db.Txn()
 	// closure.
-	if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	if err := s.FlowCtx.Cfg.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		for _, si := range s.sketches {
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram {
@@ -532,13 +534,40 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			// Delete old stats that have been superseded, if the new statistic
 			// is not partial.
 			if si.spec.PartialPredicate == "" {
-				if err := stats.DeleteOldStatsForColumns(
-					ctx,
-					txn,
-					s.tableID,
-					columnIDs,
-				); err != nil {
+				tableDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, s.tableID)
+				if err != nil {
 					return err
+				}
+
+				canaryEnabled := tableDesc.TableDesc().StatsCanaryWindow != 0 && s.FlowCtx.EvalCtx.UseCanaryStats
+				if canaryEnabled && s.FlowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn) {
+					// If the table has canary stats rollout enabled, and if the
+					// selection of canary or stable path is active (see
+					// sql.canaryRollDice()), we don't immediately delete the
+					// "stale" stats, but keep it until another canary stats is
+					// collected. It is because if a query picked the stable path
+					// for stats selection, we will need to reuse the stale stats.
+					if err = stats.DeleteExpiredStats(
+						ctx,
+						txn,
+						s.tableID,
+						columnIDs,
+					); err != nil {
+						return errors.Wrapf(err, "fail to delete expired stats for table %d columns %v", s.tableID, columnIDs)
+					}
+
+					if err := stats.MarkDelayDelete(ctx, txn, s.tableID, columnIDs); err != nil {
+						return errors.Wrapf(err, "failed to mark rows for delayed deletion for table %d columns %v", s.tableID, columnIDs)
+					}
+				} else {
+					if err := stats.DeleteOldStatsForColumns(
+						ctx,
+						txn,
+						s.tableID,
+						columnIDs,
+					); err != nil {
+						return err
+					}
 				}
 			}
 

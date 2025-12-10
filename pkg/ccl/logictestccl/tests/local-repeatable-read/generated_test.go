@@ -343,6 +343,13 @@ func TestRepeatableReadLogic_canary_stats(
 	runLogicTest(t, "canary_stats")
 }
 
+func TestRepeatableReadLogic_canary_stats_deletion(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "canary_stats_deletion")
+}
+
 func TestRepeatableReadLogic_cascade(
 	t *testing.T,
 ) {

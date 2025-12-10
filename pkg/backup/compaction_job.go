@@ -878,7 +878,7 @@ func doCompaction(
 	); err != nil {
 		return err
 	}
-	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), manifest.Descriptors)
+	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), execCtx.ExecCfg().Settings, manifest.Descriptors)
 	return backupinfo.WriteBackupMetadata(
 		ctx, execCtx, defaultStore, details, kmsEnv, manifest, statsTable,
 	)
