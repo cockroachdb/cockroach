@@ -46,6 +46,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/bulk",
         "//pkg/kv/kvpb",
+        "//pkg/obs/workloadid",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/username",
