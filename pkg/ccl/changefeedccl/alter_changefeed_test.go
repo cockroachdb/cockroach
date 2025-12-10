@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1180,6 +1181,7 @@ func TestAlterChangefeedDatabaseScope(t *testing.T) {
 func TestAlterChangefeedDatabaseLevelChangefeedFilters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	// The cases in this test will either a) create a changefeed with no filter,
 	// and then remove the filter with an ALTER CHANGEFEED, or b) create a
@@ -1272,6 +1274,7 @@ func TestAlterChangefeedDatabaseLevelChangefeedFilters(t *testing.T) {
 func TestAlterChangefeedDatabaseLevelChangefeedDoesntRemoveFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1313,6 +1316,7 @@ func TestAlterChangefeedDatabaseLevelChangefeedDoesntRemoveFilter(t *testing.T) 
 func TestAlterChangefeedDatabaseLevelChangefeedRemainsDatabaseLevel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1356,6 +1360,7 @@ func TestAlterChangefeedDatabaseLevelChangefeedRemainsDatabaseLevel(t *testing.T
 func TestAlterChangefeedDatabaseLevelChangefeedDiff(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1394,6 +1399,7 @@ func TestAlterChangefeedDatabaseLevelChangefeedDiff(t *testing.T) {
 func TestAlterChangefeedDatabaseLevelChangefeedFailsOnTargetAlter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	for _, op := range []string{"ADD", "DROP"} {
 		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -1426,6 +1432,7 @@ func TestAlterChangefeedDatabaseLevelChangefeedFailsOnTargetAlter(t *testing.T) 
 func TestAlterChangefeedDatabaseLevelChangefeedMultipleSetClauses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1466,6 +1473,7 @@ func TestAlterChangefeedDatabaseLevelChangefeedMultipleSetClauses(t *testing.T) 
 func TestAlterChangefeedDatabaseLevelChangefeedFilterSemantics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	type alterSpec struct {
 		stmt string
@@ -1683,6 +1691,7 @@ func TestAlterChangefeedDatabaseLevelChangefeedFilterSemantics(t *testing.T) {
 func TestAlterChangefeedFilterChangesDontEmitPreAlterEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1740,6 +1749,7 @@ func TestAlterChangefeedFilterChangesDontEmitPreAlterEvents(t *testing.T) {
 func TestAlterChangefeedFilterChangesWriteProgressForTablesThatWillBeAdded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1798,6 +1808,7 @@ func TestAlterChangefeedFilterChangesWriteProgressForTablesThatWillBeAdded(t *te
 func TestAlterChangefeedFilterChangesDontWriteProgressForTablesThatWillBeDropped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1848,6 +1859,7 @@ func TestAlterChangefeedFilterChangesDontWriteProgressForTablesThatWillBeDropped
 func TestAlterChangefeedFilterChangesDontOverwriteProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1933,6 +1945,7 @@ func TestAlterChangefeedFilterChangesDontOverwriteProgress(t *testing.T) {
 func TestAlterChangefeedDatabaseLevelChangefeedWithInitialScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
