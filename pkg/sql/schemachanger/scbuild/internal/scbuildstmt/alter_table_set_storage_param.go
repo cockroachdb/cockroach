@@ -25,12 +25,118 @@ import (
 // NotImplementedError if the param is not yet supported in the declarative
 // schema changer.
 func validateStorageParamKey(t tree.NodeFormatter, key string) {
-	if strings.HasPrefix(strings.ToLower(key), "ttl") {
+	loweredKey := strings.ToLower(key)
+	// These TTL params still require legacy schema changer because they
+	// affect column management, column dependencies, or schedule management.
+	switch loweredKey {
+	case "ttl", "ttl_expire_after", "ttl_expiration_expression", "ttl_job_cron":
 		panic(scerrors.NotImplementedErrorf(t, redact.Sprintf("%s not implemented yet", redact.SafeString(key))))
 	}
-	if key == catpb.RBRUsingConstraintTableSettingName {
+	if loweredKey == catpb.RBRUsingConstraintTableSettingName {
 		panic(scerrors.NotImplementedErrorf(t, "infer_rbr_region_col_using_constraint not implemented yet"))
 	}
+}
+
+// isTTLParam returns true if this is a TTL storage parameter.
+func isTTLParam(key string) bool {
+	loweredKey := strings.ToLower(key)
+	return strings.HasPrefix(loweredKey, "ttl")
+}
+
+// applyTTLStorageParamsSet processes TTL-related storage parameters for SET.
+// It returns:
+// - origElem: the original RowLevelTTL element (nil if table had no TTL).
+// - newElem: the updated RowLevelTTL element (nil if no TTL params were handled).
+// - changed: true if any TTL param was modified.
+func applyTTLStorageParamsSet(
+	b BuildCtx, tbl *scpb.Table, params tree.StorageParams,
+) (origElem *scpb.RowLevelTTL, newElem *scpb.RowLevelTTL, changed bool) {
+	origElem = b.QueryByID(tbl.TableID).FilterRowLevelTTL().MustGetZeroOrOneElement()
+
+	if len(params) == 0 {
+		return origElem, nil, false
+	}
+
+	// Build new TTL from original (or empty if none).
+	var newTTL catpb.RowLevelTTL
+	var origTTLExpr *scpb.Expression
+	if origElem != nil {
+		newTTL = origElem.RowLevelTTL
+		origTTLExpr = origElem.TTLExpr
+	}
+
+	setter := tablestorageparam.NewTTLSetter(&newTTL, false /* isNewObject */)
+	if err := storageparam.Set(
+		b,
+		b.SemaCtx(),
+		b.EvalCtx(),
+		params,
+		setter,
+	); err != nil {
+		panic(err)
+	}
+
+	// Construct new scpb.RowLevelTTL element with incremented SeqNum.
+	var seqNum uint32
+	if origElem != nil {
+		seqNum = origElem.SeqNum + 1
+	}
+	newElem = &scpb.RowLevelTTL{
+		TableID:     tbl.TableID,
+		RowLevelTTL: newTTL,
+		TTLExpr:     origTTLExpr,
+		SeqNum:      seqNum,
+	}
+	return origElem, newElem, true
+}
+
+// applyTTLStorageParamsReset processes TTL-related storage parameters for RESET.
+// It returns:
+// - origElem: the original RowLevelTTL element (nil if table had no TTL).
+// - newElem: the updated RowLevelTTL element (nil if no TTL params were handled).
+// - changed: true if any TTL param was modified.
+func applyTTLStorageParamsReset(
+	b BuildCtx, tbl *scpb.Table, params []string,
+) (origElem *scpb.RowLevelTTL, newElem *scpb.RowLevelTTL, changed bool) {
+	origElem = b.QueryByID(tbl.TableID).FilterRowLevelTTL().MustGetZeroOrOneElement()
+
+	if len(params) == 0 {
+		return origElem, nil, false
+	}
+
+	// Build new TTL from original (or empty if none).
+	var newTTL *catpb.RowLevelTTL
+	var origTTLExpr *scpb.Expression
+	if origElem != nil {
+		ttlCopy := origElem.RowLevelTTL
+		newTTL = &ttlCopy
+		origTTLExpr = origElem.TTLExpr
+	}
+
+	// Even if origElem is nil, we apply all the resets, since some of them
+	// have side effects like sending notices.
+	setter := tablestorageparam.NewTTLSetter(newTTL, false /* isNewObject */)
+	if err := storageparam.Reset(
+		b,
+		b.EvalCtx(),
+		params,
+		setter,
+	); err != nil {
+		panic(err)
+	}
+
+	if origElem == nil {
+		return nil, nil, false
+	}
+
+	// Construct new scpb.RowLevelTTL element with incremented SeqNum.
+	newElem = &scpb.RowLevelTTL{
+		TableID:     tbl.TableID,
+		RowLevelTTL: *newTTL,
+		TTLExpr:     origTTLExpr,
+		SeqNum:      origElem.SeqNum + 1,
+	}
+	return origElem, newElem, true
 }
 
 // AlterTableSetStorageParams implements ALTER TABLE ... SET {storage_param} in the declarative schema changer.
@@ -41,22 +147,41 @@ func AlterTableSetStorageParams(
 	stmt tree.Statement,
 	t *tree.AlterTableSetStorageParams,
 ) {
+	var ttlParams, otherParams tree.StorageParams
+	for _, param := range t.StorageParams {
+		validateStorageParamKey(t, param.Key)
+		if isTTLParam(param.Key) {
+			ttlParams = append(ttlParams, param)
+		} else {
+			otherParams = append(otherParams, param)
+		}
+	}
+
+	// Handle TTL params first, using the RowLevelTTL element.
+	origTTL, newTTL, ttlChanged := applyTTLStorageParamsSet(b, tbl, ttlParams)
+	if ttlChanged {
+		if origTTL != nil {
+			b.Drop(origTTL)
+		}
+		b.Add(newTTL)
+	}
+
 	if err := storageparam.StorageParamPreChecks(
 		b,
 		b.EvalCtx(),
 		false, /* isNewObject */
-		t.StorageParams,
+		otherParams,
 		nil, /* resetParams */
 	); err != nil {
 		panic(err)
 	}
-	for _, param := range t.StorageParams {
+
+	for _, param := range otherParams {
+		key := param.Key
 		val, err := tablestorageparam.ParseAndValidate(b, b.SemaCtx(), b.EvalCtx(), param)
 		if err != nil {
 			panic(err) // tried to set an invalid value for param
 		}
-		key := param.Key
-		validateStorageParamKey(t, key)
 
 		// schema_locked uses a dedicated TableSchemaLocked element.
 		if key == "schema_locked" {
@@ -130,21 +255,40 @@ func AlterTableResetStorageParams(
 	stmt tree.Statement,
 	t *tree.AlterTableResetStorageParams,
 ) {
+	var ttlParams, otherParams []string
+	for _, param := range t.Params {
+		validateStorageParamKey(t, param)
+		if isTTLParam(param) {
+			ttlParams = append(ttlParams, param)
+		} else {
+			otherParams = append(otherParams, param)
+		}
+	}
+
+	// Handle TTL params first, using the RowLevelTTL element.
+	origTTL, newTTL, ttlChanged := applyTTLStorageParamsReset(b, tbl, ttlParams)
+	if ttlChanged {
+		if origTTL != nil {
+			b.Drop(origTTL)
+		}
+		b.Add(newTTL)
+	}
+
 	if err := storageparam.StorageParamPreChecks(
 		b,
 		b.EvalCtx(),
 		false, /* isNewObject */
 		nil,   /* setParams */
-		t.Params,
+		otherParams,
 	); err != nil {
 		panic(err)
 	}
-	for _, key := range t.Params {
+
+	for _, key := range otherParams {
 		// Validate the key is a known storage parameter.
 		if err := tablestorageparam.IsValidParamKey(key); err != nil {
 			panic(err)
 		}
-		validateStorageParamKey(t, key)
 
 		// Get the reset value for this param. Most of the time this is the
 		// zero value, but for some params it may be different.

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Setter observes storage parameters for tables.
@@ -62,6 +63,14 @@ func NewSetter(tableDesc *tabledesc.Mutable, isNewObject bool) *Setter {
 		TableDesc:          tableDesc,
 		NewObject:          isNewObject,
 		UpdatedRowLevelTTL: updatedRowLevelTTL,
+	}
+}
+
+// NewTTLSetter returns a new Setter that can only set TTL parameters.
+func NewTTLSetter(ttlParams *catpb.RowLevelTTL, isNewObject bool) *Setter {
+	return &Setter{
+		NewObject:          isNewObject,
+		UpdatedRowLevelTTL: ttlParams,
 	}
 }
 
@@ -988,7 +997,17 @@ func (po *Setter) Set(
 	key string,
 	datum tree.Datum,
 ) error {
-	if strings.HasPrefix(key, "ttl_") && len(po.TableDesc.AllMutations()) > 0 {
+	// The declarative schema changer makes a Setter that can only handle TTL
+	// params, but doesn't have a TableDesc. Verify that TTL params are the only
+	// ones being set in this case.
+	// TODO(rafi): Figure out a way to take TableDesc out of Setter so that
+	//  declarative schema changer can use this code path for non-TTL params.
+	if po.TableDesc == nil {
+		if !strings.HasPrefix(key, "ttl") || !po.hasRowLevelTTL() {
+			return errors.AssertionFailedf("cannot set %s in this context", redact.SafeString(key))
+		}
+	}
+	if strings.HasPrefix(key, "ttl_") && po.TableDesc != nil && len(po.TableDesc.AllMutations()) > 0 {
 		return pgerror.Newf(
 			pgcode.FeatureNotSupported,
 			"cannot modify TTL settings while another schema change on the table is being processed",
@@ -1006,7 +1025,17 @@ func (po *Setter) Set(
 
 // Reset implements the Setter interface.
 func (po *Setter) Reset(ctx context.Context, evalCtx *eval.Context, key string) error {
-	if strings.HasPrefix(key, "ttl_") && len(po.TableDesc.AllMutations()) > 0 {
+	// The declarative schema changer makes a Setter that can only handle TTL
+	// params, but doesn't have a TableDesc. Verify that TTL params are the only
+	// ones being set in this case.
+	// TODO(rafi): Figure out a way to take TableDesc out of Setter so that
+	//  declarative schema changer can use this code path for non-TTL params.
+	if po.TableDesc == nil {
+		if !strings.HasPrefix(key, "ttl") {
+			return errors.AssertionFailedf("cannot reset %s in this context", redact.SafeString(key))
+		}
+	}
+	if strings.HasPrefix(key, "ttl_") && po.TableDesc != nil && len(po.TableDesc.AllMutations()) > 0 {
 		return pgerror.Newf(
 			pgcode.FeatureNotSupported,
 			"cannot modify TTL settings while another schema change on the table is being processed",

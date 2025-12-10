@@ -499,6 +499,10 @@ func (w *walkCtx) walkStorageParams(tbl catalog.TableDescriptor) {
 			// schema_locked is handled separately via the TableSchemaLocked element.
 			continue
 		}
+		if strings.HasPrefix(key, "ttl") {
+			// ttl parameters are handled separately via the RowLevelTTL element.
+			continue
+		}
 		w.ev(scpb.Status_PUBLIC, &scpb.TableStorageParam{
 			TableID: tableID,
 			Name:    key,
