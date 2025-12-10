@@ -15,12 +15,6 @@ jobs:
     - uses: actions/checkout@v3
     - run: cd build/release/bincheck && ./test-linux ${{ github.ref_name }} ${{ github.sha }}
 
-  darwin-amd64:
-    runs-on: macos-13
-    steps:
-    - uses: actions/checkout@v3
-    - run: cd build/release/bincheck && ./test-macos-amd64 ${{ github.ref_name }} ${{ github.sha }}
-
   darwin-arm64:
     runs-on: macos-latest
     steps:
