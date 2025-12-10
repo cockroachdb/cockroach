@@ -103,6 +103,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -11289,4 +11290,109 @@ func TestBackupRestoreDatabaseRevisionHistory(t *testing.T) {
 		sqlDB.Exec(t, restoreQuery, backupPath)
 		checkDatabase("ephemeral", false)
 	}
+}
+
+// TestStrictLocalityAwareBackupRegionalByRow tests that a strict locality-aware
+// backup.
+func TestStrictLocalityAwareBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "takes too long under duress")
+
+	ctx := context.Background()
+
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// The range scanner validation requires the system tenant.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {Locality: localityFromStr(t, "region=east1")},
+			1: {Locality: localityFromStr(t, "region=east2")},
+			2: {Locality: localityFromStr(t, "region=east3")},
+		}}
+
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, 0 /* numAccounts */, func(tc *testcluster.TestCluster) {}, args)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
+
+	sqlDB.Exec(t, "CREATE DATABASE test")
+	sqlDB.Exec(t, `ALTER DATABASE test CONFIGURE ZONE USING constraints = '[+region=east3]', num_replicas = 1;`)
+	sqlDB.Exec(t, "CREATE TABLE test.x (id INT PRIMARY KEY, n INT)")
+	sqlDB.Exec(t, "INSERT INTO test.x VALUES (1, 1)")
+
+	// Wait for data constraints to be enforced.
+	east3NodeID := tc.Servers[2].NodeID()
+	checkLocalities := func(targetSpan roachpb.Span, scanner rangedesc.Scanner) func() error {
+		// make pageSize large enough to not affect the test
+		pageSize := 10000
+		init := func() {}
+
+		return func() error {
+			return scanner.Scan(ctx, pageSize, init, targetSpan, func(descriptors ...roachpb.RangeDescriptor) error {
+				for _, desc := range descriptors {
+					for _, replica := range desc.InternalReplicas {
+						if replica.NodeID != east3NodeID {
+							return errors.Newf("found table data located on another node %d, desc %v",
+								replica.NodeID, desc)
+						}
+					}
+				}
+				return nil
+			})
+		}
+	}
+	srv := tc.Servers[0]
+	codec := keys.MakeSQLCodec(srv.RPCContext().TenantID)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		srv.DB(), codec, "test", "x")
+
+	testutils.SucceedsWithin(t,
+		checkLocalities(tableDesc.PrimaryIndexSpan(codec), rangedesc.NewScanner(srv.DB())),
+		time.Second*45*5)
+
+	require.NoError(t, tc.WaitForFullReplication())
+
+	// Clear the range cache to ensure it's updated with all replica placement info.
+	for _, s := range tc.Servers {
+		s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().Clear()
+	}
+
+	// Create locality-aware backup URIs with STRICT option.
+	backupURIs := []string{
+		"nodelocal://1/rbr-backup-1?COCKROACH_LOCALITY=default",
+		fmt.Sprintf("nodelocal://1/rbr-backup-1?COCKROACH_LOCALITY=%s", url.QueryEscape("region=east1")),
+		fmt.Sprintf("nodelocal://1/rbr-backup-2?COCKROACH_LOCALITY=%s", url.QueryEscape("region=east2")),
+		fmt.Sprintf("nodelocal://1/rbr-backup-3?COCKROACH_LOCALITY=%s", url.QueryEscape("region=east3")),
+	}
+
+	// Run a STRICT locality-aware backup.
+	backupQuery := fmt.Sprintf(
+		"BACKUP DATABASE test INTO (%q, %q, %q, %q) WITH STRICT STORAGE LOCALITY",
+		backupURIs[0], backupURIs[1], backupURIs[2], backupURIs[3],
+	)
+	sqlDB.Exec(t, backupQuery)
+
+	// Cannot specify strict storage locality with execution locality
+	sqlDB.ExpectErr(t, "STRICT STORAGE LOCALITY option cannot be specified with the EXECUTION LOCALITY option", fmt.Sprintf(
+		"BACKUP DATABASE test INTO (%q, %q, %q, %q) WITH STRICT STORAGE LOCALITY, EXECUTION LOCALITY = %q",
+		backupURIs[0], backupURIs[1], backupURIs[2], backupURIs[3], backupURIs[3]))
+
+	// Removing east3 URI should fail the STRICT locality-aware backup.
+	badCmd := fmt.Sprintf(
+		"BACKUP DATABASE test INTO (%q,%q) WITH STRICT STORAGE LOCALITY",
+		backupURIs[0], backupURIs[1],
+	)
+	if _, err := sqlDB.DB.ExecContext(ctx, badCmd); err == nil {
+		require.NoError(t, checkLocalities(tableDesc.PrimaryIndexSpan(codec), rangedesc.NewScanner(srv.DB()))())
+		t.Fatal("command succeeded but localities are correct")
+	}
+
+	// Removing the strict flag allows the backup to pass
+	sqlDB.Exec(t, fmt.Sprintf(
+		"BACKUP DATABASE test INTO (%q,%q)",
+		backupURIs[0], backupURIs[1],
+	))
 }

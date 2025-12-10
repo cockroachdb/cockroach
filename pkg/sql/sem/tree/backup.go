@@ -43,6 +43,7 @@ type BackupOptions struct {
 	IncrementalStorage              StringOrPlaceholderOptList
 	ExecutionLocality               Expr
 	UpdatesClusterMonitoringMetrics Expr
+	Strict                          bool
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -302,6 +303,10 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("updates_cluster_monitoring_metrics = ")
 		ctx.FormatNode(o.UpdatesClusterMonitoringMetrics)
 	}
+	if o.Strict {
+		maybeAddSep()
+		ctx.WriteString("strict storage locality")
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -362,6 +367,13 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 	} else {
 		o.UpdatesClusterMonitoringMetrics = other.UpdatesClusterMonitoringMetrics
 	}
+	if o.Strict {
+		if other.Strict {
+			return errors.New("strict storage locality option specified multiple times")
+		}
+	} else {
+		o.Strict = other.Strict
+	}
 	return nil
 }
 
@@ -375,7 +387,8 @@ func (o BackupOptions) IsDefault() bool {
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		o.ExecutionLocality == options.ExecutionLocality &&
 		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
-		o.UpdatesClusterMonitoringMetrics == options.UpdatesClusterMonitoringMetrics
+		o.UpdatesClusterMonitoringMetrics == options.UpdatesClusterMonitoringMetrics &&
+		o.Strict == options.Strict
 }
 
 // Format implements the NodeFormatter interface.

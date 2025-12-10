@@ -1462,6 +1462,7 @@ unreserved_keyword ::=
 	| 'REPLICATED'
 	| 'REPLICATION'
 	| 'RESET'
+	| 'RESOLVED'
 	| 'RESTART'
 	| 'RESTORE'
 	| 'RESTRICT'
@@ -2673,6 +2674,7 @@ backup_options ::=
 	| include_all_clusters '=' a_expr
 	| 'UPDATES_CLUSTER_MONITORING_METRICS'
 	| 'UPDATES_CLUSTER_MONITORING_METRICS' '=' a_expr
+	| 'STRICT' 'STORAGE' 'LOCALITY'
 
 opt_template_clause ::=
 	'TEMPLATE' opt_equal non_reserved_word_or_sconst
@@ -3160,6 +3162,7 @@ targets_roles ::=
 
 show_job_options ::=
 	'EXECUTION' 'DETAILS'
+	| 'RESOLVED' 'TIMESTAMP'
 
 show_ranges_options ::=
 	( 'TABLES' | 'INDEXES' | 'DETAILS' | 'KEYS' | 'EXPLAIN' ) ( ( ',' 'TABLES' | ',' 'INDEXES' | ',' 'DETAILS' | ',' 'EXPLAIN' | ',' 'KEYS' ) )*
@@ -4448,6 +4451,7 @@ bare_label_keywords ::=
 	| 'REPLICATED'
 	| 'REPLICATION'
 	| 'RESET'
+	| 'RESOLVED'
 	| 'RESTART'
 	| 'RESTORE'
 	| 'RESTRICT'
