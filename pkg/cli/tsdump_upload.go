@@ -321,6 +321,12 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 	if err := kv.Value.GetProto(&idata); err != nil {
 		return nil, err
 	}
+	braceIdx := strings.IndexByte(name, '{')
+	if braceIdx != -1 {
+		// has child labels
+		// TODO(jasonlmfong): support uploading child labels
+		return nil, errors.Errorf("timeseries key with child labels: %s", name)
+	}
 
 	series := &datadogV2.MetricSeries{
 		Metric:   name,
