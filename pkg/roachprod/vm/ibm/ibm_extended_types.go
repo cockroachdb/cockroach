@@ -548,7 +548,7 @@ func (i *instance) toVM() vm.VM {
 
 	if i == nil || i.instance == nil {
 		return vm.VM{
-			Errors: []error{errors.New("instance is nil")},
+			Errors: []vm.VMError{vm.NewVMError(errors.New("instance is nil"))},
 		}
 	}
 
@@ -556,37 +556,37 @@ func (i *instance) toVM() vm.VM {
 		err := i.load()
 		if err != nil {
 			return vm.VM{
-				Errors: []error{errors.Wrap(err, "failed to load instance")},
+				Errors: []vm.VMError{vm.NewVMError(errors.Wrap(err, "failed to load instance"))},
 			}
 		}
 	}
 
-	var vmErrors []error
+	var vmErrors []vm.VMError
 
 	vpcID := ""
 	region, err := i.provider.zoneToRegion(*i.instance.Zone.Name)
 	if err != nil {
-		vmErrors = append(vmErrors, errors.Wrap(err, "unable to get region"))
+		vmErrors = append(vmErrors, vm.NewVMError(errors.Wrap(err, "unable to get region")))
 	} else {
 		vpcID = i.provider.config.regions[region].vpcID
 	}
 
 	// Check if the instance is in a valid state.
 	if core.StringNilMapper(i.instance.Status) == "failed" {
-		vmErrors = append(vmErrors, errors.New("instance is in failed state"))
+		vmErrors = append(vmErrors, vm.NewVMError(errors.New("instance is in failed state")))
 	}
 
 	// Gather tags
 	tags, err := i.getTagsAsMap()
 	if err != nil {
-		vmErrors = append(vmErrors, errors.Wrap(err, "unable to get tags"))
+		vmErrors = append(vmErrors, vm.NewVMError(errors.Wrap(err, "unable to get tags")))
 	}
 
 	var lifetime time.Duration
 	if lifeText, ok := tags[vm.TagLifetime]; ok {
 		lifetime, err = time.ParseDuration(lifeText)
 		if err != nil {
-			vmErrors = append(vmErrors, errors.Wrap(err, "unable to compute lifetime"))
+			vmErrors = append(vmErrors, vm.NewVMError(errors.Wrap(err, "unable to compute lifetime")))
 		}
 	} else {
 		// Missing lifetime tag, use the default lifetime.
@@ -598,7 +598,7 @@ func (i *instance) toVM() vm.VM {
 	privateIP := i.getPrivateIPAddress()
 	publicIP, err := i.getPublicIPAddress()
 	if err != nil {
-		vmErrors = append(vmErrors, errors.Wrap(err, "unable to get public IP"))
+		vmErrors = append(vmErrors, vm.NewVMError(errors.Wrap(err, "unable to get public IP")))
 	}
 
 	nonBootAttachedVolumes := []vm.Volume{}

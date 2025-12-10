@@ -604,19 +604,19 @@ func (p *Provider) computeVirtualMachineToVM(cvm compute.VirtualMachine) (*vm.VM
 	}
 
 	if createdPtr := cvm.Tags[vm.TagCreated]; createdPtr == nil {
-		m.Errors = append(m.Errors, vm.ErrNoExpiration)
+		m.Errors = append(m.Errors, vm.NewVMError(vm.ErrNoExpiration))
 	} else if parsed, err := time.Parse(time.RFC3339, *createdPtr); err == nil {
 		m.CreatedAt = parsed
 	} else {
-		m.Errors = append(m.Errors, vm.ErrNoExpiration)
+		m.Errors = append(m.Errors, vm.NewVMError(vm.ErrNoExpiration))
 	}
 
 	if lifetimePtr := cvm.Tags[vm.TagLifetime]; lifetimePtr == nil {
-		m.Errors = append(m.Errors, vm.ErrNoExpiration)
+		m.Errors = append(m.Errors, vm.NewVMError(vm.ErrNoExpiration))
 	} else if parsed, err := time.ParseDuration(*lifetimePtr); err == nil {
 		m.Lifetime = parsed
 	} else {
-		m.Errors = append(m.Errors, vm.ErrNoExpiration)
+		m.Errors = append(m.Errors, vm.NewVMError(vm.ErrNoExpiration))
 	}
 
 	// The network info needs a separate request.
@@ -625,7 +625,7 @@ func (p *Provider) computeVirtualMachineToVM(cvm compute.VirtualMachine) (*vm.VM
 		return nil, err
 	}
 	if err := p.fillNetworkDetails(context.Background(), m, nicID); errors.Is(err, vm.ErrBadNetwork) {
-		m.Errors = append(m.Errors, err)
+		m.Errors = append(m.Errors, vm.NewVMError(err))
 	} else if err != nil {
 		return nil, err
 	}

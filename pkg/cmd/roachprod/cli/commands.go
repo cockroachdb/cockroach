@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -547,15 +546,15 @@ hosts file.
 				if listDetails {
 					collated := filteredCloud.BadInstanceErrors()
 
-					// Sort by Error() value for stable output
-					var errors ui.ErrorsByError
-					for err := range collated {
-						errors = append(errors, err)
+					// Sort by error message for stable output
+					var errMsgs []string
+					for msg := range collated {
+						errMsgs = append(errMsgs, msg)
 					}
-					sort.Sort(errors)
+					sort.Strings(errMsgs)
 
-					for _, e := range errors {
-						fmt.Printf("%s: %s\n", e, collated[e].Names())
+					for _, msg := range errMsgs {
+						fmt.Printf("%s: %s\n", msg, collated[msg].Names())
 					}
 				}
 			}

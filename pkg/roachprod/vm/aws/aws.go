@@ -1141,20 +1141,20 @@ func (in *DescribeInstancesOutputInstance) toVM(
 	// Convert the tag map into a more useful representation
 	tagMap := in.Tags.MakeMap()
 
-	var errs []error
+	var errs []vm.VMError
 	createdAt, err := time.Parse(time.RFC3339, in.LaunchTime)
 	if err != nil {
-		errs = append(errs, vm.ErrNoExpiration)
+		errs = append(errs, vm.NewVMError(vm.ErrNoExpiration))
 	}
 
 	var lifetime time.Duration
 	if lifeText, ok := tagMap[vm.TagLifetime]; ok {
 		lifetime, err = time.ParseDuration(lifeText)
 		if err != nil {
-			errs = append(errs, err)
+			errs = append(errs, vm.NewVMError(err))
 		}
 	} else {
-		errs = append(errs, vm.ErrNoExpiration)
+		errs = append(errs, vm.NewVMError(vm.ErrNoExpiration))
 	}
 
 	var nonBootableVolumes []vm.Volume
@@ -1165,11 +1165,11 @@ func (in *DescribeInstancesOutputInstance) toVM(
 				if vol, ok := volumes[bdm.Disk.VolumeID]; ok {
 					nonBootableVolumes = append(nonBootableVolumes, vol)
 				} else {
-					errs = append(errs, errors.Newf(
+					errs = append(errs, vm.NewVMError(errors.Newf(
 						"Attempted to add volume %s however it is not in the attached volumes for instance %s",
 						bdm.Disk.VolumeID,
 						in.InstanceID,
-					))
+					)))
 				}
 			}
 		}

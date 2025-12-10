@@ -60,14 +60,17 @@ type Cloud struct {
 	BadInstances vm.List `json:"bad_instances"`
 }
 
-// BadInstanceErrors returns all bad VM instances, grouped by error.
-func (c *Cloud) BadInstanceErrors() map[error]vm.List {
-	ret := map[error]vm.List{}
+// BadInstanceErrors returns all bad VM instances, grouped by error message.
+// Note: errors are grouped by their string representation to handle cases
+// where errors have been serialized/deserialized and lost pointer identity.
+func (c *Cloud) BadInstanceErrors() map[string]vm.List {
+	ret := map[string]vm.List{}
 
 	// Expand instances and errors
-	for _, vm := range c.BadInstances {
-		for _, err := range vm.Errors {
-			ret[err] = append(ret[err], vm)
+	for _, v := range c.BadInstances {
+		for _, err := range v.Errors {
+			msg := err.Error()
+			ret[msg] = append(ret[msg], v)
 		}
 	}
 
@@ -263,11 +266,11 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 			// Parse cluster/user from VM name, but only for non-local VMs
 			userName, err := v.UserName()
 			if err != nil {
-				v.Errors = append(v.Errors, vm.ErrInvalidUserName)
+				v.Errors = append(v.Errors, vm.NewVMError(vm.ErrInvalidUserName))
 			}
 			clusterName, err := v.ClusterName()
 			if err != nil {
-				v.Errors = append(v.Errors, vm.ErrInvalidClusterName)
+				v.Errors = append(v.Errors, vm.NewVMError(vm.ErrInvalidClusterName))
 			}
 
 			// Anything with an error gets tossed into the BadInstances slice, and we'll correct
