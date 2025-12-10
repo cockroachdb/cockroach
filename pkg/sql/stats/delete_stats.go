@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -128,6 +129,77 @@ func deleteStatsForDroppedTables(ctx context.Context, db isql.DB, limit int64) e
 		fmt.Sprintf(`DELETE FROM system.table_statistics
                             WHERE "tableID" NOT IN (SELECT table_id FROM crdb_internal.tables)
                             LIMIT %d`, limit),
+	)
+	return err
+}
+
+// MarkDelayDelete marks old statistics for delayed deletion instead of immediately
+// removing them. This function applies the same filtering logic as DeleteOldStatsForColumns
+// but sets "delayDelete"=true on statistics that would otherwise be deleted.
+func MarkDelayDelete(
+	ctx context.Context, txn isql.Txn, tableID descpb.ID, columnIDs []descpb.ColumnID,
+) error {
+	columnIDsVal := tree.NewDArray(types.Int)
+	for _, c := range columnIDs {
+		if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(int(c)))); err != nil {
+			return err
+		}
+	}
+
+	_, err := txn.ExecEx(
+		ctx, "update-visibility", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		`UPDATE system.table_statistics
+					SET "delayDelete" = true
+					WHERE "tableID" = $1
+						AND "columnIDs" = $3
+						AND "statisticID" NOT IN (
+								SELECT "statisticID" FROM system.table_statistics
+								WHERE "tableID" = $1
+									AND "name" = $2
+									AND "columnIDs" = $3
+								ORDER BY "createdAt" DESC
+								LIMIT $4
+						)`,
+		tableID,
+		jobspb.AutoStatsName,
+		columnIDsVal,
+		keepCount,
+	)
+
+	return err
+}
+
+// DeleteExpiredStats permanently removes statistics that were previously marked
+// for delayed deletion by MarkDelayDelete. This function performs the actual
+// cleanup of statistics that are no longer needed.
+//
+// This function should be called after new statistics have been collected to
+// safely remove the old statistics without risking query plan degradation.
+// It deletes all statistics for the specified table and columns where
+// "delayDelete" is true.
+//
+// The two-phase deletion process (mark then delete) ensures that:
+// - Old statistics remain available during the transition period
+// - Query planning can exclude delay-deleted stats from canary paths
+// - Cleanup happens safely once replacement statistics are available
+func DeleteExpiredStats(
+	ctx context.Context, txn isql.Txn, tableID descpb.ID, columnIDs []descpb.ColumnID,
+) error {
+	columnIDsVal := tree.NewDArray(types.Int)
+	for _, c := range columnIDs {
+		if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(int(c)))); err != nil {
+			return err
+		}
+	}
+	_, err := txn.ExecEx(
+		ctx, "delete-expired-stats", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		`DELETE FROM system.table_statistics
+         WHERE "delayDelete" = true
+           AND "tableID" = $1
+           AND "columnIDs" = $2`,
+		tableID, columnIDsVal,
 	)
 	return err
 }
