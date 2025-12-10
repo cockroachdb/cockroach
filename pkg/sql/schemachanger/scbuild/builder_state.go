@@ -1192,7 +1192,7 @@ func (b *builderState) resolveRelation(
 ) *cachedDesc {
 	var prefix catalog.ResolvedObjectPrefix
 	var rel catalog.Descriptor
-	prefix, rel = b.cr.MayResolveTable(b.ctx, *name)
+	prefix, rel = b.cr.MayResolveTable(b.ctx, *name, p.WithOffline)
 	if rel == nil {
 		if p.ResolveTypes {
 			prefix, rel = b.cr.MayResolveType(b.ctx, *name)
