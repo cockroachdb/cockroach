@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const scheme = "external"
+const Scheme = "external"
 
 func makeExternalConnectionConfig(
 	uri *url.URL, args cloud.ExternalStorageURIContext,
@@ -118,6 +118,6 @@ func init() {
 			ParseFn:        parseExternalConnectionURL,
 			ConstructFn:    makeExternalConnectionStorage,
 			RedactedParams: cloud.RedactedParams(),
-			Schemes:        []string{scheme},
+			Schemes:        []string{Scheme},
 		})
 }

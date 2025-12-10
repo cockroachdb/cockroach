@@ -9,12 +9,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupsink"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -456,8 +459,32 @@ func sendRemoteAddSSTable(
 		batchTimestamp = execCtx.ExecCfg().DB.Clock().Now()
 	}
 
+	// check if file uri is an external connection and swap it out/revalidate
+	locator := file.Dir.URI
+	uri, err := url.Parse(file.Dir.URI)
+	if err != nil {
+		return err
+	}
+	if uri.Scheme == externalconn.Scheme {
+		if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
+			ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, t)
+			if err != nil {
+				return err
+			}
+
+			materialized, err := externalconn.Materialize(ec, uri)
+			if err := cloud.SchemeSupportsEarlyBoot(materialized.Scheme); err != nil {
+				return errors.Wrap(err, "backup URI not supported for online restore")
+			}
+			locator = materialized.String()
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+
 	loc := kvpb.LinkExternalSSTableRequest_ExternalFile{
-		Locator:                 file.Dir.URI,
+		Locator:                 locator,
 		Path:                    file.Path,
 		ApproximatePhysicalSize: fileSize,
 		BackingFileSize:         file.BackingFileSize,

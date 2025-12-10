@@ -10,6 +10,7 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
+	"github.com/cockroachdb/errors"
 )
 
 // ExternalConnection is the interface to the external resource represented by
@@ -36,6 +37,46 @@ type ExternalConnection interface {
 	// RedactedConnectionURI returns the connection URI with sensitive information
 	// redacted.
 	RedactedConnectionURI() string
+}
+
+// converts a potentially modified external connection uri to the underlying uri with those
+// modifications applied. passing uri == nil will just return the underlying uri with no modifications
+func Materialize(ec ExternalConnection, uri *url.URL) (*url.URL, error) {
+	if uri != nil {
+		if uri.Scheme != Scheme {
+			return nil, errors.Newf("invalid input scheme '%s'", uri.Scheme)
+
+		}
+		connectionName := ec.ConnectionName()
+		if uri.Host != connectionName {
+			return nil, errors.Newf("input host %s does not match connection name %s", uri.Host, connectionName)
+		}
+	}
+
+	connDetails := ec.ConnectionProto()
+	switch d := connDetails.Details.(type) {
+	case *connectionpb.ConnectionDetails_SimpleURI:
+		materialized, err := url.Parse(d.SimpleURI.URI)
+		if err != nil {
+			return nil, err
+		}
+
+		if uri != nil {
+			query := materialized.Query()
+			for key, vals := range uri.Query() {
+				for _, val := range vals {
+					query.Add(key, val)
+				}
+			}
+			materialized.RawQuery = query.Encode()
+
+			materialized = materialized.JoinPath(uri.Path)
+		}
+
+		return materialized, nil
+	default:
+		return nil, errors.Newf("invalid connection details: %v", d)
+	}
 }
 
 // connectionParserFactory is the factory method that takes in an endpoint URI
