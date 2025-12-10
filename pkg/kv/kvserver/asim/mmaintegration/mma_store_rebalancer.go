@@ -155,6 +155,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 			storeLeaseholderMsg := MakeStoreLeaseholderMsgFromState(s, msr.localStoreID)
 			pendingChanges := msr.allocator.ComputeChanges(ctx, &storeLeaseholderMsg, mmaprototype.ChangeOptions{
 				LocalStoreID: roachpb.StoreID(msr.localStoreID),
+				PeriodicCall: true, /* to exercise observability code paths */
 			})
 			log.KvDistribution.Infof(ctx, "store %d: computed %d changes", msr.localStoreID, len(pendingChanges))
 			for i, change := range pendingChanges {

@@ -17,6 +17,13 @@ type ChangeOptions struct {
 	// DryRun tells the allocator not to update its internal state with the
 	// proposed pending changes.
 	DryRun bool
+	// PeriodicCall is only used for observability, for deciding when to update
+	// gauges and log a summary of what happened in the rebalancing pass. We
+	// expect that when this is true, more significant changes may be produced,
+	// and the subsequent calls in a tight loop will have diminishing returns
+	// (due to pending changes from a load perspective), and so choose not to
+	// update gauges and logs in those subsequent calls.
+	PeriodicCall bool
 }
 
 // Allocator is the interface for a distributed allocator. We expect that the
@@ -68,7 +75,11 @@ type Allocator interface {
 	// registered.
 	RegisterExternalChange(localStoreID roachpb.StoreID, change PendingRangeChange) (_ ExternalRangeChange, ok bool)
 
-	// ComputeChanges is called periodically and frequently, say every 10s.
+	// ComputeChanges is called to compute changes. The caller may use a
+	// combination of periodic calls (say every 60s) and calling in a tight
+	// loop. The tight loop is useful when the periodic call produced changes
+	// that have been enacted, and the caller want to keep producing more
+	// changes immediately.
 	//
 	// It accepts the latest StoreLeaseholderMsg for ChangeOptions.LocalStoreID.
 	//
