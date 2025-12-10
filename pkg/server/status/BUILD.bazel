@@ -68,6 +68,7 @@ go_library(
         "//pkg/util/log/logmetrics",
         "//pkg/util/log/severity",
         "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
         "//pkg/util/syncutil",
         "//pkg/util/system",
         "@com_github_cockroachdb_crlib//crtime",

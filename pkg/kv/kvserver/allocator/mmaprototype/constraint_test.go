@@ -126,30 +126,56 @@ func printSpanConfig(b *strings.Builder, conf roachpb.SpanConfig) {
 	}
 }
 
+// TestNormalizedSpanConfig exercises the full constraint normalization pipeline
+// including both normalizeVoterConstraints and normalizeEmptyConstraints.
+// It tests relationship types: conjEqualSet, conjStrictSubset, conjStrictSuperset,
+// conjNonIntersecting, and conjPossiblyIntersecting, as well as empty constraint
+// handling across both normalization phases.
 func TestNormalizedSpanConfig(t *testing.T) {
 	interner := newStringInterner()
-	datadriven.RunTest(t, "testdata/normalize_config",
-		func(t *testing.T, d *datadriven.TestData) string {
-			switch d.Cmd {
-			case "normalize":
-				conf := parseSpanConfig(t, d)
-				var b strings.Builder
-				fmt.Fprintf(&b, "input:\n")
-				printSpanConfig(&b, conf)
-				nConf, err := makeNormalizedSpanConfig(&conf, interner)
-				if err != nil {
-					fmt.Fprintf(&b, "err=%s\n", err.Error())
-				}
-				if nConf != nil {
-					fmt.Fprintf(&b, "output:\n")
-					printSpanConfig(&b, nConf.uninternedConfig())
-				}
-				return b.String()
 
-			default:
-				return fmt.Sprintf("unknown command: %s", d.Cmd)
+	// Handler uses observer to show intermediate states after each normalization
+	// phase, printing "(unchanged)" when a phase doesn't modify the config.
+	handler := func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "normalize":
+			conf := parseSpanConfig(t, d)
+			var b strings.Builder
+
+			// Track previous state to detect changes.
+			var prev strings.Builder
+
+			// Observer compares current state with previous to avoid redundant output.
+			observer := func(phaseName string, nConf *normalizedSpanConfig) {
+				fmt.Fprintf(&b, "%s:\n", phaseName)
+				var cur strings.Builder
+				printSpanConfig(&cur, nConf.uninternedConfig())
+				if cur.String() == prev.String() {
+					fmt.Fprintf(&b, " (unchanged)\n")
+				} else {
+					b.WriteString(cur.String())
+				}
+				prev = cur
 			}
-		})
+
+			// Run normalization with observer.
+			_, err := makeNormalizedSpanConfigWithObserver(&conf, interner, observer)
+			if err != nil {
+				fmt.Fprintf(&b, "err=%s\n", err.Error())
+			}
+			return b.String()
+		default:
+			return fmt.Sprintf("unknown command: %s", d.Cmd)
+		}
+	}
+
+	t.Run("Basic", func(t *testing.T) {
+		datadriven.RunTest(t, filepath.Join(datapathutils.TestDataPath(t), t.Name()), handler)
+	})
+
+	t.Run("EdgeCases", func(t *testing.T) {
+		datadriven.RunTest(t, filepath.Join(datapathutils.TestDataPath(t), t.Name()), handler)
+	})
 }
 
 func printPostingList(b *strings.Builder, pl storeSet) {

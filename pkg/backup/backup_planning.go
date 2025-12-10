@@ -75,6 +75,7 @@ func resolveOptionsForBackupJobDescription(
 		Detached:                        opts.Detached,
 		ExecutionLocality:               opts.ExecutionLocality,
 		UpdatesClusterMonitoringMetrics: opts.UpdatesClusterMonitoringMetrics,
+		Strict:                          opts.Strict,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -465,6 +466,9 @@ func backupPlanHook(
 				return nil, nil, false, err
 			}
 		}
+		if backupStmt.Options.Strict {
+			return nil, nil, false, errors.New("STRICT STORAGE LOCALITY option cannot be specified with the EXECUTION LOCALITY option")
+		}
 	}
 
 	var includeAllSecondaryTenants bool
@@ -611,6 +615,7 @@ func backupPlanHook(
 			ApplicationName:                 p.SessionData().ApplicationName,
 			ExecutionLocality:               executionLocality,
 			UpdatesClusterMonitoringMetrics: updatesClusterMonitoringMetrics,
+			StrictLocalityFiltering:         backupStmt.Options.Strict,
 		}
 		if backupStmt.CreatedByInfo != nil {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ScheduleID()

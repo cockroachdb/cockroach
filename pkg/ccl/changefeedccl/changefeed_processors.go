@@ -568,7 +568,8 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		sf = schemafeed.DoNothingSchemaFeed
 	} else {
 		sf = schemafeed.New(ctx, cfg, schemaChange.EventClass, ca.targets,
-			initialHighWater, &ca.metrics.SchemaFeedMetrics, config.Opts.GetCanHandle())
+			initialHighWater, &ca.metrics.SchemaFeedMetrics, config.Opts.GetCanHandle(),
+			isDBLevelChangefeed(ca.spec.Feed))
 	}
 
 	monitoringCfg, err := makeKVFeedMonitoringCfg(ctx, ca.sliMetrics, opts, ca.FlowCtx.Cfg.Settings)

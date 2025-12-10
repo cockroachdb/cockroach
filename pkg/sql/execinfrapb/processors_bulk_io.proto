@@ -342,8 +342,10 @@ message BackupDataSpec {
   // only be set on backups starting on cluster version 24.1 or
   // greater.
   optional bool include_mvcc_value_header = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "IncludeMVCCValueHeader"];
+  
+  optional bool strict_locality = 14 [(gogoproto.nullable) = false];
 
-  // NEXTID: 14.
+  // NEXTID: 15.
 }
 
 message RestoreFileSpec {

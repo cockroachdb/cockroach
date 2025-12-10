@@ -570,15 +570,11 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			expr, err := w.newExpression(col.GetComputeExpr())
 			onErrPanic(err)
 
-			if columnType.ElementCreationMetadata.In_24_3OrLater {
-				w.ev(scpb.Status_PUBLIC, &scpb.ColumnComputeExpression{
-					TableID:    tbl.GetID(),
-					ColumnID:   col.GetID(),
-					Expression: *expr,
-				})
-			} else {
-				columnType.ComputeExpr = expr
-			}
+			w.ev(scpb.Status_PUBLIC, &scpb.ColumnComputeExpression{
+				TableID:    tbl.GetID(),
+				ColumnID:   col.GetID(),
+				Expression: *expr,
+			})
 		}
 
 		if columnType.ElementCreationMetadata.In_26_1OrLater {

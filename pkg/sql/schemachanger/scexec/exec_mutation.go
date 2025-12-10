@@ -8,7 +8,6 @@ package scexec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/errors"
@@ -39,13 +38,6 @@ func executeMutationOps(
 	}
 	// Execute deferred ops last.
 	nvs := deferredState{}
-	mode, err := backfill.DetermineDistributedMergeMode(
-		ctx, deps.ClusterSettings(), backfill.DistributedMergeConsumerDeclarative,
-	)
-	if err != nil {
-		return err
-	}
-	nvs.distributedMergeMode = mode
 	nv := scmutationexec.NewDeferredVisitor(&nvs)
 	for _, op := range ops {
 		if dop, ok := op.(scop.DeferredMutationOp); ok {

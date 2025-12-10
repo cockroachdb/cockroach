@@ -857,14 +857,10 @@ func maybeCreateAndAddShardCol(
 		notNull: true,
 	}
 	wexpr := b.WrapExpression(tbl.TableID, parsedExpr)
-	if spec.colType.ElementCreationMetadata.In_24_3OrLater {
-		spec.compute = &scpb.ColumnComputeExpression{
-			TableID:    tbl.TableID,
-			ColumnID:   shardColID,
-			Expression: *wexpr,
-		}
-	} else {
-		spec.colType.ComputeExpr = wexpr
+	spec.compute = &scpb.ColumnComputeExpression{
+		TableID:    tbl.TableID,
+		ColumnID:   shardColID,
+		Expression: *wexpr,
 	}
 
 	if spec.colType.ElementCreationMetadata.In_26_1OrLater {

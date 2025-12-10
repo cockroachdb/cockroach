@@ -15,6 +15,21 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// DistributedMergeMode captures whether distributed merge is enabled for index
+// backfills planned by the declarative schema changer. The zero value indicates
+// the mode has not been evaluated yet.
+type DistributedMergeMode int32
+
+const (
+	// DistributedMergeModeUnset indicates the mode has not been computed.
+	DistributedMergeModeUnset DistributedMergeMode = iota
+	// DistributedMergeModeDisabled indicates distributed merge should not be
+	// used.
+	DistributedMergeModeDisabled
+	// DistributedMergeModeEnabled indicates distributed merge should be used.
+	DistributedMergeModeEnabled
+)
+
 // CurrentState is a TargetState decorated with the current status of the
 // elements in the target state.
 type CurrentState struct {
@@ -40,6 +55,12 @@ type CurrentState struct {
 	// NonCancelable property of the job; if a schema change is no longer
 	// Revertible, the job must be NonCancelable.
 	Revertible bool
+
+	// DistributedMergeMode captures the planned distributed merge configuration
+	// for any index backfills associated with this state. It is populated during
+	// planning and plumbed through to job creation; it is not reconstructed from
+	// descriptor state for existing jobs.
+	DistributedMergeMode DistributedMergeMode
 }
 
 // ByteSize returns an estimated memory allocation for a schema change state `s`.
@@ -58,6 +79,7 @@ func (s CurrentState) ByteSize() (ret int64) {
 	ret += int64(s.TargetState.Authorization.Size())
 	ret += int64(cap(s.Initial)+cap(s.Current)) * int64(unsafe.Sizeof(Status(0)))
 	ret += int64(unsafe.Sizeof(false))
+	ret += int64(unsafe.Sizeof(DistributedMergeMode(0)))
 	return ret
 }
 
@@ -72,11 +94,12 @@ func (s CurrentState) WithCurrentStatuses(current []Status) CurrentState {
 // DeepCopy returns a deep copy of the receiver.
 func (s CurrentState) DeepCopy() CurrentState {
 	return CurrentState{
-		TargetState: *protoutil.Clone(&s.TargetState).(*TargetState),
-		Initial:     append(make([]Status, 0, len(s.Initial)), s.Initial...),
-		Current:     append(make([]Status, 0, len(s.Current)), s.Current...),
-		InRollback:  s.InRollback,
-		Revertible:  s.Revertible,
+		TargetState:          *protoutil.Clone(&s.TargetState).(*TargetState),
+		Initial:              append(make([]Status, 0, len(s.Initial)), s.Initial...),
+		Current:              append(make([]Status, 0, len(s.Current)), s.Current...),
+		InRollback:           s.InRollback,
+		Revertible:           s.Revertible,
+		DistributedMergeMode: s.DistributedMergeMode,
 	}
 }
 

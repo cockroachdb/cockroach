@@ -972,6 +972,33 @@ func (b *Builder) buildPlaceholderScan(
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("PlaceholderScan cannot have constraints")
 	}
 
+	// Evaluate the scalar expressions.
+	values := make([]tree.Datum, len(scan.Span))
+	for i, expr := range scan.Span {
+		// The expression is either a placeholder or a constant.
+		var val tree.Datum
+		if p, ok := expr.(*memo.PlaceholderExpr); ok {
+			val, err = eval.Expr(b.ctx, b.evalCtx, p.Value)
+			if err != nil {
+				return execPlan{}, colOrdMap{}, err
+			}
+		} else {
+			val = memo.ExtractConstDatum(expr)
+		}
+		if val == tree.DNull {
+			// If any value is NULL, then build an empty values operator instead
+			// of a scan. No row can satisfy the equality filter that was used
+			// to build this placeholder scan, because of SQL NULL-equality
+			// semantics.
+			return b.buildValues(&memo.ValuesExpr{
+				ValuesPrivate: memo.ValuesPrivate{
+					Cols: scan.Cols.ToList(),
+				},
+			})
+		}
+		values[i] = val
+	}
+
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
 	idx := tab.Index(scan.Index)
@@ -987,20 +1014,6 @@ func (b *Builder) buildPlaceholderScan(
 	var columns constraint.Columns
 	columns.Init(spanColumns)
 	keyCtx := constraint.MakeKeyContext(b.ctx, &columns, b.evalCtx)
-
-	values := make([]tree.Datum, len(scan.Span))
-	for i, expr := range scan.Span {
-		// The expression is either a placeholder or a constant.
-		if p, ok := expr.(*memo.PlaceholderExpr); ok {
-			val, err := eval.Expr(b.ctx, b.evalCtx, p.Value)
-			if err != nil {
-				return execPlan{}, colOrdMap{}, err
-			}
-			values[i] = val
-		} else {
-			values[i] = memo.ExtractConstDatum(expr)
-		}
-	}
 
 	key := constraint.MakeCompositeKey(values...)
 	var span constraint.Span

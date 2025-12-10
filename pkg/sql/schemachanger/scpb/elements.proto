@@ -249,10 +249,7 @@ message ColumnType {
   uint32 family_id = 2 [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
   uint32 column_id = 3 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   TypeT embedded_type_t = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  reserved 5;
-  // Deprecated
-  // compute expression is now handled as a separate element (see ColumnComputeExpression).
-  Expression compute_expr = 6 [deprecated = true];
+  reserved 5, 6;
   bool is_virtual = 7;
   reserved 8, 9, 10;
   // ElementCreationMetadata stores information about when this element is created.
@@ -1043,7 +1040,6 @@ message FunctionSecurity {
 }
 
 message ElementCreationMetadata {
-  reserved 1;
-  bool in_24_3_or_later = 2;
+  reserved 1, 2;
   bool in_26_1_or_later = 3;
 }

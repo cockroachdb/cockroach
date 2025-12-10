@@ -190,7 +190,7 @@ func EncodeMetadataValue(metadata cspann.PartitionMetadata) []byte {
 	// - 0-20 bytes for timestamp (variable encoding)
 	// - 4 bytes count of dimensions
 	// - 4 bytes for each dimension in the vector
-	encMetadataSize := 4 + 8 + 8 + 8 + binary.MaxVarintLen64*2 + 4 + 4*len(metadata.Centroid)
+	encMetadataSize := 4 + 4 + 8 + 8 + 8 + binary.MaxVarintLen64*2 + 4 + 4*len(metadata.Centroid)
 	buf := make([]byte, 0, encMetadataSize)
 	buf = encoding.EncodeUint32Ascending(buf, uint32(metadata.Level))
 	buf = encoding.EncodeUint32Ascending(buf, uint32(metadata.StateDetails.State))

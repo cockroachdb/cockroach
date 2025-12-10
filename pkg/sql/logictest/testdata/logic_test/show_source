@@ -205,6 +205,7 @@ plan_cache_mode                                                  auto
 plpgsql_use_strict_into                                          off
 prefer_lookup_joins_for_fks                                      off
 prepared_statements_cache_size                                   0 B
+prevent_update_set_column_drop                                   on
 propagate_admission_header_to_leaf_transactions                  on
 propagate_input_ordering                                         off
 recursion_depth_limit                                            1000
@@ -257,6 +258,7 @@ unsafe_allow_triggers_modifying_cascades                         off
 use_cputs_on_non_unique_indexes                                  off
 use_declarative_schema_changer                                   on
 use_improved_routine_dependency_tracking                         on
+use_improved_routine_deps_triggers_and_computed_cols             on
 use_pre_25_2_variadic_builtins                                   off
 use_proc_txn_control_extended_protocol_fix                       on
 use_soft_limit_for_distribute_scan                               on

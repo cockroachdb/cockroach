@@ -9,49 +9,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	catpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/stretchr/testify/require"
 )
-
-// TestDeprecatedColumnComputeFieldMigration will ensure that ComputeExpr in
-// ColumnType is nulled out and a new ColumnComputeExpression is added.
-func TestDeprecatedColumnComputeFieldMigration(t *testing.T) {
-	state := DescriptorState{
-		Targets: []Target{
-			MakeTarget(ToPublic,
-				&ColumnType{
-					TableID: 100,
-					ComputeExpr: &Expression{
-						Expr: catpb.Expression("Hello"),
-					},
-				},
-				nil,
-			),
-		},
-		CurrentStatuses: []Status{Status_PUBLIC},
-		TargetRanks:     []uint32{1},
-	}
-	migrationOccurred := MigrateDescriptorState(
-		clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()},
-		1,
-		&state,
-	)
-	require.True(t, migrationOccurred)
-	require.Len(t, state.CurrentStatuses, 2)
-	require.Len(t, state.Targets, 2)
-	require.NotNil(t, state.Targets[0].GetColumnType())
-	ct := state.Targets[0].GetColumnType()
-	require.Nil(t, ct.ComputeExpr)
-	require.NotNil(t, state.Targets[1].GetColumnComputeExpression())
-	cce := state.Targets[1].GetColumnComputeExpression()
-	require.Equal(t, cce.TableID, ct.TableID)
-	require.Equal(t, cce.ColumnID, ct.ColumnID)
-	require.Equal(t, cce.Expr, catpb.Expression("Hello"))
-	require.Equal(t, state.CurrentStatuses[1], Status_PUBLIC)
-	require.Equal(t, state.TargetRanks[1], uint32(2))
-}
 
 // TestDeprecatedIsInvertedMigration tests that the IsInverted field is migrated
 // to the new Type field.

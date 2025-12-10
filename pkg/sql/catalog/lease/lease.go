@@ -113,6 +113,12 @@ var MaxBatchLeaseCount = settings.RegisterIntSetting(settings.ApplicationLevel,
 	"the maximum number of descriptors to lease in a single batch",
 	1000)
 
+// GetLockedLeaseTimestampEnabled returns if locked leasing timestamps are enabled.
+func GetLockedLeaseTimestampEnabled(ctx context.Context, settings *cluster.Settings) bool {
+	return LockedLeaseTimestamp.Get(&settings.SV) &&
+		settings.Version.IsActive(ctx, clusterversion.V26_1)
+}
+
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
 func (m *Manager) WaitForNoVersion(
@@ -1478,7 +1484,7 @@ func (m *Manager) purgeOldVersions(
 	// Optionally, acquire the refcount on the previous version for the locked
 	// leasing mode.
 	acquireLeaseOnPrevious := func() error {
-		if !LockedLeaseTimestamp.Get(&m.storage.settings.SV) {
+		if !GetLockedLeaseTimestampEnabled(ctx, m.storage.settings) {
 			return nil
 		}
 		var handles []*closeTimeStampHandle
@@ -3605,7 +3611,7 @@ func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
 
 // GetReadTimestamp returns a locked timestamp to use for lease management.
 func (m *Manager) GetReadTimestamp(ctx context.Context, timestamp hlc.Timestamp) ReadTimestamp {
-	if LockedLeaseTimestamp.Get(&m.settings.SV) {
+	if GetLockedLeaseTimestampEnabled(ctx, m.settings) {
 		replicationTS := m.getSafeReplicationTSHandle(ctx)
 		if replicationTS.timestamp.Less(timestamp) {
 			return LeaseTimestamp{
