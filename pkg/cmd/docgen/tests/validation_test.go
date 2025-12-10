@@ -241,25 +241,13 @@ func TestBrokenGrammarLinks(t *testing.T) {
 	}
 }
 
-// TestUnusedDiagrams checks for diagrams that are generated but not used in documentation.
+// TestUnusedDiagrams is a placeholder for future functionality.
+// Detecting unused diagrams would require cloning the cockroachdb/docs
+// repository and scanning for remote_include references. This is not
+// currently needed but could be implemented later if diagram cruft
+// becomes a problem.
 func TestUnusedDiagrams(t *testing.T) {
-	repoRoot, ok := findRepoRoot(t)
-	if !ok {
-		return
-	}
-
-	// Get all generated diagram names
-	bnfDir := filepath.Join(repoRoot, "docs", "generated", "sql", "bnf")
-	bnfFiles, err := filepath.Glob(filepath.Join(bnfDir, "*.bnf"))
-	if err != nil || len(bnfFiles) == 0 {
-		skip.IgnoreLint(t, "Could not read BNF directory")
-		return
-	}
-
-	// This is a placeholder - in production, you would search the docs repo
-	// for remote_include references to each diagram
-	t.Log("WARNING: Unused diagram detection requires access to cockroachdb/docs repository.")
-	t.Log("In production, this test would check which diagrams are actually referenced.")
+	skip.IgnoreLint(t, "Unused diagram detection not needed - can be implemented later if required")
 }
 
 // TestSKIPDOCSuppressions reports all SKIP DOC annotations in sql.y
