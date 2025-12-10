@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package bulkingest
+package bulkingest_test
 
 import (
 	"context"
@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkingest"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -88,7 +89,7 @@ func TestIngestFileProcessorSpanBoundaries(t *testing.T) {
 	)
 	defer cleanupJobCtx()
 
-	err := IngestFiles(
+	err := bulkingest.IngestFiles(
 		ctx,
 		jobExecCtx,
 		spans,

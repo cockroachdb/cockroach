@@ -3,11 +3,12 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package bulkingest
+package bulkingest_test
 
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkingest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -124,7 +125,7 @@ func TestTaskSlice(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := taskSlice(tc.tasks, tc.workerID, tc.numWorkers)
+			result := bulkingest.TaskSlice(tc.tasks, tc.workerID, tc.numWorkers)
 			require.Equal(t, tc.expected, result)
 		})
 	}
