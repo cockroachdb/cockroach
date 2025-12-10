@@ -140,6 +140,14 @@ func (ic internedConstraint) less(b internedConstraint) bool {
 // constraints are in increasing order using internedConstraint.less.
 type constraintsConj []internedConstraint
 
+// Computes an FNV-1a hash for constraintsConj. Note: Potential hash collisions
+// may exist between different constraintsConj, so this hash is intended only
+// for optimization, and must be accompanied by a full equality check for
+// correctness.
+func (cc constraintsConj) hash() uint64 {
+	return constraintsDisj{cc}.hash()
+}
+
 // conjunctionRelationship describes the binary relationship between sets of
 // stores satisfying two constraint conjunctions. A constraint conjunction
 // (constraintsConj) represents all possible sets of stores that satisfy all
@@ -360,6 +368,51 @@ func (icc internedConstraintsConjunction) unintern(
 		cc.Constraints = append(cc.Constraints, c.unintern(interner))
 	}
 	return cc
+}
+
+// dedupConstraints combines duplicate constraint conjunctions (those with
+// the same constraints) by summing their numReplicas.
+// Example:
+// constraints: [+region=us-west-1]: 1, [+region=us-west-1]: 1, []: 3, []: 1
+// result: [+region=us-west-1]: 2, []: 4
+func dedupConstraints(
+	constraints []internedConstraintsConjunction,
+) []internedConstraintsConjunction {
+	if len(constraints) <= 1 {
+		return constraints
+	}
+	// Hash key -> indices in result (each index corresponds to a unique
+	// constraint in constraints).
+	seen := make(map[uint64][]int)
+	result := make([]internedConstraintsConjunction, 0, len(constraints))
+	for i := range constraints {
+		if constraints[i].numReplicas == 0 {
+			continue
+		}
+		h := constraints[i].constraints.hash()
+		if indices, ok := seen[h]; ok {
+			found := false
+			for _, idx := range indices {
+				// Same hash and same constraint => duplicate.
+				if result[idx].constraints.relationship(constraints[i].constraints) == conjEqualSet {
+					result[idx].numReplicas += constraints[i].numReplicas
+					found = true
+					break
+				}
+			}
+			if found {
+				// Is a duplicate, added to result already.
+				continue
+			}
+			// Same hash with different constraint.
+			seen[h] = append(seen[h], len(result))
+		} else {
+			// Not the same hash => different constraint.
+			seen[h] = []int{len(result)}
+		}
+		result = append(result, constraints[i])
+	}
+	return result
 }
 
 type internedLeasePreference struct {
