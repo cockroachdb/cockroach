@@ -6,6 +6,7 @@ go_library(
     name = "stats",
     srcs = [
         "automatic_stats.go",
+        "canary_stats.go",
         "delete_stats.go",
         "forecast.go",
         "histogram.go",
@@ -24,6 +25,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
