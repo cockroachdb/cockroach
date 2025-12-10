@@ -490,27 +490,30 @@ SELECT hash, row_id, fingerprint, hint, created_at FROM system.statement_hints O
 ----
 
 statement ok
-INSERT INTO system.statement_hints (row_id, fingerprint, hint, created_at)
+INSERT INTO system.statement_hints (row_id, fingerprint, hint, created_at, hint_type, hint_name, database)
 (VALUES
-  (100, 'foo', 'DEADBEEF', '2018-01-01 1:00:00.00000+00:00'),
-  (200, 'bar', 'BEEFDEAD', '2018-01-02 1:00:00.00000+00:00')
+  (100, 'foo', 'DEADBEEF', '2018-01-01 1:00:00.00000+00:00', 'REWRITE INLINE HINTS', 'foo_hint', 'test'),
+  (200, 'bar', 'BEEFDEAD', '2018-01-02 1:00:00.00000+00:00', 'REWRITE INLINE HINTS', 'bar_hint', NULL)
 )
 
-query IITTT
-SELECT hash, row_id, fingerprint, hint, created_at FROM system.statement_hints ORDER BY row_id
+query IITTTTTBT
+SELECT hash, row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
+FROM system.statement_hints ORDER BY row_id
 ----
--2824945433545984717  100  foo  DEADBEEF  2018-01-01 01:00:00 +0000 UTC
--2821042167266592640  200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC
+-2824945433545984717  100  foo  DEADBEEF  2018-01-01 01:00:00 +0000 UTC  REWRITE INLINE HINTS  foo_hint  true  test
+-2821042167266592640  200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC  REWRITE INLINE HINTS  bar_hint  true  NULL
 
-query ITTT
-SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints WHERE fingerprint = 'foo' ORDER BY row_id
+query ITTTTTBT
+SELECT row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
+FROM system.statement_hints WHERE fingerprint = 'foo' ORDER BY row_id
 ----
-100  foo  DEADBEEF  2018-01-01 01:00:00 +0000 UTC
+100  foo  DEADBEEF  2018-01-01 01:00:00 +0000 UTC  REWRITE INLINE HINTS  foo_hint  true  test
 
-query ITTT
-SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints WHERE fingerprint = 'bar' ORDER BY row_id
+query ITTTTTBT
+SELECT row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
+FROM system.statement_hints WHERE fingerprint = 'bar' ORDER BY row_id
 ----
-200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC
+200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC  REWRITE INLINE HINTS  bar_hint  true  NULL
 
 query ITTT
 SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints WHERE fingerprint = 'baz' ORDER BY row_id
@@ -519,9 +522,10 @@ SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints WHERE f
 statement count 1
 DELETE FROM system.statement_hints WHERE fingerprint = 'foo'
 
-query ITTT
-SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints ORDER BY row_id
+query ITTTTTBT
+SELECT row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database
+FROM system.statement_hints ORDER BY row_id
 ----
-200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC
+200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC  REWRITE INLINE HINTS  bar_hint  true  NULL
 
 subtest end
