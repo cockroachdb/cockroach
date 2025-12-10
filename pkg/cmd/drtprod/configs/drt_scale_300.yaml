@@ -183,6 +183,5 @@ targets:
           workers: 266666
           conns: 100
           active-workers: 100
-          duration: 12h
           ramp: 1h
           wait: 0
