@@ -57,7 +57,7 @@ func UpdateDescriptorCount(
 		if err != nil {
 			return err
 		}
-		tableStats, err := execCfg.TableStatsCache.GetTableStats(ctx, desc, nil /* typeResolver */)
+		tableStats, err := execCfg.TableStatsCache.GetTableStats(ctx, desc, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */)
 		if err != nil {
 			return err
 		}
