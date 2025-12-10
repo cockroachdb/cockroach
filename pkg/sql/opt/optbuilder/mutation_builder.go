@@ -1097,6 +1097,13 @@ func (mb *mutationBuilder) maybeAddRegionColLookup(op opt.Operator) {
 func (mb *mutationBuilder) addCheckConstraintCols(
 	isUpdate bool, policyCmdScope cat.PolicyCommandScope, includeSelectPolicies bool,
 ) {
+	if mb.b.evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols {
+		// Avoid adding unnecessary dependencies on columns that are referenced by
+		// check expressions. We only need to track columns that were explicitly
+		// specified by the user, e.g. those in SET, WHERE or RETURNING clause, or
+		// the target columns of an INSERT.
+		defer mb.b.DisableSchemaDepTracking()()
+	}
 	if mb.tab.CheckCount() != 0 {
 		projectionsScope := mb.outScope.replace()
 		projectionsScope.appendColumnsFromScope(mb.outScope)
@@ -1508,6 +1515,11 @@ func (mb *mutationBuilder) projectPartialIndexPutAndDelCols() {
 // projectPartialIndexDelCols, or projectPartialIndexPutAndDelCols.
 func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope) {
 	if partialIndexCount(mb.tab) > 0 {
+		if mb.b.evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols {
+			// Avoid unnecessary dependencies on columns and UDTs referenced by the
+			// partial index expression.
+			defer mb.b.DisableSchemaDepTracking()()
+		}
 		projectionScope := mb.outScope.replace()
 		projectionScope.appendColumnsFromScope(mb.outScope)
 
