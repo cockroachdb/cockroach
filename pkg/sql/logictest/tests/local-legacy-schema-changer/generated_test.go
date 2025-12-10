@@ -318,6 +318,13 @@ func TestLogic_canary_stats(
 	runLogicTest(t, "canary_stats")
 }
 
+func TestLogic_canary_stats_deletion(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "canary_stats_deletion")
+}
+
 func TestLogic_cascade(
 	t *testing.T,
 ) {
