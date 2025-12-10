@@ -1750,6 +1750,9 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
 	LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+	// Old versions need to be retained, since we don't have code
+	// to read them from storage in this test.
+	RetainOldVersionsForLocked.Override(ctx, &st.SV, true)
 	// Intentionally disable WaitForInitialVersion support, so that we can run
 	// historical queries at timestamps before the lease manager is fully caught
 	// up.
