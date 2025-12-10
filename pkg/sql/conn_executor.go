@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -156,26 +157,6 @@ var detailedLatencyMetrics = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
-// canaryFraction controls the probabilistic sampling rate for queries
-// participating in the canary statistics rollout feature.
-//
-// This cluster-level setting determines what fraction of queries will use
-// "canary statistics" (newly collected stats within their canary window)
-// versus "stable statistics" (previously proven stats). For example, a value
-// of 0.2 means 20% of queries will test canary stats while 80% use stable stats.
-//
-// The selection is atomic per query: if a query is chosen for canary evaluation,
-// it will use canary statistics for ALL tables it references (where available).
-// A query never uses a mix of canary and stable statistics.
-var canaryFraction = settings.RegisterFloatSetting(
-	settings.ApplicationLevel,
-	"sql.stats.canary_fraction",
-	"probability that table statistics will use canary mode instead of stable mode for query planning [0.0-1.0]",
-	0,
-	settings.Fraction,
-	settings.WithVisibility(settings.Reserved),
-)
-
 // canaryRollDice performs the probabilistic check to determine if a query
 // should use the "canary path" for statistics.
 // This selection is atomic per query, meaning that if a query is chosen to use
@@ -185,7 +166,7 @@ var canaryFraction = settings.RegisterFloatSetting(
 func canaryRollDice(evalCtx *eval.Context, rng *rand.Rand) bool {
 	switch m := evalCtx.SessionData().CanaryStatsMode; m {
 	case sessiondatapb.CanaryStatsModeAuto:
-		threshold := canaryFraction.Get(&evalCtx.Settings.SV)
+		threshold := stats.CanaryFraction.Get(&evalCtx.Settings.SV)
 		// If the fraction is 0, never use canary stats.
 		if threshold == 0 {
 			return false
