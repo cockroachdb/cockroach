@@ -86,4 +86,5 @@ var asyncpgIgnoreList = blocklist{
 	`test_copy.TestCopyTo.test_copy_to_table_timeout`:                            "flaky; see #119291 and https://github.com/MagicStack/asyncpg/issues/240",
 	`test_execute.TestExecuteMany.test_executemany_server_failure_during_writes`: "flaky",
 	`test_listeners.TestListeners.test_dangling_listener_warns`:                  "flaky",
+	`test_timeout.TestTimeout.test_timeout_05`:                                   "flaky",
 }
