@@ -1435,3 +1435,37 @@ SELECT crdb_internal_d_shard_16 AS shard, count(*) < 20 FROM decimals GROUP BY 1
 15  false
 
 subtest end
+
+# Regression test for #158154. Don't add transitive column dependencies to
+# routines that build check constraints.
+subtest regression_158154
+
+statement ok
+CREATE TABLE t158154 (col1 INT8 NOT NULL, col2 TIMESTAMP NOT NULL);
+
+statement ok
+CREATE INDEX idx1 ON t158154 (col2 ASC) USING HASH WITH (bucket_count = 6);
+
+statement ok
+CREATE OR REPLACE PROCEDURE p158154 () LANGUAGE PLpgSQL AS $proc$
+  BEGIN
+    UPDATE t158154 SET col1 = col1 + 1;
+  END;
+$proc$;
+
+statement ok
+CALL p158154();
+
+# The procedure does not directly depend on the hash-sharded index computed
+# column, so dropping the index should succeed.
+statement ok
+DROP INDEX t158154@idx1;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+
+subtest end

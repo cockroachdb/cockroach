@@ -2116,3 +2116,35 @@ WHERE stat->>'columns' = '["a"]'
     "null_count": 0,
     "row_count": 5
 }
+
+# Regression test for #158154. Don't add transitive column dependencies to
+# routines that build check constraints for enum columns.
+subtest regression_158154
+
+statement ok
+CREATE TYPE typ158154 AS ENUM ('foo', 'bar');
+
+statement ok
+CREATE TABLE t158154 (a INT, b typ158154);
+
+statement ok
+CREATE PROCEDURE p158154() LANGUAGE SQL AS $$
+  INSERT INTO t158154 (a) VALUES (1);
+  UPDATE t158154 SET a = a + 1;
+$$;
+
+statement ok
+CALL p158154();
+
+statement ok
+ALTER TABLE t158154 DROP COLUMN b;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+DROP TYPE typ158154;
+
+subtest end
