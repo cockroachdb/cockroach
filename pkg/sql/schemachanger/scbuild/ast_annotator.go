@@ -29,6 +29,15 @@ func newAstAnnotator(original tree.Statement) (*astAnnotator, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Preserve fields that are not part of the SQL syntax.
+	// ImportRollback is set programmatically and lost during format/parse.
+	if origTruncate, ok := original.(*tree.Truncate); ok {
+		if newTruncate, ok := statement.AST.(*tree.Truncate); ok {
+			newTruncate.ImportRollback = origTruncate.ImportRollback
+		}
+	}
+
 	return &astAnnotator{
 		nonExistentNames: map[*tree.TableName]struct{}{},
 		statement:        statement.AST,
