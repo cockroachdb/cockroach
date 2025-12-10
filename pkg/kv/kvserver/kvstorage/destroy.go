@@ -197,19 +197,9 @@ func destroyReplicaImpl(
 // SubsumeReplica is like DestroyReplica, but it does not delete the user keys
 // (and the corresponding system and lock table keys). The latter are inherited
 // by the subsuming range.
-//
-// Returns SelectOpts which can be used to reflect on the key spans that this
-// function clears.
-// TODO(pav-kv): get rid of SelectOpts.
-func SubsumeReplica(
-	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo,
-) (rditer.SelectOpts, error) {
-	// Forget about the user keys.
-	info.Keys = roachpb.RSpan{}
-	return rditer.SelectOpts{
-		ReplicatedByRangeID:   true,
-		UnreplicatedByRangeID: true,
-	}, destroyReplicaImpl(ctx, rw, info, MergedTombstoneReplicaID)
+func SubsumeReplica(ctx context.Context, rw ReadWriter, info DestroyReplicaInfo) error {
+	info.Keys = roachpb.RSpan{} // forget about the user keys
+	return destroyReplicaImpl(ctx, rw, info, MergedTombstoneReplicaID)
 }
 
 // RemoveStaleRHSFromSplit removes all replicated data for the RHS replica of a
@@ -243,32 +233,29 @@ func RemoveStaleRHSFromSplit(
 // RewriteRaftState rewrites the raft state of the given replica with the
 // provided state. Specifically, it rewrites HardState and RaftTruncatedState,
 // and clears the raft log. All writes are generated in the engine keys order.
-//
-// TODO(pav-kv): get rid of the returned cleared spans.
 func RewriteRaftState(
 	ctx context.Context,
 	raftWO RaftWO,
 	sl StateLoader,
 	hs raftpb.HardState,
 	ts kvserverpb.RaftTruncatedState,
-) (cleared roachpb.Span, _ error) {
+) error {
 	// Update HardState.
 	if err := sl.SetHardState(ctx, raftWO, hs); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "unable to write HardState")
+		return errors.Wrapf(err, "unable to write HardState")
 	}
 	// Clear the raft log. Note that there are no Pebble range keys in this span.
-	logPrefix := sl.RaftLogPrefix().Clone()
-	raftLog := roachpb.Span{Key: logPrefix, EndKey: logPrefix.PrefixEnd()}
+	raftLog := sl.RaftLogPrefix() // NB: use only until next StateLoader call
 	if err := raftWO.ClearRawRange(
-		raftLog.Key, raftLog.EndKey, true /* pointKeys */, false, /* rangeKeys */
+		raftLog, raftLog.PrefixEnd(), true /* pointKeys */, false, /* rangeKeys */
 	); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "unable to clear the raft log")
+		return errors.Wrapf(err, "unable to clear the raft log")
 	}
 	// Update the log truncation state.
 	if err := sl.SetRaftTruncatedState(ctx, raftWO, &ts); err != nil {
-		return roachpb.Span{}, errors.Wrapf(err, "unable to write RaftTruncatedState")
+		return errors.Wrapf(err, "unable to write RaftTruncatedState")
 	}
-	return raftLog, nil
+	return nil
 }
 
 // TestingForceClearRange changes the value of ClearRangeThresholdPointKeys to

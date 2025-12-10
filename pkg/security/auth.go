@@ -73,6 +73,12 @@ var disallowRootLoginMu struct {
 	disallowed bool
 }
 
+// allowDebugUserMu controls whether debuguser login should be allowed.
+var allowDebugUserMu struct {
+	syncutil.RWMutex
+	allowed bool
+}
+
 func SetRootSubject(rootDNString string) error {
 	return rootSubjectMu.setDNWithString(rootDNString)
 }
@@ -101,6 +107,20 @@ func CheckRootLoginDisallowed() bool {
 	disallowRootLoginMu.RLock()
 	defer disallowRootLoginMu.RUnlock()
 	return disallowRootLoginMu.disallowed
+}
+
+// SetAllowDebugUser sets whether debuguser login should be allowed.
+func SetAllowDebugUser(allow bool) {
+	allowDebugUserMu.Lock()
+	defer allowDebugUserMu.Unlock()
+	allowDebugUserMu.allowed = allow
+}
+
+// CheckDebugUserLoginAllowed returns whether debuguser login is currently allowed.
+func CheckDebugUserLoginAllowed() bool {
+	allowDebugUserMu.RLock()
+	defer allowDebugUserMu.RUnlock()
+	return allowDebugUserMu.allowed
 }
 
 // CertificateUserScope indicates the scope of a user certificate i.e. which
@@ -512,6 +532,11 @@ func ValidateUserScope(
 	for _, scope := range certUserScope {
 		// Check if root login is disallowed and certificate contains "root" as a principal
 		if CheckRootLoginDisallowed() && scope.Username == username.RootUser {
+			return false
+		}
+
+		// Check if debuguser login is not allowed and certificate contains "debuguser" as a principal
+		if !CheckDebugUserLoginAllowed() && scope.Username == username.DebugUser {
 			return false
 		}
 
