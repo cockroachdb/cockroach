@@ -168,6 +168,38 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 func (a *allocatorState) AdjustPendingChangeDisposition(change ExternalRangeChange, success bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	metrics := a.ensureMetricsForLocalStoreLocked(change.localStoreID)
+	isLeaseTransfer := change.IsPureTransferLease()
+	switch change.origin {
+	case OriginExternal:
+		if isLeaseTransfer {
+			if success {
+				metrics.ExternalLeaseChangeSuccess.Inc(1)
+			} else {
+				metrics.ExternalLeaseChangeFailure.Inc(1)
+			}
+		} else {
+			if success {
+				metrics.ExternalReplicaChangeSuccess.Inc(1)
+			} else {
+				metrics.ExternalReplicaChangeFailure.Inc(1)
+			}
+		}
+	case originMMARebalance:
+		if isLeaseTransfer {
+			if success {
+				metrics.RebalanceLeaseChangeSuccess.Inc(1)
+			} else {
+				metrics.RebalanceLeaseChangeFailure.Inc(1)
+			}
+		} else {
+			if success {
+				metrics.RebalanceReplicaChangeSuccess.Inc(1)
+			} else {
+				metrics.RebalanceReplicaChangeFailure.Inc(1)
+			}
+		}
+	}
 	_, ok := a.cs.ranges[change.RangeID]
 	if !ok {
 		// Range no longer exists. This can happen if the StoreLeaseholderMsg
@@ -217,15 +249,15 @@ func (a *allocatorState) RegisterExternalChange(
 	defer a.mu.Unlock()
 	counterMetrics := a.ensureMetricsForLocalStoreLocked(localStoreID)
 	if err := a.cs.preCheckOnApplyReplicaChanges(change); err != nil {
-		counterMetrics.ExternalFailedToRegister.Inc(1)
+		counterMetrics.ExternalRegisterFailure.Inc(1)
 		log.KvDistribution.Infof(context.Background(),
 			"did not register external changes: due to %v", err)
 		return ExternalRangeChange{}, false
 	} else {
-		counterMetrics.ExternaRegisterSuccess.Inc(1)
+		counterMetrics.ExternalRegisterSuccess.Inc(1)
 	}
 	a.cs.addPendingRangeChange(change)
-	return MakeExternalRangeChange(change), true
+	return MakeExternalRangeChange(OriginExternal, localStoreID, change), true
 }
 
 // ComputeChanges implements the Allocator interface.
