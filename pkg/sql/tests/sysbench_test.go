@@ -27,7 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -164,25 +166,27 @@ func newTestCluster(
 	// also moderately less realistic.
 	disableBackgroundWork(st)
 	const cacheSize = 2 * 1024 * 1024 * 1024 // 2GB
+	knobs := base.TestingKnobs{
+		DialerKnobs: nodedialer.DialerTestingKnobs{
+			TestingNoLocalClientOptimization: !localRPCFastPath,
+		},
+		Server: &server.TestingKnobs{
+			ContextTestingKnobs: rpc.ContextTestingKnobs{
+				NoLoopbackDialer: !localRPCFastPath,
+			},
+		},
+	}
 	return serverutils.StartCluster(b, nodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings:  st,
 			CacheSize: cacheSize,
-			Knobs: base.TestingKnobs{
-				DialerKnobs: nodedialer.DialerTestingKnobs{
-					TestingNoLocalClientOptimization: !localRPCFastPath,
-				},
-			},
+			Knobs:     knobs,
 		}},
 	)
 }
 
 // sysbenchSQL is SQL-based implementation of sysbenchDriver. It runs SQL
 // statements against a single node cluster.
-//
-// TODO(nvanbenschoten): add a 3-node cluster variant of this driver.
-// TODO(nvanbenschoten): add a variant of this driver which bypasses the gRPC
-// local fast-path optimization.
 type sysbenchSQL struct {
 	ctx     context.Context
 	stopper *stop.Stopper
@@ -376,10 +380,6 @@ func (s *sysbenchSQLClient) prepConn() {
 // sysbenchKV is KV-based implementation of sysbenchDriver. It bypasses the SQL
 // layer and runs the workload directly against the KV layer, on a single node
 // cluster.
-//
-// TODO(nvanbenschoten): add a 3-node cluster variant of this driver.
-// TODO(nvanbenschoten): add a variant of this driver which bypasses the gRPC
-// local fast-path optimization.
 type sysbenchKV struct {
 	ctx         context.Context
 	db          *kv.DB
