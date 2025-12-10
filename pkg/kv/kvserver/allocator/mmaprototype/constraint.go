@@ -611,7 +611,7 @@ func normalizeConstraints(
 			constraints: interner.internConstraintsConj(nil),
 		})
 	}
-	return rv, nil
+	return dedupConstraints(rv), nil
 }
 
 // relationshipVoterAndAll represents the relationship between a voter constraint
@@ -769,11 +769,9 @@ func makeNormalizedConstraintsEnv(conf *normalizedSpanConfig) normalizedConstrai
 func (ncEnv *normalizedConstraintsEnv) buildVoterConstraints() []internedConstraintsConjunction {
 	vc := make([]internedConstraintsConjunction, 0, len(ncEnv.voterConstraints))
 	for i := range ncEnv.voterConstraints {
-		if ncEnv.voterConstraints[i].numReplicas > 0 {
-			vc = append(vc, ncEnv.voterConstraints[i].internedConstraintsConjunction)
-		}
+		vc = append(vc, ncEnv.voterConstraints[i].internedConstraintsConjunction)
 	}
-	return vc
+	return dedupConstraints(vc)
 }
 
 // moveToEnd moves the voter constraint at idx to the end of the slice. This is
@@ -931,6 +929,7 @@ func (conf *normalizedSpanConfig) normalizeEmptyConstraints() {
 		if conf.constraints[n].numReplicas == 0 {
 			conf.constraints = conf.constraints[:n]
 		}
+		conf.constraints = dedupConstraints(conf.constraints)
 	}
 }
 
