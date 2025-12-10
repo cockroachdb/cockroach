@@ -10,6 +10,6 @@ INTO
 AS OF SYSTEM TIME
 	'-10s'
 WITH
-	revision_history = true, incremental_location = 'gs://acme-co-backup/incrementals'
+	revision_history = true
 
 
