@@ -82,12 +82,38 @@ func makeLeasedDescriptors(lm LeaseManager) leasedDescriptors {
 }
 
 // leasedDescriptors holds references to all the descriptors leased in the
-// transaction, and supports access by name and by ID.
+//
+//	transaction and supports access by name and by ID.
 type leasedDescriptors struct {
 	lm                LeaseManager
 	cache             nstree.NameMap
 	leaseTimestamp    lease.ReadTimestamp
 	leaseTimestampSet bool
+}
+
+// retryOnModifiedDescriptor is generated when a descriptor that this txn needs has been
+// altered.
+type retryOnModifiedDescriptor struct {
+	descName      string
+	descID        descpb.ID
+	expiration    hlc.Timestamp
+	readTimestamp hlc.Timestamp
+}
+
+// ClientVisibleRetryError implements the ClientVisibleRetryError interface.
+func (r *retryOnModifiedDescriptor) ClientVisibleRetryError() {
+}
+
+// Error implements error interface.
+func (r *retryOnModifiedDescriptor) Error() string {
+	return fmt.Sprint(errors.Formattable(r))
+}
+
+// SafeFormatError implements SafeFormatter.
+func (r *retryOnModifiedDescriptor) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("the descriptor %s(%d) has been modified at timestamp %s, which is no longer usable by the txns timestamp: %s",
+		r.descName, r.descID, r.expiration.String(), r.readTimestamp)
+	return nil
 }
 
 // mismatchedExternalDataRowTimestamp is generated when the external row data timestamps
@@ -118,6 +144,7 @@ func newMismatchedExternalDataRowTimestampError(
 func (e *mismatchedExternalDataRowTimestamp) ClientVisibleRetryError() {
 }
 
+// SafeFormatError implements SafeFormatter.
 func (e *mismatchedExternalDataRowTimestamp) SafeFormatError(p errors.Printer) (next error) {
 	p.Printf("PCR reader timestamp has moved forward, "+
 		"existing descriptor %s(%d) and timestamp: %s "+
@@ -131,6 +158,7 @@ func (e *mismatchedExternalDataRowTimestamp) SafeFormatError(p errors.Printer) (
 	return nil
 }
 
+// Error implements error interface.
 func (e *mismatchedExternalDataRowTimestamp) Error() string {
 	return fmt.Sprint(errors.Formattable(e))
 }
@@ -306,6 +334,16 @@ func (ld *leasedDescriptors) getResult(
 	expiration := ldesc.Expiration(ctx)
 	readTimestamp := txn.ReadTimestamp()
 	if expiration.LessEq(txn.ReadTimestamp()) {
+		// If we encounter this with locked leasing, then its possible timestamp retention is disabled.
+		if ld.leaseTimestampSet && ld.leaseTimestamp.GetTimestamp() != ld.leaseTimestamp.GetBaseTimestamp() {
+			return nil, false, &retryOnModifiedDescriptor{
+				descName:      ldesc.GetName(),
+				descID:        ldesc.GetID(),
+				expiration:    expiration,
+				readTimestamp: readTimestamp,
+			}
+		}
+
 		return nil, false, errors.AssertionFailedf("bad descriptor for id=%d readTimestamp=%s, expiration=%s (leaseTimestamp: %s)", ldesc.GetID(), readTimestamp, expiration, ld.leaseTimestamp.GetTimestamp())
 	}
 
