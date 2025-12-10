@@ -328,25 +328,27 @@ func registerImport(r registry.Registry) {
 			suites = registry.ManualOnly
 		}
 
-		for _, numNodes := range testSpec.nodes {
-			ts := testSpec
-			numNodes := numNodes
+		for _, distMerge := range []bool{false, true} {
+			for _, numNodes := range testSpec.nodes {
+				ts := testSpec
+				numNodes := numNodes
 
-			name := fmt.Sprintf("import/%s/nodes=%d", ts.subtestName, numNodes)
-			r.Add(registry.TestSpec{
-				Name:              name,
-				Owner:             registry.OwnerSQLQueries,
-				Benchmark:         testSpec.benchmark,
-				Timeout:           timeout,
-				Cluster:           r.MakeClusterSpec(numNodes),
-				CompatibleClouds:  registry.Clouds(spec.GCE, spec.Local),
-				Suites:            suites,
-				EncryptionSupport: registry.EncryptionMetamorphic,
-				Leases:            registry.MetamorphicLeases,
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runImportTest(ctx, t, c, ts, numNodes, timeout)
-				},
-			})
+				name := fmt.Sprintf("import/%s/distmerge=%v/nodes=%d", ts.subtestName, distMerge, numNodes)
+				r.Add(registry.TestSpec{
+					Name:              name,
+					Owner:             registry.OwnerSQLQueries,
+					Benchmark:         testSpec.benchmark,
+					Timeout:           timeout,
+					Cluster:           r.MakeClusterSpec(numNodes),
+					CompatibleClouds:  registry.Clouds(spec.GCE, spec.Local),
+					Suites:            suites,
+					EncryptionSupport: registry.EncryptionMetamorphic,
+					Leases:            registry.MetamorphicLeases,
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runImportTest(ctx, t, c, ts, numNodes, timeout, distMerge)
+					},
+				})
+			}
 		}
 	}
 }
@@ -358,6 +360,7 @@ func runImportTest(
 	testSpec importTestSpec,
 	numNodes int,
 	timeout time.Duration,
+	useDistributedMerge bool,
 ) {
 	rng, seed := randutil.NewTestRand()
 
@@ -375,6 +378,9 @@ func runImportTest(
 	_, err := conn.ExecContext(ctx, `CREATE DATABASE import_test`)
 	require.NoError(t, err)
 	_, err = conn.ExecContext(ctx, `USE import_test`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx,
+		fmt.Sprintf(`SET CLUSTER SETTING bulkio.import.distributed_merge.enabled = %v`, useDistributedMerge))
 	require.NoError(t, err)
 
 	// Initialize datasets and create tables.
@@ -694,12 +700,12 @@ func importCancellationRunner(
 		// Block until the job is complete. Afterwards, it either completed
 		// succesfully before we cancelled it, or the cancellation has finished
 		// reverting the keys it wrote prior to cancellation.
-		var status string
+		var status, errorMsg string
 		err = conn.QueryRowContext(
 			ctx,
-			`WITH x AS (SHOW JOBS WHEN COMPLETE (SELECT $1)) SELECT status FROM x`,
+			`WITH x AS (SHOW JOBS WHEN COMPLETE (SELECT $1)) SELECT status, error FROM x`,
 			jobID,
-		).Scan(&status)
+		).Scan(&status, &errorMsg)
 		if err != nil {
 			return err
 		}
@@ -716,7 +722,7 @@ func importCancellationRunner(
 				return slices.Contains(urls, url)
 			})
 		} else if status == "failed" {
-			return errors.Newf("Job %s failed.\n", jobID)
+			return errors.Newf("Job %s failed with error: %s\n", jobID, errorMsg)
 		}
 	}
 	if len(urlsToImport) != 0 {
