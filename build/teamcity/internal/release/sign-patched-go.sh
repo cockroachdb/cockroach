@@ -15,7 +15,7 @@ if [[ $service_account != "signing-agent@crl-teamcity-agents.iam.gserviceaccount
 fi
 
 cleanup() {
-    rm -rf darwin.zip staging darwin-amd64 darwin-arm64 ./*.tar.gz TIMESTAMP.txt
+    rm -rf darwin.zip staging darwin-arm64 ./*.tar.gz TIMESTAMP.txt
     rm -rf .secrets
 }
 trap cleanup EXIT
@@ -53,5 +53,4 @@ sign() {
       darwin.zip
 }
 
-sign amd64
 sign arm64
