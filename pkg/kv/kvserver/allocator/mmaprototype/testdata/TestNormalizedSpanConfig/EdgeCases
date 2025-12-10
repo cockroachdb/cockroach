@@ -525,6 +525,75 @@ after:
  voter-constraints:
    +region=a,+zone=a1:3
 
+# Duplicate empty voter constraints from basic normalization are not combined.
+normalize num-replicas=5 num-voters=3
+voter-constraint num-replicas=1
+----
+basic:
+ num-replicas=5 num-voters=3
+ constraints:
+   :5
+ voter-constraints:
+   :1
+   :2
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ (unchanged)
+err=multiple empty voter constraints: {1 []} and {2 []}
+
+
+# normalizeVoterConstraints narrowing can create duplicate voter constraints.
+normalize num-replicas=2 num-voters=2
+constraint num-replicas=2 +region=a
+voter-constraint num-replicas=1 +region=a
+voter-constraint num-replicas=1
+----
+basic:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a:2
+ voter-constraints:
+   +region=a:1
+   :1
+normalizeVoterConstraints:
+ num-replicas=2 num-voters=2
+ constraints:
+   +region=a:2
+ voter-constraints:
+   +region=a:1
+   +region=a:1
+after:
+ (unchanged)
+
+# normalizeEmptyConstraints creates duplicate all-replica constraints when
+# narrowing.
+normalize num-replicas=3 num-voters=2
+constraint num-replicas=1 +region=a
+voter-constraint num-replicas=1 +region=a +zone=a1
+voter-constraint num-replicas=1 +region=a +zone=a1
+----
+basic:
+ num-replicas=3 num-voters=2
+ constraints:
+   +region=a:1
+   :2
+ voter-constraints:
+   +region=a,+zone=a1:1
+   +region=a,+zone=a1:1
+normalizeVoterConstraints:
+ (unchanged)
+after:
+ num-replicas=3 num-voters=2
+ constraints:
+   +region=a:1
+   +region=a,+zone=a1:1
+   +region=a,+zone=a1:1
+ voter-constraints:
+   +region=a,+zone=a1:1
+   +region=a,+zone=a1:1
+
+
 # From #106559: num_voters (5) exceeds explicit voter constraints (4), creating
 # implicit empty voter [:]:1. normalizeVoterConstraints makes voters stricter by
 # narrowing the implicit [:]:1 to [+region=eu-west-1]:1.
