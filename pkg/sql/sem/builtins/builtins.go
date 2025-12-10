@@ -109,7 +109,6 @@ import (
 )
 
 var (
-	errEmptyInputString = pgerror.New(pgcode.InvalidParameterValue, "the input string must not be empty")
 	errZeroIP           = pgerror.New(pgcode.InvalidParameterValue, "zero length IP")
 	errChrValueTooSmall = pgerror.New(pgcode.InvalidParameterValue, "input value must be >= 0")
 	errChrValueTooLarge = pgerror.Newf(pgcode.InvalidParameterValue,
@@ -1322,7 +1321,7 @@ var regularBuiltins = map[string]builtinDefinition{
 				for _, ch := range s {
 					return tree.NewDInt(tree.DInt(ch)), nil
 				}
-				return nil, errEmptyInputString
+				return tree.NewDInt(0), nil
 			},
 			types.Int,
 			"Returns the character code of the first character in `val`. Despite the name, the function supports Unicode too.",
