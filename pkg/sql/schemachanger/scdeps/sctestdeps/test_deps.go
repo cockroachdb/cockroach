@@ -331,7 +331,7 @@ func (s *TestState) MayResolvePrefix(
 
 // MayResolveTable implements the scbuild.CatalogReader interface.
 func (s *TestState) MayResolveTable(
-	ctx context.Context, name tree.UnresolvedObjectName,
+	ctx context.Context, name tree.UnresolvedObjectName, allowOffline bool,
 ) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor) {
 	prefix, desc, err := s.mayResolveObject(name)
 	if err != nil {
@@ -385,7 +385,7 @@ func (s *TestState) MayResolveIndex(
 	idx catalog.Index,
 ) {
 	if tableIndexName.Table.Object() != "" {
-		prefix, tbl = s.MayResolveTable(ctx, *tableIndexName.Table.ToUnresolvedObjectName())
+		prefix, tbl = s.MayResolveTable(ctx, *tableIndexName.Table.ToUnresolvedObjectName(), false /* allowOffline */)
 		if tbl == nil {
 			return false, catalog.ResolvedObjectPrefix{}, nil, nil
 		}

@@ -41,6 +41,7 @@ func Truncate(b BuildCtx, stmt *tree.Truncate) {
 		tblName := &stmt.Tables[i]
 		elts := b.ResolveTable(tblName.ToUnresolvedObjectName(), ResolveParams{
 			RequiredPrivilege: privilege.DROP,
+			WithOffline:       stmt.ImportRollback,
 		})
 		tbl := elts.FilterTable().MustGetOneElement()
 		tblName.ObjectNamePrefix = b.NamePrefix(tbl)
