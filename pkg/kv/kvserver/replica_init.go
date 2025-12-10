@@ -87,7 +87,7 @@ func newInitializedReplica(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if err := r.initRaftMuLockedReplicaMuLocked(loaded, waitForPrevLeaseToExpire); err != nil {
+	if err := r.initRaftMuLockedReplicaMuLocked(loaded, waitForPrevLeaseToExpire, nil); err != nil {
 		return nil, err
 	}
 
@@ -298,7 +298,7 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 // initRaftMuLockedReplicaMuLocked initializes the Replica using the state
 // loaded from storage. Must not be called more than once on a Replica.
 func (r *Replica) initRaftMuLockedReplicaMuLocked(
-	s kvstorage.LoadedReplicaState, waitForPrevLeaseToExpire bool,
+	s kvstorage.LoadedReplicaState, waitForPrevLeaseToExpire bool, beforeInitFunc func(*Replica),
 ) error {
 	desc := s.ReplState.Desc
 	// Ensure that the loaded state corresponds to the same replica.
@@ -333,7 +333,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 		return err
 	}
 
-	r.setDescLockedRaftMuLocked(r.AnnotateCtx(context.TODO()), desc)
+	r.setDescLockedRaftMuLocked(r.AnnotateCtx(context.TODO()), desc, beforeInitFunc)
 
 	// Only do this if there was a previous lease. This shouldn't be important
 	// to do but consider that the first lease which is obtained is back-dated
@@ -400,7 +400,7 @@ func (r *Replica) initFromSnapshotLockedRaftMuLocked(
 		return errors.AssertionFailedf("initializing replica with uninitialized desc: %s", desc)
 	}
 
-	r.setDescLockedRaftMuLocked(ctx, desc)
+	r.setDescLockedRaftMuLocked(ctx, desc, nil)
 	r.setStartKeyLocked(desc.StartKey)
 	return nil
 }
@@ -427,13 +427,17 @@ func (r *Replica) getTenantIDRLocked() (roachpb.TenantID, bool) {
 
 // setDescRaftMuLocked atomically sets the replica's descriptor. It requires raftMu to be
 // locked.
-func (r *Replica) setDescRaftMuLocked(ctx context.Context, desc *roachpb.RangeDescriptor) {
+func (r *Replica) setDescRaftMuLocked(
+	ctx context.Context, desc *roachpb.RangeDescriptor, beforeInitFunc func(*Replica),
+) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.setDescLockedRaftMuLocked(ctx, desc)
+	r.setDescLockedRaftMuLocked(ctx, desc, beforeInitFunc)
 }
 
-func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.RangeDescriptor) {
+func (r *Replica) setDescLockedRaftMuLocked(
+	ctx context.Context, desc *roachpb.RangeDescriptor, beforeInitFunc func(*Replica),
+) {
 	if desc.RangeID != r.RangeID {
 		log.KvExec.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID)
@@ -495,6 +499,9 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 		r.mu.lastReplicaAddedTime = time.Time{}
 	}
 
+	if beforeInitFunc != nil {
+		beforeInitFunc(r)
+	}
 	r.rangeStr.store(r.replicaID, desc)
 	r.isInitialized.Store(desc.IsInitialized())
 	r.connectionClass.set(rpcbase.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
