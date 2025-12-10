@@ -948,3 +948,53 @@ func TestNormalizedVoterAllRelationships(t *testing.T) {
 			}
 		})
 }
+
+// TestDedupConstraints tests the dedupConstraints function which deduplicates
+// constraints and voter constraints by summing their numReplicas.
+func TestDedupConstraints(t *testing.T) {
+	interner := newStringInterner()
+
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, t.Name()),
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "dedup":
+				// Parse span config.
+				conf := parseSpanConfig(t, d)
+
+				// Intern constraints and call dedupConstraints directly.
+				var constraints []internedConstraintsConjunction
+				for _, cc := range conf.Constraints {
+					constraints = append(constraints, internedConstraintsConjunction{
+						numReplicas: cc.NumReplicas,
+						constraints: interner.internConstraintsConj(cc.Constraints),
+					})
+				}
+				constraints = dedupConstraints(constraints)
+
+				// Intern voter constraints and call dedupConstraints directly.
+				var voterConstraints []internedConstraintsConjunction
+				for _, cc := range conf.VoterConstraints {
+					voterConstraints = append(voterConstraints, internedConstraintsConjunction{
+						numReplicas: cc.NumReplicas,
+						constraints: interner.internConstraintsConj(cc.Constraints),
+					})
+				}
+				voterConstraints = dedupConstraints(voterConstraints)
+
+				// Create normalizedSpanConfig with deduped constraints.
+				nConf := &normalizedSpanConfig{
+					numVoters:        conf.GetNumVoters(),
+					numReplicas:      conf.NumReplicas,
+					constraints:      constraints,
+					voterConstraints: voterConstraints,
+					interner:         interner,
+				}
+				// Format output using printSpanConfig.
+				var b strings.Builder
+				printSpanConfig(&b, nConf.uninternedConfig())
+				return b.String()
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+}
