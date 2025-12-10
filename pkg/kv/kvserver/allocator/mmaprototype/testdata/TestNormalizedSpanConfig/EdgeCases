@@ -501,7 +501,7 @@ after:
    +region=a:2
    +region=a,+zone=a1:2
 
-# TODO(wenyihu6): Duplicate constraints not merged
+# Duplicate empty voter constraints from basic normalization combined.
 normalize num-replicas=6 num-voters=3
 constraint num-replicas=2 +region=a +zone=a1
 constraint num-replicas=2 +region=a +zone=a1
@@ -510,22 +510,16 @@ voter-constraint num-replicas=3 +region=a +zone=a1
 basic:
  num-replicas=6 num-voters=3
  constraints:
-   +region=a,+zone=a1:2
-   +region=a,+zone=a1:2
+   +region=a,+zone=a1:4
    :2
  voter-constraints:
    +region=a,+zone=a1:3
 normalizeVoterConstraints:
  (unchanged)
 after:
- num-replicas=6 num-voters=3
- constraints:
-   +region=a,+zone=a1:3
-   +region=a,+zone=a1:3
- voter-constraints:
-   +region=a,+zone=a1:3
+ (unchanged)
 
-# Duplicate empty voter constraints from basic normalization are not combined.
+# Duplicate empty voter constraints from basic normalization combined.
 normalize num-replicas=5 num-voters=3
 voter-constraint num-replicas=1
 ----
@@ -534,16 +528,16 @@ basic:
  constraints:
    :5
  voter-constraints:
-   :1
-   :2
+   :3
 normalizeVoterConstraints:
  (unchanged)
 after:
  (unchanged)
-err=multiple empty voter constraints: {1 []} and {2 []}
 
 
-# normalizeVoterConstraints narrowing can create duplicate voter constraints.
+# normalizeVoterConstraints narrowing should not create duplicate voter
+# constraints. Without dedupConstraints, this would create duplicate voter
+# constraints. region=a:1 and region=a:1 => region=a:2
 normalize num-replicas=2 num-voters=2
 constraint num-replicas=2 +region=a
 voter-constraint num-replicas=1 +region=a
@@ -561,13 +555,13 @@ normalizeVoterConstraints:
  constraints:
    +region=a:2
  voter-constraints:
-   +region=a:1
-   +region=a:1
+   +region=a:2
 after:
  (unchanged)
 
-# normalizeEmptyConstraints creates duplicate all-replica constraints when
-# narrowing.
+# normalizeEmptyConstraints should not create duplicate all-replica constraints
+# when narrowing. Without dedupConstraints, this would create duplicate
+# all-replica constraints. region=a:1 and region=a:1 => region=a:2
 normalize num-replicas=3 num-voters=2
 constraint num-replicas=1 +region=a
 voter-constraint num-replicas=1 +region=a +zone=a1
@@ -579,19 +573,16 @@ basic:
    +region=a:1
    :2
  voter-constraints:
-   +region=a,+zone=a1:1
-   +region=a,+zone=a1:1
+   +region=a,+zone=a1:2
 normalizeVoterConstraints:
  (unchanged)
 after:
  num-replicas=3 num-voters=2
  constraints:
    +region=a:1
-   +region=a,+zone=a1:1
-   +region=a,+zone=a1:1
+   +region=a,+zone=a1:2
  voter-constraints:
-   +region=a,+zone=a1:1
-   +region=a,+zone=a1:1
+   +region=a,+zone=a1:2
 
 
 # From #106559: num_voters (5) exceeds explicit voter constraints (4), creating
