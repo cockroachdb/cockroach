@@ -846,6 +846,13 @@ func (mb *mutationBuilder) buildInputForDoNothing(
 	// TODO(andyk): do we need to do more here?
 	mb.outScope.ordering = nil
 
+	if !mb.arbiters.Empty() &&
+		mb.b.evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols {
+		// Avoid resolving transitive dependencies on columns and UDTs referenced by
+		// any partial index predicates among the arbiters.
+		defer mb.b.DisableSchemaDepTracking()()
+	}
+
 	// Create an anti-join for each arbiter.
 	mb.arbiters.ForEach(func(
 		name string, conflictOrds intsets.Fast, pred tree.Expr, canaryOrd int, uniqueWithoutIndex bool, uniqueOrd int,
@@ -901,6 +908,13 @@ func (mb *mutationBuilder) buildInputForUpsert(
 
 	// Ignore any ordering requested by the input.
 	mb.outScope.ordering = nil
+
+	if !mb.arbiters.Empty() &&
+		mb.b.evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols {
+		// Avoid resolving transitive dependencies on columns and UDTs referenced by
+		// any partial index predicates among the arbiters.
+		defer mb.b.DisableSchemaDepTracking()()
+	}
 
 	// Create an UpsertDistinctOn and a left-join for the single arbiter.
 	mb.arbiters.ForEach(func(
