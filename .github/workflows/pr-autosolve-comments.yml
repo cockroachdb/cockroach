@@ -1,0 +1,297 @@
+name: PR Comment Addresser
+
+on:
+  # Native GitHub review comments (inline code comments)
+  pull_request_review_comment:
+    types: [created]
+  # PR reviews (used by Reviewable.io - comments are embedded in review body)
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  group: autosolve-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  address-review-comments:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Only trigger for:
+    # - PRs with 'o-autosolver' label
+    # - Comments/reviews NOT from the bot itself
+    # - For review_comment events: comments NOT containing our response marker
+    # - For review events: only COMMENTED or CHANGES_REQUESTED (not APPROVED/DISMISSED)
+    if: |
+      contains(github.event.pull_request.labels.*.name, 'o-autosolver') &&
+      github.actor != 'github-actions[bot]' &&
+      github.actor != 'crdb-autosolver' &&
+      (
+        (github.event_name == 'pull_request_review_comment' && !contains(github.event.comment.body, '[autosolve-response]')) ||
+        (github.event_name == 'pull_request_review' && (github.event.review.state == 'commented' || github.event.review.state == 'changes_requested'))
+      )
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+
+    steps:
+      - name: Checkout PR branch from fork
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.AUTOSOLVER_PAT }}
+
+      - name: Authenticate to Google Cloud
+        uses: 'google-github-actions/auth@v3'
+        with:
+          project_id: 'vertex-model-runners'
+          service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
+          workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
+
+      - name: Fetch all review comments
+        id: fetch_comments
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get all review comments on this PR (native GitHub inline comments)
+          COMMENTS=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments)
+          {
+            echo 'comments<<EOF'
+            echo "$COMMENTS"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Parse Reviewable comments from review body
+        id: parse_reviewable
+        if: github.event_name == 'pull_request_review'
+        env:
+          REVIEW_BODY: ${{ github.event.review.body }}
+          REVIEWER: ${{ github.event.review.user.login }}
+        run: |
+          # Parse Reviewable-style comments from review body
+          # Format: *[`path/to/file.go` line 123 at r1](url):*
+          PARSED=$(python3 -c '
+          import os
+          import re
+          import json
+
+          body = os.environ.get("REVIEW_BODY", "")
+          reviewer = os.environ.get("REVIEWER", "")
+
+          # Pattern to match Reviewable file/line references
+          file_pattern = r"\*\[`([^`]+)` line (\d+) at r\d+\].*?:\*"
+
+          # Split by file references to get each comment block
+          parts = re.split(file_pattern, body)
+
+          comments = []
+          i = 1
+          while i < len(parts):
+              if i + 2 <= len(parts):
+                  file_path = parts[i]
+                  line_num = parts[i + 1]
+                  comment_text = parts[i + 2].strip() if i + 2 < len(parts) else ""
+
+                  # Clean up comment text - remove code blocks and Reviewable metadata
+                  lines = comment_text.split("\n")
+                  cleaned_lines = []
+                  in_code_block = False
+
+                  for line in lines:
+                      if line.startswith("> ```"):
+                          in_code_block = not in_code_block
+                          continue
+                      if in_code_block or line.startswith("> "):
+                          continue
+                      if line.strip() == "___":
+                          continue
+                      if "Reviewable" in line and ("status:" in line or "LGTMs" in line):
+                          continue
+                      if line.strip().startswith("<!--") or line.strip().endswith("-->"):
+                          continue
+                      cleaned_lines.append(line)
+
+                  comment_body = "\n".join(cleaned_lines).strip()
+
+                  if comment_body:
+                      comments.append({
+                          "path": file_path,
+                          "line": int(line_num),
+                          "body": comment_body,
+                          "user": reviewer
+                      })
+              i += 3
+
+          print(json.dumps(comments))
+          ')
+
+          {
+            echo 'reviewable_comments<<EOF'
+            echo "$PARSED"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+          # Also output whether we found any Reviewable comments
+          COUNT=$(echo "$PARSED" | python3 -c "import sys, json; print(len(json.load(sys.stdin)))")
+          echo "has_reviewable_comments=$([[ $COUNT -gt 0 ]] && echo 'true' || echo 'false')" >> "$GITHUB_OUTPUT"
+
+      - name: Address review comments
+        id: address
+        uses: cockroachdb/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
+          CLOUD_ML_REGION: us-east5
+          # Pass user-controlled content via env vars to prevent prompt injection
+          # For native review comments:
+          COMMENT_USER: ${{ github.event.comment.user.login || '' }}
+          COMMENT_PATH: ${{ github.event.comment.path || '' }}
+          COMMENT_LINE: ${{ github.event.comment.line || '' }}
+          COMMENT_BODY: ${{ github.event.comment.body || '' }}
+          # For Reviewable reviews:
+          REVIEW_USER: ${{ github.event.review.user.login || '' }}
+          REVIEW_BODY: ${{ github.event.review.body || '' }}
+          REVIEWABLE_COMMENTS: ${{ steps.parse_reviewable.outputs.reviewable_comments || '[]' }}
+          # Common:
+          EVENT_TYPE: ${{ github.event_name }}
+          ALL_COMMENTS: ${{ steps.fetch_comments.outputs.comments }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          use_vertex: "true"
+          claude_args: |
+            --model claude-opus-4-5@20251101
+            --allowedTools "Read,Write,Edit,Grep,Glob,Bash(./dev test:*),Bash(./dev testlogic:*),Bash(./dev build:*),Bash(./dev generate:*),Bash(git:*)"
+          prompt: |
+            PR #${{ github.event.pull_request.number }} has received review feedback.
+
+            The review details are provided in environment variables:
+
+            EVENT_TYPE indicates the type of event:
+            - "pull_request_review_comment": A native GitHub inline code comment
+            - "pull_request_review": A PR review (possibly from Reviewable.io)
+
+            For native GitHub comments (EVENT_TYPE=pull_request_review_comment):
+            - COMMENT_USER: The username of the commenter
+            - COMMENT_PATH: The file path the comment is on
+            - COMMENT_LINE: The line number
+            - COMMENT_BODY: The comment text
+
+            For Reviewable reviews (EVENT_TYPE=pull_request_review):
+            - REVIEW_USER: The username of the reviewer
+            - REVIEW_BODY: The full review body (may contain Reviewable formatting)
+            - REVIEWABLE_COMMENTS: JSON array of parsed Reviewable comments with path, line, body, user
+
+            ALL_COMMENTS: JSON array of all native review comments on this PR
+
+            Instructions:
+            1. Read CLAUDE.md for project conventions
+            2. Read the environment variables to understand the review feedback
+            3. For Reviewable reviews, focus on the parsed REVIEWABLE_COMMENTS JSON
+            4. Address the review feedback by making code changes
+            5. Run relevant tests to verify changes
+            6. Stage all changes with git add
+
+            When formatting commits, follow the guidelines in CLAUDE.md.
+
+            Respond with a concise summary of changes made to address each comment.
+
+      - name: Extract Claude Result
+        id: claude_result
+        if: steps.address.conclusion == 'success'
+        run: |
+          if [ ! -f "${{ steps.address.outputs.execution_file }}" ]; then
+            echo "::error::Execution file not found: ${{ steps.address.outputs.execution_file }}"
+            exit 1
+          fi
+
+          RESULT=$(jq -r '.[] | select(.type == "result") | .result' "${{ steps.address.outputs.execution_file }}") || {
+            echo "::error::Failed to parse execution file with jq"
+            exit 1
+          }
+
+          if [ -z "$RESULT" ]; then
+            echo "::error::No result found in execution file"
+            exit 1
+          fi
+
+          {
+            echo 'result<<EOF'
+            echo "$RESULT"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push changes
+        id: commit
+        env:
+          AUTOSOLVER_PAT: ${{ secrets.AUTOSOLVER_PAT }}
+        run: |
+          git config user.name "crdb-autosolver"
+          git config user.email "crdb-autosolver@users.noreply.github.com"
+
+          # Check if there are staged changes (Claude should have staged them)
+          # If no staged changes, also check for unstaged changes that need staging
+          if git diff --quiet --cached; then
+            # No staged changes - check if Claude made changes but forgot to stage
+            if ! git diff --quiet; then
+              echo "::warning::Changes detected but not staged. Staging all changes."
+              git add -A
+            else
+              echo "No staged changes to commit"
+              echo "pushed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          # Check authorship before amending - only amend if we authored the commit
+          AUTHOR_EMAIL=$(git log -1 --format='%ae')
+          if [ "$AUTHOR_EMAIL" = "crdb-autosolver@users.noreply.github.com" ]; then
+            # Check if staged changes differ from HEAD before amending
+            if git diff --cached --quiet HEAD; then
+              echo "Staged changes are identical to HEAD, nothing to amend"
+              echo "pushed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            # Amend the existing commit with the new changes
+            git commit --amend --no-edit
+          else
+            # Create a new commit if we didn't author the original
+            git commit -m "Address review comments
+
+Generated by Claude Code Auto-Solver
+Co-Authored-By: Claude <noreply@anthropic.com>"
+          fi
+
+          # Force push to the fork
+          # NOTE: This is safe because this workflow only runs on PRs with 'o-autosolver' label,
+          # which are bot-owned branches. We never force push to branches owned by humans.
+          git push --force origin ${{ github.event.pull_request.head.ref }}
+
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Post summary comment
+        if: steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create comment with marker to prevent infinite loops
+          gh pr comment ${{ github.event.pull_request.number }} --body "[autosolve-response]
+
+          I've addressed the review comments and pushed updates.
+
+          **Changes made:**
+          ${{ steps.claude_result.outputs.result }}
+
+          Please review the updated code."
+
+      - name: Post no-changes comment
+        if: steps.commit.outputs.pushed == 'false' && steps.address.conclusion == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body "[autosolve-response]
+
+          I reviewed the comments but no code changes were necessary.
+
+          **Analysis:**
+          ${{ steps.claude_result.outputs.result }}"
