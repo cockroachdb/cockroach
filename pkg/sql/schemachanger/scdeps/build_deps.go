@@ -191,11 +191,12 @@ func (d *buildDeps) MayResolvePrefix(
 
 // MayResolveTable implements the scbuild.CatalogReader interface.
 func (d *buildDeps) MayResolveTable(
-	ctx context.Context, name tree.UnresolvedObjectName,
+	ctx context.Context, name tree.UnresolvedObjectName, allowOffline bool,
 ) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor) {
 	desc, prefix, err := resolver.ResolveExistingObject(ctx, d.schemaResolver, &name, tree.ObjectLookupFlags{
 		AssertNotLeased:   true,
 		DesiredObjectKind: tree.TableObject,
+		IncludeOffline:    allowOffline,
 	})
 	if err != nil {
 		panic(err)
