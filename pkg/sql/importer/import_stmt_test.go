@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -5244,6 +5245,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 	defer jobs.TestingSetProgressThresholds()()
+	defer besteffort.TestForbidSkip("import-event")()
 
 	skip.UnderRace(t)
 
@@ -5295,7 +5297,7 @@ func TestImportJobEventLogging(t *testing.T) {
 		RecoveryType: importJobRecoveryEventType,
 		NumRows:      int64(1000),
 	}
-	jobstest.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "import", "IMPORT", expectedRecoveryEvent)
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "IMPORT INTO foo.public.simple", "IMPORT", expectedRecoveryEvent)
 
 	sqlDB.Exec(t, `DROP TABLE simple`)
 
@@ -5322,7 +5324,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	// we record the count of inserted rows prior to executing testingKnobs.afterImport
 	// (see `importResumer.Resume()`) so that we can test on resuming the interrupted
 	// import process (such as TestCSVImportCanBeResumed).
-	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT", expectedRecoveryEvent)
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "IMPORT INTO foo.public.simple", "IMPORT", expectedRecoveryEvent)
 }
 
 func TestUDTChangeDuringImport(t *testing.T) {
