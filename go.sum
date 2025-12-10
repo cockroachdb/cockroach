@@ -556,8 +556,7 @@ github.com/cockroachdb/datadriven v0.0.0-20190809214429-80d97fb3cbaa/go.mod h1:z
 github.com/cockroachdb/datadriven v1.0.2/go.mod h1:a9RdTaap04u637JoCzcUoIcDmvwSUtcUFtT/C3kJlTU=
 github.com/cockroachdb/datadriven v1.0.3-0.20251123150250-ddff6747b112 h1:T1++5Vt0/4/IWZ1mHmUYl7fhQnz50QhNWIY+ITvLLIM=
 github.com/cockroachdb/datadriven v1.0.3-0.20251123150250-ddff6747b112/go.mod h1:jsaKMvD3RBCATk1/jbUZM8C9idWBJME9+VRZ5+Liq1g=
-github.com/cockroachdb/drpc v0.0.0-20251122104303-6d3d35fe35b3 h1:g9feJVqL6mBMZ/odZZsNl2XrsAxRaI6dP/y1PP+lf6s=
-github.com/cockroachdb/drpc v0.0.0-20251122104303-6d3d35fe35b3/go.mod h1:Ag2/Yfl22WZ8ywFUasRQ2brdltpX5QvY63jnYTZ3N5U=
+github.com/cockroachdb/drpc v0.0.0-20251210105104-1ea19468a040 h1:bBcGDxuvb2dcpww/5O3873LEljPjaZJ08S04ZBfddlU=
 github.com/cockroachdb/drpc v0.0.0-20251210105104-1ea19468a040/go.mod h1:Ag2/Yfl22WZ8ywFUasRQ2brdltpX5QvY63jnYTZ3N5U=
 github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f h1:lUmJxzb2/ukuRIvKTaNkvuj5LwlX4u/KxnI3zmx1SSw=
 github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f/go.mod h1:SvzfYNNBshAVbZ8wzNc/UPK3w1vf0dKDUP41ucAIf7g=
