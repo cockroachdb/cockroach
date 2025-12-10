@@ -2037,6 +2037,7 @@ WHERE stat->>'columns' = '["a"]'
     "columns": [
         "a"
     ],
+    "delay_delete": false,
     "distinct_count": 3,
     "histo_buckets": [
         {
@@ -2095,6 +2096,7 @@ WHERE stat->>'columns' = '["a"]'
     "columns": [
         "a"
     ],
+    "delay_delete": false,
     "distinct_count": 2,
     "histo_buckets": [
         {
