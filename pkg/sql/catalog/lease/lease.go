@@ -108,6 +108,12 @@ var LockedLeaseTimestamp = settings.RegisterBoolSetting(settings.ApplicationLeve
 		"descriptors used can be intentionally older to support this",
 	false)
 
+var RetainOldVersionsForLocked = settings.RegisterBoolSetting(settings.ApplicationLevel,
+	"sql.catalog.descriptor_lease.lock_old_versions.enabled",
+	"enables retaining old versions to avoid retries when locked lease timestamps are enabled, at the expense "+
+		"of delaying schema changes",
+	false)
+
 var MaxBatchLeaseCount = settings.RegisterIntSetting(settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease.max_batch_lease_count",
 	"the maximum number of descriptors to lease in a single batch",
@@ -1489,7 +1495,8 @@ func (m *Manager) purgeOldVersions(
 	// Optionally, acquire the refcount on the previous version for the locked
 	// leasing mode.
 	acquireLeaseOnPrevious := func() error {
-		if !GetLockedLeaseTimestampEnabled(ctx, m.storage.settings) {
+		if !GetLockedLeaseTimestampEnabled(ctx, m.storage.settings) ||
+			!RetainOldVersionsForLocked.Get(&m.storage.settings.SV) {
 			return nil
 		}
 		var handles []*closeTimeStampHandle
