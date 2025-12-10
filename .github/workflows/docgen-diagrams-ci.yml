@@ -9,8 +9,9 @@ on:
     branches:
       - master
       - release-*
-  pull_request_target:
-    types: [labeled]
+  # NOTE: pull_request_target was removed for security reasons.
+  # It allowed untrusted PR code to execute with access to secrets.
+  # Use workflow_dispatch instead for manual triggering on branches.
   workflow_dispatch:
     inputs:
       force_regenerate:
@@ -37,12 +38,10 @@ jobs:
       - name: Check if should run
         id: check
         run: |
-          # Run if triggered by path changes, workflow_dispatch, or docgen-diagram label
+          # Run if triggered by path changes or workflow_dispatch
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "should_run=true" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "should_run=true" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "pull_request_target" && "${{ github.event.label.name }}" == "docgen-diagram" ]]; then
             echo "should_run=true" >> $GITHUB_OUTPUT
           else
             echo "should_run=false" >> $GITHUB_OUTPUT
