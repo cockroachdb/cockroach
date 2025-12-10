@@ -1232,6 +1232,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		nodeDescs:                g,
 		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       spanConfig.kvAccessor,
+		spanConfigReporter:       spanConfig.reporter,
 		keyVisServerAccessor:     keyVisServerAccessor,
 		kvNodeDialer:             kvNodeDialer,
 		distSender:               distSender,
