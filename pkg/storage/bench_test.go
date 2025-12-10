@@ -489,8 +489,7 @@ func BenchmarkIntentScan(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
-					b.ResetTimer()
-					for i := 0; i < b.N; i++ {
+					for b.Loop() {
 						valid, err := iter.Valid()
 						if err != nil {
 							b.Fatal(err)
@@ -1144,9 +1143,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, opts benchScanOptions) {
 	endKeyBuf := append(make([]byte, 0, 1024), []byte("key-")...)
 
 	b.SetBytes(int64(opts.numRows * opts.valueBytes))
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		// Choose a random key to start scan.
 		if opts.numColumnFamilies == 0 {
 			keyIdx := rand.Int31n(int32(opts.numKeys - opts.numRows))
@@ -1191,8 +1188,6 @@ func runMVCCScan(ctx context.Context, b *testing.B, opts benchScanOptions) {
 			b.Fatalf("failed to scan garbage: found %d keys", len(res.KVs))
 		}
 	}
-
-	b.StopTimer()
 }
 
 // runMVCCGet first creates test data (and resets the benchmarking
@@ -1218,10 +1213,8 @@ func runMVCCGet(ctx context.Context, b *testing.B, opts mvccBenchData, useBatch 
 	}
 
 	b.SetBytes(int64(opts.valueBytes))
-	b.ResetTimer()
-
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		// Choose a random key to retrieve.
 		keyIdx := rand.Int31n(int32(opts.numKeys))
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyIdx)))
@@ -1241,8 +1234,6 @@ func runMVCCGet(ctx context.Context, b *testing.B, opts mvccBenchData, useBatch 
 			b.Fatalf("unexpected value size: %d", len(valueBytes))
 		}
 	}
-
-	b.StopTimer()
 }
 
 func runMVCCBlindPut(ctx context.Context, b *testing.B, emk engineMaker, valueSize int) {
@@ -1254,9 +1245,7 @@ func runMVCCBlindPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 	defer eng.Close()
 
 	b.SetBytes(int64(valueSize))
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		batch := eng.NewWriteBatch()
@@ -1267,8 +1256,6 @@ func runMVCCBlindPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 			b.Fatalf("failed commit: %v", err)
 		}
 	}
-
-	b.StopTimer()
 }
 
 func runMVCCConditionalPut(
@@ -1303,9 +1290,7 @@ func runMVCCConditionalPut(
 		expected = value.TagAndDataBytes()
 	}
 
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		batch := eng.NewBatch()
@@ -1324,8 +1309,6 @@ func runMVCCConditionalPut(
 		}
 		batch.Close()
 	}
-
-	b.StopTimer()
 }
 
 func runMVCCBlindConditionalPut(ctx context.Context, b *testing.B, emk engineMaker, valueSize int) {
@@ -1337,9 +1320,7 @@ func runMVCCBlindConditionalPut(ctx context.Context, b *testing.B, emk engineMak
 	defer eng.Close()
 
 	b.SetBytes(int64(valueSize))
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		batch := eng.NewWriteBatch()
@@ -1360,8 +1341,6 @@ func runMVCCBlindConditionalPut(ctx context.Context, b *testing.B, emk engineMak
 		}
 		batch.Close()
 	}
-
-	b.StopTimer()
 }
 
 func runMVCCBatchPut(ctx context.Context, b *testing.B, emk engineMaker, valueSize, batchSize int) {
@@ -1374,13 +1353,10 @@ func runMVCCBatchPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 
 	b.SetBytes(int64(valueSize))
 	b.ResetTimer()
+	defer b.StopTimer()
 
 	for i := 0; i < b.N; i += batchSize {
-		end := i + batchSize
-		if end > b.N {
-			end = b.N
-		}
-
+		end := min(i+batchSize, b.N)
 		batch := eng.NewBatch()
 
 		for j := i; j < end; j++ {
@@ -1401,8 +1377,6 @@ func runMVCCBatchPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 
 		batch.Close()
 	}
-
-	b.StopTimer()
 }
 
 // Benchmark batch time series merge operations. This benchmark does not
@@ -1433,10 +1407,8 @@ func runMVCCBatchTimeSeries(ctx context.Context, b *testing.B, emk engineMaker, 
 	eng := emk(b, fmt.Sprintf("batch_merge_%d", batchSize))
 	defer eng.Close()
 
-	b.ResetTimer()
-
 	var ts hlc.Timestamp
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		batch := eng.NewBatch()
 
 		for j := 0; j < batchSize; j++ {
@@ -1445,14 +1417,11 @@ func runMVCCBatchTimeSeries(ctx context.Context, b *testing.B, emk engineMaker, 
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
-
 		if err := batch.Commit(false /* sync */); err != nil {
 			b.Fatal(err)
 		}
 		batch.Close()
 	}
-
-	b.StopTimer()
 }
 
 // runMVCCGetMergedValue reads merged values for numKeys separate keys and mergesPerKey
@@ -1492,8 +1461,7 @@ func runMVCCGetMergedValue(
 		}
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := MVCCGet(ctx, eng, keys[rand.Intn(numKeys)], timestamp, MVCCGetOptions{
 			// NB: BatchEvalReadCategory is considered latency sensitive and
 			// exempted from open-iterator tracking.
@@ -1503,7 +1471,6 @@ func runMVCCGetMergedValue(
 			b.Fatal(err)
 		}
 	}
-	b.StopTimer()
 }
 
 func runMVCCDeleteRange(ctx context.Context, b *testing.B, valueBytes int) {
@@ -1718,9 +1685,7 @@ func runClearRange(
 	defer eng.Close()
 
 	b.SetBytes(rangeBytes)
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		batch := eng.NewUnindexedBatch()
 		if err := clearRange(eng, batch, MVCCKey{Key: keys.LocalMax}, MVCCKeyMax); err != nil {
 			b.Fatal(err)
@@ -1731,8 +1696,6 @@ func runClearRange(
 		// to take an exceptionally long time since ClearRange is very fast.
 		batch.Close()
 	}
-
-	b.StopTimer()
 }
 
 // runMVCCComputeStats benchmarks computing MVCC stats on a 64MB range of data.
@@ -1748,18 +1711,14 @@ func runMVCCComputeStats(ctx context.Context, b *testing.B, valueBytes int, numR
 	defer eng.Close()
 
 	b.SetBytes(rangeBytes)
-	b.ResetTimer()
-
 	var stats enginepb.MVCCStats
 	var err error
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		stats, err = ComputeStats(ctx, eng, fs.BatchEvalReadCategory, keys.LocalMax, keys.MaxKey, 0)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
-
-	b.StopTimer()
 	log.Dev.Infof(ctx, "live_bytes: %d", stats.LiveBytes)
 }
 
@@ -1776,18 +1735,14 @@ func runMVCCFindSplitKey(ctx context.Context, b *testing.B, valueBytes int) {
 	defer eng.Close()
 
 	b.SetBytes(rangeBytes)
-	b.ResetTimer()
-
 	var err error
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err = MVCCFindSplitKey(ctx, eng, roachpb.RKeyMin,
 			roachpb.RKeyMax, rangeBytes/2)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
-
-	b.StopTimer()
 }
 
 type benchGarbageCollectOptions struct {
@@ -1907,8 +1862,7 @@ func runMVCCGarbageCollect(
 	if opts.updateStats {
 		ms = &enginepb.MVCCStats{}
 	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		batch := eng.NewBatch()
 		if err := MVCCGarbageCollect(ctx, batch, ms, gcKeys, now); err != nil {
 			b.Fatal(err)
@@ -1957,9 +1911,7 @@ func runBatchApplyBatchRepr(
 	}
 
 	b.SetBytes(int64(len(repr)))
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		var batch WriteBatch
 		if !indexed {
 			batch = eng.NewWriteBatch()
@@ -1971,8 +1923,6 @@ func runBatchApplyBatchRepr(
 		}
 		batch.Close()
 	}
-
-	b.StopTimer()
 }
 
 func runMVCCCheckForAcquireLock(
@@ -2059,9 +2009,7 @@ func runMVCCAcquireLockCommon(
 	}
 	ms := &enginepb.MVCCStats{}
 
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		key := makeKey(i)
 		txn := &txn1
 		var err error
@@ -2078,8 +2026,6 @@ func runMVCCAcquireLockCommon(
 			b.Fatal(err)
 		}
 	}
-
-	b.StopTimer()
 }
 
 type mvccExportToSSTOpts struct {
@@ -2335,8 +2281,7 @@ func runCheckSSTConflicts(
 	}
 	sstWriter.Close()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := CheckSSTConflicts(context.Background(), sstFile.Data(), eng, sstStart, sstEnd, sstStart.Key, sstEnd.Key.Next(), hlc.Timestamp{}, hlc.Timestamp{}, math.MaxInt64, 0, usePrefixSeek)
 		if err != nil {
 			b.Fatal(err)
@@ -2360,8 +2305,7 @@ func runSSTIterator(b *testing.B, numKeys int, verify bool) {
 	}
 	sstWriter.Close()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		iter, err := NewMemSSTIterator(sstFile.Bytes(), verify, IterOptions{
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			LowerBound: keys.MinKey,
@@ -2539,7 +2483,8 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		batch.Close()
 		require.NoError(b, eng.IngestLocalFiles(ctx, []string{sstFileName}))
 	}
-	for i := 0; i < b.N; i++ {
+	var printed bool
+	for b.Loop() {
 		ro := eng.NewReader(StandardDurability)
 		ts := hlc.Timestamp{WallTime: int64(numVersions) + 5}
 		startKey := makeKey(nil, 0)
@@ -2566,10 +2511,11 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		if res.NumKeys != totalNumKeys {
 			b.Fatalf("expected %d keys, and found %d", totalNumKeys, res.NumKeys)
 		}
-		if i == 0 {
+		if !printed {
 			// This is to understand the results.
 			stats := iter.Stats()
 			fmt.Printf("stats: %s\n", stats.Stats.String())
+			printed = true
 		}
 		iter.Close()
 		ro.Close()
@@ -2642,7 +2588,7 @@ func BenchmarkMVCCPutDelete(b *testing.B) {
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(r, 10))
 	var blockNum int64
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		blockID := r.Int63()
 		blockNum++
 		key := encoding.EncodeVarintAscending(nil, blockID)
@@ -2957,11 +2903,7 @@ func BenchmarkBatchBuilderPut(b *testing.B) {
 
 	const batchSize = 1000
 	for i := 0; i < b.N; i += batchSize {
-		end := i + batchSize
-		if end > b.N {
-			end = b.N
-		}
-
+		end := min(b.N, i+batchSize)
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
 			ts := hlc.Timestamp{WallTime: int64(j + 1)} // j+1 to avoid zero timestamp
