@@ -1880,12 +1880,14 @@ type ExecutorConfig struct {
 	// the right number of tenant spans.
 	SpanConfigSplitter spanconfig.Splitter
 
-	// SpanConfigLimiter is used to limit how many span configs installed.
 	SpanConfigLimiter spanconfig.Limiter
 
 	// SpanConfigKVAccessor is used when creating and deleting tenant
 	// records.
 	SpanConfigKVAccessor spanconfig.KVAccessor
+
+	// SpanConfigReporter is used to get span conformance reports.
+	SpanConfigReporter spanconfig.Reporter
 
 	// InternalDB is used to create an isql.Executor bound with SessionData and
 	// other ExtraTxnState.
