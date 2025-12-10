@@ -580,8 +580,8 @@ func insertStatementHint(t *testing.T, r *sqlutils.SQLRunner, fingerprint string
 	hint.SetValue(&hintpb.InjectHints{})
 	hintBytes, err := hintpb.ToBytes(hint)
 	require.NoError(t, err)
-	const insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint") VALUES ($1, $2)`
-	r.Exec(t, insertStmt, fingerprint, hintBytes)
+	const insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint", "hint_type") VALUES ($1, $2, $3)`
+	r.Exec(t, insertStmt, fingerprint, hintBytes, hint.HintType())
 }
 
 // deleteStatementHints deletes statement hints from the system.statement_hints

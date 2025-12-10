@@ -193,7 +193,7 @@ CREATE TABLE data2.foo (a int);
 		sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR BACKUP]`)
 
 		// Populate system.statement_hints with a dummy row.
-		sqlDB.Exec(t, `INSERT INTO system.statement_hints (fingerprint, hint) VALUES ('FOO BAR _', '0xDEADBEEF'::BYTES)`)
+		sqlDB.Exec(t, `INSERT INTO system.statement_hints (fingerprint, hint, hint_type) VALUES ('FOO BAR _', '0xDEADBEEF'::BYTES, 'rewrite_inline_hints')`)
 
 		injectStats(t, sqlDB, "data.bank", "id")
 		sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
