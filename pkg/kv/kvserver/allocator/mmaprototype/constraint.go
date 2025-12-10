@@ -8,6 +8,7 @@ package mmaprototype
 import (
 	"cmp"
 	"fmt"
+	"log"
 	"math"
 	"slices"
 	"sort"
@@ -650,18 +651,16 @@ func (conf *normalizedSpanConfig) buildVoterAndAllRelationships() (
 	for i := range conf.voterConstraints {
 		if len(conf.voterConstraints[i].constraints) == 0 {
 			if emptyVoterConstraintIndex != -1 {
-				return nil, -1, -1,
-					errors.Errorf("multiple empty voter constraints: %v and %v",
-						conf.voterConstraints[emptyVoterConstraintIndex], conf.voterConstraints[i])
+				log.Fatalf("multiple empty voter constraints: %v and %v",
+					conf.voterConstraints[emptyVoterConstraintIndex], conf.voterConstraints[i])
 			}
 			emptyVoterConstraintIndex = i
 		}
 		for j := range conf.constraints {
 			if len(conf.constraints[j].constraints) == 0 {
 				if emptyConstraintIndex != -1 && emptyConstraintIndex != j {
-					return nil, -1, -1,
-						errors.Errorf("multiple empty constraints: %v and %v",
-							conf.constraints[emptyConstraintIndex], conf.constraints[j])
+					log.Fatalf("multiple empty constraints: %v and %v",
+						conf.constraints[emptyConstraintIndex], conf.constraints[j])
 				}
 				emptyConstraintIndex = j
 			}
