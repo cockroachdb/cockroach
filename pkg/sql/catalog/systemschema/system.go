@@ -1199,6 +1199,12 @@ CREATE TABLE public.inspect_errors (
 	// * fingerprint: the statement fingerprint.
 	// * hint: an external hint for the query, serialized into bytes.
 	// * created_at: the timestamp when the hint was created.
+	// * hint_type: the type of hint (e.g. "rewrite_inline_hints" or "pin_plan").
+	// * hint_name: a human-readable name for the hint.
+	// * enabled: whether the hint is currently enabled.
+	// * database: if set, indicates that fingerprints should only match if the
+	//   current database is equal. Can be left NULL to signify that any database
+	//   should match.
 	StatementHintsTableSchema = `
 CREATE TABLE system.statement_hints (
     row_id      INT8 DEFAULT unique_rowid() NOT NULL,
@@ -1206,9 +1212,13 @@ CREATE TABLE system.statement_hints (
     fingerprint STRING NOT NULL,
     hint        BYTES NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    hint_type   STRING NOT NULL,
+    hint_name   STRING NULL,
+    enabled     BOOL NOT NULL DEFAULT true,
+    database    STRING NULL,
     CONSTRAINT "primary" PRIMARY KEY ("row_id" ASC),
     INDEX hash_idx (hash ASC),
-    FAMILY "primary" (row_id, hash, fingerprint, hint, created_at)
+    FAMILY "primary" (row_id, hash, fingerprint, hint, created_at, hint_type, hint_name, enabled, database)
   );`
 
 	// ClusterMetricsTableSchema defines the schema for the system.cluster_metrics
@@ -1316,7 +1326,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_TriggerBackrefRepair.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_StatementHintsTypeColumnBackfilled.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -5324,13 +5334,17 @@ var (
 				{Name: "fingerprint", ID: 3, Type: types.String},
 				{Name: "hint", ID: 4, Type: types.Bytes},
 				{Name: "created_at", ID: 5, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "hint_type", ID: 6, Type: types.String},
+				{Name: "hint_name", ID: 7, Type: types.String, Nullable: true},
+				{Name: "enabled", ID: 8, Type: types.Bool, DefaultExpr: &trueBoolString},
+				{Name: "database", ID: 9, Type: types.String, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
 					ID:          0,
-					ColumnNames: []string{"row_id", "hash", "fingerprint", "hint", "created_at"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+					ColumnNames: []string{"row_id", "hash", "fingerprint", "hint", "created_at", "hint_type", "hint_name", "enabled", "database"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
 				},
 			},
 			descpb.IndexDescriptor{

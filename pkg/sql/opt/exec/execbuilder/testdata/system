@@ -9,21 +9,21 @@ query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM t WHERE x = _'
 ----
 select
- ├── columns: row_id:1 fingerprint:3 hint:4 created_at:5
+ ├── columns: row_id:1 fingerprint:3 hint:4 created_at:5 hint_type:6 hint_name:7 enabled:8 database:9
  ├── stats: [rows=10, distinct(3)=1, null(3)=0]
- ├── cost: 90.4700007
+ ├── cost: 92.0700007
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
- ├── fd: ()-->(3), (1)-->(4,5)
+ ├── fd: ()-->(3), (1)-->(4-9)
  ├── distribution: test
- ├── prune: (1,4,5)
+ ├── prune: (1,4-9)
  ├── index-join statement_hints
- │    ├── columns: row_id:1 fingerprint:3 hint:4 created_at:5
+ │    ├── columns: row_id:1 fingerprint:3 hint:4 created_at:5 hint_type:6 hint_name:7 enabled:8 database:9
  │    ├── stats: [rows=10]
- │    ├── cost: 90.3400007
+ │    ├── cost: 91.9400007
  │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
- │    ├── fd: (1)-->(3-5)
+ │    ├── fd: (1)-->(3-9)
  │    ├── distribution: test
  │    └── scan statement_hints@hash_idx
  │         ├── columns: row_id:1
@@ -41,21 +41,21 @@ query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM system.statement_hints WHERE hash = 123
 ----
 project
- ├── columns: row_id:1 fingerprint:3 hint:4 created_at:5
+ ├── columns: row_id:1 fingerprint:3 hint:4 created_at:5 hint_type:6 hint_name:7 enabled:8 database:9
  ├── stats: [rows=10]
- ├── cost: 90.6600007
+ ├── cost: 92.2600007
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
- ├── fd: (1)-->(3-5)
+ ├── fd: (1)-->(3-9)
  ├── distribution: test
- ├── prune: (1,3-5)
+ ├── prune: (1,3-9)
  └── index-join statement_hints
-      ├── columns: row_id:1 hash:2 fingerprint:3 hint:4 created_at:5
+      ├── columns: row_id:1 hash:2 fingerprint:3 hint:4 created_at:5 hint_type:6 hint_name:7 enabled:8 database:9
       ├── stats: [rows=10, distinct(2)=1, null(2)=0]
-      ├── cost: 90.5400007
+      ├── cost: 92.1400007
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
-      ├── fd: ()-->(2), (1)-->(3-5)
+      ├── fd: ()-->(2), (1)-->(3-9)
       ├── distribution: test
       └── scan statement_hints@hash_idx
            ├── columns: row_id:1 hash:2
@@ -96,15 +96,15 @@ query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM system.statement_hints WHERE row_id = 1
 ----
 scan statement_hints
- ├── columns: row_id:1 fingerprint:3 hint:4 created_at:5
+ ├── columns: row_id:1 fingerprint:3 hint:4 created_at:5 hint_type:6 hint_name:7 enabled:8 database:9
  ├── constraint: /1: [/1 - /1]
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0]
- ├── cost: 9.19
+ ├── cost: 9.35
  ├── key: ()
- ├── fd: ()-->(1,3-5)
+ ├── fd: ()-->(1,3-9)
  ├── distribution: test
- └── prune: (3-5)
+ └── prune: (3-9)
 
 # Delete by fingerprint and row ID.
 query T
@@ -112,33 +112,33 @@ EXPLAIN (OPT, VERBOSE) DELETE FROM system.statement_hints WHERE fingerprint = 'S
 ----
 delete statement_hints
  ├── columns: <none>
- ├── fetch columns: row_id:10 hash:11
+ ├── fetch columns: row_id:14 hash:15
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- ├── cost: 9.21
+ ├── cost: 9.29
  ├── distribution: test
  └── select
-      ├── columns: row_id:10 hash:11 fingerprint:12
+      ├── columns: row_id:14 hash:15 fingerprint:16
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=1, distinct(10)=1, null(10)=0, distinct(12)=1, null(12)=0]
-      ├── cost: 9.2
+      ├── stats: [rows=1, distinct(14)=1, null(14)=0, distinct(16)=1, null(16)=0]
+      ├── cost: 9.28
       ├── key: ()
-      ├── fd: ()-->(10-12)
+      ├── fd: ()-->(14-16)
       ├── distribution: test
-      ├── prune: (11)
+      ├── prune: (15)
       ├── scan statement_hints
-      │    ├── columns: row_id:10 hash:11 fingerprint:12
-      │    ├── constraint: /10: [/1 - /1]
+      │    ├── columns: row_id:14 hash:15 fingerprint:16
+      │    ├── constraint: /14: [/1 - /1]
       │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
-      │    ├── stats: [rows=1, distinct(10)=1, null(10)=0]
-      │    ├── cost: 9.17
+      │    ├── stats: [rows=1, distinct(14)=1, null(14)=0]
+      │    ├── cost: 9.25
       │    ├── key: ()
-      │    ├── fd: ()-->(10-12)
+      │    ├── fd: ()-->(14-16)
       │    └── distribution: test
       └── filters
-           └── fingerprint:12 = 'SELECT * FROM t WHERE x = _' [outer=(12), constraints=(/12: [/'SELECT * FROM t WHERE x = _' - /'SELECT * FROM t WHERE x = _']; tight), fd=()-->(12)]
+           └── fingerprint:16 = 'SELECT * FROM t WHERE x = _' [outer=(16), constraints=(/16: [/'SELECT * FROM t WHERE x = _' - /'SELECT * FROM t WHERE x = _']; tight), fd=()-->(16)]
 
 # Query used by the cache to check for hint existence.
 query T
