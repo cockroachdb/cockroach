@@ -2519,10 +2519,8 @@ func (p *planner) checkSchemaChangeIsAllowed(
 		return nil
 	}
 	// Check if this schema change is on the allowed list, which will only
-	// be simple non-back filling schema changes. All commands except set/reset
-	// schema_locked are unsupported before 25.2
-	preventedBySchemaLocked := !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V25_3) &&
-		!tree.IsSetOrResetSchemaLocked(n)
+	// be simple non-back filling schema changes.
+	preventedBySchemaLocked := false
 	// These schema changes are allowed because the events generated will always
 	// be ignored by the schema_locked. The tableEventFilter (in CDC schemafeed)
 	// only cares about a limited number of events:

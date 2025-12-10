@@ -10,7 +10,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -1191,13 +1190,10 @@ func checkTableSchemaChangePrerequisites(
 	schemaLocked := tableElements.FilterTableSchemaLocked().MustGetZeroOrOneElement()
 	// No-op by default unless schema_locked has been setup.
 	maybeCleanupSchemaLockedFn = func() {}
-	if schemaLocked != nil && !tree.IsSetOrResetSchemaLocked(n) {
-		// Before 25.2 we don't support auto-unsetting schema locked.
-		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) {
-			ns := tableElements.FilterNamespace().MustGetOneElement()
-			panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
-		}
-		// Unset schema_locked for the user.
+	hasSchemaLockedChange := tree.HasSetOrResetSchemaLocked(n)
+	if schemaLocked != nil && !hasSchemaLockedChange {
+		// If the user is not explicitly setting schema_locked, then we should
+		// use the auto-unset logic.
 		b.DropTransient(schemaLocked)
 		maybeCleanupSchemaLockedFn = func() {
 			maybeCleanupSchemaLocked(b, tableElements.FilterTable().MustGetOneElement().TableID)

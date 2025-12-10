@@ -1,0 +1,164 @@
+setup
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY, j INT);
+----
+
+ops
+ALTER TABLE defaultdb.foo SET (exclude_data_from_backup = true)
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetTableStorageParam
+      {}
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetTableStorageParam
+      {}
+
+ops
+ALTER TABLE defaultdb.foo SET (sql_stats_histogram_buckets_count = 64)
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetTableStorageParam
+      {}
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetTableStorageParam
+      {}
+
+ops
+ALTER TABLE defaultdb.foo SET (exclude_data_from_backup = true, sql_stats_histogram_buckets_count = 64)
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], ABSENT] -> PUBLIC
+    [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetTableStorageParam
+      {}
+    *scop.SetTableStorageParam
+      {}
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], PUBLIC] -> ABSENT
+    [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], ABSENT] -> PUBLIC
+    [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetTableStorageParam
+      {}
+    *scop.SetTableStorageParam
+      {}
+
+setup
+CREATE TABLE defaultdb.bar (x INT PRIMARY KEY) WITH (exclude_data_from_backup = true);
+----
+
+ops
+ALTER TABLE defaultdb.bar SET (exclude_data_from_backup = false)
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC] -> ABSENT
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: false}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.ResetTableStorageParam
+      {}
+    *scop.SetTableStorageParam
+      {}
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], ABSENT] -> PUBLIC
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: false}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC] -> ABSENT
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: false}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.ResetTableStorageParam
+      {}
+    *scop.SetTableStorageParam
+      {}
+
+ops
+ALTER TABLE defaultdb.bar RESET (exclude_data_from_backup)
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.ResetTableStorageParam
+      {}
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], ABSENT] -> PUBLIC
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.ResetTableStorageParam
+      {}
+
+setup
+CREATE TABLE defaultdb.baz (y INT PRIMARY KEY) WITH (exclude_data_from_backup = true, sql_stats_histogram_buckets_count = 100);
+----
+
+ops
+ALTER TABLE defaultdb.baz RESET (exclude_data_from_backup, sql_stats_histogram_buckets_count)
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[TableStorageParam:{DescID: 106, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC] -> ABSENT
+    [[TableStorageParam:{DescID: 106, Name: sql_stats_histogram_buckets_count, Value: 100}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.ResetTableStorageParam
+      {}
+    *scop.ResetTableStorageParam
+      {}
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 106, Name: exclude_data_from_backup, Value: true}, ABSENT], ABSENT] -> PUBLIC
+    [[TableStorageParam:{DescID: 106, Name: sql_stats_histogram_buckets_count, Value: 100}, ABSENT], ABSENT] -> PUBLIC
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[TableStorageParam:{DescID: 106, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC] -> ABSENT
+    [[TableStorageParam:{DescID: 106, Name: sql_stats_histogram_buckets_count, Value: 100}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.ResetTableStorageParam
+      {}
+    *scop.ResetTableStorageParam
+      {}

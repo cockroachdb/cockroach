@@ -1259,3 +1259,15 @@ type SetTableSchemaLocked struct {
 	TableID descpb.ID
 	Locked  bool
 }
+
+// SetTableStorageParam sets a storage parameter on a table.
+type SetTableStorageParam struct {
+	immediateMutationOp
+	scpb.TableStorageParam
+}
+
+// ResetTableStorageParam resets a storage parameter on a table to its default.
+type ResetTableStorageParam struct {
+	immediateMutationOp
+	scpb.TableStorageParam
+}
