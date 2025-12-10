@@ -7,37 +7,43 @@ package mmaprototype
 
 import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
+type ChangeOrigin uint8
+
+const (
+	OriginExternal ChangeOrigin = iota
+	originMMARebalance
+)
+
 type counterMetrics struct {
-	DroppedDueToStateInconsistency  *metric.Counter
-	ExternalFailedToRegister        *metric.Counter
-	ExternaRegisterSuccess          *metric.Counter
-	ExternalReplicaRebalanceSuccess *metric.Counter
-	ExternalReplicaRebalanceFailure *metric.Counter
-	ExternalLeaseTransferSuccess    *metric.Counter
-	ExternalLeaseTransferFailure    *metric.Counter
-	MMAReplicaRebalanceSuccess      *metric.Counter
-	MMAReplicaRebalanceFailure      *metric.Counter
-	MMALeaseTransferSuccess         *metric.Counter
-	MMALeaseTransferFailure         *metric.Counter
-	MMARegisterLeaseSuccess         *metric.Counter
-	MMARegisterRebalanceSuccess     *metric.Counter
+	DroppedDueToStateInconsistency *metric.Counter
+
+	ExternalRegisterSuccess *metric.Counter
+	ExternalRegisterFailure *metric.Counter
+
+	ExternalReplicaChangeSuccess *metric.Counter
+	ExternalReplicaChangeFailure *metric.Counter
+	ExternalLeaseChangeSuccess   *metric.Counter
+	ExternalLeaseChangeFailure   *metric.Counter
+
+	RebalanceReplicaChangeSuccess *metric.Counter
+	RebalanceReplicaChangeFailure *metric.Counter
+	RebalanceLeaseChangeSuccess   *metric.Counter
+	RebalanceLeaseChangeFailure   *metric.Counter
 }
 
 func makeCounterMetrics() *counterMetrics {
 	return &counterMetrics{
-		DroppedDueToStateInconsistency:  metric.NewCounter(metaDroppedDueToStateInconsistency),
-		ExternalFailedToRegister:        metric.NewCounter(metaExternalFailedToRegister),
-		ExternaRegisterSuccess:          metric.NewCounter(metaExternaRegisterSuccess),
-		MMARegisterLeaseSuccess:         metric.NewCounter(metaMMARegisterLeaseSuccess),
-		MMARegisterRebalanceSuccess:     metric.NewCounter(metaMMARegisterRebalanceSuccess),
-		ExternalReplicaRebalanceSuccess: metric.NewCounter(metaExternalReplicaRebalanceSuccess),
-		ExternalReplicaRebalanceFailure: metric.NewCounter(metaExternalReplicaRebalanceFailure),
-		ExternalLeaseTransferSuccess:    metric.NewCounter(metaExternalLeaseTransferSuccess),
-		ExternalLeaseTransferFailure:    metric.NewCounter(metaExternalLeaseTransferFailure),
-		MMAReplicaRebalanceSuccess:      metric.NewCounter(metaMMAReplicaRebalanceSuccess),
-		MMAReplicaRebalanceFailure:      metric.NewCounter(metaMMAReplicaRebalanceFailure),
-		MMALeaseTransferSuccess:         metric.NewCounter(metaMMALeaseTransferSuccess),
-		MMALeaseTransferFailure:         metric.NewCounter(metaMMALeaseTransferFailure),
+		DroppedDueToStateInconsistency: metric.NewCounter(metaDroppedDueToStateInconsistency),
+		ExternalRegisterSuccess:        metric.NewCounter(metaExternalRegisterSuccess),
+		ExternalRegisterFailure:        metric.NewCounter(metaExternalRegisterFailure),
+		ExternalReplicaChangeSuccess:   metric.NewCounter(metaExternalReplicaChangeSuccess),
+		ExternalReplicaChangeFailure:   metric.NewCounter(metaExternalReplicaChangeFailure),
+		ExternalLeaseChangeSuccess:     metric.NewCounter(metaExternalLeaseChangeSuccess),
+		ExternalLeaseChangeFailure:     metric.NewCounter(metaExternalLeaseChangeFailure),
+		RebalanceReplicaChangeSuccess:  metric.NewCounter(metaRebalanceReplicaChangeSuccess),
+		RebalanceReplicaChangeFailure:  metric.NewCounter(metaRebalanceReplicaChangeFailure),
+		RebalanceLeaseChangeSuccess:    metric.NewCounter(metaRebalanceLeaseChangeSuccess),
+		RebalanceLeaseChangeFailure:    metric.NewCounter(metaRebalanceLeaseChangeFailure),
 	}
 }
 
@@ -45,86 +51,95 @@ var (
 	metaDroppedDueToStateInconsistency = metric.Metadata{
 		Name:        "mma.dropped",
 		Help:        "Number of operations dropped due to MMA state inconsistency",
-		Measurement: "Range Rebalances",
+		Measurement: "Replica/Lease Change",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaExternalFailedToRegister = metric.Metadata{
-		Name:        "mma.external.dropped",
-		Help:        "Number of external operations that failed to register with MMA",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaExternaRegisterSuccess = metric.Metadata{
-		Name:        "mma.external.success",
+	metaExternalRegisterSuccess = metric.Metadata{
+		Name:        "mma.external.registration.success",
 		Help:        "Number of external operations successfully registered with MMA",
-		Measurement: "Range Rebalances",
+		Measurement: "Replica/Lease Change",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaMMARegisterLeaseSuccess = metric.Metadata{
-		Name:        "mma.lease.register.success",
-		Help:        "Number of lease transfers successfully registered with MMA",
-		Measurement: "Range Rebalances",
+	metaExternalRegisterFailure = metric.Metadata{
+		Name:        "mma.external.registration.failure",
+		Help:        "Number of external operations that failed to register with MMA",
+		Measurement: "Replica/Lease Change",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaMMARegisterRebalanceSuccess = metric.Metadata{
-		Name:        "mma.rebalance.register.success",
-		Help:        "Number of rebalance operations successfully registered with MMA",
-		Measurement: "Range Rebalances",
+	metaExternalReplicaChangeSuccess = metric.Metadata{
+		Name:        "mma.change.external.replica.success",
+		Help:        "Number of successful external replica change operations",
+		Measurement: "Range Change",
 		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.change",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelOrigin, "external", metric.LabelType, "replica", metric.LabelResult, "success"),
 	}
-	metaExternalReplicaRebalanceSuccess = metric.Metadata{
-		Name:        "mma.rebalances.external.success",
-		Help:        "Number of successful external replica rebalance operations",
-		Measurement: "Range Rebalances",
+	metaExternalReplicaChangeFailure = metric.Metadata{
+		Name:        "mma.change.external.replica.failure",
+		Help:        "Number of failed external replica change operations",
+		Measurement: "Range Change",
 		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.change",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelOrigin, "external", metric.LabelType, "replica", metric.LabelResult, "failure"),
+	}
+	metaExternalLeaseChangeSuccess = metric.Metadata{
+		Name:        "mma.change.external.lease.success",
+		Help:        "Number of successful external lease change operations",
+		Measurement: "Lease Change",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.change",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelOrigin, "external", metric.LabelType, "lease", metric.LabelResult, "success"),
+	}
+	metaExternalLeaseChangeFailure = metric.Metadata{
+		Name:        "mma.change.external.lease.failure",
+		Help:        "Number of failed external lease change operations",
+		Measurement: "Lease Change",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.change",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelOrigin, "external", metric.LabelType, "lease", metric.LabelResult, "failure"),
+	}
+	metaRebalanceReplicaChangeSuccess = metric.Metadata{
+		Name:        "mma.change.rebalance.replica.success",
+		Help:        "Number of successful MMA-initiated rebalance operations that change replicas",
+		Measurement: "Range Change",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.change",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelOrigin, "rebalance", metric.LabelType, "replica", metric.LabelResult, "success"),
+	}
+	metaRebalanceReplicaChangeFailure = metric.Metadata{
+		Name:        "mma.change.rebalance.replica.failure",
+		Help:        "Number of failed MMA-initiated rebalance operations that change replicas",
+		Measurement: "Range Change",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.change",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelOrigin, "rebalance", metric.LabelType, "replica", metric.LabelResult, "failure"),
+	}
+	metaRebalanceLeaseChangeSuccess = metric.Metadata{
+		Name:        "mma.change.rebalance.lease.success",
+		Help:        "Number of successful MMA-initiated rebalance operations that transfer the lease",
+		Measurement: "Lease Change",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.change",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelOrigin, "rebalance", metric.LabelType, "lease", metric.LabelResult, "success"),
+	}
+	metaRebalanceLeaseChangeFailure = metric.Metadata{
+		Name:        "mma.change.rebalance.lease.failure",
+		Help:        "Number of failed MMA-initiated rebalance operations that transfer the lease",
+		Measurement: "Lease Change",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.change",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelOrigin, "rebalance", metric.LabelType, "lease", metric.LabelResult, "failure"),
 	}
 
-	metaExternalLeaseTransferSuccess = metric.Metadata{
-		Name:        "mma.lease.external.success",
-		Help:        "Number of successful external lease transfer operations",
-		Measurement: "Lease Transfers",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaExternalReplicaRebalanceFailure = metric.Metadata{
-		Name:        "mma.rebalances.external.failure",
-		Help:        "Number of failed external replica rebalance operations",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaExternalLeaseTransferFailure = metric.Metadata{
-		Name:        "mma.lease.external.failure",
-		Help:        "Number of failed external lease transfer operations",
-		Measurement: "Lease Transfers",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaMMAReplicaRebalanceSuccess = metric.Metadata{
-		Name:        "mma.rebalance.success",
-		Help:        "Number of successful MMA-initiated replica rebalance operations",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaMMAReplicaRebalanceFailure = metric.Metadata{
-		Name:        "mma.rebalance.failure",
-		Help:        "Number of failed MMA-initiated replica rebalance operations",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaMMALeaseTransferSuccess = metric.Metadata{
-		Name:        "mma.lease.success",
-		Help:        "Number of successful MMA-initiated lease transfer operations",
-		Measurement: "Lease Transfers",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaMMALeaseTransferFailure = metric.Metadata{
-		Name:        "mma.lease.failure",
-		Help:        "Number of failed MMA-initiated lease transfer operations",
-		Measurement: "Lease Transfers",
-		Unit:        metric.Unit_COUNT,
-	}
+	// Future: we will add additional origins for MMA-initiated operations that
+	// are other than rebalance. Eventually, the external label value will go
+	// away when everything is migrated to MMA and SMA is removed.
 )
