@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -277,9 +278,9 @@ func (sc *TableStatisticsCache) GetTableStats(
 //
 // The statistics are ordered by their CreatedAt time (newest-to-oldest).
 func GetTableStatsProtosFromDB(
-	ctx context.Context, table catalog.TableDescriptor, executor isql.Executor,
+	ctx context.Context, table catalog.TableDescriptor, executor isql.Executor, st *cluster.Settings,
 ) (statsProtos []*TableStatisticProto, err error) {
-	return getTableStatsProtosFromDB(ctx, table.GetID(), executor)
+	return getTableStatsProtosFromDB(ctx, table.GetID(), executor, st)
 }
 
 // DisallowedOnSystemTable returns true if this tableID belongs to a special
@@ -602,6 +603,7 @@ const (
 	partialPredicateIndex
 	histogramIndex
 	fullStatisticsIdIndex
+	delayDeleteIdx
 	statsLen
 )
 
@@ -637,6 +639,7 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 		{"partialPredicate", partialPredicateIndex, types.String, true},
 		{"histogram", histogramIndex, types.Bytes, true},
 		{"fullStatisticID", fullStatisticsIdIndex, types.Int, true},
+		{"delayDelete", delayDeleteIdx, types.Bool, true},
 	}
 
 	for _, v := range expectedTypes {
@@ -645,6 +648,11 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 			return nil, errors.Errorf("%s returned from table statistics lookup has type %s. Expected %s",
 				v.fieldName, datums[v.fieldIndex].ResolvedType(), v.expectedType)
 		}
+	}
+
+	delayDelete := true
+	if datums[delayDeleteIdx] != tree.DBoolTrue {
+		delayDelete = false
 	}
 
 	// Extract datum values.
@@ -656,6 +664,7 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 		DistinctCount: (uint64)(*datums[distinctCountIndex].(*tree.DInt)),
 		NullCount:     (uint64)(*datums[nullCountIndex].(*tree.DInt)),
 		AvgSize:       (uint64)(*datums[avgSizeIndex].(*tree.DInt)),
+		DelayDelete:   delayDelete,
 	}
 	columnIDs := datums[columnIDsIndex].(*tree.DArray)
 	res.ColumnIDs = make([]descpb.ColumnID, len(columnIDs.Array))
@@ -968,24 +977,37 @@ func (tsp *TableStatisticProto) IsAuto() bool {
 
 // TODO(michae2): Add an index on system.table_statistics (tableID, createdAt,
 // columnIDs, statisticID).
-const getTableStatisticsStmt = `
-SELECT
-	"tableID",
-	"statisticID",
-	name,
-	"columnIDs",
-	"createdAt",
-	"rowCount",
-	"distinctCount",
-	"nullCount",
-	"avgSize",
-	"partialPredicate",
-	histogram,
-	"fullStatisticID"
-FROM system.table_statistics
-WHERE "tableID" = $1
-ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
-`
+
+// GetTableStatisticsStmt returns the appropriate SQL query for fetching table statistics
+// based on the cluster version. The delayDelete column was added in V26_2_AddTableStatisticsDelayDeleteColumn.
+func GetTableStatisticsStmt(
+	ctx context.Context, st *cluster.Settings, ordering tree.Direction,
+) string {
+	delayDeleteColumn := `false AS "delayDelete"`
+	if st.Version.IsActive(ctx, clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn) {
+		delayDeleteColumn = `"delayDelete"`
+	}
+
+	return fmt.Sprintf(`
+	SELECT
+		"tableID",
+		"statisticID",
+		name,
+		"columnIDs",
+		"createdAt",
+		"rowCount",
+		"distinctCount",
+		"nullCount",
+		"avgSize",
+		"partialPredicate",
+		histogram,
+		"fullStatisticID",
+		%[1]s
+	FROM system.table_statistics
+	WHERE "tableID" = $1
+	ORDER BY "createdAt" %[2]s, "columnIDs" %[2]s, "statisticID" %[2]s
+`, delayDeleteColumn, ordering)
+}
 
 // getTableStatsFromDB retrieves the statistics in system.table_statistics
 // for the given table ID.
@@ -1000,7 +1022,7 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 	typeResolver *descs.DistSQLTypeResolver,
 ) (_ []*TableStatistic, _ map[descpb.ColumnID]*types.T, retErr error) {
 	it, queryErr := sc.db.Executor().QueryIteratorEx(
-		ctx, "get-table-statistics", nil /* txn */, sessiondata.NodeUserSessionDataOverride, getTableStatisticsStmt, tableID,
+		ctx, "get-table-statistics", nil /* txn */, sessiondata.NodeUserSessionDataOverride, GetTableStatisticsStmt(ctx, st, tree.Descending), tableID,
 	)
 	if queryErr != nil {
 		return nil, nil, queryErr
@@ -1061,10 +1083,10 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 // It ignores any statistics that cannot be decoded (e.g. because of a
 // user-defined type that doesn't exist) and returns the rest (with no error).
 func getTableStatsProtosFromDB(
-	ctx context.Context, tableID descpb.ID, executor isql.Executor,
+	ctx context.Context, tableID descpb.ID, executor isql.Executor, st *cluster.Settings,
 ) (statsProtos []*TableStatisticProto, retErr error) {
 	it, queryErr := executor.QueryIteratorEx(
-		ctx, "get-table-statistics-protos", nil /* txn */, sessiondata.NodeUserSessionDataOverride, getTableStatisticsStmt, tableID,
+		ctx, "get-table-statistics-protos", nil /* txn */, sessiondata.NodeUserSessionDataOverride, GetTableStatisticsStmt(ctx, st, tree.Descending), tableID,
 	)
 	if queryErr != nil {
 		return nil, queryErr

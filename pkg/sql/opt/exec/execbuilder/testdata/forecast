@@ -394,6 +394,7 @@ WHERE stat->>'name' = '__forecast__'
         "b"
     ],
     "created_at": "1988-08-08 00:00:00",
+    "delay_delete": false,
     "distinct_count": 1,
     "histo_buckets": [
         {
@@ -1487,6 +1488,7 @@ WHERE stat->>'name' = '__forecast__'
         "a"
     ],
     "created_at": "2022-09-19 22:00:00",
+    "delay_delete": false,
     "distinct_count": 1,
     "histo_buckets": [
         {
@@ -1509,6 +1511,7 @@ WHERE stat->>'name' = '__forecast__'
         "b"
     ],
     "created_at": "2022-09-19 22:00:00",
+    "delay_delete": false,
     "distinct_count": 1,
     "histo_col_type": "",
     "name": "__forecast__",
@@ -1521,6 +1524,7 @@ WHERE stat->>'name' = '__forecast__'
         "b"
     ],
     "created_at": "2022-09-19 22:00:00",
+    "delay_delete": false,
     "distinct_count": 1,
     "histo_buckets": [
         {
@@ -1858,6 +1862,7 @@ WHERE stat->>'name' = '__forecast__'
         "b"
     ],
     "created_at": "2023-01-04 00:00:00",
+    "delay_delete": false,
     "distinct_count": 1,
     "histo_col_type": "",
     "name": "__forecast__",
