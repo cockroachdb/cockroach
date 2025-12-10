@@ -6,6 +6,8 @@
 package optbuilder
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -28,12 +30,35 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 	// This will cause an error for queries like:
 	//   SELECT DISTINCT a FROM t ORDER BY b
 	// Note: this behavior is consistent with PostgreSQL.
+	//
+	// Special case: allow "col IS NULL" expressions that are added for
+	// null_ordered_last handling. These don't affect the DISTINCT semantics
+	// since they're just used for ordering NULLs.
 	for _, col := range inScope.ordering {
 		if !private.GroupingCols.Contains(col.ID()) {
-			panic(pgerror.Newf(
-				pgcode.InvalidColumnReference,
-				"for SELECT DISTINCT, ORDER BY expressions must appear in select list",
-			))
+			colIsValid := false
+			scopeCol := inScope.getColumn(col.ID())
+			if scopeCol != nil {
+				// Check if this is a synthetic column added for null ordering.
+				// These columns have metadata names starting with "nulls_ordering_"
+				// and contain "col IS NULL" expressions that are safe to include
+				// in DISTINCT grouping.
+				if strings.HasPrefix(scopeCol.name.MetadataName(), "nulls_ordering_") {
+					// This is a synthetic null ordering column. It's safe to include
+					// in the grouping because it's a deterministic function of columns
+					// already in the grouping (the IS NULL expression doesn't change
+					// the DISTINCT semantics).
+					colIsValid = true
+					// Add this synthetic column to the grouping cols
+					private.GroupingCols.Add(col.ID())
+				}
+			}
+			if !colIsValid {
+				panic(pgerror.Newf(
+					pgcode.InvalidColumnReference,
+					"for SELECT DISTINCT, ORDER BY expressions must appear in select list",
+				))
+			}
 		}
 	}
 
