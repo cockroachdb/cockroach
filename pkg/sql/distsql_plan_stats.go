@@ -302,7 +302,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		typeResolver = &r
 	}
 	// Fetch all stats for the table that matches the given table descriptor.
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver)
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver, false, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -724,7 +724,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		r := descs.NewDistSQLTypeResolver(p.Descriptors(), p.Txn())
 		typeResolver = &r
 	}
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver)
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver, false, 0)
 	if err != nil {
 		return nil, err
 	}

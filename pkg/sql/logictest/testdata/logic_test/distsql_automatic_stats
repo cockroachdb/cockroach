@@ -15,17 +15,17 @@ INSERT INTO data SELECT a, b, c::FLOAT, NULL FROM
 # available for each set of column names. This is important in order to
 # tolerate the rare case of multiple auto stats jobs running between two retry
 # iterations.
-query TTIII colnames,retry
-SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+query TTIIIB colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count, delay_delete
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names, created DESC
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a}           1000       10              0
-__auto__         {a,b}         1000       100             0
-__auto__         {a,b,c}       1000       1000            0
-__auto__         {b}           1000       10              0
-__auto__         {c}           1000       10              0
-__auto__         {d}           1000       1               1000
+statistics_name  column_names  row_count  distinct_count  null_count  delay_delete
+__auto__         {a}           1000       10              0           NULL
+__auto__         {a,b}         1000       100             0           NULL
+__auto__         {a,b,c}       1000       1000            0           NULL
+__auto__         {b}           1000       10              0           NULL
+__auto__         {c}           1000       10              0           NULL
+__auto__         {d}           1000       1               1000        NULL
 
 # Disable automatic stats
 statement ok
@@ -36,17 +36,17 @@ statement ok
 UPDATE data SET d = 10 WHERE (a = 1 OR a = 2 OR a = 3) AND b > 1
 
 # There should be no change to stats.
-query TTIII colnames
-SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+query TTIIIB colnames
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count, delay_delete
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a}           1000       10              0
-__auto__         {a,b}         1000       100             0
-__auto__         {a,b,c}       1000       1000            0
-__auto__         {b}           1000       10              0
-__auto__         {c}           1000       10              0
-__auto__         {d}           1000       1               1000
+statistics_name  column_names  row_count  distinct_count  null_count  delay_delete
+__auto__         {a}           1000       10              0           NULL
+__auto__         {a,b}         1000       100             0           NULL
+__auto__         {a,b,c}       1000       1000            0           NULL
+__auto__         {b}           1000       10              0           NULL
+__auto__         {c}           1000       10              0           NULL
+__auto__         {d}           1000       1               1000        NULL
 
 # Enable automatic stats
 statement ok
@@ -69,17 +69,17 @@ UPDATE data SET d = 12 WHERE d = 10
 # with each one affecting at most 88 rows. Since 88 < 205, the refresh is not
 # guaranteed, making this test flaky.
 skipif config 3node-tenant-default-configs
-query TTIII colnames,retry
-SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+query TTIIIB colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count, delay_delete
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a}           1000       10              0
-__auto__         {a,b}         1000       100             0
-__auto__         {a,b,c}       1000       1000            0
-__auto__         {b}           1000       10              0
-__auto__         {c}           1000       10              0
-__auto__         {d}           1000       2               730
+statistics_name  column_names  row_count  distinct_count  null_count  delay_delete
+__auto__         {a}           1000       10              0           NULL
+__auto__         {a,b}         1000       100             0           NULL
+__auto__         {a,b,c}       1000       1000            0           NULL
+__auto__         {b}           1000       10              0           NULL
+__auto__         {c}           1000       10              0           NULL
+__auto__         {d}           1000       2               730         NULL
 
 # Upsert more than 20% of the table.
 statement ok
@@ -88,33 +88,33 @@ generate_series(1, 11) AS a(a),
 generate_series(1, 10) AS b(b),
 generate_series(1, 5) AS c(c)
 
-query TTIII colnames,retry
-SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+query TTIIIB colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count, delay_delete
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a}           1050       11              0
-__auto__         {a,b}         1050       110             0
-__auto__         {a,b,c}       1050       1050            0
-__auto__         {b}           1050       10              0
-__auto__         {c}           1050       10              0
-__auto__         {d}           1050       3               365
+statistics_name  column_names  row_count  distinct_count  null_count  delay_delete
+__auto__         {a}           1050       11              0           NULL
+__auto__         {a,b}         1050       110             0           NULL
+__auto__         {a,b,c}       1050       1050            0           NULL
+__auto__         {b}           1050       10              0           NULL
+__auto__         {c}           1050       10              0           NULL
+__auto__         {d}           1050       3               365         NULL
 
 # Delete more than 20% of the table.
 statement ok
 DELETE FROM data WHERE c > 5
 
-query TTIII colnames,retry
-SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+query TTIIIB colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count, delay_delete
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a}           550        11              0
-__auto__         {a,b}         550        110             0
-__auto__         {a,b,c}       550        550             0
-__auto__         {b}           550        10              0
-__auto__         {c}           550        5               0
-__auto__         {d}           550        1               0
+statistics_name  column_names  row_count  distinct_count  null_count  delay_delete
+__auto__         {a}           550        11              0           NULL
+__auto__         {a,b}         550        110             0           NULL
+__auto__         {a,b,c}       550        550             0           NULL
+__auto__         {b}           550        10              0           NULL
+__auto__         {c}           550        5               0           NULL
+__auto__         {d}           550        1               0           NULL
 
 # Test CREATE TABLE ... AS
 statement ok
@@ -122,42 +122,42 @@ CREATE TABLE copy WITH (sql_stats_automatic_collection_enabled = true) AS SELECT
 
 # Distinct count for rowid can be flaky, so don't show it. The estimate is
 # almost always 550, but occasionally it is 549...
-query TTII colnames,retry
-SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, null_count
+query TTIIB colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, null_count, delay_delete
 FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names ASC, created DESC
 ----
-statistics_name  column_names  row_count  null_count
-__auto__         {a}           550        0
-__auto__         {b}           550        0
-__auto__         {c}           550        0
-__auto__         {d}           550        0
-__auto__         {rowid}       550        0
+statistics_name  column_names  row_count  null_count  delay_delete
+__auto__         {a}           550        0           NULL
+__auto__         {b}           550        0           NULL
+__auto__         {c}           550        0           NULL
+__auto__         {d}           550        0           NULL
+__auto__         {rowid}       550        0           NULL
 
 statement ok
 CREATE TABLE test_create (x INT PRIMARY KEY, y CHAR) WITH (sql_stats_automatic_collection_enabled = true)
 
-query TTIII colnames,retry
-SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+query TTIIIB colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count, delay_delete
 FROM [SHOW STATISTICS FOR TABLE test_create] ORDER BY column_names ASC, created DESC
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {x}           0          0               0
-__auto__         {y}           0          0               0
+statistics_name  column_names  row_count  distinct_count  null_count  delay_delete
+__auto__         {x}           0          0               0           NULL
+__auto__         {y}           0          0               0           NULL
 
 # Test fast path delete.
 statement ok
 DELETE FROM copy WHERE true
 
-query TTII colnames,retry
-SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, null_count
+query TTIIB colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, null_count, delay_delete
 FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names ASC, created DESC
 ----
-statistics_name  column_names  row_count  null_count
-__auto__         {a}           0          0
-__auto__         {b}           0          0
-__auto__         {c}           0          0
-__auto__         {d}           0          0
-__auto__         {rowid}       0          0
+statistics_name  column_names  row_count  null_count  delay_delete
+__auto__         {a}           0          0           NULL
+__auto__         {b}           0          0           NULL
+__auto__         {c}           0          0           NULL
+__auto__         {d}           0          0           NULL
+__auto__         {rowid}       0          0           NULL
 
 
 # Test user-defined schemas.
@@ -176,10 +176,10 @@ statement ok
 INSERT INTO my_schema.my_table SELECT k, NULL FROM
    generate_series(1, 10) AS k(k)
 
-query TTIII colnames,retry
-SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
+query TTIIIB colnames,retry
+SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count, delay_delete
 FROM [SHOW STATISTICS FOR TABLE my_schema.my_table] ORDER BY column_names ASC, created DESC
 ----
-statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {k}           10         10              0
-__auto__         {v}           10         1               10
+statistics_name  column_names  row_count  distinct_count  null_count  delay_delete
+__auto__         {k}           10         10              0           NULL
+__auto__         {v}           10         1               10          NULL

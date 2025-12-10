@@ -111,7 +111,7 @@ func checkStatsForTable(
 
 	// Perform the lookup and refresh, and confirm the
 	// returned stats match the expected values.
-	statsList, err := sc.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */)
+	statsList, err := sc.getTableStatsFromCache(ctx, tableID, nil, nil, nil, false, 0)
 	if err != nil {
 		t.Fatalf("error retrieving stats: %s", err)
 	}
@@ -345,7 +345,7 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
 	// for tt properly hydrates the user defined type t before access.
-	stats, err := sc.GetTableStats(ctx, tbl, nil /* typeResolver */)
+	stats, err := sc.GetTableStats(ctx, tbl, nil, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,7 +360,7 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 	sc.InvalidateTableStats(ctx, tbl.GetID())
 	// Verify that GetTableStats ignores the statistic on the now unknown type and
 	// returns the rest.
-	stats, err = sc.GetTableStats(ctx, tbl, nil /* typeResolver */)
+	stats, err = sc.GetTableStats(ctx, tbl, nil, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +409,7 @@ func TestCacheWait(t *testing.T) {
 		for n := 0; n < 10; n++ {
 			wg.Add(1)
 			go func() {
-				stats, err := sc.getTableStatsFromCache(ctx, id, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */)
+				stats, err := sc.getTableStatsFromCache(ctx, id, nil, nil, nil, false, 0)
 				if err != nil {
 					t.Error(err)
 				} else if !checkStats(stats, expectedStats[id]) {
@@ -458,7 +458,7 @@ func TestCacheAutoRefresh(t *testing.T) {
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "test", "t")
 
 	expectNStats := func(n int) error {
-		stats, err := sc.GetTableStats(ctx, tableDesc, nil /* typeResolver */)
+		stats, err := sc.GetTableStats(ctx, tableDesc, nil, false, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
