@@ -350,7 +350,11 @@ func TestListClosedSessions(t *testing.T) {
 	// Create a test user.
 	users := []string{"test_user_a", "test_user_b", "test_user_c"}
 	conn := testCluster.ServerConn(0)
-	_, err := conn.Exec(fmt.Sprintf(`
+	// Disabling old version caching in the lease manager to speed up user creation against
+	// long running transactions.
+	_, err := conn.Exec("SET CLUSTER SETTING sql.catalog.descriptor_lease.lock_old_versions.enabled='off'")
+	require.NoError(t, err)
+	_, err = conn.Exec(fmt.Sprintf(`
 CREATE USER %s with password 'hunter2';
 CREATE USER %s with password 'hunter2';
 CREATE USER %s with password 'hunter2';
