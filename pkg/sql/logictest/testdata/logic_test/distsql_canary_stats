@@ -1,0 +1,73 @@
+subtest delay_delete_with_manual_stats
+# We test that for a table with canary stats rollout enabled (i.e. with
+# a non-zero stats_canary_window), when a new stats is created, the
+# deemed-to-be-obsolete stats will not be immediately deleted, but
+# marked with delay_delete=true. The actual deletion will happen until
+# another new stats is collected. Since the auto-stats collection is not
+# deterministic in tests, we test with manual stats collection. If the
+# existing stats are manual, collecting new stats would normally lead to
+# its immediate removal. This is because we typically only retain the
+# most recent 4 *auto* statistics. But with canary_window set, we should
+# still see this manual stats after the new stats is collected, but
+# marked with delay_delete=true.
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false, sql_stats_canary_window = '15s')
+
+statement ok
+INSERT INTO t (a) SELECT * FROM generate_series(1, 1000);
+ANALYZE t;
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  delay_delete
+NULL             {a}           1000       false
+
+# For a table with canary_window set, we don't immediately evict the
+# existing most-recent stats (row_count=1000) right away, but mark it
+# with delay_delete=true.
+statement ok
+INSERT INTO t (a) SELECT * FROM generate_series(1001, 2000);
+ANALYZE t;
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  delay_delete
+NULL             {a}           2000       false
+NULL             {a}           1000       true
+
+statement ok
+INSERT INTO t (a) SELECT * FROM generate_series(2001, 3000);
+CREATE STATISTICS s FROM t;
+
+# The previously marked stats (row_count=1000) is now deleted,
+# and the current most-recent stats (row_count=2000) is marked with
+# delay_delete=true.
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  delay_delete
+s                {a}           3000       false
+NULL             {a}           2000       true
+
+# But such 2-phases deletion is disabled for table with canary_window unset.
+statement ok
+ALTER TABLE t SET (sql_stats_canary_window = '0s');
+
+statement ok
+INSERT INTO t (a) SELECT * FROM generate_series(3001, 4000);
+ANALYZE t;
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  delay_delete
+NULL             {a}           4000       false
+
+subtest end

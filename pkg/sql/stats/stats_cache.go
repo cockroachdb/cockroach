@@ -602,6 +602,7 @@ const (
 	partialPredicateIndex
 	histogramIndex
 	fullStatisticsIdIndex
+	delayDeleteIdx
 	statsLen
 )
 
@@ -637,6 +638,7 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 		{"partialPredicate", partialPredicateIndex, types.String, true},
 		{"histogram", histogramIndex, types.Bytes, true},
 		{"fullStatisticID", fullStatisticsIdIndex, types.Int, true},
+		{"delayDelete", delayDeleteIdx, types.Bool, true},
 	}
 
 	for _, v := range expectedTypes {
@@ -645,6 +647,11 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 			return nil, errors.Errorf("%s returned from table statistics lookup has type %s. Expected %s",
 				v.fieldName, datums[v.fieldIndex].ResolvedType(), v.expectedType)
 		}
+	}
+
+	delayDelete := true
+	if datums[delayDeleteIdx] != tree.DBoolTrue {
+		delayDelete = false
 	}
 
 	// Extract datum values.
@@ -656,6 +663,7 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 		DistinctCount: (uint64)(*datums[distinctCountIndex].(*tree.DInt)),
 		NullCount:     (uint64)(*datums[nullCountIndex].(*tree.DInt)),
 		AvgSize:       (uint64)(*datums[avgSizeIndex].(*tree.DInt)),
+		DelayDelete:   delayDelete,
 	}
 	columnIDs := datums[columnIDsIndex].(*tree.DArray)
 	res.ColumnIDs = make([]descpb.ColumnID, len(columnIDs.Array))
@@ -981,7 +989,8 @@ SELECT
 	"avgSize",
 	"partialPredicate",
 	histogram,
-	"fullStatisticID"
+	"fullStatisticID",
+	"delayDelete"
 FROM system.table_statistics
 WHERE "tableID" = $1
 ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC

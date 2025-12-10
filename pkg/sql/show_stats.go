@@ -37,6 +37,7 @@ var showTableStatsColumns = colinfo.ResultColumns{
 	{Name: "partial_predicate", Typ: types.String},
 	{Name: "histogram_id", Typ: types.Int},
 	{Name: "full_histogram_id", Typ: types.Int},
+	{Name: "delay_delete", Typ: types.Bool},
 }
 
 var showTableStatsJSONColumns = colinfo.ResultColumns{
@@ -108,7 +109,8 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 							"avgSize",
 							"partialPredicate",
 							histogram,
-							"fullStatisticID"
+							"fullStatisticID",
+							"delayDelete"
 						FROM system.table_statistics
 						WHERE "tableID" = $1
 						ORDER BY "createdAt", "columnIDs", "statisticID"`
@@ -142,6 +144,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				partialPredicateIdx
 				histogramIdx
 				fullStatisticIDIdx
+				delayDeleteIdx
 				numCols
 			)
 
@@ -252,6 +255,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 						statsRow.PartialPredicate = string(*r[partialPredicateIdx].(*tree.DString))
 						statsRow.FullStatisticID = (uint64)(*r[fullStatisticIDIdx].(*tree.DInt))
 					}
+					statsRow.DelayDelete = (bool)(*r[delayDeleteIdx].(*tree.DBool))
 					if err := statsRow.DecodeAndSetHistogram(ctx, &p.semaCtx, r[histIdx]); err != nil {
 						v.Close(ctx)
 						return nil, err
@@ -320,6 +324,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					r[partialPredicateIdx],
 					histogramID,
 					r[fullStatisticIDIdx],
+					r[delayDeleteIdx],
 				}
 
 				if _, err := v.rows.AddRow(ctx, res); err != nil {
@@ -384,5 +389,6 @@ func tableStatisticProtoToRow(stat *stats.TableStatisticProto) (tree.Datums, err
 		row = append(row, tree.NewDBytes(tree.DBytes(histogram)))
 	}
 	row = append(row, FullStatisticID)
+	row = append(row, tree.MakeDBool(tree.DBool(stat.DelayDelete)))
 	return row, nil
 }
