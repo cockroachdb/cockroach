@@ -77,10 +77,15 @@ type allocatorState struct {
 	// mrProvider can be nil in tests.
 	mrProvider MetricRegistryForStoreProvider
 	mu         syncutil.Mutex
-	// TODO(sumeer): localStoreMetrics is also protected by mu. Nest in struct
-	// with mu, when locking story is cleaned up.
-	localStoreMetrics map[roachpb.StoreID]*counterMetrics
-	cs                *clusterState
+
+	// TODO(sumeer): counters, passMetricsAndLoggers are also protected by mu.
+	// Nest in struct with mu, when locking story is cleaned up.
+
+	// counters is keyed by local StoreID.
+	counters map[roachpb.StoreID]*counterMetrics
+	// passMetricsAndLoggers is keyed by local StoreID.
+	passMetricsAndLoggers map[roachpb.StoreID]*rebalancingPassMetricsAndLogger
+	cs                    *clusterState
 
 	// Ranges that are under-replicated, over-replicated, don't satisfy
 	// constraints, have low diversity etc. Avoids iterating through all ranges.
@@ -113,7 +118,8 @@ func NewAllocatorState(
 	cs := newClusterState(ts, interner)
 	return &allocatorState{
 		mrProvider:             metricRegistryProvider,
-		localStoreMetrics:      map[roachpb.StoreID]*counterMetrics{},
+		counters:               map[roachpb.StoreID]*counterMetrics{},
+		passMetricsAndLoggers:  map[roachpb.StoreID]*rebalancingPassMetricsAndLogger{},
 		cs:                     cs,
 		rangesNeedingAttention: map[roachpb.RangeID]struct{}{},
 		diversityScoringMemo:   newDiversityScoringMemo(),
@@ -131,7 +137,7 @@ const overloadGracePeriod = time.Minute
 func (a *allocatorState) ensureMetricsForLocalStoreLocked(
 	localStoreID roachpb.StoreID,
 ) *counterMetrics {
-	m, ok := a.localStoreMetrics[localStoreID]
+	m, ok := a.counters[localStoreID]
 	if ok {
 		return m
 	}
@@ -143,7 +149,26 @@ func (a *allocatorState) ensureMetricsForLocalStoreLocked(
 		}
 		mr.AddMetricStruct(*m)
 	}
-	a.localStoreMetrics[localStoreID] = m
+	a.counters[localStoreID] = m
+	return m
+}
+
+func (a *allocatorState) preparePassMetricsAndLoggerLocked(
+	localStoreID roachpb.StoreID,
+) *rebalancingPassMetricsAndLogger {
+	m, ok := a.passMetricsAndLoggers[localStoreID]
+	if !ok {
+		m = makeRebalancingPassMetricsAndLogger(localStoreID)
+		a.passMetricsAndLoggers[localStoreID] = m
+		if a.mrProvider != nil {
+			mr := a.mrProvider.GetStoreMetricRegistry(localStoreID)
+			if mr == nil {
+				panic(errors.AssertionFailedf("no MetricRegistry for store s%v", localStoreID))
+			}
+			mr.AddMetricStruct(m.m)
+		}
+	}
+	m.resetForRebalancingPass()
 	return m
 }
 
@@ -270,9 +295,16 @@ func (a *allocatorState) ComputeChanges(
 	if msg.StoreID != opts.LocalStoreID {
 		panic(fmt.Sprintf("ComputeChanges: expected StoreID %d, got %d", opts.LocalStoreID, msg.StoreID))
 	}
+	if opts.DryRun {
+		panic(errors.AssertionFailedf("unsupported dry-run mode"))
+	}
 	counterMetrics := a.ensureMetricsForLocalStoreLocked(opts.LocalStoreID)
 	a.cs.processStoreLeaseholderMsg(ctx, msg, counterMetrics)
-	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now())
+	var passObs *rebalancingPassMetricsAndLogger
+	if opts.PeriodicCall {
+		passObs = a.preparePassMetricsAndLoggerLocked(opts.LocalStoreID)
+	}
+	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now(), passObs)
 	return re.rebalanceStores(ctx, opts.LocalStoreID)
 }
 
@@ -438,6 +470,7 @@ func sortTargetCandidateSetAndPick(
 	overloadedDim LoadDimension,
 	rng *rand.Rand,
 	maxFractionPendingThreshold float64,
+	failLogger func(shedResult),
 ) roachpb.StoreID {
 	var b strings.Builder
 	var formatCandidatesLog = func(b *strings.Builder, candidates []candidateInfo) redact.SafeString {
@@ -497,6 +530,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	if j == 0 {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to disk space util")
+		failLogger(noCandidateDiskSpaceUtil)
 		return 0
 	}
 
@@ -575,6 +609,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	if j == 0 {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to load")
+		failLogger(noCandidateDueToLoad)
 		return 0
 	}
 	lowestLoadSet = cands.candidates[0].sls
@@ -606,6 +641,7 @@ func sortTargetCandidateSetAndPick(
 	// INVARIANT: lowestLoad <= loadThreshold.
 	if lowestLoadSet == loadThreshold && ignoreLevel < ignoreHigherThanLoadThreshold {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
+		failLogger(noCandidateDueToLoad)
 		return 0
 	}
 	// INVARIANT: lowestLoad < loadThreshold ||
@@ -616,6 +652,7 @@ func sortTargetCandidateSetAndPick(
 	if lowestLoadSet >= loadNoChange &&
 		(!discardedCandsHadNoPendingChanges || ignoreLevel == ignoreLoadNoChangeAndHigher) {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
+		failLogger(noCandidateDueToLoad)
 		return 0
 	}
 	if lowestLoadSet != highestLoadSet {
@@ -636,6 +673,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	if j == 0 {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to lease preference")
+		failLogger(noCandidateDueToUnmatchedLeasePreference)
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
@@ -649,6 +687,7 @@ func sortTargetCandidateSetAndPick(
 		lowestOverloadedLoad := cands.candidates[0].dimSummary[overloadedDim]
 		if lowestOverloadedLoad >= loadNoChange {
 			log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to overloadedDim")
+			failLogger(noCandidateDueToLoad)
 			return 0
 		}
 		j = 1
@@ -777,6 +816,7 @@ func (cs *clusterState) computeCandidatesForRange(
 	expr constraintsDisj,
 	storesToExclude storeSet,
 	loadSheddingStore roachpb.StoreID,
+	passObs *rebalancingPassMetricsAndLogger,
 ) (_ candidateSet, sheddingSLS storeLoadSummary) {
 	means := cs.meansMemo.getMeans(expr)
 	if loadSheddingStore > 0 {
@@ -784,6 +824,7 @@ func (cs *clusterState) computeCandidatesForRange(
 		sheddingSLS = cs.meansMemo.getStoreLoadSummary(ctx, means, loadSheddingStore, sheddingSS.loadSeqNum)
 		if sheddingSLS.sls <= loadNoChange && sheddingSLS.nls <= loadNoChange {
 			// In this set of stores, this store no longer looks overloaded.
+			passObs.replicaShed(notOverloaded)
 			return candidateSet{}, sheddingSLS
 		}
 	}

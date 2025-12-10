@@ -38,6 +38,7 @@ rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-thr
 [mmaid=2] can add load to n4s4: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))]
 [mmaid=2] result(success): rebalancing r3 from s3 to s4 [change: r3=[change_replicas=[{ADD_VOTER n4,s4} {REMOVE_VOTER n3,s3}] cids=1,2]] with resulting loads source: [cpu:900ns/s, write-bandwidth:0 B/s, byte-size:0 B] target: [cpu:210ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=2] reached max range move count 1; done shedding
+[mmaid=2] rebalancing pass shed: {s3}
 pending(2)
 change-id=1 store-id=4 node-id=4 range-id=3 load-delta=[cpu:110ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=5m0s gc=10m0s
   prev=(replica-id=none type=VOTER_FULL)
