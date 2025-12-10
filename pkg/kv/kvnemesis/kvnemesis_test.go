@@ -170,6 +170,13 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 			}
 			return 0, nil
 		}
+		storeKnobs.AfterSplitApplication = func(desc roachpb.ReplicaDescriptor, state kvserverpb.ReplicaState) {
+			asserter.ApplySplitRHS(
+				state.Desc.RangeID, desc.ReplicaID,
+				state.RaftAppliedIndex, state.RaftAppliedIndexTerm,
+				state.LeaseAppliedIndex, state.RaftClosedTimestamp,
+			)
+		}
 		storeKnobs.AfterSnapshotApplication = func(
 			desc roachpb.ReplicaDescriptor, state kvserverpb.ReplicaState, snap kvserver.IncomingSnapshot,
 		) {
