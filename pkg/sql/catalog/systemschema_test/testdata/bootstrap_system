@@ -159,8 +159,9 @@ CREATE TABLE public.table_statistics (
 	"avgSize" INT8 NOT NULL DEFAULT 0:::INT8,
 	"partialPredicate" STRING NULL,
 	"fullStatisticID" INT8 NULL,
+	"delayDelete" BOOL NULL DEFAULT false,
 	CONSTRAINT "primary" PRIMARY KEY ("tableID" ASC, "statisticID" ASC),
-	FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram, "avgSize", "partialPredicate", "fullStatisticID")
+	FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram, "avgSize", "partialPredicate", "fullStatisticID", "delayDelete")
 );
 CREATE TABLE public.locations (
 	"localityKey" STRING NOT NULL,
