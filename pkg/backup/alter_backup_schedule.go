@@ -49,7 +49,7 @@ func loadSchedules(
 	}
 
 	execCfg := p.ExecCfg()
-	env := sql.JobSchedulerEnv(execCfg.JobsKnobs())
+	env := jobs.JobSchedulerEnv(execCfg.JobsKnobs())
 	schedules := jobs.ScheduledJobTxn(p.InternalSQLTxn())
 	schedule, err := schedules.Load(ctx, env, scheduleID)
 	if err != nil {
@@ -434,7 +434,7 @@ func processFullBackupRecurrence(
 		return s, nil
 	}
 
-	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+	env := jobs.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 	scheduledJobs := jobs.ScheduledJobTxn(p.InternalSQLTxn())
 	if fullBackupAlways {
 		if s.incJob == nil {
@@ -535,7 +535,7 @@ func validateFullIncrementalFrequencies(p sql.PlanHookState, s scheduleDetails) 
 	if s.incJob == nil {
 		return nil
 	}
-	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+	env := jobs.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 	now := env.Now()
 
 	fullFreq, err := frequencyFromCron(now, s.fullJob.ScheduleExpr())
@@ -594,7 +594,7 @@ func processInto(p sql.PlanHookState, spec *alterBackupScheduleSpec, s scheduleD
 	// so we can unpause incrementals. This mirrors the behavior of
 	// CREATE SCHEDULE FOR BACKUP.
 	if !incPaused {
-		env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+		env := jobs.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 		s.fullJob.SetNextRun(env.Now())
 	}
 
@@ -608,7 +608,7 @@ func processNextRunNow(
 		return nil
 	}
 
-	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+	env := jobs.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 
 	// Trigger the full schedule, unless there is an inc schedule and the user did
 	// not explicitly specify the full.

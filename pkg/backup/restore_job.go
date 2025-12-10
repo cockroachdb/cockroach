@@ -2922,7 +2922,7 @@ func (r *restoreResumer) dropDescriptors(
 	// immediately.
 	dropTime := int64(1)
 	scheduledJobs := jobs.ScheduledJobTxn(txn)
-	env := sql.JobSchedulerEnv(r.execCfg.JobsKnobs())
+	env := jobs.JobSchedulerEnv(r.execCfg.JobsKnobs())
 	for i := range mutableTables {
 		tableToDrop := mutableTables[i]
 		tablesToGC = append(tablesToGC, tableToDrop.ID)

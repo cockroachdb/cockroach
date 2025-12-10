@@ -736,7 +736,7 @@ func (p *planner) validateTTLScheduledJobInTable(
 	ttl := tableDesc.GetRowLevelTTL()
 
 	execCfg := p.ExecCfg()
-	env := JobSchedulerEnv(execCfg.JobsKnobs())
+	env := jobs.JobSchedulerEnv(execCfg.JobsKnobs())
 
 	wrapError := func(origErr error) error {
 		return errors.WithHintf(
