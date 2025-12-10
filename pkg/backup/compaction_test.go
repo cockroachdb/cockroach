@@ -599,16 +599,6 @@ func TestBackupCompactionUnsupportedOptions(t *testing.T) {
 			"only scheduled backups can be compacted",
 		},
 		{
-			"incremental locations not supported",
-			jobspb.BackupDetails{
-				ScheduleID: 1,
-				Destination: jobspb.BackupDetails_Destination{
-					IncrementalStorage: []string{"nodelocal://1/backup/incs"},
-				},
-			},
-			"custom incremental storage location not supported for compaction",
-		},
-		{
 			"tenant specific backups not supported",
 			jobspb.BackupDetails{
 				ScheduleID:        1,

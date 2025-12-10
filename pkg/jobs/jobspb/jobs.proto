@@ -381,6 +381,8 @@ message BackupDetails {
     repeated string to = 1;
     // Subdir is the path within the collection path in to to backup to.
     string subdir = 2;
+		// Remove this in v26.4. See backup_index.go `shouldWriteIndex `for more
+		// details.
     repeated string incremental_storage = 3;
     // Exists is true if a backup should already exist at the destination
     bool exists = 4;
