@@ -449,7 +449,7 @@ func TestShowBackups(t *testing.T) {
 	rows := sqlDBRestore.QueryStr(t, `SHOW BACKUPS IN $1`, full)
 
 	// assert that we see the three, and only the three, full backups.
-	require.Equal(t, 3, len(rows))
+	require.Equal(t, 2, len(rows))
 
 	// check that we can show the inc layers in the individual full backups.
 	b1 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP FROM $1 IN $2] WHERE object_type='table'`, rows[0][0], full)

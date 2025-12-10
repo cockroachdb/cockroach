@@ -225,8 +225,7 @@ func TestFindAllIncrementalPaths(t *testing.T) {
 				fullEnd := toTime(chain[0].end)
 
 				writeEmptyBackupManifest(
-					t, &execCfg, collectionURI, defaultIncrementalLocation, fullEnd,
-					toTime(chain[0].start), fullEnd, true, /* indexed */
+					t, &execCfg, collectionURI, fullEnd, toTime(chain[0].start), fullEnd, true, /* indexed */
 				)
 
 				// Write the incrementals out of order to test `ListIndexes`.
@@ -236,8 +235,7 @@ func TestFindAllIncrementalPaths(t *testing.T) {
 					start := toTime(b.start)
 					end := toTime(b.end)
 					writeEmptyBackupManifest(
-						t, &execCfg, collectionURI, defaultIncrementalLocation, fullEnd,
-						start, end, true, /* indexed */
+						t, &execCfg, collectionURI, fullEnd, start, end, true, /* indexed */
 					)
 				}
 			}
@@ -265,8 +263,7 @@ func TestFindAllIncrementalPathsFallbackLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc, db, folder, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t, backuptestutils.SingleNode)
-	fmt.Println(folder)
+	tc, db, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t, backuptestutils.SingleNode)
 	defer cleanupFn()
 	db.Exec(t, "SET CLUSTER SETTING backup.index.read.enabled = true")
 
@@ -280,10 +277,23 @@ func TestFindAllIncrementalPathsFallbackLogic(t *testing.T) {
 	// custom incremental locations. It also returns the collection URI and the
 	// URI specified by `incremental_location`.
 	getStores := func(t *testing.T, subdir string) (
-		store struct{ root, inc, customInc cloud.ExternalStorage },
-		uris struct{ root, inc, customInc string },
+		store struct {
+			cleanup func()
+			root    cloud.ExternalStorage
+			inc     cloud.ExternalStorage
+		},
+		uris struct{ root, inc string },
 	) {
 		t.Helper()
+		store.cleanup = func() {
+			if store.root != nil {
+				store.root.Close()
+			}
+			if store.inc != nil {
+				store.inc.Close()
+			}
+		}
+
 		var err error
 		uris.root = fmt.Sprintf("nodelocal://1/backup/%d", testIdx)
 		store.root, err = storeFactory(ctx, uris.root, username.RootUserName())
@@ -296,13 +306,6 @@ func TestFindAllIncrementalPathsFallbackLogic(t *testing.T) {
 		store.inc, err = storeFactory(ctx, incSubdir, username.RootUserName())
 		require.NoError(t, err)
 
-		uris.customInc, err = backuputils.AppendPath(uris.root, "custom-incrementals")
-		require.NoError(t, err)
-		customIncSubdir, err := backuputils.AppendPath(uris.customInc, subdir)
-		require.NoError(t, err)
-		store.customInc, err = storeFactory(ctx, customIncSubdir, username.RootUserName())
-		require.NoError(t, err)
-
 		testIdx++
 		return store, uris
 	}
@@ -311,13 +314,13 @@ func TestFindAllIncrementalPathsFallbackLogic(t *testing.T) {
 		fullEnd := time.Now().UTC()
 		subdir := fullEnd.Format(backupbase.DateBasedIntoFolderName)
 		stores, uris := getStores(t, subdir)
+		defer stores.cleanup()
 
 		start, end := time.Time{}, fullEnd
 		const numBackups = 4
 		for range numBackups {
 			writeEmptyBackupManifest(
-				t, &execCfg, uris.root, defaultIncrementalLocation,
-				fullEnd, start, end, false, /* indexed */
+				t, &execCfg, uris.root, fullEnd, start, end, false, /* indexed */
 			)
 			start = end
 			end = end.Add(time.Hour)
@@ -329,83 +332,8 @@ func TestFindAllIncrementalPathsFallbackLogic(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.Len(t, incs, numBackups-1)
-	})
-
-	t.Run("custom incremental location with indexed full", func(t *testing.T) {
-		fullEnd := time.Now().UTC()
-		subdir := fullEnd.Format(backupbase.DateBasedIntoFolderName)
-		stores, uris := getStores(t, subdir)
-
-		start, end := time.Time{}, fullEnd
-		const numBackups = 4
-		for i := range numBackups {
-			writeEmptyBackupManifest(
-				t, &execCfg, uris.root, uris.customInc,
-				fullEnd, start, end, i == 0, /* only full can be indexed */
-			)
-			start = end
-			end = end.Add(time.Hour)
-		}
-
-		incs, err := backupdest.FindAllIncrementalPaths(
-			ctx, &execCfg, stores.customInc, stores.root,
-			subdir, true, /* customIncLocation */
-		)
-		require.NoError(t, err)
-		require.Len(t, incs, numBackups-1)
-	})
-
-	t.Run("mix of custom and default incremental locations", func(t *testing.T) {
-		fullEnd := time.Now().UTC()
-		subdir := fullEnd.Format(backupbase.DateBasedIntoFolderName)
-		stores, uris := getStores(t, subdir)
-
-		// Write a full backup
-		writeEmptyBackupManifest(
-			t, &execCfg, uris.root, defaultIncrementalLocation,
-			fullEnd, time.Time{}, fullEnd, true, /* indexed */
-		)
-
-		const numDefaultIncs = 5
-		start, end := fullEnd, fullEnd.Add(time.Hour)
-		for range numDefaultIncs {
-			writeEmptyBackupManifest(
-				t, &execCfg, uris.root, defaultIncrementalLocation,
-				fullEnd, start, end, true, /* indexed */
-			)
-			start = end
-			end = end.Add(time.Hour)
-		}
-
-		const numCustomIncs = 4
-		start = fullEnd
-		for range numCustomIncs {
-			writeEmptyBackupManifest(
-				t, &execCfg, uris.root, uris.customInc,
-				fullEnd, start, end, false, /* indexed */
-			)
-			start = end
-			end = end.Add(time.Hour)
-		}
-
-		// List from both default and custom incremental locations.
-		incs, err := backupdest.FindAllIncrementalPaths(
-			ctx, &execCfg, stores.inc, stores.root,
-			subdir, false, /* customIncLocation */
-		)
-		require.NoError(t, err)
-		require.Len(t, incs, numDefaultIncs)
-
-		incs, err = backupdest.FindAllIncrementalPaths(
-			ctx, &execCfg, stores.customInc, stores.root,
-			subdir, true, /* customIncLocation */
-		)
-		require.NoError(t, err)
-		require.Len(t, incs, numCustomIncs)
 	})
 }
-
-const defaultIncrementalLocation = ""
 
 // writeEmptyBackupManifest creates an empty backup manifest/metadata file under
 // the provided collection URI and a corresponding index file (if set).
@@ -417,27 +345,21 @@ const defaultIncrementalLocation = ""
 func writeEmptyBackupManifest(
 	t *testing.T,
 	execCfg *sql.ExecutorConfig,
-	collectionURI, incURI string,
+	collectionURI string,
 	fullEnd, start, end time.Time,
 	indexed bool,
 ) {
 	t.Helper()
 	isIncBackup := start.UnixNano() != 0 && !start.IsZero()
-	if isIncBackup && incURI != "" && indexed {
-		require.Fail(t, "backup indexing is not supported for custom incremental locations")
-	}
 
 	subdir := fullEnd.Format(backupbase.DateBasedIntoFolderName)
 	uri := collectionURI
 	backupPath := subdir
 
 	if isIncBackup {
-		uri = incURI
-		if incURI == "" {
-			var err error
-			uri, err = backuputils.AppendPath(collectionURI, backupbase.DefaultIncrementalsSubdir)
-			require.NoError(t, err)
-		}
+		var err error
+		uri, err = backuputils.AppendPath(collectionURI, backupbase.DefaultIncrementalsSubdir)
+		require.NoError(t, err)
 		backupPath = backuputils.JoinURLPath(
 			subdir,
 			backupinfo.ConstructDateBasedIncrementalFolderName(start, end),
@@ -480,9 +402,6 @@ func writeEmptyBackupManifest(
 			Subdir: subdir,
 		},
 		URI: backupURI,
-	}
-	if incURI != "" {
-		backupDetails.Destination.IncrementalStorage = []string{incURI}
 	}
 
 	require.NoError(
