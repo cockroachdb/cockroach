@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -481,10 +482,30 @@ func dumpImpl(
 				ResolutionFromProto(res),
 				req.StartNanos,
 				req.EndNanos,
+				false,
 				d,
 			); err != nil {
 				return err
 			}
+		}
+	}
+
+	// Dump child metrics only for allowed metrics at 1M resolution
+	for _, seriesName := range req.Names {
+		if !tsutil.IsAllowedChildMetric(seriesName) {
+			continue
+		}
+		if err := dumpTimeseriesAllSources(
+			ctx,
+			db,
+			seriesName,
+			Resolution1m,
+			req.StartNanos,
+			req.EndNanos,
+			true,
+			d,
+		); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -536,6 +557,7 @@ func dumpTimeseriesAllSources(
 	seriesName string,
 	diskResolution Resolution,
 	startNanos, endNanos int64,
+	includeChildMetrics bool,
 	dump func(*roachpb.KeyValue) error,
 ) error {
 	if endNanos == 0 {
@@ -548,12 +570,20 @@ func dumpTimeseriesAllSources(
 		endNanos += delta
 	}
 
+	var endKeyName string
+	if includeChildMetrics {
+		// Create a span that covers the metric's children.
+		endKeyName = seriesName + string(rune(0x7C)) // '|' is the next char after '{'
+	} else {
+		endKeyName = seriesName
+	}
+
 	span := &roachpb.Span{
 		Key: MakeDataKey(
 			seriesName, "" /* source */, diskResolution, startNanos,
 		),
 		EndKey: MakeDataKey(
-			seriesName, "" /* source */, diskResolution, endNanos,
+			endKeyName, "" /* source */, diskResolution, endNanos,
 		),
 	}
 
