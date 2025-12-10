@@ -180,7 +180,7 @@ func doCreateBackupSchedules(
 		}
 	}
 
-	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+	env := jobs.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 
 	// Evaluate incremental and full recurrence.
 	incRecurrence, err := schedulebase.ComputeScheduleRecurrence(env.Now(), eval.recurrence)
