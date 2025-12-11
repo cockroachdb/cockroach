@@ -5,7 +5,10 @@
 
 package kvstorage
 
-import "github.com/cockroachdb/cockroach/pkg/storage"
+import (
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+)
 
 // The following are type aliases that help annotating various storage
 // interaction functions in this package and its clients, accordingly to the
@@ -110,6 +113,9 @@ type Engines struct {
 	// and logs, and the Store-local keys. This engine provides timely durability,
 	// by frequent and on-demand syncing.
 	logEngine storage.Engine
+	// separated is true iff the engines are logically or physically separated.
+	// Can be true only in tests.
+	separated bool
 }
 
 // MakeEngines creates an Engines handle in which both state machine and log
@@ -121,6 +127,21 @@ func MakeEngines(eng storage.Engine) Engines {
 		stateEngine: eng,
 		todoEngine:  eng,
 		logEngine:   eng,
+	}
+}
+
+// MakeSeparatedEnginesForTesting creates an Engines handle in which the state
+// machine and log engines are logically (or physically) separated. To be used
+// only in tests, until separated engines are correctly supported.
+func MakeSeparatedEnginesForTesting(state, log storage.Engine) Engines {
+	if !buildutil.CrdbTestBuild {
+		panic("separated engines are not supported")
+	}
+	return Engines{
+		stateEngine: state,
+		todoEngine:  nil,
+		logEngine:   log,
+		separated:   true,
 	}
 }
 
@@ -138,4 +159,10 @@ func (e *Engines) LogEngine() storage.Engine {
 // not support separated engines.
 func (e *Engines) TODOEngine() storage.Engine {
 	return e.todoEngine
+}
+
+// Separated returns true iff the engines are logically or physically separated.
+// Can return true only in tests, until separated engines are supported.
+func (e *Engines) Separated() bool {
+	return e.separated
 }
