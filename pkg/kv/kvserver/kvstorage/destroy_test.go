@@ -35,9 +35,6 @@ func TestDestroyReplica(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	storage.DisableMetamorphicSimpleValueEncoding(t) // for deterministic output
-	eng := storage.NewDefaultInMemForTesting()
-	defer eng.Close()
-	e := MakeEngines(eng) // TODO(pav-kv): test separated engines too
 
 	printBatch := func(name string, b storage.WriteBatch) string {
 		str, err := print.DecodeWriteBatch(b.Repr())
@@ -75,20 +72,35 @@ func TestDestroyReplica(t *testing.T) {
 		applied: 12,
 	}
 
-	ctx := context.Background()
-	out := mutate("raft", e.LogEngine(), func(w storage.Writer) {
-		r.createRaftState(ctx, t, w)
-	}) + mutate("state", e.StateEngine(), func(w storage.Writer) {
-		r.createStateMachine(ctx, t, w)
-	}) + mutateSep("destroy", e, func(rw ReadWriter) {
-		require.NoError(t, DestroyReplica(
-			ctx, rw,
-			DestroyReplicaInfo{FullReplicaID: r.id, Keys: r.keys}, r.id.ReplicaID+1,
-		))
+	runTest := func(t *testing.T, e Engines) {
+		ctx := context.Background()
+		out := mutate("raft", e.LogEngine(), func(w storage.Writer) {
+			r.createRaftState(ctx, t, w)
+		}) + mutate("state", e.StateEngine(), func(w storage.Writer) {
+			r.createStateMachine(ctx, t, w)
+		}) + mutateSep("destroy", e, func(rw ReadWriter) {
+			require.NoError(t, DestroyReplica(
+				ctx, rw,
+				DestroyReplicaInfo{FullReplicaID: r.id, Keys: r.keys}, r.id.ReplicaID+1,
+			))
+		})
+
+		out = strings.ReplaceAll(out, "\n\n", "\n")
+		name := strings.ReplaceAll(t.Name(), "/", "-") + ".txt"
+		echotest.Require(t, out, filepath.Join(datapathutils.TestDataPath(t), name))
+	}
+
+	t.Run("one-eng", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+		runTest(t, MakeEngines(eng))
+	})
+	t.Run("sep-eng", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+		runTest(t, MakeSeparatedEnginesForTesting(eng, eng))
 	})
 
-	out = strings.ReplaceAll(out, "\n\n", "\n")
-	echotest.Require(t, out, filepath.Join(datapathutils.TestDataPath(t), t.Name()+".txt"))
 }
 
 // replicaInfo contains the basic info about the replica, used for generating
