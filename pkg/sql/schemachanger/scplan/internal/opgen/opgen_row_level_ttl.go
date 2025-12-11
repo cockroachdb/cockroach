@@ -53,6 +53,17 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
+				emit(func(this *scpb.RowLevelTTL, md *opGenContext) *scop.UpsertRowLevelTTL {
+					if ttlAppliedLater(this, md) {
+						return nil
+					}
+					// When no other TTL element is going PUBLIC, clear the TTL
+					// from the table descriptor by passing an empty RowLevelTTL.
+					return &scop.UpsertRowLevelTTL{
+						TableID: this.TableID,
+						// RowLevelTTL is intentionally left as zero value to clear TTL.
+					}
+				}),
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
 				emit(func(this *scpb.RowLevelTTL, md *opGenContext) *scop.DeleteSchedule {
@@ -68,10 +79,13 @@ func init() {
 	)
 }
 
-// ttlAppliedLater returns true if there is another RowLevelTTL element
-// with the same ScheduleID and TableID, a higher SeqNum, and
-// a target status of PUBLIC. This indicates that the TTL schedule
-// will be applied later, so we should not delete the schedule yet.
+// ttlAppliedLater returns true if there is another RowLevelTTL element with the
+// same ScheduleID and TableID that is going to PUBLIC. This indicates that the
+// TTL job will continue to be used, so we should not delete the TTL parameters.
+//
+// This handles both:
+// - Forward operations: a higher SeqNum element is going PUBLIC (new TTL params)
+// - Rollbacks: a lower SeqNum element is being restored to PUBLIC (old TTL params)
 func ttlAppliedLater(this *scpb.RowLevelTTL, md *opGenContext) bool {
 	if this.RowLevelTTL.ScheduleID == 0 {
 		return false
@@ -81,10 +95,13 @@ func ttlAppliedLater(this *scpb.RowLevelTTL, md *opGenContext) bool {
 		if !ok || other == this {
 			continue
 		}
+		// In rollback, we expect a lower SeqNum element to be restored.
+		// In forward, we expect a higher SeqNum element to be applied.
 		if other.RowLevelTTL.ScheduleID == this.RowLevelTTL.ScheduleID &&
 			other.TableID == this.TableID &&
-			other.SeqNum > this.SeqNum &&
-			t.TargetStatus == scpb.Status_PUBLIC {
+			t.TargetStatus == scpb.Status_PUBLIC &&
+			((md.InRollback && other.SeqNum < this.SeqNum) ||
+				(!md.InRollback && other.SeqNum > this.SeqNum)) {
 			return true
 		}
 	}
