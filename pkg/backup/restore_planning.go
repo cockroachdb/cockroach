@@ -8,7 +8,6 @@ package backup
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1689,28 +1687,10 @@ func doRestorePlan(
 	var fullyResolvedSubdir string
 
 	if restoreStmt.Options.OnlineImpl() {
-		// validate uris are allowed for online restore
+		// validate that from uris are allowed in online restore
 		for _, path := range from {
-			uri, err := url.Parse(path)
-			if err != nil {
+			if err := uriCompatibleWithOnlineRestore(ctx, p.InternalSQLTxn(), path); err != nil {
 				return err
-			}
-			scheme := uri.Scheme
-			if scheme == externalconn.Scheme {
-				// online restore materializes external connections late and does not support certain schemes,
-				// so we need to validate that the underlying uri has a supported scheme
-				ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, p.InternalSQLTxn())
-				if err != nil {
-					return errors.Wrap(err, "failed to load external connection")
-				}
-				materialized, err := externalconn.Materialize(ec, uri)
-				if err != nil {
-					return err
-				}
-				scheme = materialized.Scheme
-			}
-			if err := cloud.SchemeSupportsEarlyBoot(scheme); err != nil {
-				return errors.Wrap(err, "backup URI not supported for online restore")
 			}
 		}
 	}

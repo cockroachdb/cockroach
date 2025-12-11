@@ -39,7 +39,7 @@ type ExternalConnection interface {
 	RedactedConnectionURI() string
 }
 
-// converts a potentially modified external connection uri to the underlying uri with those
+// Materialize converts a potentially modified external connection uri to the underlying uri with those
 // modifications applied. passing uri == nil will just return the underlying uri with no modifications
 func Materialize(ec ExternalConnection, uri *url.URL) (*url.URL, error) {
 	if uri != nil {
@@ -54,29 +54,28 @@ func Materialize(ec ExternalConnection, uri *url.URL) (*url.URL, error) {
 	}
 
 	connDetails := ec.ConnectionProto()
-	switch d := connDetails.Details.(type) {
-	case *connectionpb.ConnectionDetails_SimpleURI:
-		materialized, err := url.Parse(d.SimpleURI.URI)
-		if err != nil {
-			return nil, err
-		}
-
-		if uri != nil {
-			query := materialized.Query()
-			for key, vals := range uri.Query() {
-				for _, val := range vals {
-					query.Add(key, val)
-				}
-			}
-			materialized.RawQuery = query.Encode()
-
-			materialized = materialized.JoinPath(uri.Path)
-		}
-
-		return materialized, nil
-	default:
-		return nil, errors.Newf("invalid connection details: %v", d)
+	ecUri, ok := connDetails.Details.(*connectionpb.ConnectionDetails_SimpleURI)
+	if !ok {
+		return nil, errors.Newf("external connection is not a URI")
 	}
+	materialized, err := url.Parse(ecUri.SimpleURI.URI)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse external connection URI")
+	}
+
+	if uri != nil {
+		query := materialized.Query()
+		for key, vals := range uri.Query() {
+			for _, val := range vals {
+				query.Add(key, val)
+			}
+		}
+		materialized.RawQuery = query.Encode()
+
+		materialized = materialized.JoinPath(uri.Path)
+	}
+
+	return materialized, nil
 }
 
 // connectionParserFactory is the factory method that takes in an endpoint URI
