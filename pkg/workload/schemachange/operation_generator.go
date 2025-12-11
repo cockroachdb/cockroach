@@ -1661,13 +1661,16 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
-	// Check if the table has any policies or triggers
-	tableHasPolicies, tableHasTriggers := false, false
+	// Check if the table has any policies, triggers, or foreign keys.
+	tableHasPolicies, tableHasTriggers, tableHasFK := false, false, false
 	if tableExists {
 		if tableHasPolicies, err = og.tableHasPolicies(ctx, tx, tableName); err != nil {
 			return nil, err
 		}
 		if tableHasTriggers, err = og.tableHasTriggers(ctx, tx, tableName); err != nil {
+			return nil, err
+		}
+		if tableHasFK, err = og.tableHasFK(ctx, tx, tableName); err != nil {
 			return nil, err
 		}
 	}
@@ -1685,10 +1688,6 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, columnName)
-	if err != nil {
-		return nil, err
-	}
-	columnRemovalWillDropFKBackingIndexes, err := og.columnRemovalWillDropFKBackingIndexes(ctx, tx, tableName, columnName)
 	if err != nil {
 		return nil, err
 	}
@@ -1710,7 +1709,7 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInAddingOrDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey || colIsRefByComputed},
-		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn || columnRemovalWillDropFKBackingIndexes},
+		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
 		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
 	})
 	stmt.potentialExecErrors.addAll(codesWithConditions{
@@ -1724,8 +1723,8 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		// it is referenced in a policy expression.
 		{code: pgcode.InvalidTableDefinition, condition: tableHasPolicies},
 		// It is possible that we cannot drop column because
-		// it is depended on by a trigger.
-		{code: pgcode.DependentObjectsStillExist, condition: tableHasTriggers},
+		// it is depended on by a trigger or foreign key.
+		{code: pgcode.DependentObjectsStillExist, condition: tableHasTriggers || tableHasFK},
 	})
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName.String(), columnName.String())
 	return stmt, nil
@@ -1779,6 +1778,19 @@ func (og *operationGenerator) tableHasPolicies(
 	}
 
 	return hasPolicies, nil
+}
+
+// tableHasFK checks if a table participates in any foreign key constraints.
+func (og *operationGenerator) tableHasFK(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `
+SELECT EXISTS (
+	SELECT 1
+	  FROM pg_constraint
+	 WHERE contype = 'f'
+	   AND (conrelid = $1::REGCLASS OR confrelid = $1::REGCLASS)
+)`, tableName.String())
 }
 
 func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
