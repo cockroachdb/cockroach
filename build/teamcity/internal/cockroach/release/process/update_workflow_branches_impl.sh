@@ -60,6 +60,12 @@ export GIT_COMMITTER_NAME="Justin Beaver"
 export GIT_AUTHOR_EMAIL="teamcity@cockroachlabs.com"
 export GIT_COMMITTER_EMAIL="teamcity@cockroachlabs.com"
 
+# Check for GitHub token
+if [[ -z "${GH_TOKEN:-}" ]]; then
+  echo "ERROR: GH_TOKEN environment variable must be set"
+  exit 1
+fi
+
 # Create a branch for the PR
 BRANCH_NAME="update-workflow-branches-$(date +%Y%m%d-%H%M%S)"
 git checkout -b "$BRANCH_NAME"
@@ -72,14 +78,14 @@ Epic: None
 Release note: None
 Release justification: non-production (release infra) change."
 
-# Push the branch
-git push origin "$BRANCH_NAME"
+# Push the branch to cockroach-teamcity fork (like update_releases.yaml workflow does)
+git push "https://oauth2:${GH_TOKEN}@github.com/cockroach-teamcity/cockroach" "$BRANCH_NAME"
 
-# Create the pull request
+# Create the pull request from the fork
 gh pr create \
   --repo cockroachdb/cockroach \
   --base master \
-  --head "$BRANCH_NAME" \
+  --head "cockroach-teamcity:$BRANCH_NAME" \
   --title "workflows: run \`update_releases\` on \`$RELEASE_BRANCH\`" \
   --body "Epic: None
 Release note: None

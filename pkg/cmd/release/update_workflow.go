@@ -221,8 +221,31 @@ func writeBranchSection(lines []string, branches []string, start int, end int, i
 	newLines = append(newLines, lines[end:]...)
 
 	// Write back to file using atomic write pattern
-	return writeFileIntoRepo(func(f *os.File) error {
-		_, err := f.WriteString(strings.Join(newLines, "\n"))
-		return err
-	}, workflowFile)
+	// Create temp file in the same directory as target to avoid cross-device link errors
+	dir := ".github/workflows"
+	f, err := os.CreateTemp(dir, "update_releases_*.yaml")
+	if err != nil {
+		return fmt.Errorf("could not create temporary file: %w", err)
+	}
+	tmpName := f.Name()
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmpName)
+		}
+	}()
+
+	if _, err = f.WriteString(strings.Join(newLines, "\n")); err != nil {
+		f.Close()
+		return fmt.Errorf("error writing to temp file: %w", err)
+	}
+
+	if err = f.Close(); err != nil {
+		return fmt.Errorf("error closing temp file: %w", err)
+	}
+
+	if err = os.Rename(tmpName, workflowFile); err != nil {
+		return fmt.Errorf("error moving file to final destination: %w", err)
+	}
+
+	return nil
 }
