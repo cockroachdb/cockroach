@@ -5572,6 +5572,24 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			_, store0Exists := rhsInfo.Desc.GetReplicaDescriptor(1)
 			require.True(t, store0Exists)
 
+			// Ensure that store 0 has created the RHS replica in memory from raft
+			// messages before we proceed. This is necessary for the tombstone to be
+			// written when the learner snapshot is rejected. Without this, there's a
+			// race where the learner snapshot might arrive before any raft heartbeats,
+			// causing the test to flake.
+
+			// Ensure that we have an (uninitialized) replica on Store 0 before
+			// proceeding. There should be one soon in response to a leader election
+			// for the split off RHS. Without this, we'll not write a tombstone as
+			// part of rejecting the learner snapshot below.
+			testutils.SucceedsSoon(t, func() error {
+				repl := tc.GetFirstStoreFromServer(t, 0).GetReplicaIfExists(rhsID)
+				if repl == nil {
+					return errors.Errorf("RHS replica r%d not yet created on store 0", rhsID)
+				}
+				return nil
+			})
+
 			// Remove and re-add the RHS to create a new uninitialized replica at
 			// a higher replica ID. This will lead to a tombstone being written.
 			target := tc.Target(0)
