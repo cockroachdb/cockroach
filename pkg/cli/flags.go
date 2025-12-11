@@ -63,6 +63,7 @@ var goMemLimit int64
 var tenantIDFile string
 var localityFile string
 var encryptionSpecs encryptionSpecList
+var useDRPC bool
 
 // initPreFlagsDefaults initializes the values of the global variables
 // defined above.
@@ -96,6 +97,8 @@ func initPreFlagsDefaults() {
 
 	tenantIDFile = ""
 	localityFile = ""
+
+	useDRPC = false
 }
 
 // AddPersistentPreRunE add 'fn' as a persistent pre-run function to 'cmd'.
@@ -464,7 +467,7 @@ func init() {
 
 		cliflagcfg.BoolFlag(f, &serverCfg.AcceptProxyProtocolHeaders, cliflags.AcceptProxyProtocolHeaders)
 
-		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
+		cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
 		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 
 		// Certificates directory. Use a server-specific flag and value to ignore environment

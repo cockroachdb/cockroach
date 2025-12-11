@@ -440,6 +440,7 @@ go_test(
         "//pkg/kv/kvserver/loqrecovery",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/roachpb",
+        "//pkg/rpc/rpcbase",
         "//pkg/security/clientsecopts",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
