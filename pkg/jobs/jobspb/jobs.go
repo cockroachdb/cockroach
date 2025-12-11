@@ -180,5 +180,6 @@ func (c CreateStatsDetails) IsAuto() bool {
 // UpdateWithSpanProgress updates the InspectProgress with data from the
 // check-specific fields in the span progress update.
 func (p *InspectProgress) UpdateWithSpanProgress(prog *InspectProcessorProgress) {
-	return
+	// Update the row count field.
+	p.RowCount += prog.SpanRowCount
 }

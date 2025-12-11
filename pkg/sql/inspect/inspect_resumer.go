@@ -358,6 +358,10 @@ func buildApplicabilityCheckers(
 			checkers = append(checkers, &indexConsistencyCheckApplicability{
 				tableID: specCheck.TableID,
 			})
+		case jobspb.InspectCheckRowCount:
+			checkers = append(checkers, &rowCountCheckApplicability{
+				tableID: specCheck.TableID,
+			})
 		default:
 			return nil, errors.AssertionFailedf("unsupported inspect check type: %v", specCheck.Type)
 		}

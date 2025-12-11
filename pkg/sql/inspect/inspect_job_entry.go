@@ -95,7 +95,7 @@ func checksForDatabase(
 	checks := []*jobspb.InspectDetails_Check{}
 
 	if err := tables.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		tableChecks, err := ChecksForTable(ctx, p, desc.(catalog.TableDescriptor))
+		tableChecks, err := ChecksForTable(ctx, p, desc.(catalog.TableDescriptor), nil /* rowCount */)
 		if err != nil {
 			return err
 		}
@@ -108,10 +108,9 @@ func checksForDatabase(
 	return checks, nil
 }
 
-// ChecksForTable generates checks on every supported index on the given
-// table.
+// ChecksForTable generates checks on every supported index on the given table.
 func ChecksForTable(
-	ctx context.Context, p sql.PlanHookState, table catalog.TableDescriptor,
+	ctx context.Context, p sql.PlanHookState, table catalog.TableDescriptor, expectedRowCount *uint64,
 ) ([]*jobspb.InspectDetails_Check, error) {
 	checks := []*jobspb.InspectDetails_Check{}
 
@@ -135,6 +134,30 @@ func ChecksForTable(
 			TableVersion: table.GetVersion(),
 		}
 		checks = append(checks, &check)
+	}
+
+	if expectedRowCount != nil {
+		var includesRowCounterCheck bool
+		for _, check := range checks {
+			switch check.Type {
+			case jobspb.InspectCheckIndexConsistency:
+				includesRowCounterCheck = true
+			}
+		}
+
+		// If none of the previous checks provide a row count, skip the check.
+		if includesRowCounterCheck {
+			checks = append(checks, &jobspb.InspectDetails_Check{
+				Type:     jobspb.InspectCheckRowCount,
+				TableID:  table.GetID(),
+				RowCount: *expectedRowCount,
+			})
+		} else {
+			if p != nil {
+				p.BufferClientNotice(ctx, pgnotice.Newf(
+					"skipping row count on table %q: no other checks provide a row count", table.GetName()))
+			}
+		}
 	}
 
 	return checks, nil
