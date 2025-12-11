@@ -2183,6 +2183,15 @@ func (*ShowFingerprints) StatementType() StatementType { return TypeDML }
 func (*ShowFingerprints) StatementTag() string { return "SHOW EXPERIMENTAL_FINGERPRINTS" }
 
 // StatementReturnType implements the Statement interface.
+func (*ShowStatementHints) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowStatementHints) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowStatementHints) StatementTag() string { return "SHOW STATEMENT HINTS" }
+
+// StatementReturnType implements the Statement interface.
 func (*ShowConstraints) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -2762,6 +2771,7 @@ func (n *ShowDefaultSessionVariablesForRole) String() string  { return AsString(
 func (n *ShowVar) String() string                             { return AsString(n) }
 func (n *ShowZoneConfig) String() string                      { return AsString(n) }
 func (n *ShowFingerprints) String() string                    { return AsString(n) }
+func (n *ShowStatementHints) String() string                  { return AsString(n) }
 func (n *ShowDefaultPrivileges) String() string               { return AsString(n) }
 func (n *ShowCompletions) String() string                     { return AsString(n) }
 func (n *ShowCommitTimestamp) String() string                 { return AsString(n) }
