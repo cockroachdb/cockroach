@@ -22,7 +22,20 @@ func init() {
 						TTLExpr:     this.TTLExpr,
 					}
 				}),
+				emit(func(this *scpb.RowLevelTTL, md *opGenContext) *scop.CreateRowLevelTTLSchedule {
+					if this.RowLevelTTL.ScheduleID != 0 {
+						// Schedule already exists, no need to create one.
+						return nil
+					}
+					return &scop.CreateRowLevelTTLSchedule{
+						TableID: this.TableID,
+					}
+				}),
 				emit(func(this *scpb.RowLevelTTL, md *opGenContext) *scop.UpdateTTLScheduleCron {
+					if this.RowLevelTTL.ScheduleID == 0 {
+						// No existing schedule to update; a new one will be created.
+						return nil
+					}
 					// Find the old TTL element being dropped with a different cron.
 					oldCron := findOldTTLCron(this, md)
 					if oldCron == this.RowLevelTTL.DeletionCron {

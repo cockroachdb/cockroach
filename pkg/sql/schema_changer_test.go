@@ -7141,7 +7141,11 @@ ALTER TABLE t.test SET (ttl_expire_after = '10 hours');
 			s, sqlDB, kvDB := serverutils.StartServer(t, params)
 			defer s.Stopper().Stop(ctx)
 
-			_, err := sqlDB.Exec("SET create_table_with_schema_locked=false")
+			_, err := sqlDB.Exec("SET create_table_with_schema_locked = false")
+			require.NoError(t, err)
+			_, err = sqlDB.Exec("SET use_declarative_schema_changer = off")
+			require.NoError(t, err)
+			_, err = sqlDB.Exec("SET sql.defaults.use_declarative_schema_changer = 'off'")
 			require.NoError(t, err)
 			_, err = sqlDB.Exec(tc.setup)
 			require.NoError(t, err)
