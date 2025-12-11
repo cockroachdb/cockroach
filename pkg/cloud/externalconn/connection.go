@@ -39,7 +39,7 @@ type ExternalConnection interface {
 	RedactedConnectionURI() string
 }
 
-// converts a potentially modified external connection uri to the underlying uri with those
+// Materialize converts a potentially modified external connection uri to the underlying uri with those
 // modifications applied. passing uri == nil will just return the underlying uri with no modifications
 func Materialize(ec ExternalConnection, uri *url.URL) (*url.URL, error) {
 	if uri != nil {

@@ -477,6 +477,8 @@ func TestOnlineRestoreTenant(t *testing.T) {
 	defer cleanupFn()
 	srv := tc.Server(0)
 
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", systemDB)
+
 	_ = securitytest.EmbeddedTenantIDs()
 
 	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
@@ -489,7 +491,8 @@ func TestOnlineRestoreTenant(t *testing.T) {
 		restoreTC, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
 		defer cleanupFnRestored()
 
-		externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", systemDB, tenant10, rSQLDB)
+		// just using this to run CREATE EXTERNAL CONNECTION on the recovery db if we're using one
+		_ = backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", rSQLDB)
 
 		systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 INTO '%s'`, externalStorage))
 
