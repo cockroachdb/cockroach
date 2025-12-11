@@ -2355,3 +2355,104 @@ at or near "on": syntax error
 DETAIL: source SQL:
 SHOW CREATE TRIGGERS ON foo
                      ^
+
+parse
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10'
+----
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10'
+SHOW STATEMENT HINTS FOR ('SELECT * FROM t WHERE x = 10') -- fully parenthesized
+SHOW STATEMENT HINTS FOR '_' -- literals removed
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' WITH DETAILS
+----
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' WITH OPTIONS (DETAILS) -- normalized!
+SHOW STATEMENT HINTS FOR ('SELECT * FROM t WHERE x = 10') WITH OPTIONS (DETAILS) -- fully parenthesized
+SHOW STATEMENT HINTS FOR '_' WITH OPTIONS (DETAILS) -- literals removed
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' WITH OPTIONS (DETAILS) -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' WITH OPTIONS (DETAILS)
+----
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' WITH OPTIONS (DETAILS)
+SHOW STATEMENT HINTS FOR ('SELECT * FROM t WHERE x = 10') WITH OPTIONS (DETAILS) -- fully parenthesized
+SHOW STATEMENT HINTS FOR '_' WITH OPTIONS (DETAILS) -- literals removed
+SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 10' WITH OPTIONS (DETAILS) -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR $$ SELECT * FROM t WHERE x = 'value' $$
+----
+SHOW STATEMENT HINTS FOR e' SELECT * FROM t WHERE x = \'value\' ' -- normalized!
+SHOW STATEMENT HINTS FOR (e' SELECT * FROM t WHERE x = \'value\' ') -- fully parenthesized
+SHOW STATEMENT HINTS FOR '_' -- literals removed
+SHOW STATEMENT HINTS FOR e' SELECT * FROM t WHERE x = \'value\' ' -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR $1
+----
+SHOW STATEMENT HINTS FOR $1
+SHOW STATEMENT HINTS FOR ($1) -- fully parenthesized
+SHOW STATEMENT HINTS FOR $1 -- literals removed
+SHOW STATEMENT HINTS FOR $1 -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR $1 WITH DETAILS
+----
+SHOW STATEMENT HINTS FOR $1 WITH OPTIONS (DETAILS) -- normalized!
+SHOW STATEMENT HINTS FOR ($1) WITH OPTIONS (DETAILS) -- fully parenthesized
+SHOW STATEMENT HINTS FOR $1 WITH OPTIONS (DETAILS) -- literals removed
+SHOW STATEMENT HINTS FOR $1 WITH OPTIONS (DETAILS) -- identifiers removed
+
+error
+SHOW STATEMENT HINTS FOR
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SHOW STATEMENT HINTS FOR
+                        ^
+HINT: try \h SHOW STATEMENT HINTS
+
+error
+SHOW STATEMENT HINTS
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SHOW STATEMENT HINTS
+                    ^
+HINT: try \h SHOW STATEMENT HINTS
+
+error
+SHOW STATEMENT
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SHOW STATEMENT
+              ^
+HINT: try \h SHOW
+
+error
+SHOW STATEMENT HINT FOR SELECT 1
+----
+at or near "hint": syntax error
+DETAIL: source SQL:
+SHOW STATEMENT HINT FOR SELECT 1
+               ^
+HINT: try \h SHOW
+
+error
+SHOW HINT FOR SELECT 1
+----
+at or near "for": syntax error
+DETAIL: source SQL:
+SHOW HINT FOR SELECT 1
+          ^
+
+error
+SHOW HINTS FOR SELECT 1
+----
+at or near "hints": syntax error
+DETAIL: source SQL:
+SHOW HINTS FOR SELECT 1
+     ^
+HINT: try \h SHOW

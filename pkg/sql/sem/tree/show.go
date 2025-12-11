@@ -1267,6 +1267,54 @@ func (s ShowFingerprintOptions) IsDefault() bool {
 
 var _ NodeFormatter = &ShowFingerprintOptions{}
 
+// ShowStatementHints represents a SHOW STATEMENT HINTS statement.
+type ShowStatementHints struct {
+	Expr    Expr
+	Options ShowHintsOptions
+}
+
+var _ Statement = &ShowStatementHints{}
+
+// Format implements the NodeFormatter interface.
+func (n *ShowStatementHints) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW STATEMENT HINTS FOR ")
+	ctx.FormatNode(n.Expr)
+	if !n.Options.IsDefault() {
+		ctx.WriteString(" WITH OPTIONS (")
+		ctx.FormatNode(&n.Options)
+		ctx.WriteString(")")
+	}
+}
+
+// ShowHintsOptions describes options for the SHOW STATEMENT HINTS execution.
+type ShowHintsOptions struct {
+	Details bool
+}
+
+func (s *ShowHintsOptions) Format(ctx *FmtCtx) {
+	if s.Details {
+		ctx.WriteString("DETAILS")
+	}
+}
+
+// CombineWith merges other ShowHintsOptions into this struct.
+func (s *ShowHintsOptions) CombineWith(other *ShowHintsOptions) error {
+	if other.Details {
+		if s.Details {
+			return errors.New("DETAILS option specified multiple times")
+		}
+		s.Details = true
+	}
+	return nil
+}
+
+// IsDefault returns true if this backup options struct has default value.
+func (s ShowHintsOptions) IsDefault() bool {
+	return s == ShowHintsOptions{}
+}
+
+var _ NodeFormatter = &ShowFingerprintOptions{}
+
 // ShowTableStats represents a SHOW STATISTICS FOR TABLE statement.
 type ShowTableStats struct {
 	Table     *UnresolvedObjectName

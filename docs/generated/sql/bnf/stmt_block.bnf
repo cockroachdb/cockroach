@@ -332,6 +332,7 @@ show_stmt ::=
 	| show_default_session_variables_for_role_stmt
 	| show_zone_stmt
 	| show_full_scans_stmt
+	| show_statement_hints_stmt
 	| show_default_privileges_stmt
 	| show_inspect_errors_stmt
 
@@ -1054,6 +1055,9 @@ show_zone_stmt ::=
 show_full_scans_stmt ::=
 	'SHOW' 'FULL' 'TABLE' 'SCANS'
 
+show_statement_hints_stmt ::=
+	'SHOW' 'STATEMENT' 'HINTS' 'FOR' string_or_placeholder opt_with_show_hints_options
+
 show_default_privileges_stmt ::=
 	'SHOW' 'DEFAULT' 'PRIVILEGES' opt_for_roles opt_in_schema
 	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'GRANTEE' role_spec_list opt_in_schema
@@ -1271,6 +1275,7 @@ unreserved_keyword ::=
 	| 'HASH'
 	| 'HEADER'
 	| 'HIGH'
+	| 'HINTS'
 	| 'HISTOGRAM'
 	| 'HOLD'
 	| 'HOUR'
@@ -2274,6 +2279,11 @@ opt_partition ::=
 partition_name ::=
 	unrestricted_name
 
+opt_with_show_hints_options ::=
+	'WITH' show_hints_options_list
+	| 'WITH' 'OPTIONS' '(' show_hints_options_list ')'
+	| 
+
 opt_for_roles ::=
 	'FOR' role_or_group_or_user role_spec_list
 	| 
@@ -3165,6 +3175,9 @@ show_ranges_options ::=
 partition ::=
 	'PARTITION' partition_name
 
+show_hints_options_list ::=
+	( show_hints_options ) ( ( ',' show_hints_options ) )*
+
 single_set_clause ::=
 	column_name '=' a_expr
 
@@ -3769,6 +3782,9 @@ show_backup_options ::=
 schema_wildcard ::=
 	wildcard_pattern
 
+show_hints_options ::=
+	'DETAILS'
+
 type_func_name_no_crdb_extra_keyword ::=
 	'AUTHORIZATION'
 	| 'COLLATION'
@@ -4212,6 +4228,7 @@ bare_label_keywords ::=
 	| 'HASH'
 	| 'HEADER'
 	| 'HIGH'
+	| 'HINTS'
 	| 'HISTOGRAM'
 	| 'HOLD'
 	| 'IDENTITY'
