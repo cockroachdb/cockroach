@@ -91,3 +91,51 @@ func TODOReaderWriter(r storage.Reader, w storage.Writer) ReadWriter {
 func TODOReadWriter(rw storage.ReadWriter) ReadWriter {
 	return TODOReaderWriter(rw, rw)
 }
+
+// Engines contains the engines that support the operations of the Store. At the
+// time of writing, all three fields will be populated with the same Engine. As
+// work on separate raft log proceeds, we will be able to experimentally run
+// with a separate log engine, and ultimately allow doing so in production
+// deployments.
+type Engines struct {
+	// stateEngine is the state machine engine, in which the committed raft state
+	// materializes after being "applied".
+	stateEngine storage.Engine
+	// todoEngine is a placeholder used in cases where:
+	// - the code does not yet cleanly separate between state and log engine
+	// - it is still unclear which of the two engines is the better choice for a
+	//   particular write, or there is a candidate, but it needs to be verified.
+	todoEngine storage.Engine
+	// logEngine is the engine holding mainly the raft state, such as HardState
+	// and logs, and the Store-local keys. This engine provides timely durability,
+	// by frequent and on-demand syncing.
+	logEngine storage.Engine
+}
+
+// MakeEngines creates an Engines handle in which both state machine and log
+// engine reside in the same physical engine.
+func MakeEngines(eng storage.Engine) Engines {
+	// TODO(#158281): in test builds, wrap the engines in a way that allows
+	// verifying that all accesses touch the correct subset of keys.
+	return Engines{
+		stateEngine: eng,
+		todoEngine:  eng,
+		logEngine:   eng,
+	}
+}
+
+// StateEngine returns the state machine engine.
+func (e *Engines) StateEngine() storage.Engine {
+	return e.stateEngine
+}
+
+// LogEngine returns the raft/log engine.
+func (e *Engines) LogEngine() storage.Engine {
+	return e.logEngine
+}
+
+// TODOEngine returns the combined engine, used in the code which currently does
+// not support separated engines.
+func (e *Engines) TODOEngine() storage.Engine {
+	return e.todoEngine
+}

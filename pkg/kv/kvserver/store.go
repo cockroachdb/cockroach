@@ -590,23 +590,6 @@ func (rs *storeReplicaVisitor) EstimatedCount() int {
 	return len(rs.repls) - rs.visited
 }
 
-// internalEngines contains the engines that support the operations of
-// this Store. At the time of writing, all three fields will be populated
-// with the same Engine. As work on CRDB-220 (separate raft log) proceeds,
-// we will be able to experimentally run with a separate log engine, and
-// ultimately allow doing so in production deployments.
-type internalEngines struct {
-	// stateEngine is the engine that materializes the raft logs on the system.
-	stateEngine storage.Engine
-	// todoEngine is a placeholder while we work on CRDB-220, used in cases where
-	// - the code does not yet cleanly separate between state and log engine
-	// - it is still unclear which of the two engines is the better choice for a
-	//   particular write, or there is a candidate, but it needs to be verified.
-	todoEngine storage.Engine
-	// logEngine is the engine holding the raft state.
-	logEngine storage.Engine
-}
-
 /*
 A Store maintains a set of Replicas whose data is stored on a storage.Engine
 usually corresponding to a dedicated storage medium. It also houses a collection
@@ -885,7 +868,7 @@ NOTE: to the best of our knowledge, we don't rely on this invariant.
 type Store struct {
 	Ident                *roachpb.StoreIdent // pointer to catch access before Start() is called
 	cfg                  StoreConfig
-	internalEngines      internalEngines
+	internalEngines      kvstorage.Engines
 	db                   *kv.DB
 	tsCache              tscache.Cache           // Most recent timestamps for keys / key ranges
 	allocator            allocatorimpl.Allocator // Makes allocation decisions
@@ -1486,15 +1469,7 @@ func NewStore(
 	iot := ioThresholds{}
 	iot.Replace(nil, 1.0) // init as empty
 	s := &Store{
-		// NB: do not access these fields directly. Instead, use
-		// the StateEngine, TODOEngine, LogEngine methods.
-		// This simplifies going through references to these
-		// engines.
-		internalEngines: internalEngines{
-			stateEngine: eng,
-			todoEngine:  eng,
-			logEngine:   eng,
-		},
+		internalEngines:                   kvstorage.MakeEngines(eng),
 		cfg:                               cfg,
 		db:                                cfg.DB, // TODO(tschottdorf): remove redundancy.
 		nodeDesc:                          nodeDesc,
@@ -3085,22 +3060,20 @@ func (s *Store) StoreID() roachpb.StoreID { return s.Ident.StoreID }
 // Clock accessor.
 func (s *Store) Clock() *hlc.Clock { return s.cfg.Clock }
 
-// StateEngine returns the statemachine engine.
+// StateEngine returns the state machine engine.
 func (s *Store) StateEngine() storage.Engine {
-	return s.internalEngines.stateEngine
+	return s.internalEngines.StateEngine()
 }
 
-// TODOEngine is a placeholder for cases in which
-// the caller needs to be updated in order to use
-// only one engine, or a closer check is still
-// pending.
+// TODOEngine is a placeholder for cases in which the caller needs to be updated
+// in order to use only one engine, or a closer check is still pending.
 func (s *Store) TODOEngine() storage.Engine {
-	return s.internalEngines.todoEngine
+	return s.internalEngines.TODOEngine()
 }
 
-// LogEngine returns the log engine.
+// LogEngine returns the raft/log engine.
 func (s *Store) LogEngine() storage.Engine {
-	return s.internalEngines.logEngine
+	return s.internalEngines.LogEngine()
 }
 
 // DB accessor.
