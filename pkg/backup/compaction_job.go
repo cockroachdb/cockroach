@@ -75,8 +75,6 @@ func maybeStartCompactionJob(
 	switch {
 	case len(triggerJob.ExecutionLocality.Tiers) != 0:
 		return 0, errors.New("execution locality not supported for compaction")
-	case triggerJob.RevisionHistory:
-		return 0, errors.New("revision history not supported for compaction")
 	case triggerJob.ScheduleID == 0:
 		return 0, errors.New("only scheduled backups can be compacted")
 	case len(triggerJob.Destination.IncrementalStorage) != 0:
@@ -634,6 +632,8 @@ func (c compactionChain) createCompactionManifest(
 	cManifest.Descriptors = details.ResolvedTargets
 	cManifest.IntroducedSpans = introducedSpans
 	cManifest.IsCompacted = true
+	// Compacted backups do not store revision-history.
+	cManifest.MVCCFilter = backuppb.MVCCFilter_Latest
 
 	cManifest.Dir = cloudpb.ExternalStorage{}
 	// As this manifest will be used prior to the manifest actually being written

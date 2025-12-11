@@ -594,14 +594,6 @@ func TestBackupCompactionUnsupportedOptions(t *testing.T) {
 			"execution locality not supported for compaction",
 		},
 		{
-			"revision history not supported",
-			jobspb.BackupDetails{
-				ScheduleID:      1,
-				RevisionHistory: true,
-			},
-			"revision history not supported for compaction",
-		},
-		{
 			"scheduled backups only",
 			jobspb.BackupDetails{
 				ScheduleID: 0,
@@ -798,6 +790,7 @@ func TestCheckCompactionManifestFields(t *testing.T) {
 		"StartTime",
 		"IntroducedSpans",
 		"IsCompacted",
+		"MVCCFilter",
 	}
 	emptied := []string{
 		"Dir",
@@ -825,7 +818,6 @@ func TestCheckCompactionManifestFields(t *testing.T) {
 		"Tenants",
 		"LocalityKVs",
 		"PartitionDescriptorFilenames",
-		"MVCCFilter",
 		"RevisionStartTime",
 	}
 
@@ -875,6 +867,7 @@ func TestCheckCompactionManifestFields(t *testing.T) {
 		StatisticsFilenames: statisticsFilenames,
 		DescriptorCoverage:  tree.AllDescriptors,
 		ElidedPrefix:        execinfrapb.ElidePrefix_TenantAndTable,
+		MVCCFilter:          backuppb.MVCCFilter_All,
 		IsCompacted:         false,
 	}
 	lastBackupStruct := structs.New(lastBackup)

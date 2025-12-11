@@ -8,6 +8,7 @@ package backup
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"syscall"
 	"testing"
 	"time"
@@ -369,4 +370,171 @@ func TestRestoreRetryRevert(t *testing.T) {
 
 	sqlDB.Exec(t, "RESUME JOB $1", restoreID)
 	jobutils.WaitForJobToCancel(t, sqlDB, restoreID)
+}
+
+func TestRestoreRevisionHistoryWithCompactions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.setOverrideAsOfClauseKnob(t)
+	th.env.SetTime(time.Date(2025, 12, 11, 1, 0, 0, 0, time.UTC))
+
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 4")
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 3")
+
+	// This test will take a backup of a table with revision history enabled. To
+	// check the correctness of a restore, we check the amount of rows in the
+	// table at different restore points. We will assume that at each point in
+	// time t, the number of rows in the table is t. We take backups at the
+	// following times:
+	//
+	// t=0: full backup is taken
+	// t=2: inc backup is taken
+	// t=4: inc backup is taken
+	// t=6: inc backup is taken, compaction occurs here, merging t=[2, 6]
+	// t=8: inc backup is taken
+	th.sqlDB.Exec(t, "CREATE TABLE t (x INT)")
+	th.sqlDB.Exec(t, "CREATE DATABASE restored")
+
+	collURI := "nodelocal://1/backup"
+	schedules, err := th.createBackupSchedule(
+		t,
+		"CREATE SCHEDULE FOR BACKUP TABLE t INTO $1 WITH revision_history RECURRING '@hourly'", collURI,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(schedules))
+
+	full, inc := schedules[0], schedules[1]
+	if full.IsPaused() {
+		full, inc = inc, full
+	}
+
+	getLastBackupTime := func(t *testing.T) string {
+		t.Helper()
+		var lastBackupTime string
+		th.sqlDB.QueryRow(
+			t,
+			"SELECT end_time FROM [SHOW BACKUP FROM LATEST IN $1] ORDER BY end_time DESC LIMIT 1",
+			collURI,
+		).Scan(&lastBackupTime)
+		require.NoError(t, err)
+		return lastBackupTime
+	}
+
+	// Create backups as according to the aforementioned schedule.
+	times := make([]string, 9)
+	th.env.SetTime(full.NextRun().Add(time.Second))
+	require.NoError(t, th.executeSchedules())
+	th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
+	times[0] = getLastBackupTime(t)
+	for i := 1; i < 9; i++ {
+		th.sqlDB.Exec(t, "INSERT INTO t VALUES ($1)", i)
+		if i%2 == 1 {
+			var now string
+			th.sqlDB.QueryRow(t, "SELECT now()").Scan(&now)
+			times[i] = now
+		} else {
+			inc, err = jobs.ScheduledJobDB(th.internalDB()).
+				Load(context.Background(), th.env, inc.ScheduleID())
+			require.NoError(t, err)
+			th.env.SetTime(inc.NextRun().Add(time.Second))
+			require.NoError(t, th.executeSchedules())
+			th.waitForSuccessfulScheduledJobCount(t, inc.ScheduleID(), i/2)
+			times[i] = getLastBackupTime(t)
+		}
+	}
+	// Wait for the compaction job to complete.
+	var compactionJobID jobspb.JobID
+	th.sqlDB.QueryRow(
+		t,
+		"SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'",
+	).Scan(&compactionJobID)
+	jobutils.WaitForJobToSucceed(t, th.sqlDB, compactionJobID)
+
+	countRestoredRows := func(t *testing.T) int {
+		t.Helper()
+		var rowCount int
+		th.sqlDB.QueryRow(t, "SELECT count(*) FROM restored.t").Scan(&rowCount)
+		return rowCount
+	}
+
+	t.Run("restore to time before compaction", func(t *testing.T) {
+		defer th.sqlDB.Exec(t, "DROP TABLE IF EXISTS restored.t")
+
+		for i := 1; i < 6; i++ {
+			th.sqlDB.Exec(
+				t,
+				fmt.Sprintf(
+					"RESTORE TABLE t FROM LATEST IN $1 AS OF SYSTEM TIME '%s' WITH into_db='restored'", times[i],
+				),
+				collURI,
+			)
+
+			restoreType := "regular"
+			if i%2 == 1 {
+				restoreType = "revision-history"
+			}
+			require.Equal(
+				t, i, countRestoredRows(t),
+				"%s restore to time %d resulted in unexpected row count", restoreType, i,
+			)
+			th.sqlDB.Exec(t, "DROP TABLE restored.t")
+		}
+	})
+
+	t.Run("restore to exact compaction time", func(t *testing.T) {
+		defer th.sqlDB.Exec(t, "DROP TABLE IF EXISTS restored.t")
+
+		var restoreJobID jobspb.JobID
+		var unused any
+		th.sqlDB.QueryRow(
+			t,
+			fmt.Sprintf(
+				"RESTORE TABLE t FROM LATEST IN $1 AS OF SYSTEM TIME '%s' WITH into_db='restored'", times[6],
+			),
+			collURI,
+		).Scan(&restoreJobID, &unused, &unused, &unused)
+		require.NoError(t, err)
+
+		require.Equal(t, 6, countRestoredRows(t))
+		require.Equal(t, 2, getNumBackupsInRestore(t, th.sqlDB, restoreJobID))
+	})
+
+	t.Run("restore to time after compaction", func(t *testing.T) {
+		defer th.sqlDB.Exec(t, "DROP TABLE IF EXISTS restored.t")
+
+		for i := 7; i < 9; i++ {
+			var restoreJobID jobspb.JobID
+			var unused any
+			th.sqlDB.QueryRow(
+				t,
+				fmt.Sprintf(
+					"RESTORE TABLE t FROM LATEST IN $1 AS OF SYSTEM TIME '%s' WITH into_db='restored'", times[i],
+				),
+				collURI,
+			).Scan(&restoreJobID, &unused, &unused, &unused)
+			require.NoError(t, err)
+
+			restoreType := "regular"
+			if i%2 == 1 {
+				restoreType = "revision-history"
+			}
+
+			require.Equal(
+				t, i, countRestoredRows(t),
+				"%s restore to time %d resulted in unexpected row count", restoreType, i,
+			)
+
+			// Both regular and revision-history restores to a point after compaction
+			// should use the compacted backup in its chain.
+			require.Equal(
+				t, 3, getNumBackupsInRestore(t, th.sqlDB, restoreJobID),
+				"unexpected number of backups used when %s restoring to t=%d", restoreType, i,
+			)
+			th.sqlDB.Exec(t, "DROP TABLE restored.t")
+		}
+	})
 }
