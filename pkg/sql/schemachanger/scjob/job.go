@@ -127,6 +127,9 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 				descriptors,
 				&execCfg.Settings.SV,
 				execCtx.SessionData(),
+				execCfg.Settings,
+				execCfg.JobsKnobs(),
+				execCfg.NodeInfo.LogicalClusterID(),
 			)
 		},
 		execCfg.StatsRefresher,
