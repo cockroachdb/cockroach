@@ -2124,7 +2124,7 @@ type lockedMuxStream struct {
 
 func (s *lockedMuxStream) SendIsThreadSafe() {}
 
-func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
+func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) (err error) {
 	// The threshold of 10s was borrowed from `slowDistSenderReplicaThreshold`
 	// in `dist_sender`, where it was deemed to be a reasonable latency
 	// threshold for an RPC to a single replica (as is the case here).
@@ -2145,7 +2145,29 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 		}
 	}()
 
+	defer maybeRecoverPanic(s.wrapped.Context(), &err, e)
+
 	return s.wrapped.Send(e)
+}
+
+func maybeRecoverPanic(ctx context.Context, errp *error, e *kvpb.MuxRangeFeedEvent) {
+	if *errp != nil {
+		return // error already set, so did not panic
+	}
+	r := recover()
+	if r == nil {
+		return // no panic, common case
+	}
+	// NB: this will populate `err` or re-panic.
+	sr := fmt.Sprint(r)
+	if !strings.Contains(sr, `index out of range`) {
+		log.Errorf(ctx, "panic in lockedMuxStream.Send: %s, event was %s", sr, e)
+		// Not a panic we want to special-case. Re-panic.
+		panic(r)
+	}
+	// We found an error we want to recover from.
+	*errp = errors.AssertionFailedf("recovered from panic in lockedMuxStream.Send: %s, event was %s", sr, e)
+	log.Errorf(ctx, "%s", *errp)
 }
 
 // perConsumerLimiter is a ConcurrentRequestLimiter for a given mux rangefeed
