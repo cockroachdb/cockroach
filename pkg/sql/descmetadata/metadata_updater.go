@@ -9,8 +9,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -112,4 +114,20 @@ func (mu metadataUpdater) UpdateTTLScheduleLabel(
 		tbl.GetRowLevelTTL().ScheduleID,
 	)
 	return err
+}
+
+// UpdateTTLScheduleCron implement scexec.DescriptorMetadataUpdater.
+func (mu metadataUpdater) UpdateTTLScheduleCron(
+	ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string,
+) error {
+	env := scheduledjobs.ProdJobSchedulerEnv
+	schedules := jobs.ScheduledJobTxn(mu.txn)
+	s, err := schedules.Load(ctx, env, scheduleID)
+	if err != nil {
+		return err
+	}
+	if err := s.SetScheduleAndNextRun(cronExpr); err != nil {
+		return err
+	}
+	return schedules.Update(ctx, s)
 }

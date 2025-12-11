@@ -232,7 +232,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
     *scop.UpsertRowLevelTTL
       RowLevelTTL:
         ExpirationExpr: ts
-        ScheduleID: 1131800315919433729
+        ScheduleID: 1131801715215400961
         SelectRateLimit: 10
       TTLExpr:
         expr: ts
@@ -254,10 +254,55 @@ PreCommitPhase stage 2 of 2 with 1 MutationType op
     *scop.UpsertRowLevelTTL
       RowLevelTTL:
         ExpirationExpr: ts
-        ScheduleID: 1131800315919433729
+        ScheduleID: 1131801715215400961
         SelectRateLimit: 10
       TTLExpr:
         expr: ts
         referencedColumnIds:
         - 2
+      TableID: 107
+
+ops
+ALTER TABLE ttl_table SET (ttl_job_cron = '0 0 * * *');
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[RowLevelTTL:{DescID: 107, SeqNum: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[RowLevelTTL:{DescID: 107, SeqNum: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertRowLevelTTL
+      RowLevelTTL:
+        DeletionCron: 0 0 * * *
+        ExpirationExpr: ts
+        ScheduleID: 1131801715215400961
+      TTLExpr:
+        expr: ts
+        referencedColumnIds:
+        - 2
+      TableID: 107
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[RowLevelTTL:{DescID: 107, SeqNum: 0}, ABSENT], ABSENT] -> PUBLIC
+    [[RowLevelTTL:{DescID: 107, SeqNum: 1}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[RowLevelTTL:{DescID: 107, SeqNum: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[RowLevelTTL:{DescID: 107, SeqNum: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertRowLevelTTL
+      RowLevelTTL:
+        DeletionCron: 0 0 * * *
+        ExpirationExpr: ts
+        ScheduleID: 1131801715215400961
+      TTLExpr:
+        expr: ts
+        referencedColumnIds:
+        - 2
+      TableID: 107
+    *scop.UpdateTTLScheduleCron
+      NewCronExpr: 0 0 * * *
+      ScheduleID: 1131801715215400961
       TableID: 107

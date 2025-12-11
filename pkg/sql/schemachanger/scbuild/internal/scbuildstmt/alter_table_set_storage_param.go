@@ -27,9 +27,9 @@ import (
 func validateStorageParamKey(t tree.NodeFormatter, key string) {
 	loweredKey := strings.ToLower(key)
 	// These TTL params still require legacy schema changer because they
-	// affect column management, column dependencies, or schedule management.
+	// affect column management or column dependencies.
 	switch loweredKey {
-	case "ttl", "ttl_expire_after", "ttl_expiration_expression", "ttl_job_cron":
+	case "ttl", "ttl_expire_after", "ttl_expiration_expression":
 		panic(scerrors.NotImplementedErrorf(t, redact.Sprintf("%s not implemented yet", redact.SafeString(key))))
 	}
 	if loweredKey == catpb.RBRUsingConstraintTableSettingName {

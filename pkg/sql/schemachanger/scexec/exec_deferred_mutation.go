@@ -29,6 +29,7 @@ type deferredState struct {
 	statsToRefresh               catalog.DescriptorIDSet
 	indexesToSplitAndScatter     []indexesToSplitAndScatter
 	ttlScheduleMetadataUpdates   []ttlScheduleMetadataUpdate
+	ttlScheduleCronUpdates       []ttlScheduleCronUpdate
 	gcJobs
 }
 
@@ -45,6 +46,11 @@ type indexesToSplitAndScatter struct {
 type ttlScheduleMetadataUpdate struct {
 	tableID descpb.ID
 	newName string
+}
+
+type ttlScheduleCronUpdate struct {
+	scheduleID  jobspb.ScheduleID
+	newCronExpr string
 }
 
 type schemaChangerJobUpdate struct {
@@ -88,6 +94,16 @@ func (s *deferredState) UpdateTTLScheduleMetadata(
 	s.ttlScheduleMetadataUpdates = append(s.ttlScheduleMetadataUpdates, ttlScheduleMetadataUpdate{
 		tableID: tableID,
 		newName: newName,
+	})
+	return nil
+}
+
+func (s *deferredState) UpdateTTLScheduleCron(
+	ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string,
+) error {
+	s.ttlScheduleCronUpdates = append(s.ttlScheduleCronUpdates, ttlScheduleCronUpdate{
+		scheduleID:  scheduleID,
+		newCronExpr: cronExpr,
 	})
 	return nil
 }
@@ -223,6 +239,11 @@ func (s *deferredState) exec(
 			continue
 		}
 		if err := m.UpdateTTLScheduleLabel(ctx, tableDesc); err != nil {
+			return err
+		}
+	}
+	for _, cronUpdate := range s.ttlScheduleCronUpdates {
+		if err := m.UpdateTTLScheduleCron(ctx, cronUpdate.scheduleID, cronUpdate.newCronExpr); err != nil {
 			return err
 		}
 	}

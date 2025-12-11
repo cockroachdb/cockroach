@@ -22,6 +22,19 @@ func init() {
 						TTLExpr:     this.TTLExpr,
 					}
 				}),
+				emit(func(this *scpb.RowLevelTTL, md *opGenContext) *scop.UpdateTTLScheduleCron {
+					// Find the old TTL element being dropped with a different cron.
+					oldCron := findOldTTLCron(this, md)
+					if oldCron == this.RowLevelTTL.DeletionCron {
+						// No need to update the cron if it is unchanged.
+						return nil
+					}
+					return &scop.UpdateTTLScheduleCron{
+						TableID:     this.TableID,
+						ScheduleID:  this.RowLevelTTL.ScheduleID,
+						NewCronExpr: this.RowLevelTTL.DeletionCronOrDefault(),
+					}
+				}),
 			),
 		),
 		toAbsent(
@@ -63,4 +76,22 @@ func ttlAppliedLater(this *scpb.RowLevelTTL, md *opGenContext) bool {
 		}
 	}
 	return false
+}
+
+// findOldTTLCron finds the DeletionCron from the TTL element being dropped
+// for the same table. Returns empty string if no such element exists.
+func findOldTTLCron(this *scpb.RowLevelTTL, md *opGenContext) string {
+	for _, t := range md.Targets {
+		other, ok := t.Element().(*scpb.RowLevelTTL)
+		if !ok || other == this {
+			continue
+		}
+		if other.TableID == this.TableID &&
+			other.RowLevelTTL.ScheduleID == this.RowLevelTTL.ScheduleID &&
+			other.SeqNum < this.SeqNum &&
+			t.TargetStatus == scpb.Status_ABSENT {
+			return other.RowLevelTTL.DeletionCron
+		}
+	}
+	return ""
 }

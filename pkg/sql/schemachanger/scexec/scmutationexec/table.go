@@ -77,3 +77,9 @@ func (d *deferredVisitor) UpdateTTLScheduleMetadata(
 ) error {
 	return d.DeferredMutationStateUpdater.UpdateTTLScheduleMetadata(ctx, op.TableID, op.NewName)
 }
+
+func (d *deferredVisitor) UpdateTTLScheduleCron(
+	ctx context.Context, op scop.UpdateTTLScheduleCron,
+) error {
+	return d.DeferredMutationStateUpdater.UpdateTTLScheduleCron(ctx, op.ScheduleID, op.NewCronExpr)
+}

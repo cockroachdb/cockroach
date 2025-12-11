@@ -107,3 +107,11 @@ type UpdateTTLScheduleMetadata struct {
 	TableID descpb.ID
 	NewName string
 }
+
+// UpdateTTLScheduleCron updates the cron schedule expression for a TTL job.
+type UpdateTTLScheduleCron struct {
+	deferredMutationOp
+	TableID     descpb.ID
+	ScheduleID  jobspb.ScheduleID
+	NewCronExpr string
+}
