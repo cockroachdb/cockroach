@@ -37,6 +37,10 @@ func (m *mockInspectCheck) AppliesTo(codec keys.SQLCodec, span roachpb.Span) (bo
 	return true, nil
 }
 
+func (c *mockInspectCheck) IsSpanLevel() bool {
+	return false
+}
+
 func (m *mockInspectCheck) Started() bool {
 	return m.started
 }

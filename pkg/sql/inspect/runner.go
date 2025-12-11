@@ -7,7 +7,9 @@ package inspect
 
 import (
 	"context"
+	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -20,6 +22,17 @@ import (
 type inspectCheckApplicability interface {
 	// AppliesTo reports whether this check applies to the given span.
 	AppliesTo(codec keys.SQLCodec, span roachpb.Span) (bool, error)
+
+	// SpanLevelCheck reports whether this check is a span-level check.
+	IsSpanLevel() bool
+}
+
+// inspectCheckClusterApplicability defines the interface for determining if a
+// check is cluster-level.
+type inspectCheckClusterApplicability interface {
+	// AppliesToCluster reports whether this check is applied at the
+	// cluster-level.
+	AppliesToCluster() (bool, error)
 }
 
 // assertCheckApplies is a helper that calls AppliesTo and asserts the check applies.
@@ -36,6 +49,21 @@ func assertCheckApplies(
 	}
 	return nil
 }
+
+// checkState represents the state of a check.
+type checkState int
+
+const (
+	// checkNotStarted indicates Start() has not been called yet.
+	checkNotStarted checkState = iota
+	// checkHashMatched indicates the hash precheck passed - no corruption detected,
+	// so the full check can be skipped.
+	checkHashMatched
+	// checkRunning indicates the full check is actively running and may produce more results.
+	checkRunning
+	// checkDone indicates the check has finished (iterator exhausted or error occurred).
+	checkDone
+)
 
 // inspectCheck defines a single validation operation used by the INSPECT system.
 // Each check represents a specific type of data validation, such as index consistency.
@@ -68,6 +96,33 @@ type inspectCheck interface {
 	Close(ctx context.Context) error
 }
 
+// inspectSpanCheck defines a check that performs validations based on the results .
+type inspectSpanCheck interface {
+	// RegisterChecksForSpan retains a reference to all the other checks on the span.
+	RegisterChecksForSpan(inspectChecks) error
+
+	// CheckSpan performs a validation using the other checks run on the span
+	// and updates the processor progress with any span information for use by
+	// the cluster-level checks.
+	CheckSpan(ctx context.Context, logger *inspectLoggerBundle, msg *jobspb.InspectProcessorProgress) error
+}
+
+// inspectClusterCheck defines a check that performs validations after all the
+// spans have been processed.
+type inspectClusterCheck interface {
+	// StartCluster prepares the check to begin returning results.
+	StartCluster(ctx context.Context, progress *jobspb.InspectProgress) error
+
+	// NextCluster returns the next inspect error, if any.
+	NextCluster(ctx context.Context) (*inspectIssue, error)
+
+	// DoneCluster reports whether the check has produced all results.
+	DoneCluster(ctx context.Context) bool
+
+	// CloseCluster cleans up resources for the check.
+	CloseCluster(ctx context.Context) error
+}
+
 // inspectRunner coordinates the execution of a set of inspectChecks.
 //
 // It manages the lifecycle of each check, including initialization,
@@ -80,13 +135,32 @@ type inspectCheck interface {
 type inspectRunner struct {
 	// checks holds the list of checks to run. Each check is run to completion
 	// before moving on to the next.
-	checks []inspectCheck
+	checks inspectChecks
 
 	// logger records issues reported by the checks.
 	logger inspectLogger
 
 	// foundIssue indicates whether any issues were found.
 	foundIssue bool
+}
+
+type inspectChecks []inspectCheck
+
+// SortStable sorts the inspectChecks to place the meta-checks at the end.
+func (c *inspectChecks) sortStable() {
+	slices.SortStableFunc(*c, func(a, b inspectCheck) int {
+		_, ainspectCheckSpan := any(a).(inspectSpanCheck)
+		_, binspectCheckSpan := any(b).(inspectSpanCheck)
+
+		if !ainspectCheckSpan && binspectCheckSpan {
+			return -1
+		}
+		if ainspectCheckSpan && !binspectCheckSpan {
+			return 1
+		}
+
+		return 0
+	})
 }
 
 // Step advances execution by processing one result from the current inspectCheck.

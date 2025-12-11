@@ -58,20 +58,9 @@ func (c *indexConsistencyCheckApplicability) AppliesTo(
 	return spanContainsTable(c.tableID, codec, span)
 }
 
-// checkState represents the state of an index consistency check.
-type checkState int
-
-const (
-	// checkNotStarted indicates Start() has not been called yet.
-	checkNotStarted checkState = iota
-	// checkHashMatched indicates the hash precheck passed - no corruption detected,
-	// so the full check can be skipped.
-	checkHashMatched
-	// checkRunning indicates the full check is actively running and may produce more results.
-	checkRunning
-	// checkDone indicates the check has finished (iterator exhausted or error occurred).
-	checkDone
-)
+func (c *indexConsistencyCheckApplicability) IsSpanLevel() bool {
+	return false
+}
 
 // indexConsistencyCheck verifies consistency between a table's primary index
 // and a specified secondary index by streaming rows from both sides of a
