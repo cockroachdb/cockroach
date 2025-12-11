@@ -7,6 +7,7 @@ package inspect_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"regexp"
 	"sync/atomic"
 	"testing"
@@ -14,9 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -24,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -393,4 +398,124 @@ func TestInspectProgressWithMultiRangeTable(t *testing.T) {
 	require.Equal(t, "succeeded", status, "INSPECT job should succeed")
 	require.InEpsilon(t, 1.0, fractionCompleted, 0.01,
 		"progress should be ~100%% at completion, got %.2f%%", fractionCompleted*100)
+}
+
+func TestInspectJobResumeOnAllSpansCompleted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	var s serverutils.TestServerInterface
+	var db *gosql.DB
+
+	s, db, _ = serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Inspect: &sql.InspectTestingKnobs{
+				OnInspectJobStart: func() error {
+					// Mark all spans as completed immediately.
+					execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
+
+					var jobID int64
+					row := db.QueryRow(`
+						SELECT job_id
+						FROM [SHOW JOBS]
+						WHERE job_type = 'INSPECT'
+						ORDER BY created DESC
+						LIMIT 1
+					`)
+					if err := row.Scan(&jobID); err != nil {
+						return err
+					}
+
+					// Mark the primary key span as completed.
+					var spans []roachpb.Span
+					err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+						j, err := execCfg.JobRegistry.LoadJob(ctx, jobspb.JobID(jobID))
+						if err != nil {
+							return err
+						}
+						details := j.Details().(jobspb.InspectDetails)
+						if len(details.Checks) == 0 {
+							return errors.New("no checks in job details")
+						}
+						tableID := details.Checks[0].TableID
+
+						desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
+						if err != nil {
+							return err
+						}
+						spans = []roachpb.Span{desc.PrimaryIndexSpan(execCfg.Codec)}
+						return nil
+					})
+					if err != nil {
+						return err
+					}
+
+					// And store the completed spans in the job's frontier.
+					return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+						frontier, err := span.MakeFrontier(spans...)
+						if err != nil {
+							return err
+						}
+						defer frontier.Release()
+
+						return jobfrontier.Store(ctx, txn, jobspb.JobID(jobID), "inspect_completed_spans", frontier)
+					})
+				},
+			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(db)
+
+	runner.Exec(t, `
+		CREATE DATABASE db;
+		CREATE TABLE db.t (
+			id INT PRIMARY KEY,
+			val INT
+		);
+		CREATE INDEX i1 on db.t (val);
+		INSERT INTO db.t VALUES (1, 2), (2, 3);`)
+
+	// The checks on the spans will be bypassed.
+	_, err := db.Exec("INSPECT TABLE db.t AS OF SYSTEM TIME '-1us'")
+	require.NoError(t, err, "INSPECT job should complete successfully")
+
+	var jobID int64
+	var status string
+	var fractionCompleted float64
+	testutils.SucceedsSoon(t, func() error {
+		row := db.QueryRow(`
+			SELECT job_id, status, fraction_completed
+			FROM [SHOW JOBS]
+			WHERE job_type = 'INSPECT'
+			ORDER BY created DESC
+			LIMIT 1
+		`)
+		if err := row.Scan(&jobID, &status, &fractionCompleted); err != nil {
+			return err
+		}
+		if status != "succeeded" {
+			return errors.Newf("job not complete: status=%s", status)
+		}
+		return nil
+	})
+
+	require.Equal(t, "succeeded", status, "job should succeed")
+	require.InEpsilon(t, 1.0, fractionCompleted, 1e-9, "job should be completed")
+
+	var totalChecks, completedChecks int64
+	row := db.QueryRow(`
+		SELECT
+			(crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Progress', value)->'inspect'->>'jobTotalCheckCount')::INT,
+			(crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Progress', value)->'inspect'->>'jobCompletedCheckCount')::INT
+		FROM system.job_info
+		WHERE job_id = $1 AND info_key = 'legacy_progress'
+	`, jobID)
+	require.NoError(t, row.Scan(&totalChecks, &completedChecks))
+	require.Equal(t, totalChecks, int64(1), "job should have counted cluster checks")
+	require.Equal(t, totalChecks, completedChecks, "all checks (including cluster checks) should be marked complete")
 }
