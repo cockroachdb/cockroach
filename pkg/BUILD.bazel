@@ -2215,6 +2215,7 @@ GO_TARGETS = [
     "//pkg/sql/idxusage:idxusage_test",
     "//pkg/sql/importer:importer",
     "//pkg/sql/importer:importer_test",
+    "//pkg/sql/inspect/inspectpb:inspectpb",
     "//pkg/sql/inspect:inspect",
     "//pkg/sql/inspect:inspect_test",
     "//pkg/sql/inverted:inverted",

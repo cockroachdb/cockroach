@@ -9,6 +9,7 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 )
@@ -27,6 +28,7 @@ type inspectLogger interface {
 // tracking aggregate state about the issues encountered.
 type inspectLoggerBundle struct {
 	loggers             []inspectLogger
+	jobID               jobspb.JobID
 	sawInternalIssue    atomic.Bool
 	sawNonInternalIssue atomic.Bool
 }
@@ -34,8 +36,8 @@ type inspectLoggerBundle struct {
 var _ inspectLogger = (*inspectLoggerBundle)(nil)
 
 // newInspectLoggerBundle constructs a bundle that delegates to the provided loggers.
-func newInspectLoggerBundle(loggers ...inspectLogger) *inspectLoggerBundle {
-	return &inspectLoggerBundle{loggers: loggers}
+func newInspectLoggerBundle(jobID jobspb.JobID, loggers ...inspectLogger) *inspectLoggerBundle {
+	return &inspectLoggerBundle{loggers: loggers, jobID: jobID}
 }
 
 // logIssue implements the inspectLogger interface.
@@ -72,6 +74,21 @@ func (l *inspectLoggerBundle) sawOnlyInternalIssues() bool {
 		return false
 	}
 	return l.sawInternalIssue.Load() && !l.sawNonInternalIssue.Load()
+}
+
+func (l *inspectLoggerBundle) userError() error {
+	if l.hasIssues() {
+		errToReturn := errInspectFoundInconsistencies
+		if l.sawOnlyInternalIssues() {
+			errToReturn = errInspectInternalErrors
+		}
+		return errors.WithHintf(
+			errToReturn,
+			"Run 'SHOW INSPECT ERRORS FOR JOB %d WITH DETAILS' for more information.",
+			l.jobID,
+		)
+	}
+	return nil
 }
 
 // metricsLogger increments metrics when issues are logged.
