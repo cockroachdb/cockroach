@@ -133,6 +133,8 @@ type tpcc struct {
 	// context group for any background reset table operation to avoid goroutine leaks during long duration workloads
 	resetTableGrp      ctxgroup.Group
 	resetTableCancelFn context.CancelFunc
+	// resetWorkerOnce ensures the reset worker is started only once across all payment workers
+	resetWorkerOnce sync.Once
 
 	asOfSystemTime string
 

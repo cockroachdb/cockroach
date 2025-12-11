@@ -229,8 +229,11 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 		WHERE d_w_id >= $2 AND d_w_id < $3`,
 		)
 
-		// Starting the background goroutine which will reset the w_ytd values periodically in warehouseWytdResetPeriod
-		go p.startResetValueWorker()
+		// Starting the background goroutine which will reset the w_ytd values periodically in warehouseWytdResetPeriod.
+		// Use sync.Once to ensure only one reset worker is started across all payment workers.
+		p.config.resetWorkerOnce.Do(func() {
+			go p.startResetValueWorker()
+		})
 	}
 
 	if err := p.sr.Init(ctx, "payment", mcp); err != nil {
