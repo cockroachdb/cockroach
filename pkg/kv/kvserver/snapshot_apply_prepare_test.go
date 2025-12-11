@@ -86,7 +86,6 @@ func TestPrepareSnapApply(t *testing.T) {
 	}
 
 	swb := snapWriteBuilder{
-		id:       id,
 		todoEng:  eng,
 		sl:       sl,
 		writeSST: writeSST,
@@ -101,8 +100,7 @@ func TestPrepareSnapApply(t *testing.T) {
 		},
 	}
 
-	err := swb.prepareSnapApply(ctx)
-	require.NoError(t, err)
+	require.NoError(t, swb.prepareSnapApply(ctx))
 
 	// The snapshot construction code is spread across MultiSSTWriter and
 	// snapWriteBuilder. We only test the latter here, but for information also
