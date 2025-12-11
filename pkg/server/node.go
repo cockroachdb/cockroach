@@ -2124,7 +2124,7 @@ type lockedMuxStream struct {
 
 func (s *lockedMuxStream) SendIsThreadSafe() {}
 
-func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
+func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) (err error) {
 	// The threshold of 10s was borrowed from `slowDistSenderReplicaThreshold`
 	// in `dist_sender`, where it was deemed to be a reasonable latency
 	// threshold for an RPC to a single replica (as is the case here).
@@ -2145,7 +2145,35 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 		}
 	}()
 
+	defer maybeRecoverPanic(s.wrapped.Context(), &err, e)
+
 	return s.wrapped.Send(e)
+}
+
+// maybeRecoverPanic recovers from "index out of range" panics that can occur
+// during event marshaling due to a suspected data race in rangefeed checkpoint
+// processing. When such a panic is caught, it is converted to an error instead
+// of crashing the server. Other types of panics are logged and re-raised.
+//
+// See: https://github.com/cockroachdb/cockroach/issues/159166
+func maybeRecoverPanic(ctx context.Context, errp *error, e *kvpb.MuxRangeFeedEvent) {
+	if *errp != nil {
+		return // error already set, so did not panic
+	}
+	r := recover()
+	if r == nil {
+		return // no panic, common case
+	}
+	// NB: this will populate `errp` or re-panic.
+	sr := fmt.Sprint(r)
+	if !strings.Contains(sr, `index out of range`) {
+		log.Dev.Errorf(ctx, "panic in lockedMuxStream.Send: %s, event was %s", sr, e)
+		// Not a panic we want to special-case. Re-panic.
+		panic(r)
+	}
+	// We found an error we want to recover from.
+	*errp = errors.AssertionFailedf("recovered from panic in lockedMuxStream.Send: %s, event was %s", sr, e)
+	log.Dev.Errorf(ctx, "%s", *errp)
 }
 
 // perConsumerLimiter is a ConcurrentRequestLimiter for a given mux rangefeed

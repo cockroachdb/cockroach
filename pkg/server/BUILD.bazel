@@ -476,6 +476,7 @@ go_test(
         "listen_and_update_addrs_test.go",
         "load_endpoint_test.go",
         "main_test.go",
+        "maybe_recover_panic_test.go",
         "migration_test.go",
         "multi_store_test.go",
         "node_http_router_test.go",
