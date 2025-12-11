@@ -5729,7 +5729,19 @@ func (og *operationGenerator) truncateTable(ctx context.Context, tx pgx.Tx) (*op
 		// will fail with an error.
 		for fk := range fkSet {
 			if _, hasTable := tableSet[fk]; !hasTable {
-				op.expectedExecErrors.add(pgcode.FeatureNotSupported)
+				// In mixed version workloads, we can see either pgcode.Uncategorized
+				// (pre-v26.1) or pgcode.FeatureNotSupported (v26.1+) depending on which
+				// node handles the TRUNCATE. The pgcode was changed in #154382 (v26.1).
+				versionBefore261, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_1.Version())
+				if err != nil {
+					return nil, err
+				}
+				if versionBefore261 {
+					op.expectedExecErrors.add(pgcode.Uncategorized)
+					op.potentialExecErrors.add(pgcode.FeatureNotSupported)
+				} else {
+					op.expectedExecErrors.add(pgcode.FeatureNotSupported)
+				}
 				break
 			}
 		}
