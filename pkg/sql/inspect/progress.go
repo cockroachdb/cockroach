@@ -221,6 +221,9 @@ func (t *inspectProgressTracker) updateProgressCache(
 		inspectProgress.JobCompletedCheckCount += incomingProcProgress.ChecksCompleted
 	}
 
+	// Update the check-specific fields (e.g. row counts).
+	updateWithSpanProgress(inspectProgress, &incomingProcProgress)
+
 	// Update cached progress - the goroutine will handle actual persistence.
 	t.mu.cachedProgress = &jobspb.Progress{
 		Details: &jobspb.Progress_Inspect{
@@ -233,6 +236,35 @@ func (t *inspectProgressTracker) updateProgressCache(
 	// capture the final state when a processor completes its work, rather than
 	// waiting for the next periodic checkpoint update.
 	return meta.BulkProcessorProgress.Drained, nil
+}
+
+// stepCompletedCheckCount advances the completed check count in the internal
+// cache. This is used for checks run off the processors.
+func (t *inspectProgressTracker) stepCompletedCheckCount(ctx context.Context, count int) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.mu.cachedProgress == nil {
+		return errors.AssertionFailedf("progress not initialized")
+	}
+
+	orig := t.mu.cachedProgress.GetInspect()
+	if orig == nil {
+		return errors.AssertionFailedf("cached progress does not contain Inspect details")
+	}
+	inspectProgress := protoutil.Clone(orig).(*jobspb.InspectProgress)
+
+	// Increment the completed check count
+	inspectProgress.JobCompletedCheckCount += int64(count)
+
+	// Update cached progress - the goroutine will handle actual persistence.
+	t.mu.cachedProgress = &jobspb.Progress{
+		Details: &jobspb.Progress_Inspect{
+			Inspect: inspectProgress,
+		},
+	}
+
+	return nil
 }
 
 // terminateTracker performs any necessary cleanup when the job completes or fails.
@@ -406,24 +438,53 @@ func (t *inspectProgressTracker) hasUncheckpointedSpans() bool {
 	return t.mu.receivedSpanCount > t.mu.lastCheckpointedSpanCount
 }
 
-// countApplicableChecks determines how many checks will actually run across all spans.
+// countApplicableSpanChecks determines how many checks will actually run across all spans.
 // This provides accurate progress calculation by only counting checks that apply to each span.
-func countApplicableChecks(
+func countApplicableSpanChecks(
 	pkSpans []roachpb.Span, checkers []inspectCheckApplicability, codec keys.SQLCodec,
 ) (int64, error) {
 	var totalApplicableChecks int64 = 0
 
 	for _, span := range pkSpans {
 		for _, checker := range checkers {
-			applies, err := checker.AppliesTo(codec, span)
+			isApplicable, err := checker.AppliesTo(codec, span)
 			if err != nil {
 				return 0, err
 			}
-			if applies {
+			if isApplicable {
 				totalApplicableChecks++
+
+				if checker.IsSpanLevel() {
+					totalApplicableChecks++
+				}
 			}
 		}
 	}
 
 	return totalApplicableChecks, nil
+}
+
+// countApplicableSpanChecks determines how many cluster-level checks apply.
+func countApplicableClusterChecks(checkers []inspectCheckApplicability) (int64, error) {
+	var count int64 = 0
+
+	for _, checker := range checkers {
+		if checker, ok := checker.(inspectCheckClusterApplicability); ok {
+			applies, err := checker.AppliesToCluster()
+			if err != nil {
+				return 0, err
+			}
+			if applies {
+				count++
+			}
+		}
+	}
+
+	return count, nil
+}
+
+// updateWithSpanProgress updates the InspectProgress with data from the
+// check-specific fields in the span progress update.
+func updateWithSpanProgress(p *jobspb.InspectProgress, prog *jobspb.InspectProcessorProgress) {
+	// For future span-level checks.
 }
