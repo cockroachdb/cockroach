@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -349,6 +350,10 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	// Enable DRPC for inter-node communication if needed.
+	// By default it is off.
+	rpcbase.ExperimentalDRPCEnabled.Override(ctx, &serverCfg.Settings.SV, useDRPC)
 
 	conn, finish, err := newClientConn(ctx, serverCfg)
 	if err != nil {
@@ -832,6 +837,10 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Enable DRPC for inter-node communication if needed.
+	// By default it is off.
+	rpcbase.ExperimentalDRPCEnabled.Override(ctx, &serverCfg.Settings.SV, useDRPC)
+
 	conn, finish, err := newClientConn(ctx, serverCfg)
 	if err != nil {
 		return err
@@ -920,6 +929,10 @@ func runDrain(cmd *cobra.Command, args []string) (err error) {
 	if len(args) > 0 {
 		targetNode = args[0]
 	}
+
+	// Enable DRPC for inter-node communication if needed.
+	// By default it is off.
+	rpcbase.ExperimentalDRPCEnabled.Override(ctx, &serverCfg.Settings.SV, useDRPC)
 
 	// Establish a RPC connection.
 	conn, finish, err := newClientConn(ctx, serverCfg)
