@@ -1,3 +1,5 @@
+# LogicTest: !local-mixed-25.4
+
 subtest delay_delete_with_manual_stats
 # We test that for a table with canary stats rollout enabled (i.e. with
 # a non-zero stats_canary_window), when a new stats is created, the

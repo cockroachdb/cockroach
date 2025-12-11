@@ -97,23 +97,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			//    "handle" which can be used with SHOW HISTOGRAM.
 			// TODO(yuzefovich): refactor the code to use the iterator API
 			// (currently it is not possible due to a panic-catcher below).
-			stmt := `SELECT
-							"tableID",
-							"statisticID",
-							name,
-							"columnIDs",
-							"createdAt",
-							"rowCount",
-							"distinctCount",
-							"nullCount",
-							"avgSize",
-							"partialPredicate",
-							histogram,
-							"fullStatisticID",
-							"delayDelete"
-						FROM system.table_statistics
-						WHERE "tableID" = $1
-						ORDER BY "createdAt", "columnIDs", "statisticID"`
+			stmt := stats.GetTableStatisticsStmt(ctx, p.ExtendedEvalContext().Settings, tree.Ascending)
 
 			// There is a privilege check above to make sure the user has any
 			// privilege on the table being inspected. We use the node user to execute

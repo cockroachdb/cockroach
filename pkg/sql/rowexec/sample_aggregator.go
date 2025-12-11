@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -538,7 +539,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 					return err
 				}
 				canaryEnabled := tableDesc.TableDesc().StatsCanaryWindow != 0
-				if canaryEnabled {
+				if canaryEnabled && s.FlowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.V26_1_AddTableStatisticsDelayDeleteColumn) {
 					// If the table has canary stats rollout enabled, we don't
 					// immediately delete the "staled" stats, but keep it until
 					// another canary stats is collected. It is because if a query
