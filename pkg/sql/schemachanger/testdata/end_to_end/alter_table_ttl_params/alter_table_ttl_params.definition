@@ -1,0 +1,7 @@
+setup
+CREATE TABLE t (id INT PRIMARY KEY, created_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'created_at');
+----
+
+test
+ALTER TABLE t SET (ttl_select_rate_limit = 100, ttl_job_cron = '0 4 * * *');
+----
