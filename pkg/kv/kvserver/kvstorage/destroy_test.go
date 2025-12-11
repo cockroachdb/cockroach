@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,17 +38,18 @@ func TestDestroyReplica(t *testing.T) {
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
-	var sb redact.StringBuilder
-	ctx := context.Background()
-	mutate := func(name string, write func(storage.ReadWriter)) {
+	printBatch := func(name string, b storage.WriteBatch) string {
+		str, err := print.DecodeWriteBatch(b.Repr())
+		require.NoError(t, err)
+		return fmt.Sprintf(">> %s:\n%s", name, str)
+	}
+	mutate := func(name string, write func(storage.ReadWriter)) string {
 		b := eng.NewBatch()
 		defer b.Close()
 		write(b)
-		str, err := print.DecodeWriteBatch(b.Repr())
-		require.NoError(t, err)
-		_, err = sb.WriteString(fmt.Sprintf(">> %s:\n%s", name, str))
-		require.NoError(t, err)
+		str := printBatch(name, b)
 		require.NoError(t, b.Commit(false))
+		return str
 	}
 
 	r := replicaInfo{
@@ -60,21 +60,21 @@ func TestDestroyReplica(t *testing.T) {
 		last:    15,
 		applied: 12,
 	}
-	mutate("raft", func(rw storage.ReadWriter) {
+
+	ctx := context.Background()
+	out := mutate("raft", func(rw storage.ReadWriter) {
 		r.createRaftState(ctx, t, rw)
-	})
-	mutate("state", func(rw storage.ReadWriter) {
+	}) + mutate("state", func(rw storage.ReadWriter) {
 		r.createStateMachine(ctx, t, rw)
-	})
-	mutate("destroy", func(rw storage.ReadWriter) {
+	}) + mutate("destroy", func(rw storage.ReadWriter) {
 		require.NoError(t, DestroyReplica(
 			ctx, TODOReadWriter(rw),
 			DestroyReplicaInfo{FullReplicaID: r.id, Keys: r.keys}, r.id.ReplicaID+1,
 		))
 	})
 
-	str := strings.ReplaceAll(sb.String(), "\n\n", "\n")
-	echotest.Require(t, str, filepath.Join(datapathutils.TestDataPath(t), t.Name()+".txt"))
+	out = strings.ReplaceAll(out, "\n\n", "\n")
+	echotest.Require(t, out, filepath.Join(datapathutils.TestDataPath(t), t.Name()+".txt"))
 }
 
 // replicaInfo contains the basic info about the replica, used for generating
