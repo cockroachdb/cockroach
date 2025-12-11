@@ -9678,18 +9678,32 @@ WHERE object_id = table_descriptor_id
 				fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
 					&evalCtx.Settings.SV,
 				))
-				targetStmt, err := parserutils.ParseOne(stmtFingerprint)
+				stmts, err := parserutils.Parse(stmtFingerprint)
 				if err != nil {
 					return nil, pgerror.Wrap(
 						err, pgcode.InvalidParameterValue, "could not parse statement fingerprint",
 					)
 				}
-				donorStmt, err := parserutils.ParseOne(donorSQL)
+				if len(stmts) != 1 {
+					return nil, pgerror.New(
+						pgcode.InvalidParameterValue,
+						"could not parse statement fingerprint as a single SQL statement",
+					)
+				}
+				targetStmt := stmts[0]
+				stmts, err = parserutils.Parse(donorSQL)
 				if err != nil {
 					return nil, pgerror.Wrap(
 						err, pgcode.InvalidParameterValue, "could not parse hint donor statement",
 					)
 				}
+				if len(stmts) != 1 {
+					return nil, pgerror.New(
+						pgcode.InvalidParameterValue,
+						"could not parse hint donor statement as a single SQL statement",
+					)
+				}
+				donorStmt := stmts[0]
 				donor, err := tree.NewHintInjectionDonor(donorStmt.AST, fingerprintFlags)
 				if err != nil {
 					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error while creating donor")
