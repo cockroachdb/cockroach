@@ -1431,13 +1431,6 @@ func NewTableDesc(
 		return nil, err
 	}
 
-	paramIsDelete := n.StorageParams.GetVal("ttl_delete_rate_limit") != nil
-	paramIsSelect := n.StorageParams.GetVal("ttl_select_rate_limit") != nil
-
-	if paramIsDelete || paramIsSelect {
-		printTTLRateLimitNotice(ctx, evalCtx.ClientNoticeSender)
-	}
-
 	setter.TableDesc.RowLevelTTL = setter.UpdatedRowLevelTTL
 
 	indexEncodingVersion := descpb.StrictIndexColumnIDGuaranteesVersion

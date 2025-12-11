@@ -3832,6 +3832,17 @@ deprules
     - SmallerSeqNumFirst(*scpb.PartitionZoneConfig, *scpb.PartitionZoneConfig)($later-seqNum, $earlier-seqNum)
     - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
     - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure row level TTL configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.RowLevelTTL'
+    - $earlier-seqNum[Type] = '*scpb.RowLevelTTL'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $table-id)
+    - SmallerSeqNumFirst(*scpb.RowLevelTTL, *scpb.RowLevelTTL)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
 - name: ensure table zone configs are in increasing seqNum order
   from: later-seqNum-Node
   kind: Precedence
@@ -9095,6 +9106,17 @@ deprules
     - $later-seqNum-Node[CurrentStatus] = $status
     - $earlier-seqNum-Node[CurrentStatus] = $status
     - SmallerSeqNumFirst(*scpb.PartitionZoneConfig, *scpb.PartitionZoneConfig)($later-seqNum, $earlier-seqNum)
+    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
+    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
+- name: ensure row level TTL configs are in increasing seqNum order
+  from: later-seqNum-Node
+  kind: Precedence
+  to: earlier-seqNum-Node
+  query:
+    - $later-seqNum[Type] = '*scpb.RowLevelTTL'
+    - $earlier-seqNum[Type] = '*scpb.RowLevelTTL'
+    - joinOnDescID($later-seqNum, $earlier-seqNum, $table-id)
+    - SmallerSeqNumFirst(*scpb.RowLevelTTL, *scpb.RowLevelTTL)($later-seqNum, $earlier-seqNum)
     - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
     - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
 - name: ensure table zone configs are in increasing seqNum order

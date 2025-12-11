@@ -159,4 +159,7 @@ type DeferredMutationStateUpdater interface {
 
 	// UpdateTTLScheduleMetadata updates the TTL schedule metadata for a table.
 	UpdateTTLScheduleMetadata(ctx context.Context, tableID descpb.ID, newName string) error
+
+	// UpdateTTLScheduleCron updates the cron expression for a TTL schedule.
+	UpdateTTLScheduleCron(ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string) error
 }
