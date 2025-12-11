@@ -201,6 +201,13 @@ func newCluster(
 		return nil, err
 	}
 
+	if !metadata.IsLive() {
+		err := errors.Newf(`expired cluster: %s`, name)
+		err = errors.WithHintf(err, "\nRemaining lifetime: %s\n  ", metadata.LifetimeRemaining())
+		err = errors.WithHint(err, `Use "roachprod sync" to update cluster lifetime if cluster cache is out of sync.`)
+		return nil, err
+	}
+
 	if clusterSettings.DebugDir == "" {
 		clusterSettings.DebugDir = os.ExpandEnv(config.DefaultDebugDir)
 	}
