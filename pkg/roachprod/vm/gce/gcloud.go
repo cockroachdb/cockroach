@@ -209,27 +209,27 @@ type jsonVM struct {
 
 // Convert the JSON VM data into our common VM type.
 func (jsonVM *jsonVM) toVM(project string, dnsDomain string) (ret *vm.VM) {
-	var vmErrors []error
+	var vmErrors []vm.VMError
 	var err error
 
 	// Check "lifetime" label.
 	var lifetime time.Duration
 	if lifetimeStr, ok := jsonVM.Labels[vm.TagLifetime]; ok {
 		if lifetime, err = time.ParseDuration(lifetimeStr); err != nil {
-			vmErrors = append(vmErrors, vm.ErrNoExpiration)
+			vmErrors = append(vmErrors, vm.NewVMError(vm.ErrNoExpiration))
 		}
 	} else {
-		vmErrors = append(vmErrors, vm.ErrNoExpiration)
+		vmErrors = append(vmErrors, vm.NewVMError(vm.ErrNoExpiration))
 	}
 
 	// Extract network information
 	var publicIP, privateIP, vpc string
 	if len(jsonVM.NetworkInterfaces) == 0 {
-		vmErrors = append(vmErrors, vm.ErrBadNetwork)
+		vmErrors = append(vmErrors, vm.NewVMError(vm.ErrBadNetwork))
 	} else {
 		privateIP = jsonVM.NetworkInterfaces[0].NetworkIP
 		if len(jsonVM.NetworkInterfaces[0].AccessConfigs) == 0 {
-			vmErrors = append(vmErrors, vm.ErrBadNetwork)
+			vmErrors = append(vmErrors, vm.NewVMError(vm.ErrBadNetwork))
 		} else {
 			_ = jsonVM.NetworkInterfaces[0].AccessConfigs[0].Name // silence unused warning
 			publicIP = jsonVM.NetworkInterfaces[0].AccessConfigs[0].NatIP
@@ -238,7 +238,7 @@ func (jsonVM *jsonVM) toVM(project string, dnsDomain string) (ret *vm.VM) {
 	}
 	if jsonVM.Scheduling.OnHostMaintenance == "" {
 		// N.B. 'onHostMaintenance' is always non-empty, hence its absense implies a parsing error
-		vmErrors = append(vmErrors, vm.ErrBadScheduling)
+		vmErrors = append(vmErrors, vm.NewVMError(vm.ErrBadScheduling))
 	}
 
 	machineType := lastComponent(jsonVM.MachineType)
@@ -261,7 +261,7 @@ func (jsonVM *jsonVM) toVM(project string, dnsDomain string) (ret *vm.VM) {
 
 		vol, volType, err := jsonVMDisk.toVolume()
 		if err != nil {
-			vmErrors = append(vmErrors, err)
+			vmErrors = append(vmErrors, vm.NewVMError(err))
 			continue
 		}
 
@@ -3115,7 +3115,7 @@ func (j *managedInstanceGroupInstance) toVM(
 ) *vm.VM {
 
 	var err error
-	var vmErrors []error
+	var vmErrors []vm.VMError
 
 	remoteUser := config.SharedUser
 	if !config.UseSharedUser {
@@ -3130,10 +3130,10 @@ func (j *managedInstanceGroupInstance) toVM(
 	var lifetime time.Duration
 	if lifetimeStr, ok := instanceTemplate.Properties.Labels[vm.TagLifetime]; ok {
 		if lifetime, err = time.ParseDuration(lifetimeStr); err != nil {
-			vmErrors = append(vmErrors, vm.ErrNoExpiration)
+			vmErrors = append(vmErrors, vm.NewVMError(vm.ErrNoExpiration))
 		}
 	} else {
-		vmErrors = append(vmErrors, vm.ErrNoExpiration)
+		vmErrors = append(vmErrors, vm.NewVMError(vm.ErrNoExpiration))
 	}
 
 	var arch vm.CPUArch
@@ -3148,7 +3148,7 @@ func (j *managedInstanceGroupInstance) toVM(
 	for _, disk := range instanceTemplate.Properties.Disks {
 		vol, volType, err := disk.toVolume(j.Name, zone)
 		if err != nil {
-			vmErrors = append(vmErrors, err)
+			vmErrors = append(vmErrors, vm.NewVMError(err))
 			continue
 		}
 

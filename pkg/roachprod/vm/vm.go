@@ -6,6 +6,7 @@
 package vm
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -105,7 +106,7 @@ type VM struct {
 	CreatedAt time.Time `json:"created_at"`
 	// If non-empty, indicates that some or all of the data in the VM instance
 	// is not present or otherwise invalid.
-	Errors      []error           `json:"errors"`
+	Errors      []VMError         `json:"errors"`
 	Lifetime    time.Duration     `json:"lifetime"`
 	Preemptible bool              `json:"preemptible"`
 	Labels      map[string]string `json:"labels"`
@@ -171,7 +172,7 @@ func Name(cluster string, idx int) string {
 	return fmt.Sprintf("%s-%0.4d", cluster, idx)
 }
 
-// Error values for VM.Error
+// Error values for VM.Errors
 var (
 	ErrBadNetwork         = errors.New("could not determine network information")
 	ErrBadScheduling      = errors.New("could not determine scheduling information")
@@ -179,6 +180,72 @@ var (
 	ErrInvalidClusterName = errors.New("invalid cluster name")
 	ErrNoExpiration       = errors.New("could not determine expiration")
 )
+
+// VMError wraps an error and implements json.Marshaler/Unmarshaler so that
+// errors can be properly serialized to and from JSON. This is necessary because
+// Go's encoding/json cannot unmarshal into an error interface type.
+type VMError struct {
+	err error
+}
+
+// NewVMError creates a new VMError from an error.
+func NewVMError(err error) VMError {
+	return VMError{err: err}
+}
+
+// Error implements the error interface.
+func (e VMError) Error() string {
+	if e.err == nil {
+		return ""
+	}
+	return e.err.Error()
+}
+
+// Unwrap returns the underlying error for use with errors.Is/As.
+func (e VMError) Unwrap() error {
+	return e.err
+}
+
+// MarshalJSON implements json.Marshaler.
+func (e VMError) MarshalJSON() ([]byte, error) {
+	if e.err == nil {
+		return []byte(`""`), nil
+	}
+	return json.Marshal(e.err.Error())
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+// It handles both the new format (JSON string) and the legacy format (JSON object)
+// that was produced when []error was serialized directly. The legacy format
+// typically produces empty objects `{}` since error types don't have exported fields.
+func (e *VMError) UnmarshalJSON(data []byte) error {
+	// Try to unmarshal as a string first (new format)
+	var msg string
+	if err := json.Unmarshal(data, &msg); err == nil {
+		if msg == "" {
+			e.err = nil
+		} else {
+			// Use Newf with %s format to satisfy the fmtsafe linter which requires
+			// constant format strings.
+			e.err = errors.Newf("%s", msg)
+		}
+		return nil
+	}
+
+	// If that fails, try to unmarshal as an object (legacy format).
+	// The legacy format serialized error interfaces as objects, but since
+	// errors.errorString has no exported fields, they serialize as empty `{}`.
+	// We treat any object as a nil/unknown error to maintain backwards compatibility.
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err == nil {
+		// Legacy format - treat as nil error (the error message was lost in serialization)
+		e.err = nil
+		return nil
+	}
+
+	// If neither worked, return an error
+	return errors.Newf("cannot unmarshal VMError from: %s", string(data))
+}
 
 var regionRE = regexp.MustCompile(`(.*[^-])-?[0-9a-z]$`)
 
