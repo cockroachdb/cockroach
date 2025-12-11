@@ -37,7 +37,7 @@ func init() {
 						return nil
 					}
 					// Find the old TTL element being dropped with a different cron.
-					oldCron := findOldTTLCron(this, md)
+					oldCron := findPreviousTTLCron(this, md)
 					if oldCron == this.RowLevelTTL.DeletionCron {
 						// No need to update the cron if it is unchanged.
 						return nil
@@ -91,9 +91,11 @@ func ttlAppliedLater(this *scpb.RowLevelTTL, md *opGenContext) bool {
 	return false
 }
 
-// findOldTTLCron finds the DeletionCron from the TTL element being dropped
-// for the same table. Returns empty string if no such element exists.
-func findOldTTLCron(this *scpb.RowLevelTTL, md *opGenContext) string {
+// findPreviousTTLCron finds the DeletionCron from the TTL element for the same
+// table with a lower SeqNum and the specified target status. In other words, it
+// finds the TTL cron from the dropped RowLevelTTL element. Returns empty string
+// if no such element exists.
+func findPreviousTTLCron(this *scpb.RowLevelTTL, md *opGenContext) string {
 	for _, t := range md.Targets {
 		other, ok := t.Element().(*scpb.RowLevelTTL)
 		if !ok || other == this {
@@ -103,7 +105,7 @@ func findOldTTLCron(this *scpb.RowLevelTTL, md *opGenContext) string {
 			other.RowLevelTTL.ScheduleID == this.RowLevelTTL.ScheduleID &&
 			other.SeqNum < this.SeqNum &&
 			t.TargetStatus == scpb.Status_ABSENT {
-			return other.RowLevelTTL.DeletionCron
+			return other.RowLevelTTL.DeletionCronOrDefault()
 		}
 	}
 	return ""
