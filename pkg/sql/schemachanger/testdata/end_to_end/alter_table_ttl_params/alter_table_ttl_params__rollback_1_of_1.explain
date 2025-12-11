@@ -12,9 +12,8 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t SET ('ttl_sel
       │    │    └── ABSENT → PUBLIC RowLevelTTL:{DescID: 104 (t), SeqNum: 0}
       │    ├── 1 element transitioning toward ABSENT
       │    │    └── PUBLIC → ABSENT RowLevelTTL:{DescID: 104 (t), SeqNum: 1}
-      │    └── 4 Mutation operations
+      │    └── 3 Mutation operations
       │         ├── UpsertRowLevelTTL {"TableID":104}
-      │         ├── DeleteSchedule {"ScheduleID":<redacted>}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase

@@ -308,21 +308,9 @@ deps
 ALTER TABLE ttl_table SET (ttl_expiration_expression = $$ts + INTERVAL '10 minutes'$$, ttl_job_cron = '30 2 * * 0');
 ----
 - from: [RowLevelTTL:{DescID: 108, SeqNum: 0}, ABSENT]
-  to:   [RowLevelTTL:{DescID: 108, SeqNum: 1}, ABSENT]
-  kind: Precedence
-  rule: ensure row level TTL configs are in increasing seqNum order
-- from: [RowLevelTTL:{DescID: 108, SeqNum: 0}, ABSENT]
   to:   [RowLevelTTL:{DescID: 108, SeqNum: 1}, PUBLIC]
-  kind: Precedence
-  rule: ensure row level TTL configs are in increasing seqNum order
-- from: [RowLevelTTL:{DescID: 108, SeqNum: 0}, PUBLIC]
-  to:   [RowLevelTTL:{DescID: 108, SeqNum: 1}, ABSENT]
-  kind: Precedence
-  rule: ensure row level TTL configs are in increasing seqNum order
-- from: [RowLevelTTL:{DescID: 108, SeqNum: 0}, PUBLIC]
-  to:   [RowLevelTTL:{DescID: 108, SeqNum: 1}, PUBLIC]
-  kind: Precedence
-  rule: ensure row level TTL configs are in increasing seqNum order
+  kind: SameStagePrecedence
+  rule: old TTL params are dropped before the new one is added
 
 ops
 ALTER TABLE ttl_table SET (ttl_select_rate_limit = 10, ttl_job_cron = '0 0 * * *');
