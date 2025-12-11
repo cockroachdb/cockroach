@@ -700,6 +700,11 @@ func (r *testRunner) allocateOrAttachToCluster(
 		localCluster: clustersOpt.typ == localCluster,
 		arch:         arch,
 	}
+	if cfg.localCluster {
+		cfg.os = runtime.GOOS
+	} else {
+		cfg.os = "linux" // Currently only test against linux clusters
+	}
 	return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
 }
 
