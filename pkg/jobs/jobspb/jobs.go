@@ -176,3 +176,9 @@ func (r *RowLevelTTLProcessorProgress) SafeFormat(p redact.SafePrinter, _ rune) 
 func (c CreateStatsDetails) IsAuto() bool {
 	return c.Name == AutoStatsName || c.Name == AutoPartialStatsName
 }
+
+// UpdateWithSpanProgress updates the InspectProgress with data from the
+// check-specific fields in the span progress update.
+func (p *InspectProgress) UpdateWithSpanProgress(prog *InspectProcessorProgress) {
+	return
+}

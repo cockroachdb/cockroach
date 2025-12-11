@@ -7,7 +7,6 @@ package inspect
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -126,6 +126,10 @@ func (t *testingInspectCheck) AppliesTo(codec keys.SQLCodec, span roachpb.Span) 
 	return true, nil
 }
 
+func (c *testingInspectCheck) IsSpanLevel() bool {
+	return false
+}
+
 // Started implements the inspectCheck interface.
 func (t *testingInspectCheck) Started() bool {
 	return t.started
@@ -205,6 +209,73 @@ func (t *testingInspectCheck) Close(context.Context) error {
 	return nil
 }
 
+// testingInspectCheckSpan is a test implementation of inspectCheckSpan.
+type testingInspectCheckSpan struct {
+	started bool
+
+	spanIssues int64
+}
+
+var _ inspectCheckApplicability = (*testingInspectCheckSpan)(nil)
+
+var _ inspectSpanCheck = (*testingInspectCheckSpan)(nil)
+
+func (t *testingInspectCheckSpan) AppliesTo(codec keys.SQLCodec, span roachpb.Span) (bool, error) {
+	// For testing, assume all checks apply to all spans
+	return true, nil
+}
+
+func (c *testingInspectCheckSpan) IsSpanLevel() bool {
+	return true
+}
+
+func (t *testingInspectCheckSpan) AppliesToCluster() (bool, error) {
+	// For testing it runs.
+	return true, nil
+}
+
+func (t *testingInspectCheckSpan) Started() bool {
+	return t.started
+}
+
+func (t *testingInspectCheckSpan) Start(
+	ctx context.Context, cfg *execinfra.ServerConfig, span roachpb.Span, workerIndex int,
+) error {
+	t.started = true
+	return nil
+}
+
+func (*testingInspectCheckSpan) Next(
+	ctx context.Context, cfg *execinfra.ServerConfig,
+) (*inspectIssue, error) {
+	return nil, nil
+}
+
+func (*testingInspectCheckSpan) Done(ctx context.Context) bool {
+	return true
+}
+
+func (*testingInspectCheckSpan) Close(ctx context.Context) error {
+	return nil
+}
+
+func (t *testingInspectCheckSpan) RegisterChecksForSpan(checks inspectChecks) error {
+	return nil
+}
+
+func (t *testingInspectCheckSpan) CheckSpan(
+	ctx context.Context, logger *inspectLoggerBundle, msg *jobspb.InspectProcessorProgress,
+) error {
+	for i := t.spanIssues; i > 0; i-- {
+		err := logger.logIssue(ctx, &inspectIssue{})
+		if err != nil {
+			return errors.Wrapf(err, "error logging inspect issue")
+		}
+	}
+
+	return nil
+}
+
 // discardRowReceiver is a minimal RowReceiver that discards all data.
 type discardRowReceiver struct{}
 
@@ -249,7 +320,7 @@ func runProcessorAndWait(t *testing.T, proc *inspectProcessor, expectErr bool) {
 // makeProcessor will create an inspect processor for test.
 func makeProcessor(
 	t *testing.T,
-	checkFactory inspectCheckFactory,
+	checkFactories []inspectCheckFactory,
 	src spanSource,
 	concurrency int,
 	asOf hlc.Timestamp,
@@ -274,7 +345,7 @@ func makeProcessor(
 				AsOf: asOf,
 			},
 		},
-		checkFactories: []inspectCheckFactory{checkFactory},
+		checkFactories: checkFactories,
 		cfg:            flowCtx.Cfg,
 		flowCtx:        flowCtx,
 		spanSrc:        src,
@@ -358,12 +429,14 @@ func TestInspectProcessor_ControlFlow(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
-			factory := func(asOf hlc.Timestamp) inspectCheck {
-				return &testingInspectCheck{
-					configs: tc.configs,
-				}
+			factories := []inspectCheckFactory{
+				func(asOf hlc.Timestamp) inspectCheck {
+					return &testingInspectCheck{
+						configs: tc.configs,
+					}
+				},
 			}
-			proc, _ := makeProcessor(t, factory, tc.spanSrc, len(tc.configs), hlc.Timestamp{})
+			proc, _ := makeProcessor(t, factories, tc.spanSrc, len(tc.configs), hlc.Timestamp{})
 			runProcessorAndWait(t, proc, tc.expectErr)
 		})
 	}
@@ -377,20 +450,22 @@ func TestInspectProcessor_EmitIssues(t *testing.T) {
 		mode:     spanModeNormal,
 		maxSpans: 1,
 	}
-	factory := func(asOf hlc.Timestamp) inspectCheck {
-		return &testingInspectCheck{
-			configs: []testingCheckConfig{
-				{
-					mode: checkModeNone,
-					issues: []*inspectIssue{
-						{ErrorType: "test_error", PrimaryKey: "pk1"},
-						{ErrorType: "test_error", PrimaryKey: "pk2"},
+	factories := []inspectCheckFactory{
+		func(asOf hlc.Timestamp) inspectCheck {
+			return &testingInspectCheck{
+				configs: []testingCheckConfig{
+					{
+						mode: checkModeNone,
+						issues: []*inspectIssue{
+							{ErrorType: "test_error", PrimaryKey: "pk1"},
+							{ErrorType: "test_error", PrimaryKey: "pk2"},
+						},
 					},
 				},
-			},
-		}
+			}
+		},
 	}
-	proc, logger := makeProcessor(t, factory, spanSrc, 1, hlc.Timestamp{})
+	proc, logger := makeProcessor(t, factories, spanSrc, 1, hlc.Timestamp{})
 
 	runProcessorAndWait(t, proc, true /* expectErr */)
 
@@ -439,21 +514,23 @@ func TestInspectProcessor_AsOfTime(t *testing.T) {
 			testStartTime := time.Now()
 
 			var capturedTimestamp hlc.Timestamp
-			factory := func(asOf hlc.Timestamp) inspectCheck {
-				capturedTimestamp = asOf
-				return &testingInspectCheck{
-					configs: []testingCheckConfig{
-						{
-							mode: checkModeNone,
-							issues: []*inspectIssue{
-								{ErrorType: "test_error", PrimaryKey: "pk1", AOST: asOf.GoTime()},
+			factories := []inspectCheckFactory{
+				func(asOf hlc.Timestamp) inspectCheck {
+					capturedTimestamp = asOf
+					return &testingInspectCheck{
+						configs: []testingCheckConfig{
+							{
+								mode: checkModeNone,
+								issues: []*inspectIssue{
+									{ErrorType: "test_error", PrimaryKey: "pk1", AOST: asOf.GoTime()},
+								},
 							},
 						},
-					},
-				}
+					}
+				},
 			}
 
-			proc, logger := makeProcessor(t, factory, spanSrc, 1, tc.asOf)
+			proc, logger := makeProcessor(t, factories, spanSrc, 1, tc.asOf)
 
 			runProcessorAndWait(t, proc, true /* expectErr */)
 
@@ -464,4 +541,26 @@ func TestInspectProcessor_AsOfTime(t *testing.T) {
 			tc.verifyTimestamp(t, actualTime, capturedTimestamp, testStartTime)
 		})
 	}
+}
+
+func TestInspectProcessor_SpanCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	spanSrc := &testingSpanSource{
+		mode:     spanModeNormal,
+		maxSpans: 1,
+	}
+	factories := []inspectCheckFactory{
+		func(asOf hlc.Timestamp) inspectCheck {
+			return &testingInspectCheckSpan{
+				spanIssues: 2,
+			}
+		},
+	}
+	proc, logger := makeProcessor(t, factories, spanSrc, 1, hlc.Timestamp{})
+
+	runProcessorAndWait(t, proc, true /* expectErr */)
+
+	require.Equal(t, 2, logger.numIssuesFound())
 }
