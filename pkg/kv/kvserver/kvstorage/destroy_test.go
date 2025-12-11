@@ -174,7 +174,7 @@ type testBatch struct {
 
 func makeTestBatch(eng Engines) testBatch {
 	if !eng.Separated() {
-		return testBatch{batch: eng.TODOEngine().NewBatch()}
+		return testBatch{batch: eng.Engine().NewBatch()}
 	}
 	return testBatch{
 		batch:     eng.StateEngine().NewBatch(),

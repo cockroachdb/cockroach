@@ -145,6 +145,17 @@ func MakeSeparatedEnginesForTesting(state, log storage.Engine) Engines {
 	}
 }
 
+// Engine returns the single engine. Used when the caller implements backwards
+// compatible code and neither StateEngine nor LogEngine can be used. This is
+// different from TODOEngine in that the caller explicitly acknowledges the fact
+// that they are using a combined engine.
+func (e *Engines) Engine() storage.Engine {
+	if buildutil.CrdbTestBuild && e.separated {
+		panic("engines are separated")
+	}
+	return e.todoEngine
+}
+
 // StateEngine returns the state machine engine.
 func (e *Engines) StateEngine() storage.Engine {
 	return e.stateEngine
@@ -156,7 +167,8 @@ func (e *Engines) LogEngine() storage.Engine {
 }
 
 // TODOEngine returns the combined engine, used in the code which currently does
-// not support separated engines.
+// not support separated engines. The caller must eventually "resolve" this call
+// to one of StateEngine, LogEngine, or Engine.
 func (e *Engines) TODOEngine() storage.Engine {
 	return e.todoEngine
 }
