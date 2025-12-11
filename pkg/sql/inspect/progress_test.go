@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/inspect/inspectpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -421,15 +422,17 @@ func verifyStoredSpans(
 // Returns both the metadata and the parsed progress struct for use with updateProgressCache.
 func createProcessorProgressUpdate(
 	checksCompleted int64, finished bool, completedSpans []roachpb.Span,
-) (*execinfrapb.ProducerMetadata, jobspb.InspectProcessorProgress, error) {
-	progressMsg := jobspb.InspectProcessorProgress{
-		ChecksCompleted: checksCompleted,
-		Finished:        finished,
+) (*execinfrapb.ProducerMetadata, inspectpb.InspectProgressDetails, error) {
+	progressMsg := inspectpb.InspectProgressDetails{
+		Progress: &inspectpb.InspectProcessorProgress{
+			ChecksCompleted: checksCompleted,
+			Finished:        finished,
+		},
 	}
 
 	progressAny, err := pbtypes.MarshalAny(&progressMsg)
 	if err != nil {
-		return nil, jobspb.InspectProcessorProgress{}, err
+		return nil, inspectpb.InspectProgressDetails{}, err
 	}
 
 	const testNodeID = 1
@@ -632,9 +635,11 @@ func TestInspectProgressTracker_ProgressFlushConditions(t *testing.T) {
 func createSpanStartedProgressUpdate(
 	span roachpb.Span, ts hlc.Timestamp,
 ) (*execinfrapb.ProducerMetadata, error) {
-	progressMsg := jobspb.InspectProcessorProgress{
-		SpanStarted: span,
-		StartedAt:   ts,
+	progressMsg := inspectpb.InspectProgressDetails{
+		Progress: &inspectpb.InspectProcessorProgress{
+			SpanStarted: span,
+			StartedAt:   ts,
+		},
 	}
 
 	progressAny, err := pbtypes.MarshalAny(&progressMsg)
