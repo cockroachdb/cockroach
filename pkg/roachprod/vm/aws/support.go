@@ -7,6 +7,7 @@ package aws
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -158,13 +159,27 @@ func writeStartupScript(
 
 // runCommand is used to invoke an AWS command.
 func (p *Provider) runCommand(l *logger.Logger, args []string) ([]byte, error) {
+	return p.runCommandWithContext(context.Background(), l, args)
+}
+
+// runCommand is used to invoke an AWS command.
+func (p *Provider) runCommandWithContext(
+	ctx context.Context, l *logger.Logger, args []string,
+) ([]byte, error) {
 
 	if p.Profile != "" {
 		args = append(args[:len(args):len(args)], "--profile", p.Profile)
 	}
+
+	credentialsEnv, err := p.getEnvironmentAWSCredentials()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get AWS credentials")
+	}
+
 	var stderrBuf bytes.Buffer
-	cmd := exec.Command("aws", args...)
+	cmd := exec.CommandContext(ctx, "aws", args...)
 	cmd.Stderr = &stderrBuf
+	cmd.Env = append(os.Environ(), credentialsEnv...)
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
@@ -178,9 +193,16 @@ func (p *Provider) runCommand(l *logger.Logger, args []string) ([]byte, error) {
 
 // runJSONCommand invokes an aws command and parses the json output.
 func (p *Provider) runJSONCommand(l *logger.Logger, args []string, parsed interface{}) error {
+	return p.runJSONCommandWithContext(context.Background(), l, args, parsed)
+}
+
+// runJSONCommandWithContext invokes an aws command and parses the json output.
+func (p *Provider) runJSONCommandWithContext(
+	ctx context.Context, l *logger.Logger, args []string, parsed interface{},
+) error {
 	// Force json output in case the user has overridden the default behavior.
 	args = append(args[:len(args):len(args)], "--output", "json")
-	rawJSON, err := p.runCommand(l, args)
+	rawJSON, err := p.runCommandWithContext(ctx, l, args)
 	if err != nil {
 		return err
 	}

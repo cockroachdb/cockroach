@@ -1256,7 +1256,7 @@ func buildSSHKeysRemoveCmd() *cobra.Command {
 
 			if PromptYesNo("Are you sure?", false /* defaultYes */) {
 				fmt.Printf("Deleting %d keys belonging to %s...\n", len(toBeDeleted), user)
-				return gce.SetUserAuthorizedKeys(newKeys)
+				return gce.Infrastructure.SetUserAuthorizedKeys(newKeys)
 			} else {
 				fmt.Printf("Aborted.\n")
 				return nil

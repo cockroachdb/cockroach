@@ -17,6 +17,11 @@ type InfraProvider interface {
 	// gcloud cockroach-ephemeral project and returns them formatted for use in
 	// an authorized_keys file.
 	GetUserAuthorizedKeys() (AuthorizedKeys, error)
+	// SetUserAuthorizedKeys updates the default project metadata with the
+	// keys provided. Note that this overwrites any existing keys -- all
+	// existing keys need to be passed in the `keys` list provided in
+	// order for them to continue to exist after this function is called.
+	SetUserAuthorizedKeys(keys AuthorizedKeys) error
 	// SyncDNS replaces the configured DNS zone with the supplied hosts.
 	SyncDNS(l *logger.Logger, vms vm.List) error
 	// DNSDomain returns the configured DNS domain for public DNS A records.

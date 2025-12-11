@@ -6,6 +6,7 @@
 package vm
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"sort"
@@ -114,7 +115,10 @@ type VM struct {
 
 	// PublicDNS is the public DNS name that can be used to connect to the VM.
 	PublicDNS string `json:"public_dns"`
-	// The DNS provider to use for DNS operations performed for this VM.
+	// PublicDNSZone is the public DNS zone that can be used to connect to the VM
+	// (e.g. roachprod.crdb.io).
+	PublicDNSZone string `json:"public_dns_zone"`
+	// The DNS provider to use for DNS operations performed for this VM (e.g. gce).
 	DNSProvider string `json:"dns_provider"`
 
 	// The name of the cloud provider that hosts the VM instance
@@ -454,6 +458,8 @@ type ListOptions struct {
 	IncludeEmptyClusters bool
 	ComputeEstimatedCost bool
 	IncludeProviders     []string
+	LimitConcurrency     int
+	BailOnProviderError  bool
 }
 
 type PreemptedVM struct {
@@ -489,6 +495,11 @@ type Provider interface {
 	CreateProviderOpts() ProviderOpts
 	CleanSSH(l *logger.Logger) error
 
+	// IsLocalProvider returns true if the provider is a local provider.
+	// This is used to determine if this provider should be executed locally
+	// even if the remote state is enabled.
+	IsLocalProvider() bool
+
 	// ConfigSSH takes a list of zones and configures SSH for machines in those
 	// zones for the given provider.
 	ConfigSSH(l *logger.Logger, zones []string) error
@@ -500,7 +511,7 @@ type Provider interface {
 	Extend(l *logger.Logger, vms List, lifetime time.Duration) error
 	// Return the account name associated with the provider
 	FindActiveAccount(l *logger.Logger) (string, error)
-	List(l *logger.Logger, opts ListOptions) (List, error)
+	List(ctx context.Context, l *logger.Logger, opts ListOptions) (List, error)
 	// AddLabels adds (or updates) the given labels to the given VMs.
 	// N.B. If a VM contains a label with the same key, its value will be updated.
 	AddLabels(l *logger.Logger, vms List, labels map[string]string) error
@@ -563,6 +574,9 @@ type Provider interface {
 	// ListLoadBalancers returns a list of load balancer IPs and ports that are currently
 	// routing to services for the given VMs.
 	ListLoadBalancers(l *logger.Logger, vms List) ([]ServiceAddress, error)
+
+	// String returns a human-readable identifier for the provider
+	String() string
 }
 
 // DeleteCluster is an optional capability for a Provider which can
@@ -573,6 +587,9 @@ type DeleteCluster interface {
 
 // Providers contains all known Provider instances. This is initialized by subpackage init() functions.
 var Providers = map[string]Provider{}
+
+// DNSProviders contains all known DNS providers.
+var DNSProviders = map[string]DNSProvider{}
 
 // ProviderOptionsContainer is a container for a collection of provider-specific options.
 type ProviderOptionsContainer map[string]ProviderOpts
@@ -802,4 +819,15 @@ func SanitizeLabelValues(labels map[string]string) map[string]string {
 		sanitized[k] = SanitizeLabel(v)
 	}
 	return sanitized
+}
+
+// GetVMDNSInfo returns the full DNS name, domain, and provider name for a VM
+// given its name and DNS provider.
+func GetVMDNSInfo(
+	ctx context.Context, vmName string, provider DNSProvider,
+) (string, string, string) {
+	if provider == nil {
+		return "", "", ""
+	}
+	return fmt.Sprintf("%s.%s", vmName, provider.Domain()), provider.Domain(), provider.ProviderName()
 }

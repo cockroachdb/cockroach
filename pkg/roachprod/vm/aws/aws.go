@@ -7,6 +7,7 @@
 package aws
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -18,10 +19,16 @@ import (
 	"strings"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	awsststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -66,8 +73,14 @@ func Init() error {
 		"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)"
 	const noCredentials = "missing AWS credentials, expected ~/.aws/credentials file or AWS_ACCESS_KEY_ID env var"
 
-	providerInstance := &Provider{}
-	providerInstance.Config.awsConfig = *DefaultConfig
+	providerInstance, err := NewProvider()
+	if err != nil {
+		vm.Providers[ProviderName] = flagstub.New(
+			&Provider{},
+			fmt.Sprintf("unable to init aws provider: %s", err),
+		)
+		return errors.Wrap(err, "unable to init aws provider")
+	}
 
 	haveRequiredVersion := func() bool {
 		// `aws --version` takes around 400ms on my machine.
@@ -125,6 +138,74 @@ func Init() error {
 	}
 	vm.Providers[ProviderName] = providerInstance
 	return nil
+}
+
+func NewProvider(options ...Option) (*Provider, error) {
+	p := &Provider{
+		Config: awsConfigValue{
+			awsConfig: *DefaultConfig,
+		},
+	}
+
+	for _, option := range options {
+		option.apply(p)
+	}
+
+	// If AssumeSTSRole is set, we need to set a default session name
+	// if none was provided.
+	if p.AssumeSTSRole != "" && p.AssumeSTSSessionName == "" {
+		if hostname, err := os.Hostname(); err != nil {
+			p.AssumeSTSSessionName = fmt.Sprintf("roachprod-%d", timeutil.Now().Unix())
+		} else {
+			p.AssumeSTSSessionName = fmt.Sprintf("roachprod-%s", hostname)
+		}
+	}
+
+	return p, nil
+}
+
+func (p *Provider) getEnvironmentAWSCredentials() ([]string, error) {
+
+	// If we don't need to assume a role, return an empty slice.
+	if p.AssumeSTSRole == "" || len(p.AccountIDs) == 0 {
+		return []string{}, nil
+	}
+
+	// Our provider needs to assume a role.
+
+	// In case we need to assume a role, we need to generate and return temporary
+	// credentials.
+	// We lock the provider to avoid concurrent generations.
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// If we never fetched the credentials or they're about to expire, fetch them.
+	if p.mu.credentials == nil || p.mu.credentials.Expiration.Before(timeutil.Now().Add(time.Minute*2)) {
+		cfg, err := awsconfig.LoadDefaultConfig(context.TODO(), awsconfig.WithRegion("us-east-1"))
+		if err != nil {
+			return nil, errors.Wrap(err, "assumeRole: failed to load config")
+		}
+
+		roleArn := fmt.Sprintf("arn:aws:iam::%s:role/%s", p.AccountIDs[0], p.AssumeSTSRole)
+		roleSessionName := fmt.Sprintf("%s-%s", p.AssumeSTSSessionName, p.AccountIDs[0])
+
+		stsClient := sts.NewFromConfig(cfg)
+		tmpCredentials, err := stsClient.AssumeRole(context.TODO(), &sts.AssumeRoleInput{
+			RoleArn:         aws.String(roleArn),
+			RoleSessionName: aws.String(roleSessionName),
+		})
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to assume role %s", roleArn)
+		}
+
+		p.mu.credentials = tmpCredentials.Credentials
+	}
+
+	return []string{
+		fmt.Sprintf("%s=%s", amazon.AWSAccessKeyParam, *p.mu.credentials.AccessKeyId),
+		fmt.Sprintf("%s=%s", amazon.AWSSecretParam, *p.mu.credentials.SecretAccessKey),
+		fmt.Sprintf("%s=%s", amazon.AWSTempTokenParam, *p.mu.credentials.SessionToken),
+	}, nil
 }
 
 // ebsDisk represent EBS disk device.
@@ -299,10 +380,30 @@ type Provider struct {
 
 	// aws accounts to perform action in, used by gcCmd only as it clean ups multiple aws accounts
 	AccountIDs []string
+
+	// If AssumeSTSRole is set to a non-empty string, the provider will use STS
+	// to assume the role. It should be set to the role part of the ARN to assume.
+	// e.g. "arn:aws:iam::123456789012:role/{MyRole}"
+	AssumeSTSRole        string
+	AssumeSTSSessionName string
+
+	mu struct {
+		syncutil.Mutex
+
+		// credentials are the AWS credentials.
+		credentials *awsststypes.Credentials
+	}
+
+	dnsProvider vm.DNSProvider
 }
 
 func (p *Provider) SupportsSpotVMs() bool {
 	return true
+}
+
+// IsLocalProvider returns false because AWS is a remote provider.
+func (p *Provider) IsLocalProvider() bool {
+	return false
 }
 
 func (p *Provider) GetPreemptedSpotVMs(
@@ -758,7 +859,7 @@ func (p *Provider) Create(
 	// Our initial list of VMs does not include the IP addresses or volumes.
 	// waitForIPs() returns the VMs list with all information set, so we simply
 	// overwrite the list with the result of waitForIPs().
-	vmList, err := p.waitForIPs(l, names, regions, providerOpts)
+	vmList, err := p.waitForIPs(context.Background(), l, names, regions, providerOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -787,7 +888,7 @@ func (p *Provider) Shrink(*logger.Logger, vm.List, string) error {
 // We do a bad job at higher layers detecting this lack of IP which can lead to
 // commands hanging indefinitely.
 func (p *Provider) waitForIPs(
-	l *logger.Logger, names []string, regions []string, opts *ProviderOpts,
+	ctx context.Context, l *logger.Logger, names []string, regions []string, opts *ProviderOpts,
 ) ([]vm.VM, error) {
 	waitForIPRetry := retry.Start(retry.Options{
 		InitialBackoff: 100 * time.Millisecond,
@@ -799,7 +900,7 @@ func (p *Provider) waitForIPs(
 		// We also include volumes in the list because they were not included
 		// in the initial list of VMs as they're only returned by run-instances
 		// when ready.
-		vms, err := p.listRegionsFiltered(l, regions, names, *opts, vm.ListOptions{
+		vms, err := p.listRegionsFiltered(ctx, l, regions, names, *opts, vm.ListOptions{
 			IncludeVolumes: true,
 		})
 		if err != nil {
@@ -942,31 +1043,41 @@ func (p *Provider) stsGetCallerIdentity(l *logger.Logger) (string, error) {
 }
 
 // List is part of the vm.Provider interface.
-func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
+func (p *Provider) List(
+	ctx context.Context, l *logger.Logger, opts vm.ListOptions,
+) (vm.List, error) {
 	regions, err := p.allRegions(p.Config.availabilityZoneNames())
 	if err != nil {
 		return nil, err
 	}
 	defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
-	return p.listRegions(l, regions, *defaultOpts, opts)
+	return p.listRegions(ctx, l, regions, *defaultOpts, opts)
 }
 
 // listRegions lists VMs in the regions passed.
 // It ignores region-specific errors.
 func (p *Provider) listRegions(
-	l *logger.Logger, regions []string, opts ProviderOpts, listOpts vm.ListOptions,
+	ctx context.Context,
+	l *logger.Logger,
+	regions []string,
+	opts ProviderOpts,
+	listOpts vm.ListOptions,
 ) (vm.List, error) {
-	return p.listRegionsFiltered(l, regions, nil, opts, listOpts)
+	return p.listRegionsFiltered(ctx, l, regions, nil, opts, listOpts)
 }
 
 // listRegionsFiltered lists VMs in the regions with a filter on instance names.
 // The filter makes it more efficient to list specific VMs than listRegions.
 func (p *Provider) listRegionsFiltered(
-	l *logger.Logger, regions, names []string, opts ProviderOpts, listOpts vm.ListOptions,
+	ctx context.Context,
+	l *logger.Logger,
+	regions, names []string,
+	opts ProviderOpts,
+	listOpts vm.ListOptions,
 ) (vm.List, error) {
 	var ret vm.List
 	var mux syncutil.Mutex
-	var g errgroup.Group
+	g := ctxgroup.WithContext(ctx)
 
 	// Create a filter for the instance names.
 	var namesFilter string
@@ -975,8 +1086,8 @@ func (p *Provider) listRegionsFiltered(
 	}
 
 	for _, r := range regions {
-		g.Go(func() error {
-			vms, err := p.describeInstances(l, r, opts, listOpts, namesFilter)
+		g.GoCtx(func(ctx context.Context) error {
+			vms, err := p.describeInstances(ctx, l, r, opts, listOpts, namesFilter)
 			if err != nil {
 				l.Printf("Failed to list AWS VMs in region: %s\n%v\n", r, err)
 				return nil
@@ -1019,7 +1130,7 @@ func (p *Provider) allRegions(zones []string) (regions []string, err error) {
 }
 
 func (p *Provider) getVolumesForInstances(
-	l *logger.Logger, region string, instanceIDs []string,
+	ctx context.Context, l *logger.Logger, region string, instanceIDs []string,
 ) (vols map[string]map[string]vm.Volume, err error) {
 	type describeVolume struct {
 		Volumes []struct {
@@ -1055,7 +1166,7 @@ func (p *Provider) getVolumesForInstances(
 		"Name=attachment.instance-id,Values=" + strings.Join(instanceIDs, ","),
 	}
 
-	err = p.runJSONCommand(l, getVolumesArgs, &volumeOut)
+	err = p.runJSONCommandWithContext(ctx, l, getVolumesArgs, &volumeOut)
 	if err != nil {
 		return vols, err
 	}
@@ -1135,7 +1246,7 @@ type DescribeInstancesOutputInstance struct {
 
 // toVM converts an ec2 instance to a vm.VM struct.
 func (in *DescribeInstancesOutputInstance) toVM(
-	volumes map[string]vm.Volume, remoteUserName string,
+	volumes map[string]vm.Volume, remoteUserName string, dnsProvider vm.DNSProvider,
 ) *vm.VM {
 
 	// Convert the tag map into a more useful representation
@@ -1181,6 +1292,9 @@ func (in *DescribeInstancesOutputInstance) toVM(
 		iamIdentifier = strings.Split(strings.TrimPrefix(in.IamInstanceProfile.Arn, "arn:aws:iam::"), ":")[0]
 	}
 
+	// Get public DNS info from the DNS provider if it is configured.
+	publicDns, publicDnsZone, dnsProviderName := vm.GetVMDNSInfo(context.Background(), tagMap["Name"], dnsProvider)
+
 	return &vm.VM{
 		CreatedAt:              createdAt,
 		DNS:                    in.PrivateDNSName,
@@ -1193,6 +1307,9 @@ func (in *DescribeInstancesOutputInstance) toVM(
 		ProviderID:             in.InstanceID,
 		ProviderAccountID:      iamIdentifier,
 		PublicIP:               in.PublicIPAddress,
+		PublicDNS:              publicDns,
+		PublicDNSZone:          publicDnsZone,
+		DNSProvider:            dnsProviderName,
 		RemoteUser:             remoteUserName,
 		VPC:                    in.VpcID,
 		MachineType:            in.InstanceType,
@@ -1233,7 +1350,12 @@ type RunInstancesOutput struct {
 // describeInstances executes the ec2 describe-instances command
 // with the given filters.
 func (p *Provider) describeInstances(
-	l *logger.Logger, region string, opts ProviderOpts, listOpt vm.ListOptions, filters string,
+	ctx context.Context,
+	l *logger.Logger,
+	region string,
+	opts ProviderOpts,
+	listOpt vm.ListOptions,
+	filters string,
 ) (vm.List, error) {
 
 	args := []string{
@@ -1244,7 +1366,7 @@ func (p *Provider) describeInstances(
 		args = append(args, "--filters", filters)
 	}
 	var describeInstancesResponse DescribeInstancesOutput
-	err := p.runJSONCommand(l, args, &describeInstancesResponse)
+	err := p.runJSONCommandWithContext(ctx, l, args, &describeInstancesResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -1275,7 +1397,7 @@ func (p *Provider) describeInstances(
 	// Fetch volume info for all instances at once
 	var volumes map[string]map[string]vm.Volume
 	if listOpt.IncludeVolumes && len(instances) > 0 {
-		volumes, err = p.getVolumesForInstances(l, region, maps.Keys(instances))
+		volumes, err = p.getVolumesForInstances(ctx, l, region, maps.Keys(instances))
 		if err != nil {
 			return nil, err
 		}
@@ -1283,7 +1405,7 @@ func (p *Provider) describeInstances(
 
 	var ret vm.List
 	for _, in := range instances {
-		v := in.toVM(volumes[in.InstanceID], opts.RemoteUserName)
+		v := in.toVM(volumes[in.InstanceID], opts.RemoteUserName, p.dnsProvider)
 		ret = append(ret, *v)
 	}
 
@@ -1448,7 +1570,9 @@ func (p *Provider) runInstance(
 
 	// Volumes are attached to the instance only after the instance is running.
 	// We will fill in the volume information during the waitForIPs call.
-	v := runInstancesOutput.Instances[0].toVM(map[string]vm.Volume{}, providerOpts.RemoteUserName)
+	v := runInstancesOutput.Instances[0].toVM(
+		map[string]vm.Volume{}, providerOpts.RemoteUserName, p.dnsProvider,
+	)
 	return v, err
 }
 
@@ -1474,7 +1598,7 @@ func runSpotInstance(
 		return nil, errors.Errorf("No instances found for spot request, likely the spot request had bad parameter")
 	}
 
-	v := runInstancesOutput.Instances[0].toVM(map[string]vm.Volume{}, providerOpts.RemoteUserName)
+	v := runInstancesOutput.Instances[0].toVM(map[string]vm.Volume{}, providerOpts.RemoteUserName, p.dnsProvider)
 
 	instanceId := runInstancesOutput.Instances[0].InstanceID
 	spotInstanceRequestId, err := getSpotInstanceRequestId(l, p, regionName, instanceId)
@@ -1892,4 +2016,9 @@ func (p *Provider) DeleteLoadBalancer(*logger.Logger, vm.List, int) error {
 func (p *Provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddress, error) {
 	// This Provider has no concept of load balancers yet, return an empty list.
 	return nil, nil
+}
+
+// String returns a human-readable string representation of the Provider.
+func (p *Provider) String() string {
+	return fmt.Sprintf("%s-%s", ProviderName, strings.Join(p.AccountIDs, "_"))
 }

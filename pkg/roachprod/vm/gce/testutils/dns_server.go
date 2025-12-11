@@ -6,53 +6,36 @@
 package testutils
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"math/rand"
-	"os/exec"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/maps"
 )
-
-type testProvider struct {
-	vm.Provider
-	vm.DNSProvider
-}
-
-type testDNSRecord struct {
-	Name       string   `json:"name"`
-	Kind       string   `json:"kind"`
-	RecordType string   `json:"type"`
-	TTL        int      `json:"ttl"`
-	RRDatas    []string `json:"rrdatas"`
-}
 
 type Metrics struct {
 	ListCalls, CreateCalls, UpdateCalls, DeleteCalls int
 }
 
-func createTestJSONRecord(records []testDNSRecord) ([]byte, error) {
-	return json.Marshal(records)
-}
-
-// TestDNSServer is a DNS "server" that can be used for testing purposes. It
-// emulates the `gcloud dns` command responses, by storing the records in memory
-// and providing the same output as the `gcloud dns` command. It will fail in
-// the same way as the `gcloud dns` command if a record already exists or does
-// not exist, depending on the command.
+// TestDNSServer is a DNS "server" that can be used for testing purposes.
+// It stores DNS records in memory and implements the vm.DNSProvider interface.
 type TestDNSServer interface {
+	vm.DNSProvider
 	Metrics() Metrics
 	Count() int
 }
 
 type testDNSServer struct {
-	mu      syncutil.Mutex
-	records map[string]vm.DNSRecord
-	metrics Metrics
+	mu           syncutil.Mutex
+	records      map[string]vm.DNSRecord
+	metrics      Metrics
+	domain       string
+	publicDomain string
+	providerName string
 }
 
 func (t *testDNSServer) storedName(name string) string {
@@ -64,65 +47,8 @@ func (t *testDNSServer) storedName(name string) string {
 	return name
 }
 
-func (t *testDNSServer) list(filter string) ([]byte, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.metrics.ListCalls++
-	records := make([]testDNSRecord, 0)
-	for name, r := range t.records {
-		if filter == "" || strings.Contains(name, filter) {
-			records = append(records, testDNSRecord{
-				Name:       r.Name,
-				Kind:       "dns#resourceRecordSet",
-				RecordType: string(r.Type),
-				TTL:        vm.DNSRecordTTL,
-				RRDatas:    strings.Split(r.Data, ","),
-			})
-		}
-	}
-	return createTestJSONRecord(records)
-}
-
-func (t *testDNSServer) create(name string, data string) ([]byte, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.metrics.CreateCalls++
-	if _, ok := t.records[t.storedName(name)]; ok {
-		return nil, errors.Newf("can't create record %s already exists", name)
-	}
-	// Keep the data grouped to avoid having to join it later.
-	t.records[t.storedName(name)] = vm.DNSRecord{
-		Type: vm.SRV,
-		Name: t.storedName(name),
-		Data: data,
-	}
-	return []byte{}, nil
-}
-
-func (t *testDNSServer) update(name string, data string) ([]byte, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.metrics.UpdateCalls++
-	if _, ok := t.records[t.storedName(name)]; !ok {
-		return nil, errors.Newf("can't update record %s it does not exist", name)
-	}
-	t.records[t.storedName(name)] = vm.DNSRecord{
-		Type: vm.SRV,
-		Name: t.storedName(name),
-		Data: data,
-	}
-	return []byte{}, nil
-}
-
-func (t *testDNSServer) delete(name string) ([]byte, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.metrics.DeleteCalls++
-	if _, ok := t.records[t.storedName(name)]; !ok {
-		return nil, errors.Newf("can't delete record it does not exist", name)
-	}
-	delete(t.records, t.storedName(name))
-	return []byte{}, nil
+func (t *testDNSServer) normalizeName(name string) string {
+	return strings.TrimSuffix(name, ".")
 }
 
 func (t *testDNSServer) Count() int {
@@ -137,39 +63,215 @@ func (t *testDNSServer) Metrics() Metrics {
 	return t.metrics
 }
 
-func (t *testDNSServer) execFunc(cmd *exec.Cmd) ([]byte, error) {
-	getArg := func(args []string, arg string) string {
-		for i, a := range args {
-			if a == arg {
-				return args[i+1]
+// vm.DNSProvider interface implementation
+
+func (t *testDNSServer) CreateRecords(ctx context.Context, records ...vm.DNSRecord) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Group records by name
+	recordsByName := make(map[string][]vm.DNSRecord)
+	for _, record := range records {
+		normalizedName := t.normalizeName(record.Name)
+		recordsByName[normalizedName] = append(recordsByName[normalizedName], record)
+	}
+
+	for name, recordGroup := range recordsByName {
+		storedName := t.storedName(name)
+
+		// Combine existing and new records (for SRV records)
+		combinedRecords := make(map[string]vm.DNSRecord)
+		for _, record := range recordGroup {
+			combinedRecords[record.Data] = record
+		}
+
+		// Check if record already exists
+		existingRecord, recordExists := t.records[storedName]
+		if recordExists {
+			// For SRV records, merge with existing
+			if existingRecord.Type == vm.SRV {
+				for _, data := range strings.Split(existingRecord.Data, ",") {
+					if data != "" {
+						combinedRecords[data] = vm.DNSRecord{
+							Type: existingRecord.Type,
+							Name: storedName,
+							Data: data,
+							TTL:  existingRecord.TTL,
+						}
+					}
+				}
 			}
 		}
-		return ""
+
+		// Build combined data
+		dataSlice := maps.Keys(combinedRecords)
+		combinedData := strings.Join(dataSlice, ",")
+
+		// Update metrics based on whether this is a create or update
+		firstRecord := recordGroup[0]
+		if !recordExists {
+			// This is a new record, increment CreateCalls
+			t.metrics.CreateCalls++
+			t.records[storedName] = vm.DNSRecord{
+				Type: firstRecord.Type,
+				Name: storedName,
+				Data: combinedData,
+				TTL:  firstRecord.TTL,
+			}
+		} else if existingRecord.Data != combinedData {
+			// This is an update with different data, increment UpdateCalls
+			t.metrics.UpdateCalls++
+			t.records[storedName] = vm.DNSRecord{
+				Type: firstRecord.Type,
+				Name: storedName,
+				Data: combinedData,
+				TTL:  firstRecord.TTL,
+			}
+		}
+		// If the record exists and the data is identical, don't increment anything
 	}
-	for _, arg := range cmd.Args {
-		switch arg {
-		case "list":
-			return t.list(getArg(cmd.Args, "--filter"))
-		case "create":
-			return t.create(getArg(cmd.Args, "create"), getArg(cmd.Args, "--rrdatas"))
-		case "update":
-			return t.update(getArg(cmd.Args, "update"), getArg(cmd.Args, "--rrdatas"))
-		case "delete":
-			return t.delete(getArg(cmd.Args, "delete"))
+
+	return nil
+}
+
+func (t *testDNSServer) LookupRecords(
+	ctx context.Context, recordType vm.DNSType, name string,
+) ([]vm.DNSRecord, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.metrics.ListCalls++
+
+	storedName := t.storedName(name)
+	if record, ok := t.records[storedName]; ok && record.Type == recordType {
+		// Split the data back into individual records
+		var records []vm.DNSRecord
+		for _, data := range strings.Split(record.Data, ",") {
+			if data != "" {
+				records = append(records, vm.DNSRecord{
+					Type: record.Type,
+					Name: record.Name,
+					Data: data,
+					TTL:  record.TTL,
+				})
+			}
+		}
+		return records, nil
+	}
+
+	return []vm.DNSRecord{}, nil
+}
+
+func (t *testDNSServer) ListRecords(ctx context.Context) ([]vm.DNSRecord, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.metrics.ListCalls++
+
+	var records []vm.DNSRecord
+	for _, record := range t.records {
+		// Split the data back into individual records
+		for _, data := range strings.Split(record.Data, ",") {
+			if data != "" {
+				records = append(records, vm.DNSRecord{
+					Type: record.Type,
+					Name: record.Name,
+					Data: data,
+					TTL:  record.TTL,
+				})
+			}
 		}
 	}
-	return nil, errors.New("unknown command")
+
+	return records, nil
+}
+
+func (t *testDNSServer) DeleteSRVRecordsByName(ctx context.Context, names ...string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.metrics.DeleteCalls++
+
+	for _, name := range names {
+		storedName := t.storedName(name)
+		delete(t.records, storedName)
+	}
+
+	return nil
+}
+
+func (t *testDNSServer) DeletePublicRecordsByName(ctx context.Context, names ...string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.metrics.DeleteCalls++
+
+	for _, name := range names {
+		storedName := t.storedName(name)
+		if record, ok := t.records[storedName]; ok && record.Type == vm.A {
+			delete(t.records, storedName)
+		}
+	}
+
+	return nil
+}
+
+func (t *testDNSServer) DeleteSRVRecordsBySubdomain(ctx context.Context, subdomain string) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.metrics.DeleteCalls++
+
+	suffix := fmt.Sprintf("%s.%s.", subdomain, t.domain)
+	var toDelete []string
+	for name, record := range t.records {
+		if record.Type == vm.SRV && strings.HasSuffix(name, suffix) {
+			toDelete = append(toDelete, name)
+		}
+	}
+
+	for _, name := range toDelete {
+		delete(t.records, name)
+	}
+
+	return nil
+}
+
+func (t *testDNSServer) Domain() string {
+	return t.domain
+}
+
+func (t *testDNSServer) PublicDomain() string {
+	return t.publicDomain
+}
+
+func (t *testDNSServer) SyncDNS(l *logger.Logger, vms vm.List) error {
+	return t.SyncDNSWithContext(context.Background(), l, vms)
+}
+
+func (t *testDNSServer) SyncDNSWithContext(
+	ctx context.Context, l *logger.Logger, vms vm.List,
+) error {
+	// For testing purposes, this is a no-op
+	return nil
+}
+
+func (t *testDNSServer) ProviderName() string {
+	return t.providerName
 }
 
 // ProviderWithTestDNSServer initializes a test DNS server and a DNS capable
 // provider pointing to the test server. It returns the test DNS server, the
 // test DNS provider, and the provider name.
 func ProviderWithTestDNSServer(rng *rand.Rand) (TestDNSServer, vm.DNSProvider, string) {
-	testServer := &testDNSServer{records: make(map[string]vm.DNSRecord)}
-	testDNS := gce.NewDNSProviderWithExec(testServer.execFunc)
 	// Since this is a global variable, we need to make sure the provider name is
 	// unique, in order to avoid conflicts with other tests.
 	providerName := fmt.Sprintf("testProvider-%d", rng.Uint32())
-	vm.Providers[providerName] = &testProvider{DNSProvider: testDNS}
-	return testServer, testDNS, providerName
+
+	testServer := &testDNSServer{
+		records:      make(map[string]vm.DNSRecord),
+		domain:       "test.crdb.io",
+		publicDomain: "test-public.crdb.io",
+		providerName: providerName,
+	}
+
+	// Register the test DNS provider globally
+	vm.DNSProviders[providerName] = testServer
+
+	return testServer, testServer, providerName
 }
