@@ -667,3 +667,75 @@ lease-preference +region=a -zone=a1
 #   constraints and voter constraints.
 # - Only prohibiting constraints.
 # - Common configurations not already included such as REGION survival.
+
+# Regression test for a bug where isConstraintSatisfied should only count
+# voters for voter constraints.
+#
+# In analyzedConstraints.initialize, isConstraintSatisfied determines if a
+# constraint is satisfied before moving to the next one. Stores satisfying
+# multiple constraints are deferred, then assigned to the first under-satisfied
+# constraint. The bug: isConstraintSatisfied counts voters + non-voters, but
+# for voter constraints only voters should count.
+#
+# Setup:
+#   - voter constraint: [+region=a]:2, [+zone=b1]:1
+#   - s10 (voter, a/a1): satisfies [+region=a]:2 only -> assigned 
+#   - s11 (non-voter, a/a1): satisfies [+region=a]:2 only -> assigned to zone=b1
+#   - s12 (voter, a/b1): satisfies both -> should be assigned to [+region=a]:2
+#   but is assigned to [+zone=b1]:1
+#   - s13 (voter, b): satisfies neither
+# Buggy output: [+region=a]:2 gets only 1 voter (s10), [+zone=b1]:1 gets s12.
+# Correct output: [+region=a]:2 gets 2 voters (s10, s12), [+zone=b1]:1 empty
+# since it should prioritize fully satisfying a constraint before the next one.
+store
+  store-id=10 locality-tiers=region=a,zone=a1 node-id=10
+  store-id=11 locality-tiers=region=a,zone=a1 node-id=11
+  store-id=12 locality-tiers=region=a,zone=b1 node-id=12
+  store-id=13 locality-tiers=region=b node-id=13
+----
+
+span-config name=voter-constraint-bug num-replicas=4 num-voters=3
+voter-constraint num-replicas=2 +region=a
+voter-constraint num-replicas=1 +zone=b1
+----
+ num-replicas=4 num-voters=3
+ constraints:
+   +zone=b1:1
+   +region=a:2
+   :1
+ voter-constraints:
+   +region=a:2
+   +zone=b1:1
+
+analyze-constraints config-name=voter-constraint-bug leaseholder=10
+store-id=10 type=VOTER_FULL
+store-id=11 type=NON_VOTER
+store-id=12 type=VOTER_FULL
+store-id=13 type=VOTER_FULL
+----
+needed: voters 3 non-voters 1
+voters: 10(=a,=a1,=10) 12(=a,=b1,=12) 13(=b,=13)
+non-voters: 11(=a,=a1,=11)
+constraints:
+  +zone=b1:1
+    voters: 12
+    non-voters:
+  +region=a:2
+    voters: 10
+    non-voters: 11
+  :1
+    voters: 13
+    non-voters:
+voter-constraints:
+  +region=a:2
+    voters: 10
+    non-voters: 11
+  +zone=b1:1
+    voters: 12
+    non-voters:
+  satisfied-no-contraint:
+    voters: 13
+    voters:
+leaseholder pref-index s10:0
+lease pref-indices: s10:0 s12:0 s13:0
+diversity: voter 0.888889, all 0.777778
