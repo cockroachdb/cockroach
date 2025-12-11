@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/inspect/inspectpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -34,6 +35,9 @@ import (
 
 // Name for the INSPECT completed spans frontier in jobfrontier.
 const inspectCompletedSpansKey = "inspect_completed_spans"
+
+// Name for the INSPECT data collected from span checks.
+const inspectSpanCheckDataKey = "inspect_span_check_data"
 
 // inspectProgressTracker tracks INSPECT job progress with span checkpointing.
 // It maintains completed spans to enable job restarts without reprocessing.
@@ -78,6 +82,7 @@ type inspectProgressTracker struct {
 		// lastLoggedPercent tracks the last percentage milestone we logged, to avoid
 		// spamming logs with progress updates. We log at every 1% increment.
 		lastLoggedPercent int
+		spanCheckData     inspectpb.InspectSpanCheckData
 	}
 
 	// Goroutine management.
@@ -110,13 +115,21 @@ func newInspectProgressTracker(
 	return t
 }
 
-// loadCompletedSpansFromStorage loads completed spans from jobfrontier.
-func (t *inspectProgressTracker) loadCompletedSpansFromStorage(
+// loadFromStorage loads completed spans from jobfrontier and span check data
+// from storage.
+func (t *inspectProgressTracker) loadFromStorage(
 	ctx context.Context,
-) ([]roachpb.Span, error) {
+) ([]roachpb.Span, inspectpb.InspectSpanCheckData, error) {
 	var completedSpans []roachpb.Span
+	var spanCheckData inspectpb.InspectSpanCheckData
 
 	err := t.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := jobs.InfoStorageForJob(txn, t.jobID)
+		_, err := infoStorage.GetProto(ctx, inspectSpanCheckDataKey, &spanCheckData)
+		if err != nil {
+			return errors.Wrap(err, "failed to load span check data")
+		}
+
 		resolvedSpans, found, err := jobfrontier.GetResolvedSpans(ctx, txn, t.jobID, inspectCompletedSpansKey)
 		if err != nil {
 			return err
@@ -133,13 +146,14 @@ func (t *inspectProgressTracker) loadCompletedSpansFromStorage(
 		return nil
 	})
 
-	return completedSpans, err
+	return completedSpans, spanCheckData, err
 }
 
-// initTracker sets up the progress tracker and returns completed spans from any previous
-// job execution. This should be called before planning to enable span optimization.
+// initTracker sets up the progress tracker, loads span check data, and returns
+// completed spans from any previous job execution. This should be called before
+// planning to enable span optimization.
 func (t *inspectProgressTracker) initTracker(ctx context.Context) ([]roachpb.Span, error) {
-	completedSpans, err := t.loadCompletedSpansFromStorage(ctx)
+	completedSpans, spanCheckData, err := t.loadFromStorage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -149,6 +163,7 @@ func (t *inspectProgressTracker) initTracker(ctx context.Context) ([]roachpb.Spa
 		t.mu.Lock()
 		defer t.mu.Unlock()
 		t.mu.completedSpans.Add(completedSpans...)
+		t.mu.spanCheckData = spanCheckData
 		log.Dev.Infof(ctx, "INSPECT job restarting with %d existing completed spans", len(completedSpans))
 	}
 
@@ -203,19 +218,21 @@ func (t *inspectProgressTracker) handleProgressUpdate(
 		return nil
 	}
 
-	var incomingProcProgress jobspb.InspectProcessorProgress
-	if err := pbtypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &incomingProcProgress); err != nil {
+	// TODO: Handle older type coming in
+
+	var incomingProgressDetails inspectpb.InspectProgressDetails
+	if err := pbtypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &incomingProgressDetails); err != nil {
 		return errors.Wrapf(err, "unable to unmarshal inspect progress details")
 	}
 
 	// Handle span started: set up PTS protection.
-	if !incomingProcProgress.SpanStarted.Equal(roachpb.Span{}) {
-		t.setupSpanPTS(ctx, incomingProcProgress.SpanStarted, incomingProcProgress.StartedAt)
+	if !incomingProgressDetails.Progress.SpanStarted.Equal(roachpb.Span{}) {
+		t.setupSpanPTS(ctx, incomingProgressDetails.Progress.SpanStarted, incomingProgressDetails.Progress.StartedAt)
 		return nil
 	}
 
 	// Update the progress cache (with lock).
-	needsImmediatePersistence, err := t.updateProgressCache(meta, incomingProcProgress)
+	needsImmediatePersistence, err := t.updateProgressCache(meta, incomingProgressDetails)
 	if err != nil {
 		return err
 	}
@@ -245,7 +262,7 @@ func (t *inspectProgressTracker) handleProgressUpdate(
 // updateProgressCache computes updated job progress from processor metadata and updates
 // the internal cache. Returns true when immediate persistence is needed.
 func (t *inspectProgressTracker) updateProgressCache(
-	meta *execinfrapb.ProducerMetadata, incomingProcProgress jobspb.InspectProcessorProgress,
+	meta *execinfrapb.ProducerMetadata, incomingProcProgress inspectpb.InspectProgressDetails,
 ) (bool, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -269,8 +286,13 @@ func (t *inspectProgressTracker) updateProgressCache(
 	}
 
 	// Update check count.
-	if incomingProcProgress.ChecksCompleted > 0 {
-		inspectProgress.JobCompletedCheckCount += incomingProcProgress.ChecksCompleted
+	if incomingProcProgress.Progress.ChecksCompleted > 0 {
+		inspectProgress.JobCompletedCheckCount += incomingProcProgress.Progress.ChecksCompleted
+	}
+
+	// Update the check-specific fields (e.g. row counts).
+	if incomingProcProgress.SpanCheckData != nil {
+		t.applySpanCheckData(incomingProcProgress.SpanCheckData)
 	}
 
 	// Update cached progress - the goroutine will handle actual persistence.
@@ -285,6 +307,42 @@ func (t *inspectProgressTracker) updateProgressCache(
 	// capture the final state when a processor completes its work, rather than
 	// waiting for the next periodic checkpoint update.
 	return meta.BulkProcessorProgress.Drained, nil
+}
+
+// stepCompletedCheckCount updates the completed check count. This is used for
+// checks run off the processors.
+func (t *inspectProgressTracker) stepCompletedCheckCount(
+	ctx context.Context, count int,
+) (err error) {
+	t.mu.Lock()
+	defer func() {
+		t.mu.Unlock()
+
+		if err == nil {
+			err = t.flushProgress(ctx)
+		}
+	}()
+
+	if t.mu.cachedProgress == nil {
+		return errors.AssertionFailedf("progress not initialized")
+	}
+
+	orig := t.mu.cachedProgress.GetInspect()
+	if orig == nil {
+		return errors.AssertionFailedf("cached progress does not contain Inspect details")
+	}
+	inspectProgress := protoutil.Clone(orig).(*jobspb.InspectProgress)
+
+	// Increment the completed check count
+	inspectProgress.JobCompletedCheckCount += int64(count)
+
+	t.mu.cachedProgress = &jobspb.Progress{
+		Details: &jobspb.Progress_Inspect{
+			Inspect: inspectProgress,
+		},
+	}
+
+	return nil
 }
 
 // terminateTracker performs any necessary cleanup when the job completes or fails.
@@ -586,8 +644,8 @@ func (t *inspectProgressTracker) flushProgress(ctx context.Context) error {
 	})
 }
 
-// flushCheckpointUpdate performs a progress update to include completed spans.
-// The completed spans are stored via jobfrontier.
+// flushCheckpointUpdate performs a progress update of completed spans and span
+// check data. The completed spans are stored via jobfrontier.
 func (t *inspectProgressTracker) flushCheckpointUpdate(ctx context.Context) error {
 	if !t.hasUncheckpointedSpans() {
 		return nil
@@ -595,11 +653,13 @@ func (t *inspectProgressTracker) flushCheckpointUpdate(ctx context.Context) erro
 
 	var completedSpans []roachpb.Span
 	var capturedReceivedCount int
+	var spanCheckData inspectpb.InspectSpanCheckData
 	func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 		completedSpans = t.mu.completedSpans.Slice()
 		capturedReceivedCount = t.mu.receivedSpanCount
+		spanCheckData = t.mu.spanCheckData
 	}()
 
 	// If no completed spans, nothing to store.
@@ -614,7 +674,18 @@ func (t *inspectProgressTracker) flushCheckpointUpdate(ctx context.Context) erro
 			return err
 		}
 		defer frontier.Release()
-		return jobfrontier.Store(ctx, txn, t.jobID, inspectCompletedSpansKey, frontier)
+
+		err = jobfrontier.Store(ctx, txn, t.jobID, inspectCompletedSpansKey, frontier)
+		if err != nil {
+			return err
+		}
+
+		infoStorage := jobs.InfoStorageForJob(txn, t.jobID)
+		if err := infoStorage.WriteProto(ctx, inspectSpanCheckDataKey, &spanCheckData); err != nil {
+			return errors.Wrap(err, "failed to store span check data")
+		}
+
+		return nil
 	})
 	if err != nil {
 		return err
@@ -678,24 +749,61 @@ func (t *inspectProgressTracker) hasUncheckpointedSpans() bool {
 	return t.mu.receivedSpanCount > t.mu.lastCheckpointedSpanCount
 }
 
-// countApplicableChecks determines how many checks will actually run across all spans.
+// countApplicableSpanChecks determines how many checks will actually run across all spans.
 // This provides accurate progress calculation by only counting checks that apply to each span.
-func countApplicableChecks(
+func countApplicableSpanChecks(
 	pkSpans []roachpb.Span, checkers []inspectCheckApplicability, codec keys.SQLCodec,
 ) (int64, error) {
 	var totalApplicableChecks int64 = 0
 
 	for _, span := range pkSpans {
 		for _, checker := range checkers {
-			applies, err := checker.AppliesTo(codec, span)
+			isApplicable, err := checker.AppliesTo(codec, span)
 			if err != nil {
 				return 0, err
 			}
-			if applies {
+			if isApplicable {
 				totalApplicableChecks++
+
+				// Span-level checks are run a second time after the regular checks have completed.
+				if checker.IsSpanLevel() {
+					totalApplicableChecks++
+				}
 			}
 		}
 	}
 
 	return totalApplicableChecks, nil
+}
+
+// countApplicableClusterChecks determines how many cluster-level checks apply.
+func countApplicableClusterChecks(checkers []inspectCheckApplicability) (int64, error) {
+	var count int64 = 0
+
+	for _, checker := range checkers {
+		if checker, ok := checker.(inspectCheckClusterApplicability); ok {
+			applies, err := checker.AppliesToCluster()
+			if err != nil {
+				return 0, err
+			}
+			if applies {
+				count++
+			}
+		}
+	}
+
+	return count, nil
+}
+
+// applySpanCheckData updates the cache with data from the check-specific fields
+// in the span progress update. The caller is responsible for acquiring the
+// mutex.
+func (t *inspectProgressTracker) applySpanCheckData(
+	incomingSpanCheckData *inspectpb.InspectProcessorSpanCheckData,
+) {
+	if incomingSpanCheckData == nil {
+		return
+	}
+
+	// For future span-level checks.
 }
