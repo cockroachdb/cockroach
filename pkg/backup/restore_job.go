@@ -1915,7 +1915,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err != nil {
 		return err
 	}
-
 	if err := r.validateJobIsResumable(ctx, p.ExecCfg(), backupManifests); err != nil {
 		return err
 	}
@@ -1923,7 +1922,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err != nil {
 		return err
 	}
-
 	lastBackupIndex, err := backupinfo.GetBackupIndexAtTime(backupManifests, details.EndTime)
 	if err != nil {
 		return err

@@ -473,6 +473,9 @@ func sendRemoteAddSSTable(
 			}
 
 			materialized, err := externalconn.Materialize(ec, uri)
+			if err != nil {
+				return err
+			}
 			if err := cloud.SchemeSupportsEarlyBoot(materialized.Scheme); err != nil {
 				return errors.Wrap(err, "backup URI not supported for online restore")
 			}

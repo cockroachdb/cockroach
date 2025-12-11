@@ -51,13 +51,10 @@ const (
 var smallEngineBlocks = !util.RaceEnabled && metamorphic.ConstantWithTestBool("small-engine-blocks", false)
 var externalConnection = metamorphic.ConstantWithTestBool("external-connection", false)
 
-// metamorphically choose between nodelocal uri, and external connection pointing to that nodelocal.
-// if extconn is chosen, optionally apply `CREATE EXTERNAL CONNECTION` commands to dbs
+// metamorphically choose between `baseURI`, and external connection pointing to `baseURI`.
+// if external connection is chosen, optionally apply `CREATE EXTERNAL CONNECTION` commands to `dbs`
 func GetExternalStorageURI(
-	t *testing.T,
-	baseURI string,
-	extConnName string,
-	dbs ...*sqlutils.SQLRunner,
+	t *testing.T, baseURI string, extConnName string, dbs ...*sqlutils.SQLRunner,
 ) string {
 	uri := baseURI
 	if externalConnection {
