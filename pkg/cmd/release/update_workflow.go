@@ -6,17 +6,23 @@
 package main
 
 import (
+	"bytes"
+	"embed"
 	"fmt"
-	"log"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
+	"text/template"
 
 	"github.com/cockroachdb/version"
 	"github.com/spf13/cobra"
 )
 
 const workflowFile = ".github/workflows/update_releases.yaml"
+
+//go:embed templates/*.tmpl
+var templatesFS embed.FS
 
 var updateWorkflowBranchesCmd = &cobra.Command{
 	Use:   "update-workflow-branches",
@@ -77,7 +83,7 @@ func findLatestReleaseBranch() (string, error) {
 		// Add .0 for patch to make it a valid semantic version
 		v, err := version.Parse("v" + versionStr + ".0")
 		if err != nil {
-			log.Printf("WARNING: cannot parse version from branch %s: %v", branch, err)
+			fmt.Printf("WARNING: cannot parse version from branch %s: %v\n", branch, err)
 			continue
 		}
 		versions = append(versions, branchVersion{branch, v})
@@ -96,35 +102,9 @@ func findLatestReleaseBranch() (string, error) {
 	return versions[len(versions)-1].branch, nil
 }
 
-// addBranchToWorkflow adds the specified branch to the workflow file if not already present.
-func addBranchToWorkflow(branch string) error {
-	// Read the workflow file
-	rawData, err := os.ReadFile(workflowFile)
-	if err != nil {
-		return fmt.Errorf("failed to read workflow file: %w", err)
-	}
-
-	lines := strings.Split(string(rawData), "\n")
-
-	// Find the branch section and extract current branches
-	currentBranches, branchStart, branchEnd, indent, err := parseBranchSection(lines)
-	if err != nil {
-		return err
-	}
-
-	// Check if branch already exists
-	for _, b := range currentBranches {
-		if b == branch {
-			fmt.Printf("Branch %s is already in the workflow file\n", branch)
-			return nil
-		}
-	}
-
-	// Add the new branch
-	currentBranches = append(currentBranches, branch)
-
-	// Sort branches: master first, then release branches in version order
-	slices.SortFunc(currentBranches, func(a, b string) int {
+// sortBranches sorts branches with master first, then release branches in version order.
+func sortBranches(branches []string) {
+	slices.SortFunc(branches, func(a, b string) int {
 		if a == "master" {
 			return -1
 		}
@@ -146,110 +126,113 @@ func addBranchToWorkflow(branch string) error {
 
 		return va.Compare(vb)
 	})
+}
 
-	// Write the updated file
-	if err := writeBranchSection(lines, currentBranches, branchStart, branchEnd, indent); err != nil {
+// addBranchToWorkflow adds the specified branch to the workflow file if not already present.
+func addBranchToWorkflow(branch string) error {
+	// Read the workflow file
+	content, err := os.ReadFile(workflowFile)
+	if err != nil {
+		return fmt.Errorf("failed to read workflow file: %w", err)
+	}
+
+	// Extract current branches from the branch section
+	currentBranches, err := extractBranches(string(content))
+	if err != nil {
 		return err
+	}
+
+	// Check if branch already exists
+	if slices.Contains(currentBranches, branch) {
+		fmt.Printf("Branch %s is already in the workflow file\n", branch)
+		return nil
+	}
+
+	// Add the new branch and sort
+	currentBranches = append(currentBranches, branch)
+	sortBranches(currentBranches)
+
+	// Generate new branch section from template
+	newBranchSection, err := renderBranchTemplate(currentBranches)
+	if err != nil {
+		return fmt.Errorf("failed to render branch template: %w", err)
+	}
+
+	// Replace the branch section in the workflow file
+	newContent, err := replaceBranchSection(string(content), newBranchSection)
+	if err != nil {
+		return err
+	}
+
+	// Write back to file
+	if err := os.WriteFile(workflowFile, []byte(newContent), 0644); err != nil {
+		return fmt.Errorf("failed to write workflow file: %w", err)
 	}
 
 	fmt.Printf("Added branch %s to workflow file\n", branch)
 	return nil
 }
 
-// parseBranchSection parses the workflow file to find the branch matrix section.
-func parseBranchSection(
-	lines []string,
-) (branches []string, start int, end int, indent string, err error) {
-	start = -1
-	end = -1
+// extractBranches extracts the list of branches from the workflow file.
+func extractBranches(content string) ([]string, error) {
+	// Match the branch array in the YAML
+	// Looking for:
+	//   branch:
+	//     - "master"
+	//     - "release-X.Y"
+	//     ...
+	branchPattern := regexp.MustCompile(`(?m)^\s+branch:\s*\n((?:\s+- "[^"]+"\s*\n)+)`)
+	matches := branchPattern.FindStringSubmatch(content)
+	if len(matches) < 2 {
+		return nil, fmt.Errorf("could not find branch section in workflow file")
+	}
 
-	for i, line := range lines {
-		// Look for "branch:" within the matrix section
-		if strings.Contains(line, "branch:") && !strings.HasPrefix(strings.TrimSpace(line), "#") {
-			start = i + 1
-			// Determine indentation from the next line
-			if i+1 < len(lines) {
-				nextLine := lines[i+1]
-				// Count leading spaces
-				trimmed := strings.TrimLeft(nextLine, " ")
-				indent = strings.Repeat(" ", len(nextLine)-len(trimmed))
-			}
-		} else if start != -1 && end == -1 {
-			// Check if this line is still part of branch list
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" {
-				// Empty line, continue
-				continue
-			}
-			if !strings.HasPrefix(trimmed, "-") {
-				// Found the end of the branch list
-				end = i
-				break
-			} else {
-				// Extract branch name from line like '- "release-25.4"'
-				// Remove leading "- " and quotes
-				branchLine := strings.TrimSpace(trimmed)
-				branchLine = strings.TrimPrefix(branchLine, "- ")
-				branchLine = strings.Trim(branchLine, "\"")
-				branches = append(branches, branchLine)
-			}
+	branchListStr := matches[1]
+
+	// Extract individual branch names
+	branchItemPattern := regexp.MustCompile(`- "([^"]+)"`)
+	itemMatches := branchItemPattern.FindAllStringSubmatch(branchListStr, -1)
+
+	var branches []string
+	for _, match := range itemMatches {
+		if len(match) >= 2 {
+			branches = append(branches, match[1])
 		}
 	}
 
-	if start == -1 {
-		return nil, 0, 0, "", fmt.Errorf("branch section not found in workflow file")
+	if len(branches) == 0 {
+		return nil, fmt.Errorf("no branches found in workflow file")
 	}
 
-	// If we reached end of file, set end to len(lines)
-	if end == -1 {
-		end = len(lines)
-	}
-
-	return branches, start, end, indent, nil
+	return branches, nil
 }
 
-// writeBranchSection writes the updated branch list back to the workflow file.
-func writeBranchSection(
-	lines []string, branches []string, start int, end int, indent string,
-) error {
-	// Build new lines
-	var newLines []string
-	newLines = append(newLines, lines[:start]...)
-
-	// Add branch lines
-	for _, branch := range branches {
-		newLines = append(newLines, fmt.Sprintf("%s- %q", indent, branch))
-	}
-
-	// Add remaining lines
-	newLines = append(newLines, lines[end:]...)
-
-	// Write back to file using atomic write pattern
-	// Create temp file in the same directory as target to avoid cross-device link errors
-	dir := ".github/workflows"
-	f, err := os.CreateTemp(dir, "update_releases_*.yaml")
+// renderBranchTemplate renders the branch template with the given branches.
+func renderBranchTemplate(branches []string) (string, error) {
+	tmpl, err := template.ParseFS(templatesFS, "templates/workflow_branches.tmpl")
 	if err != nil {
-		return fmt.Errorf("could not create temporary file: %w", err)
-	}
-	tmpName := f.Name()
-	defer func() {
-		if err != nil {
-			_ = os.Remove(tmpName)
-		}
-	}()
-
-	if _, err = f.WriteString(strings.Join(newLines, "\n")); err != nil {
-		f.Close()
-		return fmt.Errorf("error writing to temp file: %w", err)
+		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
 
-	if err = f.Close(); err != nil {
-		return fmt.Errorf("error closing temp file: %w", err)
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, map[string]interface{}{
+		"Branches": branches,
+	}); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 
-	if err = os.Rename(tmpName, workflowFile); err != nil {
-		return fmt.Errorf("error moving file to final destination: %w", err)
+	return buf.String(), nil
+}
+
+// replaceBranchSection replaces the branch section in the workflow content.
+func replaceBranchSection(content, newBranchSection string) (string, error) {
+	// Replace the branch list while preserving everything else
+	branchPattern := regexp.MustCompile(`(?m)(^\s+branch:\s*\n)(?:\s+- "[^"]+"\s*\n)+`)
+
+	if !branchPattern.MatchString(content) {
+		return "", fmt.Errorf("could not find branch section to replace in workflow file")
 	}
 
-	return nil
+	newContent := branchPattern.ReplaceAllString(content, "${1}"+newBranchSection)
+	return newContent, nil
 }
