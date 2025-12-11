@@ -1,0 +1,298 @@
+# LogicTest: !local-prepared
+# cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
+
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX (y));
+
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT, INDEX (b));
+
+# Test privilege checking.
+statement ok
+CREATE USER testuser2
+
+# User without VIEWCLUSTERMETADATA privilege should get an error.
+user testuser2
+
+statement error pgcode 42501 pq: must have VIEWCLUSTERMETADATA privilege to run `SHOW STATEMENT HINTS`
+SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10'
+
+statement error pgcode 42501 pq: must have VIEWCLUSTERMETADATA privilege to run `SHOW STATEMENT HINTS`
+SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10' WITH DETAILS
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERMETADATA TO testuser2
+
+# Now testuser2 can query statement hints.
+user testuser2
+
+query ITTT colnames
+SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10';
+----
+row_id  fingerprint  hint_type  created_at
+
+query ITTTT colnames
+SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10' WITH DETAILS;
+----
+row_id  fingerprint  hint_type  created_at  details
+
+user root
+
+# Test with no hints.
+query ITTT colnames
+SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10';
+----
+row_id  fingerprint  hint_type  created_at
+
+query ITTTT colnames
+SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10' WITH DETAILS;
+----
+row_id  fingerprint  hint_type  created_at  details
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT * FROM xy WHERE y = _',
+  'SELECT * FROM xy@xy_y_idx WHERE y = _'
+);
+
+# Test SHOW STATEMENT HINTS without DETAILS. Note that hints are shown for the
+# fingerprint with constants removed.
+query TT colnames
+SELECT fingerprint, hint_type
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10'];
+----
+fingerprint                   hint_type
+SELECT * FROM xy WHERE y = _  rewrite_inline_hints
+
+# Test SHOW STATEMENT HINTS with DETAILS.
+query TTT colnames
+SELECT fingerprint, hint_type, details
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10' WITH DETAILS];
+----
+fingerprint                   hint_type             details
+SELECT * FROM xy WHERE y = _  rewrite_inline_hints  {"donorSql": "SELECT * FROM xy@xy_y_idx WHERE y = _"}
+
+# Case with a placeholder in the requested statement.
+query TTT
+SELECT fingerprint, hint_type, details
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = $1' WITH DETAILS];
+----
+SELECT * FROM xy WHERE y = _  rewrite_inline_hints  {"donorSql": "SELECT * FROM xy@xy_y_idx WHERE y = _"}
+
+# Case with a CTE.
+statement ok
+SELECT crdb_internal.inject_hint(
+  'WITH cte AS (SELECT * FROM xy WHERE y = _) SELECT * FROM cte',
+  'WITH cte AS (SELECT * FROM xy@xy_y_idx WHERE y = _) SELECT * FROM cte'
+);
+
+query TTT colnames
+SELECT fingerprint, hint_type, details
+FROM [SHOW STATEMENT HINTS FOR 'WITH cte AS (SELECT * FROM xy WHERE y = 10) SELECT * FROM cte' WITH DETAILS]
+ORDER BY created_at DESC, row_id DESC;
+----
+fingerprint                                                   hint_type             details
+WITH cte AS (SELECT * FROM xy WHERE y = _) SELECT * FROM cte  rewrite_inline_hints  {"donorSql": "WITH cte AS (SELECT * FROM xy@xy_y_idx WHERE y = _) SELECT * FROM cte"}
+
+# Test with non-existent fingerprint.
+query ITTT
+SHOW STATEMENT HINTS FOR 'SELECT * FROM nonexistent WHERE x = 1';
+----
+
+# Test with multiple hints for same fingerprint.
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT * FROM xy WHERE y = _',
+  'SELECT * FROM xy@primary WHERE y = _'
+);
+
+query I
+SELECT count(*) FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10'];
+----
+2
+
+query TT
+SELECT fingerprint, hint_type
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10']
+ORDER BY created_at DESC, row_id DESC;
+----
+SELECT * FROM xy WHERE y = _  rewrite_inline_hints
+SELECT * FROM xy WHERE y = _  rewrite_inline_hints
+
+query TTT colnames
+SELECT fingerprint, hint_type, details
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10' WITH DETAILS]
+ORDER BY created_at DESC, row_id DESC;
+----
+fingerprint                   hint_type             details
+SELECT * FROM xy WHERE y = _  rewrite_inline_hints  {"donorSql": "SELECT * FROM xy@primary WHERE y = _"}
+SELECT * FROM xy WHERE y = _  rewrite_inline_hints  {"donorSql": "SELECT * FROM xy@xy_y_idx WHERE y = _"}
+
+# Test that SHOW STATEMENT HINTS works inside a SELECT
+query I
+SELECT (SELECT count(*) FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10']);
+----
+2
+
+# EXPLAIN, PREPARE, EXECUTE, and COPY statements display a notice about unwrapping.
+query T noticetrace
+SHOW STATEMENT HINTS FOR 'EXPLAIN SELECT * FROM xy WHERE y = 10'
+----
+NOTICE: EXPLAIN statements apply hints from their inner SQL statement; consider using the inner statement with SHOW STATEMENT HINTS instead.
+
+query T noticetrace
+SHOW STATEMENT HINTS FOR 'EXPLAIN ANALYZE SELECT * FROM xy WHERE y = 10'
+----
+NOTICE: EXPLAIN statements apply hints from their inner SQL statement; consider using the inner statement with SHOW STATEMENT HINTS instead.
+
+query T noticetrace
+SHOW STATEMENT HINTS FOR 'COPY (SELECT * FROM xy WHERE y = 10) TO STDOUT CSV'
+----
+NOTICE: COPY statements apply hints from their inner SQL statement; consider using the inner statement with SHOW STATEMENT HINTS instead.
+
+query T noticetrace
+SHOW STATEMENT HINTS FOR 'PREPARE p AS SELECT * FROM xy WHERE y = $1'
+----
+NOTICE: PREPARE statements apply hints from their inner SQL statement; consider using the inner statement with SHOW STATEMENT HINTS instead.
+
+statement ok
+PREPARE p AS SELECT * FROM xy WHERE y = $1;
+
+# EXECUTE statements display a notice about using the prepared statement.
+query T noticetrace
+SHOW STATEMENT HINTS FOR 'EXECUTE p'
+----
+NOTICE: EXECUTE statements apply hints from the underlying prepared statement; consider using the prepared statement with SHOW STATEMENT HINTS instead.
+
+# Show hints for a DDL statement.
+# TODO(#159229): consider disallowing this.
+statement ok
+SELECT crdb_internal.inject_hint(
+  'CREATE INDEX ON xy (y)',
+  'CREATE INDEX ON xy (y)'
+);
+
+query TT colnames
+SELECT fingerprint, hint_type
+FROM [SHOW STATEMENT HINTS FOR 'CREATE INDEX ON xy (y)']
+ORDER BY created_at DESC, row_id DESC;
+----
+fingerprint             hint_type
+CREATE INDEX ON xy (y)  rewrite_inline_hints
+
+# Test with a semicolon in the statement - ensure it still matches.
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT * FROM ab WHERE a = _',
+  'SELECT * FROM ab@primary WHERE a = _'
+);
+
+query TT colnames
+SELECT fingerprint, hint_type
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM ab WHERE a = 1;']
+ORDER BY created_at DESC, row_id DESC;
+----
+fingerprint                   hint_type
+SELECT * FROM ab WHERE a = _  rewrite_inline_hints
+
+# Test with dollar-quoted string containing a semicolon.
+query TT colnames
+SELECT fingerprint, hint_type
+FROM [SHOW STATEMENT HINTS FOR $$ SELECT * FROM ab WHERE a = 1; $$]
+ORDER BY created_at DESC, row_id DESC;
+----
+fingerprint                   hint_type
+SELECT * FROM ab WHERE a = _  rewrite_inline_hints
+
+# Test with a placeholder instead of a constant string.
+statement ok
+PREPARE show_hints_stmt AS
+SELECT fingerprint, hint_type FROM [SHOW STATEMENT HINTS FOR $1] ORDER BY created_at DESC, row_id DESC
+
+query TT colnames
+EXECUTE show_hints_stmt('SELECT * FROM ab WHERE a = 1')
+----
+fingerprint                   hint_type
+SELECT * FROM ab WHERE a = _  rewrite_inline_hints
+
+# Test with different casing - input is lowercase, fingerprint is uppercase.
+query TT colnames
+SELECT fingerprint, hint_type
+FROM [SHOW STATEMENT HINTS FOR 'select * from ab where a = 1']
+ORDER BY created_at DESC, row_id DESC;
+----
+fingerprint                   hint_type
+SELECT * FROM ab WHERE a = _  rewrite_inline_hints
+
+# Test with mixed casing.
+query TT colnames
+SELECT fingerprint, hint_type
+FROM [SHOW STATEMENT HINTS FOR 'SeLeCt * FrOm ab WhErE a = 1']
+ORDER BY created_at DESC, row_id DESC;
+----
+fingerprint                   hint_type
+SELECT * FROM ab WHERE a = _  rewrite_inline_hints
+
+# Test with extra whitespace and newlines.
+query TT colnames
+SELECT fingerprint, hint_type
+FROM [SHOW STATEMENT HINTS FOR '  SELECT   *   FROM   ab   WHERE   a   =   1  ']
+ORDER BY created_at DESC, row_id DESC;
+----
+fingerprint                   hint_type
+SELECT * FROM ab WHERE a = _  rewrite_inline_hints
+
+# Test with optional AS keyword for table alias - should match with or without AS.
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT * FROM ab AS t WHERE t.a = _',
+  'SELECT * FROM ab@primary t WHERE t.a = _'
+);
+
+# Query with AS keyword.
+query TT colnames
+SELECT fingerprint, hint_type
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM ab AS t WHERE t.a = 1']
+ORDER BY created_at DESC, row_id DESC;
+----
+fingerprint                          hint_type
+SELECT * FROM ab AS t WHERE t.a = _  rewrite_inline_hints
+
+# Query without AS keyword - should match same fingerprint.
+query TT colnames
+SELECT fingerprint, hint_type
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM ab t WHERE t.a = 1']
+ORDER BY created_at DESC, row_id DESC;
+----
+fingerprint                          hint_type
+SELECT * FROM ab AS t WHERE t.a = _  rewrite_inline_hints
+
+# Column references are not allowed.
+statement ok
+CREATE TABLE queries (q STRING);
+
+# Case with statement source bracket syntax.
+statement error pgcode 42601 pq: at or near "q": syntax error
+SELECT fingerprint, hint_type
+FROM queries, LATERAL (SELECT * FROM [SHOW STATEMENT HINTS FOR q]) AS hints
+ORDER BY created_at DESC, row_id DESC;
+
+# Case with a CTE.
+statement error pgcode 42601 pq: at or near "q": syntax error
+SELECT fingerprint, hint_type
+FROM queries, LATERAL (WITH foo AS MATERIALIZED (SHOW STATEMENT HINTS FOR q) SELECT * FROM foo) AS hints
+ORDER BY created_at DESC, row_id DESC;
+
+# Function calls are not allowed.
+statement error pgcode 42601 pq: at or near "\(": syntax error
+SELECT fingerprint, hint_type
+FROM [SHOW STATEMENT HINTS FOR upper('select * from ab where a = 1')]
+ORDER BY created_at DESC, row_id DESC;
+
+# Binary expressions are not allowed.
+statement error pgcode 42601 pq: at or near "\|": syntax error
+SELECT fingerprint, hint_type
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM ' || 'ab WHERE a = 1']
+ORDER BY created_at DESC, row_id DESC;
