@@ -168,7 +168,6 @@ func TestChangefeedBasics(t *testing.T) {
 func TestDatabaseLevelChangefeedBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -220,7 +219,6 @@ func TestDatabaseLevelChangefeedBasics(t *testing.T) {
 func TestDatabaseLevelChangefeedWithFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
 
 	type testCase struct {
 		name             string
@@ -379,7 +377,6 @@ func TestDatabaseLevelChangefeedWithFilter(t *testing.T) {
 func TestDatabaseLevelChangefeedNameResolutionIsSearchPathIndependent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
 
 	type testCase struct {
 		name             string
@@ -1207,7 +1204,6 @@ func TestChangefeedDiff(t *testing.T) {
 func TestDatabaseLevelChangefeedDiff(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1330,7 +1326,6 @@ func TestMissingTableErr(t *testing.T) {
 func TestChangefeedMissingDatabaseErr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE foo`, `database "foo" does not exist`)
 	})
@@ -1339,7 +1334,6 @@ func TestChangefeedMissingDatabaseErr(t *testing.T) {
 func TestChangefeedCannotTargetSystemDatabaseErr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE system`, `changefeed cannot target the system database`)
 	})
@@ -1430,7 +1424,6 @@ func TestChangefeedFullTableName(t *testing.T) {
 func TestDatabaseLevelChangefeedWithFullTableName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -4193,11 +4186,14 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 
 	rootDB.Exec(t, `CREATE EXTERNAL CONNECTION "nope" AS 'kafka://nope'`)
 
-	// TODO(#154053): also test each of these for database level changefeeds once implemented
 	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 		userDB.ExpectErr(t,
 			`user "user1" requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed`,
 			"CREATE CHANGEFEED FOR table_a, table_b INTO 'external://nope'",
+		)
+		userDB.ExpectErr(t,
+			`user "user1" requires the CHANGEFEED privilege on the target database to be able to run an enterprise changefeed`,
+			"CREATE CHANGEFEED FOR DATABASE defaultdb INTO 'kafka://nope'",
 		)
 	})
 	rootDB.Exec(t, "GRANT CHANGEFEED ON table_a TO user1")
@@ -4206,11 +4202,19 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 			`user "user1" requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed`,
 			"CREATE CHANGEFEED FOR table_a, table_b INTO 'external://nope'",
 		)
+		userDB.ExpectErr(t,
+			`user "user1" requires the CHANGEFEED privilege on the target database to be able to run an enterprise changefeed`,
+			"CREATE CHANGEFEED FOR DATABASE defaultdb INTO 'kafka://nope'",
+		)
 	})
 	rootDB.Exec(t, "GRANT CHANGEFEED ON table_b TO user1")
 	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 		userDB.Exec(t,
 			"CREATE CHANGEFEED FOR table_a, table_b INTO 'external://nope'",
+		)
+		userDB.ExpectErr(t,
+			`user "user1" requires the CHANGEFEED privilege on the target database to be able to run an enterprise changefeed`,
+			"CREATE CHANGEFEED FOR DATABASE defaultdb INTO 'kafka://nope'",
 		)
 	})
 
@@ -4222,11 +4226,20 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 			"pq: the CHANGEFEED privilege on all target tables can only be used with external connection sinks",
 			"CREATE CHANGEFEED FOR table_a, table_b INTO 'kafka://nope'",
 		)
+		userDB.ExpectErr(t,
+			"pq: the CHANGEFEED privilege on the target database can only be used with external connection sinks",
+			"CREATE CHANGEFEED FOR DATABASE defaultdb INTO 'kafka://nope'",
+		)
 	})
 	rootDB.Exec(t, "GRANT USAGE ON EXTERNAL CONNECTION nope to user1")
 	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 		userDB.Exec(t,
 			"CREATE CHANGEFEED FOR table_a, table_b INTO 'external://nope'",
+		)
+	})
+	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
+		userDB.Exec(t,
+			"CREATE CHANGEFEED FOR DATABASE defaultdb INTO 'external://nope'",
 		)
 	})
 	rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = false")
@@ -12818,7 +12831,6 @@ func TestChangefeedBareFullProtobuf(t *testing.T) {
 func TestDatabaseLevelChangefeedRenameDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -12849,7 +12861,6 @@ func TestDatabaseLevelChangefeedRenameDatabase(t *testing.T) {
 func TestDatabaseLevelChangefeedRenameTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -12910,7 +12921,6 @@ func TestCreateTableLevelChangefeedWithDBPrivilege(t *testing.T) {
 func TestDatabaseLevelChangefeedChangingTableset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
 
 	makeKnobs := func(createTableCh chan struct{}) func(*base.TestingKnobs) {
 		return func(knobs *base.TestingKnobs) {
@@ -13057,7 +13067,6 @@ func TestDatabaseLevelChangefeedChangingTableset(t *testing.T) {
 func TestDatabaseLevelChangefeedWithInitialScanOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
 
 	type testCase struct {
 		name             string
@@ -13153,7 +13162,6 @@ func TestDatabaseLevelChangefeedWithInitialScanOptions(t *testing.T) {
 func TestDatabaseLevelChangefeedSkipOfflineTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
 
 	dataSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
