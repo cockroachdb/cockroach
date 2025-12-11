@@ -474,6 +474,12 @@ object TableSchemaLocked
 
 TableSchemaLocked :  TableID
 
+object TableStorageParam
+
+TableStorageParam :  TableID
+TableStorageParam :  Name
+TableStorageParam :  Value
+
 object TableZoneConfig
 
 TableZoneConfig :  TableID
@@ -687,6 +693,7 @@ Table <|-- TableLocalityRegionalByRowUsingConstraint
 Table <|-- TableLocalitySecondaryRegion
 Table <|-- TablePartitioning
 Table <|-- TableSchemaLocked
+Table <|-- TableStorageParam
 Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
 Table <|-- TemporaryIndex

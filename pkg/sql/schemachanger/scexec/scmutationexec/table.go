@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -29,6 +30,28 @@ func (i *immediateVisitor) SetTableSchemaLocked(
 	}
 	tbl.SchemaLocked = op.Locked
 	return nil
+}
+
+func (i *immediateVisitor) SetTableStorageParam(
+	ctx context.Context, op scop.SetTableStorageParam,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.Param.TableID)
+	if err != nil {
+		return err
+	}
+	setter := tablestorageparam.NewSetter(tbl, false /* isNewObject */)
+	return setter.SetToStringValue(ctx, op.Param.Name, op.Param.Value)
+}
+
+func (i *immediateVisitor) ResetTableStorageParam(
+	ctx context.Context, op scop.ResetTableStorageParam,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.Param.TableID)
+	if err != nil {
+		return err
+	}
+	setter := tablestorageparam.NewSetter(tbl, false /* isNewObject */)
+	return setter.ResetToZeroValue(ctx, op.Param.Name)
 }
 
 func (d *deferredVisitor) UpdateTTLScheduleMetadata(
