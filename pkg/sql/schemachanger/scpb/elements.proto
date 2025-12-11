@@ -770,6 +770,10 @@ message RowLevelTTL {
   // ExpirationExpr is not set. This expression is used to establish column
   // dependencies.
   Expression ttl_expr = 3 [(gogoproto.customname) = "TTLExpr"];
+  // SeqNum differentiates different versions of the TTL configuration for the
+  // same table. When modifying TTL parameters, the old element is dropped and
+  // a new one with an incremented SeqNum is added.
+  uint32 seq_num = 4 [(gogoproto.customname) = "SeqNum"];
 }
 
 message ColumnName {

@@ -10,6 +10,7 @@ package storageparam
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -150,6 +151,7 @@ func StorageParamPreChecks(
 	}
 	keys = append(keys, resetParams...)
 
+	hasTTLRateLimit := false
 	for _, key := range keys {
 		if key == `schema_locked` {
 			// We only allow setting/resetting `schema_locked` storage parameter in
@@ -168,6 +170,17 @@ func StorageParamPreChecks(
 					"its own without other parameters in a single-statement implicit transaction.", key)
 			}
 		}
+		if key == `ttl_select_rate_limit` || key == `ttl_delete_rate_limit` {
+			hasTTLRateLimit = true
+		}
 	}
+
+	if hasTTLRateLimit {
+		evalCtx.ClientNoticeSender.BufferClientNotice(ctx, errors.WithDetail(
+			pgnotice.Newf("The TTL rate limit is per node per table."),
+			"See the documentation for additional details: "+docs.URL("row-level-ttl#ttl-storage-parameters"),
+		))
+	}
+
 	return nil
 }

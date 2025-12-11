@@ -15,8 +15,25 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.RowLevelTTL) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.RowLevelTTL, md *opGenContext) *scop.UpsertRowLevelTTL {
+					return &scop.UpsertRowLevelTTL{
+						TableID:     this.TableID,
+						RowLevelTTL: this.RowLevelTTL,
+						TTLExpr:     this.TTLExpr,
+					}
+				}),
+				emit(func(this *scpb.RowLevelTTL, md *opGenContext) *scop.UpdateTTLScheduleCron {
+					// Find the old TTL element being dropped with a different cron.
+					oldCron := findOldTTLCron(this, md)
+					if oldCron == this.RowLevelTTL.DeletionCron {
+						// No need to update the cron if it is unchanged.
+						return nil
+					}
+					return &scop.UpdateTTLScheduleCron{
+						TableID:     this.TableID,
+						ScheduleID:  this.RowLevelTTL.ScheduleID,
+						NewCronExpr: this.RowLevelTTL.DeletionCronOrDefault(),
+					}
 				}),
 			),
 		),
@@ -25,7 +42,10 @@ func init() {
 			to(scpb.Status_ABSENT,
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
-				emit(func(this *scpb.RowLevelTTL) *scop.DeleteSchedule {
+				emit(func(this *scpb.RowLevelTTL, md *opGenContext) *scop.DeleteSchedule {
+					if ttlAppliedLater(this, md) {
+						return nil
+					}
 					return &scop.DeleteSchedule{
 						ScheduleID: this.RowLevelTTL.ScheduleID,
 					}
@@ -33,4 +53,45 @@ func init() {
 			),
 		),
 	)
+}
+
+// ttlAppliedLater returns true if there is another RowLevelTTL element
+// with the same ScheduleID and TableID, a higher SeqNum, and
+// a target status of PUBLIC. This indicates that the TTL schedule
+// will be applied later, so we should not delete the schedule yet.
+func ttlAppliedLater(this *scpb.RowLevelTTL, md *opGenContext) bool {
+	if this.RowLevelTTL.ScheduleID == 0 {
+		return false
+	}
+	for _, t := range md.Targets {
+		other, ok := t.Element().(*scpb.RowLevelTTL)
+		if !ok || other == this {
+			continue
+		}
+		if other.RowLevelTTL.ScheduleID == this.RowLevelTTL.ScheduleID &&
+			other.TableID == this.TableID &&
+			other.SeqNum > this.SeqNum &&
+			t.TargetStatus == scpb.Status_PUBLIC {
+			return true
+		}
+	}
+	return false
+}
+
+// findOldTTLCron finds the DeletionCron from the TTL element being dropped
+// for the same table. Returns empty string if no such element exists.
+func findOldTTLCron(this *scpb.RowLevelTTL, md *opGenContext) string {
+	for _, t := range md.Targets {
+		other, ok := t.Element().(*scpb.RowLevelTTL)
+		if !ok || other == this {
+			continue
+		}
+		if other.TableID == this.TableID &&
+			other.RowLevelTTL.ScheduleID == this.RowLevelTTL.ScheduleID &&
+			other.SeqNum < this.SeqNum &&
+			t.TargetStatus == scpb.Status_ABSENT {
+			return other.RowLevelTTL.DeletionCron
+		}
+	}
+	return ""
 }
