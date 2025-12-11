@@ -44,8 +44,8 @@ func TestDestroyReplica(t *testing.T) {
 		require.NoError(t, err)
 		return fmt.Sprintf(">> %s:\n%s", name, str)
 	}
-	mutate := func(name string, eng storage.Engine, write func(storage.ReadWriter)) string {
-		b := eng.NewBatch()
+	mutate := func(name string, eng storage.Engine, write func(storage.Writer)) string {
+		b := eng.NewWriteBatch()
 		defer b.Close()
 		write(b)
 		str := printBatch(name, b)
@@ -76,10 +76,10 @@ func TestDestroyReplica(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	out := mutate("raft", e.LogEngine(), func(rw storage.ReadWriter) {
-		r.createRaftState(ctx, t, rw)
-	}) + mutate("state", e.StateEngine(), func(rw storage.ReadWriter) {
-		r.createStateMachine(ctx, t, rw)
+	out := mutate("raft", e.LogEngine(), func(w storage.Writer) {
+		r.createRaftState(ctx, t, w)
+	}) + mutate("state", e.StateEngine(), func(w storage.Writer) {
+		r.createStateMachine(ctx, t, w)
 	}) + mutateSep("destroy", e, func(rw ReadWriter) {
 		require.NoError(t, DestroyReplica(
 			ctx, rw,
@@ -118,25 +118,25 @@ func (r *replicaInfo) createRaftState(ctx context.Context, t *testing.T, w stora
 	}
 }
 
-func (r *replicaInfo) createStateMachine(ctx context.Context, t *testing.T, rw storage.ReadWriter) {
+func (r *replicaInfo) createStateMachine(ctx context.Context, t *testing.T, w storage.Writer) {
 	sl := MakeStateLoader(r.id.RangeID)
-	require.NoError(t, sl.SetRangeTombstone(ctx, rw, kvserverpb.RangeTombstone{
+	require.NoError(t, sl.SetRangeTombstone(ctx, w, kvserverpb.RangeTombstone{
 		NextReplicaID: r.id.ReplicaID,
 	}))
-	require.NoError(t, sl.SetRaftReplicaID(ctx, rw, r.id.ReplicaID))
+	require.NoError(t, sl.SetRaftReplicaID(ctx, w, r.id.ReplicaID))
 	// TODO(pav-kv): figure out whether LastReplicaGCTimestamp should be in the
 	// log or state engine.
 	require.NoError(t, storage.MVCCBlindPutProto(
-		ctx, rw,
+		ctx, w,
 		keys.RangeLastReplicaGCTimestampKey(r.id.RangeID),
 		hlc.Timestamp{}, /* timestamp */
 		&hlc.Timestamp{WallTime: 12345678},
 		storage.MVCCWriteOptions{},
 	))
-	createRangeData(t, rw, r.keys)
+	createRangeData(t, w, r.keys)
 }
 
-func createRangeData(t *testing.T, rw storage.ReadWriter, span roachpb.RSpan) {
+func createRangeData(t *testing.T, w storage.Writer, span roachpb.RSpan) {
 	ts := hlc.Timestamp{WallTime: 1}
 	for _, k := range []roachpb.Key{
 		keys.RangeDescriptorKey(span.Key),   // system
@@ -144,14 +144,14 @@ func createRangeData(t *testing.T, rw storage.ReadWriter, span roachpb.RSpan) {
 		roachpb.Key(span.EndKey).Prevish(2), // user
 	} {
 		// Put something under the system or user key.
-		require.NoError(t, rw.PutMVCC(
+		require.NoError(t, w.PutMVCC(
 			storage.MVCCKey{Key: k, Timestamp: ts}, storage.MVCCValue{},
 		))
 		// Put something under the corresponding lock key.
 		ek, _ := storage.LockTableKey{
 			Key: k, Strength: lock.Intent, TxnUUID: uuid.UUID{},
 		}.ToEngineKey(nil)
-		require.NoError(t, rw.PutEngineKey(ek, nil))
+		require.NoError(t, w.PutEngineKey(ek, nil))
 	}
 }
 
