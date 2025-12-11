@@ -119,7 +119,8 @@ exp,benchmark
 1,SystemDatabaseQueries/select_system.users_with_empty_database_Name
 1,SystemDatabaseQueries/select_system.users_with_schema_Name
 1,SystemDatabaseQueries/select_system.users_without_schema_Name
-1,TriggerResolution/insert_into_table_with_trigger
+1,TriggerResolution/insert_into_table_with_before_trigger
+1,TriggerResolution/insert_into_table_with_after_trigger
 18,Truncate/truncate_1_column_0_rows
 17,Truncate/truncate_1_column_1_row
 17,Truncate/truncate_1_column_2_rows
