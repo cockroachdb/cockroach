@@ -25,7 +25,8 @@ var cpuPacerRequestDuration = settings.RegisterDurationSetting(
 	50*time.Millisecond,
 )
 
-var yieldIfNoPacer = settings.RegisterBoolSetting(
+// YieldIfNoPacer is exported so it can be overridden in tests.
+var YieldIfNoPacer = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"bulkio.elastic_cpu_control.always_yield.enabled",
 	"if true, yield the CPU as needed even when time-based elastic pacing is not enabled",
@@ -38,7 +39,7 @@ func NewCPUPacer(ctx context.Context, db *kv.DB, setting *settings.BoolSetting) 
 	if db == nil || db.AdmissionPacerFactory == nil || !setting.Get(db.SettingsValues()) {
 		log.Dev.Infof(ctx, "admission control is not configured to pace bulk ingestion")
 
-		if db != nil && yieldIfNoPacer.Get(db.SettingsValues()) {
+		if db != nil && YieldIfNoPacer.Get(db.SettingsValues()) {
 			// Return a Pacer that just yields.
 			return &admission.Pacer{Yield: true}
 		}
