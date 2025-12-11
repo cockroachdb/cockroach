@@ -1257,6 +1257,24 @@ func (s ShowFingerprintOptions) IsDefault() bool {
 
 var _ NodeFormatter = &ShowFingerprintOptions{}
 
+// ShowStatementHints represents a SHOW STATEMENT HINTS statement.
+type ShowStatementHints struct {
+	Statement   Statement
+	WithDetails bool
+}
+
+var _ Statement = &ShowStatementHints{}
+
+// Format implements the NodeFormatter interface.
+func (n *ShowStatementHints) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW STATEMENT HINTS ")
+	if n.WithDetails {
+		ctx.WriteString("WITH DETAILS ")
+	}
+	ctx.WriteString("FOR ")
+	ctx.FormatNode(n.Statement)
+}
+
 // ShowTableStats represents a SHOW STATISTICS FOR TABLE statement.
 type ShowTableStats struct {
 	Table     *UnresolvedObjectName

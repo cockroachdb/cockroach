@@ -278,6 +278,7 @@ FILES = [
     "show_session_stmt",
     "show_sessions",
     "show_statements",
+    "show_statement_hints_stmt",
     "show_stats",
     "show_survival_goal_stmt",
     "show_tables",

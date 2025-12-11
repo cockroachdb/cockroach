@@ -288,6 +288,7 @@ DOCS_SRCS = [
     "//docs/generated/sql/bnf:show_sequences.bnf",
     "//docs/generated/sql/bnf:show_session_stmt.bnf",
     "//docs/generated/sql/bnf:show_sessions.bnf",
+    "//docs/generated/sql/bnf:show_statement_hints_stmt.bnf",
     "//docs/generated/sql/bnf:show_statements.bnf",
     "//docs/generated/sql/bnf:show_stats.bnf",
     "//docs/generated/sql/bnf:show_survival_goal_stmt.bnf",

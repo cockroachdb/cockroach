@@ -1029,7 +1029,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
 %token <str> GLOBAL GOAL GRANT GRANTEE GRANTS GREATEST GROUP GROUPING GROUPS
 
-%token <str> HAVING HASH HEADER HIGH HISTOGRAM HOLD HOUR
+%token <str> HAVING HASH HEADER HIGH HINTS HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
@@ -1440,6 +1440,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> show_zone_stmt
 %type <tree.Statement> show_schedules_stmt
 %type <tree.Statement> show_full_scans_stmt
+%type <tree.Statement> show_statement_hints_stmt
 %type <tree.Statement> show_completions_stmt
 %type <tree.Statement> show_logical_replication_jobs_stmt opt_show_logical_replication_jobs_options show_logical_replication_jobs_options
 %type <tree.Statement> show_policies_stmt
@@ -8659,6 +8660,7 @@ show_stmt:
 | SHOW error                 // SHOW HELP: SHOW
 | show_last_query_stats_stmt
 | show_full_scans_stmt
+| show_statement_hints_stmt
 | show_default_privileges_stmt // EXTEND WITH HELP: SHOW DEFAULT PRIVILEGES
 | show_completions_stmt
 | show_inspect_errors_stmt // EXTEND WITH HELP: SHOW INSPECT ERRORS
@@ -10519,7 +10521,30 @@ fingerprint_options:
     $$.val = &tree.ShowFingerprintOptions{ExcludedUserColumns: $4.stringOrPlaceholderOptList()}
   }
 
-
+// %Help: SHOW STATEMENT HINTS - list statement hints for a fingerprint
+// %Category: Misc
+// %Text:
+// SHOW STATEMENT HINTS FOR <fingerprint>
+// SHOW STATEMENT HINTS FOR <fingerprint> WITH DETAILS
+//
+// Shows statement hints stored in system.statement_hints for the given
+// fingerprint. WITH DETAILS includes decoded hint-specific information.
+show_statement_hints_stmt:
+  SHOW STATEMENT HINTS FOR stmt_without_legacy_transaction
+  {
+    $$.val = &tree.ShowStatementHints{
+      Statement: $5.stmt(),
+      WithDetails: false,
+    }
+  }
+| SHOW STATEMENT HINTS WITH DETAILS FOR stmt_without_legacy_transaction
+  {
+    $$.val = &tree.ShowStatementHints{
+      Statement: $7.stmt(),
+      WithDetails: true,
+    }
+  }
+| SHOW STATEMENT HINTS error // SHOW HELP: SHOW STATEMENT HINTS
 
 show_full_scans_stmt:
   SHOW FULL TABLE SCANS
@@ -18730,6 +18755,7 @@ unreserved_keyword:
 | HASH
 | HEADER
 | HIGH
+| HINTS
 | HISTOGRAM
 | HOLD
 | HOUR
@@ -19280,6 +19306,7 @@ bare_label_keywords:
 | HASH
 | HEADER
 | HIGH
+| HINTS
 | HISTOGRAM
 | HOLD
 | IDENTITY

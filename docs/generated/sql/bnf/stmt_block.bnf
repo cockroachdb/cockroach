@@ -332,6 +332,7 @@ show_stmt ::=
 	| show_default_session_variables_for_role_stmt
 	| show_zone_stmt
 	| show_full_scans_stmt
+	| show_statement_hints_stmt
 	| show_default_privileges_stmt
 	| show_inspect_errors_stmt
 
@@ -1054,6 +1055,10 @@ show_zone_stmt ::=
 show_full_scans_stmt ::=
 	'SHOW' 'FULL' 'TABLE' 'SCANS'
 
+show_statement_hints_stmt ::=
+	'SHOW' 'STATEMENT' 'HINTS' 'FOR' explainable_stmt
+	| 'SHOW' 'STATEMENT' 'HINTS' 'WITH' 'DETAILS' 'FOR' explainable_stmt
+
 show_default_privileges_stmt ::=
 	'SHOW' 'DEFAULT' 'PRIVILEGES' opt_for_roles opt_in_schema
 	| 'SHOW' 'DEFAULT' 'PRIVILEGES' 'FOR' 'GRANTEE' role_spec_list opt_in_schema
@@ -1271,6 +1276,7 @@ unreserved_keyword ::=
 	| 'HASH'
 	| 'HEADER'
 	| 'HIGH'
+	| 'HINTS'
 	| 'HISTOGRAM'
 	| 'HOLD'
 	| 'HOUR'
@@ -4221,6 +4227,7 @@ bare_label_keywords ::=
 	| 'HASH'
 	| 'HEADER'
 	| 'HIGH'
+	| 'HINTS'
 	| 'HISTOGRAM'
 	| 'HOLD'
 	| 'IDENTITY'

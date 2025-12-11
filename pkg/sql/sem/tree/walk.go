@@ -1273,6 +1273,24 @@ func (n *ShowFingerprints) walkStmt(v Visitor) Statement {
 	return ret
 }
 
+// copyNode makes a copy of this Statement without recursing in any child
+// Statements.
+func (n *ShowStatementHints) copyNode() *ShowStatementHints {
+	stmtCopy := *n
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (n *ShowStatementHints) walkStmt(v Visitor) Statement {
+	s, changed := WalkStmt(v, n.Statement)
+	if changed {
+		ret := n.copyNode()
+		ret.Statement = s
+		return ret
+	}
+	return n
+}
+
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (n *AlterTenantRename) copyNode() *AlterTenantRename {
 	stmtCopy := *n
