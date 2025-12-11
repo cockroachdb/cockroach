@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlinit"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -2569,7 +2570,7 @@ func (r *restoreResumer) publishDescriptors(
 		}
 		// Assign a TTL schedule before publishing.
 		if mutTable.HasRowLevelTTL() {
-			j, err := sql.CreateRowLevelTTLScheduledJob(
+			j, err := ttlinit.CreateRowLevelTTLScheduledJob(
 				ctx,
 				jobsKnobs,
 				jobs.ScheduledJobTxn(txn),

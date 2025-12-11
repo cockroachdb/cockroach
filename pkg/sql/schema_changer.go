@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlinit"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1819,7 +1820,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 
 					if shouldCreateScheduledJob {
-						j, err := CreateRowLevelTTLScheduledJob(
+						j, err := ttlinit.CreateRowLevelTTLScheduledJob(
 							ctx,
 							sc.execCfg.JobsKnobs(),
 							scheduledJobs,
