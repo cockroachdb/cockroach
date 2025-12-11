@@ -7,7 +7,6 @@ package inspect
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -205,6 +205,65 @@ func (t *testingInspectCheck) Close(context.Context) error {
 	return nil
 }
 
+// testingInspectMetaCheck is a test implementation of inspectMetaCheck and inspectPostCheck.
+type testingInspectMetaCheck struct {
+	started bool
+}
+
+var _ inspectMetaCheck = (*testingInspectMetaCheck)(nil)
+var _ inspectPostCheck = (*testingInspectMetaCheck)(nil)
+
+func (t *testingInspectMetaCheck) AppliesTo(codec keys.SQLCodec, span roachpb.Span) (bool, error) {
+	// For testing, assume all checks apply to all spans
+	return true, nil
+}
+
+func (t *testingInspectMetaCheck) Started() bool {
+	return t.started
+}
+
+func (t *testingInspectMetaCheck) Start(
+	ctx context.Context, cfg *execinfra.ServerConfig, span roachpb.Span, workerIndex int,
+) error {
+	t.started = true
+	return nil
+}
+
+func (*testingInspectMetaCheck) Next(
+	ctx context.Context, cfg *execinfra.ServerConfig,
+) (*inspectIssue, error) {
+	return nil, nil
+}
+
+func (*testingInspectMetaCheck) Done(ctx context.Context) bool {
+	return true
+}
+
+func (*testingInspectMetaCheck) Close(ctx context.Context) error {
+	return nil
+}
+
+func (t *testingInspectMetaCheck) RegisterChecks(checks inspectChecks) error {
+	return nil
+}
+
+func (t *testingInspectMetaCheck) MetaCheck(
+	ctx context.Context, msg *jobspb.InspectProcessorProgress, logger *inspectLoggerBundle,
+) error {
+	err := logger.logIssue(ctx, &inspectIssue{})
+	if err != nil {
+		return errors.Wrapf(err, "error logging inspect issue")
+	}
+
+	return nil
+}
+
+func (t *testingInspectMetaCheck) Issues(
+	ctx context.Context, progress *jobspb.InspectProgress,
+) ([]*inspectIssue, error) {
+	return []*inspectIssue{{}}, nil
+}
+
 // discardRowReceiver is a minimal RowReceiver that discards all data.
 type discardRowReceiver struct{}
 
@@ -249,7 +308,7 @@ func runProcessorAndWait(t *testing.T, proc *inspectProcessor, expectErr bool) {
 // makeProcessor will create an inspect processor for test.
 func makeProcessor(
 	t *testing.T,
-	checkFactory inspectCheckFactory,
+	checkFactories []inspectCheckFactory,
 	src spanSource,
 	concurrency int,
 	asOf hlc.Timestamp,
@@ -274,13 +333,18 @@ func makeProcessor(
 				AsOf: asOf,
 			},
 		},
-		checkFactories: []inspectCheckFactory{checkFactory},
+		checkFactories: checkFactories,
 		cfg:            flowCtx.Cfg,
 		flowCtx:        flowCtx,
 		spanSrc:        src,
 		loggerBundle:   loggerBundle,
 		concurrency:    concurrency,
 		clock:          clock,
+		test: &struct {
+			progress *jobspb.InspectProgress
+		}{
+			progress: &jobspb.InspectProgress{},
+		},
 	}
 	return proc, logger
 }
@@ -358,12 +422,14 @@ func TestInspectProcessor_ControlFlow(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
-			factory := func(asOf hlc.Timestamp) inspectCheck {
-				return &testingInspectCheck{
-					configs: tc.configs,
-				}
+			factories := []inspectCheckFactory{
+				func(asOf hlc.Timestamp) inspectCheck {
+					return &testingInspectCheck{
+						configs: tc.configs,
+					}
+				},
 			}
-			proc, _ := makeProcessor(t, factory, tc.spanSrc, len(tc.configs), hlc.Timestamp{})
+			proc, _ := makeProcessor(t, factories, tc.spanSrc, len(tc.configs), hlc.Timestamp{})
 			runProcessorAndWait(t, proc, tc.expectErr)
 		})
 	}
@@ -377,20 +443,22 @@ func TestInspectProcessor_EmitIssues(t *testing.T) {
 		mode:     spanModeNormal,
 		maxSpans: 1,
 	}
-	factory := func(asOf hlc.Timestamp) inspectCheck {
-		return &testingInspectCheck{
-			configs: []testingCheckConfig{
-				{
-					mode: checkModeNone,
-					issues: []*inspectIssue{
-						{ErrorType: "test_error", PrimaryKey: "pk1"},
-						{ErrorType: "test_error", PrimaryKey: "pk2"},
+	factories := []inspectCheckFactory{
+		func(asOf hlc.Timestamp) inspectCheck {
+			return &testingInspectCheck{
+				configs: []testingCheckConfig{
+					{
+						mode: checkModeNone,
+						issues: []*inspectIssue{
+							{ErrorType: "test_error", PrimaryKey: "pk1"},
+							{ErrorType: "test_error", PrimaryKey: "pk2"},
+						},
 					},
 				},
-			},
-		}
+			}
+		},
 	}
-	proc, logger := makeProcessor(t, factory, spanSrc, 1, hlc.Timestamp{})
+	proc, logger := makeProcessor(t, factories, spanSrc, 1, hlc.Timestamp{})
 
 	runProcessorAndWait(t, proc, true /* expectErr */)
 
@@ -439,21 +507,23 @@ func TestInspectProcessor_AsOfTime(t *testing.T) {
 			testStartTime := time.Now()
 
 			var capturedTimestamp hlc.Timestamp
-			factory := func(asOf hlc.Timestamp) inspectCheck {
-				capturedTimestamp = asOf
-				return &testingInspectCheck{
-					configs: []testingCheckConfig{
-						{
-							mode: checkModeNone,
-							issues: []*inspectIssue{
-								{ErrorType: "test_error", PrimaryKey: "pk1", AOST: asOf.GoTime()},
+			factories := []inspectCheckFactory{
+				func(asOf hlc.Timestamp) inspectCheck {
+					capturedTimestamp = asOf
+					return &testingInspectCheck{
+						configs: []testingCheckConfig{
+							{
+								mode: checkModeNone,
+								issues: []*inspectIssue{
+									{ErrorType: "test_error", PrimaryKey: "pk1", AOST: asOf.GoTime()},
+								},
 							},
 						},
-					},
-				}
+					}
+				},
 			}
 
-			proc, logger := makeProcessor(t, factory, spanSrc, 1, tc.asOf)
+			proc, logger := makeProcessor(t, factories, spanSrc, 1, tc.asOf)
 
 			runProcessorAndWait(t, proc, true /* expectErr */)
 
@@ -464,4 +534,24 @@ func TestInspectProcessor_AsOfTime(t *testing.T) {
 			tc.verifyTimestamp(t, actualTime, capturedTimestamp, testStartTime)
 		})
 	}
+}
+
+func TestInspectProcessor_MetaCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	spanSrc := &testingSpanSource{
+		mode:     spanModeNormal,
+		maxSpans: 1,
+	}
+	factories := []inspectCheckFactory{
+		func(asOf hlc.Timestamp) inspectCheck {
+			return &testingInspectMetaCheck{}
+		},
+	}
+	proc, logger := makeProcessor(t, factories, spanSrc, 1, hlc.Timestamp{})
+
+	runProcessorAndWait(t, proc, true /* expectErr */)
+
+	require.Equal(t, 2, logger.numIssuesFound())
 }

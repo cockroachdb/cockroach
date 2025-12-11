@@ -7,7 +7,9 @@ package inspect
 
 import (
 	"context"
+	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -36,6 +38,21 @@ func assertCheckApplies(
 	}
 	return nil
 }
+
+// checkState represents the state of a check.
+type checkState int
+
+const (
+	// checkNotStarted indicates Start() has not been called yet.
+	checkNotStarted checkState = iota
+	// checkHashMatched indicates the hash precheck passed - no corruption detected,
+	// so the full check can be skipped.
+	checkHashMatched
+	// checkRunning indicates the full check is actively running and may produce more results.
+	checkRunning
+	// checkDone indicates the check has finished (iterator exhausted or error occurred).
+	checkDone
+)
 
 // inspectCheck defines a single validation operation used by the INSPECT system.
 // Each check represents a specific type of data validation, such as index consistency.
@@ -68,6 +85,27 @@ type inspectCheck interface {
 	Close(ctx context.Context) error
 }
 
+// inspectMetaCheck defines a check that uses the results of previous checks to
+// perform its validation on a span.
+type inspectMetaCheck interface {
+	inspectCheck
+
+	// RegisterChecks retains a reference to the other checks for use by the
+	// meta-check. It errors if it determines the meta-check cannot run.
+	RegisterChecks(inspectChecks) error
+
+	// MetaCheck allows the meta-check to update its progress after each
+	// span is processed.
+	MetaCheck(ctx context.Context, msg *jobspb.InspectProcessorProgress, logger *inspectLoggerBundle) error
+}
+
+// inspectPostCheck defines a check that performs validations after all the
+// spans have been processed.
+type inspectPostCheck interface {
+	// NextPost returns the next inspect error, if any.
+	Issues(ctx context.Context, progress *jobspb.InspectProgress) ([]*inspectIssue, error)
+}
+
 // inspectRunner coordinates the execution of a set of inspectChecks.
 //
 // It manages the lifecycle of each check, including initialization,
@@ -80,13 +118,32 @@ type inspectCheck interface {
 type inspectRunner struct {
 	// checks holds the list of checks to run. Each check is run to completion
 	// before moving on to the next.
-	checks []inspectCheck
+	checks inspectChecks
 
 	// logger records issues reported by the checks.
 	logger inspectLogger
 
 	// foundIssue indicates whether any issues were found.
 	foundIssue bool
+}
+
+type inspectChecks []inspectCheck
+
+// SortStable sorts the inspectChecks to place the meta-checks at the end.
+func (c *inspectChecks) sortStable() {
+	slices.SortStableFunc(*c, func(a, b inspectCheck) int {
+		_, aInspectMetaCheck := any(a).(inspectMetaCheck)
+		_, bInspectMetaCheck := any(b).(inspectMetaCheck)
+
+		if !aInspectMetaCheck && bInspectMetaCheck {
+			return -1
+		}
+		if aInspectMetaCheck && !bInspectMetaCheck {
+			return 1
+		}
+
+		return 0
+	})
 }
 
 // Step advances execution by processing one result from the current inspectCheck.

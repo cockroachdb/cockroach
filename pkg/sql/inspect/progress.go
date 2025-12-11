@@ -221,6 +221,9 @@ func (t *inspectProgressTracker) updateProgressCache(
 		inspectProgress.JobCompletedCheckCount += incomingProcProgress.ChecksCompleted
 	}
 
+	// Update the check-specific fields (e.g. row counts).
+	inspectProgress.UpdateWithSpanProgress(&incomingProcProgress)
+
 	// Update cached progress - the goroutine will handle actual persistence.
 	t.mu.cachedProgress = &jobspb.Progress{
 		Details: &jobspb.Progress_Inspect{
