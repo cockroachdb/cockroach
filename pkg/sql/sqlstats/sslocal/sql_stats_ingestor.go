@@ -445,8 +445,6 @@ func (i *SQLStatsIngester) flushBuffer(
 		}
 		// We need to recompute the fingerprint ID.
 		s.ImplicitTxn = transaction.ImplicitTxn
-		s.FingerprintID = appstatspb.ConstructStatementFingerprintID(
-			s.Query, s.ImplicitTxn, s.Database)
 	}
 
 	for _, sink := range i.sinks {

@@ -41,7 +41,6 @@ type stmtKey struct {
 // sampledPlanKey is used by the Optimizer to determine if we should build a full EXPLAIN plan.
 type sampledPlanKey struct {
 	stmtNoConstants string
-	implicitTxn     bool
 	database        string
 }
 
@@ -213,8 +212,8 @@ func NewTempContainerFromExistingStmtStats(
 		stmtStats, _, throttled :=
 			container.tryCreateStatsForStmtWithKeyLocked(key, sampledPlanKey{
 				stmtNoConstants: statistics[i].Key.KeyData.Query,
-				implicitTxn:     statistics[i].Key.KeyData.ImplicitTxn,
-				database:        statistics[i].Key.KeyData.Database,
+				//implicitTxn:     statistics[i].Key.KeyData.ImplicitTxn,
+				database: statistics[i].Key.KeyData.Database,
 			})
 		if throttled {
 			return nil /* container */, nil /* remaining */, ErrFingerprintLimitReached
@@ -533,11 +532,11 @@ func (s *Container) DrainStats(
 
 		statementStats = append(statementStats, &appstatspb.CollectedStatementStatistics{
 			Key: appstatspb.StatementStatisticsKey{
-				Query:                    stmt.meta.stmtNoConstants,
-				QuerySummary:             querySummary,
-				DistSQL:                  distSQLUsed,
-				Vec:                      vectorized,
-				ImplicitTxn:              stmt.meta.implicitTxn,
+				Query:        stmt.meta.stmtNoConstants,
+				QuerySummary: querySummary,
+				DistSQL:      distSQLUsed,
+				Vec:          vectorized,
+				//ImplicitTxn:              stmt.meta.implicitTxn,
 				FullScan:                 fullScan,
 				App:                      s.appName,
 				Database:                 stmt.meta.database,

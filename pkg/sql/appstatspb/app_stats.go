@@ -23,9 +23,7 @@ func (s StmtFingerprintID) String() string {
 // constants redacted, its database, and if it was part of an
 // implicit txn. At the time of writing, these are the axis' we use to bucket
 // queries for stats collection (see stmtKey).
-var ConstructStatementFingerprintID = func(
-	stmtNoConstants string, implicitTxn bool, database string,
-) StmtFingerprintID {
+var ConstructStatementFingerprintID = func(stmtNoConstants string, database string) StmtFingerprintID {
 	fnv := util.MakeFNV64()
 	for _, c := range stmtNoConstants {
 		fnv.Add(uint64(c))
@@ -33,11 +31,11 @@ var ConstructStatementFingerprintID = func(
 	for _, c := range database {
 		fnv.Add(uint64(c))
 	}
-	if implicitTxn {
-		fnv.Add('I')
-	} else {
-		fnv.Add('E')
-	}
+	//if implicitTxn {
+	//	fnv.Add('I')
+	//} else {
+	//	fnv.Add('E')
+	//}
 	return StmtFingerprintID(fnv.Sum())
 }
 
@@ -142,7 +140,6 @@ func (t *TransactionStatistics) Add(other *TransactionStatistics) {
 func (s *AggregatedStatementMetadata) Add(other *CollectedStatementStatistics) {
 	// Only set the value if it hasn't already been set.
 	if s.Query == "" || s.QuerySummary == "" {
-		s.ImplicitTxn = other.Key.ImplicitTxn
 		s.Query = other.Key.Query
 		s.QuerySummary = other.Key.QuerySummary
 		s.StmtType = other.Stats.SQLType
@@ -217,6 +214,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.FailureCount += other.FailureCount
 	s.GenericCount += other.GenericCount
 	s.StmtHintsCount += other.StmtHintsCount
+	s.ImplicitTxnCount += other.ImplicitTxnCount
 }
 
 // AlmostEqual compares two StatementStatistics and their contained NumericStats

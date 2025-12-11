@@ -27,13 +27,13 @@ END;
 
 show-stats db=max_txn_stmts_test app-name=exec
 ----
-{"count": "5", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "023097855475259c"}
-{"count": "3", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "3b5be2cb288f18aa"}
+{"count": "3", "fingerprint_id": "7fdaafd3307d1a66", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": null, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "b521449cc92662c1"}
+{"count": "5", "fingerprint_id": "7fdaafd3307d1a66", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": null, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "d1d4956998874849"}
 
 show-txn-stats db=max_txn_stmts_test app-name=exec
 ----
-{"commit_lat_not_zero": true, "count": "1", "statement_fingerprint_ids": ["bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17"], "svc_lat_not_zero": true, "txn_fingerprint_id": "023097855475259c"}
-{"commit_lat_not_zero": true, "count": "1", "statement_fingerprint_ids": ["bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17"], "svc_lat_not_zero": true, "txn_fingerprint_id": "3b5be2cb288f18aa"}
+{"commit_lat_not_zero": true, "count": "1", "statement_fingerprint_ids": ["7fdaafd3307d1a66", "7fdaafd3307d1a66", "7fdaafd3307d1a66"], "svc_lat_not_zero": true, "txn_fingerprint_id": "b521449cc92662c1"}
+{"commit_lat_not_zero": true, "count": "1", "statement_fingerprint_ids": ["7fdaafd3307d1a66", "7fdaafd3307d1a66", "7fdaafd3307d1a66", "7fdaafd3307d1a66", "7fdaafd3307d1a66"], "svc_lat_not_zero": true, "txn_fingerprint_id": "d1d4956998874849"}
 
 exec-sql db=max_txn_stmts_test app-name=setup-limit
 SET CLUSTER SETTING sql.metrics.transaction_details.max_statement_stats=4;
@@ -63,11 +63,11 @@ END;
 
 show-stats db=max_txn_stmts_test app-name=exec
 ----
-{"count": "6", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "023097855475259c"}
-{"count": "6", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "3b5be2cb288f18aa"}
-{"count": "4", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "ffffffffffffffff"}
+{"count": "6", "fingerprint_id": "7fdaafd3307d1a66", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": null, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "b521449cc92662c1"}
+{"count": "6", "fingerprint_id": "7fdaafd3307d1a66", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": null, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "d1d4956998874849"}
+{"count": "4", "fingerprint_id": "7fdaafd3307d1a66", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": null, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "ffffffffffffffff"}
 
 show-txn-stats db=max_txn_stmts_test app-name=exec
 ----
-{"commit_lat_not_zero": true, "count": "2", "statement_fingerprint_ids": ["bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17"], "svc_lat_not_zero": true, "txn_fingerprint_id": "023097855475259c"}
-{"commit_lat_not_zero": true, "count": "2", "statement_fingerprint_ids": ["bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17"], "svc_lat_not_zero": true, "txn_fingerprint_id": "3b5be2cb288f18aa"}
+{"commit_lat_not_zero": true, "count": "2", "statement_fingerprint_ids": ["7fdaafd3307d1a66", "7fdaafd3307d1a66", "7fdaafd3307d1a66"], "svc_lat_not_zero": true, "txn_fingerprint_id": "b521449cc92662c1"}
+{"commit_lat_not_zero": true, "count": "2", "statement_fingerprint_ids": ["7fdaafd3307d1a66", "7fdaafd3307d1a66", "7fdaafd3307d1a66", "7fdaafd3307d1a66", "7fdaafd3307d1a66"], "svc_lat_not_zero": true, "txn_fingerprint_id": "d1d4956998874849"}

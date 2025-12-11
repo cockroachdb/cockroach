@@ -50,7 +50,6 @@ func ExplainTreePlanNodeToJSON(node *appstatspb.ExplainTreePlanNode) json.JSON {
 //	    "db":                   { "type": "string" },
 //	    "distsql":              { "type": "boolean" },
 //	    "failed":               { "type": "boolean" },
-//	    "implicitTxn":          { "type": "boolean" },
 //	    "vec":                  { "type": "boolean" },
 //	    "fullScan":             { "type": "boolean" },
 //	  }
@@ -423,7 +422,6 @@ func BuildTxnStatisticsJSON(
 //	    "fingerprintID":        { "type": "string" },
 //	    "querySummary":         { "type": "string" },
 //	    "formattedQuery":       { "type": "string" },
-//	    "implicitTxn":          { "type": "boolean" },
 //	    "distSQLCount":         { "type": "number" },
 //	    "failedCount":          { "type": "number" },
 //	    "vecCount":             { "type": "number" },

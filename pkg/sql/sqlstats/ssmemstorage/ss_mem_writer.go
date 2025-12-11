@@ -54,8 +54,8 @@ func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.Recorde
 	// Get the statistics object.
 	stats, created, throttled := s.tryCreateStatsForStmtWithKey(statementKey, sampledPlanKey{
 		stmtNoConstants: value.Query,
-		implicitTxn:     value.ImplicitTxn,
-		database:        value.Database,
+		//implicitTxn:     value.ImplicitTxn,
+		database: value.Database,
 	})
 
 	// This means we have reached the limit of unique fingerprintstats. We don't
@@ -82,6 +82,9 @@ func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.Recorde
 	}
 	if value.AppliedStmtHints {
 		stats.mu.data.StmtHintsCount++
+	}
+	if value.ImplicitTxn {
+		stats.mu.data.ImplicitTxnCount++
 	}
 	if value.AutoRetryCount == 0 {
 		stats.mu.data.FirstAttemptCount++
@@ -157,10 +160,9 @@ func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.Recorde
 
 // StatementSampled returns true if the statement with the given fingerprint
 // exists in the sampled statement cache.
-func (s *Container) StatementSampled(fingerprint string, implicitTxn bool, database string) bool {
+func (s *Container) StatementSampled(fingerprint string, database string) bool {
 	key := sampledPlanKey{
 		stmtNoConstants: fingerprint,
-		implicitTxn:     implicitTxn,
 		database:        database,
 	}
 	s.mu.Lock()
@@ -171,12 +173,9 @@ func (s *Container) StatementSampled(fingerprint string, implicitTxn bool, datab
 
 // TrySetStatementSampled attempts to add the statement to the sampled
 // statement cache. If the statement is already in the cache, it returns false.
-func (s *Container) TrySetStatementSampled(
-	fingerprint string, implicitTxn bool, database string,
-) bool {
+func (s *Container) TrySetStatementSampled(fingerprint string, database string) bool {
 	key := sampledPlanKey{
 		stmtNoConstants: fingerprint,
-		implicitTxn:     implicitTxn,
 		database:        database,
 	}
 	s.mu.Lock()

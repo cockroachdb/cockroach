@@ -90,7 +90,6 @@ func (s *StmtStatsIterator) Next() bool {
 			QuerySummary:             querySummary,
 			DistSQL:                  distSQLUsed,
 			Vec:                      vectorized,
-			ImplicitTxn:              statementStats.meta.implicitTxn,
 			FullScan:                 fullScan,
 			App:                      s.container.appName,
 			Database:                 statementStats.meta.database,
