@@ -15,8 +15,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› SET ('ex
  │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
  │         └── 3 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
- │              ├── SetTableStorageParam
- │              └── SetTableStorageParam
+ │              ├── SetTableStorageParam {"Param":{"Name":"exclude_data_fro...","TableID":104,"Value":"true"}}
+ │              └── SetTableStorageParam {"Param":{"Name":"sql_stats_histog...","TableID":104,"Value":"64"}}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 2 elements transitioning toward PUBLIC
@@ -34,8 +34,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› SET ('ex
  │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
  │         └── 5 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
- │              ├── SetTableStorageParam
- │              ├── SetTableStorageParam
+ │              ├── SetTableStorageParam {"Param":{"Name":"exclude_data_fro...","TableID":104,"Value":"true"}}
+ │              ├── SetTableStorageParam {"Param":{"Name":"sql_stats_histog...","TableID":104,"Value":"64"}}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  └── PostCommitPhase

@@ -18,7 +18,7 @@ func init() {
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.TableStorageParam) *scop.SetTableStorageParam {
 					return &scop.SetTableStorageParam{
-						TableStorageParam: *protoutil.Clone(this).(*scpb.TableStorageParam),
+						Param: *protoutil.Clone(this).(*scpb.TableStorageParam),
 					}
 				}),
 			),
@@ -28,7 +28,7 @@ func init() {
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.TableStorageParam) *scop.ResetTableStorageParam {
 					return &scop.ResetTableStorageParam{
-						TableStorageParam: *protoutil.Clone(this).(*scpb.TableStorageParam),
+						Param: *protoutil.Clone(this).(*scpb.TableStorageParam),
 					}
 				}),
 			),
