@@ -13,8 +13,8 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t SET ('exclude
       │    │    ├── PUBLIC → ABSENT TableStorageParam:{DescID: 104 (t), Name: "exclude_data_from_backup", Value: "true"}
       │    │    └── PUBLIC → ABSENT TableStorageParam:{DescID: 104 (t), Name: "sql_stats_histogram_buckets_count", Value: "64"}
       │    └── 4 Mutation operations
-      │         ├── ResetTableStorageParam
-      │         ├── ResetTableStorageParam
+      │         ├── ResetTableStorageParam {"Param":{"Name":"exclude_data_fro...","TableID":104,"Value":"true"}}
+      │         ├── ResetTableStorageParam {"Param":{"Name":"sql_stats_histog...","TableID":104,"Value":"64"}}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase

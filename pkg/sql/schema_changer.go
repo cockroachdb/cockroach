@@ -1807,7 +1807,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					if scTable.RowLevelTTL.ScheduleID != 0 {
 						_, err := scheduledJobs.Load(
 							ctx,
-							JobSchedulerEnv(sc.execCfg.JobsKnobs()),
+							jobs.JobSchedulerEnv(sc.execCfg.JobsKnobs()),
 							scTable.RowLevelTTL.ScheduleID,
 						)
 						if err != nil {
@@ -1836,7 +1836,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				} else if m.Dropped() {
 					if scTable.HasRowLevelTTL() {
 						if err := scheduledJobs.DeleteByID(
-							ctx, JobSchedulerEnv(sc.execCfg.JobsKnobs()),
+							ctx, jobs.JobSchedulerEnv(sc.execCfg.JobsKnobs()),
 							scTable.GetRowLevelTTL().ScheduleID,
 						); err != nil {
 							return err
