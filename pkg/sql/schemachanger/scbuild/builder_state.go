@@ -605,6 +605,38 @@ func (b *builderState) IsTableEmpty(table *scpb.Table) bool {
 	return b.tr.IsTableEmpty(b.ctx, table.TableID, index.IndexID)
 }
 
+// ValidateTTLExpirationExpression validates the ttl_expiration_expression for
+// a table's row-level TTL configuration. It verifies that the expression:
+// - type-checks as a TIMESTAMPTZ
+// - is not volatile
+// - references valid columns in the table
+func (b *builderState) ValidateTTLExpirationExpression(
+	tableID catid.DescID, ttl *catpb.RowLevelTTL,
+) {
+	if ttl == nil || !ttl.HasExpirationExpr() {
+		return
+	}
+	b.ensureDescriptor(tableID)
+	desc := b.descCache[tableID].desc
+	tbl, ok := desc.(catalog.TableDescriptor)
+	if !ok {
+		panic(errors.AssertionFailedf("Expected table descriptor for ID %d, instead got %s",
+			desc.GetID(), desc.DescriptorType()))
+	}
+	ns := b.QueryByID(tableID).FilterNamespace().MustGetOneElement()
+	tableName := tree.MakeTableNameFromPrefix(b.NamePrefix(ns), tree.Name(ns.Name))
+	if err := schemaexpr.ValidateTTLExpirationExpression(
+		b.ctx,
+		tbl,
+		b.semaCtx,
+		&tableName,
+		ttl,
+		b.clusterSettings.Version.ActiveVersion(b.ctx),
+	); err != nil {
+		panic(err)
+	}
+}
+
 func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
 	{
 		b.ensureDescriptor(id)
@@ -906,8 +938,8 @@ func (b *builderState) ComputedColumnExpression(
 func (b *builderState) PartialIndexPredicateExpression(
 	tableID catid.DescID, expr tree.Expr,
 ) tree.Expr {
-	// Ensure that an namespace entry exists for the table.
-	_, _, ns := scpb.FindNamespace(b.QueryByID(tableID))
+	// Ensure that a namespace entry exists for the table.
+	ns := b.QueryByID(tableID).FilterNamespace().MustGetOneElement()
 	if ns == nil {
 		panic(errors.AssertionFailedf("unable to find namespace for %d.", tableID))
 	}

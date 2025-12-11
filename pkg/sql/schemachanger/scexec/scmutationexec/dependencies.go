@@ -162,4 +162,7 @@ type DeferredMutationStateUpdater interface {
 
 	// UpdateTTLScheduleCron updates the cron expression for a TTL schedule.
 	UpdateTTLScheduleCron(ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string) error
+
+	// CreateRowLevelTTLSchedule creates a new row-level TTL schedule for a table.
+	CreateRowLevelTTLSchedule(ctx context.Context, tableID descpb.ID) error
 }
