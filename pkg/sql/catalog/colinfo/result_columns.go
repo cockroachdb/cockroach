@@ -192,6 +192,25 @@ var ShowFingerprintsColumns = ResultColumns{
 	{Name: "fingerprint", Typ: types.String},
 }
 
+// ShowStatementHintsColumns are the result columns of a
+// SHOW STATEMENT HINTS statement.
+var ShowStatementHintsColumns = ResultColumns{
+	{Name: "row_id", Typ: types.Int},
+	{Name: "fingerprint", Typ: types.String},
+	{Name: "hint_type", Typ: types.String},
+	{Name: "created_at", Typ: types.TimestampTZ},
+}
+
+// ShowStatementHintsDetailsColumns are the result columns of a
+// SHOW STATEMENT HINTS WITH DETAILS statement.
+var ShowStatementHintsDetailsColumns = ResultColumns{
+	{Name: "row_id", Typ: types.Int},
+	{Name: "fingerprint", Typ: types.String},
+	{Name: "hint_type", Typ: types.String},
+	{Name: "created_at", Typ: types.TimestampTZ},
+	{Name: "details", Typ: types.Jsonb},
+}
+
 // ShowTenantFingerprintsColumns are the result columns of a SHOW
 // EXPERIMENTAL_FINGERPRINTS FROM TENANT statement.
 var ShowTenantFingerprintsColumns = ResultColumns{

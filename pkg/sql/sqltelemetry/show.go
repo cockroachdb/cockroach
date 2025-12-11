@@ -63,6 +63,8 @@ const (
 	LogicalReplicationJobs
 	// InspectErrors represents the SHOW INSPECT ERRORS command.
 	InspectErrors
+	// StatementHints represents the SHOW STATEMENT HINTS command.
+	StatementHints
 )
 
 var showTelemetryNameMap = map[ShowTelemetryType]string{
@@ -89,6 +91,7 @@ var showTelemetryNameMap = map[ShowTelemetryType]string{
 	ExternalConnection:       "external_connection",
 	LogicalReplicationJobs:   "logical_replication_jobs",
 	InspectErrors:            "inspect_errors",
+	StatementHints:           "statement_hints",
 }
 
 func (s ShowTelemetryType) String() string {

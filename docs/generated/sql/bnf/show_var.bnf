@@ -38,5 +38,6 @@ show_stmt ::=
 	| show_default_session_variables_for_role_stmt
 	| show_zone_stmt
 	| show_full_scans_stmt
+	| show_statement_hints_stmt
 	| show_default_privileges_stmt
 	| show_inspect_errors_stmt

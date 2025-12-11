@@ -297,6 +297,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ShowZoneConfig(ctx, n)
 	case *tree.ShowFingerprints:
 		return p.ShowFingerprints(ctx, n)
+	case *tree.ShowStatementHints:
+		return p.ShowStatementHints(ctx, n)
 	case *tree.ShowTransactionStatus:
 		return p.ShowVar(ctx, &tree.ShowVar{Name: "transaction_status"})
 	case *tree.ShowTriggers:
@@ -441,6 +443,7 @@ func init() {
 		&tree.ShowTraceForSession{},
 		&tree.ShowZoneConfig{},
 		&tree.ShowFingerprints{},
+		&tree.ShowStatementHints{},
 		&tree.ShowVar{},
 		&tree.ShowTransactionStatus{},
 		&tree.ShowTriggers{},

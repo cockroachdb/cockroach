@@ -1273,6 +1273,24 @@ func (n *ShowFingerprints) walkStmt(v Visitor) Statement {
 	return ret
 }
 
+// copyNode makes a copy of this Statement without recursing in any child
+// Statements.
+func (n *ShowStatementHints) copyNode() *ShowStatementHints {
+	stmtCopy := *n
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (n *ShowStatementHints) walkStmt(v Visitor) Statement {
+	e, changed := WalkExpr(v, n.Expr)
+	if changed {
+		ret := n.copyNode()
+		ret.Expr = e
+		return ret
+	}
+	return n
+}
+
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (n *AlterTenantRename) copyNode() *AlterTenantRename {
 	stmtCopy := *n
@@ -2149,6 +2167,7 @@ var _ walkableStmt = &SetClusterSetting{}
 var _ walkableStmt = &SetTransaction{}
 var _ walkableStmt = &SetVar{}
 var _ walkableStmt = &ShowFingerprints{}
+var _ walkableStmt = &ShowStatementHints{}
 var _ walkableStmt = &ShowTenantClusterSetting{}
 var _ walkableStmt = &ShowTenant{}
 var _ walkableStmt = &UnionClause{}
