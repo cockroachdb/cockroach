@@ -728,10 +728,10 @@ constraints:
     non-voters:
 voter-constraints:
   +region=a:2
-    voters: 10
+    voters: 10 12
     non-voters: 11
   +zone=b1:1
-    voters: 12
+    voters:
     non-voters:
   satisfied-no-contraint:
     voters: 13

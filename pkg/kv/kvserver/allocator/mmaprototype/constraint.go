@@ -1424,6 +1424,7 @@ func (ac *analyzedConstraints) initialize(
 	constraints []internedConstraintsConjunction,
 	buf *analyzeConstraintsBuf,
 	constraintMatcher storeMatchesConstraintInterface,
+	isVoterConstraints bool,
 ) {
 	ac.constraints = constraints
 	if len(ac.constraints) == 0 {
@@ -1474,6 +1475,10 @@ func (ac *analyzedConstraints) initialize(
 	// satisfied by the stores currently assigned to it.
 	// TODO(wenyihu6): voter constraint should only count voters here (#158109)
 	isConstraintSatisfied := func(constraintIndex int) bool {
+		if isVoterConstraints {
+			// For voter constraints, only voters can satisfy them.
+			return len(ac.satisfiedByReplica[voterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
+		}
 		return len(ac.satisfiedByReplica[voterIndex][constraintIndex])+
 			len(ac.satisfiedByReplica[nonVoterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
 	}
@@ -1626,10 +1631,10 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 	rac.replicas = rac.buf.replicas
 
 	if spanConfig.constraints != nil {
-		rac.constraints.initialize(spanConfig.constraints, &rac.buf, constraintMatcher)
+		rac.constraints.initialize(spanConfig.constraints, &rac.buf, constraintMatcher, false /* isVoterConstraints */)
 	}
 	if spanConfig.voterConstraints != nil {
-		rac.voterConstraints.initialize(spanConfig.voterConstraints, &rac.buf, constraintMatcher)
+		rac.voterConstraints.initialize(spanConfig.voterConstraints, &rac.buf, constraintMatcher, true /* isVoterConstraints */)
 	}
 
 	rac.leaseholderID = leaseholder
