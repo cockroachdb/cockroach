@@ -14,8 +14,53 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+// snapWriter encapsulates storage readers and writers needed for constructing a
+// snapshot ingestion.
+// TODO(sep-raft-log): support separated engines.
+type snapWriter struct {
+	// stateRO reads the state machine state preceding the snapshot.
+	stateRO kvstorage.StateRO
+	// raftRO reads the raft engine state preceding the snapshot.
+	raftRO kvstorage.RaftRO
+	// raftWO is the pending write batch into the raft engine. Not nil iff
+	// separated engines are enabled. If nil, the raft state is written into the
+	// combined engine using writeSST.
+	raftWO storage.WriteBatch
+	// writeSST provides a Writer which the caller uses to populate a subset of
+	// the pending snapshot write. One writeSST call corresponds to one keys
+	// subspace (such as replicated RangeID-local) and/or one range.
+	//
+	// Commonly, writeSST provides a Writer backed by a newly created SSTable
+	// which will be part of a Pebble ingestion. Less commonly, when the snapshot
+	// is simple/small and applying it as a batch is more efficient, the Writer is
+	// backed by a shared Pebble batch (one for the entire snapshot application).
+	//
+	// All writes within writeSST are sorted by key. Distinct writeSST invocations
+	// write into non-overlapping spans. Both requirements are dictated by the
+	// common case in which the snapshot is applied as a Pebble ingestion.
+	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
+}
+
+// separateEngines sets up the snapWriter for separated state machine and raft
+// engines. Uses the provided log engine for creating a write batch into it.
+func (s *snapWriter) separateEngines(logEngine storage.Engine) {
+	if !buildutil.CrdbTestBuild {
+		panic("separated engines are not supported")
+	} else if s.raftWO != nil {
+		panic("separateEngines called twice")
+	}
+	s.raftWO = logEngine.NewWriteBatch()
+}
+
+func (s *snapWriter) close() {
+	if s.raftWO != nil {
+		s.raftWO.Close()
+	}
+}
 
 // snapWriteBuilder contains the data needed to prepare the on-disk state for a
 // snapshot.
@@ -24,9 +69,8 @@ import (
 type snapWriteBuilder struct {
 	id roachpb.FullReplicaID
 
-	todoEng  storage.Engine
-	sl       kvstorage.StateLoader
-	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
+	sl kvstorage.StateLoader
+	wr snapWriter
 
 	truncState kvserverpb.RaftTruncatedState
 	hardState  raftpb.HardState
@@ -41,20 +85,31 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	// TODO(pav-kv): assert that our replica already exists in storage. Note that
 	// it can be either uninitialized or initialized.
 	_ = applySnapshotTODO // 1.1 + 1.3 + 2.4 + 3.1
-	// TODO(sep-raft-log): rewriteRaftState now only touches raft engine keys, so
-	// it will be convenient to redirect it to a raft engine batch.
-	if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(w), s.sl, s.hardState, s.truncState)
-	}); err != nil {
+	if err := s.rewriteRaftState(ctx); err != nil {
 		return err
 	}
 	_ = applySnapshotTODO // 1.2 + 2.1 + 2.2 + 2.3 (diff) + 3.2
 	if err := s.clearSubsumedReplicaDiskData(ctx); err != nil {
 		return err
 	}
-
 	_ = applySnapshotTODO // 2.3 (split)
 	return s.clearResidualDataOnNarrowSnapshot(ctx)
+}
+
+// rewriteRaftState rewrites the raft state of the given replica with the
+// provided state. Specifically, it rewrites HardState and RaftTruncatedState,
+// and clears the raft log. All writes are generated in the engine keys order.
+func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context) error {
+	// With separated engines, update the raft engine batch directly.
+	if raftWO := s.wr.raftWO; raftWO != nil {
+		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(raftWO), s.sl,
+			s.hardState, s.truncState)
+	}
+	// With a combined engine, create an SST and update it.
+	return s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(w), s.sl,
+			s.hardState, s.truncState)
+	})
 }
 
 // clearSubsumedReplicaDiskData clears the on disk data of the subsumed
@@ -107,12 +162,19 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	// the span [b, sn). We do this in
 	// clearResidualDataOnNarrowSnapshot, not here.
 
-	// TODO(sep-raft-log): need different readers for raft and state engine.
-	reader := storage.Reader(s.todoEng)
 	for _, sub := range s.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
-		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			return kvstorage.SubsumeReplica(ctx, kvstorage.TODOReaderWriter(reader, w), sub)
+		if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+			// Redirect the raft portion of replica destruction to the raft batch when
+			// engines are separated.
+			raftWO := kvstorage.RaftWO(s.wr.raftWO)
+			if raftWO == nil {
+				raftWO = w
+			}
+			return kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
+				State: kvstorage.State{RO: s.wr.stateRO, WO: w},
+				Raft:  kvstorage.Raft{RO: s.wr.raftRO, WO: raftWO},
+			}, sub)
 		}); err != nil {
 			return err
 		}
@@ -174,8 +236,6 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 		return nil // we aren't narrowing anything; no-op
 	}
 
-	// TODO(sep-raft-log): read from the state machine engine here.
-	reader := storage.Reader(s.todoEng)
 	for _, span := range rditer.Select(0, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
 			RSpan:      roachpb.RSpan{Key: s.desc.EndKey, EndKey: endKey},
@@ -184,9 +244,9 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 			UserKeys:   true,
 		},
 	}) {
-		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		if err := s.wr.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 			return storage.ClearRangeWithHeuristic(
-				ctx, reader, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys(),
+				ctx, s.wr.stateRO, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys(),
 			)
 		}); err != nil {
 			return err
