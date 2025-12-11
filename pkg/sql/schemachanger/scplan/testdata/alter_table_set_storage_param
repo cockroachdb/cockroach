@@ -232,7 +232,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
     *scop.UpsertRowLevelTTL
       RowLevelTTL:
         ExpirationExpr: ts
-        ScheduleID: 1131801715215400961
+        ScheduleID: 1
         SelectRateLimit: 10
       TTLExpr:
         expr: ts
@@ -254,7 +254,7 @@ PreCommitPhase stage 2 of 2 with 1 MutationType op
     *scop.UpsertRowLevelTTL
       RowLevelTTL:
         ExpirationExpr: ts
-        ScheduleID: 1131801715215400961
+        ScheduleID: 1
         SelectRateLimit: 10
       TTLExpr:
         expr: ts
@@ -263,7 +263,7 @@ PreCommitPhase stage 2 of 2 with 1 MutationType op
       TableID: 107
 
 ops
-ALTER TABLE ttl_table SET (ttl_job_cron = '0 0 * * *');
+ALTER TABLE ttl_table SET (ttl_select_rate_limit = 10, ttl_job_cron = '0 0 * * *');
 ----
 StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
@@ -274,7 +274,8 @@ StatementPhase stage 1 of 1 with 1 MutationType op
       RowLevelTTL:
         DeletionCron: 0 0 * * *
         ExpirationExpr: ts
-        ScheduleID: 1131801715215400961
+        ScheduleID: 1
+        SelectRateLimit: 10
       TTLExpr:
         expr: ts
         referencedColumnIds:
@@ -296,7 +297,8 @@ PreCommitPhase stage 2 of 2 with 2 MutationType ops
       RowLevelTTL:
         DeletionCron: 0 0 * * *
         ExpirationExpr: ts
-        ScheduleID: 1131801715215400961
+        ScheduleID: 1
+        SelectRateLimit: 10
       TTLExpr:
         expr: ts
         referencedColumnIds:
@@ -304,5 +306,5 @@ PreCommitPhase stage 2 of 2 with 2 MutationType ops
       TableID: 107
     *scop.UpdateTTLScheduleCron
       NewCronExpr: 0 0 * * *
-      ScheduleID: 1131801715215400961
+      ScheduleID: 1
       TableID: 107

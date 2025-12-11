@@ -365,6 +365,7 @@ object RowLevelTTL
 RowLevelTTL :  TableID
 RowLevelTTL :  RowLevelTTL
 RowLevelTTL :  TTLExpr
+RowLevelTTL :  SeqNum
 
 object Schema
 
