@@ -2161,7 +2161,7 @@ func handleTTLStorageParamChange(
 
 		// Update cron schedule if required.
 		if before.DeletionCron != after.DeletionCron {
-			env := JobSchedulerEnv(params.ExecCfg().JobsKnobs())
+			env := jobs.JobSchedulerEnv(params.ExecCfg().JobsKnobs())
 			schedules := jobs.ScheduledJobTxn(params.p.InternalSQLTxn())
 			s, err := schedules.Load(
 				params.ctx,
