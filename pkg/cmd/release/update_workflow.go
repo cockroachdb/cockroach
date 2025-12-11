@@ -7,13 +7,13 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"slices"
 	"strings"
 
 	"github.com/cockroachdb/version"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 const workflowFile = ".github/workflows/update_releases.yaml"
@@ -77,7 +77,7 @@ func findLatestReleaseBranch() (string, error) {
 		// Add .0 for patch to make it a valid semantic version
 		v, err := version.Parse("v" + versionStr + ".0")
 		if err != nil {
-			log.Printf("WARNING: cannot parse version from branch %s: %v", branch, err)
+			fmt.Printf("WARNING: cannot parse version from branch %s: %v\n", branch, err)
 			continue
 		}
 		versions = append(versions, branchVersion{branch, v})
@@ -96,35 +96,9 @@ func findLatestReleaseBranch() (string, error) {
 	return versions[len(versions)-1].branch, nil
 }
 
-// addBranchToWorkflow adds the specified branch to the workflow file if not already present.
-func addBranchToWorkflow(branch string) error {
-	// Read the workflow file
-	rawData, err := os.ReadFile(workflowFile)
-	if err != nil {
-		return fmt.Errorf("failed to read workflow file: %w", err)
-	}
-
-	lines := strings.Split(string(rawData), "\n")
-
-	// Find the branch section and extract current branches
-	currentBranches, branchStart, branchEnd, indent, err := parseBranchSection(lines)
-	if err != nil {
-		return err
-	}
-
-	// Check if branch already exists
-	for _, b := range currentBranches {
-		if b == branch {
-			fmt.Printf("Branch %s is already in the workflow file\n", branch)
-			return nil
-		}
-	}
-
-	// Add the new branch
-	currentBranches = append(currentBranches, branch)
-
-	// Sort branches: master first, then release branches in version order
-	slices.SortFunc(currentBranches, func(a, b string) int {
+// sortBranches sorts branches with master first, then release branches in version order.
+func sortBranches(branches []string) {
+	slices.SortFunc(branches, func(a, b string) int {
 		if a == "master" {
 			return -1
 		}
@@ -146,109 +120,137 @@ func addBranchToWorkflow(branch string) error {
 
 		return va.Compare(vb)
 	})
+}
 
-	// Write the updated file
-	if err := writeBranchSection(lines, currentBranches, branchStart, branchEnd, indent); err != nil {
+// addBranchToWorkflow adds the specified branch to the workflow file if not already present.
+func addBranchToWorkflow(branch string) error {
+	// Read and parse the workflow file
+	data, err := os.ReadFile(workflowFile)
+	if err != nil {
+		return fmt.Errorf("failed to read workflow file: %w", err)
+	}
+
+	var workflow yaml.Node
+	if err := yaml.Unmarshal(data, &workflow); err != nil {
+		return fmt.Errorf("failed to parse workflow YAML: %w", err)
+	}
+
+	// Navigate to jobs.update-crdb-releases-yaml.strategy.matrix.branch
+	branchNode, err := findBranchNode(&workflow)
+	if err != nil {
 		return err
+	}
+
+	// Extract current branches
+	var currentBranches []string
+	for _, item := range branchNode.Content {
+		if item.Kind == yaml.ScalarNode {
+			currentBranches = append(currentBranches, item.Value)
+		}
+	}
+
+	// Check if branch already exists
+	if slices.Contains(currentBranches, branch) {
+		fmt.Printf("Branch %s is already in the workflow file\n", branch)
+		return nil
+	}
+
+	// Add the new branch and sort
+	currentBranches = append(currentBranches, branch)
+	sortBranches(currentBranches)
+
+	// Update the YAML node with sorted branches
+	branchNode.Content = make([]*yaml.Node, 0, len(currentBranches))
+	for _, b := range currentBranches {
+		branchNode.Content = append(branchNode.Content, &yaml.Node{
+			Kind:  yaml.ScalarNode,
+			Style: yaml.DoubleQuotedStyle,
+			Value: b,
+		})
+	}
+
+	// Marshal back to YAML
+	var buf strings.Builder
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(&workflow); err != nil {
+		return fmt.Errorf("failed to encode YAML: %w", err)
+	}
+	encoder.Close()
+
+	// Write back to file
+	if err := os.WriteFile(workflowFile, []byte(buf.String()), 0644); err != nil {
+		return fmt.Errorf("failed to write workflow file: %w", err)
 	}
 
 	fmt.Printf("Added branch %s to workflow file\n", branch)
 	return nil
 }
 
-// parseBranchSection parses the workflow file to find the branch matrix section.
-func parseBranchSection(
-	lines []string,
-) (branches []string, start int, end int, indent string, err error) {
-	start = -1
-	end = -1
+// findBranchNode navigates the YAML tree to find the branch array node.
+func findBranchNode(root *yaml.Node) (*yaml.Node, error) {
+	// Navigate: root -> jobs (map key) -> jobs (map value) ->
+	// update-crdb-releases-yaml (key) -> update-crdb-releases-yaml (value) ->
+	// strategy (key) -> strategy (value) -> matrix (key) -> matrix (value) ->
+	// branch (key) -> branch (value - sequence)
 
-	for i, line := range lines {
-		// Look for "branch:" within the matrix section
-		if strings.Contains(line, "branch:") && !strings.HasPrefix(strings.TrimSpace(line), "#") {
-			start = i + 1
-			// Determine indentation from the next line
-			if i+1 < len(lines) {
-				nextLine := lines[i+1]
-				// Count leading spaces
-				trimmed := strings.TrimLeft(nextLine, " ")
-				indent = strings.Repeat(" ", len(nextLine)-len(trimmed))
-			}
-		} else if start != -1 && end == -1 {
-			// Check if this line is still part of branch list
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" {
-				// Empty line, continue
-				continue
-			}
-			if !strings.HasPrefix(trimmed, "-") {
-				// Found the end of the branch list
-				end = i
-				break
-			} else {
-				// Extract branch name from line like '- "release-25.4"'
-				// Remove leading "- " and quotes
-				branchLine := strings.TrimSpace(trimmed)
-				branchLine = strings.TrimPrefix(branchLine, "- ")
-				branchLine = strings.Trim(branchLine, "\"")
-				branches = append(branches, branchLine)
-			}
-		}
+	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 {
+		return nil, fmt.Errorf("invalid YAML structure: expected document node")
 	}
 
-	if start == -1 {
-		return nil, 0, 0, "", fmt.Errorf("branch section not found in workflow file")
+	topMap := root.Content[0]
+	if topMap.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("invalid YAML structure: expected mapping at top level")
 	}
 
-	// If we reached end of file, set end to len(lines)
-	if end == -1 {
-		end = len(lines)
+	// Find "jobs" key
+	jobsNode := findMapValue(topMap, "jobs")
+	if jobsNode == nil {
+		return nil, fmt.Errorf("'jobs' key not found in workflow")
 	}
 
-	return branches, start, end, indent, nil
+	// Find "update-crdb-releases-yaml" key
+	jobNode := findMapValue(jobsNode, "update-crdb-releases-yaml")
+	if jobNode == nil {
+		return nil, fmt.Errorf("'update-crdb-releases-yaml' job not found")
+	}
+
+	// Find "strategy" key
+	strategyNode := findMapValue(jobNode, "strategy")
+	if strategyNode == nil {
+		return nil, fmt.Errorf("'strategy' key not found in job")
+	}
+
+	// Find "matrix" key
+	matrixNode := findMapValue(strategyNode, "matrix")
+	if matrixNode == nil {
+		return nil, fmt.Errorf("'matrix' key not found in strategy")
+	}
+
+	// Find "branch" key
+	branchNode := findMapValue(matrixNode, "branch")
+	if branchNode == nil {
+		return nil, fmt.Errorf("'branch' key not found in matrix")
+	}
+
+	if branchNode.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("'branch' value is not a sequence")
+	}
+
+	return branchNode, nil
 }
 
-// writeBranchSection writes the updated branch list back to the workflow file.
-func writeBranchSection(
-	lines []string, branches []string, start int, end int, indent string,
-) error {
-	// Build new lines
-	var newLines []string
-	newLines = append(newLines, lines[:start]...)
-
-	// Add branch lines
-	for _, branch := range branches {
-		newLines = append(newLines, fmt.Sprintf("%s- %q", indent, branch))
+// findMapValue finds a value in a mapping node by key.
+func findMapValue(mapNode *yaml.Node, key string) *yaml.Node {
+	if mapNode.Kind != yaml.MappingNode {
+		return nil
 	}
 
-	// Add remaining lines
-	newLines = append(newLines, lines[end:]...)
-
-	// Write back to file using atomic write pattern
-	// Create temp file in the same directory as target to avoid cross-device link errors
-	dir := ".github/workflows"
-	f, err := os.CreateTemp(dir, "update_releases_*.yaml")
-	if err != nil {
-		return fmt.Errorf("could not create temporary file: %w", err)
-	}
-	tmpName := f.Name()
-	defer func() {
-		if err != nil {
-			_ = os.Remove(tmpName)
+	// Mapping nodes have alternating key-value pairs in Content
+	for i := 0; i < len(mapNode.Content); i += 2 {
+		if mapNode.Content[i].Value == key {
+			return mapNode.Content[i+1]
 		}
-	}()
-
-	if _, err = f.WriteString(strings.Join(newLines, "\n")); err != nil {
-		f.Close()
-		return fmt.Errorf("error writing to temp file: %w", err)
-	}
-
-	if err = f.Close(); err != nil {
-		return fmt.Errorf("error closing temp file: %w", err)
-	}
-
-	if err = os.Rename(tmpName, workflowFile); err != nil {
-		return fmt.Errorf("error moving file to final destination: %w", err)
 	}
 
 	return nil
