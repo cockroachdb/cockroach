@@ -259,12 +259,11 @@ func (*testingInspectCheckSpan) Close(ctx context.Context) error {
 	return nil
 }
 
-func (t *testingInspectCheckSpan) RegisterChecksForSpan(checks inspectChecks) error {
-	return nil
-}
-
 func (t *testingInspectCheckSpan) CheckSpan(
-	ctx context.Context, logger *inspectLoggerBundle, msg *jobspb.InspectProcessorProgress,
+	ctx context.Context,
+	checks inspectChecks,
+	logger *inspectLoggerBundle,
+	msg *jobspb.InspectProcessorProgress,
 ) error {
 	for i := t.spanIssues; i > 0; i-- {
 		err := logger.logIssue(ctx, &inspectIssue{})

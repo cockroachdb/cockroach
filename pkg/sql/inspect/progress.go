@@ -486,5 +486,6 @@ func countApplicableClusterChecks(checkers []inspectCheckApplicability) (int64, 
 // updateWithSpanProgress updates the InspectProgress with data from the
 // check-specific fields in the span progress update.
 func updateWithSpanProgress(p *jobspb.InspectProgress, prog *jobspb.InspectProcessorProgress) {
-	// For future span-level checks.
+	// Update the row count field.
+	p.RowCount += prog.SpanRowCount
 }
