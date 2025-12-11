@@ -839,5 +839,6 @@ func (t *inspectProgressTracker) applySpanCheckData(
 		return
 	}
 
-	// For future span-level checks.
+	// Update the row count field.
+	t.mu.spanCheckData.RowCount += incomingSpanCheckData.SpanRowCount
 }
