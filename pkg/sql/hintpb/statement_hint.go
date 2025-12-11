@@ -6,6 +6,8 @@
 package hintpb
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -30,4 +32,28 @@ func ToBytes(hint StatementHintUnion) ([]byte, error) {
 		return nil, errors.New("cannot convert empty hint to bytes")
 	}
 	return protoutil.Marshal(&hint)
+}
+
+// HintType returns a string representation of the hint type for display.
+func (h StatementHintUnion) HintType() string {
+	switch h.GetValue().(type) {
+	case *InjectHints:
+		return "rewrite_inline_hints"
+	default:
+		return "unknown"
+	}
+}
+
+// Details returns a JSON representation of the hint details. This is used for
+// displaying hint information in SHOW STATEMENT HINTS WITH DETAILS.
+func (h *StatementHintUnion) Details() (json.JSON, error) {
+	var wrapped protoutil.Message
+	switch t := h.GetValue().(type) {
+	case *InjectHints:
+		wrapped = t
+	default:
+		return nil, errors.New("unknown hint type")
+	}
+	flags := protoreflect.FmtFlags{EmitDefaults: true}
+	return protoreflect.MessageToJSON(wrapped, flags)
 }

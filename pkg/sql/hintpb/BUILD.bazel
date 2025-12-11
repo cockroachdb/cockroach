@@ -26,6 +26,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/hintpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/protoreflect",
+        "//pkg/util/json",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
