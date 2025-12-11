@@ -37,18 +37,32 @@ func TestDestroyReplica(t *testing.T) {
 	storage.DisableMetamorphicSimpleValueEncoding(t) // for deterministic output
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
+	e := MakeEngines(eng) // TODO(pav-kv): test separated engines too
 
 	printBatch := func(name string, b storage.WriteBatch) string {
 		str, err := print.DecodeWriteBatch(b.Repr())
 		require.NoError(t, err)
 		return fmt.Sprintf(">> %s:\n%s", name, str)
 	}
-	mutate := func(name string, write func(storage.ReadWriter)) string {
+	mutate := func(name string, eng storage.Engine, write func(storage.ReadWriter)) string {
 		b := eng.NewBatch()
 		defer b.Close()
 		write(b)
 		str := printBatch(name, b)
 		require.NoError(t, b.Commit(false))
+		return str
+	}
+	mutateSep := func(name string, eng Engines, write func(ReadWriter)) string {
+		b := makeTestBatch(eng)
+		defer b.close()
+		write(b.readWriter())
+		var str string
+		if eng.Separated() {
+			str = printBatch(name+"/state", b.batch) + printBatch(name+"/raft", b.raftBatch)
+		} else {
+			str = printBatch(name, b.batch)
+		}
+		require.NoError(t, b.commit())
 		return str
 	}
 
@@ -62,13 +76,13 @@ func TestDestroyReplica(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	out := mutate("raft", func(rw storage.ReadWriter) {
+	out := mutate("raft", e.LogEngine(), func(rw storage.ReadWriter) {
 		r.createRaftState(ctx, t, rw)
-	}) + mutate("state", func(rw storage.ReadWriter) {
+	}) + mutate("state", e.StateEngine(), func(rw storage.ReadWriter) {
 		r.createStateMachine(ctx, t, rw)
-	}) + mutate("destroy", func(rw storage.ReadWriter) {
+	}) + mutateSep("destroy", e, func(rw ReadWriter) {
 		require.NoError(t, DestroyReplica(
-			ctx, TODOReadWriter(rw),
+			ctx, rw,
 			DestroyReplicaInfo{FullReplicaID: r.id, Keys: r.keys}, r.id.ReplicaID+1,
 		))
 	})
@@ -138,5 +152,46 @@ func createRangeData(t *testing.T, rw storage.ReadWriter, span roachpb.RSpan) {
 			Key: k, Strength: lock.Intent, TxnUUID: uuid.UUID{},
 		}.ToEngineKey(nil)
 		require.NoError(t, rw.PutEngineKey(ek, nil))
+	}
+}
+
+type testBatch struct {
+	batch     storage.Batch
+	raftBatch storage.Batch
+}
+
+func makeTestBatch(eng Engines) testBatch {
+	if !eng.Separated() {
+		return testBatch{batch: eng.TODOEngine().NewBatch()}
+	}
+	return testBatch{
+		batch:     eng.StateEngine().NewBatch(),
+		raftBatch: eng.LogEngine().NewBatch(),
+	}
+}
+
+func (b *testBatch) readWriter() ReadWriter {
+	if b.raftBatch == nil {
+		return TODOReadWriter(b.batch)
+	}
+	return ReadWriter{
+		State: State{RO: b.batch, WO: b.batch},
+		Raft:  Raft{RO: b.raftBatch, WO: b.raftBatch},
+	}
+}
+
+func (b *testBatch) commit() error {
+	if b.raftBatch != nil {
+		if err := b.raftBatch.Commit(false /* sync */); err != nil {
+			return err
+		}
+	}
+	return b.batch.Commit(false /* sync */)
+}
+
+func (b *testBatch) close() {
+	b.batch.Close()
+	if b.raftBatch != nil {
+		b.raftBatch.Close()
 	}
 }
