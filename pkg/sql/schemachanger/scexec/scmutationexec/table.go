@@ -35,23 +35,23 @@ func (i *immediateVisitor) SetTableSchemaLocked(
 func (i *immediateVisitor) SetTableStorageParam(
 	ctx context.Context, op scop.SetTableStorageParam,
 ) error {
-	tbl, err := i.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.Param.TableID)
 	if err != nil {
 		return err
 	}
 	setter := tablestorageparam.NewSetter(tbl, false /* isNewObject */)
-	return setter.SetToStringValue(ctx, op.Name, op.Value)
+	return setter.SetToStringValue(ctx, op.Param.Name, op.Param.Value)
 }
 
 func (i *immediateVisitor) ResetTableStorageParam(
 	ctx context.Context, op scop.ResetTableStorageParam,
 ) error {
-	tbl, err := i.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.Param.TableID)
 	if err != nil {
 		return err
 	}
 	setter := tablestorageparam.NewSetter(tbl, false /* isNewObject */)
-	return setter.ResetToZeroValue(ctx, op.Name)
+	return setter.ResetToZeroValue(ctx, op.Param.Name)
 }
 
 func (d *deferredVisitor) UpdateTTLScheduleMetadata(

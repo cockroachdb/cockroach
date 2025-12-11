@@ -1263,11 +1263,11 @@ type SetTableSchemaLocked struct {
 // SetTableStorageParam sets a storage parameter on a table.
 type SetTableStorageParam struct {
 	immediateMutationOp
-	scpb.TableStorageParam
+	Param scpb.TableStorageParam
 }
 
 // ResetTableStorageParam resets a storage parameter on a table to its default.
 type ResetTableStorageParam struct {
 	immediateMutationOp
-	scpb.TableStorageParam
+	Param scpb.TableStorageParam
 }

@@ -970,7 +970,7 @@ message TableSchemaLocked {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
-// TableStorageParam models storage parameter `schema_locked` of a table.
+// TableStorageParam models the storage parameters of a table other than `schema_locked` and RowLevelTTL-related ones.
 message TableStorageParam {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string name = 2;
