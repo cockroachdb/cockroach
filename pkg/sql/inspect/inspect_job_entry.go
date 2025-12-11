@@ -95,7 +95,7 @@ func checksForDatabase(
 	checks := []*jobspb.InspectDetails_Check{}
 
 	if err := tables.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		tableChecks, err := ChecksForTable(ctx, p, desc.(catalog.TableDescriptor))
+		tableChecks, err := ChecksForTable(ctx, p, desc.(catalog.TableDescriptor), nil /* rowCount */)
 		if err != nil {
 			return err
 		}
@@ -111,7 +111,7 @@ func checksForDatabase(
 // ChecksForTable generates checks on every supported index on the given
 // table.
 func ChecksForTable(
-	ctx context.Context, p sql.PlanHookState, table catalog.TableDescriptor,
+	ctx context.Context, p sql.PlanHookState, table catalog.TableDescriptor, rowCount *uint64,
 ) ([]*jobspb.InspectDetails_Check, error) {
 	checks := []*jobspb.InspectDetails_Check{}
 
@@ -137,7 +137,35 @@ func ChecksForTable(
 		checks = append(checks, &check)
 	}
 
+	if rowCount != nil {
+		// If none of the previous checks provide a row count, add a noop check.
+		if !includesRowCounterCheck(checks) {
+			checks = append(checks, &jobspb.InspectDetails_Check{
+				Type:         jobspb.InspectCheckIndexConsistency,
+				TableID:      table.GetID(),
+				IndexID:      table.GetPrimaryIndexID(),
+				TableVersion: table.GetVersion(),
+			})
+		}
+
+		checks = append(checks, &jobspb.InspectDetails_Check{
+			Type:     jobspb.InspectCheckRowCount,
+			TableID:  table.GetID(),
+			RowCount: *rowCount,
+		})
+	}
+
 	return checks, nil
+}
+
+func includesRowCounterCheck(checks []*jobspb.InspectDetails_Check) bool {
+	for _, check := range checks {
+		if check.Type == jobspb.InspectCheckIndexConsistency {
+			return true
+		}
+	}
+
+	return false
 }
 
 type indexKey struct {

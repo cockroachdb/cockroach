@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -176,5 +177,17 @@ func (r *RowLevelTTLProcessorProgress) SafeFormat(p redact.SafePrinter, _ rune) 
 // UpdateWithSpanProgress updates the InspectProgress with data from the
 // check-specific fields in the span progress update.
 func (p *InspectProgress) UpdateWithSpanProgress(prog *InspectProcessorProgress) {
-	return
+	// Update the row count field.
+	lookup := make(map[descpb.IndexID]*InspectRowCount)
+	for _, rowCount := range p.IndexRowCounts {
+		lookup[rowCount.IndexID] = rowCount
+	}
+
+	for _, spanRowCount := range prog.SpanRowCounts {
+		if rowCount, ok := lookup[spanRowCount.IndexID]; ok {
+			rowCount.RowCount += spanRowCount.RowCount
+		} else {
+			p.IndexRowCounts = append(p.IndexRowCounts, spanRowCount)
+		}
+	}
 }

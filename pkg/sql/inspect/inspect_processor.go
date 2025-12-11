@@ -550,6 +550,16 @@ func buildInspectCheckFactories(
 					asOf:         asOf,
 				}
 			})
+		case jobspb.InspectCheckRowCount:
+			checkFactories = append(checkFactories, func(asOf hlc.Timestamp) inspectCheck {
+				return &rowCountCheck{
+					rowCountCheckApplicability: rowCountCheckApplicability{
+						tableID: tableID,
+					},
+					expected: specCheck.RowCount,
+					asOf:     asOf,
+				}
+			})
 		default:
 			return nil, errors.AssertionFailedf("unsupported inspect check type: %v", specCheck.Type)
 		}

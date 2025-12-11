@@ -88,10 +88,14 @@ type indexConsistencyCheck struct {
 
 	// lastQueryPlaceholders stores the placeholder values used in lastQuery.
 	lastQueryPlaceholders []interface{}
+
+	// rowCount stores the number of rows processed by the check.
+	rowCount uint64
 }
 
 var _ inspectCheck = (*indexConsistencyCheck)(nil)
 var _ inspectCheckApplicability = (*indexConsistencyCheck)(nil)
+var _ inspectCheckRowCount = (*indexConsistencyCheck)(nil)
 
 // Started implements the inspectCheck interface.
 func (c *indexConsistencyCheck) Started() bool {
@@ -416,6 +420,7 @@ func (c *indexConsistencyCheck) Done(context.Context) bool {
 // Close implements the inspectCheck interface.
 func (c *indexConsistencyCheck) Close(context.Context) error {
 	if c.rowIter != nil {
+		c.rowCount = uint64(c.rowIter.RowsAffected())
 		// Clear the iter ahead of close to ensure we only attempt the close once.
 		it := c.rowIter
 		c.rowIter = nil
@@ -424,6 +429,13 @@ func (c *indexConsistencyCheck) Close(context.Context) error {
 		}
 	}
 	return nil
+}
+
+// Rows implements the inspectCheckRowCount interface.
+func (c *indexConsistencyCheck) Rows() map[descpb.IndexID]uint64 {
+	return map[descpb.IndexID]uint64{
+		c.indexID: c.rowCount,
+	}
 }
 
 // loadCatalogInfo loads the table descriptor and validates the specified
@@ -461,6 +473,13 @@ func (c *indexConsistencyCheck) loadCatalogInfo(ctx context.Context) error {
 		}
 
 		c.priIndex = c.tableDesc.GetPrimaryIndex()
+
+		// The row count check run a consistency check on the primary index if
+		// no other checks scan for the row count.
+		if c.indexID == c.priIndex.GetID() {
+			c.secIndex = c.priIndex
+			return nil
+		}
 
 		for _, idx := range c.tableDesc.PublicNonPrimaryIndexes() {
 			if idx.GetID() != c.indexID {
