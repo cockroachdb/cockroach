@@ -79,6 +79,12 @@ func makeRateLimitedTimeoutFunc(rateSettings *settings.ByteSizeSetting) queuePro
 // the operations's timeout.
 const permittedRangeScanSlowdown = 10
 
+// snapshotIngestSlowdown is the factor used to determine the minimum rate of
+// snapshot ingestion. This is half of the permittedRangeScanSlowdown factor,
+// meaning we allow snapshots to ingest atleast as fast as would be necessary to
+// complete within half of a snapshots timeout duration.
+const snapshotIngestSlowdown = permittedRangeScanSlowdown / 2
+
 // makeRateLimitedTimeoutFuncByPermittedSlowdown creates a timeout function based on a permitted
 // slowdown factor on the estimated queue processing duration based on the given rate settings.
 // See makeRateLimitedTimeoutFunc for more information.
