@@ -31,11 +31,11 @@ func WriteClusterVersion(
 // At the time of writing this is used during bootstrap, initial server start
 // (to perhaps fill into additional stores), and during cluster version bumps.
 func WriteClusterVersionToEngines(
-	ctx context.Context, engines []storage.Engine, cv clusterversion.ClusterVersion,
+	ctx context.Context, engines []Engines, cv clusterversion.ClusterVersion,
 ) error {
 	for _, eng := range engines {
-		if err := WriteClusterVersion(ctx, eng, cv); err != nil {
-			return errors.Wrapf(err, "error writing version to engine %s", eng)
+		if err := WriteClusterVersion(ctx, eng.TODOEngine(), cv); err != nil {
+			return errors.Wrapf(err, "error writing version to engine %s", eng.TODOEngine())
 		}
 	}
 	return nil

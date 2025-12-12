@@ -1629,7 +1629,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		// that version won't be on all engines. For that reason, we backfill
 		// once.
 		if err := kvstorage.WriteClusterVersionToEngines(
-			ctx, s.engines.TODO(), initialDiskClusterVersion,
+			ctx, s.engines, initialDiskClusterVersion,
 		); err != nil {
 			return err
 		}
@@ -1842,7 +1842,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		// itself, and then informing the version setting about it (an invariant
 		// we must up hold whenever setting a new active version).
 		if err := kvstorage.WriteClusterVersionToEngines(
-			ctx, s.engines.TODO(), state.clusterVersion,
+			ctx, s.engines, state.clusterVersion,
 		); err != nil {
 			return err
 		}

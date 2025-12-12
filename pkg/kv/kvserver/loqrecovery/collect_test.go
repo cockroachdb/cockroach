@@ -31,7 +31,7 @@ func TestCollectChecksStoreInfo(t *testing.T) {
 	defer engines.Close()
 
 	v := roachpb.Version{Major: 21, Minor: 2}
-	if err := kvstorage.WriteClusterVersionToEngines(ctx, []storage.Engine{engines.TODOEngine()},
+	if err := kvstorage.WriteClusterVersionToEngines(ctx, []kvstorage.Engines{engines},
 		clusterversion.ClusterVersion{Version: v}); err != nil {
 		t.Fatalf("failed to populate test store cluster version: %v", err)
 	}
