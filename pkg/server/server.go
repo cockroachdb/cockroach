@@ -556,7 +556,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 			decomNodeMap.onNodeDecommissioned(id)
 		},
-		Engines: engines.TODO(),
+		Engines: engines,
 		OnSelfHeartbeat: func(ctx context.Context) {
 			now := clock.Now()
 			if err := stores.VisitStores(func(s *kvserver.Store) error {
