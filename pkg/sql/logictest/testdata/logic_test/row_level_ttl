@@ -93,7 +93,7 @@ subtest end
 
 subtest create_table_crdb_internal_expiration_incorrect_explicit_default
 
-statement error expected DEFAULT expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
+statement error expected DEFAULT expression of crdb_internal_expiration to be \( current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL \)
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
   crdb_internal_expiration TIMESTAMPTZ
@@ -103,7 +103,7 @@ subtest end
 
 subtest create_table_crdb_internal_expiration_incorrect_explicit_on_update
 
-statement error expected ON UPDATE expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
+statement error expected ON UPDATE expression of crdb_internal_expiration to be \( current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL \)
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
   crdb_internal_expiration TIMESTAMPTZ DEFAULT current_timestamp() + '10 minutes'
@@ -289,35 +289,46 @@ DROP SCHEDULE $schedule_id
 
 subtest end
 
+# The following tests verify that the legacy schema changer detects concurrent
+# schema changes when modifying TTL settings. These are specific to the legacy
+# schema changer's behavior.
 subtest existing_ttl_concurrent_schema_change
 
+onlyif config local-legacy-schema-changer
 statement ok
 SET autocommit_before_ddl = false
 
+onlyif config local-legacy-schema-changer
 statement ok
 CREATE TABLE tbl_existing_ttl_concurrent_schema_change (
   id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes', schema_locked=false)
 
+onlyif config local-legacy-schema-changer
 statement error cannot modify TTL settings while another schema change on the table is being processed
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl), RESET (ttl_expire_after)
 
+onlyif config local-legacy-schema-changer
 statement error cannot modify TTL settings while another schema change on the table is being processed
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl);
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change SET (ttl_select_batch_size = 200)
 
+onlyif config local-legacy-schema-changer
 statement ok
 ROLLBACK
 
+onlyif config local-legacy-schema-changer
 statement error cannot perform other schema changes in the same transaction as a TTL mutation
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl);
 CREATE INDEX tbl_idx ON tbl_existing_ttl_concurrent_schema_change (id)
 
+onlyif config local-legacy-schema-changer
 statement ok
 ROLLBACK
 
+onlyif config local-legacy-schema-changer
 statement ok
 RESET autocommit_before_ddl
 
@@ -325,41 +336,51 @@ subtest end
 
 subtest add_ttl_concurrent_schema_change
 
+onlyif config local-legacy-schema-changer
 statement ok
 SET autocommit_before_ddl = false
 
+onlyif config local-legacy-schema-changer
 statement ok
 CREATE TABLE tbl_add_ttl_concurrent_schema_change (
    id INT PRIMARY KEY
 ) WITH (schema_locked = false)
 
+onlyif config local-legacy-schema-changer
 statement error cannot modify TTL settings while another schema change on the table is being processed
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes'), SET (ttl_select_batch_size = 200)
 
+onlyif config local-legacy-schema-changer
 statement error cannot modify TTL settings while another schema change on the table is being processed
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
 ALTER TABLE tbl_add_ttl_concurrent_schema_change RESET (ttl_select_batch_size)
 
+onlyif config local-legacy-schema-changer
 statement ok
 ROLLBACK
 
+onlyif config local-legacy-schema-changer
 statement error cannot modify TTL settings while another schema change on the table is being processed
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE INDEX tbl_idx ON tbl_add_ttl_concurrent_schema_change (id);
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
 
+onlyif config local-legacy-schema-changer
 statement ok
 ROLLBACK
 
+onlyif config local-legacy-schema-changer
 statement error cannot perform other schema changes in the same transaction as a TTL mutation
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
 CREATE INDEX tbl_idx ON tbl_add_ttl_concurrent_schema_change (id)
 
+onlyif config local-legacy-schema-changer
 statement ok
 ROLLBACK
 
+onlyif config local-legacy-schema-changer
 statement ok
 RESET autocommit_before_ddl
 
