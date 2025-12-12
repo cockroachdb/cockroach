@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
@@ -229,16 +230,15 @@ func (ds *Server) RegisterWorkloadCollector(stores *kvserver.Stores) error {
 
 // GetLSMStats creates a mapping between store IDs and LSM stats for all of the
 // provided storage engines.
-func GetLSMStats(engines []storage.Engine) (map[roachpb.StoreID]string, error) {
-	stats := make(map[roachpb.StoreID]string)
+func GetLSMStats(engines []kvstorage.Engines) (map[roachpb.StoreID]string, error) {
+	stats := make(map[roachpb.StoreID]string, len(engines))
 	for _, eng := range engines {
-		storeID, err := eng.GetStoreID()
+		storeID, err := eng.TODOEngine().GetStoreID()
 		if err != nil {
 			return nil, err
 		}
-		stats[roachpb.StoreID(storeID)] = eng.GetMetrics().String()
+		stats[roachpb.StoreID(storeID)] = eng.TODOEngine().GetMetrics().String()
 	}
-
 	return stats, nil
 }
 
@@ -252,7 +252,7 @@ func FormatLSMStats(stats map[roachpb.StoreID]string) string {
 }
 
 // RegisterEngines setups up debug engine endpoints for the known storage engines.
-func (ds *Server) RegisterEngines(engines []storage.Engine) error {
+func (ds *Server) RegisterEngines(engines []kvstorage.Engines) error {
 	ds.mux.HandleFunc("/debug/lsm", func(w http.ResponseWriter, req *http.Request) {
 		stats, err := GetLSMStats(engines)
 		if err != nil {
@@ -262,13 +262,13 @@ func (ds *Server) RegisterEngines(engines []storage.Engine) error {
 	})
 
 	for _, eng := range engines {
-		dir := eng.Env().Dir
+		dir := eng.TODOEngine().Env().Dir
 		if dir == "" {
 			// TODO(yevgeniy): Add plumbing to support LSM visualization for in memory engines.
 			continue
 		}
 
-		storeID, err := eng.GetStoreID()
+		storeID, err := eng.TODOEngine().GetStoreID()
 		if err != nil {
 			return err
 		}
@@ -293,7 +293,7 @@ func (ds *Server) RegisterEngines(engines []storage.Engine) error {
 				ctx := req.Context()
 				ctx, cancel := context.WithTimeout(ctx, dur)
 				defer cancel()
-				profile, err := eng.ProfileSeparatedValueRetrievals(ctx)
+				profile, err := eng.TODOEngine().ProfileSeparatedValueRetrievals(ctx)
 				if err != nil {
 					http.Error(w, "error profiling separated value retrievals", http.StatusInternalServerError)
 					return
