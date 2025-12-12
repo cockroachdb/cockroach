@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -101,6 +102,16 @@ func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, 
 			break
 		}
 	}
+}
+
+// DumpNow requests a goroutine dump on demand.
+//
+// This is currently a stub and does not take a dump.
+func (gd *GoroutineDumper) DumpNow(
+	ctx context.Context, reason redact.RedactableString,
+) (didDump bool, _ error) {
+	log.Dev.Infof(ctx, "on-demand goroutine dump requested: %s", reason)
+	return false, nil
 }
 
 // NewGoroutineDumper returns a GoroutineDumper which enables
