@@ -17,7 +17,6 @@ on:
     - cron: 0 0 * * *
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-
 name: Update pkg/testutils/release/cockroach_releases.yaml
 jobs:
   update-crdb-releases-yaml:
@@ -33,6 +32,7 @@ jobs:
           - "release-25.2"
           - "release-25.3"
           - "release-25.4"
+          - "release-26.1"
     name: Update pkg/testutils/release/cockroach_releases.yaml on ${{ matrix.branch }}
     runs-on: ubuntu-latest
     steps:
