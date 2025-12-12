@@ -68,15 +68,13 @@ func TestRoundtripRandomPGVector(t *testing.T) {
 	extra := randutil.RandBytes(rng, 10)
 	for i := 0; i < 1000; i++ {
 		v := Random(rng, 1000 /* maxDim */)
-		encoded, err := Encode(nil, v)
-		assert.NoError(t, err)
+		encoded := Encode(nil, v)
 		encoded = append(encoded, extra...)
 		remaining, roundtripped, err := Decode(encoded)
 		assert.NoError(t, err)
 		assert.Equal(t, v.String(), roundtripped.String())
 		assert.Equal(t, extra, remaining)
-		reEncoded, err := Encode(nil, roundtripped)
-		assert.NoError(t, err)
+		reEncoded := Encode(nil, roundtripped)
 		assert.Equal(t, encoded, append(reEncoded, extra...))
 	}
 }
