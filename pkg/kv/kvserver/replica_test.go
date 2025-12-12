@@ -1082,7 +1082,7 @@ func TestReplicaLeaseCounters(t *testing.T) {
 		Cache:             cache,
 		LivenessThreshold: nlActive,
 		RenewalDuration:   nlRenewal,
-		Engines:           []storage.Engine{},
+		Engines:           []kvstorage.Engines{},
 	})
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 

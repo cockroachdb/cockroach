@@ -210,7 +210,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		LivenessThreshold:       active,
 		RenewalDuration:         renewal,
 		HistogramWindowInterval: cfg.HistogramWindowInterval,
-		Engines:                 []storage.Engine{ltc.Eng},
+		Engines:                 []kvstorage.Engines{kvstorage.MakeEngines(ltc.Eng)},
 	})
 	liveness.TimeUntilNodeDead.Override(ctx, &cfg.Settings.SV, liveness.TestTimeUntilNodeDead)
 	{
