@@ -115,7 +115,7 @@ func TestRangeSplitMeta(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if _, err := storage.MVCCScan(ctx, s.Eng, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{}); err != nil {
+		if _, err := storage.MVCCScan(ctx, s.Eng.TODOEngine(), keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{}); err != nil {
 			return errors.Wrap(err, "failed to verify no dangling intents")
 		}
 		return nil
@@ -231,7 +231,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// for timing of finishing the test writer and a possibly-ongoing
 	// asynchronous split.
 	testutils.SucceedsSoon(t, func() error {
-		if _, err := storage.MVCCScan(ctx, s.Eng, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{}); err != nil {
+		if _, err := storage.MVCCScan(ctx, s.Eng.TODOEngine(), keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{}); err != nil {
 			return errors.Wrap(err, "failed to verify no dangling intents")
 		}
 		return nil
