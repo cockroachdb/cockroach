@@ -39,16 +39,21 @@ go_test(
     srcs = [
         "git_test.go",
         "update_releases_test.go",
+        "update_workflow_test.go",
     ],
     data = glob([
         "templates/**",
         "testdata/**",
-    ]),
+    ]) + [
+        "//.github:workflows/update_releases.yaml",
+    ],
     embed = [":release_lib"],
     deps = [
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/release",
         "@com_github_cockroachdb_version//:version",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
+        "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )

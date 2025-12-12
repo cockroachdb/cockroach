@@ -176,7 +176,9 @@ func addBranchToWorkflow(branch string) error {
 	if err := encoder.Encode(&workflow); err != nil {
 		return fmt.Errorf("failed to encode YAML: %w", err)
 	}
-	encoder.Close()
+	if err := encoder.Close(); err != nil {
+		return fmt.Errorf("failed to close YAML encoder: %w", err)
+	}
 
 	// Write back to file
 	if err := os.WriteFile(workflowFile, []byte(buf.String()), 0644); err != nil {
