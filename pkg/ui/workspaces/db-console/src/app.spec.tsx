@@ -328,13 +328,6 @@ describe("Routing to", () => {
     });
   });
 
-  describe("'/statements/:${implicitTxnAttr}/:${statementAttr}' path", () => {
-    test("routes to <StatementDetails> component", () => {
-      navigateToPath("/statements/implicit-txn-attr/statement-attr");
-      screen.getByTestId("statementDetails");
-    });
-  });
-
   describe("'/statement' path", () => {
     test("redirected to '/sql-activity?tab=Statements&view=fingerprints'", () => {
       navigateToPath("/statement");
@@ -344,9 +337,9 @@ describe("Routing to", () => {
     });
   });
 
-  describe("'/statement/:${implicitTxnAttr}/:${statementAttr}' path", () => {
+  describe("'/statement/:${statementAttr}' path", () => {
     test("routes to <StatementDetails> component", () => {
-      navigateToPath("/statement/implicit-attr/statement-attr/");
+      navigateToPath("/statement/statement-attr/");
       screen.getByTestId("statementDetails");
     });
   });

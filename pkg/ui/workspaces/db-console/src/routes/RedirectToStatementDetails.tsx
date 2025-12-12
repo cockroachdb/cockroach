@@ -7,12 +7,7 @@ import { StatementLinkTarget } from "@cockroachlabs/cluster-ui";
 import React from "react";
 import { Redirect, match as Match } from "react-router-dom";
 
-import {
-  appAttr,
-  databaseAttr,
-  implicitTxnAttr,
-  statementAttr,
-} from "src/util/constants";
+import { appAttr, statementAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 
 type Props = {
@@ -24,9 +19,7 @@ type Props = {
 export function RedirectToStatementDetails({ match }: Props) {
   const linkProps = {
     statementFingerprintID: getMatchParamByName(match, statementAttr),
-    app: getMatchParamByName(match, appAttr),
-    implicitTxn: getMatchParamByName(match, implicitTxnAttr) === "true",
-    database: getMatchParamByName(match, databaseAttr),
+    appNames: [getMatchParamByName(match, appAttr)],
   };
 
   return <Redirect to={StatementLinkTarget(linkProps)} />;

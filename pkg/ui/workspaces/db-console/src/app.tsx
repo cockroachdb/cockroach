@@ -29,11 +29,9 @@ import {
   aggregatedTsAttr,
   appAttr,
   dashboardNameAttr,
-  databaseAttr,
   databaseNameAttr,
   databaseIDAttr,
   executionIdAttr,
-  implicitTxnAttr,
   indexNameAttr,
   nodeIDAttr,
   rangeIDAttr,
@@ -279,32 +277,12 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         />
                         <Route
                           exact
-                          path={`/statement/:${implicitTxnAttr}/:${statementAttr}`}
+                          path={`/statement/:${statementAttr}`}
                           component={StatementDetails}
                         />
                         <Route
                           exact
                           path={`/statements/:${appAttr}/:${statementAttr}`}
-                          render={RedirectToStatementDetails}
-                        />
-                        <Route
-                          exact
-                          path={`/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}`}
-                          render={RedirectToStatementDetails}
-                        />
-                        <Route
-                          exact
-                          path={`/statements/:${appAttr}/:${databaseAttr}/:${implicitTxnAttr}/:${statementAttr}`}
-                          render={RedirectToStatementDetails}
-                        />
-                        <Route
-                          exact
-                          path={`/statement/:${implicitTxnAttr}/:${statementAttr}`}
-                          render={RedirectToStatementDetails}
-                        />
-                        <Route
-                          exact
-                          path={`/statement/:${databaseAttr}/:${implicitTxnAttr}/:${statementAttr}`}
                           render={RedirectToStatementDetails}
                         />
                         <Redirect

@@ -53,7 +53,6 @@ export const StatementTableCell = {
               : unset
             : null,
         ]}
-        implicitTxn={stmt.implicitTxn}
         search={search}
         onClick={onStatementClick}
       />
@@ -165,7 +164,6 @@ type StatementLinkTargetProps = {
   statementFingerprintID: string;
   aggregatedTs?: number;
   appNames?: string[];
-  implicitTxn: boolean;
 };
 
 // StatementLinkTarget returns the link to the relevant statement page, given
@@ -173,7 +171,7 @@ type StatementLinkTargetProps = {
 export const StatementLinkTarget = (
   props: StatementLinkTargetProps,
 ): string => {
-  const base = `/statement/${props.implicitTxn}`;
+  const base = `/statement`;
   const statementFingerprintID = props.statementFingerprintID;
 
   const searchParams = propsToQueryString({
@@ -189,7 +187,6 @@ interface StatementLinkProps {
   statementFingerprintID: string;
   aggregatedTs?: number;
   appNames?: string[];
-  implicitTxn: boolean;
   statement: string;
   statementSummary: string;
   search?: string;
@@ -201,7 +198,6 @@ interface StatementLinkProps {
 export const StatementLink = ({
   statementFingerprintID,
   appNames,
-  implicitTxn,
   statement,
   statementSummary,
   search,
@@ -217,7 +213,6 @@ export const StatementLink = ({
   const linkProps = {
     statementFingerprintID,
     appNames,
-    implicitTxn,
   };
 
   const summary = computeOrUseStmtSummary(statement, statementSummary);

@@ -210,6 +210,7 @@ export function addStatementStats(
     failure_count: a.failure_count.add(b.failure_count),
     generic_count: a.generic_count.add(b.generic_count),
     stmt_hints_count: a.stmt_hints_count.add(b.stmt_hints_count),
+    implicit_txn_count: a.implicit_txn_count.add(b.implicit_txn_count),
     first_attempt_count: a.first_attempt_count.add(b.first_attempt_count),
     max_retries: a.max_retries.greaterThan(b.max_retries)
       ? a.max_retries
@@ -283,7 +284,6 @@ export interface ExecutionStatistics {
   database: string;
   distSQL: boolean;
   vec: boolean;
-  implicit_txn: boolean;
   full_scan: boolean;
   node_id: number;
   txn_fingerprint_ids: Long[];
@@ -303,7 +303,6 @@ export function flattenStatementStats(
     database: stmt.key.key_data.database,
     distSQL: stmt.key.key_data.distSQL,
     vec: stmt.key.key_data.vec,
-    implicit_txn: stmt.key.key_data.implicit_txn,
     full_scan: stmt.key.key_data.full_scan,
     node_id: stmt.key.node_id,
     txn_fingerprint_ids: stmt.txn_fingerprint_ids,
@@ -315,7 +314,7 @@ export function flattenStatementStats(
 // that should be used to group statements.
 // Currently, using only statement_fingerprint_id
 // (created by ConstructStatementFingerprintID using:
-// query, implicit_txn, database, failed).
+// query, database, failed).
 export function statementKey(stmt: ExecutionStatistics): string {
   return stmt.statement_fingerprint_id?.toString();
 }

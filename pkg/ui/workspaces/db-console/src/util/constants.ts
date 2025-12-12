@@ -19,7 +19,6 @@ export const {
   databaseIDAttr,
   fingerprintIDAttr,
   executionIdAttr,
-  implicitTxnAttr,
   nodeIDAttr,
   nodeQueryString,
   rangeIDAttr,
