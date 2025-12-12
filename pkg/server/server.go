@@ -932,6 +932,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		},
 	)
 
+	goroutineDumper, err := maybeNewGoroutineDumper(ctx, cfg.BaseConfig.GoroutineDumpDirName, st)
+	if err != nil {
+		return nil, errors.Wrap(err, "starting goroutine dumper worker")
+	}
+
 	storeCfg := kvserver.StoreConfig{
 		DefaultSpanConfig:            cfg.DefaultZoneConfig.AsSpanConfig(),
 		Settings:                     st,
@@ -977,6 +982,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowRangeControllerMetrics: rangeControllerMetrics,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
 		RangeCount:                   &atomic.Int64{},
+	}
+	if goroutineDumper != nil {
+		storeCfg.GoroutineDumpNow = goroutineDumper.DumpNow
 	}
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
@@ -1367,11 +1375,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			return nodeTombStorage.SetDecommissioned(ctx, id, timeutil.Now())
 		},
 	)
-
-	goroutineDumper, err := maybeNewGoroutineDumper(ctx, cfg.BaseConfig.GoroutineDumpDirName, st)
-	if err != nil {
-		return nil, errors.Wrap(err, "starting goroutine dumper worker")
-	}
 
 	*lateBoundServer = topLevelServer{
 		nodeIDContainer:           nodeIDContainer,
