@@ -949,9 +949,10 @@ func TestNormalizedVoterAllRelationships(t *testing.T) {
 		})
 }
 
-// TestDedupConstraints tests the dedupConstraints function which deduplicates
-// constraints and voter constraints by summing their numReplicas.
-func TestDedupConstraints(t *testing.T) {
+// TestDedupAndFilterConstraints tests the dedupAndFilterConstraints function
+// which deduplicates constraints and voter constraints by summing their
+// numReplicas.
+func TestDedupAndFilterConstraints(t *testing.T) {
 	interner := newStringInterner()
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, t.Name()),
@@ -961,7 +962,7 @@ func TestDedupConstraints(t *testing.T) {
 				// Parse span config.
 				conf := parseSpanConfig(t, d)
 
-				// Intern constraints and call dedupConstraints directly.
+				// Intern constraints and call dedupAndFilterConstraints directly.
 				var constraints []internedConstraintsConjunction
 				for _, cc := range conf.Constraints {
 					constraints = append(constraints, internedConstraintsConjunction{
@@ -969,9 +970,9 @@ func TestDedupConstraints(t *testing.T) {
 						constraints: interner.internConstraintsConj(cc.Constraints),
 					})
 				}
-				constraints = dedupConstraints(constraints)
+				constraints = dedupAndFilterConstraints(constraints)
 
-				// Intern voter constraints and call dedupConstraints directly.
+				// Intern voter constraints and call dedupAndFilterConstraints directly.
 				var voterConstraints []internedConstraintsConjunction
 				for _, cc := range conf.VoterConstraints {
 					voterConstraints = append(voterConstraints, internedConstraintsConjunction{
@@ -979,7 +980,7 @@ func TestDedupConstraints(t *testing.T) {
 						constraints: interner.internConstraintsConj(cc.Constraints),
 					})
 				}
-				voterConstraints = dedupConstraints(voterConstraints)
+				voterConstraints = dedupAndFilterConstraints(voterConstraints)
 
 				// Create normalizedSpanConfig with deduped constraints.
 				nConf := &normalizedSpanConfig{

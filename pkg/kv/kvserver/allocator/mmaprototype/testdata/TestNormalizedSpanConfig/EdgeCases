@@ -536,7 +536,7 @@ after:
 
 
 # normalizeVoterConstraints narrowing should not create duplicate voter
-# constraints. Without dedupConstraints, this would create duplicate voter
+# constraints. Without dedupAndFilterConstraints, this would create duplicate voter
 # constraints. region=a:1 and region=a:1 => region=a:2
 normalize num-replicas=2 num-voters=2
 constraint num-replicas=2 +region=a
@@ -560,7 +560,7 @@ after:
  (unchanged)
 
 # normalizeEmptyConstraints should not create duplicate all-replica constraints
-# when narrowing. Without dedupConstraints, this would create duplicate
+# when narrowing. Without dedupAndFilterConstraints, this would create duplicate
 # all-replica constraints. region=a:1 and region=a:1 => region=a:2
 normalize num-replicas=3 num-voters=2
 constraint num-replicas=1 +region=a
