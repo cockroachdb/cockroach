@@ -1282,6 +1282,11 @@ func (m *Manager) acquireNodeLease(
 				if err := m.upsertDescriptorIntoState(ctx, id, session, desc); err != nil {
 					return false, err
 				}
+				// Descriptor versions for these tables participate directly in memo
+				// staleness checks. Bump the lease generation now so queries that
+				// rely on the new privileges/options are forced to replan immediately
+				// instead of waiting for the asynchronous lease update.
+				m.leaseGeneration.Add(1)
 
 				desc, err = doAcquisition()
 				if err != nil {
