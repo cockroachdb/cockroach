@@ -785,6 +785,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			0, /* pebbleCacheSize */
 			s.stopper,
 			s.runtime,
+			nil, /* goroutineDumper */
 			s.tenantStatus.sessionRegistry,
 			s.sqlServer.execCfg.RootMemoryMonitor,
 		); err != nil {

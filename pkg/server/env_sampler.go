@@ -64,6 +64,7 @@ func startSampleEnvironment(
 	pebbleCacheSize int64,
 	stopper *stop.Stopper,
 	runtimeSampler *status.RuntimeStatSampler,
+	goroutineDumper *goroutinedumper.GoroutineDumper,
 	sessionRegistry *sql.SessionRegistry,
 	rootMemMonitor *mon.BytesMonitor,
 ) error {
@@ -86,26 +87,13 @@ func startSampleEnvironment(
 	}
 	// Immediately record summaries once on server startup.
 
-	// Initialize a goroutine dumper if we have an output directory
-	// specified.
-	var goroutineDumper *goroutinedumper.GoroutineDumper
-	if cfg.goroutineDumpDirName != "" {
-		hasValidDumpDir := true
-		if err := os.MkdirAll(cfg.goroutineDumpDirName, 0755); err != nil {
-			// This is possible when running with only in-memory stores;
-			// in that case the start-up code sets the output directory
-			// to the current directory (.). If running the process
-			// from a directory which is not writable, we won't
-			// be able to create a sub-directory here.
-			log.Dev.Warningf(ctx, "cannot create goroutine dump dir -- goroutine dumps will be disabled: %v", err)
-			hasValidDumpDir = false
-		}
-		if hasValidDumpDir {
-			var err error
-			goroutineDumper, err = goroutinedumper.NewGoroutineDumper(ctx, cfg.goroutineDumpDirName, cfg.st)
-			if err != nil {
-				return errors.Wrap(err, "starting goroutine dumper worker")
-			}
+	// Initialize a goroutine dumper if we have an output directory specified and
+	// no pre-built dumper was provided.
+	if goroutineDumper == nil {
+		var err error
+		goroutineDumper, err = maybeNewGoroutineDumper(ctx, cfg.goroutineDumpDirName, cfg.st)
+		if err != nil {
+			return errors.Wrap(err, "starting goroutine dumper worker")
 		}
 	}
 
@@ -208,4 +196,21 @@ func startSampleEnvironment(
 				}
 			}
 		})
+}
+
+func maybeNewGoroutineDumper(
+	ctx context.Context, goroutineDumpDirName string, st *cluster.Settings,
+) (*goroutinedumper.GoroutineDumper, error) {
+	if goroutineDumpDirName == "" {
+		return nil, nil
+	}
+	if err := os.MkdirAll(goroutineDumpDirName, 0755); err != nil {
+		// This is possible when running with only in-memory stores; in that case
+		// the start-up code sets the output directory to the current directory (.).
+		// If running the process from a directory which is not writable, we won't
+		// be able to create a sub-directory here.
+		log.Dev.Warningf(ctx, "cannot create goroutine dump dir -- goroutine dumps will be disabled: %v", err)
+		return nil, nil
+	}
+	return goroutinedumper.NewGoroutineDumper(ctx, goroutineDumpDirName, st)
 }
