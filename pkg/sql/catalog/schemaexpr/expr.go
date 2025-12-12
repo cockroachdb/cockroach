@@ -614,11 +614,12 @@ func ValidatePartialIndex(
 // * references valid columns in the table.
 func ValidateTTLExpirationExpression(
 	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
 	semaCtx *tree.SemaContext,
 	tableName *tree.TableName,
 	ttl *catpb.RowLevelTTL,
 	version clusterversion.ClusterVersion,
+	getAllNonDropColumnsFn func() colinfo.ResultColumns,
+	columnLookupByNameFn ColumnLookupFn,
 ) error {
 
 	if !ttl.HasExpirationExpr() {
@@ -648,9 +649,8 @@ func ValidateTTLExpirationExpression(
 	// inside a single transaction.
 	// Only config changes can affect the results of Stable functions in the TTL
 	// job because session data cannot be modified.
-	if _, _, _, err := DequalifyAndValidateExpr(
+	if _, _, _, err := DequalifyAndValidateExprImpl(
 		ctx,
-		tableDesc,
 		exprs[0],
 		types.TimestampTZ,
 		tree.TTLExpirationExpr,
@@ -658,6 +658,8 @@ func ValidateTTLExpirationExpression(
 		volatility.Stable,
 		tableName,
 		version,
+		getAllNonDropColumnsFn,
+		columnLookupByNameFn,
 	); err != nil {
 		return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 	}
