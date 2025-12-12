@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
@@ -416,22 +417,21 @@ func TestClusterIDMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	engines := make([]storage.Engine, 2)
+	engines := make([]kvstorage.Engines, 2)
 	for i := range engines {
-		e := storage.NewDefaultInMemForTesting()
+		e := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
 		defer e.Close()
-
-		sIdent := roachpb.StoreIdent{
-			ClusterID: uuid.MakeV4(),
-			NodeID:    1,
-			StoreID:   roachpb.StoreID(i + 1),
-		}
-		if err := storage.MVCCPutProto(
-			context.Background(), e, keys.StoreIdentKey(), hlc.Timestamp{}, &sIdent, storage.MVCCWriteOptions{},
-		); err != nil {
-			t.Fatal(err)
-		}
 		engines[i] = e
+
+		require.NoError(t, storage.MVCCPutProto(
+			context.Background(), e.LogEngine(),
+			keys.StoreIdentKey(), hlc.Timestamp{},
+			&roachpb.StoreIdent{
+				ClusterID: uuid.MakeV4(),
+				NodeID:    1,
+				StoreID:   roachpb.StoreID(i + 1),
+			}, storage.MVCCWriteOptions{},
+		))
 	}
 
 	_, err := inspectEngines(

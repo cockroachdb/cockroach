@@ -134,7 +134,7 @@ type initState struct {
 	clusterID            uuid.UUID
 	clusterVersion       clusterversion.ClusterVersion
 	initializedEngines   []storage.Engine
-	uninitializedEngines []storage.Engine
+	uninitializedEngines Engines
 	initialSettingsKVs   []roachpb.KeyValue
 	initType             serverpb.InitType
 }
@@ -502,11 +502,11 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 	// TODO(jackson): Eventually we should be able to avoid opening the
 	// engines altogether until here, but that requires us to move the
 	// store cluster version key outside of the storage engine.
-	if err := assertEnginesEmpty(s.inspectedDiskState.uninitializedEngines); err != nil {
+	if err := assertEnginesEmpty(s.inspectedDiskState.uninitializedEngines.TODO()); err != nil {
 		return nil, err
 	}
 
-	firstEngine := s.inspectedDiskState.uninitializedEngines[0]
+	firstEngine := s.inspectedDiskState.uninitializedEngines.TODO()[0]
 	clusterVersion := clusterversion.ClusterVersion{Version: *resp.ActiveVersion}
 	if err := kvstorage.WriteClusterVersion(ctx, firstEngine, clusterVersion); err != nil {
 		return nil, err
@@ -685,25 +685,26 @@ func newInitServerConfig(
 // been assigned yet (i.e. if none of the engines is initialized). See
 // commentary on initState for the intended usage of inspectEngines.
 func inspectEngines(
-	ctx context.Context, engines []storage.Engine, latestVersion, minSupportedVersion roachpb.Version,
+	ctx context.Context,
+	engines []kvstorage.Engines,
+	latestVersion, minSupportedVersion roachpb.Version,
 ) (*initState, error) {
 	var clusterID uuid.UUID
 	var nodeID roachpb.NodeID
-	var initializedEngines, uninitializedEngines []storage.Engine
+	var initializedEngines, uninitializedEngines Engines
 	var initialSettingsKVs []roachpb.KeyValue
 
 	for _, eng := range engines {
 		// Once cached settings are loaded from any engine we can stop.
 		if len(initialSettingsKVs) == 0 {
 			var err error
-			// TODO(sep-raft-log): inspect only the log engines here.
-			initialSettingsKVs, err = loadCachedSettingsKVs(ctx, eng)
+			initialSettingsKVs, err = loadCachedSettingsKVs(ctx, eng.LogEngine())
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		storeIdent, err := kvstorage.ReadStoreIdent(ctx, eng)
+		storeIdent, err := kvstorage.ReadStoreIdent(ctx, eng.LogEngine())
 		if errors.HasType(err, (*kvstorage.NotBootstrappedError)(nil)) {
 			uninitializedEngines = append(uninitializedEngines, eng)
 			continue
@@ -725,13 +726,19 @@ func inspectEngines(
 		}
 		nodeID = storeIdent.NodeID
 
-		if err := eng.SetStoreID(ctx, int32(storeIdent.StoreID)); err != nil {
+		if err := eng.StateEngine().SetStoreID(ctx, int32(storeIdent.StoreID)); err != nil {
 			return nil, err
 		}
+		if eng.Separated() {
+			if err := eng.LogEngine().SetStoreID(ctx, int32(storeIdent.StoreID)); err != nil {
+				return nil, err
+			}
+		}
+
 		initializedEngines = append(initializedEngines, eng)
 	}
 	clusterVersion, err := kvstorage.SynthesizeClusterVersionFromEngines(
-		ctx, initializedEngines, latestVersion, minSupportedVersion,
+		ctx, initializedEngines.TODO(), latestVersion, minSupportedVersion,
 	)
 	if err != nil {
 		return nil, err
@@ -740,7 +747,7 @@ func inspectEngines(
 	state := &initState{
 		clusterID:            clusterID,
 		nodeID:               nodeID,
-		initializedEngines:   initializedEngines,
+		initializedEngines:   initializedEngines.TODO(),
 		uninitializedEngines: uninitializedEngines,
 		clusterVersion:       clusterVersion,
 		initialSettingsKVs:   initialSettingsKVs,

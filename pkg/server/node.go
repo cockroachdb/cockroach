@@ -468,20 +468,20 @@ func GetBootstrapSchemaForTest(
 // written, since epoch-based leases cannot be granted until then. All other
 // engines are initialized with their StoreIdent.
 func bootstrapCluster(
-	ctx context.Context, engines []storage.Engine, initCfg initServerCfg,
+	ctx context.Context, engines Engines, initCfg initServerCfg,
 ) (*initState, error) {
 	// We expect all the stores to be empty at this point, except for
 	// the store cluster version key. Assert so.
 	//
 	// TODO(jackson): Eventually we should be able to avoid opening the
 	// engines altogether until here.
-	if err := assertEnginesEmpty(engines); err != nil {
+	if err := assertEnginesEmpty(engines.TODO()); err != nil {
 		return nil, err
 	}
 
 	// We use our binary version to bootstrap the cluster.
 	bootstrapVersion := clusterversion.ClusterVersion{Version: initCfg.latestVersion}
-	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines, bootstrapVersion); err != nil {
+	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines.TODO(), bootstrapVersion); err != nil {
 		return nil, err
 	}
 
@@ -497,7 +497,7 @@ func bootstrapCluster(
 
 		// Initialize the engine backing the store with the store ident and cluster
 		// version.
-		if err := kvstorage.InitEngine(ctx, eng, sIdent); err != nil {
+		if err := kvstorage.InitEngine(ctx, eng.TODOEngine(), sIdent); err != nil {
 			return nil, err
 		}
 
@@ -543,7 +543,7 @@ func bootstrapCluster(
 				storeKnobs = *kn
 			}
 			if err := kvserver.WriteInitialClusterData(
-				ctx, eng, initialValues,
+				ctx, eng.TODOEngine(), initialValues,
 				bootstrapVersion.Version, len(engines), splits,
 				timeutil.Now().UnixNano(), storeKnobs,
 			); err != nil {
@@ -770,7 +770,7 @@ func (n *Node) start(
 		// sequence ID generator stored in a system key.
 		n.additionalStoreInitCh = make(chan struct{})
 		if err := n.stopper.RunAsyncTask(workersCtx, "initialize-additional-stores", func(ctx context.Context) {
-			if err := n.initializeAdditionalStores(ctx, state.uninitializedEngines); err != nil {
+			if err := n.initializeAdditionalStores(ctx, state.uninitializedEngines.TODO()); err != nil {
 				log.Dev.Fatalf(ctx, "while initializing additional stores: %v", err)
 			}
 			close(n.additionalStoreInitCh)
