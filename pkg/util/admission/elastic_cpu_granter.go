@@ -296,8 +296,9 @@ var ( // granter-side metrics (some of these have parallels on the requester sid
 	}
 
 	elasticCPUNanosExhaustedDuration = metric.Metadata{
-		Name:        "admission.elastic_cpu.nanos_exhausted_duration",
-		Help:        "Total duration when elastic CPU nanoseconds were exhausted, in micros",
+		Name: "admission.elastic_cpu.nanos_exhausted_duration",
+		Help: "Total duration (in micros) when elastic CPU tokens (tokens measured in nanoseconds) " +
+			"were exhausted, as observed by the token granter (not waiters)",
 		Measurement: "Microseconds",
 		Unit:        metric.Unit_COUNT,
 	}
