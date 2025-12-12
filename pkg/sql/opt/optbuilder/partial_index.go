@@ -27,11 +27,16 @@ import (
 // scan. A scan and its logical properties are required in order to fully
 // normalize the partial index predicates.
 func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan memo.RelExpr) {
-	// We do not want to track view/function deps here, otherwise a
-	// view/function depending on a table with a partial index predicate using
-	// a UDT will result in a type dependency being added between the
-	// view/function and the UDT.
-	defer b.DisableSchemaDepTracking()()
+	if !b.evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols {
+		// We do not want to track view/function deps here, otherwise a
+		// view/function depending on a table with a partial index predicate using
+		// a UDT will result in a type dependency being added between the
+		// view/function and the UDT.
+		//
+		// This is the legacy path; with the session setting on, we will disable
+		// dependency tracking in buildPartialIndexPredicate below.
+		defer b.DisableSchemaDepTracking()()
+	}
 
 	tab := tabMeta.Table
 	numIndexes := tab.DeletableIndexCount()
