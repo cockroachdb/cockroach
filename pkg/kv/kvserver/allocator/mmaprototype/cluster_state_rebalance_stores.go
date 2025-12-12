@@ -509,7 +509,8 @@ func (re *rebalanceEnv) rebalanceReplicas(
 			}
 		}
 		// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
-		cands, ssSLS := re.computeCandidatesForRange(ctx, re.scratch.disj[:], re.scratch.storesToExcludeForRange, store.StoreID)
+		cands, ssSLS := re.computeCandidatesForRange(
+			ctx, re.scratch.disj[:], re.scratch.storesToExcludeForRange, store.StoreID, re.passObs)
 		log.KvDistribution.VEventf(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
 			rangeID, store.StoreID, ss.adjusted.load)
 		if log.V(2) {
@@ -688,6 +689,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 
 		candsPL = retainReadyLeaseTargetStoresOnly(ctx, candsPL, re.stores, rangeID)
+		// INVARIANT: candsPL - {store.StoreID} \subset cands
 		if len(candsPL) == 0 || (len(candsPL) == 1 && candsPL[0] == store.StoreID) {
 			re.passObs.leaseShed(noHealthyCandidate)
 			log.KvDistribution.VEventf(ctx, 2,
@@ -695,6 +697,8 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 				ss.NodeID, ss.StoreID, rangeID)
 			continue
 		}
+		// INVARIANT: candsPL has at least one candidate other than store.StoreID,
+		// which is also in cands.
 
 		clear(re.scratch.nodes)
 		means := computeMeansForStoreSet(re, candsPL, re.scratch.nodes, re.scratch.stores)
@@ -704,6 +708,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			// This store is not cpu overloaded relative to these candidates for
 			// this range.
 			log.KvDistribution.VEventf(ctx, 2, "result(failed): skipping r%d since store not overloaded relative to candidates", rangeID)
+			re.passObs.leaseShed(notOverloaded)
 			continue
 		}
 		var candsSet candidateSet
@@ -715,13 +720,6 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 				diversityScore:       0,
 				leasePreferenceIndex: cand.leasePreferenceIndex,
 			})
-		}
-		if len(candsSet.candidates) == 0 {
-			log.KvDistribution.Infof(
-				ctx,
-				"result(failed): no candidates to move lease from n%vs%v for r%v before sortTargetCandidateSetAndPick [pre_filter_candidates=%v]",
-				ss.NodeID, ss.StoreID, rangeID, candsPL)
-			continue
 		}
 		// Have candidates. We set ignoreLevel to
 		// ignoreHigherThanLoadThreshold since this is the only allocator that

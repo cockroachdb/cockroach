@@ -816,6 +816,7 @@ func (cs *clusterState) computeCandidatesForRange(
 	expr constraintsDisj,
 	storesToExclude storeSet,
 	loadSheddingStore roachpb.StoreID,
+	passObs *rebalancingPassMetricsAndLogger,
 ) (_ candidateSet, sheddingSLS storeLoadSummary) {
 	means := cs.meansMemo.getMeans(expr)
 	if loadSheddingStore > 0 {
@@ -823,6 +824,7 @@ func (cs *clusterState) computeCandidatesForRange(
 		sheddingSLS = cs.meansMemo.getStoreLoadSummary(ctx, means, loadSheddingStore, sheddingSS.loadSeqNum)
 		if sheddingSLS.sls <= loadNoChange && sheddingSLS.nls <= loadNoChange {
 			// In this set of stores, this store no longer looks overloaded.
+			passObs.replicaShed(notOverloaded)
 			return candidateSet{}, sheddingSLS
 		}
 	}

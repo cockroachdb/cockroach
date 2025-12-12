@@ -188,20 +188,38 @@ func toOverloadKind(withinLeaseSheddingGracePeriod bool, ignoreLevel ignoreLevel
 	}
 }
 
-// rebalancingPassMetricsAndLogger manages gauge metrics and logging for
-// rebalancing passes.
+// rebalancingPassMetricsAndLogger manages gauge metrics and logging for the
+// first call to ComputeChanges from mmaStoreRebalancer. One per local store.
+//
+// Note: Metrics are registered to the LOCAL store's registry, not the overloaded
+// stores'. Each store tracks "from my perspective, what overloaded stores did I
+// observe and what were the outcomes?" during its rebalancing pass.
+//
+// Each rebalancing pass: states and skippedStores are reset at start. For each
+// overloaded store, curState/curStoreID track shedding results; when processing
+// of that store completes, curState is saved to states (or the store is added
+// to skippedStores if skipped). At the end of the pass, states is aggregated to
+// update m, and failedSummaries/successSummaries are built for logging.
 type rebalancingPassMetricsAndLogger struct {
+	// The local store where the rebalancing pass is happening.
 	localStoreID roachpb.StoreID
-	m            gaugeMetrics
+	// Gauge metrics for overloaded store counts by duration/outcome.
+	m gaugeMetrics
 
-	// Pass state that is used only during a rebalancing pass to update m, and
-	// to log.
+	// Per-pass state (reset each pass, used to update m and to log).
 
-	states           map[roachpb.StoreID]storePassState
-	skippedStores    []roachpb.StoreID
-	curState         storePassState
-	curStoreID       roachpb.StoreID
-	failedSummaries  []storePassSummary
+	// Overloaded store ID -> shedding counts and overload category.
+	states map[roachpb.StoreID]storePassState
+	// Overloaded stores skipped during the pass (due to max range/lease move
+	// limit reached).
+	skippedStores []roachpb.StoreID
+	// Shedding results for the currently-processing store.
+	curState storePassState
+	// Store ID that curState belongs to.
+	curStoreID roachpb.StoreID
+	// Stores with shedding failures. Aggregated into at the end of the pass.
+	failedSummaries []storePassSummary
+	// Stores with shedding successes. Aggregated into at the end of the pass.
 	successSummaries []storePassSummary
 }
 
@@ -224,31 +242,36 @@ type storePassState struct {
 
 func (s *storePassState) summarize() storePassSummary {
 	var sum storePassSummary
-	for i := range s.shedCounts {
-		for j := range s.shedCounts[i] {
-			if s.shedCounts[i][j] == 0 {
+	for kindIdx := range s.shedCounts {
+		for resultIdx := range s.shedCounts[kindIdx] {
+			count := s.shedCounts[kindIdx][resultIdx]
+			if count == 0 {
 				continue
 			}
-			if shedResult(j) == shedSuccess {
-				sum.numShedSuccesses += s.shedCounts[i][j]
+			result := shedResult(resultIdx)
+			if result == shedSuccess {
+				sum.numShedSuccesses += count
 			} else {
-				sum.numShedFailures += s.shedCounts[i][j]
+				sum.numShedFailures += count
 			}
-			if s.shedCounts[i][j] > sum.mostCommonCount {
-				sum.mostCommonReason = shedResult(j)
-				sum.mostCommonCount = s.shedCounts[i][j]
+			if count > sum.mostCommonCount {
+				sum.mostCommonReason = result
+				sum.mostCommonCount = count
 			}
 		}
 	}
 	return sum
 }
 
-// storePassSummary is a summary of storePassState, computed at the end of
-// rebalancing.
+// storePassSummary aggregates shedding outcomes for a single overloaded
+// store.
 type storePassSummary struct {
+	// Overloaded store ID.
 	storeID          roachpb.StoreID
 	numShedSuccesses int
 	numShedFailures  int
+	// mostCommonReason/mostCommonCount track the most frequent shedResult for
+	// this overloaded store, used in failure logging.
 	mostCommonReason shedResult
 	mostCommonCount  int
 }
@@ -259,7 +282,7 @@ var (
 	// behavior.
 	metaOverloadedStoreLeaseGraceSuccess = metric.Metadata{
 		Name:        "mma.overloaded_store.lease_grace.success",
-		Help:        "Number of overloaded stores within lease shedding grace period for which shedding failed",
+		Help:        "Number of overloaded stores within lease shedding grace period for which shedding succeeded",
 		Measurement: "Stores",
 		Unit:        metric.Unit_COUNT,
 		LabeledName: "mma.overloaded_store",
@@ -402,6 +425,10 @@ type shedResult uint8
 // Candidates could have been eliminated earlier for other reasons.
 const (
 	shedSuccess shedResult = iota
+	// notOverloaded represents a store that looks overloaded when considering
+	// cluster aggregates, but when considering a range, it is not overloaded
+	// compared to the other candidates.
+	notOverloaded
 	noCandidate
 	noHealthyCandidate
 	noCandidateDiskSpaceUtil
@@ -420,6 +447,8 @@ func (sr shedResult) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch sr {
 	case shedSuccess:
 		w.SafeString("success")
+	case notOverloaded:
+		w.SafeString("not-overloaded")
 	case noCandidate:
 		w.SafeString("no-cand")
 	case noHealthyCandidate:
@@ -470,58 +499,68 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 	}
 	g.failedSummaries = g.failedSummaries[:0]
 	g.successSummaries = g.successSummaries[:0]
-	// Index 0 is success and 1 is failure. The value is number of stores,
-	// with each store counted at most once.
+
+	// Aggregate store counts by (overloadKind, outcome) for gauge metrics.
+	// storeNumSummaries[kindIdx][0] = success count, [kindIdx][1] = failure
+	// count. Each store is counted at most once based on whether it had any
+	// shedding success.
 	var storeNumSummaries [numOverloadKinds][2]int64
-	for storeID, state := range g.states {
-		s := state.summarize()
-		s.storeID = storeID
+	for overloadedStoreID, passState := range g.states {
+		s := passState.summarize()
+		s.storeID = overloadedStoreID
 		if s.numShedSuccesses > 0 {
-			storeNumSummaries[state.overloadKind][0]++
+			storeNumSummaries[passState.overloadKind][0]++
 			g.successSummaries = append(g.successSummaries, s)
 		} else if s.numShedFailures > 0 {
-			storeNumSummaries[state.overloadKind][1]++
+			storeNumSummaries[passState.overloadKind][1]++
 			g.failedSummaries = append(g.failedSummaries, s)
 		}
 		// Else ignore. Some transient situation caused no ranges to be
 		// considered.
 	}
-	// Update gauge metrics using storeNumSummaries.
-	for i := range storeNumSummaries {
-		for j := range storeNumSummaries[i] {
-			switch overloadKind(i) {
+
+	// Update gauge metrics using storeNumSummaries aggregated from all overloaded
+	// stores.
+	for kindIdx := range storeNumSummaries {
+		for outcomeIdx := range storeNumSummaries[kindIdx] {
+			count := storeNumSummaries[kindIdx][outcomeIdx]
+			isSuccess := outcomeIdx == 0
+			switch overloadKind(kindIdx) {
 			case overloadedWaitingForLeaseShedding:
-				if j == 0 {
-					g.m.OverloadedStoreLeaseGraceSuccess.Update(storeNumSummaries[i][j])
+				if isSuccess {
+					g.m.OverloadedStoreLeaseGraceSuccess.Update(count)
 				} else {
-					g.m.OverloadedStoreLeaseGraceFailure.Update(storeNumSummaries[i][j])
+					g.m.OverloadedStoreLeaseGraceFailure.Update(count)
 				}
 			case overloadedShortDuration:
-				if j == 0 {
-					g.m.OverloadedStoreShortDurSuccess.Update(storeNumSummaries[i][j])
+				if isSuccess {
+					g.m.OverloadedStoreShortDurSuccess.Update(count)
 				} else {
-					g.m.OverloadedStoreShortDurFailure.Update(storeNumSummaries[i][j])
+					g.m.OverloadedStoreShortDurFailure.Update(count)
 				}
 			case overloadedMediumDuration:
-				if j == 0 {
-					g.m.OverloadedStoreMediumDurSuccess.Update(storeNumSummaries[i][j])
+				if isSuccess {
+					g.m.OverloadedStoreMediumDurSuccess.Update(count)
 				} else {
-					g.m.OverloadedStoreMediumDurFailure.Update(storeNumSummaries[i][j])
+					g.m.OverloadedStoreMediumDurFailure.Update(count)
 				}
 			case overloadedLongDuration:
-				if j == 0 {
-					g.m.OverloadedStoreLongDurSuccess.Update(storeNumSummaries[i][j])
+				if isSuccess {
+					g.m.OverloadedStoreLongDurSuccess.Update(count)
 				} else {
-					g.m.OverloadedStoreLongDurFailure.Update(storeNumSummaries[i][j])
+					g.m.OverloadedStoreLongDurFailure.Update(count)
 				}
 			}
 		}
 	}
 
-	// Logging.
+	// Build log message with up to k entries per category.
+	// Example output: "rebalancing pass shed: {s1, s3} failures
+	// (store,reason:count): (s2,no-cand:5) skipped: {s4, s5}"
 	const k = 20
 	var b strings.Builder
-	// Logging using g.successSummaries.
+
+	// Log stores where shedding succeeded, sorted by store ID.
 	n := len(g.successSummaries)
 	if n > 0 {
 		slices.SortFunc(g.successSummaries, func(a, b storePassSummary) int {
@@ -545,7 +584,8 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 		}
 		fmt.Fprintf(&b, "}")
 	}
-	// Logging using g.failedSummaries.
+
+	// Log stores where shedding failed, sorted by failure count (descending).
 	n = len(g.failedSummaries)
 	if n > 0 {
 		slices.SortFunc(g.failedSummaries, func(a, b storePassSummary) int {
@@ -573,7 +613,9 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 			fmt.Fprintf(&b, ",...")
 		}
 	}
-	// Logging using g.skippedStores
+
+	// Log stores that were skipped (e.g., max range move limit reached), sorted
+	// by store ID.
 	n = len(g.skippedStores)
 	if n > 0 {
 		slices.Sort(g.skippedStores)
@@ -595,6 +637,7 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Cont
 		}
 		fmt.Fprintf(&b, "}")
 	}
+
 	if b.Len() > 0 {
 		log.KvDistribution.Infof(ctx, "%s", redact.SafeString(b.String()))
 	}
