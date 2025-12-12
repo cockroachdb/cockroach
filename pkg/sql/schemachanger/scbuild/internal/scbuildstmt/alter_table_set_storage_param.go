@@ -10,15 +10,18 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -79,7 +82,16 @@ func applyTTLStorageParamsSet(
 	}
 
 	// Validate the TTL expiration expression if present.
-	b.ValidateTTLExpirationExpression(tbl.TableID, &newTTL)
+	b.ValidateTTLExpirationExpression(
+		tbl.TableID,
+		&newTTL,
+		func() colinfo.ResultColumns {
+			return getNonDropResultColumns(b, tbl.TableID)
+		},
+		func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
+			return columnLookupFn(b, tbl.TableID, columnName)
+		},
+	)
 
 	// Construct new scpb.RowLevelTTL element with incremented SeqNum.
 	var seqNum uint32

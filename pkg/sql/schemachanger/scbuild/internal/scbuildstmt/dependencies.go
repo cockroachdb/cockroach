@@ -334,9 +334,13 @@ type TableHelpers interface {
 	// a table's row-level TTL configuration. It verifies that the expression:
 	// - type-checks as a TIMESTAMPTZ.
 	// - is not volatile.
-	// - references valid columns in the table (the columns must exist before
-	//   this schema change begins).
-	ValidateTTLExpirationExpression(tableID catid.DescID, ttl *catpb.RowLevelTTL)
+	// - references valid columns in the table.
+	ValidateTTLExpirationExpression(
+		tableID catid.DescID,
+		ttl *catpb.RowLevelTTL,
+		getAllNonDropColumnsFn func() colinfo.ResultColumns,
+		columnLookupByNameFn schemaexpr.ColumnLookupFn,
+	)
 }
 
 type FunctionHelpers interface {

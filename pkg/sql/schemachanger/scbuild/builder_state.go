@@ -611,27 +611,25 @@ func (b *builderState) IsTableEmpty(table *scpb.Table) bool {
 // - is not volatile
 // - references valid columns in the table
 func (b *builderState) ValidateTTLExpirationExpression(
-	tableID catid.DescID, ttl *catpb.RowLevelTTL,
+	tableID catid.DescID,
+	ttl *catpb.RowLevelTTL,
+	getAllNonDropColumnsFn func() colinfo.ResultColumns,
+	columnLookupByNameFn schemaexpr.ColumnLookupFn,
 ) {
 	if ttl == nil || !ttl.HasExpirationExpr() {
 		return
 	}
 	b.ensureDescriptor(tableID)
-	desc := b.descCache[tableID].desc
-	tbl, ok := desc.(catalog.TableDescriptor)
-	if !ok {
-		panic(errors.AssertionFailedf("Expected table descriptor for ID %d, instead got %s",
-			desc.GetID(), desc.DescriptorType()))
-	}
 	ns := b.QueryByID(tableID).FilterNamespace().MustGetOneElement()
 	tableName := tree.MakeTableNameFromPrefix(b.NamePrefix(ns), tree.Name(ns.Name))
 	if err := schemaexpr.ValidateTTLExpirationExpression(
 		b.ctx,
-		tbl,
 		b.semaCtx,
 		&tableName,
 		ttl,
 		b.clusterSettings.Version.ActiveVersion(b.ctx),
+		getAllNonDropColumnsFn,
+		columnLookupByNameFn,
 	); err != nil {
 		panic(err)
 	}
