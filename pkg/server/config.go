@@ -712,14 +712,6 @@ func (e *Engines) Close() {
 	*e = nil
 }
 
-func (e *Engines) TODO() []storage.Engine {
-	res := make([]storage.Engine, len(*e))
-	for i, eng := range *e {
-		res[i] = eng.TODOEngine()
-	}
-	return res
-}
-
 // CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	var engines Engines
