@@ -1259,6 +1259,11 @@ type StoreConfig struct {
 
 	TestingKnobs StoreTestingKnobs
 
+	// GoroutineDumpNow, if set, triggers an on-demand goroutine dump.
+	//
+	// The returned bool indicates whether a dump was taken.
+	GoroutineDumpNow func(context.Context, redact.RedactableString) (bool, error)
+
 	// EagerLeaseAcquisitionLimiter is used to limit the number of concurrent
 	// eager lease extensions. Normally shared between all stores on a node.
 	// Can be nil, which disables the limit.
