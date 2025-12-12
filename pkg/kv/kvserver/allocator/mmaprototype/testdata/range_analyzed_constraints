@@ -739,3 +739,59 @@ voter-constraints:
 leaseholder pref-index s10:0
 lease pref-indices: s10:0 s12:0 s13:0
 diversity: voter 0.888889, all 0.777778
+
+# Test: Non-voter spreading for all-replica constraints.
+#
+# This verifies that the fix for voter constraints (only count voters) does NOT
+# break the spreading behavior for all-replica constraints (should count both).
+#
+# Setup:
+#   - All-replica constraints: [+region=a]:1, [+zone=b1]:1, [+region=b]:1
+#   - s20 (non-voter, a/b1): satisfies both [+region=a] and [+zone=b1]
+#   - s21 (non-voter, a/b1): satisfies both [+region=a] and [+zone=b1]
+#   - s22 (voter, b): satisfies [+region=b] only
+#
+# Expected: Non-voters should spread out:
+#   - [+region=a]:1 gets s20
+#   - [+zone=b1]:1 gets s21 
+#   - [+region=b]:1 gets s22
+# NOT: both non-voters on [+region=a], leaving [+zone=b1] empty.
+
+store 
+  store-id=20 locality-tiers=region=a,zone=b1 node-id=20
+  store-id=21 locality-tiers=region=a,zone=b1 node-id=21
+  store-id=22 locality-tiers=region=b node-id=22
+----
+
+span-config name=non-voter-spreading num-replicas=3 num-voters=3
+voter-constraint num-replicas=1 +region=a
+voter-constraint num-replicas=1 +zone=b1
+voter-constraint num-replicas=1 +region=b
+----
+ num-replicas=3 num-voters=3
+ voter-constraints:
+   +region=a:1
+   +zone=b1:1
+   +region=b:1
+
+analyze-constraints config-name=non-voter-spreading leaseholder=22
+store-id=20 type=NON_VOTER
+store-id=21 type=NON_VOTER
+store-id=22 type=VOTER_FULL
+----
+needed: voters 3 non-voters 0
+voters: 22(=b,=22)
+non-voters: 20(=a,=b1,=20) 21(=a,=b1,=21)
+voter-constraints:
+  +region=a:1
+    voters:
+    non-voters: 20 21
+  +zone=b1:1
+    voters:
+    non-voters:
+  +region=b:1
+    voters: 22
+    non-voters:
+leaseholder pref-index s22:0
+lease pref-indices: s22:0
+diversity: voter 1.000000, all 0.777778
