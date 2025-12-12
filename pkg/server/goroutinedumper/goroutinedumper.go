@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -43,6 +45,13 @@ var (
 			"always kept even if its size exceeds the limit.",
 		500<<20, // 500MiB
 	)
+	onDemandMinInterval = settings.RegisterDurationSettingWithExplicitUnit(
+		settings.ApplicationLevel,
+		"server.goroutine_dump.on_demand.min_interval",
+		"minimum amount of time that must pass between two on-demand goroutine dumps (0 disables rate limiting)",
+		10*time.Second,
+		settings.DurationWithMinimum(0),
+	)
 )
 
 // heuristic represents whether goroutine dump is triggered. It is true when
@@ -63,6 +72,11 @@ var doubleSinceLastDumpHeuristic = heuristic{
 // GoroutineDumper stores relevant functions and stats to take goroutine dumps
 // if an abnormal change in number of goroutines is detected.
 type GoroutineDumper struct {
+	mu struct {
+		syncutil.Mutex
+		lastOnDemandDumpTime time.Time
+	}
+
 	goroutines          int64
 	goroutinesThreshold int64
 	maxGoroutinesDumped int64
@@ -77,6 +91,9 @@ type GoroutineDumper struct {
 // GoroutineDumper is true.
 // At most one dump is taken in a call of this function.
 func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, goroutines int64) {
+	gd.mu.Lock()
+	defer gd.mu.Unlock()
+
 	gd.goroutines = goroutines
 	if gd.goroutinesThreshold != numGoroutinesThreshold.Get(&st.SV) {
 		gd.goroutinesThreshold = numGoroutinesThreshold.Get(&st.SV)
@@ -105,13 +122,35 @@ func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, 
 }
 
 // DumpNow requests a goroutine dump on demand.
-//
-// This is currently a stub and does not take a dump.
 func (gd *GoroutineDumper) DumpNow(
 	ctx context.Context, reason redact.RedactableString,
 ) (didDump bool, _ error) {
-	log.Dev.Infof(ctx, "on-demand goroutine dump requested: %s", reason)
-	return false, nil
+	gd.mu.Lock()
+	defer gd.mu.Unlock()
+
+	minInterval := onDemandMinInterval.Get(&gd.st.SV)
+	now := gd.currentTime()
+	if minInterval > 0 && now.Sub(gd.mu.lastOnDemandDumpTime) < minInterval {
+		log.Ops.VEventfDepth(ctx, 1, 1, "on-demand goroutine dump suppressed by rate limit: %s", reason)
+		return false, nil
+	}
+
+	filename := fmt.Sprintf(
+		"%s.%s.%s.%09d",
+		goroutineDumpPrefix,
+		now.Format(timeFormat),
+		"on_demand",
+		runtime.NumGoroutine(),
+	)
+	log.Ops.Infof(ctx, "taking on-demand goroutine dump: %s [%s]", reason, filename)
+	path := gd.store.GetFullPath(filename)
+	if err := gd.takeGoroutineDump(path); err != nil {
+		return false, err
+	}
+
+	gd.mu.lastOnDemandDumpTime = now
+	gd.gcDumps(ctx, now)
+	return true, nil
 }
 
 // NewGoroutineDumper returns a GoroutineDumper which enables
