@@ -283,8 +283,9 @@ func TestBumpClusterVersion(t *testing.T) {
 			}
 
 			// Check to see that our bumped cluster version was persisted to disk.
+			engines := Engines(s.Engines())
 			synthesizedCV, err := kvstorage.SynthesizeClusterVersionFromEngines(
-				ctx, s.Engines(), test.binaryVersion,
+				ctx, engines.TODO(), test.binaryVersion,
 				test.activeClusterVersion,
 			)
 			if err != nil {

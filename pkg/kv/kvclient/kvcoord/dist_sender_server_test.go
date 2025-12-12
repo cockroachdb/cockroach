@@ -84,9 +84,10 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	key := testutils.MakeKey(keys.Meta1Prefix, roachpb.KeyMax)
 	now := s.Clock().Now()
 	txn := roachpb.MakeTransaction("txn", roachpb.Key("foobar"), isolation.Serializable, 0, now, 0, int32(s.SQLInstanceID()), 0, false /* omitInRangefeeds */)
-	if err := storage.MVCCPutProto(context.Background(), s.Engines()[0], key, now, &roachpb.RangeDescriptor{}, storage.MVCCWriteOptions{Txn: &txn}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, storage.MVCCPutProto(
+		context.Background(), s.Engines()[0].StateEngine(), key, now,
+		&roachpb.RangeDescriptor{}, storage.MVCCWriteOptions{Txn: &txn},
+	))
 
 	// Create a new DistSender and client.DB so that the Get below is guaranteed
 	// to not hit in the range descriptor cache forcing a RangeLookup operation.

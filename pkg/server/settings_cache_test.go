@@ -120,9 +120,10 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 
 		cfg := s.SystemLayer().(*testServer).topLevelServer.cfg
 		initConfig := newInitServerConfig(ctx, cfg, getGRPCDialOpts, getDRPCDialOpts)
+		engines := Engines(s.Engines())
 		inspectState, err := inspectEngines(
 			context.Background(),
-			s.Engines(),
+			engines.TODO(),
 			s.ClusterSettings().Version.LatestVersion(),
 			s.ClusterSettings().Version.MinSupportedVersion(),
 		)
