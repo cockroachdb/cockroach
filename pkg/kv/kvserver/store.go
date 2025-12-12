@@ -2953,29 +2953,28 @@ func (s *Store) WriteHLCUpperBound(ctx context.Context, time int64) error {
 	return batch.Commit(true /* sync */)
 }
 
-// ReadHLCUpperBound returns the upper bound to the wall time of the HLC
-// If this value does not exist 0 is returned
+// ReadHLCUpperBound returns the upper bound to the wall time of the HLC.
+// Returns 0 if the value does not exist.
 func ReadHLCUpperBound(ctx context.Context, e storage.Engine) (int64, error) {
 	var timestamp hlc.Timestamp
-	ok, err := storage.MVCCGetProto(ctx, e, keys.StoreHLCUpperBoundKey(), hlc.Timestamp{},
-		&timestamp, storage.MVCCGetOptions{})
-	if err != nil {
+	if ok, err := storage.MVCCGetProto(
+		ctx, e, keys.StoreHLCUpperBoundKey(), hlc.Timestamp{},
+		&timestamp, storage.MVCCGetOptions{},
+	); err != nil || !ok {
 		return 0, err
-	} else if !ok {
-		return 0, nil
 	}
 	return timestamp.WallTime, nil
 }
 
-// ReadMaxHLCUpperBound returns the maximum of the stored hlc upper bounds
-// among all the engines. This value is optionally persisted by the server and
-// it is guaranteed to be higher than any wall time used by the HLC. If this
-// value is persisted, HLC wall clock monotonicity is guaranteed across server
-// restarts
-func ReadMaxHLCUpperBound(ctx context.Context, engines []storage.Engine) (int64, error) {
+// ReadMaxHLCUpperBound returns the maximum of the stored HLC upper bounds among
+// all the engines. This value is optionally persisted by the server, and it is
+// guaranteed to be higher than any wall time used by the HLC. If this value is
+// persisted, HLC wall clock monotonicity is guaranteed across server restarts.
+func ReadMaxHLCUpperBound(ctx context.Context, engines []kvstorage.Engines) (int64, error) {
 	var hlcUpperBound int64
 	for _, e := range engines {
-		engineHLCUpperBound, err := ReadHLCUpperBound(ctx, e)
+		// NB: StoreHLCUpperBoundKey is in the log engine.
+		engineHLCUpperBound, err := ReadHLCUpperBound(ctx, e.LogEngine())
 		if err != nil {
 			return 0, err
 		}
