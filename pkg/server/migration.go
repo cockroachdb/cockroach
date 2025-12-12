@@ -163,8 +163,10 @@ func (m *migrationServer) SyncAllEngines(
 		// initialized.
 		m.server.node.waitForAdditionalStoreInit()
 
-		for _, eng := range m.server.engines.TODO() {
-			if err := storage.WriteSyncNoop(eng); err != nil {
+		for _, eng := range m.server.engines {
+			// TODO(sep-raft-log): figure out whether StateEngine needs a sync, or we
+			// can only sync LogEngine here.
+			if err := storage.WriteSyncNoop(eng.TODOEngine()); err != nil {
 				return err
 			}
 		}
