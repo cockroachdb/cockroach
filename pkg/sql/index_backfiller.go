@@ -7,12 +7,15 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -164,7 +167,21 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	if retErr != nil {
 		return retErr
 	}
-	return run(ctx)
+	if err := run(ctx); err != nil {
+		return err
+	}
+	if !useDistributedMerge {
+		return nil
+	}
+	merged, err := ib.runDistributedMerge(ctx, job, descriptor, progress, sstManifestBuf.Snapshot())
+	if err != nil {
+		return err
+	}
+	progress.SSTManifests = merged
+	if err := tracker.SetBackfillProgress(ctx, progress); err != nil {
+		return err
+	}
+	return ib.runDistributedIngest(ctx, job, descriptor, progress, merged)
 }
 
 // Index backfilling ingests SSTs that don't play nicely with running txns
@@ -274,4 +291,112 @@ func getIndexBackfillDistributedMergeMode(
 			errors.AssertionFailedf("expected new schema change details on job %d", job.ID())
 	}
 	return details.DistributedMergeMode, nil
+}
+
+// runDistributedMerge runs a distributed merge of the provided SSTs into larger
+// SSTs. This is part of the distributed merge pipeline and is only run if the
+// index backfill has enabled distributed merging.
+func (ib *IndexBackfillPlanner) runDistributedMerge(
+	ctx context.Context,
+	job *jobs.Job,
+	descriptor catalog.TableDescriptor,
+	progress scexec.BackfillProgress,
+	manifests []jobspb.IndexBackfillSSTManifest,
+) ([]jobspb.IndexBackfillSSTManifest, error) {
+	if len(manifests) == 0 {
+		return nil, nil
+	}
+	ssts := make([]execinfrapb.BulkMergeSpec_SST, 0, len(manifests))
+	for _, manifest := range manifests {
+		if manifest.Span == nil {
+			return nil, errors.AssertionFailedf("manifest missing span metadata")
+		}
+		ssts = append(ssts, execinfrapb.BulkMergeSpec_SST{
+			URI:      manifest.URI,
+			StartKey: append([]byte(nil), manifest.Span.Key...),
+			EndKey:   append([]byte(nil), manifest.Span.EndKey...),
+		})
+	}
+	targetSpans := make([]roachpb.Span, 0, len(progress.DestIndexIDs))
+	for _, idxID := range progress.DestIndexIDs {
+		span := descriptor.IndexSpan(ib.execCfg.Codec, idxID)
+		targetSpans = append(targetSpans, span)
+	}
+	if len(targetSpans) == 0 {
+		return nil, errors.AssertionFailedf("no destination index spans provided for merge")
+	}
+
+	mem := &MemoryMetrics{}
+	jobExecCtx, cleanup := MakeJobExecContext(ctx, "index-backfill-distributed-merge", username.NodeUserName(), mem, ib.execCfg)
+	defer cleanup()
+
+	outputURI := func(instanceID base.SQLInstanceID) string {
+		// Use nodelocal for temporary storage of merged SSTs. These SSTs are
+		// only needed during the lifetime of the job. The '/job/<jobID>' prefix
+		// allows for easy cleanup in the event of job cancellation or failure.
+		// TODO(158873): handle cleanup of nodelocal SSTs
+		//
+		// The 'iter-0' suffix is to allow for future iterations of
+		// merging in case we want to do multiple stages of merging.
+		return fmt.Sprintf("nodelocal://%d/job/%d/merge/iter-0/", instanceID, job.ID())
+	}
+
+	merged, err := invokeBulkMerge(ctx, jobExecCtx, ssts, targetSpans, outputURI)
+	if err != nil {
+		return nil, err
+	}
+
+	writeTS := progress.MinimumWriteTimestamp
+	out := make([]jobspb.IndexBackfillSSTManifest, 0, len(merged))
+	for _, sst := range merged {
+		span := roachpb.Span{
+			Key:    append([]byte(nil), sst.StartKey...),
+			EndKey: append([]byte(nil), sst.EndKey...),
+		}
+		ts := writeTS
+		out = append(out, jobspb.IndexBackfillSSTManifest{
+			URI:            sst.URI,
+			Span:           &span,
+			WriteTimestamp: &ts,
+		})
+	}
+	return out, nil
+}
+
+// runDistributedIngest runs a final ingest of the SSTs produced by
+// the runDistributedMerge call. This is only used when the distributed
+// merge pipeline is enabled for index backfills.
+// TODO(159374): we can remove this stage of the pipeline if the merge processor
+// can write directly into the KV in it's final iteration.
+func (ib *IndexBackfillPlanner) runDistributedIngest(
+	ctx context.Context,
+	job *jobs.Job,
+	descriptor catalog.TableDescriptor,
+	progress scexec.BackfillProgress,
+	outputs []jobspb.IndexBackfillSSTManifest,
+) error {
+	if len(outputs) == 0 {
+		return nil
+	}
+	spans := make([]roachpb.Span, len(progress.DestIndexIDs))
+	for i, idxID := range progress.DestIndexIDs {
+		spans[i] = descriptor.IndexSpan(ib.execCfg.Codec, idxID)
+	}
+	ssts := make([]execinfrapb.BulkMergeSpec_SST, len(outputs))
+	for i, manifest := range outputs {
+		if manifest.Span == nil {
+			return errors.AssertionFailedf("manifest missing span metadata")
+		}
+		ssts[i] = execinfrapb.BulkMergeSpec_SST{
+			URI:      manifest.URI,
+			StartKey: append([]byte(nil), manifest.Span.Key...),
+			EndKey:   append([]byte(nil), manifest.Span.EndKey...),
+		}
+	}
+
+	mem := &MemoryMetrics{}
+	jobExecCtx, cleanup := MakeJobExecContext(ctx, "index-backfill-ingest", username.NodeUserName(), mem, ib.execCfg)
+	defer cleanup()
+
+	return invokeBulkIngest(ctx, jobExecCtx, spans, ssts)
 }
