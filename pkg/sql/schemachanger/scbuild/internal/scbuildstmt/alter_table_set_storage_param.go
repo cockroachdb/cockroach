@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -228,22 +230,19 @@ func isTTLParam(key string) bool {
 }
 
 // applyTTLStorageParamsSet processes TTL-related storage parameters for SET.
-// It returns:
-// - origElem: the original RowLevelTTL element (nil if table had no TTL).
-// - newElem: the updated RowLevelTTL element (nil if no TTL params were handled).
-// - changed: true if any TTL param was modified.
+// It handles dropping the old RowLevelTTL element and adding the new one.
 func applyTTLStorageParamsSet(
 	b BuildCtx,
 	tbl *scpb.Table,
 	tn *tree.TableName,
 	t *tree.AlterTableSetStorageParams,
 	params tree.StorageParams,
-) (origElem *scpb.RowLevelTTL, newElem *scpb.RowLevelTTL, changed bool) {
-	origElem = b.QueryByID(tbl.TableID).FilterRowLevelTTL().MustGetZeroOrOneElement()
-
+) {
 	if len(params) == 0 {
-		return origElem, nil, false
+		return
 	}
+
+	origElem := b.QueryByID(tbl.TableID).FilterRowLevelTTL().MustGetZeroOrOneElement()
 
 	// Build new TTL from original (or empty if none).
 	var newTTL catpb.RowLevelTTL
@@ -298,28 +297,40 @@ func applyTTLStorageParamsSet(
 	if origElem != nil {
 		seqNum = origElem.SeqNum + 1
 	}
-	newElem = &scpb.RowLevelTTL{
+	newElem := &scpb.RowLevelTTL{
 		TableID:     tbl.TableID,
 		RowLevelTTL: newTTL,
 		TTLExpr:     origTTLExpr,
 		SeqNum:      seqNum,
 	}
-	return origElem, newElem, true
+
+	// Drop old element and add new one.
+	if origElem != nil {
+		b.Drop(origElem)
+	}
+	b.Add(newElem)
+
+	// If TTL is being added to a table with inbound FKs that have cascading
+	// delete actions, send a notice about the performance implications.
+	if origElem == nil && hasInboundFKWithCascadingDeleteAction(b, tbl) {
+		b.EvalCtx().ClientNoticeSender.BufferClientNotice(
+			b,
+			pgnotice.Newf("Columns within table %s are referenced as foreign keys."+
+				" This will make TTL deletion jobs more expensive as dependent rows"+
+				" in other tables will need to be updated as well. To improve performance"+
+				" of the TTL job, consider reducing the value of ttl_delete_batch_size.", tn.Object()),
+		)
+	}
 }
 
 // applyTTLStorageParamsReset processes TTL-related storage parameters for RESET.
-// It returns:
-// - origElem: the original RowLevelTTL element (nil if table had no TTL).
-// - newElem: the updated RowLevelTTL element (nil if TTL is being completely removed).
-// - changed: true if any TTL param was modified.
-func applyTTLStorageParamsReset(
-	b BuildCtx, tbl *scpb.Table, params []string,
-) (origElem *scpb.RowLevelTTL, newElem *scpb.RowLevelTTL, changed bool) {
-	origElem = b.QueryByID(tbl.TableID).FilterRowLevelTTL().MustGetZeroOrOneElement()
-
+// It handles dropping the old RowLevelTTL element and adding a new one if needed.
+func applyTTLStorageParamsReset(b BuildCtx, tbl *scpb.Table, params []string) {
 	if len(params) == 0 {
-		return origElem, nil, false
+		return
 	}
+
+	origElem := b.QueryByID(tbl.TableID).FilterRowLevelTTL().MustGetZeroOrOneElement()
 
 	// Check if we're resetting 'ttl' or 'ttl_expire_after' which may require
 	// dropping the TTL column.
@@ -355,44 +366,33 @@ func applyTTLStorageParamsReset(
 	}
 
 	if origElem == nil {
-		return nil, nil, false
+		return
 	}
 
 	// Check if we need to drop the TTL column and/or the RowLevelTTL element.
 	origHasDuration := origElem.RowLevelTTL.HasDurationExpr()
 	needDropColumn := origHasDuration && (resettingTTL || resettingExpireAfter)
 
-	// IMPORTANT: We must drop the RowLevelTTL element BEFORE dropping the column,
-	// because dropColumn's walkColumnDependencies checks for RowLevelTTL
-	// dependencies and will block the drop if one exists.
-	alreadyDroppedOrig := false
-	if resettingTTL || needDropColumn {
-		b.Drop(origElem)
-		alreadyDroppedOrig = true
-	}
-
+	// Always drop the old element first (required before column drop).
+	b.Drop(origElem)
 	if needDropColumn {
 		dropTTLColumn(b, tbl)
 	}
 
-	// If resetting 'ttl', return nil for newElem to signal complete removal.
+	// If resetting 'ttl', we're done - TTL is completely removed.
 	if resettingTTL {
-		return nil, nil, true
+		telemetry.Inc(sqltelemetry.RowLevelTTLDropped)
+		return
 	}
 
-	// Construct new scpb.RowLevelTTL element with incremented SeqNum.
-	newElem = &scpb.RowLevelTTL{
+	// Construct and add new scpb.RowLevelTTL element with incremented SeqNum.
+	newElem := &scpb.RowLevelTTL{
 		TableID:     tbl.TableID,
 		RowLevelTTL: *newTTL,
 		TTLExpr:     origTTLExpr,
 		SeqNum:      origElem.SeqNum + 1,
 	}
-	// If we already dropped origElem above, return nil for it so the caller
-	// doesn't try to drop it again.
-	if alreadyDroppedOrig {
-		return nil, newElem, true
-	}
-	return origElem, newElem, true
+	b.Add(newElem)
 }
 
 // AlterTableSetStorageParams implements ALTER TABLE ... SET {storage_param} in the declarative schema changer.
@@ -414,25 +414,7 @@ func AlterTableSetStorageParams(
 	}
 
 	// Handle TTL params first, using the RowLevelTTL element.
-	origTTL, newTTL, ttlChanged := applyTTLStorageParamsSet(b, tbl, tn, t, ttlParams)
-	if ttlChanged {
-		if origTTL != nil {
-			b.Drop(origTTL)
-		}
-		b.Add(newTTL)
-
-		// If TTL is being added to a table with inbound FKs that have cascading
-		// delete actions, send a notice about the performance implications.
-		if origTTL == nil && hasInboundFKWithCascadingDeleteAction(b, tbl) {
-			b.EvalCtx().ClientNoticeSender.BufferClientNotice(
-				b,
-				pgnotice.Newf("Columns within table %s are referenced as foreign keys."+
-					" This will make TTL deletion jobs more expensive as dependent rows"+
-					" in other tables will need to be updated as well. To improve performance"+
-					" of the TTL job, consider reducing the value of ttl_delete_batch_size.", tn.Object()),
-			)
-		}
-	}
+	applyTTLStorageParamsSet(b, tbl, tn, t, ttlParams)
 
 	if err := storageparam.StorageParamPreChecks(
 		b,
@@ -560,16 +542,7 @@ func AlterTableResetStorageParams(
 	}
 
 	// Handle TTL params first, using the RowLevelTTL element.
-	origTTL, newTTL, ttlChanged := applyTTLStorageParamsReset(b, tbl, ttlParams)
-	if ttlChanged {
-		if origTTL != nil {
-			b.Drop(origTTL)
-		}
-		// If newTTL is nil, TTL is being completely removed (RESET (ttl)).
-		if newTTL != nil {
-			b.Add(newTTL)
-		}
-	}
+	applyTTLStorageParamsReset(b, tbl, ttlParams)
 
 	if err := storageparam.StorageParamPreChecks(
 		b,
