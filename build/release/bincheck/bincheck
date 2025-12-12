@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -exuo pipefail
 
 export COCKROACH_INCONSISTENT_TIME_ZONES=true
 
