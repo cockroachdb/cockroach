@@ -502,7 +502,7 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 	// TODO(jackson): Eventually we should be able to avoid opening the
 	// engines altogether until here, but that requires us to move the
 	// store cluster version key outside of the storage engine.
-	if err := assertEnginesEmpty(s.inspectedDiskState.uninitializedEngines.TODO()); err != nil {
+	if err := assertEnginesEmpty(s.inspectedDiskState.uninitializedEngines); err != nil {
 		return nil, err
 	}
 
@@ -526,14 +526,14 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 	)
 }
 
-func assertEnginesEmpty(engines []storage.Engine) error {
+func assertEnginesEmpty(engines []kvstorage.Engines) error {
 	storeClusterVersionKey := keys.DeprecatedStoreClusterVersionKey()
 
 	// TODO(sumeer): plumb a context if necessary.
 	ctx := context.Background()
 	for _, engine := range engines {
 		err := func() error {
-			iter, err := engine.NewEngineIterator(ctx, storage.IterOptions{
+			iter, err := engine.TODOEngine().NewEngineIterator(ctx, storage.IterOptions{
 				KeyTypes:   storage.IterKeyTypePointsAndRanges,
 				UpperBound: roachpb.KeyMax,
 			})

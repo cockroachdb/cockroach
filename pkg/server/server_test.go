@@ -1029,12 +1029,13 @@ func TestAssertEnginesEmpty(t *testing.T) {
 	eng, err := storage.Open(ctx, storage.InMemory(), cluster.MakeClusterSettings())
 	require.NoError(t, err)
 	defer eng.Close()
+	engs := []kvstorage.Engines{kvstorage.MakeEngines(eng)}
 
-	require.NoError(t, assertEnginesEmpty([]storage.Engine{eng}))
+	require.NoError(t, assertEnginesEmpty(engs))
 
 	require.NoError(t, storage.MVCCPutProto(ctx, eng, keys.DeprecatedStoreClusterVersionKey(),
 		hlc.Timestamp{}, &roachpb.Version{Major: 21, Minor: 1, Internal: 122}, storage.MVCCWriteOptions{}))
-	require.NoError(t, assertEnginesEmpty([]storage.Engine{eng}))
+	require.NoError(t, assertEnginesEmpty(engs))
 
 	batch := eng.NewBatch()
 	key := storage.MVCCKey{
@@ -1046,7 +1047,7 @@ func TestAssertEnginesEmpty(t *testing.T) {
 	}
 	require.NoError(t, batch.PutMVCC(key, value))
 	require.NoError(t, batch.Commit(false))
-	require.Error(t, assertEnginesEmpty([]storage.Engine{eng}))
+	require.Error(t, assertEnginesEmpty(engs))
 }
 
 // TestAssertExternalStorageInitializedBeforeJobSchedulerStart is a
