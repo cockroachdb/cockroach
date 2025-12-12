@@ -76,6 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
+	"github.com/cockroachdb/cockroach/pkg/server/goroutinedumper"
 	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -178,6 +179,7 @@ type topLevelServer struct {
 	ctSender             *sidetransport.Sender
 	policyRefresher      *policyrefresher.PolicyRefresher
 	nodeCapacityProvider *load.NodeCapacityProvider
+	goroutineDumper      *goroutinedumper.GoroutineDumper
 
 	http            *httpServer
 	adminAuthzCheck privchecker.CheckerForRPCHandlers
@@ -930,6 +932,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		},
 	)
 
+	goroutineDumper, err := maybeNewGoroutineDumper(ctx, cfg.BaseConfig.GoroutineDumpDirName, st)
+	if err != nil {
+		return nil, errors.Wrap(err, "starting goroutine dumper worker")
+	}
+
 	storeCfg := kvserver.StoreConfig{
 		DefaultSpanConfig:            cfg.DefaultZoneConfig.AsSpanConfig(),
 		Settings:                     st,
@@ -975,6 +982,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowRangeControllerMetrics: rangeControllerMetrics,
 		SchedulerLatencyListener:     admissionControl.schedulerLatencyListener,
 		RangeCount:                   &atomic.Int64{},
+	}
+	if goroutineDumper != nil {
+		storeCfg.GoroutineDumpNow = goroutineDumper.DumpNow
 	}
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
@@ -1394,6 +1404,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		policyRefresher:           policyRefresher,
 		nodeCapacityProvider:      nodeCapacityProvider,
 		runtime:                   runtimeSampler,
+		goroutineDumper:           goroutineDumper,
 		http:                      sHTTP,
 		adminAuthzCheck:           adminAuthzCheck,
 		admin:                     sAdmin,
@@ -2004,6 +2015,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.cfg.CacheSize,
 		s.stopper,
 		s.runtime,
+		s.goroutineDumper,
 		s.status.sessionRegistry,
 		s.sqlServer.execCfg.RootMemoryMonitor,
 	); err != nil {
