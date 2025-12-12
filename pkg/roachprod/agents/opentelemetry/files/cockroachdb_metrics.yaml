@@ -701,6 +701,7 @@ go_scheduler_latency_sum: go.scheduler_latency.sum
 gossip_bytes_received: gossip.bytes.received
 gossip_bytes_sent: gossip.bytes.sent
 gossip_callbacks_pending: gossip.callbacks.pending
+gossip_callbacks_processed: gossip.callbacks.processed
 gossip_connections_incoming: gossip.connections.incoming
 gossip_connections_outgoing: gossip.connections.outgoing
 gossip_connections_refused: gossip.connections.refused
