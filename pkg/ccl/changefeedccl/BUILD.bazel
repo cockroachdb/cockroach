@@ -205,6 +205,7 @@ go_test(
         "changefeed_dist_test.go",
         "changefeed_job_info_test.go",
         "changefeed_memory_test.go",
+        "changefeed_processors_test.go",
         "changefeed_progress_test.go",
         "changefeed_stmt_test.go",
         "changefeed_test.go",
@@ -231,6 +232,9 @@ go_test(
         "testfeed_test.go",
         "validations_test.go",
     ],
+    data = [
+        "changefeed_processors.go",
+    ],
     embed = [":changefeedccl"],
     exec_properties = select({
         "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
@@ -241,6 +245,7 @@ go_test(
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/build",
+        "//pkg/build/bazel",
         "//pkg/ccl",
         "//pkg/ccl/changefeedccl/cdceval",
         "//pkg/ccl/changefeedccl/cdcevent",
