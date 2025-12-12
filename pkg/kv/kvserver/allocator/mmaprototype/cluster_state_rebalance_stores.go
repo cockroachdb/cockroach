@@ -240,8 +240,10 @@ func (re *rebalanceEnv) rebalanceStores(
 		}
 	}
 
-	consideredAllOverloadedStores := true
-	for _, store := range sheddingStores {
+	i := 0
+	n := len(sheddingStores)
+	for ; i < n; i++ {
+		store := sheddingStores[i]
 		// NB: we don't have to check the maxLeaseTransferCount here since only one
 		// store can transfer leases - the local store. So the limit is only checked
 		// inside of the corresponding rebalanceLeasesFromLocalStoreID call, but
@@ -249,12 +251,14 @@ func (re *rebalanceEnv) rebalanceStores(
 		if re.rangeMoveCount >= re.maxRangeMoveCount {
 			log.KvDistribution.VEventf(ctx, 2, "reached max range move count %d, stopping further rebalancing",
 				re.maxRangeMoveCount)
-			consideredAllOverloadedStores = false
 			break
 		}
 		re.rebalanceStore(ctx, store, localStoreID)
 	}
-	re.passObs.finishRebalancingPass(ctx, consideredAllOverloadedStores)
+	for ; i < n; i++ {
+		re.passObs.skippedStore(sheddingStores[i].StoreID)
+	}
+	re.passObs.finishRebalancingPass(ctx)
 	return re.changes
 }
 
