@@ -105,10 +105,9 @@ func (m *migrationServer) BumpClusterVersion(
 func bumpClusterVersion(
 	ctx context.Context, st *cluster.Settings, newCV clusterversion.ClusterVersion, engines Engines,
 ) error {
-
 	versionSetting := st.Version
 	prevCV, err := kvstorage.SynthesizeClusterVersionFromEngines(
-		ctx, engines.TODO(), versionSetting.LatestVersion(),
+		ctx, engines, versionSetting.LatestVersion(),
 		versionSetting.MinSupportedVersion(),
 	)
 	if err != nil {
