@@ -188,12 +188,20 @@ func addBranchToWorkflow(branch string) error {
 }
 
 // findBranchNode navigates the YAML tree to find the branch array node.
+//
+// IMPORTANT: This function expects the workflow YAML to have the following structure:
+//
+//	jobs:
+//	  update-crdb-releases-yaml:
+//	    strategy:
+//	      matrix:
+//	        branch:
+//	          - "master"
+//	          - "release-X.Y"
+//
+// If the workflow structure changes (job name, nesting, etc.), this function will
+// return an error. Update the expectedPath below if the structure needs to change.
 func findBranchNode(root *yaml.Node) (*yaml.Node, error) {
-	// Navigate: root -> jobs (map key) -> jobs (map value) ->
-	// update-crdb-releases-yaml (key) -> update-crdb-releases-yaml (value) ->
-	// strategy (key) -> strategy (value) -> matrix (key) -> matrix (value) ->
-	// branch (key) -> branch (value - sequence)
-
 	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 {
 		return nil, fmt.Errorf("invalid YAML structure: expected document node")
 	}
@@ -203,41 +211,43 @@ func findBranchNode(root *yaml.Node) (*yaml.Node, error) {
 		return nil, fmt.Errorf("invalid YAML structure: expected mapping at top level")
 	}
 
-	// Find "jobs" key
-	jobsNode := findMapValue(topMap, "jobs")
-	if jobsNode == nil {
-		return nil, fmt.Errorf("'jobs' key not found in workflow")
-	}
-
-	// Find "update-crdb-releases-yaml" key
-	jobNode := findMapValue(jobsNode, "update-crdb-releases-yaml")
-	if jobNode == nil {
-		return nil, fmt.Errorf("'update-crdb-releases-yaml' job not found")
-	}
-
-	// Find "strategy" key
-	strategyNode := findMapValue(jobNode, "strategy")
-	if strategyNode == nil {
-		return nil, fmt.Errorf("'strategy' key not found in job")
-	}
-
-	// Find "matrix" key
-	matrixNode := findMapValue(strategyNode, "matrix")
-	if matrixNode == nil {
-		return nil, fmt.Errorf("'matrix' key not found in strategy")
-	}
-
-	// Find "branch" key
-	branchNode := findMapValue(matrixNode, "branch")
-	if branchNode == nil {
-		return nil, fmt.Errorf("'branch' key not found in matrix")
+	// Navigate to jobs.update-crdb-releases-yaml.strategy.matrix.branch
+	// If this path changes in the workflow file, update it here and in the comment above.
+	expectedPath := []string{"jobs", "update-crdb-releases-yaml", "strategy", "matrix", "branch"}
+	branchNode, err := navigateYAMLPath(topMap, expectedPath)
+	if err != nil {
+		return nil, fmt.Errorf("workflow structure does not match expected format.\n"+
+			"Expected path: %s\n"+
+			"Error: %w\n\n"+
+			"If the workflow file structure has changed, update the expectedPath in findBranchNode()",
+			strings.Join(expectedPath, " -> "), err)
 	}
 
 	if branchNode.Kind != yaml.SequenceNode {
-		return nil, fmt.Errorf("'branch' value is not a sequence")
+		return nil, fmt.Errorf("expected 'branch' to be a sequence (array), but found %v.\n"+
+			"The workflow file structure may have changed. Update the code in findBranchNode() if needed",
+			branchNode.Kind)
 	}
 
 	return branchNode, nil
+}
+
+// navigateYAMLPath navigates through a sequence of keys in a YAML mapping structure.
+func navigateYAMLPath(start *yaml.Node, path []string) (*yaml.Node, error) {
+	current := start
+	for i, key := range path {
+		next := findMapValue(current, key)
+		if next == nil {
+			// Provide context about where in the path we failed
+			completedPath := strings.Join(path[:i], " -> ")
+			if completedPath != "" {
+				completedPath += " -> "
+			}
+			return nil, fmt.Errorf("key '%s' not found after navigating: %s", key, completedPath+"[HERE]")
+		}
+		current = next
+	}
+	return current, nil
 }
 
 // findMapValue finds a value in a mapping node by key.
