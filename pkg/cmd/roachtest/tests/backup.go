@@ -329,7 +329,7 @@ func runBackup(ctx context.Context, t test.Test, c cluster.Cluster, abandon bool
 	const perTransactionRowCount = 1000
 	numTxns := totalRowCount / perTransactionRowCount
 
-	_, err := conn.Exec("CREATE TABLE foo(k INT PRIMARY KEY, v INT NOT NULL)")
+	_, err := conn.ExecContext(ctx, "CREATE TABLE foo(k INT PRIMARY KEY, v INT NOT NULL)")
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -337,20 +337,20 @@ func runBackup(ctx context.Context, t test.Test, c cluster.Cluster, abandon bool
 	// the corresponding txn record. This will trigger async intent resolution
 	// after the txn is aborted.
 	statement := fmt.Sprintf("ALTER TABLE foo SPLIT AT VALUES (%d)", numTxns)
-	_, err = conn.Exec(statement)
+	_, err = conn.ExecContext(ctx, statement)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
 	// Disable buffered writes to ensure transactions write intents.
-	_, err = conn.Exec("SET CLUSTER SETTING kv.transaction.write_buffering.enabled = false")
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING kv.transaction.write_buffering.enabled = false")
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
 	// Disable randomized anchor keys since the test controls in which range the
 	// transaction records live.
-	_, err = conn.Exec("SET CLUSTER SETTING kv.transaction.randomized_anchor_key.enabled=false")
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING kv.transaction.randomized_anchor_key.enabled=false")
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -360,14 +360,14 @@ func runBackup(ctx context.Context, t test.Test, c cluster.Cluster, abandon bool
 	for i := 0; i < totalRowCount; i += perTransactionRowCount {
 		txnIndex := i / perTransactionRowCount
 		var tx *gosql.Tx
-		tx, err = conn.Begin()
+		tx, err = conn.BeginTx(ctx, nil)
 		if err != nil {
 			t.Fatalf(err.Error())
 		}
 		transactions[txnIndex] = tx
 		// Anchor these transactions on the range that contains key i < numTxns.
 		statement = fmt.Sprintf("INSERT INTO foo (k, v) VALUES (%d, %d)", txnIndex, txnIndex)
-		_, err = tx.Exec(statement)
+		_, err = tx.ExecContext(ctx, statement)
 		if err != nil {
 			t.Fatalf(err.Error())
 		}
@@ -377,7 +377,7 @@ func runBackup(ctx context.Context, t test.Test, c cluster.Cluster, abandon bool
 			// TODO(mira): Currently, this takes ~4-5 min. We can speed up writing
 			// these intents by using generate_series.
 			statement = fmt.Sprintf("INSERT INTO foo (k, v) VALUES (%d, %d)", baseKey+j, j)
-			_, err = tx.Exec(statement)
+			_, err = tx.ExecContext(ctx, statement)
 			if err != nil {
 				t.Fatalf(err.Error())
 			}
@@ -398,11 +398,11 @@ func runBackup(ctx context.Context, t test.Test, c cluster.Cluster, abandon bool
 	// These cluster settings ensure that ExportRequests issued by the backup
 	// processor are not delayed for too long, especially for abandon=false, when
 	// only the final high-priority ExportRequest can push the slow pending txn.
-	_, err = conn.Exec("SET CLUSTER SETTING bulkio.backup.read_with_priority_after = '500ms'")
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING bulkio.backup.read_with_priority_after = '500ms'")
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-	_, err = conn.Exec("SET CLUSTER SETTING bulkio.backup.read_retry_delay = '100ms'")
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING bulkio.backup.read_retry_delay = '100ms'")
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -415,7 +415,7 @@ func runBackup(ctx context.Context, t test.Test, c cluster.Cluster, abandon bool
 	// longer than expected.
 	// TODO(mira): Adjust the timeout if the test flakes, and after the VIR work.
 	t.Status("running backup")
-	_, err = conn.Exec(fmt.Sprintf("BACKUP TABLE foo INTO 'nodelocal://1/%s'", destinationName(c)))
+	_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP TABLE foo INTO 'nodelocal://1/%s'", destinationName(c)))
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
