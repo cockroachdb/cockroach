@@ -1025,9 +1025,9 @@ func TestDiskStatsMap(t *testing.T) {
 		},
 	}
 	// Engines.
-	engines := []storage.Engine{
-		storage.NewDefaultInMemForTesting(),
-		storage.NewDefaultInMemForTesting(),
+	engines := []kvstorage.Engines{
+		kvstorage.MakeEngines(storage.NewDefaultInMemForTesting()),
+		kvstorage.MakeEngines(storage.NewDefaultInMemForTesting()),
 	}
 	defer func() {
 		for i := range engines {
@@ -1038,7 +1038,7 @@ func TestDiskStatsMap(t *testing.T) {
 	engineIDs := []roachpb.StoreID{10, 5}
 	for i := range engines {
 		ident := roachpb.StoreIdent{StoreID: engineIDs[i]}
-		require.NoError(t, storage.MVCCBlindPutProto(ctx, engines[i], keys.StoreIdentKey(),
+		require.NoError(t, storage.MVCCBlindPutProto(ctx, engines[i].LogEngine(), keys.StoreIdentKey(),
 			hlc.Timestamp{}, &ident, storage.MVCCWriteOptions{}))
 	}
 	var dsm diskStatsMap

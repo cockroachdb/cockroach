@@ -2078,7 +2078,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// uses the disk stats map we're initializing.
 	var pmp admission.PebbleMetricsProvider
 	if pmp, err = s.node.registerEnginesForDiskStatsMap(
-		s.cfg.Stores.Specs, s.engines.TODO(), (*diskMonitorManager)(s.cfg.DiskMonitorManager)); err != nil {
+		s.cfg.Stores.Specs, s.engines, (*diskMonitorManager)(s.cfg.DiskMonitorManager)); err != nil {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
 	}
 
