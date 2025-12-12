@@ -37,9 +37,11 @@ func TestSnapshotQueue(t *testing.T) {
 	var tg *testGranter
 	var buf builderWithMu
 	var wrkMap workMap
+	var minRate int64
 	initialTime := timeutil.FromUnixMicros(int64(0))
 	registry := metric.NewRegistry()
 	metrics := makeSnapshotQueueMetrics(registry)
+	ts := timeutil.NewManualTime(time.Unix(0, 0))
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "snapshot_queue"),
 		func(t *testing.T, d *datadriven.TestData) string {
@@ -66,8 +68,10 @@ func TestSnapshotQueue(t *testing.T) {
 				q.ts.(*timeutil.ManualTime).AdvanceTo(timeutil.FromUnixNanos(int64(createTime) * time.Millisecond.Nanoseconds()))
 				ctx, cancel := context.WithCancel(context.Background())
 				wrkMap.set(id, &testWork{cancel: cancel})
-				go func(ctx context.Context, id int, count int) {
-					err := q.Admit(ctx, int64(count))
+				// Create a fresh timer for each admit call so minRate timing works correctly.
+				timer := ts.NewTimer()
+				go func(ctx context.Context, id int, count int, minRate int64) {
+					err := q.Admit(ctx, int64(count), minRate, timer)
 					if err != nil {
 						buf.printf("id %d: admit failed", id)
 						wrkMap.delete(id)
@@ -75,7 +79,7 @@ func TestSnapshotQueue(t *testing.T) {
 						buf.printf("id %d: admit succeeded", id)
 						wrkMap.setAdmitted(id, StoreWorkHandle{})
 					}
-				}(ctx, id, count)
+				}(ctx, id, count, minRate)
 				// Need deterministic output, and this is racing with the goroutine
 				// which is trying to get admitted. Retry to let it get scheduled.
 				maybeRetryWithWait(t, d.Expected, d.Rewrite, buf.String)
@@ -121,6 +125,20 @@ func TestSnapshotQueue(t *testing.T) {
 				})
 				return strconv.FormatBool(q.empty())
 
+			case "set-min-rate":
+				var v int
+				d.ScanArgs(t, "v", &v)
+				minRate = int64(v)
+				return ""
+
+			case "advance-time":
+				var millis int
+				d.ScanArgs(t, "millis", &millis)
+				ts.Advance(time.Duration(millis) * time.Millisecond)
+				// Need deterministic output since advancing time may trigger timer callbacks.
+				maybeRetryWithWait(t, d.Expected, d.Rewrite, buf.String)
+				return buf.stringAndReset()
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
@@ -138,7 +156,11 @@ func TestSnapshotPacer(t *testing.T) {
 	require.NoError(t, pacer.Pace(ctx, 1, false))
 
 	q := &testingSnapshotQueue{}
-	pacer = NewSnapshotPacer(q)
+	ts := timeutil.NewManualTime(time.Unix(0, 0))
+	timer := ts.NewTimer()
+
+	var minRate int64 = 10 << 20 // 10 MB/s
+	pacer = NewSnapshotPacer(q, minRate, timer)
 
 	// Should not ask for admission since write bytes = burst size.
 	writeBytes := int64(SnapshotBurstSize)
@@ -150,35 +172,42 @@ func TestSnapshotPacer(t *testing.T) {
 	// Do another write, should go over threshold and seek admission.
 	require.NoError(t, pacer.Pace(ctx, 1, false))
 	require.True(t, q.admitted)
+	require.Equal(t, minRate, q.minRate)
 	require.Equal(t, int64(0), pacer.intWriteBytes)
 	require.Equal(t, writeBytes+1, q.admitCount)
 
 	// Not enough bytes since last admission. Should not ask for admission.
 	q.admitted = false
 	q.admitCount = 0
+	q.minRate = 0
 	require.NoError(t, pacer.Pace(ctx, 5, false))
 	require.False(t, q.admitted)
+	require.Equal(t, int64(0), q.minRate)
 	require.Equal(t, int64(5), pacer.intWriteBytes)
 	require.Equal(t, int64(0), q.admitCount)
 
 	// We now go above the threshold again. Should ask for admission.
 	require.NoError(t, pacer.Pace(ctx, writeBytes, false))
 	require.True(t, q.admitted)
+	require.Equal(t, minRate, q.minRate)
 	require.Equal(t, writeBytes+5, q.admitCount)
 	require.Equal(t, int64(0), pacer.intWriteBytes)
 
 	// Do few more writes.
 	q.admitted = false
 	q.admitCount = 0
+	q.minRate = 0
 	require.NoError(t, pacer.Pace(ctx, 10, false))
 	require.False(t, q.admitted)
 	require.Equal(t, int64(10), pacer.intWriteBytes)
+	require.Equal(t, int64(0), q.minRate)
 	require.Equal(t, int64(0), q.admitCount)
 
 	// If final call to pacer, we should admit regardless of size. It should flush
 	// all intWriteBytes.
 	require.NoError(t, pacer.Pace(ctx, -1, true))
 	require.True(t, q.admitted)
+	require.Equal(t, minRate, q.minRate)
 	require.Equal(t, int64(9), q.admitCount)
 }
 
@@ -186,12 +215,16 @@ func TestSnapshotPacer(t *testing.T) {
 type testingSnapshotQueue struct {
 	admitted   bool
 	admitCount int64
+	minRate    int64
 }
 
 var _ snapshotRequester = &testingSnapshotQueue{}
 
-func (ts *testingSnapshotQueue) Admit(ctx context.Context, count int64) error {
+func (ts *testingSnapshotQueue) Admit(
+	ctx context.Context, count int64, minRate int64, timerForMinRate timeutil.TimerI,
+) error {
 	ts.admitted = true
 	ts.admitCount = count
+	ts.minRate = minRate
 	return nil
 }
