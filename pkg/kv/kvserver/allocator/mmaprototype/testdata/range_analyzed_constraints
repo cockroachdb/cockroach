@@ -668,14 +668,14 @@ lease-preference +region=a -zone=a1
 # - Only prohibiting constraints.
 # - Common configurations not already included such as REGION survival.
 
-# Regression test for a bug where isConstraintSatisfied should only count
-# voters for voter constraints.
+# Test: Voter constraint assignment prioritizes voters over non-voters.
 #
 # In analyzedConstraints.initialize, isConstraintSatisfied determines if a
 # constraint is satisfied before moving to the next one. Stores satisfying
 # multiple constraints are deferred, then assigned to the first under-satisfied
-# constraint. The bug: isConstraintSatisfied counts voters + non-voters, but
-# for voter constraints only voters should count.
+# constraint. For voter constraints, non-voters that satisfy only one constraint
+# are also deferred to phase 2 (see isVoterConstraints parameter) so that voters
+# get first chance to satisfy constraints.
 #
 # Setup:
 #   - voter constraint: [+region=a]:2, [+zone=b1]:1
@@ -740,10 +740,7 @@ leaseholder pref-index s10:0
 lease pref-indices: s10:0 s12:0 s13:0
 diversity: voter 0.888889, all 0.777778
 
-# Test: Non-voter spreading for all-replica constraints.
-#
-# This verifies that the fix for voter constraints (only count voters) does NOT
-# break the spreading behavior for all-replica constraints (should count both).
+# Test: Non-voter spreading of non-voters on voter constraints.
 #
 # Setup:
 #   - All-replica constraints: [+region=a]:1, [+zone=b1]:1, [+region=b]:1
@@ -785,10 +782,10 @@ non-voters: 20(=a,=b1,=20) 21(=a,=b1,=21)
 voter-constraints:
   +region=a:1
     voters:
-    non-voters: 20 21
+    non-voters: 20
   +zone=b1:1
     voters:
-    non-voters:
+    non-voters: 21
   +region=b:1
     voters: 22
     non-voters:
