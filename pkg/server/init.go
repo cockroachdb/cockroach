@@ -133,7 +133,7 @@ type initState struct {
 	nodeID               roachpb.NodeID
 	clusterID            uuid.UUID
 	clusterVersion       clusterversion.ClusterVersion
-	initializedEngines   []storage.Engine
+	initializedEngines   Engines
 	uninitializedEngines Engines
 	initialSettingsKVs   []roachpb.KeyValue
 	initType             serverpb.InitType
@@ -747,7 +747,7 @@ func inspectEngines(
 	state := &initState{
 		clusterID:            clusterID,
 		nodeID:               nodeID,
-		initializedEngines:   initializedEngines.TODO(),
+		initializedEngines:   initializedEngines,
 		uninitializedEngines: uninitializedEngines,
 		clusterVersion:       clusterVersion,
 		initialSettingsKVs:   initialSettingsKVs,
