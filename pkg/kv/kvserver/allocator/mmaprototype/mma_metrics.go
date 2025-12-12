@@ -191,9 +191,14 @@ func toOverloadKind(withinLeaseSheddingGracePeriod bool, ignoreLevel ignoreLevel
 // rebalancingPassMetricsAndLogger manages gauge metrics and logging for
 // rebalancing passes.
 type rebalancingPassMetricsAndLogger struct {
-	localStoreID     roachpb.StoreID
-	m                gaugeMetrics
+	localStoreID roachpb.StoreID
+	m            gaugeMetrics
+
+	// Pass state that is used only during a rebalancing pass to update m, and
+	// to log.
+
 	states           map[roachpb.StoreID]storePassState
+	skippedStores    []roachpb.StoreID
 	curState         storePassState
 	curStoreID       roachpb.StoreID
 	failedSummaries  []storePassSummary
@@ -366,6 +371,7 @@ func (g *rebalancingPassMetricsAndLogger) resetForRebalancingPass() {
 		return
 	}
 	clear(g.states)
+	g.skippedStores = g.skippedStores[:0]
 }
 
 func (g *rebalancingPassMetricsAndLogger) storeOverloaded(
@@ -451,9 +457,14 @@ func (g *rebalancingPassMetricsAndLogger) replicaShed(result shedResult) {
 	g.curState.shedCounts[shedReplica][result]++
 }
 
-func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(
-	ctx context.Context, consideredAllOverloadedStores bool,
-) {
+func (g *rebalancingPassMetricsAndLogger) skippedStore(storeID roachpb.StoreID) {
+	if g == nil {
+		return
+	}
+	g.skippedStores = append(g.skippedStores, storeID)
+}
+
+func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(ctx context.Context) {
 	if g == nil {
 		return
 	}
@@ -507,14 +518,15 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(
 		}
 	}
 
-	// Logging using g.successSummaries.
-	slices.SortFunc(g.successSummaries, func(a, b storePassSummary) int {
-		return cmp.Compare(a.storeID, b.storeID)
-	})
+	// Logging.
 	const k = 20
 	var b strings.Builder
+	// Logging using g.successSummaries.
 	n := len(g.successSummaries)
 	if n > 0 {
+		slices.SortFunc(g.successSummaries, func(a, b storePassSummary) int {
+			return cmp.Compare(a.storeID, b.storeID)
+		})
 		omitted := false
 		if n > k {
 			omitted = true
@@ -526,7 +538,7 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(
 			if i == 0 {
 				prefix = ""
 			}
-			fmt.Fprintf(&b, "%ss%d", prefix, g.successSummaries[i].storeID)
+			fmt.Fprintf(&b, "%ss%v", prefix, g.successSummaries[i].storeID)
 		}
 		if omitted {
 			fmt.Fprintf(&b, ",...")
@@ -534,32 +546,54 @@ func (g *rebalancingPassMetricsAndLogger) finishRebalancingPass(
 		fmt.Fprintf(&b, "}")
 	}
 	// Logging using g.failedSummaries.
-	slices.SortFunc(g.failedSummaries, func(a, b storePassSummary) int {
-		return cmp.Or(cmp.Compare(-a.numShedFailures, -b.numShedFailures),
-			cmp.Compare(a.storeID, b.storeID))
-	})
 	n = len(g.failedSummaries)
 	if n > 0 {
+		slices.SortFunc(g.failedSummaries, func(a, b storePassSummary) int {
+			return cmp.Or(cmp.Compare(-a.numShedFailures, -b.numShedFailures),
+				cmp.Compare(a.storeID, b.storeID))
+		})
 		omitted := false
 		if n > k {
 			omitted = true
 			n = k
 		}
 		if b.Len() == 0 {
-			fmt.Fprintf(&b, "rebalancing pass ")
+			fmt.Fprintf(&b, "rebalancing pass")
 		}
-		fmt.Fprintf(&b, "failures (store,reason:count): ")
+		fmt.Fprintf(&b, " failures (store,reason:count): ")
 		for i := 0; i < n; i++ {
 			prefix := ", "
 			if i == 0 {
 				prefix = ""
 			}
-			fmt.Fprintf(&b, "%s(s%d,%v:%d)", prefix, g.failedSummaries[i].storeID,
+			fmt.Fprintf(&b, "%s(s%v,%v:%d)", prefix, g.failedSummaries[i].storeID,
 				g.failedSummaries[i].mostCommonReason, g.failedSummaries[i].mostCommonCount)
 		}
 		if omitted {
 			fmt.Fprintf(&b, ",...")
 		}
+	}
+	// Logging using g.skippedStores
+	n = len(g.skippedStores)
+	if n > 0 {
+		slices.Sort(g.skippedStores)
+		omitted := false
+		if n > k {
+			omitted = true
+			n = k
+		}
+		fmt.Fprintf(&b, " skipped: {")
+		for i := 0; i < n; i++ {
+			prefix := ", "
+			if i == 0 {
+				prefix = ""
+			}
+			fmt.Fprintf(&b, "%ss%v", prefix, g.skippedStores[i])
+		}
+		if omitted {
+			fmt.Fprintf(&b, ",...")
+		}
+		fmt.Fprintf(&b, "}")
 	}
 	if b.Len() > 0 {
 		log.KvDistribution.Infof(ctx, "%s", redact.SafeString(b.String()))
