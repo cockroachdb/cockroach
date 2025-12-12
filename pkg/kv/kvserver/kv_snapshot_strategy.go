@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -142,7 +143,34 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// Using a nil pacer is effectively a noop if snapshot control is disabled.
 	var pacer *admission.SnapshotPacer = nil
 	if admission.DiskBandwidthForSnapshotIngest.Get(&s.cfg.Settings.SV) && snapshotQ != nil {
-		pacer = admission.NewSnapshotPacer(snapshotQ)
+		minRate := int64(0)
+		if admission.DiskBandwidthForSnapshotIngestMinRateEnabled.Get(&s.cfg.Settings.SV) {
+			minFractionOfTimeoutForApplyingSnapshot := 1 - snapshotReservationQueueTimeoutFraction.Get(&s.cfg.Settings.SV)
+			snapshotApplySlowdownFactor := snapshotIngestSlowdown * minFractionOfTimeoutForApplyingSnapshot
+			if snapshotApplySlowdownFactor < 1 {
+				// Avoid division by 0. A snapshotApplySlowdownFactor between 0
+				// and 1 would cause the minRate to be greater than
+				// rebalanceSnapshotRate, which is the max speed snapshots can
+				// be sent at, so we don't need to ingest snapshots at a faster
+				// rate than that.
+				snapshotApplySlowdownFactor = 1
+			}
+
+			minRate = int64(float64(rebalanceSnapshotRate.Get(&s.cfg.Settings.SV)) / snapshotApplySlowdownFactor)
+
+			// Cap minRate at 10% of the store's provisioned bandwidth to
+			// prevent oversaturating the disk when rebalanceSnapshotRate is large.
+			storeBW := s.cfg.KVAdmissionController.GetProvisionedBandwidth(s.StoreID())
+			if storeBW > 0 {
+				maxSnapshotMinRate := int64(float64(storeBW) * 0.10)
+				if minRate > maxSnapshotMinRate {
+					minRate = maxSnapshotMinRate
+				}
+			}
+		}
+
+		timer := &timeutil.Timer{}
+		pacer = admission.NewSnapshotPacer(snapshotQ, minRate, timer.AsTimerI())
 	}
 
 	for {
