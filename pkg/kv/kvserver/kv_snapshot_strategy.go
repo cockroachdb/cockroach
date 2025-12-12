@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -142,7 +143,15 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// Using a nil pacer is effectively a noop if snapshot control is disabled.
 	var pacer *admission.SnapshotPacer = nil
 	if admission.DiskBandwidthForSnapshotIngest.Get(&s.cfg.Settings.SV) && snapshotQ != nil {
-		pacer = admission.NewSnapshotPacer(snapshotQ)
+		minRate := int64(0)
+		if admission.DiskBandwidthForSnapshotIngestMinRateEnabled.Get(&s.cfg.Settings.SV) {
+			// TODO: consider incorporating the slowdown factor that the sender uses
+			// to set a deadline. All we want here is to prevent the sender from
+			// timing out.
+			minRate = rebalanceSnapshotRate.Get(&s.cfg.Settings.SV)
+		}
+		timer := &timeutil.Timer{}
+		pacer = admission.NewSnapshotPacer(snapshotQ, minRate, timer.AsTimerI())
 	}
 
 	for {

@@ -40,6 +40,8 @@ func TestSnapshotQueue(t *testing.T) {
 	initialTime := timeutil.FromUnixMicros(int64(0))
 	registry := metric.NewRegistry()
 	metrics := makeSnapshotQueueMetrics(registry)
+	ts := timeutil.NewManualTime(time.Unix(0, 0))
+	timer := ts.NewTimer()
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "snapshot_queue"),
 		func(t *testing.T, d *datadriven.TestData) string {
@@ -67,7 +69,8 @@ func TestSnapshotQueue(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				wrkMap.set(id, &testWork{cancel: cancel})
 				go func(ctx context.Context, id int, count int) {
-					err := q.Admit(ctx, int64(count))
+					// TODO: improve test to permit minRate and manualTimer.
+					err := q.Admit(ctx, int64(count), 0, timer)
 					if err != nil {
 						buf.printf("id %d: admit failed", id)
 						wrkMap.delete(id)
@@ -138,7 +141,10 @@ func TestSnapshotPacer(t *testing.T) {
 	require.NoError(t, pacer.Pace(ctx, 1, false))
 
 	q := &testingSnapshotQueue{}
-	pacer = NewSnapshotPacer(q)
+	// TODO: verify that non-zero minRate is plumbed through.
+	ts := timeutil.NewManualTime(time.Unix(0, 0))
+	timer := ts.NewTimer()
+	pacer = NewSnapshotPacer(q, 0, timer)
 
 	// Should not ask for admission since write bytes = burst size.
 	writeBytes := int64(SnapshotBurstSize)
@@ -190,7 +196,9 @@ type testingSnapshotQueue struct {
 
 var _ snapshotRequester = &testingSnapshotQueue{}
 
-func (ts *testingSnapshotQueue) Admit(ctx context.Context, count int64) error {
+func (ts *testingSnapshotQueue) Admit(
+	ctx context.Context, count int64, minRate int64, timerForMinRate timeutil.TimerI,
+) error {
 	ts.admitted = true
 	ts.admitCount = count
 	return nil
