@@ -283,17 +283,12 @@ func TestBumpClusterVersion(t *testing.T) {
 			}
 
 			// Check to see that our bumped cluster version was persisted to disk.
-			engines := Engines(s.Engines())
 			synthesizedCV, err := kvstorage.SynthesizeClusterVersionFromEngines(
-				ctx, engines.TODO(), test.binaryVersion,
+				ctx, s.Engines(), test.binaryVersion,
 				test.activeClusterVersion,
 			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if synthesizedCV.Version != test.expClusterVersion {
-				t.Fatalf("expected synthesized cluster version %s, got %s", test.expClusterVersion, synthesizedCV)
-			}
+			require.NoError(t, err)
+			require.Equal(t, test.expClusterVersion, synthesizedCV.Version)
 		})
 	}
 }

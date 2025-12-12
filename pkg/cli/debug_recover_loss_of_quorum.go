@@ -322,15 +322,15 @@ func runDebugDeadReplicaCollect(cmd *cobra.Command, args []string) error {
 				"Check cluster health and retry the operation.")
 		}
 	} else {
-		var stores []storage.Engine
+		var stores []kvstorage.Engines
 		for _, storeSpec := range debugRecoverCollectInfoOpts.Stores.Specs {
-			db, err := OpenEngine(storeSpec.Path, stopper, fs.ReadOnly, storage.MustExist)
+			eng, err := OpenEngine(storeSpec.Path, stopper, fs.ReadOnly, storage.MustExist)
 			if err != nil {
 				return errors.WithHint(errors.Wrapf(err,
 					"failed to open store at path %q", storeSpec.Path),
 					"Ensure that store path is correct and that it is not used by another process.")
 			}
-			stores = append(stores, db)
+			stores = append(stores, kvstorage.MakeEngines(eng))
 		}
 		var err error
 		replicaInfo, stats, err = loqrecovery.CollectStoresReplicaInfo(ctx, stores)
@@ -813,20 +813,21 @@ func applyRecoveryToLocalStore(
 
 	var localNodeID roachpb.NodeID
 	batches := make(map[roachpb.StoreID]storage.Batch)
-	stores := make([]storage.Engine, len(debugRecoverExecuteOpts.Stores.Specs))
+	stores := make([]kvstorage.Engines, len(debugRecoverExecuteOpts.Stores.Specs))
 	for i, storeSpec := range debugRecoverExecuteOpts.Stores.Specs {
-		store, err := OpenEngine(storeSpec.Path, stopper, fs.ReadWrite, storage.MustExist)
+		eng, err := OpenEngine(storeSpec.Path, stopper, fs.ReadWrite, storage.MustExist)
 		if err != nil {
 			return errors.Wrapf(err, "failed to open store at path %q. ensure that store path is "+
 				"correct and that it is not used by another process", storeSpec.Path)
 		}
+		store := kvstorage.MakeEngines(eng)
 		stores[i] = store
-		batch := store.NewBatch()
+
+		batch := store.TODOEngine().NewBatch()
 		defer store.Close() //nolint:deferloop
 		defer batch.Close() //nolint:deferloop
 
-		// TODO(sep-raft-log): StoreIdent is in the LogEngine.
-		storeIdent, err := kvstorage.ReadStoreIdent(ctx, store)
+		storeIdent, err := kvstorage.ReadStoreIdent(ctx, store.LogEngine())
 		if err != nil {
 			return err
 		}

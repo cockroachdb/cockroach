@@ -368,7 +368,7 @@ func CommitReplicaChanges(batches map[roachpb.StoreID]storage.Batch) (ApplyUpdat
 // or planStorage issues are propagated.
 // Regardless of application success or failure, staged plan would be removed.
 func MaybeApplyPendingRecoveryPlan(
-	ctx context.Context, planStore PlanStore, engines []storage.Engine, clock timeutil.TimeSource,
+	ctx context.Context, planStore PlanStore, engines []kvstorage.Engines, clock timeutil.TimeSource,
 ) error {
 	if len(engines) < 1 {
 		return nil
@@ -382,11 +382,11 @@ func MaybeApplyPendingRecoveryPlan(
 		log.KvExec.Infof(ctx, "applying staged loss of quorum recovery plan %s", plan.PlanID)
 		batches := make(map[roachpb.StoreID]storage.Batch)
 		for _, e := range engines {
-			ident, err := kvstorage.ReadStoreIdent(ctx, e)
+			ident, err := kvstorage.ReadStoreIdent(ctx, e.LogEngine())
 			if err != nil {
 				return errors.Wrap(err, "failed to read store ident when trying to apply loss of quorum recovery plan")
 			}
-			b := e.NewBatch()
+			b := e.TODOEngine().NewBatch()
 			defer b.Close() //nolint:deferloop
 			batches[ident.StoreID] = b
 		}
@@ -419,7 +419,7 @@ func MaybeApplyPendingRecoveryPlan(
 	}
 
 	// First read node parameters from the first store.
-	storeIdent, err := kvstorage.ReadStoreIdent(ctx, engines[0])
+	storeIdent, err := kvstorage.ReadStoreIdent(ctx, engines[0].LogEngine())
 	if err != nil {
 		if errors.Is(err, &kvstorage.NotBootstrappedError{}) {
 			// This is wrong, we must not have staged plans in a non-bootstrapped
@@ -444,7 +444,7 @@ func MaybeApplyPendingRecoveryPlan(
 		r.Error = err.Error()
 		log.KvExec.Errorf(ctx, "failed to apply staged loss of quorum recovery plan %s", err)
 	}
-	if err = writeNodeRecoveryResults(ctx, engines[0], r,
+	if err = writeNodeRecoveryResults(ctx, engines[0].LogEngine(), r,
 		loqrecoverypb.DeferredRecoveryActions{DecommissionedNodeIDs: plan.DecommissionedNodeIDs}); err != nil {
 		log.KvExec.Errorf(ctx, "failed to write loss of quorum recovery results to store: %s", err)
 	}
@@ -453,7 +453,7 @@ func MaybeApplyPendingRecoveryPlan(
 
 func CheckEnginesVersion(
 	ctx context.Context,
-	engines []storage.Engine,
+	engines []kvstorage.Engines,
 	plan loqrecoverypb.ReplicaUpdatePlan,
 	ignoreInternal bool,
 ) error {

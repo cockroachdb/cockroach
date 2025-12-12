@@ -319,7 +319,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create loss of quorum plan store")
 	}
-	if err := loqrecovery.MaybeApplyPendingRecoveryPlan(ctx, planStore, enginesTODO, timeutil.DefaultTimeSource{}); err != nil {
+	if err := loqrecovery.MaybeApplyPendingRecoveryPlan(ctx, planStore, engines, timeutil.DefaultTimeSource{}); err != nil {
 		return nil, errors.Wrap(err, "failed to apply loss of quorum recovery plan")
 	}
 
