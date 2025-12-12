@@ -1460,7 +1460,7 @@ func (ac *analyzedConstraints) initialize(
 			if n == 0 {
 				ac.satisfiedNoConstraintReplica[kind] =
 					append(ac.satisfiedNoConstraintReplica[kind], store.StoreID)
-			} else if n == 1 {
+			} else if n == 1 && (!isVoterConstraints || kind == voterIndex) {
 				// Satisfies exactly one constraint, so place it there.
 				constraintIndex := buf.replicaConstraintIndices[kind][i][0]
 				ac.satisfiedByReplica[kind][constraintIndex] =
@@ -1473,12 +1473,20 @@ func (ac *analyzedConstraints) initialize(
 
 	// isConstraintSatisfied checks if the given constraint index has been fully
 	// satisfied by the stores currently assigned to it.
-	// TODO(wenyihu6): voter constraint should only count voters here (#158109)
+	// isConstraintSatisfied checks if the given constraint index has been fully
+	// satisfied by the stores currently assigned to it.
+	//
+	// NB: This intentionally counts both voters and non-voters even when
+	// isVoterConstraints is true. This is correct because Phase 2 iterates over
+	// voters (kind=voterIndex) before non-voters (kind=nonVoterIndex). By
+	// counting both, we avoid over-satisfying a constraint with non-voters before
+	// other constraints get a chance to be satisfied.
+	// Example:
+	// constraints [+region=a]:1, [+zone=b1]:1, [+region=b]:1 and two non-voters
+	// matching both region=a and zone=b1, counting only voters would cause both
+	// non-voters to be assigned to [+region=a] instead of spreading them across
+	// constraints. See range_analyzed_constraints for more details.
 	isConstraintSatisfied := func(constraintIndex int) bool {
-		if isVoterConstraints {
-			// For voter constraints, only voters can satisfy them.
-			return len(ac.satisfiedByReplica[voterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
-		}
 		return len(ac.satisfiedByReplica[voterIndex][constraintIndex])+
 			len(ac.satisfiedByReplica[nonVoterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
 	}

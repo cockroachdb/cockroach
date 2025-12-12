@@ -785,10 +785,10 @@ non-voters: 20(=a,=b1,=20) 21(=a,=b1,=21)
 voter-constraints:
   +region=a:1
     voters:
-    non-voters: 20 21
+    non-voters: 20
   +zone=b1:1
     voters:
-    non-voters:
+    non-voters: 21
   +region=b:1
     voters: 22
     non-voters:
