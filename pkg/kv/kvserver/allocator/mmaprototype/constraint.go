@@ -372,12 +372,14 @@ func (icc internedConstraintsConjunction) unintern(
 	return cc
 }
 
-// dedupConstraints combines duplicate constraint conjunctions (those with
-// the same constraints) by summing their numReplicas.
+// dedupAndFilterConstraints filters out constraint conjunctions with
+// numReplicas == 0 and combines duplicate conjunctions (those with the same
+// constraints) by summing their numReplicas.
 // Example:
-// constraints: [+region=us-west-1]: 1, [+region=us-west-1]: 1, []: 3, []: 1
+// constraints: [+region=us-west-1]: 1, [+region=us-west-1]: 1, []: 3, []: 1,
+// [+region=eu]: 0
 // result: [+region=us-west-1]: 2, []: 4
-func dedupConstraints(
+func dedupAndFilterConstraints(
 	constraints []internedConstraintsConjunction,
 ) []internedConstraintsConjunction {
 	if len(constraints) <= 1 {
@@ -613,7 +615,7 @@ func normalizeConstraints(
 			constraints: interner.internConstraintsConj(nil),
 		})
 	}
-	return dedupConstraints(rv), nil
+	return dedupAndFilterConstraints(rv), nil
 }
 
 // relationshipVoterAndAll represents the relationship between a voter constraint
@@ -773,7 +775,7 @@ func (ncEnv *normalizedConstraintsEnv) buildVoterConstraints() []internedConstra
 	for i := range ncEnv.voterConstraints {
 		vc = append(vc, ncEnv.voterConstraints[i].internedConstraintsConjunction)
 	}
-	return dedupConstraints(vc)
+	return dedupAndFilterConstraints(vc)
 }
 
 // moveToEnd moves the voter constraint at idx to the end of the slice. This is
@@ -931,7 +933,7 @@ func (conf *normalizedSpanConfig) normalizeEmptyConstraints() {
 		if conf.constraints[n].numReplicas == 0 {
 			conf.constraints = conf.constraints[:n]
 		}
-		conf.constraints = dedupConstraints(conf.constraints)
+		conf.constraints = dedupAndFilterConstraints(conf.constraints)
 	}
 }
 
