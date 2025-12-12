@@ -10771,7 +10771,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.elastic_cpu.nanos_exhausted_duration
       exported_name: admission_elastic_cpu_nanos_exhausted_duration
-      description: Total duration when elastic CPU nanoseconds were exhausted, in micros
+      description: Total duration (in micros) when elastic CPU tokens (tokens measured in nanoseconds) were exhausted, as observed by the token granter (not waiters)
       y_axis_label: Microseconds
       type: GAUGE
       unit: COUNT
@@ -11011,7 +11011,7 @@ layers:
       derivative: NONE
     - name: admission.granter.elastic_io_tokens_exhausted_duration.kv
       exported_name: admission_granter_elastic_io_tokens_exhausted_duration_kv
-      description: Total duration when Elastic IO tokens were exhausted, in micros
+      description: Total duration (in micros) when Elastic IO tokens were exhausted, as observed by the token granter (not waiters)
       y_axis_label: Microseconds
       type: COUNTER
       unit: COUNT
@@ -11035,7 +11035,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.granter.io_tokens_exhausted_duration.kv
       exported_name: admission_granter_io_tokens_exhausted_duration_kv
-      description: Total duration when IO tokens were exhausted, in micros
+      description: Total duration (in micros) when IO tokens were exhausted, as observed by the token granter (not waiters)
       y_axis_label: Microseconds
       type: COUNTER
       unit: COUNT
@@ -11075,7 +11075,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.granter.slots_exhausted_duration.kv
       exported_name: admission_granter_slots_exhausted_duration_kv
-      description: Total duration when KV slots were exhausted, in micros
+      description: Total duration (in micros) when KV slots were exhausted, as observed by the slot granter (not waiters)
       y_axis_label: Microseconds
       type: COUNTER
       unit: COUNT
