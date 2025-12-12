@@ -1600,7 +1600,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		initConfig := newInitServerConfig(ctx, s.cfg, getGRPCDialOpts, getDRPCDialOpts)
 		inspectedDiskState, err := inspectEngines(
 			ctx,
-			s.engines.TODO(),
+			s.engines,
 			s.cfg.Settings.Version.LatestVersion(),
 			s.cfg.Settings.Version.MinSupportedVersion(),
 		)
