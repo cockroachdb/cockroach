@@ -114,6 +114,18 @@ func (ic internedConstraint) unintern(interner *stringInterner) roachpb.Constrai
 	}
 }
 
+// cmp compares two internedConstraint, returning -1 if ic < b, 0 if ic == b,
+// and 1 if ic > b.
+func (ic internedConstraint) cmp(b internedConstraint) int {
+	if ic.typ != b.typ {
+		return cmp.Compare(ic.typ, b.typ)
+	}
+	if ic.key != b.key {
+		return cmp.Compare(ic.key, b.key)
+	}
+	return cmp.Compare(ic.value, b.value)
+}
+
 // less defines an arbitrary total ordering for internedConstraint, used only to
 // sort constraints into a consistent order. This ordering has no semantic
 // meaning regarding strictness or set containment is purely lexicographic:
@@ -372,6 +384,26 @@ func (icc internedConstraintsConjunction) unintern(
 	return cc
 }
 
+// cmp compares two constraintsConj, returning -1 if cc < b, 0 if cc == b, and 1
+// if cc > b. Note that this does not perform a semantic comparison and just
+// represents a sorting order.
+func (cc constraintsConj) cmp(b constraintsConj) int {
+	n := min(len(cc), len(b))
+	for i := 0; i < n; i++ {
+		cmp := cc[i].cmp(b[i])
+		if cmp != 0 {
+			return cmp
+		}
+	}
+	if n < len(cc) {
+		return +1
+	}
+	if n < len(b) {
+		return -1
+	}
+	return 0
+}
+
 // dedupAndFilterConstraints filters out constraint conjunctions with
 // numReplicas == 0 and combines duplicate conjunctions (those with the same
 // constraints) by summing their numReplicas.
@@ -379,44 +411,52 @@ func (icc internedConstraintsConjunction) unintern(
 // constraints: [+region=us-west-1]: 1, [+region=us-west-1]: 1, []: 3, []: 1,
 // [+region=eu]: 0
 // result: [+region=us-west-1]: 2, []: 4
+// TODO(wenyihu6): we could take in a scratch space to avoid allocating indices
 func dedupAndFilterConstraints(
 	constraints []internedConstraintsConjunction,
 ) []internedConstraintsConjunction {
-	if len(constraints) <= 1 {
+	n := len(constraints)
+	if n == 0 {
 		return constraints
 	}
-	// Hash key -> indices in result (each index corresponds to a unique
-	// constraint in constraints).
-	seen := make(map[uint64][]int)
-	result := make([]internedConstraintsConjunction, 0, len(constraints))
-	for i := range constraints {
-		if constraints[i].numReplicas == 0 {
-			continue
-		}
-		h := constraints[i].constraints.hash()
-		if indices, ok := seen[h]; ok {
-			found := false
-			for _, idx := range indices {
-				// Same hash and same constraint => duplicate.
-				if result[idx].constraints.relationship(constraints[i].constraints) == conjEqualSet {
-					result[idx].numReplicas += constraints[i].numReplicas
-					found = true
-					break
-				}
-			}
-			if found {
-				// Is a duplicate, added to result already.
-				continue
-			}
-			// Same hash with different constraint.
-			seen[h] = append(seen[h], len(result))
-		} else {
-			// Not the same hash => different constraint.
-			seen[h] = []int{len(result)}
-		}
-		result = append(result, constraints[i])
+	// indices represents the positions in the original constraints.
+	indices := make([]int, n)
+	for i := range indices {
+		indices[i] = i
 	}
-	return result
+	// Sort the indices such that equal constraints get grouped and within a
+	// sequence of equal constraints, the smallest index sorts first. The latter
+	// allows us to preserve the original ordering after de-duplication.
+	slices.SortFunc(indices, func(i, j int) int {
+		return cmp.Or(constraints[i].constraints.cmp(constraints[j].constraints),
+			cmp.Compare(i, j))
+	})
+	// j is the index into the updated indices slice, where the value
+	// is the index of the original constraint that is preserved.
+	j := 0
+	// Say the original indices slice is the following, where the parentheses
+	// represent equal constraints: (3, 5), (1, 4), (0, 2). At the end, we will
+	// have 3, 1, 0 in the slice.
+	for i := 1; i < n; i++ {
+		if constraints[indices[j]].constraints.cmp(constraints[indices[i]].constraints) == 0 {
+			constraints[indices[j]].numReplicas += constraints[indices[i]].numReplicas
+		} else {
+			j++
+			indices[j] = indices[i]
+		}
+	}
+	indices = indices[:j+1]
+	// Sort these indices in increasing order to preserve original ordering.
+	slices.Sort(indices)
+	// Copy to result, filtering out numReplicas == 0.
+	k := 0
+	for _, idx := range indices {
+		if constraints[idx].numReplicas != 0 {
+			constraints[k] = constraints[idx]
+			k++
+		}
+	}
+	return constraints[:k]
 }
 
 type internedLeasePreference struct {
