@@ -506,9 +506,9 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 		return nil, err
 	}
 
-	firstEngine := s.inspectedDiskState.uninitializedEngines.TODO()[0]
+	firstEngine := s.inspectedDiskState.uninitializedEngines[0]
 	clusterVersion := clusterversion.ClusterVersion{Version: *resp.ActiveVersion}
-	if err := kvstorage.WriteClusterVersion(ctx, firstEngine, clusterVersion); err != nil {
+	if err := kvstorage.WriteClusterVersion(ctx, firstEngine.TODOEngine(), clusterVersion); err != nil {
 		return nil, err
 	}
 
@@ -516,7 +516,7 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 	if err != nil {
 		return nil, err
 	}
-	if err := kvstorage.InitEngine(ctx, firstEngine, sIdent); err != nil {
+	if err := kvstorage.InitEngine(ctx, firstEngine.TODOEngine(), sIdent); err != nil {
 		return nil, err
 	}
 
