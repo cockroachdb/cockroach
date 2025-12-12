@@ -37,6 +37,7 @@ const (
 	regexpOfRemoteAddress   = "[[:alnum:].:-]+"
 	stacksFileName          = "stacks.txt"
 	stacksWithLabelFileName = "stacks_with_labels.txt"
+	stacksPprofFileName     = "stacks.pprof"
 	heapPprofFileName       = "heap.pprof"
 	lsmFileName             = "lsm.txt"
 	rangesInfoFileName      = "ranges.json"
@@ -633,6 +634,28 @@ func (zc *debugZipContext) getStackInformation(
 	} else {
 		nodePrinter.info("skipping %s due to file filters", stacksWithLabelFileName)
 	}
+
+	if zipCtx.files.shouldIncludeFile(stacksPprofFileName) {
+		var stacksPprofData []byte
+		s := nodePrinter.start("requesting goroutine profile")
+		requestErr := zc.runZipFn(ctx, s,
+			func(ctx context.Context) error {
+				stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
+					NodeId: id,
+					Type:   serverpb.StacksType_GOROUTINE_STACKS_DEBUG_3,
+				})
+				if err == nil {
+					stacksPprofData = stacks.Data
+				}
+				return err
+			})
+		if err := zc.z.createRawOrError(s, prefix+"/"+stacksPprofFileName, stacksPprofData, requestErr); err != nil {
+			return err
+		}
+	} else {
+		nodePrinter.info("skipping %s due to file filters", stacksPprofFileName)
+	}
+
 	return nil
 }
 

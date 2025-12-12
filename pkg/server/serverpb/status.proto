@@ -780,6 +780,7 @@ enum StacksType {
   GOROUTINE_STACKS = 0;
   reserved 1;
   GOROUTINE_STACKS_DEBUG_1 = 2;
+  GOROUTINE_STACKS_DEBUG_3 = 3;
 }
 
 message StacksRequest {
