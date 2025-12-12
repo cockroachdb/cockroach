@@ -1465,7 +1465,7 @@ func (sc *StoreConfig) Tracer() *tracing.Tracer {
 
 // NewStore returns a new instance of a store.
 func NewStore(
-	ctx context.Context, cfg StoreConfig, eng storage.Engine, nodeDesc *roachpb.NodeDescriptor,
+	ctx context.Context, cfg StoreConfig, eng kvstorage.Engines, nodeDesc *roachpb.NodeDescriptor,
 ) *Store {
 	if !cfg.Valid() {
 		log.KvExec.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
@@ -1473,7 +1473,7 @@ func NewStore(
 	iot := ioThresholds{}
 	iot.Replace(nil, 1.0) // init as empty
 	s := &Store{
-		internalEngines:                   kvstorage.MakeEngines(eng),
+		internalEngines:                   eng,
 		cfg:                               cfg,
 		db:                                cfg.DB, // TODO(tschottdorf): remove redundancy.
 		nodeDesc:                          nodeDesc,

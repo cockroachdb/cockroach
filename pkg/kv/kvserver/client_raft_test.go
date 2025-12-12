@@ -6264,8 +6264,8 @@ func TestStoreMetricsOnIncomingOutgoingMsg(t *testing.T) {
 
 	// Create a noop store and request.
 	node := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(1)}
-	eng := storage.NewDefaultInMemForTesting()
-	stopper.AddCloser(eng)
+	eng := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+	stopper.AddCloser(&eng)
 	cfg.Transport = kvserver.NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, cfg.Clock)
 	store := kvserver.NewStore(ctx, cfg, eng, &node)
 	store.Ident = &roachpb.StoreIdent{
