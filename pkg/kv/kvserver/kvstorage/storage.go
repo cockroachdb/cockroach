@@ -178,3 +178,13 @@ func (e *Engines) TODOEngine() storage.Engine {
 func (e *Engines) Separated() bool {
 	return e.separated
 }
+
+// Close closes the underlying engine(s).
+func (e *Engines) Close() {
+	if !e.separated {
+		e.Engine().Close()
+		return
+	}
+	e.stateEngine.Close()
+	e.logEngine.Close()
+}

@@ -433,7 +433,7 @@ func TestCreateEngines(t *testing.T) {
 
 			var buf bytes.Buffer
 			for _, e := range engines {
-				buf.WriteString(strings.TrimSpace(e.GetPebbleOptions().String()))
+				buf.WriteString(strings.TrimSpace(e.TODOEngine().GetPebbleOptions().String()))
 				buf.WriteString("\n")
 			}
 			return grepStr(&buf, pattern)
