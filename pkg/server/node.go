@@ -475,7 +475,7 @@ func bootstrapCluster(
 	//
 	// TODO(jackson): Eventually we should be able to avoid opening the
 	// engines altogether until here.
-	if err := assertEnginesEmpty(engines.TODO()); err != nil {
+	if err := assertEnginesEmpty(engines); err != nil {
 		return nil, err
 	}
 
