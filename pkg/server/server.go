@@ -310,6 +310,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		return nil, errors.Wrap(err, "failed to create engines")
 	}
 	stopper.AddCloser(&engines)
+	enginesTODO := engines.TODO()
 
 	// Loss of quorum recovery store is created and pending plan is applied to
 	// engines as soon as engines are created and before any data is read in a
@@ -318,11 +319,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create loss of quorum plan store")
 	}
-	if err := loqrecovery.MaybeApplyPendingRecoveryPlan(ctx, planStore, engines, timeutil.DefaultTimeSource{}); err != nil {
+	if err := loqrecovery.MaybeApplyPendingRecoveryPlan(ctx, planStore, enginesTODO, timeutil.DefaultTimeSource{}); err != nil {
 		return nil, errors.Wrap(err, "failed to apply loss of quorum recovery plan")
 	}
 
-	nodeTombStorage, decommissionCheck := getPingCheckDecommissionFn(engines)
+	nodeTombStorage, decommissionCheck := getPingCheckDecommissionFn(enginesTODO)
 
 	g := gossip.New(
 		cfg.AmbientCtx,
@@ -556,7 +557,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 			decomNodeMap.onNodeDecommissioned(id)
 		},
-		Engines: engines,
+		Engines: enginesTODO,
 		OnSelfHeartbeat: func(ctx context.Context) {
 			now := clock.Now()
 			if err := stores.VisitStores(func(s *kvserver.Store) error {
@@ -1179,7 +1180,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	// The settings cache writer is responsible for persisting the
 	// cluster settings on KV nodes across restarts.
-	settingsWriter := newSettingsCacheWriter(engines[0], stopper)
+	settingsWriter := newSettingsCacheWriter(engines[0].TODOEngine(), stopper)
 	stopTrigger := newStopTrigger()
 
 	// Initialize the pgwire pre-server, which initializes connections,
@@ -1599,7 +1600,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		initConfig := newInitServerConfig(ctx, s.cfg, getGRPCDialOpts, getDRPCDialOpts)
 		inspectedDiskState, err := inspectEngines(
 			ctx,
-			s.engines,
+			s.engines.TODO(),
 			s.cfg.Settings.Version.LatestVersion(),
 			s.cfg.Settings.Version.MinSupportedVersion(),
 		)
@@ -1629,7 +1630,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		// that version won't be on all engines. For that reason, we backfill
 		// once.
 		if err := kvstorage.WriteClusterVersionToEngines(
-			ctx, s.engines, initialDiskClusterVersion,
+			ctx, s.engines.TODO(), initialDiskClusterVersion,
 		); err != nil {
 			return err
 		}
@@ -1842,7 +1843,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		// itself, and then informing the version setting about it (an invariant
 		// we must up hold whenever setting a new active version).
 		if err := kvstorage.WriteClusterVersionToEngines(
-			ctx, s.engines, state.clusterVersion,
+			ctx, s.engines.TODO(), state.clusterVersion,
 		); err != nil {
 			return err
 		}
@@ -2078,7 +2079,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// uses the disk stats map we're initializing.
 	var pmp admission.PebbleMetricsProvider
 	if pmp, err = s.node.registerEnginesForDiskStatsMap(
-		s.cfg.Stores.Specs, s.engines, (*diskMonitorManager)(s.cfg.DiskMonitorManager)); err != nil {
+		s.cfg.Stores.Specs, s.engines.TODO(), (*diskMonitorManager)(s.cfg.DiskMonitorManager)); err != nil {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
 	}
 
@@ -2243,7 +2244,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	}
 
 	// Register the engines debug endpoints.
-	if err := s.debug.RegisterEngines(s.engines); err != nil {
+	if err := s.debug.RegisterEngines(s.engines.TODO()); err != nil {
 		return errors.Wrapf(err, "failed to register engines with debug server")
 	}
 

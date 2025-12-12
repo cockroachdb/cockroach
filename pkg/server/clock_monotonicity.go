@@ -78,7 +78,7 @@ func (s *topLevelServer) checkHLCUpperBoundExistsAndEnsureMonotonicity(
 	// TODO(sep-raft-log): make sure we're reading only from log engines. There
 	// seems to be no harm in reading from state engines too (and seeing zeroes),
 	// but the HLC key is in the log engines.
-	hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, s.engines)
+	hlcUpperBound, err := kvserver.ReadMaxHLCUpperBound(ctx, s.engines.TODO())
 	if err != nil {
 		return false, errors.Wrap(err, "reading max HLC upper bound")
 	}

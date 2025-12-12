@@ -1947,7 +1947,7 @@ func (ts *testServer) SettingsWatcher() interface{} {
 
 // Engines returns the testServer's engines.
 func (ts *testServer) Engines() []storage.Engine {
-	return ts.engines
+	return ts.engines.TODO()
 }
 
 // AdvRPCAddr returns the server's RPC address. Should be used by clients.

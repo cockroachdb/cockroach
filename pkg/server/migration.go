@@ -108,7 +108,7 @@ func bumpClusterVersion(
 
 	versionSetting := st.Version
 	prevCV, err := kvstorage.SynthesizeClusterVersionFromEngines(
-		ctx, engines, versionSetting.LatestVersion(),
+		ctx, engines.TODO(), versionSetting.LatestVersion(),
 		versionSetting.MinSupportedVersion(),
 	)
 	if err != nil {
@@ -127,7 +127,7 @@ func bumpClusterVersion(
 	// Whenever the version changes, we want to persist that update to
 	// wherever the CRDB process retrieved the initial version from
 	// (typically a collection of storage.Engines).
-	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines, newCV); err != nil {
+	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines.TODO(), newCV); err != nil {
 		return err
 	}
 
@@ -164,7 +164,7 @@ func (m *migrationServer) SyncAllEngines(
 		// initialized.
 		m.server.node.waitForAdditionalStoreInit()
 
-		for _, eng := range m.server.engines {
+		for _, eng := range m.server.engines.TODO() {
 			if err := storage.WriteSyncNoop(eng); err != nil {
 				return err
 			}

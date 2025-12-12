@@ -892,7 +892,7 @@ func (s *systemStatusServer) EngineStats(
 		return status.EngineStats(ctx, req)
 	}
 
-	stats, err := debug.GetLSMStats(*s.engines)
+	stats, err := debug.GetLSMStats(s.engines.TODO())
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}

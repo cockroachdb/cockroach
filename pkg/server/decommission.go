@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/decommissioning"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -111,7 +112,7 @@ func (t *decommissioningNodeMap) onNodeDecommissioned(nodeID roachpb.NodeID) {
 }
 
 func getPingCheckDecommissionFn(
-	engines Engines,
+	engines []storage.Engine,
 ) (*nodeTombstoneStorage, func(context.Context, roachpb.NodeID, codes.Code) error) {
 	nodeTombStorage := &nodeTombstoneStorage{engs: engines}
 	return nodeTombStorage, func(ctx context.Context, nodeID roachpb.NodeID, errorCode codes.Code) error {
