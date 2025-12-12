@@ -23,9 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -162,7 +164,11 @@ func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string
 func ListIndexes(
 	ctx context.Context, store cloud.ExternalStorage, subdir string,
 ) ([]string, error) {
-	var indexBasenames []string
+	type indexTimes struct {
+		file       string
+		start, end time.Time
+	}
+	var indexes []indexTimes
 	indexDir, err := indexSubdir(subdir)
 	if err != nil {
 		return nil, err
@@ -172,52 +178,40 @@ func ListIndexes(
 		indexDir+"/",
 		"",
 		func(file string) error {
-			indexBasenames = append(indexBasenames, path.Base(file))
+			base := path.Base(file)
+			i := indexTimes{
+				file: base,
+			}
+			i.start, i.end, err = parseIndexFilename(base)
+			if err != nil {
+				// We ignore any unexpected files in the index directory.
+				log.Dev.Warningf(ctx, "unexpected file %s in index directory: %v", file, err)
+				return nil
+			}
+			indexes = append(indexes, i)
 			return nil
 		},
 	); err != nil {
 		return nil, errors.Wrapf(err, "listing indexes in %s", subdir)
 	}
 
-	timeMemo := make(map[string][2]time.Time)
-	indexTimesFromFile := func(basename string) (time.Time, time.Time, error) {
-		if times, ok := timeMemo[basename]; ok {
-			return times[0], times[1], nil
-		}
-		start, end, err := parseIndexFilename(basename)
-		if err != nil {
-			return time.Time{}, time.Time{}, err
-		}
-		timeMemo[basename] = [2]time.Time{start, end}
-		return start, end, nil
-	}
-	var sortErr error
-	slices.SortFunc(indexBasenames, func(a, b string) int {
-		aStart, aEnd, err := indexTimesFromFile(a)
-		if err != nil {
-			sortErr = err
-		}
-		bStart, bEnd, err := indexTimesFromFile(b)
-		if err != nil {
-			sortErr = err
-		}
-		if aEnd.Before(bEnd) {
+	slices.SortFunc(indexes, func(a, b indexTimes) int {
+		if a.end.Before(b.end) {
 			return -1
-		} else if aEnd.After(bEnd) {
+		} else if a.end.After(b.end) {
 			return 1
 		}
 		// End times are equal, so break tie with start time.
-		if aStart.Before(bStart) {
+		if a.start.Before(b.start) {
 			return -1
 		} else {
 			return 1
 		}
 	})
-	if sortErr != nil {
-		return nil, errors.Wrapf(sortErr, "sorting index filenames")
-	}
 
-	return indexBasenames, nil
+	return util.Map(indexes, func(i indexTimes) string {
+		return i.file
+	}), nil
 }
 
 // GetBackupTreeIndexMetadata concurrently retrieves the index metadata for all
