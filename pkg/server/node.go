@@ -1298,7 +1298,7 @@ type monitorManagerInterface interface {
 }
 
 func (dsm *diskStatsMap) initDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine, diskManager monitorManagerInterface,
+	specs []base.StoreSpec, engines []kvstorage.Engines, diskManager monitorManagerInterface,
 ) error {
 	*dsm = diskStatsMap{
 		provisionedRate: make(map[roachpb.StoreID]storageconfig.ProvisionedRate),
@@ -1308,7 +1308,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 		if specs[i].Path == "" || specs[i].InMemory {
 			continue
 		}
-		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i])
+		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i].LogEngine())
 		if err != nil {
 			return err
 		}
@@ -1336,7 +1336,7 @@ func (mm *diskMonitorManager) Monitor(path string) (kvserver.DiskStatsMonitor, e
 }
 
 func (n *Node) registerEnginesForDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine, diskManager *diskMonitorManager,
+	specs []base.StoreSpec, engines []kvstorage.Engines, diskManager *diskMonitorManager,
 ) (admission.PebbleMetricsProvider, error) {
 	pmp := &nodePebbleMetricsProvider{n: n}
 	if err := pmp.diskStatsMap.initDiskStatsMap(specs, engines, diskManager); err != nil {
