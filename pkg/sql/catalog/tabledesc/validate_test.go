@@ -2776,7 +2776,7 @@ func TestValidateTableDesc(t *testing.T) {
 					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
 				},
 			}},
-		{err: `expected DEFAULT expression of crdb_internal_expiration to be current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'`,
+		{err: `expected DEFAULT expression of crdb_internal_expiration to be ( current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes' ), but got: (  )`,
 			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -2815,7 +2815,7 @@ func TestValidateTableDesc(t *testing.T) {
 					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
 				},
 			}},
-		{err: `expected ON UPDATE expression of crdb_internal_expiration to be current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes'`,
+		{err: `expected ON UPDATE expression of crdb_internal_expiration to be ( current_timestamp():::TIMESTAMPTZ + INTERVAL '2 minutes' ), but got: (  )`,
 			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
