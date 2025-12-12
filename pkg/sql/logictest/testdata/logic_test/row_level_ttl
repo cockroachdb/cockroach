@@ -758,6 +758,15 @@ CREATE TABLE tbl_set_ttl_job_cron (
 statement ok
 ALTER TABLE tbl_set_ttl_job_cron SET (ttl_job_cron = '@weekly')
 
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl_set_ttl_job_cron'
+
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl: $label_suffix'
+----
+ACTIVE  @weekly  root
+
 onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_job_cron]
@@ -1124,14 +1133,6 @@ ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expres
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expression = 'expire_at')
 
-# Tested below anyway, so we can skip this statement for legacy schema changer.
-skipif config local-legacy-schema-changer
-statement error cannot drop column "expire_at" referenced by row-level TTL expiration expression "expire_at"
-ALTER TABLE tbl_alter_table_ttl_expiration_expression DROP COLUMN expire_at
-
-statement ok
-SET use_declarative_schema_changer = 'off'
-
 skipif config schema-locked-disabled
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (schema_locked = false)
@@ -1142,9 +1143,6 @@ ALTER TABLE tbl_alter_table_ttl_expiration_expression DROP COLUMN expire_at
 skipif config schema-locked-disabled
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (schema_locked = true)
-
-statement ok
-SET use_declarative_schema_changer = 'on'
 
 statement error cannot alter type of column "expire_at" referenced by row-level TTL expiration expression "expire_at"\nHINT: use ALTER TABLE .*
 ALTER TABLE tbl_alter_table_ttl_expiration_expression ALTER expire_at TYPE TIMESTAMP USING (expire_at AT TIME ZONE 'UTC')
