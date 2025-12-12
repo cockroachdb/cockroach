@@ -10773,10 +10773,10 @@ layers:
       exported_name: admission_elastic_cpu_nanos_exhausted_duration
       description: Total duration (in micros) when elastic CPU tokens (tokens measured in nanoseconds) were exhausted, as observed by the token granter (not waiters)
       y_axis_label: Microseconds
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.elastic_cpu.over_limit_durations
       exported_name: admission_elastic_cpu_over_limit_durations
       description: Measurement of how much over the prescribed limit elastic requests ran (not recorded if requests don't run over)
