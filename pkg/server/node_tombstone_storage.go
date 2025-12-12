@@ -22,7 +22,7 @@ import (
 // nodeTombstoneStorage maintains a local (i.e. unreplicated)
 // registry of which nodes were permanently removed from the cluster.
 type nodeTombstoneStorage struct {
-	engs []storage.Engine
+	engs []kvstorage.Engines
 	mu   struct {
 		syncutil.RWMutex
 		// cache contains both positive and negative hits. Positive hits
@@ -54,7 +54,7 @@ func (s *nodeTombstoneStorage) IsDecommissioned(
 	// No cache hit.
 	k := s.key(nodeID)
 	for _, eng := range s.engs {
-		valRes, err := storage.MVCCGet(ctx, eng, k, hlc.Timestamp{}, storage.MVCCGetOptions{})
+		valRes, err := storage.MVCCGet(ctx, eng.LogEngine(), k, hlc.Timestamp{}, storage.MVCCGetOptions{})
 		if err != nil {
 			return time.Time{}, err
 		}
@@ -119,7 +119,7 @@ func (s *nodeTombstoneStorage) SetDecommissioned(
 		//
 		// One initialized engine is always available when this method
 		// is called, so we're still persisting on at least one engine.
-		if _, err := kvstorage.ReadStoreIdent(ctx, eng); err != nil {
+		if _, err := kvstorage.ReadStoreIdent(ctx, eng.LogEngine()); err != nil {
 			if errors.Is(err, &kvstorage.NotBootstrappedError{}) {
 				continue
 			}
@@ -131,7 +131,7 @@ func (s *nodeTombstoneStorage) SetDecommissioned(
 		}
 
 		if _, err := storage.MVCCPut(
-			ctx, eng, k, hlc.Timestamp{}, v, storage.MVCCWriteOptions{},
+			ctx, eng.LogEngine(), k, hlc.Timestamp{}, v, storage.MVCCWriteOptions{},
 		); err != nil {
 			return err
 		}

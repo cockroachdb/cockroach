@@ -310,7 +310,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		return nil, errors.Wrap(err, "failed to create engines")
 	}
 	stopper.AddCloser(&engines)
-	enginesTODO := engines.TODO()
 
 	// Loss of quorum recovery store is created and pending plan is applied to
 	// engines as soon as engines are created and before any data is read in a
@@ -323,7 +322,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		return nil, errors.Wrap(err, "failed to apply loss of quorum recovery plan")
 	}
 
-	nodeTombStorage, decommissionCheck := getPingCheckDecommissionFn(enginesTODO)
+	nodeTombStorage, decommissionCheck := getPingCheckDecommissionFn(engines)
 
 	g := gossip.New(
 		cfg.AmbientCtx,
@@ -557,7 +556,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 			decomNodeMap.onNodeDecommissioned(id)
 		},
-		Engines: enginesTODO,
+		Engines: engines.TODO(),
 		OnSelfHeartbeat: func(ctx context.Context) {
 			now := clock.Now()
 			if err := stores.VisitStores(func(s *kvserver.Store) error {
