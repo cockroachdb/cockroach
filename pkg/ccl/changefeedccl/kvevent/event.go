@@ -133,6 +133,18 @@ func (t Type) Index() int {
 	}
 }
 
+// ResolvedBackward moves the ResolvedTS of an underlying RangeFeedCheckpoint
+// event backwards to the given timestamps.
+//
+// Panics if the Event is not a RangeFeedCheckpoint event.
+func (e *Event) ResolvedBackward(ts hlc.Timestamp) {
+	if e.ev == nil || e.ev.Checkpoint == nil {
+		panic("ResolvedBackwards called on event without a RangeFeedCheckpoint")
+	}
+	e.ev = e.ev.ShallowCopy()
+	e.ev.Checkpoint.ResolvedTS.Backward(ts)
+}
+
 // Raw returns the underlying RangeFeedEvent.
 func (e *Event) Raw() *kvpb.RangeFeedEvent {
 	return e.ev
