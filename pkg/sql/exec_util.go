@@ -4301,6 +4301,14 @@ func (m *sessionDataMutator) SetOptimizerUseMaxFrequencySelectivity(val bool) {
 	m.data.OptimizerUseMaxFrequencySelectivity = val
 }
 
+func (m *sessionDataMutator) SetPreventUpdateSetColumnDrop(val bool) {
+	m.data.PreventUpdateSetColumnDrop = val
+}
+
+func (m *sessionDataMutator) SetUseImprovedRoutineDepsTriggersAndComputedCols(val bool) {
+	m.data.UseImprovedRoutineDepsTriggersAndComputedCols = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
