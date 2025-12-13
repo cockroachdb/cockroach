@@ -98,6 +98,7 @@ type retryOnModifiedDescriptor struct {
 	descID        descpb.ID
 	expiration    hlc.Timestamp
 	readTimestamp hlc.Timestamp
+	forcedErr     error
 }
 
 // ClientVisibleRetryError implements the ClientVisibleRetryError interface.
@@ -113,7 +114,7 @@ func (r *retryOnModifiedDescriptor) Error() string {
 func (r *retryOnModifiedDescriptor) SafeFormatError(p errors.Printer) (next error) {
 	p.Printf("the descriptor %s(%d) has been modified at timestamp %s, which is no longer usable by the transaction's timestamp: %s",
 		r.descName, r.descID, r.expiration, r.readTimestamp)
-	return nil
+	return r.forcedErr
 }
 
 // mismatchedExternalDataRowTimestamp is generated when the external row data timestamps
