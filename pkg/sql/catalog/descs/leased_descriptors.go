@@ -112,7 +112,7 @@ func (r *retryOnModifiedDescriptor) Error() string {
 // SafeFormatError implements SafeFormatter.
 func (r *retryOnModifiedDescriptor) SafeFormatError(p errors.Printer) (next error) {
 	p.Printf("the descriptor %s(%d) has been modified at timestamp %s, which is no longer usable by the transaction's timestamp: %s",
-		r.descName, r.descID, r.expiration.String(), r.readTimestamp)
+		r.descName, r.descID, r.expiration, r.readTimestamp)
 	return nil
 }
 

@@ -352,7 +352,7 @@ func TestListClosedSessions(t *testing.T) {
 	conn := testCluster.ServerConn(0)
 	// Disabling old version caching in the lease manager to speed up user creation against
 	// long running transactions.
-	_, err :g= conn.Exec(fmt.Sprintf(`
+	_, err := conn.Exec(fmt.Sprintf(`
 CREATE USER %s with password 'hunter2';
 CREATE USER %s with password 'hunter2';
 CREATE USER %s with password 'hunter2';

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // GetComment fetches comment from uncommitted cache if it exists, otherwise from storage.
@@ -218,6 +219,9 @@ func getDescriptorsByID(
 			if descs[i] == nil {
 				descs[i] = read.LookupDescriptor(id)
 				vls[i] = tc.validationLevels[id]
+				if err := tc.ensureLeasedAndKVVersionsMatch(ctx, txn, descs[i], false); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -245,6 +249,50 @@ func getDescriptorsByID(
 		return err
 	}
 	return nil
+}
+
+// ensureLeasedAndKVVersionsMatch ensures that a KV and leased descriptors/
+// in a given transaction have compatible versions. This impacts transactions
+// that execute catalog queries followed by schema changes, where schema changes
+// always require the freshest copy from the store. If they don't, then retry error
+// is forced, since there is a risk of making decisions on stale data within the
+// application.
+func (tc *Collection) ensureLeasedAndKVVersionsMatch(
+	ctx context.Context, txn *kv.Txn, descriptor catalog.Descriptor, isLeased bool,
+) error {
+	// If we are not using leased descriptors for catalog views, this logic
+	// isn't needed.
+	usingLeasedDescriptorsForCatalogViews := allowLeasedDescriptorsInCatalogViews.Get(&tc.settings.SV)
+	if !usingLeasedDescriptorsForCatalogViews {
+		return nil
+	}
+
+	var otherDescriptor catalog.Descriptor
+	if isLeased {
+		otherDescriptor = tc.cr.Cache().LookupDescriptor(descriptor.GetID())
+	} else {
+		entry := tc.leased.cache.GetByID(descriptor.GetID())
+		if entry != nil {
+			otherDescriptor = entry.(catalog.Descriptor)
+		}
+	}
+	// Versions match so everything is good.
+	if otherDescriptor == nil ||
+		descriptor.GetVersion() == otherDescriptor.GetVersion() {
+		return nil
+	}
+	modificationTime := descriptor.GetModificationTime()
+	if isLeased {
+		modificationTime = otherDescriptor.GetModificationTime()
+	}
+	// Generate a force retry error directly.
+	err := &retryOnModifiedDescriptor{
+		descID:        descriptor.GetID(),
+		descName:      descriptor.GetName(),
+		expiration:    modificationTime,
+		readTimestamp: txn.ReadTimestamp(),
+	}
+	return txn.GenerateForcedRetryableErr(ctx, redact.Sprintf("%v", err))
 }
 
 func filterDescriptor(desc catalog.Descriptor, flags getterFlags) error {
@@ -365,6 +413,9 @@ func (q *byIDLookupContext) lookupCached(
 ) (catalog.Descriptor, catalog.ValidationLevel, error) {
 	if q.tc.cr.IsIDInCache(id) {
 		if desc := q.tc.cr.Cache().LookupDescriptor(id); desc != nil {
+			if err := q.tc.ensureLeasedAndKVVersionsMatch(q.ctx, q.txn, desc, false); err != nil {
+				return nil, catalog.NoValidation, err
+			}
 			return desc, q.tc.validationLevels[id], nil
 		}
 	}
@@ -398,6 +449,9 @@ func (q *byIDLookupContext) lookupLeased(
 		if q.flags.layerFilters.withAdding && catalog.HasAddingDescriptorError(err) {
 			return nil, catalog.NoValidation, nil
 		}
+		return nil, catalog.NoValidation, err
+	}
+	if err := q.tc.ensureLeasedAndKVVersionsMatch(q.ctx, q.txn, desc, true); err != nil {
 		return nil, catalog.NoValidation, err
 	}
 	return desc, validate.ImmutableRead, nil
