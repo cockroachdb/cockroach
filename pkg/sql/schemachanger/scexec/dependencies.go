@@ -389,6 +389,9 @@ type DescriptorMetadataUpdater interface {
 
 	// UpdateTTLScheduleCron updates the cron schedule for a TTL job.
 	UpdateTTLScheduleCron(ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string) error
+
+	// CreateRowLevelTTLSchedule creates a new row-level TTL schedule for a table.
+	CreateRowLevelTTLSchedule(ctx context.Context, tbl catalog.TableDescriptor) error
 }
 
 type TemporarySchemaCreator interface {

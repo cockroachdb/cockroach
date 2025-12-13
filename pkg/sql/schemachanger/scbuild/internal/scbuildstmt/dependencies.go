@@ -329,6 +329,14 @@ type TableHelpers interface {
 
 	// IsTableEmpty returns if the table is empty or not.
 	IsTableEmpty(tbl *scpb.Table) bool
+
+	// ValidateTTLExpirationExpression validates the ttl_expiration_expression for
+	// a table's row-level TTL configuration. It verifies that the expression:
+	// - type-checks as a TIMESTAMPTZ.
+	// - is not volatile.
+	// - references valid columns in the table (the columns must exist before
+	//   this schema change begins).
+	ValidateTTLExpirationExpression(tableID catid.DescID, ttl *catpb.RowLevelTTL)
 }
 
 type FunctionHelpers interface {

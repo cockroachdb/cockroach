@@ -12,8 +12,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
@@ -27,9 +29,9 @@ import (
 func validateStorageParamKey(t tree.NodeFormatter, key string) {
 	loweredKey := strings.ToLower(key)
 	// These TTL params still require legacy schema changer because they
-	// affect column management or column dependencies.
+	// affect column management.
 	switch loweredKey {
-	case "ttl", "ttl_expire_after", "ttl_expiration_expression":
+	case "ttl", "ttl_expire_after":
 		panic(scerrors.NotImplementedErrorf(t, redact.Sprintf("%s not implemented yet", redact.SafeString(key))))
 	}
 	if loweredKey == catpb.RBRUsingConstraintTableSettingName {
@@ -75,6 +77,9 @@ func applyTTLStorageParamsSet(
 	); err != nil {
 		panic(err)
 	}
+
+	// Validate the TTL expiration expression if present.
+	b.ValidateTTLExpirationExpression(tbl.TableID, &newTTL)
 
 	// Construct new scpb.RowLevelTTL element with incremented SeqNum.
 	var seqNum uint32
@@ -164,6 +169,18 @@ func AlterTableSetStorageParams(
 			b.Drop(origTTL)
 		}
 		b.Add(newTTL)
+
+		// If TTL is being added to a table with inbound FKs that have cascading
+		// delete actions, send a notice about the performance implications.
+		if origTTL == nil && hasInboundFKWithCascadingDeleteAction(b, tbl) {
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(
+				b,
+				pgnotice.Newf("Columns within table %s are referenced as foreign keys."+
+					" This will make TTL deletion jobs more expensive as dependent rows"+
+					" in other tables will need to be updated as well. To improve performance"+
+					" of the TTL job, consider reducing the value of ttl_delete_batch_size.", tn.Object()),
+			)
+		}
 	}
 
 	if err := storageparam.StorageParamPreChecks(
@@ -245,6 +262,32 @@ func isTableReferencedByFK(b BuildCtx, tbl *scpb.Table) bool {
 		}
 	})
 	return hasInboundFK
+}
+
+// hasInboundFKWithCascadingDeleteAction returns true if the table has any
+// inbound foreign key constraints with ON DELETE actions that cascade (i.e.,
+// not NO_ACTION or RESTRICT). This is used to warn users that TTL deletions
+// will be more expensive when dependent rows need to be updated.
+func hasInboundFKWithCascadingDeleteAction(b BuildCtx, tbl *scpb.Table) bool {
+	hasCascadingFK := false
+	backRefs := b.BackReferences(tbl.TableID)
+	// Check validated foreign key constraints
+	backRefs.FilterForeignKeyConstraint().ForEach(func(current scpb.Status, target scpb.TargetStatus, e *scpb.ForeignKeyConstraint) {
+		if e.ReferencedTableID == tbl.TableID &&
+			e.OnDeleteAction != semenumpb.ForeignKeyAction_NO_ACTION &&
+			e.OnDeleteAction != semenumpb.ForeignKeyAction_RESTRICT {
+			hasCascadingFK = true
+		}
+	})
+	// Check unvalidated foreign key constraints
+	backRefs.FilterForeignKeyConstraintUnvalidated().ForEach(func(current scpb.Status, target scpb.TargetStatus, e *scpb.ForeignKeyConstraintUnvalidated) {
+		if e.ReferencedTableID == tbl.TableID &&
+			e.OnDeleteAction != semenumpb.ForeignKeyAction_NO_ACTION &&
+			e.OnDeleteAction != semenumpb.ForeignKeyAction_RESTRICT {
+			hasCascadingFK = true
+		}
+	})
+	return hasCascadingFK
 }
 
 // AlterTableResetStorageParams implements ALTER TABLE ... RESET {storage_param} in the declarative schema changer.

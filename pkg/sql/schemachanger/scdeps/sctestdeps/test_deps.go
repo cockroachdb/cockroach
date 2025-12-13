@@ -1349,6 +1349,14 @@ func (s *TestState) UpdateTTLScheduleCron(
 	return nil
 }
 
+// CreateRowLevelTTLSchedule implements scexec.DescriptorMetadataUpdater
+func (s *TestState) CreateRowLevelTTLSchedule(
+	ctx context.Context, tbl catalog.TableDescriptor,
+) error {
+	s.LogSideEffectf("create row-level TTL schedule for table #%d", tbl.GetID())
+	return nil
+}
+
 // DescriptorMetadataUpdater implement scexec.Dependencies.
 func (s *TestState) DescriptorMetadataUpdater(
 	ctx context.Context,

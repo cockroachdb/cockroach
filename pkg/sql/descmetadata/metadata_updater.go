@@ -9,11 +9,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -23,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlinit"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // metadataUpdater which implements scexec.MetaDataUpdater that is used to update
@@ -33,6 +36,11 @@ type metadataUpdater struct {
 	sessionData  *sessiondata.SessionData
 	descriptors  *descs.Collection
 	cacheEnabled bool
+
+	// Fields needed for TTL schedule creation.
+	settings  *cluster.Settings
+	knobs     *jobs.TestingKnobs
+	clusterID uuid.UUID
 }
 
 // NewMetadataUpdater creates a new comment updater, which can be used to
@@ -42,15 +50,21 @@ func NewMetadataUpdater(
 	ctx context.Context,
 	txn isql.Txn,
 	descriptors *descs.Collection,
-	settings *settings.Values,
+	settingsValues *settings.Values,
 	sessionData *sessiondata.SessionData,
+	clusterSettings *cluster.Settings,
+	knobs *jobs.TestingKnobs,
+	clusterID uuid.UUID,
 ) scexec.DescriptorMetadataUpdater {
 	return metadataUpdater{
 		ctx:          ctx,
 		txn:          txn,
 		sessionData:  sessionData,
 		descriptors:  descriptors,
-		cacheEnabled: sessioninit.CacheEnabled.Get(settings),
+		cacheEnabled: sessioninit.CacheEnabled.Get(settingsValues),
+		settings:     clusterSettings,
+		knobs:        knobs,
+		clusterID:    clusterID,
 	}
 }
 
@@ -120,7 +134,7 @@ func (mu metadataUpdater) UpdateTTLScheduleLabel(
 func (mu metadataUpdater) UpdateTTLScheduleCron(
 	ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string,
 ) error {
-	env := scheduledjobs.ProdJobSchedulerEnv
+	env := jobs.JobSchedulerEnv(mu.knobs)
 	schedules := jobs.ScheduledJobTxn(mu.txn)
 	s, err := schedules.Load(ctx, env, scheduleID)
 	if err != nil {
@@ -130,4 +144,39 @@ func (mu metadataUpdater) UpdateTTLScheduleCron(
 		return err
 	}
 	return schedules.Update(ctx, s)
+}
+
+// CreateRowLevelTTLSchedule implements scexec.DescriptorMetadataUpdater.
+func (mu metadataUpdater) CreateRowLevelTTLSchedule(
+	ctx context.Context, tbl catalog.TableDescriptor,
+) error {
+	if !tbl.HasRowLevelTTL() {
+		return nil
+	}
+
+	// Get the mutable table descriptor to update the schedule ID.
+	mutTbl, err := mu.descriptors.MutableByID(mu.txn.KV()).Table(ctx, tbl.GetID())
+	if err != nil {
+		return err
+	}
+
+	// Create the scheduled job using the shared helper.
+	schedules := jobs.ScheduledJobTxn(mu.txn)
+	version := clusterversion.ClusterVersion{Version: mu.settings.Version.ActiveVersion(ctx).Version}
+	sj, err := ttlinit.CreateRowLevelTTLScheduledJob(
+		ctx,
+		mu.knobs,
+		schedules,
+		tbl.GetPrivileges().Owner(),
+		tbl,
+		mu.clusterID,
+		version,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Update the table descriptor with the schedule ID.
+	mutTbl.RowLevelTTL.ScheduleID = sj.ScheduleID()
+	return mu.descriptors.WriteDesc(ctx, false /* kvTrace */, mutTbl, mu.txn.KV())
 }

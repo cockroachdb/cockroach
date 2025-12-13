@@ -83,3 +83,9 @@ func (d *deferredVisitor) UpdateTTLScheduleCron(
 ) error {
 	return d.DeferredMutationStateUpdater.UpdateTTLScheduleCron(ctx, op.ScheduleID, op.NewCronExpr)
 }
+
+func (d *deferredVisitor) CreateRowLevelTTLSchedule(
+	ctx context.Context, op scop.CreateRowLevelTTLSchedule,
+) error {
+	return d.DeferredMutationStateUpdater.CreateRowLevelTTLSchedule(ctx, op.TableID)
+}

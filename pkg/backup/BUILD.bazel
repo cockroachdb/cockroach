@@ -125,6 +125,7 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/stats",
         "//pkg/sql/syntheticprivilege",
+        "//pkg/sql/ttl/ttlinit",
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/storage/enginepb",
