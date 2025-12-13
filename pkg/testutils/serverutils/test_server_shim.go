@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -419,6 +421,14 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 	if err != nil {
 		return nil, err
 	}
+	// TestServers run in CI often are running under sustained overload conditions
+	// causing background work, normally expected to yield until spare capacity is
+	// available, to be starved out indefinitely -- just running the various
+	// system components/rangefeeds/etc of several testservers/tenants is enough
+	// to have a perpetually non-empty runnable queue in CIs for 10+ minutes. As
+	// such, we have to disable yield AC if we want background work to run at all.
+	admission.YieldInPacer.Override(context.Background(), &srv.(TestServerInterfaceRaw).ClusterSettings().SV, false)
+	bulk.YieldIfNoPacer.Override(context.Background(), &srv.(TestServerInterfaceRaw).ClusterSettings().SV, false)
 	srv = wrapTestServer(srv.(TestServerInterfaceRaw), tcfg)
 	return srv.(TestServerInterface), nil
 }
