@@ -28,7 +28,16 @@ type snapshotWorkItem struct {
 	mu             struct {
 		// These fields are updated after creation. The mutex in SnapshotQueue must
 		// be held to read and write to these fields.
-		inQueue   bool
+
+		// The granted value transitions at most once from false to true. Granting
+		// can race with context cancellation, so when context cancellation is
+		// processed, it is possible that the grant was already made. In that
+		// case, the grant needs to be returned.
+		granted bool
+		// The cancelled value transitions at most once from false to true. Since
+		// cancelled items are not immediately removed from SnapshotQueue.mu.q,
+		// this bool tells the queue to ignore (and lazily remove) an item that
+		// has been cancelled, when a grant happens.
 		cancelled bool
 	}
 }
@@ -138,6 +147,7 @@ func (s *SnapshotQueue) granted(_ grantChainID) int64 {
 		break
 	}
 	count := item.count
+	item.mu.granted = true
 	// After signalling to the channel, we transfer ownership of item back to the
 	// `Admit` goroutine, it should no longer be accessed here.
 	item.admitCh <- true
@@ -197,7 +207,7 @@ func (s *SnapshotQueue) Admit(ctx context.Context, count int64) error {
 		func() {
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			if !item.mu.inQueue {
+			if item.mu.granted {
 				// NB: we must call snapshotGranter.returnGrant after releasing the
 				// mutex.
 				tokensToReturn = item.count
@@ -232,7 +242,6 @@ func (s *SnapshotQueue) Admit(ctx context.Context, count int64) error {
 func (s *SnapshotQueue) addLocked(item *snapshotWorkItem) {
 	item.enqueueingTime = timeutil.Now()
 	s.mu.q.Enqueue(item)
-	item.mu.inQueue = true
 }
 
 func (s *SnapshotQueue) popLocked() *snapshotWorkItem {
@@ -240,7 +249,6 @@ func (s *SnapshotQueue) popLocked() *snapshotWorkItem {
 	if !ok {
 		return nil
 	}
-	item.mu.inQueue = false
 	return item
 }
 
@@ -275,7 +283,7 @@ func newSnapshotWorkItem(count int64) *snapshotWorkItem {
 		count:          count,
 	}
 	item.mu.cancelled = false
-	item.mu.inQueue = false
+	item.mu.granted = false
 	return item
 }
 
