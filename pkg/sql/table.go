@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func (p *planner) getVirtualTabler() VirtualTabler {
@@ -301,6 +302,13 @@ func (p *planner) writeSchemaChange(
 func (p *planner) writeVersionBump(ctx context.Context, id descpb.ID) error {
 	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, id)
 	if err != nil {
+		if descs.IsRetryOnModifiedDescriptorError(err) {
+			// Convert retry on modified descriptor errors into forced retryable errors,
+			// since we need the epoch to bump for deadlock avoidance with the role
+			// membership cache. ClientVisibleRetryError's do not bump the txns epochs
+			// automatically.
+			return p.Txn().GenerateForcedRetryableErr(ctx, redact.Sprintf("%s", err))
+		}
 		return err
 	}
 

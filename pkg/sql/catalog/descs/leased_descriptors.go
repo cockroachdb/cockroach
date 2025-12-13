@@ -116,6 +116,11 @@ func (r *retryOnModifiedDescriptor) SafeFormatError(p errors.Printer) (next erro
 	return nil
 }
 
+// IsRetryOnModifiedDescriptorError checks if an error is of type retryOnModifiedDescriptor.
+func IsRetryOnModifiedDescriptorError(err error) bool {
+	return errors.HasType(err, (*retryOnModifiedDescriptor)(nil))
+}
+
 // mismatchedExternalDataRowTimestamp is generated when the external row data timestamps
 // within a descriptor do not match.
 type mismatchedExternalDataRowTimestamp struct {

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // MembershipCache is a shared cache for role membership information.
@@ -139,6 +140,14 @@ func (m *MembershipCache) RunAtCacheReadTS(
 func (m *MembershipCache) GetRolesForMember(
 	ctx context.Context, txn descs.Txn, member username.SQLUsername,
 ) (_ map[username.SQLUsername]bool, retErr error) {
+	defer func() {
+		// Convert retry on modified descriptor errors into forced retryable errors,
+		// since we need the epoch to bump for deadlock avoidance. ClientVisibleRetryError's
+		// do not bump the txns epochs automatically.
+		if descs.IsRetryOnModifiedDescriptorError(retErr) {
+			retErr = txn.KV().GenerateForcedRetryableErr(ctx, redact.Sprintf("%s", retErr))
+		}
+	}()
 	if txn == nil {
 		return nil, errors.AssertionFailedf("cannot use MembershipCache without a txn")
 	}
