@@ -218,6 +218,9 @@ func getDescriptorsByID(
 			if descs[i] == nil {
 				descs[i] = read.LookupDescriptor(id)
 				vls[i] = tc.validationLevels[id]
+				if err := tc.ensureLeasedAndKVVersionsMatch(txn, descs[i], false); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -245,6 +248,45 @@ func getDescriptorsByID(
 		return err
 	}
 	return nil
+}
+
+// ensureLeasedAndKVVersionsMatch ensures that a KV and leased descriptors/
+// in a given transaction have compatible versions. If they don't, then retry
+// error is forced.
+func (tc *Collection) ensureLeasedAndKVVersionsMatch(
+	txn *kv.Txn, descriptor catalog.Descriptor, isLeased bool,
+) error {
+	// If we are not using leased descriptors for catalog views, this logic
+	// isn't needed.
+	usingLeasedDescriptorsForCatalogViews := allowLeasedDescriptorsInCatalogViews.Get(&tc.settings.SV)
+	if !usingLeasedDescriptorsForCatalogViews {
+		return nil
+	}
+
+	var otherDescriptor catalog.Descriptor
+	if isLeased {
+		otherDescriptor = tc.cr.Cache().LookupDescriptor(descriptor.GetID())
+	} else {
+		entry := tc.leased.cache.GetByID(descriptor.GetID())
+		if entry != nil {
+			otherDescriptor = entry.(catalog.Descriptor)
+		}
+	}
+	// Versions match so everything is good.
+	if otherDescriptor == nil ||
+		descriptor.GetVersion() == otherDescriptor.GetVersion() {
+		return nil
+	}
+	modificationTime := descriptor.GetModificationTime()
+	if isLeased {
+		modificationTime = otherDescriptor.GetModificationTime()
+	}
+	return &retryOnModifiedDescriptor{
+		descID:        descriptor.GetID(),
+		descName:      descriptor.GetName(),
+		expiration:    modificationTime,
+		readTimestamp: txn.ReadTimestamp(),
+	}
 }
 
 func filterDescriptor(desc catalog.Descriptor, flags getterFlags) error {
@@ -365,6 +407,9 @@ func (q *byIDLookupContext) lookupCached(
 ) (catalog.Descriptor, catalog.ValidationLevel, error) {
 	if q.tc.cr.IsIDInCache(id) {
 		if desc := q.tc.cr.Cache().LookupDescriptor(id); desc != nil {
+			if err := q.tc.ensureLeasedAndKVVersionsMatch(q.txn, desc, false); err != nil {
+				return nil, catalog.NoValidation, err
+			}
 			return desc, q.tc.validationLevels[id], nil
 		}
 	}
@@ -398,6 +443,9 @@ func (q *byIDLookupContext) lookupLeased(
 		if q.flags.layerFilters.withAdding && catalog.HasAddingDescriptorError(err) {
 			return nil, catalog.NoValidation, nil
 		}
+		return nil, catalog.NoValidation, err
+	}
+	if err := q.tc.ensureLeasedAndKVVersionsMatch(q.txn, desc, true); err != nil {
 		return nil, catalog.NoValidation, err
 	}
 	return desc, validate.ImmutableRead, nil
