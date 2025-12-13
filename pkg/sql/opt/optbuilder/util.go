@@ -882,7 +882,8 @@ func (b *Builder) appendOrdinaryColumnsFromTable(
 			visibility: columnVisibility(tabCol.Visibility()),
 		})
 	}
-	if b.trackSchemaDeps && b.evalCtx.SessionData().UseImprovedRoutineDependencyTracking {
+	if !tab.IsVirtualTable() && b.trackSchemaDeps &&
+		b.evalCtx.SessionData().UseImprovedRoutineDependencyTracking {
 		dep := opt.SchemaDep{DataSource: tab}
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
 			if tab.Column(i).Kind() != cat.Ordinary {
