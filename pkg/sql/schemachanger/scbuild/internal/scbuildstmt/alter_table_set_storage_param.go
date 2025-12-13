@@ -43,7 +43,11 @@ func validateStorageParamKey(t tree.NodeFormatter, key string) {
 // buildTTLColumnExpr builds the expression: current_timestamp() + interval_expr.
 // This is the expression used for the default and on-update values of the
 // crdb_internal_expiration column when ttl_expire_after is set.
-func buildTTLColumnExpr(intervalExpr tree.Expr) tree.Expr {
+func buildTTLColumnExpr(ttl *catpb.RowLevelTTL) tree.Expr {
+	intervalExpr, err := parser.ParseExpr(string(ttl.DurationExpr))
+	if err != nil {
+		panic(errors.Wrapf(err, "unexpected expression for TTL duration"))
+	}
 	return &tree.BinaryExpr{
 		Operator: treebin.MakeBinaryOperator(treebin.Plus),
 		Left:     &tree.FuncExpr{Func: tree.WrapFunction("current_timestamp")},
@@ -73,11 +77,7 @@ func addTTLColumn(
 	}
 
 	// Build the column expression: current_timestamp() + interval_expr.
-	intervalExpr, err := parser.ParseExpr(string(ttl.DurationExpr))
-	if err != nil {
-		panic(errors.Wrapf(err, "unexpected expression for TTL duration"))
-	}
-	ttlExpr := buildTTLColumnExpr(intervalExpr)
+	ttlExpr := buildTTLColumnExpr(ttl)
 
 	// Create column elements using addColumn pattern.
 	colID := b.NextTableColumnID(tbl)
@@ -180,11 +180,7 @@ func updateTTLColumnExpressions(
 	col := mustRetrieveColumnElem(b, tbl.TableID, colID)
 
 	// Build new expression.
-	intervalExpr, err := parser.ParseExpr(string(ttl.DurationExpr))
-	if err != nil {
-		panic(errors.Wrapf(err, "unexpected expression for TTL duration"))
-	}
-	ttlExpr := buildTTLColumnExpr(intervalExpr)
+	ttlExpr := buildTTLColumnExpr(ttl)
 
 	// Use panicIfInvalidNonComputedColumnExpr to get a properly typed expression.
 	colName := string(catpb.TTLDefaultExpirationColumnName)
@@ -281,16 +277,20 @@ func applyTTLStorageParamsSet(
 	}
 
 	// Validate the TTL expiration expression if present.
-	b.ValidateTTLExpirationExpression(
-		tbl.TableID,
-		&newTTL,
-		func() colinfo.ResultColumns {
-			return getNonDropResultColumns(b, tbl.TableID)
-		},
-		func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
-			return columnLookupFn(b, tbl.TableID, columnName)
-		},
-	)
+	newTTLExpr := origTTLExpr
+	if newTTL.HasExpirationExpr() {
+		ttlExpr := b.TTLExpirationExpression(
+			tbl.TableID,
+			&newTTL,
+			func() colinfo.ResultColumns {
+				return getNonDropResultColumns(b, tbl.TableID)
+			},
+			func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
+				return columnLookupFn(b, tbl.TableID, columnName)
+			},
+		)
+		newTTLExpr = b.WrapExpression(tbl.TableID, ttlExpr)
+	}
 
 	// Construct new scpb.RowLevelTTL element with incremented SeqNum.
 	var seqNum uint32
@@ -300,7 +300,7 @@ func applyTTLStorageParamsSet(
 	newElem := &scpb.RowLevelTTL{
 		TableID:     tbl.TableID,
 		RowLevelTTL: newTTL,
-		TTLExpr:     origTTLExpr,
+		TTLExpr:     newTTLExpr,
 		SeqNum:      seqNum,
 	}
 
@@ -389,8 +389,12 @@ func applyTTLStorageParamsReset(b BuildCtx, tbl *scpb.Table, params []string) {
 	newElem := &scpb.RowLevelTTL{
 		TableID:     tbl.TableID,
 		RowLevelTTL: *newTTL,
-		TTLExpr:     origTTLExpr,
 		SeqNum:      origElem.SeqNum + 1,
+	}
+	if newTTL.HasExpirationExpr() {
+		// If the new TTL still has an expiration expression, retain the original
+		// expression.
+		newElem.TTLExpr = origTTLExpr
 	}
 	b.Add(newElem)
 }

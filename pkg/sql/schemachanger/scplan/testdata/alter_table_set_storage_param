@@ -232,6 +232,10 @@ StatementPhase stage 1 of 1 with 1 MutationType op
       RowLevelTTL:
         DeletionCron: 1 4 * * 1
         ExpirationExpr: created_at + INTERVAL '10 minutes'
+      TTLExpr:
+        expr: created_at + '00:10:00':::INTERVAL
+        referencedColumnIds:
+        - 2
       TableID: 107
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
@@ -247,6 +251,10 @@ PreCommitPhase stage 2 of 2 with 2 MutationType ops
       RowLevelTTL:
         DeletionCron: 1 4 * * 1
         ExpirationExpr: created_at + INTERVAL '10 minutes'
+      TTLExpr:
+        expr: created_at + '00:10:00':::INTERVAL
+        referencedColumnIds:
+        - 2
       TableID: 107
     *scop.CreateRowLevelTTLSchedule
       TableID: 107
@@ -273,7 +281,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
         ExpirationExpr: ts + INTERVAL '10 minutes'
         ScheduleID: 1
       TTLExpr:
-        expr: ts
+        expr: ts + '00:10:00':::INTERVAL
         referencedColumnIds:
         - 2
       TableID: 108
@@ -295,7 +303,7 @@ PreCommitPhase stage 2 of 2 with 2 MutationType ops
         ExpirationExpr: ts + INTERVAL '10 minutes'
         ScheduleID: 1
       TTLExpr:
-        expr: ts
+        expr: ts + '00:10:00':::INTERVAL
         referencedColumnIds:
         - 2
       TableID: 108

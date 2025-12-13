@@ -612,6 +612,9 @@ func ValidatePartialIndex(
 // * type-checks as a TIMESTAMPTZ.
 // * is not volatile.
 // * references valid columns in the table.
+//
+// Returns the serialized expression with UDF names replaced by OID references.
+// If the TTL does not have an expiration expression, returns an empty string.
 func ValidateTTLExpirationExpression(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
@@ -620,22 +623,22 @@ func ValidateTTLExpirationExpression(
 	version clusterversion.ClusterVersion,
 	getAllNonDropColumnsFn func() colinfo.ResultColumns,
 	columnLookupByNameFn ColumnLookupFn,
-) error {
+) (string, error) {
 
 	if !ttl.HasExpirationExpr() {
-		return nil
+		return "", nil
 	}
 
 	exprs, err := parserutils.ParseExprs([]string{string(ttl.ExpirationExpr)})
 	if err != nil {
-		return pgerror.Wrapf(
+		return "", pgerror.Wrapf(
 			err,
 			pgcode.InvalidParameterValue,
 			`ttl_expiration_expression %q must be a valid expression`,
 			ttl.ExpirationExpr,
 		)
 	} else if len(exprs) != 1 {
-		return pgerror.Newf(
+		return "", pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			`ttl_expiration_expression %q must be a single expression`,
 			ttl.ExpirationExpr,
@@ -649,7 +652,7 @@ func ValidateTTLExpirationExpression(
 	// inside a single transaction.
 	// Only config changes can affect the results of Stable functions in the TTL
 	// job because session data cannot be modified.
-	if _, _, _, err := DequalifyAndValidateExprImpl(
+	serializedExpr, _, _, err := DequalifyAndValidateExprImpl(
 		ctx,
 		exprs[0],
 		types.TimestampTZ,
@@ -660,12 +663,13 @@ func ValidateTTLExpirationExpression(
 		version,
 		getAllNonDropColumnsFn,
 		columnLookupByNameFn,
-	); err != nil {
-		return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+	)
+	if err != nil {
+		return "", pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 	}
 
 	// todo: check dropped column here?
-	return nil
+	return serializedExpr, nil
 }
 
 func MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(
