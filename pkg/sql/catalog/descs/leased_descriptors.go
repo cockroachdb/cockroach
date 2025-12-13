@@ -98,6 +98,7 @@ type retryOnModifiedDescriptor struct {
 	descID        descpb.ID
 	expiration    hlc.Timestamp
 	readTimestamp hlc.Timestamp
+	forcedErr     error
 }
 
 // ClientVisibleRetryError implements the ClientVisibleRetryError interface.
