@@ -399,7 +399,7 @@ func backup(
 		}
 	}
 
-	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), backupManifest.Descriptors)
+	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), execCtx.ExecCfg().Settings, backupManifest.Descriptors)
 	if err := backupinfo.WriteBackupMetadata(ctx, execCtx, defaultStore, details, &kmsEnv, backupManifest, statsTable); err != nil {
 		return roachpb.RowCount{}, 0, err
 	}
@@ -432,13 +432,13 @@ func releaseProtectedTimestamp(
 // to suboptimal performance when reading/writing to this table until
 // the stats have been recomputed.
 func getTableStatsForBackup(
-	ctx context.Context, executor isql.Executor, descs []descpb.Descriptor,
+	ctx context.Context, executor isql.Executor, st *cluster.Settings, descs []descpb.Descriptor,
 ) backuppb.StatsTable {
 	var tableStatistics []*stats.TableStatisticProto
 	for i := range descs {
 		if tbl, _, _, _, _ := descpb.GetDescriptors(&descs[i]); tbl != nil {
 			tableDesc := tabledesc.NewBuilder(tbl).BuildImmutableTable()
-			tableStatisticsAcc, err := stats.GetTableStatsProtosFromDB(ctx, tableDesc, executor)
+			tableStatisticsAcc, err := stats.GetTableStatsProtosFromDB(ctx, tableDesc, executor, st)
 			if err != nil {
 				log.Dev.Warningf(
 					ctx, "failed to collect stats for table: %s, table ID: %d during a backup: %s",

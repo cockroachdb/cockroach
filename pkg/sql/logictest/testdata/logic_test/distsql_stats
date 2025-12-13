@@ -1148,6 +1148,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE et]
         "columns": [
             "x"
         ],
+        "delay_delete": false,
         "distinct_count": 3,
         "histo_buckets": [
             {
@@ -1181,6 +1182,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE et]
         "columns": [
             "y"
         ],
+        "delay_delete": false,
         "distinct_count": 3,
         "histo_buckets": [
             {
@@ -1214,6 +1216,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE et]
         "columns": [
             "z"
         ],
+        "delay_delete": false,
         "distinct_count": 3,
         "histo_buckets": [
             {
@@ -1809,6 +1812,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         "columns": [
             "k"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_buckets": [
             {
@@ -1830,6 +1834,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         "columns": [
             "c"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -1871,6 +1876,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
         "columns": [
             "x"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_buckets": [
             {
@@ -2060,6 +2066,7 @@ SELECT jsonb_pretty(
         "columns": [
             "r"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2073,6 +2080,7 @@ SELECT jsonb_pretty(
         "columns": [
             "a"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2087,6 +2095,7 @@ SELECT jsonb_pretty(
             "a",
             "sa"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "",
         "id": 0,
@@ -2099,6 +2108,7 @@ SELECT jsonb_pretty(
         "columns": [
             "sa"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2161,6 +2171,7 @@ SELECT jsonb_pretty(
         "columns": [
             "r"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_buckets": [
             {
@@ -2181,6 +2192,7 @@ SELECT jsonb_pretty(
         "columns": [
             "a"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_buckets": [
             {
@@ -2202,6 +2214,7 @@ SELECT jsonb_pretty(
             "a",
             "sa"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_col_type": "",
         "id": 0,
@@ -2213,6 +2226,7 @@ SELECT jsonb_pretty(
         "columns": [
             "sa"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2278,6 +2292,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "columns": [
             "a"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2290,6 +2305,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "columns": [
             "b"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2302,6 +2318,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "columns": [
             "rowid"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2315,6 +2332,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
             "a",
             "b"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "",
         "id": 0,

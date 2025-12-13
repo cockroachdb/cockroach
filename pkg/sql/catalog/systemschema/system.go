@@ -348,6 +348,12 @@ CREATE TABLE system.web_sessions (
 	// contains the number of distinct values of the column group, the number of
 	// null values, the average size of the column(s), and (optionally) a
 	// histogram if there is only one column in columnIDs.
+	// The column `delayDelete` accommodates the canary stats rollout feature,
+	// which requires retaining stats that would normally be evicted during
+	// the standard stats collection process. These stats must be preserved
+	// for queries that choose the "stable" path for planning, ensuring they
+	// continue using older statistics until their age exceeds the stats_
+	// canary_window.
 	//
 	// Design outlined in /docs/RFCS/20170908_sql_optimizer_statistics.md
 	// Note: avgSize is a newer statistic than the RFC above. It contains the
@@ -366,8 +372,9 @@ CREATE TABLE system.table_statistics (
 	"avgSize"            INT8       NOT NULL DEFAULT 0,
 	"partialPredicate"   STRING,
 	"fullStatisticID"    INT8,
+	"delayDelete"        BOOL      DEFAULT FALSE,
 	CONSTRAINT "primary" PRIMARY KEY ("tableID", "statisticID"),
-	FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram, "avgSize", "partialPredicate", "fullStatisticID")
+	FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram, "avgSize", "partialPredicate", "fullStatisticID", "delayDelete")
 );`
 
 	// locations are used to map a locality specified by a node to geographic
@@ -1479,7 +1486,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_1_AddTableStatisticsLocksTable.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_1_AddTableStatisticsDelayDeleteColumn.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -2348,6 +2355,7 @@ var (
 				{Name: "avgSize", ID: 10, Type: types.Int, DefaultExpr: &zeroIntString},
 				{Name: "partialPredicate", ID: 11, Type: types.String, Nullable: true},
 				{Name: "fullStatisticID", ID: 12, Type: types.Int, Nullable: true},
+				{Name: "delayDelete", ID: 13, Type: types.Bool, Nullable: true, DefaultExpr: &falseBoolString},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2366,8 +2374,9 @@ var (
 						"avgSize",
 						"partialPredicate",
 						"fullStatisticID",
+						"delayDelete",
 					},
-					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13},
 				},
 			},
 			descpb.IndexDescriptor{
