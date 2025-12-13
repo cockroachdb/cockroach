@@ -2574,7 +2574,7 @@ func newTableDesc(
 			}
 			return true, !col.IsInaccessible(), col.IsComputed(), col.GetID(), col.GetType()
 		}
-		if err := schemaexpr.ValidateTTLExpirationExpression(
+		if _, err := schemaexpr.ValidateTTLExpirationExpression(
 			params.ctx, params.p.SemaCtx(), &n.Table, ttl, params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx),
 			getAllNonDropColumnsFn, columnLookupByNameFn,
 		); err != nil {

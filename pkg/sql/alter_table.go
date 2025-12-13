@@ -2309,7 +2309,7 @@ func handleTTLStorageParamChange(
 			}
 			return true, !col.IsInaccessible(), col.IsComputed(), col.GetID(), col.GetType()
 		}
-		if err := schemaexpr.ValidateTTLExpirationExpression(
+		if _, err := schemaexpr.ValidateTTLExpirationExpression(
 			params.ctx, params.p.SemaCtx(), tn, after,
 			params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
 			getAllNonDropColumnsFn, columnLookupByNameFn,
