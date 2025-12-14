@@ -90,6 +90,12 @@ var errorOnConcurrentCreateStats = settings.RegisterBoolSetting(
 	true,
 	settings.WithPublic)
 
+var automaticStatsJobAutoCleanup = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.stats.automatic_stats_job_auto_cleanup.enabled",
+	"set to true to enable automatic cleanup of completed AUTO CREATE STATISTICS jobs",
+	false)
+
 const nonIndexColHistogramBuckets = 2
 
 // StubTableStats generates "stub" statistics for a table which are missing
@@ -220,6 +226,12 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 			}
 			if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) {
 				return nil
+			}
+		}
+	} else if automaticStatsJobAutoCleanup.Get(n.p.ExecCfg().SV()) {
+		if name := job.Details().(jobspb.CreateStatsDetails).Name; name == jobspb.AutoStatsName || name == jobspb.AutoPartialStatsName {
+			if err := n.p.ExecCfg().JobRegistry.DeleteTerminalJobByID(ctx, job.ID()); err != nil {
+				log.Dev.Warningf(ctx, "failed to auto-delete terminal automatic stats job: %v", err)
 			}
 		}
 	}
