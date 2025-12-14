@@ -341,7 +341,7 @@ type elasticCPUGranterMetrics struct {
 	MaxAvailableNanos      *metric.Counter
 	AvailableNanos         *metric.Gauge
 	UtilizationLimit       *metric.GaugeFloat64
-	NanosExhaustedDuration *metric.Gauge
+	NanosExhaustedDuration *metric.Counter
 	OverLimitDuration      metric.IHistogram
 
 	Utilization      *metric.GaugeFloat64 // updated every elasticCPUUtilizationMetricInterval, using fields below
@@ -358,7 +358,7 @@ func makeElasticCPUGranterMetrics() *elasticCPUGranterMetrics {
 		PreWorkNanos:           metric.NewCounter(elasticCPUPreWorkNanos),
 		MaxAvailableNanos:      metric.NewCounter(elasticCPUMaxAvailableNanos),
 		AvailableNanos:         metric.NewGauge(elasticCPUAvailableNanos),
-		NanosExhaustedDuration: metric.NewGauge(elasticCPUNanosExhaustedDuration),
+		NanosExhaustedDuration: metric.NewCounter(elasticCPUNanosExhaustedDuration),
 		OverLimitDuration: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     elasticCPUOverLimitDurations,
