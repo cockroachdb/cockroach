@@ -43,18 +43,7 @@ Execute {"Portal": "p1"}
 Sync
 ----
 
-# CockroachDB intentionally uses exponents for decimals like 1E+4, as
-# oppposed to Postgres, which returns 10000.
-until crdb_only
-ReadyForQuery
-----
-{"Type":"ParseComplete"}
-{"Type":"BindComplete"}
-{"Type":"DataRow","Values":[{"text":"10000"},{"text":"1E+4"},{"text":"1.0E+5"}]}
-{"Type":"CommandComplete","CommandTag":"SELECT 1"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-until noncrdb_only
+until
 ReadyForQuery
 ----
 {"Type":"ParseComplete"}
@@ -64,8 +53,8 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 # ResultFormatCodes [1] = FormatBinary
-# [0, 1, 0, 1, 0, 0, 0, 0, 0, 1] = binary 1E+4
-# [0, 1, 0, 1, 0, 0, 0, 0, 0, 10] = binary 10E+4
+# [0, 1, 0, 1, 0, 0, 0, 0, 0, 1] = binary 10000
+# [0, 1, 0, 1, 0, 0, 0, 0, 0, 10] = binary 100000
 send
 Parse {"Name": "s2", "Query": "SELECT 10000::decimal, $1::decimal, $2::decimal"}
 Bind {"DestinationPortal": "p2", "PreparedStatement": "s2", "ParameterFormatCodes": [1], "Parameters": [{"binary":"00010001000000000001"}, {"binary":"0001000100000000000a"}], "ResultFormatCodes": [1,1, 1]}
@@ -79,5 +68,43 @@ ReadyForQuery
 {"Type":"ParseComplete"}
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"binary":"00010001000000000001"},{"binary":"00010001000000000001"},{"binary":"0001000100000000000a"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# ResultFormatCodes [1] = FormatBinary
+# [0, 2, 0, 0, 0, 0, 0, 5, 0, 1, 8fc] = binary 1.23000
+# [0, 2, 0, 0, 0, 0, 0, a, 0, 1, 8fc] = binary 1.2300000000
+# [0, 1, 0, 0, 0, 0, 0, a, 0, 1] = binary 1.0000000000
+send
+Parse {"Name": "s3", "Query": "SELECT $1::decimal, $2::decimal, $3::decimal"}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "s3", "ParameterFormatCodes": [1], "Parameters": [{"binary":"0002000000000005000108fc"}, {"binary":"000200000000000a000108fc"}, {"binary": "000100000000000a0001"}]}
+Execute {"Portal": "p3"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1.23000"},{"text":"1.2300000000"},{"text":"1.0000000000"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# [0, 1, 0, 1, 0, 0, 0, 3, 0, 1] = binary 10000.000
+# [0, 1, 0, 2, 0, 0, 0, 3, 0, 1] = binary 100000000.000
+send
+Parse {"Name": "s4", "Query": "SELECT $1::decimal, $2::decimal"}
+Bind {"DestinationPortal": "p4", "PreparedStatement": "s4", "ParameterFormatCodes": [1], "Parameters": [{"binary":"00010001000000030001"}, {"binary":"00010002000000030001"}]}
+Execute {"Portal": "p4"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"10000.000"},{"text":"100000000.000"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
