@@ -1000,13 +1000,6 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				stmtScope.makeOrderingChoice(),
 			)
 
-			// Add an optimization barrier in case the projected variables are never
-			// referenced again, to prevent column-pruning rules from dropping the
-			// side effects of executing the SELECT ... INTO statement.
-			if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
-				b.ob.addBarrier(stmtScope)
-			}
-
 			if strict {
 				// Check that the expression produces exactly one row.
 				b.addOneRowCheck(stmtScope)
@@ -1020,6 +1013,14 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					nil, /* on */
 					memo.EmptyJoinPrivate,
 				)
+			}
+
+			// Add an optimization barrier in case the projected variables are never
+			// referenced again, to prevent column-pruning and join-elimination rules
+			// from dropping the side effects of executing the SELECT ... INTO
+			// statement.
+			if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
+				b.ob.addBarrier(stmtScope)
 			}
 
 			// Step 2: build the INTO statement into a continuation routine that calls
