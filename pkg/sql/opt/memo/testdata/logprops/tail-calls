@@ -958,22 +958,22 @@ values
                                ├── params: x
                                └── body
                                     └── project
-                                         ├── left-join (cross)
-                                         │    ├── values
-                                         │    │    └── tuple
-                                         │    ├── barrier
-                                         │    │    └── limit
-                                         │    │         ├── project-set
-                                         │    │         │    ├── values
-                                         │    │         │    │    └── tuple
-                                         │    │         │    └── zip
-                                         │    │         │         └── udf: nested
-                                         │    │         │              └── body
-                                         │    │         │                   └── values
-                                         │    │         │                        └── tuple
-                                         │    │         │                             └── const: 1
-                                         │    │         └── const: 1
-                                         │    └── filters (true)
+                                         ├── barrier
+                                         │    └── left-join (cross)
+                                         │         ├── values
+                                         │         │    └── tuple
+                                         │         ├── limit
+                                         │         │    ├── project-set
+                                         │         │    │    ├── values
+                                         │         │    │    │    └── tuple
+                                         │         │    │    └── zip
+                                         │         │    │         └── udf: nested
+                                         │         │    │              └── body
+                                         │         │    │                   └── values
+                                         │         │    │                        └── tuple
+                                         │         │    │                             └── const: 1
+                                         │         │    └── const: 1
+                                         │         └── filters (true)
                                          └── projections
                                               └── variable: nested
 
