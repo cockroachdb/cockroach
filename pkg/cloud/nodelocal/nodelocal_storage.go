@@ -189,6 +189,10 @@ func (l *localFileStorage) List(
 	sort.Strings(res)
 	var prevPrefix string
 	for _, f := range res {
+		// Skip temporary files.
+		if strings.HasSuffix(f, blobs.TmpFileSuffix) {
+			continue
+		}
 		f = strings.TrimPrefix(f, dest)
 		if delim != "" {
 			if i := strings.Index(f, delim); i >= 0 {

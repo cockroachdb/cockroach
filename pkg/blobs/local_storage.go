@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const TmpFileSuffix = ".tmp"
+
 // LocalStorage wraps all operations with the local file system
 // that the blob service makes.
 type LocalStorage struct {
@@ -119,7 +121,7 @@ func (l *LocalStorage) Writer(ctx context.Context, filename string) (io.WriteClo
 	//   exotic edge cases, hence the use fileutil.Move below.)
 	// See the explanatory comment for os.CreateTemp to understand
 	// what the "*" in the suffix means.
-	tmpFile, err := os.CreateTemp(targetDir, filepath.Base(fullPath)+"*.tmp")
+	tmpFile, err := os.CreateTemp(targetDir, filepath.Base(fullPath)+"*"+TmpFileSuffix)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating temporary file")
 	}
