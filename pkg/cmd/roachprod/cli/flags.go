@@ -28,62 +28,62 @@ import (
 
 var (
 	// Do not populate providerOptsContainer here as we need to call InitProivders() first.
-	providerOptsContainer vm.ProviderOptionsContainer
-	pprofOpts             roachprod.PprofOpts
-	numNodes              int
-	numRacks              int
-	username              string
-	database              string
-	dryrun                bool
-	destroyAllMine        bool
-	destroyAllLocal       bool
-	extendLifetime        time.Duration
-	wipePreserveCerts     bool
-	grafanaConfig         string
-	grafanaArch           string
-	grafanaDumpDir        string
-	jaegerConfigNodes     string
-	listCost              bool
-	listDetails           bool
-	listJSON              bool
-	listMine              bool
-	listPattern           string
-	isSecure              install.ComplexSecureOption // Set based on the values passed to --secure and --insecure
-	secure                = true
-	insecure              = envutil.EnvOrDefaultBool("COCKROACH_ROACHPROD_INSECURE", false)
-	virtualClusterName    string
-	sqlInstance           int
-	extraSSHOptions       = ""
-	exportSSHConfig       string
-	nodeEnv               []string
-	tag                   string
-	external              = false
-	pgurlCertsDir         string
-	authMode              string
-	adminurlPath          = ""
-	adminurlIPs           = false
-	urlOpen               = false
-	useTreeDist           = true
-	sig                   = 9
-	waitFlag              = false
-	gracePeriod           = 0
-	deploySig             = 15
-	deployWaitFlag        = true
-	deployGracePeriod     = 300
-	pause                 = time.Duration(0)
-	createVMOpts          = vm.DefaultCreateOpts()
-	startOpts             = roachprod.DefaultStartOpts()
-	stageOS               string
-	stageArch             string
-	stageDir              string
-	logsDir               string
-	logsFilter            string
-	logsProgramFilter     string
-	logsFrom              time.Time
-	logsTo                time.Time
-	logsInterval          time.Duration
-	volumeCreateOpts      vm.VolumeCreateOpts
-	listOpts              vm.ListOptions
+	providerOptsContainer    vm.ProviderOptionsContainer
+	pprofOpts                roachprod.PprofOpts
+	numNodes                 int
+	numRacks                 int
+	username                 string
+	database                 string
+	dryrun                   bool
+	destroyAllMine           bool
+	destroyAllLocal          bool
+	extendLifetime           time.Duration
+	wipePreserveCerts        bool
+	grafanaConfig            string
+	grafanaArch              string
+	grafanaDumpDir           string
+	jaegerConfigNodes        string
+	listCost                 bool
+	listDetails              bool
+	listJSON                 bool
+	listMine                 bool
+	listPattern              string
+	isSecure                 install.ComplexSecureOption // Set based on the values passed to --secure and --insecure
+	secure                   = true
+	insecure, insecureEnvSet = getInsecureEnvVar() // Get both value and whether it was explicitly set
+	virtualClusterName       string
+	sqlInstance              int
+	extraSSHOptions          = ""
+	exportSSHConfig          string
+	nodeEnv                  []string
+	tag                      string
+	external                 = false
+	pgurlCertsDir            string
+	authMode                 string
+	adminurlPath             = ""
+	adminurlIPs              = false
+	urlOpen                  = false
+	useTreeDist              = true
+	sig                      = 9
+	waitFlag                 = false
+	gracePeriod              = 0
+	deploySig                = 15
+	deployWaitFlag           = true
+	deployGracePeriod        = 300
+	pause                    = time.Duration(0)
+	createVMOpts             = vm.DefaultCreateOpts()
+	startOpts                = roachprod.DefaultStartOpts()
+	stageOS                  string
+	stageArch                string
+	stageDir                 string
+	logsDir                  string
+	logsFilter               string
+	logsProgramFilter        string
+	logsFrom                 time.Time
+	logsTo                   time.Time
+	logsInterval             time.Duration
+	volumeCreateOpts         vm.VolumeCreateOpts
+	listOpts                 vm.ListOptions
 
 	monitorOpts        install.MonitorOpts
 	cachedHostsCluster string
@@ -109,11 +109,24 @@ var (
 	fetchLogsTimeout time.Duration
 )
 
+// getInsecureEnvVar returns the value of COCKROACH_ROACHPROD_INSECURE and
+// whether it was explicitly set.
+func getInsecureEnvVar() (bool, bool) {
+	val, ok := envutil.EnvString("COCKROACH_ROACHPROD_INSECURE", 1)
+	if !ok {
+		return false, false
+	}
+	return val == "true" || val == "1", true
+}
+
 // Intended to be called once from drtprod main package to update defaults which differ from roachprod.
 func UpdateFlagDefaults() {
-	// N.B. unlike roachprod, which defaults to "insecure mode", drtprod defaults to "secure mode".
+	// N.B. Both roachprod and drtprod default to secure mode via the flag defaults.
+	// However, roachprod has runtime logic in overrideBasedOnClusterSettings() that
+	// forces insecure mode for clusters in the cockroach-ephemeral GCP project.
+	// drtprod explicitly sets secure=true here to ensure secure mode is used.
 	secure = true
-	insecure = envutil.EnvOrDefaultBool("COCKROACH_ROACHPROD_INSECURE", false)
+	// insecure and insecureEnvSet are already initialized via getInsecureEnvVar()
 }
 
 func initRootCmdFlags(rootCmd *cobra.Command) {
