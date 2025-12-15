@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -189,13 +188,6 @@ func changefeedPlanHook(
 	changefeedStmt := getChangefeedStatement(stmt)
 	if changefeedStmt == nil {
 		return nil, nil, false, nil
-	}
-	if changefeedStmt.Level != tree.ChangefeedLevelTable {
-		return nil, nil, false,
-			errors.UnimplementedError(
-				errors.IssueLink{IssueURL: build.MakeIssueURL(154053)},
-				"database-level changefeed is not implemented yet",
-			)
 	}
 
 	exprEval := p.ExprEvaluator("CREATE CHANGEFEED")
