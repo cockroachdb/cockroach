@@ -3879,6 +3879,7 @@ message ContentionEvent {
 // QuorumReplicationFlowAdmissionEvent is a message that is recorded on traces by a
 // range controller when waiting for quorum flow control.
 message QuorumReplicationFlowAdmissionEvent {
+  option (gogoproto.goproto_stringer) = false;
   // WaitDurationNanos is the time spent waiting.
   int64 wait_duration_nanos = 1 [(gogoproto.casttype) = "time.Duration"];
 }

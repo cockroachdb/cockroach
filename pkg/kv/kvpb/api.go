@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
+	"github.com/gogo/protobuf/proto"
 )
 
 //go:generate mockgen -package=kvpbmock -destination=kvpbmock/mocks_generated.go . InternalClient,Internal_MuxRangeFeedClient
@@ -2659,4 +2660,14 @@ func (r *AddSSTableRequest) Validate(bh Header) error {
 		}
 	}
 	return nil
+}
+
+func (m *QuorumReplicationFlowAdmissionEvent) String() string {
+	return strings.TrimSpace(proto.CompactTextString(m))
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (m *QuorumReplicationFlowAdmissionEvent) SafeFormat(w redact.SafePrinter, _ rune) {
+	prefix := redact.SafeString("range controller waited for quorum flow control")
+	w.Printf("%s for %d nanos", prefix, m.WaitDurationNanos)
 }
