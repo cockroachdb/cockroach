@@ -632,11 +632,23 @@ message BulkMergeSpec {
   // output_storage is the external storage connection where the merged output should be stored.
   optional cloud.cloudpb.ExternalStorage output_storage = 3 [(gogoproto.nullable) = false];
 
+  // iteration identifies which merge iteration this processor is executing.
+  optional int32 iteration = 4 [(gogoproto.nullable) = false];
+
+  // max_iterations captures the total number of merge iterations. When
+  // iteration == max_iterations, the processor should write directly to KV
+  // instead of producing SSTs in external storage.
+  optional int32 max_iterations = 5 [(gogoproto.nullable) = false];
+
+  // write_timestamp is the MVCC timestamp to use when the final iteration writes
+  // directly into KV.
+  optional util.hlc.Timestamp write_timestamp = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "WriteTimestamp"];
+
   message Output {
     // output_ssts is the list of output SSTs.
     repeated SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
   }
-  // NEXT ID: 4.
+  // NEXT ID: 7.
 }
 
 // IndexBackfillMapProgress is emitted by map-stage processors to describe newly
