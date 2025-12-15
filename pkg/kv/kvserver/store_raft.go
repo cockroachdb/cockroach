@@ -823,16 +823,21 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	ctx := context.TODO()
 	s.updateLivenessMap()
 
-	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
-		r.mu.RLock()
-		quiescent := r.mu.quiescent
-		lagging := r.mu.laggingFollowersOnQuiesce
-		r.mu.RUnlock()
-		if quiescent && lagging.MemberStale(l) {
-			r.maybeUnquiesce(ctx, false /* wakeLeader */, false /* mayCampaign */) // already leader
-		}
-		return true
-	})
+	// NB: If leader leases are enabled, there's no need to go through all
+	// replicas and try and unquiesce them. As such, we can omit this work
+	// entirely.
+	if !LeaderLeasesEnabled.Get(&s.ClusterSettings().SV) {
+		s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
+			r.mu.RLock()
+			quiescent := r.mu.quiescent
+			lagging := r.mu.laggingFollowersOnQuiesce
+			r.mu.RUnlock()
+			if quiescent && lagging.MemberStale(l) {
+				r.maybeUnquiesce(ctx, false /* wakeLeader */, false /* mayCampaign */) // already leader
+			}
+			return true
+		})
+	}
 }
 
 // supportWithdrawnCallback is called every time the local store withdraws
