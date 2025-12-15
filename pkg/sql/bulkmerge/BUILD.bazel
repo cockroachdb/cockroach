@@ -19,6 +19,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/ccl/storageccl",
+        "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/sql",
