@@ -386,6 +386,7 @@ func (cc constraintsConj) cmp(b constraintsConj) int {
 // constraints: [+region=us-west-1]: 1, [+region=us-west-1]: 1, []: 3, []: 1,
 // [+region=eu]: 0
 // result: [+region=us-west-1]: 2, []: 4
+// TODO(wenyihu6): we could take in a scratch space to avoid allocating indices
 func dedupAndFilterConstraints(
 	constraints []internedConstraintsConjunction,
 ) []internedConstraintsConjunction {
