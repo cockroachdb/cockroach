@@ -11,7 +11,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/stretchr/testify/require"
@@ -23,7 +23,7 @@ func newTestCluster(t *testing.T) *SyncedCluster {
 	if err != nil {
 		t.Fatalf("could not read test cluster file: %s", err)
 	}
-	metadata := &cloud.Cluster{}
+	metadata := &cloudcluster.Cluster{}
 	if err := json.Unmarshal(data, metadata); err != nil {
 		t.Fatalf("could not unmarshal test cluster file: %s", err)
 	}

@@ -64,6 +64,7 @@ go_library(
         "//pkg/ccl/changefeedccl/kvfeed",
         "//pkg/ccl/changefeedccl/resolvedspan",
         "//pkg/ccl/changefeedccl/schemafeed",
+        "//pkg/ccl/changefeedccl/tableset",
         "//pkg/ccl/changefeedccl/timers",
         "//pkg/ccl/kvccl/kvfollowerreadsccl",
         "//pkg/ccl/utilccl",
@@ -235,6 +236,9 @@ go_test(
         "testfeed_test.go",
         "validations_test.go",
     ],
+    data = [
+        "changefeed_processors.go",
+    ],
     embed = [":changefeedccl"],
     exec_properties = select({
         "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
@@ -245,6 +249,7 @@ go_test(
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/build",
+        "//pkg/build/bazel",
         "//pkg/ccl",
         "//pkg/ccl/changefeedccl/cdceval",
         "//pkg/ccl/changefeedccl/cdcevent",

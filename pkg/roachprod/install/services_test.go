@@ -15,7 +15,7 @@ import (
 	"testing"
 	"testing/quick"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -26,18 +26,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testProvider struct {
-	vm.Provider
-	vm.DNSProvider
-}
-
 func TestServicePorts(t *testing.T) {
 	ctx := context.Background()
 	clusterName := "tc"
 	z1NS := local.NewDNSProvider(t.TempDir(), "z1")
-	vm.Providers["p1"] = &testProvider{DNSProvider: z1NS}
+	vm.DNSProviders["p1"] = z1NS
 	z2NS := local.NewDNSProvider(t.TempDir(), "z2")
-	vm.Providers["p2"] = &testProvider{DNSProvider: z2NS}
+	vm.DNSProviders["p2"] = z2NS
 
 	err := z1NS.CreateRecords(ctx,
 		vm.CreateSRVRecord(serviceDNSName(z1NS, "t1", ServiceTypeSQL, clusterName), net.SRV{
@@ -56,7 +51,7 @@ func TestServicePorts(t *testing.T) {
 	require.NoError(t, err)
 
 	c := &SyncedCluster{
-		Cluster: cloud.Cluster{
+		Cluster: cloudcluster.Cluster{
 			Name: clusterName,
 			VMs: vm.List{
 				vm.VM{
@@ -140,7 +135,7 @@ func (t *serviceRegistryTest) makeVM(clusterName string, i int) vm.VM {
 func (t *serviceRegistryTest) newCluster(nodeCount int) *SyncedCluster {
 	clusterName := fmt.Sprintf("cluster-%s", randutil.RandString(t.rng, 10, randutil.PrintableKeyAlphabet))
 	c := &SyncedCluster{
-		Cluster: cloud.Cluster{
+		Cluster: cloudcluster.Cluster{
 			Name: clusterName,
 		},
 	}
