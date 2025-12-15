@@ -2660,3 +2660,13 @@ func (r *AddSSTableRequest) Validate(bh Header) error {
 	}
 	return nil
 }
+
+func (m *QuorumReplicationFlowAdmissionEvent) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (m *QuorumReplicationFlowAdmissionEvent) SafeFormat(w redact.SafePrinter, _ rune) {
+	prefix := redact.SafeString("range controller waited for quorum flow control")
+	w.Printf("%s for %d nanos", prefix, m.WaitDurationNanos)
+}
