@@ -232,7 +232,8 @@ func newDescriptorVersionState(
 	if !expiration.IsEmpty() {
 		descState.expiration.Store(&expiration)
 	}
-
+	// Populate the size of the structure.
+	descState.byteSize = descState.calculateByteSize()
 	return descState
 }
 
