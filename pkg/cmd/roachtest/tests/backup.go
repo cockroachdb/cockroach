@@ -329,7 +329,13 @@ func runBackup(ctx context.Context, t test.Test, c cluster.Cluster, abandon bool
 	const perTransactionRowCount = 1000
 	numTxns := totalRowCount / perTransactionRowCount
 
-	_, err := conn.ExecContext(ctx, "CREATE TABLE foo(k INT PRIMARY KEY, v INT NOT NULL)")
+	// Disable automatic stats collection to avoid additional contention.
+	_, err := conn.ExecContext(ctx, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	_, err = conn.ExecContext(ctx, "CREATE TABLE foo(k INT PRIMARY KEY, v INT NOT NULL)")
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -372,16 +378,16 @@ func runBackup(ctx context.Context, t test.Test, c cluster.Cluster, abandon bool
 			t.Fatalf(err.Error())
 		}
 		baseKey := numTxns + txnIndex*perTransactionRowCount
-		for j := 0; j < perTransactionRowCount; j += 1 {
-			// Ensure the intents are on a different range than the txn record.
-			// TODO(mira): Currently, this takes ~4-5 min. We can speed up writing
-			// these intents by using generate_series.
-			statement = fmt.Sprintf("INSERT INTO foo (k, v) VALUES (%d, %d)", baseKey+j, j)
-			_, err = tx.ExecContext(ctx, statement)
-			if err != nil {
-				t.Fatalf(err.Error())
-			}
+		statement = fmt.Sprintf(`
+          INSERT INTO foo (k, v) 
+          SELECT %d + gs, gs %% %d 
+          FROM generate_series(0, %d) AS gs`,
+			baseKey, perTransactionRowCount, perTransactionRowCount-1)
+		_, err = tx.ExecContext(ctx, statement)
+		if err != nil {
+			t.Fatalf(err.Error())
 		}
+
 	}
 
 	// For abandoned intents, abort the transactions. We have disabled async
