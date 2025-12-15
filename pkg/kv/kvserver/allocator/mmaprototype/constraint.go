@@ -1442,8 +1442,14 @@ func (ac *analyzedConstraints) initialize(
 	// using constraintMatcher.storeMatches. In addition, it also populates
 	// ac.satisfiedNoConstraintReplica[kind][i] for stores that satisfy no
 	// constraint and ac.satisfiedByReplica[kind][i] for stores that satisfy
-	// exactly one constraint. Since we will be assigning at least one
-	// constraint to each store, these stores are unambiguous.
+	// exactly one constraint (with an exception for voter constraints).
+	//
+	// Exception for voter constraints: when ac corresponds to voter constraints,
+	// we delay assigning non-voters that satisfy only one constraint until phase
+	// 2, since we would like to give a chance for voters to satisfy the voter
+	// constraint, even if the voters satisfy multiple constraints. That is, we
+	// want to avoid a situation where we unnecessarily need to elevate a
+	// non-voter to voter.
 	//
 	// Compute the list of all constraints satisfied by each store.
 	for kind := voterIndex; kind < numReplicaKinds; kind++ {
@@ -1481,11 +1487,14 @@ func (ac *analyzedConstraints) initialize(
 	// voters (kind=voterIndex) before non-voters (kind=nonVoterIndex). By
 	// counting both, we avoid over-satisfying a constraint with non-voters before
 	// other constraints get a chance to be satisfied.
-	// Example:
-	// constraints [+region=a]:1, [+zone=b1]:1, [+region=b]:1 and two non-voters
-	// matching both region=a and zone=b1, counting only voters would cause both
-	// non-voters to be assigned to [+region=a] instead of spreading them across
-	// constraints. See range_analyzed_constraints for more details.
+	// Example: voter constraints [+region=a]:1, [+zone=b1]:1, [+region=b]:1 with
+	// two non-voters on stores matching both region=a and zone=b1. If we only
+	// counted voters, [+region=a] would appear unsatisfied when processing the
+	// second non-voter, causing both non-voters to be assigned to [+region=a]. By
+	// counting both voters and non-voters, the first non-voter assignment marks
+	// [+region=a] as satisfied, allowing the second non-voter to be assigned to
+	// [+zone=b1]. See testdata/range_analyzed_constraints for examples
+	// illustrating this behavior.
 	isConstraintSatisfied := func(constraintIndex int) bool {
 		return len(ac.satisfiedByReplica[voterIndex][constraintIndex])+
 			len(ac.satisfiedByReplica[nonVoterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
