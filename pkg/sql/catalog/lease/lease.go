@@ -2804,11 +2804,18 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 		}
 		log.Dev.Warningf(ctx, "range feed was not closed before a restart attempt")
 	}
+	// Always populate a timestamp on the range feed, otherwise we run the risk
+	// of a race condition between when the range feed selects a timestamp versus
+	// when we start handing out leases (i.e. close waitForInit) The startup below
+	// is asynchronous in nature, so the timestamp could be after close the waitForInit
+	// channel.
+	now := m.storage.db.KV().Clock().Now()
+	log.Dev.Infof(ctx, "starting lease manager rangefeed at timestamp %s", now)
 	// Ignore errors here because they indicate that the server is shutting down.
 	// Also note that the range feed automatically shuts down when the server
 	// shuts down, so we don't need to call Close() ourselves.
 	m.mu.rangeFeed, _ = m.rangeFeedFactory.RangeFeed(
-		ctx, "lease", []roachpb.Span{descriptorTableSpan}, hlc.Timestamp{}, handleEvent,
+		ctx, "lease", []roachpb.Span{descriptorTableSpan}, now, handleEvent,
 		rangefeed.WithSystemTablePriority(),
 		rangefeed.WithOnCheckpoint(handleCheckpoint),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
