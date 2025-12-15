@@ -115,6 +115,15 @@ func (ic internedConstraint) unintern(interner *stringInterner) roachpb.Constrai
 
 // cmp compares two internedConstraint, returning -1 if ic < b, 0 if ic == b,
 // and 1 if ic > b.
+//
+// This ordering has no semantic meaning regarding strictness or set
+// containment. It is purely lexicographic: first by typ, then key, then value.
+// Its purpose is to enable merge-based comparison of two sorted constraint
+// lists in relationship.
+//
+// Example: +region=a < -region=b because Required(0) < Prohibited(1). This does
+// not imply that +region=a is stricter than -region=b. They simply mean that
+// they are two distinct constraints.
 func (ic internedConstraint) cmp(b internedConstraint) int {
 	if ic.typ != b.typ {
 		return cmp.Compare(ic.typ, b.typ)
@@ -125,41 +134,8 @@ func (ic internedConstraint) cmp(b internedConstraint) int {
 	return cmp.Compare(ic.value, b.value)
 }
 
-// less defines an arbitrary total ordering for internedConstraint, used only to
-// sort constraints into a consistent order. This ordering has no semantic
-// meaning regarding strictness or set containment is purely lexicographic:
-// first by typ, then key, then value. Its purpose is to enable merge-based
-// comparison of two sorted constraint lists in relationship.
-//
-// For example, +region=a < -region=b because Required(0) < Prohibited(1). This
-// does not imply that +region=a is stricter than -region=b. They simply mean
-// that they are two distinct constraints.
-func (ic internedConstraint) less(b internedConstraint) bool {
-	// NB: (typ, key) must be compared before value so that relationship can
-	// detect non-intersecting constraints that share (typ, key) but differ in
-	// value with a single pass.
-	if ic.typ != b.typ {
-		return ic.typ < b.typ
-	}
-	if ic.key != b.key {
-		return ic.key < b.key
-	}
-	if ic.value != b.value {
-		return ic.value < b.value
-	}
-	return false
-}
-
 // constraints are in increasing order using internedConstraint.less.
 type constraintsConj []internedConstraint
-
-// Computes an FNV-1a hash for constraintsConj. Note: Potential hash collisions
-// may exist between different constraintsConj, so this hash is intended only
-// for optimization, and must be accompanied by a full equality check for
-// correctness.
-func (cc constraintsConj) hash() uint64 {
-	return constraintsDisj{cc}.hash()
-}
 
 // conjunctionRelationship describes the binary relationship between sets of
 // stores satisfying two constraint conjunctions. A constraint conjunction
@@ -305,7 +281,7 @@ func (cc constraintsConj) relationship(b constraintsConj) conjunctionRelationshi
 			// first in the sort order and differs between these two conjuncts.
 		}
 		// If cc[i] < b[j], we've found a conjunct unique to cc.
-		if cc[i].less(b[j]) {
+		if cc[i].cmp(b[j]) < 0 {
 			extraInCC++
 			i++
 			continue
@@ -2214,7 +2190,7 @@ func (si *stringInterner) internConstraintsConj(constraints []roachpb.Constraint
 		})
 	}
 	sort.Slice(rv, func(j, k int) bool {
-		return rv[j].less(rv[k])
+		return rv[j].cmp(rv[k]) < 0
 	})
 	j := 0
 	// De-dup conjuncts in the conjunction.
