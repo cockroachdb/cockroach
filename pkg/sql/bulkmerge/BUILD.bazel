@@ -19,6 +19,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/ccl/storageccl",
+        "//pkg/cloud/cloudpb",
         "//pkg/keys",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
@@ -34,6 +35,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/storage",
+        "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
