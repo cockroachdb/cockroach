@@ -18,8 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -178,5 +180,40 @@ func (mu metadataUpdater) CreateRowLevelTTLSchedule(
 
 	// Update the table descriptor with the schedule ID.
 	mutTbl.RowLevelTTL.ScheduleID = sj.ScheduleID()
+
+	// Also update the ScheduleID in the declarative schema changer state's
+	// RowLevelTTL elements. This is necessary so that if the schema change
+	// fails and needs to roll back, the DeleteSchedule operation will have
+	// the correct ScheduleID to delete.
+	updateRowLevelTTLElementScheduleID(mutTbl, sj.ScheduleID())
+
 	return mu.descriptors.WriteDesc(ctx, false /* kvTrace */, mutTbl, mu.txn.KV())
+}
+
+// updateRowLevelTTLElementScheduleID updates the ScheduleID in any RowLevelTTL
+// elements in the declarative schema changer state. This is needed so that
+// rollback operations can correctly identify and delete the schedule.
+func updateRowLevelTTLElementScheduleID(mutTbl *tabledesc.Mutable, scheduleID jobspb.ScheduleID) {
+	state := mutTbl.GetDeclarativeSchemaChangerState()
+	if state == nil {
+		return
+	}
+
+	// Look for RowLevelTTL elements going PUBLIC and update their ScheduleID.
+	modified := false
+	for i := range state.Targets {
+		if ttl := state.Targets[i].GetRowLevelTTL(); ttl != nil {
+			// Update RowLevelTTL elements that are going PUBLIC (being added)
+			// and don't already have a ScheduleID set.
+			if state.Targets[i].TargetStatus == scpb.Status_PUBLIC &&
+				ttl.TableID == mutTbl.GetID() && ttl.ScheduleID == 0 {
+				ttl.ScheduleID = scheduleID
+				modified = true
+			}
+		}
+	}
+
+	if modified {
+		mutTbl.SetDeclarativeSchemaChangerState(state)
+	}
 }

@@ -2302,13 +2302,6 @@ func TestReadCommittedLogic_truncate(
 	runLogicTest(t, "truncate")
 }
 
-func TestReadCommittedLogic_truncate_with_concurrent_mutation(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "truncate_with_concurrent_mutation")
-}
-
 func TestReadCommittedLogic_tsvector(
 	t *testing.T,
 ) {

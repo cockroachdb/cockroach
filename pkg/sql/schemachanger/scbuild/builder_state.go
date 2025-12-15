@@ -605,36 +605,40 @@ func (b *builderState) IsTableEmpty(table *scpb.Table) bool {
 	return b.tr.IsTableEmpty(b.ctx, table.TableID, index.IndexID)
 }
 
-// ValidateTTLExpirationExpression validates the ttl_expiration_expression for
+// TTLExpirationExpression returns a validated TTL expiration expression for
 // a table's row-level TTL configuration. It verifies that the expression:
 // - type-checks as a TIMESTAMPTZ
 // - is not volatile
 // - references valid columns in the table
-func (b *builderState) ValidateTTLExpirationExpression(
-	tableID catid.DescID, ttl *catpb.RowLevelTTL,
-) {
+func (b *builderState) TTLExpirationExpression(
+	tableID catid.DescID,
+	ttl *catpb.RowLevelTTL,
+	getAllNonDropColumnsFn func() colinfo.ResultColumns,
+	columnLookupByNameFn schemaexpr.ColumnLookupFn,
+) tree.Expr {
 	if ttl == nil || !ttl.HasExpirationExpr() {
-		return
+		return nil
 	}
 	b.ensureDescriptor(tableID)
-	desc := b.descCache[tableID].desc
-	tbl, ok := desc.(catalog.TableDescriptor)
-	if !ok {
-		panic(errors.AssertionFailedf("Expected table descriptor for ID %d, instead got %s",
-			desc.GetID(), desc.DescriptorType()))
-	}
 	ns := b.QueryByID(tableID).FilterNamespace().MustGetOneElement()
 	tableName := tree.MakeTableNameFromPrefix(b.NamePrefix(ns), tree.Name(ns.Name))
-	if err := schemaexpr.ValidateTTLExpirationExpression(
+	serializedExpr, err := schemaexpr.ValidateTTLExpirationExpression(
 		b.ctx,
-		tbl,
 		b.semaCtx,
 		&tableName,
 		ttl,
 		b.clusterSettings.Version.ActiveVersion(b.ctx),
-	); err != nil {
+		getAllNonDropColumnsFn,
+		columnLookupByNameFn,
+	)
+	if err != nil {
 		panic(err)
 	}
+	parsedExpr, err := parser.ParseExpr(serializedExpr)
+	if err != nil {
+		panic(err)
+	}
+	return parsedExpr
 }
 
 func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
