@@ -209,6 +209,7 @@ var StartCompactionJob func(
 	collectionURI, incrLoc []string,
 	fullBackupPath string,
 	encryptionOpts jobspb.BackupEncryptionOptions,
+	executionLocality roachpb.Locality,
 	start, end hlc.Timestamp,
 ) (jobspb.JobID, error)
 
@@ -9406,8 +9407,27 @@ WHERE object_id = table_descriptor_id
 				if fullPath == "LATEST" {
 					return nil, errors.Newf("full_backup_path must be explicitly specified and not LATEST")
 				}
+
+				var executionLocality roachpb.Locality
+				if backupAST.Options.ExecutionLocality != nil {
+					if strVal, ok := backupAST.Options.ExecutionLocality.(*tree.StrVal); ok {
+						s := strVal.RawString()
+						if s != "" {
+							if err := executionLocality.Set(s); err != nil {
+								return nil, err
+							}
+						}
+					} else {
+						return nil, errors.Newf(
+							"expected string value, got %+v", backupAST.Options.ExecutionLocality,
+						)
+					}
+				}
+
 				jobID, err := StartCompactionJob(
-					ctx, evalCtx.Planner, scheduleID, collectionURI, incrLoc, fullPath, encryption, startTs, endTs,
+					ctx, evalCtx.Planner, scheduleID,
+					collectionURI, incrLoc, fullPath, encryption, executionLocality,
+					startTs, endTs,
 				)
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},

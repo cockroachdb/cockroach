@@ -73,8 +73,6 @@ func maybeStartCompactionJob(
 	}
 
 	switch {
-	case len(triggerJob.ExecutionLocality.Tiers) != 0:
-		return 0, errors.New("execution locality not supported for compaction")
 	case triggerJob.RevisionHistory:
 		return 0, errors.New("revision history not supported for compaction")
 	case triggerJob.ScheduleID == 0:
@@ -202,6 +200,7 @@ func StartCompactionJob(
 	collectionURI, incrLoc []string,
 	fullBackupPath string,
 	encryptionOpts jobspb.BackupEncryptionOptions,
+	executionLocality roachpb.Locality,
 	start, end hlc.Timestamp,
 ) (jobspb.JobID, error) {
 	planHook, ok := planner.(sql.PlanHookState)
@@ -219,6 +218,7 @@ func StartCompactionJob(
 			Exists:             true,
 		},
 		EncryptionOptions: &encryptionOpts,
+		ExecutionLocality: executionLocality,
 		Compact:           true,
 	}
 	jobID := planHook.ExecCfg().JobRegistry.MakeJobID()
@@ -603,6 +603,7 @@ func updateCompactionBackupDetails(
 		ResolvedCompleteDbs: lastBackup.CompleteDbs,
 		FullCluster:         lastBackup.DescriptorCoverage == tree.AllDescriptors,
 		ScheduleID:          initialDetails.ScheduleID,
+		ExecutionLocality:   initialDetails.ExecutionLocality,
 		Compact:             true,
 	}
 	return compactedDetails, nil
