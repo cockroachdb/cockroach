@@ -907,7 +907,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	})
 
 	mmaAlloc, mmaAllocSync := func() (mmaprototype.Allocator, *mmaintegration.AllocatorSync) {
-		mmaAllocState := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{}, stores,
+		mmaAllocState := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
 			rand.New(rand.NewSource(timeutil.Now().UnixNano())))
 		allocatorSync := mmaintegration.NewAllocatorSync(storePool, mmaAllocState, st, nil)
 		// We make sure that mmaAllocState is returned through the `Allocator`
