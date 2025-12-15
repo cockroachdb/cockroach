@@ -34,7 +34,7 @@ CREATE STATISTICS full_stat FROM products;
 # Clear the stat cache so that creating partial statistics has access to the
 # latest full statistic.
 statement ok
-SELECT crdb_internal.clear_table_stats_cache();
+SELECT information_schema.crdb_clear_table_stats_cache();
 
 # Test stats collections with WHERE expressions
 statement ok
@@ -159,7 +159,7 @@ CREATE STATISTICS products_full FROM products;
 # Clear the stat cache so that creating partial statistics has access to the
 # latest full statistic.
 statement ok
-SELECT crdb_internal.clear_table_stats_cache();
+SELECT information_schema.crdb_clear_table_stats_cache();
 
 statement ok
 CREATE STATISTICS stat_discount ON discount_price FROM products WHERE discount_price > 30
@@ -222,7 +222,7 @@ CREATE STATISTICS fullstat FROM partial_indexes;
 # Clear the stat cache so that creating partial statistics has access to the
 # latest full statistic.
 statement ok
-SELECT crdb_internal.clear_table_stats_cache();
+SELECT information_schema.crdb_clear_table_stats_cache();
 
 # Filter implies the partial index predicate, so it can be used.
 statement ok

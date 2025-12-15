@@ -676,6 +676,7 @@ var functions = func() *functionsMu {
 			"crdb_internal.create_join_token",
 			"crdb_internal.reset_multi_region_zone_configs_for_database",
 			"crdb_internal.reset_index_usage_stats",
+			"information_schema.crdb_reset_index_usage_stats",
 			"crdb_internal.start_replication_stream",
 			"crdb_internal.replication_stream_progress",
 			"crdb_internal.complete_replication_stream",
@@ -683,6 +684,7 @@ var functions = func() *functionsMu {
 			"crdb_internal.request_statement_bundle",
 			"crdb_internal.set_compaction_concurrency",
 			"crdb_internal.reset_sql_stats",
+			"information_schema.crdb_reset_sql_stats",
 		} {
 			skip = skip || strings.Contains(def.Name, substr)
 		}

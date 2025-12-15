@@ -273,7 +273,7 @@ func TestStmtStatsEnable(t *testing.T) {
 
 	sqlConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
-	sqlConn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+	sqlConn.Exec(t, "SELECT information_schema.crdb_reset_sql_stats()")
 
 	appName := "TestStmtStatsEnable"
 	sqlConn.Exec(t, "SET application_name = $1", appName)

@@ -1303,6 +1303,19 @@ func TestUnprivilegedUserResetIndexUsageStats(t *testing.T) {
 	)
 
 	require.Contains(t, err.Error(), "user non_admin_user does not have REPAIRCLUSTER system privilege")
+
+	// Test that information_schema.crdb_reset_index_usage_stats has the same behavior
+	_, err = ie.ExecEx(
+		ctx,
+		"test-reset-index-usage-stats-information-schema-as-non-admin-user",
+		nil, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: username.MakeSQLUsernameFromPreNormalizedString("non_admin_user"),
+		},
+		"SELECT information_schema.crdb_reset_index_usage_stats()",
+	)
+
+	require.Contains(t, err.Error(), "user non_admin_user does not have REPAIRCLUSTER system privilege")
 }
 
 // TestCombinedStatementUsesCorrectSourceTable tests that requests read from
