@@ -1845,6 +1845,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 					"expected LineString",
 					"geometry type is unsupported",
 					"invalid escape string",
+					"invalid input syntax for type",
 					"invalid regular expression",
 					"no locations to init GEOS",
 					"parameter has to be of type Point",
