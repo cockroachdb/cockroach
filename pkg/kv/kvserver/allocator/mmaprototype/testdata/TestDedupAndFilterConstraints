@@ -1,0 +1,79 @@
+# Empty input - no constraints.
+dedup
+----
+(empty)
+
+# Single constraint - no combining needed.
+dedup
+num-replicas=3 +region=us-west-1
+----
++region=us-west-1:3
+
+# Dedup duplicate constraints.
+# [+region=us-west-1]: 1 + [+region=us-west-1]: 1 => [+region=us-west-1]: 2
+dedup
+num-replicas=1 +region=us-west-1
+num-replicas=1 +region=us-west-1
+----
++region=us-west-1:2
+
+# Empty constraints (no constraint part).
+dedup
+num-replicas=1
+----
+:1
+
+# No duplicates - different constraints remain separate.
+dedup
+num-replicas=1 +region=us-west-1
+num-replicas=2 +region=us-east-1
+----
++region=us-west-1:1
++region=us-east-1:2
+
+# Multiple constraints in conjunction - duplicates dedup.
+dedup
+num-replicas=1 +region=us-west-1 +zone=a
+num-replicas=2 +region=us-west-1 +zone=a
+----
++region=us-west-1,+zone=a:3
+
+# Required vs prohibited not dedup - different constraint types.
+dedup
+num-replicas=1 +region=us-west-1
+num-replicas=1 -region=us-west-1
+----
++region=us-west-1:1
+-region=us-west-1:1
+
+# Three duplicates dedup: 1 + 2 + 1 = 4.
+dedup
+num-replicas=1 +region=us-west-1
+num-replicas=2 +region=us-west-1
+num-replicas=1 +region=us-west-1
+----
++region=us-west-1:4
+
+# Mixed duplicates and non-duplicates.
+dedup
+num-replicas=1 +region=us-west-1
+num-replicas=2 +region=us-east-1
+num-replicas=1 +region=us-west-1
+num-replicas=1 +region=us-east-1
+----
++region=us-west-1:2
++region=us-east-1:3
+
+# Filter zero numReplicas entries.
+dedup
+num-replicas=0 +region=us-west-1
+num-replicas=3 +region=us-east-1
+----
++region=us-east-1:3
+
+# All zero numReplicas - should return empty.
+dedup
+num-replicas=0 +region=us-west-1
+num-replicas=0 +region=us-east-1
+----
+(empty)

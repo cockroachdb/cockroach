@@ -7,6 +7,7 @@ package mmaprototype
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"math"
 	"slices"
@@ -15,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -112,29 +114,25 @@ func (ic internedConstraint) unintern(interner *stringInterner) roachpb.Constrai
 	}
 }
 
-// less defines an arbitrary total ordering for internedConstraint, used only to
-// sort constraints into a consistent order. This ordering has no semantic
-// meaning regarding strictness or set containment is purely lexicographic:
-// first by typ, then key, then value. Its purpose is to enable merge-based
-// comparison of two sorted constraint lists in relationship.
+// cmp compares two internedConstraint, returning -1 if ic < b, 0 if ic == b,
+// and 1 if ic > b.
 //
-// For example, +region=a < -region=b because Required(0) < Prohibited(1). This
-// does not imply that +region=a is stricter than -region=b. They simply mean
-// that they are two distinct constraints.
-func (ic internedConstraint) less(b internedConstraint) bool {
-	// NB: (typ, key) must be compared before value so that relationship can
-	// detect non-intersecting constraints that share (typ, key) but differ in
-	// value with a single pass.
+// This ordering has no semantic meaning regarding strictness or set
+// containment. It is purely lexicographic: first by typ, then key, then value.
+// Its purpose is to enable merge-based comparison of two sorted constraint
+// lists in relationship.
+//
+// Example: +region=a < -region=b because Required(0) < Prohibited(1). This does
+// not imply that +region=a is stricter than -region=b. They simply mean that
+// they are two distinct constraints.
+func (ic internedConstraint) cmp(b internedConstraint) int {
 	if ic.typ != b.typ {
-		return ic.typ < b.typ
+		return cmp.Compare(ic.typ, b.typ)
 	}
 	if ic.key != b.key {
-		return ic.key < b.key
+		return cmp.Compare(ic.key, b.key)
 	}
-	if ic.value != b.value {
-		return ic.value < b.value
-	}
-	return false
+	return cmp.Compare(ic.value, b.value)
 }
 
 // constraints are in increasing order using internedConstraint.less.
@@ -284,7 +282,7 @@ func (cc constraintsConj) relationship(b constraintsConj) conjunctionRelationshi
 			// first in the sort order and differs between these two conjuncts.
 		}
 		// If cc[i] < b[j], we've found a conjunct unique to cc.
-		if cc[i].less(b[j]) {
+		if cc[i].cmp(b[j]) < 0 {
 			extraInCC++
 			i++
 			continue
@@ -360,6 +358,81 @@ func (icc internedConstraintsConjunction) unintern(
 		cc.Constraints = append(cc.Constraints, c.unintern(interner))
 	}
 	return cc
+}
+
+// cmp compares two constraintsConj, returning -1 if cc < b, 0 if cc == b, and 1
+// if cc > b. Note that this does not perform a semantic comparison and just
+// represents a sorting order.
+func (cc constraintsConj) cmp(b constraintsConj) int {
+	n := min(len(cc), len(b))
+	for i := 0; i < n; i++ {
+		cmp := cc[i].cmp(b[i])
+		if cmp != 0 {
+			return cmp
+		}
+	}
+	if n < len(cc) {
+		return +1
+	}
+	if n < len(b) {
+		return -1
+	}
+	return 0
+}
+
+// dedupAndFilterConstraints filters out constraint conjunctions with
+// numReplicas == 0 and combines duplicate conjunctions (those with the same
+// constraints) by summing their numReplicas.
+// Example:
+// constraints: [+region=us-west-1]: 1, [+region=us-west-1]: 1, []: 3, []: 1,
+// [+region=eu]: 0
+// result: [+region=us-west-1]: 2, []: 4
+// TODO(wenyihu6): we could take in a scratch space to avoid allocating indices
+func dedupAndFilterConstraints(
+	constraints []internedConstraintsConjunction,
+) []internedConstraintsConjunction {
+	n := len(constraints)
+	if n == 0 {
+		return constraints
+	}
+	// indices represents the positions in the original constraints.
+	indices := make([]int, n)
+	for i := range indices {
+		indices[i] = i
+	}
+	// Sort the indices such that equal constraints get grouped and within a
+	// sequence of equal constraints, the smallest index sorts first. The latter
+	// allows us to preserve the original ordering after de-duplication.
+	slices.SortFunc(indices, func(i, j int) int {
+		return cmp.Or(constraints[i].constraints.cmp(constraints[j].constraints),
+			cmp.Compare(i, j))
+	})
+	// j is the index into the updated indices slice, where the value
+	// is the index of the original constraint that is preserved.
+	j := 0
+	// Say the original indices slice is the following, where the parentheses
+	// represent equal constraints: (3, 5), (1, 4), (0, 2). At the end, we will
+	// have 3, 1, 0 in the slice.
+	for i := 1; i < n; i++ {
+		if constraints[indices[j]].constraints.cmp(constraints[indices[i]].constraints) == 0 {
+			constraints[indices[j]].numReplicas += constraints[indices[i]].numReplicas
+		} else {
+			j++
+			indices[j] = indices[i]
+		}
+	}
+	indices = indices[:j+1]
+	// Sort these indices in increasing order to preserve original ordering.
+	slices.Sort(indices)
+	// Copy to result, filtering out numReplicas == 0.
+	k := 0
+	for _, idx := range indices {
+		if constraints[idx].numReplicas != 0 {
+			constraints[k] = constraints[idx]
+			k++
+		}
+	}
+	return constraints[:k]
 }
 
 type internedLeasePreference struct {
@@ -558,7 +631,7 @@ func normalizeConstraints(
 			constraints: interner.internConstraintsConj(nil),
 		})
 	}
-	return rv, nil
+	return dedupAndFilterConstraints(rv), nil
 }
 
 // relationshipVoterAndAll represents the relationship between a voter constraint
@@ -593,22 +666,22 @@ func (conf *normalizedSpanConfig) buildVoterAndAllRelationships() (
 	// constraint.
 	// Example:
 	// voterConstraints: [+region=a]: 2, []: 2 => emptyVoterConstraintIndex = 1
+	// TODO(wenyihu6): instead of fatal, we should return an error so that user
+	// input does not cause a crash.
 	emptyVoterConstraintIndex = -1
 	for i := range conf.voterConstraints {
 		if len(conf.voterConstraints[i].constraints) == 0 {
 			if emptyVoterConstraintIndex != -1 {
-				return nil, -1, -1,
-					errors.Errorf("multiple empty voter constraints: %v and %v",
-						conf.voterConstraints[emptyVoterConstraintIndex], conf.voterConstraints[i])
+				log.KvDistribution.Fatalf(context.Background(), "multiple empty voter constraints: %v and %v",
+					conf.voterConstraints[emptyVoterConstraintIndex], conf.voterConstraints[i])
 			}
 			emptyVoterConstraintIndex = i
 		}
 		for j := range conf.constraints {
 			if len(conf.constraints[j].constraints) == 0 {
 				if emptyConstraintIndex != -1 && emptyConstraintIndex != j {
-					return nil, -1, -1,
-						errors.Errorf("multiple empty constraints: %v and %v",
-							conf.constraints[emptyConstraintIndex], conf.constraints[j])
+					log.KvDistribution.Fatalf(context.Background(), "multiple empty constraints: %v and %v",
+						conf.constraints[emptyConstraintIndex], conf.constraints[j])
 				}
 				emptyConstraintIndex = j
 			}
@@ -716,11 +789,9 @@ func makeNormalizedConstraintsEnv(conf *normalizedSpanConfig) normalizedConstrai
 func (ncEnv *normalizedConstraintsEnv) buildVoterConstraints() []internedConstraintsConjunction {
 	vc := make([]internedConstraintsConjunction, 0, len(ncEnv.voterConstraints))
 	for i := range ncEnv.voterConstraints {
-		if ncEnv.voterConstraints[i].numReplicas > 0 {
-			vc = append(vc, ncEnv.voterConstraints[i].internedConstraintsConjunction)
-		}
+		vc = append(vc, ncEnv.voterConstraints[i].internedConstraintsConjunction)
 	}
-	return vc
+	return dedupAndFilterConstraints(vc)
 }
 
 // moveToEnd moves the voter constraint at idx to the end of the slice. This is
@@ -878,6 +949,7 @@ func (conf *normalizedSpanConfig) normalizeEmptyConstraints() {
 		if conf.constraints[n].numReplicas == 0 {
 			conf.constraints = conf.constraints[:n]
 		}
+		conf.constraints = dedupAndFilterConstraints(conf.constraints)
 	}
 }
 
@@ -2122,7 +2194,7 @@ func (si *stringInterner) internConstraintsConj(constraints []roachpb.Constraint
 		})
 	}
 	sort.Slice(rv, func(j, k int) bool {
-		return rv[j].less(rv[k])
+		return rv[j].cmp(rv[k]) < 0
 	})
 	j := 0
 	// De-dup conjuncts in the conjunction.
