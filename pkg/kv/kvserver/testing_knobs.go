@@ -568,6 +568,13 @@ type StoreTestingKnobs struct {
 	// messages because it has no updates and heartbeats are turned off. This
 	// simulation is only meaningful for ranges that use leader leases.
 	DisableUpdateLastUpdateTimesMapOnRaftGroupStep func(r *Replica) bool
+
+	// SysBytesVerificationOnRaftApply, if set, will result in SysBytes
+	// verification on every Raft command application. This is done by recomputing
+	// SysBytes from the actual applied state and comparing it with the stats in
+	// the batch being applied. The result of the comparison (mismatch or not) is
+	// reported via the callback.
+	SysBytesVerificationOnRaftApply func(mismatch bool)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
