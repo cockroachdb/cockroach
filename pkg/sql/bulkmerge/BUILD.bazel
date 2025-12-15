@@ -20,6 +20,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/ccl/storageccl",
+        "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/sql",
@@ -53,6 +54,7 @@ go_test(
         "//pkg/ccl/storageccl",
         "//pkg/cloud",
         "//pkg/cloud/externalconn/providers",
+        "//pkg/keys",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
@@ -69,6 +71,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

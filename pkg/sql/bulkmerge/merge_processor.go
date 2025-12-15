@@ -10,6 +10,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
@@ -243,7 +244,7 @@ func (m *bulkMergeProcessor) mergeSSTs(
 		return execinfrapb.BulkMergeSpec_Output{}, nil
 	}
 
-	sstMaxSize := targetFileSize.Get(&m.flowCtx.EvalCtx.Settings.SV)
+	sstTargetSize := targetFileSize.Get(&m.flowCtx.EvalCtx.Settings.SV)
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: mergeSpan.Key,
@@ -264,7 +265,7 @@ func (m *bulkMergeProcessor) mergeSSTs(
 
 	var mergedSSTs execinfrapb.BulkMergeSpec_Output
 
-	var firstKey roachpb.Key
+	var firstKey, endKey roachpb.Key
 	var sstSize int64
 	// Write all KVs
 	for iter.SeekGE(storage.MVCCKey{Key: mergeSpan.Key}); ; iter.NextKey() {
@@ -285,15 +286,18 @@ func (m *bulkMergeProcessor) mergeSSTs(
 			firstKey = key.Key.Clone()
 		}
 
-		// Write the key-value pair
-		if err := mergedSSTWriter.PutRawMVCC(key, val); err != nil {
-			return execinfrapb.BulkMergeSpec_Output{}, err
+		// If our file has grown too large, pick an endpoint after the current key.
+		if endKey == nil && sstSize >= sstTargetSize {
+			safeKey, err := keys.EnsureSafeSplitKey(key.Key)
+			if err != nil {
+				return execinfrapb.BulkMergeSpec_Output{}, err
+			}
+			endKey = safeKey.PrefixEnd()
 		}
-		sstSize += int64(len(key.Key) + len(val))
 
-		// Flush large SSTs after writing the key
-		if sstSize >= sstMaxSize {
-			endKey := key.Key.Next()
+		// If we've selected an endKey and this key is at or beyond that point, create a new SST
+		// for the current key.
+		if endKey != nil && key.Key.Compare(endKey) >= 0 {
 			mergedSSTs.SSTs = append(mergedSSTs.SSTs, execinfrapb.BulkMergeSpec_SST{
 				StartKey: firstKey,
 				EndKey:   endKey,
@@ -308,10 +312,23 @@ func (m *bulkMergeProcessor) mergeSSTs(
 				return execinfrapb.BulkMergeSpec_Output{}, err
 			}
 			mergedSSTWriter = storage.MakeIngestionSSTWriter(ctx, m.flowCtx.EvalCtx.Settings, mergedSSTFile)
-			// Next SST starts where this one ended to maintain contiguous non-overlapping ranges
+
+			// Next SST starts where this one ended to maintain contiguous
+			// non-overlapping ranges. This has the side-effect of the startKey
+			// not necessarily being the first key in the file. If we use the first
+			// observed key after the break as the StartKey, we end up with ranges
+			// that start at /0, which is not exactly wrong, but it's different than
+			// what is observed with non-distributed ingest.
 			firstKey = endKey
+			endKey = nil
 			sstSize = 0
 		}
+
+		// Write the key-value pair
+		if err := mergedSSTWriter.PutRawMVCC(key, val); err != nil {
+			return execinfrapb.BulkMergeSpec_Output{}, err
+		}
+		sstSize += int64(len(key.Key) + len(val))
 	}
 
 	// Finish writing the SST
