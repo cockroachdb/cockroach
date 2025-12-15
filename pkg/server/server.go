@@ -907,7 +907,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	})
 
 	mmaAlloc, mmaAllocSync := func() (mmaprototype.Allocator, *mmaintegration.AllocatorSync) {
-		mmaAllocState := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{}, stores,
+		mmaAllocState := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
 			rand.New(rand.NewSource(timeutil.Now().UnixNano())))
 		allocatorSync := mmaintegration.NewAllocatorSync(storePool, mmaAllocState, st, nil)
 		// We make sure that mmaAllocState is returned through the `Allocator`
@@ -2090,6 +2090,11 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// Raft commands like log application and snapshot application may be able
 	// to bypass admission control.
 	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, pmp, mrp, s.node)
+
+	s.node.stores.VisitStores(func(store *kvserver.Store) error {
+		s.node.storeCfg.MMAllocator.InitMetricsForLocalStore(store.StoreID(), store.Registry())
+		return nil
+	})
 
 	// Once all stores are initialized, check if offline storage recovery
 	// was done prior to start and record any actions appropriately.
