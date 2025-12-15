@@ -950,8 +950,7 @@ func TestNormalizedVoterAllRelationships(t *testing.T) {
 }
 
 // TestDedupAndFilterConstraints tests the dedupAndFilterConstraints function
-// which deduplicates constraints and voter constraints by summing their
-// numReplicas.
+// which deduplicates constraints by summing their numReplicas.
 func TestDedupAndFilterConstraints(t *testing.T) {
 	interner := newStringInterner()
 
@@ -959,12 +958,15 @@ func TestDedupAndFilterConstraints(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "dedup":
-				// Parse span config.
-				conf := parseSpanConfig(t, d)
-
-				// Intern constraints and call dedupAndFilterConstraints directly.
+				// Parse input lines directly as internedConstraintsConjunction.
+				// Each line format: num-replicas=N [+key=val|-key=val]...
 				var constraints []internedConstraintsConjunction
-				for _, cc := range conf.Constraints {
+				for _, line := range strings.Split(d.Input, "\n") {
+					parts := strings.Fields(line)
+					if len(parts) == 0 {
+						continue
+					}
+					cc := parseConstraintsConj(t, parts)
 					constraints = append(constraints, internedConstraintsConjunction{
 						numReplicas: cc.NumReplicas,
 						constraints: interner.internConstraintsConj(cc.Constraints),
@@ -972,27 +974,15 @@ func TestDedupAndFilterConstraints(t *testing.T) {
 				}
 				constraints = dedupAndFilterConstraints(constraints)
 
-				// Intern voter constraints and call dedupAndFilterConstraints directly.
-				var voterConstraints []internedConstraintsConjunction
-				for _, cc := range conf.VoterConstraints {
-					voterConstraints = append(voterConstraints, internedConstraintsConjunction{
-						numReplicas: cc.NumReplicas,
-						constraints: interner.internConstraintsConj(cc.Constraints),
-					})
-				}
-				voterConstraints = dedupAndFilterConstraints(voterConstraints)
-
-				// Create normalizedSpanConfig with deduped constraints.
-				nConf := &normalizedSpanConfig{
-					numVoters:        conf.GetNumVoters(),
-					numReplicas:      conf.NumReplicas,
-					constraints:      constraints,
-					voterConstraints: voterConstraints,
-					interner:         interner,
-				}
-				// Format output using printSpanConfig.
+				// Format output.
 				var b strings.Builder
-				printSpanConfig(&b, nConf.uninternedConfig())
+				for _, icc := range constraints {
+					cc := icc.unintern(interner)
+					fmt.Fprintf(&b, "%s\n", cc.String())
+				}
+				if len(constraints) == 0 {
+					b.WriteString("(empty)\n")
+				}
 				return b.String()
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
