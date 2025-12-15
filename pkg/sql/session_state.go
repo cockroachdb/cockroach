@@ -134,6 +134,15 @@ func (p *planner) DeserializeSessionState(
 	sd.SessionData = m.SessionData
 	sd.LocalUnmigratableSessionData = evalCtx.SessionData().LocalUnmigratableSessionData
 	sd.LocalOnlySessionData = m.LocalOnlySessionData
+
+	// Note(davidh): The line below is mitigation for an issue with
+	// upgrades to 25.4 where the `AllowUnsafeInternals` field was
+	// introduced. The default value of this is `true` and setting it to
+	// `false` will incorrectly block executions that access internals on
+	// migrated sessions.
+	// TODO(davidh): Remove after 25.4 is rolled out everywhere. (CRDB-57952)
+	sd.LocalOnlySessionData.AllowUnsafeInternals = true
+
 	if sd.SessionUser().Normalized() != evalCtx.SessionData().SessionUser().Normalized() {
 		return nil, pgerror.Newf(
 			pgcode.InsufficientPrivilege,
