@@ -150,7 +150,7 @@ func (lq *leaseQueue) process(
 		err = repl.AdminTransferLease(ctx, transferOp.Target.StoreID, false /* bypassSafetyChecks */)
 		// Inform allocator sync that the change has been applied which applies
 		// changes to store pool and inform mma.
-		lq.as.PostApply(changeID, err == nil /*success*/)
+		lq.as.PostApply(ctx, changeID, err == nil /*success*/)
 		if err != nil {
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, transferOp.Target)
 		}
