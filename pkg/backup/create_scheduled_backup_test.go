@@ -151,6 +151,7 @@ func (h *testHelper) clearSchedules(t *testing.T) {
 func (h *testHelper) waitForScheduledJobState(
 	t *testing.T, scheduleID jobspb.ScheduleID, state jobs.State,
 ) {
+	t.Helper()
 	query := "SELECT status FROM " + h.env.SystemJobsTableName() +
 		" WHERE created_by_type=$1 AND created_by_id=$2 ORDER BY created DESC LIMIT 1"
 
