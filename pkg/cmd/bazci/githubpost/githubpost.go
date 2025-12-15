@@ -525,7 +525,16 @@ func listFailuresFromTestXML(
 		pkg := suite.Name
 		dotIdx := strings.LastIndexByte(pkg, '.')
 		if dotIdx > 0 {
+			// e.g. for a suite name like github.com/cockroachdb/cockroach/pkg/util/json.TestJSONErrors
+			// we want to extract the package name as github.com/cockroachdb/cockroach/pkg/util/json
 			pkg = pkg[:dotIdx]
+		} else if dotIdx < 0 {
+			// Test Suite does not contain '.' i.e. pkg/sql/opt/testutils/testcat/testcat_test_/testcat_test
+			// How to proceed?
+			// Is this even actionable? We should track this even if it's not.
+			// Should we do something here or later on?
+			// This test failure belongs on the suite level
+			//
 		}
 		for _, testCase := range suite.TestCases {
 			var result *buildutil.XMLMessage
@@ -572,16 +581,20 @@ func processFailures(
 ) error {
 	for test, testEvents := range failures {
 		if split := strings.SplitN(test.name, "/", 2); len(split) == 2 {
+			// e.g. TestJSONErrors/gostd
+			// if t.Run is used with the name parameter, the subtest name is appended to the parent test name delimmited by a slash.
 			parentTest, subTest := scopedTest{pkg: test.pkg, name: split[0]}, scopedTest{pkg: test.pkg, name: split[1]}
 			log.Printf("consolidating failed subtest %q into parent test %q", subTest.name, parentTest.name)
 			failures[parentTest] = append(failures[parentTest], testEvents...)
 			delete(failures, test)
 		} else {
+			// e.g. TestCatalog
 			log.Printf("failed parent test %q (no subtests)", test.name)
 			if _, ok := failures[test]; !ok {
 				return errors.AssertionFailedf("expected %q in 'failures'", test.name)
 			}
 		}
+		// Add a third case for error 142 cases?
 	}
 	// Sort the failed tests to make the unit tests for this script deterministic.
 	var failedTestNames []scopedTest
@@ -597,6 +610,45 @@ func processFailures(
 		for _, testEvent := range testEvents {
 			outputs = append(outputs, testEvent.Output)
 		}
+		// How to file an issue for error 142 case?
+		/*
+						Currently it looks like pkg/sql/opt/testutils/testcat/testcat_test_/testcat_test: pkg failed
+						Which is not really correct
+						What would be the package name? sql/opt/testutils/testcat ?
+
+						testcat_test_/testcat_test
+						* testcat_test_ is the test's directory
+						* name defined in go_test(name = "testcat_test", ...) BUILD.bazel
+
+					I guess something like "pkg/sql/opt/testutils/testcat/testcat_test_/testcat_test failed"
+					is fine for title?
+
+					Default Formatter depends on package name and test name to find the owner. will the grep work if we pass in "testcat_test" i.e. the
+					name defined in BUILD.bazel? maybe with a change in GetTestOwner (eventually getFile)??
+					* That grep would target the BUILD.bazel file and i just checked one of them and it's irfan sharif who is on dev inf
+					* are a lot of BUILD.bazel most recent commiters probably doesn't match the owning team of the test code?
+					"last committer to touch ... the first line of the source code that contains testName"
+
+					func DefaultFormatter(ctx context.Context, f Failure) (issues.IssueFormatter, issues.PostRequest) {
+						initCo()
+						teams, logs := co.GetTestOwner(f.packageName, f.testName)
+						for _, line := range logs {
+							log.Println(line)
+						}
+						repro := fmt.Sprintf("./dev test ./pkg/%s --race --stress -f %s",
+							trimPkg(f.packageName), f.testName)
+
+				OK so i don't see a way to conform the test.xml of error 142 cases to a Failure struct instance that can be used
+				by getFile to get the file of the test code
+
+				This would mean these types of tickets would be always routed to test-eng
+				Is there another way of identifying the owning team in this case?
+				Assuming there's a reason why .github/CODEOWNERS scanning doesn't work
+					* Otherwise why was this not the routing method vs. the git grep approach?
+
+			If no simple workaround available, we should create better titles / descriptions so test-eng can quickly identify
+			these issues and route these to the appropriate teams.
+		*/
 		err := fileIssue(ctx, Failure{
 			title:       fmt.Sprintf("%s: %s failed", trimPkg(test.pkg), test.name),
 			packageName: test.pkg,
