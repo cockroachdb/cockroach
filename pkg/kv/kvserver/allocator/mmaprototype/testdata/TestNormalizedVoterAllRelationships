@@ -234,8 +234,8 @@ input:
    +region=us-west:2
 normalization error: constraint replicas add up to more than configured replicas
 
-# Test error case: multiple empty constraints (via normalization adding empty
-# constraint).
+# Explicit [:2] expands to [:8] after merging empty constraints. Synthesizes
+# [:4] for unconstrained voters.
 normalized-voter-all-rels num-replicas=8 num-voters=5
 constraint num-replicas=2
 voter-constraint num-replicas=1 +region=us-west
@@ -260,7 +260,8 @@ table:
 	[idx=0][voter=:4] [all=:8] rel=equalSet
 	[idx=1][voter=+region=us-west:1] [all=:8] rel=strictSubset
 
-# Test error case: multiple explicit empty constraints.
+# Multiple explicit empty constraints [:2] and [:3] merge into [:5]. Synthesizes
+# [:2] for unconstrained voters.
 normalized-voter-all-rels num-replicas=5 num-voters=3
 constraint num-replicas=2
 constraint num-replicas=3
