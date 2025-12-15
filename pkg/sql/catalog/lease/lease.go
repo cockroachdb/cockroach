@@ -106,6 +106,12 @@ var LockedLeaseTimestamp = settings.RegisterBoolSetting(settings.ApplicationLeve
 	"sql.catalog.descriptor_lease.use_locked_timestamps.enabled",
 	"guarantees transactional version consistency for descriptors used by the lease manager,"+
 		"descriptors used can be intentionally older to support this",
+	true)
+
+var RetainOldVersionsForLocked = settings.RegisterBoolSetting(settings.ApplicationLevel,
+	"sql.catalog.descriptor_lease.lock_old_versions.enabled",
+	"enables retaining old versions to avoid retries when locked lease timestamps are enabled, at the expense "+
+		"of delaying schema changes",
 	false)
 
 var MaxBatchLeaseCount = settings.RegisterIntSetting(settings.ApplicationLevel,
@@ -1489,7 +1495,8 @@ func (m *Manager) purgeOldVersions(
 	// Optionally, acquire the refcount on the previous version for the locked
 	// leasing mode.
 	acquireLeaseOnPrevious := func() error {
-		if !GetLockedLeaseTimestampEnabled(ctx, m.storage.settings) {
+		if !GetLockedLeaseTimestampEnabled(ctx, m.storage.settings) ||
+			!RetainOldVersionsForLocked.Get(&m.storage.settings.SV) {
 			return nil
 		}
 		var handles []*closeTimeStampHandle
@@ -2008,8 +2015,18 @@ func (m *Manager) AcquireByName(
 	// way: look in the database to resolve the name, then acquire a new lease.
 	var err error
 	id, err := m.resolveName(ctx, timestamp.GetTimestamp(), parentID, parentSchemaID, name)
-	if err != nil {
+	if err != nil &&
+		(timestamp.GetTimestamp() == timestamp.GetBaseTimestamp() ||
+			!errors.Is(err, catalog.ErrDescriptorNotFound)) {
 		return nil, err
+	} else if errors.Is(err, catalog.ErrDescriptorNotFound) {
+		// The descriptor was not found at the lease timestamp, so attempt the
+		// real timestamp in use by this txn. This implies the object may have
+		// just been created.
+		id, err = m.resolveName(ctx, timestamp.GetBaseTimestamp(), parentID, parentSchemaID, name)
+		if err != nil {
+			return nil, err
+		}
 	}
 	desc, err := m.Acquire(ctx, timestamp, id)
 	if err != nil {

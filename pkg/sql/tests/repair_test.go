@@ -257,6 +257,8 @@ func TestDescriptorRepair(t *testing.T) {
 		args := base.TestServerArgs{}
 		args.Knobs.EventLog = &eventlog.EventLogTestingKnobs{SyncWrites: true}
 		s, db, _ := serverutils.StartServer(t, args)
+		_, err := db.Exec(`SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=false`)
+		require.NoError(t, err)
 		return s, db, func() {
 			s.Stopper().Stop(ctx)
 		}
@@ -267,6 +269,8 @@ func TestDescriptorRepair(t *testing.T) {
 		defer cleanup()
 		tdb := sqlutils.MakeSQLRunner(db)
 
+		// This test needs to disable wait for an initial version, since the initial version
+		// is intentionally bad, so the lease manager can never acquire it.
 		tdb.Exec(t, "CREATE DATABASE db")
 		tdb.Exec(t, "CREATE TABLE foobar()")
 
@@ -461,9 +465,13 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 		{ // 11
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
 			// then show that deleting the namespace entry succeeds with the force flag.
+			// This test needs to disable wait for initial version because the intitial version
+			// is intentionally bad, so the lease manager can never acquire it.
 			before: []string{
+				`SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=false`,
 				upsertInvalidDuplicateColumnDescriptorBefore,
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID, true);`,
+				`SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=true`,
 			},
 			op: `SELECT crdb_internal.unsafe_delete_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID, true);`,
 			expEventLogEntries: []eventLogPattern{
