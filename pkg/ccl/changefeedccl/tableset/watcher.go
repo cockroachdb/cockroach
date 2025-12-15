@@ -323,6 +323,22 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 				if !ok {
 					return nil
 				}
+			} else {
+				nameInfo, err := catalogkeys.DecodeNameMetadataKey(w.execCfg.Codec, kv.Key)
+				if err != nil {
+					return err
+				}
+
+				// Database-level namespace entry tombstone.
+				if nameInfo.ParentID == 0 && nameInfo.ParentSchemaID == 0 &&
+					tree.Name(nameInfo.Name) == w.dbName {
+					// Fail the watcher/changefeed: the target database entry was removed.
+					return changefeedbase.WithTerminalError(
+						errors.Newf("target database %q (id %d) dropped", w.dbName, w.filter.DatabaseID),
+					)
+				}
+
+				return nil
 			}
 
 			if log.V(2) {

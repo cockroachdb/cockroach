@@ -13488,3 +13488,38 @@ func TestChangefeedWatcherCleanupOnStop(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
+
+func TestDatabaseLevelChangefeedDropDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE db`)
+		sqlDB.Exec(t, `GRANT CHANGEFEED ON DATABASE db TO enterprisefeeduser`)
+		sqlDB.Exec(t, `CREATE TABLE db.foo (a INT PRIMARY KEY, b STRING)`)
+		feed := feed(t, f, `CREATE CHANGEFEED FOR DATABASE db`)
+		enterpriseFeed := feed.(cdctest.EnterpriseTestFeed)
+		waitForJobState(sqlDB, t, enterpriseFeed.JobID(), jobs.StateRunning)
+		sqlDB.Exec(t, `DROP DATABASE db`)
+		waitForJobState(sqlDB, t, enterpriseFeed.JobID(), jobs.StateFailed)
+		require.NoError(t, feed.Close())
+		require.Error(t, enterpriseFeed.FetchTerminalJobErr())
+	}
+	cdcTest(t, testFn, feedTestEnterpriseSinks, withAllowChangefeedErr(("feed should fail when database is dropped")))
+
+	testEmptyTablesetFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE db`)
+		sqlDB.Exec(t, `GRANT CHANGEFEED ON DATABASE db TO enterprisefeeduser`)
+		feed := feed(t, f, `CREATE CHANGEFEED FOR DATABASE db WITH hibernation_polling_frequency='1s'`)
+		enterpriseFeed := feed.(cdctest.EnterpriseTestFeed)
+		waitForJobState(sqlDB, t, enterpriseFeed.JobID(), jobs.StateRunning)
+		time.Sleep(5 * time.Second)
+		sqlDB.Exec(t, `DROP DATABASE db`)
+		waitForJobState(sqlDB, t, enterpriseFeed.JobID(), jobs.StateFailed)
+		require.NoError(t, feed.Close())
+		require.Error(t, enterpriseFeed.FetchTerminalJobErr())
+	}
+	cdcTest(t, testEmptyTablesetFn, feedTestEnterpriseSinks, withAllowChangefeedErr(("feed should fail when database is dropped")))
+}
