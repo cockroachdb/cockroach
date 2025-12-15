@@ -125,7 +125,7 @@ describe("StatementDiagnosticsHistoryView", () => {
     });
 
     const linkElement = screen.getByRole("link");
-    expect(linkElement.getAttribute("href")).toBe("/statement/true/123");
+    expect(linkElement.getAttribute("href")).toBe("/statement/123");
   });
 
   it("calls onCancelRequest when cancel button is clicked", async () => {

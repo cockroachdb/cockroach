@@ -144,16 +144,14 @@ export const StatementDiagnosticsHistoryView: React.FC<
       cell: record => {
         const fingerprint = record.statement_fingerprint;
         const statement = getStatementByFingerprint(fingerprint);
-        const { implicit_txn: implicitTxn = "true", query } =
-          statement?.key?.key_data || {};
+        const { query } = statement?.key?.key_data || {};
 
         if (isUndefined(query)) {
           return <StatementColumn fingerprint={fingerprint} />;
         }
 
-        const base = `/statement/${implicitTxn}`;
         const statementFingerprintID = statement.id.toString();
-        const path = `${base}/${encodeURIComponent(statementFingerprintID)}`;
+        const path = `/statement/${encodeURIComponent(statementFingerprintID)}`;
 
         return (
           <Link

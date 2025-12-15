@@ -321,16 +321,9 @@ describe("Routing to", () => {
     });
   });
 
-  describe("'/statements/:${appAttr}/:${statementAttr}' path", () => {
+  describe("'/statement/:${statementAttr}' path", () => {
     test("routes to <StatementDetails> component", () => {
-      navigateToPath("/statements/%24+internal/true");
-      screen.getByTestId("statementDetails");
-    });
-  });
-
-  describe("'/statements/:${implicitTxnAttr}/:${statementAttr}' path", () => {
-    test("routes to <StatementDetails> component", () => {
-      navigateToPath("/statements/implicit-txn-attr/statement-attr");
+      navigateToPath("/statement/statement-fingerprint-id");
       screen.getByTestId("statementDetails");
     });
   });
@@ -341,13 +334,6 @@ describe("Routing to", () => {
       expect(history.location.pathname + history.location.search).toBe(
         "/sql-activity?tab=Statements&view=fingerprints",
       );
-    });
-  });
-
-  describe("'/statement/:${implicitTxnAttr}/:${statementAttr}' path", () => {
-    test("routes to <StatementDetails> component", () => {
-      navigateToPath("/statement/implicit-attr/statement-attr/");
-      screen.getByTestId("statementDetails");
     });
   });
 
