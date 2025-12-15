@@ -73,7 +73,7 @@ func TestConstraintMatcher(t *testing.T) {
 					cpls = append(cpls, constraintAndPL{c: c, pl: pl})
 				}
 				sort.Slice(cpls, func(i, j int) bool {
-					return cpls[i].c.less(cpls[j].c)
+					return cpls[i].c.cmp(cpls[j].c) < 0
 				})
 				for _, cpl := range cpls {
 					c := cpl.c
