@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -1414,43 +1413,6 @@ func requiresTopicInValue(s Sink) bool {
 	return s.getConcreteType() == sinkTypeWebhook
 }
 
-// buildDatabaseWatcherFilterFromSpec constructs a tableset watcher filter from a
-// database-level changefeed target specification.
-func buildDatabaseWatcherFilterFromSpec(
-	spec jobspb.ChangefeedTargetSpecification,
-) (tableset.Filter, error) {
-	filter := tableset.Filter{
-		DatabaseID: spec.DescID,
-	}
-	if spec.FilterList != nil && len(spec.FilterList.Tables) > 0 {
-		switch spec.FilterList.FilterType {
-		case tree.IncludeFilter:
-			filter.IncludeTables = make(map[string]struct{})
-			for fqTableName := range spec.FilterList.Tables {
-				// TODO(#156859): use fully qualified names once watcher supports it.
-				// Extract just the table name from the fully qualified name (e.g., "db.public.table" -> "table")
-				tn, err := parser.ParseQualifiedTableName(fqTableName)
-				if err != nil {
-					return tableset.Filter{}, errors.Wrapf(err, "failed to parse name in filter list: %s", fqTableName)
-				}
-				filter.IncludeTables[tn.Object()] = struct{}{}
-			}
-		case tree.ExcludeFilter:
-			filter.ExcludeTables = make(map[string]struct{})
-			for fqTableName := range spec.FilterList.Tables {
-				// TODO(#156859): use fully qualified names once watcher supports it.
-				// Extract just the table name from the fully qualified name (e.g., "db.public.table" -> "table")
-				tn, err := parser.ParseQualifiedTableName(fqTableName)
-				if err != nil {
-					return tableset.Filter{}, errors.Wrapf(err, "failed to parse name in filter list: %s", fqTableName)
-				}
-				filter.ExcludeTables[tn.Object()] = struct{}{}
-			}
-		}
-	}
-	return filter, nil
-}
-
 var errDoneWatching = errors.New("done watching")
 
 func makeChangefeedDescription(
@@ -1856,12 +1818,15 @@ func (b *changefeedResumer) resumeWithRetries(
 			waitForTables := isDBLevelChangefeed(details) && targets.NumUniqueTables() == 0
 			if waitForTables {
 				// Create a watcher for the database.
-				filter, err := buildDatabaseWatcherFilterFromSpec(details.TargetSpecifications[0])
+				filter := tableset.Filter{
+					DatabaseID:  details.TargetSpecifications[0].DescID,
+					TableFilter: *details.TargetSpecifications[0].FilterList,
+				}
+
+				watcher, err = tableset.NewWatcher(ctx, filter, execCfg, watcherMemMonitor, int64(jobID))
 				if err != nil {
 					return err
 				}
-
-				watcher = tableset.NewWatcher(filter, execCfg, watcherMemMonitor, int64(jobID))
 				g.GoCtx(func(ctx context.Context) error {
 					// This method runs the watcher until its context is canceled.
 					// The watcher context is canceled when diffs are sent to the
@@ -1890,27 +1855,20 @@ func (b *changefeedResumer) resumeWithRetries(
 					if err != nil {
 						return err
 					}
-				watchLoop:
 					for ts := schemaTS; ctx.Err() == nil; ts = ts.AddDuration(*frequency) {
-						unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, ts)
+						added, err := watcher.PopUpTo(ctx, ts)
 						if err != nil {
 							return err
 						}
-						if !unchanged {
-							// todo(#156874): once watcher gives us only adds,
-							// we can safely take the first diff.
-							for _, diff := range diffs {
-								if diff.Added.ID != 0 {
-									schemaTS = diff.AsOf
-									initialHighWater = diff.AsOf
-									targets, err = AllTargets(ctx, details, execCfg, schemaTS)
-									if err != nil {
-										return err
-									}
-									cancelWatcher(errDoneWatching)
-									break watchLoop
-								}
+						if len(added) > 0 {
+							schemaTS = added[0].AsOf
+							initialHighWater = added[0].AsOf
+							targets, err = AllTargets(ctx, details, execCfg, schemaTS)
+							if err != nil {
+								return err
 							}
+							cancelWatcher(errDoneWatching)
+							break
 						}
 					}
 				}
