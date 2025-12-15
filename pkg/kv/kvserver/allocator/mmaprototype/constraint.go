@@ -7,8 +7,8 @@ package mmaprototype
 
 import (
 	"cmp"
+	"context"
 	"fmt"
-	"log"
 	"math"
 	"slices"
 	"sort"
@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -665,11 +666,13 @@ func (conf *normalizedSpanConfig) buildVoterAndAllRelationships() (
 	// constraint.
 	// Example:
 	// voterConstraints: [+region=a]: 2, []: 2 => emptyVoterConstraintIndex = 1
+	// TODO(wenyihu6): instead of fatal, we should return an error so that user
+	// input does not cause a crash.
 	emptyVoterConstraintIndex = -1
 	for i := range conf.voterConstraints {
 		if len(conf.voterConstraints[i].constraints) == 0 {
 			if emptyVoterConstraintIndex != -1 {
-				log.Fatalf("multiple empty voter constraints: %v and %v",
+				log.KvDistribution.Fatalf(context.Background(), "multiple empty voter constraints: %v and %v",
 					conf.voterConstraints[emptyVoterConstraintIndex], conf.voterConstraints[i])
 			}
 			emptyVoterConstraintIndex = i
@@ -677,7 +680,7 @@ func (conf *normalizedSpanConfig) buildVoterAndAllRelationships() (
 		for j := range conf.constraints {
 			if len(conf.constraints[j].constraints) == 0 {
 				if emptyConstraintIndex != -1 && emptyConstraintIndex != j {
-					log.Fatalf("multiple empty constraints: %v and %v",
+					log.KvDistribution.Fatalf(context.Background(), "multiple empty constraints: %v and %v",
 						conf.constraints[emptyConstraintIndex], conf.constraints[j])
 				}
 				emptyConstraintIndex = j
