@@ -303,6 +303,11 @@ export default function Debug() {
           disabled={disable_kv_level_advanced_debug}
         />
         <StatementDiagnosticsConnected />
+        <DebugPanelLink
+          name="Cluster Explorer"
+          url="#/cluster-explorer"
+          note="Explore and analyze your cluster with interactive node and range visualization."
+        />
         <PanelTitle>Configuration</PanelTitle>
         <DebugPanelLink
           name="Cluster Settings"
