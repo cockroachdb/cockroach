@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // ChangeOptions is passed to ComputeChanges and AdminScatterOne.
@@ -37,6 +38,8 @@ type ChangeOptions struct {
 //     be less different than integration with the old allocator.
 type Allocator interface {
 	LoadSummaryForAllStores(context.Context) string
+
+	InitMetricsForLocalStore(localStoreID roachpb.StoreID, registry *metric.Registry)
 
 	// Methods to update the state of the external world. The allocator starts
 	// with no knowledge.

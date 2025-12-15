@@ -74,9 +74,7 @@ type allocatorState struct {
 	// this. We could of course build our own queueing mechanism instead of
 	// relying on the queueing in mutex.
 
-	// mrProvider can be nil in tests.
-	mrProvider MetricRegistryForStoreProvider
-	mu         syncutil.Mutex
+	mu syncutil.Mutex
 
 	// TODO(sumeer): counters, passMetricsAndLoggers are also protected by mu.
 	// Nest in struct with mu, when locking story is cleaned up.
@@ -100,24 +98,15 @@ type allocatorState struct {
 
 var _ Allocator = &allocatorState{}
 
-type MetricRegistryForStoreProvider interface {
-	// GetStoreMetricRegistry returns the registry for the store, if it is
-	// known, else nil.
-	GetStoreMetricRegistry(storeID roachpb.StoreID) *metric.Registry
-}
-
 // NewAllocatorState constructs a new implementation of Allocator.
 //
 // The metricRegistryProvider allows the allocator to lazily initialize
 // per-local-store metrics once the StoreID is known. It can be nil in tests,
 // in which case no metrics will be collected.
-func NewAllocatorState(
-	ts timeutil.TimeSource, metricRegistryProvider MetricRegistryForStoreProvider, rand *rand.Rand,
-) *allocatorState {
+func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState {
 	interner := newStringInterner()
 	cs := newClusterState(ts, interner)
 	return &allocatorState{
-		mrProvider:             metricRegistryProvider,
 		counters:               map[roachpb.StoreID]*counterMetrics{},
 		passMetricsAndLoggers:  map[roachpb.StoreID]*rebalancingPassMetricsAndLogger{},
 		cs:                     cs,
@@ -134,21 +123,26 @@ func NewAllocatorState(
 const remoteStoreLeaseSheddingGraceDuration = 2 * time.Minute
 const overloadGracePeriod = time.Minute
 
-func (a *allocatorState) ensureMetricsForLocalStoreLocked(
+func (a *allocatorState) InitMetricsForLocalStore(
+	localStoreID roachpb.StoreID, registry *metric.Registry,
+) {
+	cMetrics := makeCounterMetrics()
+	registry.AddMetricStruct(*cMetrics)
+	a.counters[localStoreID] = cMetrics
+	passMetrics := makeRebalancingPassMetricsAndLogger(localStoreID)
+	registry.AddMetricStruct(passMetrics.m)
+	a.passMetricsAndLoggers[localStoreID] = passMetrics
+}
+
+func (a *allocatorState) getMetricsForLocalStoreLocked(
 	localStoreID roachpb.StoreID,
 ) *counterMetrics {
 	m, ok := a.counters[localStoreID]
 	if ok {
 		return m
 	}
+	// Only for tests that don't call InitMetricsForLocalStore.
 	m = makeCounterMetrics()
-	if a.mrProvider != nil {
-		mr := a.mrProvider.GetStoreMetricRegistry(localStoreID)
-		if mr == nil {
-			panic(errors.AssertionFailedf("no MetricRegistry for store s%v", localStoreID))
-		}
-		mr.AddMetricStruct(*m)
-	}
 	a.counters[localStoreID] = m
 	return m
 }
@@ -158,15 +152,9 @@ func (a *allocatorState) preparePassMetricsAndLoggerLocked(
 ) *rebalancingPassMetricsAndLogger {
 	m, ok := a.passMetricsAndLoggers[localStoreID]
 	if !ok {
+		// Only for tests that don't call InitMetricsForLocalStore.
 		m = makeRebalancingPassMetricsAndLogger(localStoreID)
 		a.passMetricsAndLoggers[localStoreID] = m
-		if a.mrProvider != nil {
-			mr := a.mrProvider.GetStoreMetricRegistry(localStoreID)
-			if mr == nil {
-				panic(errors.AssertionFailedf("no MetricRegistry for store s%v", localStoreID))
-			}
-			mr.AddMetricStruct(m.m)
-		}
 	}
 	m.resetForRebalancingPass()
 	return m
@@ -194,7 +182,7 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 func (a *allocatorState) AdjustPendingChangeDisposition(change ExternalRangeChange, success bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	metrics := a.ensureMetricsForLocalStoreLocked(change.localStoreID)
+	metrics := a.getMetricsForLocalStoreLocked(change.localStoreID)
 	isLeaseTransfer := change.IsPureTransferLease()
 	switch change.origin {
 	case OriginExternal:
@@ -273,7 +261,7 @@ func (a *allocatorState) RegisterExternalChange(
 ) (_ ExternalRangeChange, ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	counterMetrics := a.ensureMetricsForLocalStoreLocked(localStoreID)
+	counterMetrics := a.getMetricsForLocalStoreLocked(localStoreID)
 	if err := a.cs.preCheckOnApplyReplicaChanges(change); err != nil {
 		counterMetrics.ExternalRegisterFailure.Inc(1)
 		log.KvDistribution.Infof(context.Background(),
@@ -298,7 +286,7 @@ func (a *allocatorState) ComputeChanges(
 	if opts.DryRun {
 		panic(errors.AssertionFailedf("unsupported dry-run mode"))
 	}
-	counterMetrics := a.ensureMetricsForLocalStoreLocked(opts.LocalStoreID)
+	counterMetrics := a.getMetricsForLocalStoreLocked(opts.LocalStoreID)
 	a.cs.processStoreLeaseholderMsg(ctx, msg, counterMetrics)
 	var passObs *rebalancingPassMetricsAndLogger
 	if opts.PeriodicCall {
