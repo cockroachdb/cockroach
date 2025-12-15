@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
@@ -2297,9 +2299,20 @@ func handleTTLStorageParamChange(
 	}
 	// Validate the type and volatility of ttl_expiration_expression.
 	if after != nil {
-		if err := schemaexpr.ValidateTTLExpirationExpression(
-			params.ctx, tableDesc, params.p.SemaCtx(), tn, after,
+		getAllNonDropColumnsFn := func() colinfo.ResultColumns {
+			return colinfo.ResultColumnsFromColumns(tableDesc.GetID(), tableDesc.NonDropColumns())
+		}
+		columnLookupByNameFn := func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
+			col, err := catalog.MustFindColumnByTreeName(tableDesc, columnName)
+			if err != nil || col.Dropped() {
+				return false, false, false, 0, nil
+			}
+			return true, !col.IsInaccessible(), col.IsComputed(), col.GetID(), col.GetType()
+		}
+		if _, err := schemaexpr.ValidateTTLExpirationExpression(
+			params.ctx, params.p.SemaCtx(), tn, after,
 			params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+			getAllNonDropColumnsFn, columnLookupByNameFn,
 		); err != nil {
 			return false, err
 		}

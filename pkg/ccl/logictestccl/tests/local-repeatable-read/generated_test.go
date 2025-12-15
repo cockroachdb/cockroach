@@ -2261,13 +2261,6 @@ func TestRepeatableReadLogic_truncate(
 	runLogicTest(t, "truncate")
 }
 
-func TestRepeatableReadLogic_truncate_with_concurrent_mutation(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "truncate_with_concurrent_mutation")
-}
-
 func TestRepeatableReadLogic_tsvector(
 	t *testing.T,
 ) {

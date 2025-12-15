@@ -2564,8 +2564,19 @@ func newTableDesc(
 	// Row level TTL tables require a scheduled job to be created as well.
 	if ret.HasRowLevelTTL() {
 		ttl := ret.GetRowLevelTTL()
-		if err := schemaexpr.ValidateTTLExpirationExpression(
-			params.ctx, ret, params.p.SemaCtx(), &n.Table, ttl, params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx),
+		getAllNonDropColumnsFn := func() colinfo.ResultColumns {
+			return colinfo.ResultColumnsFromColumns(ret.GetID(), ret.NonDropColumns())
+		}
+		columnLookupByNameFn := func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
+			col, err := catalog.MustFindColumnByTreeName(ret, columnName)
+			if err != nil || col.Dropped() {
+				return false, false, false, 0, nil
+			}
+			return true, !col.IsInaccessible(), col.IsComputed(), col.GetID(), col.GetType()
+		}
+		if _, err := schemaexpr.ValidateTTLExpirationExpression(
+			params.ctx, params.p.SemaCtx(), &n.Table, ttl, params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx),
+			getAllNonDropColumnsFn, columnLookupByNameFn,
 		); err != nil {
 			return nil, err
 		}
