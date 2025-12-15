@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -331,5 +333,189 @@ func verifySSTs(
 			"SST %d exceeds max size. Got %d, max %d", i, sstSize, maxSize)
 
 		t.Logf("SST %d: size=%d, range=[%v, %v]", i, sstSize, sst.StartKey, sst.EndKey)
+	}
+}
+
+// TestMergeSSTsSplitsAtRowBoundaries tests that when SSTs are split due to
+// size constraints, the splits occur at row boundaries (not mid-row, splitting
+// column families apart). It verifies that the endKey calculation uses
+// EnsureSafeSplitKey() + PrefixEnd() to ensure proper row boundary handling.
+func TestMergeSSTsSplitsAtRowBoundaries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		ExternalIODir: dir,
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	execCfg := srv.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
+
+	// Set a small target size to force splits mid-processing.
+	// With 3 rows × 2 column families × ~60 byte values = ~360 bytes of data,
+	// a 150 byte target should create at least 2 SSTs.
+	targetFileSize.Override(ctx, &srv.ClusterSettings().SV, 150)
+
+	tsa := newTestServerAllocator(t, ctx, execCfg)
+	fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, srv.Clock())
+	batcher := bulksst.NewUnsortedSSTBatcher(srv.ClusterSettings(), fileAllocator)
+
+	ts := hlc.Timestamp{WallTime: 1}
+	rowPrefix := keys.SystemSQLCodec.IndexPrefix(7, 1)
+
+	// Create 3 rows, each with 2 column families
+	// Row structure: /Table/7/1/<rowID>/0/<familyID>
+	for rowID := 1; rowID <= 3; rowID++ {
+		rowKey := encoding.EncodeUvarintAscending(rowPrefix, uint64(rowID))
+		cf1 := roachpb.Key(keys.MakeFamilyKey(append([]byte(nil), rowKey...), 1))
+		cf2 := roachpb.Key(keys.MakeFamilyKey(append([]byte(nil), rowKey...), 2))
+
+		// Use large values to ensure we exceed target size
+		value := make([]byte, 60)
+		for i := range value {
+			value[i] = byte('a' + rowID - 1)
+		}
+
+		require.NoError(t, batcher.AddMVCCKey(ctx, storage.MVCCKey{Key: cf1, Timestamp: ts}, value))
+		require.NoError(t, batcher.AddMVCCKey(ctx, storage.MVCCKey{Key: cf2, Timestamp: ts}, value))
+	}
+
+	require.NoError(t, batcher.Flush(ctx))
+
+	ssts := importToMerge(fileAllocator.GetFileList())
+
+	// Create a merge spec with a single span covering all data
+	spans := []roachpb.Span{{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}}
+
+	jobExecCtx, cleanup := sql.MakeJobExecContext(
+		ctx, "test", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
+	)
+	defer cleanup()
+
+	plan, planCtx, err := newBulkMergePlan(
+		ctx,
+		jobExecCtx,
+		ssts,
+		spans,
+		func(instanceID base.SQLInstanceID) string {
+			return fmt.Sprintf("nodelocal://%d/merge/out/", instanceID)
+		})
+	require.NoError(t, err)
+	defer plan.Release()
+
+	var result execinfrapb.BulkMergeSpec_Output
+	rowWriter := sql.NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		require.NoError(t, protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &result))
+		return nil
+	})
+
+	sqlReceiver := sql.MakeDistSQLReceiver(
+		ctx,
+		rowWriter,
+		tree.Rows,
+		execCfg.RangeDescriptorCache,
+		nil,
+		nil,
+		jobExecCtx.ExtendedEvalContext().Tracing)
+	defer sqlReceiver.Release()
+
+	evalCtxCopy := jobExecCtx.ExtendedEvalContext().Context.Copy()
+	jobExecCtx.DistSQLPlanner().Run(
+		ctx,
+		planCtx,
+		nil,
+		plan,
+		sqlReceiver,
+		evalCtxCopy,
+		nil,
+	)
+
+	require.NoError(t, rowWriter.Err())
+
+	// Verify that splitting occurred (we should have at least 2 SSTs)
+	require.GreaterOrEqual(t, len(result.SSTs), 2, "expected at least 2 output SSTs due to size-based splitting")
+
+	// Verify each SST's contents: column families of the same row must stay together
+	cloudMux := bulkutil.NewExternalStorageMux(execCfg.DistSQLSrv.ExternalStorageFromURI, username.RootUserName())
+
+	for i, sst := range result.SSTs {
+		file, err := cloudMux.StoreFile(ctx, sst.URI)
+		require.NoError(t, err)
+
+		iterOpts := storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			LowerBound: sst.StartKey,
+			UpperBound: sst.EndKey,
+		}
+
+		iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{file}, nil, iterOpts)
+		require.NoError(t, err)
+		defer iter.Close()
+
+		// Track column families per row
+		type rowInfo struct {
+			familyIDs map[uint32]bool
+			firstKey  roachpb.Key
+		}
+		rows := make(map[string]*rowInfo)
+
+		var lastKey roachpb.Key
+		for iter.SeekGE(storage.MVCCKey{Key: sst.StartKey}); ; iter.NextKey() {
+			ok, err := iter.Valid()
+			require.NoError(t, err)
+			if !ok {
+				break
+			}
+
+			key := iter.UnsafeKey()
+			lastKey = key.Key.Clone()
+
+			// Get the safe split key (row boundary) for this key
+			rowStart, err := keys.EnsureSafeSplitKey(key.Key)
+			require.NoError(t, err)
+
+			rowStartStr := string(rowStart)
+			if rows[rowStartStr] == nil {
+				rows[rowStartStr] = &rowInfo{
+					familyIDs: make(map[uint32]bool),
+					firstKey:  key.Key.Clone(),
+				}
+			}
+
+			// Extract family ID from the key by parsing from the row start
+			// The key format is: <rowStart><familyID>
+			// We can decode the family ID by removing the row prefix
+			remainder := bytes.TrimPrefix(key.Key, rowStart)
+			if len(remainder) > 0 {
+				// Decode the family ID (it's the next varint encoded value)
+				// DecodeUvarintAscending returns (remaining bytes, decoded value, error)
+				_, familyIDUint64, err := encoding.DecodeUvarintAscending(remainder)
+				if err == nil {
+					rows[rowStartStr].familyIDs[uint32(familyIDUint64)] = true
+				}
+			}
+		}
+
+		t.Logf("SST %d: [%v, %v), contains %d rows", i, sst.StartKey, sst.EndKey, len(rows))
+
+		// Verify that each row has exactly 2 column families (no partial rows)
+		for rowKey, info := range rows {
+			require.Len(t, info.familyIDs, 2,
+				"row %q in SST %d should have both column families (got %v)", rowKey, i, info.familyIDs)
+		}
+
+		// Verify that the SST endKey is at a row boundary (for non-final SSTs)
+		if i < len(result.SSTs)-1 && !bytes.Equal(sst.EndKey, roachpb.KeyMax) {
+			// The endKey should be the PrefixEnd of a safe split key
+			// This means the endKey should be one byte past a valid row start
+			safeKey, err := keys.EnsureSafeSplitKey(lastKey)
+			require.NoError(t, err)
+			expectedEndKey := safeKey.PrefixEnd()
+			require.Equal(t, expectedEndKey, sst.EndKey,
+				"SST %d endKey should be at row boundary (safeKey.PrefixEnd())", i)
+		}
 	}
 }
