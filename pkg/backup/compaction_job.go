@@ -73,8 +73,6 @@ func maybeStartCompactionJob(
 	}
 
 	switch {
-	case len(triggerJob.ExecutionLocality.Tiers) != 0:
-		return 0, errors.New("execution locality not supported for compaction")
 	case triggerJob.ScheduleID == 0:
 		return 0, errors.New("only scheduled backups can be compacted")
 	case len(triggerJob.SpecificTenantIds) != 0 || triggerJob.IncludeAllSecondaryTenants:
@@ -197,13 +195,47 @@ func StartCompactionJob(
 	scheduleID jobspb.ScheduleID,
 	collectionURI []string,
 	fullBackupPath string,
-	encryptionOpts jobspb.BackupEncryptionOptions,
+	options tree.BackupOptions,
 	start, end hlc.Timestamp,
 ) (jobspb.JobID, error) {
 	planHook, ok := planner.(sql.PlanHookState)
 	if !ok {
 		return 0, errors.New("missing job execution context")
 	}
+
+	var executionLocality roachpb.Locality
+	if options.ExecutionLocality != nil {
+		if strVal, ok := options.ExecutionLocality.(*tree.StrVal); ok {
+			s := strVal.RawString()
+			if s != "" {
+				if err := executionLocality.Set(s); err != nil {
+					return 0, errors.Wrap(err, "error setting execution locality")
+				}
+			}
+		} else {
+			return 0, errors.Newf(
+				"expected string value, got %+v", options.ExecutionLocality,
+			)
+		}
+	}
+
+	encryption := jobspb.BackupEncryptionOptions{
+		Mode: jobspb.EncryptionMode_None,
+	}
+	if options.EncryptionPassphrase != nil {
+		encryption.Mode = jobspb.EncryptionMode_Passphrase
+		encryption.RawPassphrase = tree.AsStringWithFlags(
+			options.EncryptionPassphrase,
+			tree.FmtBareStrings,
+		)
+	}
+	if options.EncryptionKMSURI != nil {
+		if encryption.Mode != jobspb.EncryptionMode_None {
+			return 0, errors.Newf("only one encryption mode can be specified")
+		}
+		encryption.RawKmsUris = builtins.ExprSliceToStrSlice(options.EncryptionKMSURI)
+	}
+
 	details := jobspb.BackupDetails{
 		ScheduleID: scheduleID,
 		StartTime:  start,
@@ -213,7 +245,8 @@ func StartCompactionJob(
 			Subdir: fullBackupPath,
 			Exists: true,
 		},
-		EncryptionOptions: &encryptionOpts,
+		EncryptionOptions: &encryption,
+		ExecutionLocality: executionLocality,
 		Compact:           true,
 	}
 	jobID := planHook.ExecCfg().JobRegistry.MakeJobID()
@@ -598,6 +631,7 @@ func updateCompactionBackupDetails(
 		ResolvedCompleteDbs: lastBackup.CompleteDbs,
 		FullCluster:         lastBackup.DescriptorCoverage == tree.AllDescriptors,
 		ScheduleID:          initialDetails.ScheduleID,
+		ExecutionLocality:   initialDetails.ExecutionLocality,
 		Compact:             true,
 	}
 	return compactedDetails, nil

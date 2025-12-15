@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -57,15 +58,6 @@ func TestBackupCompaction(t *testing.T) {
 		},
 	)
 	defer cleanupDB()
-
-	startCompaction := func(
-		db *sqlutils.SQLRunner, backupStmt string, fullPath string, start, end hlc.Timestamp,
-	) jobspb.JobID {
-		t.Helper()
-		var jobID jobspb.JobID
-		db.QueryRow(t, compactionQuery(backupStmt, fullPath, start, end)).Scan(&jobID)
-		return jobID
-	}
 
 	bucketNum := 1
 	getLatestFullDir := func(collectionURI []string) string {
@@ -107,7 +99,7 @@ func TestBackupCompaction(t *testing.T) {
 			end := getTime()
 			db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
-			compactionJobId := startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end)
+			compactionJobId := triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end)
 			compactionRedactedUri := getDescUri(t, db, compactionJobId)
 			require.Equal(t, fullRedactedUri, compactionRedactedUri)
 
@@ -150,13 +142,13 @@ func TestBackupCompaction(t *testing.T) {
 		end := getTime()
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
-		jobutils.WaitForJobToSucceed(t, db, startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end))
+		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end))
 		validateCompactedBackupForTables(t, db, collectionURI, []string{"foo", "bar", "baz"}, start, end, noOpts, noOpts, 2)
 
 		db.Exec(t, "DROP TABLE bar")
 		end = getTime()
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
-		jobutils.WaitForJobToSucceed(t, db, startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end))
+		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end))
 
 		db.Exec(t, "DROP TABLE foo, baz")
 		db.Exec(t, restoreQuery(t, fullCluster, collectionURI, noAOST, noOpts))
@@ -186,7 +178,7 @@ func TestBackupCompaction(t *testing.T) {
 		end := getTime()
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
-		jobutils.WaitForJobToSucceed(t, db, startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end))
+		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end))
 
 		var numIndexes, restoredNumIndexes int
 		db.QueryRow(t, "SELECT count(*) FROM [SHOW INDEXES FROM foo]").Scan(&numIndexes)
@@ -225,7 +217,7 @@ func TestBackupCompaction(t *testing.T) {
 		db.Exec(t, "INSERT INTO foo VALUES (6, 6)")
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 
-		jobutils.WaitForJobToSucceed(t, db, startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end))
+		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end))
 		validateCompactedBackupForTables(t, db, collectionURI, []string{"foo"}, start, end, noOpts, noOpts, 4)
 	})
 
@@ -249,7 +241,7 @@ func TestBackupCompaction(t *testing.T) {
 		end := getTime()
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
-		jobutils.WaitForJobToSucceed(t, db, startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end))
+		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end))
 		validateCompactedBackupForTables(t, db, collectionURI, []string{"foo"}, start, end, noOpts, noOpts, 2)
 	})
 
@@ -279,7 +271,7 @@ func TestBackupCompaction(t *testing.T) {
 		if pause {
 			db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'")
 		}
-		jobID := startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end)
+		jobID := triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end)
 		if pause {
 			jobutils.WaitForJobToPause(t, db, jobID)
 			db.Exec(t, "RESUME JOB $1", jobID)
@@ -308,7 +300,7 @@ func TestBackupCompaction(t *testing.T) {
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'")
 
-		jobID := startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end)
+		jobID := triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end)
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "RESUME JOB $1", jobID)
 		jobutils.WaitForJobToSucceed(t, db, jobID)
@@ -319,7 +311,7 @@ func TestBackupCompaction(t *testing.T) {
 		end = getTime()
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'")
-		jobID = startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end)
+		jobID = triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end)
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "CANCEL JOB $1", jobID)
 		jobutils.WaitForJobToCancel(t, db, jobID)
@@ -355,10 +347,10 @@ func TestBackupCompaction(t *testing.T) {
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
 		fullDir := getLatestFullDir(collectionURI)
-		c1JobID := startCompaction(db, backupStmt, fullDir, mid, end)
+		c1JobID := triggerCompaction(t, db, backupStmt, fullDir, mid, end)
 		jobutils.WaitForJobToSucceed(t, db, c1JobID)
 
-		c2JobID := startCompaction(db, backupStmt, fullDir, start, end)
+		c2JobID := triggerCompaction(t, db, backupStmt, fullDir, start, end)
 		jobutils.WaitForJobToSucceed(t, db, c2JobID)
 		ensureBackupExists(t, db, collectionURI, mid, end, noOpts)
 		ensureBackupExists(t, db, collectionURI, start, end, noOpts)
@@ -566,6 +558,221 @@ func TestBlockConcurrentScheduledCompactions(t *testing.T) {
 	require.Equal(t, 2, numCompactions)
 }
 
+func TestBackupCompactionExecLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "too slow")
+
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
+		},
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {
+				ExternalIODir: "/west0",
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "tier", Value: "0"},
+					{Key: "region", Value: "west"},
+				}},
+			},
+			1: {
+				ExternalIODir: "/west1",
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "tier", Value: "1"},
+					{Key: "region", Value: "west"},
+				}},
+			},
+			2: {
+				ExternalIODir: "/east0",
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "tier", Value: "0"},
+					{Key: "region", Value: "east"},
+				}},
+			},
+			3: {
+				ExternalIODir: "/east1",
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "tier", Value: "1"},
+					{Key: "region", Value: "east"},
+				}},
+			},
+		},
+	}
+	const numAccounts = 1000
+	tc, db, _, cleanup := backupRestoreTestSetupWithParams(t, 4, numAccounts, InitManualReplication, args)
+	defer cleanup()
+
+	west1Node, east0Node := sqlutils.MakeSQLRunner(tc.Conns[1]), sqlutils.MakeSQLRunner(tc.Conns[2])
+
+	targets := "DATABASE data"
+
+	// initBackupChain will create an identical chain of backups in all four node directories.
+	initBackupChain := func(subCollection string) (hlc.Timestamp, hlc.Timestamp) {
+		start := getTime()
+		for i := 1; i <= 4; i++ {
+			db.Exec(t, fullBackupQuery(targets,
+				[]string{fmt.Sprintf("nodelocal://%d/%s", i, subCollection)},
+				start, noOpts))
+		}
+		db.Exec(t, "UPDATE data.bank SET balance = 200")
+		for i := 1; i <= 4; i++ {
+			db.Exec(t, incBackupQuery(targets,
+				[]string{fmt.Sprintf("nodelocal://%d/%s", i, subCollection)},
+				noAOST, noOpts))
+		}
+		db.Exec(t, "UPDATE data.bank SET balance = 201")
+		for i := 1; i <= 4; i++ {
+			db.Exec(t, incBackupQuery(targets,
+				[]string{fmt.Sprintf("nodelocal://%d/%s", i, subCollection)},
+				noAOST, noOpts))
+		}
+		db.Exec(t, "UPDATE data.bank SET balance = 202")
+		end := getTime()
+		for i := 1; i <= 4; i++ {
+			db.Exec(t, incBackupQuery(targets,
+				[]string{fmt.Sprintf("nodelocal://%d/%s", i, subCollection)},
+				end, noOpts))
+		}
+		return start, end
+	}
+	const numInitialBackups = 4
+
+	countBackups := func(collection string) int {
+		var count int
+		db.QueryRow(
+			t, fmt.Sprintf(
+				"SELECT count(DISTINCT (start_time, end_time)) FROM [SHOW BACKUP FROM LATEST IN '%s']",
+				collection,
+			),
+		).Scan(&count)
+		return count
+	}
+
+	t.Run("pin-tier", func(t *testing.T) {
+		ensureLeaseholder(t, db)
+		start, end := initBackupChain("pin-tier")
+
+		// Note that using "nodelocal://0", in combination with setting a unique `ExternalIODir` for
+		// each node, allows us to see which nodes participated in processing the job.
+		// Processor nodes will translate "nodelocal://0" to their respective directories,
+		// meaning only the directories of nodes which participated in processing will be modified.
+		processorCollection := []string{"nodelocal://0/pin-tier"}
+
+		// Run and wait for an execution locality filtered compaction job.
+		jobutils.WaitForJobToSucceed(
+			t, db,
+			triggerCompaction(
+				t, east0Node,
+				fullBackupQuery(targets, processorCollection, start,
+					"WITH EXECUTION LOCALITY = 'tier=0'"),
+				getLatestFullDir(t, db, processorCollection[0]),
+				start, end,
+			),
+		)
+
+		numWest0 := countBackups("nodelocal://1/pin-tier")
+		numWest1 := countBackups("nodelocal://2/pin-tier")
+		numEast0 := countBackups("nodelocal://3/pin-tier")
+		numEast1 := countBackups("nodelocal://4/pin-tier")
+
+		// Validate that at least one node matching the locality filter processed the compaction,
+		// and that all nodes which don't match the locality filter did not.
+		require.True(t, numEast0 == numInitialBackups+1 || numWest0 == numInitialBackups+1)
+		require.Equal(t, numWest1, numInitialBackups)
+		require.Equal(t, numEast1, numInitialBackups)
+	})
+
+	t.Run("pin-region", func(t *testing.T) {
+		ensureLeaseholder(t, db)
+		start, end := initBackupChain("pin-region")
+		processorCollection := []string{"nodelocal://0/pin-region"}
+
+		jobutils.WaitForJobToSucceed(
+			t, db,
+			triggerCompaction(
+				t, east0Node,
+				fullBackupQuery(targets, processorCollection, start,
+					"WITH EXECUTION LOCALITY = 'region=east'"),
+				getLatestFullDir(t, db, processorCollection[0]),
+				start, end,
+			),
+		)
+
+		numWest0 := countBackups("nodelocal://1/pin-region")
+		numWest1 := countBackups("nodelocal://2/pin-region")
+		numEast0 := countBackups("nodelocal://3/pin-region")
+		numEast1 := countBackups("nodelocal://4/pin-region")
+
+		require.True(t, numEast0 == numInitialBackups+1 || numEast1 == numInitialBackups+1)
+		require.Equal(t, numWest0, numInitialBackups)
+		require.Equal(t, numWest1, numInitialBackups)
+	})
+
+	t.Run("pin-single", func(t *testing.T) {
+		ensureLeaseholder(t, db)
+		start, end := initBackupChain("pin-single")
+		processorCollection := []string{"nodelocal://0/pin-single"}
+
+		jobutils.WaitForJobToSucceed(
+			t, db,
+			triggerCompaction(
+				t, west1Node,
+				fullBackupQuery(targets, processorCollection, start,
+					"WITH EXECUTION LOCALITY = 'tier=1,region=west'"),
+				getLatestFullDir(t, db, processorCollection[0]),
+				start, end,
+			),
+		)
+
+		numWest0 := countBackups("nodelocal://1/pin-single")
+		numWest1 := countBackups("nodelocal://2/pin-single")
+		numEast0 := countBackups("nodelocal://3/pin-single")
+		numEast1 := countBackups("nodelocal://4/pin-single")
+
+		// Validate that the expected node processed the compaction, and the rest did not.
+		require.Equal(t, numWest1, numInitialBackups+1)
+		require.Equal(t, numWest0, numInitialBackups)
+		require.Equal(t, numEast0, numInitialBackups)
+		require.Equal(t, numEast1, numInitialBackups)
+
+		// Validate that the expected node's directory restores correctly using the expected number of backups.
+		//
+		// Note that with this test structure, we can only do this restore validation in cases where
+		// we pin the processing to a single node. Using the "nodelocal://0" trick to see which nodes
+		// participated in processing means that, in cases where multiple nodes participate in processing,
+		// the compaction will be split across multiple directories, and thus cannot be restored from correctly.
+		validateCompactedBackupForTables(t, db,
+			[]string{"nodelocal://2/pin-single"},
+			[]string{"bank"}, start, end, noOpts, noOpts,
+			2)
+	})
+
+	t.Run("validate-coordinator", func(t *testing.T) {
+		// The previous subtests only validate that the processor nodes adhere to the locality filter.
+		// This test ensures that the coordinator node also matches the locality filter.
+		ensureLeaseholder(t, db)
+		start, end := initBackupChain("validate-coordinator")
+		processorCollection := []string{"nodelocal://0/validate-coordinator"}
+
+		compactionJobID := triggerCompaction(
+			t, db,
+			fullBackupQuery(targets, processorCollection, start,
+				"WITH EXECUTION LOCALITY = 'tier=1,region=west'"),
+			getLatestFullDir(t, db, processorCollection[0]),
+			start, end,
+		)
+		jobutils.WaitForJobToSucceed(t, db, compactionJobID)
+
+		var instanceId int32
+		db.QueryRow(t, fmt.Sprintf(
+			"select system.jobs.claim_instance_id from system.jobs where system.jobs.id = %d",
+			compactionJobID)).Scan(&instanceId)
+
+		require.Equal(t, int32(tc.Servers[1].SQLInstanceID()), instanceId)
+	})
+}
+
 func TestBackupCompactionUnsupportedOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -581,18 +788,6 @@ func TestBackupCompactionUnsupportedOptions(t *testing.T) {
 		details jobspb.BackupDetails
 		error   string
 	}{
-		{
-			"execution locality not supported",
-			jobspb.BackupDetails{
-				ScheduleID: 1,
-				ExecutionLocality: roachpb.Locality{
-					Tiers: []roachpb.Tier{
-						{Key: "region", Value: "us-east-2"},
-					},
-				},
-			},
-			"execution locality not supported for compaction",
-		},
 		{
 			"scheduled backups only",
 			jobspb.BackupDetails{
@@ -686,8 +881,7 @@ func TestCompactionCheckpointing(t *testing.T) {
 	).Scan(&backupPath)
 
 	db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.write_checkpoint'")
-	var jobID jobspb.JobID
-	db.QueryRow(t, compactionQuery(backupStmt, backupPath, start, end)).Scan(&jobID)
+	jobID := triggerCompaction(t, db, backupStmt, backupPath, start, end)
 
 	// Ensure that the very first manifest when the job is initially started has
 	// no files.
@@ -739,8 +933,7 @@ func TestToggleCompactionForRestore(t *testing.T) {
 	db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 	var backupPath string
 	db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
-	var compactionID jobspb.JobID
-	db.QueryRow(t, compactionQuery(backupStmt, backupPath, start, end)).Scan(&compactionID)
+	compactionID := triggerCompaction(t, db, backupStmt, backupPath, start, end)
 	waitForSuccessfulJob(t, tc, compactionID)
 
 	var compRestoreID, classicRestoreID jobspb.JobID
@@ -963,7 +1156,7 @@ func validateCompactedBackupForTables(
 	ensureBackupExists(t, db, collectionURI, start, end, showOpts)
 	rows := make(map[string][][]string)
 	for _, table := range tables {
-		rows[table] = db.QueryStr(t, "SELECT * FROM "+table)
+		rows[table] = db.QueryStr(t, "SELECT * FROM "+table+" ORDER BY PRIMARY KEY "+table)
 	}
 	tablesList := strings.Join(tables, ", ")
 	db.Exec(t, "DROP TABLE "+tablesList)
@@ -972,7 +1165,7 @@ func validateCompactedBackupForTables(
 	var discard *any
 	row.Scan(&restoreJobID, &discard, &discard, &discard)
 	for table, originalRows := range rows {
-		restoredRows := db.QueryStr(t, "SELECT * FROM "+table)
+		restoredRows := db.QueryStr(t, "SELECT * FROM "+table+" ORDER BY PRIMARY KEY "+table)
 		require.Equal(t, originalRows, restoredRows, "table %s", table)
 	}
 
@@ -1067,15 +1260,28 @@ func incBackupQuery(
 	)
 }
 
-// compactBackupQuery creates a `crdb_internal.backup_compaction` statement.
-func compactionQuery(backupStmt string, fullPath string, start, end hlc.Timestamp) string {
+// triggerCompaction creates and executes a `crdb_internal.backup_compaction` statement
+// and returns the job id of the backup compaction.
+func triggerCompaction(
+	t *testing.T,
+	db *sqlutils.SQLRunner,
+	backupStmt string,
+	fullPath string,
+	start, end hlc.Timestamp,
+) jobspb.JobID {
+	t.Helper()
+
 	backupStmt = strings.ReplaceAll(backupStmt, "'", "''")
-	return fmt.Sprintf(
+	backupStmt = fmt.Sprintf(
 		`SELECT crdb_internal.backup_compaction(
 			0, '%s', '%s', '%s'::DECIMAL, '%s'::DECIMAL
 		)`,
 		backupStmt, fullPath, start.AsOfSystemTime(), end.AsOfSystemTime(),
 	)
+
+	var jobID jobspb.JobID
+	db.QueryRow(t, backupStmt).Scan(&jobID)
+	return jobID
 }
 
 // restoreQuery creates a `RESTORE` statement that restores from the latest
