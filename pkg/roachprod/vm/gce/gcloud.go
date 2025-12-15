@@ -1049,6 +1049,8 @@ type ProjectsVal struct {
 // ARM64 builds), but we randomize the specific zone. This is to avoid
 // "zone exhausted" errors in one particular zone, especially during
 // nightly roachtest runs.
+// TODO(manojpillai): use same defaults for ARM64, given c4a wide availability.
+// But review roachtest impact before changing.
 func DefaultZones(arch string, geoDistributed bool) []string {
 	zones := []string{"us-east1-b", "us-east1-c", "us-east1-d"}
 	if vm.ParseArch(arch) == vm.ArchARM64 {
@@ -1481,7 +1483,8 @@ func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, err
 			zones = []string{"us-central1-a"}
 		}
 
-		if !IsSupportedT2AZone(providerOpts.Zones) {
+		if strings.HasPrefix(strings.ToLower(providerOpts.MachineType), "t2a-") &&
+			!IsSupportedT2AZone(providerOpts.Zones) {
 			return nil, errors.Newf("T2A instances are not supported outside of [%s]", strings.Join(SupportedT2AZones, ","))
 		}
 	}
