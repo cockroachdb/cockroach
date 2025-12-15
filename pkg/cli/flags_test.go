@@ -1917,8 +1917,13 @@ func TestUseNewRPC(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if baseCfg.UseDRPC != tc.expectedVal {
-				t.Errorf("expected UseDRPC=%v, but got %v", tc.expectedVal, baseCfg.UseDRPC)
+			require.True(t, f.Lookup(cliflags.UseNewRPC.Name).Hidden)
+
+			useDRPC, err := strconv.ParseBool(f.Lookup(cliflags.UseNewRPC.Name).Value.String())
+			require.NoError(t, err)
+
+			if useDRPC != tc.expectedVal {
+				t.Errorf("expected UseDRPC=%v, but got %v", tc.expectedVal, useDRPC)
 			}
 		})
 	}

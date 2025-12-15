@@ -665,6 +665,7 @@ func newInitServerConfig(
 			latestVersion, minSupportedVersion)
 	}
 
+	useDRPC := rpcbase.ExperimentalDRPCEnabled.Get(&cfg.Settings.SV)
 	bootstrapAddresses := cfg.FilterGossipBootstrapAddresses(context.Background())
 	return initServerCfg{
 		advertiseAddr:           cfg.AdvertiseAddr,
@@ -674,7 +675,7 @@ func newInitServerConfig(
 		defaultZoneConfig:       cfg.DefaultZoneConfig,
 		getGRPCDialOpts:         getGRPCDialOpts,
 		getDRPCDialOpts:         getDRPCDialOpts,
-		useDRPC:                 cfg.UseDRPC,
+		useDRPC:                 useDRPC,
 		bootstrapAddresses:      bootstrapAddresses,
 		testingKnobs:            cfg.TestingKnobs,
 	}

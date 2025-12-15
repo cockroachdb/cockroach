@@ -425,9 +425,6 @@ type ContextOptions struct {
 
 	// Locality stores the locality of this node.
 	Locality roachpb.Locality
-
-	// UseDRPC indicates if DRPC must be used for internode communication.
-	UseDRPC bool
 }
 
 // DefaultContextOptions are mostly used in tests.
@@ -461,7 +458,6 @@ func ServerContextOptionsFromBaseConfig(cfg *base.Config) ContextOptions {
 		AdvertiseAddrH:                 &cfg.AdvertiseAddrH,
 		SQLAdvertiseAddrH:              &cfg.SQLAdvertiseAddrH,
 		DisableTLSForHTTP:              cfg.DisableTLSForHTTP,
-		UseDRPC:                        cfg.UseDRPC,
 	}
 }
 
