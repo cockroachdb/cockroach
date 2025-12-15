@@ -30,6 +30,7 @@ type deferredState struct {
 	indexesToSplitAndScatter     []indexesToSplitAndScatter
 	ttlScheduleMetadataUpdates   []ttlScheduleMetadataUpdate
 	ttlScheduleCronUpdates       []ttlScheduleCronUpdate
+	ttlSchedulesToCreate         []ttlScheduleToCreate
 	gcJobs
 }
 
@@ -51,6 +52,10 @@ type ttlScheduleMetadataUpdate struct {
 type ttlScheduleCronUpdate struct {
 	scheduleID  jobspb.ScheduleID
 	newCronExpr string
+}
+
+type ttlScheduleToCreate struct {
+	tableID descpb.ID
 }
 
 type schemaChangerJobUpdate struct {
@@ -104,6 +109,13 @@ func (s *deferredState) UpdateTTLScheduleCron(
 	s.ttlScheduleCronUpdates = append(s.ttlScheduleCronUpdates, ttlScheduleCronUpdate{
 		scheduleID:  scheduleID,
 		newCronExpr: cronExpr,
+	})
+	return nil
+}
+
+func (s *deferredState) CreateRowLevelTTLSchedule(ctx context.Context, tableID descpb.ID) error {
+	s.ttlSchedulesToCreate = append(s.ttlSchedulesToCreate, ttlScheduleToCreate{
+		tableID: tableID,
 	})
 	return nil
 }
@@ -244,6 +256,20 @@ func (s *deferredState) exec(
 	}
 	for _, cronUpdate := range s.ttlScheduleCronUpdates {
 		if err := m.UpdateTTLScheduleCron(ctx, cronUpdate.scheduleID, cronUpdate.newCronExpr); err != nil {
+			return err
+		}
+	}
+	for _, ttlCreate := range s.ttlSchedulesToCreate {
+		descs, err := c.MustReadImmutableDescriptors(ctx, ttlCreate.tableID)
+		if err != nil {
+			return err
+		}
+		desc := descs[0]
+		tableDesc, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			continue
+		}
+		if err := m.CreateRowLevelTTLSchedule(ctx, tableDesc); err != nil {
 			return err
 		}
 	}

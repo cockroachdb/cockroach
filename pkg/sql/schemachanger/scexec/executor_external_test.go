@@ -536,6 +536,12 @@ func (u noopMetadataUpdater) UpdateTTLScheduleCron(
 	return nil
 }
 
+func (u noopMetadataUpdater) CreateRowLevelTTLSchedule(
+	ctx context.Context, tbl catalog.TableDescriptor,
+) error {
+	return nil
+}
+
 type noopTemporarySchemaCreator struct{}
 
 var _ scexec.TemporarySchemaCreator = noopTemporarySchemaCreator{}

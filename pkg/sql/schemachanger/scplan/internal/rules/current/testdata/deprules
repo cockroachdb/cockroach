@@ -3832,17 +3832,6 @@ deprules
     - SmallerSeqNumFirst(*scpb.PartitionZoneConfig, *scpb.PartitionZoneConfig)($later-seqNum, $earlier-seqNum)
     - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
     - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
-- name: ensure row level TTL configs are in increasing seqNum order
-  from: later-seqNum-Node
-  kind: Precedence
-  to: earlier-seqNum-Node
-  query:
-    - $later-seqNum[Type] = '*scpb.RowLevelTTL'
-    - $earlier-seqNum[Type] = '*scpb.RowLevelTTL'
-    - joinOnDescID($later-seqNum, $earlier-seqNum, $table-id)
-    - SmallerSeqNumFirst(*scpb.RowLevelTTL, *scpb.RowLevelTTL)($later-seqNum, $earlier-seqNum)
-    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
-    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
 - name: ensure table zone configs are in increasing seqNum order
   from: later-seqNum-Node
   kind: Precedence
@@ -4287,6 +4276,20 @@ deprules
     - $descriptor-Node[CurrentStatus] = ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($descriptor, $descriptor-Target, $descriptor-Node)
+- name: old TTL params are dropped before the new one is added
+  from: old-ttl-param-Node
+  kind: SameStagePrecedence
+  to: new-ttl-param-Node
+  query:
+    - $old-ttl-param[Type] = '*scpb.RowLevelTTL'
+    - $new-ttl-param[Type] = '*scpb.RowLevelTTL'
+    - joinOnDescID($old-ttl-param, $new-ttl-param, $table-id)
+    - $old-ttl-param-Target[TargetStatus] = ABSENT
+    - $old-ttl-param-Node[CurrentStatus] = ABSENT
+    - $new-ttl-param-Target[TargetStatus] = PUBLIC
+    - $new-ttl-param-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-ttl-param, $old-ttl-param-Target, $old-ttl-param-Node)
+    - joinTargetNode($new-ttl-param, $new-ttl-param-Target, $new-ttl-param-Node)
 - name: old column generated as identity is dropped before new one is added
   from: old-column-generated-as-identity-Node
   kind: SameStagePrecedence
@@ -9108,17 +9111,6 @@ deprules
     - SmallerSeqNumFirst(*scpb.PartitionZoneConfig, *scpb.PartitionZoneConfig)($later-seqNum, $earlier-seqNum)
     - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
     - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
-- name: ensure row level TTL configs are in increasing seqNum order
-  from: later-seqNum-Node
-  kind: Precedence
-  to: earlier-seqNum-Node
-  query:
-    - $later-seqNum[Type] = '*scpb.RowLevelTTL'
-    - $earlier-seqNum[Type] = '*scpb.RowLevelTTL'
-    - joinOnDescID($later-seqNum, $earlier-seqNum, $table-id)
-    - SmallerSeqNumFirst(*scpb.RowLevelTTL, *scpb.RowLevelTTL)($later-seqNum, $earlier-seqNum)
-    - joinTargetNode($later-seqNum, $later-seqNum-Target, $later-seqNum-Node)
-    - joinTargetNode($earlier-seqNum, $earlier-seqNum-Target, $earlier-seqNum-Node)
 - name: ensure table zone configs are in increasing seqNum order
   from: later-seqNum-Node
   kind: Precedence
@@ -9563,6 +9555,20 @@ deprules
     - $descriptor-Node[CurrentStatus] = ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($descriptor, $descriptor-Target, $descriptor-Node)
+- name: old TTL params are dropped before the new one is added
+  from: old-ttl-param-Node
+  kind: SameStagePrecedence
+  to: new-ttl-param-Node
+  query:
+    - $old-ttl-param[Type] = '*scpb.RowLevelTTL'
+    - $new-ttl-param[Type] = '*scpb.RowLevelTTL'
+    - joinOnDescID($old-ttl-param, $new-ttl-param, $table-id)
+    - $old-ttl-param-Target[TargetStatus] = ABSENT
+    - $old-ttl-param-Node[CurrentStatus] = ABSENT
+    - $new-ttl-param-Target[TargetStatus] = PUBLIC
+    - $new-ttl-param-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-ttl-param, $old-ttl-param-Target, $old-ttl-param-Node)
+    - joinTargetNode($new-ttl-param, $new-ttl-param-Target, $new-ttl-param-Node)
 - name: old column generated as identity is dropped before new one is added
   from: old-column-generated-as-identity-Node
   kind: SameStagePrecedence
