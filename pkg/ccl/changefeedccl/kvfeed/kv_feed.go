@@ -759,82 +759,6 @@ func copyFromSourceToDestUntilTableEvent(
 			return nil
 		}
 
-		// spanFrontier returns the frontier timestamp for the specified span by
-		// finding the minimum timestamp of its subspans in the frontier.
-		spanFrontier = func(sp roachpb.Span) hlc.Timestamp {
-			minTs := hlc.MaxTimestamp
-			for _, ts := range frontier.SpanEntries(sp) {
-				if ts.Less(minTs) {
-					minTs = ts
-				}
-			}
-			if minTs == hlc.MaxTimestamp {
-				return hlc.Timestamp{}
-			}
-			return minTs
-		}
-
-		// checkCopyBoundary checks the event against the current copy boundary
-		// to determine if we should skip the event and/or whether we can stop copying.
-		// We can stop copying once the frontier has reached boundary.Timestamp().Prev().
-		// In most cases, a boundary does not exist, and thus we do nothing.
-		// If a boundary has been discovered, but the event happens before that boundary,
-		// we let the event proceed.
-		// Otherwise (if `e.ts` >= `boundary.ts`), we will act as follows:
-		//  - KV event: do nothing (we shouldn't emit this event)
-		//  - Resolved event: advance this span to `boundary.ts` in the frontier
-		checkCopyBoundary = func(e *kvevent.Event) (skipEvent, stopCopying bool, err error) {
-			if boundary == nil {
-				return false, false, nil
-			}
-			if knobs.EndTimeReached != nil && knobs.EndTimeReached() {
-				return true, true, nil
-			}
-			if e.Timestamp().Less(boundary.Timestamp()) {
-				return false, false, nil
-			}
-			switch e.Type() {
-			case kvevent.TypeKV:
-				return true, false, nil
-			case kvevent.TypeResolved:
-				boundaryResolvedTimestamp := boundary.Timestamp().Prev()
-				resolved := e.Resolved()
-				if resolved.Timestamp.LessEq(boundaryResolvedTimestamp) {
-					return false, false, nil
-				}
-
-				// At this point, we know event is after boundaryResolvedTimestamp.
-				skipEvent = true
-
-				if _, ok := boundary.(*errEndTimeReached); ok {
-					// We know we've hit the end time boundary. In this case, we do not want to
-					// skip this event because we want to make sure we emit checkpoint at
-					// exactly boundaryResolvedTimestamp. This checkpoint can be used to
-					// produce span based changefeed checkpoints if needed.
-					// We only want to emit this checkpoint once, and then we can skip
-					// subsequent checkpoints for this span until entire frontier reaches
-					// boundary timestamp.
-					if boundaryResolvedTimestamp.Compare(spanFrontier(resolved.Span)) > 0 {
-						e.ResolvedBackward(boundaryResolvedTimestamp)
-						skipEvent = false
-					}
-				}
-
-				if _, err := frontier.Forward(resolved.Span, boundaryResolvedTimestamp); err != nil {
-					return false, false, err
-				}
-
-				return skipEvent, frontier.Frontier() == boundaryResolvedTimestamp, nil
-			case kvevent.TypeFlush:
-				// TypeFlush events have a timestamp of zero and should have already
-				// been processed by the timestamp check above. We include this here
-				// for completeness.
-				return false, false, nil
-			default:
-				return false, false, &errUnknownEvent{*e}
-			}
-		}
-
 		// writeToDest writes an event to the dest.
 		writeToDest = func(e kvevent.Event) error {
 			defer st.KVFeedBuffer.Start().End()
@@ -863,7 +787,7 @@ func copyFromSourceToDestUntilTableEvent(
 			if err := checkForTableEvent(e.Timestamp()); err != nil {
 				return err
 			}
-			skipEntry, stopCopying, err := checkCopyBoundary(&e)
+			skipEntry, stopCopying, err := checkCopyBoundary(&e, boundary, frontier, knobs)
 			if err != nil {
 				return err
 			}
@@ -904,4 +828,83 @@ func copyFromSourceToDestUntilTableEvent(
 			return err
 		}
 	}
+}
+
+// checkCopyBoundary checks the event against the current copy boundary
+// to determine if we should skip the event and/or whether we can stop copying.
+// We can stop copying once the frontier has reached boundary.Timestamp().Prev().
+// In most cases, a boundary does not exist, and thus we do nothing.
+// If a boundary has been discovered, but the event happens before that boundary,
+// we let the event proceed.
+// Otherwise (if `e.ts` >= `boundary.ts`), we will act as follows:
+//   - KV event: do nothing (we shouldn't emit this event)
+//   - Resolved event: advance this span to `boundary.ts` in the frontier
+func checkCopyBoundary(
+	e *kvevent.Event, boundary copyBoundary, frontier span.Frontier, knobs TestingKnobs,
+) (skipEvent, stopCopying bool, err error) {
+	if boundary == nil {
+		return false, false, nil
+	}
+	if knobs.EndTimeReached != nil && knobs.EndTimeReached() {
+		return true, true, nil
+	}
+	if e.Timestamp().Less(boundary.Timestamp()) {
+		return false, false, nil
+	}
+
+	switch e.Type() {
+	case kvevent.TypeKV:
+		return true, false, nil
+	case kvevent.TypeResolved:
+		boundaryResolvedTimestamp := boundary.Timestamp().Prev()
+		resolved := e.Resolved()
+		if resolved.Timestamp.LessEq(boundaryResolvedTimestamp) {
+			return false, false, nil
+		}
+
+		// At this point, we know event is after boundaryResolvedTimestamp.
+		skipEvent = true
+
+		if _, ok := boundary.(*errEndTimeReached); ok {
+			// We know we've hit the end time boundary. In this case, we do not want to
+			// skip this event because we want to make sure we emit checkpoint at
+			// exactly boundaryResolvedTimestamp. This checkpoint can be used to
+			// produce span based changefeed checkpoints if needed.
+			// We only want to emit this checkpoint once, and then we can skip
+			// subsequent checkpoints for this span until entire frontier reaches
+			// boundary timestamp.
+			if boundaryResolvedTimestamp.Compare(spanFrontier(frontier, resolved.Span)) > 0 {
+				e.ResolvedBackward(boundaryResolvedTimestamp)
+				skipEvent = false
+			}
+		}
+
+		if _, err := frontier.Forward(resolved.Span, boundaryResolvedTimestamp); err != nil {
+			return false, false, err
+		}
+
+		return skipEvent, frontier.Frontier() == boundaryResolvedTimestamp, nil
+	case kvevent.TypeFlush:
+		// TypeFlush events have a timestamp of zero and should have already
+		// been processed by the timestamp check above. We include this here
+		// for completeness.
+		return false, false, nil
+	default:
+		return false, false, &errUnknownEvent{*e}
+	}
+}
+
+// spanFrontier returns the frontier timestamp for the specified span by
+// finding the minimum timestamp of its subspans in the frontier.
+func spanFrontier(frontier span.Frontier, sp roachpb.Span) hlc.Timestamp {
+	minTs := hlc.MaxTimestamp
+	for _, ts := range frontier.SpanEntries(sp) {
+		if ts.Less(minTs) {
+			minTs = ts
+		}
+	}
+	if minTs == hlc.MaxTimestamp {
+		return hlc.Timestamp{}
+	}
+	return minTs
 }
