@@ -381,12 +381,12 @@ func TestWatcherDropDatabase(t *testing.T) {
 
 	db.Exec(t, "DROP DATABASE defaultdb")
 
-	adds, err := watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
-	require.NoError(t, err)
-	assert.Empty(t, adds)
+	_, err = watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "dropped")
 
-	cancel()
-	require.ErrorIs(t, eg.Wait(), context.Canceled)
+	err = eg.Wait()
+	require.Contains(t, err.Error(), "dropped")
 }
 
 func getDatabaseID(
