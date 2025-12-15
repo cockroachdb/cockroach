@@ -323,11 +323,13 @@ func distImport(
 
 		merged, err := bulkmerge.Merge(ctx, execCtx, inputSSTs, spans, func(instanceID base.SQLInstanceID) string {
 			return fmt.Sprintf("nodelocal://%d/job/%d/merge/", instanceID, job.ID())
-		})
+		}, 1 /* iteration */, 2 /* maxIterations */, nil /* writeTS */)
 		if err != nil {
 			return err
 		}
 
+		// TODO(159374): skip this processor and write to the KV with merge by
+		// doing multiple merge iterations.
 		return bulkingest.IngestFiles(ctx, execCtx, spans, merged)
 	})
 
