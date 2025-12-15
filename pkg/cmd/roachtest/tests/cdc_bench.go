@@ -457,7 +457,7 @@ func runCDCBenchWorkload(
 		nWorkload = c.Node(numNodes - 2)
 		nKafka := c.Node(numNodes)
 
-		kafka, cleanup := setupKafka(ctx, t, c, nKafka)
+		kafka, cleanup := setupKafka(ctx, t, c, nKafka, kafkaManagerOpts{})
 		defer cleanup()
 		sinkURI = kafka.sinkURL(ctx)
 	case nullSink, "":
