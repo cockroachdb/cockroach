@@ -1210,17 +1210,19 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 				// rely on known strings.
 				validPgErrs := []string{
 					"cannot subtract infinite dates",
-					"regexp compilation failed",
-					"invalid regular expression",
-					"invalid escape string",
-					"error parsing GeoJSON",
-					"error parsing EWKT",
-					"geometry type is unsupported",
-					"should be of length",
 					"dwithin distance cannot be less than zero",
-					"parameter has to be of type Point",
+					"error parsing EWKB",
+					"error parsing EWKT",
+					"error parsing GeoJSON",
 					"expected LineString",
+					"geometry type is unsupported",
+					"invalid escape string",
+					"invalid input syntax for type",
+					"invalid regular expression",
 					"no locations to init GEOS",
+					"parameter has to be of type Point",
+					"regexp compilation failed",
+					"should be of length",
 				}
 				containsKnownPgErr := func(e error) (interface{}, bool) {
 					for _, v := range validPgErrs {
