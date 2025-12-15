@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/taskset"
@@ -210,13 +212,6 @@ func (m *bulkMergeProcessor) mergeSSTs(
 ) (execinfrapb.BulkMergeSpec_Output, error) {
 	mergeSpan := m.spec.Spans[taskID]
 	var storeFiles []storageccl.StoreFile
-	destStore, err := m.flowCtx.Cfg.ExternalStorage(ctx, m.spec.OutputStorage)
-	if err != nil {
-		return execinfrapb.BulkMergeSpec_Output{}, err
-	}
-	defer destStore.Close()
-	destFileAllocator := bulksst.NewExternalFileAllocator(destStore, m.spec.OutputStorage.URI,
-		m.flowCtx.Cfg.DB.KV().Clock())
 
 	// Find the ssts that overlap with the given task's key range.
 	for _, sst := range m.spec.SSTs {
@@ -247,6 +242,18 @@ func (m *bulkMergeProcessor) mergeSSTs(
 		return execinfrapb.BulkMergeSpec_Output{}, err
 	}
 	defer iter.Close()
+
+	if m.spec.Iteration == m.spec.MaxIterations {
+		return m.ingestFinalIteration(ctx, iter, mergeSpan)
+	}
+
+	destStore, err := m.flowCtx.Cfg.ExternalStorage(ctx, m.spec.OutputStorage)
+	if err != nil {
+		return execinfrapb.BulkMergeSpec_Output{}, err
+	}
+	defer destStore.Close()
+	destFileAllocator := bulksst.NewExternalFileAllocator(destStore, m.spec.OutputStorage.URI,
+		m.flowCtx.Cfg.DB.KV().Clock())
 
 	mergedSSTFile, currentFileURI, err := destFileAllocator.AddFile(ctx)
 	if err != nil {
@@ -333,6 +340,67 @@ func (m *bulkMergeProcessor) mergeSSTs(
 		})
 	}
 	return mergedSSTs, nil
+}
+
+func (m *bulkMergeProcessor) ingestFinalIteration(
+	ctx context.Context, iter storage.SimpleMVCCIterator, mergeSpan roachpb.Span,
+) (execinfrapb.BulkMergeSpec_Output, error) {
+	writeTS := m.spec.WriteTimestamp
+	if writeTS.IsEmpty() {
+		writeTS = m.flowCtx.Cfg.DB.KV().Clock().Now()
+	}
+
+	// Use SSTBatcher directly instead of BufferingAdder since the data is
+	// already sorted from the merge iterator. This avoids the unnecessary
+	// sorting overhead in BufferingAdder.
+	batcher, err := bulk.MakeSSTBatcher(
+		ctx,
+		"bulk-merge-final",
+		m.flowCtx.Cfg.DB.KV(),
+		m.flowCtx.EvalCtx.Settings,
+		hlc.Timestamp{}, // disallowShadowingBelow
+		false,           // writeAtBatchTs
+		false,           // scatterSplitRanges
+		m.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
+		m.flowCtx.Cfg.BulkSenderLimiter,
+		nil, // range cache
+	)
+	if err != nil {
+		return execinfrapb.BulkMergeSpec_Output{}, err
+	}
+	defer batcher.Close(ctx)
+
+	// Construct MVCC key with the write timestamp for each key from the iterator.
+	mvccKey := storage.MVCCKey{Timestamp: writeTS}
+	for iter.SeekGE(storage.MVCCKey{Key: mergeSpan.Key}); ; iter.NextKey() {
+		ok, err := iter.Valid()
+		if err != nil {
+			return execinfrapb.BulkMergeSpec_Output{}, err
+		}
+		if !ok {
+			break
+		}
+		key := iter.UnsafeKey()
+		if key.Key.Compare(mergeSpan.EndKey) >= 0 {
+			break
+		}
+		val, err := iter.UnsafeValue()
+		if err != nil {
+			return execinfrapb.BulkMergeSpec_Output{}, err
+		}
+
+		// Set the user key on the MVCC key and add to batcher.
+		// The data is already sorted, so SSTBatcher can write directly without sorting.
+		mvccKey.Key = key.Key.Clone()
+		if err := batcher.AddMVCCKey(ctx, mvccKey, val); err != nil {
+			return execinfrapb.BulkMergeSpec_Output{}, err
+		}
+	}
+
+	if err := batcher.Flush(ctx); err != nil {
+		return execinfrapb.BulkMergeSpec_Output{}, err
+	}
+	return execinfrapb.BulkMergeSpec_Output{}, nil
 }
 
 func init() {

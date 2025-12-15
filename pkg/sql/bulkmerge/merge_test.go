@@ -80,6 +80,100 @@ func TestDistributedMergeThreeNodes(t *testing.T) {
 	testMergeProcessors(t, srv, instanceCount)
 }
 
+func TestDistributedMergeMultiPassIngestsIntoKV(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		ExternalIODir: dir,
+		// These tests write directly into KV, so they must run against the system
+		// tenant.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	tsa := newTestServerAllocator(t, ctx, execCfg)
+	jobExecCtx, jobCleanup := sql.MakeJobExecContext(
+		ctx, "test", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
+	)
+	defer jobCleanup()
+
+	targetFileSize.Override(ctx, &s.ClusterSettings().SV, 1<<20)
+	fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock())
+	batcher := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator)
+
+	prefix := "merge-multi/"
+	const keyCount = 10
+	expected := make(map[string]string, keyCount)
+	for i := 0; i < keyCount; i++ {
+		key := fmt.Sprintf("%skey-%d", prefix, i)
+		val := fmt.Sprintf("value-%d", i)
+		expected[key] = val
+
+		mvccVal := roachpb.MakeValueFromBytes([]byte(val))
+		encMVCCVal, err := storage.EncodeMVCCValue(storage.MVCCValue{Value: mvccVal})
+		require.NoError(t, err)
+		mvccKey := storage.MVCCKey{
+			Key:       []byte(key),
+			Timestamp: hlc.Timestamp{WallTime: 1},
+		}
+		require.NoError(t, batcher.AddMVCCKey(ctx, mvccKey, encMVCCVal))
+	}
+	require.NoError(t, batcher.CloseWithError(ctx))
+
+	inputSSTs := importToMerge(fileAllocator.GetFileList())
+	start := roachpb.Key(prefix)
+	end := start.PrefixEnd()
+	spans := []roachpb.Span{{Key: start, EndKey: end}}
+
+	// First iteration produces merged SSTs to external storage.
+	iter1Out, err := Merge(
+		ctx,
+		jobExecCtx,
+		inputSSTs,
+		spans,
+		func(instanceID base.SQLInstanceID) string {
+			return fmt.Sprintf("nodelocal://%d/merge/iter-1/", instanceID)
+		},
+		1, /* iteration */
+		2, /* maxIterations */
+		nil,
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, iter1Out)
+
+	// Second (final) iteration ingests directly into KV.
+	writeTS := execCfg.Clock.Now()
+	iter2Out, err := Merge(
+		ctx,
+		jobExecCtx,
+		iter1Out,
+		spans,
+		func(instanceID base.SQLInstanceID) string {
+			return fmt.Sprintf("nodelocal://%d/merge/iter-2/", instanceID)
+		},
+		2, /* iteration */
+		2, /* maxIterations */
+		&writeTS,
+	)
+	require.NoError(t, err)
+	require.Nil(t, iter2Out, "final iteration should not produce SST outputs")
+
+	rows, err := s.DB().Scan(ctx, start, end, 0 /* maxRows */)
+	require.NoError(t, err)
+	require.Len(t, rows, keyCount)
+	for _, kv := range rows {
+		val, err := kv.Value.GetBytes()
+		require.NoError(t, err)
+		require.Equal(t, expected[string(kv.Key)], string(val))
+	}
+}
+
 func randIntSlice(n int) []int {
 	ls := make([]int, n)
 	for i := range ls {
@@ -199,7 +293,10 @@ func testMergeProcessors(
 		spans,
 		func(instanceID base.SQLInstanceID) string {
 			return fmt.Sprintf("nodelocal://%d/merge/out/", instanceID)
-		})
+		},
+		1, /* iteration */
+		2, /* maxIterations */
+		nil /* writeTS */)
 	require.NoError(t, err)
 	defer plan.Release()
 
