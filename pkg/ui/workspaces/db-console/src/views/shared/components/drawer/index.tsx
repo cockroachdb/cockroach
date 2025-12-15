@@ -21,11 +21,7 @@ interface IDrawerProps {
 }
 
 const openDetails = (data: any) => {
-  const base =
-    data.app && data.app.length > 0
-      ? `/statements/${data.app}/${data.implicitTxn}`
-      : `/statement/${data.implicitTxn}`;
-  const link = `${base}/${encodeURIComponent(data.statement)}`;
+  const link = `/statement/${encodeURIComponent(data.statement)}`;
   return <Link to={link}>View statement details</Link>;
 };
 

@@ -100,7 +100,7 @@ type StatementDetailsResponse =
 const { TabPane } = Tabs;
 
 export type StatementDetailsProps = StatementDetailsOwnProps &
-  RouteComponentProps<{ implicitTxn: string; statement: string }>;
+  RouteComponentProps<{ statement: string }>;
 
 export interface StatementDetailsState {
   currentTab?: string;
