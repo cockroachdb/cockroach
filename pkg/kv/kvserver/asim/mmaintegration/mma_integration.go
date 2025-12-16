@@ -15,6 +15,11 @@ import (
 
 // MakeStoreLeaseholderMsgFromState creates a StoreLeaseholderMsg from the
 // state of the simulator.
+//
+// The span config is populated when the replica's mmaSpanConfigIsUpToDate flag
+// is false (new replica, span config changed, or lease was just acquired).
+// The caller is responsible for setting mmaSpanConfigIsUpToDate=true on replicas
+// after successfully sending the message to MMA.
 func MakeStoreLeaseholderMsgFromState(
 	s state.State, storeID state.StoreID,
 ) mmaprototype.StoreLeaseholderMsg {
@@ -76,13 +81,21 @@ func MakeStoreLeaseholderMsgFromState(
 		rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(load.RaftCPUNanosPerSecond + load.RequestCPUNanosPerSecond)
 		rl.RaftCPU = mmaprototype.LoadValue(load.RaftCPUNanosPerSecond)
 
-		rangeMessages = append(rangeMessages, mmaprototype.RangeMsg{
-			RangeID:                  roachpb.RangeID(replica.Range()),
-			MaybeSpanConfIsPopulated: true,
+		rngSpanConf := rng.SpanConfig()
+		rangeID := roachpb.RangeID(replica.Range())
+
+		spanConfIsPopulated := !replica.MMASpanConfigIsUpToDate() && rngSpanConf != nil
+
+		rangeMsg := mmaprototype.RangeMsg{
+			RangeID:                  rangeID,
+			MaybeSpanConfIsPopulated: spanConfIsPopulated,
 			Replicas:                 replicas,
-			MaybeSpanConf:            *rng.SpanConfig(),
 			RangeLoad:                rl,
-		})
+		}
+		if spanConfIsPopulated {
+			rangeMsg.MaybeSpanConf = *rngSpanConf
+		}
+		rangeMessages = append(rangeMessages, rangeMsg)
 	}
 
 	return mmaprototype.StoreLeaseholderMsg{
