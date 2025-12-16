@@ -337,7 +337,6 @@ export interface ExecutionDetails {
   elapsedTimeMillis?: number;
   contentionTimeMs?: number;
   fingerprintID?: string;
-  implicit?: boolean;
   indexRecommendations?: string[];
   retries?: number;
   statement?: string;

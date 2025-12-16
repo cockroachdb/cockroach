@@ -136,7 +136,6 @@ export type StatementMetadata = {
   distsql: boolean;
   failed: boolean;
   fullScan: boolean;
-  implicitTxn: boolean;
   query: string;
   querySummary: string;
   stmtType: string;
@@ -211,7 +210,6 @@ export function convertStatementRawFormatToAggregatedStatistics(
     applicationName: s.app_name,
     database: s.metadata.db,
     fullScan: s.metadata.fullScan,
-    implicitTxn: s.metadata.implicitTxn,
     label: s.metadata.querySummary,
     summary: s.metadata.querySummary,
     aggregatedTs: s.aggregated_ts,

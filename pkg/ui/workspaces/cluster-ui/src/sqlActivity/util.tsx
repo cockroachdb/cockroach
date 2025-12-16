@@ -153,7 +153,6 @@ export const convertRawStmtsToAggregateStatistics = (
       label: stmt.statement,
       summary: stmt.statement_summary,
       aggregatedTs: stmt.aggregated_ts,
-      implicitTxn: stmt.implicit_txn,
       fullScan: stmt.full_scan,
       database: stmt.database,
       applicationName: stmt.app,

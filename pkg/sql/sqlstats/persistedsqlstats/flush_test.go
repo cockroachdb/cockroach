@@ -828,11 +828,7 @@ func TestSQLStatsStmtSampling(t *testing.T) {
 
 	checkSampled := func(fingerprint string, implicitTxn bool, expectedPreviouslySampledState bool) {
 
-		previouslySampled := appStats.StatementSampled(
-			fingerprint,
-			implicitTxn,
-			dbName,
-		)
+		previouslySampled := appStats.StatementSampled(fingerprint, dbName)
 
 		errMessage := fmt.Sprintf("validate: %s, implicit: %t expected sample before: %t, actual sample before: %t\n",
 			fingerprint, implicitTxn, expectedPreviouslySampledState, previouslySampled)

@@ -152,7 +152,7 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 				d.MaybeScanArgs(t, "stubStatementFingerprintId", &stubStatementFingerprintId)
 				if stubStatementFingerprintId != "" {
 					defer testutils.TestingHook(&appstatspb.ConstructStatementFingerprintID,
-						func(stmtNoConstants string, implicitTxn bool, database string) appstatspb.StmtFingerprintID {
+						func(stmtNoConstants string, database string) appstatspb.StmtFingerprintID {
 							parseUint, e := strconv.ParseUint(stubStatementFingerprintId, 10, 64)
 							if e != nil {
 								panic(e.Error())

@@ -226,7 +226,6 @@ function ExplainPlan({
           idxRecommendations={plan.stats.index_recommendations}
           database={plan.metadata.databases[0]}
           query={plan.metadata.query}
-          implicitTxn={plan.metadata.implicit_txn}
           statementFingerprintID={statementFingerprintID}
           sortSetting={sortSetting}
           onChangeSortSetting={onChangeSortSetting}
@@ -241,7 +240,6 @@ function formatIdxRecommendations(
   idxRecs: string[],
   database: string,
   query: string,
-  implicitTxn?: boolean,
   statementFingerprintID?: string,
 ): InsightRecommendation[] {
   const recs = [];
@@ -274,7 +272,6 @@ function formatIdxRecommendations(
         statement: query,
         summary: query.length > 120 ? query.slice(0, 120) + "..." : query,
         fingerprintID: statementFingerprintID,
-        implicit: implicitTxn,
       },
     };
     recs.push(idxRec);
@@ -287,7 +284,6 @@ interface InsightsProps {
   idxRecommendations: string[];
   database: string;
   query: string;
-  implicitTxn?: boolean;
   statementFingerprintID?: string;
   sortSetting?: SortSetting;
   onChangeSortSetting?: (ss: SortSetting) => void;
@@ -298,7 +294,6 @@ export function Insights({
   idxRecommendations,
   database,
   query,
-  implicitTxn,
   statementFingerprintID,
   sortSetting,
   onChangeSortSetting,
@@ -311,7 +306,6 @@ export function Insights({
     idxRecommendations,
     database,
     query,
-    implicitTxn,
     statementFingerprintID,
   );
   return (

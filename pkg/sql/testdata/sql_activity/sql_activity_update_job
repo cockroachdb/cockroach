@@ -48,8 +48,8 @@ run-sql useApp=true
 SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
 system.transaction_statistics WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
 ----
-2024-01-01 01:00:00 +0000 UTC,["1d2a16425a50b884"],1
-2024-01-01 01:00:00 +0000 UTC,["78da04360628cf28"],1
+2024-01-01 01:00:00 +0000 UTC,["6afa260318561b7f"],1
+2024-01-01 01:00:00 +0000 UTC,["58d6127c4c85189b"],1
 
 # Check the values got properly added to the top activity tables.
 run-sql useApp=true
@@ -63,8 +63,8 @@ run-sql useApp=true
 SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
 system.transaction_activity WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
 ----
-2024-01-01 01:00:00 +0000 UTC,["1d2a16425a50b884"],1
-2024-01-01 01:00:00 +0000 UTC,["78da04360628cf28"],1
+2024-01-01 01:00:00 +0000 UTC,["6afa260318561b7f"],1
+2024-01-01 01:00:00 +0000 UTC,["58d6127c4c85189b"],1
 
 # Change the app name back, so new stats can be added.
 update-app ignore=false
@@ -123,11 +123,11 @@ run-sql useApp=true
 SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
 system.transaction_statistics WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
 ----
-2024-01-01 01:00:00 +0000 UTC,["e4e9b6317139aad1"],1
-2024-01-01 01:00:00 +0000 UTC,["1d2a16425a50b884"],3
-2024-01-01 01:00:00 +0000 UTC,["78da04360628cf28"],1
-2024-01-01 02:00:00 +0000 UTC,["2e9ed501bad29d2a"],1
-2024-01-01 02:00:00 +0000 UTC,["1d2a16425a50b884"],1
+2024-01-01 01:00:00 +0000 UTC,["a8370357cd0f6f08"],1
+2024-01-01 01:00:00 +0000 UTC,["6afa260318561b7f"],3
+2024-01-01 01:00:00 +0000 UTC,["58d6127c4c85189b"],1
+2024-01-01 02:00:00 +0000 UTC,["e76e463042ee3d91"],1
+2024-01-01 02:00:00 +0000 UTC,["6afa260318561b7f"],1
 
 # Check the values got properly added to the top activity tables
 run-sql useApp=true
@@ -144,8 +144,8 @@ run-sql useApp=true
 SELECT aggregated_ts, metadata -> 'stmtFingerprintIDs', statistics -> 'statistics' -> 'cnt' as count FROM
 system.transaction_activity WHERE app_name = $1 ORDER BY aggregated_ts, fingerprint_id
 ----
-2024-01-01 01:00:00 +0000 UTC,["e4e9b6317139aad1"],1
-2024-01-01 01:00:00 +0000 UTC,["1d2a16425a50b884"],3
-2024-01-01 01:00:00 +0000 UTC,["78da04360628cf28"],1
-2024-01-01 02:00:00 +0000 UTC,["2e9ed501bad29d2a"],1
-2024-01-01 02:00:00 +0000 UTC,["1d2a16425a50b884"],1
+2024-01-01 01:00:00 +0000 UTC,["a8370357cd0f6f08"],1
+2024-01-01 01:00:00 +0000 UTC,["6afa260318561b7f"],3
+2024-01-01 01:00:00 +0000 UTC,["58d6127c4c85189b"],1
+2024-01-01 02:00:00 +0000 UTC,["e76e463042ee3d91"],1
+2024-01-01 02:00:00 +0000 UTC,["6afa260318561b7f"],1

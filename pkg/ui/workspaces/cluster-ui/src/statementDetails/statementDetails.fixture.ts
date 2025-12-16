@@ -21,7 +21,6 @@ const statementDetailsNoData: StatementDetailsResponse = {
       formatted_query: "",
       query_summary: "",
       stmt_type: "",
-      implicit_txn: false,
       dist_sql_count: new Long(0),
       full_scan_count: new Long(0),
       vec_count: new Long(0),
@@ -76,7 +75,6 @@ const statementDetailsData: StatementDetailsResponse = {
       query: "SELECT * FROM crdb_internal.node_build_info",
       app_names: ["$ cockroach sql", "newname"],
       dist_sql_count: new Long(2),
-      implicit_txn: true,
       vec_count: new Long(2),
       full_scan_count: new Long(2),
       databases: ["defaultdb"],
@@ -828,17 +826,16 @@ export const getStatementDetailsPropsFixture = (
   return {
     history,
     location: {
-      pathname: "/statement/true/4705782015019656142",
+      pathname: "/statement/4705782015019656142",
       search: "",
       hash: "",
       state: null,
     },
     match: {
-      path: "/statement/:implicitTxn/:statement",
-      url: "/statement/true/4705782015019656142",
+      path: "/statement/:statement",
+      url: "/statement/4705782015019656142",
       isExact: true,
       params: {
-        implicitTxn: "true",
         statement: "4705782015019656142",
       },
     },

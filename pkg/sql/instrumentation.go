@@ -446,8 +446,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.isTenant = execinfra.IncludeRUEstimateInExplainAnalyze.Get(cfg.SV()) && cfg.DistSQLSrv != nil &&
 		cfg.DistSQLSrv.TenantCostController != nil
 	ih.topLevelStats = topLevelQueryStats{}
-	stmtFingerprintId := appstatspb.ConstructStatementFingerprintID(
-		stmt.StmtNoConstants, implicitTxn, p.SessionData().Database)
+	stmtFingerprintId := appstatspb.ConstructStatementFingerprintID(stmt.StmtNoConstants, p.SessionData().Database)
 	ih.fingerprintId = stmtFingerprintId
 	ih.stmtDiagnosticsRecorder = stmtDiagnosticsRecorder
 	ih.withStatementTrace = cfg.TestingKnobs.WithStatementTrace
@@ -505,7 +504,7 @@ func (ih *instrumentationHelper) Setup(
 	}
 
 	if collectTxnExecStats {
-		statsCollector.SetStatementSampled(stmt.StmtNoConstants, implicitTxn, p.SessionData().Database)
+		statsCollector.SetStatementSampled(stmt.StmtNoConstants, p.SessionData().Database)
 	} else {
 		collectTxnExecStats = func() bool {
 			if stmt.AST.StatementType() == tree.TypeTCL {
@@ -522,7 +521,7 @@ func (ih *instrumentationHelper) Setup(
 			// If this is the first time we see this statement in the current stats
 			// container, we'll collect its execution stats anyway (unless the user
 			// disabled txn or stmt stats collection entirely).
-			return statsCollector.ShouldSampleNewStatement(stmt.StmtNoConstants, implicitTxn, p.SessionData().Database)
+			return statsCollector.ShouldSampleNewStatement(stmt.StmtNoConstants, p.SessionData().Database)
 		}()
 	}
 

@@ -4455,8 +4455,7 @@ func (ex *connExecutor) execWithProfiling(
 			stmtNoConstants = tree.FormatStatementHideConstants(ast, fmtFlags)
 		}
 		// Compute fingerprint ID here since ih.Setup hasn't been called yet.
-		fingerprintID := appstatspb.ConstructStatementFingerprintID(
-			stmtNoConstants, ex.implicitTxn(), ex.sessionData().Database)
+		fingerprintID := appstatspb.ConstructStatementFingerprintID(stmtNoConstants, ex.sessionData().Database)
 		pprofutil.Do(ctx, func(ctx context.Context) {
 			err = op(ctx)
 		},

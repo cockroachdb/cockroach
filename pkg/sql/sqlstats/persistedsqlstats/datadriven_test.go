@@ -146,11 +146,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 			// them.
 			fingerprint = strings.Replace(fingerprint, "%", " ", -1)
 
-			previouslySampled := appStats.StatementSampled(
-				fingerprint,
-				implicitTxn,
-				dbName,
-			)
+			previouslySampled := appStats.StatementSampled(fingerprint, dbName)
 			return fmt.Sprintf("%t", previouslySampled)
 		case "skip":
 			var issue int

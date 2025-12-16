@@ -63,7 +63,6 @@ export interface AggregateStatistics {
   // replaced with shortStatement otherwise.
   summary: string;
   aggregatedTs: number;
-  implicitTxn: boolean;
   fullScan: boolean;
   database: string;
   applicationName: string;

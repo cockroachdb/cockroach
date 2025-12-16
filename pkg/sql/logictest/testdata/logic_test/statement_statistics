@@ -65,13 +65,13 @@ select 1, 2; select 1, 2, 3; select 'ok'
 statement ok
 SET application_name = ''
 
-query TTTB retry
-SELECT statement_id, txn_fingerprint_id, key, implicit_txn FROM crdb_internal.node_statement_statistics WHERE application_name = 'multi_stmts_test' ORDER BY key, txn_fingerprint_id
+query TTT retry
+SELECT statement_id, txn_fingerprint_id, key FROM crdb_internal.node_statement_statistics WHERE application_name = 'multi_stmts_test' ORDER BY key, txn_fingerprint_id
 ----
-10543509969653713415  11423158778792053189  SELECT _                  true
-5745311157220589890   11423158778792053189  SELECT _, _               true
-5153809228704478449   11423158778792053189  SELECT _, _, _            true
-17546814520094097656  6692757627851618087   SET application_name = _  true
+7928773885180877178   18265961508612229380  SELECT _
+1149870031395497801   18265961508612229380  SELECT _, _
+10182044490880789608  18265961508612229380  SELECT _, _, _
+3003916976115243531   9715306593911631316   SET application_name = _
 
 statement ok
 CREATE TABLE test(x INT, y INT, z INT); INSERT INTO test(x, y, z) VALUES (0,0,0);
@@ -202,50 +202,6 @@ SELECT _  true    true      true     true    true
 SELECT _  true    true      true     true    true
 SELECT _  true    true      true     true    true
 
-# Check that statements made in implicit transactions are separated from those
-# that are not.
-
-statement ok
-SET application_name = 'implicit_txn_test'
-
-statement ok
-BEGIN; SELECT x FROM test where y=1; COMMIT;
-
-# Upgraded implicit txn. All statements should be in explicit txn.
-statement ok
-select 1; BEGIN; select 1; select 1; COMMIT
-
-statement ok
-BEGIN;
-SELECT x, z FROM test;
-SELECT x FROM test where y=1;
-COMMIT;
-
-statement ok
-SELECT z FROM test where y=2;
-
-statement ok
-SELECT x FROM test where y=1;
-
-statement ok
-RESET application_name
-
-query TTTB colnames,retry
-SELECT statement_id, txn_fingerprint_id, key, implicit_txn
-  FROM crdb_internal.node_statement_statistics
- WHERE application_name = 'implicit_txn_test'
-ORDER BY statement_id, key, implicit_txn;
-----
-statement_id          txn_fingerprint_id    key                             implicit_txn
-10408858296841757952  4544145443417805535   SELECT x FROM test WHERE y = _  false
-10408858296841757952  13478531408983698331  SELECT x FROM test WHERE y = _  false
-10408858296841757964  4544145443417805523   SELECT x FROM test WHERE y = _  true
-10543509969653713419  646847662919799570    SELECT _                        false
-12572515814643342375  79149212088773624     RESET application_name          true
-15907252083884073594  8332314834087515557   SELECT z FROM test WHERE y = _  true
-3710577796014427302   13478531408983698331  SELECT x, z FROM test           false
-
-
 # Test throttling of storing statistics per application
 
 # Creating some helper views.
@@ -353,22 +309,22 @@ RESET application_name
 query TTI retry
 SELECT * FROM app_stmts_view ORDER BY 2
 ----
-12572515814643342375  RESET application_name                                                 3
-10543509969653713419  SELECT _                                                               2
-10543509969653713419  SELECT _                                                               1
-5745311157220589902   SELECT _, _                                                            2
-5745311157220589902   SELECT _, _                                                            1
-5153809228704478461   SELECT _, _, _                                                         2
-5323573557126703672   SELECT _, _, _, _                                                      1
-1284200566828503222   SELECT count(_) AS wombat1                                             1
-431703347292518239    SELECT count(_) AS wombat2                                             1
-8979787910399768568   SET CLUSTER SETTING "sql.metrics.max_mem_stmt_fingerprints" = DEFAULT  1
-17515881800496300282  SET CLUSTER SETTING "sql.metrics.max_mem_txn_fingerprints" = DEFAULT   1
+8157382750598442714   RESET application_name                                                 3
+7928773885180877178   SELECT _                                                               2
+7928773885180877178   SELECT _                                                               1
+1149870031395497801   SELECT _, _                                                            2
+1149870031395497801   SELECT _, _                                                            1
+10182044490880789608  SELECT _, _, _                                                         2
+7711936872899816207   SELECT _, _, _, _                                                      1
+17089948394804253633  SELECT count(_) AS wombat1                                             1
+10525193303439383422  SELECT count(_) AS wombat2                                             1
+12054215425236092683  SET CLUSTER SETTING "sql.metrics.max_mem_stmt_fingerprints" = DEFAULT  1
+5956647164099413249   SET CLUSTER SETTING "sql.metrics.max_mem_txn_fingerprints" = DEFAULT   1
 
 query TTI
 SELECT * FROM txn_fingerprint_view ORDER BY 1
 ----
-12294275735240441984  {431703347292518239}                                            1
-13741002326085904233  {1284200566828503222}                                           1
-7184384531886178123   {10543509969653713419,5745311157220589902,5153809228704478461}  2
-7913717851072930190   {10543509969653713419,5745311157220589902,5323573557126703672}  1
+1214631142438135818   {7928773885180877178,1149870031395497801,10182044490880789608}  2
+17766861796794494829  {7928773885180877178,1149870031395497801,7711936872899816207}   1
+4427956285091261601   {10525193303439383422}                                          1
+4776081459034268702   {17089948394804253633}                                          1

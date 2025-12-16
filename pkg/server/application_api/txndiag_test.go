@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -286,20 +287,25 @@ func TestAdminAPITransactionDiagnosticsBundle(t *testing.T) {
 	ts := s.ApplicationLayer()
 	conn := sqlutils.MakeSQLRunner(ts.SQLConn(t))
 
+	conn.Exec(t, "CREATE DATABASE IF NOT EXISTS testdb")
+	conn.Exec(t, "USE testdb")
 	// Set up the test table
 	conn.Exec(t, "CREATE TABLE test (id INT)")
 
+	stmt1 := "INSERT INTO test VALUES (_)"
+	stmt2 := "SELECT * FROM test"
+
 	// Insert into transaction_diagnostics first
-	txnFingerprintID, err := sqlstatsutil.DecodeStringToTxnFingerprintID("5a808c2f3780b2c8")
-	require.NoError(t, err)
-	stmt1FingerprintID, err := sqlstatsutil.DecodeStringToStmtFingerprintID("2ca050d725bfd5f0")
-	require.NoError(t, err)
-	stmt2FingerprintID, err := sqlstatsutil.DecodeStringToStmtFingerprintID("fece62580b006715")
-	require.NoError(t, err)
+	txnFingerprintIDBuilder := util.MakeFNV64()
+	stmt1FingerprintID := appstatspb.ConstructStatementFingerprintID(stmt1, "testdb")
+	stmt2FingerprintID := appstatspb.ConstructStatementFingerprintID(stmt2, "testdb")
+	txnFingerprintIDBuilder.Add(uint64(stmt1FingerprintID))
+	txnFingerprintIDBuilder.Add(uint64(stmt2FingerprintID))
+	txnFingerprintID := txnFingerprintIDBuilder.Sum()
 
 	// Create a transaction diagnostic request that should match our data
 	req := &serverpb.CreateTransactionDiagnosticsReportRequest{
-		TransactionFingerprintId: sqlstatsutil.EncodeUint64ToBytes(uint64(txnFingerprintID)),
+		TransactionFingerprintId: sqlstatsutil.EncodeUint64ToBytes(txnFingerprintID),
 		StatementFingerprintIds: [][]byte{
 			sqlstatsutil.EncodeUint64ToBytes(uint64(stmt1FingerprintID)),
 			sqlstatsutil.EncodeUint64ToBytes(uint64(stmt2FingerprintID)),
@@ -307,7 +313,7 @@ func TestAdminAPITransactionDiagnosticsBundle(t *testing.T) {
 	}
 
 	var resp serverpb.CreateTransactionDiagnosticsReportResponse
-	err = srvtestutils.PostStatusJSONProto(ts, "txndiagreports", req, &resp)
+	err := srvtestutils.PostStatusJSONProto(ts, "txndiagreports", req, &resp)
 	require.NoError(t, err)
 	require.NotZero(t, resp.Report.Id)
 

@@ -1071,7 +1071,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	}
 
 	query := `INSERT INTO posts VALUES (_, __more__)`
-	fingerprintID := appstatspb.ConstructStatementFingerprintID(query, true, `roachblog`)
+	fingerprintID := appstatspb.ConstructStatementFingerprintID(query, `roachblog`)
 	path := fmt.Sprintf(`stmtdetails/%v`, fingerprintID)
 
 	var resp serverpb.StatementDetailsResponse
@@ -1263,7 +1263,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 		thirdServerSQL.Exec(t, stmt)
 	}
 	selectQuery := "SELECT _, _, _, _"
-	fingerprintID = appstatspb.ConstructStatementFingerprintID(selectQuery, true, "defaultdb")
+	fingerprintID = appstatspb.ConstructStatementFingerprintID(selectQuery, "defaultdb")
 
 	testPath(
 		fmt.Sprintf(`stmtdetails/%v`, fingerprintID),
@@ -1763,7 +1763,6 @@ func generateStatement() appstatspb.CollectedStatementStatistics {
 			Database:                 "test_database",
 			DistSQL:                  true,
 			FullScan:                 true,
-			ImplicitTxn:              true,
 			PlanHash:                 uint64(200),
 			Query:                    "SELECT * FROM foo",
 			QuerySummary:             "SELECT * FROM foo",
@@ -1922,7 +1921,6 @@ func insertStatementIntoSystemStmtStatsTable(
 		Database:     statement.Key.Database,
 		DistSQL:      statement.Key.DistSQL,
 		FullScan:     statement.Key.FullScan,
-		ImplicitTxn:  statement.Key.ImplicitTxn,
 		Query:        statement.Key.Query,
 		QuerySummary: statement.Key.QuerySummary,
 		StmtType:     statement.Stats.SQLType,
@@ -1993,7 +1991,6 @@ func insertStatementIntoSystemStmtActivityTable(
 		DistSQLCount:  1,
 		FailedCount:   0,
 		FullScanCount: 1,
-		ImplicitTxn:   statement.Key.ImplicitTxn,
 		Query:         statement.Key.Query,
 		QuerySummary:  statement.Key.QuerySummary,
 		StmtType:      statement.Stats.SQLType,

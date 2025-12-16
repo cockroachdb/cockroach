@@ -53,9 +53,8 @@ func TestSampledStatsCollection(t *testing.T) {
 		) *appstatspb.CollectedStatementStatistics {
 			t.Helper()
 			key := appstatspb.StatementStatisticsKey{
-				Query:       stmt,
-				ImplicitTxn: implicitTxn,
-				Database:    database,
+				Query:    stmt,
+				Database: database,
 			}
 			var stats *appstatspb.CollectedStatementStatistics
 			require.NoError(t, sqlStats.
@@ -64,7 +63,6 @@ func TestSampledStatsCollection(t *testing.T) {
 					sqlstats.IteratorOptions{},
 					func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 						if statistics.Key.Query == key.Query &&
-							statistics.Key.ImplicitTxn == key.ImplicitTxn &&
 							statistics.Key.Database == key.Database {
 							stats = statistics
 						}

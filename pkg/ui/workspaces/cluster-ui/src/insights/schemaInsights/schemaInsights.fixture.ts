@@ -38,7 +38,6 @@ export const SchemaInsightsPropsFixture: InsightRecommendation[] = [
       statement: "SELECT * FROM test_table WHERE another_num > _",
       summary: "SELECT * FROM test_table",
       fingerprintID: "\\xc093e4523ab0bd3e",
-      implicit: true,
     },
   },
   {
@@ -49,7 +48,6 @@ export const SchemaInsightsPropsFixture: InsightRecommendation[] = [
       statement: "SELECT * FROM test_table WHERE yet_another_num > _",
       summary: "SELECT * FROM test_table",
       fingerprintID: "\\xc093e4523ab0db9o",
-      implicit: false,
     },
   },
 ];

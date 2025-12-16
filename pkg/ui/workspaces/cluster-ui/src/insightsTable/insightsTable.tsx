@@ -125,7 +125,6 @@ const StatementExecution = ({
           statementFingerprintID={rec.execution.fingerprintID}
           statement={rec.execution.statement}
           statementSummary={rec.execution.summary}
-          implicitTxn={rec.execution.implicit}
           className="inline"
         />
       )}

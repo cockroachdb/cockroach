@@ -129,7 +129,6 @@ function createIndexRecommendationsToSchemaInsight(
           statement: row.query,
           summary: row.querysummary,
           fingerprintID: HexStringToInt64String(row.fingerprint_id),
-          implicit: row.implicittxn,
         },
         query: recQuery,
       });

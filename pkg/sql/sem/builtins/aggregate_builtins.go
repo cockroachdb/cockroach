@@ -1962,7 +1962,6 @@ func mergeAggregatedMetadataHelper(
 	if aggMetadata.Query == "" {
 		// Decode and set the constant info only if they haven't been set yet.
 		err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON.JSON, tmpMetadata)
-		aggMetadata.ImplicitTxn = tmpMetadata.ImplicitTxn
 		aggMetadata.Query = tmpMetadata.Query
 		aggMetadata.QuerySummary = tmpMetadata.QuerySummary
 		aggMetadata.StmtType = tmpMetadata.StmtType

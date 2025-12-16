@@ -147,6 +147,8 @@ message StatementStatistics {
   // (ex/ not replication related work).
   optional NumericStat kv_cpu_time_nanos = 38 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTimeNanos"];
 
+  optional int64 implicit_txn_count = 39 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;
@@ -232,14 +234,14 @@ message StatementStatisticsKey {
   optional string query = 1 [(gogoproto.nullable) = false];
   optional string app = 2 [(gogoproto.nullable) = false];
   optional bool distSQL = 3 [(gogoproto.nullable) = false];
-  optional bool implicit_txn = 6 [(gogoproto.nullable) = false];
+//  optional bool implicit_txn = 6 [(gogoproto.nullable) = false];
   optional bool vec = 7 [(gogoproto.nullable) = false];
   optional bool full_scan = 8 [(gogoproto.nullable) = false];
   optional string database = 9 [(gogoproto.nullable) = false];
   optional uint64 plan_hash = 10 [(gogoproto.nullable) = false];
   optional string query_summary = 12 [(gogoproto.nullable) = false];
 
-  reserved 4, 5;
+  reserved 4, 5, 6;
   optional uint64 transaction_fingerprint_id = 11
     [(gogoproto.nullable) = false,
      (gogoproto.customname) = "TransactionFingerprintID",
@@ -255,14 +257,14 @@ message AggregatedStatementMetadata {
   optional string stmt_type = 4 [(gogoproto.nullable) = false];
   repeated string app_names = 5;
   repeated string databases = 6;
-  optional bool implicit_txn = 7 [(gogoproto.nullable) = false];
+//  optional bool implicit_txn = 7 [(gogoproto.nullable) = false];
   optional int64 dist_sql_count = 8 [(gogoproto.nullable) = false, (gogoproto.customname) = "DistSQLCount"];
   optional int64 full_scan_count = 10 [(gogoproto.nullable) = false];
   optional int64 vec_count = 11 [(gogoproto.nullable) = false];
   optional int64 total_count = 12 [(gogoproto.nullable) = false];
   optional string fingerprint_id = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "FingerprintID"];
 
-  reserved 9;
+  reserved 7, 9;
 }
 
 // CollectedStatementStatistics wraps collected timings and metadata for some

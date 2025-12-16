@@ -60,7 +60,6 @@ describe("SQLDetailsStats sagas", () => {
           query: "SELECT * FROM crdb_internal.node_build_info",
           app_names: ["$ cockroach sql", "newname"],
           dist_sql_count: new Long(2),
-          implicit_txn: true,
           vec_count: new Long(2),
           full_scan_count: new Long(2),
           databases: ["defaultdb"],

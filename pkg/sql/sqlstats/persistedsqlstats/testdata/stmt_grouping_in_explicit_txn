@@ -55,8 +55,8 @@ ORDER BY
   jsonb_array_length(metadata -> 'stmtFingerprintIDs')
 ASC
 ----
-dce4fa24f23a3c31,["1d2a16425a50b888", "647cd604b055a7b7", "647cd604b055a7b7"]
-f72debc328a1e0f4,["1d2a16425a50b888", "647cd604b055a7b7", "647cd604b055a7b7", "647cd604b055a7b7"]
+d617ebef6c48a954,["6afa260318561b7f", "a2fb423e64738b46", "a2fb423e64738b46"]
+b1b479ea9b0432fa,["6afa260318561b7f", "a2fb423e64738b46", "a2fb423e64738b46", "a2fb423e64738b46"]
 
 # Ensures the statistics for each explicit transactions are grouped into
 # different entry.
@@ -76,10 +76,10 @@ WHERE
 ORDER BY
   2, 4
 ----
-1d2a16425a50b888,dce4fa24f23a3c31,SELECT _,1
-647cd604b055a7b7,dce4fa24f23a3c31,SELECT _, _,2
-1d2a16425a50b888,f72debc328a1e0f4,SELECT _,2
-647cd604b055a7b7,f72debc328a1e0f4,SELECT _, _,6
+6afa260318561b7f,b1b479ea9b0432fa,SELECT _,2
+a2fb423e64738b46,b1b479ea9b0432fa,SELECT _, _,6
+6afa260318561b7f,d617ebef6c48a954,SELECT _,1
+a2fb423e64738b46,d617ebef6c48a954,SELECT _, _,2
 
 # Ensures that implicit transaction stats are collected separately.
 observe-sql
@@ -106,8 +106,8 @@ WHERE
 ORDER BY
   2
 ----
-1d2a16425a50b884,b249ab0edc510f5b,SELECT _,2
-647cd604b055a7bb,cb1f6b4836541064,SELECT _, _,1
+a2fb423e64738b46,0d98ff72e2723c99,SELECT _, _,1
+6afa260318561b7f,c5999b4f9e57aca0,SELECT _,2
 
 
 sql-stats-flush
@@ -130,8 +130,8 @@ ORDER BY
   jsonb_array_length(metadata -> 'stmtFingerprintIDs')
 ASC
 ----
-dce4fa24f23a3c31,["1d2a16425a50b888", "647cd604b055a7b7", "647cd604b055a7b7"]
-f72debc328a1e0f4,["1d2a16425a50b888", "647cd604b055a7b7", "647cd604b055a7b7", "647cd604b055a7b7"]
+d617ebef6c48a954,["6afa260318561b7f", "a2fb423e64738b46", "a2fb423e64738b46"]
+b1b479ea9b0432fa,["6afa260318561b7f", "a2fb423e64738b46", "a2fb423e64738b46", "a2fb423e64738b46"]
 
 # Ensures the statistics for each explicit transactions are grouped into
 # different entry.
@@ -151,10 +151,10 @@ WHERE
 ORDER BY
   2, 4
 ----
-1d2a16425a50b888,dce4fa24f23a3c31,SELECT _,1
-647cd604b055a7b7,dce4fa24f23a3c31,SELECT _, _,2
-1d2a16425a50b888,f72debc328a1e0f4,SELECT _,2
-647cd604b055a7b7,f72debc328a1e0f4,SELECT _, _,6
+6afa260318561b7f,b1b479ea9b0432fa,SELECT _,2
+a2fb423e64738b46,b1b479ea9b0432fa,SELECT _, _,6
+6afa260318561b7f,d617ebef6c48a954,SELECT _,1
+a2fb423e64738b46,d617ebef6c48a954,SELECT _, _,2
 
 # Ensures that implicit transaction stats are collected separately.
 observe-sql
@@ -182,5 +182,5 @@ ORDER BY
   (statistics -> 'statistics' ->> 'cnt')::INT
 ASC
 ----
-647cd604b055a7bb,cb1f6b4836541064,SELECT _, _,1
-1d2a16425a50b884,b249ab0edc510f5b,SELECT _,2
+a2fb423e64738b46,0d98ff72e2723c99,SELECT _, _,1
+6afa260318561b7f,c5999b4f9e57aca0,SELECT _,2
