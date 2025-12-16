@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -123,6 +124,10 @@ type Collection struct {
 	// repairs.
 	skipValidationOnWrite bool
 
+	// waitForLockedLeaseBump indicates that we need to wait for the locked
+	// lease timestamp to bump as well.
+	waitForLockedLeaseBump bool
+
 	// readerCatalogSetup indicates that replicated descriptors can be modified
 	// by this collection.
 	readerCatalogSetup bool
@@ -189,6 +194,18 @@ func (tc *Collection) SkipValidationOnWrite() {
 	tc.skipValidationOnWrite = true
 }
 
+// MaybeSetLockedLeaseBump requires that the locked lease timestamp
+// is also bumped after this operation. This is needed in scenarios
+// where WaitForOneVersion has no prior version checked out, and the
+// previous version is invalid (i.e. has validation errors).
+func (tc *Collection) MaybeSetLockedLeaseBump(ctx context.Context) {
+	if !lease.LockedLeaseTimestamp.Get(&tc.settings.SV) ||
+		!tc.settings.Version.IsActive(ctx, clusterversion.V26_1) {
+		return
+	}
+	tc.waitForLockedLeaseBump = true
+}
+
 // SetReaderCatalogSetup indicates this collection is being used to
 // modify reader catalogs.
 func (tc *Collection) SetReaderCatalogSetup() {
@@ -199,6 +216,29 @@ func (tc *Collection) SetReaderCatalogSetup() {
 // the passed slice. Errors are logged but ignored.
 func (tc *Collection) ReleaseSpecifiedLeases(ctx context.Context, descs []lease.IDVersion) {
 	tc.leased.release(ctx, descs)
+}
+
+// MaybeWaitForLeaseTimestampBump waits for any lease timestamp bump, which
+// is normally used by repair queries to ensure the new version is available.
+// Normally for schema changes WaitForOneVersion is enough, since it guarantees
+// no one can lease the old version. However, if the prior version was invalid,
+// then there will be a delay after which the new version will be usable, as the
+// locked lease timestamp gets bumped.
+func (tc *Collection) MaybeWaitForLeaseTimestampBump(
+	ctx context.Context, commitTime hlc.Timestamp,
+) {
+	// This transaction does not require any leased timestamp bump.
+	if !tc.waitForLockedLeaseBump {
+		return
+	}
+	// Confirm the lease manager is leasing out any new descriptor versions
+	// at the commit time.
+	r := retry.StartWithCtx(ctx, retry.Options{})
+	for r.Next() {
+		if !tc.leased.lm.GetSafeReplicationTS().Less(commitTime) {
+			break
+		}
+	}
 }
 
 // ReleaseLeases releases all leases. Errors are logged but ignored.
