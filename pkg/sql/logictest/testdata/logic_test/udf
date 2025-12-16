@@ -1192,3 +1192,219 @@ statement ok
 DROP VIEW v_builtin;
 
 subtest end
+
+subtest show_create_func_cast_enum
+
+statement ok
+CREATE TYPE cast_udf_enum AS ENUM ('a', 'b', 'c');
+
+statement ok
+DROP TABLE IF EXISTS cast_udf_enum_t;
+
+statement ok
+CREATE TABLE cast_udf_enum_t (c STRING);
+
+statement ok
+INSERT INTO cast_udf_enum_t VALUES ('a'), ('a'), ('b')
+
+statement ok
+CREATE FUNCTION cast_to_enum() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT count(*) INTO i FROM cast_udf_enum_t WHERE c::cast_udf_enum = 'a'::cast_udf_enum;
+    RETURN i;
+  END
+$$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION cast_to_enum];
+----
+CREATE FUNCTION public.cast_to_enum()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  DECLARE
+  i INT8;
+  BEGIN
+  SELECT count(*) FROM public.cast_udf_enum_t WHERE c::public.cast_udf_enum = 'a'::test.public.cast_udf_enum INTO i;
+  RETURN i;
+  END;
+$$
+
+query I
+SELECT cast_to_enum()
+----
+2
+
+statement ok
+DROP FUNCTION cast_to_enum;
+
+statement ok
+DROP TABLE cast_udf_enum_t;
+
+statement ok
+DROP TYPE cast_udf_enum;
+
+subtest end
+
+subtest show_create_func_cast_composite_type
+
+statement ok
+CREATE TYPE composite_coord AS (x INT, y INT);
+
+statement ok
+CREATE TABLE composite_test_t (id INT, coord STRING);
+
+statement ok
+CREATE FUNCTION cast_to_composite() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    result INT;
+  BEGIN
+    SELECT 1 INTO result FROM composite_test_t WHERE coord::composite_coord IS NOT NULL;
+    RETURN result;
+  END
+$$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION cast_to_composite];
+----
+CREATE FUNCTION public.cast_to_composite()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  DECLARE
+  result INT8;
+  BEGIN
+  SELECT 1 FROM public.composite_test_t WHERE coord::public.composite_coord IS NOT NULL INTO result;
+  RETURN result;
+  END;
+$$
+
+statement ok
+DROP FUNCTION cast_to_composite;
+
+statement ok
+DROP TABLE composite_test_t;
+
+statement ok
+DROP TYPE composite_coord;
+
+subtest end
+
+subtest show_create_func_cast_array_enum
+
+statement ok
+CREATE TYPE array_status AS ENUM ('active', 'inactive', 'pending');
+
+statement ok
+CREATE TABLE array_test_t (statuses STRING[]);
+
+statement ok
+CREATE FUNCTION process_array() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    count INT;
+  BEGIN
+    SELECT count(*) INTO count FROM array_test_t WHERE statuses[1]::array_status = 'active'::array_status;
+    RETURN count;
+  END
+$$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION process_array];
+----
+CREATE FUNCTION public.process_array()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  DECLARE
+  count INT8;
+  BEGIN
+  SELECT count(*) FROM public.array_test_t WHERE statuses[1]::public.array_status = 'active'::test.public.array_status INTO count;
+  RETURN count;
+  END;
+$$
+
+statement ok
+DROP FUNCTION process_array;
+
+statement ok
+DROP TABLE array_test_t;
+
+statement ok
+DROP TYPE array_status;
+
+subtest end
+
+subtest show_create_func_multiple_udt_casts
+
+statement ok
+CREATE TYPE user_status AS ENUM ('guest', 'member', 'admin');
+
+statement ok
+CREATE TYPE user_profile AS (name STRING, age INT);
+
+statement ok
+CREATE TABLE mixed_udt_t (status STRING, profile STRING);
+
+statement ok
+CREATE FUNCTION mixed_udt_func() RETURNS TEXT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    status_val user_status;
+    profile_val user_profile;
+    result TEXT;
+  BEGIN
+    SELECT status::user_status, profile::user_profile INTO status_val, profile_val
+    FROM mixed_udt_t WHERE status::user_status = 'admin'::user_status;
+    result := status_val::TEXT;
+    RETURN result;
+  END
+$$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION mixed_udt_func];
+----
+CREATE FUNCTION public.mixed_udt_func()
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  DECLARE
+  status_val public.user_status;
+  profile_val public.user_profile;
+  result STRING;
+  BEGIN
+  SELECT status::public.user_status, profile::user_profile FROM public.mixed_udt_t WHERE status::user_status = 'admin'::test.public.user_status INTO status_val, profile_val;
+  result := status_val::STRING;
+  RETURN result;
+  END;
+$$
+
+statement ok
+DROP FUNCTION mixed_udt_func;
+
+statement ok
+DROP TABLE mixed_udt_t;
+
+statement ok
+DROP TYPE user_profile;
+
+statement ok
+DROP TYPE user_status;
+
+subtest end
