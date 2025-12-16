@@ -379,6 +379,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		log.Dev.Warningf(ca.Ctx(), "moving to draining due to error wrapping metrics controller: %v", err)
 		ca.MoveToDraining(err)
 		ca.cancel()
+		return
 	}
 
 	ca.sink, err = getEventSink(ctx, ca.FlowCtx.Cfg, ca.spec.Feed, timestampOracle,
