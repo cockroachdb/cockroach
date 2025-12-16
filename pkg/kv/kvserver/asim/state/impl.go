@@ -735,6 +735,11 @@ func (s *state) removeReplica(rangeID RangeID, storeID StoreID) bool {
 func (s *state) SetSpanConfigForRange(rangeID RangeID, spanConfig *roachpb.SpanConfig) bool {
 	if rng, ok := s.ranges.rangeMap[rangeID]; ok {
 		rng.config = spanConfig
+		// Invalidate the MMA span config status for all replicas of this range,
+		// so that the new span config will be sent to MMA on the next tick.
+		for _, repl := range rng.replicas {
+			repl.mmaSpanConfigIsUpToDate = false
+		}
 		return true
 	}
 	return false
@@ -1000,7 +1005,10 @@ func (s *state) replaceLeaseHolder(rangeID RangeID, storeID, oldStoreID StoreID)
 
 func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
 	rng := s.ranges.rangeMap[rangeID]
-	rng.replicas[storeID].holdsLease = true
+	repl := rng.replicas[storeID]
+	repl.holdsLease = true
+	// When a replica acquires the lease, invalidate the MMA span config status.
+	repl.mmaSpanConfigIsUpToDate = false
 	replicaID := s.stores[storeID].replicas[rangeID]
 	rng.leaseholder = replicaID
 }
@@ -1697,6 +1705,14 @@ type replica struct {
 	rangeID    RangeID
 	desc       roachpb.ReplicaDescriptor
 	holdsLease bool
+	// mmaSpanConfigIsUpToDate tracks whether the span config for this replica
+	// has been sent to MMA. This mirrors real CockroachDB's per-replica tracking.
+	// It is set to false when:
+	//   - A new replica is created
+	//   - The span config for the range changes
+	//   - This replica acquires a lease (because MMA deletes ranges when we lose the lease)
+	// It is set to true after the span config is successfully sent to MMA.
+	mmaSpanConfigIsUpToDate bool
 }
 
 // ReplicaID returns the ID of this replica.
@@ -1734,4 +1750,16 @@ func (r *replica) String() string {
 	builder := &strings.Builder{}
 	builder.WriteString(fmt.Sprintf("r%d,s%d/%d", r.rangeID, r.storeID, r.replicaID))
 	return builder.String()
+}
+
+// MMASpanConfigIsUpToDate returns whether the span config for this replica
+// has been sent to MMA.
+func (r *replica) MMASpanConfigIsUpToDate() bool {
+	return r.mmaSpanConfigIsUpToDate
+}
+
+// SetMMASpanConfigIsUpToDate sets whether the span config for this replica
+// has been sent to MMA.
+func (r *replica) SetMMASpanConfigIsUpToDate(upToDate bool) {
+	r.mmaSpanConfigIsUpToDate = upToDate
 }

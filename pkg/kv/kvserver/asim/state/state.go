@@ -293,6 +293,14 @@ type Replica interface {
 	HoldsLease() bool
 	// String returns a string representing the state of the replica.
 	String() string
+	// MMASpanConfigIsUpToDate returns whether the span config for this replica
+	// has been sent to MMA. This is set to false when the span config changes,
+	// when the replica acquires a lease, or when a new replica is created.
+	// It is set to true after the span config is successfully sent to MMA.
+	MMASpanConfigIsUpToDate() bool
+	// SetMMASpanConfigIsUpToDate sets whether the span config for this replica
+	// has been sent to MMA.
+	SetMMASpanConfigIsUpToDate(bool)
 }
 
 // ManualSimClock implements the WallClock interface in the hlc pkg. This clock
