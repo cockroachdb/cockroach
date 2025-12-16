@@ -520,7 +520,13 @@ func TestClusterState(t *testing.T) {
 					if o, ok := dd.ScanArgOpt[int](t, d, "num-top-k-replicas"); ok {
 						n = o
 					}
-					cs.processStoreLeaseholderMsgInternal(context.Background(), &msg, n, nil)
+					cs.processStoreLeaseholderMsgInternal(ctx, &msg, n, nil)
+					if d.HasArg("trace") {
+						rec := finishAndGet()
+						var sb redact.StringBuilder
+						rec.SafeFormatMinimal(&sb)
+						return sb.String()
+					}
 					return ""
 
 				case "make-pending-changes":
