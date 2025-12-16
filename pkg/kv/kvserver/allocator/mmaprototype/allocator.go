@@ -37,8 +37,14 @@ type ChangeOptions struct {
 //   - changes to this interface to make the integration for the new allocator
 //     be less different than integration with the old allocator.
 type Allocator interface {
+	// LoadSummaryForAllStores returns a human-readable string summarizing the
+	// current load state of all known stores in the cluster. This is primarily
+	// used for debugging and observability purposes.
 	LoadSummaryForAllStores(context.Context) string
 
+	// InitMetricsForLocalStore initializes and registers metrics for the
+	// specified local store with the provided metric registry. This should be
+	// called once per store during startup to register metrics for mma.
 	InitMetricsForLocalStore(localStoreID roachpb.StoreID, registry *metric.Registry)
 
 	// Methods to update the state of the external world. The allocator starts
