@@ -68,3 +68,30 @@ query
 EXECUTE stmt
 ----
 1
+
+reset
+----
+
+exec
+SET allow_unsafe_internals = false;
+----
+
+let $x
+SELECT encode(crdb_internal.serialize_session(), 'hex')
+----
+
+exec
+SET allow_unsafe_internals = true;
+----
+
+exec
+SELECT crdb_internal.deserialize_session( decode('$x', 'hex') )
+----
+
+# Demonstrate that `allow_unsafe_internals` will always get
+# deserialized in `on` state in order to avoid the deserialization bug
+# which sets the setting to `off` by default.
+query
+SHOW allow_unsafe_internals
+----
+on
