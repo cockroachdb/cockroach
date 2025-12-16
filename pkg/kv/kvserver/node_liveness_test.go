@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -343,6 +344,121 @@ func TestNodeIsLiveCallback(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestNodeIsLiveCallbackBypassWithLeaderLeases verifies that expensive work to
+// check whether replicas need to be unquiesced does not happen when all ranges
+// are using leader leases.
+//
+// See https://github.com/cockroachdb/cockroach/issues/157089.
+func TestNodeIsLiveCallbackBypassWithLeaderLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	manualClock := hlc.NewHybridManualClock()
+	// We only want to record entries after the heartbeat loop has been paused.
+	var started atomic.Bool
+	var invokedCount, workDoneCount atomic.Int64
+
+	st := cluster.MakeTestingClusterSettings()
+
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						WallClock: manualClock,
+					},
+					Store: &kvserver.StoreTestingKnobs{
+						NodeIsLiveCallbackInvoked: func(l livenesspb.Liveness) {
+							if started.Load() {
+								invokedCount.Add(1)
+							}
+						},
+						NodeIsLiveCallbackWorkDone: func(l livenesspb.Liveness) {
+							if started.Load() {
+								workDoneCount.Add(1)
+							}
+						},
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	verifyLiveness(t, tc)
+	pauseNodeLivenessHeartbeatLoops(tc)
+	started.Store(true)
+
+	testCases := []struct {
+		name                string
+		leaderLeasesEnabled bool
+		fortificationFrac   float64
+		expectWorkDone      bool
+	}{
+		{
+			name:                "leader_leases_disabled",
+			leaderLeasesEnabled: false,
+			fortificationFrac:   0.0,
+			expectWorkDone:      true,
+		},
+		{
+			name:                "leader_leases_enabled_fortification_0",
+			leaderLeasesEnabled: true,
+			fortificationFrac:   0.0,
+			expectWorkDone:      true,
+		},
+		{
+			name:                "leader_leases_enabled_fortification_50",
+			leaderLeasesEnabled: true,
+			fortificationFrac:   0.5,
+			expectWorkDone:      true,
+		},
+		{
+			name:                "leader_leases_disabled_fortification_100",
+			leaderLeasesEnabled: false,
+			fortificationFrac:   1.0,
+			expectWorkDone:      true,
+		},
+		{
+			name:                "leader_leases_enabled_fortification_100",
+			leaderLeasesEnabled: true,
+			fortificationFrac:   1.0,
+			expectWorkDone:      false, // bypass
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			kvserver.LeaderLeasesEnabled.Override(ctx, &st.SV, testCase.leaderLeasesEnabled)
+			kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, testCase.fortificationFrac)
+			invokedCount.Store(0)  // reset
+			workDoneCount.Store(0) // reset
+
+			// Advance clock past the liveness threshold so the node is
+			// considered non-live. Then, trigger a heartbeat to make the node
+			// transition to live.
+			manualClock.Increment(tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).
+				TestingGetLivenessThreshold().Nanoseconds() + 1)
+			nl := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness)
+			l, ok := nl.Self()
+			require.True(t, ok)
+			require.NoError(t, nl.Heartbeat(ctx, l))
+
+			// The callback should always be invoked when transitioning from
+			// non-live to live.
+			require.NotZero(t, invokedCount.Load())
+
+			if testCase.expectWorkDone {
+				require.NotZero(t, workDoneCount.Load())
+			} else {
+				require.Zero(t, workDoneCount.Load())
+			}
+		})
+	}
 }
 
 // TestNodeHeartbeatCallback verifies that HeartbeatCallback is invoked whenever
