@@ -2093,11 +2093,6 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// to bypass admission control.
 	s.storeGrantCoords.SetPebbleMetricsProvider(ctx, pmp, mrp, s.node)
 
-	s.node.stores.VisitStores(func(store *kvserver.Store) error {
-		s.node.storeCfg.MMAllocator.InitMetricsForLocalStore(store.StoreID(), store.Registry())
-		return nil
-	})
-
 	// Once all stores are initialized, check if offline storage recovery
 	// was done prior to start and record any actions appropriately.
 	logPendingLossOfQuorumRecoveryEvents(workersCtx, s.node.stores)
