@@ -1545,10 +1545,9 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		if rangeMsg.MaybeSpanConfIsPopulated {
 			normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.MaybeSpanConf, cs.constraintMatcher.interner)
 			if err != nil {
-				// TODO(wenyihu6): add metrics here to track 1. developer error or 2.
-				// best-effort normalization.
 				log.KvDistribution.Warningf(
 					ctx, "range r%v span config had errors in normalization: %v, normalized result: %v", rangeMsg.RangeID, err, normSpanConfig)
+				metrics.incSpanConfigNormalizationErrorIfNonNil()
 			}
 			rs.conf = normSpanConfig
 		}
