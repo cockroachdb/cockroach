@@ -6,6 +6,7 @@
 package sqlstats
 
 import (
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -42,7 +43,7 @@ var TxnStatsNumStmtFingerprintStatsToRecord = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.metrics.transaction_details.max_statement_stats",
 	"max number of statement statistics that may be associated with transaction statistics",
-	100_000,
+	math.MaxInt64,
 	settings.PositiveInt,
 )
 
