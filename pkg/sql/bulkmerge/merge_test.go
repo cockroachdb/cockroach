@@ -8,6 +8,7 @@ package bulkmerge
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/taskset"
 	"github.com/stretchr/testify/require"
 )
 
@@ -78,6 +81,51 @@ func TestDistributedMergeThreeNodes(t *testing.T) {
 	nodeIdx := rand.Intn(instanceCount)
 	srv := tc.Server(nodeIdx)
 	testMergeProcessors(t, srv, instanceCount)
+}
+
+func TestDistributedMergeProcessorFailurePropagates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	injectedErr := errors.New("injected merge processor failure")
+
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		ExternalIODir: dir,
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				BulkMergeTestingKnobs: &TestingKnobs{
+					RunBeforeMergeTask: func(
+						ctx context.Context, flowID execinfrapb.FlowID, taskID taskset.TaskID,
+					) error {
+						return injectedErr
+					},
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
+	jobExecCtx, cleanupJob := sql.MakeJobExecContext(
+		ctx, "test-merge-failure", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
+	)
+	defer cleanupJob()
+
+	spans := []roachpb.Span{{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}}
+	ssts := []execinfrapb.BulkMergeSpec_SST{{
+		URI:      "nodelocal://1/unused",
+		StartKey: []byte("a"),
+		EndKey:   []byte("b"),
+	}}
+
+	_, err := Merge(ctx, jobExecCtx, ssts, spans, func(instanceID base.SQLInstanceID) string {
+		return fmt.Sprintf("nodelocal://%d/merge/out/", instanceID)
+	})
+	require.ErrorIs(t, err, injectedErr)
 }
 
 func randIntSlice(n int) []int {

@@ -323,6 +323,9 @@ type TestingKnobs struct {
 	// testing knobs.
 	IndexBackfillMergerTestingKnobs base.ModuleTestingKnobs
 
+	// BulkMergeTestingKnobs are specific to the distributed merge pipeline.
+	BulkMergeTestingKnobs base.ModuleTestingKnobs
+
 	// ProcessorNoTracingSpan is used to disable the creation of a tracing span
 	// in ProcessorBase.StartInternal if the tracing is enabled.
 	ProcessorNoTracingSpan bool
