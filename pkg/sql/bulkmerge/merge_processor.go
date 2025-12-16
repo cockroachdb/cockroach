@@ -157,6 +157,14 @@ func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumR
 		return nil, err
 	}
 
+	if knobs, ok := m.flowCtx.Cfg.TestingKnobs.BulkMergeTestingKnobs.(*TestingKnobs); ok {
+		if knobs.RunBeforeMergeTask != nil {
+			if err := knobs.RunBeforeMergeTask(m.Ctx(), m.flowCtx.ID, input.taskID); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	results, err := m.mergeSSTs(m.Ctx(), input.taskID)
 	if err != nil {
 		return nil, err
