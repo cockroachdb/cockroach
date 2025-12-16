@@ -66,7 +66,7 @@ func New(
 func (c *Cache) Get(
 	ctx context.Context, txn isql.Txn, col *descs.Collection, spo syntheticprivilege.Object,
 ) (*catpb.PrivilegeDescriptor, error) {
-	_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), syntheticprivilege.SystemPrivilegesTableName)
+	_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).WithoutLockedTimestamp().Get(), syntheticprivilege.SystemPrivilegesTableName)
 	if err != nil {
 		return nil, err
 	}

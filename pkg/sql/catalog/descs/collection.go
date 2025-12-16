@@ -1583,7 +1583,7 @@ func (tc *Collection) LockDescriptorWithLease(
 		return uint64(vo.Desc().GetVersion()), nil
 	}
 	// Otherwise, we should be able to lease the relevant object out.
-	desc, shouldReadFromStore, err := tc.leased.getByID(ctx, txn, id)
+	desc, shouldReadFromStore, err := tc.leased.getByID(ctx, txn, id, false /* withoutLockedTimestamp */)
 	if err != nil {
 		return 0, err
 	}
