@@ -11467,6 +11467,10 @@ func TestRestoreConformanceFailure(t *testing.T) {
 	backupURI := "nodelocal://1/restore_conformance_failure"
 	sqlDB.Exec(t, "BACKUP DATABASE test INTO $1", backupURI)
 
+	// Ensure rf=5 zone config has been applied as the default span config, so
+	// that when restore creates new descriptors, they inherit the rf=5 default.
+	sqlutils.WaitForSpanConfigReconciliation(t, sqlDB)
+
 	// This will take a long time: we give 60 seconds for the span configs to
 	// advance, then restore will chew up 60s to fail to conform.
 	sqlDB.ExpectErr(t, "ranges for restoring objects could not conform to zone configs", fmt.Sprintf(
