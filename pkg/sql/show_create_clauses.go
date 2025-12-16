@@ -388,18 +388,8 @@ func formatViewQueryTypesForDisplay(
 
 // formatFunctionQueryTypesForDisplay is similar to
 // formatViewQueryTypesForDisplay but can only be used for functions.
-// nil is used as the table descriptor for schemaexpr.FormatExprForDisplay call.
-// This is fine assuming that UDFs cannot be created with expression casting a
-// column/var to an enum in function body. This is super rare case for now, and
-// it's tracked with issue #87475. We should also unify this function with
-// formatViewQueryTypesForDisplay.
 func formatFunctionQueryTypesForDisplay(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	semaCtx *tree.SemaContext,
-	sessionData *sessiondata.SessionData,
-	queries string,
-	lang catpb.Function_Language,
+	ctx context.Context, semaCtx *tree.SemaContext, queries string, lang catpb.Function_Language,
 ) (string, error) {
 	// replaceFunc is a visitor function that replaces user defined type IDs in
 	// SQL expressions with their names.
@@ -426,17 +416,25 @@ func formatFunctionQueryTypesForDisplay(
 		if !typ.UserDefined() {
 			return true, expr, nil
 		}
-		formattedExpr, err := schemaexpr.FormatExprForDisplay(
-			ctx, nil, expr.String(), evalCtx, semaCtx, sessionData, tree.FmtParsable,
-		)
+
+		typedExpr, err := expr.TypeCheck(ctx, semaCtx, types.AnyElement)
 		if err != nil {
 			return false, expr, err
 		}
-		newExpr, err = parser.ParseExpr(formattedExpr)
-		if err != nil {
-			return false, expr, err
+
+		dEnum, ok := typedExpr.(*tree.DEnum)
+		if !ok {
+			return false, expr, errors.Newf("unsupported expression type %T", typedExpr)
 		}
-		return false, newExpr, nil
+		switch n := expr.(type) {
+		case *tree.CastExpr:
+			n.Expr = tree.NewStrVal(dEnum.LogicalRep)
+			n.Type = dEnum.EnumTyp
+		case *tree.AnnotateTypeExpr:
+			n.Expr = tree.NewStrVal(dEnum.LogicalRep)
+			n.Type = dEnum.EnumTyp
+		}
+		return false, expr, nil
 	}
 	// replaceTypeFunc is a visitor function that replaces type annotations
 	// containing user defined types IDs with their name. This is currently only
