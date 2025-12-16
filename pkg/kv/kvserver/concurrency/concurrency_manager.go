@@ -133,7 +133,7 @@ var UnreplicatedLockReliabilitySplit = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.lock_table.unreplicated_lock_reliability.split.enabled",
 	"whether the replica should attempt to keep unreplicated locks during range splits",
-	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.split.enabled", true),
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.split.enabled", false),
 )
 
 // UnreplicatedLockReliabilityLeaseTransfer controls whether the replica will attempt
@@ -142,7 +142,7 @@ var UnreplicatedLockReliabilityLeaseTransfer = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled",
 	"whether the replica should attempt to keep unreplicated locks during lease transfers",
-	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled", true),
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled", false),
 )
 
 // UnreplicatedLockReliabilityMerge controls whether the replica will attempt to
@@ -151,7 +151,7 @@ var UnreplicatedLockReliabilityMerge = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.lock_table.unreplicated_lock_reliability.merge.enabled",
 	"whether the replica should attempt to keep unreplicated locks during range merges",
-	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.merge.enabled", true),
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.merge.enabled", false),
 )
 
 var MaxLockFlushSize = settings.RegisterByteSizeSetting(
