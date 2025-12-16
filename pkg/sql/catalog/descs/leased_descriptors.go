@@ -259,6 +259,7 @@ func (ld *leasedDescriptors) getByName(
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
+	withoutLockedTimestamp bool,
 ) (desc catalog.Descriptor, shouldReadFromStore bool, err error) {
 	// First, look to see if we already have the descriptor.
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
@@ -273,7 +274,11 @@ func (ld *leasedDescriptors) getByName(
 		return desc, false, nil
 	}
 	ld.maybeInitReadTimestamp(ctx, txn)
-	ldesc, err := ld.lm.AcquireByName(ctx, ld.leaseTimestamp, parentID, parentSchemaID, name)
+	timestamp := ld.leaseTimestamp
+	if withoutLockedTimestamp {
+		timestamp = lease.TimestampToReadTimestamp(txn.ReadTimestamp())
+	}
+	ldesc, err := ld.lm.AcquireByName(ctx, timestamp, parentID, parentSchemaID, name)
 	const setTxnDeadline = true
 	return ld.getResult(ctx, txn, setTxnDeadline, ldesc, err)
 }
@@ -281,14 +286,18 @@ func (ld *leasedDescriptors) getByName(
 // getByID return a leased descriptor valid for the transaction,
 // acquiring one if necessary.
 func (ld *leasedDescriptors) getByID(
-	ctx context.Context, txn deadlineHolder, id descpb.ID,
+	ctx context.Context, txn deadlineHolder, id descpb.ID, withoutLockedTimestamp bool,
 ) (_ catalog.Descriptor, shouldReadFromStore bool, _ error) {
 	// First, look to see if we already have the table in the shared cache.
 	if cached := ld.getCachedByID(ctx, id); cached != nil {
 		return cached, false, nil
 	}
 	ld.maybeInitReadTimestamp(ctx, txn)
-	desc, err := ld.lm.Acquire(ctx, ld.leaseTimestamp, id)
+	timestamp := ld.leaseTimestamp
+	if withoutLockedTimestamp {
+		timestamp = lease.TimestampToReadTimestamp(txn.ReadTimestamp())
+	}
+	desc, err := ld.lm.Acquire(ctx, timestamp, id)
 	const setTxnDeadline = false
 	return ld.getResult(ctx, txn, setTxnDeadline, desc, err)
 }
