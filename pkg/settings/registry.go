@@ -276,6 +276,7 @@ var retiredSettings = map[InternalKey]struct{}{
 	"storage.columnar_blocks.enabled": {},
 
 	// removed as of 26.1
+	"bulkio.import.write_import_epoch.enabled":            {},
 	"sql.distsql_planning.use_gossip.enabled":             {},
 	"rocksdb.ingest_backpressure.l0_file_count_threshold": {},
 	"rocksdb.ingest_backpressure.max_delay":               {},

@@ -429,13 +429,8 @@ func (r *importResumer) prepareTableForIngestion(
 	// TODO(dt): audit everywhere we get table descs (leases or otherwise) to
 	// ensure that filtering by state handles IMPORTING correctly.
 
-	// We only use the new OfflineForImport on 24.1, which bumps
-	// the ImportEpoch, if we are completely on 24.1.
-	if importEpochs.Get(&p.ExecCfg().Settings.SV) {
-		importing.OfflineForImport()
-	} else {
-		importing.SetOffline(tabledesc.OfflineReasonImporting)
-	}
+	// Use OfflineForImport which bumps the ImportEpoch.
+	importing.OfflineForImport()
 
 	// TODO(dt): de-validate all the FKs.
 	if err := descsCol.WriteDesc(
@@ -707,13 +702,6 @@ var retryDuration = settings.RegisterDurationSetting(
 	"duration during which the IMPORT can be retried in face of non-permanent errors",
 	time.Minute*2,
 	settings.PositiveDuration,
-)
-
-var importEpochs = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"bulkio.import.write_import_epoch.enabled",
-	"controls whether IMPORT will write ImportEpoch's to descriptors",
-	true,
 )
 
 func getFractionCompleted(job *jobs.Job) float64 {
