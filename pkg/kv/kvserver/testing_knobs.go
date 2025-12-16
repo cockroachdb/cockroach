@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -568,6 +569,15 @@ type StoreTestingKnobs struct {
 	// messages because it has no updates and heartbeats are turned off. This
 	// simulation is only meaningful for ranges that use leader leases.
 	DisableUpdateLastUpdateTimesMapOnRaftGroupStep func(r *Replica) bool
+
+	// NodeIsLiveCallbackInvoked, if set, is called every time the
+	// nodeIsLiveCallback is invoked on the store. Called regardless of any bypass
+	// logic.
+	NodeIsLiveCallbackInvoked func(livenesspb.Liveness)
+
+	// NodeIsLiveCallbackWorkDone, if set, is called after nodeIsLiveCallback
+	// completes its iteration over all replicas on the store.
+	NodeIsLiveCallbackWorkDone func(livenesspb.Liveness)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
