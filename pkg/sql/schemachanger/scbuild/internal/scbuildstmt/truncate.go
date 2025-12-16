@@ -89,6 +89,9 @@ func Truncate(b BuildCtx, stmt *tree.Truncate) {
 }
 
 func truncateTable(b BuildCtx, n *tree.Truncate, elts ElementResultSet) {
+	// Enforce schema_locked / LDR for truncate.
+	lockedCleanup := checkTableSchemaChangePrerequisites(b, elts, n)
+	defer lockedCleanup()
 	tbl := elts.FilterTable().MustGetOneElement()
 	// Fall back to legacy schema changer if we need to rewrite index references.
 	backRefs := b.BackReferences(tbl.TableID)
