@@ -13400,6 +13400,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: mma.span_config.normalization.error
+      exported_name: mma_span_config_normalization_error
+      description: Number of ranges where span config normalization had errors. This includes cases where best-effort normalization may have succeeded (producing a usable config despite the error).
+      y_axis_label: Range
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: node-id
       exported_name: node_id
       description: node ID with labels for advertised RPC and HTTP addresses
