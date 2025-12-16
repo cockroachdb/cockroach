@@ -717,10 +717,22 @@ func sortTargetCandidateSetAndPick(
 // ensureAnalyzedConstraints ensures that the constraints field of rangeState is
 // populated. It uses rangeState.{replicas,conf} as inputs to the computation.
 //
+// rstate.conf may be nil if basic span config normalization failed (e.g.,
+// invalid config). In this case, constraint analysis is skipped and
+// rstate.constraints remains nil. In addition, rstate.constraints may also
+// remain nil after the call if there is no leaseholder found. In such cases,
+// the range should be skipped from rebalancing.
+//
 // NB: Caller is responsible for calling clearAnalyzedConstraints when rstate or
 // the rstate.constraints is no longer needed.
 func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
 	if rstate.constraints != nil {
+		return
+	}
+	// Skip the range if the configuration is invalid for constraint analysis.
+	if rstate.conf == nil {
+		log.KvDistribution.Warning(context.Background(),
+			"no span config due to normalization error, skipping constraint analysis")
 		return
 	}
 	// Populate the constraints.
@@ -743,9 +755,16 @@ func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
 		// that there is a new leaseholder (and thus should drop this range).
 		// However, even in this case, replica.IsLeaseholder should still be there
 		// based on to the stale state, so this should still be impossible to hit.
-		panic(errors.AssertionFailedf("no leaseholders found in %v", rstate.replicas))
+		log.KvDistribution.Warningf(context.Background(),
+			"mma: no leaseholders found in %v, skipping constraint analysis", rstate.replicas)
+		return
 	}
-	rac.finishInit(rstate.conf, cs.constraintMatcher, leaseholder)
+	if err := rac.finishInit(rstate.conf, cs.constraintMatcher, leaseholder); err != nil {
+		releaseRangeAnalyzedConstraints(rac)
+		log.KvDistribution.Warningf(context.Background(),
+			"mma: error finishing constraint analysis: %v, skipping range", err)
+		return
+	}
 	rstate.constraints = rac
 }
 

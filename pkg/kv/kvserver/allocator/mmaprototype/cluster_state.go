@@ -1081,7 +1081,14 @@ type rangeState struct {
 	// addition of s4 to be thrown away while keeping the removal of s1. This is
 	// mostly being defensive to avoid any chance of internal inconsistency.
 	replicas []StoreIDAndReplicaState
-	conf     *normalizedSpanConfig
+	// conf is nil if basic span config normalization failed (e.g., invalid
+	// config). If only structural normalization failed, conf contains a
+	// best-effort result and the error is logged but not propagated here.
+	//
+	// If conf is nil, range analysis is skipped, and thus constraints is nil.
+	// This range will be skipped from rebalancing. If conf is non-nil (even if it
+	// was a best-effort result), range analysis is performed.
+	conf *normalizedSpanConfig
 
 	load RangeLoad
 
@@ -1106,6 +1113,10 @@ type rangeState struct {
 	// the pending changes will be reflected in pendingChanges. Then it becomes
 	// the responsibility of a higher layer (allocator) to notice that the
 	// rangeState has pendingChanges, and not make any more changes.
+	//
+	// NB: constraints may be nil if span config normalization failed (e.g.,
+	// invalid config) or if finishInit fails due to other errors (such as no
+	// leaseholder found).
 	constraints *rangeAnalyzedConstraints
 
 	// lastFailedChange is the latest time at which a change to the range needed
@@ -1539,18 +1550,10 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		if rangeMsg.MaybeSpanConfIsPopulated {
 			normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.MaybeSpanConf, cs.constraintMatcher.interner)
 			if err != nil {
-				if normSpanConfig == nil {
-					// TODO: the roachpb.SpanConfig violated the basic requirements
-					// documented in the proto. We need to ensure that the checks that
-					// happened here are also done when the user set the ZoneConfig, so
-					// that we can reject such violations up front. At this point in the
-					// code we have no way of continuing, so we panic, but we must ensure
-					// we never get here in production for user specified input.
-					panic(err)
-				} else {
-					log.KvDistribution.Warningf(
-						ctx, "range r%v span config had errors in normalization: %v", rangeMsg.RangeID, err)
-				}
+				// TODO(wenyihu6): add metrics here to track 1. developer error or 2.
+				// best-effort normalization.
+				log.KvDistribution.Warningf(
+					ctx, "range r%v span config had errors in normalization: %v, normalized result: %v", rangeMsg.RangeID, err, normSpanConfig)
 			}
 			rs.conf = normSpanConfig
 		}
