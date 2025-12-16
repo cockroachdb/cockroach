@@ -1192,3 +1192,55 @@ statement ok
 DROP VIEW v_builtin;
 
 subtest end
+
+subtest show_create_func_cast_udt
+
+statement ok
+CREATE TYPE cast_udf_enum AS ENUM ('a', 'b', 'c');
+
+statement ok
+DROP TABLE IF EXISTS cast_udf_enum_t;
+
+statement ok
+CREATE TABLE cast_udf_enum_t (c STRING);
+
+statement ok
+CREATE FUNCTION cast_to_enum() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT 1 INTO i FROM cast_udf_enum_t WHERE c::cast_udf_enum IN ();
+    RETURN i;
+  END
+$$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION cast_to_enum];
+----
+CREATE FUNCTION public.cast_to_enum()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  DECLARE
+  i INT8;
+  BEGIN
+  SELECT 1 FROM public.cast_udf_enum_t WHERE c::public.cast_udf_enum IN () INTO i;
+  RETURN i;
+  END;
+$$
+
+statement ok
+DROP FUNCTION cast_to_enum;
+
+statement ok
+DROP TABLE cast_udf_enum_t;
+
+statement ok
+DROP TYPE cast_udf_enum;
+
+subtest end
+
