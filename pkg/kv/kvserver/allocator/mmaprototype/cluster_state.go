@@ -1114,8 +1114,9 @@ type rangeState struct {
 	// rangeState has pendingChanges, and not make any more changes.
 	//
 	// NB: constraints may be nil if span config normalization failed (e.g.,
-	// invalid config) or if finishInit fails due to other errors (such as no
-	// leaseholder found).
+	// invalid config) or if constraint analysis fails due to other errors (e.g.,
+	// no leaseholder found). In such cases, mma would skip the range from
+	// rebalancing to avoid violating constraints.
 	constraints *rangeAnalyzedConstraints
 
 	// lastFailedChange is the latest time at which a change to the range needed
