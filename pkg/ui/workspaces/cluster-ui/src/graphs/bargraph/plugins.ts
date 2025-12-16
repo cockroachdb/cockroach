@@ -101,6 +101,133 @@ function getFormattedValue(value: number, yAxisUnits: AxisUnits): string {
   }
 }
 
+export interface BarMetadata {
+  databases?: string[];
+  tables?: string[];
+  indexes?: string[];
+}
+
+// Tooltip plugin for categorical bar charts (non-time-series)
+export function categoricalBarTooltipPlugin(
+  yAxis: AxisUnits,
+  labels: string[],
+  metadata?: BarMetadata[],
+): Plugin {
+  const cursorToolTip = {
+    tooltip: document.createElement("div"),
+  };
+
+  function escapeHtml(str: string): string {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function setCursor(u: uPlot) {
+    const { tooltip } = cursorToolTip;
+    const { left = 0, idx } = u.cursor;
+
+    if (idx === null || idx === undefined || idx < 0 || idx >= labels.length) {
+      tooltip.style.display = "none";
+      return;
+    }
+
+    const label = labels[idx];
+    const value = u.data[1][idx];
+    const meta = metadata?.[idx];
+
+    // Build tooltip content
+    let content = `<div style="font-weight: bold; margin-bottom: 8px;">${escapeHtml(label)}</div>`;
+    content += `<div style="margin-bottom: 8px;">Value: ${getFormattedValue(value, yAxis)}</div>`;
+
+    // Add metadata if available
+    if (meta) {
+      if (meta.databases && meta.databases.length > 0) {
+        content += `<div style="margin-top: 8px;"><strong>Database${meta.databases.length > 1 ? "s" : ""}:</strong></div>`;
+        content += meta.databases
+          .map(db => `<div style="margin-left: 8px;">• ${escapeHtml(db)}</div>`)
+          .join("");
+      } else if (label.toLowerCase().includes("range")) {
+        content += `<div style="margin-top: 8px;"><strong>Database:</strong> System range</div>`;
+      }
+
+      if (meta.tables && meta.tables.length > 0) {
+        content += `<div style="margin-top: 8px;"><strong>Table${meta.tables.length > 1 ? "s" : ""}:</strong></div>`;
+        content += meta.tables
+          .map(
+            table =>
+              `<div style="margin-left: 8px;">• ${escapeHtml(table)}</div>`,
+          )
+          .join("");
+      }
+
+      if (meta.indexes && meta.indexes.length > 0) {
+        content += `<div style="margin-top: 8px;"><strong>Index${meta.indexes.length > 1 ? "es" : ""}:</strong></div>`;
+        content += meta.indexes
+          .map(
+            index =>
+              `<div style="margin-left: 8px;">• ${escapeHtml(index)}</div>`,
+          )
+          .join("");
+      }
+    }
+
+    tooltip.innerHTML = content;
+
+    // Position tooltip
+    const tooltipWidth = tooltip.offsetWidth;
+    const plotWidth = u.over.offsetWidth;
+    let tooltipLeft = left + 20;
+
+    // Adjust if tooltip goes off the right edge
+    if (tooltipLeft + tooltipWidth > plotWidth) {
+      tooltipLeft = left - tooltipWidth - 20;
+    }
+
+    tooltip.style.left = `${tooltipLeft}px`;
+    tooltip.style.top = `20px`;
+    tooltip.style.display = "";
+  }
+
+  function ready(u: uPlot) {
+    const plot = u.root.querySelector(".u-over");
+    const { tooltip } = cursorToolTip;
+
+    plot?.addEventListener("mouseleave", () => {
+      tooltip.style.display = "none";
+    });
+  }
+
+  function init(u: uPlot) {
+    const plot = u.root.querySelector(".u-over");
+    const { tooltip } = cursorToolTip;
+
+    tooltip.style.display = "none";
+    tooltip.style.pointerEvents = "none";
+    tooltip.style.position = "absolute";
+    tooltip.style.padding = "12px";
+    tooltip.style.minWidth = "150px";
+    tooltip.style.maxWidth = "350px";
+    tooltip.style.background = "#fff";
+    tooltip.style.borderRadius = "4px";
+    tooltip.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+    tooltip.style.border = "1px solid #999";
+    tooltip.style.zIndex = "1000";
+    tooltip.style.fontSize = "12px";
+    tooltip.style.lineHeight = "1.4";
+
+    plot?.appendChild(tooltip);
+  }
+
+  return {
+    hooks: {
+      init,
+      ready,
+      setCursor,
+    },
+  };
+}
+
 // Tooltip legend plugin for bar charts.
 export function barTooltipPlugin(yAxis: AxisUnits, timezone: string): Plugin {
   const cursorToolTip = {
