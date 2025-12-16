@@ -1157,6 +1157,11 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		stmt.potentialExecErrors.addAll(codesWithConditions{
 			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
 		})
+		// We can still hit an error on commit if data is inserted that
+		// violates the unique constraint.
+		og.potentialCommitErrors.addAll(codesWithConditions{
+			{code: pgcode.UniqueViolation, condition: def.Unique},
+		})
 	}
 
 	stmt.sql = tree.AsString(def)
