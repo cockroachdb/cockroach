@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -765,7 +764,14 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
 func (r *Replica) newBatchedEngine(g *concurrency.Guard) (storage.Batch, *storage.OpLoggerBatch) {
-	batch := r.store.StateEngine().NewBatch()
+	var batch storage.Batch
+	if util.RaceEnabled {
+		spans := g.LatchSpans()
+		batch = r.store.StateEngine().(*spanSetEngine).NewBatchWithSpans(spans)
+	} else {
+		batch = r.store.StateEngine().NewBatch()
+	}
+
 	if !batch.ConsistentIterators() {
 		// This is not currently needed for correctness, but future optimizations
 		// may start relying on this, so we assert here.
@@ -807,17 +813,6 @@ func (r *Replica) newBatchedEngine(g *concurrency.Guard) (storage.Batch, *storag
 		// instead of a fine-grained per-replica state.
 		opLogger = storage.NewOpLoggerBatch(batch)
 		batch = opLogger
-	}
-	if util.RaceEnabled {
-		// During writes we may encounter a versioned value newer than the request
-		// timestamp, and may have to retry at a higher timestamp. This is still
-		// safe as we're only ever writing at timestamps higher than the timestamp
-		// any write latch would be declared at. But because of this, we don't
-		// assert on access timestamps using spanset.NewBatchAt.
-		spans := g.LatchSpans()
-		spans.AddForbiddenMatcher(overlapsUnreplicatedRangeIDLocalKeys)
-		spans.AddForbiddenMatcher(overlapsStoreLocalKeys)
-		batch = spanset.NewBatch(batch, spans)
 	}
 
 	return batch, opLogger

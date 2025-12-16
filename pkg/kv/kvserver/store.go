@@ -78,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -3088,6 +3089,12 @@ func (s *Store) Clock() *hlc.Clock { return s.cfg.Clock }
 
 // StateEngine returns the statemachine engine.
 func (s *Store) StateEngine() storage.Engine {
+	if util.RaceEnabled {
+		e := NewSpanSetEngine(s.internalEngines.stateEngine)
+		e.(*spanSetEngine).AddForbiddenMatcher(overlapsUnreplicatedRangeIDLocalKeys)
+		e.(*spanSetEngine).AddForbiddenMatcher(overlapsStoreLocalKeys)
+		return e
+	}
 	return s.internalEngines.stateEngine
 }
 
@@ -3101,6 +3108,11 @@ func (s *Store) TODOEngine() storage.Engine {
 
 // LogEngine returns the log engine.
 func (s *Store) LogEngine() storage.Engine {
+	if util.RaceEnabled {
+		e := NewSpanSetEngine(s.internalEngines.logEngine)
+		e.(*spanSetEngine).AddForbiddenMatcher(overlapsNonRaftEngineSpans)
+		return e
+	}
 	return s.internalEngines.logEngine
 }
 

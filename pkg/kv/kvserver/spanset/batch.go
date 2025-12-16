@@ -449,6 +449,15 @@ func (s spanSetReader) ScanInternal(
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
 	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
+	if s.spansOnly {
+		if err := s.spans.CheckAllowed(SpanReadOnly, TrickySpan{Key: lower, EndKey: upper}); err != nil {
+			return err
+		}
+	} else {
+		if err := s.spans.CheckAllowedAt(SpanReadOnly, TrickySpan{Key: lower, EndKey: upper}, s.ts); err != nil {
+			return err
+		}
+	}
 	return s.r.ScanInternal(ctx, lower, upper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
@@ -721,6 +730,125 @@ func (s spanSetWriter) BufferedSize() int {
 	return s.w.BufferedSize()
 }
 
+// spanSetWriteBatch wraps a storage.WriteBatch and adds span checking.
+type spanSetWriteBatch struct {
+	spanSetWriter
+	wb storage.WriteBatch
+}
+
+var _ storage.WriteBatch = (*spanSetWriteBatch)(nil)
+
+// NewWriteBatch returns a storage.WriteBatch that asserts access of the
+// underlying WriteBatch against the given SpanSet. Timestamps are not
+// considered, only span boundaries are checked.
+func NewWriteBatch(wb storage.WriteBatch, spans *SpanSet) storage.WriteBatch {
+	return &spanSetWriteBatch{
+		spanSetWriter: spanSetWriter{w: wb, spans: spans, spansOnly: true},
+		wb:            wb,
+	}
+}
+
+// NewWriteBatchAt returns a storage.WriteBatch that asserts access of the
+// underlying WriteBatch against the given SpanSet at the given timestamp.
+func NewWriteBatchAt(wb storage.WriteBatch, spans *SpanSet, ts hlc.Timestamp) storage.WriteBatch {
+	return &spanSetWriteBatch{
+		spanSetWriter: spanSetWriter{w: wb, spans: spans, spansOnly: false, ts: ts},
+		wb:            wb,
+	}
+}
+
+// Close implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Close() {
+	s.wb.Close()
+}
+
+// Commit implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Commit(sync bool) error {
+	return s.wb.Commit(sync)
+}
+
+// CommitNoSyncWait implements storage.WriteBatch.
+func (s *spanSetWriteBatch) CommitNoSyncWait() error {
+	return s.wb.CommitNoSyncWait()
+}
+
+// SyncWait implements storage.WriteBatch.
+func (s *spanSetWriteBatch) SyncWait() error {
+	return s.wb.SyncWait()
+}
+
+// Empty implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Empty() bool {
+	return s.wb.Empty()
+}
+
+// Count implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Count() uint32 {
+	return s.wb.Count()
+}
+
+// Len implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Len() int {
+	return s.wb.Len()
+}
+
+// Repr implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Repr() []byte {
+	return s.wb.Repr()
+}
+
+// CommitStats implements storage.WriteBatch.
+func (s *spanSetWriteBatch) CommitStats() storage.BatchCommitStats {
+	return s.wb.CommitStats()
+}
+
+// ClearRawEncodedRange implements storage.InternalWriter.
+func (s *spanSetWriteBatch) ClearRawEncodedRange(start, end []byte) error {
+	// Decode the engine keys to check spans.
+	startKey, err := storage.DecodeMVCCKey(start)
+	if err != nil {
+		return err
+	}
+	endKey, err := storage.DecodeMVCCKey(end)
+	if err != nil {
+		return err
+	}
+	if err := s.spanSetWriter.checkAllowedRange(startKey.Key, endKey.Key); err != nil {
+		return err
+	}
+	return s.wb.ClearRawEncodedRange(start, end)
+}
+
+// PutInternalRangeKey implements storage.InternalWriter.
+func (s *spanSetWriteBatch) PutInternalRangeKey(start, end []byte, key rangekey.Key) error {
+	// Decode the engine keys to check spans.
+	startKey, err := storage.DecodeMVCCKey(start)
+	if err != nil {
+		return err
+	}
+	endKey, err := storage.DecodeMVCCKey(end)
+	if err != nil {
+		return err
+	}
+	if err := s.spanSetWriter.checkAllowedRange(startKey.Key, endKey.Key); err != nil {
+		return err
+	}
+	return s.wb.PutInternalRangeKey(start, end, key)
+}
+
+// PutInternalPointKey implements storage.InternalWriter.
+func (s *spanSetWriteBatch) PutInternalPointKey(key *pebble.InternalKey, value []byte) error {
+	// Decode the internal key to check spans.
+	mvccKey, err := storage.DecodeMVCCKey(key.UserKey)
+	if err != nil {
+		return err
+	}
+	if err := s.spanSetWriter.checkAllowed(mvccKey.Key); err != nil {
+		return err
+	}
+	return s.wb.PutInternalPointKey(key, value)
+}
+
 // ReadWriter is used outside of the spanset package internally, in ccl.
 type ReadWriter struct {
 	spanSetReader
@@ -780,7 +908,14 @@ var _ storage.Batch = spanSetBatch{}
 func (s spanSetBatch) NewBatchOnlyMVCCIterator(
 	ctx context.Context, opts storage.IterOptions,
 ) (storage.MVCCIterator, error) {
-	panic("unimplemented")
+	mvccIter, err := s.b.NewBatchOnlyMVCCIterator(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	if s.spansOnly {
+		return NewIterator(mvccIter, s.spans), nil
+	}
+	return NewIteratorAt(mvccIter, s.spans, s.ts), nil
 }
 
 func (s spanSetBatch) ScanInternal(
@@ -792,8 +927,16 @@ func (s spanSetBatch) ScanInternal(
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
 	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
-	// Only used on Engine.
-	panic("unimplemented")
+	if s.spansOnly {
+		if err := s.spans.CheckAllowed(SpanReadOnly, TrickySpan{Key: lower, EndKey: upper}); err != nil {
+			return err
+		}
+	} else {
+		if err := s.spans.CheckAllowedAt(SpanReadOnly, TrickySpan{Key: lower, EndKey: upper}, s.ts); err != nil {
+			return err
+		}
+	}
+	return s.b.ScanInternal(ctx, lower, upper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
 func (s spanSetBatch) Commit(sync bool) error {
@@ -805,7 +948,7 @@ func (s spanSetBatch) CommitNoSyncWait() error {
 }
 
 func (s spanSetBatch) SyncWait() error {
-	return s.b.CommitNoSyncWait()
+	return s.b.SyncWait()
 }
 
 func (s spanSetBatch) Empty() bool {
@@ -908,10 +1051,16 @@ func DisableReadWriterAssertions(rw storage.ReadWriter) storage.ReadWriter {
 // wrapper with the latch assertion disabled.
 func DisableUndeclaredSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	switch v := rw.(type) {
+	case *storage.OpLoggerBatch:
+		// OpLoggerBatch embeds a storage.Batch. Access it directly through the Batch field.
+		result := DisableUndeclaredSpanAssertions(v.Batch)
+		return result
+
 	case *spanSetBatch:
 		newSnapSetBatch := v.shallowCopy()
 		newSnapSetBatch.spanSetReader.spans.DisableUndeclaredAccessAssertions()
 		newSnapSetBatch.spanSetWriter.spans.DisableUndeclaredAccessAssertions()
+		newSnapSetBatch.spans.DisableUndeclaredAccessAssertions()
 		return newSnapSetBatch
 
 	default:
@@ -919,24 +1068,62 @@ func DisableUndeclaredSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	}
 }
 
-// DisableForbiddenSpanAssertions returns a new batch wrapper with
-// forbidden span assertions disabled. It does not modify the original batch.
-// The returned batch shares the same underlying storage.Batch but has its own
-// SpanSet wrapper with the forbidden span assertion disabled.
-// TODO(ibrahim): We eventually want to eliminate all the users of this
-// function.
 func DisableForbiddenSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	switch v := rw.(type) {
+	case *storage.OpLoggerBatch:
+		// OpLoggerBatch embeds a storage.Batch. Access it directly through the Batch field.
+		result := DisableForbiddenSpanAssertions(v.Batch)
+		return result
+
 	case *spanSetBatch:
 		newSnapSetBatch := v.shallowCopy()
 		newSnapSetBatch.spanSetReader.spans.DisableForbiddenSpansAssertions()
 		newSnapSetBatch.spanSetWriter.spans.DisableForbiddenSpansAssertions()
+		newSnapSetBatch.spans.DisableForbiddenSpansAssertions()
 		return newSnapSetBatch
 
 	default:
 		return rw
 	}
 }
+
+//// DisableForbiddenSpanAssertions returns a new batch wrapper with
+//// forbidden span assertions disabled. It does not modify the original batch.
+//// The returned batch shares the same underlying storage.Batch but has its own
+//// SpanSet wrapper with the forbidden span assertion disabled.
+//// TODO(ibrahim): We eventually want to eliminate all the users of this
+//// function.
+//func DisableForbiddenSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
+//	switch v := rw.(type) {
+//	case *storage.OpLoggerBatch:
+//		// OpLoggerBatch embeds a storage.Batch. Access it directly through the Batch field.
+//		result := DisableForbiddenSpanAssertions(v.Batch)
+//		return result
+//
+//	case *spanSetBatch:
+//		newSnapSetBatch := v.shallowCopy()
+//		newSnapSetBatch.spanSetReader.spans.DisableForbiddenSpansAssertions()
+//		newSnapSetBatch.spanSetWriter.spans.DisableForbiddenSpansAssertions()
+//		newSnapSetBatch.spans.DisableForbiddenSpansAssertions()
+//
+//		// Recursively disable forbidden assertions on the underlying batch in case
+//		// it's also a spanSetBatch (e.g., from StateEngine).
+//		newSnapSetBatch.b = DisableForbiddenSpanAssertions(newSnapSetBatch.b).(storage.Batch)
+//
+//		// Recreate the ReadWriter wrapper with the updated batch to ensure all
+//		// operations use the batch with disabled assertions.
+//		if newSnapSetBatch.spansOnly {
+//			newSnapSetBatch.ReadWriter = makeSpanSetReadWriter(newSnapSetBatch.b, newSnapSetBatch.spans)
+//		} else {
+//			newSnapSetBatch.ReadWriter = makeSpanSetReadWriterAt(newSnapSetBatch.b, newSnapSetBatch.spans, newSnapSetBatch.ts)
+//		}
+//
+//		return newSnapSetBatch
+//	default:
+//		// If it's not a type we recognize, just return it unchanged
+//		return rw
+//	}
+//}
 
 // addLockTableSpans adds corresponding lock table spans for the declared
 // spans. This is to implicitly allow raw access to separated intents in the

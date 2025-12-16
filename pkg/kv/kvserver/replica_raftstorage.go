@@ -916,10 +916,24 @@ func overlapsUnreplicatedRangeIDLocalKeys(span spanset.TrickySpan) error {
 		return errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not decode range ID for span: %s", span)
 	}
-	if spanset.Overlaps(roachpb.Span{
+
+	rangeLocalIDSpan1 := roachpb.Span{
 		Key:    keys.MakeRangeIDUnreplicatedPrefix(rangeID),
+		EndKey: keys.RangeTombstoneKey(rangeID),
+	}
+
+	rangeLocalIDSpan2 := roachpb.Span{
+		Key:    keys.RangeTombstoneKey(rangeID).Next(),
+		EndKey: keys.RaftReplicaIDKey(rangeID),
+	}
+
+	rangeLocalIDSpan3 := roachpb.Span{
+		Key:    keys.RaftReplicaIDKey(rangeID).Next(),
 		EndKey: keys.MakeRangeIDUnreplicatedPrefix(rangeID).PrefixEnd(),
-	}, span) {
+	}
+
+	if spanset.Overlaps(rangeLocalIDSpan1, span) || spanset.Overlaps(rangeLocalIDSpan2, span) ||
+		spanset.Overlaps(rangeLocalIDSpan3, span) {
 		return errors.Errorf("overlapping an unreplicated rangeID span")
 	}
 
@@ -938,6 +952,70 @@ func overlapsStoreLocalKeys(span spanset.TrickySpan) error {
 
 	if spanset.Overlaps(localStoreSpan, span) {
 		return errors.Errorf("overlaps with store local keys")
+	}
+
+	return nil
+}
+
+func overlapsNonRaftEngineSpans(span spanset.TrickySpan) error {
+	if spanset.Overlaps(roachpb.Span{
+		Key:    keys.LocalStoreMax,
+		EndKey: keys.MaxKey,
+	}, span) {
+		return errors.Errorf("overlaps with state engine spans")
+	}
+
+	if spanset.Overlaps(roachpb.Span{
+		Key:    keys.MinKey,
+		EndKey: keys.LocalRangeIDPrefix.AsRawKey(),
+	}, span) {
+		return errors.Errorf("overlaps with state engine spans")
+	}
+
+	// ---- []-[]-[] ---- [   ] --------
+	// /////                  //////////
+
+	if spanset.Contains(roachpb.Span{
+		Key:    keys.LocalStorePrefix,
+		EndKey: keys.LocalStoreMax,
+	}, span) {
+		return nil
+	}
+
+	// ---- []-[]-[] ---- [   ] --------
+	// /////              //////////////
+
+	fullRangeIDLocalSpans := roachpb.Span{
+		Key:    keys.LocalRangeIDPrefix.AsRawKey(),
+		EndKey: keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd(),
+	}
+
+	if !spanset.Contains(fullRangeIDLocalSpans, span) {
+		return errors.Errorf("overlaps with state engine spans")
+	}
+
+	// If the span in inside fullRangeIDLocalSpans, we expect that both start and
+	// end keys should be in the same rangeID.
+	rangeIDKey := span.Key
+	if rangeIDKey == nil {
+		rangeIDKey = span.EndKey
+	}
+	rangeID, err := keys.DecodeRangeIDPrefix(rangeIDKey)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err,
+			"could not decode range ID for span: %s", span)
+	}
+
+	rangeLocalIDSpan1 := roachpb.Span{
+		Key: keys.RangeTombstoneKey(rangeID),
+	}
+
+	rangeLocalIDSpan2 := roachpb.Span{
+		Key: keys.RaftReplicaIDKey(rangeID),
+	}
+
+	if spanset.Overlaps(rangeLocalIDSpan1, span) || spanset.Overlaps(rangeLocalIDSpan2, span) {
+		return errors.Errorf("overlaps with state engine spans")
 	}
 
 	return nil

@@ -916,9 +916,7 @@ const (
 )
 
 // Engine is the interface that wraps the core operations of a key/value store.
-type Engine interface {
-	Reader
-	Writer
+type EngineWithoutRW interface {
 	// Attrs returns the engine/store attributes.
 	Attrs() roachpb.Attributes
 	// Capacity returns capacity details for the engine's available storage.
@@ -992,7 +990,7 @@ type Engine interface {
 	// NewWriteBatch returns a new write batch that will commit to the
 	// underlying Engine. The batch accumulates all mutations and applies them
 	// atomically on a call to Commit().
-	NewWriteBatch() WriteBatch
+	NewWriteBatch() WriteBatch ///////
 	// NewSnapshot returns a read-only, point-in-time snapshot of selected key
 	// spans of the engine.
 	//
@@ -1023,7 +1021,7 @@ type Engine interface {
 	// flush.
 	//
 	// Note that snapshots must be closed before the Engine is closed.
-	NewSnapshot(keyRanges ...roachpb.Span) Reader
+	NewSnapshot(keyRanges ...roachpb.Span) Reader /////////
 	// IngestLocalFiles atomically links a slice of files into the RocksDB
 	// log-structured merge-tree.
 	IngestLocalFiles(ctx context.Context, paths []string) error
@@ -1054,7 +1052,7 @@ type Engine interface {
 	// ApproximateDiskBytes returns an approximation of the on-disk size and file
 	// counts for the given key span, along with how many of those bytes are on
 	// remote, as well as specifically external remote, storage.
-	ApproximateDiskBytes(from, to roachpb.Key) (total, remote, external uint64, _ error)
+	ApproximateDiskBytes(from, to roachpb.Key) (total, remote, external uint64, _ error) ///////
 	// IngestLocalFilesToWriter converts local files with the given paths to
 	// equivalent writes into the Writer, after also clearing the specified spans.
 	// The caller is then responsible for committing the batch behind the Writer.
@@ -1072,11 +1070,11 @@ type Engine interface {
 	) error
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
-	CompactRange(ctx context.Context, start, end roachpb.Key) error
+	CompactRange(ctx context.Context, start, end roachpb.Key) error /////////
 	// ScanStorageInternalKeys returns key level statistics for each level of a pebble store (that overlap start and end).
-	ScanStorageInternalKeys(start, end roachpb.Key, megabytesPerSecond int64) ([]enginepb.StorageInternalKeysMetrics, error)
+	ScanStorageInternalKeys(start, end roachpb.Key, megabytesPerSecond int64) ([]enginepb.StorageInternalKeysMetrics, error) //////////
 	// GetTableMetrics returns information about sstables that overlap start and end.
-	GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetricsInfo, error)
+	GetTableMetrics(start, end roachpb.Key) ([]enginepb.SSTableMetricsInfo, error) //////////
 	// RegisterFlushCompletedCallback registers a callback that will be run for
 	// every successful flush. Only one callback can be registered at a time, so
 	// registering again replaces the previous callback. The callback must
@@ -1088,7 +1086,7 @@ type Engine interface {
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used. If spans is not empty, the checkpoint excludes
 	// SSTs that don't overlap with any of these key spans.
-	CreateCheckpoint(dir string, spans []roachpb.Span) error
+	CreateCheckpoint(dir string, spans []roachpb.Span) error ////////
 
 	// MinVersion is the minimum CockroachDB version that is compatible with this
 	// store. For newly created stores, this matches the currently active cluster
@@ -1116,7 +1114,7 @@ type Engine interface {
 	// given span. The parameter copy controls how it is downloaded -- i.e. if it
 	// just copies the backing bytes to a local file of if it rewrites the file
 	// key-by-key to a new file.
-	Download(ctx context.Context, span roachpb.Span, copy bool) error
+	Download(ctx context.Context, span roachpb.Span, copy bool) error //////
 
 	// RegisterDiskSlowCallback registers a callback that will be run when a
 	// write operation on the disk has been seen to be slow. This callback
@@ -1143,6 +1141,13 @@ type Engine interface {
 	// this intermediate case. Currently, this mainly feeds into allocation
 	// decisions by the caller (such as shedding leases).
 	GetDiskUnhealthy() bool
+}
+
+// Engine is the interface that wraps the core operations of a key/value store.
+type Engine interface {
+	Reader
+	Writer
+	EngineWithoutRW
 }
 
 // Batch is the interface for batch specific operations.
