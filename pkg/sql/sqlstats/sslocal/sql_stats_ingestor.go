@@ -254,15 +254,15 @@ func (i *SQLStatsIngester) ingest(ctx context.Context, events *eventBuffer) {
 			// the stmts with and the statement's txn id will be nil. In that case
 			// we can send immediately to the sinks.
 			if e.statement.UnderOuterTxn {
-				i.flushBuffer(ctx, e.statement.SessionID, nil, 0)
+				i.flushBuffer(ctx, e.statement.SessionID, nil)
 			}
 		} else if e.transaction != nil {
-			i.flushBuffer(ctx, e.transaction.SessionID, e.transaction, e.transaction.FingerprintID)
+			i.flushBuffer(ctx, e.transaction.SessionID, e.transaction)
 			i.metrics.NumProcessed.Inc(1)
 			i.metrics.QueueSize.Dec(1)
 		} else {
 			if e.forceFlush {
-				i.flushBuffer(ctx, e.sessionID, nil, forceFlushTransactionFingerprintId)
+				i.flushStatementsOnly(ctx, e.sessionID)
 			} else {
 				i.clearSession(e.sessionID)
 			}
@@ -398,39 +398,71 @@ func (i *SQLStatsIngester) processStatement(statement *sqlstats.RecordedStmtStat
 // flushBuffer sends the buffered statementsBySessionID and provided transaction
 // to the registered sinks. The transaction may be nil.
 func (i *SQLStatsIngester) flushBuffer(
-	ctx context.Context,
-	sessionID clusterunique.ID,
-	transaction *sqlstats.RecordedTxnStats,
-	transactionFingerprintID appstatspb.TransactionFingerprintID,
+	ctx context.Context, sessionID clusterunique.ID, transaction *sqlstats.RecordedTxnStats,
 ) {
+	statements, ok := func() (*statementBuf, bool) {
+		statements, ok := i.statementsBySessionID[sessionID]
+		if !ok {
+			return nil, false
+		}
+		delete(i.statementsBySessionID, sessionID)
+		return statements, true
+	}()
+	if !ok {
+		return
+	}
+	defer statements.release()
+
+	if len(*statements) == 0 {
+		return
+	}
+
+	if transaction != nil {
+		// Here we'll set the transaction fingerprint ID for each statement if the
+		// below cluster setting is enabled.
+		shouldAssociateWithTxn := AssociateStmtWithTxnFingerprint.Get(&i.settings.SV)
+		// These values are only known at the time of the transaction.
+		for _, s := range *statements {
+			if shouldAssociateWithTxn {
+				s.TransactionFingerprintID = transaction.FingerprintID
+			}
+			if s.ImplicitTxn == transaction.ImplicitTxn {
+				continue
+			}
+			// We need to recompute the fingerprint ID.
+			s.ImplicitTxn = transaction.ImplicitTxn
+			s.FingerprintID = appstatspb.ConstructStatementFingerprintID(
+				s.Query, s.ImplicitTxn, s.Database)
+		}
+	}
+
+	for _, sink := range i.sinks {
+		sink.ObserveTransaction(ctx, transaction, *statements)
+	}
+}
+
+// flushStatementsOnly sends the buffered statementsBySessionID to the registered sinks
+func (i *SQLStatsIngester) flushStatementsOnly(ctx context.Context, sessionID clusterunique.ID) {
 	var statements statementBuf
 	if sessionStatements, ok := i.statementsBySessionID[sessionID]; ok {
 		defer sessionStatements.release()
 		statements = *sessionStatements
 		delete(i.statementsBySessionID, sessionID)
-	} else if transaction == nil {
-		// No statements or transactions to flush, return early
+	} else {
+		// No statements to flush, return early
 		return
 	}
 
 	// Here we'll set the transaction fingerprint ID for each statement if the
 	// below cluster setting is enabled.
-	shouldAssociateWithTxn := AssociateStmtWithTxnFingerprint.Get(&i.settings.SV)
-	// These values are only known at the time of the transaction.
-	for _, s := range statements {
-		if shouldAssociateWithTxn {
-			s.TransactionFingerprintID = transactionFingerprintID
+	if AssociateStmtWithTxnFingerprint.Get(&i.settings.SV) {
+		// These values are only known at the time of the transaction.
+		for _, s := range statements {
+			s.TransactionFingerprintID = forceFlushTransactionFingerprintId
 		}
-		if transaction == nil || s.ImplicitTxn == transaction.ImplicitTxn {
-			continue
-		}
-		// We need to recompute the fingerprint ID.
-		s.ImplicitTxn = transaction.ImplicitTxn
-		s.FingerprintID = appstatspb.ConstructStatementFingerprintID(
-			s.Query, s.ImplicitTxn, s.Database)
 	}
 
 	for _, sink := range i.sinks {
-		sink.ObserveTransaction(ctx, transaction, statements)
+		sink.ObserveTransaction(ctx, nil, statements)
 	}
 }
