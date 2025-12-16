@@ -426,7 +426,8 @@ func (s *state) Replicas(storeID StoreID) []Replica {
 func (s *state) AddNode(nodeCPUCapacity int64, locality roachpb.Locality) Node {
 	s.nodeSeqGen++
 	nodeID := s.nodeSeqGen
-	mmAllocator := mmaprototype.NewAllocatorState(s.clock, rand.New(rand.NewSource(s.settings.Seed)))
+	mmAllocator := mmaprototype.NewAllocatorState(
+		s.clock, nil, rand.New(rand.NewSource(s.settings.Seed)))
 	sp := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(),
 		hlc.NewClockForTesting(s.clock), s.settings.ST)
 	node := &node{
