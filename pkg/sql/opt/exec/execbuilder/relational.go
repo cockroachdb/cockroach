@@ -896,15 +896,27 @@ func (b *Builder) buildPlaceholderScan(
 	values := make([]tree.Datum, len(scan.Span))
 	for i, expr := range scan.Span {
 		// The expression is either a placeholder or a constant.
+		var val tree.Datum
 		if p, ok := expr.(*memo.PlaceholderExpr); ok {
-			val, err := eval.Expr(b.ctx, b.evalCtx, p.Value)
+			val, err = eval.Expr(b.ctx, b.evalCtx, p.Value)
 			if err != nil {
 				return execPlan{}, colOrdMap{}, err
 			}
-			values[i] = val
 		} else {
-			values[i] = memo.ExtractConstDatum(expr)
+			val = memo.ExtractConstDatum(expr)
 		}
+		if val == tree.DNull {
+			// If any value is NULL, then build an empty values operator instead
+			// of a scan. No row can satisfy the equality filter that was used
+			// to build this placeholder scan, because of SQL NULL-equality
+			// semantics.
+			return b.buildValues(&memo.ValuesExpr{
+				ValuesPrivate: memo.ValuesPrivate{
+					Cols: scan.Cols.ToList(),
+				},
+			})
+		}
+		values[i] = val
 	}
 
 	key := constraint.MakeCompositeKey(values...)
