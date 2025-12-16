@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -25,6 +25,11 @@ import (
 func TestCPUTimeTokenFiller(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	if time.Second%timePerTick != 0 || timePerTick > time.Second {
+		t.Errorf("timePerTick=%v must be < 1s & must divide 1s evenly", timePerTick)
+		return
+	}
 
 	// Fixed time for reproducibility.
 	unixNanos := int64(1758938600000000000) // 2025-09-24T14:30:00Z
@@ -141,10 +146,10 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 	}
 
 	model := &testModel{buf: &buf}
-	model.rates[testTier0][canBurst] = 5
-	model.rates[testTier0][noBurst] = 4
-	model.rates[testTier1][canBurst] = 3
-	model.rates[testTier1][noBurst] = 2
+	model.rates[testTier0][canBurst] = 5000
+	model.rates[testTier0][noBurst] = 4000
+	model.rates[testTier1][canBurst] = 3000
+	model.rates[testTier1][noBurst] = 2000
 	allocator := cpuTimeTokenAllocator{
 		granter:  granter,
 		settings: cluster.MakeClusterSettings(),
@@ -344,8 +349,14 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	}
 	require.InDelta(t, 20, model.tokenToCPUTimeMultiplier, tolerance)
 
-	// Iteratively reduce to 3.6x, since low CPU mode, and
-	// tokenToCPUTimeMultiplier = 20 > 3.6.
+	// Iteratively reduce to 3.2x, since low CPU mode, and
+	// tokenToCPUTimeMultiplier = 20 > 3.2. Why 3.2? First, fit computes
+	// the smallest target from targets. In this case, that is 0.8. Then
+	// the following formula is used to determine the upper bound for the
+	// multiplier:
+	// upperBound = smallestTargetUtil / lowCPUUtilFrac
+	//            = 0.8 / 0.25
+	//            = 3.2
 	tokenCPUTime.append(dur.Nanoseconds()/5, 100)
 	actualCPUTime.append(dur.Milliseconds()/5, 100)
 	{
@@ -362,19 +373,19 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 			lastMult = mult
 		}
 	}
-	require.InDelta(t, 3.6, model.tokenToCPUTimeMultiplier, tolerance)
+	require.InDelta(t, 3.2, model.tokenToCPUTimeMultiplier, tolerance)
 
 	// Check refillRates again, this time with tokenToCPUTimeMultiplier
-	// equal to 3.6 instead of one.
-
-	// 80% -> 10 vCPUs * .8 * 1s = 8s -> 8s / 3.6 ~= 2.22222222s
-	require.Equal(t, int64(2222222222), refillRates[testTier1][noBurst])
-	// 85% -> 10 vCPUs * .85 * 1s = 8.5s -> 8.5s / 3.6 ~= 2.36111111s
-	require.Equal(t, int64(2361111111), refillRates[testTier1][canBurst])
-	// 90% -> 10 vCPUs * .9 * 1s = 9s -> 9s / 3.6 ~= 2.5s
-	require.Equal(t, int64(2500000000), refillRates[testTier0][noBurst])
-	// 95% -> 10 vCPUs * .95 * 1s = 9.5s -> 9.5s / 3.6 ~= 2.63888889
-	require.Equal(t, int64(2638888888), refillRates[testTier0][canBurst])
+	// equal to 3.2 instead of one.
+	//
+	// 80% -> 10 vCPUs * .8 * 1s = 8s -> 8s / 3.2 = 2.5s
+	require.Equal(t, int64(2500000000), refillRates[testTier1][noBurst])
+	// 85% -> 10 vCPUs * .85 * 1s = 8.5s -> 8.5s / 3.2 = 2.65625s
+	require.Equal(t, int64(2656250000), refillRates[testTier1][canBurst])
+	// 90% -> 10 vCPUs * .9 * 1s = 9s -> 9s / 3.2 = 2.8125s
+	require.Equal(t, int64(2812500000), refillRates[testTier0][noBurst])
+	// 95% -> 10 vCPUs * .95 * 1s = 9.5s -> 9.5s / 3.2 = 2.96875s
+	require.Equal(t, int64(2968750000), refillRates[testTier0][canBurst])
 }
 
 type testTokenUsageTracker struct {
