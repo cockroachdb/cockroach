@@ -237,6 +237,12 @@ func validateFunctionRelationReferences(
 ) {
 	for _, id := range refProvider.ReferencedRelationIDs().Ordered() {
 		_, _, namespace := scpb.FindNamespace(b.QueryByID(id))
+		if namespace == nil {
+			// Relations should have Namespace elements. If not found, this could
+			// indicate an internal error or an unexpected descriptor type.
+			panic(errors.AssertionFailedf(
+				"cannot find Namespace element for referenced relation ID %d", id))
+		}
 		if namespace.DatabaseID != parentDBID {
 			panic(pgerror.Newf(
 				pgcode.FeatureNotSupported,
