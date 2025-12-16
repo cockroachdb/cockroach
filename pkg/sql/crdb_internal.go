@@ -3371,7 +3371,7 @@ func createRoutinePopulate(
 			for i := range treeNode.Options {
 				if body, ok := treeNode.Options[i].(tree.RoutineBodyStr); ok {
 					bodyStr := string(body)
-					bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, p.EvalContext(), &p.semaCtx, p.SessionData(), bodyStr, fnDesc.GetLanguage())
+					bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, &p.semaCtx, bodyStr, fnDesc.GetLanguage())
 					if err != nil {
 						return err
 					}
@@ -3453,7 +3453,7 @@ func createRoutinePopulateByFnIndex(
 	for i := range treeNode.Options {
 		if body, ok := treeNode.Options[i].(tree.RoutineBodyStr); ok {
 			bodyStr := string(body)
-			bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, p.EvalContext(), &p.semaCtx, p.SessionData(), bodyStr, fnDesc.GetLanguage())
+			bodyStr, err = formatFunctionQueryTypesForDisplay(ctx, &p.semaCtx, bodyStr, fnDesc.GetLanguage())
 			if err != nil {
 				return false, err
 			}
