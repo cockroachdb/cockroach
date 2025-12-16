@@ -10,6 +10,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
@@ -256,7 +257,7 @@ func (m *bulkMergeProcessor) mergeSSTs(
 
 	var mergedSSTs execinfrapb.BulkMergeSpec_Output
 
-	var firstKey roachpb.Key
+	var firstKey, endKey roachpb.Key
 	var sstSize int64
 	// Write all KVs
 	for iter.SeekGE(storage.MVCCKey{Key: mergeSpan.Key}); ; iter.NextKey() {
@@ -277,15 +278,18 @@ func (m *bulkMergeProcessor) mergeSSTs(
 			firstKey = key.Key.Clone()
 		}
 
-		// Write the key-value pair
-		if err := mergedSSTWriter.PutRawMVCC(key, val); err != nil {
-			return execinfrapb.BulkMergeSpec_Output{}, err
+		// If our file has grown too large, pick an endpoint after the current key.
+		if endKey == nil && sstSize >= sstMaxSize {
+			safeKey, err := keys.EnsureSafeSplitKey(key.Key)
+			if err != nil {
+				return execinfrapb.BulkMergeSpec_Output{}, err
+			}
+			endKey = safeKey.PrefixEnd()
 		}
-		sstSize += int64(len(key.Key) + len(val))
 
-		// Flush large SSTs after writing the key
-		if sstSize >= sstMaxSize {
-			endKey := key.Key.Next()
+		// If we've selected an endKey and this key is at or beyond that point, create a new SST
+		// for the current key.
+		if endKey != nil && key.Key.Compare(endKey) >= 0 {
 			mergedSSTs.SSTs = append(mergedSSTs.SSTs, execinfrapb.BulkMergeSpec_SST{
 				StartKey: firstKey,
 				EndKey:   endKey,
@@ -300,10 +304,18 @@ func (m *bulkMergeProcessor) mergeSSTs(
 				return execinfrapb.BulkMergeSpec_Output{}, err
 			}
 			mergedSSTWriter = storage.MakeIngestionSSTWriter(ctx, m.flowCtx.EvalCtx.Settings, mergedSSTFile)
-			// Next SST starts where this one ended to maintain contiguous non-overlapping ranges
-			firstKey = endKey
+
+			// Next SST records its own first key to avoid carrying over stale bounds.
+			firstKey = nil
+			endKey = nil
 			sstSize = 0
 		}
+
+		// Write the key-value pair
+		if err := mergedSSTWriter.PutRawMVCC(key, val); err != nil {
+			return execinfrapb.BulkMergeSpec_Output{}, err
+		}
+		sstSize += int64(len(key.Key) + len(val))
 	}
 
 	// Finish writing the SST
