@@ -459,6 +459,12 @@ func (re *rebalanceEnv) rebalanceReplicas(
 			continue
 		}
 		re.ensureAnalyzedConstraints(rstate)
+		if rstate.constraints == nil {
+			log.KvDistribution.Warningf(ctx,
+				"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
+				rangeID, rstate.conf, rstate.replicas)
+			continue
+		}
 		isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
 		if !isVoter && !isNonVoter {
 			// Due to REQUIREMENT(change-computation), the top-k is up to date, so
@@ -669,6 +675,12 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			continue
 		}
 		re.ensureAnalyzedConstraints(rstate)
+		if rstate.constraints == nil {
+			log.KvDistribution.Warningf(ctx,
+				"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
+				rangeID, rstate.conf, rstate.replicas)
+			continue
+		}
 		if rstate.constraints.leaseholderID != store.StoreID {
 			// See the earlier comment about assertions.
 			panic(fmt.Sprintf("internal state inconsistency: "+
