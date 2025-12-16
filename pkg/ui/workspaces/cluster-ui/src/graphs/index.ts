@@ -5,3 +5,4 @@
 
 export * from "./visualization";
 export * from "./utils/domain";
+export * from "./bargraph";

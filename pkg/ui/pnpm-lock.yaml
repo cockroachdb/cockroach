@@ -591,6 +591,9 @@ importers:
       d3-geo-projection:
         specifier: ^4.0.0
         version: 4.0.0
+      d3-interpolate:
+        specifier: ^3.0.1
+        version: 3.0.1
       d3-scale:
         specifier: ^4.0.2
         version: 4.0.2
@@ -14645,6 +14648,7 @@ packages:
 
   /glob@7.2.3:
     resolution: {integrity: sha512-nFR0zLpU2YCaRxwoCJvL6UvCH2JFyFVIvwTLsIf21AuHlMskA1hhTdk+LlYJtOlYt9v6dvszD2BGRqBL+iQK9Q==}
+    deprecated: Glob versions prior to v9 are no longer supported
     dependencies:
       fs.realpath: 1.0.0
       inflight: 1.0.6
