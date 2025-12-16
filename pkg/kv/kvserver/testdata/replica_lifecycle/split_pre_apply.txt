@@ -1,0 +1,159 @@
+# Test case 1: The RHS replica has been destroyed before the split is
+# applied. This simulates the case where the RHS replica was removed
+# from the store before the split was applied. In this case, the split
+# application should clear the user data that would have belonged to the RHS
+# range.
+
+create-descriptor start=a end=z replicas=(1,2,3)
+----
+created descriptor: r1:{a-z} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+
+create-replica range-id=1 initialized
+----
+created replica: (n1,s1):1
+Put: 0,0 /Local/RangeID/1/r/RangeLease (0x01698972726c6c2d00): <empty>
+Put: 0,0 /Local/RangeID/1/r/RangeGCThreshold (0x016989726c67632d00): 0,0
+Put: 0,0 /Local/RangeID/1/r/RangeGCHint (0x016989727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 
+Put: 0,0 /Local/RangeID/1/r/RangeVersion (0x016989727276657200): 10.8-upgrading-step-007
+Put: 0,0 /Local/RangeID/1/r/RangeAppliedState (0x016989727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:142 sys_count:4 > raft_closed_timestamp:<> raft_applied_index_term:5 
+Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
+Put: 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
+Put: 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): index:10 term:5 
+
+# Add some data that will belong to the RHS range after the split.
+create-range-data range-id=1 base-key=m num-user-keys=1
+----
+Put: 0.000000001,0 "m0" (0x6d3000000000000000000109): ""
+
+set-lease range-id=1 replica=1
+----
+ok
+
+eval-split range-id=1 split-key=m
+----
+lhs: r1 ["a", "m"), rhs: r2 ["m", "z")
+
+# Create the RHS replica (uninitialized).
+create-replica range-id=2
+----
+created replica: (n1,s1):1
+Put: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): replica_id:1 
+
+# Destroy the RHS replica before applying the split. This simulates the case
+# where the RHS replica was removed from the store before the split was applied.
+destroy-replica range-id=2
+----
+Put: 0,0 /Local/RangeID/2/u/RangeTombstone (0x01698a757266746200): next_replica_id:4 
+Delete: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): 
+
+# TODO(arul): the RangeLastReplicaGCTimestamp shouldn't exist in this batch at
+# all. See https://github.com/cockroachdb/cockroach/issues/157897.
+apply-split range-id=1
+----
+Put: 0,0 /Local/RangeID/2/u/RangeLastReplicaGCTimestamp (0x01698a75726c727400): 0,0
+Put: 0,0 /Local/Range"m"/QueueLastProcessed/"consistencyChecker" (0x016b126d0001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
+Put: 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,0 pro=0,0 acq=Unspecified
+Put: 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 0.000000004,0
+Put: 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<> 
+Put: 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): 10.8-upgrading-step-007
+Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:198 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5 
+Delete (Sized at 30): 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 
+Delete (Sized at 43): 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): 
+Delete (Sized at 36): 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): 
+Delete (Sized at 48): 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): 
+Delete (Sized at 36): 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): 
+Delete (Sized at 48): 0,0 /Local/Range"m"/QueueLastProcessed/"consistencyChecker" (0x016b126d0001716c7074636f6e73697374656e6379436865636b657200): 
+Delete (Sized at 12): 0.000000001,0 "m0" (0x6d3000000000000000000109): 
+
+print-range-state
+----
+range desc: r1:{a-m} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=10
+		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseLeader term=10 min-exp=0.000000100,0 pro=0,0 acq=Unspecified
+range desc: r2:{m-z} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,0 pro=0,0 acq=Unspecified
+
+# Test case 2: RHS replica exists but with a higher ReplicaID than the split.
+# This simulates the case where the RHS was removed and recreated with a higher ID.
+
+# Add some data that will belong to the RHS range after the split. This data
+# will need to be cleared if the RHS replica is considered destroyed when
+# applying the split.
+create-range-data range-id=1 base-key=g num-user-keys=1
+----
+Put: 0.000000001,0 "g0" (0x673000000000000000000109): ""
+
+eval-split range-id=1 split-key=f
+----
+lhs: r1 ["a", "f"), rhs: r3 ["f", "m")
+
+# Higher replica ID than what was in the split trigger; uninitialized.
+create-replica range-id=3 replica-id=5
+----
+created replica: (n1,s1):5
+Put: 0,0 /Local/RangeID/3/u/RaftReplicaID (0x01698b757266747200): replica_id:5 
+
+# Apply the split. The RHS is detected as destroyed because its ReplicaID (5)
+# is higher than the one in the split trigger (1).
+apply-split range-id=1
+----
+Put: 0,0 /Local/RangeID/3/u/RangeLastReplicaGCTimestamp (0x01698b75726c727400): 0,0
+Put: 0,0 /Local/Range"f"/QueueLastProcessed/"consistencyChecker" (0x016b12660001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
+Put: 0,0 /Local/RangeID/3/r/RangeLease (0x01698b72726c6c2d00): repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,1 pro=0,0 acq=Unspecified
+Put: 0,0 /Local/RangeID/3/r/RangeGCThreshold (0x01698b726c67632d00): 0.000000004,0
+Put: 0,0 /Local/RangeID/3/r/RangeGCHint (0x01698b727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<> 
+Put: 0,0 /Local/RangeID/3/r/RangeVersion (0x01698b727276657200): 10.8-upgrading-step-007
+Put: 0,0 /Local/RangeID/3/r/RangeAppliedState (0x01698b727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:200 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5 
+Delete (Sized at 30): 0,0 /Local/RangeID/3/r/RangeGCThreshold (0x01698b726c67632d00): 
+Delete (Sized at 43): 0,0 /Local/RangeID/3/r/RangeAppliedState (0x01698b727261736b00): 
+Delete (Sized at 36): 0,0 /Local/RangeID/3/r/RangeGCHint (0x01698b727267636800): 
+Delete (Sized at 50): 0,0 /Local/RangeID/3/r/RangeLease (0x01698b72726c6c2d00): 
+Delete (Sized at 36): 0,0 /Local/RangeID/3/r/RangeVersion (0x01698b727276657200): 
+Delete (Sized at 48): 0,0 /Local/Range"f"/QueueLastProcessed/"consistencyChecker" (0x016b12660001716c7074636f6e73697374656e6379436865636b657200): 
+Delete (Sized at 12): 0.000000001,0 "g0" (0x673000000000000000000109): 
+
+# Test case 3: RHS replica exists with the same ReplicaID as in the split
+# trigger. This is the usual case.
+
+# Add some data that will belong to the RHS range after the split. This time,
+# it shouldn't be cleared, because the RHS replica hasn't been destroyed.
+create-range-data range-id=1 base-key=d num-user-keys=1
+----
+Put: 0.000000001,0 "d0" (0x643000000000000000000109): ""
+
+eval-split range-id=1 split-key=c
+----
+lhs: r1 ["a", "c"), rhs: r4 ["c", "f")
+
+# Create the RHS replica with the same ReplicaID as in the split trigger.
+create-replica range-id=4 replica-id=1
+----
+created replica: (n1,s1):1
+Put: 0,0 /Local/RangeID/4/u/RaftReplicaID (0x01698c757266747200): replica_id:1 
+
+apply-split range-id=1
+----
+Put: 0,0 /Local/RangeID/4/u/RangeLastReplicaGCTimestamp (0x01698c75726c727400): 0,0
+Put: 0,0 /Local/Range"c"/QueueLastProcessed/"consistencyChecker" (0x016b12630001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
+Put: 0,0 /Local/RangeID/4/r/RangeLease (0x01698c72726c6c2d00): repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,2 pro=0,0 acq=Unspecified
+Put: 0,0 /Local/RangeID/4/r/RangeGCThreshold (0x01698c726c67632d00): 0.000000004,0
+Put: 0,0 /Local/RangeID/4/r/RangeGCHint (0x01698c727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<> 
+Put: 0,0 /Local/RangeID/4/r/RangeVersion (0x01698c727276657200): 10.8-upgrading-step-007
+Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698c727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:200 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5 
+Put: 0,0 /Local/RangeID/4/u/RaftHardState (0x01698c757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
+Put: 0,0 /Local/RangeID/4/u/RaftTruncatedState (0x01698c757266747400): index:10 term:5 
+Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698c727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:200 sys_count:5 > raft_closed_timestamp:<wall_time:100 > raft_applied_index_term:5 
+
+print-range-state
+----
+range desc: r1:{a-c} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=10
+		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseLeader term=10 min-exp=0.000000100,0 pro=0,0 acq=Unspecified
+range desc: r2:{m-z} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,0 pro=0,0 acq=Unspecified
+range desc: r3:{f-m} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+		replica (n1/s1): id=5 [uninitialized] HardState={Term:0,Vote:0,Commit:0}
+		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,1 pro=0,0 acq=Unspecified
+range desc: r4:{c-f} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=10
+		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,2 pro=0,0 acq=Unspecified
