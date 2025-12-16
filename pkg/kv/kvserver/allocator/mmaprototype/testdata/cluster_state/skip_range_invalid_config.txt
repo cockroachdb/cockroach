@@ -1,0 +1,76 @@
+# Tests that ranges with invalid span configs (where normalization fails)
+# trigger a warning and result in nil conf.
+#
+# Scenario: Range 1 has an invalid config where constraint replicas (2) exceed
+# num_replicas (1). This causes normalization to fail with a warning logged.
+
+set-store
+  store-id=1 node-id=1 attrs=purple locality-tiers=region=us-west-1,zone=us-west-1a
+  store-id=2 node-id=2 attrs=yellow locality-tiers=region=us-east-1,zone=us-east-1a
+----
+node-id=1 locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 attrs=purple
+node-id=2 locality-tiers=region=us-east-1,zone=us-east-1a,node=2
+  store-id=2 attrs=yellow
+
+store-load-msg
+  store-id=1 node-id=1 load=[100,100,100] capacity=[200,200,200] secondary-load=0 load-time=0s
+----
+
+store-load-msg
+  store-id=2 node-id=2 load=[10,10,10] capacity=[200,200,200] secondary-load=0 load-time=0s
+----
+
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:100ns/s, write-bandwidth:100 B/s, byte-size:100 B] adjusted=[cpu:100ns/s, write-bandwidth:100 B/s, byte-size:100 B] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:10ns/s, write-bandwidth:10 B/s, byte-size:10 B] adjusted=[cpu:10ns/s, write-bandwidth:10 B/s, byte-size:10 B] node-reported-cpu=10 node-adjusted-cpu=10 seq=1
+
+# Range 1: Invalid config - constraint replicas (2) > num_replicas (1).
+# This triggers: "constraint replicas add up to more than configured replicas"
+store-leaseholder-msg trace
+store-id=1
+  range-id=1 load=[50,50,50] raft-cpu=10
+  config=(num_replicas=1 constraints={"+region=us-west-1":2})
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+----
+range r1 span config had errors in normalization: constraint replicas add up to more than configured replicas, normalized result: <nil>
+load summary for dim=CPURate (s1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+load summary for dim=WriteBandwidth (s1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+load summary for dim=ByteSize (s1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+load summary for dim=CPURate (n1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
+load summary for dim=WriteBandwidth (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
+load summary for dim=ByteSize (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
+load summary for dim=CPURate (n2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
+
+ranges
+----
+range-id=1 local-store=1 load=[cpu:50ns/s, write-bandwidth:50 B/s, byte-size:50 B] raft-cpu=10
+  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+
+# Rebalance from store 1. The rebalancer attempts to shed load from s1 but
+# cannot find a suitable candidate.
+rebalance-stores store-id=1
+----
+[mmaid=1] rebalanceStores begins
+[mmaid=1] cluster means: (stores-load [cpu:55ns/s, write-bandwidth:55 B/s, byte-size:55 B]) (stores-capacity [cpu:200ns/s, write-bandwidth:200 B/s, byte-size:200 B]) (nodes-cpu-load 55) (nodes-cpu-capacity 200)
+[mmaid=1] load summary for dim=CPURate (s1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+[mmaid=1] load summary for dim=WriteBandwidth (s1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+[mmaid=1] load summary for dim=ByteSize (s1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+[mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+[mmaid=1] evaluating s1: node load overloadSlow, store load overloadSlow, worst dim CPURate
+[mmaid=1] overload-continued s1 ((store=overloadSlow worst=CPURate cpu=overloadSlow writes=overloadSlow bytes=overloadSlow node=overloadSlow high_disk=false frac_pending=0.00,0.00(true))) - within grace period
+[mmaid=1] store s1 was added to shedding store list
+[mmaid=1] load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
+[mmaid=1] load summary for dim=WriteBandwidth (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
+[mmaid=1] load summary for dim=ByteSize (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
+[mmaid=1] load summary for dim=CPURate (n2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
+[mmaid=1] evaluating s2: node load loadLow, store load loadLow, worst dim CPURate
+[mmaid=1] start processing shedding store s1: cpu node load overloadSlow, store load overloadSlow, worst dim CPURate
+[mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r1:[cpu:50ns/s, write-bandwidth:50 B/s, byte-size:50 B]
+[mmaid=1] local store s1 is CPU overloaded (overloadSlow >= overloadSlow), attempting lease transfers first
+[mmaid=1] skipping r1: no constraints analyzed (conf=<nil> replicas=[s1:replica-id=1 type=VOTER_FULL leaseholder=true lease disposition:ok])
+[mmaid=1] attempting to shed replicas next
+[mmaid=1] skipping r1: no constraints analyzed (conf=<nil> replicas=[s1:replica-id=1 type=VOTER_FULL leaseholder=true lease disposition:ok])
+pending(0)
