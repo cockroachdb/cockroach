@@ -713,6 +713,11 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 		var candsSet candidateSet
 		for _, cand := range cands {
+			if !candsPL.contains(cand.storeID) {
+				// Skip candidates that are filtered out by
+				// retainReadyLeaseTargetStoresOnly.
+				continue
+			}
 			candSls := re.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)
 			candsSet.candidates = append(candsSet.candidates, candidateInfo{
 				StoreID:              cand.storeID,
