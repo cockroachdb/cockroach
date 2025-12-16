@@ -1081,13 +1081,12 @@ type rangeState struct {
 	// addition of s4 to be thrown away while keeping the removal of s1. This is
 	// mostly being defensive to avoid any chance of internal inconsistency.
 	replicas []StoreIDAndReplicaState
-	// conf is nil if basic span config normalization failed (e.g., invalid
-	// config). If only structural normalization failed, conf contains a
-	// best-effort result and the error is logged but not propagated here.
-	//
-	// If conf is nil, range analysis is skipped, and thus constraints is nil.
-	// This range will be skipped from rebalancing. If conf is non-nil (even if it
-	// was a best-effort result), range analysis is performed.
+	// conf may be nil or non-nil depending on the type of normalization error:
+	// - Hard error: a developer error or the input config is invalid. Results in
+	// conf=nil, and the range is excluded from rebalancing.
+	// - Soft error: input config is suboptimal but we can still proceed (e.g.,
+	// voter constraints not fully satisfiable by replica constraints). Results in
+	// a best-effort conf, and rebalancing continues normally.
 	conf *normalizedSpanConfig
 
 	load RangeLoad
