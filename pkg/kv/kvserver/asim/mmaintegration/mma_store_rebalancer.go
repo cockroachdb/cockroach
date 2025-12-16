@@ -157,6 +157,22 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 				LocalStoreID: roachpb.StoreID(msr.localStoreID),
 				PeriodicCall: true, /* to exercise observability code paths */
 			})
+			// After ComputeChanges succeeds, mark the span config as up-to-date
+			// on replicas.
+			for _, rm := range storeLeaseholderMsg.Ranges {
+				if rm.MaybeSpanConfIsPopulated {
+					rng, ok := s.Range(state.RangeID(rm.RangeID))
+					if !ok {
+						panic(fmt.Sprintf("range %d not found", rm.RangeID))
+					}
+
+					replica, ok := rng.Replica(msr.localStoreID)
+					if !ok {
+						panic(fmt.Sprintf("replica %d not found", msr.localStoreID))
+					}
+					replica.SetMMASpanConfigIsUpToDate(true)
+				}
+			}
 			log.KvDistribution.Infof(ctx, "store %d: computed %d changes", msr.localStoreID, len(pendingChanges))
 			for i, change := range pendingChanges {
 				usageInfo := s.RangeUsageInfo(state.RangeID(change.RangeID), msr.localStoreID)
