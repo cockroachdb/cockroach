@@ -53,7 +53,7 @@ type regressionInfo struct {
 
 // createRegressionPostRequest creates a post request for benchmark performance regressions.
 func createRegressionPostRequest(
-	pkgName string, regressions []regressionInfo, sheetLink, description string,
+	pkgName string, regressions []regressionInfo, description string,
 ) (issues.IssueFormatter, issues.PostRequest) {
 	// Build the regression summary message
 	var sb strings.Builder
@@ -61,16 +61,10 @@ func createRegressionPostRequest(
 	sb.WriteString(fmt.Sprintf("Comparison: %s\n\n", description))
 	sb.WriteString(fmt.Sprintf("Found %d benchmark(s) with regressions ≥%.0f%%:\n\n", len(regressions), slackPercentageThreshold))
 
-	for i, reg := range regressions {
-		if i >= 10 { // Limit to 10 regressions in the summary
-			sb.WriteString(fmt.Sprintf("... and %d more regression(s)\n", len(regressions)-i))
-			break
-		}
+	for _, reg := range regressions {
 		sb.WriteString(fmt.Sprintf("• %s (%s): %s (%.1f%%)\n",
 			reg.benchmarkName, reg.metricUnit, reg.formattedDelta, reg.percentChange))
 	}
-
-	sb.WriteString(fmt.Sprintf("\nDetailed comparison: %s\n", sheetLink))
 
 	benchmarkName := regressions[0].benchmarkName
 	f := githubpost.MicrobenchmarkFailure(

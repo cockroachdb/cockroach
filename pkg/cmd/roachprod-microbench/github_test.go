@@ -75,7 +75,6 @@ func TestCreateRegressionPostRequestBasic(t *testing.T) {
 	formatter, req := createRegressionPostRequest(
 		"pkg/sql",
 		regressions,
-		"https://docs.google.com/spreadsheets/d/test123",
 		"master -> release-24.1",
 	)
 
@@ -98,7 +97,6 @@ func TestCreateRegressionPostRequestBasic(t *testing.T) {
 	require.Contains(t, req.Message, "pkg/sql")
 	require.Contains(t, req.Message, "BenchmarkScan")
 	require.Contains(t, req.Message, "25.5%")
-	require.Contains(t, req.Message, "https://docs.google.com/spreadsheets/d/test123")
 	require.Contains(t, req.Message, "master -> release-24.1")
 }
 
@@ -117,49 +115,17 @@ func TestCreateRegressionPostRequestMultiple(t *testing.T) {
 	_, req := createRegressionPostRequest(
 		"pkg/kv",
 		regressions,
-		"https://docs.google.com/spreadsheets/d/test456",
 		"baseline -> experiment",
 	)
 
 	// Should mention total count
 	require.Contains(t, req.Message, "15 benchmark(s)")
 
-	// Should truncate to 10 and show "... and 5 more"
-	require.Contains(t, req.Message, "5 more regression(s)")
-
 	// First regression should be present
 	require.Contains(t, req.Message, "Benchmark0")
 
-	// 11th regression should not be listed individually
-	require.NotContains(t, req.Message, "Benchmark10")
-}
-
-func TestCreateRegressionPostRequestTruncation(t *testing.T) {
-	// Test the exact boundary at 10 regressions
-	regressions := make([]regressionInfo, 10)
-	for i := 0; i < 10; i++ {
-		regressions[i] = regressionInfo{
-			benchmarkName:  fmt.Sprintf("Benchmark%d", i),
-			metricUnit:     "ns/op",
-			percentChange:  20.0,
-			formattedDelta: "+100µs",
-		}
-	}
-
-	_, req := createRegressionPostRequest(
-		"pkg/storage",
-		regressions,
-		"https://docs.google.com/spreadsheets/d/test",
-		"test comparison",
-	)
-
-	// All 10 should be listed
-	for i := 0; i < 10; i++ {
-		require.Contains(t, req.Message, fmt.Sprintf("Benchmark%d", i))
-	}
-
-	// Should not show truncation message for exactly 10
-	require.NotContains(t, req.Message, "more regression(s)")
+	// Last regression should be present too
+	require.Contains(t, req.Message, "Benchmark14")
 }
 
 func TestCreateRegressionPostRequestFormat(t *testing.T) {
@@ -182,7 +148,6 @@ func TestCreateRegressionPostRequestFormat(t *testing.T) {
 	formatter, req := createRegressionPostRequest(
 		"pkg/sql/exec",
 		regressions,
-		"https://docs.google.com/spreadsheets/d/example123",
 		"v24.1.0 -> v24.2.0",
 	)
 
@@ -212,7 +177,6 @@ func TestCreateRegressionPostRequestFormat(t *testing.T) {
 		"(ns/op): +1.2ms (25.5%)",
 		"BenchmarkInsert/batch=100",
 		"(B/op): +5.0KB (30.0%)",
-		"Detailed comparison: https://docs.google.com/spreadsheets/d/example123",
 	}
 
 	for _, expected := range expectedElements {

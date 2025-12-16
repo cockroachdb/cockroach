@@ -349,14 +349,12 @@ func (c *compare) compareUsingThreshold(comparisonResultsMap model.ComparisonRes
 	return nil
 }
 
-func (c *compare) postRegressionIssues(
-	links map[string]string, comparisonResultsMap model.ComparisonResultsMap,
-) error {
+func (c *compare) maybePostRegressionIssues(comparisonResultsMap model.ComparisonResultsMap) error {
 	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
-	l, err := loggerCfg.NewLogger("")
-	if err != nil {
-		return errors.Wrap(err, "failed to create logger for posting issues")
-	}
+	l, _ := loggerCfg.NewLogger("")
+
+	// Collect errors encountered while creating benchmark issues.
+	createBenchmarkIssueErrors := []error{}
 
 	for pkgName, comparisonResults := range comparisonResultsMap {
 		var regressions []regressionInfo
@@ -378,15 +376,20 @@ func (c *compare) postRegressionIssues(
 		}
 
 		if len(regressions) > 0 {
-			sheetLink := links[pkgName]
-			formatter, req := createRegressionPostRequest(pkgName, regressions, sheetLink, c.sheetDesc)
+			formatter, req := createRegressionPostRequest(pkgName, regressions, c.sheetDesc)
 			err := postBenchmarkIssue(c.ctx, l, formatter, req)
 			if err != nil {
 				log.Printf("failed to post regression issue for package %s: %v", pkgName, err)
+				// Accumulate the error but continue processing other packages.
+				createBenchmarkIssueErrors = append(createBenchmarkIssueErrors, err)
 				continue
 			}
 			log.Printf("Posted regression issue for package: %s with %d regression(s)", pkgName, len(regressions))
 		}
+	}
+
+	if len(createBenchmarkIssueErrors) > 0 {
+		return errors.Join(createBenchmarkIssueErrors...)
 	}
 
 	return nil
@@ -487,6 +490,5 @@ func truncateBenchmarkName(text string, maxLen int) string {
 }
 
 func isRegression(delta float64, better int) bool {
-	return (delta < 0 && better > 0) ||
-		(delta > 0 && better < 0)
+	return delta*float64(better) < 0
 }
