@@ -312,6 +312,14 @@ func (mr *MetricsRecorder) AddStore(store storeMetrics) {
 	defer mr.mu.Unlock()
 	storeID := store.StoreID()
 	store.Registry().AddLabel("store", strconv.Itoa(int(storeID)))
+	// If AddNode has already been called, we need to add the node_id label here.
+	// This can happen when stores are initialized asynchronously after node start.
+	// There's no risk of duplicate labels: either the store is added before AddNode
+	// runs (in which case desc.NodeID is 0 here, and AddNode adds the label), or it's
+	// added after (in which case we add it here, and AddNode never saw this store).
+	if !disableNodeAndTenantLabels && mr.mu.desc.NodeID != 0 {
+		store.Registry().AddLabel("node_id", strconv.Itoa(int(mr.mu.desc.NodeID)))
+	}
 	mr.mu.storeRegistries[storeID] = store.Registry()
 	mr.mu.stores[storeID] = store
 }
