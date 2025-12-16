@@ -2151,6 +2151,14 @@ func (b *BulkOpSummary) DeepCopy() BulkOpSummary {
 	return cpy
 }
 
+// ShallowCopy returns a shallow copy of the receiver and the underlying
+// RangeFeedEvent.
+func (e *MuxRangeFeedEvent) ShallowCopy() *MuxRangeFeedEvent {
+	cpy := *e
+	cpy.RangeFeedEvent = *cpy.RangeFeedEvent.ShallowCopy()
+	return &cpy
+}
+
 // MustSetValue is like SetValue, except it resets the enum and panics if the
 // provided value is not a valid variant type.
 func (e *RangeFeedEvent) MustSetValue(value interface{}) {

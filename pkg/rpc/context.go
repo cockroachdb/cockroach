@@ -1020,7 +1020,7 @@ func (a internalClientAdapter) MuxRangeFeed(
 	//    -> RPC caller
 
 	eventWriter, eventReader := makePipe(func(dst interface{}, src interface{}) {
-		*dst.(*kvpb.MuxRangeFeedEvent) = *src.(*kvpb.MuxRangeFeedEvent)
+		*dst.(*kvpb.MuxRangeFeedEvent) = *(src.(*kvpb.MuxRangeFeedEvent).ShallowCopy())
 	})
 	requestWriter, requestReader := makePipe(func(dst interface{}, src interface{}) {
 		*dst.(*kvpb.RangeFeedRequest) = *src.(*kvpb.RangeFeedRequest)
