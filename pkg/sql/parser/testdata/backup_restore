@@ -151,29 +151,12 @@ SHOW BACKUPS IN '*****' -- identifiers removed
 SHOW BACKUPS IN 'bar' -- passwords exposed
 
 parse
-SHOW BACKUPS IN 'bar' WITH index
-----
-SHOW BACKUPS IN '*****' WITH OPTIONS (index) -- normalized!
-SHOW BACKUPS IN ('*****') WITH OPTIONS (index) -- fully parenthesized
-SHOW BACKUPS IN '_' WITH OPTIONS (index) -- literals removed
-SHOW BACKUPS IN '*****' WITH OPTIONS (index) -- identifiers removed
-SHOW BACKUPS IN 'bar' WITH OPTIONS (index) -- passwords exposed
-
-parse
 SHOW BACKUPS IN $1
 ----
 SHOW BACKUPS IN $1
 SHOW BACKUPS IN ($1) -- fully parenthesized
 SHOW BACKUPS IN $1 -- literals removed
 SHOW BACKUPS IN $1 -- identifiers removed
-
-parse
-SHOW BACKUPS IN $1 WITH index
-----
-SHOW BACKUPS IN $1 WITH OPTIONS (index) -- normalized!
-SHOW BACKUPS IN ($1) WITH OPTIONS (index) -- fully parenthesized
-SHOW BACKUPS IN $1 WITH OPTIONS (index) -- literals removed
-SHOW BACKUPS IN $1 WITH OPTIONS (index) -- identifiers removed
 
 parse
 SHOW BACKUP 'foo' IN 'bar'
