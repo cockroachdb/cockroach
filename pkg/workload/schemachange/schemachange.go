@@ -654,9 +654,6 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 			return err
 		}
 	}
-	if _, err := conn.Exec(ctx, "SET enable_inspect_command = true;"); err != nil {
-		return err
-	}
 
 	tx, err := conn.Begin(ctx)
 	if err != nil {
