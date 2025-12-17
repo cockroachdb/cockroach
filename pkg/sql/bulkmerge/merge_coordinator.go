@@ -110,6 +110,7 @@ func (m *mergeCoordinator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMeta
 			m.done = true
 			return m.emitResults()
 		case meta.Err != nil:
+			m.closeLoopback()
 			m.MoveToDraining(meta.Err)
 		default:
 			// If there is non-nil meta, we pass it up the processor chain. It might
