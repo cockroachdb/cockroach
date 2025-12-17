@@ -552,11 +552,12 @@ func showComments(
 	}
 
 	for _, indexComment := range tc.indexes {
-		idx, err := catalog.MustFindIndexByID(table, descpb.IndexID(indexComment.subID))
-		if err != nil {
-			return err
+		// With leased descriptors enabled, it is possible that the descriptor
+		// we are currently using may not have these comments apply yet.
+		idx := catalog.FindIndexByID(table, descpb.IndexID(indexComment.subID))
+		if idx == nil {
+			continue
 		}
-
 		f.WriteString(";\n")
 		f.FormatNode(&tree.CommentOnIndex{
 			Index: tree.TableIndexName{
@@ -568,11 +569,13 @@ func showComments(
 	}
 
 	for _, constraintComment := range tc.constraints {
-		f.WriteString(";\n")
-		c, err := catalog.MustFindConstraintByID(table, descpb.ConstraintID(constraintComment.subID))
-		if err != nil {
-			return err
+		// With leased descriptors enabled, it is possible that the descriptor
+		// we are currently using may not have these constraint apply yet.
+		c := catalog.FindConstraintByID(table, descpb.ConstraintID(constraintComment.subID))
+		if c == nil {
+			continue
 		}
+		f.WriteString(";\n")
 		f.FormatNode(&tree.CommentOnConstraint{
 			Constraint: tree.Name(c.GetName()),
 			Table:      tn.ToUnresolvedObjectName(),
