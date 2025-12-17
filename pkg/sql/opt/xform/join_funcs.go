@@ -256,6 +256,8 @@ func (c *CustomFuncs) GenerateLookupJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
+	b := c.e.evalCtx.SessionData().ApplicationName == "marcus"
+	_ = b
 	c.generateLookupJoinsImpl(
 		grp, joinType,
 		input,

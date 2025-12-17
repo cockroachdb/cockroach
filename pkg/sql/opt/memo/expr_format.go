@@ -1070,9 +1070,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			// Ensure that the definition of the UDF is not printed out again if it
 			// is recursively called.
 			f.seenUDFs[def] = struct{}{}
-			if len(def.Params) > 0 {
-				f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
-			}
+			f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
 			n := tp.Child("body")
 			for i := range def.Body {
 				stmtNode := n
