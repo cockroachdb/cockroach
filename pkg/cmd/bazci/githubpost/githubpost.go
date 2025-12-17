@@ -547,12 +547,28 @@ func listFailuresFromTestXML(
 						fmt.Printf("couldn't parse time %s as float64: %+v\n", testCase.Time, err)
 					}
 				}
-				event := testEvent{
-					Action:  "fail",
-					Package: pkg,
-					Test:    testCase.Name,
-					Output:  result.Contents,
-					Elapsed: elapsed,
+				var event testEvent
+				if dotIdx < 0 || pkg == testCase.Name {
+					// Test case or suite name is potentially irregular and does not
+					// match the expected format. Test binary may not have successfully
+					// executed or encountered some other error. We will make a special
+					// testEvent for this case.
+					// See unit tests for an example. See #159708 for more details.
+					log.Printf("encountered xml with non fully qualified test failure(s) %s and test suite(s) %s", pkg, testCase.Name)
+					event = testEvent{
+						Package: pkg,
+						Test:    testCase.Name,
+						Output: fmt.Sprintf("Test binary potentially failed to execute because of bazel test timeout,"+
+							" init() issue, or some other error. Content: %s", result.Contents),
+					}
+				} else {
+					event = testEvent{
+						Action:  "fail",
+						Package: pkg,
+						Test:    testCase.Name,
+						Output:  result.Contents,
+						Elapsed: elapsed,
+					}
 				}
 				failures[key] = append(failures[key], event)
 			}
