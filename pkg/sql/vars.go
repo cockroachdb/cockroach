@@ -4264,26 +4264,11 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	// This is only kept for backwards compatibility and no longer has any effect.
-	`enable_scrub_job`: makeBackwardsCompatBoolVar(
-		"enable_scrub_job", false,
-	),
+	`enable_scrub_job`: makeBackwardsCompatBoolVar("enable_scrub_job", false),
 
 	// CockroachDB extension.
-	`enable_inspect_command`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`enable_inspect_command`),
-		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("enable_inspect_command", s)
-			if err != nil {
-				return err
-			}
-			m.SetEnableInspectCommand(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableInspectCommand), nil
-		},
-		GlobalDefault: globalFalse,
-	},
+	// This is only kept for backwards compatibility and no longer has any effect.
+	`enable_inspect_command`: makeBackwardsCompatBoolVar("enable_inspect_command", true),
 
 	// CockroachDB extension. Configures the initial backoff duration for
 	// automatic retries of statements in explicit READ COMMITTED transactions

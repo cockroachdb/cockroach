@@ -512,7 +512,6 @@ statement ok
 RESET vectorize;
 CREATE TABLE t38626 (id int PRIMARY KEY, name STRING, CONSTRAINT abc CHECK (name > 'he'));
 INSERT INTO t38626 VALUES (1, 'hello');
-SET enable_inspect_command = true;
 
 statement ok
 INSPECT TABLE t38626;

@@ -30,15 +30,6 @@ CREATE TABLE foo (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
 let $foo_created_ts
 SELECT now()
 
-statement error pq: INSPECT is an experimental feature and is disabled by default
-INSPECT TABLE foo;
-
-statement error pq: INSPECT is an experimental feature and is disabled by default
-INSPECT DATABASE test;
-
-statement ok
-SET enable_inspect_command = true;
-
 subtest transaction_behavior
 
 # Test that regular INSPECT cannot run within a transaction.
@@ -217,9 +208,6 @@ CREATE USER testuser2;
 
 user testuser2
 
-statement ok
-SET enable_inspect_command = true;
-
 statement error pq: user testuser2 does not have INSPECT privilege
 INSPECT TABLE foo;
 
@@ -232,9 +220,6 @@ statement ok
 GRANT SYSTEM INSPECT TO testuser2;
 
 user testuser2
-
-statement ok
-SET enable_inspect_command = true;
 
 statement ok
 INSPECT TABLE foo;
@@ -389,9 +374,6 @@ CREATE TABLE dbfoo.public.t1 (c1 INT, INDEX idx_c1 (c1));
 
 
 statement ok
-SET enable_inspect_command = true;
-
-statement ok
 INSPECT DATABASE dbfoo WITH OPTIONS INDEX (t1@idx_c1);
 
 statement ok
@@ -451,9 +433,6 @@ CREATE TABLE dbfoo.public.t1 (c1 INT, INDEX idx_c1 (c1));
 CREATE TABLE dbfoo.s1.t1 (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
 CREATE TABLE dbbar.public.t1 (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
 CREATE TABLE dbbar.public.t2 (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
-
-statement ok
-SET enable_inspect_command = true;
 
 subtest all_forms
 
