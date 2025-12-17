@@ -852,6 +852,24 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	}
 }
 
+// registerNodeIsLiveCallbackSettingsChange registers callbacks on the
+// LeaderLeasesEnabled and RaftLeaderFortificationFractionEnabled settings. When
+// these settings change such that we can no longer bypassing the expensive
+// nodeIsLiveCallback work, we invoke the callback for all live nodes to ensure
+// quiesced ranges are promptly unquiesced, if necessary.
+func (s *Store) registerNodeIsLiveCallbackSettingsChange(ctx context.Context) {
+	invokeCallbackForAllLiveNodes := func(ctx context.Context) {
+		for _, entry := range s.cfg.NodeLiveness.ScanNodeVitalityFromCache() {
+			if entry.IsLive(livenesspb.IsAliveNotification) {
+				s.nodeIsLiveCallback(entry.GetInternalLiveness())
+			}
+		}
+	}
+
+	LeaderLeasesEnabled.SetOnChange(&s.ClusterSettings().SV, invokeCallbackForAllLiveNodes)
+	RaftLeaderFortificationFractionEnabled.SetOnChange(&s.ClusterSettings().SV, invokeCallbackForAllLiveNodes)
+}
+
 // supportWithdrawnCallback is called every time the local store withdraws
 // support form other stores in store liveness. The goal of this callback is to
 // unquiesce any replicas on the local store that have leaders on any of the
