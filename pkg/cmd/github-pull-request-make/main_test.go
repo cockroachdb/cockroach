@@ -7,30 +7,43 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 )
 
+func ciStressTestdataFile(t *testing.T, file string) string {
+	if bazel.BuiltWithBazel() {
+		f, err := bazel.Runfile(filepath.Join("pkg", "cmd", "ci-stress", "testdata", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	return filepath.Join("..", "ci-stress", "testdata", file)
+}
+
 func TestPkgsFromDiff(t *testing.T) {
 	for filename, expPkgs := range map[string]map[string]pkg{
-		datapathutils.TestDataPath(t, "skip.diff"): {
+		ciStressTestdataFile(t, "skip.diff"): {
 			"pkg/ccl/storageccl": makePkg([]string{"TestPutS3"}),
 		},
-		datapathutils.TestDataPath(t, "modified.diff"): {
+		ciStressTestdataFile(t, "modified.diff"): {
 			"pkg/crosscluster/physical": makePkg([]string{"TestStreamingAutoReplan"}),
 		},
-		datapathutils.TestDataPath(t, "removed.diff"): {},
-		datapathutils.TestDataPath(t, "not_go.diff"):  {},
-		datapathutils.TestDataPath(t, "new_test.diff"): {
+		ciStressTestdataFile(t, "removed.diff"): {},
+		ciStressTestdataFile(t, "not_go.diff"):  {},
+		ciStressTestdataFile(t, "new_test.diff"): {
 			"pkg/crosscluster/streamclient": makePkg([]string{
 				"TestExternalConnectionClient",
 				"TestGetFirstActiveClientEmpty",
 			}),
 		},
 		datapathutils.TestDataPath(t, "dont_stress.diff"): {},
-		datapathutils.TestDataPath(t, "27595.diff"): {
+		ciStressTestdataFile(t, "27595.diff"): {
 			"pkg/storage/closedts/container": makePkg([]string{
 				"TestTwoNodes",
 			}),
