@@ -298,6 +298,9 @@ func NewTestCluster(
 		// concise and recognizable.
 		clusterArgs.ServerArgs.ClusterName = fmt.Sprintf("TestCluster-%s",
 			randutil.RandString(rng, 10, randutil.PrintableKeyAlphabet))
+	} else {
+		t.Logf("WARNING: TestCluster using non-unique ClusterName %q; "+
+			"concurrent tests may collide (see #157868)", clusterArgs.ServerArgs.ClusterName)
 	}
 
 	if err := checkServerArgsForCluster(
