@@ -40,6 +40,11 @@ type tombstoneUpdater struct {
 		// deleter is a row.Deleter that uses the leased descriptor. Callers should
 		// use getDeleter to ensure the lease is valid for the current transaction.
 		deleter row.Deleter
+
+		// partialIndexUpdateHelper is used to avoid constructing delete requests
+		// for indexes. Since the cput ensures we are only overwriting tombstones,
+		// we know there are no index entries to delete.
+		ph row.PartialIndexUpdateHelper
 	}
 
 	scratch []tree.Datum
@@ -135,14 +140,13 @@ func (tu *tombstoneUpdater) addToBatch(
 		return err
 	}
 
-	var ph row.PartialIndexUpdateHelper
 	var vh row.VectorIndexUpdateHelper
 
 	return deleter.DeleteRow(
 		ctx,
 		batch,
 		afterRow,
-		ph,
+		tu.leased.ph,
 		vh,
 		row.OriginTimestampCPutHelper{
 			OriginTimestamp:    mvccTimestamp,
@@ -164,9 +168,16 @@ func (tu *tombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.De
 			return row.Deleter{}, err
 		}
 
-		cols, err := writeableColunms(ctx, tu.leased.descriptor.Underlying().(catalog.TableDescriptor))
-		if err != nil {
-			return row.Deleter{}, err
+		table := tu.leased.descriptor.Underlying().(catalog.TableDescriptor)
+		schema := getColumnSchema(table)
+		cols := make([]catalog.Column, len(schema))
+		for i, cs := range schema {
+			cols[i] = cs.column
+		}
+
+		tu.leased.ph = row.PartialIndexUpdateHelper{}
+		for _, index := range table.NonPrimaryIndexes() {
+			tu.leased.ph.IgnoreForDel.Add(int(index.GetID()))
 		}
 
 		tu.leased.deleter = row.MakeDeleter(tu.codec, tu.leased.descriptor.Underlying().(catalog.TableDescriptor), nil /* lockedIndexes */, cols, tu.sd, &tu.settings.SV, nil /* metrics */)
