@@ -472,6 +472,7 @@ func (s *azureStorage) List(
 
 	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
 	sp.SetTag("path", attribute.StringValue(dest))
+	afterKey := opts.CanonicalAfterKey(s.prefix)
 
 	pager := s.container.NewListBlobsHierarchyPager(opts.Delimiter, &container.ListBlobsHierarchyOptions{Prefix: &dest})
 	for pager.More() {
@@ -480,12 +481,25 @@ func (s *azureStorage) List(
 		if err != nil {
 			return errors.Wrap(err, "unable to list files for specified blob")
 		}
+		// TODO: Azure does not natively support AfterKey listing, so we filter
+		// manually here. This is not the most efficient and potentially a lot of
+		// data sent over the wire is discarded. There may be a way to make this
+		// more efficient by providing an AfterKeyDelimiter that can be used to
+		// find a start point and then use Azure's opaque `marker` in the return
+		// response to continue listing from there. This is left as an exercise to
+		// the reader.
 		for _, blob := range response.Segment.BlobPrefixes {
+			if *blob.Name < afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*blob.Name, dest)); err != nil {
 				return err
 			}
 		}
 		for _, blob := range response.Segment.BlobItems {
+			if *blob.Name < afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*blob.Name, dest)); err != nil {
 				return err
 			}

@@ -93,6 +93,29 @@ type ListOptions struct {
 	// If a Delimiter is set, names which have the same prefix, prior to the
 	// Delimiter, are grouped into a single result which is that prefix.
 	Delimiter string
+
+	// When AfterKey is set, listing will only return results whose names are
+	// lexicographically greater than AfterKey. AfterKey must be a full key
+	// relative to the external storage's base prefix.
+	//
+	// NB: Cloud providers have different semantics regarding inclusivity. Some
+	// return names strictly greater than AfterKey, others return names greater
+	// than or equal to AfterKey. Callers should not make assumptions about
+	// whether AfterKey itself will be included in the results.
+	// Additionally, whether or not AfterKey filtering is applied before or after
+	// a set Delimiter is provider-dependent.
+	AfterKey string
+}
+
+// CanonicalAfterKey returns the canonicalized AfterKey, given an external
+// storage base prefix. All cloud providers expect a full key to be provided as
+// an AfterKey, so we join the base prefix of the store and AfterKey here. If no
+// AfterKey is set, an empty string is returned.
+func (o ListOptions) CanonicalAfterKey(prefix string) string {
+	if o.AfterKey == "" {
+		return ""
+	}
+	return JoinPathPreservingTrailingSlash(prefix, o.AfterKey)
 }
 
 type ReadOptions struct {

@@ -347,7 +347,14 @@ func (g *gcsStorage) List(
 	defer sp.Finish()
 	sp.SetTag("path", attribute.StringValue(dest))
 
-	it := g.bucket.Objects(ctx, &gcs.Query{Prefix: dest, Delimiter: opts.Delimiter})
+	it := g.bucket.Objects(
+		ctx,
+		&gcs.Query{
+			Prefix:      dest,
+			Delimiter:   opts.Delimiter,
+			StartOffset: opts.CanonicalAfterKey(g.prefix),
+		},
+	)
 	for {
 		attrs, err := it.Next()
 		if errors.Is(err, iterator.Done) {
