@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -575,6 +576,15 @@ type StoreTestingKnobs struct {
 	// the batch being applied. If a mismatch is detected, the callback is invoked
 	// with an error describing the mismatch; otherwise it is called with nil.
 	SysBytesVerificationOnRaftApply func(mismatchErr error)
+
+	// NodeIsLiveCallbackInvoked, if set, is called every time the
+	// nodeIsLiveCallback is invoked on the store. Called regardless of any bypass
+	// logic.
+	NodeIsLiveCallbackInvoked func(livenesspb.Liveness)
+
+	// NodeIsLiveCallbackWorkDone, if set, is called after nodeIsLiveCallback
+	// completes its iteration over all replicas on the store.
+	NodeIsLiveCallbackWorkDone func(livenesspb.Liveness)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

@@ -821,6 +821,21 @@ func (s *Store) processRACv2RangeController(ctx context.Context, rangeID roachpb
 // down. Those instances should be rare, however, and we expect the newly live
 // node to eventually unquiesce the range.
 func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
+	if fn := s.cfg.TestingKnobs.NodeIsLiveCallbackInvoked; fn != nil {
+		defer fn(l)
+	}
+
+	// If there are no epoch based leases in the system (leader leases are
+	// enabled and Raft fortification is enabled for all ranges), we do not need
+	// to attempt to unquiesce any replicas -- there can't be any. This allows
+	// us to eschew some expensive iteration, see
+	// https://github.com/cockroachdb/cockroach/issues/157089.
+	leaderLeasesEnabled := LeaderLeasesEnabled.Get(&s.ClusterSettings().SV)
+	fortificationFrac := RaftLeaderFortificationFractionEnabled.Get(&s.ClusterSettings().SV)
+	if leaderLeasesEnabled && fortificationFrac == 1.0 {
+		return
+	}
+
 	ctx := context.TODO()
 	s.updateLivenessMap()
 
@@ -834,6 +849,28 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 		}
 		return true
 	})
+
+	if fn := s.cfg.TestingKnobs.NodeIsLiveCallbackWorkDone; fn != nil {
+		fn(l)
+	}
+}
+
+// registerNodeIsLiveCallbackSettingsChange registers callbacks on the
+// LeaderLeasesEnabled and RaftLeaderFortificationFractionEnabled settings. When
+// these settings change such that we can no longer bypassing the expensive
+// nodeIsLiveCallback work, we invoke the callback for all live nodes to ensure
+// quiesced ranges are promptly unquiesced, if necessary.
+func (s *Store) registerNodeIsLiveCallbackSettingsChange(ctx context.Context) {
+	invokeCallbackForAllLiveNodes := func(ctx context.Context) {
+		for _, entry := range s.cfg.NodeLiveness.ScanNodeVitalityFromCache() {
+			if entry.IsLive(livenesspb.IsAliveNotification) {
+				s.nodeIsLiveCallback(entry.GetInternalLiveness())
+			}
+		}
+	}
+
+	LeaderLeasesEnabled.SetOnChange(&s.ClusterSettings().SV, invokeCallbackForAllLiveNodes)
+	RaftLeaderFortificationFractionEnabled.SetOnChange(&s.ClusterSettings().SV, invokeCallbackForAllLiveNodes)
 }
 
 // supportWithdrawnCallback is called every time the local store withdraws

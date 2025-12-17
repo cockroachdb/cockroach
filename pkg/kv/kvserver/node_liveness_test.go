@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -343,6 +345,235 @@ func TestNodeIsLiveCallback(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestNodeIsLiveCallbackBypassWithLeaderLeases verifies that expensive work to
+// check whether replicas need to be unquiesced does not happen when all ranges
+// are using leader leases.
+//
+// See https://github.com/cockroachdb/cockroach/issues/157089.
+func TestNodeIsLiveCallbackBypassWithLeaderLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	manualClock := hlc.NewHybridManualClock()
+	// We only want to record entries after the heartbeat loop has been paused.
+	var started atomic.Bool
+	var invokedCount, workDoneCount atomic.Int64
+
+	st := cluster.MakeTestingClusterSettings()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Settings: st,
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				WallClock: manualClock,
+			},
+			Store: &kvserver.StoreTestingKnobs{
+				NodeIsLiveCallbackInvoked: func(l livenesspb.Liveness) {
+					if started.Load() {
+						invokedCount.Add(1)
+					}
+				},
+				NodeIsLiveCallbackWorkDone: func(l livenesspb.Liveness) {
+					if started.Load() {
+						workDoneCount.Add(1)
+					}
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	nl := s.NodeLiveness().(*liveness.NodeLiveness)
+	testutils.SucceedsSoon(t, func() error {
+		return verifyLivenessServer(s, 1)
+	})
+	nl.PauseHeartbeatLoopForTest()
+	started.Store(true)
+
+	testCases := []struct {
+		name                string
+		leaderLeasesEnabled bool
+		fortificationFrac   float64
+		expectWorkDone      bool
+	}{
+		{
+			name:                "leader_leases_disabled",
+			leaderLeasesEnabled: false,
+			fortificationFrac:   0.0,
+			expectWorkDone:      true,
+		},
+		{
+			name:                "leader_leases_enabled_fortification_0",
+			leaderLeasesEnabled: true,
+			fortificationFrac:   0.0,
+			expectWorkDone:      true,
+		},
+		{
+			name:                "leader_leases_enabled_fortification_50",
+			leaderLeasesEnabled: true,
+			fortificationFrac:   0.5,
+			expectWorkDone:      true,
+		},
+		{
+			name:                "leader_leases_disabled_fortification_100",
+			leaderLeasesEnabled: false,
+			fortificationFrac:   1.0,
+			expectWorkDone:      true,
+		},
+		{
+			name:                "leader_leases_enabled_fortification_100",
+			leaderLeasesEnabled: true,
+			fortificationFrac:   1.0,
+			expectWorkDone:      false, // bypass
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			kvserver.LeaderLeasesEnabled.Override(ctx, &st.SV, testCase.leaderLeasesEnabled)
+			kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, testCase.fortificationFrac)
+			invokedCount.Store(0)  // reset
+			workDoneCount.Store(0) // reset
+
+			// Advance clock past the liveness threshold so the node is
+			// considered non-live. Then, trigger a heartbeat to make the node
+			// transition to live.
+			manualClock.Increment(nl.TestingGetLivenessThreshold().Nanoseconds() + 1)
+			l, ok := nl.Self()
+			require.True(t, ok)
+			require.NoError(t, nl.Heartbeat(ctx, l))
+
+			// The callback should always be invoked when transitioning from
+			// non-live to live. It's invoked async, so wait for it before asserting
+			// expectations below.
+			testutils.SucceedsSoon(t, func() error {
+				if invokedCount.Load() == 0 {
+					return errors.New("callback not yet invoked")
+				}
+				return nil
+			})
+
+			if testCase.expectWorkDone {
+				require.Equal(t, int64(1), workDoneCount.Load())
+			} else {
+				require.Zero(t, workDoneCount.Load())
+			}
+		})
+	}
+}
+
+// TestNodeIsLiveCallbackReactsToTransitions tests that when LeaderLeasesEnabled
+// or RaftLeaderFortificationFractionEnabled settings change, the
+// nodeIsLiveCallback is invoked for all live nodes, and we iterate over all
+// replicas only as necessary. See
+// https://github.com/cockroachdb/cockroach/issues/157089 for more details.
+func TestNodeIsLiveCallbackReactsToTransitions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	var started atomic.Bool
+	var invokedCount, workDoneCount atomic.Int64
+
+	st := cluster.MakeTestingClusterSettings()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: st,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				NodeIsLiveCallbackInvoked: func(l livenesspb.Liveness) {
+					if started.Load() {
+						invokedCount.Add(1)
+					}
+				},
+				NodeIsLiveCallbackWorkDone: func(l livenesspb.Liveness) {
+					if started.Load() {
+						workDoneCount.Add(1)
+					}
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	nl := s.NodeLiveness().(*liveness.NodeLiveness)
+	testutils.SucceedsSoon(t, func() error {
+		return verifyLivenessServer(s, 1)
+	})
+	nl.PauseHeartbeatLoopForTest()
+	started.Store(true)
+
+	testCases := []struct {
+		name string
+		// NB: SetOnChange is only called when there's a difference in setting
+		// values. This is used to setup initial state that differs from the
+		// defaults.
+		setup          func(sv *settings.Values)
+		testSQL        string
+		expectWorkDone bool
+	}{
+		{
+			name:           "leader_leases_turned_off",
+			testSQL:        "SET CLUSTER SETTING kv.leases.leader_leases.enabled = false",
+			expectWorkDone: true,
+		},
+		{
+			name:           "fortification_set_to_50%",
+			testSQL:        "SET CLUSTER SETTING kv.raft.leader_fortification.fraction_enabled = 0.5",
+			expectWorkDone: true,
+		},
+		{
+			name: "leader_leases_turned_on",
+			setup: func(sv *settings.Values) {
+				kvserver.LeaderLeasesEnabled.Override(ctx, sv, false)
+			},
+			testSQL:        "SET CLUSTER SETTING kv.leases.leader_leases.enabled = true",
+			expectWorkDone: false,
+		},
+		{
+			name: "fortification_set_to_100%",
+			setup: func(sv *settings.Values) {
+				kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, sv, 0.5)
+			},
+			testSQL:        "SET CLUSTER SETTING kv.raft.leader_fortification.fraction_enabled = 1.0",
+			expectWorkDone: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Restore defaults before each test, before running any
+			// test-specific setup and resetting counters.
+			kvserver.LeaderLeasesEnabled.Override(ctx, &st.SV, true)
+			kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 1.0)
+			if testCase.setup != nil {
+				testCase.setup(&st.SV)
+			}
+			invokedCount.Store(0)
+			workDoneCount.Store(0)
+
+			_, err := db.Exec(testCase.testSQL) // execute the settings change
+			require.NoError(t, err)
+
+			// The callback should always be invoked when the setting changes, though
+			// this happens async.
+			testutils.SucceedsSoon(t, func() error {
+				if invokedCount.Load() == 0 {
+					return errors.New("callback not yet invoked")
+				}
+				return nil
+			})
+			if testCase.expectWorkDone {
+				require.NotZero(t, workDoneCount.Load(), "expected work to be done")
+			} else {
+				require.Zero(t, workDoneCount.Load(), "expected no work to be done")
+			}
+		})
+	}
 }
 
 // TestNodeHeartbeatCallback verifies that HeartbeatCallback is invoked whenever
