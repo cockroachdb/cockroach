@@ -616,7 +616,7 @@ func (d *eventDecoder) DecodeKV(
 	}
 	// Unwatched family errors aren't terminal so return early and let caller
 	// decide what to do with it.
-	if errors.Is(err, ErrUnwatchedFamily) {
+	if err == ErrUnwatchedFamily {
 		return Row{}, err
 	}
 
