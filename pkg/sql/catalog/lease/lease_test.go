@@ -718,6 +718,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	srv, db, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
+	lm := s.LeaseManager().(*lease.Manager)
 
 	_, err := db.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
 	if err != nil {
@@ -759,6 +760,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	mu.Unlock()
 
 	// DROP the table
+	ts := s.Clock().Now()
 	_, err = db.Exec(`DROP TABLE test.t`)
 	if err != nil {
 		t.Fatal(err)
@@ -783,6 +785,12 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	if !testutils.IsError(err, "descriptor is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
+	// Validate we can read the descriptor before the drop.
+	pastLease, err := lm.Acquire(ctx, lease.TimestampToReadTimestamp(ts), tableDesc.GetID())
+	require.NoError(t, err)
+	require.Equalf(t, lease3.Underlying().GetVersion(), pastLease.Underlying().GetVersion(), "prior version does not match ")
+	pastLease.Release(ctx)
+
 }
 
 // TestSubqueryLeases tests that all leases acquired by a subquery are
