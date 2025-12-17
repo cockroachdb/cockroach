@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -4395,7 +4396,7 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowUnsafeInternals), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			if defaultAllowUnsafeInternals.Get(sv) {
+			if unsafesql.AllowUnsafeInternalsOverrideEnabled(sv) {
 				return "on"
 			}
 			return "off"

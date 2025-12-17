@@ -305,3 +305,77 @@ func TestPanickingSQLFormat(t *testing.T) {
 		string(result),
 	)
 }
+
+func TestClusterSettingOverride(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				UnsafeOverride: func() *bool { return nil }, // no override
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	pool := s.SQLConn(t)
+	defer pool.Close()
+
+	defer unsafesql.TestRemoveLimiters()()
+
+	// Verify the default behavior: unsafe access is denied for external queries.
+	conn, err := pool.Conn(ctx)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+
+	// Ensure allow_unsafe_internals session variable is false.
+	_, err = conn.ExecContext(ctx, "SET allow_unsafe_internals = false")
+	require.NoError(t, err)
+
+	// Verify that unsafe access is denied by default.
+	_, err = conn.QueryContext(ctx, "SELECT * FROM system.namespace")
+	checkUnsafeErr(t, err)
+
+	// getInterlockKey extracts the interlock key from an unsafe setting error.
+	getInterlockKey := func(err error) string {
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "may cause cluster instability")
+		var pqErr *pq.Error
+		ok := errors.As(err, &pqErr)
+		require.True(t, ok)
+		require.True(t, strings.HasPrefix(pqErr.Detail, "key:"), pqErr.Detail)
+		return strings.TrimPrefix(pqErr.Detail, "key: ")
+	}
+
+	// Enable the cluster setting override.
+	// First attempt will fail and provide the interlock key.
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING sql.override.allow_unsafe_internals.enabled = true")
+	key := getInterlockKey(err)
+
+	// Set the interlock key and then set the setting.
+	_, err = conn.ExecContext(ctx, "SET unsafe_setting_interlock_key = $1", key)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING sql.override.allow_unsafe_internals.enabled = true")
+	require.NoError(t, err)
+
+	// Verify that unsafe access is now allowed even without the session variable.
+	rows, err := conn.QueryContext(ctx, "SELECT * FROM system.namespace LIMIT 1")
+	require.NoError(t, err, "expected query to succeed with cluster setting override enabled")
+	require.NoError(t, rows.Close())
+
+	// Verify access to crdb_internal tables is also allowed.
+	rows, err = conn.QueryContext(ctx, "SELECT * FROM crdb_internal.gossip_alerts LIMIT 1")
+	require.NoError(t, err, "expected crdb_internal query to succeed with cluster setting override enabled")
+	require.NoError(t, rows.Close())
+
+	// Disable the cluster setting override (RESET doesn't require interlock key).
+	_, err = conn.ExecContext(ctx, "RESET CLUSTER SETTING sql.override.allow_unsafe_internals.enabled")
+	require.NoError(t, err)
+
+	// Verify that unsafe access is denied again.
+	_, err = conn.QueryContext(ctx, "SELECT * FROM system.namespace")
+	checkUnsafeErr(t, err)
+}
