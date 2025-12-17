@@ -9957,16 +9957,18 @@ func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 	r.Close(ctx)
 
 	var actualNumCheckpointsWritten int
-	require.NoError(t, store.List(ctx, latestFilePath+"/progress/", "", func(f string) error {
-		// Don't double count checkpoints as there will be the manifest and
-		// the checksum.
-		if !strings.HasSuffix(f, backupinfo.BackupManifestChecksumSuffix) {
-			if strings.HasPrefix(f, backupinfo.BackupManifestCheckpointName) {
-				actualNumCheckpointsWritten++
+	require.NoError(t, store.List(
+		ctx, latestFilePath+"/progress/", cloud.ListOptions{},
+		func(f string) error {
+			// Don't double count checkpoints as there will be the manifest and
+			// the checksum.
+			if !strings.HasSuffix(f, backupinfo.BackupManifestChecksumSuffix) {
+				if strings.HasPrefix(f, backupinfo.BackupManifestCheckpointName) {
+					actualNumCheckpointsWritten++
+				}
 			}
-		}
-		return nil
-	}))
+			return nil
+		}))
 
 	// numCheckpointWritten only accounts for checkpoints written in the
 	// progress loop, each time we Resume we write another checkpoint.
@@ -10091,7 +10093,7 @@ func TestBackupTimestampedCheckpointsAreLexicographical(t *testing.T) {
 			}
 			require.NoError(t, err)
 			var actual string
-			err = store.List(ctx, "/progress/", "", func(f string) error {
+			err = store.List(ctx, "/progress/", cloud.ListOptions{}, func(f string) error {
 				actual = f
 				return cloud.ErrListingDone
 			})
@@ -10122,13 +10124,15 @@ func TestBackupNoOverwriteLatest(t *testing.T) {
 	findNumLatestFiles := func() (int, string) {
 		var numLatestFiles int
 		var latestFile string
-		err = store.List(ctx, backupbase.LatestHistoryDirectory, "", func(p string) error {
-			if numLatestFiles == 0 {
-				latestFile = p
-			}
-			numLatestFiles++
-			return nil
-		})
+		err = store.List(
+			ctx, backupbase.LatestHistoryDirectory, cloud.ListOptions{},
+			func(p string) error {
+				if numLatestFiles == 0 {
+					latestFile = p
+				}
+				numLatestFiles++
+				return nil
+			})
 		require.NoError(t, err)
 		return numLatestFiles, latestFile
 	}

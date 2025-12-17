@@ -331,7 +331,7 @@ func (m *mockExternalStorage) Writer(ctx context.Context, basename string) (io.W
 	return nil, errors.New("not implemented")
 }
 func (m *mockExternalStorage) List(
-	ctx context.Context, prefix, delimiter string, fn cloud.ListingFn,
+	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
 ) error {
 	return errors.New("not implemented")
 }

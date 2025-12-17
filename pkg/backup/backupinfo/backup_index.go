@@ -138,7 +138,7 @@ func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string
 	if err := store.List(
 		ctx,
 		indexDir,
-		"/",
+		cloud.ListOptions{Delimiter: "/"},
 		func(file string) error {
 			indexExists = true
 			// Because we delimit on `/` and the index subdir does not contain a
@@ -176,7 +176,7 @@ func ListIndexes(
 	if err := store.List(
 		ctx,
 		indexDir+"/",
-		"",
+		cloud.ListOptions{},
 		func(file string) error {
 			// We assert that if a file ends with .pb in the index, it should be a
 			// parsable index file. Otherwise, we ignore it. This circumvents any temp

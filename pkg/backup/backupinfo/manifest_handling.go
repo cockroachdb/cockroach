@@ -1392,21 +1392,24 @@ func CheckForPreviousBackup(
 
 	// Check for the presence of a BACKUP-LOCK file with a job ID different from
 	// that of our job.
-	if err := defaultStore.List(ctx, "", backupbase.ListingDelimDataSlash, func(s string) error {
-		s = strings.TrimPrefix(s, "/")
-		if strings.HasPrefix(s, BackupLockFilePrefix) {
-			jobIDSuffix := strings.TrimPrefix(s, BackupLockFilePrefix)
-			if len(jobIDSuffix) == 0 {
-				return errors.AssertionFailedf("malformed BACKUP-LOCK file %s, expected a job ID suffix", s)
+	if err := defaultStore.List(
+		ctx, "", cloud.ListOptions{Delimiter: backupbase.ListingDelimDataSlash},
+		func(s string) error {
+			s = strings.TrimPrefix(s, "/")
+			if strings.HasPrefix(s, BackupLockFilePrefix) {
+				jobIDSuffix := strings.TrimPrefix(s, BackupLockFilePrefix)
+				if len(jobIDSuffix) == 0 {
+					return errors.AssertionFailedf("malformed BACKUP-LOCK file %s, expected a job ID suffix", s)
+				}
+				if jobIDSuffix != strconv.FormatInt(int64(jobID), 10) {
+					return pgerror.Newf(pgcode.FileAlreadyExists,
+						"%s already contains a `BACKUP-LOCK` file written by job %s",
+						redactedURI, jobIDSuffix)
+				}
 			}
-			if jobIDSuffix != strconv.FormatInt(int64(jobID), 10) {
-				return pgerror.Newf(pgcode.FileAlreadyExists,
-					"%s already contains a `BACKUP-LOCK` file written by job %s",
-					redactedURI, jobIDSuffix)
-			}
-		}
-		return nil
-	}); err != nil {
+			return nil
+		},
+	); err != nil {
 		// HTTP external storage does not support listing, and so we skip checking
 		// for a BACKUP-LOCK file.
 		if !errors.Is(err, cloud.ErrListingUnsupported) {
@@ -1594,7 +1597,7 @@ func readLatestCheckpointFile(
 
 	// We name files such that the most recent checkpoint will always
 	// be at the top, so just grab the first filename.
-	err = exportStore.List(ctx, BackupProgressDirectory, "", func(p string) error {
+	err = exportStore.List(ctx, BackupProgressDirectory, cloud.ListOptions{}, func(p string) error {
 		// The first file returned by List could be either the checkpoint or
 		// checksum file, but we are only concerned with the timestamped prefix.
 		// We resolve if it is a checkpoint or checksum file separately below.

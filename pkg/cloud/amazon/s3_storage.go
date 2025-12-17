@@ -942,7 +942,9 @@ func (s *s3Storage) ReadFile(
 		cloud.ResumingReaderRetryOnErrFnForSettings(ctx, s.settings), s3ErrDelay), fileSize, nil
 }
 
-func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
+func (s *s3Storage) List(
+	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
+) error {
 	ctx, sp := tracing.ChildSpan(ctx, "s3.List")
 	defer sp.Finish()
 
@@ -960,9 +962,9 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 	// s3 clones which return s3://<prefix>/ as the first result of listing
 	// s3://<prefix> to exclude that result.
 	if envutil.EnvOrDefaultBool("COCKROACH_S3_LIST_WITH_PREFIX_SLASH_MARKER", false) {
-		s3Input = &s3.ListObjectsV2Input{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(delim), StartAfter: aws.String(dest + "/")}
+		s3Input = &s3.ListObjectsV2Input{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(opts.Delimiter), StartAfter: aws.String(dest + "/")}
 	} else {
-		s3Input = &s3.ListObjectsV2Input{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(delim)}
+		s3Input = &s3.ListObjectsV2Input{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(opts.Delimiter)}
 	}
 
 	paginator := s3.NewListObjectsV2Paginator(client, s3Input)
