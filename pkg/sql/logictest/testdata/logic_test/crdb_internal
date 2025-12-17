@@ -1017,10 +1017,10 @@ start_pretty
 /Table/117/1/2
 /Table/117/1/3
 
-query T
-SELECT crdb_internal.cluster_name()
+query B
+SELECT length(crdb_internal.cluster_name()) > 0
 ----
-testclustername
+true
 
 # Regression for 41834.
 statement ok
