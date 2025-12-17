@@ -5930,4 +5930,61 @@ DROP TABLE accounts, non_rls;
 statement ok
 DROP USER alice;
 
+statement ok
+RESET SESSION row_security;
+
+subtest end
+
+# Regression test for #158154. Don't add transitive column dependencies to
+# routines that build RLS constraints.
+subtest regression_158154
+
+statement ok
+CREATE TABLE t158154 (c0 INT, c1 TEXT DEFAULT 'foobarbaz', FAMILY (c0, c1));
+
+statement ok
+CREATE ROLE user_158154
+
+statement ok
+GRANT ALL ON t158154 TO user_158154;
+
+statement ok
+ALTER TABLE t158154 ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+ALTER TABLE t158154 OWNER TO user_158154;
+
+statement ok
+SET ROLE user_158154;
+
+statement ok
+CREATE POLICY IF NOT EXISTS p1 on t158154 WITH CHECK (c0 > 0 AND c1 = 'foobarbaz');
+
+statement ok
+CREATE PROCEDURE p158154() LANGUAGE SQL AS $$
+  UPDATE t158154 SET c0 = 1 WHERE true;
+$$;
+
+statement ok
+CALL p158154();
+
+# The procedure does not directly depend on column b, so dropping column b
+# should be allowed after dropping the RLS constraint.
+statement ok
+DROP POLICY p1 on t158154;
+ALTER TABLE t158154 DROP COLUMN c1;
+
+statement ok
+CALL p158154();
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+
+statement ok
+DROP ROLE user_158154;
+
 subtest end

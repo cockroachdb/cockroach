@@ -991,6 +991,25 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) error {
 	return nil
 }
 
+func (g *lockTableGuardImpl) String() string {
+	var sb redact.StringBuilder
+	g.safeFormat(&sb)
+	return sb.String()
+}
+
+func (g *lockTableGuardImpl) SafeFormat(w redact.SafePrinter, _ rune) {
+	g.safeFormat(w)
+}
+
+func (g *lockTableGuardImpl) safeFormat(w redact.SafeWriter) {
+	w.Printf("req: %d, txn: ", redact.Safe(g.seqNum))
+	if g.txn == nil {
+		w.SafeString("none")
+	} else {
+		w.SafeString(redact.SafeString(g.txn.ID.String()))
+	}
+}
+
 // queuedGuard is used to wrap waiting locking requests in the keyLocks struct.
 // Waiting requests typically wait in an active state, i.e., the
 // lockTableGuardImpl.key refers to the same key inside this keyLock struct.
@@ -1014,6 +1033,31 @@ type queuedGuard struct {
 	mode   lock.Mode // protected by keyLocks.mu
 	active bool      // protected by keyLocks.mu
 	order  queueOrder
+}
+
+func (qg *queuedGuard) String() string {
+	var sb redact.StringBuilder
+	qg.safeFormat(&sb)
+	return sb.String()
+}
+
+func (qg *queuedGuard) SafeFormat(w redact.SafePrinter, _ rune) {
+	qg.safeFormat(w)
+}
+
+func (qg *queuedGuard) safeFormat(w redact.SafeWriter) {
+	optPromotingMsg := redact.SafeString("")
+	if qg.order.isPromoting {
+		optPromotingMsg = " promoting: true"
+	}
+	w.Printf("active: %t req: %d%s, strength: %s, txn: ",
+		qg.active, qg.order.reqSeqNum, optPromotingMsg, qg.mode.Strength,
+	)
+	if qg.guard.txn == nil {
+		w.SafeString("none")
+	} else {
+		w.SafeString(redact.SafeString(qg.guard.txn.ID.String()))
+	}
 }
 
 // queueOrder encapsulates fields that are used to determine the order in which
@@ -1987,32 +2031,13 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 	if kl.waitingReaders.Len() > 0 {
 		sb.SafeString("   waiting readers:\n")
 		for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
-			g := e.Value
-			sb.Printf("    req: %d, txn: ", redact.Safe(g.seqNum))
-			if g.txn == nil {
-				sb.SafeString("none\n")
-			} else {
-				sb.Printf("%v\n", redact.Safe(g.txn.ID))
-			}
+			sb.Printf("    %s\n", e.Value)
 		}
 	}
 	if kl.queuedLockingRequests.Len() > 0 {
 		sb.SafeString("   queued locking requests:\n")
 		for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
-			qg := e.Value
-			g := qg.guard
-			optPromotingMsg := redact.SafeString("")
-			if qg.order.isPromoting {
-				optPromotingMsg = " promoting: true"
-			}
-			sb.Printf("    active: %t req: %d%s, strength: %s, txn: ",
-				qg.active, qg.order.reqSeqNum, optPromotingMsg, qg.mode.Strength,
-			)
-			if g.txn == nil {
-				sb.SafeString("none\n")
-			} else {
-				sb.Printf("%v\n", redact.Safe(g.txn.ID))
-			}
+			sb.Printf("    %s\n", e.Value)
 		}
 	}
 }

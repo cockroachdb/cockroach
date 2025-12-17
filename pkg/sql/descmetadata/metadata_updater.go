@@ -9,18 +9,25 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlinit"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // metadataUpdater which implements scexec.MetaDataUpdater that is used to update
@@ -31,6 +38,11 @@ type metadataUpdater struct {
 	sessionData  *sessiondata.SessionData
 	descriptors  *descs.Collection
 	cacheEnabled bool
+
+	// Fields needed for TTL schedule creation.
+	settings  *cluster.Settings
+	knobs     *jobs.TestingKnobs
+	clusterID uuid.UUID
 }
 
 // NewMetadataUpdater creates a new comment updater, which can be used to
@@ -40,15 +52,21 @@ func NewMetadataUpdater(
 	ctx context.Context,
 	txn isql.Txn,
 	descriptors *descs.Collection,
-	settings *settings.Values,
+	settingsValues *settings.Values,
 	sessionData *sessiondata.SessionData,
+	clusterSettings *cluster.Settings,
+	knobs *jobs.TestingKnobs,
+	clusterID uuid.UUID,
 ) scexec.DescriptorMetadataUpdater {
 	return metadataUpdater{
 		ctx:          ctx,
 		txn:          txn,
 		sessionData:  sessionData,
 		descriptors:  descriptors,
-		cacheEnabled: sessioninit.CacheEnabled.Get(settings),
+		cacheEnabled: sessioninit.CacheEnabled.Get(settingsValues),
+		settings:     clusterSettings,
+		knobs:        knobs,
+		clusterID:    clusterID,
 	}
 }
 
@@ -112,4 +130,90 @@ func (mu metadataUpdater) UpdateTTLScheduleLabel(
 		tbl.GetRowLevelTTL().ScheduleID,
 	)
 	return err
+}
+
+// UpdateTTLScheduleCron implement scexec.DescriptorMetadataUpdater.
+func (mu metadataUpdater) UpdateTTLScheduleCron(
+	ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string,
+) error {
+	env := jobs.JobSchedulerEnv(mu.knobs)
+	schedules := jobs.ScheduledJobTxn(mu.txn)
+	s, err := schedules.Load(ctx, env, scheduleID)
+	if err != nil {
+		return err
+	}
+	if err := s.SetScheduleAndNextRun(cronExpr); err != nil {
+		return err
+	}
+	return schedules.Update(ctx, s)
+}
+
+// CreateRowLevelTTLSchedule implements scexec.DescriptorMetadataUpdater.
+func (mu metadataUpdater) CreateRowLevelTTLSchedule(
+	ctx context.Context, tbl catalog.TableDescriptor,
+) error {
+	if !tbl.HasRowLevelTTL() {
+		return nil
+	}
+
+	// Get the mutable table descriptor to update the schedule ID.
+	mutTbl, err := mu.descriptors.MutableByID(mu.txn.KV()).Table(ctx, tbl.GetID())
+	if err != nil {
+		return err
+	}
+
+	// Create the scheduled job using the shared helper.
+	schedules := jobs.ScheduledJobTxn(mu.txn)
+	version := clusterversion.ClusterVersion{Version: mu.settings.Version.ActiveVersion(ctx).Version}
+	sj, err := ttlinit.CreateRowLevelTTLScheduledJob(
+		ctx,
+		mu.knobs,
+		schedules,
+		tbl.GetPrivileges().Owner(),
+		tbl,
+		mu.clusterID,
+		version,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Update the table descriptor with the schedule ID.
+	mutTbl.RowLevelTTL.ScheduleID = sj.ScheduleID()
+
+	// Also update the ScheduleID in the declarative schema changer state's
+	// RowLevelTTL elements. This is necessary so that if the schema change
+	// fails and needs to roll back, the DeleteSchedule operation will have
+	// the correct ScheduleID to delete.
+	updateRowLevelTTLElementScheduleID(mutTbl, sj.ScheduleID())
+
+	return mu.descriptors.WriteDesc(ctx, false /* kvTrace */, mutTbl, mu.txn.KV())
+}
+
+// updateRowLevelTTLElementScheduleID updates the ScheduleID in any RowLevelTTL
+// elements in the declarative schema changer state. This is needed so that
+// rollback operations can correctly identify and delete the schedule.
+func updateRowLevelTTLElementScheduleID(mutTbl *tabledesc.Mutable, scheduleID jobspb.ScheduleID) {
+	state := mutTbl.GetDeclarativeSchemaChangerState()
+	if state == nil {
+		return
+	}
+
+	// Look for RowLevelTTL elements going PUBLIC and update their ScheduleID.
+	modified := false
+	for i := range state.Targets {
+		if ttl := state.Targets[i].GetRowLevelTTL(); ttl != nil {
+			// Update RowLevelTTL elements that are going PUBLIC (being added)
+			// and don't already have a ScheduleID set.
+			if state.Targets[i].TargetStatus == scpb.Status_PUBLIC &&
+				ttl.TableID == mutTbl.GetID() && ttl.ScheduleID == 0 {
+				ttl.ScheduleID = scheduleID
+				modified = true
+			}
+		}
+	}
+
+	if modified {
+		mutTbl.SetDeclarativeSchemaChangerState(state)
+	}
 }

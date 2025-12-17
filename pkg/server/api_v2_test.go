@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -385,10 +386,16 @@ func TestCheckRestartSafe_Criticality(t *testing.T) {
 	err = drain(ctx, ts1, t)
 	require.NoError(t, err)
 
-	res, err = checkRestartSafe(ctx, ts1.NodeID(), ts1.NodeLiveness().(livenesspb.NodeVitalityInterface), ts1.GetStores().(storeVisitor), 3, false)
-	// Now that we've drained, we're ok to restart
-	require.NoError(t, err)
-	require.True(t, res.IsRestartSafe)
+	testutils.SucceedsSoon(t, func() error {
+		res, err = checkRestartSafe(ctx, ts1.NodeID(), ts1.NodeLiveness().(livenesspb.NodeVitalityInterface), ts1.GetStores().(storeVisitor), 3, false)
+		if err != nil {
+			return err
+		}
+		if !res.IsRestartSafe {
+			return errors.New("expected IsRestartSafe to be true")
+		}
+		return nil
+	})
 }
 
 // TestCheckRestartSafe_RangeStatus verifies that checkRestartSafe is
@@ -575,12 +582,7 @@ func TestCheckRestartSafe_Integration(t *testing.T) {
 	ctx := context.Background()
 	var err error
 
-	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			// TODO(155111): Test is flakey with DRPC enabled.
-			DefaultDRPCOption: base.TestDRPCDisabled,
-		},
-	})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(ctx)
 
 	ts0 := testCluster.Server(0)

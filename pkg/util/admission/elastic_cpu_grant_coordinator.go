@@ -8,6 +8,7 @@ package admission
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -83,14 +84,23 @@ func (e *ElasticCPUGrantCoordinator) tryGrant() {
 	e.elasticCPUGranter.tryGrant()
 }
 
+// YieldInPacer is exported so it can be overridden in tests.
+var YieldInPacer = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"admission.elastic_cpu.yield_in_pacer.enabled",
+	"when true, time-based elastic CPU pacing additionally yields CPU as-needed according to the scheduler",
+	true,
+)
+
 // NewPacer implements the PacerMaker interface.
 func (e *ElasticCPUGrantCoordinator) NewPacer(unit time.Duration, wi WorkInfo) *Pacer {
 	if e == nil {
 		return nil
 	}
 	return &Pacer{
-		unit: unit,
-		wi:   wi,
-		wq:   e.ElasticCPUWorkQueue,
+		unit:  unit,
+		wi:    wi,
+		wq:    e.ElasticCPUWorkQueue,
+		Yield: YieldInPacer.Get(&e.ElasticCPUWorkQueue.settings.SV),
 	}
 }

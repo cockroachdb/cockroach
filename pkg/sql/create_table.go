@@ -17,10 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -56,15 +53,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
-	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlinit"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/lib/pq/oid"
 )
 
@@ -1431,13 +1426,6 @@ func NewTableDesc(
 		return nil, err
 	}
 
-	paramIsDelete := n.StorageParams.GetVal("ttl_delete_rate_limit") != nil
-	paramIsSelect := n.StorageParams.GetVal("ttl_select_rate_limit") != nil
-
-	if paramIsDelete || paramIsSelect {
-		printTTLRateLimitNotice(ctx, evalCtx.ClientNoticeSender)
-	}
-
 	setter.TableDesc.RowLevelTTL = setter.UpdatedRowLevelTTL
 
 	indexEncodingVersion := descpb.StrictIndexColumnIDGuaranteesVersion
@@ -2576,14 +2564,25 @@ func newTableDesc(
 	// Row level TTL tables require a scheduled job to be created as well.
 	if ret.HasRowLevelTTL() {
 		ttl := ret.GetRowLevelTTL()
-		if err := schemaexpr.ValidateTTLExpirationExpression(
-			params.ctx, ret, params.p.SemaCtx(), &n.Table, ttl, params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx),
+		getAllNonDropColumnsFn := func() colinfo.ResultColumns {
+			return colinfo.ResultColumnsFromColumns(ret.GetID(), ret.NonDropColumns())
+		}
+		columnLookupByNameFn := func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
+			col, err := catalog.MustFindColumnByTreeName(ret, columnName)
+			if err != nil || col.Dropped() {
+				return false, false, false, 0, nil
+			}
+			return true, !col.IsInaccessible(), col.IsComputed(), col.GetID(), col.GetType()
+		}
+		if _, err := schemaexpr.ValidateTTLExpirationExpression(
+			params.ctx, params.p.SemaCtx(), &n.Table, ttl, params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx),
+			getAllNonDropColumnsFn, columnLookupByNameFn,
 		); err != nil {
 			return nil, err
 		}
 
 		params.p.Txn()
-		j, err := CreateRowLevelTTLScheduledJob(
+		j, err := ttlinit.CreateRowLevelTTLScheduledJob(
 			params.ctx,
 			params.ExecCfg().JobsKnobs(),
 			jobs.ScheduledJobTxn(params.p.InternalSQLTxn()),
@@ -2609,70 +2608,6 @@ func newTableDesc(
 	}
 
 	return ret, nil
-}
-
-// newRowLevelTTLScheduledJob returns a *jobs.ScheduledJob for row level TTL
-// for a given table. newRowLevelTTLScheduledJob assumes that
-// tblDesc.RowLevelTTL is not nil.
-func newRowLevelTTLScheduledJob(
-	env scheduledjobs.JobSchedulerEnv,
-	owner username.SQLUsername,
-	tblDesc *tabledesc.Mutable,
-	clusterID uuid.UUID,
-	clusterVersion clusterversion.ClusterVersion,
-) (*jobs.ScheduledJob, error) {
-	sj := jobs.NewScheduledJob(env)
-	sj.SetScheduleLabel(ttlbase.BuildScheduleLabel(tblDesc))
-	sj.SetOwner(owner)
-	sj.SetScheduleDetails(jobspb.ScheduleDetails{
-		Wait: jobspb.ScheduleDetails_SKIP,
-		// If a job fails, try again at the allocated cron time.
-		OnError:                jobspb.ScheduleDetails_RETRY_SCHED,
-		ClusterID:              clusterID,
-		CreationClusterVersion: clusterVersion,
-	})
-
-	if err := sj.SetScheduleAndNextRun(tblDesc.RowLevelTTL.DeletionCronOrDefault()); err != nil {
-		return nil, err
-	}
-	args := &catpb.ScheduledRowLevelTTLArgs{
-		TableID: tblDesc.GetID(),
-	}
-	any, err := pbtypes.MarshalAny(args)
-	if err != nil {
-		return nil, err
-	}
-	sj.SetExecutionDetails(
-		tree.ScheduledRowLevelTTLExecutor.InternalName(),
-		jobspb.ExecutionArguments{Args: any},
-	)
-	return sj, nil
-}
-
-// CreateRowLevelTTLScheduledJob creates a new row-level TTL schedule.
-func CreateRowLevelTTLScheduledJob(
-	ctx context.Context,
-	knobs *jobs.TestingKnobs,
-	s jobs.ScheduledJobStorage,
-	owner username.SQLUsername,
-	tblDesc *tabledesc.Mutable,
-	clusterID uuid.UUID,
-	version clusterversion.ClusterVersion,
-) (*jobs.ScheduledJob, error) {
-	if !tblDesc.HasRowLevelTTL() {
-		return nil, errors.AssertionFailedf("CreateRowLevelTTLScheduledJob called with no .RowLevelTTL: %#v", tblDesc)
-	}
-
-	telemetry.Inc(sqltelemetry.RowLevelTTLCreated)
-	env := JobSchedulerEnv(knobs)
-	j, err := newRowLevelTTLScheduledJob(env, owner, tblDesc, clusterID, version)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.Create(ctx, j); err != nil {
-		return nil, err
-	}
-	return j, nil
 }
 
 func rowLevelTTLAutomaticColumnDef(ttl *catpb.RowLevelTTL) (*tree.ColumnTableDef, error) {

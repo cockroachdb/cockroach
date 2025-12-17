@@ -106,12 +106,24 @@ var LockedLeaseTimestamp = settings.RegisterBoolSetting(settings.ApplicationLeve
 	"sql.catalog.descriptor_lease.use_locked_timestamps.enabled",
 	"guarantees transactional version consistency for descriptors used by the lease manager,"+
 		"descriptors used can be intentionally older to support this",
+	true)
+
+var RetainOldVersionsForLocked = settings.RegisterBoolSetting(settings.ApplicationLevel,
+	"sql.catalog.descriptor_lease.lock_old_versions.enabled",
+	"enables retaining old versions to avoid retries when locked lease timestamps are enabled, at the expense "+
+		"of delaying schema changes",
 	false)
 
 var MaxBatchLeaseCount = settings.RegisterIntSetting(settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease.max_batch_lease_count",
 	"the maximum number of descriptors to lease in a single batch",
 	1000)
+
+// GetLockedLeaseTimestampEnabled returns if locked leasing timestamps are enabled.
+func GetLockedLeaseTimestampEnabled(ctx context.Context, settings *cluster.Settings) bool {
+	return LockedLeaseTimestamp.Get(&settings.SV) &&
+		settings.Version.IsActive(ctx, clusterversion.V26_1)
+}
 
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
@@ -987,6 +999,16 @@ func (m *Manager) insertDescriptorVersions(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	newVersionsToInsert := make([]*descriptorVersionState, 0, len(versions))
+	defer func() {
+		// Release memory for anything not inserted, entries are
+		// cleared after each insert.
+		for _, state := range newVersionsToInsert {
+			if state == nil {
+				continue
+			}
+			t.m.boundAccount.Shrink(ctx, state.getByteSize())
+		}
+	}()
 	for i := range versions {
 		// Since we gave up the lock while reading the versions from
 		// the store we have to ensure that no one else inserted the
@@ -1001,8 +1023,9 @@ func (m *Manager) insertDescriptorVersions(
 		}
 	}
 	// Only insert if all versions were allocated.
-	for _, descState := range newVersionsToInsert {
+	for idx, descState := range newVersionsToInsert {
 		t.mu.active.insert(descState)
+		newVersionsToInsert[idx] = nil
 	}
 
 	return nil
@@ -1276,6 +1299,11 @@ func (m *Manager) acquireNodeLease(
 				if err := m.upsertDescriptorIntoState(ctx, id, session, desc); err != nil {
 					return false, err
 				}
+				// Descriptor versions for these tables participate directly in memo
+				// staleness checks. Bump the lease generation now so queries that
+				// rely on the new privileges/options are forced to replan immediately
+				// instead of waiting for the asynchronous lease update.
+				m.leaseGeneration.Add(1)
 
 				desc, err = doAcquisition()
 				if err != nil {
@@ -1478,7 +1506,8 @@ func (m *Manager) purgeOldVersions(
 	// Optionally, acquire the refcount on the previous version for the locked
 	// leasing mode.
 	acquireLeaseOnPrevious := func() error {
-		if !LockedLeaseTimestamp.Get(&m.storage.settings.SV) {
+		if !GetLockedLeaseTimestampEnabled(ctx, m.storage.settings) ||
+			!RetainOldVersionsForLocked.Get(&m.storage.settings.SV) {
 			return nil
 		}
 		var handles []*closeTimeStampHandle
@@ -1997,8 +2026,18 @@ func (m *Manager) AcquireByName(
 	// way: look in the database to resolve the name, then acquire a new lease.
 	var err error
 	id, err := m.resolveName(ctx, timestamp.GetTimestamp(), parentID, parentSchemaID, name)
-	if err != nil {
+	if err != nil &&
+		(timestamp.GetTimestamp() == timestamp.GetBaseTimestamp() ||
+			!errors.Is(err, catalog.ErrDescriptorNotFound)) {
 		return nil, err
+	} else if errors.Is(err, catalog.ErrDescriptorNotFound) {
+		// The descriptor was not found at the lease timestamp, so attempt the
+		// real timestamp in use by this txn. This implies the object may have
+		// just been created.
+		id, err = m.resolveName(ctx, timestamp.GetBaseTimestamp(), parentID, parentSchemaID, name)
+		if err != nil {
+			return nil, err
+		}
 	}
 	desc, err := m.Acquire(ctx, timestamp, id)
 	if err != nil {
@@ -2798,11 +2837,18 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 		}
 		log.Dev.Warningf(ctx, "range feed was not closed before a restart attempt")
 	}
+	// Always populate a timestamp on the range feed, otherwise we run the risk
+	// of a race condition between when the range feed selects a timestamp versus
+	// when we start handing out leases (i.e. close waitForInit) The startup below
+	// is asynchronous in nature, so the timestamp could be after close the waitForInit
+	// channel.
+	now := m.storage.db.KV().Clock().Now()
+	log.Dev.Infof(ctx, "starting lease manager rangefeed at timestamp %s", now)
 	// Ignore errors here because they indicate that the server is shutting down.
 	// Also note that the range feed automatically shuts down when the server
 	// shuts down, so we don't need to call Close() ourselves.
 	m.mu.rangeFeed, _ = m.rangeFeedFactory.RangeFeed(
-		ctx, "lease", []roachpb.Span{descriptorTableSpan}, hlc.Timestamp{}, handleEvent,
+		ctx, "lease", []roachpb.Span{descriptorTableSpan}, now, handleEvent,
 		rangefeed.WithSystemTablePriority(),
 		rangefeed.WithOnCheckpoint(handleCheckpoint),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
@@ -3605,7 +3651,7 @@ func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
 
 // GetReadTimestamp returns a locked timestamp to use for lease management.
 func (m *Manager) GetReadTimestamp(ctx context.Context, timestamp hlc.Timestamp) ReadTimestamp {
-	if LockedLeaseTimestamp.Get(&m.settings.SV) {
+	if GetLockedLeaseTimestampEnabled(ctx, m.settings) {
 		replicationTS := m.getSafeReplicationTSHandle(ctx)
 		if replicationTS.timestamp.Less(timestamp) {
 			return LeaseTimestamp{

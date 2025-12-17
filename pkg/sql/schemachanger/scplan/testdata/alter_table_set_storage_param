@@ -1,0 +1,368 @@
+setup
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY, j INT);
+----
+
+ops
+ALTER TABLE defaultdb.foo SET (exclude_data_from_backup = true)
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetTableStorageParam
+      Param:
+        Name: exclude_data_from_backup
+        TableID: 104
+        Value: "true"
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetTableStorageParam
+      Param:
+        Name: exclude_data_from_backup
+        TableID: 104
+        Value: "true"
+
+ops
+ALTER TABLE defaultdb.foo SET (sql_stats_histogram_buckets_count = 64)
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetTableStorageParam
+      Param:
+        Name: sql_stats_histogram_buckets_count
+        TableID: 104
+        Value: "64"
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetTableStorageParam
+      Param:
+        Name: sql_stats_histogram_buckets_count
+        TableID: 104
+        Value: "64"
+
+ops
+ALTER TABLE defaultdb.foo SET (exclude_data_from_backup = true, sql_stats_histogram_buckets_count = 64)
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], ABSENT] -> PUBLIC
+    [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetTableStorageParam
+      Param:
+        Name: exclude_data_from_backup
+        TableID: 104
+        Value: "true"
+    *scop.SetTableStorageParam
+      Param:
+        Name: sql_stats_histogram_buckets_count
+        TableID: 104
+        Value: "64"
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], PUBLIC] -> ABSENT
+    [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], ABSENT] -> PUBLIC
+    [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetTableStorageParam
+      Param:
+        Name: exclude_data_from_backup
+        TableID: 104
+        Value: "true"
+    *scop.SetTableStorageParam
+      Param:
+        Name: sql_stats_histogram_buckets_count
+        TableID: 104
+        Value: "64"
+
+setup
+CREATE TABLE defaultdb.bar (x INT PRIMARY KEY) WITH (exclude_data_from_backup = true);
+----
+
+ops
+ALTER TABLE defaultdb.bar SET (exclude_data_from_backup = false)
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC] -> ABSENT
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: false}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.ResetTableStorageParam
+      Param:
+        Name: exclude_data_from_backup
+        TableID: 105
+        Value: "true"
+    *scop.SetTableStorageParam
+      Param:
+        Name: exclude_data_from_backup
+        TableID: 105
+        Value: "false"
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], ABSENT] -> PUBLIC
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: false}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC] -> ABSENT
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: false}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.ResetTableStorageParam
+      Param:
+        Name: exclude_data_from_backup
+        TableID: 105
+        Value: "true"
+    *scop.SetTableStorageParam
+      Param:
+        Name: exclude_data_from_backup
+        TableID: 105
+        Value: "false"
+
+ops
+ALTER TABLE defaultdb.bar RESET (exclude_data_from_backup)
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.ResetTableStorageParam
+      Param:
+        Name: exclude_data_from_backup
+        TableID: 105
+        Value: "true"
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], ABSENT] -> PUBLIC
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.ResetTableStorageParam
+      Param:
+        Name: exclude_data_from_backup
+        TableID: 105
+        Value: "true"
+
+setup
+CREATE TABLE defaultdb.baz (y INT PRIMARY KEY) WITH (exclude_data_from_backup = true, sql_stats_histogram_buckets_count = 100);
+----
+
+ops
+ALTER TABLE defaultdb.baz RESET (exclude_data_from_backup, sql_stats_histogram_buckets_count)
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[TableStorageParam:{DescID: 106, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC] -> ABSENT
+    [[TableStorageParam:{DescID: 106, Name: sql_stats_histogram_buckets_count, Value: 100}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.ResetTableStorageParam
+      Param:
+        Name: exclude_data_from_backup
+        TableID: 106
+        Value: "true"
+    *scop.ResetTableStorageParam
+      Param:
+        Name: sql_stats_histogram_buckets_count
+        TableID: 106
+        Value: "100"
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[TableStorageParam:{DescID: 106, Name: exclude_data_from_backup, Value: true}, ABSENT], ABSENT] -> PUBLIC
+    [[TableStorageParam:{DescID: 106, Name: sql_stats_histogram_buckets_count, Value: 100}, ABSENT], ABSENT] -> PUBLIC
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[TableStorageParam:{DescID: 106, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC] -> ABSENT
+    [[TableStorageParam:{DescID: 106, Name: sql_stats_histogram_buckets_count, Value: 100}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.ResetTableStorageParam
+      Param:
+        Name: exclude_data_from_backup
+        TableID: 106
+        Value: "true"
+    *scop.ResetTableStorageParam
+      Param:
+        Name: sql_stats_histogram_buckets_count
+        TableID: 106
+        Value: "100"
+
+setup
+CREATE TABLE no_ttl_table (id INT PRIMARY KEY, created_at TIMESTAMPTZ);
+----
+
+ops
+ALTER TABLE no_ttl_table SET (ttl_expiration_expression = $$created_at + INTERVAL '10 minutes'$$, ttl_job_cron = '1 4 * * 1');
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[RowLevelTTL:{DescID: 107, SeqNum: 0}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertRowLevelTTL
+      RowLevelTTL:
+        DeletionCron: 1 4 * * 1
+        ExpirationExpr: created_at + INTERVAL '10 minutes'
+      TTLExpr:
+        expr: created_at + '00:10:00':::INTERVAL
+        referencedColumnIds:
+        - 2
+      TableID: 107
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[RowLevelTTL:{DescID: 107, SeqNum: 0}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[RowLevelTTL:{DescID: 107, SeqNum: 0}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertRowLevelTTL
+      RowLevelTTL:
+        DeletionCron: 1 4 * * 1
+        ExpirationExpr: created_at + INTERVAL '10 minutes'
+      TTLExpr:
+        expr: created_at + '00:10:00':::INTERVAL
+        referencedColumnIds:
+        - 2
+      TableID: 107
+    *scop.CreateRowLevelTTLSchedule
+      TableID: 107
+
+deps
+ALTER TABLE no_ttl_table SET (ttl_expiration_expression = $$created_at + INTERVAL '10 minutes'$$, ttl_job_cron = '1 4 * * 1');
+----
+
+setup
+CREATE TABLE ttl_table (id INT PRIMARY KEY, ts TIMESTAMPTZ) WITH (ttl_expiration_expression = 'ts');
+----
+
+ops
+ALTER TABLE ttl_table SET (ttl_expiration_expression = $$ts + INTERVAL '10 minutes'$$, ttl_job_cron = '30 2 * * 0');
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[RowLevelTTL:{DescID: 108, SeqNum: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[RowLevelTTL:{DescID: 108, SeqNum: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertRowLevelTTL
+      RowLevelTTL:
+        DeletionCron: 30 2 * * 0
+        ExpirationExpr: ts + INTERVAL '10 minutes'
+        ScheduleID: 1
+      TTLExpr:
+        expr: ts + '00:10:00':::INTERVAL
+        referencedColumnIds:
+        - 2
+      TableID: 108
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[RowLevelTTL:{DescID: 108, SeqNum: 0}, ABSENT], ABSENT] -> PUBLIC
+    [[RowLevelTTL:{DescID: 108, SeqNum: 1}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[RowLevelTTL:{DescID: 108, SeqNum: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[RowLevelTTL:{DescID: 108, SeqNum: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertRowLevelTTL
+      RowLevelTTL:
+        DeletionCron: 30 2 * * 0
+        ExpirationExpr: ts + INTERVAL '10 minutes'
+        ScheduleID: 1
+      TTLExpr:
+        expr: ts + '00:10:00':::INTERVAL
+        referencedColumnIds:
+        - 2
+      TableID: 108
+    *scop.UpdateTTLScheduleCron
+      NewCronExpr: 30 2 * * 0
+      ScheduleID: 1
+      TableID: 108
+
+deps
+ALTER TABLE ttl_table SET (ttl_expiration_expression = $$ts + INTERVAL '10 minutes'$$, ttl_job_cron = '30 2 * * 0');
+----
+- from: [RowLevelTTL:{DescID: 108, SeqNum: 0}, ABSENT]
+  to:   [RowLevelTTL:{DescID: 108, SeqNum: 1}, PUBLIC]
+  kind: SameStagePrecedence
+  rule: old TTL params are dropped before the new one is added
+
+ops
+ALTER TABLE ttl_table SET (ttl_select_rate_limit = 10, ttl_job_cron = '0 0 * * *');
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[RowLevelTTL:{DescID: 108, SeqNum: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[RowLevelTTL:{DescID: 108, SeqNum: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertRowLevelTTL
+      RowLevelTTL:
+        DeletionCron: 0 0 * * *
+        ExpirationExpr: ts
+        ScheduleID: 1
+        SelectRateLimit: 10
+      TTLExpr:
+        expr: ts
+        referencedColumnIds:
+        - 2
+      TableID: 108
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[RowLevelTTL:{DescID: 108, SeqNum: 0}, ABSENT], ABSENT] -> PUBLIC
+    [[RowLevelTTL:{DescID: 108, SeqNum: 1}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[RowLevelTTL:{DescID: 108, SeqNum: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[RowLevelTTL:{DescID: 108, SeqNum: 1}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.UpsertRowLevelTTL
+      RowLevelTTL:
+        DeletionCron: 0 0 * * *
+        ExpirationExpr: ts
+        ScheduleID: 1
+        SelectRateLimit: 10
+      TTLExpr:
+        expr: ts
+        referencedColumnIds:
+        - 2
+      TableID: 108
+    *scop.UpdateTTLScheduleCron
+      NewCronExpr: 0 0 * * *
+      ScheduleID: 1
+      TableID: 108

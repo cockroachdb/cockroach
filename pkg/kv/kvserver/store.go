@@ -105,6 +105,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -2548,12 +2549,12 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 		var timer timeutil.Timer
 		defer timer.Stop()
 		errInterrupted := errors.New("waiting interrupted")
-		wait := func(ctx context.Context, until time.Time, interrupt <-chan struct{}) error {
-			now := timeutil.Now()
-			if !now.Before(until) {
+		wait := func(ctx context.Context, until crtime.Mono, interrupt <-chan struct{}) error {
+			wait := until.Sub(crtime.NowMono())
+			if wait <= 0 {
 				return nil
 			}
-			timer.Reset(until.Sub(now))
+			timer.Reset(wait)
 			select {
 			case <-timer.C:
 				return nil
@@ -2597,7 +2598,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 				return // context canceled
 			}
 			// Aim to complete this run in exactly refresh interval.
-			now := timeutil.Now()
+			now := crtime.NowMono()
 			pacer.StartTask(now)
 
 			// We're about to perform one work cycle, where we go through all replicas
@@ -2615,7 +2616,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 					break
 				}
 
-				todo, by := pacer.Pace(timeutil.Now(), len(work))
+				todo, by := pacer.Pace(crtime.NowMono(), len(work))
 				for _, id := range work[:todo] {
 					if r := s.GetReplicaIfExists(id); r != nil {
 						cts := r.GetCurrentClosedTimestamp(ctx)
@@ -3963,13 +3964,6 @@ func (s *Store) AllocatorCheckRange(
 	collectTraces bool,
 	overrideStorePool storepool.AllocatorStorePool,
 ) (allocatorimpl.AllocatorAction, roachpb.ReplicationTarget, tracingpb.Recording, error) {
-	// Testing knob to inject errors.
-	if interceptor := s.cfg.TestingKnobs.AllocatorCheckRangeInterceptor; interceptor != nil {
-		if err := interceptor(); err != nil {
-			return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, tracingpb.Recording{}, err
-		}
-	}
-
 	var spanOptions []tracing.SpanOption
 	if collectTraces {
 		spanOptions = append(spanOptions, tracing.WithRecording(tracingpb.RecordingVerbose))

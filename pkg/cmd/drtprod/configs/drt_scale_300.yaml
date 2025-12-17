@@ -181,8 +181,7 @@ targets:
           warehouses:  $WAREHOUSES
           active-warehouses: 266666
           workers: 266666
-          conns: 1000
-          active-workers: 1000
-          duration: 12h
+          conns: 100
+          active-workers: 100
           ramp: 1h
           wait: 0

@@ -690,3 +690,20 @@ quality of service: regular
   regions: <hidden>
   actual row count: 0
   execution time: 0µs
+
+# Regression test for #159124.
+statement ok
+CREATE TABLE t159124 (
+  k INT PRIMARY KEY,
+  s STRING,
+  UNIQUE INDEX (s)
+)
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+statement ok
+PREPARE p159124 AS SELECT k FROM t159124 WHERE s = current_user()
+
+statement ok
+EXECUTE p159124

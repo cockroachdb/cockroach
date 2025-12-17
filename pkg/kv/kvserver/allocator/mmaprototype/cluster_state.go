@@ -1348,13 +1348,13 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 }
 
 func (cs *clusterState) processStoreLeaseholderMsg(
-	ctx context.Context, msg *StoreLeaseholderMsg, metrics *MMAMetrics,
+	ctx context.Context, msg *StoreLeaseholderMsg, metrics *counterMetrics,
 ) {
 	cs.processStoreLeaseholderMsgInternal(ctx, msg, numTopKReplicas, metrics)
 }
 
 func (cs *clusterState) processStoreLeaseholderMsgInternal(
-	ctx context.Context, msg *StoreLeaseholderMsg, numTopKReplicas int, metrics *MMAMetrics,
+	ctx context.Context, msg *StoreLeaseholderMsg, numTopKReplicas int, metrics *counterMetrics,
 ) {
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)

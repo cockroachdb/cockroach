@@ -1473,13 +1473,6 @@ func TestLogic_trigram_builtins(
 	runLogicTest(t, "trigram_builtins")
 }
 
-func TestLogic_truncate_with_concurrent_mutation(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "truncate_with_concurrent_mutation")
-}
-
 func TestLogic_tuple(
 	t *testing.T,
 ) {

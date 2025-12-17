@@ -198,6 +198,8 @@ type Provider struct {
 	resourceManagerService    *resourcemanagerv2.ResourceManagerV2
 	transitgatewayService     *transitgatewayapisv1.TransitGatewayApisV1
 
+	dnsProvider vm.DNSProvider
+
 	// GCAccounts is a list of accounts to use during garbage collection.
 	// These are identifiers, expected to match API keys in the environment
 	// with the format: IBM_<account>_APIKEY.
@@ -334,21 +336,37 @@ func (p *Provider) Name() string {
 	return ProviderName
 }
 
+// String returns a human-readable string representation of the Provider.
+func (p *Provider) String() string {
+	_, accountID, err := p.getIdentityFromAuthenticator()
+	if err != nil {
+		return fmt.Sprintf("%s-unknown-account", ProviderName)
+	}
+	return fmt.Sprintf("%s-%s", ProviderName, accountID)
+}
+
 // Active is part of the vm.Provider interface.
 func (p *Provider) Active() bool {
 	return true
 }
 
+// IsCentralizedProvider returns true because IBM is a remote provider.
+func (p *Provider) IsCentralizedProvider() bool {
+	return true
+}
+
 // List queries the IBM Cloud API to return all Roachprod VMs across all regions.
-func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
+func (p *Provider) List(
+	ctx context.Context, l *logger.Logger, opts vm.ListOptions,
+) (vm.List, error) {
 
 	var ret vm.List
 	var mux syncutil.Mutex
-	var g errgroup.Group
+	g := ctxgroup.WithContext(ctx)
 
 	for r := range p.vpcServices {
-		g.Go(func() error {
-			vms, err := p.listRegion(l, r, opts)
+		g.GoCtx(func(ctx context.Context) error {
+			vms, err := p.listRegion(ctx, l, r, opts)
 			if err != nil {
 				// Failing to list VMs in a region is not fatal.
 				l.Printf("failed to list IBM VMs in region: %s\n%v\n", r, err)
@@ -512,7 +530,7 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	// If we want to delete floating IPs, we need to set the flag to true.
 	deleteFloatingIPs := false
 
-	var g errgroup.Group
+	g := ctxgroup.WithContext(context.TODO())
 	for _, vm := range vms {
 
 		g.Go(func() error {

@@ -94,6 +94,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/bulkingest" // register bulk ingest implementation
+	_ "github.com/cockroachdb/cockroach/pkg/sql/bulkmerge"  // register bulk merge implementation
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry" // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -907,7 +909,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	})
 
 	mmaAlloc, mmaAllocSync := func() (mmaprototype.Allocator, *mmaintegration.AllocatorSync) {
-		mmaAllocState := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
+		mmaAllocState := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{}, stores,
 			rand.New(rand.NewSource(timeutil.Now().UnixNano())))
 		allocatorSync := mmaintegration.NewAllocatorSync(storePool, mmaAllocState, st, nil)
 		// We make sure that mmaAllocState is returned through the `Allocator`
@@ -1232,6 +1234,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		nodeDescs:                g,
 		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       spanConfig.kvAccessor,
+		spanConfigReporter:       spanConfig.reporter,
 		keyVisServerAccessor:     keyVisServerAccessor,
 		kvNodeDialer:             kvNodeDialer,
 		distSender:               distSender,

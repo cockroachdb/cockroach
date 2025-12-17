@@ -379,6 +379,9 @@ type StoreTestingKnobs struct {
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
 	BeforeSnapshotSSTIngestion func(IncomingSnapshot, []string) error
+	// AfterSplitApplication is called on the newly created replica's state after
+	// a split is applied. Called iff the RHS replica is not already destroyed.
+	AfterSplitApplication func(roachpb.ReplicaDescriptor, kvserverpb.ReplicaState)
 	// AfterSnapshotApplication is run after a snapshot is applied, before
 	// releasing the replica mutex.
 	AfterSnapshotApplication func(roachpb.ReplicaDescriptor, kvserverpb.ReplicaState, IncomingSnapshot)
@@ -482,12 +485,6 @@ type StoreTestingKnobs struct {
 
 	// EnqueueReplicaInterceptor intercepts calls to `store.Enqueue()`.
 	EnqueueReplicaInterceptor func(queueName string, replica *Replica)
-
-	// AllocatorCheckRangeInterceptor intercepts calls to
-	// `Store.AllocatorCheckRange()` and can be used to inject errors for testing.
-	// If returns non-nil error, the error is returned instead of calling the
-	// actual AllocatorCheckRange logic.
-	AllocatorCheckRangeInterceptor func() error
 
 	// GlobalMVCCRangeTombstone will write a global MVCC range tombstone across
 	// the entire user keyspace during cluster bootstrapping. This will be written

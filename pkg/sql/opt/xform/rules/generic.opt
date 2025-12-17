@@ -82,7 +82,8 @@
     []
     $outputCols:* &
         (GenericRulesEnabled) &
-        (HasPlaceholdersOrStableExprs $values) &
+        (HasPlaceholders $values) &
+        (IsConstantsAndPlaceholders $row) &
         (Let
             (
                 $span

@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -196,19 +197,9 @@ func destroyReplicaImpl(
 // SubsumeReplica is like DestroyReplica, but it does not delete the user keys
 // (and the corresponding system and lock table keys). The latter are inherited
 // by the subsuming range.
-//
-// Returns SelectOpts which can be used to reflect on the key spans that this
-// function clears.
-// TODO(pav-kv): get rid of SelectOpts.
-func SubsumeReplica(
-	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo,
-) (rditer.SelectOpts, error) {
-	// Forget about the user keys.
-	info.Keys = roachpb.RSpan{}
-	return rditer.SelectOpts{
-		ReplicatedByRangeID:   true,
-		UnreplicatedByRangeID: true,
-	}, destroyReplicaImpl(ctx, rw, info, MergedTombstoneReplicaID)
+func SubsumeReplica(ctx context.Context, rw ReadWriter, info DestroyReplicaInfo) error {
+	info.Keys = roachpb.RSpan{} // forget about the user keys
+	return destroyReplicaImpl(ctx, rw, info, MergedTombstoneReplicaID)
 }
 
 // RemoveStaleRHSFromSplit removes all replicated data for the RHS replica of a
@@ -235,6 +226,34 @@ func RemoveStaleRHSFromSplit(
 		); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// RewriteRaftState rewrites the raft state of the given replica with the
+// provided state. Specifically, it rewrites HardState and RaftTruncatedState,
+// and clears the raft log. All writes are generated in the engine keys order.
+func RewriteRaftState(
+	ctx context.Context,
+	raftWO RaftWO,
+	sl StateLoader,
+	hs raftpb.HardState,
+	ts kvserverpb.RaftTruncatedState,
+) error {
+	// Update HardState.
+	if err := sl.SetHardState(ctx, raftWO, hs); err != nil {
+		return errors.Wrapf(err, "unable to write HardState")
+	}
+	// Clear the raft log. Note that there are no Pebble range keys in this span.
+	raftLog := sl.RaftLogPrefix() // NB: use only until next StateLoader call
+	if err := raftWO.ClearRawRange(
+		raftLog, raftLog.PrefixEnd(), true /* pointKeys */, false, /* rangeKeys */
+	); err != nil {
+		return errors.Wrapf(err, "unable to clear the raft log")
+	}
+	// Update the log truncation state.
+	if err := sl.SetRaftTruncatedState(ctx, raftWO, &ts); err != nil {
+		return errors.Wrapf(err, "unable to write RaftTruncatedState")
 	}
 	return nil
 }

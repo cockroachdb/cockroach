@@ -293,6 +293,28 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	child4 := aggGauge.AddChild("yours", "paused")
 	child4.Update(0)
 
+	aggHistogram := aggmetric.NewHistogram(
+		metric.HistogramOptions{
+			Metadata: metric.Metadata{
+				Name:     "changefeed.stage.downstream_client_send.latency",
+				Category: metric.Metadata_CHANGEFEEDS,
+			},
+			Duration:     10 * time.Second,
+			BucketConfig: metric.IOLatencyBuckets,
+			Mode:         metric.HistogramModePrometheus,
+		},
+		"scope",
+	)
+	appReg.AddMetric(aggHistogram)
+	// Add child histogram metrics
+	child5 := aggHistogram.AddChild("default")
+	child5.RecordValue(100)
+	child5.RecordValue(200)
+	child6 := aggHistogram.AddChild("user")
+	child6.RecordValue(300)
+	child6.RecordValue(400)
+	child6.RecordValue(500)
+
 	// Enable the cluster setting for child metrics storage
 	ChildMetricsStorageEnabled.Override(context.Background(), &st.SV, true)
 
@@ -333,6 +355,34 @@ func TestMetricsRecorderLabels(t *testing.T) {
 			labelMatchers:  []string{"db=\"yours\"", "status__=\"paused\""},
 			expectedSource: "7",
 			expectedValue:  0,
+		},
+		{
+			name:           "histogram default -count",
+			metricPrefix:   "cr.node.changefeed.stage.downstream_client_send.latency",
+			labelMatchers:  []string{"scope=\"default\"", "-count"},
+			expectedSource: "7",
+			expectedValue:  2,
+		},
+		{
+			name:           "histogram user -count",
+			metricPrefix:   "cr.node.changefeed.stage.downstream_client_send.latency",
+			labelMatchers:  []string{"scope=\"user\"", "-count"},
+			expectedSource: "7",
+			expectedValue:  3,
+		},
+		{
+			name:           "histogram default -avg",
+			metricPrefix:   "cr.node.changefeed.stage.downstream_client_send.latency",
+			labelMatchers:  []string{"scope=\"default\"", "-avg"},
+			expectedSource: "7",
+			expectedValue:  150,
+		},
+		{
+			name:           "histogram user -avg",
+			metricPrefix:   "cr.node.changefeed.stage.downstream_client_send.latency",
+			labelMatchers:  []string{"scope=\"user\"", "-avg"},
+			expectedSource: "7",
+			expectedValue:  400,
 		},
 	}
 
@@ -1147,7 +1197,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		require.Contains(t, metricName, "changefeed.aggregator_progress{feed_name=\"my-feed!\", job_id=\"test@123\"}")
 	})
 
-	t.Run("counter and gauge support", func(t *testing.T) {
+	t.Run("counter, gauge, histogram support", func(t *testing.T) {
 		reg := metric.NewRegistry()
 
 		// Test with gauge
@@ -1168,6 +1218,25 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		counterChild := counter.AddChild("counter")
 		counterChild.Inc(50)
 
+		// Test with histogram
+		histogram := aggmetric.NewHistogram(
+			metric.HistogramOptions{
+				Metadata: metric.Metadata{
+					Name:     "changefeed.emitted_batch_sizes",
+					Category: metric.Metadata_CHANGEFEEDS,
+				},
+				Duration:     10 * time.Second,
+				BucketConfig: metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePrometheus,
+			},
+			"scope",
+		)
+		reg.AddMetric(histogram)
+		histChild := histogram.AddChild("default")
+		histChild.RecordValue(100)
+		histChild.RecordValue(200)
+		histChild.RecordValue(300)
+
 		recorder := registryRecorder{
 			registry:       reg,
 			format:         nodeTimeSeriesPrefix,
@@ -1178,7 +1247,7 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 		var dest []tspb.TimeSeriesData
 		recorder.recordChangefeedChildMetrics(&dest)
 
-		require.Len(t, dest, 2)
+		require.Len(t, dest, 13) // 1 gauge + 1 counter + 11 histogram metrics
 
 		// Find gauge and counter data points
 		var gaugeValue, counterValue float64
@@ -1192,6 +1261,20 @@ func TestRecordChangefeedChildMetrics(t *testing.T) {
 
 		require.Equal(t, float64(100), gaugeValue)
 		require.Equal(t, float64(50), counterValue)
+
+		// Verify that histogram suffixes are present
+		foundSuffixes := make(map[string]bool)
+		expectedSuffixes := []string{"-count", "-sum", "-p50", "-p75", "-p90", "-p99", "-p99.9", "-p99.99", "-p99.999", "-max", "-avg"}
+
+		for _, data := range dest {
+			for _, suffix := range expectedSuffixes {
+				if strings.Contains(data.Name, suffix) {
+					foundSuffixes[suffix] = true
+				}
+			}
+		}
+
+		require.Equal(t, len(expectedSuffixes), len(foundSuffixes), "Expected to find histogram metric suffixes")
 	})
 }
 
@@ -1200,8 +1283,8 @@ func BenchmarkRecordChangefeedChildMetrics(b *testing.B) {
 	enableChildCollection := true
 
 	// Get metrics from the allowed list and convert to slice for indexing
-	allowedMetricsList := make([]string, 0, len(allowedChangefeedMetrics))
-	for metricName := range allowedChangefeedMetrics {
+	allowedMetricsList := make([]string, 0, len(tsutil.AllowedChildMetrics))
+	for metricName := range tsutil.AllowedChildMetrics {
 		allowedMetricsList = append(allowedMetricsList, metricName)
 	}
 

@@ -1,0 +1,26 @@
+/* setup */
+CREATE TABLE t (i int);
+CREATE SCHEMA sc;
+
+/* test */
+ALTER TABLE t SET (exclude_data_from_backup=true, autovacuum_enabled=false, sql_stats_histogram_buckets_count=64);
+EXPLAIN (DDL) rollback at post-commit stage 1 of 1;
+----
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t SET ('exclude_data_from_backup' = ‹true›, 'autovacuum_enabled' = ‹false›, 'sql_stats_histogram_buckets_count' = ‹64›);
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 2 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC → ABSENT TableStorageParam:{DescID: 104 (t), Name: "exclude_data_from_backup", Value: "true"}
+      │    │    └── PUBLIC → ABSENT TableStorageParam:{DescID: 104 (t), Name: "sql_stats_histogram_buckets_count", Value: "64"}
+      │    └── 4 Mutation operations
+      │         ├── ResetTableStorageParam {"Param":{"Name":"exclude_data_fro...","TableID":104,"Value":"true"}}
+      │         ├── ResetTableStorageParam {"Param":{"Name":"sql_stats_histog...","TableID":104,"Value":"64"}}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

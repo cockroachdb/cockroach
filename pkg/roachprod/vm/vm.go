@@ -6,6 +6,8 @@
 package vm
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -105,7 +107,7 @@ type VM struct {
 	CreatedAt time.Time `json:"created_at"`
 	// If non-empty, indicates that some or all of the data in the VM instance
 	// is not present or otherwise invalid.
-	Errors      []error           `json:"errors"`
+	Errors      []VMError         `json:"errors"`
 	Lifetime    time.Duration     `json:"lifetime"`
 	Preemptible bool              `json:"preemptible"`
 	Labels      map[string]string `json:"labels"`
@@ -114,7 +116,10 @@ type VM struct {
 
 	// PublicDNS is the public DNS name that can be used to connect to the VM.
 	PublicDNS string `json:"public_dns"`
-	// The DNS provider to use for DNS operations performed for this VM.
+	// PublicDNSZone is the public DNS zone that can be used to connect to the VM
+	// (e.g. roachprod.crdb.io).
+	PublicDNSZone string `json:"public_dns_zone"`
+	// The DNS provider to use for DNS operations performed for this VM (e.g. gce).
 	DNSProvider string `json:"dns_provider"`
 
 	// The name of the cloud provider that hosts the VM instance
@@ -171,7 +176,7 @@ func Name(cluster string, idx int) string {
 	return fmt.Sprintf("%s-%0.4d", cluster, idx)
 }
 
-// Error values for VM.Error
+// Error values for VM.Errors
 var (
 	ErrBadNetwork         = errors.New("could not determine network information")
 	ErrBadScheduling      = errors.New("could not determine scheduling information")
@@ -179,6 +184,72 @@ var (
 	ErrInvalidClusterName = errors.New("invalid cluster name")
 	ErrNoExpiration       = errors.New("could not determine expiration")
 )
+
+// VMError wraps an error and implements json.Marshaler/Unmarshaler so that
+// errors can be properly serialized to and from JSON. This is necessary because
+// Go's encoding/json cannot unmarshal into an error interface type.
+type VMError struct {
+	err error
+}
+
+// NewVMError creates a new VMError from an error.
+func NewVMError(err error) VMError {
+	return VMError{err: err}
+}
+
+// Error implements the error interface.
+func (e VMError) Error() string {
+	if e.err == nil {
+		return ""
+	}
+	return e.err.Error()
+}
+
+// Unwrap returns the underlying error for use with errors.Is/As.
+func (e VMError) Unwrap() error {
+	return e.err
+}
+
+// MarshalJSON implements json.Marshaler.
+func (e VMError) MarshalJSON() ([]byte, error) {
+	if e.err == nil {
+		return []byte(`""`), nil
+	}
+	return json.Marshal(e.err.Error())
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+// It handles both the new format (JSON string) and the legacy format (JSON object)
+// that was produced when []error was serialized directly. The legacy format
+// typically produces empty objects `{}` since error types don't have exported fields.
+func (e *VMError) UnmarshalJSON(data []byte) error {
+	// Try to unmarshal as a string first (new format)
+	var msg string
+	if err := json.Unmarshal(data, &msg); err == nil {
+		if msg == "" {
+			e.err = nil
+		} else {
+			// Use Newf with %s format to satisfy the fmtsafe linter which requires
+			// constant format strings.
+			e.err = errors.Newf("%s", msg)
+		}
+		return nil
+	}
+
+	// If that fails, try to unmarshal as an object (legacy format).
+	// The legacy format serialized error interfaces as objects, but since
+	// errors.errorString has no exported fields, they serialize as empty `{}`.
+	// We treat any object as a nil/unknown error to maintain backwards compatibility.
+	var obj map[string]any
+	if err := json.Unmarshal(data, &obj); err == nil {
+		// Legacy format - treat as nil error (the error message was lost in serialization)
+		e.err = nil
+		return nil
+	}
+
+	// If neither worked, return an error
+	return errors.Newf("cannot unmarshal VMError from: %s", string(data))
+}
 
 var regionRE = regexp.MustCompile(`(.*[^-])-?[0-9a-z]$`)
 
@@ -454,6 +525,8 @@ type ListOptions struct {
 	IncludeEmptyClusters bool
 	ComputeEstimatedCost bool
 	IncludeProviders     []string
+	LimitConcurrency     int
+	BailOnProviderError  bool
 }
 
 type PreemptedVM struct {
@@ -489,6 +562,11 @@ type Provider interface {
 	CreateProviderOpts() ProviderOpts
 	CleanSSH(l *logger.Logger) error
 
+	// IsCentralizedProvider returns true if the provider is a centralized provider.
+	// This is used to determine if this provider will pull its state from a centralized
+	// service and trigger actions remotely, or if all will be managed locally.
+	IsCentralizedProvider() bool
+
 	// ConfigSSH takes a list of zones and configures SSH for machines in those
 	// zones for the given provider.
 	ConfigSSH(l *logger.Logger, zones []string) error
@@ -500,7 +578,7 @@ type Provider interface {
 	Extend(l *logger.Logger, vms List, lifetime time.Duration) error
 	// Return the account name associated with the provider
 	FindActiveAccount(l *logger.Logger) (string, error)
-	List(l *logger.Logger, opts ListOptions) (List, error)
+	List(ctx context.Context, l *logger.Logger, opts ListOptions) (List, error)
 	// AddLabels adds (or updates) the given labels to the given VMs.
 	// N.B. If a VM contains a label with the same key, its value will be updated.
 	AddLabels(l *logger.Logger, vms List, labels map[string]string) error
@@ -563,6 +641,9 @@ type Provider interface {
 	// ListLoadBalancers returns a list of load balancer IPs and ports that are currently
 	// routing to services for the given VMs.
 	ListLoadBalancers(l *logger.Logger, vms List) ([]ServiceAddress, error)
+
+	// String returns a human-readable identifier for the provider
+	String() string
 }
 
 // DeleteCluster is an optional capability for a Provider which can
@@ -573,6 +654,9 @@ type DeleteCluster interface {
 
 // Providers contains all known Provider instances. This is initialized by subpackage init() functions.
 var Providers = map[string]Provider{}
+
+// DNSProviders contains all known DNS providers.
+var DNSProviders = map[string]DNSProvider{}
 
 // ProviderOptionsContainer is a container for a collection of provider-specific options.
 type ProviderOptionsContainer map[string]ProviderOpts
@@ -802,4 +886,15 @@ func SanitizeLabelValues(labels map[string]string) map[string]string {
 		sanitized[k] = SanitizeLabel(v)
 	}
 	return sanitized
+}
+
+// GetVMDNSInfo returns the full DNS name, domain, and provider name for a VM
+// given its name and DNS provider.
+func GetVMDNSInfo(
+	ctx context.Context, vmName string, provider DNSProvider,
+) (string, string, string) {
+	if provider == nil {
+		return "", "", ""
+	}
+	return fmt.Sprintf("%s.%s", vmName, provider.Domain()), provider.Domain(), provider.ProviderName()
 }

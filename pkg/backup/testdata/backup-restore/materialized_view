@@ -8,6 +8,7 @@ CREATE DATABASE testdb;
 USE testdb;
 CREATE TABLE testdb.t (a int primary key, b int);
 CREATE MATERIALIZED VIEW testdb.mv AS SELECT a, b FROM testdb.t;
+CREATE MATERIALIZED VIEW testdb.mv2 AS SELECT a, b FROM testdb.t;
 INSERT INTO testdb.t (a, b) VALUES (1, 2);
 ----
 
@@ -22,6 +23,18 @@ INSERT INTO testdb.t (a, b) VALUES (2, 3);
 exec-sql
 REFRESH MATERIALIZED VIEW mv;
 ----
+
+
+# Pause the schema change intentionally to refresh a view on mv2
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec'
+----
+
+
+exec-sql expect-error-regex=(pq: job \d+ was paused before it completed with reason: pause point "schemachanger.before.exec" hit)
+REFRESH MATERIALIZED VIEW mv2;
+----
+regex matches error
 
 exec-sql
 BACKUP INTO 'nodelocal://1/test/'

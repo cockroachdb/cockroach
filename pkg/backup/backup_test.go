@@ -103,6 +103,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -11289,4 +11290,243 @@ func TestBackupRestoreDatabaseRevisionHistory(t *testing.T) {
 		sqlDB.Exec(t, restoreQuery, backupPath)
 		checkDatabase("ephemeral", false)
 	}
+}
+
+func speedUpSpanConfigReconciliation(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+	sqlDB.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '200ms'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`)
+	sqlDB.Exec(t, "SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
+	sqlDB.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'")
+}
+
+// TestStrictLocalityAwareBackupRegionalByRow tests that a strict locality-aware
+// backup.
+func TestStrictLocalityAwareBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "takes too long under duress")
+
+	ctx := context.Background()
+
+	knobs := base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		BackupRestore: &sql.BackupRestoreTestingKnobs{
+			RestoreSpanConfigConformanceRetryPolicy: &retry.Options{
+				InitialBackoff: time.Millisecond,
+				Multiplier:     2,
+				MaxBackoff:     1 * time.Second,
+				MaxDuration:    30 * time.Second,
+			},
+		}}
+
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Increases allocator queue frequency.
+			ScanMaxIdleTime: 10 * time.Millisecond,
+			// The range scanner validation requires the system tenant.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Knobs:             knobs,
+		},
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {Locality: localityFromStr(t, "region=east1"), Knobs: knobs},
+			1: {Locality: localityFromStr(t, "region=east2"), Knobs: knobs},
+			2: {Locality: localityFromStr(t, "region=east3"), Knobs: knobs},
+		}}
+
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, 0 /* numAccounts */, func(tc *testcluster.TestCluster) {}, args)
+	defer cleanupFn()
+
+	speedUpSpanConfigReconciliation(t, sqlDB)
+	sqlDB.Exec(t, `SET CLUSTER SETTING restore.wait_for_span_config_conformance.enabled = true`)
+
+	sqlDB.Exec(t, "CREATE DATABASE test")
+	sqlDB.Exec(t, `ALTER DATABASE test CONFIGURE ZONE USING constraints = '[+region=east3]', num_replicas = 1;`)
+	sqlDB.Exec(t, "CREATE TABLE test.x (id INT PRIMARY KEY, n INT)")
+	sqlDB.Exec(t, "INSERT INTO test.x VALUES (1, 1)")
+
+	// Wait for data constraints to be enforced.
+	east3NodeID := tc.Servers[2].NodeID()
+	checkLocalities := func(targetSpan roachpb.Span, scanner rangedesc.Scanner) func() error {
+		// make pageSize large enough to not affect the test
+		pageSize := 10000
+		init := func() {}
+
+		return func() error {
+			return scanner.Scan(ctx, pageSize, init, targetSpan, func(descriptors ...roachpb.RangeDescriptor) error {
+				for _, desc := range descriptors {
+					for _, replica := range desc.InternalReplicas {
+						if replica.NodeID != east3NodeID {
+							return errors.Newf("found table data located on another node %d, desc %v",
+								replica.NodeID, desc)
+						}
+					}
+				}
+				return nil
+			})
+		}
+	}
+	srv := tc.Servers[0]
+	codec := keys.MakeSQLCodec(srv.RPCContext().TenantID)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		srv.DB(), codec, "test", "x")
+
+	testutils.SucceedsWithin(t,
+		checkLocalities(tableDesc.PrimaryIndexSpan(codec), rangedesc.NewScanner(srv.DB())),
+		time.Second*45*5)
+
+	require.NoError(t, tc.WaitForFullReplication())
+
+	// Clear the range cache to ensure it's updated with all replica placement info.
+	for _, s := range tc.Servers {
+		s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().Clear()
+	}
+
+	// Create locality-aware backup URIs with STRICT option.
+	backupURIs := []string{
+		"nodelocal://1/rbr-backup-1?COCKROACH_LOCALITY=default",
+		fmt.Sprintf("nodelocal://1/rbr-backup-1?COCKROACH_LOCALITY=%s", url.QueryEscape("region=east1")),
+		fmt.Sprintf("nodelocal://1/rbr-backup-2?COCKROACH_LOCALITY=%s", url.QueryEscape("region=east2")),
+		fmt.Sprintf("nodelocal://1/rbr-backup-3?COCKROACH_LOCALITY=%s", url.QueryEscape("region=east3")),
+	}
+
+	// Run a STRICT locality-aware backup.
+	backupQuery := fmt.Sprintf(
+		"BACKUP DATABASE test INTO (%q, %q, %q, %q) WITH STRICT STORAGE LOCALITY",
+		backupURIs[0], backupURIs[1], backupURIs[2], backupURIs[3],
+	)
+	sqlDB.Exec(t, backupQuery)
+
+	// Cannot specify strict storage locality with execution locality
+	sqlDB.ExpectErr(t, "STRICT STORAGE LOCALITY option cannot be specified with the EXECUTION LOCALITY option", fmt.Sprintf(
+		"BACKUP DATABASE test INTO (%q, %q, %q, %q) WITH STRICT STORAGE LOCALITY, EXECUTION LOCALITY = %q",
+		backupURIs[0], backupURIs[1], backupURIs[2], backupURIs[3], backupURIs[3]))
+
+	// Removing east3 URI should fail the STRICT locality-aware backup.
+	badCmd := fmt.Sprintf(
+		"BACKUP DATABASE test INTO (%q,%q) WITH STRICT STORAGE LOCALITY",
+		backupURIs[0], backupURIs[1],
+	)
+	if _, err := sqlDB.DB.ExecContext(ctx, badCmd); err == nil {
+		require.NoError(t, checkLocalities(tableDesc.PrimaryIndexSpan(codec), rangedesc.NewScanner(srv.DB()))())
+		t.Fatal("command succeeded but localities are correct")
+	}
+
+	// Removing the strict flag allows the backup to pass
+	sqlDB.Exec(t, fmt.Sprintf(
+		"BACKUP DATABASE test INTO (%q,%q)",
+		backupURIs[0], backupURIs[1],
+	))
+}
+
+func TestRestoreConformanceFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "takes too long under duress")
+
+	knobs := base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		BackupRestore: &sql.BackupRestoreTestingKnobs{
+			RestoreSpanConfigConformanceRetryPolicy: &retry.Options{
+				InitialBackoff: time.Millisecond,
+				Multiplier:     2,
+				MaxBackoff:     1 * time.Second,
+				MaxDuration:    60 * time.Second,
+			},
+		}}
+
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			// Increases allocator queue frequency.
+			ScanMaxIdleTime: 10 * time.Millisecond,
+			Knobs:           knobs,
+		},
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {Locality: localityFromStr(t, "region=east1"), Knobs: knobs},
+			1: {Locality: localityFromStr(t, "region=east2"), Knobs: knobs},
+			2: {Locality: localityFromStr(t, "region=east3"), Knobs: knobs},
+		}}
+
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, 0 /* numAccounts */, InitManualReplication, args)
+	defer cleanupFn()
+
+	speedUpSpanConfigReconciliation(t, sqlDB)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING restore.wait_for_span_config_conformance.enabled = true`)
+
+	// 3 Node cluster will never conform to an rf of 5.
+	sqlDB.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING num_replicas = 5;`)
+
+	sqlDB.Exec(t, "CREATE DATABASE test")
+	sqlDB.Exec(t, "CREATE TABLE test.x (id INT PRIMARY KEY, n INT)")
+	sqlDB.Exec(t, "INSERT INTO test.x VALUES (1, 1)")
+
+	backupURI := "nodelocal://1/restore_conformance_failure"
+	sqlDB.Exec(t, "BACKUP DATABASE test INTO $1", backupURI)
+
+	// Ensure rf=5 zone config has been applied as the default span config, so
+	// that when restore creates new descriptors, they inherit the rf=5 default.
+	sqlutils.WaitForSpanConfigReconciliation(t, sqlDB)
+
+	// This will take a long time: we give 60 seconds for the span configs to
+	// advance, then restore will chew up 60s to fail to conform.
+	sqlDB.ExpectErr(t, "ranges for restoring objects could not conform to zone configs", fmt.Sprintf(
+		"RESTORE DATABASE test FROM LATEST IN %q with new_db_name = test_restored",
+		backupURI,
+	))
+
+	// After resetting the zone configs, the restore should succeed.
+	sqlDB.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING num_replicas = 3;`)
+	sqlDB.Exec(t, fmt.Sprintf(
+		"RESTORE DATABASE test FROM LATEST IN %q with new_db_name = test_restored",
+		backupURI,
+	))
+}
+
+// TestRestoreConformanceSingleNode tests that a restore on a single-node works
+// with span conformance is enabled and ensures the checkpointing logic works.
+func TestRestoreConformanceSingleNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// To manipulate span config knobs
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, NoInitManipulation, params)
+	defer cleanupFn()
+
+	speedUpSpanConfigReconciliation(t, sqlDB)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING restore.wait_for_span_config_conformance.enabled = true`)
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_publishing_descriptors'")
+
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", localFoo))
+
+	var jobId int
+	sqlDB.QueryRow(t, fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN '%s' with detached, new_db_name=data2", localFoo)).Scan(&jobId)
+	jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(jobId))
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+
+	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", jobId))
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobspb.JobID(jobId))
+
+	// Ensure we only checked for span config conformance once.
+	query := fmt.Sprintf(`SELECT count(*) FROM system.job_message WHERE job_id = %d AND message = 'checking span config conformance'`, jobId)
+	sqlDB.CheckQueryResults(t, query, [][]string{{"1"}})
+
+	query2 := fmt.Sprintf(`SELECT count(*) FROM system.job_message WHERE job_id = %d AND message = 'span config conformance check completed'`, jobId)
+	sqlDB.CheckQueryResults(t, query2, [][]string{{"1"}})
 }

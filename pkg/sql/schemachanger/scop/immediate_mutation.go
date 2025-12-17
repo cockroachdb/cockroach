@@ -1259,3 +1259,23 @@ type SetTableSchemaLocked struct {
 	TableID descpb.ID
 	Locked  bool
 }
+
+// SetTableStorageParam sets a storage parameter on a table.
+type SetTableStorageParam struct {
+	immediateMutationOp
+	Param scpb.TableStorageParam
+}
+
+// ResetTableStorageParam resets a storage parameter on a table to its default.
+type ResetTableStorageParam struct {
+	immediateMutationOp
+	Param scpb.TableStorageParam
+}
+
+// UpsertRowLevelTTL sets the RowLevelTTL on a table descriptor.
+type UpsertRowLevelTTL struct {
+	immediateMutationOp
+	TableID     descpb.ID
+	RowLevelTTL catpb.RowLevelTTL
+	TTLExpr     *scpb.Expression
+}

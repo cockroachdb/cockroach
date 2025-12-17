@@ -611,6 +611,18 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerClampInequalitySelectivity = false
 	notStale()
 
+	// Stale prevent_update_set_column_drop.
+	evalCtx.SessionData().PreventUpdateSetColumnDrop = true
+	stale()
+	evalCtx.SessionData().PreventUpdateSetColumnDrop = false
+	notStale()
+
+	// Stale use_improved_routine_deps_triggers_and_computed_cols.
+	evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols = true
+	stale()
+	evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)

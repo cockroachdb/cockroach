@@ -73,7 +73,7 @@ ALTER TABLE defaultdb.bar ALTER PRIMARY KEY USING COLUMNS (i)
 - [[ColumnName:{DescID: 105, Name: rowid, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: rowid, tableId: 105}
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in243OrLater: true, in261OrLater: true}, tableId: 105, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
+  {columnId: 2, elementCreationMetadata: {in261OrLater: true}, tableId: 105, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
 - [[ColumnHidden:{DescID: 105, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, tableId: 105}
 - [[ColumnNotNull:{DescID: 105, ColumnID: 2, IndexID: 0}, ABSENT], PUBLIC]

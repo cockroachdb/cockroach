@@ -1,6 +1,6 @@
 module github.com/cockroachdb/cockroach
 
-go 1.25.3
+go 1.25.5
 
 // golang.org/x/* packages are maintained and curated by the go project, just
 // without the backwards compatibility promises the standard library, and thus
@@ -88,6 +88,7 @@ require (
 )
 
 require (
+	cloud.google.com/go/compute v1.19.3
 	cloud.google.com/go/profiler v0.3.1
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.11.1
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.7.0
@@ -137,7 +138,7 @@ require (
 	github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20251204205628-eec404107db6
+	github.com/cockroachdb/pebble v0.0.0-20251212011003-97fbda9e3d19
 	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb
@@ -527,7 +528,7 @@ replace github.com/docker/docker => github.com/moby/moby v24.0.6+incompatible
 
 replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.3.3-0.20241216150617-2358cdb156a1
 
-replace storj.io/drpc => github.com/cockroachdb/drpc v0.0.0-20251122104303-6d3d35fe35b3
+replace storj.io/drpc => github.com/cockroachdb/drpc v0.0.0-20251210103241-07114ac1c731
 
 // Note: This forked dependency adds a commit that opens up some
 // private APIs to enable us to make some perf improvements to

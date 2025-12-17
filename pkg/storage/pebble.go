@@ -2506,6 +2506,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // named version, it can be assumed all *nodes* have ratcheted to the pebble
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
+	clusterversion.V26_1: pebble.FormatMarkForCompactionInVersionEdit,
 	clusterversion.V25_4: pebble.FormatV2BlobFiles,
 }
 
@@ -2634,9 +2635,9 @@ func (p *Pebble) BufferedSize() int {
 	return 0
 }
 
-// ConvertFilesToBatchAndCommit implements the Engine interface.
-func (p *Pebble) ConvertFilesToBatchAndCommit(
-	_ context.Context, paths []string, clearedSpans []roachpb.Span,
+// IngestLocalFilesToWriter implements the Engine interface.
+func (p *Pebble) IngestLocalFilesToWriter(
+	_ context.Context, paths []string, clearedSpans []roachpb.Span, writer Writer,
 ) error {
 	files := make([]objstorage.ReadableFile, len(paths))
 	closeFiles := func() {
@@ -2674,11 +2675,8 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 	}
 	defer iter.Close()
 
-	batch := p.NewWriteBatch()
-	for i := range clearedSpans {
-		err :=
-			batch.ClearRawRange(clearedSpans[i].Key, clearedSpans[i].EndKey, true, true)
-		if err != nil {
+	for _, span := range clearedSpans {
+		if err := writer.ClearRawRange(span.Key, span.EndKey, true, true); err != nil {
 			return err
 		}
 	}
@@ -2694,7 +2692,7 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 			if v, err = iter.UnsafeValue(); err != nil {
 				break
 			}
-			if err = batch.PutEngineKey(k, v); err != nil {
+			if err = writer.PutEngineKey(k, v); err != nil {
 				break
 			}
 		}
@@ -2705,7 +2703,7 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 			}
 			rangeKeys := iter.EngineRangeKeys()
 			for i := range rangeKeys {
-				if err = batch.PutEngineRangeKey(rangeBounds.Key, rangeBounds.EndKey, rangeKeys[i].Version,
+				if err = writer.PutEngineRangeKey(rangeBounds.Key, rangeBounds.EndKey, rangeKeys[i].Version,
 					rangeKeys[i].Value); err != nil {
 					break
 				}
@@ -2716,11 +2714,7 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 		}
 		valid, err = iter.NextEngineKey()
 	}
-	if err != nil {
-		batch.Close()
-		return err
-	}
-	return batch.Commit(true)
+	return err
 }
 
 func (p *Pebble) GetDiskUnhealthy() bool {

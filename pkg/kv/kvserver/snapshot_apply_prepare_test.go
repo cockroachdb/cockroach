@@ -12,9 +12,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -84,7 +86,6 @@ func TestPrepareSnapApply(t *testing.T) {
 	}
 
 	swb := snapWriteBuilder{
-		id:       id,
 		todoEng:  eng,
 		sl:       sl,
 		writeSST: writeSST,
@@ -99,14 +100,16 @@ func TestPrepareSnapApply(t *testing.T) {
 		},
 	}
 
-	err := swb.prepareSnapApply(ctx)
-	require.NoError(t, err)
+	require.NoError(t, swb.prepareSnapApply(ctx))
 
+	// The snapshot construction code is spread across MultiSSTWriter and
+	// snapWriteBuilder. We only test the latter here, but for information also
+	// print the replicated spans that MultiSSTWriter generates SSTs for.
+	//
+	// TODO(pav-kv): check a few invariants, such as that all SSTs don't overlap,
+	// including with the replicated spans generated here.
 	for _, span := range rditer.MakeReplicatedKeySpans(swb.desc) {
 		sb.Printf(">> repl: %v\n", span)
-	}
-	for _, span := range swb.cleared {
-		sb.Printf(">> cleared: %v\n", span)
 	}
 	sb.Printf(">> excise: %v\n", swb.desc.KeySpan().AsRawSpanWithNoLocals())
 
@@ -129,5 +132,25 @@ func createRangeData(t *testing.T, eng storage.Engine, desc roachpb.RangeDescrip
 			Key: k, Strength: lock.Intent, TxnUUID: uuid.UUID{},
 		}.ToEngineKey(nil)
 		require.NoError(t, eng.PutEngineKey(ek, nil))
+	}
+
+	// Add some raft state: HardState, TruncatedState and log entries.
+	const truncIndex, numEntries = 10, 3
+	ctx := context.Background()
+
+	sl := logstore.NewStateLoader(desc.RangeID)
+	require.NoError(t, sl.SetRaftTruncatedState(
+		ctx, eng, &kvserverpb.RaftTruncatedState{Index: truncIndex, Term: 5},
+	))
+	require.NoError(t, sl.SetHardState(
+		ctx, eng, raftpb.HardState{Term: 6, Commit: truncIndex + numEntries},
+	))
+	for i := truncIndex + 1; i <= truncIndex+numEntries; i++ {
+		require.NoError(t, storage.MVCCBlindPutProto(
+			ctx, eng,
+			sl.RaftLogKey(kvpb.RaftIndex(i)), hlc.Timestamp{},
+			&raftpb.Entry{Index: uint64(i), Term: 6},
+			storage.MVCCWriteOptions{},
+		))
 	}
 }

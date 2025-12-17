@@ -3,9 +3,20 @@ init
 resetInterval()
 elapsed: 0s
 
-# Let 2s pass, 200ms at a time. Expect a call to allocateTokens
-# per 200ms advance (since advance uses AdvanceInOneTick). Expect
-# a reset every 1s.
+# cpuTimeTokenFiller ticks time & calls cpuTimeTokenAllocator, with some smart
+# logic to handle delayed or dropped ticks, as is discussed in the docs above
+# cpuTimeTokenFiller. So this test ticks simulated time, and then goldens out
+# the calls to the allocator.
+#
+# Let 2s pass, 200ms at a time. Expect a call to allocateTokens per 200ms
+# advance. Expect a reset every 1s. timePerTick is set to 1ms, so if 200ms
+# has passed then (1000ms - 200ms) / 1ms = 800ms / 1ms = 800 ticks are left.
+# So the ticker should call allocateTokens(800) in this case.
+#
+# Note that AdvanceInOneTick is used in these test cases. So this test case
+# is dropping 199 / 200 ticks (timePerTick = 1ms). This tests the drop tick
+# logic, but the primary reason we do it here is to make the test readable.
+# 1000 ticks would be a lot to golden out.
 advance dur=200ms
 ----
 allocateTokens(800)
@@ -26,6 +37,20 @@ advance dur=200ms
 allocateTokens(200)
 elapsed: 800ms
 
+# cpuTimeTokenFiller splits time into 1s intervals. An invariant of the filler
+# is to call allocateTokens(1) every interval. (This is implemented by making
+# the call once 1s passes, unless it was already made during a previous tick.)
+# This invariant is important, as it lets cpuTimeTokenAllocator ensure that it
+# has added refill rates tokens to all the buckets every 1s, as is required to
+# meet the high level requirements of CPU time token AC.
+#
+# After this call to advance, the interval is over. So below we see the call
+# to allocateTokens(1) & then we see that resetInterval is called, to signal
+# the start of a new interval. As part of that interval, allocateToken(100)
+# is called too. (Note that it is because we are simulating dropped ticks (as
+# per the earlier comment) that two calls to allocateTokens are needed during
+# a single tick. In the typical case, by the time the interval ends,
+# allocateTokens(1) would *already* be called.
 advance dur=200ms
 ----
 allocateTokens(1)
@@ -33,6 +58,9 @@ resetInterval()
 allocateTokens(1000)
 elapsed: 1s
 
+# Test another 1s interval with 5 200ms-separated ticks (so there are dropped
+# ticks in between). This is the same as the first case, but we want to check
+# we get the same behavior after a call to resetInterval.
 advance dur=200ms
 ----
 allocateTokens(800)
@@ -60,8 +88,8 @@ resetInterval()
 allocateTokens(1000)
 elapsed: 2s
 
-# Let 1s pass in one tick. Expect allocateTokens(1) to be called.
-# Expect a reset.
+# Let 1s pass in a single tick (so 999 dropped ticks). Expect
+# allocateTokens(1) to be called. Expect a reset.
 advance dur=1000ms
 ----
 allocateTokens(1)
@@ -69,7 +97,7 @@ resetInterval()
 allocateTokens(1000)
 elapsed: 3s
 
-# Let 1s pass in a different tick interval than every 200ms.
+# Let 1s pass with different tick intervals than once every 200ms.
 advance dur=400ms
 ----
 allocateTokens(600)
@@ -92,6 +120,58 @@ resetInterval()
 allocateTokens(1000)
 elapsed: 4s
 
+# Let interval pass with a bunch of "crooked" numbers that one might
+# get from a production clock.
+advance dur=195ms3ns
+----
+allocateTokens(805)
+elapsed: 4.195000003s
+
+advance dur=205ms2ns
+----
+allocateTokens(600)
+elapsed: 4.400000005s
+
+advance dur=205ms10ns
+----
+allocateTokens(395)
+elapsed: 4.605000015s
+
+advance dur=199ms9ns
+----
+allocateTokens(196)
+elapsed: 4.804000024s
+
+# After this call to advance, the 1s interval is over-shot. As expected,
+# allocateTokens(1) is called, and then the interval ends, and a new
+# one starts. Note though that the filler makes no attempt to correct the
+# 54ms error. That is, the new interval starts at t=5.054s, not at second
+# boundary. Thus the token bucket may be under-filled. We are okay with
+# this behavior: If ticks are delayed, the CPU must be overloaded, so
+# handing out a few less tokens is acceptable.
+advance dur=250ms
+----
+allocateTokens(1)
+resetInterval()
+allocateTokens(1000)
+elapsed: 5.054000024s
+
+# Let 3ms pass 1ms at a time using the production tick interval of 1ms.
+advance dur=1ms
+----
+allocateTokens(999)
+elapsed: 5.055000024s
+
+advance dur=1ms
+----
+allocateTokens(998)
+elapsed: 5.056000024s
+
+advance dur=1ms
+----
+allocateTokens(997)
+elapsed: 5.057000024s
+
 stop
 ----
-elapsed: 4s
+elapsed: 5.057000024s

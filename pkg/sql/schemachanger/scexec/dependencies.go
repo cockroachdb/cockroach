@@ -386,6 +386,12 @@ type DescriptorMetadataUpdater interface {
 	// UpdateTTLScheduleLabel updates the schedule_name for the TTL Scheduled Job
 	// of the given table.
 	UpdateTTLScheduleLabel(ctx context.Context, tbl catalog.TableDescriptor) error
+
+	// UpdateTTLScheduleCron updates the cron schedule for a TTL job.
+	UpdateTTLScheduleCron(ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string) error
+
+	// CreateRowLevelTTLSchedule creates a new row-level TTL schedule for a table.
+	CreateRowLevelTTLSchedule(ctx context.Context, tbl catalog.TableDescriptor) error
 }
 
 type TemporarySchemaCreator interface {

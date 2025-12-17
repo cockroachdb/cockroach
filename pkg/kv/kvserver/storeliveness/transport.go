@@ -10,6 +10,7 @@ import (
 	"time"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/taskpacer"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"storj.io/drpc"
@@ -270,10 +272,10 @@ func (t *Transport) smearingSenderLoop(ctx context.Context) {
 			// pick it up in the next iteration of the for loop.
 
 			// Pace the signalling of the channels.
-			pacer.StartTask(timeutil.Now())
+			pacer.StartTask(crtime.NowMono())
 			workLeft := len(toSignal)
 			for workLeft > 0 {
-				todo, by := pacer.Pace(timeutil.Now(), workLeft)
+				todo, by := pacer.Pace(crtime.NowMono(), workLeft)
 
 				// Pop todo items off the toSignal slice and signal them.
 				for i := 0; i < todo && workLeft > 0; i++ {
@@ -287,7 +289,7 @@ func (t *Transport) smearingSenderLoop(ctx context.Context) {
 				}
 
 				if workLeft > 0 {
-					if wait := timeutil.Until(by); wait > 0 {
+					if wait := by.Sub(crtime.NowMono()); wait > 0 {
 						time.Sleep(wait)
 					}
 				}
@@ -566,7 +568,10 @@ func (t *Transport) startProcessNewQueue(
 	err := t.stopper.RunAsyncTask(
 		ctx, "storeliveness.Transport: sending messages",
 		func(ctx context.Context) {
-			pprofutil.Do(ctx, worker, "remote_node_id", toNodeID.String())
+			pprofutil.Do(ctx, worker,
+				workloadid.ProfileTag, workloadid.WORKLOAD_NAME_STORELIVENESS,
+				"remote_node_id", toNodeID.String(),
+			)
 		},
 	)
 	if err != nil {

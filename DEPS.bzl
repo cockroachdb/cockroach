@@ -1834,10 +1834,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "0f60d31c331d228bfacf820de70557ce7ae3d450592b7a5e97c6f56a41cf3dd5",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20251204205628-eec404107db6",
+        sha256 = "46fdb76ff0471743447aef359c737acd7ee4f956bec831e9da80ac94956a408f",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20251212011003-97fbda9e3d19",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20251204205628-eec404107db6.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20251212011003-97fbda9e3d19.zip",
         ],
     )
     go_repository(
@@ -10900,10 +10900,10 @@ def go_deps():
         name = "io_storj_drpc",
         build_file_proto_mode = "disable_global",
         importpath = "storj.io/drpc",
-        sha256 = "3dbe010ef17497f2f3087f6d0ab565c1c469c0fc25ba031159fb107e6969715a",
-        strip_prefix = "github.com/cockroachdb/drpc@v0.0.0-20251122104303-6d3d35fe35b3",
+        sha256 = "f7e8b2536ebc8807b56e62b7a9bd622a5265cb44b8f689473e36f8daf20248a3",
+        strip_prefix = "github.com/cockroachdb/drpc@v0.0.0-20251210103241-07114ac1c731",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/drpc/com_github_cockroachdb_drpc-v0.0.0-20251122104303-6d3d35fe35b3.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/drpc/com_github_cockroachdb_drpc-v0.0.0-20251210103241-07114ac1c731.zip",
         ],
     )
     go_repository(

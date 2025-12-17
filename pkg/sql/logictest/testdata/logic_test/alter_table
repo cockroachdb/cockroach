@@ -1,4 +1,4 @@
-# LogicTest: !local-prepared
+# LogicTest: default-configs 3node-tenant !local-prepared local-dist-merge-backfill-declarative-schema-changer
 # We've seen this file take more than an hour under race.
 skip under race
 
@@ -5039,6 +5039,129 @@ CREATE SEQUENCE public.t1_serial_columns_z_seq1 MINVALUE 1 MAXVALUE 922337203685
 
 statement ok
 RESET create_table_with_schema_locked
+
+# Regression for #158804: dropping constraints with comments should not leave
+# dangling constraint comments in system.comments table.
+subtest drop_constraint_removes_comments
+
+# Setup: Create parent table for foreign key constraints.
+statement ok
+CREATE TABLE t_parent (
+  id INT PRIMARY KEY
+);
+
+# Test table with various constraint types.
+statement ok
+CREATE TABLE t_constraints (
+  a INT,
+  b INT NOT NULL,
+  c INT UNIQUE,
+  d INT,
+  e INT,
+  CONSTRAINT pkey_a PRIMARY KEY (a),
+  CONSTRAINT check_b CHECK (b > 0),
+  CONSTRAINT unique_d UNIQUE WITHOUT INDEX (d),
+  CONSTRAINT fk_e FOREIGN KEY (e) REFERENCES t_parent(id),
+  FAMILY f1 (a, b, c, d, e)
+) WITH (schema_locked = false);
+
+# Add comments on all constraints.
+statement ok
+COMMENT ON CONSTRAINT pkey_a ON t_constraints IS 'primary key comment';
+
+statement ok
+COMMENT ON CONSTRAINT check_b ON t_constraints IS 'check constraint comment';
+
+statement ok
+COMMENT ON CONSTRAINT t_constraints_c_key ON t_constraints IS 'unique with index comment';
+
+statement ok
+COMMENT ON CONSTRAINT unique_d ON t_constraints IS 'unique without index comment';
+
+statement ok
+COMMENT ON CONSTRAINT fk_e ON t_constraints IS 'foreign key comment';
+
+# Verify all comments exist (5 constraint comments).
+query I
+SELECT count(*) FROM system.comments WHERE type = 5 AND object_id = (
+  SELECT table_id FROM crdb_internal.tables
+  WHERE name = 't_constraints' AND schema_name = 'public' AND database_name = current_database()
+);
+----
+5
+
+# Drop check constraint directly - should remove its comment.
+statement ok
+ALTER TABLE t_constraints DROP CONSTRAINT check_b;
+
+query I
+SELECT count(*) FROM system.comments WHERE type = 5 AND object_id = (
+  SELECT table_id FROM crdb_internal.tables
+  WHERE name = 't_constraints' AND schema_name = 'public' AND database_name = current_database()
+);
+----
+4
+
+# Drop foreign key constraint via column drop - should remove its comment.
+statement ok
+ALTER TABLE t_constraints DROP COLUMN e;
+
+query I
+SELECT count(*) FROM system.comments WHERE type = 5 AND object_id = (
+  SELECT table_id FROM crdb_internal.tables
+  WHERE name = 't_constraints' AND schema_name = 'public' AND database_name = current_database()
+);
+----
+3
+
+# Drop unique without index constraint via column drop - should remove its comment.
+statement ok
+ALTER TABLE t_constraints DROP COLUMN d;
+
+query I
+SELECT count(*) FROM system.comments WHERE type = 5 AND object_id = (
+  SELECT table_id FROM crdb_internal.tables
+  WHERE name = 't_constraints' AND schema_name = 'public' AND database_name = current_database()
+);
+----
+2
+
+# Drop unique constraint with index via column drop - should remove its comment.
+statement ok
+ALTER TABLE t_constraints DROP COLUMN c;
+
+query I
+SELECT count(*) FROM system.comments WHERE type = 5 AND object_id = (
+  SELECT table_id FROM crdb_internal.tables
+  WHERE name = 't_constraints' AND schema_name = 'public' AND database_name = current_database()
+);
+----
+1
+
+# Change primary key - should retain old primary key comment and move it to the new PK.
+statement ok
+ALTER TABLE t_constraints ALTER PRIMARY KEY USING COLUMNS (b);
+
+query I
+SELECT count(*) FROM system.comments WHERE type = 5 AND object_id = (
+  SELECT table_id FROM crdb_internal.tables
+  WHERE name = 't_constraints' AND schema_name = 'public' AND database_name = current_database()
+);
+----
+1
+
+query T
+SELECT obj_description(oid) FROM pg_constraint WHERE conrelid = 't_constraints'::regclass AND contype = 'p';
+----
+primary key comment
+
+statement ok
+DROP TABLE t_constraints;
+
+statement ok
+DROP TABLE t_parent;
+
+subtest end
 
 # Regression tests for issue #137326. Add column with IF NOT EXIST.
 subtest add_col_if_not_exists

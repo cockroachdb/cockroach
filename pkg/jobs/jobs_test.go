@@ -1849,6 +1849,19 @@ func TestShowJobs(t *testing.T) {
 				out.fractionCompleted = *maybeFractionCompleted
 			}
 
+			// Confirm SHOW JOBS matches.
+			var shownTyp string
+			var shownTS *apd.Decimal
+			sqlDB.QueryRow(t, `SELECT job_type, resolved_timestamp FROM [SHOW JOBS SELECT $1 WITH RESOLVED TIMESTAMP]`, in.id).Scan(&shownTyp, &shownTS)
+			if shownTyp != out.typ {
+				t.Fatalf("expected SHOW JOBS to return type %s but found %s", in.typ, shownTyp)
+			}
+			if !out.highWater.IsEmpty() {
+				shownHLC, err := hlc.DecimalToHLC(shownTS)
+				require.NoError(t, err)
+				require.True(t, out.highWater.Equal(shownHLC))
+			}
+
 			// details field is not explicitly checked for equality; its value is
 			// confirmed via the job_type field, which is dependent on the details
 			// field.

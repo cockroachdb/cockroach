@@ -26,128 +26,6 @@ import (
 	"github.com/cockroachdb/redact/interfaces"
 )
 
-type MMAMetrics struct {
-	DroppedDueToStateInconsistency  *metric.Counter
-	ExternalFailedToRegister        *metric.Counter
-	ExternaRegisterSuccess          *metric.Counter
-	ExternalReplicaRebalanceSuccess *metric.Counter
-	ExternalReplicaRebalanceFailure *metric.Counter
-	ExternalLeaseTransferSuccess    *metric.Counter
-	ExternalLeaseTransferFailure    *metric.Counter
-	MMAReplicaRebalanceSuccess      *metric.Counter
-	MMAReplicaRebalanceFailure      *metric.Counter
-	MMALeaseTransferSuccess         *metric.Counter
-	MMALeaseTransferFailure         *metric.Counter
-	MMARegisterLeaseSuccess         *metric.Counter
-	MMARegisterRebalanceSuccess     *metric.Counter
-}
-
-func makeMMAMetrics() *MMAMetrics {
-	return &MMAMetrics{
-		DroppedDueToStateInconsistency:  metric.NewCounter(metaDroppedDueToStateInconsistency),
-		ExternalFailedToRegister:        metric.NewCounter(metaExternalFailedToRegister),
-		ExternaRegisterSuccess:          metric.NewCounter(metaExternaRegisterSuccess),
-		MMARegisterLeaseSuccess:         metric.NewCounter(metaMMARegisterLeaseSuccess),
-		MMARegisterRebalanceSuccess:     metric.NewCounter(metaMMARegisterRebalanceSuccess),
-		ExternalReplicaRebalanceSuccess: metric.NewCounter(metaExternalReplicaRebalanceSuccess),
-		ExternalReplicaRebalanceFailure: metric.NewCounter(metaExternalReplicaRebalanceFailure),
-		ExternalLeaseTransferSuccess:    metric.NewCounter(metaExternalLeaseTransferSuccess),
-		ExternalLeaseTransferFailure:    metric.NewCounter(metaExternalLeaseTransferFailure),
-		MMAReplicaRebalanceSuccess:      metric.NewCounter(metaMMAReplicaRebalanceSuccess),
-		MMAReplicaRebalanceFailure:      metric.NewCounter(metaMMAReplicaRebalanceFailure),
-		MMALeaseTransferSuccess:         metric.NewCounter(metaMMALeaseTransferSuccess),
-		MMALeaseTransferFailure:         metric.NewCounter(metaMMALeaseTransferFailure),
-	}
-}
-
-var (
-	metaDroppedDueToStateInconsistency = metric.Metadata{
-		Name:        "mma.dropped",
-		Help:        "Number of operations dropped due to MMA state inconsistency",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaExternalFailedToRegister = metric.Metadata{
-		Name:        "mma.external.dropped",
-		Help:        "Number of external operations that failed to register with MMA",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaExternaRegisterSuccess = metric.Metadata{
-		Name:        "mma.external.success",
-		Help:        "Number of external operations successfully registered with MMA",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaMMARegisterLeaseSuccess = metric.Metadata{
-		Name:        "mma.lease.register.success",
-		Help:        "Number of lease transfers successfully registered with MMA",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaMMARegisterRebalanceSuccess = metric.Metadata{
-		Name:        "mma.rebalance.register.success",
-		Help:        "Number of rebalance operations successfully registered with MMA",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaExternalReplicaRebalanceSuccess = metric.Metadata{
-		Name:        "mma.rebalances.external.success",
-		Help:        "Number of successful external replica rebalance operations",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaExternalLeaseTransferSuccess = metric.Metadata{
-		Name:        "mma.lease.external.success",
-		Help:        "Number of successful external lease transfer operations",
-		Measurement: "Lease Transfers",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaExternalReplicaRebalanceFailure = metric.Metadata{
-		Name:        "mma.rebalances.external.failure",
-		Help:        "Number of failed external replica rebalance operations",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaExternalLeaseTransferFailure = metric.Metadata{
-		Name:        "mma.lease.external.failure",
-		Help:        "Number of failed external lease transfer operations",
-		Measurement: "Lease Transfers",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaMMAReplicaRebalanceSuccess = metric.Metadata{
-		Name:        "mma.rebalance.success",
-		Help:        "Number of successful MMA-initiated replica rebalance operations",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaMMAReplicaRebalanceFailure = metric.Metadata{
-		Name:        "mma.rebalance.failure",
-		Help:        "Number of failed MMA-initiated replica rebalance operations",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaMMALeaseTransferSuccess = metric.Metadata{
-		Name:        "mma.lease.success",
-		Help:        "Number of successful MMA-initiated lease transfer operations",
-		Measurement: "Lease Transfers",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaMMALeaseTransferFailure = metric.Metadata{
-		Name:        "mma.lease.failure",
-		Help:        "Number of failed MMA-initiated lease transfer operations",
-		Measurement: "Lease Transfers",
-		Unit:        metric.Unit_COUNT,
-	}
-)
-
 type allocatorState struct {
 	// Locking.
 	//
@@ -195,9 +73,19 @@ type allocatorState struct {
 	// try-write-lock that could quickly return with failure then we could avoid
 	// this. We could of course build our own queueing mechanism instead of
 	// relying on the queueing in mutex.
-	mmaMetrics *MMAMetrics
+
+	// mrProvider can be nil in tests.
+	mrProvider MetricRegistryForStoreProvider
 	mu         syncutil.Mutex
-	cs         *clusterState
+
+	// TODO(sumeer): counters, passMetricsAndLoggers are also protected by mu.
+	// Nest in struct with mu, when locking story is cleaned up.
+
+	// counters is keyed by local StoreID.
+	counters map[roachpb.StoreID]*counterMetrics
+	// passMetricsAndLoggers is keyed by local StoreID.
+	passMetricsAndLoggers map[roachpb.StoreID]*rebalancingPassMetricsAndLogger
+	cs                    *clusterState
 
 	// Ranges that are under-replicated, over-replicated, don't satisfy
 	// constraints, have low diversity etc. Avoids iterating through all ranges.
@@ -212,15 +100,30 @@ type allocatorState struct {
 
 var _ Allocator = &allocatorState{}
 
-func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState {
+type MetricRegistryForStoreProvider interface {
+	// GetStoreMetricRegistry returns the registry for the store, if it is
+	// known, else nil.
+	GetStoreMetricRegistry(storeID roachpb.StoreID) *metric.Registry
+}
+
+// NewAllocatorState constructs a new implementation of Allocator.
+//
+// The metricRegistryProvider allows the allocator to lazily initialize
+// per-local-store metrics once the StoreID is known. It can be nil in tests,
+// in which case no metrics will be collected.
+func NewAllocatorState(
+	ts timeutil.TimeSource, metricRegistryProvider MetricRegistryForStoreProvider, rand *rand.Rand,
+) *allocatorState {
 	interner := newStringInterner()
 	cs := newClusterState(ts, interner)
 	return &allocatorState{
+		mrProvider:             metricRegistryProvider,
+		counters:               map[roachpb.StoreID]*counterMetrics{},
+		passMetricsAndLoggers:  map[roachpb.StoreID]*rebalancingPassMetricsAndLogger{},
 		cs:                     cs,
 		rangesNeedingAttention: map[roachpb.RangeID]struct{}{},
 		diversityScoringMemo:   newDiversityScoringMemo(),
 		rand:                   rand,
-		mmaMetrics:             makeMMAMetrics(),
 	}
 }
 
@@ -231,8 +134,42 @@ func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState 
 const remoteStoreLeaseSheddingGraceDuration = 2 * time.Minute
 const overloadGracePeriod = time.Minute
 
-func (a *allocatorState) Metrics() *MMAMetrics {
-	return a.mmaMetrics
+func (a *allocatorState) ensureMetricsForLocalStoreLocked(
+	localStoreID roachpb.StoreID,
+) *counterMetrics {
+	m, ok := a.counters[localStoreID]
+	if ok {
+		return m
+	}
+	m = makeCounterMetrics()
+	if a.mrProvider != nil {
+		mr := a.mrProvider.GetStoreMetricRegistry(localStoreID)
+		if mr == nil {
+			panic(errors.AssertionFailedf("no MetricRegistry for store s%v", localStoreID))
+		}
+		mr.AddMetricStruct(*m)
+	}
+	a.counters[localStoreID] = m
+	return m
+}
+
+func (a *allocatorState) preparePassMetricsAndLoggerLocked(
+	localStoreID roachpb.StoreID,
+) *rebalancingPassMetricsAndLogger {
+	m, ok := a.passMetricsAndLoggers[localStoreID]
+	if !ok {
+		m = makeRebalancingPassMetricsAndLogger(localStoreID)
+		a.passMetricsAndLoggers[localStoreID] = m
+		if a.mrProvider != nil {
+			mr := a.mrProvider.GetStoreMetricRegistry(localStoreID)
+			if mr == nil {
+				panic(errors.AssertionFailedf("no MetricRegistry for store s%v", localStoreID))
+			}
+			mr.AddMetricStruct(m.m)
+		}
+	}
+	m.resetForRebalancingPass()
+	return m
 }
 
 func (a *allocatorState) LoadSummaryForAllStores(ctx context.Context) string {
@@ -257,6 +194,38 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 func (a *allocatorState) AdjustPendingChangeDisposition(change ExternalRangeChange, success bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	metrics := a.ensureMetricsForLocalStoreLocked(change.localStoreID)
+	isLeaseTransfer := change.IsPureTransferLease()
+	switch change.origin {
+	case OriginExternal:
+		if isLeaseTransfer {
+			if success {
+				metrics.ExternalLeaseChangeSuccess.Inc(1)
+			} else {
+				metrics.ExternalLeaseChangeFailure.Inc(1)
+			}
+		} else {
+			if success {
+				metrics.ExternalReplicaChangeSuccess.Inc(1)
+			} else {
+				metrics.ExternalReplicaChangeFailure.Inc(1)
+			}
+		}
+	case originMMARebalance:
+		if isLeaseTransfer {
+			if success {
+				metrics.RebalanceLeaseChangeSuccess.Inc(1)
+			} else {
+				metrics.RebalanceLeaseChangeFailure.Inc(1)
+			}
+		} else {
+			if success {
+				metrics.RebalanceReplicaChangeSuccess.Inc(1)
+			} else {
+				metrics.RebalanceReplicaChangeFailure.Inc(1)
+			}
+		}
+	}
 	_, ok := a.cs.ranges[change.RangeID]
 	if !ok {
 		// Range no longer exists. This can happen if the StoreLeaseholderMsg
@@ -300,20 +269,21 @@ func (a *allocatorState) AdjustPendingChangeDisposition(change ExternalRangeChan
 
 // RegisterExternalChange implements the Allocator interface.
 func (a *allocatorState) RegisterExternalChange(
-	change PendingRangeChange,
+	localStoreID roachpb.StoreID, change PendingRangeChange,
 ) (_ ExternalRangeChange, ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	counterMetrics := a.ensureMetricsForLocalStoreLocked(localStoreID)
 	if err := a.cs.preCheckOnApplyReplicaChanges(change); err != nil {
-		a.mmaMetrics.ExternalFailedToRegister.Inc(1)
+		counterMetrics.ExternalRegisterFailure.Inc(1)
 		log.KvDistribution.Infof(context.Background(),
 			"did not register external changes: due to %v", err)
 		return ExternalRangeChange{}, false
 	} else {
-		a.mmaMetrics.ExternaRegisterSuccess.Inc(1)
+		counterMetrics.ExternalRegisterSuccess.Inc(1)
 	}
 	a.cs.addPendingRangeChange(change)
-	return MakeExternalRangeChange(change), true
+	return MakeExternalRangeChange(OriginExternal, localStoreID, change), true
 }
 
 // ComputeChanges implements the Allocator interface.
@@ -325,8 +295,16 @@ func (a *allocatorState) ComputeChanges(
 	if msg.StoreID != opts.LocalStoreID {
 		panic(fmt.Sprintf("ComputeChanges: expected StoreID %d, got %d", opts.LocalStoreID, msg.StoreID))
 	}
-	a.cs.processStoreLeaseholderMsg(ctx, msg, a.mmaMetrics)
-	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now())
+	if opts.DryRun {
+		panic(errors.AssertionFailedf("unsupported dry-run mode"))
+	}
+	counterMetrics := a.ensureMetricsForLocalStoreLocked(opts.LocalStoreID)
+	a.cs.processStoreLeaseholderMsg(ctx, msg, counterMetrics)
+	var passObs *rebalancingPassMetricsAndLogger
+	if opts.PeriodicCall {
+		passObs = a.preparePassMetricsAndLoggerLocked(opts.LocalStoreID)
+	}
+	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now(), passObs)
 	return re.rebalanceStores(ctx, opts.LocalStoreID)
 }
 
@@ -492,6 +470,7 @@ func sortTargetCandidateSetAndPick(
 	overloadedDim LoadDimension,
 	rng *rand.Rand,
 	maxFractionPendingThreshold float64,
+	failLogger func(shedResult),
 ) roachpb.StoreID {
 	var b strings.Builder
 	var formatCandidatesLog = func(b *strings.Builder, candidates []candidateInfo) redact.SafeString {
@@ -551,6 +530,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	if j == 0 {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to disk space util")
+		failLogger(noCandidateDiskSpaceUtil)
 		return 0
 	}
 
@@ -629,6 +609,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	if j == 0 {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to load")
+		failLogger(noCandidateDueToLoad)
 		return 0
 	}
 	lowestLoadSet = cands.candidates[0].sls
@@ -660,6 +641,7 @@ func sortTargetCandidateSetAndPick(
 	// INVARIANT: lowestLoad <= loadThreshold.
 	if lowestLoadSet == loadThreshold && ignoreLevel < ignoreHigherThanLoadThreshold {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
+		failLogger(noCandidateDueToLoad)
 		return 0
 	}
 	// INVARIANT: lowestLoad < loadThreshold ||
@@ -670,6 +652,7 @@ func sortTargetCandidateSetAndPick(
 	if lowestLoadSet >= loadNoChange &&
 		(!discardedCandsHadNoPendingChanges || ignoreLevel == ignoreLoadNoChangeAndHigher) {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
+		failLogger(noCandidateDueToLoad)
 		return 0
 	}
 	if lowestLoadSet != highestLoadSet {
@@ -690,6 +673,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	if j == 0 {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to lease preference")
+		failLogger(noCandidateDueToUnmatchedLeasePreference)
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
@@ -703,6 +687,7 @@ func sortTargetCandidateSetAndPick(
 		lowestOverloadedLoad := cands.candidates[0].dimSummary[overloadedDim]
 		if lowestOverloadedLoad >= loadNoChange {
 			log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to overloadedDim")
+			failLogger(noCandidateDueToLoad)
 			return 0
 		}
 		j = 1
@@ -831,6 +816,7 @@ func (cs *clusterState) computeCandidatesForRange(
 	expr constraintsDisj,
 	storesToExclude storeSet,
 	loadSheddingStore roachpb.StoreID,
+	passObs *rebalancingPassMetricsAndLogger,
 ) (_ candidateSet, sheddingSLS storeLoadSummary) {
 	means := cs.meansMemo.getMeans(expr)
 	if loadSheddingStore > 0 {
@@ -838,6 +824,7 @@ func (cs *clusterState) computeCandidatesForRange(
 		sheddingSLS = cs.meansMemo.getStoreLoadSummary(ctx, means, loadSheddingStore, sheddingSS.loadSeqNum)
 		if sheddingSLS.sls <= loadNoChange && sheddingSLS.nls <= loadNoChange {
 			// In this set of stores, this store no longer looks overloaded.
+			passObs.replicaShed(notOverloaded)
 			return candidateSet{}, sheddingSLS
 		}
 	}
