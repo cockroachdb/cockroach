@@ -191,6 +191,13 @@ optional: z IN (3, 4) AND y IN (10, 20)
 key cols:
   x = a
 
+lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
+x = a AND z IN (3, 4)
+optional: y IN (10, 20)
+----
+lookup expression:
+  ((y IN (10, 20)) AND (z IN (3, 4))) AND (a = x)
+
 lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y, z)
 x = a AND y = b
 optional: z > 10
