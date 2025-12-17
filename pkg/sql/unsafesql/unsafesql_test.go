@@ -299,3 +299,53 @@ func TestPanickingSQLFormat(t *testing.T) {
 		string(result),
 	)
 }
+
+// TestBuiltinAccessingCRDBInternalWithMemoStaleness verifies that builtins
+// which internally access crdb_internal tables work correctly when:
+// 1. allow_unsafe_internals is false (default for external users)
+// 2. The query is executed multiple times (triggering memo staleness checks)
+//
+// This specifically tests the fix in util.go which adds BUILTIN_UNSAFE_ALLOWED
+// to dependencies when inside a builtin context, so that memo staleness
+// checking knows to bypass unsafe internal checks.
+func TestBuiltinAccessingCRDBInternalWithMemoStaleness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	pool := s.SQLConn(t)
+	defer pool.Close()
+
+	runner := sqlutils.MakeSQLRunner(pool)
+
+	// Set allow_unsafe_internals to false - this is the scenario where
+	// external users can't directly access crdb_internal, but builtins should
+	// still work.
+	runner.Exec(t, "SET allow_unsafe_internals = false")
+
+	// Create a UDF so pg_get_functiondef has something to work with.
+	// pg_get_functiondef internally accesses crdb_internal.create_function_statements.
+	runner.Exec(t, "CREATE FUNCTION test_udf_for_memo() RETURNS INT LANGUAGE SQL AS $$ SELECT 42 $$")
+
+	// Get the OID of the function.
+	var funcOID int
+	runner.QueryRow(t, "SELECT oid FROM pg_proc WHERE proname = 'test_udf_for_memo'").Scan(&funcOID)
+
+	// Execute pg_get_functiondef multiple times. The first execution builds
+	// the plan and caches the memo. Subsequent executions trigger memo
+	// staleness checking via CheckDependencies -> checkDataSourcePrivileges.
+	//
+	// Without the fix in util.go, the staleness check would fail because it
+	// doesn't know the crdb_internal access was from a builtin context.
+	for i := 0; i < 3; i++ {
+		var result string
+		err := runner.DB.QueryRowContext(ctx, "SELECT pg_get_functiondef($1::oid)", funcOID).Scan(&result)
+		require.NoError(t, err, "iteration %d: pg_get_functiondef should work even with allow_unsafe_internals=false", i)
+		require.Contains(t, result, "test_udf_for_memo", "iteration %d: expected function definition", i)
+	}
+}
