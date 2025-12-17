@@ -815,8 +815,7 @@ func (r *Replica) newBatchedEngine(g *concurrency.Guard) (storage.Batch, *storag
 		// any write latch would be declared at. But because of this, we don't
 		// assert on access timestamps using spanset.NewBatchAt.
 		spans := g.LatchSpans()
-		spans.AddForbiddenMatcher(overlapsLocalRaftKeys)
-		spans.AddForbiddenMatcher(overlapsStoreLocalKeys)
+		spans.AddForbiddenMatcher(validateIsStateEngineSpan)
 		batch = spanset.NewBatch(batch, spans)
 	}
 

@@ -93,6 +93,8 @@ type SpanSet struct {
 	// shouldn't be accessed (forbidden). This allows for complex pattern matching
 	// like forbidding specific keys across all range IDs without enumerating them
 	// explicitly.
+	// TODO(ibrahim): consider making this a single matcher given that we
+	// currently only use one matcher at a time.
 	forbiddenSpansMatchers []func(TrickySpan) error
 	allowUndeclared        bool
 	allowForbidden         bool
