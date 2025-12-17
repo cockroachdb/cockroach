@@ -2461,10 +2461,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
 
+	s.cfg.MMAllocator.InitMetricsForLocalStore(ctx, s.StoreID(), s.Registry())
 	s.mmaStoreRebalancer.start(ctx, s.stopper)
-	if s.cfg.MMAllocator != nil {
-		s.cfg.MMAllocator.InitMetricsForLocalStore(s.StoreID(), s.Registry())
-	}
 
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)

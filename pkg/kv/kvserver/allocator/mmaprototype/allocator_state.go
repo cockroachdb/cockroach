@@ -76,14 +76,12 @@ type allocatorState struct {
 
 	mu syncutil.Mutex
 
-	// TODO(sumeer): counters, passMetricsAndLoggers are also protected by mu.
-	// Nest in struct with mu, when locking story is cleaned up.
+	// TODO(sumeer): metricsMap is protected by mu. Nest in struct with mu, when
+	// locking story is cleaned up.
 
-	// counters is keyed by local StoreID.
-	counters map[roachpb.StoreID]*counterMetrics
-	// passMetricsAndLoggers is keyed by local StoreID.
-	passMetricsAndLoggers map[roachpb.StoreID]*rebalancingPassMetricsAndLogger
-	cs                    *clusterState
+	// metricsMap is keyed by local StoreID.
+	metricsMap map[roachpb.StoreID]*metricsEtc
+	cs         *clusterState
 
 	// Ranges that are under-replicated, over-replicated, don't satisfy
 	// constraints, have low diversity etc. Avoids iterating through all ranges.
@@ -94,6 +92,8 @@ type allocatorState struct {
 	diversityScoringMemo *diversityScoringMemo
 
 	rand *rand.Rand
+
+	metricsUnregisteredEvery log.EveryN
 }
 
 var _ Allocator = &allocatorState{}
@@ -107,13 +107,19 @@ func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState 
 	interner := newStringInterner()
 	cs := newClusterState(ts, interner)
 	return &allocatorState{
-		counters:               map[roachpb.StoreID]*counterMetrics{},
-		passMetricsAndLoggers:  map[roachpb.StoreID]*rebalancingPassMetricsAndLogger{},
-		cs:                     cs,
-		rangesNeedingAttention: map[roachpb.RangeID]struct{}{},
-		diversityScoringMemo:   newDiversityScoringMemo(),
-		rand:                   rand,
+		metricsMap:               map[roachpb.StoreID]*metricsEtc{},
+		cs:                       cs,
+		rangesNeedingAttention:   map[roachpb.RangeID]struct{}{},
+		diversityScoringMemo:     newDiversityScoringMemo(),
+		rand:                     rand,
+		metricsUnregisteredEvery: log.Every(time.Minute),
 	}
+}
+
+type metricsEtc struct {
+	counters             *counterMetrics
+	passMetricsAndLogger *rebalancingPassMetricsAndLogger
+	metricsRegistered    bool
 }
 
 // These constants are semi-arbitrary.
@@ -124,39 +130,50 @@ const remoteStoreLeaseSheddingGraceDuration = 2 * time.Minute
 const overloadGracePeriod = time.Minute
 
 func (a *allocatorState) InitMetricsForLocalStore(
-	localStoreID roachpb.StoreID, registry *metric.Registry,
+	ctx context.Context, localStoreID roachpb.StoreID, registry *metric.Registry,
 ) {
-	cMetrics := makeCounterMetrics()
-	registry.AddMetricStruct(*cMetrics)
-	a.counters[localStoreID] = cMetrics
-	passMetrics := makeRebalancingPassMetricsAndLogger(localStoreID)
-	registry.AddMetricStruct(passMetrics.m)
-	a.passMetricsAndLoggers[localStoreID] = passMetrics
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	_ = a.ensureMetricsForLocalStoreLocked(ctx, localStoreID, registry)
 }
 
-func (a *allocatorState) getMetricsForLocalStoreLocked(
-	localStoreID roachpb.StoreID,
+func (a *allocatorState) getCounterMetricsForLocalStoreLocked(
+	ctx context.Context, localStoreID roachpb.StoreID,
 ) *counterMetrics {
-	m, ok := a.counters[localStoreID]
-	if ok {
-		return m
-	}
-	// Only for tests that don't call InitMetricsForLocalStore.
-	m = makeCounterMetrics()
-	a.counters[localStoreID] = m
-	return m
+	return a.ensureMetricsForLocalStoreLocked(ctx, localStoreID, nil).counters
 }
 
 func (a *allocatorState) preparePassMetricsAndLoggerLocked(
-	localStoreID roachpb.StoreID,
+	ctx context.Context, localStoreID roachpb.StoreID,
 ) *rebalancingPassMetricsAndLogger {
-	m, ok := a.passMetricsAndLoggers[localStoreID]
+	pm := a.ensureMetricsForLocalStoreLocked(ctx, localStoreID, nil).passMetricsAndLogger
+	pm.resetForRebalancingPass()
+	return pm
+}
+
+// ensureMetricsForLocalStoreLocked ensures that the metrics for localStoreID
+// exist, creating them if necessary. The registry parameter, when non-nil, is
+// used to register the metrics if they have not been registered previously.
+func (a *allocatorState) ensureMetricsForLocalStoreLocked(
+	ctx context.Context, localStoreID roachpb.StoreID, registry *metric.Registry,
+) *metricsEtc {
+	m, ok := a.metricsMap[localStoreID]
 	if !ok {
-		// Only for tests that don't call InitMetricsForLocalStore.
-		m = makeRebalancingPassMetricsAndLogger(localStoreID)
-		a.passMetricsAndLoggers[localStoreID] = m
+		m = &metricsEtc{
+			counters:             makeCounterMetrics(),
+			passMetricsAndLogger: makeRebalancingPassMetricsAndLogger(localStoreID),
+		}
+		a.metricsMap[localStoreID] = m
 	}
-	m.resetForRebalancingPass()
+	if !m.metricsRegistered {
+		if registry != nil {
+			registry.AddMetricStruct(*m.counters)
+			registry.AddMetricStruct(m.passMetricsAndLogger.m)
+			m.metricsRegistered = true
+		} else if a.metricsUnregisteredEvery.ShouldLog() {
+			log.KvDistribution.Warningf(ctx, "metrics for store s%v are unregistered", localStoreID)
+		}
+	}
 	return m
 }
 
@@ -179,10 +196,12 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 }
 
 // AdjustPendingChangeDisposition implements the Allocator interface.
-func (a *allocatorState) AdjustPendingChangeDisposition(change ExternalRangeChange, success bool) {
+func (a *allocatorState) AdjustPendingChangeDisposition(
+	ctx context.Context, change ExternalRangeChange, success bool,
+) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	metrics := a.getMetricsForLocalStoreLocked(change.localStoreID)
+	metrics := a.getCounterMetricsForLocalStoreLocked(ctx, change.localStoreID)
 	isLeaseTransfer := change.IsPureTransferLease()
 	switch change.origin {
 	case OriginExternal:
@@ -257,11 +276,11 @@ func (a *allocatorState) AdjustPendingChangeDisposition(change ExternalRangeChan
 
 // RegisterExternalChange implements the Allocator interface.
 func (a *allocatorState) RegisterExternalChange(
-	localStoreID roachpb.StoreID, change PendingRangeChange,
+	ctx context.Context, localStoreID roachpb.StoreID, change PendingRangeChange,
 ) (_ ExternalRangeChange, ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	counterMetrics := a.getMetricsForLocalStoreLocked(localStoreID)
+	counterMetrics := a.getCounterMetricsForLocalStoreLocked(ctx, localStoreID)
 	if err := a.cs.preCheckOnApplyReplicaChanges(change); err != nil {
 		counterMetrics.ExternalRegisterFailure.Inc(1)
 		log.KvDistribution.Infof(context.Background(),
@@ -286,11 +305,11 @@ func (a *allocatorState) ComputeChanges(
 	if opts.DryRun {
 		panic(errors.AssertionFailedf("unsupported dry-run mode"))
 	}
-	counterMetrics := a.getMetricsForLocalStoreLocked(opts.LocalStoreID)
+	counterMetrics := a.getCounterMetricsForLocalStoreLocked(ctx, opts.LocalStoreID)
 	a.cs.processStoreLeaseholderMsg(ctx, msg, counterMetrics)
 	var passObs *rebalancingPassMetricsAndLogger
 	if opts.PeriodicCall {
-		passObs = a.preparePassMetricsAndLoggerLocked(opts.LocalStoreID)
+		passObs = a.preparePassMetricsAndLoggerLocked(ctx, opts.LocalStoreID)
 	}
 	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now(), passObs)
 	return re.rebalanceStores(ctx, opts.LocalStoreID)
