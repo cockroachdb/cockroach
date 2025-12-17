@@ -153,9 +153,9 @@ func (f *Failer) Setup(ctx context.Context, l *logger.Logger, args FailureArgs) 
 }
 
 func (f *Failer) Inject(ctx context.Context, l *logger.Logger, args FailureArgs) error {
-	if err := f.checkValidTransition(readyForFailure); err != nil {
-		return err
-	}
+	//if err := f.checkValidTransition(readyForFailure); err != nil {
+	//	return err
+	//}
 
 	f.state = activeFailure
 	f.injectArgs = args

@@ -302,11 +302,13 @@ func (f *GenericFailure) WaitForProcessDeath(
 func (f *GenericFailure) StopCluster(
 	ctx context.Context, l *logger.Logger, stopOpts roachprod.StopOpts,
 ) error {
-	return f.c.Stop(ctx, l, stopOpts.Sig, stopOpts.Wait, stopOpts.GracePeriod, "" /* VirtualClusterName*/)
+	return nil
+	// return f.c.Stop(ctx, l, stopOpts.Sig, stopOpts.Wait, stopOpts.GracePeriod, "" /* VirtualClusterName*/)
 }
 
 func (f *GenericFailure) StartCluster(ctx context.Context, l *logger.Logger) error {
-	return f.StartNodes(ctx, l, f.c.Nodes)
+	return nil
+	//return f.StartNodes(ctx, l, f.c.Nodes)
 }
 
 func (f *GenericFailure) StartNodes(

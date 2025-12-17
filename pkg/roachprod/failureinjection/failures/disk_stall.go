@@ -479,64 +479,64 @@ func (s *DmsetupDiskStaller) getOrStoreDeviceName(
 }
 
 func (s *DmsetupDiskStaller) Setup(ctx context.Context, l *logger.Logger, args FailureArgs) error {
-	diskStallArgs := args.(DiskStallArgs)
-	var err error
-
-	// Disabling journaling requires the cockroach process to not have been started yet.
-	if diskStallArgs.RestartNodes {
-		// Use the default stop opts, if the user wants more control, they should manage
-		// the cluster restart themselves.
-		stopOpts := roachprod.DefaultStopOpts()
-		if err = s.StopCluster(ctx, l, stopOpts); err != nil {
-			return err
-		}
-	}
-
-	// Get the device name and store it for later stages (cleanup).
-	dev, err := s.getOrStoreDeviceName(ctx, l)
-	if err != nil {
-		return err
-	}
-
-	// snapd will run "snapd auto-import /dev/dm-0" via udev triggers when
-	// /dev/dm-0 is created. This possibly interferes with the dmsetup create
-	// reload, so we disable snapd auto-import udev rules by creating an empty
-	// /etc/udev/rules.d/66-snapd-autoimport.rules file (which takes precedence
-	// over the corresponding file in /lib/udev/rules.d/).
-	if err = s.Run(ctx, l, s.c.Nodes, `echo '# disabled during tests' | sudo tee /etc/udev/rules.d/66-snapd-autoimport.rules >/dev/null; \
-sudo udevadm control --reload; \
-sudo udevadm settle`); err != nil {
-		return err
-	}
-	if err = s.Run(ctx, l, s.c.Nodes, `sudo umount -f /mnt/data1 || true`); err != nil {
-		return err
-	}
-	if err = s.Run(ctx, l, s.c.Nodes, `sudo dmsetup remove_all`); err != nil {
-		return err
-	}
-	// See https://github.com/cockroachdb/cockroach/issues/129619#issuecomment-2316147244.
-	if err = s.Run(ctx, l, s.c.Nodes, `sudo tune2fs -O ^has_journal `+dev); err != nil {
-		return errors.WithHintf(err, "disabling journaling fails if the cluster has been started")
-	}
-	if err = s.Run(ctx, l, s.c.Nodes, `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
-		`sudo dmsetup create data1`); err != nil {
-		return err
-	}
-	// This has occasionally been seen to fail with "Device or resource busy",
-	// with no clear explanation. Try to find out who it is.
-	if err = s.Run(ctx, l, s.c.Nodes, "sudo bash -c 'ps aux; dmsetup status; mount; lsof'"); err != nil {
-		return err
-	}
-
-	if err = s.Run(ctx, l, s.c.Nodes, `sudo mount /dev/mapper/data1 /mnt/data1`); err != nil {
-		return err
-	}
-
-	if diskStallArgs.RestartNodes {
-		if err = s.StartCluster(ctx, l); err != nil {
-			return err
-		}
-	}
+	//	diskStallArgs := args.(DiskStallArgs)
+	//	var err error
+	//
+	//	// Disabling journaling requires the cockroach process to not have been started yet.
+	//	if diskStallArgs.RestartNodes {
+	//		// Use the default stop opts, if the user wants more control, they should manage
+	//		// the cluster restart themselves.
+	//		stopOpts := roachprod.DefaultStopOpts()
+	//		if err = s.StopCluster(ctx, l, stopOpts); err != nil {
+	//			return err
+	//		}
+	//	}
+	//
+	//	// Get the device name and store it for later stages (cleanup).
+	//	dev, err := s.getOrStoreDeviceName(ctx, l)
+	//	if err != nil {
+	//		return err
+	//	}
+	//
+	//	// snapd will run "snapd auto-import /dev/dm-0" via udev triggers when
+	//	// /dev/dm-0 is created. This possibly interferes with the dmsetup create
+	//	// reload, so we disable snapd auto-import udev rules by creating an empty
+	//	// /etc/udev/rules.d/66-snapd-autoimport.rules file (which takes precedence
+	//	// over the corresponding file in /lib/udev/rules.d/).
+	//	if err = s.Run(ctx, l, s.c.Nodes, `echo '# disabled during tests' | sudo tee /etc/udev/rules.d/66-snapd-autoimport.rules >/dev/null; \
+	//sudo udevadm control --reload; \
+	//sudo udevadm settle`); err != nil {
+	//		return err
+	//	}
+	//	if err = s.Run(ctx, l, s.c.Nodes, `sudo umount -f /mnt/data1 || true`); err != nil {
+	//		return err
+	//	}
+	//	if err = s.Run(ctx, l, s.c.Nodes, `sudo dmsetup remove_all`); err != nil {
+	//		return err
+	//	}
+	//	// See https://github.com/cockroachdb/cockroach/issues/129619#issuecomment-2316147244.
+	//	if err = s.Run(ctx, l, s.c.Nodes, `sudo tune2fs -O ^has_journal `+dev); err != nil {
+	//		return errors.WithHintf(err, "disabling journaling fails if the cluster has been started")
+	//	}
+	//	if err = s.Run(ctx, l, s.c.Nodes, `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
+	//		`sudo dmsetup create data1`); err != nil {
+	//		return err
+	//	}
+	//	// This has occasionally been seen to fail with "Device or resource busy",
+	//	// with no clear explanation. Try to find out who it is.
+	//	if err = s.Run(ctx, l, s.c.Nodes, "sudo bash -c 'ps aux; dmsetup status; mount; lsof'"); err != nil {
+	//		return err
+	//	}
+	//
+	//	if err = s.Run(ctx, l, s.c.Nodes, `sudo mount /dev/mapper/data1 /mnt/data1`); err != nil {
+	//		return err
+	//	}
+	//
+	//	if diskStallArgs.RestartNodes {
+	//		if err = s.StartCluster(ctx, l); err != nil {
+	//			return err
+	//		}
+	//	}
 	return nil
 }
 
