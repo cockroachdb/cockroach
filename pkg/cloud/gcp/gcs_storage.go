@@ -343,11 +343,18 @@ func (g *gcsStorage) List(
 	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
 ) error {
 	dest := cloud.JoinPathPreservingTrailingSlash(g.prefix, prefix)
+	afterKey := opts.CanonicalAfterKey(g.prefix)
 	ctx, sp := tracing.ChildSpan(ctx, "gcs.List")
 	defer sp.Finish()
 	sp.SetTag("path", attribute.StringValue(dest))
 
-	it := g.bucket.Objects(ctx, &gcs.Query{Prefix: dest, Delimiter: opts.Delimiter})
+	it := g.bucket.Objects(
+		ctx,
+		&gcs.Query{
+			Prefix:    dest,
+			Delimiter: opts.Delimiter,
+		},
+	)
 	for {
 		attrs, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -359,6 +366,9 @@ func (g *gcsStorage) List(
 		name := attrs.Name
 		if name == "" {
 			name = attrs.Prefix
+		}
+		if name <= afterKey {
+			continue
 		}
 		if err := fn(strings.TrimPrefix(name, dest)); err != nil {
 			return err

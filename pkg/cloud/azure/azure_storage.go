@@ -472,6 +472,7 @@ func (s *azureStorage) List(
 
 	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
 	sp.SetTag("path", attribute.StringValue(dest))
+	afterKey := opts.CanonicalAfterKey(s.prefix)
 
 	pager := s.container.NewListBlobsHierarchyPager(opts.Delimiter, &container.ListBlobsHierarchyOptions{Prefix: &dest})
 	for pager.More() {
@@ -481,11 +482,17 @@ func (s *azureStorage) List(
 			return errors.Wrap(err, "unable to list files for specified blob")
 		}
 		for _, blob := range response.Segment.BlobPrefixes {
+			if *blob.Name <= afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*blob.Name, dest)); err != nil {
 				return err
 			}
 		}
 		for _, blob := range response.Segment.BlobItems {
+			if *blob.Name <= afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*blob.Name, dest)); err != nil {
 				return err
 			}

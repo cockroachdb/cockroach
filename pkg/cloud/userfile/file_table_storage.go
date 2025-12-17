@@ -250,6 +250,7 @@ func (f *fileTableStorage) List(
 	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
 ) error {
 	dest := cloud.JoinPathPreservingTrailingSlash(f.prefix, prefix)
+	afterKey := opts.CanonicalAfterKey(f.prefix)
 
 	res, err := f.fs.ListFiles(ctx, dest)
 	if err != nil {
@@ -269,6 +270,12 @@ func (f *fileTableStorage) List(
 			}
 			prevPrefix = f
 		}
+
+		// afterKey is a full key so we must compare against the full file key.
+		if dest+f <= afterKey {
+			continue
+		}
+
 		if err := fn(f); err != nil {
 			return err
 		}
