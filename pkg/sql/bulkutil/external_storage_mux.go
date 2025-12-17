@@ -103,7 +103,7 @@ func (c *ExternalStorageMux) ListFiles(
 	if err != nil {
 		return err
 	}
-	return store.List(ctx, prefix, "" /* delimiter */, fn)
+	return store.List(ctx, prefix, cloud.ListOptions{}, fn)
 }
 
 // splitURI splits a URI into its prefix (scheme + host) and path components.

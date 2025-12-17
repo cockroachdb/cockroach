@@ -179,6 +179,7 @@ func (l *localFileStorage) List(
 	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
 ) error {
 	dest := cloud.JoinPathPreservingTrailingSlash(l.base, prefix)
+	afterKey := opts.CanonicalAfterKey(l.base)
 
 	res, err := l.blobClient.List(ctx, dest)
 	if err != nil {
@@ -199,6 +200,12 @@ func (l *localFileStorage) List(
 			}
 			prevPrefix = f
 		}
+
+		// afterKey is a full key so we must compare against the full file key.
+		if dest+f <= afterKey {
+			continue
+		}
+
 		if err := fn(f); err != nil {
 			return err
 		}

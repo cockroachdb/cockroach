@@ -950,6 +950,7 @@ func (s *s3Storage) List(
 
 	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
 	sp.SetTag("path", attribute.StringValue(dest))
+	afterKey := opts.CanonicalAfterKey(s.prefix)
 
 	client, err := s.getClient(ctx)
 	if err != nil {
@@ -962,9 +963,18 @@ func (s *s3Storage) List(
 	// s3 clones which return s3://<prefix>/ as the first result of listing
 	// s3://<prefix> to exclude that result.
 	if envutil.EnvOrDefaultBool("COCKROACH_S3_LIST_WITH_PREFIX_SLASH_MARKER", false) {
-		s3Input = &s3.ListObjectsV2Input{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(opts.Delimiter), StartAfter: aws.String(dest + "/")}
+		s3Input = &s3.ListObjectsV2Input{
+			Bucket:     s.bucket,
+			Prefix:     aws.String(dest),
+			Delimiter:  nilIfEmpty(opts.Delimiter),
+			StartAfter: aws.String(dest + "/"),
+		}
 	} else {
-		s3Input = &s3.ListObjectsV2Input{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(opts.Delimiter)}
+		s3Input = &s3.ListObjectsV2Input{
+			Bucket:    s.bucket,
+			Prefix:    aws.String(dest),
+			Delimiter: nilIfEmpty(opts.Delimiter),
+		}
 	}
 
 	paginator := s3.NewListObjectsV2Paginator(client, s3Input)
@@ -982,12 +992,18 @@ func (s *s3Storage) List(
 		}
 
 		for _, x := range page.CommonPrefixes {
+			if *x.Prefix <= afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*x.Prefix, dest)); err != nil {
 				return err
 			}
 		}
 
 		for _, fileObject := range page.Contents {
+			if *fileObject.Key <= afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*fileObject.Key, dest)); err != nil {
 				return err
 			}
