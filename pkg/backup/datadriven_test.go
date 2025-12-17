@@ -156,6 +156,7 @@ type clusterCfg struct {
 	testingKnobCfg    string
 	defaultTestTenant base.DefaultTestTenantOptions
 	randomTxnRetries  bool
+	notSlim           bool
 }
 
 func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
@@ -232,6 +233,9 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 		// function returned by StartBackupRestoreTestCluster fails anyway since
 		// we stop the first node before executing cleanupFns.
 		backuptestutils.WithSkipInvalidDescriptorCheck(),
+	}
+	if cfg.notSlim {
+		opts = append(opts, backuptestutils.WithNonSlimServers())
 	}
 	if cfg.iodir == "" {
 		opts = append(opts, backuptestutils.WithBank(cfg.splits))
@@ -619,6 +623,10 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			if d.HasArg("disable-tenant") {
 				defaultTestTenant = base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798)
 			}
+			notSlim := false
+			if d.HasArg("not-slim") {
+				notSlim = true
+			}
 
 			// TODO(ssd): Once TestServer starts up reliably enough:
 			// randomTxnRetries := !d.HasArg("disable-txn-retries")
@@ -635,6 +643,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				testingKnobCfg:    testingKnobCfg,
 				defaultTestTenant: defaultTestTenant,
 				randomTxnRetries:  randomTxnRetries,
+				notSlim:           notSlim,
 			}
 			err := ds.addCluster(t, cfg)
 			if err != nil {
