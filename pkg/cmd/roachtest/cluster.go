@@ -1414,7 +1414,7 @@ func (c *clusterImpl) FetchDebugZip(
 			//
 			// Ignore the files in the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
-			excludeFiles := "*.log,*.pprof"
+			excludeFiles := "*.log"
 
 			cmd := roachtestutil.NewCommand("%s debug zip", test.DefaultCockroachPath).
 				Option("include-range-info").
