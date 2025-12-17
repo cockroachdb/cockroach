@@ -64,8 +64,11 @@ var DiskBandwidthForSnapshotIngest = settings.RegisterBoolSetting(
 )
 
 var DiskBandwidthForSnapshotIngestMinRateEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly, "kvadmission.store.snapshot_ingest_bandwidth_control.min_rate.enabled",
-	"TODO", true, settings.WithPublic)
+	settings.SystemOnly,
+	"kvadmission.store.snapshot_ingest_bandwidth_control.min_rate.enabled",
+	"if set to true, snapshot ingests will be admitted at a minimum rate",
+	true,
+	settings.WithPublic)
 
 var snapshotWaitDur = metric.Metadata{
 	Name:        "admission.wait_durations.snapshot_ingest",
@@ -75,7 +78,8 @@ var snapshotWaitDur = metric.Metadata{
 }
 
 type SnapshotMetrics struct {
-	WaitDurations metric.IHistogram
+	WaitDurations         metric.IHistogram
+	AdmittedSnapshotBytes metric.Counter
 }
 
 func makeSnapshotQueueMetrics(registry *metric.Registry) *SnapshotMetrics {
@@ -85,6 +89,12 @@ func makeSnapshotQueueMetrics(registry *metric.Registry) *SnapshotMetrics {
 			Metadata:     snapshotWaitDur,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,
+		}),
+		AdmittedSnapshotBytes: *metric.NewCounter(metric.Metadata{
+			Name:        "admission.admitted_snapshot_bytes",
+			Help:        "Number of bytes admitted for snapshot ingests",
+			Measurement: "Bytes",
+			Unit:        metric.Unit_BYTES,
 		}),
 	}
 	registry.AddMetricStruct(m)
@@ -166,16 +176,19 @@ func (s *SnapshotQueue) close() {
 	}
 }
 
-// TODO: add a counter metric in bytes, that is updated by every successful
-// Admit. This allows an observer visibility into the incoming snapshot rate
-// and that the min rate logic is working as expected.
-
 // Admit is called whenever a snapshot ingest request needs to update the number
 // of byte tokens it is using. Note that it accepts negative values, in which
 // case it will return the tokens back to the granter.
 func (s *SnapshotQueue) Admit(
 	ctx context.Context, count int64, minRate int64, timerForMinRate timeutil.TimerI,
-) error {
+) (err error) {
+	defer func() {
+		if err == nil {
+			// todo(angela): if count is negative, is it correct to be decrementing the counter?
+			s.metrics.AdmittedSnapshotBytes.Inc(count)
+		}
+	}()
+
 	if count == 0 {
 		return nil
 	}
