@@ -32,13 +32,14 @@ import (
 )
 
 type compareConfig struct {
-	slackConfig   slackConfig
-	influxConfig  influxConfig
-	experimentDir string
-	baselineDir   string
-	sheetDesc     string
-	threshold     float64
-	postIssues    bool
+	slackConfig    slackConfig
+	influxConfig   influxConfig
+	experimentDir  string
+	baselineDir    string
+	versionContext string
+	generateSheet  bool
+	threshold      float64
+	postIssues     bool
 }
 
 type slackConfig struct {
@@ -98,7 +99,7 @@ func newCompare(config compareConfig) (*compare, error) {
 
 	ctx := context.Background()
 	var service *google.Service
-	if config.sheetDesc != "" {
+	if config.generateSheet {
 		service, err = google.New(ctx)
 		if err != nil {
 			return nil, err
@@ -214,8 +215,8 @@ func (c *compare) publishToGoogleSheets(
 	sheets := make(map[string]string)
 	for pkgGroup, comparisonResults := range comparisonResultsMap {
 		sheetName := pkgGroup + "/..."
-		if c.sheetDesc != "" {
-			sheetName = fmt.Sprintf("%s (%s)", sheetName, c.sheetDesc)
+		if c.versionContext != "" {
+			sheetName = fmt.Sprintf("%s (%s)", sheetName, c.versionContext)
 		}
 
 		url, err := c.service.CreateSheet(c.ctx, sheetName, comparisonResults, "baseline", "experiment")
@@ -311,7 +312,7 @@ func (c *compare) postToSlack(
 
 	s := newSlackClient(c.slackConfig.user, c.slackConfig.channel, c.slackConfig.token)
 	return s.Post(
-		slack.MsgOptionText(fmt.Sprintf("Microbenchmark comparison summary: %s", c.sheetDesc), false),
+		slack.MsgOptionText(fmt.Sprintf("Microbenchmark comparison summary: %s", c.versionContext), false),
 		slack.MsgOptionAttachments(attachments...),
 	)
 }
@@ -376,7 +377,7 @@ func (c *compare) maybePostRegressionIssues(comparisonResultsMap model.Compariso
 		}
 
 		if len(regressions) > 0 {
-			formatter, req := createRegressionPostRequest(pkgName, regressions, c.sheetDesc)
+			formatter, req := createRegressionPostRequest(pkgName, regressions, c.versionContext)
 			err := postBenchmarkIssue(c.ctx, l, formatter, req)
 			if err != nil {
 				log.Printf("failed to post regression issue for package %s: %v", pkgName, err)

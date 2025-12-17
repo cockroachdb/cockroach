@@ -168,7 +168,7 @@ func makeCompareCommand() *cobra.Command {
 		// Errors are propagated at the end to fail the CI job if any operation failed.
 		var errs []error
 		var links map[string]string
-		if c.sheetDesc != "" {
+		if c.generateSheet {
 			links, err = c.publishToGoogleSheets(comparisonResult)
 			if err != nil {
 				log.Printf("Failed to publish to Google Sheets: %v", err)
@@ -222,7 +222,8 @@ func makeCompareCommand() *cobra.Command {
 		Args: cobra.ExactArgs(2),
 		RunE: runCmdFunc,
 	}
-	cmd.Flags().StringVar(&config.sheetDesc, "sheet-desc", config.sheetDesc, "set a sheet description to publish the results to Google Sheets")
+	cmd.Flags().StringVar(&config.versionContext, "version-context", config.versionContext, "version comparison context (e.g., 'v25.3.4 (1cddb3a2) -> refs/heads/master (ddeef368)') used for sheets, Slack, and GitHub issues")
+	cmd.Flags().BoolVar(&config.generateSheet, "generate-sheet", config.generateSheet, "publish the comparison results to Google Sheets")
 	cmd.Flags().StringVar(&config.slackConfig.token, "slack-token", config.slackConfig.token, "pass a slack token to post the results to a slack channel")
 	cmd.Flags().StringVar(&config.slackConfig.user, "slack-user", config.slackConfig.user, "slack user to post the results as")
 	cmd.Flags().StringVar(&config.slackConfig.channel, "slack-channel", config.slackConfig.channel, "slack channel to post the results to")
