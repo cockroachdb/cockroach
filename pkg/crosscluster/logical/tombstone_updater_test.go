@@ -7,18 +7,24 @@ package logical
 
 import (
 	"context"
+	"math/rand"
+	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/ldrrandgen"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -114,4 +120,82 @@ func TestTombstoneUpdaterSetsOriginID(t *testing.T) {
 	destRunner.CheckQueryResults(t, "SELECT pk, payload FROM tab", [][]string{
 		{"1", "42"},
 	})
+}
+
+func TestTombstoneUpdaterRandomTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, testClusterBaseClusterArgs, 1, 1)
+	defer server.Stopper().Stop(ctx)
+
+	runner := runners[0]
+	dbName := dbNames[0]
+
+	rng, _ := randutil.NewPseudoRand()
+	tableName := "rand_table"
+
+	stmt := tree.SerializeForDisplay(ldrrandgen.GenerateLDRTable(ctx, rng, tableName, true))
+	t.Logf("Creating table with schema: %s", stmt)
+	runner.Exec(t, stmt)
+
+	desc := desctestutils.TestingGetMutableExistingTableDescriptor(
+		s.DB(), s.Codec(), dbName, tableName)
+
+	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
+	tu := newTombstoneUpdater(s.Codec(), s.DB(), s.LeaseManager().(*lease.Manager), desc.GetID(), sd, s.ClusterSettings())
+	defer tu.ReleaseLeases(ctx)
+
+	columnSchemas := getColumnSchema(desc)
+	cols := make([]catalog.Column, len(columnSchemas))
+	for i, cs := range columnSchemas {
+		cols[i] = cs.column
+	}
+
+	config := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	session := newInternalSession(t, s)
+	defer session.Close(ctx)
+
+	writer, err := newSQLRowWriter(ctx, desc, session)
+	require.NoError(t, err)
+
+	for i := 0; i < 10; i++ {
+		row := generateRandomRow(rng, cols)
+		before := s.Clock().Now()
+		after := s.Clock().Now()
+
+		err := sql.DescsTxn(ctx, &config, func(
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
+		) error {
+			_, err := tu.updateTombstone(ctx, txn, after, row)
+			return err
+		})
+		require.NoError(t, err)
+
+		stats, err := tu.updateTombstone(ctx, nil, before, row)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), stats.kvWriteTooOld, "expected 1 kv put for tombstone update")
+
+		// Use the table writer to try and insert the previous row using the
+		// `before` timestamp. This should fail with LWW error because the
+		// tombstone was written at a later timestamp. It may fail with integer out
+		// of range error if the table has computed columns and the random datums
+		// add to produces something out of range.
+		err = writer.InsertRow(ctx, before, row)
+		require.Error(t, err)
+		if !(strings.Contains(err.Error(), "integer out of range") || isLwwLoser(err)) {
+			t.Fatalf("expected LWW or integer out of range error, got: %v", err)
+		}
+	}
+}
+
+func generateRandomRow(rng *rand.Rand, cols []catalog.Column) []tree.Datum {
+	row := make([]tree.Datum, 0, len(cols))
+	for _, col := range cols {
+		datum := randgen.RandDatum(rng, col.GetType(), col.IsNullable())
+		row = append(row, datum)
+	}
+	return row
 }

@@ -219,6 +219,11 @@ func (rd *Deleter) DeleteRow(
 		if pm.IgnoreForDel.Contains(int(index.GetID())) {
 			continue
 		}
+		if oth.PreviousWasDeleted {
+			// If we are updating a tombstone, then there are no secondary index entries
+			// that need to be deleted.
+			continue
+		}
 
 		// We want to include empty k/v pairs because we want to delete all k/v's for this row.
 		entries, err := rowenc.EncodeSecondaryIndex(
