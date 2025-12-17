@@ -154,6 +154,48 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	// Decommisioning nudger metrics.
+	metaDecommissioningNudgerEnqueue = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.enqueue",
+		Help:        "Number of enqueued enqueues of a range for decommissioning by the decommissioning nudger. Note: This metric tracks when the nudger attempts to enqueue, but the replica might not end up being enqueued by the priority queue due to various filtering or failure conditions.",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDecommissioningNudgerEnqueueSuccess = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.enqueue.success",
+		Help:        "Number of ranges that were successfully enqueued by the decommisioning nudger",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.enqueue.success",
+	}
+	metaDecommissioningNudgerEnqueueFailure = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.enqueue.failure",
+		Help:        "Number of ranges that failed to enqueue at the replicate queue",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.enqueue.failure",
+	}
+	metaDecommissioningNudgerProcessSuccess = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.process.success",
+		Help:        "Number of ranges enqueued by the decommissioning nudger that were successfully processed by the replicate queue",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.process.success",
+	}
+	metaDecommissioningNudgerProcessFailure = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.process.failure",
+		Help:        "Number of ranges enqueued by the decommissioning nudger that failed to process by the replicate queue",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "ranges.decommissioning.nudger.process.failure",
+	}
+	metaDecommissioningNudgerNotLeaseholderOrInvalidLease = metric.Metadata{
+		Name:        "ranges.decommissioning.nudger.not_leaseholder_or_invalid_lease",
+		Help:        "Number of ranges that were not the leaseholder or had an invalid lease at the decommissioning nudger",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// Lease request metrics.
 	metaLeaseRequestSuccessCount = metric.Metadata{
 		Name:        "leases.success",
@@ -1990,6 +2032,33 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaReplicateQueueEnqueueAdd = metric.Metadata{
+		Name:        "queue.replicate.enqueue.add",
+		Help:        "Number of replicas successfully added to the replicate queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueEnqueueFailedPrecondition = metric.Metadata{
+		Name: "queue.replicate.enqueue.failedprecondition",
+		Help: "Number of replicas that failed the precondition checks and were therefore not added to the replicate " +
+			"queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueEnqueueNoAction = metric.Metadata{
+		Name: "queue.replicate.enqueue.noaction",
+		Help: "Number of replicas for which ShouldQueue determined no action was needed and were therefore not " +
+			"added to the replicate queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueEnqueueUnexpectedError = metric.Metadata{
+		Name: "queue.replicate.enqueue.unexpectederror",
+		Help: "Number of replicas that were expected to be enqueued (ShouldQueue returned true or the caller decided to " +
+			"add to the replicate queue directly), but failed to be enqueued due to unexpected errors",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaLeaseQueueSuccesses = metric.Metadata{
 		Name:        "queue.lease.process.success",
 		Help:        "Number of replicas successfully processed by the replica lease queue",
@@ -2035,6 +2104,12 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 	metaReplicateQueuePending = metric.Metadata{
 		Name:        "queue.replicate.pending",
 		Help:        "Number of pending replicas in the replicate queue",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicateQueueFull = metric.Metadata{
+		Name:        "queue.replicate.queue_full",
+		Help:        "Number of times a replica was dropped from the queue due to queue fullness",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -2657,6 +2732,14 @@ type StoreMetrics struct {
 	OverReplicatedRangeCount  *metric.Gauge
 	DecommissioningRangeCount *metric.Gauge
 
+	// Decommissioning nudger metrics.
+	DecommissioningNudgerEnqueue                      *metric.Counter
+	DecommissioningNudgerEnqueueSuccess               *metric.Counter
+	DecommissioningNudgerEnqueueFailure               *metric.Counter
+	DecommissioningNudgerProcessSuccess               *metric.Counter
+	DecommissioningNudgerProcessFailure               *metric.Counter
+	DecommissioningNudgerNotLeaseholderOrInvalidLease *metric.Counter
+
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
 	// lease).
@@ -2934,9 +3017,14 @@ type StoreMetrics struct {
 	ReplicaGCQueueFailures                    *metric.Counter
 	ReplicaGCQueuePending                     *metric.Gauge
 	ReplicaGCQueueProcessingNanos             *metric.Counter
+	ReplicateQueueEnqueueAdd                  *metric.Counter
+	ReplicateQueueEnqueueFailedPrecondition   *metric.Counter
+	ReplicateQueueEnqueueNoAction             *metric.Counter
+	ReplicateQueueEnqueueUnexpectedError      *metric.Counter
 	ReplicateQueueSuccesses                   *metric.Counter
 	ReplicateQueueFailures                    *metric.Counter
 	ReplicateQueuePending                     *metric.Gauge
+	ReplicateQueueFull                        *metric.Counter
 	ReplicateQueueProcessingNanos             *metric.Counter
 	ReplicateQueuePurgatory                   *metric.Gauge
 	SplitQueueSuccesses                       *metric.Counter
@@ -3365,6 +3453,14 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		OverReplicatedRangeCount:  metric.NewGauge(metaOverReplicatedRangeCount),
 		DecommissioningRangeCount: metric.NewGauge(metaDecommissioningRangeCount),
 
+		// Decommissioning nuder metrics.
+		DecommissioningNudgerEnqueue:                      metric.NewCounter(metaDecommissioningNudgerEnqueue),
+		DecommissioningNudgerEnqueueSuccess:               metric.NewCounter(metaDecommissioningNudgerEnqueueSuccess),
+		DecommissioningNudgerEnqueueFailure:               metric.NewCounter(metaDecommissioningNudgerEnqueueFailure),
+		DecommissioningNudgerProcessSuccess:               metric.NewCounter(metaDecommissioningNudgerProcessSuccess),
+		DecommissioningNudgerProcessFailure:               metric.NewCounter(metaDecommissioningNudgerProcessFailure),
+		DecommissioningNudgerNotLeaseholderOrInvalidLease: metric.NewCounter(metaDecommissioningNudgerNotLeaseholderOrInvalidLease),
+
 		// Lease request metrics.
 		LeaseRequestSuccessCount: metric.NewCounter(metaLeaseRequestSuccessCount),
 		LeaseRequestErrorCount:   metric.NewCounter(metaLeaseRequestErrorCount),
@@ -3708,9 +3804,14 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaGCQueueFailures:                    metric.NewCounter(metaReplicaGCQueueFailures),
 		ReplicaGCQueuePending:                     metric.NewGauge(metaReplicaGCQueuePending),
 		ReplicaGCQueueProcessingNanos:             metric.NewCounter(metaReplicaGCQueueProcessingNanos),
+		ReplicateQueueEnqueueAdd:                  metric.NewCounter(metaReplicateQueueEnqueueAdd),
+		ReplicateQueueEnqueueFailedPrecondition:   metric.NewCounter(metaReplicateQueueEnqueueFailedPrecondition),
+		ReplicateQueueEnqueueNoAction:             metric.NewCounter(metaReplicateQueueEnqueueNoAction),
+		ReplicateQueueEnqueueUnexpectedError:      metric.NewCounter(metaReplicateQueueEnqueueUnexpectedError),
 		ReplicateQueueSuccesses:                   metric.NewCounter(metaReplicateQueueSuccesses),
 		ReplicateQueueFailures:                    metric.NewCounter(metaReplicateQueueFailures),
 		ReplicateQueuePending:                     metric.NewGauge(metaReplicateQueuePending),
+		ReplicateQueueFull:                        metric.NewCounter(metaReplicateQueueFull),
 		ReplicateQueueProcessingNanos:             metric.NewCounter(metaReplicateQueueProcessingNanos),
 		ReplicateQueuePurgatory:                   metric.NewGauge(metaReplicateQueuePurgatory),
 		SplitQueueSuccesses:                       metric.NewCounter(metaSplitQueueSuccesses),
