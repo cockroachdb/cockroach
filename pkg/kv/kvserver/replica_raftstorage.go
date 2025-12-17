@@ -916,11 +916,28 @@ func overlapsUnreplicatedRangeIDLocalKeys(span spanset.TrickySpan) error {
 		return errors.NewAssertionErrorWithWrappedErrf(err,
 			"could not decode range ID for span: %s", span)
 	}
-	if spanset.Overlaps(roachpb.Span{
-		Key:    keys.MakeRangeIDUnreplicatedPrefix(rangeID),
-		EndKey: keys.MakeRangeIDUnreplicatedPrefix(rangeID).PrefixEnd(),
-	}, span) {
-		return errors.Errorf("overlapping an unreplicated rangeID span")
+
+	// RangeTombstoneKey and RaftReplicaIDKey are considered part of the
+	// StateEngine keys. We need to exclude them from the check below.
+	rangeLocalIDSpans := []roachpb.Span{
+		{
+			Key:    keys.MakeRangeIDUnreplicatedPrefix(rangeID),
+			EndKey: keys.RangeTombstoneKey(rangeID),
+		},
+		{
+			Key:    keys.RangeTombstoneKey(rangeID).Next(),
+			EndKey: keys.RaftReplicaIDKey(rangeID),
+		},
+		{
+			Key:    keys.RaftReplicaIDKey(rangeID).Next(),
+			EndKey: keys.MakeRangeIDUnreplicatedPrefix(rangeID).PrefixEnd(),
+		},
+	}
+
+	for _, rangeLocalIDSpan := range rangeLocalIDSpans {
+		if spanset.Overlaps(rangeLocalIDSpan, span) {
+			return errors.Errorf("overlapping an unreplicated rangeID span")
+		}
 	}
 
 	return nil

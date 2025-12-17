@@ -15235,15 +15235,15 @@ func TestOverlapsUnreplicatedRangeIDLocalKeys(t *testing.T) {
 		// Point spans not overlapping with unreplicated local RangeID spans.
 		{span: s(roachpb.KeyMin, nil)},
 		{span: s(keys.LocalRangeIDPrefix.AsRawKey().Prevish(1), nil)},
-		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1).Prevish(1), nil)},
 		{span: s(keys.RangeForceFlushKey(1), nil)},
+		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1).Prevish(1), nil)},
+		{span: s(keys.RangeTombstoneKey(1), nil)},
 		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd(), nil)},
 		{span: s(keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd(), nil)},
 		{span: s(roachpb.KeyMax, nil)},
 
 		// Point spans overlapping with unreplicated local RangeID spans.
 		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1), nil), notOk: true},
-		{span: s(keys.RangeTombstoneKey(1), nil), notOk: true},
 		{span: s(keys.RaftTruncatedStateKey(1), nil), notOk: true},
 		{span: s(keys.RaftTruncatedStateKey(2), nil), notOk: true},
 		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd().Prevish(1), nil), notOk: true},
@@ -15252,12 +15252,12 @@ func TestOverlapsUnreplicatedRangeIDLocalKeys(t *testing.T) {
 		{span: s(nil, keys.LocalRangeIDPrefix.AsRawKey())},
 		{span: s(nil, keys.MakeRangeIDUnreplicatedPrefix(1))},
 		{span: s(nil, keys.RangeForceFlushKey(1))},
+		{span: s(keys.RangeTombstoneKey(1), nil)},
 		{span: s(nil, keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd().Next())},
 		{span: s(nil, keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd().Next())},
 
 		// Tricky spans overlapping with unreplicated local RangeID spans.
 		{span: s(nil, keys.MakeRangeIDUnreplicatedPrefix(1).Next()), notOk: true},
-		{span: s(nil, keys.RangeTombstoneKey(1).Next()), notOk: true},
 		{span: s(nil, keys.RaftTruncatedStateKey(1).Next()), notOk: true},
 		{span: s(nil, keys.RaftTruncatedStateKey(2).Next()), notOk: true},
 		{span: s(nil, keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd()), notOk: true},
