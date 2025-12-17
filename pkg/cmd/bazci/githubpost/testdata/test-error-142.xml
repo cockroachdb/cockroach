@@ -1,0 +1,8 @@
+<testsuites>
+<testsuite errors="1" failures="0" skipped="0" tests="1" time="0"
+           name="pkg/sql/opt/testutils/testcat/testcat_test_/testcat_test" timestamp="">
+  <testcase name="pkg/sql/opt/testutils/testcat/testcat_test_/testcat_test" time="60">
+    <error message="exited with error code 142" />
+  </testcase>
+</testsuite>
+</testsuites>
