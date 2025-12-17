@@ -3,6 +3,9 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+// Pacer's internals rely on our fork of Go. See pacer_nofork.go.
+//go:build bazel
+
 package admission
 
 import (
