@@ -4228,7 +4228,7 @@ func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeL
 			break
 		}
 		_, err = rq.processOneChange(
-			ctx, r, desc, conf, true /* scatter */, false, /* dryRun */
+			ctx, r, desc, conf, true /* scatter */, false /* dryRun */, -1, /*priorityAtEnqueue*/
 		)
 		if err != nil {
 			// If the error is expected to be transient, retry processing the range.
