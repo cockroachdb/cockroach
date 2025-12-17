@@ -177,12 +177,7 @@ func inspectPlanHook(
 
 	switch inspectStmt.Typ {
 	case tree.InspectTable, tree.InspectDatabase:
-		if !p.ExtendedEvalContext().SessionData().EnableInspectCommand {
-			return nil, nil, false, errors.WithHint(
-				pgerror.Newf(pgcode.ExperimentalFeature, "INSPECT is an experimental feature and is disabled by default"),
-				"To enable, run SET enable_inspect_command = true;",
-			)
-		}
+		// valid types.
 	default:
 		return nil, nil, false, errors.AssertionFailedf("unexpected INSPECT type received, got: %v", inspectStmt.Typ)
 	}
