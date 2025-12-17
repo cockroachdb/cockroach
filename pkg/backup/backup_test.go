@@ -11292,6 +11292,14 @@ func TestBackupRestoreDatabaseRevisionHistory(t *testing.T) {
 	}
 }
 
+func speedUpSpanConfigReconciliation(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+	sqlDB.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '200ms'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`)
+	sqlDB.Exec(t, "SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
+	sqlDB.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'")
+}
+
 // TestStrictLocalityAwareBackupRegionalByRow tests that a strict locality-aware
 // backup.
 func TestStrictLocalityAwareBackup(t *testing.T) {
@@ -11302,21 +11310,36 @@ func TestStrictLocalityAwareBackup(t *testing.T) {
 
 	ctx := context.Background()
 
+	knobs := base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		BackupRestore: &sql.BackupRestoreTestingKnobs{
+			RestoreSpanConfigConformanceRetryPolicy: &retry.Options{
+				InitialBackoff: time.Millisecond,
+				Multiplier:     2,
+				MaxBackoff:     1 * time.Second,
+				MaxDuration:    30 * time.Second,
+			},
+		}}
+
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			// Increases allocator queue frequency.
+			ScanMaxIdleTime: 10 * time.Millisecond,
 			// The range scanner validation requires the system tenant.
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Knobs:             knobs,
 		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {Locality: localityFromStr(t, "region=east1")},
-			1: {Locality: localityFromStr(t, "region=east2")},
-			2: {Locality: localityFromStr(t, "region=east3")},
+			0: {Locality: localityFromStr(t, "region=east1"), Knobs: knobs},
+			1: {Locality: localityFromStr(t, "region=east2"), Knobs: knobs},
+			2: {Locality: localityFromStr(t, "region=east3"), Knobs: knobs},
 		}}
 
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, 0 /* numAccounts */, func(tc *testcluster.TestCluster) {}, args)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
+	speedUpSpanConfigReconciliation(t, sqlDB)
+	sqlDB.Exec(t, `SET CLUSTER SETTING restore.wait_for_span_config_conformance.enabled = true`)
 
 	sqlDB.Exec(t, "CREATE DATABASE test")
 	sqlDB.Exec(t, `ALTER DATABASE test CONFIGURE ZONE USING constraints = '[+region=east3]', num_replicas = 1;`)
@@ -11395,4 +11418,115 @@ func TestStrictLocalityAwareBackup(t *testing.T) {
 		"BACKUP DATABASE test INTO (%q,%q)",
 		backupURIs[0], backupURIs[1],
 	))
+}
+
+func TestRestoreConformanceFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "takes too long under duress")
+
+	knobs := base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		BackupRestore: &sql.BackupRestoreTestingKnobs{
+			RestoreSpanConfigConformanceRetryPolicy: &retry.Options{
+				InitialBackoff: time.Millisecond,
+				Multiplier:     2,
+				MaxBackoff:     1 * time.Second,
+				MaxDuration:    60 * time.Second,
+			},
+		}}
+
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			// Increases allocator queue frequency.
+			ScanMaxIdleTime: 10 * time.Millisecond,
+			Knobs:           knobs,
+		},
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {Locality: localityFromStr(t, "region=east1"), Knobs: knobs},
+			1: {Locality: localityFromStr(t, "region=east2"), Knobs: knobs},
+			2: {Locality: localityFromStr(t, "region=east3"), Knobs: knobs},
+		}}
+
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, 0 /* numAccounts */, InitManualReplication, args)
+	defer cleanupFn()
+
+	speedUpSpanConfigReconciliation(t, sqlDB)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING restore.wait_for_span_config_conformance.enabled = true`)
+
+	// 3 Node cluster will never conform to an rf of 5.
+	sqlDB.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING num_replicas = 5;`)
+
+	sqlDB.Exec(t, "CREATE DATABASE test")
+	sqlDB.Exec(t, "CREATE TABLE test.x (id INT PRIMARY KEY, n INT)")
+	sqlDB.Exec(t, "INSERT INTO test.x VALUES (1, 1)")
+
+	backupURI := "nodelocal://1/restore_conformance_failure"
+	sqlDB.Exec(t, "BACKUP DATABASE test INTO $1", backupURI)
+
+	// Ensure rf=5 zone config has been applied as the default span config, so
+	// that when restore creates new descriptors, they inherit the rf=5 default.
+	sqlutils.WaitForSpanConfigReconciliation(t, sqlDB)
+
+	// This will take a long time: we give 60 seconds for the span configs to
+	// advance, then restore will chew up 60s to fail to conform.
+	sqlDB.ExpectErr(t, "ranges for restoring objects could not conform to zone configs", fmt.Sprintf(
+		"RESTORE DATABASE test FROM LATEST IN %q with new_db_name = test_restored",
+		backupURI,
+	))
+
+	// After resetting the zone configs, the restore should succeed.
+	sqlDB.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING num_replicas = 3;`)
+	sqlDB.Exec(t, fmt.Sprintf(
+		"RESTORE DATABASE test FROM LATEST IN %q with new_db_name = test_restored",
+		backupURI,
+	))
+}
+
+// TestRestoreConformanceSingleNode tests that a restore on a single-node works
+// with span conformance is enabled and ensures the checkpointing logic works.
+func TestRestoreConformanceSingleNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// To manipulate span config knobs
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, NoInitManipulation, params)
+	defer cleanupFn()
+
+	speedUpSpanConfigReconciliation(t, sqlDB)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING restore.wait_for_span_config_conformance.enabled = true`)
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_publishing_descriptors'")
+
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", localFoo))
+
+	var jobId int
+	sqlDB.QueryRow(t, fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN '%s' with detached, new_db_name=data2", localFoo)).Scan(&jobId)
+	jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(jobId))
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+
+	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", jobId))
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobspb.JobID(jobId))
+
+	// Ensure we only checked for span config conformance once.
+	query := fmt.Sprintf(`SELECT count(*) FROM system.job_message WHERE job_id = %d AND message = 'checking span config conformance'`, jobId)
+	sqlDB.CheckQueryResults(t, query, [][]string{{"1"}})
+
+	query2 := fmt.Sprintf(`SELECT count(*) FROM system.job_message WHERE job_id = %d AND message = 'span config conformance check completed'`, jobId)
+	sqlDB.CheckQueryResults(t, query2, [][]string{{"1"}})
 }
