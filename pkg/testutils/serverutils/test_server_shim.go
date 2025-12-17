@@ -636,15 +636,15 @@ func ShouldEnableDRPC(
 	var logSuffix string
 
 	if option == base.TestDRPCUnset {
-		if globalDefaultDRPCOptionOverride.isSet {
+		if envOption := parseDefaultTestDRPCOptionFromEnv(); envOption != base.TestDRPCUnset {
+			option = envOption
+			logSuffix = " (via COCKROACH_TEST_DRPC environment variable)"
+		} else if globalDefaultDRPCOptionOverride.isSet {
 			option = globalDefaultDRPCOptionOverride.value
 			logSuffix = " (via override by TestingGlobalDRPCOption)"
 		} else if factoryDefaultDRPC != nil {
 			option = *factoryDefaultDRPC
 			logSuffix = " (via testserver factory defaults)"
-		} else if envOption := parseDefaultTestDRPCOptionFromEnv(); envOption != base.TestDRPCUnset {
-			option = envOption
-			logSuffix = " (via COCKROACH_TEST_DRPC environment variable)"
 		} else {
 			return base.TestDRPCUnset
 		}
