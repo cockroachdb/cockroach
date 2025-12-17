@@ -13,6 +13,7 @@ import (
 	roachprodConfig "github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -161,23 +162,23 @@ func makeCompareCommand() *cobra.Command {
 
 		comparisonResult := c.createComparisons(metricMaps, "baseline", "experiment")
 
-		if c.influxConfig.token != "" {
-			err = c.pushToInfluxDB(comparisonResult)
-			if err != nil {
-				return err
-			}
-		}
-
+		// Collect errors from all operations but continue attempting each one.
+		// This ensures we attempt to post to Slack, create
+		// GitHub issues, and push to InfluxDB regardless of individual failures.
+		// Errors are propagated at the end to fail the CI job if any operation failed.
+		var errs []error
 		var links map[string]string
 		if c.sheetDesc != "" {
 			links, err = c.publishToGoogleSheets(comparisonResult)
 			if err != nil {
-				return err
+				log.Printf("Failed to publish to Google Sheets: %v", err)
+				errs = append(errs, err)
 			}
 			if c.slackConfig.token != "" {
 				err = c.postToSlack(links, comparisonResult)
 				if err != nil {
-					return err
+					log.Printf("Failed to post to Slack: %v", err)
+					errs = append(errs, err)
 				}
 			}
 		}
@@ -186,13 +187,27 @@ func makeCompareCommand() *cobra.Command {
 			err = c.maybePostRegressionIssues(comparisonResult)
 			if err != nil {
 				log.Printf("Failed to post GitHub issues: %v", err)
-				return err
+				errs = append(errs, err)
+			}
+		}
+
+		if c.influxConfig.token != "" {
+			err = c.pushToInfluxDB(comparisonResult)
+			if err != nil {
+				log.Printf("Failed to push to InfluxDB: %v", err)
+				errs = append(errs, err)
 			}
 		}
 
 		// if the threshold is set, we want to compare and fail the job in case of perf regressions
 		if c.threshold != skipComparison {
-			return c.compareUsingThreshold(comparisonResult)
+			if err := c.compareUsingThreshold(comparisonResult); err != nil {
+				errs = append(errs, err)
+			}
+		}
+
+		if len(errs) > 0 {
+			return errors.Join(errs...)
 		}
 		return nil
 	}
