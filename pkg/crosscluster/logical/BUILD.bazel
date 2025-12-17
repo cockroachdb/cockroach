@@ -154,6 +154,7 @@ go_test(
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/storageccl",
         "//pkg/crosscluster",
+        "//pkg/crosscluster/ldrrandgen",
         "//pkg/crosscluster/replicationtestutils",
         "//pkg/crosscluster/streamclient",
         "//pkg/crosscluster/streamclient/randclient",
