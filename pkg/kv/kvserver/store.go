@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -382,6 +383,9 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		KVFlowWaitForEvalConfig:      rac2.NewWaitForEvalConfig(st),
 		KVFlowEvalWaitMetrics:        rac2.NewEvalWaitMetrics(),
 		KVFlowRangeControllerMetrics: rac2.NewRangeControllerMetrics(),
+
+		MMAllocator: mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
+			rand.New(rand.NewSource(timeutil.Now().UnixNano()))),
 	}
 	sc.TestingKnobs.TenantRateKnobs.Authorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
 
@@ -2461,10 +2465,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
 
+	s.cfg.MMAllocator.InitMetricsForLocalStore(ctx, s.StoreID(), s.Registry())
 	s.mmaStoreRebalancer.start(ctx, s.stopper)
-	if s.cfg.MMAllocator != nil {
-		s.cfg.MMAllocator.InitMetricsForLocalStore(s.StoreID(), s.Registry())
-	}
 
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
