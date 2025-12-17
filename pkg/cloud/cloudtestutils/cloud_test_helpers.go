@@ -473,7 +473,7 @@ func CheckListFilesCanonical(t *testing.T, info StoreInfo, canonical string) {
 			t.Run(tc.name, func(t *testing.T) {
 				s := storeFromURI(ctx, t, tc.uri, clientFactory, info.User, info.DB, testSettings)
 				var actual []string
-				require.NoError(t, s.List(ctx, tc.prefix, tc.delimiter, func(f string) error {
+				require.NoError(t, s.List(ctx, tc.prefix, cloud.ListOptions{Delimiter: tc.delimiter}, func(f string) error {
 					actual = append(actual, f)
 					return nil
 				}))
@@ -584,7 +584,7 @@ func CheckNoPermission(t *testing.T, info StoreInfo) {
 	}
 	defer s.Close()
 
-	err = s.List(ctx, "", "", nil)
+	err = s.List(ctx, "", cloud.ListOptions{}, nil)
 	if err == nil {
 		t.Fatalf("expected error when listing %s with no permissions", info.URI)
 	}

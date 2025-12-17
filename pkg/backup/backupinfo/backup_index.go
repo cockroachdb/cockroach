@@ -136,7 +136,7 @@ func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string
 	if err := store.List(
 		ctx,
 		indexDir,
-		"/",
+		cloud.ListOptions{Delimiter: "/"},
 		func(file string) error {
 			indexExists = true
 			// Because we delimit on `/` and the index subdir does not contain a
@@ -170,7 +170,7 @@ func ListIndexes(
 	if err := store.List(
 		ctx,
 		indexDir+"/",
-		"",
+		cloud.ListOptions{},
 		func(file string) error {
 			indexBasenames = append(indexBasenames, path.Base(file))
 			return nil
@@ -329,7 +329,7 @@ func ListSubdirsFromIndex(ctx context.Context, store cloud.ExternalStorage) ([]s
 	if err := store.List(
 		ctx,
 		backupbase.BackupIndexDirectoryPath,
-		"/",
+		cloud.ListOptions{Delimiter: "/"},
 		func(indexSubdir string) error {
 			indexSubdir = strings.TrimSuffix(indexSubdir, "/")
 			subdir, err := convertIndexSubdirToSubdir(indexSubdir)

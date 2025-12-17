@@ -77,11 +77,9 @@ type ExternalStorage interface {
 	// List enumerates files within the supplied prefix, calling the passed
 	// function with the name of each file found, relative to the external storage
 	// destination's configured prefix. If the passed function returns a non-nil
-	// error, iteration is stopped it is returned. If delimiter is non-empty
-	// names which have the same prefix, prior to the delimiter, are grouped
-	// into a single result which is that prefix. The order that results are
+	// error, iteration is stopped, and it is returned. The order that results are
 	// passed to the callback is undefined.
-	List(ctx context.Context, prefix, delimiter string, fn ListingFn) error
+	List(ctx context.Context, prefix string, opts ListOptions, fn ListingFn) error
 
 	// Delete removes the named file from the store. If the file does not exist,
 	// Delete returns nil.
@@ -89,6 +87,12 @@ type ExternalStorage interface {
 
 	// Size returns the length of the named file in bytes.
 	Size(ctx context.Context, basename string) (int64, error)
+}
+
+type ListOptions struct {
+	// If a Delimiter is set, names which have the same prefix, prior to the
+	// Delimiter, are grouped into a single result which is that prefix.
+	Delimiter string
 }
 
 type ReadOptions struct {
