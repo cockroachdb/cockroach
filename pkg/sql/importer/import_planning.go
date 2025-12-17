@@ -396,7 +396,7 @@ func importPlanHook(
 						return err
 					}
 					var expandedFiles []string
-					if err := s.List(ctx, "", "", func(s string) error {
+					if err := s.List(ctx, "", cloud.ListOptions{}, func(s string) error {
 						ok, err := path.Match(pattern, s)
 						if ok {
 							uri.Path = prefix + s

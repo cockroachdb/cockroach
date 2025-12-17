@@ -48,7 +48,7 @@ func CheckExternalStorageConnection(
 
 	// List the sentinel file.
 	var foundFile bool
-	if err := es.List(ctx, "", "", func(s string) error {
+	if err := es.List(ctx, "", cloud.ListOptions{}, func(s string) error {
 		paths := strings.Split(s, "/")
 		s = paths[len(paths)-1]
 		if match := strings.HasPrefix(s, markerFile); match {

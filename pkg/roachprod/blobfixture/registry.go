@@ -217,23 +217,26 @@ func (r *Registry) listFixtures(
 	}
 	var result []FixtureMetadata
 
-	err := r.storage.List(ctx, kindPrefix /*delimiter*/, "", func(found string) error {
-		json, err := r.maybeReadFile(ctx, path.Join(kindPrefix, found))
-		if err != nil {
-			return err
-		}
-		if json == nil {
-			return nil // Skip files that don't exist (may have been GC'd)
-		}
+	err := r.storage.List(
+		ctx, kindPrefix /*delimiter*/, cloud.ListOptions{},
+		func(found string) error {
+			json, err := r.maybeReadFile(ctx, path.Join(kindPrefix, found))
+			if err != nil {
+				return err
+			}
+			if json == nil {
+				return nil // Skip files that don't exist (may have been GC'd)
+			}
 
-		metadata := FixtureMetadata{}
-		if err := metadata.UnmarshalJson(json); err != nil {
-			return err
-		}
+			metadata := FixtureMetadata{}
+			if err := metadata.UnmarshalJson(json); err != nil {
+				return err
+			}
 
-		result = append(result, metadata)
-		return nil
-	})
+			result = append(result, metadata)
+			return nil
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +293,7 @@ func (r *Registry) deleteBlobsMatchingPrefix(ctx context.Context, prefix string)
 	// Producer goroutine
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(paths)
-		err := r.storage.List(ctx, prefix, "", func(path string) error {
+		err := r.storage.List(ctx, prefix, cloud.ListOptions{}, func(path string) error {
 			select {
 			case paths <- path:
 				return nil
