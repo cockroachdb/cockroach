@@ -433,6 +433,18 @@ func Overlaps(s1 roachpb.Span, s2 TrickySpan) bool {
 	return doesNormalSpanContainPointTrickySpan(s1, s2)
 }
 
+// Equals returns whether s1 equals s2, where s2 can be a TrickySpan.
+func Equals(s1 roachpb.Span, s2 TrickySpan) bool {
+	// The common case: both spans have non-nil start keys.
+	if s2.Key != nil {
+		return s1.Equal(roachpb.Span(s2))
+	}
+
+	// s2 is a TrickySpan with nil Key and non-nil EndKey. Since s2 is infinitely
+	// small, s1 and s2 are equal IFF s1 contains s2.
+	return doesNormalSpanContainPointTrickySpan(s1, s2)
+}
+
 // Validate returns an error if any spans that have been added to the set
 // are invalid.
 func (s *SpanSet) Validate() error {
