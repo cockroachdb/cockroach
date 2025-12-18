@@ -100,6 +100,12 @@ type inspectProcessor struct {
 		// worker goroutines.
 		syncutil.Mutex
 	}
+
+	// test, if set, supports test-only behavior.
+	test *struct {
+		// progress is the job progress used to persist state after a span is processed.
+		progress *jobspb.InspectProgress
+	}
 }
 
 var _ execinfra.Processor = (*inspectProcessor)(nil)
@@ -202,6 +208,11 @@ func (p *inspectProcessor) runInspect(ctx context.Context, output execinfra.RowR
 		return err
 	}
 
+	// Run any post-checks after all spans have been processed.
+	if err := p.processPostChecks(ctx); err != nil {
+		return err
+	}
+
 	// Send final completion message to indicate this processor is finished
 	if err := p.sendInspectProgress(ctx, output, 0, true /* finished */); err != nil {
 		return err
@@ -268,7 +279,7 @@ func (p *inspectProcessor) processSpan(
 	asOfToUse := p.getTimestampForSpan()
 
 	// Only create checks that apply to this span.
-	var checks []inspectCheck
+	var checks inspectChecks
 	for _, factory := range p.checkFactories {
 		check := factory(asOfToUse)
 		applies, err := check.AppliesTo(p.cfg.Codec, span)
@@ -277,6 +288,16 @@ func (p *inspectProcessor) processSpan(
 		}
 		if applies {
 			checks = append(checks, check)
+		}
+	}
+	checks.sortStable()
+
+	// Provide the meta-checks with a reference to all the other checks.
+	for _, check := range checks {
+		if metaCheck, ok := check.(inspectMetaCheck); ok {
+			if err := metaCheck.RegisterChecks(checks); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -316,12 +337,72 @@ func (p *inspectProcessor) processSpan(
 		}
 	}
 
+	progressMsg := &jobspb.InspectProcessorProgress{
+		ChecksCompleted: 0, // No additional checks completed, just marking span done
+		Finished:        false,
+	}
+
+	for _, check := range checks {
+		if check, ok := check.(inspectMetaCheck); ok {
+			err := check.MetaCheck(ctx, progressMsg, p.loggerBundle)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	// Report span completion for checkpointing.
-	if err := p.sendSpanCompletionProgress(ctx, output, span, false /* finished */); err != nil {
+	if err := p.sendSpanCompletionProgress(ctx, output, span, false /* finished */, progressMsg); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// processPostChecks runs any post-checks using the accumulated job progress.
+func (p *inspectProcessor) processPostChecks(ctx context.Context) (err error) {
+	progress, err := p.loadProgress(ctx, p.spec.JobID)
+	if err != nil {
+		return err
+	}
+
+	for _, factory := range p.checkFactories {
+		check := factory(p.getTimestampForSpan())
+		if postCheck, ok := check.(inspectPostCheck); ok {
+			issues, err := postCheck.Issues(ctx, progress)
+			if err != nil {
+				return err
+			}
+			for _, issue := range issues {
+				err = p.loggerBundle.logIssue(ctx, issue)
+				if err != nil {
+					return errors.Wrapf(err, "error logging inspect issue")
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (p *inspectProcessor) loadProgress(
+	ctx context.Context, jobID jobspb.JobID,
+) (*jobspb.InspectProgress, error) {
+	if p.test != nil {
+		return p.test.progress, nil
+	}
+
+	job, err := p.cfg.JobRegistry.LoadJob(ctx, p.spec.JobID)
+	if err != nil {
+		return nil, err
+	}
+
+	progress, ok := job.Progress().Details.(*jobspb.Progress_Inspect)
+	if !ok {
+		return nil, errors.New("job is not an inspect job")
+	}
+
+	return progress.Inspect, nil
 }
 
 // sendInspectProgress marshals and sends inspect processor progress via BulkProcessorProgress.
@@ -365,15 +446,18 @@ func (p *inspectProcessor) getTimestampForSpan() hlc.Timestamp {
 // sendSpanCompletionProgress sends progress indicating a span has been completed.
 // This is used for checkpointing to track which spans are done.
 func (p *inspectProcessor) sendSpanCompletionProgress(
-	ctx context.Context, output execinfra.RowReceiver, completedSpan roachpb.Span, finished bool,
+	ctx context.Context,
+	output execinfra.RowReceiver,
+	completedSpan roachpb.Span,
+	finished bool,
+	progressMsg *jobspb.InspectProcessorProgress,
 ) error {
 	if p.spansProcessedCtr != nil {
 		p.spansProcessedCtr.Inc(1)
 	}
-	progressMsg := &jobspb.InspectProcessorProgress{
-		ChecksCompleted: 0, // No additional checks completed, just marking span done
-		Finished:        finished,
-	}
+
+	progressMsg.ChecksCompleted = 0 // No additional checks completed, just marking span done
+	progressMsg.Finished = finished
 
 	progressAny, err := pbtypes.MarshalAny(progressMsg)
 	if err != nil {
@@ -466,7 +550,6 @@ func buildInspectCheckFactories(
 					asOf:         asOf,
 				}
 			})
-
 		default:
 			return nil, errors.AssertionFailedf("unsupported inspect check type: %v", specCheck.Type)
 		}

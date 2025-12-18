@@ -172,3 +172,9 @@ var _ redact.SafeFormatter = (*RowLevelTTLProcessorProgress)(nil)
 func (r *RowLevelTTLProcessorProgress) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.SafeString(redact.SafeString(r.String()))
 }
+
+// UpdateWithSpanProgress updates the InspectProgress with data from the
+// check-specific fields in the span progress update.
+func (p *InspectProgress) UpdateWithSpanProgress(prog *InspectProcessorProgress) {
+	return
+}
