@@ -26,6 +26,7 @@ go_library(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/util/buildutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/metric",
