@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,20 +35,32 @@ func TestDestroyReplica(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	storage.DisableMetamorphicSimpleValueEncoding(t) // for deterministic output
-	eng := storage.NewDefaultInMemForTesting()
-	defer eng.Close()
 
-	var sb redact.StringBuilder
-	ctx := context.Background()
-	mutate := func(name string, write func(storage.ReadWriter)) {
-		b := eng.NewBatch()
-		defer b.Close()
-		write(b)
+	printBatch := func(name string, b storage.WriteBatch) string {
 		str, err := print.DecodeWriteBatch(b.Repr())
 		require.NoError(t, err)
-		_, err = sb.WriteString(fmt.Sprintf(">> %s:\n%s", name, str))
-		require.NoError(t, err)
+		return fmt.Sprintf(">> %s:\n%s", name, str)
+	}
+	mutate := func(name string, eng storage.Engine, write func(storage.Writer)) string {
+		b := eng.NewWriteBatch()
+		defer b.Close()
+		write(b)
+		str := printBatch(name, b)
 		require.NoError(t, b.Commit(false))
+		return str
+	}
+	mutateSep := func(name string, eng Engines, write func(ReadWriter)) string {
+		b := makeTestBatch(eng)
+		defer b.close()
+		write(b.readWriter())
+		var str string
+		if eng.Separated() {
+			str = printBatch(name+"/state", b.batch) + printBatch(name+"/raft", b.raftBatch)
+		} else {
+			str = printBatch(name, b.batch)
+		}
+		require.NoError(t, b.commit())
+		return str
 	}
 
 	r := replicaInfo{
@@ -60,21 +71,36 @@ func TestDestroyReplica(t *testing.T) {
 		last:    15,
 		applied: 12,
 	}
-	mutate("raft", func(rw storage.ReadWriter) {
-		r.createRaftState(ctx, t, rw)
+
+	runTest := func(t *testing.T, e Engines) {
+		ctx := context.Background()
+		out := mutate("raft", e.LogEngine(), func(w storage.Writer) {
+			r.createRaftState(ctx, t, w)
+		}) + mutate("state", e.StateEngine(), func(w storage.Writer) {
+			r.createStateMachine(ctx, t, w)
+		}) + mutateSep("destroy", e, func(rw ReadWriter) {
+			require.NoError(t, DestroyReplica(
+				ctx, rw,
+				DestroyReplicaInfo{FullReplicaID: r.id, Keys: r.keys}, r.id.ReplicaID+1,
+			))
+		})
+
+		out = strings.ReplaceAll(out, "\n\n", "\n")
+		name := strings.ReplaceAll(t.Name(), "/", "-") + ".txt"
+		echotest.Require(t, out, filepath.Join(datapathutils.TestDataPath(t), name))
+	}
+
+	t.Run("one-eng", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+		runTest(t, MakeEngines(eng))
 	})
-	mutate("state", func(rw storage.ReadWriter) {
-		r.createStateMachine(ctx, t, rw)
-	})
-	mutate("destroy", func(rw storage.ReadWriter) {
-		require.NoError(t, DestroyReplica(
-			ctx, TODOReadWriter(rw),
-			DestroyReplicaInfo{FullReplicaID: r.id, Keys: r.keys}, r.id.ReplicaID+1,
-		))
+	t.Run("sep-eng", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+		runTest(t, MakeSeparatedEnginesForTesting(eng, eng))
 	})
 
-	str := strings.ReplaceAll(sb.String(), "\n\n", "\n")
-	echotest.Require(t, str, filepath.Join(datapathutils.TestDataPath(t), t.Name()+".txt"))
 }
 
 // replicaInfo contains the basic info about the replica, used for generating
@@ -104,25 +130,25 @@ func (r *replicaInfo) createRaftState(ctx context.Context, t *testing.T, w stora
 	}
 }
 
-func (r *replicaInfo) createStateMachine(ctx context.Context, t *testing.T, rw storage.ReadWriter) {
+func (r *replicaInfo) createStateMachine(ctx context.Context, t *testing.T, w storage.Writer) {
 	sl := MakeStateLoader(r.id.RangeID)
-	require.NoError(t, sl.SetRangeTombstone(ctx, rw, kvserverpb.RangeTombstone{
+	require.NoError(t, sl.SetRangeTombstone(ctx, w, kvserverpb.RangeTombstone{
 		NextReplicaID: r.id.ReplicaID,
 	}))
-	require.NoError(t, sl.SetRaftReplicaID(ctx, rw, r.id.ReplicaID))
+	require.NoError(t, sl.SetRaftReplicaID(ctx, w, r.id.ReplicaID))
 	// TODO(pav-kv): figure out whether LastReplicaGCTimestamp should be in the
 	// log or state engine.
 	require.NoError(t, storage.MVCCBlindPutProto(
-		ctx, rw,
+		ctx, w,
 		keys.RangeLastReplicaGCTimestampKey(r.id.RangeID),
 		hlc.Timestamp{}, /* timestamp */
 		&hlc.Timestamp{WallTime: 12345678},
 		storage.MVCCWriteOptions{},
 	))
-	createRangeData(t, rw, r.keys)
+	createRangeData(t, w, r.keys)
 }
 
-func createRangeData(t *testing.T, rw storage.ReadWriter, span roachpb.RSpan) {
+func createRangeData(t *testing.T, w storage.Writer, span roachpb.RSpan) {
 	ts := hlc.Timestamp{WallTime: 1}
 	for _, k := range []roachpb.Key{
 		keys.RangeDescriptorKey(span.Key),   // system
@@ -130,13 +156,54 @@ func createRangeData(t *testing.T, rw storage.ReadWriter, span roachpb.RSpan) {
 		roachpb.Key(span.EndKey).Prevish(2), // user
 	} {
 		// Put something under the system or user key.
-		require.NoError(t, rw.PutMVCC(
+		require.NoError(t, w.PutMVCC(
 			storage.MVCCKey{Key: k, Timestamp: ts}, storage.MVCCValue{},
 		))
 		// Put something under the corresponding lock key.
 		ek, _ := storage.LockTableKey{
 			Key: k, Strength: lock.Intent, TxnUUID: uuid.UUID{},
 		}.ToEngineKey(nil)
-		require.NoError(t, rw.PutEngineKey(ek, nil))
+		require.NoError(t, w.PutEngineKey(ek, nil))
+	}
+}
+
+type testBatch struct {
+	batch     storage.Batch
+	raftBatch storage.Batch
+}
+
+func makeTestBatch(eng Engines) testBatch {
+	if !eng.Separated() {
+		return testBatch{batch: eng.Engine().NewBatch()}
+	}
+	return testBatch{
+		batch:     eng.StateEngine().NewBatch(),
+		raftBatch: eng.LogEngine().NewBatch(),
+	}
+}
+
+func (b *testBatch) readWriter() ReadWriter {
+	if b.raftBatch == nil {
+		return TODOReadWriter(b.batch)
+	}
+	return ReadWriter{
+		State: State{RO: b.batch, WO: b.batch},
+		Raft:  Raft{RO: b.raftBatch, WO: b.raftBatch},
+	}
+}
+
+func (b *testBatch) commit() error {
+	if b.raftBatch != nil {
+		if err := b.raftBatch.Commit(false /* sync */); err != nil {
+			return err
+		}
+	}
+	return b.batch.Commit(false /* sync */)
+}
+
+func (b *testBatch) close() {
+	b.batch.Close()
+	if b.raftBatch != nil {
+		b.raftBatch.Close()
 	}
 }
