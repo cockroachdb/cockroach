@@ -71,6 +71,7 @@ func (*AlterTableSetVisible) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
 func (*AlterTablePartitionByTable) alterTableCmd()   {}
 func (*AlterTableInjectStats) alterTableCmd()        {}
+func (*AlterTablePushStats) alterTableCmd()          {}
 func (*AlterTableSetStorageParams) alterTableCmd()   {}
 func (*AlterTableResetStorageParams) alterTableCmd() {}
 func (*AlterTableAddIdentity) alterTableCmd()        {}
@@ -96,6 +97,7 @@ var _ AlterTableCmd = &AlterTableSetVisible{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
 var _ AlterTableCmd = &AlterTablePartitionByTable{}
 var _ AlterTableCmd = &AlterTableInjectStats{}
+var _ AlterTableCmd = &AlterTablePushStats{}
 var _ AlterTableCmd = &AlterTableSetStorageParams{}
 var _ AlterTableCmd = &AlterTableResetStorageParams{}
 var _ AlterTableCmd = &AlterTableAddIdentity{}
@@ -614,6 +616,22 @@ func (node *AlterTableInjectStats) TelemetryName() string {
 // Format implements the NodeFormatter interface.
 func (node *AlterTableInjectStats) Format(ctx *FmtCtx) {
 	ctx.WriteString(" INJECT STATISTICS ")
+	ctx.FormatNode(node.Stats)
+}
+
+// AlterTablePushStats represents an ALTER TABLE PUSH STATISTICS statement.
+type AlterTablePushStats struct {
+	Stats Expr
+}
+
+// TelemetryName implements the AlterTableCmd interface.
+func (node *AlterTablePushStats) TelemetryName() string {
+	return "push_stats"
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTablePushStats) Format(ctx *FmtCtx) {
+	ctx.WriteString(" PUSH STATISTICS ")
 	ctx.FormatNode(node.Stats)
 }
 

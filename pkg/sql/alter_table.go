@@ -735,6 +735,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
+		case *tree.AlterTablePushStats:
+			// TODO: Implement PUSH STATISTICS functionality with retention logic
+			return errors.Newf("ALTER TABLE PUSH STATISTICS is not yet implemented")
+
 		case *tree.AlterTableSetStorageParams:
 			setter := tablestorageparam.NewSetter(n.tableDesc, false /* isNewObject */)
 			if err := storageparam.Set(
