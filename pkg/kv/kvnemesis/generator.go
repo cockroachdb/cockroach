@@ -812,6 +812,7 @@ type nodes struct {
 	mu      syncutil.RWMutex
 	running map[int]struct{}
 	stopped map[int]struct{}
+	crashed map[int]struct{}
 }
 
 func randNodeFromMap(m map[int]struct{}, rng *rand.Rand) int {
@@ -844,6 +845,12 @@ func (n *nodes) setStopped(nodeID int) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.stopped[nodeID] = struct{}{}
+}
+
+func (n *nodes) setCrashed(nodeID int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.crashed[nodeID] = struct{}{}
 }
 
 // RandStep returns a single randomly generated next operation to execute.
