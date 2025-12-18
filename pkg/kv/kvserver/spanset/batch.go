@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
 )
@@ -765,8 +766,15 @@ func NewReader(r storage.Reader, spans *SpanSet, ts hlc.Timestamp) storage.Reade
 }
 
 // NewReadWriterAt returns a storage.ReadWriter that asserts access of the
+// underlying ReadWriter against the given SpanSet.
+//
+// NewReadWriter clones and does not retain the provided span set.
+func NewReadWriter(rw storage.ReadWriter, spans *SpanSet, ts hlc.Timestamp) storage.ReadWriter {
+	return makeSpanSetReadWriter(rw, spans)
+}
+
+// NewReadWriterAt returns a storage.ReadWriter that asserts access of the
 // underlying ReadWriter against the given SpanSet at a given timestamp.
-// If zero timestamp is provided, accesses are considered non-MVCC.
 //
 // NewReadWriterAt clones and does not retain the provided span set.
 func NewReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Timestamp) storage.ReadWriter {
@@ -774,7 +782,8 @@ func NewReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Timestamp) st
 }
 
 type spanSetBatch struct {
-	ReadWriter
+	spanSetReader
+	spanSetWriteBatch
 	b storage.Batch
 	// TODO(ibrahim): The fields spans, spansOnly, and ts don't seem to be used.
 	// Consider removing or marking them as intended.
@@ -785,6 +794,12 @@ type spanSetBatch struct {
 }
 
 var _ storage.Batch = spanSetBatch{}
+
+// Close implements storage.Batch (resolves ambiguity between Reader.Close
+// and WriteBatch.Close).
+func (s spanSetBatch) Close() {
+	s.wb.Close()
+}
 
 func (s spanSetBatch) NewBatchOnlyMVCCIterator(
 	ctx context.Context, opts storage.IterOptions,
@@ -799,50 +814,6 @@ func (s spanSetBatch) NewBatchOnlyMVCCIterator(
 	return NewIteratorAt(mvccIter, s.spans, s.ts), nil
 }
 
-func (s spanSetBatch) Commit(sync bool) error {
-	return s.b.Commit(sync)
-}
-
-func (s spanSetBatch) CommitNoSyncWait() error {
-	return s.b.CommitNoSyncWait()
-}
-
-func (s spanSetBatch) SyncWait() error {
-	return s.b.SyncWait()
-}
-
-func (s spanSetBatch) Empty() bool {
-	return s.b.Empty()
-}
-
-func (s spanSetBatch) Count() uint32 {
-	return s.b.Count()
-}
-
-func (s spanSetBatch) Len() int {
-	return s.b.Len()
-}
-
-func (s spanSetBatch) Repr() []byte {
-	return s.b.Repr()
-}
-
-func (s spanSetBatch) CommitStats() storage.BatchCommitStats {
-	return s.b.CommitStats()
-}
-
-func (s spanSetBatch) PutInternalRangeKey(start, end []byte, key rangekey.Key) error {
-	return s.b.PutInternalRangeKey(start, end, key)
-}
-
-func (s spanSetBatch) PutInternalPointKey(key *pebble.InternalKey, value []byte) error {
-	return s.b.PutInternalPointKey(key, value)
-}
-
-func (s spanSetBatch) ClearRawEncodedRange(start, end []byte) error {
-	return s.b.ClearRawEncodedRange(start, end)
-}
-
 // shallowCopy returns a shallow copy of the spanSetBatch. The returned batch
 // shares the same underlying storage.Batch but has its own spanSetBatch wrapper
 // with a new copy of the SpanSet that uses a shallow copy of the underlying
@@ -850,20 +821,127 @@ func (s spanSetBatch) ClearRawEncodedRange(start, end []byte) error {
 func (s spanSetBatch) shallowCopy() *spanSetBatch {
 	b := s
 	b.spanSetReader.spans = b.spanSetReader.spans.ShallowCopy()
-	b.spanSetWriter.spans = b.spanSetWriter.spans.ShallowCopy()
+	b.spanSetWriteBatch.spanSetWriter.spans = b.spanSetWriteBatch.spanSetWriter.spans.ShallowCopy()
 	b.spans = b.spans.ShallowCopy()
 	return &b
+}
+
+// spanSetWriteBatch wraps a storage.WriteBatch and adds span checking.
+type spanSetWriteBatch struct {
+	spanSetWriter
+	wb storage.WriteBatch
+}
+
+var _ storage.WriteBatch = (*spanSetWriteBatch)(nil)
+
+// ClearRawEncodedRange implements storage.InternalWriter.
+func (s spanSetWriteBatch) ClearRawEncodedRange(start, end []byte) error {
+	// Decode the engine keys to check spans.
+	startKey, ok := storage.DecodeEngineKey(start)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+	endKey, ok := storage.DecodeEngineKey(end)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+	if err := s.spanSetWriter.checkAllowedRange(startKey.Key, endKey.Key); err != nil {
+		return err
+	}
+	return s.wb.ClearRawEncodedRange(start, end)
+}
+
+// PutInternalRangeKey implements storage.InternalWriter.
+func (s spanSetWriteBatch) PutInternalRangeKey(start, end []byte, key rangekey.Key) error {
+	// Decode the engine keys to check spans.
+	startKey, ok := storage.DecodeEngineKey(start)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+	endKey, ok := storage.DecodeEngineKey(end)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+	if err := s.spanSetWriter.checkAllowedRange(startKey.Key, endKey.Key); err != nil {
+		return err
+	}
+	return s.wb.PutInternalRangeKey(start, end, key)
+}
+
+// PutInternalPointKey implements storage.InternalWriter.
+func (s spanSetWriteBatch) PutInternalPointKey(key *pebble.InternalKey, value []byte) error {
+	// Decode the internal key to check spans.
+	mvccKey, ok := storage.DecodeEngineKey(key.UserKey)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+
+	if err := s.spanSetWriter.checkAllowed(mvccKey.Key); err != nil {
+		return err
+	}
+
+	return s.wb.PutInternalPointKey(key, value)
+}
+
+// Close implements storage.WriteBatch.
+func (s spanSetWriteBatch) Close() {
+	s.wb.Close()
+}
+
+// Commit implements storage.WriteBatch.
+func (s spanSetWriteBatch) Commit(sync bool) error {
+	return s.wb.Commit(sync)
+}
+
+// CommitNoSyncWait implements storage.WriteBatch.
+func (s spanSetWriteBatch) CommitNoSyncWait() error {
+	return s.wb.CommitNoSyncWait()
+}
+
+// SyncWait implements storage.WriteBatch.
+func (s spanSetWriteBatch) SyncWait() error {
+	return s.wb.SyncWait()
+}
+
+// Empty implements storage.WriteBatch.
+func (s spanSetWriteBatch) Empty() bool {
+	return s.wb.Empty()
+}
+
+// Count implements storage.WriteBatch.
+func (s spanSetWriteBatch) Count() uint32 {
+	return s.wb.Count()
+}
+
+// Len implements storage.WriteBatch.
+func (s spanSetWriteBatch) Len() int {
+	return s.wb.Len()
+}
+
+// Repr implements storage.WriteBatch.
+func (s spanSetWriteBatch) Repr() []byte {
+	return s.wb.Repr()
+}
+
+// CommitStats implements storage.WriteBatch.
+func (s spanSetWriteBatch) CommitStats() storage.BatchCommitStats {
+	return s.wb.CommitStats()
 }
 
 // NewBatch returns a storage.Batch that asserts access of the underlying
 // Batch against the given SpanSet. We only consider span boundaries, associated
 // timestamps are not considered.
 func NewBatch(b storage.Batch, spans *SpanSet) storage.Batch {
+	spans = addLockTableSpans(spans)
 	return &spanSetBatch{
-		ReadWriter: makeSpanSetReadWriter(b, spans),
-		b:          b,
-		spans:      spans,
-		spansOnly:  true,
+		spanSetReader: spanSetReader{r: b, spans: spans, spansOnly: true},
+		spanSetWriteBatch: spanSetWriteBatch{
+			spanSetWriter: spanSetWriter{w: b, spans: spans, spansOnly: true},
+			wb:            b,
+		},
+		b:         b,
+		spans:     spans,
+		spansOnly: true,
 	}
 }
 
@@ -871,11 +949,16 @@ func NewBatch(b storage.Batch, spans *SpanSet) storage.Batch {
 // Batch against the given SpanSet at the given timestamp.
 // If the zero timestamp is used, all accesses are considered non-MVCC.
 func NewBatchAt(b storage.Batch, spans *SpanSet, ts hlc.Timestamp) storage.Batch {
+	spans = addLockTableSpans(spans)
 	return &spanSetBatch{
-		ReadWriter: makeSpanSetReadWriterAt(b, spans, ts),
-		b:          b,
-		spans:      spans,
-		ts:         ts,
+		spanSetReader: spanSetReader{r: b, spans: spans, ts: ts},
+		spanSetWriteBatch: spanSetWriteBatch{
+			spanSetWriter: spanSetWriter{w: b, spans: spans, ts: ts},
+			wb:            b,
+		},
+		b:     b,
+		spans: spans,
+		ts:    ts,
 	}
 }
 
@@ -884,9 +967,9 @@ func NewBatchAt(b storage.Batch, spans *SpanSet, ts hlc.Timestamp) storage.Batch
 func DisableReaderAssertions(reader storage.Reader) storage.Reader {
 	switch v := reader.(type) {
 	case ReadWriter:
-		return DisableReaderAssertions(v.r)
+		return DisableReaderAssertions(v.spanSetReader.r)
 	case *spanSetBatch:
-		return DisableReaderAssertions(v.r)
+		return DisableReaderAssertions(v.spanSetReader.r)
 	default:
 		return reader
 	}
@@ -897,9 +980,9 @@ func DisableReaderAssertions(reader storage.Reader) storage.Reader {
 func DisableReadWriterAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	switch v := rw.(type) {
 	case ReadWriter:
-		return DisableReadWriterAssertions(v.w.(storage.ReadWriter))
+		return DisableReadWriterAssertions(v.spanSetWriter.w.(storage.ReadWriter))
 	case *spanSetBatch:
-		return DisableReadWriterAssertions(v.w.(storage.ReadWriter))
+		return DisableReadWriterAssertions(v.spanSetWriteBatch.spanSetWriter.w.(storage.ReadWriter))
 	default:
 		return rw
 	}
@@ -914,7 +997,7 @@ func DisableUndeclaredSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	case *spanSetBatch:
 		newSnapSetBatch := v.shallowCopy()
 		newSnapSetBatch.spanSetReader.spans.DisableUndeclaredAccessAssertions()
-		newSnapSetBatch.spanSetWriter.spans.DisableUndeclaredAccessAssertions()
+		newSnapSetBatch.spanSetWriteBatch.spanSetWriter.spans.DisableUndeclaredAccessAssertions()
 		return newSnapSetBatch
 
 	default:
@@ -933,7 +1016,7 @@ func DisableForbiddenSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	case *spanSetBatch:
 		newSnapSetBatch := v.shallowCopy()
 		newSnapSetBatch.spanSetReader.spans.DisableForbiddenSpansAssertions()
-		newSnapSetBatch.spanSetWriter.spans.DisableForbiddenSpansAssertions()
+		newSnapSetBatch.spanSetWriteBatch.spanSetWriter.spans.DisableForbiddenSpansAssertions()
 		return newSnapSetBatch
 
 	default:
