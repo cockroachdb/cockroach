@@ -348,6 +348,7 @@ func (b *ConstraintBuilder) Build(
 			if isOptional := allIdx >= len(onFilters); isOptional {
 				optionalMultiValFilterSuffixLen++
 			} else {
+				optionalMultiValFilterSuffixLen = 0
 				// There's no need to track optional filters for reducing the
 				// remaining filters because they are not present in the ON
 				// filters to begin with.
