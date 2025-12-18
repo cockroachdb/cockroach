@@ -80,11 +80,13 @@ func alterTableAddPrimaryKey(
 	}
 
 	d := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
-	// Ensure that there is a default rowid column.
+	// Ensure that there is a default rowid column, OR there's a DROP CONSTRAINT
+	// for the existing PK in the same statement (meaning this is a PK swap).
 	oldPrimaryIndex := mustRetrieveCurrentPrimaryIndexElement(b, tbl.TableID)
-	if getPrimaryIndexDefaultRowIDColumn(
+	implicitRowIDPKCol := getPrimaryIndexDefaultRowIDColumn(
 		b, tbl.TableID, oldPrimaryIndex.IndexID,
-	) == nil {
+	)
+	if implicitRowIDPKCol == nil && !hasDropPrimaryKeyConstraintEarlierInStatement(stmt, b, tbl.TableID, t) {
 		// If the constraint already exists then nothing to do here.
 		if oldPrimaryIndex != nil && d.IfNotExists {
 			return
@@ -99,6 +101,65 @@ func alterTableAddPrimaryKey(
 		Name:          d.Name,
 		StorageParams: d.StorageParams,
 	})
+}
+
+// hasDropPrimaryKeyConstraintEarlierInStatement checks if there's a DROP
+// CONSTRAINT command in the same ALTER TABLE statement that drops a primary
+// key constraint. The DROP CONSTRAINT must appear BEFORE the addCmd in the
+// statement's command list for this to return true, as only then is it a
+// proper PK swap (drop first, then add).
+func hasDropPrimaryKeyConstraintEarlierInStatement(
+	stmt tree.Statement, b BuildCtx, tableID catid.DescID, addCmd *tree.AlterTableAddConstraint,
+) bool {
+	alterTable, ok := stmt.(*tree.AlterTable)
+	if !ok {
+		return false
+	}
+	// Find the index of the ADD command in the statement.
+	addCmdIndex := -1
+	for i, cmd := range alterTable.Cmds {
+		if addConstraint, ok := cmd.(*tree.AlterTableAddConstraint); ok && addConstraint == addCmd {
+			addCmdIndex = i
+			break
+		}
+	}
+	if addCmdIndex == -1 {
+		return false
+	}
+	// Only look at commands that come before the ADD command.
+	for i := 0; i < addCmdIndex; i++ {
+		cmd := alterTable.Cmds[i]
+		dropConstraint, ok := cmd.(*tree.AlterTableDropConstraint)
+		if !ok {
+			continue
+		}
+		// Check if the constraint being dropped is the current public primary index.
+		// Note: We look at the current PUBLIC primary index and check if its name
+		// matches the constraint being dropped. We can't rely on ToAbsent target
+		// status because the DROP CONSTRAINT may not have fully processed the drop
+		// yet - it may have detected the ADD PRIMARY KEY and deferred to it.
+		tableElts := b.QueryByID(tableID)
+		// Find the currently PUBLIC primary index.
+		publicPrimaryIndexes := tableElts.FilterPrimaryIndex().Filter(
+			func(current scpb.Status, _ scpb.TargetStatus, _ *scpb.PrimaryIndex) bool {
+				return current == scpb.Status_PUBLIC
+			})
+		// Check if any of them have a name matching the constraint being dropped.
+		foundMatchingDrop := !publicPrimaryIndexes.Filter(
+			func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.PrimaryIndex) bool {
+				// Look for an IndexName element matching this index and the constraint name.
+				matchingName := tableElts.FilterIndexName().Filter(
+					func(_ scpb.Status, _ scpb.TargetStatus, name *scpb.IndexName) bool {
+						return name.IndexID == idx.IndexID && name.Name == string(dropConstraint.Constraint)
+					})
+				return !matchingName.IsEmpty()
+			}).IsEmpty()
+
+		if foundMatchingDrop {
+			return true
+		}
+	}
+	return false
 }
 
 // alterTableAddCheck contains logic for building

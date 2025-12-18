@@ -1794,9 +1794,9 @@ func validateConstraintNameIsNotUsed(
 			return true, nil
 		}
 		if idx.Dropped() {
-			return false, pgerror.Newf(pgcode.DuplicateRelation, "constraint with name %q already exists and is being dropped, try again later", name)
+			return false, pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists and is being dropped, try again later", name)
 		}
-		return false, pgerror.Newf(pgcode.DuplicateRelation, "constraint with name %q already exists", name)
+		return false, pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists", name)
 
 	default:
 		return false, errors.AssertionFailedf(

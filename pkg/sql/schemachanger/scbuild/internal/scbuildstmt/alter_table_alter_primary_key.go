@@ -95,7 +95,17 @@ func alterPrimaryKey(
 	// same as the old PK name.
 	if t.Name != "" && string(t.Name) != inflatedChain.finalSpec.name.Name {
 		checkIfConstraintNameAlreadyExists(b, tbl, t)
-		inflatedChain.finalSpec.name.Name = string(t.Name)
+		// We need to drop the old IndexName and add a new one with the updated
+		// name. We can't just modify the Name field in place because Name is part
+		// of the element key in the builder state's element index map. Modifying
+		// it after the element was added would corrupt the map.
+		b.Drop(inflatedChain.finalSpec.name)
+		inflatedChain.finalSpec.name = &scpb.IndexName{
+			TableID: inflatedChain.finalSpec.name.TableID,
+			IndexID: inflatedChain.finalSpec.name.IndexID,
+			Name:    string(t.Name),
+		}
+		b.Add(inflatedChain.finalSpec.name)
 	}
 
 	// Set up shard column and sharding descriptor, if applicable.
@@ -372,6 +382,15 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 func isNewPrimaryKeySameAsOldPrimaryKey(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) bool {
 	oldPrimaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, tbl.TableID)
 	oldPrimaryIndexKeyColumns := mustRetrieveKeyIndexColumns(b, tbl.TableID, oldPrimaryIndexElem.IndexID)
+
+	// If a new name is specified and it differs from the old PK name, they're
+	// not the same.
+	if t.Name != "" {
+		oldPKName := mustRetrieveIndexNameElem(b, tbl.TableID, oldPrimaryIndexElem.IndexID)
+		if string(t.Name) != oldPKName.Name {
+			return false
+		}
+	}
 
 	// Check whether they have the same number of key columns.
 	if len(oldPrimaryIndexKeyColumns) != len(t.Columns) {
