@@ -17519,6 +17519,14 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       visibility: SUPPORT
+    - name: storeliveness.heartbeat.persist_duration
+      exported_name: storeliveness_heartbeat_persist_duration
+      description: Latency of persisting Store Liveness requester meta before sending heartbeats
+      y_axis_label: Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: storeliveness.heartbeat.successes
       exported_name: storeliveness_heartbeat_successes
       description: Number of Store Liveness heartbeats sent out by the Store Liveness Support Manager
@@ -17535,6 +17543,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storeliveness.message_handle.persist_duration
+      exported_name: storeliveness_message_handle_persist_duration
+      description: Latency of persisting Store Liveness state when handling incoming messages
+      y_axis_label: Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: storeliveness.message_handle.successes
       exported_name: storeliveness_message_handle_successes
       description: Number of incoming Store Liveness messages handled by the Store Liveness Support Manager
@@ -17567,6 +17583,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storeliveness.support_withdraw.persist_duration
+      exported_name: storeliveness_support_withdraw_persist_duration
+      description: Latency of persisting Store Liveness state when withdrawing support
+      y_axis_label: Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: storeliveness.support_withdraw.successes
       exported_name: storeliveness_support_withdraw_successes
       description: Number of times the Store Liveness Support Manager has successfully withdrawn support for another store
