@@ -313,11 +313,14 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	livenessInterval := sm.options.SupportDuration
 	heartbeats := rsfu.getHeartbeatsToSend(sm.storeID, sm.clock.Now(), livenessInterval)
+	beforePersist := timeutil.Now()
 	if err := rsfu.write(ctx, sm.engine); err != nil {
 		log.KvExec.Warningf(ctx, "failed to write requester meta: %v", err)
 		sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats)))
 		return
 	}
+	persistDur := timeutil.Since(beforePersist)
+	sm.metrics.HeartbeatPersistDuration.RecordValue(persistDur.Nanoseconds())
 	sm.requesterStateHandler.checkInUpdate(rsfu)
 
 	// Send heartbeats to each remote store.
@@ -352,6 +355,7 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 
 	batch := sm.engine.NewBatch()
 	defer batch.Close()
+	beforePersist := timeutil.Now()
 	if err := ssfu.write(ctx, batch); err != nil {
 		log.KvExec.Warningf(ctx, "failed to write supporter meta and state: %v", err)
 		sm.metrics.SupportWithdrawFailures.Inc(int64(numWithdrawn))
@@ -362,14 +366,15 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 		sm.metrics.SupportWithdrawFailures.Inc(int64(numWithdrawn))
 		return
 	}
+	persistDur := timeutil.Since(beforePersist)
+	sm.metrics.SupportWithdrawPersistDuration.RecordValue(persistDur.Nanoseconds())
 	sm.supporterStateHandler.checkInUpdate(ssfu)
 	log.KvExec.Infof(ctx, "withdrew support from %d stores", numWithdrawn)
 	sm.metrics.SupportWithdrawSuccesses.Inc(int64(numWithdrawn))
 	if sm.withdrawalCallback != nil {
 		beforeProcess := timeutil.Now()
 		sm.withdrawalCallback(supportWithdrawnForStoreIDs)
-		afterProcess := timeutil.Now()
-		processDur := afterProcess.Sub(beforeProcess)
+		processDur := timeutil.Since(beforeProcess)
 		if processDur > minCallbackDurationToRecord {
 			sm.metrics.CallbacksProcessingDuration.RecordValue(processDur.Nanoseconds())
 		}
@@ -402,6 +407,7 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 
 	batch := sm.engine.NewBatch()
 	defer batch.Close()
+	beforePersist := timeutil.Now()
 	if err := rsfu.write(ctx, batch); err != nil {
 		log.KvExec.Warningf(ctx, "failed to write requester meta: %v", err)
 		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
@@ -417,6 +423,8 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
 		return
 	}
+	persistDur := timeutil.Since(beforePersist)
+	sm.metrics.MessageHandlePersistDuration.RecordValue(persistDur.Nanoseconds())
 	sm.requesterStateHandler.checkInUpdate(rsfu)
 	sm.supporterStateHandler.checkInUpdate(ssfu)
 	sm.metrics.MessageHandleSuccesses.Inc(int64(len(msgs)))
