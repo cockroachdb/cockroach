@@ -128,7 +128,8 @@ func TestSSTFileNamingConvention(t *testing.T) {
 
 	// Use the same function that production code uses to set the prefix.
 	spec := execinfrapb.BackfillerSpec{}
-	backfill.EnableDistributedMergeIndexBackfillSink(nodeID, jobID, &spec)
+	storagePrefix := fmt.Sprintf("nodelocal://%d/", nodeID)
+	backfill.EnableDistributedMergeIndexBackfillSink(storagePrefix, jobID, &spec)
 
 	writeTS := hlc.Timestamp{WallTime: 1000000000}
 

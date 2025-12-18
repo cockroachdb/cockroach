@@ -151,6 +151,20 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	// appropriate timestamps in-between.
 	readAsOf := now
 	useDistributedMerge := mode == jobspb.IndexBackfillDistributedMergeMode_Enabled
+
+	// addStoragePrefix records a storage prefix before any SST is written to that
+	// location, ensuring cleanup can occur even if the job fails mid-backfill or
+	// mid-merge. Duplicates are skipped by checking the existing prefixes.
+	addStoragePrefix := func(ctx context.Context, prefix string) error {
+		for _, existing := range progress.SSTStoragePrefixes {
+			if existing == prefix {
+				return nil // Already recorded.
+			}
+		}
+		progress.SSTStoragePrefixes = append(progress.SSTStoragePrefixes, prefix)
+		return tracker.SetBackfillProgress(ctx, progress)
+	}
+
 	run, retErr := ib.plan(
 		ctx,
 		job.ID(),
@@ -163,6 +177,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		progress.SourceIndexID,
 		useDistributedMerge,
 		updateFunc,
+		addStoragePrefix,
 	)
 	if retErr != nil {
 		return retErr
@@ -173,7 +188,8 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	if !useDistributedMerge {
 		return nil
 	}
-	merged, err := ib.runDistributedMerge(ctx, job, descriptor, progress, sstManifestBuf.Snapshot())
+
+	merged, err := ib.runDistributedMerge(ctx, job, descriptor, progress, sstManifestBuf.Snapshot(), addStoragePrefix)
 	if err != nil {
 		return err
 	}
@@ -230,6 +246,7 @@ func (ib *IndexBackfillPlanner) plan(
 	sourceIndexID descpb.IndexID,
 	useDistributedMerge bool,
 	callback func(_ context.Context, meta *execinfrapb.ProducerMetadata) error,
+	addStoragePrefix func(ctx context.Context, prefix string) error,
 ) (runFunc func(context.Context) error, _ error) {
 
 	var p *PhysicalPlan
@@ -253,7 +270,12 @@ func (ib *IndexBackfillPlanner) plan(
 			indexesToBackfill, sourceIndexID,
 		)
 		if useDistributedMerge {
-			backfill.EnableDistributedMergeIndexBackfillSink(ib.execCfg.NodeInfo.NodeID.SQLInstanceID(), jobID, &spec)
+			// Record the storage prefix before any SSTs are written.
+			storagePrefix := fmt.Sprintf("nodelocal://%d/", ib.execCfg.NodeInfo.NodeID.SQLInstanceID())
+			backfill.EnableDistributedMergeIndexBackfillSink(storagePrefix, jobID, &spec)
+			if err := addStoragePrefix(ctx, storagePrefix); err != nil {
+				return err
+			}
 		}
 		var err error
 		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, sourceSpans)
@@ -296,12 +318,16 @@ func getIndexBackfillDistributedMergeMode(
 // runDistributedMerge runs a distributed merge of the provided SSTs into larger
 // SSTs. This is part of the distributed merge pipeline and is only run if the
 // index backfill has enabled distributed merging.
+//
+// The addStoragePrefix callback is invoked before any SST is written to a new
+// storage location, allowing the caller to persist the prefix for cleanup.
 func (ib *IndexBackfillPlanner) runDistributedMerge(
 	ctx context.Context,
 	job *jobs.Job,
 	descriptor catalog.TableDescriptor,
 	progress scexec.BackfillProgress,
 	manifests []jobspb.IndexBackfillSSTManifest,
+	addStoragePrefix func(ctx context.Context, prefix string) error,
 ) ([]jobspb.IndexBackfillSSTManifest, error) {
 	if len(manifests) == 0 {
 		return nil, nil
@@ -330,21 +356,26 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 	jobExecCtx, cleanup := MakeJobExecContext(ctx, "index-backfill-distributed-merge", username.NodeUserName(), mem, ib.execCfg)
 	defer cleanup()
 
-	outputURI := func(instanceID base.SQLInstanceID) string {
+	genOutputURIAndRecordPrefix := func(instanceID base.SQLInstanceID) (string, error) {
 		// Use nodelocal for temporary storage of merged SSTs. These SSTs are
-		// only needed during the lifetime of the job. The '/job/<jobID>' prefix
-		// allows for easy cleanup in the event of job cancellation or failure.
-		// TODO(158873): handle cleanup of nodelocal SSTs
+		// only needed during the lifetime of the job. Record the storage prefix
+		// for cleanup on job completion - this must happen before writing any SST.
+		prefix := fmt.Sprintf("nodelocal://%d/", instanceID)
+		if err := addStoragePrefix(ctx, prefix); err != nil {
+			return "", err
+		}
+		// The '/job/<jobID>' prefix allows for easy cleanup in the event of job
+		// cancellation or failure.
 		//
 		// The 'iter-0' suffix is to allow for future iterations of
 		// merging in case we want to do multiple stages of merging.
-		return fmt.Sprintf("nodelocal://%d/job/%d/merge/iter-0/", instanceID, job.ID())
+		return fmt.Sprintf("%sjob/%d/merge/iter-0/", prefix, job.ID()), nil
 	}
 
 	writeTS := progress.MinimumWriteTimestamp
 
 	// TODO(159374): use single-pass merge by setting iteration < maxIterations
-	merged, err := invokeBulkMerge(ctx, jobExecCtx, ssts, targetSpans, outputURI,
+	merged, err := invokeBulkMerge(ctx, jobExecCtx, ssts, targetSpans, genOutputURIAndRecordPrefix,
 		1 /* iteration */, 2 /* maxIterations */, &writeTS)
 	if err != nil {
 		return nil, err

@@ -23,7 +23,7 @@ func newBulkMergePlan(
 	execCtx sql.JobExecContext,
 	ssts []execinfrapb.BulkMergeSpec_SST,
 	spans []roachpb.Span,
-	genOutputURI func(sqlInstance base.SQLInstanceID) string,
+	genOutputURIAndRecordPrefix func(sqlInstance base.SQLInstanceID) (string, error),
 	iteration int,
 	maxIterations int,
 	writeTS *hlc.Timestamp,
@@ -79,9 +79,13 @@ func newBulkMergePlan(
 	for streamID, sqlInstanceID := range sqlInstanceIDs {
 		var outputStorageConf cloudpb.ExternalStorage
 		if iteration < maxIterations {
+			outputURI, err := genOutputURIAndRecordPrefix(sqlInstanceID)
+			if err != nil {
+				return nil, nil, err
+			}
 			outputStorage, err := execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI(
 				ctx,
-				genOutputURI(sqlInstanceID),
+				outputURI,
 				execCtx.User(),
 			)
 			if err != nil {

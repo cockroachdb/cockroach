@@ -31,12 +31,13 @@ func convertToJobBackfillProgress(
 			return nil, err
 		}
 		ret = append(ret, jobspb.BackfillProgress{
-			TableID:        bp.TableID,
-			SourceIndexID:  bp.SourceIndexID,
-			DestIndexIDs:   bp.DestIndexIDs,
-			WriteTimestamp: bp.MinimumWriteTimestamp,
-			CompletedSpans: strippedSpans,
-			SSTManifests:   manifests,
+			TableID:            bp.TableID,
+			SourceIndexID:      bp.SourceIndexID,
+			DestIndexIDs:       bp.DestIndexIDs,
+			WriteTimestamp:     bp.MinimumWriteTimestamp,
+			CompletedSpans:     strippedSpans,
+			SSTManifests:       manifests,
+			SSTStoragePrefixes: bp.SSTStoragePrefixes,
 		})
 	}
 	return ret, nil
@@ -56,6 +57,7 @@ func convertFromJobBackfillProgress(
 			MinimumWriteTimestamp: bp.WriteTimestamp,
 			CompletedSpans:        addTenantPrefixToSpans(codec, bp.CompletedSpans),
 			SSTManifests:          backfill.AddTenantPrefixToSSTManifests(codec, bp.SSTManifests),
+			SSTStoragePrefixes:    bp.SSTStoragePrefixes,
 		})
 	}
 	return ret

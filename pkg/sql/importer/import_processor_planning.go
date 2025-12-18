@@ -322,8 +322,8 @@ func distImport(
 		}
 
 		writeTS := &hlc.Timestamp{WallTime: walltime}
-		_, err = bulkmerge.Merge(ctx, execCtx, inputSSTs, spans, func(instanceID base.SQLInstanceID) string {
-			return fmt.Sprintf("nodelocal://%d/job/%d/merge/", instanceID, job.ID())
+		_, err = bulkmerge.Merge(ctx, execCtx, inputSSTs, spans, func(instanceID base.SQLInstanceID) (string, error) {
+			return fmt.Sprintf("nodelocal://%d/job/%d/merge/", instanceID, job.ID()), nil
 		}, 1 /* iteration */, 1 /* maxIterations */, writeTS)
 
 		return err
