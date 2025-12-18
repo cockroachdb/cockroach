@@ -635,7 +635,9 @@ const DefaultMemtableSize = 64 << 20 // 64 MB
 
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
 
-func defaultPebbleOptions(sv *settings.Values) *pebble.Options {
+// initPebbleOptions populates Pebble options common for all uses.
+// EnsureDefaults is not called.
+func initPebbleOptions() *pebble.Options {
 	opts := &pebble.Options{
 		Comparer:   &EngineComparer,
 		FS:         vfs.Default,
@@ -662,7 +664,6 @@ func defaultPebbleOptions(sv *settings.Values) *pebble.Options {
 	opts.FlushDelayRangeKey = 10 * time.Second
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
 
-	opts.Experimental.SpanPolicyFunc = spanPolicyFuncFactory(sv)
 	opts.Experimental.UserKeyCategories = userKeyCategories
 
 	// Every 5 minutes, log iterators that have been open for more than 1 minute.
@@ -701,18 +702,13 @@ func defaultPebbleOptions(sv *settings.Values) *pebble.Options {
 	return opts
 }
 
-// DefaultPebbleOptions returns the default pebble options for general use
-// (e.g., SST writers, external iterators, tests). This does not use cluster
-// settings and should not be used when opening a production Pebble engine.
+// DefaultPebbleOptions returns default Pebble options for general use (e.g.,
+// SST writers, external iterators, tests). This does not use cluster settings
+// and cannot be used when opening a production Pebble engine.
 func DefaultPebbleOptions() *pebble.Options {
-	return defaultPebbleOptions(nil /* sv */)
-}
-
-// DefaultPebbleOptionsForOpen returns the default pebble options for opening
-// a production Pebble engine. It uses cluster settings to configure value
-// storage policies.
-func DefaultPebbleOptionsForOpen(sv *settings.Values) *pebble.Options {
-	return defaultPebbleOptions(sv)
+	opts := initPebbleOptions()
+	opts.EnsureDefaults()
+	return opts
 }
 
 var (
@@ -1013,11 +1009,12 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			cfg.opts.FormatMajorVersion, MinimumSupportedFormatVersion,
 		)
 	}
+	sv := &cfg.settings.SV
 	cfg.opts.FS = cfg.env
 	cfg.opts.Lock = cfg.env.DirectoryLock
 	cfg.opts.ErrorIfNotExists = cfg.mustExist
 	cfg.opts.ApplyCompressionSettings(func() pebble.DBCompressionSettings {
-		return CompressionAlgorithmStorage.Get(&cfg.settings.SV).DBCompressionSettings()
+		return CompressionAlgorithmStorage.Get(sv).DBCompressionSettings()
 	})
 	// Note: the CompactionConcurrencyRange function will be wrapped below to
 	// allow overriding the lower and upper values at runtime through
@@ -1028,27 +1025,28 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			upper = determineMaxConcurrentCompactions(
 				defaultMaxConcurrentCompactions,
 				envMaxConcurrentCompactions,
-				int(compactionConcurrencyUpper.Get(&cfg.settings.SV)),
+				int(compactionConcurrencyUpper.Get(sv)),
 			)
 			return lower, max(lower, upper)
 		}
 	}
 	if cfg.opts.MaxConcurrentDownloads == nil {
 		cfg.opts.MaxConcurrentDownloads = func() int {
-			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
+			return int(concurrentDownloadCompactions.Get(sv))
 		}
 	}
 	cfg.opts.DeletionPacing.BaselineRate = func() uint64 {
-		return uint64(baselineDeletionRate.Get(&cfg.settings.SV))
+		return uint64(baselineDeletionRate.Get(sv))
 	}
 	cfg.opts.Experimental.TombstoneDenseCompactionThreshold = func() float64 {
-		return 0.01 * float64(tombstoneDenseCompactionThreshold.Get(&cfg.settings.SV))
+		return 0.01 * float64(tombstoneDenseCompactionThreshold.Get(sv))
 	}
 	if cfg.opts.Experimental.UseDeprecatedCompensatedScore == nil {
 		cfg.opts.Experimental.UseDeprecatedCompensatedScore = func() bool {
-			return useDeprecatedCompensatedScore.Get(&cfg.settings.SV)
+			return useDeprecatedCompensatedScore.Get(sv)
 		}
 	}
+	cfg.opts.Experimental.SpanPolicyFunc = spanPolicyFuncFactory(sv)
 
 	cfg.opts.EnsureDefaults()
 
