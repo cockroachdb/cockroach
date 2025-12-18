@@ -7,6 +7,7 @@ package sslocal
 
 import (
 	"context"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,6 +25,8 @@ import (
 // defaultFlushInterval specifies a default for the amount of time an ingester
 // will go before flushing its contents to the registry.
 const defaultFlushInterval = time.Millisecond * 500
+
+const forceFlushTransactionFingerprintId = appstatspb.TransactionFingerprintID(math.MaxUint64)
 
 // Metrics holds running measurements of various ingester-related runtime stats.
 type Metrics struct {
@@ -149,6 +152,7 @@ type event struct {
 	sessionID   clusterunique.ID
 	transaction *sqlstats.RecordedTxnStats
 	statement   *sqlstats.RecordedStmtStats
+	forceFlush  bool
 }
 
 type BufferOpt func(i *SQLStatsIngester)
@@ -257,7 +261,11 @@ func (i *SQLStatsIngester) ingest(ctx context.Context, events *eventBuffer) {
 			i.metrics.NumProcessed.Inc(1)
 			i.metrics.QueueSize.Dec(1)
 		} else {
-			i.clearSession(e.sessionID)
+			if e.forceFlush {
+				i.flushStatementsOnly(ctx, e.sessionID)
+			} else {
+				i.clearSession(e.sessionID)
+			}
 			i.metrics.NumProcessed.Inc(1)
 			i.metrics.QueueSize.Dec(1)
 		}
@@ -318,6 +326,18 @@ func (i *SQLStatsIngester) ClearSession(sessionID clusterunique.ID) {
 	i.guard.AtomicWrite(func(writerIdx int64) {
 		i.guard.eventBuffer[writerIdx] = event{
 			sessionID: sessionID,
+		}
+		i.metrics.QueueSize.Inc(1)
+	})
+}
+
+// FlushBuffer sends a signal to the underlying registry to flush any cached
+// data associated with the given sessionID. This is an async operation.
+func (i *SQLStatsIngester) FlushBuffer(sessionID clusterunique.ID) {
+	i.guard.AtomicWrite(func(writerIdx int64) {
+		i.guard.eventBuffer[writerIdx] = event{
+			sessionID:  sessionID,
+			forceFlush: true,
 		}
 		i.metrics.QueueSize.Inc(1)
 	})
@@ -437,5 +457,31 @@ func (i *SQLStatsIngester) flushBuffer(
 
 	for _, sink := range i.sinks {
 		sink.ObserveTransaction(ctx, transaction, *statements)
+	}
+}
+
+// flushStatementsOnly sends the buffered statementsBySessionID to the registered sinks
+func (i *SQLStatsIngester) flushStatementsOnly(ctx context.Context, sessionID clusterunique.ID) {
+	var statements statementBuf
+	if sessionStatements, ok := i.statementsBySessionID[sessionID]; ok {
+		defer sessionStatements.release()
+		statements = *sessionStatements
+		delete(i.statementsBySessionID, sessionID)
+	} else {
+		// No statements to flush, return early
+		return
+	}
+
+	// Here we'll set the transaction fingerprint ID for each statement if the
+	// below cluster setting is enabled.
+	if AssociateStmtWithTxnFingerprint.Get(&i.settings.SV) {
+		// These values are only known at the time of the transaction.
+		for _, s := range statements {
+			s.TransactionFingerprintID = forceFlushTransactionFingerprintId
+		}
+	}
+
+	for _, sink := range i.sinks {
+		sink.ObserveTransaction(ctx, nil, statements)
 	}
 }
