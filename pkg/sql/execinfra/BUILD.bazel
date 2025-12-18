@@ -25,6 +25,7 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/gossip",
         "//pkg/jobs",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
