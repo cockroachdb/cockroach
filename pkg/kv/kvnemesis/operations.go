@@ -74,6 +74,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *RestartNodeOperation:
 		return &o.Result
+	case *CrashNodeOperation:
+		return &o.Result
 	default:
 		panic(errors.AssertionFailedf(`unknown operation: %T %v`, o, o))
 	}
@@ -253,6 +255,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *StopNodeOperation:
 		o.format(w, fctx)
 	case *RestartNodeOperation:
+		o.format(w, fctx)
+	case *CrashNodeOperation:
 		o.format(w, fctx)
 	default:
 		fmt.Fprintf(w, "%v", op.GetValue())
@@ -526,12 +530,17 @@ func (op RemoveNetworkPartitionOperation) format(w *strings.Builder, fctx format
 }
 
 func (op StopNodeOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `env.Restarter.StopNode(%d)`, int(op.NodeId))
+	fmt.Fprintf(w, `env.ServerController.StopNode(%d)`, int(op.NodeId))
 	op.Result.format(w)
 }
 
 func (op RestartNodeOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `env.Restarter.RestartNode(%d)`, int(op.NodeId))
+	fmt.Fprintf(w, `env.ServerController.RestartNode(%d)`, int(op.NodeId))
+	op.Result.format(w)
+}
+
+func (op CrashNodeOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `env.ServerController.CrashNode(%d)`, int(op.NodeId))
 	op.Result.format(w)
 }
 

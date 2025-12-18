@@ -109,6 +109,7 @@ func RunNemesis(
 	n := nodes{
 		running: make(map[int]struct{}),
 		stopped: make(map[int]struct{}),
+		crashed: make(map[int]struct{}),
 	}
 	for i := 1; i <= config.NumNodes; i++ {
 		// In liveness mode, we don't allow stopping and restarting the two
