@@ -74,6 +74,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *RestartNodeOperation:
 		return &o.Result
+	case *CrashServerOperation:
+		return &o.Result
 	default:
 		panic(errors.AssertionFailedf(`unknown operation: %T %v`, o, o))
 	}
@@ -253,6 +255,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *StopNodeOperation:
 		o.format(w, fctx)
 	case *RestartNodeOperation:
+		o.format(w, fctx)
+	case *CrashServerOperation:
 		o.format(w, fctx)
 	default:
 		fmt.Fprintf(w, "%v", op.GetValue())
@@ -532,6 +536,11 @@ func (op StopNodeOperation) format(w *strings.Builder, fctx formatCtx) {
 
 func (op RestartNodeOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `env.Restarter.RestartNode(%d)`, int(op.NodeId))
+	op.Result.format(w)
+}
+
+func (op CrashServerOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `env.Restarter.CrashServer(%d)`, int(op.NodeId))
 	op.Result.format(w)
 }
 
