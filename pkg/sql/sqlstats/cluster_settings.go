@@ -6,6 +6,7 @@
 package sqlstats
 
 import (
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -26,6 +27,23 @@ var TxnStatsNumStmtFingerprintIDsToRecord = settings.RegisterIntSetting(
 	"sql.metrics.transaction_details.max_statement_ids",
 	"max number of statement fingerprint IDs to store for transaction statistics",
 	1000,
+	settings.PositiveInt,
+)
+
+// TxnStatsNumStmtFingerprintStatsToRecord limits the number of recorded
+// statement statistics that may be associated with transaction statistics for
+// a single transaction. If the number of statements executed exceeds this
+// value, SQL Stats will force the ingester to flush the buffered stats. These
+// stats will not be associated with the current transaction. SQL Stats will
+// continue to buffer statements until this limit is reached again. In the case
+// that it isn't reached again, the buffered statements will be flushed when
+// the transaction is committed, and they will be associated with the
+// transaction.
+var TxnStatsNumStmtFingerprintStatsToRecord = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.metrics.transaction_details.max_statement_stats",
+	"max number of statement statistics that may be associated with transaction statistics",
+	math.MaxInt64,
 	settings.PositiveInt,
 )
 

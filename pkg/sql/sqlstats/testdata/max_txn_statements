@@ -1,0 +1,73 @@
+# In this test, we verify that statement statistics are force flushed based on
+# the `sql.metrics.transaction_details.max_statement_ids` cluster setting. If
+# the expected criteria is met, statement statistics for a session will be
+# flushed from the buffer, regardless of whether the transaction has ended.
+# When statement statistics are force flushed, there will be no transaction
+# fingerprint ID associated with the flushed statement statistics, since this
+# requires a transaction to have ended to compute.
+
+# Setup baseline to test against with default settings
+exec-sql db=max_txn_stmts_test app-name=exec
+BEGIN;
+SELECT 1;
+SELECT 1;
+SELECT 1;
+END;
+----
+
+exec-sql db=max_txn_stmts_test app-name=exec
+BEGIN;
+SELECT 1;
+SELECT 1;
+SELECT 1;
+SELECT 1;
+SELECT 1;
+END;
+----
+
+show-stats db=max_txn_stmts_test app-name=exec
+----
+{"count": "5", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "023097855475259c"}
+{"count": "3", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "3b5be2cb288f18aa"}
+
+show-txn-stats db=max_txn_stmts_test app-name=exec
+----
+{"commit_lat_not_zero": true, "count": "1", "statement_fingerprint_ids": ["bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17"], "svc_lat_not_zero": true, "txn_fingerprint_id": "023097855475259c"}
+{"commit_lat_not_zero": true, "count": "1", "statement_fingerprint_ids": ["bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17"], "svc_lat_not_zero": true, "txn_fingerprint_id": "3b5be2cb288f18aa"}
+
+exec-sql db=max_txn_stmts_test app-name=setup-limit
+SET CLUSTER SETTING sql.metrics.transaction_details.max_statement_stats=4;
+----
+
+# This is over the configured settings but below the threshold for force flush,
+# so it will still contribute to the same SQL Stats rows as above.
+exec-sql db=max_txn_stmts_test app-name=exec
+BEGIN;
+SELECT 1;
+SELECT 1;
+SELECT 1;
+END;
+----
+
+# This is over the threshold for force flush, so it results in a new row in
+# SQL stats with a blank transaction fingerprint ID.
+exec-sql db=max_txn_stmts_test app-name=exec
+BEGIN;
+SELECT 1;
+SELECT 1;
+SELECT 1;
+SELECT 1;
+SELECT 1;
+END;
+----
+
+show-stats db=max_txn_stmts_test app-name=exec
+----
+{"count": "6", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "023097855475259c"}
+{"count": "6", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "3b5be2cb288f18aa"}
+{"count": "4", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "ffffffffffffffff"}
+
+show-txn-stats db=max_txn_stmts_test app-name=exec
+----
+{"commit_lat_not_zero": true, "count": "2", "statement_fingerprint_ids": ["bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17"], "svc_lat_not_zero": true, "txn_fingerprint_id": "023097855475259c"}
+{"commit_lat_not_zero": true, "count": "2", "statement_fingerprint_ids": ["bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17"], "svc_lat_not_zero": true, "txn_fingerprint_id": "3b5be2cb288f18aa"}
