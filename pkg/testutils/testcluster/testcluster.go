@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -2036,6 +2037,72 @@ func (tc *TestCluster) RestartServerWithInspect(
 			}
 			return ctx.Err()
 		})
+}
+
+func (tc *TestCluster) CrashServer(idx int) error {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if tc.ServerStopped(idx) {
+		return errors.Errorf("server %d is already stopped", idx)
+	}
+
+	serverArgs := tc.serverArgs[idx]
+
+	serverKnobs, ok := serverArgs.Knobs.Server.(*server.TestingKnobs)
+	if !ok || serverKnobs.StickyVFSRegistry == nil {
+		return errors.Errorf(
+			"server %d does not have sticky VFS registry; crash emulation requires sticky VFS", idx)
+	}
+
+	if dialer := tc.Servers[idx].NodeDialer(); dialer != nil {
+		nodeDialer, ok := dialer.(*nodedialer.Dialer)
+		if ok {
+			for peerIdx := range tc.Servers {
+				if peerIdx == idx {
+					continue
+				}
+				peerNodeID := tc.Servers[peerIdx].NodeID()
+				for c := 0; c < rpcbase.NumConnectionClasses; c++ {
+					if brk, found := nodeDialer.GetCircuitBreaker(
+						peerNodeID,
+						rpcbase.ConnectionClass(c),
+					); found {
+						brk.Report(errors.New("connection terminated by crash emulation"))
+					}
+				}
+			}
+		}
+	}
+
+	crashedVFSs := make(map[string]*vfs.MemFS)
+	for i, spec := range serverArgs.StoreSpecs {
+		if !spec.InMemory || spec.StickyVFSID == "" {
+			return errors.Errorf(
+				"crash emulation requires all stores to be in-memory with sticky VFS IDs; "+
+					"store %d on server %d does not meet requirements", i, idx)
+		}
+
+		currentVFS := serverKnobs.StickyVFSRegistry.Get(spec.StickyVFSID)
+
+		crashFS := currentVFS.CrashClone(vfs.CrashCloneCfg{})
+		crashedVFSs[spec.StickyVFSID] = crashFS
+	}
+
+	tc.stopServerLocked(idx)
+
+	for stickyID, crashFS := range crashedVFSs {
+		serverKnobs.StickyVFSRegistry.Set(stickyID, crashFS)
+	}
+
+	return nil
+}
+
+func (tc *TestCluster) CrashAndRestartServer(idx int) error {
+	if err := tc.CrashServer(idx); err != nil {
+		return err
+	}
+	return tc.RestartServer(idx)
 }
 
 // ServerStopped determines if a server has been explicitly
