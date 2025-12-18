@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
 )
@@ -855,6 +856,115 @@ func (s spanSetBatch) shallowCopy() *spanSetBatch {
 	return &b
 }
 
+type spanSetInternalWriter struct {
+	spanSetWriter
+	wb storage.WriteBatch
+}
+
+var _ storage.InternalWriter = (*spanSetInternalWriter)(nil)
+
+// ClearRawEncodedRange implements storage.InternalWriter.
+func (s *spanSetInternalWriter) ClearRawEncodedRange(start, end []byte) error {
+	// Decode the engine keys to check spans.
+	startKey, ok := storage.DecodeEngineKey(start)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+	endKey, ok := storage.DecodeEngineKey(end)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+	if err := s.spanSetWriter.checkAllowedRange(startKey.Key, endKey.Key); err != nil {
+		return err
+	}
+	return s.wb.ClearRawEncodedRange(start, end)
+}
+
+// PutInternalRangeKey implements storage.InternalWriter.
+func (s *spanSetInternalWriter) PutInternalRangeKey(start, end []byte, key rangekey.Key) error {
+	// Decode the engine keys to check spans.
+	startKey, ok := storage.DecodeEngineKey(start)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+	endKey, ok := storage.DecodeEngineKey(end)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+	if err := s.spanSetWriter.checkAllowedRange(startKey.Key, endKey.Key); err != nil {
+		return err
+	}
+	return s.wb.PutInternalRangeKey(start, end, key)
+}
+
+// PutInternalPointKey implements storage.InternalWriter.
+func (s *spanSetInternalWriter) PutInternalPointKey(key *pebble.InternalKey, value []byte) error {
+	// Decode the internal key to check spans.
+	mvccKey, ok := storage.DecodeEngineKey(key.UserKey)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+
+	if err := s.spanSetWriter.checkAllowed(mvccKey.Key); err != nil {
+		return err
+	}
+
+	return s.wb.PutInternalPointKey(key, value)
+}
+
+// spanSetWriteBatch wraps a storage.WriteBatch and adds span checking.
+type spanSetWriteBatch struct {
+	spanSetInternalWriter
+	wb storage.WriteBatch
+}
+
+var _ storage.WriteBatch = (*spanSetWriteBatch)(nil)
+
+// Close implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Close() {
+	s.wb.Close()
+}
+
+// Commit implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Commit(sync bool) error {
+	return s.wb.Commit(sync)
+}
+
+// CommitNoSyncWait implements storage.WriteBatch.
+func (s *spanSetWriteBatch) CommitNoSyncWait() error {
+	return s.wb.CommitNoSyncWait()
+}
+
+// SyncWait implements storage.WriteBatch.
+func (s *spanSetWriteBatch) SyncWait() error {
+	return s.wb.SyncWait()
+}
+
+// Empty implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Empty() bool {
+	return s.wb.Empty()
+}
+
+// Count implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Count() uint32 {
+	return s.wb.Count()
+}
+
+// Len implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Len() int {
+	return s.wb.Len()
+}
+
+// Repr implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Repr() []byte {
+	return s.wb.Repr()
+}
+
+// CommitStats implements storage.WriteBatch.
+func (s *spanSetWriteBatch) CommitStats() storage.BatchCommitStats {
+	return s.wb.CommitStats()
+}
+
 // NewBatch returns a storage.Batch that asserts access of the underlying
 // Batch against the given SpanSet. We only consider span boundaries, associated
 // timestamps are not considered.
@@ -876,6 +986,31 @@ func NewBatchAt(b storage.Batch, spans *SpanSet, ts hlc.Timestamp) storage.Batch
 		b:          b,
 		spans:      spans,
 		ts:         ts,
+	}
+}
+
+// NewWriteBatch returns a storage.WriteBatch that asserts access of the
+// underlying WriteBatch against the given SpanSet. Timestamps are not
+// considered, only span boundaries are checked.
+func NewWriteBatch(wb storage.WriteBatch, spans *SpanSet) storage.WriteBatch {
+	return &spanSetWriteBatch{
+		spanSetInternalWriter: spanSetInternalWriter{
+			spanSetWriter: spanSetWriter{w: wb, spans: spans, spansOnly: true},
+			wb:            wb,
+		},
+		wb: wb,
+	}
+}
+
+// NewWriteBatchAt returns a storage.WriteBatch that asserts access of the
+// underlying WriteBatch against the given SpanSet at the given timestamp.
+func NewWriteBatchAt(wb storage.WriteBatch, spans *SpanSet, ts hlc.Timestamp) storage.WriteBatch {
+	return &spanSetWriteBatch{
+		spanSetInternalWriter: spanSetInternalWriter{
+			spanSetWriter: spanSetWriter{w: wb, spans: spans, ts: ts},
+			wb:            wb,
+		},
+		wb: wb,
 	}
 }
 
