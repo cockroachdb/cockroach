@@ -197,7 +197,7 @@ func RunNemesis(
 	}
 	env.Partitioner.EnablePartitions(false)
 	for i := 0; i < config.NumNodes; i++ {
-		_ = env.Restarter.RestartServer(i)
+		_ = env.ServerController.RestartServer(i)
 	}
 
 	allSteps := make(steps, 0, numSteps)
