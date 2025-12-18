@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -1298,9 +1297,9 @@ func getFullyQualifiedTableNames(
 			// Table name is fully qualfied e.g. foo.bar.fizz. This will resolve to
 			// foo.bar.fizz unless foo != <targetDatabase>, in which case it would fail.
 			if tableName.CatalogName != tree.Name(targetDatabase) {
-				return nil, errors.AssertionFailedf(
+				return nil, changefeedbase.WithTerminalError(errors.Newf(
 					"table %q must be in target database %q", tableName.FQString(), targetDatabase,
-				)
+				))
 			}
 		}
 		fqTableNames = append(fqTableNames, tableName)
@@ -1419,36 +1418,14 @@ func requiresTopicInValue(s Sink) bool {
 func buildDatabaseWatcherFilterFromSpec(
 	spec jobspb.ChangefeedTargetSpecification,
 ) (tableset.Filter, error) {
-	filter := tableset.Filter{
-		DatabaseID: spec.DescID,
+	filterList := spec.FilterList
+	if filterList == nil {
+		filterList = &jobspb.FilterList{}
 	}
-	if spec.FilterList != nil && len(spec.FilterList.Tables) > 0 {
-		switch spec.FilterList.FilterType {
-		case tree.IncludeFilter:
-			filter.IncludeTables = make(map[string]struct{})
-			for fqTableName := range spec.FilterList.Tables {
-				// TODO(#156859): use fully qualified names once watcher supports it.
-				// Extract just the table name from the fully qualified name (e.g., "db.public.table" -> "table")
-				tn, err := parser.ParseQualifiedTableName(fqTableName)
-				if err != nil {
-					return tableset.Filter{}, errors.Wrapf(err, "failed to parse name in filter list: %s", fqTableName)
-				}
-				filter.IncludeTables[tn.Object()] = struct{}{}
-			}
-		case tree.ExcludeFilter:
-			filter.ExcludeTables = make(map[string]struct{})
-			for fqTableName := range spec.FilterList.Tables {
-				// TODO(#156859): use fully qualified names once watcher supports it.
-				// Extract just the table name from the fully qualified name (e.g., "db.public.table" -> "table")
-				tn, err := parser.ParseQualifiedTableName(fqTableName)
-				if err != nil {
-					return tableset.Filter{}, errors.Wrapf(err, "failed to parse name in filter list: %s", fqTableName)
-				}
-				filter.ExcludeTables[tn.Object()] = struct{}{}
-			}
-		}
-	}
-	return filter, nil
+	return tableset.Filter{
+		DatabaseID:  spec.DescID,
+		TableFilter: *filterList,
+	}, nil
 }
 
 var errDoneWatching = errors.New("done watching")
@@ -1861,7 +1838,10 @@ func (b *changefeedResumer) resumeWithRetries(
 					return err
 				}
 
-				watcher = tableset.NewWatcher(filter, execCfg, watcherMemMonitor, int64(jobID))
+				watcher, err = tableset.NewWatcher(ctx, filter, execCfg, watcherMemMonitor, int64(jobID))
+				if err != nil {
+					return err
+				}
 				g.GoCtx(func(ctx context.Context) error {
 					// This method runs the watcher until its context is canceled.
 					// The watcher context is canceled when diffs are sent to the
@@ -1890,27 +1870,20 @@ func (b *changefeedResumer) resumeWithRetries(
 					if err != nil {
 						return err
 					}
-				watchLoop:
 					for ts := schemaTS; ctx.Err() == nil; ts = ts.AddDuration(*frequency) {
-						unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, ts)
+						added, err := watcher.PopUpTo(ctx, ts)
 						if err != nil {
 							return err
 						}
-						if !unchanged {
-							// todo(#156874): once watcher gives us only adds,
-							// we can safely take the first diff.
-							for _, diff := range diffs {
-								if diff.Added.ID != 0 {
-									schemaTS = diff.AsOf
-									initialHighWater = diff.AsOf
-									targets, err = AllTargets(ctx, details, execCfg, schemaTS)
-									if err != nil {
-										return err
-									}
-									cancelWatcher(errDoneWatching)
-									break watchLoop
-								}
+						if len(added) > 0 {
+							schemaTS = added[0].AsOf
+							initialHighWater = added[0].AsOf
+							targets, err = AllTargets(ctx, details, execCfg, schemaTS)
+							if err != nil {
+								return err
 							}
+							cancelWatcher(errDoneWatching)
+							break
 						}
 					}
 				}
