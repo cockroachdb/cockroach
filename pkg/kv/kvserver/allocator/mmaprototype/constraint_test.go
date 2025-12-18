@@ -948,3 +948,44 @@ func TestNormalizedVoterAllRelationships(t *testing.T) {
 			}
 		})
 }
+
+// TestDedupAndFilterConstraints tests the dedupAndFilterConstraints function
+// which deduplicates constraints by summing their numReplicas.
+func TestDedupAndFilterConstraints(t *testing.T) {
+	interner := newStringInterner()
+
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, t.Name()),
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "dedup":
+				// Parse input lines directly as internedConstraintsConjunction.
+				// Each line format: num-replicas=N [+key=val|-key=val]...
+				var constraints []internedConstraintsConjunction
+				for _, line := range strings.Split(d.Input, "\n") {
+					parts := strings.Fields(line)
+					if len(parts) == 0 {
+						continue
+					}
+					cc := parseConstraintsConj(t, parts)
+					constraints = append(constraints, internedConstraintsConjunction{
+						numReplicas: cc.NumReplicas,
+						constraints: interner.internConstraintsConj(cc.Constraints),
+					})
+				}
+				constraints = dedupAndFilterConstraints(constraints)
+
+				// Format output.
+				var b strings.Builder
+				for _, icc := range constraints {
+					cc := icc.unintern(interner)
+					fmt.Fprintf(&b, "%s\n", cc.String())
+				}
+				if len(constraints) == 0 {
+					b.WriteString("(empty)\n")
+				}
+				return b.String()
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+}
