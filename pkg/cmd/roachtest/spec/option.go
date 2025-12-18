@@ -71,6 +71,20 @@ func VolumeSize(n int) Option {
 	}
 }
 
+// VolumeType sets the volume type.
+func VolumeType(volumeType string) Option {
+	return func(spec *ClusterSpec) {
+		spec.VolumeType = volumeType
+	}
+}
+
+// VolumeCount sets the volume count.
+func VolumeCount(volumeCount int) Option {
+	return func(spec *ClusterSpec) {
+		spec.VolumeCount = volumeCount
+	}
+}
+
 // SSD is a node option which requests nodes with the specified number of SSDs.
 func SSD(n int) Option {
 	return func(spec *ClusterSpec) {
@@ -242,13 +256,6 @@ func GCEMinCPUPlatform(platform string) Option {
 	}
 }
 
-// GCEVolumeType sets the volume type when the cluster is on GCE.
-func GCEVolumeType(volumeType string) Option {
-	return func(spec *ClusterSpec) {
-		spec.GCE.VolumeType = volumeType
-	}
-}
-
 // GCEZones is a node option which requests Geo-distributed nodes; only applies
 // when the test runs on GCE.
 //
@@ -275,6 +282,14 @@ func AWSVolumeThroughput(throughput int) Option {
 	}
 }
 
+// AWSVolumeIOPS sets the provisioned IOPS for EBS volumes when the cluster is
+// on AWS.
+func AWSVolumeIOPS(iops int) Option {
+	return func(spec *ClusterSpec) {
+		spec.AWS.VolumeIOPS = iops
+	}
+}
+
 // AWSZones is a node option which requests Geo-distributed nodes; only applies
 // when the test runs on AWS.
 //
@@ -298,5 +313,13 @@ func AWSZones(zones string) Option {
 func AzureZones(zones string) Option {
 	return func(spec *ClusterSpec) {
 		spec.Azure.Zones = zones
+	}
+}
+
+// AzureVolumeIOPS sets the provisioned IOPS for ultra-disk volumes
+// when the cluster is on Azure.
+func AzureVolumeIOPS(iops int) Option {
+	return func(spec *ClusterSpec) {
+		spec.Azure.VolumeIOPS = iops
 	}
 }

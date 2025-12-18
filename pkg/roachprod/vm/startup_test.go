@@ -28,13 +28,13 @@ func TestGenericStartupArgs(t *testing.T) {
 		args := DefaultStartupArgs(WithOSInitializedFile("test"))
 		require.Equal(t, args.OSInitializedFile, "test")
 	})
-	t.Run("WithDiskInitializeFile", func(t *testing.T) {
+	t.Run("WithDisksInitializedFile", func(t *testing.T) {
 		args := DefaultStartupArgs(WithDisksInitializedFile("test"))
 		require.Equal(t, args.DisksInitializedFile, "test")
 	})
 	t.Run("WithZfs", func(t *testing.T) {
-		args := DefaultStartupArgs(WithZfs(true))
-		require.Equal(t, args.Zfs, true)
+		args := DefaultStartupArgs(WithFilesystem(Ext4))
+		require.Equal(t, args.Filesystem, Ext4)
 	})
 	t.Run("WithFIPS", func(t *testing.T) {
 		args := DefaultStartupArgs(WithEnableFIPS(true))
