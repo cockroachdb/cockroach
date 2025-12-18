@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -2054,6 +2055,91 @@ func (tc *TestCluster) RestartServerWithInspect(
 			}
 			return ctx.Err()
 		})
+}
+
+// isolateNodeFromPeers trips circuit breakers on the crashed node's dialer to
+// isolate it from all peer nodes. This simulates network partition behavior
+// during a crash. The circuit breakers will automatically reset when the node
+// is restarted and connections are successfully re-established via the
+// background `AsyncProbe` mechanism; manual undo is not needed.
+func (tc *TestCluster) isolateNodeFromPeers(idx int) {
+	nodeDialer, ok := tc.Servers[idx].NodeDialer().(*nodedialer.Dialer)
+	if !ok {
+		return
+	}
+	for peerIdx := range tc.Servers {
+		if peerIdx == idx {
+			continue
+		}
+		peerNodeID := tc.Servers[peerIdx].NodeID()
+		for c := 0; c < rpcbase.NumConnectionClasses; c++ {
+			if brk, found := nodeDialer.GetCircuitBreaker(
+				peerNodeID,
+				rpcbase.ConnectionClass(c),
+			); found {
+				brk.Report(errors.New("connection terminated by crash emulation"))
+			}
+		}
+	}
+}
+
+// CrashNode emulates a crash of the server at the given index by stopping it
+// and creating a snapshot of its in-memory filesystems (capturing state at the
+// last sync point). This allows testing crash recovery scenarios. Requires all
+// stores to use sticky VFS with in-memory storage. Also reports connection
+// failures to peer nodes' circuit breakers to simulate network disconnection.
+func (tc *TestCluster) CrashNode(idx int) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if tc.mu.serverStoppers[idx] == nil {
+		tc.t.Fatalf("server %d is already stopped", idx)
+	}
+
+	serverArgs := tc.serverArgs[idx]
+
+	serverKnobs, ok := serverArgs.Knobs.Server.(*server.TestingKnobs)
+	if !ok || serverKnobs.StickyVFSRegistry == nil {
+		tc.t.Fatalf(
+			"server %d does not have sticky VFS registry; crash emulation requires sticky VFS", idx)
+	}
+
+	// Isolate the crashed node from its peers by tripping circuit breakers.
+	// This simulates network partition behavior during a crash. Circuit breakers
+	// will automatically reset when the node is restarted and connections are
+	// successfully re-established (via background probe mechanisms), so no manual
+	// undo is needed.
+	//
+	// This step is first because we want to prevent any message sent after the
+	// CrashClone of the VFS. Otherwise it would be able to leak false durability
+	// signal into the cluster, such as with raft messages like
+	// MsgVoteResp / MsgAppResp.
+	tc.isolateNodeFromPeers(idx)
+
+	crashedVFSesMap := make(map[string]*vfs.MemFS)
+	for i, spec := range serverArgs.StoreSpecs {
+		if !spec.InMemory || spec.StickyVFSID == "" {
+			tc.t.Fatalf(
+				"crash emulation requires all stores to be in-memory with sticky VFS IDs; "+
+					"store %d on server %d does not meet requirements", i, idx)
+		}
+
+		// Get the current in-memory filesystem for this store and create a crash
+		// snapshot. CrashClone captures the filesystem state at the last sync point,
+		// simulating what would be on disk after a crash (only synced data survives).
+		currentVFS := serverKnobs.StickyVFSRegistry.Get(spec.StickyVFSID)
+		crashedVFSesMap[spec.StickyVFSID] = currentVFS.CrashClone(vfs.CrashCloneCfg{})
+	}
+
+	tc.stopServerLocked(idx)
+
+	// Replace the filesystems in the registry with the crash snapshots. When the
+	// server is restarted, it will see the filesystem state as it was at the last
+	// sync point (the crash snapshot), not the current state. This simulates a
+	// real crash where only synced data persists.
+	for stickyID, crashFS := range crashedVFSesMap {
+		serverKnobs.StickyVFSRegistry.Set(stickyID, crashFS)
+	}
 }
 
 // ServerStopped determines if a server has been explicitly
