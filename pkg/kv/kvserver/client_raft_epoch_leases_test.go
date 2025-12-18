@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -306,18 +307,18 @@ func TestRequestsOnLaggingReplicaEpochLeases(t *testing.T) {
 
 	for _, i := range []int{0, 1, 2} {
 		store := tc.GetFirstStoreFromServer(t, i)
-		h := &unreliableRaftHandler{
-			name:                       fmt.Sprintf("store %d", i),
-			rangeID:                    rngDesc.RangeID,
+		h := &kvtestutils.UnreliableRaftHandler{
+			Name:                       fmt.Sprintf("store %d", i),
+			RangeID:                    rngDesc.RangeID,
 			IncomingRaftMessageHandler: store,
 		}
 		if i != partitionNodeIdx {
 			// Only filter messages from the partitioned store on the other two
 			// stores.
-			h.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
+			h.DropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 				return req.FromReplica.StoreID == partRepl.StoreID()
 			}
-			h.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
+			h.DropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
 				return hb.FromReplicaID == partReplDesc.ReplicaID
 			}
 		}
@@ -551,17 +552,17 @@ func TestSnapshotAfterTruncationWithUncommittedTailEpochLeases(t *testing.T) {
 	//
 	log.KvExec.Infof(ctx, "test: installing unreliable Raft transports")
 	for _, s := range []int{0, 1, 2} {
-		h := &unreliableRaftHandler{
-			rangeID:                    partRepl.RangeID,
+		h := &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    partRepl.RangeID,
 			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
 		}
 		if s != partStore {
 			// Only filter messages from the partitioned store on the other
 			// two stores.
-			h.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
+			h.DropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 				return req.FromReplica.StoreID == partRepl.StoreID()
 			}
-			h.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
+			h.DropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
 				return hb.FromReplicaID == partReplDesc.ReplicaID
 			}
 		}
@@ -661,11 +662,11 @@ func TestSnapshotAfterTruncationWithUncommittedTailEpochLeases(t *testing.T) {
 	// Remove the partition. Snapshot should follow.
 	log.KvExec.Infof(ctx, "test: removing the partition")
 	for _, s := range []int{0, 1, 2} {
-		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, &unreliableRaftHandler{
-			rangeID:                    partRepl.RangeID,
+		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    partRepl.RangeID,
 			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
-			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+			UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+				DropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we just truncated can
 					// make it through. The Raft transport is asynchronous so this is necessary
 					// to make the test pass reliably.
@@ -673,8 +674,8 @@ func TestSnapshotAfterTruncationWithUncommittedTailEpochLeases(t *testing.T) {
 					// entries in the MsgApp, so filter where msg.Index < index, not <= index.
 					return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
 				},
-				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
-				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
+				DropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+				DropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
 			},
 		})
 	}
