@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -488,6 +489,22 @@ type redactionFunc func(string) (string, error)
 
 var redactSimple = func(string) (string, error) {
 	return "redacted", nil
+}
+
+// Regex from https://avro.apache.org/docs/1.8.1/spec.html.
+var avroNameRegexp = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func validateAvroSchemaPrefix(prefix string) error {
+	if prefix == "" {
+		return nil
+	}
+	if !avroNameRegexp.MatchString(prefix) {
+		return errors.Errorf(
+			`%s must start with [A-Za-z_] and subsequently contain only [A-Za-z0-9_]`,
+			OptAvroSchemaPrefix,
+		)
+	}
+	return nil
 }
 
 // RedactUserFromURI takes a URI string and removes the user from it.
@@ -1393,6 +1410,11 @@ func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool
 			}
 		}
 	}
+
+	if err := validateAvroSchemaPrefix(s.m[OptAvroSchemaPrefix]); err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -79,3 +79,53 @@ func TestEncodingOptionsValidations(t *testing.T) {
 	}
 
 }
+
+func TestAvroSchemaPrefixValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cases := []struct {
+		prefix    string
+		expectErr string
+	}{
+		// Valid prefixes
+		{"", ""},
+		{"a", ""},
+		{"A", ""},
+		{"_", ""},
+		{"abc", ""},
+		{"ABC", ""},
+		{"_abc", ""},
+		{"a1", ""},
+		{"A1_b2_C3", ""},
+		{"crdb_cdc_", ""},
+		{"super", ""},
+		{"____", ""},
+
+		// Invalid prefixes - starts with invalid character
+		{"1abc", "must start with [A-Za-z_] and subsequently contain only [A-Za-z0-9_]"},
+		{"123", "must start with [A-Za-z_] and subsequently contain only [A-Za-z0-9_]"},
+		{"-abc", "must start with [A-Za-z_] and subsequently contain only [A-Za-z0-9_]"},
+
+		// Invalid prefixes - contains invalid characters
+		{"abc-def", "must start with [A-Za-z_] and subsequently contain only [A-Za-z0-9_]"},
+		{"abc.def", "must start with [A-Za-z_] and subsequently contain only [A-Za-z0-9_]"},
+		{"abc def", "must start with [A-Za-z_] and subsequently contain only [A-Za-z0-9_]"},
+		{"abc!", "must start with [A-Za-z_] and subsequently contain only [A-Za-z0-9_]"},
+	}
+
+	for _, c := range cases {
+		t.Run(fmt.Sprintf("prefix=%q", c.prefix), func(t *testing.T) {
+			opts := MakeStatementOptions(map[string]string{
+				OptAvroSchemaPrefix: c.prefix,
+			})
+			err := opts.ValidateForCreateChangefeed(false)
+			if c.expectErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), c.expectErr)
+			}
+		})
+	}
+}
