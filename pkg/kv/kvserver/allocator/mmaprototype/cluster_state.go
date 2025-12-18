@@ -1605,7 +1605,14 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 	localss := cs.stores[msg.StoreID]
 	cs.meansMemo.clear()
 	clusterMeans := cs.meansMemo.getMeans(nil)
-	for _, ss := range cs.stores {
+	// Sort by store ID for deterministic log output in tests.
+	storeIDs := make([]roachpb.StoreID, 0, len(cs.stores))
+	for storeID := range cs.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	slices.Sort(storeIDs)
+	for _, storeID := range storeIDs {
+		ss := cs.stores[storeID]
 		topk := ss.adjusted.topKRanges[msg.StoreID]
 		if topk == nil {
 			topk = &topKReplicas{k: numTopKReplicas}
