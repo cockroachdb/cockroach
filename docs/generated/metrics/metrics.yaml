@@ -13232,6 +13232,174 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: mma.change.external.lease.failure
+      exported_name: mma_change_external_lease_failure
+      labeled_name: 'mma.change{origin: external, type: lease, result: failure}'
+      description: Number of failed external lease change operations
+      y_axis_label: Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.external.lease.success
+      exported_name: mma_change_external_lease_success
+      labeled_name: 'mma.change{origin: external, type: lease, result: success}'
+      description: Number of successful external lease change operations
+      y_axis_label: Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.external.replica.failure
+      exported_name: mma_change_external_replica_failure
+      labeled_name: 'mma.change{origin: external, type: replica, result: failure}'
+      description: Number of failed external replica change operations
+      y_axis_label: Range Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.external.replica.success
+      exported_name: mma_change_external_replica_success
+      labeled_name: 'mma.change{origin: external, type: replica, result: success}'
+      description: Number of successful external replica change operations
+      y_axis_label: Range Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.rebalance.lease.failure
+      exported_name: mma_change_rebalance_lease_failure
+      labeled_name: 'mma.change{origin: rebalance, type: lease, result: failure}'
+      description: Number of failed MMA-initiated rebalance operations that transfer the lease
+      y_axis_label: Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.rebalance.lease.success
+      exported_name: mma_change_rebalance_lease_success
+      labeled_name: 'mma.change{origin: rebalance, type: lease, result: success}'
+      description: Number of successful MMA-initiated rebalance operations that transfer the lease
+      y_axis_label: Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.rebalance.replica.failure
+      exported_name: mma_change_rebalance_replica_failure
+      labeled_name: 'mma.change{origin: rebalance, type: replica, result: failure}'
+      description: Number of failed MMA-initiated rebalance operations that change replicas
+      y_axis_label: Range Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.rebalance.replica.success
+      exported_name: mma_change_rebalance_replica_success
+      labeled_name: 'mma.change{origin: rebalance, type: replica, result: success}'
+      description: Number of successful MMA-initiated rebalance operations that change replicas
+      y_axis_label: Range Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.dropped
+      exported_name: mma_dropped
+      description: Number of operations dropped due to MMA state inconsistency
+      y_axis_label: Replica/Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.external.registration.failure
+      exported_name: mma_external_registration_failure
+      description: Number of external operations that failed to register with MMA
+      y_axis_label: Replica/Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.external.registration.success
+      exported_name: mma_external_registration_success
+      description: Number of external operations successfully registered with MMA
+      y_axis_label: Replica/Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.overloaded_store.lease_grace.failure
+      exported_name: mma_overloaded_store_lease_grace_failure
+      labeled_name: 'mma.overloaded_store{type: lease_grace, result: failure}'
+      description: Number of overloaded stores within lease shedding grace period for which shedding failed
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.lease_grace.success
+      exported_name: mma_overloaded_store_lease_grace_success
+      labeled_name: 'mma.overloaded_store{type: lease_grace, result: success}'
+      description: Number of overloaded stores within lease shedding grace period for which shedding succeeded
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.long_dur.failure
+      exported_name: mma_overloaded_store_long_dur_failure
+      labeled_name: 'mma.overloaded_store{type: long_dur, result: failure}'
+      description: Number of stores overloaded for a long duration for which shedding failed
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.long_dur.success
+      exported_name: mma_overloaded_store_long_dur_success
+      labeled_name: 'mma.overloaded_store{type: long_dur, result: success}'
+      description: Number of stores overloaded for a long duration for which shedding succeeded
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.medium_dur.failure
+      exported_name: mma_overloaded_store_medium_dur_failure
+      labeled_name: 'mma.overloaded_store{type: medium_dur, result: failure}'
+      description: Number of stores overloaded for a medium duration for which shedding failed
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.medium_dur.success
+      exported_name: mma_overloaded_store_medium_dur_success
+      labeled_name: 'mma.overloaded_store{type: medium_dur, result: success}'
+      description: Number of stores overloaded for a medium duration for which shedding succeeded
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.short_dur.failure
+      exported_name: mma_overloaded_store_short_dur_failure
+      labeled_name: 'mma.overloaded_store{type: short_dur, result: failure}'
+      description: Number of stores overloaded for a short duration for which shedding failed
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.short_dur.success
+      exported_name: mma_overloaded_store_short_dur_success
+      labeled_name: 'mma.overloaded_store{type: short_dur, result: success}'
+      description: Number of stores overloaded for a short duration for which shedding succeeded
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: node-id
       exported_name: node_id
       description: node ID with labels for advertised RPC and HTTP addresses

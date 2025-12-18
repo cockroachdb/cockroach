@@ -120,7 +120,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 	}
 
 	if !tick.Before(rq.next) && rq.lastSyncChangeID.IsValid() {
-		rq.as.PostApply(rq.lastSyncChangeID, true /* success */)
+		rq.as.PostApply(ctx, rq.lastSyncChangeID, true /* success */)
 		rq.lastSyncChangeID = mmaintegration.InvalidSyncChangeID
 	}
 
@@ -232,7 +232,7 @@ func pushReplicateChange(
 		next = completeAt
 	} else {
 		log.VEventf(ctx, 1, "pushing state change failed")
-		as.PostApply(changeID, false /* success */)
+		as.PostApply(ctx, changeID, false /* success */)
 		changeID = mmaintegration.InvalidSyncChangeID
 	}
 	return next, changeID

@@ -137,7 +137,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 				} else {
 					log.KvDistribution.VInfof(ctx, 1, "operation for pendingChange=%v completed successfully", curChange.change)
 				}
-				msr.as.PostApply(curChange.syncChangeID, success)
+				msr.as.PostApply(ctx, curChange.syncChangeID, success)
 				msr.pendingChangeIdx++
 			} else {
 				log.KvDistribution.VInfof(ctx, 1, "operation for pendingChange=%v is still in progress", curChange.change)

@@ -1137,7 +1137,7 @@ func (rq *replicateQueue) TransferLease(
 	)
 
 	err := rlm.AdminTransferLease(ctx, target.StoreID, false /* bypassSafetyChecks */)
-	rq.as.PostApply(changeID, err == nil /*success*/)
+	rq.as.PostApply(ctx, changeID, err == nil /*success*/)
 
 	if err != nil {
 		return errors.Wrapf(err, "%s: unable to transfer lease to %v", rlm, target)
@@ -1189,7 +1189,7 @@ func (rq *replicateQueue) changeReplicas(
 		details, chgs,
 	)
 
-	rq.as.PostApply(changeID, err == nil /*success*/)
+	rq.as.PostApply(ctx, changeID, err == nil /*success*/)
 	return err
 }
 
