@@ -1024,6 +1024,9 @@ func (v *validator) processOp(op Operation) {
 	case *RestartNodeOperation:
 		execTimestampStrictlyOptional = true
 		v.checkError(op, t.Result)
+	case *CrashNodeOperation:
+		execTimestampStrictlyOptional = true
+		v.checkError(op, t.Result)
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
 	}

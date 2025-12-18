@@ -30,6 +30,7 @@ type Logger interface {
 type ServerController interface {
 	StopServer(idx int)
 	RestartServer(idx int) error
+	CrashServer(idx int)
 }
 
 // Env manipulates the environment (cluster settings, zone configurations) that

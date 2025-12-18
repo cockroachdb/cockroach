@@ -424,6 +424,7 @@ type FaultConfig struct {
 	// RestartNode is an operation that restarts a randomly chosen node.
 	RestartNode int
 	// Disk stalls and other faults belong here.
+	CrashServer int
 }
 
 // newAllOperationsConfig returns a GeneratorConfig that exercises *all*
@@ -811,6 +812,7 @@ type nodes struct {
 	mu      syncutil.RWMutex
 	running map[int]struct{}
 	stopped map[int]struct{}
+	crashed map[int]struct{}
 }
 
 func randNodeFromMap(m map[int]struct{}, rng *rand.Rand) int {
@@ -843,6 +845,12 @@ func (n *nodes) setStopped(nodeID int) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.stopped[nodeID] = struct{}{}
+}
+
+func (n *nodes) setCrashed(nodeID int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.crashed[nodeID] = struct{}{}
 }
 
 // RandStep returns a single randomly generated next operation to execute.
@@ -931,6 +939,9 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	}
 	if len(g.nodes.stopped) > 0 {
 		addOpGen(&allowed, restartRandNode, g.Config.Ops.Fault.RestartNode)
+	}
+	if len(g.nodes.running) > 0 {
+		addOpGen(&allowed, crashRandNode, g.Config.Ops.Fault.CrashServer)
 	}
 
 	return step(g.selectOp(rng, allowed))
@@ -1881,6 +1892,11 @@ func restartRandNode(g *generator, rng *rand.Rand) Operation {
 	return restartNode(randNode)
 }
 
+func crashRandNode(g *generator, rng *rand.Rand) Operation {
+	randNode := g.nodes.removeRandRunning(rng)
+	return crashServer(randNode)
+}
+
 func isFollowerReadEligibleOp(op Operation) bool {
 	if op.Get != nil && op.Get.FollowerReadEligible {
 		return true
@@ -2527,6 +2543,10 @@ func stopNode(nodeID int) Operation {
 
 func restartNode(nodeID int) Operation {
 	return Operation{RestartNode: &RestartNodeOperation{NodeId: int32(nodeID)}}
+}
+
+func crashServer(nodeID int) Operation {
+	return Operation{CrashNode: &CrashNodeOperation{NodeId: int32(nodeID)}}
 }
 
 type countingRandSource struct {

@@ -444,6 +444,11 @@ func TestRandStep(t *testing.T) {
 			n.mu.Lock()
 			n.running[int(o.NodeId)] = struct{}{}
 			n.mu.Unlock()
+		case *CrashNodeOperation:
+			counts.Fault.CrashServer++
+			n.mu.Lock()
+			n.crashed[int(o.NodeId)] = struct{}{}
+			n.mu.Unlock()
 		default:
 			t.Fatalf("%T", o)
 		}

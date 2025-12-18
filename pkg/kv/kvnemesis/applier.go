@@ -190,6 +190,11 @@ func (a *Applier) applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 		err := a.env.ServerController.RestartServer(serverID)
 		a.nodes.setRunning(int(o.NodeId))
 		o.Result = resultInit(ctx, err)
+	case *CrashNodeOperation:
+		serverID := int(o.NodeId) - 1
+		a.env.ServerController.CrashServer(serverID)
+		a.nodes.setCrashed(int(o.NodeId))
+		o.Result = resultInit(ctx, nil)
 	case *ClosureTxnOperation:
 		// Use a backoff loop to avoid thrashing on txn aborts. Don't wait between
 		// epochs of the same transaction to avoid waiting while holding locks.
