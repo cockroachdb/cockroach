@@ -1546,7 +1546,6 @@ func (t *logicTest) newCluster(
 					IgnoreOnDeleteRangeError: ignoreMVCCRangeTombstoneErrors,
 				},
 			},
-			ClusterName:   "testclustername",
 			ExternalIODir: t.sharedIODir,
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
