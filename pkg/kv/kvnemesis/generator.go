@@ -555,6 +555,7 @@ func newAllOperationsConfig() GeneratorConfig {
 			RemoveNetworkPartition: 1,
 			StopNode:               1,
 			RestartNode:            1,
+			CrashServer:            1,
 		},
 	}}
 }
@@ -655,6 +656,7 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.Fault.RemoveNetworkPartition = 0
 	config.Ops.Fault.StopNode = 0
 	config.Ops.Fault.RestartNode = 0
+	config.Ops.Fault.CrashServer = 0
 	return config
 }
 
@@ -835,6 +837,49 @@ func (n *nodes) removeRandStopped(rng *rand.Rand) int {
 	return nodeID
 }
 
+func (n *nodes) removeRandCrashed(rng *rand.Rand) int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	nodeID := randNodeFromMap(n.crashed, rng)
+	delete(n.crashed, nodeID)
+	return nodeID
+}
+
+// removeRandStoppedOrCrashed randomly picks a node from either the stopped or
+// crashed sets. If both sets are non-empty, it randomly chooses which set to
+// pick from (with equal probability), otherwise picks from whichever set is
+// available.
+func (n *nodes) removeRandStoppedOrCrashed(rng *rand.Rand) int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	stoppedCount := len(n.stopped)
+	crashedCount := len(n.crashed)
+
+	if stoppedCount == 0 && crashedCount == 0 {
+		panic("no stopped or crashed nodes available")
+	}
+
+	// If both sets are non-empty, randomly choose which one to pick from.
+	// Otherwise, pick from whichever set is available.
+	var nodeID int
+	if stoppedCount > 0 && crashedCount > 0 {
+		if rng.Intn(2) == 0 {
+			nodeID = randNodeFromMap(n.stopped, rng)
+			delete(n.stopped, nodeID)
+		} else {
+			nodeID = randNodeFromMap(n.crashed, rng)
+			delete(n.crashed, nodeID)
+		}
+	} else if stoppedCount > 0 {
+		nodeID = randNodeFromMap(n.stopped, rng)
+		delete(n.stopped, nodeID)
+	} else {
+		nodeID = randNodeFromMap(n.crashed, rng)
+		delete(n.crashed, nodeID)
+	}
+	return nodeID
+}
+
 func (n *nodes) setRunning(nodeID int) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -937,7 +982,7 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	if len(g.nodes.running) > 0 {
 		addOpGen(&allowed, stopRandNode, g.Config.Ops.Fault.StopNode)
 	}
-	if len(g.nodes.stopped) > 0 {
+	if len(g.nodes.stopped) > 0 || len(g.nodes.crashed) > 0 {
 		addOpGen(&allowed, restartRandNode, g.Config.Ops.Fault.RestartNode)
 	}
 	if len(g.nodes.running) > 0 {
@@ -1888,7 +1933,7 @@ func stopRandNode(g *generator, rng *rand.Rand) Operation {
 }
 
 func restartRandNode(g *generator, rng *rand.Rand) Operation {
-	randNode := g.nodes.removeRandStopped(rng)
+	randNode := g.nodes.removeRandStoppedOrCrashed(rng)
 	return restartNode(randNode)
 }
 

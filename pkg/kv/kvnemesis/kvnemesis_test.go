@@ -270,7 +270,14 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		}
 	}
 
-	reg := fs.NewStickyRegistry()
+	var reg fs.StickyRegistry
+	if cfg.enableCrashOperations {
+		// UseStrictMemFS is required for crash simulation - it enables CrashClone()
+		// to properly simulate what data survives a crash (only synced data).
+		reg = fs.NewStickyRegistry(fs.UseStrictMemFS)
+	} else {
+		reg = fs.NewStickyRegistry()
+	}
 	lisReg := listenerutil.NewListenerRegistry()
 	args := base.TestClusterArgs{
 		ReusableListenerReg: lisReg,
@@ -427,6 +434,11 @@ type kvnemesisTestCfg struct {
 	testGeneratorConfig func(*GeneratorConfig)
 
 	mode TestMode
+
+	// enableCrashOperations enables the strict in-memory filesystem needed for
+	// crash simulation. Without this, CrashClone() doesn't properly simulate
+	// crash behavior. Only enable for tests that use CrashServer operations.
+	enableCrashOperations bool
 }
 
 func defaultTestConfiguration(numNodes int) kvnemesisTestCfg {
@@ -575,6 +587,30 @@ func TestKVNemesisMultiNode_Restart_Liveness(t *testing.T) {
 		mode:                         Liveness,
 		testGeneratorConfig: func(cfg *GeneratorConfig) {
 			cfg.Ops.Fault.StopNode = 1
+			cfg.Ops.Fault.RestartNode = 1
+			// Disallow replica changes because they interfere with the zone config
+			// constraints (at least one replica on nodes 1 and 2).
+			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{}
+		},
+	})
+}
+
+func TestKVNemesisMultiNode_Crash_Liveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     4,
+		numSteps:                     10, // Crash operations are expensive, use fewer steps
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
+		mode:                         Liveness,
+		enableCrashOperations:        true, // Required for UseStrictMemFS
+		testGeneratorConfig: func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.CrashServer = 1
 			cfg.Ops.Fault.RestartNode = 1
 			// Disallow replica changes because they interfere with the zone config
 			// constraints (at least one replica on nodes 1 and 2).

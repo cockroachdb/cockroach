@@ -63,7 +63,7 @@ go_library(
 
 go_test(
     name = "kvnemesis_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "applier_test.go",
         "clock_test.go",
