@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
@@ -3863,8 +3864,8 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	})
 
 	store, _ := getFirstStoreReplica(t, tc.Server(1), k)
-	tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
-		rangeID:                    desc.RangeID,
+	tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &kvtestutils.UnreliableRaftHandler{
+		RangeID:                    desc.RangeID,
 		IncomingRaftMessageHandler: store,
 	})
 
@@ -4601,10 +4602,10 @@ func TestStoreRangeSplitRaftSnapshotAfterRHSRebalanced(t *testing.T) {
 
 	// Start dropping all Raft traffic to store2.
 	aRepl0 := store0.LookupReplica(roachpb.RKey(keyStart))
-	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:                    aRepl0.RangeID,
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+		RangeID:                    aRepl0.RangeID,
 		IncomingRaftMessageHandler: store2,
-		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{},
+		UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{},
 	})
 
 	// Split at keyD: [keyStart, keyD) and [keyD, /Max)
@@ -4645,11 +4646,11 @@ func TestStoreRangeSplitRaftSnapshotAfterRHSRebalanced(t *testing.T) {
 
 	beforeRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
 
-	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:                    aRepl0.RangeID,
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+		RangeID:                    aRepl0.RangeID,
 		IncomingRaftMessageHandler: store2,
-		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+		UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+			DropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 				// Make sure that even going forward no MsgApp for what we just
 				// truncated can make it through. The Raft transport is asynchronous so
 				// this is necessary to make the test pass reliably - otherwise the
@@ -4661,8 +4662,8 @@ func TestStoreRangeSplitRaftSnapshotAfterRHSRebalanced(t *testing.T) {
 				// index.
 				return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
 			},
-			dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
-			dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
+			DropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+			DropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
 		},
 	})
 
