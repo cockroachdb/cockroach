@@ -113,8 +113,10 @@ debug/system.sql_stats_cardinality.txt
 debug/system.sqlliveness.txt
 debug/system.statement_diagnostics.txt
 debug/system.statement_diagnostics_requests.txt
+debug/system.statement_hints.txt
 debug/system.statement_statistics_limit_5000.txt
 debug/system.table_statistics.txt
+debug/system.table_statistics_locks.txt
 debug/system.task_payloads.txt
 debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
@@ -246,8 +248,10 @@ debug/system.sql_stats_cardinality.txt
 debug/system.sqlliveness.txt
 debug/system.statement_diagnostics.txt
 debug/system.statement_diagnostics_requests.txt
+debug/system.statement_hints.txt
 debug/system.statement_statistics_limit_5000.txt
 debug/system.table_statistics.txt
+debug/system.table_statistics_locks.txt
 debug/system.task_payloads.txt
 debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
@@ -410,8 +414,10 @@ debug/system.sql_stats_cardinality.txt
 debug/system.sqlliveness.txt
 debug/system.statement_diagnostics.txt
 debug/system.statement_diagnostics_requests.txt
+debug/system.statement_hints.txt
 debug/system.statement_statistics_limit_5000.txt
 debug/system.table_statistics.txt
+debug/system.table_statistics_locks.txt
 debug/system.task_payloads.txt
 debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
@@ -549,8 +555,10 @@ debug/system.sql_stats_cardinality.txt
 debug/system.sqlliveness.txt
 debug/system.statement_diagnostics.txt
 debug/system.statement_diagnostics_requests.txt
+debug/system.statement_hints.txt
 debug/system.statement_statistics_limit_5000.txt
 debug/system.table_statistics.txt
+debug/system.table_statistics_locks.txt
 debug/system.task_payloads.txt
 debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
