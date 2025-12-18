@@ -11,6 +11,7 @@ package sqlstats
 import (
 	"context"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -99,6 +100,41 @@ type RecordedStmtStats struct {
 	Indexes                  []string
 	QueryTags                []sqlcommenter.QueryTag
 	UnderOuterTxn            bool
+}
+
+// Size returns the approximate memory footprint of RecordedStmtStats.
+func (r *RecordedStmtStats) Size() int64 {
+	size := int64(unsafe.Sizeof(*r))
+
+	// Account for variable-length string fields.
+	size += int64(len(r.Query))
+	size += int64(len(r.App))
+	size += int64(len(r.Database))
+	size += int64(len(r.QuerySummary))
+	size += int64(len(r.PlanGist))
+
+	// Account for slices.
+	size += int64(cap(r.Nodes)) * int64(unsafe.Sizeof(int64(0)))
+	size += int64(cap(r.KVNodeIDs)) * int64(unsafe.Sizeof(int32(0)))
+	size += int64(cap(r.IndexRecommendations)) * int64(unsafe.Sizeof(""))
+	for _, rec := range r.IndexRecommendations {
+		size += int64(len(rec))
+	}
+	size += int64(cap(r.Indexes)) * int64(unsafe.Sizeof(""))
+	for _, idx := range r.Indexes {
+		size += int64(len(idx))
+	}
+	size += int64(cap(r.QueryTags)) * int64(unsafe.Sizeof(sqlcommenter.QueryTag{}))
+
+	// Account for pointer fields.
+	if r.Plan != nil {
+		size += int64(r.Plan.Size())
+	}
+	if r.ExecStats != nil {
+		size += int64(unsafe.Sizeof(*r.ExecStats))
+	}
+
+	return size
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.

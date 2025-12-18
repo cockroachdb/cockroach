@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	prometheus "github.com/prometheus/client_model/go"
 )
@@ -90,6 +91,14 @@ type SQLStatsIngester struct {
 	// We buffer ingested statementsBySessionID by session id.
 	statementsBySessionID map[clusterunique.ID]*statementBuf
 	resetStatementsBuf    atomic.Bool
+
+	// acc is the memory account that tracks memory allocations for buffered
+	// statements in statementsBySessionID.
+	acc *mon.ConcurrentBoundAccount
+
+	// stmtSizes tracks the memory footprint of buffered statements per session.
+	// This is used to properly account for memory when statements are flushed.
+	stmtSizes map[clusterunique.ID]int64
 
 	sinks []SQLStatsSink
 
@@ -187,6 +196,11 @@ func (i *SQLStatsIngester) Start(ctx context.Context, stopper *stop.Stopper, opt
 				i.ingest(ctx, payload.events) // note that ingest clears the buffer
 				if payload.resetStatementsBuf {
 					i.statementsBySessionID = make(map[clusterunique.ID]*statementBuf)
+					i.stmtSizes = make(map[clusterunique.ID]int64)
+					// Clear all memory accounting when resetting the buffer.
+					if i.acc != nil {
+						i.acc.Clear(ctx)
+					}
 				}
 				eventBufferPool.Put(payload.events)
 
@@ -247,7 +261,7 @@ func (i *SQLStatsIngester) ingest(ctx context.Context, events *eventBuffer) {
 			break
 		}
 		if e.statement != nil {
-			i.processStatement(e.statement)
+			i.processStatement(ctx, e.statement)
 			i.metrics.NumProcessed.Inc(1)
 			i.metrics.QueueSize.Dec(1)
 			// When under an outer transaction, we don't have a txn to associate
@@ -264,7 +278,7 @@ func (i *SQLStatsIngester) ingest(ctx context.Context, events *eventBuffer) {
 			if e.forceFlush {
 				i.flushStatementsOnly(ctx, e.sessionID)
 			} else {
-				i.clearSession(e.sessionID)
+				i.clearSession(ctx, e.sessionID)
 			}
 			i.metrics.NumProcessed.Inc(1)
 			i.metrics.QueueSize.Dec(1)
@@ -344,7 +358,11 @@ func (i *SQLStatsIngester) FlushBuffer(sessionID clusterunique.ID) {
 }
 
 func NewSQLStatsIngester(
-	st *cluster.Settings, knobs *sqlstats.TestingKnobs, metrics Metrics, sinks ...SQLStatsSink,
+	st *cluster.Settings,
+	knobs *sqlstats.TestingKnobs,
+	metrics Metrics,
+	parentMon *mon.BytesMonitor,
+	sinks ...SQLStatsSink,
 ) *SQLStatsIngester {
 	i := &SQLStatsIngester{
 		// A channel size of 1 is sufficient to avoid unnecessarily
@@ -356,10 +374,15 @@ func NewSQLStatsIngester(
 		eventBufferCh:         make(chan eventBufChPayload, 1),
 		closeCh:               make(chan struct{}),
 		statementsBySessionID: make(map[clusterunique.ID]*statementBuf),
+		stmtSizes:             make(map[clusterunique.ID]int64),
 		sinks:                 sinks,
 		settings:              st,
 		testingKnobs:          knobs,
 		metrics:               metrics,
+	}
+
+	if parentMon != nil {
+		i.acc = parentMon.MakeConcurrentBoundAccount()
 	}
 
 	if knobs != nil && knobs.SynchronousSQLStats {
@@ -393,10 +416,18 @@ func NewSQLStatsIngester(
 
 // clearSession removes the session from the registry and releases the
 // associated statement buffer.
-func (i *SQLStatsIngester) clearSession(sessionID clusterunique.ID) {
+func (i *SQLStatsIngester) clearSession(ctx context.Context, sessionID clusterunique.ID) {
 	if b, ok := i.statementsBySessionID[sessionID]; ok {
 		delete(i.statementsBySessionID, sessionID)
 		b.release()
+
+		// Release memory for this session's buffered statements.
+		if i.acc != nil {
+			if size, ok := i.stmtSizes[sessionID]; ok {
+				i.acc.Shrink(ctx, size)
+				delete(i.stmtSizes, sessionID)
+			}
+		}
 
 		if i.testingKnobs != nil && i.testingKnobs.OnIngesterSessionClear != nil {
 			i.testingKnobs.OnIngesterSessionClear(sessionID)
@@ -405,7 +436,20 @@ func (i *SQLStatsIngester) clearSession(sessionID clusterunique.ID) {
 	}
 }
 
-func (i *SQLStatsIngester) processStatement(statement *sqlstats.RecordedStmtStats) {
+func (i *SQLStatsIngester) processStatement(
+	ctx context.Context, statement *sqlstats.RecordedStmtStats,
+) {
+	if i.acc != nil {
+		stmtSize := statement.Size()
+		if err := i.acc.Grow(ctx, stmtSize); err != nil {
+			// If we hit memory limits, we cannot buffer this statement.
+			// The error will propagate through the SQL memory pool accounting,
+			// causing queries to fail with OOM when the pool is exhausted.
+			return
+		}
+		i.stmtSizes[statement.SessionID] += stmtSize
+	}
+
 	b, ok := i.statementsBySessionID[statement.SessionID]
 	if !ok {
 		b = statementsBufPool.Get().(*statementBuf)
@@ -431,6 +475,14 @@ func (i *SQLStatsIngester) flushBuffer(
 		return
 	}
 	defer statements.release()
+
+	// Release memory for this session's buffered statements.
+	if i.acc != nil {
+		if size, ok := i.stmtSizes[sessionID]; ok {
+			i.acc.Shrink(ctx, size)
+			delete(i.stmtSizes, sessionID)
+		}
+	}
 
 	if len(*statements) == 0 {
 		return
@@ -467,6 +519,13 @@ func (i *SQLStatsIngester) flushStatementsOnly(ctx context.Context, sessionID cl
 		defer sessionStatements.release()
 		statements = *sessionStatements
 		delete(i.statementsBySessionID, sessionID)
+
+		if i.acc != nil {
+			if size, ok := i.stmtSizes[sessionID]; ok {
+				i.acc.Shrink(ctx, size)
+				delete(i.stmtSizes, sessionID)
+			}
+		}
 	} else {
 		// No statements to flush, return early
 		return
