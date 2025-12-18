@@ -763,7 +763,7 @@ func (b *replicaAppBatch) verifySysBytes(ctx context.Context) error {
 	// applied via handleNonTrivialReplicatedEvalResult.
 	var desc roachpb.RangeDescriptor
 	descKey := keys.RangeDescriptorKey(b.state.Desc.StartKey)
-	ok, err := storage.MVCCGetProto(ctx, b.r.store.TODOEngine(), descKey,
+	ok, err := storage.MVCCGetProto(ctx, b.r.store.StateEngine(), descKey,
 		hlc.MaxTimestamp, &desc, storage.MVCCGetOptions{
 			Inconsistent: true, ReadCategory: fs.UnknownReadCategory})
 	if err != nil {
@@ -786,7 +786,7 @@ func (b *replicaAppBatch) verifySysBytes(ctx context.Context) error {
 	var computedSysBytes, computedSysCount int64
 	for _, span := range sysKeySpans {
 		ms, err := storage.ComputeStats(
-			ctx, b.r.store.TODOEngine(), fs.UnknownReadCategory,
+			ctx, b.r.store.StateEngine(), fs.UnknownReadCategory,
 			span.Key, span.EndKey, 0 /* nowNanos */)
 		if err != nil {
 			return err
