@@ -754,6 +754,7 @@ func getDescriptorsFromStoreForInterval(
 	codec keys.SQLCodec,
 	id descpb.ID,
 	lowerBound, upperBound hlc.Timestamp,
+	isOffline bool,
 ) ([]historicalDescriptor, error) {
 	// Ensure lower bound is not an empty timestamp (now).
 	if lowerBound.IsEmpty() {
@@ -837,7 +838,12 @@ func getDescriptorsFromStoreForInterval(
 					if err != nil {
 						return err
 					}
-					if descContent == nil {
+					if len(descContent) == 0 {
+						// Skip any deletions of the descriptor.
+						if isOffline {
+							subsequentModificationTime = k.Timestamp
+							continue
+						}
 						return errors.Wrapf(errors.New("unsafe value error"), "error "+
 							"extracting raw bytes of descriptor with key %s modified between "+
 							"%s, %s", k.String(), k.Timestamp, subsequentModificationTime)
@@ -907,13 +913,21 @@ func (m *Manager) readOlderVersionForTimestamp(
 	if t == nil {
 		return nil, nil
 	}
-	endTimestamp, done := func() (hlc.Timestamp, bool) {
+	endTimestamp, isOffline, done := func() (hlc.Timestamp, bool, bool) {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 
 		// If there are no descriptors, then we won't have a valid end timestamp.
 		if len(t.mu.active.data) == 0 {
-			return hlc.Timestamp{}, true
+			// If the descriptor is offline, then we can return when it was taken
+			// offline, a valid descriptor exists within this interval.
+			// Note: This allows us to populate dropped descriptors, which will
+			// be cleaned up via purgeOldVersions when these descriptors are actually
+			// deleted from the descriptor table (via the range feed).
+			if t.mu.takenOffline {
+				return t.mu.takenOfflineAt, true, false
+			}
+			return hlc.Timestamp{}, false, true
 		}
 		// We permit gaps in historical versions. We want to find the timestamp
 		// that represents the start of the validity interval for the known version
@@ -935,9 +949,9 @@ func (m *Manager) readOlderVersionForTimestamp(
 			// whether the descriptor for which we're searching actually exists. This
 			// will deal with cases where a concurrent fetch filled it in for us.
 			i > 0 && timestamp.Less(t.mu.active.data[i-1].getExpiration(ctx)) {
-			return hlc.Timestamp{}, true
+			return hlc.Timestamp{}, false, true
 		}
-		return t.mu.active.data[i].GetModificationTime(), false
+		return t.mu.active.data[i].GetModificationTime(), false, false
 	}()
 	if done {
 		return nil, nil
@@ -946,7 +960,7 @@ func (m *Manager) readOlderVersionForTimestamp(
 	// Retrieve descriptors in range [timestamp, endTimestamp) in decreasing
 	// modification time order.
 	descs, err := getDescriptorsFromStoreForInterval(
-		ctx, m.storage.db.KV(), m.Codec(), id, timestamp, endTimestamp,
+		ctx, m.storage.db.KV(), m.Codec(), id, timestamp, endTimestamp, isOffline,
 	)
 	if err != nil {
 		return nil, err
@@ -965,8 +979,9 @@ func (m *Manager) readOlderVersionForTimestamp(
 
 	// Unless the timestamp is exactly at the earliest modification time from
 	// ExportRequest, we'll invoke another call to retrieve the descriptor with
-	// modification time prior to the timestamp.
-	if timestamp.Less(earliestModificationTime) {
+	// modification time prior to the timestamp. For offline descriptors, we will
+	// try reading again if nothing was read above as a last resort.
+	if timestamp.Less(earliestModificationTime) || (isOffline && len(descs) == 0) {
 		desc, err := m.storage.getForExpiration(ctx, earliestModificationTime, id)
 		if err != nil {
 			return nil, err
@@ -1084,8 +1099,8 @@ func (m *Manager) upsertDescriptorIntoState(
 		return errors.AssertionFailedf("could not find descriptor state for id %d", id)
 	}
 	t.mu.Lock()
-	t.mu.takenOffline = false
 	defer t.mu.Unlock()
+	t.setTakenOfflineLocked(false)
 	err := t.upsertLeaseLocked(ctx, desc, session, m.storage.getRegionPrefix())
 	if err != nil {
 		return err
@@ -1420,7 +1435,7 @@ func (m *Manager) purgeOldVersions(
 		leases, leaseToExpire := func() (leasesToRemove []*storedLease, leasesToExpire *descriptorVersionState) {
 			t.mu.Lock()
 			defer t.mu.Unlock()
-			t.mu.takenOffline = dropped
+			t.setTakenOfflineLocked(dropped)
 			return t.removeInactiveVersions(ctx), t.mu.active.findPreviousToExpire(dropped)
 		}()
 		for _, l := range leases {

@@ -47,6 +47,9 @@ type descriptorState struct {
 		// offline temporarily (as opposed to dropped).
 		takenOffline bool
 
+		// Timestamp at which this descriptor became offline.
+		takenOfflineAt hlc.Timestamp
+
 		// maxVersionSeen is used to prevent a race where a concurrent lease
 		// acquisition might miss an event indicating that there is a new version
 		// of a descriptor.
@@ -93,6 +96,12 @@ func (t *descriptorState) findForTimestamp(
 
 	// Acquire a lease if no descriptor exists in the cache.
 	if len(t.mu.active.data) == 0 {
+		// If the descriptor is marked as offline, we should attempt
+		// a historical query to fetch it, since it's likely querying
+		// the past. A non-historical query will fail instantly.
+		if t.mu.takenOffline {
+			return nil, false, errReadOlderVersion
+		}
 		return nil, false, errRenewLease
 	}
 	return t.findForTimestampImpl(ctx, timestamp.GetTimestamp(), timestamp.GetBaseTimestamp(), expensiveLogEnabled)
@@ -116,6 +125,12 @@ func (t *descriptorState) findForTimestampImpl(
 		// Check to see if the ModificationTime is valid. If only the initial version
 		// of the descriptor is known, then read it at the base timestamp.
 		if desc := t.mu.active.data[i]; desc.GetModificationTime().LessEq(leaseTimestamp) {
+			// If the version within the time range is marked as dropped,
+			// then return a dropped descriptor error.
+			if err := catalog.FilterDroppedDescriptor(desc); err != nil {
+				return nil, false, err
+			}
+
 			latest := i+1 == len(t.mu.active.data)
 			if !desc.hasExpired(ctx, readTimestamp) {
 				// Existing valid descriptor version.
@@ -130,7 +145,7 @@ func (t *descriptorState) findForTimestampImpl(
 				return t.findForTimestampImpl(ctx, readTimestamp, readTimestamp, expensiveLogEnabled)
 			}
 
-			if latest {
+			if latest && !t.mu.takenOffline {
 				// Renew the lease if the lease has expired
 				// The latest descriptor always has a lease.
 				return nil, false, errRenewLease
@@ -348,4 +363,19 @@ func (t *descriptorState) markAcquisitionDone(ctx context.Context) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.mu.acquisitionsInProgress--
+}
+
+// setTakenOfflineLocked marks the descriptor as offline and sets / clears the timestamp.
+func (t *descriptorState) setTakenOfflineLocked(offline bool) {
+	// If the descriptor is already offline or online
+	// don't modify the timestamp.
+	if t.mu.takenOffline == offline {
+		return
+	}
+	t.mu.takenOffline = offline
+	timestamp := hlc.Timestamp{}
+	if offline {
+		timestamp = t.m.storage.clock.Now()
+	}
+	t.mu.takenOfflineAt = timestamp
 }
