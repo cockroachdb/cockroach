@@ -583,6 +583,29 @@ func TestKVNemesisMultiNode_Restart_Liveness(t *testing.T) {
 	})
 }
 
+func TestKVNemesisMultiNode_Crash_Liveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     4,
+		numSteps:                     10,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
+		mode:                         Liveness,
+		testGeneratorConfig: func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.CrashServer = 1
+			cfg.Ops.Fault.RestartNode = 1
+			// Disallow replica changes because they interfere with the zone config
+			// constraints (at least one replica on nodes 1 and 2).
+			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{}
+		},
+	})
+}
+
 func TestKVNemesisMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

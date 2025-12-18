@@ -195,6 +195,9 @@ func (a *Applier) applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 		err := a.env.ServerController.CrashServer(serverID)
 		if err == nil {
 			a.nodes.setCrashed(int(o.NodeId))
+		} else {
+			log.Dev.Infof(ctx, "failed to crash server %d: %v", serverID, err)
+			a.nodes.setRunning(int(o.NodeId))
 		}
 		o.Result = resultInit(ctx, err)
 	case *ClosureTxnOperation:

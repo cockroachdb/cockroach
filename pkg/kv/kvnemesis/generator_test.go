@@ -80,6 +80,7 @@ func TestRandStep(t *testing.T) {
 	n := nodes{
 		running: map[int]struct{}{1: {}, 2: {}, 3: {}},
 		stopped: make(map[int]struct{}),
+		crashed: make(map[int]struct{}),
 	}
 	g, err := MakeGenerator(config, getReplicasFn, 0, &n)
 	require.NoError(t, err)

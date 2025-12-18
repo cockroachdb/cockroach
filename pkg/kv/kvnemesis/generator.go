@@ -555,6 +555,7 @@ func newAllOperationsConfig() GeneratorConfig {
 			RemoveNetworkPartition: 1,
 			StopNode:               1,
 			RestartNode:            1,
+			CrashServer:            1,
 		},
 	}}
 }
@@ -655,6 +656,7 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.Fault.RemoveNetworkPartition = 0
 	config.Ops.Fault.StopNode = 0
 	config.Ops.Fault.RestartNode = 0
+	config.Ops.Fault.CrashServer = 0
 	return config
 }
 
@@ -835,6 +837,14 @@ func (n *nodes) removeRandStopped(rng *rand.Rand) int {
 	return nodeID
 }
 
+func (n *nodes) removeRandCrashed(rng *rand.Rand) int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	nodeID := randNodeFromMap(n.crashed, rng)
+	delete(n.crashed, nodeID)
+	return nodeID
+}
+
 func (n *nodes) setRunning(nodeID int) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -937,7 +947,7 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	if len(g.nodes.running) > 0 {
 		addOpGen(&allowed, stopRandNode, g.Config.Ops.Fault.StopNode)
 	}
-	if len(g.nodes.stopped) > 0 {
+	if len(g.nodes.stopped) > 0 || len(g.nodes.crashed) > 0 {
 		addOpGen(&allowed, restartRandNode, g.Config.Ops.Fault.RestartNode)
 	}
 	if len(g.nodes.running) > 0 {
@@ -1888,7 +1898,12 @@ func stopRandNode(g *generator, rng *rand.Rand) Operation {
 }
 
 func restartRandNode(g *generator, rng *rand.Rand) Operation {
-	randNode := g.nodes.removeRandStopped(rng)
+	var randNode int
+	if len(g.nodes.stopped) > 0 {
+		randNode = g.nodes.removeRandStopped(rng)
+	} else if len(g.nodes.crashed) > 0 {
+		randNode = g.nodes.removeRandCrashed(rng)
+	}
 	return restartNode(randNode)
 }
 
