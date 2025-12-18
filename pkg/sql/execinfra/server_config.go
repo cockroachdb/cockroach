@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -245,6 +246,11 @@ type TestingKnobs struct {
 	// RunBeforeIndexBackfillProgressUpdate is called before updating the
 	// progress for a single index backfill.
 	RunBeforeIndexBackfillProgressUpdate func(ctx context.Context, completed []roachpb.Span)
+
+	// AfterDistributedMergeIteration is called after each iteration of a
+	// distributed merge during index backfill. It receives the iteration number
+	// and the current SST manifests.
+	AfterDistributedMergeIteration func(ctx context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest)
 
 	// SerializeIndexBackfillCreationAndIngestion ensures that every index batch
 	// created during an index backfill is also ingested before moving on to the

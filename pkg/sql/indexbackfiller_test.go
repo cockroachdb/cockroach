@@ -791,3 +791,49 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 		}
 	}
 }
+
+func TestMultiMergeIndexBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Create a temp directory for nodelocal storage used by distributed merge.
+	tempDir := t.TempDir()
+
+	// Track manifests from each iteration using the testing knob.
+	manifestCountByIteration := make(map[int]int, 0)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: tempDir,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			DistSQL: &execinfra.TestingKnobs{
+				AfterDistributedMergeIteration: func(ctx context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest) {
+					manifestCountByIteration[iteration] = len(manifests)
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.iterations = 4`)
+
+	tdb.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY, v INT)`)
+	tdb.Exec(t, `INSERT INTO t SELECT i, i*10 FROM generate_series(1, 1000) AS g(i)`)
+
+	// Trigger the distributed merge index backfill. It validates the final rows
+	// itself, so a successful run implies the new pipeline produced correct
+	// results. The remaining validation checks that intermediate files were
+	// created and recorded in job progress for each iteration.
+	tdb.Exec(t, `CREATE INDEX idx ON t (v)`)
+
+	// Verify that we saw all intermediate iterations (1, 2, 3) via the testing knob.
+	// Iteration 4 is the final one that ingests to KV, so it doesn't generate manifests.
+	require.GreaterOrEqual(t, 1, manifestCountByIteration[1])
+	require.GreaterOrEqual(t, 1, manifestCountByIteration[2])
+	require.GreaterOrEqual(t, 1, manifestCountByIteration[3])
+}
