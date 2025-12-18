@@ -145,11 +145,30 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	if admission.DiskBandwidthForSnapshotIngest.Get(&s.cfg.Settings.SV) && snapshotQ != nil {
 		minRate := int64(0)
 		if admission.DiskBandwidthForSnapshotIngestMinRateEnabled.Get(&s.cfg.Settings.SV) {
-			// TODO: consider incorporating the slowdown factor that the sender uses
-			// to set a deadline. All we want here is to prevent the sender from
-			// timing out.
-			minRate = rebalanceSnapshotRate.Get(&s.cfg.Settings.SV)
+			maxFractionOfTimeoutSpentApplyingSnapshot := 1 - snapshotReservationQueueTimeoutFraction.Get(&s.cfg.Settings.SV)
+			snapshotApplySlowdownFactor := snapshotIngestSlowdown * maxFractionOfTimeoutSpentApplyingSnapshot
+			if snapshotApplySlowdownFactor < 1 {
+				// Avoid division by 0. A snapshotApplySlowdownFactor between 0
+				// and 1 would cause the minRate to be greater than
+				// rebalanceSnapshotRate, which is the max speed snapshots can
+				// be sent at, so we don't need to ingest snapshots at a faster
+				// rate than that.
+				snapshotApplySlowdownFactor = 1
+			}
+
+			minRate = int64(float64(rebalanceSnapshotRate.Get(&s.cfg.Settings.SV)) / snapshotApplySlowdownFactor)
+
+			// Cap minRate at 10% of the store's provisioned bandwidth to
+			// prevent oversaturating the disk when rebalanceSnapshotRate is large.
+			storeBW := s.cfg.KVAdmissionController.GetProvisionedBandwidth(s.StoreID())
+			if storeBW > 0 {
+				maxSnapshotMinRate := int64(float64(storeBW) * 0.10)
+				if minRate > maxSnapshotMinRate {
+					minRate = maxSnapshotMinRate
+				}
+			}
 		}
+
 		timer := &timeutil.Timer{}
 		pacer = admission.NewSnapshotPacer(snapshotQ, minRate, timer.AsTimerI())
 	}

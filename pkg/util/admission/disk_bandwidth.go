@@ -110,6 +110,11 @@ func newDiskBandwidthLimiter() *diskBandwidthLimiter {
 	}
 }
 
+// getProvisionedBandwidth returns the provisioned disk bandwidth in bytes/second.
+func (d *diskBandwidthLimiter) getProvisionedBandwidth() int64 {
+	return d.state.diskLoad.intProvisionedDiskBytes / adjustmentInterval
+}
+
 // diskTokens tokens represent actual bytes and IO on physical disks. Currently,
 // these are used to impose disk bandwidth limits on elastic traffic, but
 // regular traffic will also deduct from these buckets.
