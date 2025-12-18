@@ -449,6 +449,15 @@ func (s spanSetReader) ScanInternal(
 	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
 	visitExternalFile func(sst *pebble.ExternalFile) error,
 ) error {
+	if s.spansOnly {
+		if err := s.spans.CheckAllowed(SpanReadOnly, TrickySpan{Key: lower, EndKey: upper}); err != nil {
+			return err
+		}
+	} else {
+		if err := s.spans.CheckAllowedAt(SpanReadOnly, TrickySpan{Key: lower, EndKey: upper}, s.ts); err != nil {
+			return err
+		}
+	}
 	return s.r.ScanInternal(ctx, lower, upper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
@@ -780,20 +789,14 @@ var _ storage.Batch = spanSetBatch{}
 func (s spanSetBatch) NewBatchOnlyMVCCIterator(
 	ctx context.Context, opts storage.IterOptions,
 ) (storage.MVCCIterator, error) {
-	panic("unimplemented")
-}
-
-func (s spanSetBatch) ScanInternal(
-	ctx context.Context,
-	lower, upper roachpb.Key,
-	visitPointKey func(key *pebble.InternalKey, value pebble.LazyValue, info pebble.IteratorLevel) error,
-	visitRangeDel func(start []byte, end []byte, seqNum pebble.SeqNum) error,
-	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
-	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
-	visitExternalFile func(sst *pebble.ExternalFile) error,
-) error {
-	// Only used on Engine.
-	panic("unimplemented")
+	mvccIter, err := s.b.NewBatchOnlyMVCCIterator(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	if s.spansOnly {
+		return NewIterator(mvccIter, s.spans), nil
+	}
+	return NewIteratorAt(mvccIter, s.spans, s.ts), nil
 }
 
 func (s spanSetBatch) Commit(sync bool) error {
@@ -805,7 +808,7 @@ func (s spanSetBatch) CommitNoSyncWait() error {
 }
 
 func (s spanSetBatch) SyncWait() error {
-	return s.b.CommitNoSyncWait()
+	return s.b.SyncWait()
 }
 
 func (s spanSetBatch) Empty() bool {
