@@ -855,6 +855,106 @@ func (s spanSetBatch) shallowCopy() *spanSetBatch {
 	return &b
 }
 
+// spanSetWriteBatch wraps a storage.WriteBatch and adds span checking.
+type spanSetWriteBatch struct {
+	spanSetWriter
+	wb storage.WriteBatch
+}
+
+var _ storage.WriteBatch = (*spanSetWriteBatch)(nil)
+
+// Close implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Close() {
+	s.wb.Close()
+}
+
+// Commit implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Commit(sync bool) error {
+	return s.wb.Commit(sync)
+}
+
+// CommitNoSyncWait implements storage.WriteBatch.
+func (s *spanSetWriteBatch) CommitNoSyncWait() error {
+	return s.wb.CommitNoSyncWait()
+}
+
+// SyncWait implements storage.WriteBatch.
+func (s *spanSetWriteBatch) SyncWait() error {
+	return s.wb.SyncWait()
+}
+
+// Empty implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Empty() bool {
+	return s.wb.Empty()
+}
+
+// Count implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Count() uint32 {
+	return s.wb.Count()
+}
+
+// Len implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Len() int {
+	return s.wb.Len()
+}
+
+// Repr implements storage.WriteBatch.
+func (s *spanSetWriteBatch) Repr() []byte {
+	return s.wb.Repr()
+}
+
+// CommitStats implements storage.WriteBatch.
+func (s *spanSetWriteBatch) CommitStats() storage.BatchCommitStats {
+	return s.wb.CommitStats()
+}
+
+// ClearRawEncodedRange implements storage.InternalWriter.
+func (s *spanSetWriteBatch) ClearRawEncodedRange(start, end []byte) error {
+	// Decode the engine keys to check spans.
+	startKey, err := storage.DecodeMVCCKey(start)
+	if err != nil {
+		return err
+	}
+	endKey, err := storage.DecodeMVCCKey(end)
+	if err != nil {
+		return err
+	}
+	if err := s.spanSetWriter.checkAllowedRange(startKey.Key, endKey.Key); err != nil {
+		return err
+	}
+	return s.wb.ClearRawEncodedRange(start, end)
+}
+
+// PutInternalRangeKey implements storage.InternalWriter.
+func (s *spanSetWriteBatch) PutInternalRangeKey(start, end []byte, key rangekey.Key) error {
+	// Decode the engine keys to check spans.
+	startKey, err := storage.DecodeMVCCKey(start)
+	if err != nil {
+		return err
+	}
+	endKey, err := storage.DecodeMVCCKey(end)
+	if err != nil {
+		return err
+	}
+	if err := s.spanSetWriter.checkAllowedRange(startKey.Key, endKey.Key); err != nil {
+		return err
+	}
+	return s.wb.PutInternalRangeKey(start, end, key)
+}
+
+// PutInternalPointKey implements storage.InternalWriter.
+func (s *spanSetWriteBatch) PutInternalPointKey(key *pebble.InternalKey, value []byte) error {
+	// Decode the internal key to check spans.
+	mvccKey, err := storage.DecodeMVCCKey(key.UserKey)
+	if err != nil {
+		return err
+	}
+	if err := s.spanSetWriter.checkAllowed(mvccKey.Key); err != nil {
+		return err
+	}
+	return s.wb.PutInternalPointKey(key, value)
+}
+
 // NewBatch returns a storage.Batch that asserts access of the underlying
 // Batch against the given SpanSet. We only consider span boundaries, associated
 // timestamps are not considered.
@@ -876,6 +976,25 @@ func NewBatchAt(b storage.Batch, spans *SpanSet, ts hlc.Timestamp) storage.Batch
 		b:          b,
 		spans:      spans,
 		ts:         ts,
+	}
+}
+
+// NewWriteBatch returns a storage.WriteBatch that asserts access of the
+// underlying WriteBatch against the given SpanSet. Timestamps are not
+// considered, only span boundaries are checked.
+func NewWriteBatch(wb storage.WriteBatch, spans *SpanSet) storage.WriteBatch {
+	return &spanSetWriteBatch{
+		spanSetWriter: spanSetWriter{w: wb, spans: spans, spansOnly: true},
+		wb:            wb,
+	}
+}
+
+// NewWriteBatchAt returns a storage.WriteBatch that asserts access of the
+// underlying WriteBatch against the given SpanSet at the given timestamp.
+func NewWriteBatchAt(wb storage.WriteBatch, spans *SpanSet, ts hlc.Timestamp) storage.WriteBatch {
+	return &spanSetWriteBatch{
+		spanSetWriter: spanSetWriter{w: wb, spans: spans, spansOnly: false, ts: ts},
+		wb:            wb,
 	}
 }
 
