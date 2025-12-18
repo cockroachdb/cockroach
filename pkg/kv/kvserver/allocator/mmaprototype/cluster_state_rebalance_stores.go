@@ -481,10 +481,12 @@ func (re *rebalanceEnv) rebalanceReplicas(
 			continue
 		}
 		re.ensureAnalyzedConstraints(rstate)
-		if rstate.constraints == nil && rangeSkippedDueToFailedConstraintsShouldLog() {
-			log.KvDistribution.Warningf(ctx,
-				"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
-				rangeID, rstate.conf, rstate.replicas)
+		if rstate.constraints == nil {
+			if rangeSkippedDueToFailedConstraintsShouldLog() {
+				log.KvDistribution.Warningf(ctx,
+					"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
+					rangeID, rstate.conf, rstate.replicas)
+			}
 			continue
 		}
 		isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
