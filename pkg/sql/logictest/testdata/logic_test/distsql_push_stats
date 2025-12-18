@@ -1,0 +1,142 @@
+statement ok
+SET allow_unsafe_internals = true;
+
+# Disable automatic stats to ensure deterministic results
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, INDEX (b), INDEX (c)) WITH (sql_stats_automatic_collection_enabled = false);
+
+query TTTI rowsort
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t];
+----
+
+statement ok
+ALTER TABLE t SET (schema_locked = false);
+
+
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 1:00:00.00000+00:00",
+        "distinct_count": 100,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1000
+    },
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 2:00:00.00000+00:00",
+        "distinct_count": 200,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2000
+    },
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 3:00:00.00000+00:00",
+        "distinct_count": 300,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 3000
+    }
+]';
+
+query TTTI rowsort
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t];
+----
+__auto__  {a}  2018-01-01 01:00:00 +0000 UTC  1000
+__auto__  {a}  2018-01-01 02:00:00 +0000 UTC  2000
+__auto__  {a}  2018-01-01 03:00:00 +0000 UTC  3000
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 4:00:00.00000+00:00",
+        "distinct_count": 400,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 4000
+    }
+]'
+
+query TTTI rowsort
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t];
+----
+__auto__  {a}  2018-01-01 01:00:00 +0000 UTC  1000
+__auto__  {a}  2018-01-01 02:00:00 +0000 UTC  2000
+__auto__  {a}  2018-01-01 03:00:00 +0000 UTC  3000
+__auto__  {a}  2018-01-01 04:00:00 +0000 UTC  4000
+
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 5:00:00.00000+00:00",
+        "distinct_count": 500,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 5000
+    }
+]'
+
+query TTTI rowsort
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t];
+----
+__auto__  {a}  2018-01-01 01:00:00 +0000 UTC  1000
+__auto__  {a}  2018-01-01 02:00:00 +0000 UTC  2000
+__auto__  {a}  2018-01-01 03:00:00 +0000 UTC  3000
+__auto__  {a}  2018-01-01 04:00:00 +0000 UTC  4000
+__auto__  {a}  2018-01-01 05:00:00 +0000 UTC  5000
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 6:00:00.00000+00:00",
+        "distinct_count": 600,
+        "name": "",
+        "null_count": 0,
+        "row_count": 6000
+    }
+]'
+
+# The oldest auto stats (rowCount=1000) should have been deleted.
+query TTTI rowsort
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t];
+----
+__auto__  {a}  2018-01-01 02:00:00 +0000 UTC  2000
+__auto__  {a}  2018-01-01 03:00:00 +0000 UTC  3000
+__auto__  {a}  2018-01-01 04:00:00 +0000 UTC  4000
+__auto__  {a}  2018-01-01 05:00:00 +0000 UTC  5000
+NULL      {a}  2018-01-01 06:00:00 +0000 UTC  6000
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 7:00:00.00000+00:00",
+        "distinct_count": 700,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 7000
+    }
+]'
+
+# The most manual stats (rowCount=6000) should have been deleted.
+query TTTI rowsort
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t];
+----
+__auto__  {a}  2018-01-01 02:00:00 +0000 UTC  2000
+__auto__  {a}  2018-01-01 03:00:00 +0000 UTC  3000
+__auto__  {a}  2018-01-01 04:00:00 +0000 UTC  4000
+__auto__  {a}  2018-01-01 05:00:00 +0000 UTC  5000
+__auto__  {a}  2018-01-01 07:00:00 +0000 UTC  7000
