@@ -153,9 +153,13 @@ func (tu *tombstoneUpdater) addToBatch(
 	)
 }
 
+func (tu *tombstoneUpdater) hasValidLease(ctx context.Context, now hlc.Timestamp) bool {
+	return tu.leased.descriptor != nil && tu.leased.descriptor.Expiration(ctx).After(now)
+}
+
 func (tu *tombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.Deleter, error) {
 	timestamp := txn.ProvisionalCommitTimestamp()
-	if tu.leased.descriptor == nil || !timestamp.After(tu.leased.descriptor.Expiration(ctx)) {
+	if !tu.hasValidLease(ctx, timestamp) {
 		tu.ReleaseLeases(ctx)
 
 		var err error
