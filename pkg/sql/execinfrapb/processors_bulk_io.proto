@@ -181,7 +181,11 @@ message ReadImportDataSpec {
 
   optional int32 initial_splits = 18 [(gogoproto.nullable) = false];
 
-  // NEXTID: 21.
+  // use_distributed_merge indicates whether this import should use the
+  // distributed merge pipeline. Determined at planning time.
+  optional bool use_distributed_merge = 21 [(gogoproto.nullable) = false];
+
+  // NEXTID: 22.
 }
 
 message MergeCoordinatorSpec {
