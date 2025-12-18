@@ -529,21 +529,8 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				columnIDs[i] = s.sampledCols[c]
 			}
 
-			// Delete old stats that have been superseded, if the new statistic
-			// is not partial.
-			if si.spec.PartialPredicate == "" {
-				if err := stats.DeleteOldStatsForColumns(
-					ctx,
-					txn,
-					s.tableID,
-					columnIDs,
-				); err != nil {
-					return err
-				}
-			}
-
-			// Insert the new stat.
-			if err := stats.InsertNewStat(
+			// Use the retention logic to delete old stats and insert new stat.
+			if err := stats.WriteStatWithRetention(
 				ctx,
 				s.FlowCtx.Cfg.Settings,
 				txn,
@@ -557,6 +544,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				histogram,
 				si.spec.PartialPredicate,
 				si.spec.FullStatisticID,
+				"", // createdAt - empty string uses default timestamp
 			); err != nil {
 				return err
 			}
