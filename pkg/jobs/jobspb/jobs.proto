@@ -1330,6 +1330,11 @@ message CreateStatsDetails {
     (gogoproto.customname) = "WhereIndexID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
   ];
+
+  // UseLocksTable, if set, means that the concurrency check is performed via
+  // the system.table_statistics_locks table, so the job doesn't need to check
+  // whether there are any other concurrent CreateStats jobs.
+  bool use_locks_table = 13;
 }
 
 message CreateStatsProgress {
