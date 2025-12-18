@@ -270,7 +270,8 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		}
 	}
 
-	reg := fs.NewStickyRegistry()
+	var reg fs.StickyRegistry
+	reg = fs.NewStickyRegistry(fs.UseStrictMemFS)
 	lisReg := listenerutil.NewListenerRegistry()
 	args := base.TestClusterArgs{
 		ReusableListenerReg: lisReg,
@@ -580,6 +581,67 @@ func TestKVNemesisMultiNode_Restart_Liveness(t *testing.T) {
 			// constraints (at least one replica on nodes 1 and 2).
 			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{}
 		},
+	})
+}
+
+func TestKVNemesisMultiNode_Crash(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	baseCfg := kvnemesisTestCfg{
+		numNodes:                     4,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		// assertRaftApply is disabled because the asserter assumes no node
+		// restarts (see asserter.go:29).
+		//
+		// Crashing nodes violates this assumption since node crashes differ
+		// from graceful restarts (abrupt stop vs a graceful shutdown).
+		//
+		// There's a race condition in crash simulation where
+		// CrashNode/CrashClone() can run while the server is still active, so
+		// WAL syncs and Raft applies can complete between the snapshot and
+		// stopServerLocked(). When assertRaftApply is true, the Asserter may
+		// record applies that aren't in the crash snapshot; after restart, the
+		// replica recovers from an earlier snapshot and re-applies, causing the
+		// Asserter to flag a false regression. This is a bug in the crash
+		// simulation code, not a bug in the database logic.
+		// TODO(dodeca12): resolve crash simulation bug for kvnemesis crashes for
+		// when assertRaftApply is true.
+		assertRaftApply: false,
+		testGeneratorConfig: func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.CrashNode = 1
+			cfg.Ops.Fault.RestartNode = 1
+		},
+	}
+
+	t.Run("Liveness", func(t *testing.T) {
+		cfg := baseCfg
+		cfg.mode = Liveness
+		cfg.testGeneratorConfig = func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.CrashNode = 1
+			cfg.Ops.Fault.RestartNode = 1
+			// Disallow replica changes because they interfere with the zone config
+			// constraints (at least one replica on nodes 1 and 2).
+			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{}
+		}
+		testKVNemesisImpl(t, cfg)
+	})
+
+	t.Run("Safety", func(t *testing.T) {
+		// Unlike restart operations, crash operations don't quiesce the server
+		// before stopping it. CrashNode isolates the node from peers first, then
+		// stops it, which may prevent the quiesce hang that occurs with restart
+		// operations when a range loses quorum. This allows us to test safety
+		// properties (serializability) even when quorum is lost.
+		cfg := baseCfg
+		cfg.mode = Safety
+		// In Safety mode, we don't need to restrict replica changes since nodes
+		// 1 and 2 are not protected.
+		testKVNemesisImpl(t, cfg)
 	})
 }
 
