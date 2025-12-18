@@ -424,6 +424,7 @@ type FaultConfig struct {
 	// RestartNode is an operation that restarts a randomly chosen node.
 	RestartNode int
 	// Disk stalls and other faults belong here.
+	CrashServer int
 }
 
 // newAllOperationsConfig returns a GeneratorConfig that exercises *all*
@@ -931,6 +932,9 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	}
 	if len(g.nodes.stopped) > 0 {
 		addOpGen(&allowed, restartRandNode, g.Config.Ops.Fault.RestartNode)
+	}
+	if len(g.nodes.running) > 0 {
+		addOpGen(&allowed, crashRandNode, g.Config.Ops.Fault.CrashServer)
 	}
 
 	return step(g.selectOp(rng, allowed))
@@ -1881,6 +1885,11 @@ func restartRandNode(g *generator, rng *rand.Rand) Operation {
 	return restartNode(randNode)
 }
 
+func crashRandNode(g *generator, rng *rand.Rand) Operation {
+	randNode := g.nodes.removeRandRunning(rng)
+	return crashServer(randNode)
+}
+
 func isFollowerReadEligibleOp(op Operation) bool {
 	if op.Get != nil && op.Get.FollowerReadEligible {
 		return true
@@ -2527,6 +2536,10 @@ func stopNode(nodeID int) Operation {
 
 func restartNode(nodeID int) Operation {
 	return Operation{RestartNode: &RestartNodeOperation{NodeId: int32(nodeID)}}
+}
+
+func crashServer(nodeID int) Operation {
+	return Operation{CrashServer: &CrashServerOperation{NodeId: int32(nodeID)}}
 }
 
 type countingRandSource struct {
