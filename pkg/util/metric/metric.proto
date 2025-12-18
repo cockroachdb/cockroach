@@ -128,7 +128,7 @@ message Metadata {
 
   // visibility defines the intended audience and usage level for this metric.
   // See MetricVisibility for details on each visibility level.
-  required MetricVisibility visibility = 10 [(gogoproto.nullable) = false];
+  optional MetricVisibility visibility = 10 [(gogoproto.nullable) = false];
   // category is the dashboard category of this metric. This is
   // required if visibility is ESSENTIAL.
   required Category category = 11 [(gogoproto.nullable) = false];
