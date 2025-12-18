@@ -464,7 +464,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// If the transaction was pushed, add it to the txnStatusCache. This avoids
 	// needing to push it again if we find another one of its locks and allows for
 	// batching of intent resolution.
-	w.lt.PushedTransactionUpdated(pusheeTxn)
+	// w.lt.PushedTransactionUpdated(pusheeTxn)
 
 	// If the push succeeded then the lock holder transaction must have
 	// experienced a state transition such that it no longer conflicts with

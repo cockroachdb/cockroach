@@ -2231,8 +2231,8 @@ func (kl *keyLocks) checkStillBlocked(g *lockTableGuardImpl) (wait bool) {
 	} else {
 		for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
 			qg := e.Value
-			if qg.guard == g {
-				assert(qg.active, "expect active")
+			if qg.guard == g && qg.active {
+				assert(qg.active, fmt.Sprintf("expect active: %s", qg))
 				qg.active = false // mark as inactive
 				g.mu.Lock()
 				g.doneActivelyWaitingAtLock()
