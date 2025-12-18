@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -170,11 +171,19 @@ func (a *allocatorState) ensureMetricsForLocalStoreLocked(
 			registry.AddMetricStruct(*m.counters)
 			registry.AddMetricStruct(m.passMetricsAndLogger.m)
 			m.metricsRegistered = true
-		} else if a.metricsUnregisteredEvery.ShouldLog() {
+		} else if a.shouldLogUnregisteredMetrics() {
 			log.KvDistribution.Warningf(ctx, "metrics for store s%v are unregistered", localStoreID)
 		}
 	}
 	return m
+}
+
+// shouldLogUnregisteredMetrics returns true if a warning should be logged when
+// metrics cannot be registered due to a nil registry. This logging is skipped
+// in test builds since tests often don't provide a metrics registry. In
+// production, it rate-limits to once per minute to avoid log spam.
+func (a *allocatorState) shouldLogUnregisteredMetrics() bool {
+	return !buildutil.CrdbTestBuild && a.metricsUnregisteredEvery.ShouldLog()
 }
 
 func (a *allocatorState) LoadSummaryForAllStores(ctx context.Context) string {
