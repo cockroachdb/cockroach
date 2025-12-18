@@ -820,7 +820,7 @@ func processProgress(
 
 // compactionJobDescription generates a redacted description of the job.
 func compactionJobDescription(details jobspb.BackupDetails) (string, error) {
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple | tree.FmtShowFullURIs)
 	redactedURIs, err := sanitizeURIList(details.Destination.To)
 	if err != nil {
 		return "", err
