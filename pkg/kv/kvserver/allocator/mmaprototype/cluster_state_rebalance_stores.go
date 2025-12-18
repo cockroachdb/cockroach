@@ -15,11 +15,23 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
+
+// rangeSkippedDueToFailedConstraintsLogEvery rate limits the warning log for
+// ranges skipped due to failed constraint analysis to avoid spamming.
+var rangeSkippedDueToFailedConstraintsLogEvery = log.Every(time.Minute)
+
+// rangeSkippedDueToFailedConstraintsShouldLog returns true if the warning for
+// ranges skipped due to failed constraints should be logged. In test builds, it
+// always returns true; in production, it rate-limits to once per minute.
+func rangeSkippedDueToFailedConstraintsShouldLog() bool {
+	return buildutil.CrdbTestBuild || rangeSkippedDueToFailedConstraintsLogEvery.ShouldLog()
+}
 
 // rebalanceEnv tracks the state and outcomes of a rebalanceStores invocation.
 // Recall that such an invocation is on behalf of a local store, but will
@@ -460,9 +472,11 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		}
 		re.ensureAnalyzedConstraints(rstate)
 		if rstate.constraints == nil {
-			log.KvDistribution.Warningf(ctx,
-				"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
-				rangeID, rstate.conf, rstate.replicas)
+			if rangeSkippedDueToFailedConstraintsShouldLog() {
+				log.KvDistribution.Warningf(ctx,
+					"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
+					rangeID, rstate.conf, rstate.replicas)
+			}
 			continue
 		}
 		isVoter, isNonVoter := rstate.constraints.replicaRole(store.StoreID)
@@ -676,9 +690,11 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 		re.ensureAnalyzedConstraints(rstate)
 		if rstate.constraints == nil {
-			log.KvDistribution.Warningf(ctx,
-				"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
-				rangeID, rstate.conf, rstate.replicas)
+			if rangeSkippedDueToFailedConstraintsShouldLog() {
+				log.KvDistribution.Warningf(ctx,
+					"skipping r%d: no constraints analyzed (conf=%v replicas=%v)",
+					rangeID, rstate.conf, rstate.replicas)
+			}
 			continue
 		}
 		if rstate.constraints.leaseholderID != store.StoreID {
