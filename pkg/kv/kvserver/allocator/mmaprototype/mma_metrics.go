@@ -50,6 +50,16 @@ type counterMetrics struct {
 	SpanConfigNormalizationError *metric.Counter
 }
 
+// incSpanConfigNormalizationErrorIfNonNil increments the
+// SpanConfigNormalizationError counter if it is non-nil. This is used to avoid
+// panics when the metrics registry is nil.
+func (c *counterMetrics) incSpanConfigNormalizationErrorIfNonNil() {
+	if c == nil {
+		return
+	}
+	c.SpanConfigNormalizationError.Inc(1)
+}
+
 func makeCounterMetrics() *counterMetrics {
 	return &counterMetrics{
 		DroppedDueToStateInconsistency: metric.NewCounter(metaDroppedDueToStateInconsistency),

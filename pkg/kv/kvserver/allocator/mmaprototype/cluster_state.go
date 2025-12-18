@@ -1552,7 +1552,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			if err != nil {
 				log.KvDistribution.Warningf(
 					ctx, "range r%v span config had errors in normalization: %v, normalized result: %v", rangeMsg.RangeID, err, normSpanConfig)
-				metrics.SpanConfigNormalizationError.Inc(1)
+				metrics.incSpanConfigNormalizationErrorIfNonNil()
 			}
 			rs.conf = normSpanConfig
 		}
