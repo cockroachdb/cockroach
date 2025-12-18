@@ -1081,12 +1081,11 @@ type rangeState struct {
 	// addition of s4 to be thrown away while keeping the removal of s1. This is
 	// mostly being defensive to avoid any chance of internal inconsistency.
 	replicas []StoreIDAndReplicaState
-	// conf may be nil or non-nil depending on the type of normalization error:
-	// - Hard error: a developer error or the input config is invalid. Results in
-	// conf=nil, and the range is excluded from rebalancing.
-	// - Soft error: input config is suboptimal but we can still proceed (e.g.,
-	// voter constraints not fully satisfiable by replica constraints). Results in
-	// a best-effort conf, and rebalancing continues normally.
+	// conf is nil iff developer error or basic span config normalization failed
+	// (invalid config), in which case the range analysis is skipped,
+	// rangeAnalyzedConstraints is always nil, and the range is excluded from
+	// rebalancing. Note that if only doStructuralNormalization failed, conf will
+	// be non-nil.
 	conf *normalizedSpanConfig
 
 	load RangeLoad
@@ -1100,9 +1099,10 @@ type rangeState struct {
 	// be identical to clusterState.pendingChanges.
 	pendingChanges []*pendingReplicaChange
 
-	// If non-nil, it is up-to-date. Typically, non-nil for a range that has no
-	// pendingChanges and is not satisfying some constraint, since we don't want
-	// to repeat the analysis work every time we consider it.
+	// Nil if conf is nil (since conf is required input), or if constraint
+	// analysis fails (e.g., no leaseholder found). When nil, the range is
+	// excluded from rebalancing. When non-nil, it is up-to-date and cached to
+	// avoid repeating analysis work.
 	//
 	// REMINDER: rangeAnalyzedConstraints ignores LEARNER and
 	// VOTER_DEMOTING_LEARNER replicas. So if a voter/non-voter is being added
@@ -1112,11 +1112,6 @@ type rangeState struct {
 	// the pending changes will be reflected in pendingChanges. Then it becomes
 	// the responsibility of a higher layer (allocator) to notice that the
 	// rangeState has pendingChanges, and not make any more changes.
-	//
-	// NB: constraints may be nil if span config normalization failed (e.g.,
-	// invalid config) or if constraint analysis fails due to other errors (e.g.,
-	// no leaseholder found). In such cases, mma would skip the range from
-	// rebalancing to avoid violating constraints.
 	constraints *rangeAnalyzedConstraints
 
 	// lastFailedChange is the latest time at which a change to the range needed
