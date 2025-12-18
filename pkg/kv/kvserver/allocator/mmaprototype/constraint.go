@@ -7,7 +7,6 @@ package mmaprototype
 
 import (
 	"cmp"
-	"context"
 	"fmt"
 	"math"
 	"slices"
@@ -16,7 +15,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -666,22 +664,22 @@ func (conf *normalizedSpanConfig) buildVoterAndAllRelationships() (
 	// constraint.
 	// Example:
 	// voterConstraints: [+region=a]: 2, []: 2 => emptyVoterConstraintIndex = 1
-	// TODO(wenyihu6): instead of fatal, we should return an error so that user
-	// input does not cause a crash.
 	emptyVoterConstraintIndex = -1
 	for i := range conf.voterConstraints {
 		if len(conf.voterConstraints[i].constraints) == 0 {
 			if emptyVoterConstraintIndex != -1 {
-				log.KvDistribution.Fatalf(context.Background(), "multiple empty voter constraints: %v and %v",
-					conf.voterConstraints[emptyVoterConstraintIndex], conf.voterConstraints[i])
+				return nil, -1, -1,
+					errors.Errorf("multiple empty voter constraints: %v and %v",
+						conf.voterConstraints[emptyVoterConstraintIndex], conf.voterConstraints[i])
 			}
 			emptyVoterConstraintIndex = i
 		}
 		for j := range conf.constraints {
 			if len(conf.constraints[j].constraints) == 0 {
 				if emptyConstraintIndex != -1 && emptyConstraintIndex != j {
-					log.KvDistribution.Fatalf(context.Background(), "multiple empty constraints: %v and %v",
-						conf.constraints[emptyConstraintIndex], conf.constraints[j])
+					return nil, -1, -1,
+						errors.Errorf("multiple empty constraints: %v and %v",
+							conf.constraints[emptyConstraintIndex], conf.constraints[j])
 				}
 				emptyConstraintIndex = j
 			}
@@ -856,7 +854,7 @@ func (ncEnv *normalizedConstraintsEnv) satisfyVoterWithAll(voterIndex int, allIn
 // (TODO(wenyihu6): this is the one that I am still confused about. Sumeer
 // mentioned that it is unclear whether we truly need this. So lets revisit this
 // later.)
-func (conf *normalizedSpanConfig) normalizeEmptyConstraints() {
+func (conf *normalizedSpanConfig) normalizeEmptyConstraints() error {
 	// We are done with normalizing voter constraints. We also do some basic
 	// normalization for constraints: we have seen examples where the
 	// constraints are under-specified and give freedom in the choice of
@@ -882,7 +880,10 @@ func (conf *normalizedSpanConfig) normalizeEmptyConstraints() {
 	// This is technically true, but once we have the required second voter in
 	// us-east-1, both places in that empty constraint will be consumed, and we
 	// will need to move that non-voter to us-central-1, which is wasteful.
-	rels, emptyConstraintIndex, _, _ := conf.buildVoterAndAllRelationships()
+	rels, emptyConstraintIndex, _, err := conf.buildVoterAndAllRelationships()
+	if err != nil {
+		return err
+	}
 	if emptyConstraintIndex >= 0 {
 		// Ignore conjPossiblyIntersecting.
 		index := 0
@@ -951,6 +952,7 @@ func (conf *normalizedSpanConfig) normalizeEmptyConstraints() {
 		}
 		conf.constraints = dedupAndFilterConstraints(conf.constraints)
 	}
+	return nil
 }
 
 // Phase 1: Normalizing Voter Constraints
@@ -1194,7 +1196,8 @@ func (conf *normalizedSpanConfig) normalizeVoterConstraints() error {
 		neededReplicas := conf.voterConstraints[i].numReplicas
 		actualReplicas := ncEnv.voterConstraints[i].numReplicas + ncEnv.voterConstraints[i].additionalReplicas
 		if actualReplicas > neededReplicas {
-			panic("code bug")
+			return errors.Errorf("programmer error: actualReplicas (%d) > neededReplicas (%d) for voter constraint %d",
+				actualReplicas, neededReplicas, i)
 		}
 		if actualReplicas < neededReplicas {
 			err = errors.Errorf("could not satisfy all voter constraints due to " +
@@ -1236,12 +1239,14 @@ func (conf *normalizedSpanConfig) doStructuralNormalization(
 
 	// Do not return early on error from normalizeVoterConstraints since we want
 	// to continue with best-effort normalization for constraints.
-	err := conf.normalizeVoterConstraints()
+	err1 := conf.normalizeVoterConstraints()
 	if observer != nil {
 		observer("normalizeVoterConstraints", conf)
 	}
-	conf.normalizeEmptyConstraints()
-	return err
+	err2 := conf.normalizeEmptyConstraints()
+	// Use errors.Join so both errors are visible in .Error() output, since
+	// this error is surfaced to the operator.
+	return errors.Join(err1, err2)
 }
 
 type replicaKindIndex int32
@@ -1713,7 +1718,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 	spanConfig *normalizedSpanConfig,
 	constraintMatcher storeMatchesConstraintInterface,
 	leaseholder roachpb.StoreID,
-) {
+) error {
 	rac.spanConfig = spanConfig
 	rac.numNeededReplicas[voterIndex] = spanConfig.numVoters
 	rac.numNeededReplicas[nonVoterIndex] = spanConfig.numReplicas - spanConfig.numVoters
@@ -1748,7 +1753,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 			}
 		}
 		if rac.leaseholderPreferenceIndex == -1 {
-			panic("leaseholder not found in replicas")
+			return errors.Errorf("leaseholder not found in replicas %v", rac.replicas)
 		}
 	}
 
@@ -1764,6 +1769,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 	rac.voterLocalityTiers = makeReplicasLocalityTiers(voterLocalityTiers)
 
 	rac.votersDiversityScore, rac.replicasDiversityScore = diversityScore(rac.replicas)
+	return nil
 }
 
 // Disjunction of conjunctions.

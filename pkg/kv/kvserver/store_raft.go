@@ -825,6 +825,14 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 		defer fn(l)
 	}
 
+	// NB: The liveness map is only used by epoch based leases currently.
+	// Technically, we could avoid this as well if we knew that no epoch based
+	// leases were in the system. However, to prevent surprises were this map to
+	// be used elsewhere in the future, we update it before the check below; this
+	// isn't a big deal, as the callback is expensive because of the iteration
+	// over all replicas on the store, not this update.
+	s.updateLivenessMap()
+
 	// If there are no epoch based leases in the system (leader leases are
 	// enabled and Raft fortification is enabled for all ranges), we do not need
 	// to attempt to unquiesce any replicas -- there can't be any. This allows
@@ -837,7 +845,6 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 	}
 
 	ctx := context.TODO()
-	s.updateLivenessMap()
 
 	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
 		r.mu.RLock()

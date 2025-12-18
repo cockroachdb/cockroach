@@ -41,6 +41,23 @@ type counterMetrics struct {
 	RebalanceReplicaChangeFailure *metric.Counter
 	RebalanceLeaseChangeSuccess   *metric.Counter
 	RebalanceLeaseChangeFailure   *metric.Counter
+
+	// SpanConfigNormalizationError counts ranges where span config normalization
+	// encountered an error. This includes cases where best-effort normalization
+	// may have succeeded (producing a usable config despite the error). This
+	// metric does not include cases constraint analysis fails.
+	// TODO(wenyihu6): add ConstraintAnalysisSkipped for those.
+	SpanConfigNormalizationError *metric.Counter
+}
+
+// incSpanConfigNormalizationErrorIfNonNil increments the
+// SpanConfigNormalizationError counter if it is non-nil. This is used to avoid
+// panics when the metrics registry is nil.
+func (c *counterMetrics) incSpanConfigNormalizationErrorIfNonNil() {
+	if c == nil {
+		return
+	}
+	c.SpanConfigNormalizationError.Inc(1)
 }
 
 func makeCounterMetrics() *counterMetrics {
@@ -56,6 +73,7 @@ func makeCounterMetrics() *counterMetrics {
 		RebalanceReplicaChangeFailure:  metric.NewCounter(metaRebalanceReplicaChangeFailure),
 		RebalanceLeaseChangeSuccess:    metric.NewCounter(metaRebalanceLeaseChangeSuccess),
 		RebalanceLeaseChangeFailure:    metric.NewCounter(metaRebalanceLeaseChangeFailure),
+		SpanConfigNormalizationError:   metric.NewCounter(metaSpanConfigNormalizationError),
 	}
 }
 
@@ -149,6 +167,14 @@ var (
 		LabeledName: "mma.change",
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelOrigin, "rebalance", metric.LabelType, "lease", metric.LabelResult, "failure"),
+	}
+	metaSpanConfigNormalizationError = metric.Metadata{
+		Name: "mma.span_config.normalization.error",
+		Help: "Number of ranges where span config normalization had errors. " +
+			"This includes cases where best-effort normalization may have succeeded " +
+			"(producing a usable config despite the error).",
+		Measurement: "Range",
+		Unit:        metric.Unit_COUNT,
 	}
 
 	// Future: we will add additional origins for MMA-initiated operations that

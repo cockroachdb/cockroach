@@ -1081,7 +1081,12 @@ type rangeState struct {
 	// addition of s4 to be thrown away while keeping the removal of s1. This is
 	// mostly being defensive to avoid any chance of internal inconsistency.
 	replicas []StoreIDAndReplicaState
-	conf     *normalizedSpanConfig
+	// conf is nil iff developer error or basic span config normalization failed
+	// (invalid config), in which case the range analysis is skipped,
+	// rangeAnalyzedConstraints is always nil, and the range is excluded from
+	// rebalancing. Note that if only doStructuralNormalization failed, conf will
+	// be non-nil.
+	conf *normalizedSpanConfig
 
 	load RangeLoad
 
@@ -1094,9 +1099,10 @@ type rangeState struct {
 	// be identical to clusterState.pendingChanges.
 	pendingChanges []*pendingReplicaChange
 
-	// If non-nil, it is up-to-date. Typically, non-nil for a range that has no
-	// pendingChanges and is not satisfying some constraint, since we don't want
-	// to repeat the analysis work every time we consider it.
+	// Nil if conf is nil (since conf is required input), or if constraint
+	// analysis fails (e.g., no leaseholder found). When nil, the range is
+	// excluded from rebalancing. When non-nil, it is up-to-date and cached to
+	// avoid repeating analysis work.
 	//
 	// REMINDER: rangeAnalyzedConstraints ignores LEARNER and
 	// VOTER_DEMOTING_LEARNER replicas. So if a voter/non-voter is being added
@@ -1539,18 +1545,9 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		if rangeMsg.MaybeSpanConfIsPopulated {
 			normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.MaybeSpanConf, cs.constraintMatcher.interner)
 			if err != nil {
-				if normSpanConfig == nil {
-					// TODO: the roachpb.SpanConfig violated the basic requirements
-					// documented in the proto. We need to ensure that the checks that
-					// happened here are also done when the user set the ZoneConfig, so
-					// that we can reject such violations up front. At this point in the
-					// code we have no way of continuing, so we panic, but we must ensure
-					// we never get here in production for user specified input.
-					panic(err)
-				} else {
-					log.KvDistribution.Warningf(
-						ctx, "range r%v span config had errors in normalization: %v", rangeMsg.RangeID, err)
-				}
+				log.KvDistribution.Warningf(
+					ctx, "range r%v span config had errors in normalization: %v, normalized result: %v", rangeMsg.RangeID, err, normSpanConfig)
+				metrics.incSpanConfigNormalizationErrorIfNonNil()
 			}
 			rs.conf = normSpanConfig
 		}
@@ -1605,7 +1602,14 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 	localss := cs.stores[msg.StoreID]
 	cs.meansMemo.clear()
 	clusterMeans := cs.meansMemo.getMeans(nil)
-	for _, ss := range cs.stores {
+	// Sort by store ID for deterministic log output in tests.
+	storeIDs := make([]roachpb.StoreID, 0, len(cs.stores))
+	for storeID := range cs.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	slices.Sort(storeIDs)
+	for _, storeID := range storeIDs {
+		ss := cs.stores[storeID]
 		topk := ss.adjusted.topKRanges[msg.StoreID]
 		if topk == nil {
 			topk = &topKReplicas{k: numTopKReplicas}
