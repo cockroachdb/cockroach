@@ -7886,6 +7886,14 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `unknown enriched_properties: potato, valid values are: source, schema`,
 		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH enriched_properties='schema,potato'`,
 	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `avro_schema_prefix must start with \[A-Za-z_\] and subsequently contain only \[A-Za-z0-9_\]`,
+		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH avro_schema_prefix='1abc'`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `avro_schema_prefix must start with \[A-Za-z_\] and subsequently contain only \[A-Za-z0-9_\]`,
+		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH avro_schema_prefix='abc-d'`,
+	)
 
 	t.Run("sinkless enriched non-json", func(t *testing.T) {
 		skip.WithIssue(t, 130949, "sinkless feed validations are subpar")
