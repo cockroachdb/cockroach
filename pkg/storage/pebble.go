@@ -670,16 +670,16 @@ func defaultPebbleOptions(sv *settings.Values) *pebble.Options {
 	opts.Experimental.IteratorTracking.MaxAge = time.Minute
 
 	opts.Levels[0] = pebble.LevelOptions{
-		BlockSize:      32 << 10,  // 32 KB
-		IndexBlockSize: 256 << 10, // 256 KB
-		FilterPolicy:   bloom.FilterPolicy(10),
+		BlockSize:         32 << 10,  // 32 KB
+		IndexBlockSize:    256 << 10, // 256 KB
+		TableFilterPolicy: bloom.FilterPolicy(10),
 	}
 	opts.Levels[0].EnsureL0Defaults()
 	for i := 1; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
 		l.BlockSize = 32 << 10       // 32 KB
 		l.IndexBlockSize = 256 << 10 // 256 KB
-		l.FilterPolicy = bloom.FilterPolicy(10)
+		l.TableFilterPolicy = bloom.FilterPolicy(10)
 		l.EnsureL1PlusDefaults(&opts.Levels[i-1])
 	}
 
