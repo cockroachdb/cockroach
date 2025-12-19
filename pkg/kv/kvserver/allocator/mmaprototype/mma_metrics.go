@@ -26,7 +26,10 @@ const (
 	originMMARebalance
 )
 
-type counterMetrics struct {
+// rangeOperationMetrics contains per-store metrics for range operation outcomes
+// (replica/lease changes from external and rebalance sources) and span config
+// normalization issues.
+type rangeOperationMetrics struct {
 	DroppedDueToStateInconsistency *metric.Counter
 
 	ExternalRegisterSuccess *metric.Counter
@@ -75,8 +78,8 @@ type counterMetrics struct {
 	SpanConfigNormalizationSoftError *metric.Gauge
 }
 
-func makeCounterMetrics() *counterMetrics {
-	return &counterMetrics{
+func makeRangeOperationMetrics() *rangeOperationMetrics {
+	return &rangeOperationMetrics{
 		DroppedDueToStateInconsistency:   metric.NewCounter(metaDroppedDueToStateInconsistency),
 		ExternalRegisterSuccess:          metric.NewCounter(metaExternalRegisterSuccess),
 		ExternalRegisterFailure:          metric.NewCounter(metaExternalRegisterFailure),
