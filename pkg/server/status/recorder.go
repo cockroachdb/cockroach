@@ -116,7 +116,7 @@ var bugfix149481Enabled = settings.RegisterBoolSetting(
 // This setting enables debugging of changefeeds and should not be considered functionality
 // to expand support for.
 var ChildMetricsStorageEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel, "timeseries.child_metrics.enabled",
+	settings.ApplicationLevel, "timeseries.persist_child_metrics.enabled",
 	"enables the collection of high-cardinality child metrics into the time series database",
 	false,
 	settings.WithVisibility(settings.Reserved))
