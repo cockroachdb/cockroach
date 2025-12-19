@@ -18,8 +18,9 @@ pyroscope.scrape "test_cluster" {
 		node         = "2",
 		service_name = "test-cluster",
 	}]
-	scheme          = "http"
-	scrape_interval = "30s"
+	scheme                   = "http"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
 
 	profiling_config {
 		profile.process_cpu {
@@ -75,8 +76,9 @@ pyroscope.scrape "test_cluster" {
 		node         = "4",
 		service_name = "test-cluster",
 	}]
-	scheme          = "http"
-	scrape_interval = "30s"
+	scheme                   = "http"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
 
 	profiling_config {
 		profile.process_cpu {
@@ -124,8 +126,9 @@ pyroscope.scrape "test_cluster" {
 		node         = "3",
 		service_name = "test-cluster",
 	}]
-	scheme          = "http"
-	scrape_interval = "30s"
+	scheme                   = "http"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
 
 	profiling_config {
 		profile.process_cpu {
@@ -164,9 +167,10 @@ pyroscope.write "local" {
 }
 
 pyroscope.scrape "test_cluster" {
-	targets         = []
-	scheme          = "http"
-	scrape_interval = "30s"
+	targets                  = []
+	scheme                   = "http"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
 
 	profiling_config {
 		profile.process_cpu {
@@ -214,7 +218,8 @@ pyroscope.scrape "test_cluster" {
 	tls_config {
 		insecure_skip_verify = true
 	}
-	scrape_interval = "30s"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
 
 	profiling_config {
 		profile.process_cpu {
@@ -253,9 +258,10 @@ pyroscope.write "local" {
 }
 
 pyroscope.scrape "test_cluster" {
-	targets         = []
-	scheme          = "http"
-	scrape_interval = "30s"
+	targets                  = []
+	scheme                   = "http"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
 
 	profiling_config {
 		profile.process_cpu {
@@ -303,7 +309,8 @@ pyroscope.scrape "new_cluster" {
 	tls_config {
 		insecure_skip_verify = true
 	}
-	scrape_interval = "30s"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
 
 	profiling_config {
 		profile.process_cpu {
@@ -342,9 +349,10 @@ pyroscope.write "local" {
 }
 
 pyroscope.scrape "insecure_new_cluster" {
-	targets         = []
-	scheme          = "http"
-	scrape_interval = "30s"
+	targets                  = []
+	scheme                   = "http"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
 
 	profiling_config {
 		profile.process_cpu {

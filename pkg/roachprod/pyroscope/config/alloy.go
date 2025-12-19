@@ -44,14 +44,15 @@ type (
 
 	// PyroscopeScrapeConfig configures the pyroscope.scrape component.
 	PyroscopeScrapeConfig struct {
-		Label           string              `alloy:",label"`
-		Targets         []map[string]string `alloy:"targets,attr"`
-		Scheme          string              `alloy:"scheme,attr,optional"`
-		HTTPHeaders     map[string][]string `alloy:"http_headers,attr,optional"`
-		TLSConfig       *TLSConfig          `alloy:"tls_config,block,optional"`
-		ScrapeInterval  string              `alloy:"scrape_interval,attr,optional"`
-		ProfilingConfig *ProfilingConfig    `alloy:"profiling_config,block,optional"`
-		ForwardTo       []string            `alloy:"forward_to,attr,optional"`
+		Label                  string              `alloy:",label"`
+		Targets                []map[string]string `alloy:"targets,attr"`
+		Scheme                 string              `alloy:"scheme,attr,optional"`
+		HTTPHeaders            map[string][]string `alloy:"http_headers,attr,optional"`
+		TLSConfig              *TLSConfig          `alloy:"tls_config,block,optional"`
+		ScrapeInterval         string              `alloy:"scrape_interval,attr,optional"`
+		DeltaProfilingDuration string              `alloy:"delta_profiling_duration,attr,optional"`
+		ProfilingConfig        *ProfilingConfig    `alloy:"profiling_config,block,optional"`
+		ForwardTo              []string            `alloy:"forward_to,attr,optional"`
 	}
 
 	// TLSConfig configures TLS settings for scraping.
@@ -154,9 +155,10 @@ func (c *AlloyConfig) UpdateTarget(clusterName string, secureCookie string) {
 
 	if !found {
 		scrapeConfig = &PyroscopeScrapeConfig{
-			Label:          sanitized,
-			Targets:        []map[string]string{},
-			ScrapeInterval: "30s",
+			Label:                  sanitized,
+			Targets:                []map[string]string{},
+			ScrapeInterval:         "1m",
+			DeltaProfilingDuration: "10s",
 			ProfilingConfig: &ProfilingConfig{
 				ProcessCPU: &ProfileConfig{Enabled: true},
 				Memory:     &ProfileConfig{Enabled: true},

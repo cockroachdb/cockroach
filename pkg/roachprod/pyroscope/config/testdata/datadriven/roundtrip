@@ -25,7 +25,8 @@ pyroscope.scrape "secure_cluster_test" {
 	tls_config {
 		insecure_skip_verify = true
 	}
-	scrape_interval = "30s"
+	scrape_interval          = "30s"
+	delta_profiling_duration = "10s"
 
 	profiling_config {
 		profile.process_cpu {
