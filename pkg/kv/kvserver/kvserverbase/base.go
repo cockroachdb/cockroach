@@ -17,9 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/redact"
 )
@@ -115,8 +112,6 @@ var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
-var allowMMA = envutil.EnvOrDefaultBool("COCKROACH_ALLOW_MMA", false)
-
 // LoadBasedRebalancingMode controls whether range rebalancing takes
 // additional variables such as write load and disk usage into account.
 // If disabled, rebalancing is done purely based on replica count.
@@ -133,14 +128,6 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 		LBRebalancingMultiMetricAndCount: "multi-metric and count",
 	},
 	settings.WithPublic,
-	settings.WithValidateEnum(func(enumStr string) error {
-		isMMA := enumStr == "multi-metric and count" || enumStr == "multi-metric only"
-		if buildutil.CrdbTestBuild || !isMMA || allowMMA {
-			return nil
-		}
-		return unimplemented.NewWithIssue(
-			103320, "multi-metric rebalancing not supported for production use")
-	}),
 )
 
 // LoadBasedRebalancingModeIsMMA returns true if the load-based rebalancing mode
