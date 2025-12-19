@@ -1373,15 +1373,14 @@ func (cs *clusterState) processRangeMsg(
 	metrics *counterMetrics,
 	localStoreID roachpb.StoreID,
 	now time.Time,
-) (hasHardError, hasSoftError bool) {
+) (hasError bool, hasSoftError bool) {
 	cs.scratchRangeMap[rangeMsg.RangeID] = struct{}{}
 	rs, ok := cs.ranges[rangeMsg.RangeID]
 
 	defer func() {
 		if rs.hasNormalizationError {
-			if rs.conf == nil {
-				hasHardError = true
-			} else {
+			hasError = true
+			if rs.conf != nil {
 				hasSoftError = true
 			}
 		}
@@ -1584,19 +1583,19 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 	cs.gcPendingChanges(now)
 
 	clear(cs.scratchRangeMap)
-	totalHardErrorCount := 0
+	totalErrorCount := 0
 	totalSoftErrorCount := 0
 	for _, rangeMsg := range msg.Ranges {
-		hasHardError, hasSoftError := cs.processRangeMsg(ctx, &rangeMsg, metrics, msg.StoreID, now)
-		if hasHardError {
-			totalHardErrorCount++
+		hasError, hasSoftError := cs.processRangeMsg(ctx, &rangeMsg, metrics, msg.StoreID, now)
+		if hasError {
+			totalErrorCount++
 		}
 		if hasSoftError {
 			totalSoftErrorCount++
 		}
 	}
 	if metrics != nil {
-		metrics.SpanConfigNormalizationHardError.Update(int64(totalHardErrorCount))
+		metrics.SpanConfigNormalizationError.Update(int64(totalErrorCount))
 		metrics.SpanConfigNormalizationSoftError.Update(int64(totalSoftErrorCount))
 	}
 	// Remove ranges for which this is the localRangeOwner, but for which it is
