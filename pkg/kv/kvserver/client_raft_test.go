@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1030,11 +1031,11 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// Remove the partition. Snapshot should follow.
 	log.KvExec.Infof(ctx, "test: removing the partition")
 	for _, s := range []int{0, 1, 2} {
-		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, &unreliableRaftHandler{
-			rangeID:                    partRepl.RangeID,
+		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    partRepl.RangeID,
 			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
-			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+			UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+				DropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we just truncated can
 					// make it through. The Raft transport is asynchronous so this is necessary
 					// to make the test pass reliably.
@@ -1042,8 +1043,8 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 					// entries in the MsgApp, so filter where msg.Index < index, not <= index.
 					return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
 				},
-				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
-				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
+				DropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+				DropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
 			},
 		})
 		store := tc.GetFirstStoreFromServer(t, s)
@@ -3609,7 +3610,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 	// We're going to set up the cluster with partitioning so that we can
 	// partition node 0 from the others. The partition is not initially active.
-	partRange, err := setupPartitionedRange(tc, desc.RangeID, 0, 0, false /* activated */, unreliableRaftHandlerFuncs{})
+	partRange, err := setupPartitionedRange(tc, desc.RangeID, 0, 0, false /* activated */, kvtestutils.UnreliableRaftHandlerFuncs{})
 	require.NoError(t, err)
 
 	// Put some data in the range so we'll have something to test for.
@@ -4469,8 +4470,8 @@ func TestUninitializedReplicaQuiescence(t *testing.T) {
 
 		// Block incoming snapshots on s2 until channel is signaled.
 		blockSnapshot := make(chan struct{})
-		handlerFuncs := noopRaftHandlerFuncs()
-		handlerFuncs.snapErr = func(header *kvserverpb.SnapshotRequest_Header) error {
+		handlerFuncs := kvtestutils.NoopRaftHandlerFuncs()
+		handlerFuncs.SnapErr = func(header *kvserverpb.SnapshotRequest_Header) error {
 			select {
 			case <-blockSnapshot:
 			case <-tc.Stopper().ShouldQuiesce():
@@ -4479,10 +4480,10 @@ func TestUninitializedReplicaQuiescence(t *testing.T) {
 		}
 		s2, err := tc.Server(1).GetStores().(*kvserver.Stores).GetStore(tc.Server(1).GetFirstStoreID())
 		require.NoError(t, err)
-		tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(s2.StoreID(), &unreliableRaftHandler{
-			rangeID:                    desc.RangeID,
+		tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(s2.StoreID(), &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    desc.RangeID,
 			IncomingRaftMessageHandler: s2,
-			unreliableRaftHandlerFuncs: handlerFuncs,
+			UnreliableRaftHandlerFuncs: handlerFuncs,
 		})
 
 		// Try to up-replicate to s2. Should block on a learner snapshot after the new
@@ -4935,11 +4936,11 @@ func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
 	require.Nil(t, err)
 
 	for i := 0; i < 3; i++ {
-		tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(i).StoreID, &unreliableRaftHandler{
-			rangeID:                    ri.Desc.RangeID,
+		tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(i).StoreID, &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    ri.Desc.RangeID,
 			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, i),
-			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+			UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+				DropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					return rand.Intn(2) == 0
 				},
 			},
@@ -5382,7 +5383,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 					require.True(t, ok)
 					var err error
 					*partRange, err = basePartition.extend(tc, split.RightDesc.RangeID, replDesc.ReplicaID,
-						0 /* partitionedNode */, true /* activated */, unreliableRaftHandlerFuncs{})
+						0 /* partitionedNode */, true /* activated */, kvtestutils.UnreliableRaftHandlerFuncs{})
 					log.KvExec.Infof(ctx, "partition installed before proposing split: %s", *partRange)
 					require.NoError(t, err)
 					proposalFilter.Store(noopProposalFilter)
@@ -5470,7 +5471,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 			// Set up a partition for the LHS range only. Initially it is not active.
 			lhsPartition, err := setupPartitionedRange(tc, desc.RangeID,
-				0 /* replicaID */, 0 /* partitionedNode */, false /* activated */, unreliableRaftHandlerFuncs{})
+				0 /* replicaID */, 0 /* partitionedNode */, false /* activated */, kvtestutils.UnreliableRaftHandlerFuncs{})
 			require.NoError(t, err)
 			// Wait for all nodes to catch up.
 			increment(t, db, keyA, 5)

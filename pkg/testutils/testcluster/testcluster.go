@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1435,21 +1436,38 @@ func (tc *TestCluster) ensureLeaderStepsDown(
 				},
 			})
 
+	// Block Raft messages to the current leader. This prevents the leader from
+	// receiving MsgAppResp messages from followers, which could otherwise reset
+	// the leader's notion of RecentlyActive, which would then prevent it from
+	// stepping down due to CheckQuorum.
+	leaderNode.RaftTransport().(*kvserver.RaftTransport).
+		ListenIncomingRaftMessages(leaderStore.StoreID(),
+			&kvtestutils.UnreliableRaftHandler{
+				Name:                       "ensureLeaderStepsDown",
+				RangeID:                    rangeDesc.RangeID,
+				IncomingRaftMessageHandler: leaderStore,
+				UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+					DropReq:  func(*kvserverpb.RaftMessageRequest) bool { return true },
+					DropHB:   func(*kvserverpb.RaftHeartbeat) bool { return true },
+					DropResp: func(*kvserverpb.RaftMessageResponse) bool { return true },
+				},
+			})
+
 	// Advance the manual clock past the lease's expiration.
 	log.Dev.Infof(ctx, "test: advancing clock to lease expiration")
 	manual.Increment(leaderStore.GetStoreConfig().LeaseExpiration())
 
-	// Wait for the leader to step down. Sometimes this might take a while since
-	// the leader might be replicating to other followers, and it won't step down
-	// unless it doesn't receive anything from the followers for a while.
-	// TODO(ibrahim): This could be made faster by blocking Raft messages to
-	// the leader.
+	// Wait for the leader to step down.
 	testutils.SucceedsWithin(t, func() error {
 		if leaderReplica.RaftStatus().RaftState == raftpb.StateLeader {
 			return errors.Errorf("leader hasn't stepped down yet")
 		}
 		return nil
 	}, 2*testutils.SucceedsSoonDuration())
+
+	// Restore Raft message handling to normal.
+	leaderNode.RaftTransport().(*kvserver.RaftTransport).
+		ListenIncomingRaftMessages(leaderStore.StoreID(), leaderStore)
 
 	// Restore store liveness state to normal.
 	leaderNode.StoreLivenessTransport().(*storeliveness.Transport).
