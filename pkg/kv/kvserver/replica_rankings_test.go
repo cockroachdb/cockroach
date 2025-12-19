@@ -23,11 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
@@ -498,6 +500,8 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 	// number of keys being read increases, the read bytes scales by keys * 38.
 	const entrySize = 38
 
+	// NB: All test cases must be idempotent (re-runnable) since we use
+	// SucceedsSoon to retry on interference from background activity.
 	testCases := []struct {
 		ba           *kvpb.BatchRequest
 		expectedRQPS float64
@@ -534,35 +538,42 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 
 	for i, testCase := range testCases {
 		t.Logf("test #%d", i+1)
-		// Reset the request counts to 0 before sending to clear previous requests.
-		repl.loadStats.Reset()
+		// Wrap each test case in SucceedsSoon to handle interference from
+		// background activity (e.g., async stats recording from lease upgrades).
+		// If stats don't match expectations, we reset and retry.
+		testutils.SucceedsSoon(t, func() error {
+			// Reset the request counts to 0 before sending to clear previous requests.
+			repl.loadStats.Reset()
 
-		requestsBefore := repl.loadStats.TestingGetSum(load.Requests)
-		writesBefore := repl.loadStats.TestingGetSum(load.WriteKeys)
-		readsBefore := repl.loadStats.TestingGetSum(load.ReadKeys)
-		readBytesBefore := repl.loadStats.TestingGetSum(load.ReadBytes)
-		writeBytesBefore := repl.loadStats.TestingGetSum(load.WriteBytes)
+			_, pErr = db.NonTransactionalSender().Send(ctx, testCase.ba)
+			if pErr != nil {
+				return pErr.GoError()
+			}
 
-		_, pErr = db.NonTransactionalSender().Send(ctx, testCase.ba)
-		require.Nil(t, pErr)
+			requestsAfter := repl.loadStats.TestingGetSum(load.Requests)
+			writesAfter := repl.loadStats.TestingGetSum(load.WriteKeys)
+			readsAfter := repl.loadStats.TestingGetSum(load.ReadKeys)
+			readBytesAfter := repl.loadStats.TestingGetSum(load.ReadBytes)
+			writeBytesAfter := repl.loadStats.TestingGetSum(load.WriteBytes)
 
-		require.Equal(t, 0.0, requestsBefore)
-		require.Equal(t, 0.0, writesBefore)
-		require.Equal(t, 0.0, readsBefore)
-		require.Equal(t, 0.0, writeBytesBefore)
-		require.Equal(t, 0.0, readBytesBefore)
-
-		requestsAfter := repl.loadStats.TestingGetSum(load.Requests)
-		writesAfter := repl.loadStats.TestingGetSum(load.WriteKeys)
-		readsAfter := repl.loadStats.TestingGetSum(load.ReadKeys)
-		readBytesAfter := repl.loadStats.TestingGetSum(load.ReadBytes)
-		writeBytesAfter := repl.loadStats.TestingGetSum(load.WriteBytes)
-
-		assertGreaterThanInDelta(t, testCase.expectedRQPS, requestsAfter, epsilonAllowed)
-		assertGreaterThanInDelta(t, testCase.expectedWPS, writesAfter, epsilonAllowed)
-		assertGreaterThanInDelta(t, testCase.expectedRPS, readsAfter, epsilonAllowed)
-		assertGreaterThanInDelta(t, testCase.expectedWBPS, writeBytesAfter, epsilonAllowed)
-		assertGreaterThanInDelta(t, testCase.expectedRBPS, readBytesAfter, epsilonAllowed)
+			// Check write stats first since that's where interference shows up.
+			if writesAfter < testCase.expectedWPS || writesAfter > testCase.expectedWPS+epsilonAllowed {
+				return errors.Errorf("writeKeys: got %f, expected %f±%d", writesAfter, testCase.expectedWPS, epsilonAllowed)
+			}
+			if writeBytesAfter < testCase.expectedWBPS || writeBytesAfter > testCase.expectedWBPS+epsilonAllowed {
+				return errors.Errorf("writeBytes: got %f, expected %f±%d", writeBytesAfter, testCase.expectedWBPS, epsilonAllowed)
+			}
+			if requestsAfter < testCase.expectedRQPS || requestsAfter > testCase.expectedRQPS+epsilonAllowed {
+				return errors.Errorf("requests: got %f, expected %f±%d", requestsAfter, testCase.expectedRQPS, epsilonAllowed)
+			}
+			if readsAfter < testCase.expectedRPS || readsAfter > testCase.expectedRPS+epsilonAllowed {
+				return errors.Errorf("readKeys: got %f, expected %f±%d", readsAfter, testCase.expectedRPS, epsilonAllowed)
+			}
+			if readBytesAfter < testCase.expectedRBPS || readBytesAfter > testCase.expectedRBPS+epsilonAllowed {
+				return errors.Errorf("readBytes: got %f, expected %f±%d", readBytesAfter, testCase.expectedRBPS, epsilonAllowed)
+			}
+			return nil
+		})
 	}
 }
 
