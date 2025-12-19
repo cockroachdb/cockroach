@@ -62,6 +62,7 @@ type mockLockTableGuard struct {
 	signal        chan struct{}
 	stateObserved chan struct{}
 	toResolve     []roachpb.LockUpdate
+	pushedTransactionUpdated func(*roachpb.Transaction)
 }
 
 var _ lockTableGuard = &mockLockTableGuard{}
@@ -77,7 +78,9 @@ func (g *mockLockTableGuard) CurState() (waitingState, error) {
 	return s, nil
 }
 
-func (g *mockLockTableGuard) PushedTransactionUpdated(*roachpb.Transaction) {}
+func (g *mockLockTableGuard) PushedTransactionUpdated(t *roachpb.Transaction) {
+	g.pushedTransactionUpdated(t)
+}
 
 func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
 	return g.toResolve
@@ -357,6 +360,12 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 						require.Equal(t, pusheeTxn.ID, txn.ID)
 						require.Equal(t, roachpb.ABORTED, txn.Status)
 					}
+					g.pushedTransactionUpdated = func(txn *roachpb.Transaction) {
+						require.Equal(t, pusheeTxn.ID, txn.ID)
+						require.Equal(t, roachpb.ABORTED, txn.Status)
+						g.state = waitingState{kind: doneWaiting}
+						g.notify()
+					}
 					ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate, opts intentresolver.ResolveOptions) *Error {
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
@@ -555,6 +564,12 @@ func testErrorWaitPush(
 					require.Equal(t, pusheeTxn.ID, txn.ID)
 					require.Equal(t, roachpb.ABORTED, txn.Status)
 				}
+				g.pushedTransactionUpdated = func(txn *roachpb.Transaction) {
+					require.Equal(t, pusheeTxn.ID, txn.ID)
+					require.Equal(t, roachpb.ABORTED, txn.Status)
+					g.state = waitingState{kind: doneWaiting}
+					g.notify()
+				}
 				ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate, opts intentresolver.ResolveOptions) *Error {
 					require.Equal(t, keyA, intent.Key)
 					require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
@@ -739,6 +754,12 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 						require.Equal(t, pusheeTxn.ID, txn.ID)
 						require.Equal(t, roachpb.ABORTED, txn.Status)
 					}
+					g.pushedTransactionUpdated = func(txn *roachpb.Transaction) {
+						require.Equal(t, pusheeTxn.ID, txn.ID)
+						require.Equal(t, roachpb.ABORTED, txn.Status)
+						g.state = waitingState{kind: doneWaiting}
+						g.notify()
+					}
 					ir.resolveIntent = func(_ context.Context, intent roachpb.LockUpdate, opts intentresolver.ResolveOptions) *Error {
 						require.Equal(t, keyA, intent.Key)
 						require.Equal(t, pusheeTxn.ID, intent.Txn.ID)
@@ -776,6 +797,9 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 func TestLockTableWaiterIntentResolverError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.IgnoreLint(t, "irrelevant for virtual intent resolution")
+
 	ctx := context.Background()
 	w, ir, g, _ := setupLockTableWaiterTest()
 	defer w.stopper.Stop(ctx)

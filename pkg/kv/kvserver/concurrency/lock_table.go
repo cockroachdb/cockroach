@@ -2486,8 +2486,18 @@ func (kl *keyLocks) claimantTxnFor(g *lockTableGuardImpl) (_ *enginepb.TxnMeta, 
 			// it to actively wait on this key -- in such cases, this other
 			// transaction is the claimant from the supplied request's perspective.
 			// This prompts the check below.
-			if !g.isSameTxn(e.Value.txn) {
-				return e.Value.txn, true
+			//
+			// Additionally, there are locks by transactions that the request no
+			// longer conflicts with (e.g. after a successful push). So we also need
+			// to consult canResolveLocksForConflictingTxn and
+			// replicatedLockIsResolvableForTxn.
+			tl := e.Value
+			nonLockingRead := g.curStrength() == lock.None
+			_, resolvable := g.canResolveLocksForConflictingTxn(tl.txn.ID, nonLockingRead)
+			// TODO(mira): check these conditions carefully.
+			//if !g.isSameTxn(tl.txn) { // old claimantTxn condition
+			if !g.isSameTxn(tl.txn) && !g.replicatedLockIsResolvableForTxn(tl.txn.ID, string(kl.key), nonLockingRead) && !resolvable {
+				return tl.txn, true
 			}
 		}
 	}
