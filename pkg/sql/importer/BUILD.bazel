@@ -46,7 +46,6 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
-        "//pkg/sql/bulkingest",
         "//pkg/sql/bulkmerge",
         "//pkg/sql/bulksst",
         "//pkg/sql/catalog",
