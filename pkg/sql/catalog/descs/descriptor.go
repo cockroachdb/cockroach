@@ -441,7 +441,7 @@ func (q *byIDLookupContext) lookupLeased(
 	if q.tc.cr.IsDescIDKnownToNotExist(id, q.flags.descFilters.maybeParentID) {
 		return nil, catalog.NoValidation, catalog.NewDescriptorNotFoundError(id)
 	}
-	desc, shouldReadFromStore, err := q.tc.leased.getByID(q.ctx, q.tc.deadlineHolder(q.txn), id)
+	desc, shouldReadFromStore, err := q.tc.leased.getByID(q.ctx, q.tc.deadlineHolder(q.txn), id, q.flags.descFilters.withoutLockedTimestamp)
 	if err != nil || shouldReadFromStore {
 		// Leasing does not support leasing adding descriptors, and in certain contexts,
 		// we may want them leased. So, we will fallback to the KV based reads if requested.
@@ -654,7 +654,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 			return continueLookups, descpb.InvalidID, nil
 		}
 		ld, shouldReadFromStore, err := tc.leased.getByName(
-			ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name,
+			ctx, tc.deadlineHolder(txn), parentID, parentSchemaID, name, flags.descFilters.withoutLockedTimestamp,
 		)
 		if err != nil {
 			return haltLookups, descpb.InvalidID, err
