@@ -10817,6 +10817,14 @@ layers:
       unit: PERCENT
       aggregation: AVG
       derivative: NONE
+    - name: admission.elastic_cpu_bypassed.utilization
+      exported_name: admission_elastic_cpu_bypassed_utilization
+      description: CPU utilization by elastic work that bypassed admission
+      y_axis_label: CPU Time
+      type: GAUGE
+      unit: PERCENT
+      aggregation: AVG
+      derivative: NONE
     - name: admission.errored.elastic-cpu
       exported_name: admission_errored_elastic_cpu
       description: Number of requests not admitted due to error
