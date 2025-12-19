@@ -47,33 +47,42 @@ type counterMetrics struct {
 	// may have succeeded (producing a usable config despite the error). This
 	// metric does not include cases constraint analysis fails.
 	// TODO(wenyihu6): add ConstraintAnalysisSkipped for those.
-	SpanConfigNormalizationError *metric.Counter
+	SpanConfigNormalizationHardError *metric.Gauge
+	SpanConfigNormalizationSoftError *metric.Gauge
 }
 
 // incSpanConfigNormalizationErrorIfNonNil increments the
 // SpanConfigNormalizationError counter if it is non-nil. This is used to avoid
 // panics when the metrics registry is nil.
-func (c *counterMetrics) incSpanConfigNormalizationErrorIfNonNil() {
+func (c *counterMetrics) incSpanConfigNormalizationHardErrorIfNonNil() {
 	if c == nil {
 		return
 	}
-	c.SpanConfigNormalizationError.Inc(1)
+	c.SpanConfigNormalizationHardError.Inc(1)
+}
+
+func (c *counterMetrics) incSpanConfigNormalizationSoftErrorIfNonNil() {
+	if c == nil {
+		return
+	}
+	c.SpanConfigNormalizationSoftError.Inc(1)
 }
 
 func makeCounterMetrics() *counterMetrics {
 	return &counterMetrics{
-		DroppedDueToStateInconsistency: metric.NewCounter(metaDroppedDueToStateInconsistency),
-		ExternalRegisterSuccess:        metric.NewCounter(metaExternalRegisterSuccess),
-		ExternalRegisterFailure:        metric.NewCounter(metaExternalRegisterFailure),
-		ExternalReplicaChangeSuccess:   metric.NewCounter(metaExternalReplicaChangeSuccess),
-		ExternalReplicaChangeFailure:   metric.NewCounter(metaExternalReplicaChangeFailure),
-		ExternalLeaseChangeSuccess:     metric.NewCounter(metaExternalLeaseChangeSuccess),
-		ExternalLeaseChangeFailure:     metric.NewCounter(metaExternalLeaseChangeFailure),
-		RebalanceReplicaChangeSuccess:  metric.NewCounter(metaRebalanceReplicaChangeSuccess),
-		RebalanceReplicaChangeFailure:  metric.NewCounter(metaRebalanceReplicaChangeFailure),
-		RebalanceLeaseChangeSuccess:    metric.NewCounter(metaRebalanceLeaseChangeSuccess),
-		RebalanceLeaseChangeFailure:    metric.NewCounter(metaRebalanceLeaseChangeFailure),
-		SpanConfigNormalizationError:   metric.NewCounter(metaSpanConfigNormalizationError),
+		DroppedDueToStateInconsistency:   metric.NewCounter(metaDroppedDueToStateInconsistency),
+		ExternalRegisterSuccess:          metric.NewCounter(metaExternalRegisterSuccess),
+		ExternalRegisterFailure:          metric.NewCounter(metaExternalRegisterFailure),
+		ExternalReplicaChangeSuccess:     metric.NewCounter(metaExternalReplicaChangeSuccess),
+		ExternalReplicaChangeFailure:     metric.NewCounter(metaExternalReplicaChangeFailure),
+		ExternalLeaseChangeSuccess:       metric.NewCounter(metaExternalLeaseChangeSuccess),
+		ExternalLeaseChangeFailure:       metric.NewCounter(metaExternalLeaseChangeFailure),
+		RebalanceReplicaChangeSuccess:    metric.NewCounter(metaRebalanceReplicaChangeSuccess),
+		RebalanceReplicaChangeFailure:    metric.NewCounter(metaRebalanceReplicaChangeFailure),
+		RebalanceLeaseChangeSuccess:      metric.NewCounter(metaRebalanceLeaseChangeSuccess),
+		RebalanceLeaseChangeFailure:      metric.NewCounter(metaRebalanceLeaseChangeFailure),
+		SpanConfigNormalizationHardError: metric.NewGauge(metaSpanConfigNormalizationHardError),
+		SpanConfigNormalizationSoftError: metric.NewGauge(metaSpanConfigNormalizationSoftError),
 	}
 }
 
@@ -168,13 +177,23 @@ var (
 		StaticLabels: metric.MakeLabelPairs(
 			metric.LabelOrigin, "rebalance", metric.LabelType, "lease", metric.LabelResult, "failure"),
 	}
-	metaSpanConfigNormalizationError = metric.Metadata{
-		Name: "mma.span_config.normalization.error",
-		Help: "Number of ranges where span config normalization had errors. " +
-			"This includes cases where best-effort normalization may have succeeded " +
-			"(producing a usable config despite the error).",
+	metaSpanConfigNormalizationHardError = metric.Metadata{
+		Name:        "mma.span_config.normalization.hard_error",
+		Help:        "Number of ranges where span config normalization had hard errors.",
 		Measurement: "Range",
 		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.span_config.normalization",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelResult, "hard_error"),
+	}
+	metaSpanConfigNormalizationSoftError = metric.Metadata{
+		Name:        "mma.span_config.normalization.soft_error",
+		Help:        "Number of ranges where span config normalization had soft errors.",
+		Measurement: "Range",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.span_config.normalization",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelResult, "soft_error"),
 	}
 
 	// Future: we will add additional origins for MMA-initiated operations that
