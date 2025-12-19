@@ -58,6 +58,7 @@ func (cr *commandRegistry) register() {
 		cr.buildGrafanaDumpCmd(),
 		cr.buildGrafanaURLCmd(),
 		cr.buildGrafanaAnnotationCmd(),
+		cr.buildPyroscopeCmd(),
 		cr.buildRootStorageCmd(),
 		cr.buildSnapshotCmd(),
 		cr.buildUpdateCmd(),
