@@ -9,10 +9,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -22,6 +24,9 @@ func newBulkMergePlan(
 	ssts []execinfrapb.BulkMergeSpec_SST,
 	spans []roachpb.Span,
 	genOutputURI func(sqlInstance base.SQLInstanceID) string,
+	iteration int,
+	maxIterations int,
+	writeTS *hlc.Timestamp,
 ) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	if len(spans) == 0 {
 		return nil, nil, errors.Newf("no spans specified")
@@ -67,14 +72,23 @@ func newBulkMergePlan(
 	})
 
 	mergeStage := plan.NewStageOnNodes(sqlInstanceIDs)
+	var writeTimestamp hlc.Timestamp
+	if writeTS != nil {
+		writeTimestamp = *writeTS
+	}
 	for streamID, sqlInstanceID := range sqlInstanceIDs {
-		outputStorage, err := execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI(
-			ctx,
-			genOutputURI(sqlInstanceID),
-			execCtx.User(),
-		)
-		if err != nil {
-			return nil, nil, err
+		var outputStorageConf cloudpb.ExternalStorage
+		if iteration < maxIterations {
+			outputStorage, err := execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI(
+				ctx,
+				genOutputURI(sqlInstanceID),
+				execCtx.User(),
+			)
+			if err != nil {
+				return nil, nil, err
+			}
+			outputStorageConf = outputStorage.Conf()
+			outputStorage.Close()
 		}
 		pIdx := plan.AddProcessor(physicalplan.Processor{
 			SQLInstanceID: sqlInstanceID,
@@ -84,9 +98,12 @@ func newBulkMergePlan(
 				}},
 				Core: execinfrapb.ProcessorCoreUnion{
 					BulkMerge: &execinfrapb.BulkMergeSpec{
-						SSTs:          ssts,
-						Spans:         spans,
-						OutputStorage: outputStorage.Conf(),
+						SSTs:           ssts,
+						Spans:          spans,
+						OutputStorage:  outputStorageConf,
+						Iteration:      int32(iteration),
+						MaxIterations:  int32(maxIterations),
+						WriteTimestamp: writeTimestamp,
 					},
 				},
 				Post: execinfrapb.PostProcessSpec{},
@@ -104,7 +121,6 @@ func newBulkMergePlan(
 			DestInput:        0,
 		})
 		plan.ResultRouters = append(plan.ResultRouters, pIdx)
-		outputStorage.Close()
 	}
 
 	plan.AddSingleGroupStage(ctx, coordinatorID, execinfrapb.ProcessorCoreUnion{
