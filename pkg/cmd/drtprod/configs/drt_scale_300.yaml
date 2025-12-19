@@ -80,8 +80,6 @@ targets:
           - "COCKROACH_TESTING_FORCE_RELEASE_BRANCH=true"
           - "--env" # from defaults
           - "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true"
-          - "--env" # for MMA test case scenario
-          - "COCKROACH_ALLOW_MMA=true"
         flags:
           # add flag to set provisioned throughput on each store according to their cloud provider limits
           enable-fluent-sink: true
