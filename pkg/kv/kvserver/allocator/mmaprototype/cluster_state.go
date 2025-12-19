@@ -1268,6 +1268,9 @@ type clusterState struct {
 	ranges map[roachpb.RangeID]*rangeState
 
 	scratchRangeMap map[roachpb.RangeID]struct{}
+	scratchStoreSet storeSet           // scratch space for pre-means filtering
+	scratchMeans    meansLoad          // scratch space for recomputed means
+	scratchDisj     [1]constraintsConj // scratch space for getMeans call
 
 	// Added to when a change is proposed. Will also add to corresponding
 	// rangeState.pendingChanges and to the affected storeStates.
@@ -1623,6 +1626,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			topk.dim = WriteBandwidth
 		}
 		if sls.highDiskSpaceUtilization {
+			// If disk space is running out, shedding bytes becomes the top priority.
 			topk.dim = ByteSize
 		} else if sls.sls > loadNoChange {
 			// If multiple dimensions are contributing the same loadSummary, we will pick
@@ -2191,15 +2195,42 @@ func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
 	return nil
 }
 
-// canShedAndAddLoad returns true if the delta can be added to the target
-// store and removed from the src store, such that the relative load summaries
-// will not get worse.
+// canShedAndAddLoad returns true if the delta can be added to the target store
+// and removed from the src store. It does not change any state between the call
+// and return.
 //
-// It does not change any state between the call and return.
+// overloadDim represents the dimension that is overloaded in the source and the
+// function requires that along that dimension, the target is < loadNoChange and
+// the source is > loadNoChange.
 //
-// overloadDim represents the dimension that is overloaded in the source and
-// the function requires that the target must be currently < loadNoChange
-// along that dimension.
+// Broadly speaking, the method tries to ascertain that the target wouldn't be
+// worse off than the source following the transfer. To do this, the method
+// looks at a load summary for the target that would result from the load
+// transfer (targetLoadSummary).
+//
+// When onlyConsiderTargetCPUSummary is true, the targetLoadSummary derives from
+// the target's post-transfer CPU dimension only. This is appropriate when a lease is
+// transferred, as this should only affect the CPU dimension, and we don't want
+// lease transfers to be subject to stricter checks related to other dimensions.
+// When onlyConsiderTargetCPUSummary is false, targetLoadSummary is the target's
+// worst post-transfer load summary. In both cases, the node load summary is also
+// considered.
+//
+// TODO(tbg): understand and explain why the node load summary is in the mix here.
+//
+// In either case, if the targetLoadSummary is < loadNoChange, the change is
+// permitted right away. Otherwise, stricter checks apply: After the transfer,
+// - the target must not be overloadUrgent,
+// - the target has no pending changes (to delay making a potentially non-ideal
+//   choice of the target),
+// - the target's overloaded dimension's summary must not be worse than the
+//   source's ("overloadedDimPermitsChange"),
+// - along each of the other (!=overloadeDim) dimensions, the percentage
+//   increase in load is at most a third of that of the overloaded dimension.
+//   (e.g. if CPU goes up by 30%, WriteBandwidth can go up by at most 10%).
+// - the target's node load summary must not be worse than the target's store
+//   load summary. See inline comment for more details.
+
 func (cs *clusterState) canShedAndAddLoad(
 	ctx context.Context,
 	srcSS *storeState,
@@ -2216,6 +2247,11 @@ func (cs *clusterState) canShedAndAddLoad(
 	// the load delta addition flips the loadSummary for either the target or the
 	// source, which suggests it might be useful to add this to verbose logging.
 
+	// Compute srcSLS and targetSLS, which are the load summaries of the source
+	// and target that would result from moving the lease.
+	//
+	// TODO(tbg): extract this into a helper and set it up so that it doesn't
+	// temporarily modify the cluster state.
 	targetNS := cs.nodes[targetSS.NodeID]
 	// Add the delta.
 	deltaToAdd := loadVectorToAdd(delta)
@@ -2254,28 +2290,16 @@ func (cs *clusterState) canShedAndAddLoad(
 		reason.WriteString("targetSLS.highDiskSpaceUtilization")
 		return false
 	}
-	// We define targetSummary as a summarization across all dimensions of the
-	// target. A targetSummary < loadNoChange always accepts the change. When
-	// the targetSummary >= loadNoChange, we are stricter and require both that
-	// there are no pending changes in the target, and the target is "not worse"
-	// in a way that will cause thrashing, where the details are defined below.
-	// The no pending changes requirement is to delay making a potentially
-	// non-ideal choice of the target.
-	//
-	// NB: The target's overload dimension summary must have been <
-	// loadNoChange, and the source must have been > loadNoChange.
+
+	// We define targetSummary as a "worst" of the considered load dimesions
+	// (only CPU, or all).
 	var targetSummary loadSummary
 	if onlyConsiderTargetCPUSummary {
 		targetSummary = targetSLS.dimSummary[CPURate]
-		if targetSummary < targetSLS.nls {
-			targetSummary = targetSLS.nls
-		}
 	} else {
 		targetSummary = targetSLS.sls
-		if targetSummary < targetSLS.nls {
-			targetSummary = targetSLS.nls
-		}
 	}
+	targetSummary = max(targetSummary, targetSLS.nls)
 
 	if targetSummary < loadNoChange {
 		return true
@@ -2284,6 +2308,7 @@ func (cs *clusterState) canShedAndAddLoad(
 		reason.WriteString("overloadUrgent")
 		return false
 	}
+
 	// Need to consider additional factors.
 	//
 	// It is possible that both are overloadSlow in aggregate. We want to make
@@ -2312,7 +2337,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	// That boolean predicate can also be too strict, in that we should permit
 	// transitions to overloadSlow along one dimension, to allow for an
 	// exchange.
-	overloadedDimFractionIncrease := math.MaxFloat64
+	var overloadedDimFractionIncrease float64
 	if targetSS.adjusted.load[overloadedDim] > 0 {
 		overloadedDimFractionIncrease = float64(deltaToAdd[overloadedDim]) /
 			float64(targetSS.adjusted.load[overloadedDim])
@@ -2353,14 +2378,33 @@ func (cs *clusterState) canShedAndAddLoad(
 		targetSLS.maxFractionPendingIncrease < epsilon &&
 		targetSLS.maxFractionPendingDecrease < epsilon &&
 		// NB: targetSLS.nls <= targetSLS.sls is not a typo, in that we are
-		// comparing targetSLS with itself. The nls only captures node-level
-		// CPU, so if a store that is overloaded wrt WriteBandwidth wants to
-		// shed to a store that is overloaded wrt CPURate, we need to permit
-		// that. However, the nls of the former will be less than the that of
-		// the latter. By looking at the nls of the target here, we are making
-		// sure that it is no worse than the sls of the target, since if it
-		// is, the node is overloaded wrt CPU due to some other store on that
-		// node, and we should be shedding that load first.
+		// comparing targetSLS with itself.
+		//
+		// Consider a node that has two stores:
+		// - s1 is low on CPU
+		// - s2 is very high on CPU, resulting in a node load summary of
+		// overloadSlow or overloadUrgent)
+		//
+		// In this code path, targetSLS is >= loadNoChange, so there must be
+		// some overload dimension in targetSLS. If it comes from write bandwidth
+		// (or any other non-CPU dimension), without this check,s1 might be
+		// considered an acceptable target for adding CPU load. But it is clearly
+		// not a good target, since the node housing s1 is CPU overloaded - s2
+		// should be shedding CPU load first.
+		// This example motivates the condition below. If we reach this code,
+		// we know that targetSLS >= loadNoChange, and we decide:
+		// - at sls=loadNoChange, we require nls <= loadNoChange
+		// - at sls=overloadSlow, we require nls <= overloadSlow
+		// - at sls=overloadUrgent, we require nls <= overloadUrgent.
+		// In other words, whenever a node level summary was "bumped up" beyond
+		// the target's by some other local store, we reject the change.
+		//
+		// TODO(tbg): While the example illustrates that "something had to be
+		// done", I don't understand why it makes sense to solve this exactly
+		// as it was done. The node level summary is based on node-wide CPU
+		// utilization as well as its distance from the mean (across the
+		// candidate set). Store summaries a) reflect the worst dimension, and
+		// b) on the CPU dimension are based on the store-apportioned capacity.
 		targetSLS.nls <= targetSLS.sls
 	if canAddLoad {
 		return true
@@ -2451,10 +2495,11 @@ func computeLoadSummary(
 	}
 	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
-		worstDim:                   worstDim,
-		sls:                        sls,
-		nls:                        nls,
-		dimSummary:                 dimSummary,
+		worstDim:   worstDim,
+		sls:        sls,
+		nls:        nls,
+		dimSummary: dimSummary,
+		// TODO(tbg): remove highDiskSpaceUtilization.
 		highDiskSpaceUtilization:   highDiskSpaceUtil,
 		maxFractionPendingIncrease: ss.maxFractionPendingIncrease,
 		maxFractionPendingDecrease: ss.maxFractionPendingDecrease,

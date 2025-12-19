@@ -419,6 +419,11 @@ func TestClusterState(t *testing.T) {
 				ctx, finishAndGet := tracing.ContextWithRecordingSpan(
 					context.Background(), tr, d.Cmd,
 				)
+				if d.HasArg("breakpoint") {
+					// You can set a debugger breakpoint here and use `breakpoint=true`
+					// in a datadriven command to hit it.
+					t.Log("hit breakpoint")
+				}
 				switch d.Cmd {
 				case "include":
 					loc := dd.ScanArg[string](t, d, "path")
@@ -630,7 +635,21 @@ func TestClusterState(t *testing.T) {
 				case "retain-ready-lease-target-stores-only":
 					in := dd.ScanArg[[]roachpb.StoreID](t, d, "in")
 					rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
-					out := retainReadyLeaseTargetStoresOnly(ctx, storeSet(in), cs.stores, rangeID)
+					lh, _ := dd.ScanArgOpt[roachpb.StoreID](t, d, "leaseholder")
+					out := retainReadyLeaseTargetStoresOnly(ctx, storeSet(in), cs.stores, rangeID, lh)
+					rec := finishAndGet()
+					var sb redact.StringBuilder
+					rec.SafeFormatMinimal(&sb)
+					return fmt.Sprintf("%s%v\n", sb.String(), out)
+
+				case "retain-ready-replica-target-stores-only":
+					in := dd.ScanArg[[]roachpb.StoreID](t, d, "in")
+					replicas, _ := dd.ScanArgOpt[[]roachpb.StoreID](t, d, "replicas")
+					var replicasSet storeSet
+					for _, replica := range replicas {
+						replicasSet.insert(replica)
+					}
+					out := retainReadyReplicaTargetStoresOnly(ctx, storeSet(in), cs.stores, replicasSet)
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
