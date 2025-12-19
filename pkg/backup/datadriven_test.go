@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -200,8 +199,7 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	// and overload the host. Generally overload would mean bulk work, which only
 	// uses strictly spare capacitym gets starved, but these tests expect it to
 	// still run (just slowly, along with everything else).
-	bulk.YieldIfNoPacer.Override(context.Background(), &settings.SV, false)
-	admission.YieldInPacer.Override(context.Background(), &settings.SV, false)
+	admission.YieldForElasticCPU.Override(context.Background(), &settings.SV, false)
 	params.ServerArgs.Settings = settings
 
 	clusterSize := cfg.nodes

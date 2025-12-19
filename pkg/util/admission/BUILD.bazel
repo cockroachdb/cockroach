@@ -24,6 +24,7 @@ go_library(
         "testing_knobs.go",
         "tokens_linear_model.go",
         "work_queue.go",
+        "yield.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/admission",
     visibility = ["//visibility:public"],
