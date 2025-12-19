@@ -833,13 +833,19 @@ func (r *importResumer) OnFailOrCancel(
 	ctx context.Context, execCtx interface{}, jobErr error,
 ) error {
 	p := execCtx.(sql.JobExecContext)
+	details := r.job.Details().(jobspb.ImportDetails)
+
+	if details.TablePublished {
+		// If the table was published, there is nothing for us to clean up, the
+		// descriptor is already online.
+		return nil
+	}
 
 	// Emit to the event log that the job has started reverting.
 	emitImportJobEvent(ctx, p, jobs.StateReverting, r.job)
 
 	// TODO(sql-exp): increase telemetry count for import.total.failed and
 	// import.duration-sec.failed.
-	details := r.job.Details().(jobspb.ImportDetails)
 	logutil.LogJobCompletion(ctx, importJobRecoveryEventType, r.job.ID(), false, jobErr, r.res.Rows)
 
 	addToFileFormatTelemetry(details.Format.Format.String(), "failed")
@@ -854,7 +860,6 @@ func (r *importResumer) OnFailOrCancel(
 		} else {
 			log.Dev.Infof(ctx, "verified no nodes still ingesting on behalf of job %d", r.job.ID())
 		}
-
 	}
 
 	cfg := execCtx.(sql.JobExecContext).ExecCfg()
@@ -950,7 +955,25 @@ func (r *importResumer) dropTable(
 	if err := descsCol.WriteDescToBatch(ctx, kvTrace, intoDesc, b); err != nil {
 		return err
 	}
-	return errors.Wrap(txn.KV().Run(ctx, b), "putting IMPORT INTO table back online")
+	err = txn.KV().Run(ctx, b)
+	if err != nil {
+		return errors.Wrap(err, "bringing IMPORT INTO table back online")
+	}
+
+	err = r.job.WithTxn(txn).Update(ctx, func(
+		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	) error {
+		// Mark the table as published to avoid running cleanup again.
+		details := md.Payload.GetImport()
+		details.TablePublished = true
+		ju.UpdatePayload(md.Payload)
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "updating job to mark table as published during cleanup")
+	}
+
+	return nil
 }
 
 // ReportResults implements JobResultsReporter interface.
