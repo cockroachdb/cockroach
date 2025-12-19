@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -73,8 +74,9 @@ func (r *Replica) executeReadOnlyBatch(
 	// designed.
 	rw := r.store.StateEngine().NewReadOnly(storage.StandardDurability)
 	if !rw.ConsistentIterators() {
-		// This is not currently needed for correctness, but future optimizations
-		// may start relying on this, so we assert here.
+		// This is needed for correctness, as we will call
+		// PinEngineStateForIterators, and potentially drop latches before
+		// evaluation.
 		panic("expected consistent iterators")
 	}
 	// Pin engine state eagerly so that all iterators created over this Reader are
@@ -470,6 +472,34 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		rec = evalCtx
 	}
 
+	// Decide on yielding for the ElasticCPUWorkHandle, if any. Note that any
+	// ElasticCPUWorkHandle at this point in the code is already configured to
+	// not yield since that is the safe choice when it was made (see
+	// kvadmission.go). Since we are done with concurrency control, we can
+	// revise that decision here.
+	latchesHeld := g != nil
+	if !latchesHeld && admission.YieldForElasticCPU.Get(&r.store.cfg.Settings.SV) {
+		elasticCPUHandle := admission.ElasticCPUWorkHandleFromContext(ctx)
+		if elasticCPUHandle != nil {
+			// Since latches are not held, it is safe to yield (which can slow down
+			// individual request evaluation), without any risk of latch priority
+			// inversion.
+			//
+			// Even though an individual elastic request can take longer, the
+			// goroutine scheduling of foreground work improves, which results in a
+			// higher amount of elastic work to be permitted, so overall throughput
+			// of elastic work is expected to improve.
+			//
+			// NB: This only has an effect if the request evaluation calls
+			// elasticCPUHandle.IsOverLimitAndPossiblyYield. Currently only
+			// ExportRequest evaluation does that. ExportRequest should often be
+			// evaluating without holding latches, since it should fit all the
+			// criteria in canReadOnlyRequestDropLatchesBeforeEval, i.e., consistent
+			// read, pessimistic-eval, wait-policy is block or error, and should
+			// often not find intents in canDropLatchesBeforeEval.
+			elasticCPUHandle.SetYield(true)
+		}
+	}
 	for retries := 0; ; retries++ {
 		if retries > 0 {
 			if boundAccount != nil {
@@ -493,7 +523,6 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		// indicated by the latch guard being nil) before this point, then it cannot
 		// retry at a higher timestamp because it is not isolated at higher
 		// timestamps.
-		latchesHeld := g != nil
 		var ok bool
 		if latchesHeld {
 			ba, ok = canDoServersideRetry(ctx, pErr, ba, g, hlc.Timestamp{})

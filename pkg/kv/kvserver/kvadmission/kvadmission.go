@@ -400,6 +400,10 @@ func (n *controllerImpl) AdmitKVWork(
 			// reads, so in some sense, the integration is incomplete. This is
 			// probably harmless.
 			elasticWorkHandle, err := n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.Admit(
+				// NB: yieldInHandle is always false at this point, since requests may
+				// subsequently acquire latches, and requests holding latches should
+				// never yield. Later code, that knows about the state of latching,
+				// can revise this decision.
 				ctx, admitDuration, admissionInfo, false,
 			)
 			if err != nil {
